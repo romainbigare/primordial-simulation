@@ -1,666 +1,788 @@
-# The next stage: one fixed world, a map on tiles, a ground with a history
+# The roadmap: a clean base, then animals as a field
 
-For the owner and the next orchestrator. Simple English.
+For the owner and the next orchestrator. Simple English. This is a look at the whole project as it stands on `main`:
+the spec (`docs/handover.md`), the laws (`docs/laws.md`), the handover (`review/orchestrator.md`), and the code of
+`core`, `worldgen`, `tape` and `web`. Two short runs were made for it (section 10). Numbers marked "est." are
+estimates from reading, not measures. Work that lives only on other branches (the air and sunlight, the sorted start)
+is taken from what `review/orchestrator.md` says of it.
 
-This is a review of the code only. Nothing was built and nothing was run. Numbers marked "est." come from reading the
-constants, not from a measurement. The first job of the next stage is to measure them.
+It answers seven questions:
 
-## 1. In short
+1. What is the shift that made everything better? (section 1)
+2. What is left over from the older designs and should go? (section 2)
+3. How do we bring the shift to the animals, and what must we watch? (sections 3, 4, 5)
+4. What does the natural world still miss that later stages will need? (section 6)
+5. A new roadmap. (section 7)
+6. Do we need a clean-up cycle first? (section 8)
+7. How do we build the animal world again? (section 4)
 
-The six problems the owner sees have four roots. All four are strategies, not small bugs.
+Words used here: **the books** are the accounts of matter and energy (nothing is made or lost). **A field** is a
+number per cell (so many kg per m²) in place of a list of single things. **A slot** is one of the few kinds a cell
+can hold. **A make of bed** is a kind of rock. **A push** is what drives a flow (a height, a pressure, a warmth).
 
-1. **The cells of the simulation follow the camera.** This makes the world slow, makes it flicker, and gives the
-   picture nothing: the map already draws every zoom from a law inside the cells, not from the fine cells.
-2. **The fine picture is made on the CPU, as one big window, in the same worker that steps the world.** Every pan or
-   zoom makes all of it again. While it is made, the world waits.
-3. **The ground is noise, with every lake basin filled, and with the same random bumps laid on it everywhere.** So
-   there is no valley, no lake, no river bed. And the ground drawn never changes, so erosion can never show.
-4. **The viewer sorts plants into seven fixed classes and draws each as a disc.** The genes do not reach the picture.
+## 0. In short
 
-The new shape, in one line each:
+- **The shift has a name: "fields, a fixed ground, and a picture that is derived".** The world is no longer a crowd of
+  single things that each run a full model, on cells that follow the camera. It is three layers. Each layer runs at
+  its own cost and nothing flows back from the picture to the world.
+- **A third of `core` still belongs to the old designs.** The old animal world alone is about 5,500 of `core`'s
+  16,800 lines, about 2,500 lines of tests, and most of the tape's 631 columns. More leftovers come from the tree of
+  cells (deleted as a design, but some of its tools remain), from plants-as-bodies, and from the docs: the spec still
+  describes cells that split and a planet.
+- **Do not refactor the animals. Replace them.** The plant cover is the pattern: a few slots per cell, each with
+  amounts and genes, one month's pass, costs for every trait, exact books. An animal field built the same way is
+  about 1,500 to 3,000 lines (est.) and has a fixed cost per cell, whatever the number of animals.
+- **The code is not the hard part. Five design questions are:** what "Choose" means for a field; how animals move
+  without a rule that already holds the answer; small numbers (the last ten animals of a kind); the balance between
+  plants and grazers; and people.
+- **A field is right for wild animals. It is not enough for people.** Houses, stores, tools and trade need single
+  things with a place and a life. People will need a second layer of single agents on top of the field (section
+  4.8). By the owner's decision no work goes into it before the animal layer is done.
+- **The natural world misses things that animals and people will need:** years that differ (today every year is the
+  same year), a store of seeds on the ground, fresh water against salt water, fire, life in the water, soil that
+  builds up, and useful rocks (ores, fuels, clay, salt). None is urgent for plants. Several decide whether farming,
+  storing and settling can ever appear.
+- **Yes, a clean-up cycle first.** Two to three weeks of work (est.). Its largest step is to delete the old
+  animals. That is less simple than it looks: the plants' month runs on the animals' machinery and must be cut free
+  first. Done in the right order (section 8), a plants-only run stays the same to the last digit.
+- **The roadmap changes shape.** Not M0 to M8 on one growing code base, but layers, each ended by a picture the owner
+  can judge. The owner's order: free the plants from the animals, delete the animals, build them again as a field;
+  beside it, nature goes on (the air and sunlight, the sorted start, worlds that differ). Then the small game, and
+  people after the animal layer. Section 7.1 is the one list of priorities, joined with the last session's handover.
+- **A thin contract between the land and the bodies** is the first step (section 4.9): what a cell shows, and four
+  ways to take from it and give to it, all through the books.
 
-- **A.** The simulation runs on fixed cells. Zoom is a matter of drawing only.
-- **B.** The map is drawn from tiles of the ground (they never change, so they are made once and kept) and from small
-  tables of what the cells hold. The laws inside a cell run on the graphics card, per pixel.
-- **C.** The ground is made once, at the world's start, by running the erosion law for a long time. Lakes stay lakes.
-- **D.** One drainage network, on the ground's own grid, for the simulation and for the drawing.
-- **E.** A plant's look is a function of its numbers: its kind, its wood, its leaves, its state.
+## 1. The shift: what changed
 
-## 2. Where each problem comes from
+### 1.1 The old ways
 
-### 2.1 The simulation is a lot slower
+Four ideas ruled the project before. Each was dropped for a measured reason.
 
-| Cause | Where | Size |
+| Old idea | What it cost | Where the reason is |
 |---|---|---|
-| The page runs on one core: the wasm build has no threads | `wasm/Cargo.toml`, `core/src/par.rs` | all of it |
-| The fine picture is made inside the step loop, once a second while the world plays | `web/src/worker.ts` (`FINE_MS`, `postFrame`) | 0.35 to 1.1 s each: a quarter to a half of the time (est.) |
-| Each tick builds a full frame: 25 layers for all cells | `tape/src/layers.rs` (`frame_now`, `Ctx::new`) | small, but every 50 ms |
-| The camera splits and joins cells: up to 32 changes a month | `core/src/refine/mod.rs` (`MOST_CHANGES`) | a year goes from 1 s to 3 to 7 s (`review/plan.md`) |
-| Each change rebuilds the whole mesh and every array of every cell | `core/src/remap/split.rs`, `remap/mod.rs` | 4.6 ms a change, measured |
-| After a change, all of Flow's working memory is dropped and built again for the whole world | `core/src/flow/mod.rs` (`Scratch::remap`, `with`) | a full build each month |
-| One fine cell makes the deep store's flow take sub-steps, and each sub-step works over all cells | `core/src/solve/sweep.rs` (`by_size`), `flow/deep.rs` | about 1,500 sub-steps a month at 7.8 m (est.) |
-| A cell with land and liquid ("parts") is solved 6 to 14 times a month and never counts as at rest | `core/src/flow/parts/mod.rs`, `parts/node.rs` | Flow costs twice what it did |
-| The state of all ground is built in full each month, with two sums of the potential energy of the world | `core/src/survey.rs`, `flow/mod.rs` | about a tenth of Flow (est.) |
-| Work for animals runs with no animals | `choose/features.rs`, `survey/steps.rs` | small |
+| **Every living thing is a body.** A plant stand ran the full organism model (reactions, melting, pores, roots, a brood). Speed came only from merging alike bodies into nodes | 60% of a year went to bodies. Three speed rounds gave 3.8 times, never 10. Every cheaper design "changed the world" and was refused by a test of sameness | git history |
+| **The cells follow the camera.** One tree of cells; a cell splits where one looks; the step follows the size; zoom slows time | A year went from 1 s to 3 to 7 s. The world flickered. The history of a world depended on where one looked. And "nothing new appears at fine grain" | git history |
+| **The picture is made by the core.** One fine window, on the CPU, in the same worker as the world, with 25 layers that each kept the cell's mean exactly | 0.35 to 1.1 s per window; the world waited for its picture; steps at cell edges | git history |
+| **The ground is a function of the seed.** Noise at any depth, never state | No valley, no lake, no river bed; erosion could never show | git history |
 
-The first six rows exist only because the cells follow the camera or because the picture is made in the wrong place.
+### 1.2 The new way, in one picture
 
-### 2.2 Panning and zooming are slow, tiles load slowly, trees cover all and then go
+```
+Layer 3  THE PICTURE     per pixel, on the graphics card, only where one looks.
+                         It reads layers 1 and 2. It writes nothing back.
+                              ^
+Layer 2  THE GROUND      fixed samples of 125 m, made once at the world's start by running
+                         the erosion law for 2 million years. One network of channels, ponds
+                         with one level. It is state, and it changes slowly.
+                              ^
+Layer 1  THE BOOKS       slow physics and life as FIELDS on fixed cells of 2 km:
+                         air, liquid, heat, chemistry, the plant cover.
+                         Every element and the energy are kept to 1e-9.
+```
 
-- The page keeps **one** fine window: the view and a fifth more on each side, at most 360,000 pixels
-  (`web/src/main.ts`: `FINE_MARGIN`, `FINE_MOST`). There is no store of tiles.
-- Any change of the view asks for a whole new window. It comes 150 ms after the view rests, plus 0.35 to 1.1 s, plus
-  the wait for the step loop.
-- For each window the core makes **25 layers**, each through a pyramid of filters (`tape/src/fine/pyramid.rs`), and
-  about 30 smoothing passes (`tape/src/fine/keep.rs`). The earth view reads about 8 of the layers.
-- Past the edge of the window the page shows the map of squares: one texel for 2 km. The plant marks there come from
-  the square's totals. They know nothing of water, rock or wet ground inside the square. So **trees stand on
-  everything**, and they go when the fine window comes (`web/src/vegetation.ts`, `draw`). The two fields also do not
-  mean the same thing: one counts stored fuel in the mass, the other does not.
-- Each frame, each pixel runs a heavy program: 7 grids of marks, 9 places each, up to 4 texture reads each
-  (`web/shaders/cover.wgsl`), and a 16-tap curve for the ground. When a frame takes more than 16 ms the page draws at
-  a quarter of the pixels and sharpens later (`web/src/map.ts`). While the world plays, every world frame draws again,
-  so soft and sharp pictures follow each other.
+Between the layers stands one tool: **a law inside a cell**. A cell holds means. A general law shares each mean over
+the cell's own ground (how wet each point is, how deep its loose ground, which way it faces). Whoever needs detail
+calls that law at a point: the picture today, a single animal tomorrow. Detail is **derived, not simulated**.
 
-### 2.3 Edges of cells show, things flicker
+### 1.3 Seven rules that define it
 
-| What is seen | Cause | Where |
+These are the rules I would write at the top of the spec. Each is already true of the natural world on `main`.
+
+1. **The world does not know the camera.** Cells are fixed for a world's whole life. The same seed gives the same
+   world. Zoom is drawing.
+2. **Fields first.** A kind of life in a cell is a few numbers: amounts of matter, a small vector of genes, a count.
+   A fixed number of slots per cell. The cost of a cell is fixed, whatever lives in it.
+3. **Derive the single thing from the field.** The cover holds kg per m²; the count and size of its plants follow
+   from the self-thinning law, their height from the buckling limit, their place from the wetness their genes like.
+   Nobody stores a tree.
+4. **A slow thing is computed once.** The ground gets its history when the world is made. The sorted start does the
+   same for plants. A fast thing that is always near balance is a rate, not a population (the rot of the open world
+   stands for the microbes).
+5. **Every trait has a cost, or nothing sorts.** The cover's law became good when leaves, stems, roots and frost
+   hardiness each got a price. Then zones appeared by themselves (bare north, a tree line, old stands in the south;
+   the frost gene follows the coldest month, r 0.7).
+6. **Step at the pace of the thing.** Air every 15 days, cover and liquid monthly, creep yearly, the ground at
+   creation.
+7. **Judge a change of the laws by pictures and by ranges, not by sameness.** Before and after pictures at the
+   owner's views; a few key numbers that must stay in a real range. Sameness is the right test for one thing only: a
+   clean-up, which by its meaning changes no result, is still checked to the last digit.
+
+And two rules of the owner stand above them: **things emerge from general laws**, and **do not compute what is not
+needed**.
+
+### 1.4 What it gave (from the repo's own numbers)
+
+- The tree of cells went: 5,340 lines out, 383 in.
+- The live page at a close view: 0.1 to 0.4 months a second before, 36 to 41 after.
+- Valleys, lakes with one level, rivers that reach the sea, deltas' first form, drowned coasts, five makes of rock in
+  layers: all from one erosion law run at the start, not one of them drawn.
+- Plants sort into zones on a Wide island and stay steady from year 100 to 300.
+- A plants-only year of a 32 x 32 island costs 235 ms: Flow 185, cover and survey 45, Change 8, tape 3 (section 10).
+
+## 2. Leftovers: what should leave the code base
+
+Rule 2.4 of `CLAUDE.md` says: no dead code, git keeps it. Rule 2.12 says: replace, do not patch. By those rules
+the list below is overdue. The details and line numbers are in the appendix (section 11).
+
+### 2.1 The old animal world (the largest leftover)
+
+| Part | Where | Lines of code (no comments) |
 |---|---|---|
-| Water ends at cell edges | Each cell is its own bath: it holds its own liquid at its own level over its own ground | `core/src/flow/curve.rs` |
-| Lakes step from cell to cell | Only the sea is brought to one level. Lakes above it are not | `core/src/flow/basin.rs` |
-| Forest ends at cell edges | The drawing writes a kind only into the pixels of cells that hold it | `tape/src/fine/inside.rs` (`cover`) |
-| The look of trees jumps at edges | Plane `k` is "slot `k` of this cell": another kind in the next cell. Size and tone come from a table per cell | `tape/src/fine/inside.rs` (`extend`), `web/src/canopy.ts` |
-| A kind cannot cross into a full cell | A cell holds 4 slots. Seeds of a new kind die unless they outweigh a whole slot | `core/src/cover/seed.rs` (`lodge`) |
-| Snow in blocks | A temperature field gets each cell's own remainder at the end: a step at its edge | `tape/src/fine/keep.rs` (`keep`, `Mean::Shifted`) |
-| Wet ground and plants change when the view moves | The wetness index counts only the ground inside the window, and uses the window's mean. The pixel size follows the zoom | `tape/src/fine/inside.rs` (`wetness_index`, `soil`) |
-| Detail differs after zoom out and in | A join sums the cells and loses kinds past 4 slots. A split shares out again | `core/src/remap/`, `cover/tree.rs` |
-| Seasons flash | One picture a second at 12 or more months a second | `web/src/worker.ts` |
-| The view is a patchwork of cell sizes | The page asks for cells of 6 pixels. A screen needs about 27,000 (est.). The budget is 1,500, filled depth first | `web/src/main.ts`, `wasm/src/lib.rs`, `refine/mod.rs` |
-| After a pan, new detail waits about 20 months (est.) | Joins of the old window run first and use up the month's 32 changes | `core/src/refine/join.rs` |
+| Bodies: the organism model | `core/src/body/` | 1,040 |
+| Choose: brains, perception, actions, learning | `core/src/choose/`, `brain.rs`, `lineage.rs` | 1,355 |
+| Copy for bodies, population nodes | `core/src/copy/`, `nodes.rs` | 675 |
+| Bond: parts, lots, bonds, rooms, edges | `core/src/bond/` | 1,090 |
+| The registry of bodies, the queue, the serial pass (not the chunks: the cover runs on them) | `core/src/life/` (most of it) | about 800 of 1,030 |
+| The bodies' half of the survey, the step grid, lanes | `survey.rs`, `survey/steps.rs`, `lanes.rs` | about 300 |
+| **Sum in `core`** | | **about 5,300 to 5,500 of 16,800** |
+| Their tests | `core/tests/{body,bodies,bond,choose,copy,populations,damage,lots}.rs`, one test of `threads.rs` | about 2,500 of 5,070 |
+| Their tape columns | `tape/src/rec/cols/{brains,kinds,parts,social}.rs`, `things.rs` | about 450 |
+| Their start | `worldgen/src/life/{make,seeding}.rs` (the bodies' half), seven rows of `KINDS` | about 250 |
+| Their drawing | `web/src/{avatars,sprites,blob}.ts` | about 680 |
+| The pattern finder's three detectors (groups, routes, structures) | `analyze/src/` | 320 |
 
-### 2.4 The water is not real
+Why it is a leftover and not "the animal world to improve":
 
-- **No normal lakes.** At the world's start a flood fills every closed basin of the ground with ground, at a slope of
-  1 m in 1 km (`core/src/space/drain.rs`, `samples.rs`). Every basin of 125 m or more becomes a flat. No lake can
-  form there.
-- **A pond in every hollow.** Below 125 m the ground gets random bumps that are never drained
-  (`core/src/space/below.rs`). On a filled flat the bumps are far larger than the slope. A fine cell that is low is
-  its own pond. The drawing also wets every pixel under its cell's level, with no test that the water joins up
-  (`tape/src/fine/mod.rs`, `standing`).
-- **Rivers are straight.** The path drawn is the steepest way between the centres of the 125 m samples, in 8
-  directions, with round corners (`core/src/space/network.rs`, `tape/src/fine/channels.rs`). On a filled flat that is
-  a straight line. The path knows nothing of the ground drawn below 125 m.
-- **Two networks.** The simulation moves water over the cells of the moment by another rule
-  (`core/src/flow/runoff.rs`, `solve/downhill.rs`). The drawn river is not the simulated one. There are three rules
-  for the way water runs and three floods in the code.
-- **No erosion to see.** The law exists (`flow/runoff.rs`: `load`, `wear`). But it lowers the mean of a whole 2 km
-  cell, by about 2 mm a year under the largest river (est.). No valley can form. And the ground drawn is a function
-  of the seed alone (`tape/src/fine/heights.rs`), so it would not show anyway. The world's start has no erosion.
+- It is the "every thing is a body" design that the plants left. It has all its weight: a record per body, an id per
+  body, a brain per node, a queue for what crosses a cell, a serial pass to land it, three caps to bound the nodes.
+- The owner's word is that it will be reworked. The live page and every long run go without it (`--plants`). Code
+  that nobody looks after rots. It already has: only 5 of 7 kinds with real numbers at year 70 (section 10), the slow
+  learning tests not run since the cover's law, the eaters that collapse under the sorted start.
+- Yet the gate of the natural world still hangs on it. The main guard of the fast suite
+  (`the_world_lives_and_keeps_its_books`, `tape/tests/ranges.rs`) fails with fewer than four animal kinds alive, and
+  two of the nine key numbers are the eaters' mass and life. So a change of the air or of the cover can fail the
+  gate through animals that nobody means to keep. This is the first thing the clean-up mends.
+- Its two watch reports say what it could not do: no shelter in the cold, no building, tools at 0.04% of food,
+  nothing that grain helps, and most "yes" verdicts equal to the null run.
+- The laws of the natural world need little from it: three death-cause numbers, `WET_TISSUE`, `body::noise`,
+  `body::solids_of`, the dispersal kernel `copy::lot`, `bond::Edge` in one function of the cover, `lanes::regrow`.
+- **But the plants' month runs on its machinery, and that is the real work of the cut.** Each month, also with no
+  animal, `survey::survey` runs first: it breaks what movers pushed, sums each cell (`Life::sum`, which the air reads
+  for the canopy), lands the queue and builds Flow's state. The cover's own month is `survey::cover`, on the chunks
+  and the queue of `life/`. Flow calls `survey::release` before each air step. And the plants' start draws are keyed
+  by each kind's row in the table of kinds, where animal rows stand between plant rows (`worldgen/src/life/`
+  `seeding.rs`, `kinds.rs`). So the month of the natural world must first be stated on its own, in the same order,
+  and the plant kinds must keep their numbers. Then the animals can go without moving one digit.
 
-### 2.5 Plants are green balls
+What is lost with it, said plainly:
 
-- The viewer sorts each stand into grass, tundra, steppe, shrub, woodland, forest or jungle by fixed limits of mass,
-  wood, temperature and rain (`web/src/canopy.ts`, `standOf`). These are symbols, not matter.
-- Every tree is one soft disc with a shadow (`web/shaders/cover.wgsl`, `crown`). Seven fixed colours
-  (`web/src/vegetation.ts`, `FOLIAGE`).
-- Genes reach the page only very close (64 pixels a square), as **one** tint for a whole 2 km square, from its
-  heaviest slot. Grass and trees there get the same tint.
-- The model itself has little to show: the three parts of every plant have the same colour in chemistry 0, and a
-  plant has no height, no age and no count. The live world starts with 3 kinds, and mutation is too small to found a
-  new one (from reading; a tape should check it).
+- The only user of the cover's grazing door (`Cover::take`, `Cover::breaking`, the budget's row "taken or broken by
+  bodies"). Until the animal field uses it, it is unused code, which rule 2.4 forbids. Either the field's first
+  step comes soon after, or that door goes too and comes back with the field.
+- The only code for single agents that cross cells with exact books: the queue, the landing in an order fixed by the
+  data, and the exact split and join of members (`nodes::Lot`, `nodes::rejoin`). People will need this idea again
+  (section 4.8). Keep its description; a tag alone is soon forgotten.
+- Rooms and held things with real physics (`bond/`). The same.
 
-### 2.6 The ground looks like bad noise
+What must be **kept from it, as knowledge**: its anchored laws and numbers. They are good and the new animals reuse
+them: Kleiber's upkeep, Holling's take law, the heat balance through a coat, the walk at one Froude number, the cost
+of transport, the drag in liquid, one frost law for bodies and cover, wear by the rate of living, the brood, the
+dispersal kernel, breaking and the edge. They live in `docs/laws.md` sections 3 to 6 and `docs/numbers.md`. Keep those
+rows (in a file of "laws kept for the animal field") when the code goes.
 
-- The base is value noise in 6 octaves, with ridges and a warp (`core/src/space/terrain.rs`). All octaves sit on one
-  grid with the same axes. There is no geology: no valley cut by water, no fan, no plain.
-- The noise is sized to the map, not in metres: the live island of 22 squares has features 3 times smaller and
-  steeper than the island of 64.
-- Below 125 m each square of the tree gets four random draws, scaled to **the same** roughness everywhere: on a
-  plain, on a peak, under the sea (`below.rs`, `terrain.rs`: `real_slope`). The draws sit on the squares of the tree.
-- The map shades slopes 6 times steeper than they are (`web/shaders/lib/earth.wgsl`, `EXAGGERATE`).
+### 2.2 The tree of cells: deleted as a design, its tools remain
 
-## 3. The strategies that did not pay
+The tree itself is still used and stays: cells of 1, 2 and 4 squares need its balance and its neighbours, and the
+samples are its leaves of depth 6. What remains of the tree **that moved** is this:
 
-**3.1 "The cells of the simulation follow the camera" (work packages 5 to 12).** The idea was: detail where we look.
-For land, water, air and plants it gives nothing:
+- `core/src/space/tree.rs`: the most depth is 24 ("a leaf of 0.5 mm, finer than any body"). Cells need depth 2,
+  samples 6, the tiles about 13.
+- Ids by "cell serial" with a table from serial to index, "none once it split or joined" (`core/src/life/mod.rs`):
+  no code adds or removes a cell, so the serial is always the index. About 45 lines, and it is saved.
+- `Purpose::Quarter` in `rng.rs` ("the quarter a body goes to when its cell splits (`life::tree`)"): never used, and
+  no such module.
+- `choose/features.rs` (`Regions`, `across_corners`, about 75 lines), `Leaf::parent`: so that a cell finer than a
+  square sees as far as a square. No world has such a cell.
+- `Terrain::below` and the branches `SAMPLE_DEPTH.max(l.depth)` in `flow/`: the case of a cell finer than a sample.
+- `survey/steps.rs`: a general grid of "2^halvings steps a month" that is only ever made with 0 and 2.
+- `Mesh` of any number of levels (`space/mod.rs`): it always builds two.
+- Comments that still tell of splits: the module doc of `cover/mod.rs` ("a split of a cell shares its cover out,
+  `tree`"), `nodes.rs`, `worldgen/src/terrain.rs`, `flow/drain.rs` ("sub-stepped where a cell is too small").
+- In the spec: 5.2, 7.2, 7.3 and 7.4 still describe cells that split and join, the camera as a recorded input, the
+  step that follows the size, and zoom that slows time. `docs/laws.md` 1.8 is still titled "The step by the size".
 
-- The fine picture comes from the law inside a cell (`inside`), drawn smooth across the cells. It is drawn the same
-  way over coarse cells. The page "draws every zoom from the fine raster" (`review/orchestrator.md`).
-- The project's own report says that nothing new appears at fine grain (`docs/reports/fine.md`).
-- It costs the six rows of 2.1, more than 2,000 lines of code, and the rule that the world depends on where one
-  looks.
-- It cannot even fill the view: 1,500 cells against 27,000.
+### 2.3 Plants-as-bodies, still in the body code
 
-**3.2 "The drawing must keep each cell's mean, and is made per window on the CPU."** This gave about 430 lines of hard
-mathematics (`pyramid.rs`, `keep.rs`), run for 25 layers at each window. The books are kept by the core. A picture may
-be a few percent off the mean. The rule that it may not is what puts the step at cell edges (the remainder in `keep`).
+- `Bodies::cat` in `worldgen/src/life/kinds.rs` still holds "the speed-up of the light reaction" for a body. It is
+  off for every kind.
+- The survey still keeps "the share of light set aside for the bodies' light reactions" (`Life::absorb`,
+  `Life::keep`, rows 2, 8 and 9 of `Life::sum`). Only the cover fills them and only the air reads them; they belong
+  in the cover. The store's node for it is still called `Class::Bodies`.
+- `World::rained` ("its bodies catch what fell"): written, saved, and read by no law. `Chemistry::light_reactions`:
+  no caller at all.
+- The gene `WET` (dry, dormant children, as seeds and spores) and the wear floor "as dry seeds and spores do" are
+  plant ideas on animal bodies.
 
-**3.3 "The ground is one function of the seed, at any depth, and never changes."** It is cheap and neat. But it means:
-basins must be filled (noise has basins no water cut), detail must be random, and erosion can never show.
+Most of this leaves with 2.1.
 
-**3.4 "Speed up what runs."** Whole stages went into making splits, sub-steps and the raster faster. None of the three
-needs to run. The same holds for the next ideas in the plan (a smooth mean-keeping field, a faster raster, cheaper
-sub-steps): they tune parts that the new shape removes.
+### 2.4 Tools and plans of older rounds
 
-**3.5 "One more rule for each thing seen."** Channels drawn over the ground, a nudge of 1e-6, a region of 4 x 4
-samples for the flux, three limits for a jungle. Each was added to make a picture right, and each is a place where
-the picture and the world can differ.
+- `core/src/inside/` (the law inside a cell): no law of the core reads it now. Only the tape and the page do. It
+  is the right idea in the wrong crate until the animals need it (section 4.2); say so in its doc, or move it.
+- `worldgen/src/generate.rs` and `richness.rs` (about 300 lines): the generator of random chemistries and its
+  checks, for "M7". A random chemistry cannot grow life today (the spec says so). It is a plan, not a part.
+- `ew view` (a window of a snapshot as a PNG, with a "depth" layer): made to look at fine cells.
+- `--fine`, and the globe: see the owner's decision 3 in section 9.
+- The 631 columns of `series.csv`: most are per-kind columns of bodies and counters of acts.
+- Small dead things: `units::HOUR_S`; five classes in the sleep clock where two are used; test-only doors in the
+  core (`Life::part_mut`, `rows_mut`, `Body::store_of`, `World::even_ground`).
+- Names that mean two things (`CLAUDE.md` 2.8): "bodies" is animals, ponds (`flow/bodies.rs`), a store class and a
+  worldgen struct; `Grid` is three types; `Books` is three.
 
-## 4. The new shape
+### 2.5 The docs
 
-### A. Fixed cells for the simulation
+- The documents are `CLAUDE.md` (the rules), `docs/handover.md` (the spec), `docs/laws.md`, `docs/numbers.md`,
+  `docs/tape.md`, `docs/analyze.md`, this roadmap and `review/orchestrator.md` (the handover). The spec says which
+  one wins (its section 0).
+- The spec's sections about the old animals (the laws of bodies in 6.1 to 6.6, the pattern finder and the library in
+  9, god mode in 11) describe code that leaves with C1c. They are rewritten or cut in the same merge.
+- `docs/laws.md` is true to the code. Its sections 3, 5, 6 and the body half of 4 describe the old animals and leave
+  with C1c; "a finer cell" wording stays in 5.2, 5.3 and 6.3 until then.
 
-The cells stay as built: squares on land, large cells in the open sea. The camera changes nothing in the world. The
-same seed gives the same world with no camera path. Detail for animals and people comes back later in another form:
-a group splits into single bodies, and each body reads the ground at its own place by the same law the map draws by.
-The ground's grid does not split.
+## 3. The animal world today, measured
 
-When the core is faster, the cells can be made smaller everywhere (1 km, 500 m). That is a number of the run, not a
-thing that changes while it runs.
+A 32 x 32 island (793 cells, 409 of land), seed 1, the roster, 70 years (section 10):
 
-### B. The map from tiles
+- 219 bodies (200 of them nodes) on 409 land cells: half a node per land cell. 5 of 7 kinds hold real numbers; two
+  hold 3 and 11 members.
+- All animals together weigh 2.9e6 kg: 1.7 g per m² of land. The cover weighs 1.35e10 kg (8.3 kg per m²).
+- They eat 7.8e6 kg of cover a year. By the cover's own budget in the tape, what bodies take or break is 1.7e14 J a
+  year, 1% of what the cover's light stores less its upkeep and its building (1.6e16 J). On Earth grazers take a few
+  percent in forests and 10 to 60% in grasslands (McNaughton and others 1989, from memory). The cover gives 45 times
+  more to the ground through its roots than to all animals. So the animals hardly shape the plants.
+- Eating other bodies: 2 to 3% of the animals' food.
+- Cost: 40 to 50 ms a year more than plants only, at 26 to 33 µs per update. It is cheap only because the animals
+  are few. The older runs with full populations paid 0.8 s a year at 3,700 bodies and 1.5 s at 16,000.
 
-Split what is drawn in two:
+So today's animals are a thin layer that lives, eats a little and changes nothing. They are not wrong physics. They
+are the wrong level: a costly model per node, and not enough nodes to make an ecosystem.
 
-- **What does not change** (the ground): height, slope, drained area, distance to a channel, which lake a place
-  belongs to. It is a function of the place alone. It is made in tiles of 256 x 256, level by level, each level twice
-  as fine. A tile is made once, in a second worker, and kept on the graphics card. Nine levels go from the whole
-  island to under 1 m.
-- **What changes** (the state): one small table with a row for each cell: liquid in the soil, snow, temperature, the
-  mass and the numbers of each kind of plant. Plus the level of each lake and the flux of each river. A few kilobytes
-  a frame. It is sent with each world frame.
+## 4. Animals as a field: the design I propose
 
-The graphics card joins them per pixel. It blends the cells' values between their centres, then applies the law inside
-a cell at the pixel: soil liquid by the wetness index of the place, snow by the height of the place, each plant kind by
-how wet the place is. Nothing depends on the window, so nothing flickers on a pan. A tile not made yet shows its
-parent, stretched: the picture is soft for a moment, never wrong. The world never waits for a picture.
+### 4.1 The idea
 
-### C. A ground with a history
+Do for animals what was done for plants. Each land cell holds a **fauna**: a fixed number of slots (8 to start; a
+number to measure). A slot is one kind of animal in that cell:
 
-At the world's start the noise is no longer the height. It is the **uplift**: where the ground rises. Then the build
-runs the erosion law for a long time on the grid of samples: rivers cut by their discharge and slope (the stream
-power law, Howard 1994), slopes creep (the law the core already has), what is cut settles in lakes and at the coast.
-This gives valleys that branch, ridges between them, plains at river mouths. The basins the rivers did not yet cut
-through stay: they are the lakes.
+| A slot holds | Like the cover's | Notes |
+|---|---|---|
+| members: a real count, young and adult | `Cover::plants` | counts are real, never rounded up (`CLAUDE.md` 3.2) |
+| amounts: body matter, fuel (fat), frame, with their heat | `Cover::mol` | 64-bit, every move booked on both sides |
+| about 12 genes | `Cover::genes` (9) | adult mass; diet (leaf, wall, seed, remains, prey by size); warm or cold body and coat; range per day; child size; group size; wetness of the place it likes; repair |
+| a running balance | `Cover::net` | a slot in deficit gives way, as for plants |
+| the starting kind | `Cover::root` | a label for the tape only |
+| a small vector of habits (4.4) | none | learned, not inherited by the body |
 
-The ground is then **state**: a grid of heights kept in the world, which the slow erosion of the run can change.
+One **month** of a cell's fauna is one pass, as `cover::step` is, slot by slot in a fixed order:
 
-### D. One drainage network
+1. **Food.** What each slot can reach: the cover's parts by height (grazers reach low, browsers high), seeds, remains
+   on the ground, and the other slots by their member mass. One take law for all (Holling's, already anchored).
+2. **Energy.** Upkeep by Kleiber at the pace of its body temperature. A cold-bodied kind follows the ground; a
+   warm-bodied one pays the heat balance through its coat (the closed form of `live::Balance`, already written).
+   Moving costs by the transport law. What is left builds young and fat.
+3. **Deaths.** Unpaid upkeep, wear by the rate of living, frost, and what the eaters took. Remains go to the ground
+   with their mineral, so grazers speed the cycle of the mineral as real ones do.
+4. **Births** from the brood, into the young. Young grow into adults by a flux, as today.
+5. **Books.** Gases with the air, liquid with the ground, heat to the ground: through the cell's view of the store,
+   the same way the cover books.
 
-The network on the ground's grid is the only one. The simulation routes each cell's runoff down it. The drawing reads
-the same paths and the same flux. A lake is a body with one level, as the sea is today; the sea is the lowest lake.
-The monthly flood over the cells, the rules for rims, and two of the three rules for the way water runs go away.
+Then, when every cell had its month, two passes between cells, each a plain gather in cell order:
 
-### E. Plants from their numbers
+6. **Movement as a flow.** Members flow to the 8 neighbours by two pushes. A spread, by the kind's range per day.
+   And a pull by what the kind can **sense** next door: the food there, the crowd, the warmth, the eaters. How
+   strongly each of these pulls or pushes is a gene, and moving costs energy by the transport law. So a kind does
+   not know where it would fare better: kinds whose genes lead them well leave more young. Theory says where this
+   ends when animals know everything (each member gains alike everywhere: the ideal free distribution, Fretwell and
+   Lucas 1970). That is a **check** of the result, never the rule. A kind with a large range on a Wide island may
+   then move with the seasons. Nobody writes "migrate".
+7. **Dispersal and new kinds.** Young disperse by the kernel the seeds use. A share of the young are mutants; they
+   join the most alike slot or found one, by the slot rule of the cover (`seed::lodge`, `merge_alike`), which
+   becomes one shared helper. One warning: joining takes the mean of the genes. For plants on one axis of light that
+   is mild. For animals a mean of a grazer and a hunter is good at nothing. Slots must join only when truly alike,
+   and this must be tested before the rule is shared.
 
-The core sends, for each cell, each kind it holds with its mass and its numbers (wood share, leaf area per kg, light
-capacity per leaf area, frost limit, wetness need, seed share, stored fuel, whether it is active). A kind has one
-name over the whole map, not a slot number in a cell. The page blends the mix of kinds between cells, picks the kind
-of each mark from that mix, and builds its shape and colour from the numbers. No classes.
+### 4.2 The law inside a cell, for animals
 
-## 5. The roadmap
+A cell of 2 km is large for an animal. Where its members are inside it comes from a general law, as for plants:
 
-Each stage ends with the gate of `CLAUDE.md` 6.3 and with pictures at the owner's views. Tracks A, B and D can run
-side by side; they touch different folders.
+- Each kind has a **place it likes**: wet or dry ground, open or under tall cover, near or far from standing liquid,
+  flat or steep. A cell already knows the share of its area in bins of loose depth (`World::loose_bins`); it gets
+  the same for wetness, slope and distance to liquid, found once from the samples.
+- Each kind has a **group size** (a gene). Members stand in groups of that size. A group lowers each member's risk
+  from eaters (the eater takes one of many; Hamilton 1971) and raises the fight for food inside the group. Both are
+  terms of the take law. So herds, packs and lone hunters are places on one axis, each with its price.
+- **Meetings follow from overlap.** How often an eater meets its prey is the take law times how much the two kinds'
+  places overlap inside the cell. A few numbers per pair, from the bins.
+- **The picture uses the same law.** Close up, the page draws single animals: as many as the slot's count, in groups
+  of its group size, on the ground its kind likes, each with a place seeded by (cell, slot, index), drifting along
+  the cell's flow of movers. Far away, a herd is a soft mark, as today. No animal is stored.
+- A drawn animal is a picture only. Next month the slot's count has changed and the same place may show another
+  one. It has no name that lasts and holds no state. A single being that lasts is a different thing (section 4.8).
 
-### Stage 0: switch off and measure (small, first)
+### 4.3 Small numbers
 
-No law changes. The core stays bit for bit.
+A field can fall to 1e-12 animals and grow back from that: a known fault of field models (a fox of 1e-18 that
+comes back to life; Mollison 1991).
+The rule against it is already in `CLAUDE.md` 3.2: counts are real. Where a slot holds few members, births, deaths
+and movers are drawn as whole numbers with a keyed draw (the kind of draw `lose_share` makes today for an
+individual), and a slot with less than one member is gone. So a kind can truly die out in a valley and come back
+only from next door.
 
-1. The live page runs with no cell budget (`wasm/src/lib.rs`): no splits, no joins.
-2. The fine window is made only for the layers the view reads, and not inside the step loop each second.
-3. A frame holds only the layers shown.
-4. Skip the brain features and the body sub-steps when no body lives.
-5. Write down the pace (months a second) before and after each of these, on the same seed.
+### 4.4 What "Choose" becomes
 
-Done when: the numbers are in the stage's report, and the owner has looked at the page. **Check:** is anything worse
-without fine cells? If yes, name it. It becomes a need for stage A2, not a reason to split cells again.
+This is the real design question. Today each node has a small neural network that learns in its life. Two watches
+of it say it learned nothing that beats chance beyond its hand-set start. I propose two steps.
 
-### Track A: the map on tiles
+- **Step one: habits as inherited numbers.** This is still Law 5, with the smallest brain: what a kind senses (its
+  hunger, the warmth, the food, the crowd and the eaters, here and next door) times a few weights gives the shares
+  of its time over the same general acts as today (take, move, rest). The weights are genes and evolve as every gene
+  does. It is "choices as a spread of actions" (`laws.md` 4.4), which nodes already are, with no hidden layer, no
+  learning, no trace and no memory. The list of what can be sensed and the list of acts are the only things written
+  by hand, as they are today; no weight is set to get a wanted habit, and a run with all weights at zero is the
+  null run to compare with.
+- **Step two: habits that are learned and passed on.** A slot gets a small vector of learned habits. It moves, within
+  a life, toward what paid (the gain of the last months). Young take a share of it from the adults of their cell; that
+  share is a gene. Members that move carry it. So a habit can outlive its bodies and spread across the map faster
+  than genes: that is culture as a field (Boyd and Richerson 1985). It is Law 4's imitation and Law 5's learning, in
+  the mean. A kind with a high share and a high learning rate is the start of people.
 
-| Step | Goal | Goes away | Done when |
+Step two is research. It should start only after step one has made an ecosystem that stands.
+
+### 4.5 What goes, what stays, what waits
+
+- **Goes:** bodies as records, ids, brains per node, the trace, perception of faces, the queue and the serial pass,
+  the caps, mating of pairs, parts, lots, bonds, rooms, edges, lanes.
+- **Stays (as formulas in the new month):** every anchored law listed in 2.1.
+- **Waits for the people stage:** made things and shelter (section 4.8). The old way made 20,000 to 300,000 parts
+  that nobody used; the lesson is to make no object before a kind exists that wants one.
+
+### 4.6 Cost (est., to measure first)
+
+The cover's month and the survey cost 45 ms a year on 409 land cells: about 9 µs per land cell and month, for 4
+slots. The animals' month is not simpler than the cover's: it has movement, eaters and prey in one cell, overlap and
+groups, and steps inside the month (section 5.6). So plan for two to four times the cover: 0.1 to 0.2 s a year at
+size 32, 0.4 to 0.8 s at size 64. These are guesses until a first version is timed. What is sure is the shape: the
+cost is fixed by the cells and the slots, not by the animals. The old model with a full fauna (8 kinds, young and
+adult, in every land cell of a 64 island: about 25,000 nodes) would cost 5 to 10 s a year (est. from 0.2 to 0.4 ms
+per node and year, section 10).
+
+### 4.7 How we will know it works
+
+By numbers of real ecosystems, as ranges in one slow test, and by pictures:
+
+| Check | The real range | Source (from memory; to verify when the test is written) |
+|---|---|---|
+| Grazers eat a real share of what plants grow | a few percent in forest, 10 to 60% in grassland | McNaughton and others 1989 |
+| Grazer mass follows rain and plant growth | 1 to 20 g per m² in savanna | Coe, Cumming and Phillipson 1976 |
+| Numbers fall with body mass as mass^-0.75 | across kinds | Damuth 1981 |
+| Eater mass grows slower than prey mass (power near 0.75) | across places | Hatton and others 2015 |
+| Size and coat follow the cold on a Wide island | larger and thicker in the north | Bergmann's rule |
+| Eaters and prey swing | in some places, not all | Lotka and Volterra; against a run with no eaters |
+| A wide-ranging grazer moves with the seasons | its mean latitude turns over the year | against a run with a small range |
+| The books | drift under 1e-9 | `check::drift` |
+| Cost | under 40 µs per land cell and month | section 4.6 |
+
+Pictures: a herd at the 200 m view standing where its kind likes; a grazed plain against an ungrazed one; a map of
+kinds by zone.
+
+### 4.8 People: the field is not enough, and this should be said now
+
+A field can hold "0.3 houses per km²". It cannot hold one house in one valley, the family that built it, what lies
+in its store, or the path to the next one. The end goal (settlements, tools, trade, buildings) needs **single things
+with a place and a life**. So the world will have two kinds of life in the end:
+
+- **The field**, for everything that is many and alike: plants, wild animals, and most people most of the time.
+- **A thin layer of single agents and single things**, for the few that matter one by one: a band, a household, a
+  store, a building, a boat. Each has a place inside a cell (a point of the ground's samples), a memory, and what it
+  holds.
+
+The hard part is the passage between the two, with the project's rules kept: exact books, real counts, one writer
+for each number. A member leaves a slot as an agent with its exact share of the slot's matter and heat, and joins it
+again by sums. The old code already has this mathematics (`nodes::Lot`, `nodes::rejoin`), and it has the queue that
+lands what crosses a cell in an order fixed by the data. That knowledge should be kept in writing.
+
+The owner's decision: people come after the animal layer is done, and no work goes into them before. Two things
+done for the animals also serve this passage, at no extra cost: counts that are real and split and join exactly
+(4.3), and the contract of 4.9, where a single agent is one more taker beside the field. I cannot promise the field
+will carry people; I can only say that wild animals do not need more, and that the passage is the thing to get right
+when its time comes.
+
+### 4.9 A contract between the land and the bodies
+
+The owner's idea: a layer between the natural world (plants and what the land holds) and the bodies, so that each
+side can change without the other. I looked at it with care. **It is a good idea, in a thin form.**
+
+**What the code has today.** The ground and the air already have such a contract: a body never touches them, it
+asks the cell's view of the store (`store::Moves`), which gives no more than is there and books both sides. The
+plants have none. Bodies reach into the cover's own numbers in eight places: `Cover::take`, `Cover::breaking`,
+`Cover::cut_by`, `cover::lose` (what movers break), `World::canopy` (hiding), and the cell's sums by position
+(`Life::sum(i)[1]` is mass, `[7]` is the energy to break). And the land reads the bodies the same way (the mass
+that holds the ground against the flow, the light kept). This is why the plants cannot be cut free in an hour.
+
+**The contract, as I would write it.** One small module that both sides use. Neither side uses the other.
+
+| Part | What it is | Who writes it | Who reads it |
 |---|---|---|---|
-| A1 | Tiles of the ground, made in a second worker, kept by level; a parent shows until its child comes | the one fine window for the ground | a pan and a zoom never show the squares' picture; the world's pace does not drop while tiles load |
-| A2 | The cells' table and the law inside a cell on the graphics card | `tape/src/fine/` (pyramid, keep, inside), `fineFields`, the second cover field | no cell edge at the 200 m, 50 m, 20 m and 10 m views; the same pixel has the same colour after any pan |
-| A3 | Seasons blend between two world frames; far away, plants are a field, not marks | the soft and sharp pictures in turn | a pan stays smooth while the world plays, on the owner's phone |
+| **What a cell shows** | Its layers of matter that can be taken: loose ground, remains, each slot of cover by the height it stands at, later the seeds on the ground and the standing liquid. For each: how much of each substance per m², its heat, and the energy to break a kg of it loose. And the place: ground warmth, depth of liquid, depth of snow, how hard it is to pass, how much it hides | the natural world, once a month, only if someone reads | every taker; the tape (this table **is** "what the land offers", section 6.1) |
+| **Take** | "I ask for this much of this layer." The answer is what is given, with its heat, and what breaking it costs | a taker | booked on both sides through the store |
+| **Give** | Matter and heat back to the ground: remains, droppings, seeds dropped | a taker | the same |
+| **Press** | Work spent on a cell breaks its cover by one law (what movers trample) | a taker | the same |
+| **What stands on a cell** | The mass on it, the light it catches and keeps | life (plants today, animals later) | Flow |
 
-### Track B: the ground and the water
+Three rules make it honest:
 
-| Step | Goal | Goes away | Done when |
-|---|---|---|---|
-| B1 | The ground made by the erosion law at the world's start; kept as a grid; noise in metres | filling basins to flats (`space/drain.rs`), the random bumps (`space/below.rs`) | pictures: valleys that branch, a few lakes of 0.5 to 10 km, no field of ponds |
-| B2 | One network; lakes as bodies with one level; runoff routed down the network | the monthly flood, the rims, `basin.rs` as a special case, `remap/through.rs` | a river followed from spring to sea lies in its valley at every zoom; the books close to 1e-9 |
-| B3 | Mud and sand (spec 19): what a river carries, and where it settles; the slow cut of the run changes the grid | erosion spread over a whole cell | a delta grows at a river mouth in a long run; a tile is made again where the ground changed |
+1. **It moves matter through the books, it holds no copy.** What a cell shows is read from the one source; a take
+   is a move in the store. Nothing can differ between the two sides (`CLAUDE.md` 3.1, 3.3).
+2. **It shares when takers ask for more than is there.** Each gets its share of what it asked for, so no cell is
+   overdrawn (`CLAUDE.md` 3.4). The order is fixed by the data.
+3. **It says when.** The cell shows itself as the month's start left it; takes land during the takers' month; the
+   cover feels the loss in its own next month.
 
-### Track C: plants (after A2)
+**What it gives.**
 
-| Step | Goal | Done when |
+- The plants build, run and are tested with no body code. The world with no taker is the plants-only world.
+- A **test taker** ("takes a tenth of the low layer each month") lets the cover's tests check what grazing does to
+  plants before any animal exists. It also keeps the door in use between the deletion and the new animals, so no
+  code lies unused.
+- The animals can be deleted, built again, and changed later without one edit in the cover or in Flow.
+- Later takers come through the same door: the animal field, single agents, a god's hand.
+- A test can guard it, as the word ban is guarded: no file of the natural world names a module of bodies.
+
+**Where it can go wrong.**
+
+- **Too much machinery.** Version 1 died of layers. This must be plain data and four functions, about 150 to 250
+  lines (est.), with no plug-in system and no switch. If it grows past that, it is wrong.
+- **Too narrow.** Not all that passes between land and bodies is food. Shade, shelter, snow, trampling, seeds
+  carried in a gut are in the table above because they are easy to forget. What is missing from the contract will be
+  taken behind its back.
+- **Fixed too early.** The first real taker (grazers) will show what is missing. The contract should change freely
+  until then: no old form kept.
+- **A cost with no taker.** The table of a cell is made only when a taker reads it, as the brains' features are
+  today.
+- **Blurred layers.** A grazer must be able to take the low leaves and not the trunk. So the cover shows itself by
+  slot and height, not as one mean of the cell (today a bite takes "all its parts in the field's proportions").
+
+So: yes. It is the right first step of "free the plants" (C1a), not an extra one.
+
+## 5. What to be mindful of
+
+1. **Do not script.** The danger of a field is that it is easy to write "herds migrate in winter" as a rule, or,
+   more quietly, to write the answer of a theory as the law (members that flow to where they would fare best). A
+   kind may only use what it can sense, at a cost, with weights that are genes (4.1, 4.4). The test of the spec
+   holds: can you list all uses of the rule in advance? If yes, it is a named system.
+2. **Plants and grazers must hold each other.** Today grazers take 1% of the growth. A field that covers the map
+   can overshoot, eat a zone bare and crash. Real brakes are physical: food that is hard to digest (the frame needs
+   an enzyme: reaction 13 exists), bites that get thin and slow to find (Holling), plants out of reach by height,
+   eaters. Build one trophic level first and make it stand before the next.
+3. **The cover must offer what animals eat.** See section 6: seeds as a store, leaf against wood. The grazing
+   interface is the cover's `take` and `breaking`; it should take from a slot by its height and part, not from the
+   cell's mean.
+4. **A slot count that is too small hides variety.** 4 slots of cover work because alike kinds merge. Animals need
+   room for several sizes at each trophic level. Measure 6, 8 and 12.
+5. **One formula inside a cell.** There are two laws for soil liquid inside a cell (the core's and the
+   drawing's). The animals' places must be one function that the core and the page both read.
+6. **Time.** A month is long for a mouse and short for an elephant. Eaters and prey with the take law have no exact
+   sum over a month, as the cover's simpler month has. One long step will swing or overshoot. Expect steps inside
+   the month (a week, as the bodies' physics has today) or a step that stays stable at any length. This is what
+   would fail first when built, with grazers that eat a zone bare (item 2). Kinds that live for days are rates, not
+   slots.
+7. **Seasons and bad years.** With every year the same (section 6, item 1), storing, moving and famine have less reason
+   to appear. The animals will look too stable until that is mended.
+8. **Threads.** A field makes this simple: one task per run of cells, movers gathered in cell order. The rule "one
+   writer for each number" stays; the queue and its landing rounds go.
+9. **The people stage needs single agents** (section 4.8). No work on it now. Keep counts real and exact, and keep
+   the contract (4.9) open to a taker that is one being.
+10. **Deleting first leaves a time with no animals on `main`,** and some unused doors (section 2.1). That is already
+    so in practice (`--plants` everywhere). Tag the last commit that has them, and keep the description of what is
+    worth building again.
+11. **Slots that join by the mean** can erase a kind that is splitting in two (4.1, step 7).
+
+## 6. What the natural world misses for the later stages
+
+Ranked by how much each one decides later. "Kind of work" says whether it is a law, data, or a start condition.
+
+| # | Missing | Why it matters later | Kind of work | When |
+|---|---|---|---|---|
+| 1 | **Years that differ.** No law of Flow has a random term and the air's long step is smooth: each year repeats the last. Measured (section 10): rain on land changes by 0.02% from one year to the next, the winter by 0.005 K. On Earth rain differs by 10 to 30% and winters by about 1 K. No dry year, no hard winter, no flood | Boom and bust, famine, moving on, and above all **storing** food need bad years. Farming is an answer to them | The real cause is weather: storms that the air's 15-day step cannot hold. So it must enter as a random term with a physical shape, on the mixing by eddies (which stands for that weather), keyed by the seed, the year and the place; the sea's top layer then sums it into slow swings (Hasselmann 1976, from memory). Not noise put on the rain itself. To study before it is built | Before animals are judged |
+| 2 | **Seeds on the ground as a store.** A seed lands and takes hold in the same month. The ground never holds a stock of seeds. (A plant does keep fuel, by its `STORE` gene, but inside itself, not as a part an eater can pick) | Seeds are the food that keeps over winter: the base of seed-eaters, of caching, of granaries and of every grain crop. Also a seed bank is how real plants come back after fire or drought | Law (cover): seeds lie as a pool per cell, with a life and an eater's price | With the first animals |
+| 3 | **Fresh and salt.** No law reads how salty a liquid is: a body drinks from any ground that holds the key liquid, and so do roots. And the sea of chemistry 0 is kept nearly fresh on purpose (0.2 g per kg against a real 35), so that it turns over and freezes as it does now | Rivers, springs and lakes are why animals and towns stand where they do. Salt itself is something animals seek | Two steps. A term for saltiness in drinking and in roots (small). A truly salty sea changes how the sea mixes and freezes: a change of the climate's laws with its own long runs (not small) | The first with the first animals; the second when the coast matters |
+| 4 | **Fast events: fire.** Change runs once a month in each cell. Burning exists as chemistry, but nothing starts it and a month cannot hold a fire | Fire shapes grassland against forest, clears land, cooks, fires clay, smelts. The spec parks it "for M4" | A law for a fast event inside a month: it starts (dry fuel, heat), spreads by the wind and the fuel next door, and ends in the same month, booked whole | Before people; good for god mode |
+| 5 | **Life in the water.** Cover is placed on land only; the sea and the lakes are empty | 60% of the map. Fish and shore food feed coasts, river mouths and the first boats | Start condition and a floating kind of cover (no roots), then the animal field in liquid cells | After land animals stand |
+| 6 | **Soil that builds up.** Remains rot in a week to a few years and are gone. No humus, no peat. The loose ground has one grain size | Fertility that farming uses up and floods bring back; peat, then coal; clay for pots and bricks; sand, silt and gravel are also what the law of mud and sand (spec 19) needs | Law (Change and Flow): a slow pool of dead matter; two or three grain sizes of loose ground | With the law of mud and sand |
+| 7 | **Useful rocks.** Chemistry 0 was cut from 26 to 14 substances. It keeps a hard stone (7, as hard as flint), lime (9), a fat-like fuel (6) and a burning gas (4). It has no metal element at all (its six elements are those of air, life, sand and lime), so no ore and no metal; and no fuel laid down in the ground | Bronze, iron, coal and oil are in the game's first paragraph. The ground with layers (`space/strata.rs`) is the right home: an ore body, a coal seam, a salt bed are makes of bed | No new law, but not free: new elements, substances and a reaction that frees a metal with heat and fuel; every loop over substances grows (the cut to 14 was made for speed); the richness checks already say what must exist | When people are near, not before |
+| 8 | **Wind with a direction.** The air mixes and overturns; a small island is one block with no wind at all. No wet and dry side | Rain shadows and deserts; later sails and mills | Law (the mean wind's momentum): already on the orchestrator's list | In the nature track |
+| 9 | **Day and night, and the spread inside a month.** Frost kills by the month's mean and a tuned spread (`frost_k`) | Shelter at night, frost on clear nights, the daily round of animals | A law for the spread of temperature within a step, from the surface's heat budget | With habits (4.4) |
+| 10 | **Patches inside a cell.** A cell's cover is one stack of layers over its deep ground. No cleared, burnt, grazed or tended patch | A field of crops is a patch of a cell. So is a burn scar or a grazing lawn | Law: a cell's land as a few tiles (the ground already has land, top and deep as tiles) | Before people |
+| 11 | **Cycles over thousands of years.** The carbon gas has no source (it settled near 260 ppm in older runs); the mineral washes to the sea and only fixers bring it back | A run of 5,000 years must not drift into ice or bare ground by a missing term | A check first: one run of 3,000 years, plants only, reading the gas and the mineral | In the clean-up, as a measure |
+| 12 | **Snow on food, and natural shelter.** A grazer reaches the cover under any depth of snow (only standing liquid hides it). No cave, no lee of a hill, no warmer air under tall cover: a body's heat reads the open ground alone | Winter is the hungry season because snow hides food; shelter in the cold was the old world's first failure | Law: reach under the soft cover, as under liquid; the warmth of a place inside a cell (the law inside a cell, 4.2) | With F1 and F3 |
+| 13 | **Worlds that differ in shape.** The land falls away from the middle of the map by one rule (`terrain::fall`), so every world is one island in the middle with small islands off its drowned coast | Several islands make kinds that differ from island to island, crossings, and later boats and far lands. A game wants each seed to give another world | Start condition (`space::terrain`): the fall from the middle becomes a drawn field of several rises, with channels of sea between; the share of land, the count of islands and their sizes drawn from the seed | In the nature track, after the air |
+| 14 | **Sickness** (bodies inside bodies) | Plagues, medicine. The spec parks it | Later, as a field inside the animal field | After people |
+
+### 6.1 Counting what the land offers
+
+The owner asked about quantifying resources. Two parts.
+
+**In the tape, per cell and year (physics only, no names):** what the cover grows (the budget already has it), split
+into what a grazer can digest and what needs the frame's enzyme; seeds made; liquid that is fresh and standing or
+running; the depth of loose ground; the mineral in the soil; which make of bed crops out; the warmth and its
+swing. Most are one line each in `tape/src/rec/`.
+
+**In `analyze/`, as maps with familiar names (the one-way translation layer; the crate stays, only its three
+detectors of bodies go):** "food for grazers, kg per km² and
+year", "fresh water", "building stone", "good soil". From these one can say, before any animal is placed, how many
+grazers of 100 kg a valley can feed. That number is the check of section 4.7, and later the first estimate of how
+many people a land holds.
+
+## 7. The roadmap
+
+The old milestones (M0 to M8) were steps of one growing agent world. The new road is by layers. Every stage ends
+with pictures at the owner's views and a short list of numbers in range. A stage that changes laws deletes what it
+replaces in the same merge.
+
+**The world's size and shape** (the owner's decision). No globe. A world is a square map of **128 x 128 squares**
+(256 km a side), 64 to judge by; 256 or 512 at the very most. A world of 512 has 64 times the cells of a world of 64,
+so today it would cost about 64 times as much per year: sizes above 128 wait until speed is looked at. Worlds should
+differ as much as they can: one island, several, a ring, a long coast (section 6, item 13).
+
+**Speed** (the owner's decision): no target now. Build the most true, most interesting and best-made system; cut
+back when it has become too slow. Each merge still writes down its cost per year, so that the day of cutting back
+has numbers to cut by.
+
+### 7.1 The one list of priorities
+
+This list joins the handover of the last coding session (`review/orchestrator.md` on `main`) with this look. Two
+tracks run side by side, one helper each: **nature** (N) and **life** (L). The orchestrator does the docs between.
+
+| # | Track | What | Why here | From |
+|---|---|---|---|---|
+| 1 | L | **Free the plants.** The contract (4.9); the natural world's month stated on its own; the gate and the key numbers without animals (C1a, C1b of section 8) | The owner's first priority. It must be on `main` before item 2, so that the references move once, on a gate that no animal can fail | this look |
+| 2 | N | **The air's low cloud, then the air and sunlight to `main`.** A check on paper first (does a low cloud made by cooling from below give the pole its cloud and an ice line?), then the law, then the whole package in one merge. The references move once; tell the owner each value | The light sets how fast every plant grows (about 2.3 times slower with true light). Everything that feeds on plants is judged after it | handover 1 |
+| 3 | L | **Delete the old animals** (C1c), then the tree's tools and the small dead things (C2) | The owner's second priority. The test taker keeps the contract in use | this look |
+| 4 | — | **The docs say what is true after each merge**: the laws of the old animals leave `docs/laws.md` and the spec with item 3 (C4) | So that the next agent does not build toward a planet with cells that split | this look |
+| 5 | N | **The sorted start**, after the air: first main and a sorted world run side by side to year 300; then its kinds and stands; then its look. To `main` only when its pictures are at least as good | Asked for by the owner. Its gardens change with the light, so it follows item 2 | handover 2 |
+| 6 | L | **What the land offers, first part**: seeds that lie on the ground; snow that hides food; the contract's table recorded in the tape as the count of resources | The first animals read all three | this look |
+| 7 | L | **Grazers** (F1): the animal field with a few kinds of grazers, no eaters of animals, no movement | The owner's third priority: build again, one level at a time | this look |
+| 8 | N | **Worlds that differ**: several islands and other shapes from the seed; sizes to 128. The globe as a world leaves (`--globe`, `--fine`, its view on the page) | The owner's word on size and variety. After item 2, because the air's law is judged on the lifeless globe until it is merged | the owner; this look |
+| 9 | N | **Small things on the page**: the four commits on small plants (`wip/lakes`), reviewed with pairs; dark-red specks and blocky dark patches; straight shores; a program without ice where there is none | Fill-in work between packages | handover 3, 4 |
+| 10 | L | **Movement** (F2), then **eaters and the web** (F3) | | this look |
+| 11 | N | **Years that differ** (to study first), **a wet and a dry side** (the mean wind) | Animals look too steady without bad years; rain shadows make dry land | this look; handover 6 |
+| 12 | L | **Animals on the page** (F4): single animals and herds drawn from the field | The owner judges by pictures | this look |
+| 13 | both | **The small game** (G): god tools on the living island; fire as a law | A whole thing by itself, before people | this look |
+| 14 | N | **Channels that lay down their load** (plains, marsh, deltas), with grain sizes of loose ground and soil that builds up; then ice that cuts valleys; the exact solve of the surface's step; the True view's water | Large and already agreed to wait | handover 7; this look |
+| 15 | L | **Habits that are learned** (F5); life in the water; a term for saltiness | | this look |
+| 16 | — | **People** (P0, a design round with the owner, then P1 and on); useful rocks and metals with them; names (T) | After the animal layer is done, by the owner's word | this look |
+
+What the handover's list held that is no longer needed: its item 5 (run the slow tests of bodies before the next
+change of the laws for bodies). Those tests leave with the old animals; `tape/tests/scale.rs` stays and is run with
+item 3.
+
+Still asked of the owner by the handover, with no answer yet: do the summit lake of seed 1 at the 200 m bar and a
+lake's shore at the 5 m bar look right on the live page; does the pale rounded band round a summit lake bother them;
+does zooming and panning feel slower on their phone.
+
+### 7.2 The stages of the life track, with their gates
+
+| Stage | Goal | Ends when |
 |---|---|---|
-| C1 | The table of kinds per cell; the mix blended between cells; a mark picks its kind | forests cross cell edges; no step of size or tone at an edge |
-| C2 | Shape and colour from the numbers; shapes baked once per kind | two kinds with different numbers are told apart at a glance, far and near |
-| C3 | Law changes, one commit each: a new kind can enter a full cell; the parts of a plant differ in colour; more starting kinds or a mutation that can found a kind | a tape shows how many kinds live at year 300, and a long run keeps the books |
+| **C. The clean base** (section 8) | The contract; the natural world's month and its gate stand without animals; the old animals, the tree's tools and the stale docs are out; the spec says what is true | a plants-only run the same to the last digit through C1; the spec rewritten; `core` under about 11,000 lines |
+| **R. What the land offers** | Seeds on the ground; snow on food; the count of resources in the tape and as maps. Later: years that differ; a term for saltiness | A map of "food for grazers" and of fresh water that reads right. For years that differ: over 100 years, rain on land differs from year to year by 10% or more and the winter by 0.5 K or more (today 0.02% and 0.005 K), with the climate's key numbers still in their ranges |
+| **F1. Grazers** | The animal field with a few kinds of grazers of different sizes, no eaters of animals, no movement between cells: plants and grazers hold each other | Rows 1 and 2 of 4.7 (the share eaten, the grazers' mass) in range for 500 years; numbers fall with body mass across the kinds (row 3); the books; the cost |
+| **F2. Movement** | The flow between cells by what is sensed; dispersal; new kinds by the slot rule | Kinds sort by zone (row 5); the gain per member comes out nearly even between neighbour cells, without being put in; a wide ranger's mean latitude turns over the year more than a short ranger's (row 7) |
+| **F3. Eaters and the web** | Eaters of animals, eaters of remains; group size; overlap inside a cell | Rows 4 and 6 of 4.7; a kind dies out in one region and comes back from next door |
+| **F4. Animals on the page** | Single animals and herds drawn from the field, in the Earth style; the inspect panel | The owner sees a herd at the 200 m view, where its kind likes |
+| **G. The small game** | God tools on the living island: fire, flood, drought, raise land, add and remove life; save before each; "then and now" | An action has a result one can see after 50 years |
+| **F5. Habits** | Learned habits as a field (4.4, step two); day and night; life in the water | A habit spreads across the map faster than a gene, against a null run |
+| **P. People** | After the animal layer. First one design round with the owner: stores outside the body; ground that a kind changes (patches); single agents and single things on top of the field (4.8) | A page of decisions, before any code |
 
-### Track D: the core's own speed (any time)
+**Why R and F1 go side by side, and not one after the other.** R is a list of things the land should offer. Only
+two of them are read by the very first grazers: seeds that lie on the ground (a food that keeps) and snow that hides
+food (why winter is hungry). Those two come first (item 6). The rest of R does not block grazers: years that differ
+needs a study of its own, and saltiness, fire and life in the water matter later. If all of R had to be done before
+any animal, the animals would wait for months for things they do not read yet. And the first grazers will show what
+else the land must offer: it is better to learn that early. So: the two that F1 reads, then F1, with the rest of R
+going on beside it in the nature track.
 
-1. One solve of a cell's parts at the end of the liquid step; a parts cell at rest is skipped.
-2. The full build of the ground's state only when a world is loaded.
-3. The level curves: sums kept, no sort at each neighbour.
-4. No new memory in the daily loops.
-5. The wasm build with SIMD and `wasm-opt`.
+## 8. The clean-up cycle
 
-Not on the list: cheaper sub-steps, cheaper splits, a faster raster. Stage 0 and track A remove them.
+Before the new animals, and before the spec misleads one more agent. Each step is its own merge.
 
-### Stage E: the owner decides on the tree of cells
+| Step | What | Check |
+|---|---|---|
+| C1a | **The contract and the natural world's month on its own** (4.9). The eight places where bodies reach into the cover become the contract's four verbs and its table. State what a plants-only month runs, in today's order, without the bodies' modules: the cell sums the air reads, the cover's month and its seeds' landing, the release of the light set aside. Move the shared helpers to a neutral place. Plant kinds keep the numbers their draws are keyed by. A test guards that no file of the natural world names a module of bodies | a plants-only world (`--roster --plants`) at sizes 22 and 32 gives the same `series.csv` to the last digit, before and after |
+| C1b | **The gate without animals.** The main guard and the key numbers plants-only (seven of the nine numbers stay as they are). The three thread tests of the natural world in `core/tests/threads.rs` stay. A test taker on the contract | the fast suite passes with plants-only worlds |
+| C1c | **Tag `animals-v2`, then delete the old animal world** (section 2.1): code, tests, tape columns, start rows, drawing, the pattern finder's three detectors. A short file keeps the anchored laws and what is worth building again (4.8) | as C1a, on every column that stays. `SNAPSHOT_VERSION` up |
+| C2 | **The tree's tools** (section 2.2): ids without serials; the most depth; the cases of cells finer than a square or a sample; the stale comments. And the small dead things of 2.3 and 2.4. The chemistry generator and its checks move to a branch | the same to the last digit |
+| C3 | **One helper per idea**, one solid surface of a cell (three formulas today); one heat capacity of a ground node (two); the light the cover catches (the air and the cover each have a law); one meaning of "sea"; seeds mixed by a real hash, not XOR; one name for one thing | the same to the last digit where no law changes; else its own law commit |
+| C4 | **The docs of the old animals leave**: the spec's sections about bodies (2.5) and `docs/laws.md` sections 3, 5, 6 and the body half of 4 (kept in the tag, and their anchored rows in a short file) | the list of section 11.2 is empty |
+| C6 | **Measures** before C3, so that it has a base to compare with: one plants-only world of 3,000 years (item 11 of section 6); the cost per layer at sizes 32, 64, 128 | two tables in the handover |
 
-With animals back in view: keep the code for splitting cells, or delete it (section 7). Until then it is off in the
-page and stays in the core.
+The two branches that are parked (`wip/air-light`, `wip/sorted-start`) touch `flow/air/`, `chem/`, `cover/` and
+`worldgen/life/`. C1a touches `survey.rs`, `life/`, the cover's doors and the tests. They meet in the cover and in
+`tape/tests/ranges.rs`: C1a and C1b go to `main` first, and the parked branches merge `main` in.
 
-## 6. The hardest parts
+Two to three weeks with two helpers (est.). C1a is where a surprise can hide: it touches the order of the plants'
+month. If it cannot be made the same to the last digit, it becomes a change of its own, judged by the key numbers,
+and the owner is told.
 
-### 6.1 The erosion at the world's start (B1)
-
-- **The law.** Height changes by uplift, less K x (drained area)^m x slope^n, plus creep. With n = 1 one step is
-  solved exactly, cell by cell, from the sea up the rivers (Braun and Willett 2013):
-  `h = (h_old + uplift x dt + f x h_downstream) / (1 + f)`, with `f = K x dt x area^m / distance`. It is stable for any
-  step, so 50 to 200 steps make a ground.
-- **Take m = 1/2.** Then the law needs only a square root. `powf` gives different last bits on different machines; a
-  square root does not. So the page and the command line make the same world from the same seed.
-- **Basins.** The flood today raises the ground. The new one only finds, for each basin, its lowest pass, and sends
-  the water over it (Cordonnier, Bovy and Braun 2019). Inside a basin the river drops its load; it does not cut. A
-  basin that the load fills becomes a plain. One that is left is a lake.
-- **Hard and soft rock.** K follows the hardness of the bed, which the build already draws as patches. Hard rock then
-  stands as ridges. This is where the look of each world comes from.
-- **Cost.** The live island has 352 x 352 samples: a second or two (est.). The island of 64 has a million: run most
-  steps on a grid 4 times coarser, then a few on the fine one.
-- **Risk.** The numbers (K, the time, the uplift) decide if the land looks young, old or flat. Plan a few days of
-  pictures. Each number gets its row in `docs/numbers.md`.
-- **The loose ground** is no longer 1 m everywhere: it is what the build left, thin on ridges, deep in valleys. The
-  map's rock and soil (work package 19) then come from matter.
-
-### 6.2 The ground below a sample (A1, B1)
-
-It is for drawing only. It must have no pits, no pattern of squares, and no seams between tiles. So each term is a
-function of the place and of the world's grid, never of a tile or a window:
-
-- a smooth surface through the samples (the quartic the code has), that makes no new pit;
-- the river's bed cut into it: as wide and deep as its flux says (the channel law the core has), along a path that
-  bends more where the slope is low (a bend about every 11 widths, Leopold and Wolman 1960). The path is kept as
-  "distance to the channel" in the tile, so a river is sharp at 1 m;
-- roughness only where rock is bare or the slope is steep, from gradient noise in metres, none on deep soil.
-
-The hard point is small streams: under which flux a stream is not drawn. Start with the streams the grid holds.
-
-### 6.3 Lakes with exact books (B2)
-
-- A lake is the set of samples of one basin under its pass. Its curve of volume by level is made once.
-- Its liquid stays in the ground nodes of its cells, as today. Once a month the cells of a lake are brought to one
-  level by the code that does it for the sea (`basin::share_out`, `curve::level_over`). The sea is not special.
-- When a lake rises over the pass to the next basin the two are one lake. The basins form a tree (Barnes, Callaghan
-  and Wickert 2020); the curve of each joined lake is made once too.
-- A lake in a dry place shrinks and leaves its salt. This comes free: salt already moves with the liquid.
-- Risk: the potential energy of each move must be booked as for the sea. Reuse that path; write no second one.
-
-### 6.4 Tiles and workers (A1)
-
-- Threads in wasm need a shared memory that most hosts of a single page do not give. So: two workers, each with its
-  own copy of the wasm. The second one only makes ground tiles. It needs the seed and the ground grid, not the world.
-  The grid goes to it once (half a megabyte for the live island).
-- A queue of tiles: what is in view first, coarse before fine; a request that left the view is dropped.
-- A cap on the tiles kept (about 150), the oldest out first.
-- Each tile has two texels more on each side, so slopes and blends are right at its edge.
-- A parent tile must be the mean of its children. The ground function already gives means over squares of the tree.
-- When erosion changes the grid, the tiles over that place are made again. This is rare.
-
-### 6.5 The law inside a cell, in one place (A2)
-
-- Today it lives twice and differs: the core shares soil liquid by a straight line with limits
-  (`core/src/inside/shares.rs`), the drawing by an exponential (`tape/src/fine/inside.rs`).
-- New: the formula is written once for the core and once for the shader, with the same numbers sent from the core,
-  and one test gives both the same inputs and compares them.
-- The core needs it only as a table per cell (how much of the cell is how wet), made from the ground once.
-- The mean of a cell: the shader divides by the cell's mean of the law, kept in the cell's row. Close to exact, with
-  no rounds and no step at an edge.
-- Snow on sunny and shady slopes with coarse cells: the pixel's temperature moves from the cell's by its own
-  sunlight, times how much the cell's surface warms per watt. The core already has that number from its surface
-  balance.
-
-### 6.6 Plants from numbers (C1, C2)
-
-- **The mix.** Per cell, up to 4 kinds with their weights, in two texels. A mark reads the 4 cells about it, weighs
-  them by distance, and picks one kind by its own random rank. So kinds mix mark by mark across an edge.
-- **How many and how big.** The model holds kg per m², not plants. The count and the size of the plants of a stand
-  follow from its mass by the self-thinning law (Yoda and others 1963: mean plant mass goes as density to the power
-  -3/2). Height follows from wood by the buckling limit (McMahon 1973). No limit made for "a forest".
-- **Shape.** Baked once per kind into a small picture, from its numbers: broad or narrow crown from height against
-  leaf area, open or dense from leaf area per kg, a trunk that shows from the wood share. The marks then stamp these
-  pictures. This is cheap, and far richer than a disc.
-- **Colour.** From light capacity per leaf area (more pigment per area is darker), and from the state: stored fuel,
-  activity, frost, dry stress. Real colour by kind needs C3.
-- **Honest limit.** With 3 starting kinds and small mutation the picture will show 3 kinds with small differences.
-  The rest is C3, a change of the model.
-- **Cost.** Three sizes of mark, not 7 grids. Far away, no marks: a field with grain.
-
-## 7. What can be deleted
-
-With stage 0, A and B done, and if the owner decides for fixed cells:
-
-- `tape/src/fine/` (about 900 lines) and `web/src/fine.ts`, `canopy.ts` classes, the square tint.
-- `core/src/space/below.rs`, the fill in `space/drain.rs`, `Samples::leaving`.
-- `core/src/solve/downhill.rs`, most of `flow/runoff.rs` (rims, ways), the special case in `flow/basin.rs`.
-- If the tree goes: `core/src/refine/`, `core/src/remap/`, `core/src/inside/` as a split rule, the flux register in
-  `solve/sweep.rs`, the steps by size, the relief book, the camera as an input of the run. More than 2,000 lines.
-
-What stays and is good: the books, the air, the cover's growth law, the seed kernel, the channel law, the map on the
-graphics card with its two back ends, the water's colour by depth, the marks fixed in the world.
-
-## 8. Found on the way (from reading, not run)
-
-1. Two laws for soil liquid inside a cell (6.5): against `CLAUDE.md` 3.3.
-2. The solid surface of a cell is computed in three places (`ground.rs`, `flow/land.rs`, `flow/stack.rs`).
-3. "Sea" means three things: under 0 m, in the basin, in its body. 0 m is written in, not the basin's level.
-4. Seeds mix by XOR of small numbers: the ridge noise of seed S is the base noise of seed S xor 7. Near seeds are alike.
-5. On a globe the ground below the samples holds its edge value where it should wrap: a kink at one longitude.
-6. A cell split before the first refinement never joins (`watch` stays empty).
-7. The mass of plants means two things in the two cover fields (with and without stored fuel).
-8. Water from upstream enters a split cell at "the lowest sample of the highest side", not where the network says.
+What I would **not** clean now: the chunks of `life/` that the cover runs on (the animal field will use them), the
+parts of a cell in Flow, the sleep of Change (it is used), the thread tests of the natural world, and the round
+mesh in `space/`: the strip of the planet that gives an island its climate is built on it (`worldgen/src/planet.rs`),
+and the air's law is judged on a lifeless globe until it is on `main`. Only the globe as a world to play leaves
+(item 8 of 7.1).
 
 ## 9. The owner's decisions
 
-1. **Fixed cells for the natural world: yes.** Three layers, each at its own cost: the slow physics on fixed cells;
-   the ground, the rivers and the lakes on the fixed grid of samples; the fine picture per pixel on the graphics card.
-   The cells can be made smaller everywhere once the core is faster.
-2. **The tree of cells is deleted.** The cells of a world stay as built for its whole life. Later, a group of
-   animals splits into single bodies that read the ground at their own place; the ground does not split.
-3. **The ground is state: yes.**
-4. **Plants' variety:** a balance of speed and of an interesting picture. First draw what the model holds (C1, C2);
-   change the model (C3) only as far as the picture still needs.
-5. **Seasons at high speed:** blend from month to month; above 36 months a second show the year's mean.
+1. **The order:** free the plants from the animals, then delete the animals, then build them again safely. A thin
+   contract between the land and the bodies (4.9) is the first step of it.
+2. **Animals as a field.** Yes.
+3. **No globe.** A world of 128 x 128 is already very large for a game; 256 or 512 at the very most. Worlds should
+   differ as much as they can, with several islands among their shapes.
+4. **The chemistry generator and its checks move to a branch.** They make a chemistry of chance from a seed (its
+   elements, its substances and their numbers, its reactions) and test that it could carry a world (a liquid, a gas
+   that holds heat, a reaction that stores light, things that burn, a metal that heat can free). The spec planned
+   them for a far stage: many worlds, each with its own matter. No world uses them today: every world runs on the
+   one hand-made chemistry, and a chemistry of chance cannot grow life yet. They are not needed until then.
+5. **"What the land offers" beside the first grazers,** with the two pieces the grazers read coming first (7.2).
+6. **The small game before people.** People come after the animal layer is done.
+7. **No speed target now.** Build well; cut back when it has become too slow.
 
-How the work runs: at most two work streams side by side; the fewest tests that state a law; every run without
-animals; pictures before and after each fix; `main` moves forward after each stage that passes the gate.
+## 10. The measures behind this look
 
-## 10. Where each stage stands
+Release build, 4 cores, seed 1, `ew run --size 32 --roster`, the cover's law of `main`.
 
-**Stage 0: done.** The live page keeps the cells as built; the fine picture makes only the layers the view reads and
-takes at most a tenth of the worker's time; the page gets a world frame at most four times a second; no work for
-animals while none lives. Seed 1, size 22, speed max, months a second:
+| Run | Years | ms a year (last tenth) | Flow | Change | Bodies stage (cover, survey, bodies) | Tape |
+|---|---|---|---|---|---|---|
+| `--plants` | 40 | 235 | 176 to 201 | 7 to 9 | 43 to 51 | 2 to 4 |
+| with animals | 70 | 299 | 180 to 211 | 8 to 10 | 86 to 98 | 3 to 4 |
 
-| | fitted | 200 m view | 50 m view |
+Element drift 1e-15, energy drift 1e-14 to 3e-14 in both. With animals at year 70: 219 bodies (200 nodes),
+5.0e5 members, 2.9e6 kg; 7.8e6 kg of cover eaten a year, 2.2e6 kg from the ground, 2.0e5 kg of other bodies; 26 to
+33 µs an update; 2,700 updates a year; kinds 6 and 9 of the roster hold 3 and 11 members. The cover's budget in that
+year, J: stored by light 4.9e16; upkeep 2.8e16; building 4.8e15; died 6.5e15; given to the ground by roots 7.4e15;
+shed 2.1e15; taken or broken by bodies 1.7e14.
+
+How much one year differs from the next (the plants-only run, years 20 to 40, the spread of the yearly change about
+its trend): rain on land 0.02% of its mean; the land's mean temperature 0.004 K, its winter 0.005 K, its summer
+0.007 K.
+
+Code lines without comments and blank lines: `core/src` 16,800 (Flow 5,380, of it the air 2,360; `space` 1,650;
+`bond` 1,090; `choose` 1,040; `body` 1,040; `life` 1,030; `cover` 920; `store` 740; `change` 610; `copy` 510);
+`core/tests` 5,070; `tape/src` 3,060; `web/src` 3,430 and its shaders 2,090; `worldgen/src` 1,540; `cli/src` 710.
+
+## 11. Appendix: the leftovers, with their places
+
+From two read-only audits made for this look (one of the code, one of the docs), with the main claims checked by
+hand. (a) is dead: nothing reaches it. (b) is reached but does nothing under the fixed cells. (c) is live.
+
+### 11.1 Code
+
+| What | Where | Class | Lines (about) |
 |---|---|---|---|
-| before | 26 | 0.4 | 0.1 |
-| after | 43 | 41 | 39 |
+| `Purpose::Quarter` | `core/src/rng.rs:39` | a | 2 |
+| `units::HOUR_S` | `core/src/units.rs:7` | a | 1 |
+| `Chemistry::light_reactions`, `Derived::light` | `core/src/chem/roles.rs:60`, `chem/mod.rs:143` | a | 8 |
+| `World::rained` (written and saved, read by no law) | `core/src/world.rs:122`, `flow/air/book.rs:99` | a | 6, a snapshot bump |
+| `Terrain::below` and its branch in `Terrain::inside` | `core/src/space/below.rs:112`, `terrain.rs:249` | a | 8 |
+| Cell serials (`at_serial`, `GONE`, `next_serial`, `Life::at`) | `core/src/life/mod.rs:28-265`, `life/saved.rs` | b | 45, a snapshot bump |
+| `Regions`, `across_corners`, `Leaf::parent` | `core/src/choose/features.rs:110-195`, `space/tree.rs:44` | b | 75 |
+| A cell finer than a sample | `flow/bodies.rs:68`, `flow/basin.rs:70`, `flow/curve.rs:262`, `space/samples.rs:116` | b | 15 |
+| `Mesh` of any number of levels | `core/src/space/mod.rs:207-259` | b | 15 |
+| `DEPTH_MOST` 24 | `core/src/space/tree.rs:8` | c | a number |
+| `Bodies::anywhere` (always false), `Bodies::cat[0]` (always off) | `worldgen/src/life/kinds.rs:31-34` | b | 6 |
+| `Life::absorb`, `Life::keep`, rows 2, 8, 9 of the sums | `core/src/life/mod.rs:86-95`, `survey.rs:122-158` | c, in the wrong place | 20 |
+| The test of a tree of three depths | `core/tests/space.rs:227` | tests what no world has | 30 |
+| Five `#[serde(default)]` on the chemistry file's fields | `worldgen/src/chemistry.rs:39-71` | c, against the letter of rule 2.5 | 5 |
+| The solid surface of a cell, three formulas | `ground.rs:162`, `flow/land.rs:287`, `flow/stack.rs:42` | c | one helper |
+| The heat capacity of a ground node, two sums | `ground.rs:94`, `flow/land.rs:143` | c | one helper |
+| The light the cover catches, two laws | `flow/air/cells.rs:314`, `cover/grow.rs:102` | c | to study |
 
-What stage 0 showed, for the tracks:
-- Without fine cells a 2 km cell spreads its cover evenly over its ridges: bare rock on steep ground is a need of A2
-  (the law inside a cell at each pixel), and of the ground's materials.
-- The fine picture still takes 0.3 to 0.7 s to make and comes 1 to 3 s after a zoom; while the world plays it shows a
-  state some years old. Making fewer layers saved a tenth only: the cost is the window itself. Track A removes it.
-- Trees stand in the sea at the 50 m view, as before.
+Checked and clean: no flag of the dropped designs is left in `cli/src/args.rs`; every export of `wasm/` is called;
+every file and shader of `web/` is used; no `#[serde(default)]` reads an old save; no TODO.
 
-**Track A, the map from tiles (A1, A2): done.** The ground is made in tiles (height, wetness index, channels) by a
-second worker and kept; the world's worker posts the cells' table and makes no picture; the card applies the laws
-inside a cell per pixel. A tile not made yet shows its parent. The cover's marks are masked at their foot: none in
-liquid, none under snow. The window finer than the cells is deleted. Months a second at the 200 m and 50 m views:
-24 and 22 before, 36 and 37 after; while panning at the 50 m view a coarser picture showed 84% of the time before,
-never after.
+The parts of the old animal world, to size the deletion of C1 (raw lines, comments counted): `body` 1,510, `bond`
+1,500, `choose` 1,440, `life` 1,400 (most of it), `copy` 750, `brain.rs` 310, `nodes.rs` 250, `lineage.rs` 120,
+`lanes.rs` 60. Inside them, parked for longer still: two parents (`copy/mix.rs`), watching (`choose/learn.rs`),
+lots (`bond/lots.rs`), rooms and wading (`bond/sense.rs`). About 45 of the 130 fields of `Physics` and `Config` are
+read by animal code only.
 
-The tiles are 16-bit floats, at most 56 kept, 38 MB on the card, no copy kept by the page; a tile takes 27 to 36 ms
-in wasm. A channel has a bed of washed sand cut into the ground; snow covers by its depth.
+### 11.2 Docs
 
-Open on track A: a tile's time (the goal is 15 ms; what is left is `Terrain::heights`, which builds its patch from
-the samples down at each call); channels a metre or two wide and 0.2 m deep show their bed, not water (their colour
-needs what they carry, B3); the fitted view uses texels of 125 m; tapes keep the map of squares; seasons blended
-(A3). How long a zoomed view takes to be sharp is not known: the test browser draws on the CPU.
+| Document | State | What to do |
+|---|---|---|
+| `docs/handover.md` | true to the owner's decisions, except the sections about the old animals (6.1 to 6.6, 9, 11 and the lines of 10 and 12 that name them) | rewrite or cut with C1c (C4) |
+| `docs/laws.md` | true; sections 3, 5, 6 and the body half of 4 describe the old animals; "a finer cell" wording in 5.2, 5.3, 6.3 | leave with C1c (C4) |
+| `review/orchestrator.md` | current; items 1, 2 and 4 of its section 5 are the same item | the orchestrator mends it |
 
-**B1, the worn ground: done.** The samples' heights come from an erosion law run at the world's start (the stream
-power law, creep, the rebound of what was worn) on grids of 500 m, 250 m and 125 m; basins are kept, each with its
-pass and its level; below a sample the ground is its smooth continuation. Seed 1, a 22 island: 20 bodies of standing
-liquid, 15 of 0.5 km or more. Making the samples of a 32 island: 0.45 to 0.59 s (0.60 to 0.64 s on the noise ground).
+## 12. Open items of the natural world and its page
 
-Open on the ground:
-- Bodies of standing liquid are drawn dry or per cell until B2.
-- Close views (200 m, 50 m) show a smooth sheet: the ground has no detail below 125 m. It needs roughness by
-  material and slope in the drawing (6.2), and the channel's bed cut into it.
-- One erosion strength for the whole map: the samples cannot read the bed's hardness, which is drawn per cell.
-- Tops are 5 to 13% lower on a 22 island than on the noise ground.
-- The slow test `the_frost_gene_falls_where_winters_are_cold` fails: the cold band still freezes (268.7 K), but the
-  warm band's mean gene is 273.4 K against the cold band's 270.0 K, and the test asks for more than 5 K between
-  them. Its limit is not moved. It belongs to the plants' work (C3).
+What is still open in the land, the water, the plants and the map. What is done is in `review/orchestrator.md`
+section 4, with its known faults; the lines here are the rest.
 
-**The tree of cells: deleted.** The cells of a world are those it is built with. 5,340 lines out, 383 in; runs on
-cells as built are bit for bit. The fast suite holds 199 tests.
+**The map and the tiles**
+- A tile costs 7 to 10 ms, most of it the channels' field; the goal is 15 ms for a tile in all, and the rest is
+  `Terrain::heights`, which builds its patch from the samples down at each call.
+- The fitted view uses texels of 125 m; tapes keep the map of squares.
+- Seasons blend from month to month; above 36 months a second the page shows the year's mean (A3).
+- How long a zoomed view takes to be sharp is not known: the test browser draws on the CPU.
+- At 10 m the ground between plants reads brown (herbs cover a fifth; flowers are too small to see). Autumn is mostly
+  herbs going yellow; red shows only on the heights.
 
-**Plants drawn from their numbers (C1, C2): done.** Each square's kinds reach the page with the numbers a look needs;
-a mark picks its kind at its own foot, so kinds mix across a cell's edge; the count and size of a stand's plants come
-from its mass, their height from their wood, their crown from their leaf area (`tape/src/stands.rs`). The seven
-classes and their colours are deleted.
-
-**The plants' second and third rounds: done.** Six kinds of cover start a world; a kind new to a full cell makes
-room by joining two variants of another; the ground under the plants is its own colour under the cover's litter;
-every map colour is a reflectance in linear light, encoded once by the sRGB curve. No trait of a kind is free under
-the laws as they are (the table is in the commit of the six kinds), so no cost was added. The frost test's scene
-makes its premises true and asserts them: it passes, and no slow test is known to fail.
-
-Open on the plants:
-- From afar the kinds are one olive: leaves are alike, and chemistry 0 gives every part of a plant one reflectance.
-- Kinds sort little in space on a 22 island: its ground never freezes hard and most of it is wet. The dry-ground
-  woody kind lives on the heights; the wet-ground kind wins elsewhere. Sorting needs a world with frost and dry land.
-- A few lowland cells hold no liquid in their pores among wet ones, so their cover is dormant and they show as pale
-  squares (the water's follow-ups).
-- A seedling of a tall kind is ranked for light by its slot's walls per m2, so it is slow to enter a low stand.
-- Stems are pale: the walls' reflectance in chemistry 0.
-
-**B2, the water on one network: done.** A body of standing liquid is a pond of the terrain's samples with one level;
-the low basin is the lowest body, with no code of its own. Each month a cell's runoff goes down the samples' ways to
-the body it reaches; the bodies are levelled in the order of their passes and what a body holds over its pass goes
-on; one pass sums the discharge of every sample. The page draws each body flat at its level. The monthly flood over
-the cells, the rims and the ways are deleted. 30 years, plants only, 32 x 32: 9 bodies above the low ground hold
-1.8 km3; drift of energy 8.0e-12; Flow costs 167 -> 196 ms a year.
-
-Open on the water:
-- The page sizes a channel from one flux per cell, not from each sample's discharge; rivers do not show from afar
-  (the rivers' package).
-- A body's volume by level comes from its cells' curves (8 x 8 grounds), not from its own samples: levels read back
-  are off by millimetres in cells of parts, a pond whose cells all have their lowest sample outside it holds no body,
-  and its shore shows steps of a sample on plains level with it.
-- Liquid goes straight from the cell it leaves to the body's cell; what it picks up lands with it.
-- The passes over the samples cost about 20 ms a month on a 64 x 64 island.
-
-**The rivers on the page: done.** The discharge of every sample reaches the page; a tile names the sample of the
-channel each texel is nearest and its distance to that channel's line; the shader sizes the channel by the core's
-channel law from that sample's own discharge. A channel is drawn as water at every zoom, as a line from afar once its
-discharge passes a share of the pixel's size; its line bends on slopes under 0.01. Shores run smooth between texels.
-A tile costs 9 to 16 ms in wasm.
-
-Open on the rivers: the network runs in straight lines of 8 directions with a herringbone of tributaries on plains,
-and a ladder of steps shows along some valleys (the ground's second pass); bends are an even sine and their spacing
-uses a typical runoff; a channel starts at a body with a square end; notches where tributaries join.
-
-**The owner's style for the map.** The "Earth" view is the pretty one: vivid, a little cartoony, tricks allowed
-(wide shallow shores and beaches, lighter and more varied trees, leaves that turn in the cold for tender kinds, small
-plants as tufts, flowers and bushes that melt into a field from afar). The "True" view stays the raw colours the
-physics gives. Cliffs, bare rock, scree and boulders come from numbers (slope, the loose ground's depth, a channel's
-power); the drawing places each one.
-
-**The water's follow-ups: done.** A body of standing liquid is built from its own samples; each cell holds its parts
-of it, and the passes over the samples keep their room. A cell's liquid covers the share of its area that is left
-after the pores of the ground it comes to cover have filled, so every cell of a body ends a month at the body's level.
-
-**The ground's second pass: done.** The wear's ways no longer follow the grid: coarse rows have their true width, a
-sample picks one of its ways down by a fixed draw in proportion to the fall (Fairfield and Leymarie 1991), a way
-crosses a corner only from draining ground, and a filled basin's surface leans by each sample's draw. The bed has hard
-and soft patches from the chemistry's two makes of ground. The wear leaves a depth of loose ground per sample
-(Heimsath et al. 1997) and builds a shelf under the shore from the load that reaches the low ground; taken = basins +
-shelf is tested. Channel length in straight runs of 4 samples or more: 50% -> 30%.
-
-A cell's ground node takes the top `skin_m` (2 m) of each sample's loose ground at most: the layer the year's heat and
-the roots reach. What the wear left deeper is counted with the bed. `Samples::loose` keeps the true depth for the
-picture. With it the key numbers and the globe without life are in their ranges on the new ground.
-
-**The Earth view's style: done, on main.** One style step for the Earth view only: water coloured by depth through
-clear coastal water with foam at its edge, beaches by the sea on gentle ground, stronger and warmer light, a colour
-per kind from its own numbers, leaves that turn in the cold (each plant at its own time) and go to straw in drought,
-three designs (tree, bush, herb tuft with flowers and reeds), and a far field whose grains sit anywhere in their
-cells, so no grid shows at any zoom. The True view is unchanged.
-
-Rock, shores and the ground's grain, in the same style: beaches by the sea and by lakes on gentle loose ground;
-lakes and rivers in one water colour with a lighter band at the shore; a body that holds under 0.1 m is drawn as
-ground; where the loose ground is under 0.1 m the bed's own colour shows (both views), as slabs or, where steep, a
-face; scree between plants on steep thin ground; stones in channels by the power of their flow (`Ground::rock`).
-
-Open on the look:
-- Bare bed is drawn in blurred squares of a sample's width (125 m) close up: the drawing reads the loose depth one
-  value a sample. A face's ledges and cracks do not show at 200 to 500 m.
-- Bare ground is shaded in blocks of a sample's width (125 m): the drawn normal is the samples', not smoothed.
-- At 10 m the ground between plants reads brown: herbs cover a fifth; flowers are too small to see.
-- Rivers are pale beside lakes; thin streams are faint at 200 to 500 m.
-- White wedges and small squares where a channel leaves a pond; pale blotches in seed 1's river-mouth bay.
-- Autumn is mostly herbs going yellow; red shows only on the heights.
-
-**Steep ground sheds its loose ground: done.** The loose depth of a sample is the smaller of two balances: against
-the land's lowering (Heimsath 1997), and against creep down its slope, which grows without bound near the slope loose
-grains rest at, 0.8 (Roering, Kirchner and Dietrich 1999; `space/mantle.rs`). Every sample steeper than 0.9 is bare
-bed (a third before); 5 to 15% of the land is bare. Rock bands follow the ridges.
-
-**The ground on the page: done.** A channel is drawn as one smooth line down its stem (the mean of the sample centres
-3 up and 3 down, Chaikin 1974), with the bends laid on it; within 250 m the drawn ground leans to the channel's floor,
-so a valley follows its river. Water against ground is decided per texel by the drawn height; the shelf lies 10 m
-under 0 m with a rounded edge. A scene world builds in 0.06 s.
-
-**The rain: done.** Of what condenses over a cell, the share 1 - e^(-width / 20 km) lands there; the rest drifts with
-the wind and lands over all the cells of its air node (Smith and Barstad 2004), the node's total kept. So no cell
-under raining air gets none, and the pale dry squares are gone. Rain on a 22 island's land cells (least / median /
-most): 0.03 / 1.16 / 2.33 m a year; runoff is 0.65 of the rain on land. The wettest cells get less than under rain
-that lands where it condenses, so fewer cells are rivers: that reference of the key numbers (`RIVERS`) is measured
-with this law.
-
-**The bodies' start: done.** Every body of standing liquid with a pass starts full to its pass, its pores full: in six
-runs of 60 years, 86 of 92 bodies end at their pass, so that is the level their gains and losses hold. A body that
-loses more falls to its own level by the laws.
-
-**The core's speed, first pass (track D): done.** A month of the flow takes a fifth fewer instructions, results bit
-for bit: the runoff finds once per cell whether it is land, a body's floors are sorted from last month's order, a
-cell's shore is counted by a search of its sorted sides, one search gives a part's volume and area under a level, and
-the rain's landing builds no list. Native, plants only, ms a year (size 22 / 32 / 64): 244 / 505 / 1915 -> 167 / 366 /
-1498. On the page the world waits for the page to draw its frame, so the date and the picture shown are the world's
-own within a quarter of a second, and a pause stops at the date shown.
-
-A body's level is one exact search of its floors (`level::level_with`), in place of Newton's steps, a sort and the
-halvings of the pores' share: 4% fewer instructions; the climate's numbers move in their fourth digit at most.
-
-Open on the speed:
-- The parts of a cell are solved after each of the liquid's bookings (7 a month) and after each air step. One solve at
-  the end of the liquid step changes the law's timing, not only its rounding: the runoff reads the solve after the
-  pore flow (the liquid share of a node on a melting plateau, a cell's share under its liquid, its land's pore room),
-  the erosion reads the solve after the runoff (what is solid), and the mix through the thermocline reads the parts
-  after the load. A cell at rest is already taken from its last solve; 1% of the cells the bookings pass are at rest.
-- The ground's full state is built each month at the survey. To build only what changed: a full thaw where the refresh
-  changes the substances present, the fusion enthalpy held found from the amounts (summed by moves its rounding
-  grows), and Flow's state saved with a snapshot, so a resumed run stays the unbroken one. A first try that kept only
-  the bodies and the gases monthly ran out of memory within 6 years at size 22 (not traced).
-- The wasm build has no `wasm-opt`; SIMD gives 3 to 5%.
-
-Open on the ground and the water:
+**The ground**
 - Loose ground that settles during a run is not bounded by the `skin_m` rule.
-- The heat capacity of a node's amounts is one helper (`ground::amounts_cap`). Two orders of summing remain:
-  `World::heat_cap_of` and `land::capacities` add the amounts onto the skin one by one, the parts and the reactor sum
-  the amounts first. The same node can differ in the last bit between them; joining them changes results.
-- A closed basin by the sea that loses more than it gains starts full and falls about 0.1 m a year to its own level
-  (3 of 92 bodies in six runs).
-- A body colder than its liquid's melting point at the start starts molten, as the sea does.
-- A small square where a channel leaves a pond; a tile costs 7 to 10 ms, most of it the channels' field.
 - Building the samples costs 0.5 to 0.6 s on a 32 island.
-- The surface solve is backward Euler (laws.md 1.1, known limit). The design: solve the linear balance exactly by
-  pieces, T_e + (T_0 - T_e) e^(-h/τ), the fluxes from its mean over each piece, the end from its end; a plateau is a
-  piece where the temperature stands while its fusion enthalpy is paid. It touches `Air::moves`' slopes, the cover's
-  cap, `end_reflectance` and evaporation (taken at the end temperature as backward Euler takes it).
+- Channels that lay down their load (plains, marsh, deltas), and ice that cuts valleys: see the variety below.
+
+**The water**
+- A closed basin by the sea that loses more than it gains starts full and falls about 0.1 m a year to its own level
+  (3 of 92 bodies in six runs). A body colder than its liquid's melting point at the start starts molten, as the sea
+  does.
+- Liquid goes straight from the cell it leaves to the body's cell; what it picks up lands with it.
 - Liquid over a small pond's part of a cell stands over that part only, as a pillar (`curve::Part`, `Fill`): poured
   over a one-sample pond it stood 30 km high in a test. It should spread over the cell's other samples.
-- A node of 1000 members on a summit (2,529 m, ground at 272.7 K) dies of lack on its first day; which store runs short
-  is not known.
+- The passes over the samples cost about 20 ms a month on a 64 x 64 island.
+- The surface solve is backward Euler (`docs/laws.md` 1.1, known limit). The design: solve the linear balance exactly
+  by pieces, T_e + (T_0 - T_e) e^(-h/τ), the fluxes from its mean over each piece, the end from its end; a plateau is
+  a piece where the temperature stands while its fusion enthalpy is paid. It touches `Air::moves`' slopes, the
+  cover's cap, `end_reflectance` and evaporation.
 
-## 11. Variety: landscapes and biomes on a small world
+**Rivers**
+- The faults of rivers and shores are listed in `review/orchestrator.md` section 4 (straight shores, thin tributaries
+  from afar, bends between the 500 m and 200 m bars). A river's sediment does not yet build a delta at its mouth: see
+  the variety below.
 
-The owner: the world is monotone despite rivers, lakes, mountains and colours; a small world should hold forests,
-swamps, alpine ground, plains, hills, drowned valleys, with the math correct.
+**Plants**
+- From afar the kinds are one olive: leaves are alike, and chemistry 0 gives every part of a plant one reflectance;
+  stems are pale for the same reason.
+- A few lowland cells hold no liquid in their pores among wet ones, so their cover is dormant and they show as pale
+  squares.
+- The light the cover catches has two laws: `flow::air` computes the light per capture area itself where
+  `cover::per_capture_area` states it. One should call the other.
+- The mass of plants means two things in the two cover fields (with and without stored fuel).
 
-**Why it is monotone.** A biome is not a thing: it is what plants do where four fields meet: warmth, water, ground and
-time. On a small island each of the four is nearly the same everywhere:
-- Warmth: one air temperature over the whole island (the air evens out over 340 km); only height varies it.
-- Water: rain differs by height only; the ground is drained everywhere (every valley is a V with a channel); no flat
-  wet ground but the lakes.
-- Ground: one recipe of noise worn by one law with the same numbers everywhere, on two makes of bed in random
-  patches. So every square kilometre has the same hills at the same scale; no plain, no range, no plateau.
-- Plants: six starting kinds that all want the same place.
+**The core's speed**
+- The parts of a cell are solved after each of the liquid's bookings (7 a month) and after each air step. One solve at
+  the end of the liquid step changes the law's timing, not only its rounding: the runoff, the erosion and the mix
+  through the thermocline each read a solve made after the step before them.
+- The ground's full state is built each month at the survey. To build only what changed: a full thaw where the
+  refresh changes the substances present, the fusion enthalpy held found from the amounts, and Flow's state saved
+  with a snapshot, so a resumed run stays the unbroken one.
+- The heat capacity of a node's amounts is one helper (`ground::amounts_cap`), but two orders of summing remain:
+  `World::heat_cap_of` and `land::capacities` add the amounts onto the skin one by one; the parts and the reactor sum
+  the amounts first. Joining them changes results in the last bit.
+- The wasm build has no `wasm-opt`; SIMD gives 3 to 5%.
 
-**The strategy: make each field vary strongly, by a real cause, and let the biomes follow.** Nothing is painted; no
-biome has a name in the core.
-
-| Field | The cause to add | What it gives | Cost |
-|---|---|---|---|
-| Warmth | The band's stretch for the air (section 10 of the handover; in work on a branch) | a hot end, a cold end, tree lines at different heights | 1 to 2 packages |
-| Water from the air | A mean wind across the map from the band's own circulation, mountains across it | a wet side and a dry side | after the stretch; uncertain |
-| The ground's large shape | The rise of the land differs over the map: a range, its foothills, a low plain (the rise rate as a field with one or two large features, not the same noise everywhere) | alpine ground, hills, plains on one island | 1 package |
-| The coast | The wear runs with the sea lower, then the sea rises (as after an ice age) | drowned valleys: long inlets, bays, small islands | small, with the above |
-| The ground's make | Four or five makes of bed in layers and bodies, each with its hardness, colour, pores | scarps, tablelands, wide soft vales; colour that changes across the map | 1 package |
-| Steep ground | Loose ground cannot rest on steep slopes (in work) | cliffs, scree, bare peaks | in work |
-| Flat wet ground | Channels lay down their load where the slope falls (the law for mud and sand): valley floors, fans, deltas; ground whose pores stay full | plains by rivers, marsh, deltas | 2 packages, the hardest |
-| Ice | Where snow outlasts the summer it flows and cuts (a term of the wear's law at the world's start) | U-shaped valleys, bowls, deep lakes; with the risen sea, true fjords | 2 packages, after the others |
-| Plants | Starting kinds for the new places (soaked ground, cold thin ground, dry ground), and the law that roots in full pores get no gas | marsh plants, alpine mats, dry scrub: each wins in its own place | 1 package, after the fields exist |
-| The picture | The ground's colour from its make, its wetness and its dead matter | dark wet lowland, pale dry ridge, coloured rock | with each of the above |
-
-**Order.** The stretch (in work). Then the ground's large shape with the drowned coast and the makes of bed, in one
-package: it changes most for the least. Then plants for the new places. Then the law for mud and sand. Ice last.
-
-**The plants a world starts with: sorted and adapted at its creation** (the owner's question; to explore when a helper
-is free). A world starts with a few hand-made kinds as founders; in 100 years of a banded island they neither split
-by zone nor change their genes. The full world runs 4 to 6 years a second, so it cannot evolve anything in the 4 to 7
-seconds a world's creation may take. A reduced world can:
-1. The climate first: a year or two of the world without life (under a second) gives each cell its year of ground
-   temperature, light, liquid in its pores and snow, month by month.
-2. The cover's own law alone on that frozen year (`core/src/cover/`: the same functions, called with the frozen
-   state, never a copy): no air, no flow. The cover's month is a tenth of a world's month, and cells of like climate
-   and ground can be run as one, so thousands of years fit in a few seconds.
-3. Sorting before mutation: each class of cells starts with a wide draw of genotypes over the genes' whole range, not
-   six kinds; they compete for light, liquid and minerals by the law; the losers die out in decades; mutation and the
-   spread to neighbouring classes refine the winners over centuries.
-4. The world starts with the winners where they won, at the mass they hold there, taken from the ground and the air
-   with the books kept, as today's placement does.
-What it does not know: what plants do to their own ground (they dry it, shade it, feed it), so the full laws still
-shift the result in the first decades; how far is the first thing to measure. The amount of work is fixed (the same
-world from the same seed on every machine), so a phone takes longer than a desktop for the same start.
-
-**The sorted start: built on a branch, not merged** (`worktree-agent-a13df44719d5d1f2e`: the cover's month reading one
-view, bit for bit; `worldgen/src/life/nursery/`). It works as a mechanism: a year without life kept per cell, 24
-classes of like climate, each class's cell a garden that runs the cover's own month on the frozen year (liquid,
-minerals and light closed by the law's own rates), 36 tries alone per class and invasions by seed, a second year kept
-under the first winners' cover; 0.5 to 1 s native at size 22 to 32, the same world from the same seed. The world then
-starts grown and keeps what it was given (100% of the cover at year 60 is the start's genotypes; 7 to 19% less cover
-than at the start).
-
-Why it is not merged: on an island alone it does not adapt anything to anything. One kind (a tall tree that fixes its
-own mineral) wins every class; only 1 to 3 genotypes hold over 1% of the cover (5 or 6 with the hand-made start); the
-frost and moisture genes do not follow the cells' climate, because frost never bites and the island is wet nearly
-everywhere; the cover's law does not read the loose depth. It needs places that differ (the band's Wide and Mild
-worlds: to measure next) and two changes of the cover's law that it showed:
-- A slot once taken blocks newcomers for good (`seed::lodge`: a newcomer takes the lightest slot only if its seeds
-  outweigh that slot's whole cover), so there is no replacement and mutation moves nothing in 80 years. The smallest
-  physical statement: a slot that does not pay its upkeep gives way to arriving seed, and a seedling lives on the
-  light that reaches the bottom of the layers.
-- No succession: from equal mass herbs kill tree seedlings; trees win today only where placed several times heavier.
-- The loose depth a kind's roots need (the share of a cell's area whose loose ground reaches it) is not in the law.
-Also found: `flow::air` computes the light per capture area itself where `cover::per_capture_area` now states it:
-one of the two should call the other.
-
-**The cover's law, first three changes: built on `wip/cover-law`, not merged.** Seeds always take hold and a slot in
-deficit gives way (A); each slot has a real count of plants, a plant's own height sorts the light, small plants build
-few walls (B); a kind stands only on the share of a cell whose loose ground reaches its roots (C). As mechanisms they
-hold (a seedling alone grows to 2.4 m in 4 years; the books keep). What they show: **the cover has no costs, so nothing
-sorts.** On a Wide island the two tall kinds lead in every row, from a coldest month of 284 K to 256 K and from wet
-ground to almost no rain, at 19 to 22 kg/m2. The causes, measured:
-- A stand takes almost no liquid for the gas it fixes: rain does not limit it.
-- Walls pay no upkeep, and a dormant stand pays nothing: a tall kind waits out any season at full mass.
-- Young stands store 17 kg/m2 a year (3 at 15 years, 0.5 to 0.8 when old), against 0.5 to 1.5 for forests.
-- Every dormant tissue hardens by the same 20 K for nothing: no winter of the island kills.
-In work: liquid for gas (transpiration by the air's dryness), upkeep of living walls, what light gives, hardening as a
-kind's own trait. The test is the Wide island's rows: forest only where rain and warmth pay for it.
+**Variety: landscapes and biomes on a small world**
+- Wet and dry sides of the island: a mean wind across the map from the band's own circulation, with mountains across
+  it, and a law for the mean wind's momentum.
+- Years that differ: today rain on land changes by 0.02% from year to year.
+- Flat wet ground: channels lay down their load where the slope falls (the law for mud and sand), so valley floors,
+  fans, deltas and ground whose pores stay full appear. A delta's size is the load that reached the mouth over the
+  depth of the water there (Gilbert 1885; Galloway 1975).
+- Ice: where snow outlasts the summer it flows and cuts (a term of the wear's law at the world's start): U-shaped
+  valleys, bowls, deep lakes, and with a risen sea, fjords.
+- Starting kinds for the new places (soaked ground, cold thin ground, dry ground), and the law that roots in full
+  pores get no gas: marsh plants, alpine mats, dry scrub.
+- The sorted start, parked on `wip/sorted-start`, needs places that differ and two changes of the cover's law: a
+  slot that does not pay its upkeep gives way to arriving seed, and succession (from equal mass, herbs now kill tree
+  seedlings). Its first step is in `review/orchestrator.md` section 4.
+- Worlds that differ in shape (several islands, a ring, a long coast) are item 8 of section 7.1.
