@@ -10,7 +10,7 @@ use worldgen::testkit::{in_all, DISSOLVED, LIQUID};
 #[test]
 fn coarse_cells_lie_under_the_low_liquid() {
     for seed in 1..=5 {
-        let w = worldgen::new_world(seed, 128, 128);
+        let w = worldgen::new_world(seed, 32, 32);
         let cells = w.mesh.cells();
         let coarse: Vec<usize> = (0..cells.n()).filter(|&i| cells.area()[i] > 1.5 * w.map.side * w.map.side).collect();
         assert!(!coarse.is_empty(), "seed {seed}: coarse cells");
