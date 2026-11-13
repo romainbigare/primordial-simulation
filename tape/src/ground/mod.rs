@@ -134,7 +134,10 @@ impl Ground {
                 let in_pond = self.shore.share(p, |k| self.samples.pond[k] != NONE);
                 let valley = near.drawn(i, h);
                 let met = if level.is_nan() { valley } else { valley + (valley.min(h).max(h.min(level)) - valley) * beside };
-                self.shore.drawn(p, met + (h - met) * in_pond, level, beside)
+                let bed = (near.sample[i] != NONE).then(|| self.reaches().bed_of(near.sample[i] as usize));
+                let mouth = bed.map_or([0.0; 2], |(width, depth)| shore::drowned(width, depth, near.dist[i].abs()));
+                let mouth = [mouth[0], mouth[1] / self.map.length(SAMPLE_DEPTH)];
+                self.shore.drawn(p, met + (h - met) * in_pond, level, beside, mouth)
             })
             .collect();
         let at = |p: usize| (clamp(x0 + (p % side) as i64, across) - win[0]) as usize + (clamp(y0 + (p / side) as i64, down) - win[1]) as usize * wide;
