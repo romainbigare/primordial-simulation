@@ -335,8 +335,9 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   lie on low-ground cells near the shore and the two layers bleed over the liquid there; nothing hides a buried
   plant from the light (the air's step lets the canopy catch light over any snow). To measure again on the new air.
 - Designed, not built: the first takers of the cover (F1), `review/f1-design.md`, with the orchestrator's
-  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). Its builder
-  starts when a heavy helper's place is free; commits 1 and 2 of its plan do not wait for the air.
+  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). In work:
+  commits 1 and 2 of its build plan (the shared ground as a pure clean-up; the fauna's state, placing and books
+  with no eating), by a builder in its own worktree; scratch `scratchpad/f1/`. They do not wait for the air.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
