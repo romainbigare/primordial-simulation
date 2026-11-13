@@ -77,8 +77,10 @@ fn relief_tint(c: vec3f, lit: f32) -> vec3f {
 // bed rises at `slope` (rise over run) to a rim `rim_m` deep, seen at `e` m a pixel (`LAKE_RIM_PX`). The share of
 // the deep water's colour it takes (`river_seen`'s `rel`: a lake's shallows are a river's).
 fn shore_rim(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
-  return ease(0.0, max(rim_m, slope * LAKE_RIM_PX * e), depth);
+  return ease(0.0, rim_depth(slope, e, rim_m), depth);
 }
+// The depth from which standing liquid is past its shore's band, m (`shore_rim`).
+fn rim_depth(slope: f32, e: f32, rim_m: f32) -> f32 { return max(rim_m, slope * LAKE_RIM_PX * e); }
 
 // A channel is a thin line of water decimetres deep: coloured by that depth alone it shows only its bed, a grey line
 // of gravel. A map draws a river as water, and its bed's shape is what reads: it is coloured as its own depth as a

@@ -41,11 +41,14 @@ fn noise(seed: u64, head: u32, octave: u64, x: f64) -> f64 {
 /// The wander `down` samples (over `WANDER_EVERY`) down the valley of the channel whose line began at `head`, its
 /// bed `width` of that many samples wide there: the share of its most it leans to one side (positive) or the other,
 /// about -1 to 1.
-pub(super) fn wander(seed: u64, head: u32, down: f64, width: f64) -> f64 {
+/// Of its finer octaves it takes those whose corners lie `least` apart or more (fully from twice that): a tile
+/// leaves out the turns its texels would draw as teeth (`lines::TEETH_TEXELS`).
+pub(super) fn wander(seed: u64, head: u32, down: f64, width: f64, least: f64) -> f64 {
     let (mut sum, mut often, mut strong) = (0.0, 1.0, 1.0);
     for octave in 0..WANDER_OCTAVES {
         // (The first octave is every channel's; the corners of this one lie 1 / `often` apart.)
-        let takes = if octave == 0 { 1.0 } else { super::bends::ease(TURN_WIDTHS * width, 2.0 * TURN_WIDTHS * width, 1.0 / often) };
+        let ease = super::bends::ease;
+        let takes = if octave == 0 { 1.0 } else { ease(TURN_WIDTHS * width, 2.0 * TURN_WIDTHS * width, 1.0 / often) * ease(least, 2.0 * least, 1.0 / often) };
         if takes <= 0.0 {
             break;
         }

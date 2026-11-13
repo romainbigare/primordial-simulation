@@ -5,12 +5,12 @@
 // (web/shade, draw.wgsl `LEAST_E`): seen from afar, the detail of the ground and the plants that cannot show is
 // compiled out (from 30 m, the whole island on a phone, the sea ice's floes and the pack's texture: ice.wgsl).
 
+// Through the standing liquid's shallows at its mouth a river's water reaches this share of its half width farther to
+// each side, shallowing to none there.
+const MOUTH_SOFT = 1.0;
 // What grows along a channel is read within this many of its bed's half widths of its line: its bed, its banks and the
 // stones beside a steep reach lie within them.
 const CHANNEL_NEAR = 3.0;
-// Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
-// samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
-const FILM_M = 0.05;
 // A channel's stones lie on its bed and its bars, in `IN_CHANNEL` of the places they could, fewer where it moves
 // only sand (`BAR_SAND_STONE`); beside a steep reach they lie out to `STONES_OUT` of its bed's half widths from its
 // line, thinning, and there the bed is bare (`WALL` of it: a steep reach runs between walls of its bed), and blocks
@@ -195,6 +195,17 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
+  // A river runs through the shore's band into the open water: where its water (as wide as the channel law makes it,
+  // no thinner than its line) crosses standing liquid's shallows, the liquid is as deep as the open water past the
+  // band (and past the sea's foam). So the band ends at a mouth, the colour runs on from the river's thread to the
+  // body's open water, and past the band nothing changes.
+  if (near && p.depth > 0.0 && ch.water > 0.0) {
+    let wide = max(ch.law * land.reach.w, line_of(q, e));
+    // (Deepest on the river's line and shallower to its sides, as the river's own bed: a parabola across it.)
+    let across = g.d / (wide * (1.0 + MOUTH_SOFT) + e);
+    let through = max(1.0 - across * across, 0.0);
+    p.depth = max(p.depth, through * max(rim_depth(length(g.slope), e, LAKE_RIM_M), p.sea * FOAM_M));
+  }
   p.river = 0.0;
   p.river_depth = 0.0;
   p.at = at;

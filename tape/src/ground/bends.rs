@@ -314,7 +314,8 @@ impl Bends {
     /// main neighbour's upstream at the piece's start to the mean of its own and the next one's at its end, and is
     /// none where the line ends (a join, a sink); a head leans as its own sample does. The wander's finer turns are those of a bed as
     /// wide as the channel's there (`wander::wander`), in samples, which runs between the same means.
-    pub(super) fn leans(&self, r: &Reaches, k: usize, frame: &Frame, u: f64) -> f64 {
+    /// (Of the finer turns, those `least` m long or more: `wander::wander`.)
+    pub(super) fn leans(&self, r: &Reaches, k: usize, frame: &Frame, u: f64, least: f64) -> f64 {
         let s = r.s;
         let (up, on) = (s.main[k] != NONE, s.to[k] != NONE && s.main[s.to[k] as usize] == k as u32);
         let t = ease(0.0, 1.0, u / frame.len());
@@ -324,6 +325,6 @@ impl Bends {
         let most = from + (joint(s.to[k], on) - from) * t;
         let wide = |j: u32, runs: bool| if runs { 0.5 * (r.bed_of(k).0 + r.bed_of(j as usize).0) } else { r.bed_of(k).0 };
         let width = wide(s.main[k], up) + (wide(s.to[k], on) - wide(s.main[k], up)) * t;
-        most * wander(r.seed, self.head[k], self.down[k] + u / (WANDER_EVERY * r.metres), width / (WANDER_EVERY * r.metres))
+        most * wander(r.seed, self.head[k], self.down[k] + u / (WANDER_EVERY * r.metres), width / (WANDER_EVERY * r.metres), least / (WANDER_EVERY * r.metres))
     }
 }

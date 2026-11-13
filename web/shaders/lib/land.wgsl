@@ -336,6 +336,6 @@ fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   let c = channel_at(g, discharge_at(g, at));
   let cut = depth_in(g, c);
   var p = state_on(at, g, cs, cut);
-  p.depth = max(max(p.depth, cut), select(0.0, ROOTS_M, g.d < c.bed));
+  p.depth = max(max(p.depth, cut), select(0.0, FILM_M, g.d < c.bed));
   return p;
 }

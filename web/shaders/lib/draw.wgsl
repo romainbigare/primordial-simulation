@@ -129,11 +129,13 @@ const SNOW_PER_ICE = 3.0;
 // The depth of the snow on ground of `ice_m` m of frozen cover on average at `t` K (`snow_of`), m.
 fn snow_depth(ice_m: f32, t: f32, melt: f32) -> f32 { return SNOW_PER_ICE * ice_m * unmelted(t, melt); }
 
-// A land plant's roots need air in the soil: liquid standing over its foot as deep as this, m, drowns them (half of the
-// roots of most kinds of cover lie in the top 0.3 m, Jackson and others 1996).
-const ROOTS_M = 0.3;
+// Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
+// samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
+// From this depth on it is water, and no land plant stands in it (its roots need air in the soil): one rule for the
+// water drawn and for the plants.
+const FILM_M = 0.05;
 // The share of a plant that stands where liquid stands `depth` m deep.
-fn above_water(depth: f32) -> f32 { return 1.0 - ease(0.0, ROOTS_M, depth); }
+fn above_water(depth: f32) -> f32 { return 1.0 - ease(0.0, FILM_M, depth); }
 // Snow buries a plant `height` m tall as it reaches from `BURIED_FROM` of its height to all of it: a herb is gone under
 // a deep snow, a tree stands in it.
 const BURIED_FROM = 0.6;
