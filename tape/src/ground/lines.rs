@@ -12,14 +12,11 @@ use pcore::space::network::NONE;
 const STEP_TEXELS: f64 = 0.5;
 const CALM_STEPS: usize = 48;
 /// A tile draws a channel's sway (its bends, and its wander) fully where its length is at least `BEND_TEXELS` texels,
-/// and not at all under `BEND_FROM`: shorter, it moves the line by less than a texel. Between, it grows, the same at
-/// both ends of a joint.
-const BEND_FROM: f64 = 4.0;
-const BEND_TEXELS: f64 = 8.0;
-/// A tile leaves out the wander's finer turns whose corners lie nearer than this many texels (all of them from twice
-/// that): a shell draws a channel from afar as a line several texels wide, and turns a few line widths long read as
-/// the teeth of a saw; they come in as the texels grow finer.
-const TEETH_TEXELS: f64 = 12.0;
+/// and not at all under `BEND_FROM`: a shell draws a channel from afar as a line several texels wide, and a sway whose
+/// turns are tighter than that line is wide reads as the teeth of a saw (a bend turns on about a fifth of its
+/// length). Between, it grows, the same at both ends of a joint, and its turns are wider as it is drawn less.
+const BEND_FROM: f64 = 24.0;
+const BEND_TEXELS: f64 = 72.0;
 
 /// A point of a channel's line as drawn: its place, samples; the share of its piece's curve it lies along (0 to 1);
 /// and how far along the channel's line from its head, m.
@@ -78,7 +75,7 @@ impl Channels<'_> {
         let bends = [joint(r.wavelength(k), s.main[k], &|j| r.wavelength(j)), if runs_on { joint(r.wavelength(k), s.to[k], &|j| r.wavelength(j)) } else { 0.0 }];
         let wanders = ease(BEND_FROM, BEND_TEXELS, r.wander_length() / texel);
         let between = |ends: [f64; 2], u: f64| ends[0] + (ends[1] - ends[0]) * (u / len).clamp(0.0, 1.0);
-        let lean = |u: f64| wanders * self.bends.leans(r, k, &frame, u.clamp(0.0, len), TEETH_TEXELS * texel);
+        let lean = |u: f64| wanders * self.bends.leans(r, k, &frame, u.clamp(0.0, len));
         let n = ((len / (STEP_TEXELS * texel)).ceil() as usize).clamp(1, CALM_STEPS);
         let calm: Vec<[f64; 2]> = (0..=n).map(|i| i as f64 * len / n as f64).map(|u| frame.at(u, lean(u))).collect();
         if bends == [0.0; 2] || (matches!(start, Start::Straight(_)) && r.room(k, &frame).belt == 0.0) {
