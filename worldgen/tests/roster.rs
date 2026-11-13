@@ -5,7 +5,7 @@ use worldgen::life::{seed, KINDS, ROSTER};
 
 #[test]
 fn every_roster_kind_is_placed_and_the_world_holds() {
-    let mut w = worldgen::new_world(3, 32, 32);
+    let mut w = worldgen::testkit::one_rise(3, 32, 32);
     let t0 = pcore::check::totals(&w);
     pcore::step(&mut w);
     for &k in &ROSTER {

@@ -15,7 +15,7 @@ const OTHER_CHUNKS: [u32; 2] = [1, 7];
 fn roster(threads: usize, chunks: u32) -> String {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
     pool.install(|| {
-        let mut w = worldgen::new_world(1, 16, 16);
+        let mut w = worldgen::testkit::one_rise(1, 16, 16);
         w.cfg.chunks = chunks;
         pcore::step(&mut w);
         for &k in &ROSTER {
@@ -69,7 +69,7 @@ fn the_threads_change_nothing_where_the_air_pays_for_the_pool() {
     let months = |threads: usize| {
         let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
         pool.install(|| {
-            let mut worlds = [worldgen::new_world(1, 128, 128), worldgen::terrain::new_globe(1, 64, [0; 4])];
+            let mut worlds = [worldgen::testkit::one_rise(1, 128, 128), worldgen::terrain::new_globe(1, 64, [0; 4])];
             for w in &mut worlds {
                 for _ in 0..POOL_MONTHS {
                     pcore::step(w);

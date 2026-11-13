@@ -12,8 +12,8 @@ pub const USAGE: &str = "usage:
     --globe               a globe whose rows wrap east to west, twice as many columns as rows (not an island)
     --band S,N            an island's rows from latitude S to latitude N, degrees (40,42.3): its air the air over
                           that band, its edges open on the planet's air (laws.md 1.6)
-    --shape NAME          an island's large shape: one (one rise in the middle of the map) or drawn (one to several
-                          rises drawn from the seed: several lands, a ring, a long land) (one)
+    --shape NAME          an island's large shape: drawn (one to several rises drawn from the seed: several lands, a
+                          ring, a long land) or one (one rise in the middle of the map) (drawn)
     --fine X,Y,W,H        on a globe, the W x H air blocks from column X and row Y in squares, the rest one cell an
                           air block (none)
     --years N             years to run (10)
@@ -91,11 +91,11 @@ impl Args {
         cfg.validate().map(|_| cfg)
     }
 
-    /// The large shape of a new island of `--shape NAME` (`Shape::One` if it is not there); an error if it is not one.
+    /// The large shape of a new island of `--shape NAME` (`Shape::Drawn` if it is not there); an error if it is not one.
     pub fn shape(&self) -> Result<Shape, String> {
         match self.value::<String>("--shape").as_deref() {
-            None | Some("one") => Ok(Shape::One),
-            Some("drawn") => Ok(Shape::Drawn),
+            None | Some("drawn") => Ok(Shape::Drawn),
+            Some("one") => Ok(Shape::One),
             Some(other) => Err(format!("--shape {other}: want one or drawn")),
         }
     }

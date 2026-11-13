@@ -39,8 +39,8 @@ cell's height is the terrain's mean over it (`Terrain::inside`, below), the heig
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
 its rises, says how high the ground would stand. **An island's crust is raised by rises** (`space::rises`, `Lift`):
 the noise's large shape falls by (the distance from the nearest rise, in its reaches)^p, so land stands round each rise
-and low ground that the liquid fills lies between them. An island of **drawn rises** (`Shape::Drawn`, `ew run --shape
-drawn`) has one to several, all drawn from its seed: their count the most its map holds or one
+and low ground that the liquid fills lies between them. An island of **drawn rises** (`Shape::Drawn`, the default of
+`ew run` and of the page) has one to several, all drawn from its seed: their count the most its map holds or one
 fewer, the most the count of lands of at least 600 km² that the number-area rule gives for all its land in one,
 √(land / 600 km²) (Korčák 1938; Mandelbrot 1975: N(>A) ~ A^-B with B about 1/2), so it grows with the map's side (1
 or 2 on 32 squares, 2 to 4 on 64, 5 to 7 on 128, by the drawn share); the area each raises as k^(-1/B) for the k-th
@@ -61,7 +61,7 @@ the level is the share drawn from the seed, 30 to 45%: the least of 14 scales fr
 reach that holds it, refined by 6 halvings (rises that grow into each other sag between them, so more land is not
 always the larger scale's). The wear and the drowning take some: 22 to 43% of the map is land on drawn islands of 64
 squares, seeds 1 to 12, 33% on average, against 24 to 37% (31%) on islands of one rise. An island of **one rise**
-(`Shape::One`, the default) has one in the middle of its map, reaching half its side, p = 1.6.
+(`Shape::One`, `--shape one`; the tests' worlds) has one in the middle of its map, reaching half its side, p = 1.6.
 **Each rise has its range** (`Range`): along an axis drawn from the seed (any heading, up to a
 unit of the noise from the middle of the map, bent by the warp; on a drawn rise along its length, up to a unit for a
 rise of the one rise's reach from its middle and fading past its ends) lies a range, a band half 0.7 to 1.4 units wide
@@ -846,8 +846,8 @@ to the air. Body matter holds no rock element: the **rock salt (11)** is rock ch
 ## 5. Starting conditions (not laws)
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
-- **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island of one
-  rise or of drawn rises (`--shape`, 0), or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
+- **Terrain**: a function in core (`space::terrain`, 0), which `worldgen::terrain` builds the cells on: an island of
+  drawn rises or of one rise (`--shape`, 0), or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); the bed of the chemistry's `makes`, each over the share of the cell's samples whose surface the
   wear left in it (`space::strata`); the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
   mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with

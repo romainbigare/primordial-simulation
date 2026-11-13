@@ -10,7 +10,7 @@ use worldgen::testkit::{in_all, DISSOLVED, LIQUID};
 #[test]
 fn coarse_cells_lie_under_the_low_liquid() {
     for seed in 1..=5 {
-        let w = worldgen::new_world(seed, 32, 32);
+        let w = worldgen::testkit::one_rise(seed, 32, 32);
         let cells = w.mesh.cells();
         let coarse: Vec<usize> = (0..cells.n()).filter(|&i| cells.area()[i] > 1.5 * w.map.side * w.map.side).collect();
         assert!(!coarse.is_empty(), "seed {seed}: coarse cells");
@@ -23,7 +23,7 @@ fn coarse_cells_lie_under_the_low_liquid() {
 /// The world starts with the dissolved mineral in the liquid of its low ground and none on dry land.
 #[test]
 fn a_world_starts_with_the_dissolved_mineral_in_its_liquid() {
-    let w = worldgen::new_world(1, 24, 24);
+    let w = worldgen::testkit::one_rise(1, 24, 24);
     let n = w.mesh.cells().n();
     let (mut wet, mut dry) = (0.0, 0.0);
     for i in 0..n {
@@ -41,7 +41,7 @@ fn a_world_starts_with_the_dissolved_mineral_in_its_liquid() {
 /// gas's element, 14 g a mol, to the m²) in whole cells of land, booked as new matter and energy.
 #[test]
 fn the_soil_is_given_to_the_land_and_booked() {
-    let mut w = worldgen::new_world(1, 16, 16);
+    let mut w = worldgen::testkit::one_rise(1, 16, 16);
     for _ in 0..12 {
         pcore::step(&mut w);
     }
@@ -64,7 +64,7 @@ fn the_soil_is_given_to_the_land_and_booked() {
 /// temperature and the mean molar mass of its gases).
 #[test]
 fn the_starting_air_thins_with_height_by_its_own_scale_height() {
-    let w = worldgen::new_world(1, 24, 24);
+    let w = worldgen::testkit::one_rise(1, 24, 24);
     let (chem, init) = worldgen::chemistry0();
     let (n, na, g) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.cfg.gravity);
     let column = worldgen::terrain::air_column(&chem, &init, g);
@@ -89,7 +89,7 @@ fn the_starting_air_thins_with_height_by_its_own_scale_height() {
 /// its loose ground, laws.md 2.5; an eighth of the cells or more are dry.)
 #[test]
 fn a_cells_bed_and_loose_ground_add_up_to_its_height() {
-    let w = worldgen::new_world(1, 16, 16);
+    let w = worldgen::testkit::one_rise(1, 16, 16);
     let (n, lat, seed) = (w.mesh.cells().n(), (w.cfg.lat_south, w.cfg.lat_north), w.terrain.seed);
     let dry: Vec<usize> = (0..n).filter(|&i| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0).collect();
     assert!(dry.len() > n / 8, "{} dry cells of {n}", dry.len());
