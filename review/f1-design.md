@@ -14,7 +14,27 @@ The design is accepted as the plan of F1, with these decisions. Where the text b
 call" on one of these points, this list holds.
 
 1. **One parent** may breed in F1. A law of how often adults meet belongs to F2 (it needs movement).
-2. **No thirst beyond cooling** in F1. The liquid of breath and urine waits for the work on saltiness (roadmap 6).
+2. **Thirst is a law of F1** (the owner's word; roadmap 6, item 3). It replaces what sections 1.1 and 2 (step 6) say
+   of where a body's liquid comes from:
+   - **A body drinks open liquid only**: the liquid standing on a cell and the liquid running over it in the month.
+     The liquid held in the ground's pores is the cover's, not a mouth's. `contract::liquid` (gap G4) gives the two
+     apart. A body also has the liquid of what it eats (the share `WET_TISSUE` of the living mass taken) and the
+     soft solid lying on the ground, paying its heat of fusion.
+   - **The need** is the vapour that cools it (step 6) plus a least need by body mass for breath and what it voids
+     (Nagy and Peterson 1988, a power of the mass near 0.8; the builder checks the source before coding; one
+     anchored row in `docs/numbers.md`). Only the vapour is booked; what is drunk and voided in the same month goes
+     back to the cell.
+   - **The way to the liquid is paid by the law of walking.** A member whose cell holds no open liquid in the month
+     walks to the nearest cell that does and back, as often as its need and its body's store of liquid ask; the
+     energy is work it burns. Where the way takes more of the day than the day has, the slot's work is cut by the
+     share of its need it cannot meet (as step 6 does today), and the members it cannot keep die as `LACK`. Nothing
+     says "live near a river": the cost of the way does.
+   - **No term for what is dissolved yet.** The low liquid of chemistry 0 is nearly pure, so a shore is a place to
+     drink. The term comes with the work that makes it truly salty (roadmap 6, item 3, second step); a number that
+     never bites is not added before.
+   - The gate gains one row: on a land with a dry season, the living mass of takers per km² falls with the way to
+     open liquid for the large kinds, and less or not at all for kinds under 1 kg (which live on their food's
+     liquid). Adults that move to the liquid as a herd belong to F2: open liquid is then one of the things sensed.
 3. **Small kinds** (under 1 kg) may swing; none may die out from the whole land (gate, row "hold each other", c).
 4. **`bite_floor`** is the refuge the whole stage rests on, and its anchor is weak. The gate is run at half and at
    twice its value too, and the three results are reported. If plants and takers hold each other only in a narrow
