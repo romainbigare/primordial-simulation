@@ -254,8 +254,26 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   live page is its Version 44.
 - In work, life track: the deletion of the old animals (step 2 below), by the helper that freed the plants, in its
   worktree `.claude/worktrees/agent-abcfb0efca1cd5295`. The tag `animals-v2` goes on the last commit that holds them.
-- In work, nature track: the air's low cloud, part 1, a check on paper (step 1 of the nature track); its helper
-  stops and reports before any law is built. Scratch: `scratchpad/air/`.
+- In work, nature track: the air's heat toward the poles, on the branch `air-low-cloud` (made from
+  `wip/air-light` with main merged in; worktree `.claude/worktrees/agent-acdb88dbd7f62d7f6`; scratch
+  `scratchpad/air/`, its tables in `numbers/`). What its helper measured, with books that close to 2%:
+  - **The low cloud made by cooling from below is not built.** At the pole the surface is warmer than its air in
+    every month, so nothing starts it; in a state with ice it takes as much sunlight as it gives back in heat light.
+    Earth's own polar clouds forced in as a probe cool the pole by 1 to 4 K and leave no ice.
+  - **The cause is the air's own carrying, not the liquid's.** The overturning (`flow/air/wind.rs` `push`) moves the
+    same mass per K/m at every latitude: it carries 1.7 PW across 45° and 0.67 PW across 67.5°, where Earth's mean
+    cell runs the other way or stands still. The eddies carry about twice Earth's per K of ground difference (`mix`
+    is tuned and was raised to stand for the sea's share; whole columns are exchanged, and their mean difference is
+    1.8 times the ground's). Per K the globe carries 1.7 to 5 times Earth's, worst at the polar circle. The liquid
+    under the air carries nothing sideways. Main has the same fault, hidden by its weak grey air.
+  - A probe with the overturning weakened by r / (r² + f²), the eddies halved and Earth's clouds held low keeps 1.6 m
+    of ice through the summer; no one of the three does alone.
+  - In work now: the overturning's law with the rotation (the near-ground layer's balance, down and across the
+    gradient) and `mix` anchored to Earth's eddies, each its own commit on the branch; then the globe, a Wide island
+    and the key numbers measured, with pictures. No cloud law without the orchestrator's word.
+  - Found on the way: on the globe the polar band's ground gains 0.65 m of liquid a year (rain that lands in a
+    neighbour's row and is not levelled back); and the fixed liquid reflectance (0.079) is above Fresnel's for a
+    high sun: the tropics would absorb 7 to 8 W/m² more with the true one, the pole 1 to 7 less.
 - Open on the drawn worlds, asked of the owner: rings and closed inner bodies of liquid are frequent (3 or 4 worlds
   in 12 at size 64; about 2 in 12 close into a body 2,000 km² wide and 800 m deep standing above 0 m): the
   orchestrator leans to rings that are rare and mostly open to the low ground. Drawn worlds hold less land (27%
