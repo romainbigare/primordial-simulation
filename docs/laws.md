@@ -7,7 +7,7 @@ orderings) is said once, in the code's doc comments; the code is the truth. Numb
 **Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`; how a
 cell's means lie over its own ground in `inside/`; shared
 maths in `solve/` (`sweep`, `line`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
-`ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
+`ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life/`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
 tape's events in `event.rs`; threads in `par.rs` (the same results with and without, on any count of threads).
 
@@ -643,7 +643,7 @@ which breaks them (6.8) and clears the link (`lanes::clear`) of the ground whose
 over the cell's breaking energy per m²); a cleared link is cheaper (`lanes::resist`) and grows back yearly
 (`lanes::regrow`, `regrow`). This one rule is what can make paths.
 
-### 1.8 The step by the size
+### 1.8 Each law takes one step
 An explicit step is safe while `dt Σ g / cap` of each node stays within 1/2 (no pattern changes sign in a step,
 `solve::sweep`). For a diffusion of D m²/s on a cell of side Δ with four borders that is 4 D dt / Δ² ≤ 1/2, so a step
 of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.11e7 s):

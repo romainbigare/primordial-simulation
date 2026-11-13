@@ -2,13 +2,16 @@
 
 A world that runs on five physical laws; everything else must emerge.
 
-- `docs/handover.md`: the plan, the decisions and the rules of work
+- `CLAUDE.md`: the rules for working on the code
+- `docs/handover.md`: the spec: the principles, the decisions and the rules of work
 - `docs/laws.md`: how each law works now, with the code that does it
 - `docs/numbers.md`: every free number, its unit and its source
 - `docs/tape.md`: what a run records
+- `review/roadmap.md`: the plan, the priorities and the owner's decisions
+- `review/orchestrator.md`: the handover of the work, with where things stand
 
 ```
-cargo run --release -p cli --bin ew -- run --years 300 --frames-every 5 --out out/run       # simulate: the tape (series.csv, viewer frames) and a snapshot at the end
+cargo run --release -p cli --bin ew -- run --roster --plants --years 300 --frames-every 5 --out out/run       # simulate the plant world: the tape (series.csv, viewer frames) and a snapshot at the end
 cargo run --release -p cli --bin ew -- run --years 300 --snapshots-every 100 --pictures-every 50 --months --out out/run   # also snapshots, PNG pictures and months.csv
 cargo run --release -p cli --bin ew -- resume --from out/run/snap_00300.bin.gz --years 100 --out out/run   # go on from a snapshot
 cargo run --release -p cli --bin ew -- view --from out/run/snap_00300.bin.gz --window 40,10,8,8 --px 800 --layer map --edges --out look.png   # a window of a snapshot's map as a PNG (fractions of a square allowed; cells finer than a pixel are seen)
@@ -20,7 +23,7 @@ cd web && npm run build && npm run wasm && python3 -m http.server --directory di
 cd web && npm run build && cp ../out/run/world.ewf.gz dist/                                   # tape viewer: open http://localhost:8000/?f=world.ewf.gz, or drop a file on the page
 ```
 
-Speed: `ew run --size 128 --years 1000` on 4 cores: 2.1 s per year, measured over 20 years (`--years 20 --every 1000 --frames-every 1000`; 2.2 s per year over the last 2 of them, 16,384 cells, no bodies yet), on 2026-11-01 with a load average of 1.9 (`uptime`). Every run prints its own speed line at the end.
+Every run prints its own speed line at the end.
 
 A world's cells stay those as built for its whole life, whatever the zoom. Zoom is a matter of
 drawing only: the map draws every zoom from the cells (below). The page shows the date, the months per second the world
