@@ -202,7 +202,7 @@ fn what_is_pressed_loose_the_ground_gains() {
     // (In the open: no snow hides any of it.)
     w.life.env[i][3] = 0.0;
     let all = shown(&w, i, Layer::Cover);
-    let breaking = w.life.cover(i).breaking(&w.chem, &w.cfg, &cover::Parts::of(&w.chem).expect("the cover's parts"));
+    let breaking = all.breaking;
     w.take_counters();
     let before: Vec<f64> = (0..w.chem.ns()).map(|k| ground(&w, k)).collect();
     w.in_cell(i, |w, d| contract::press(w, d, i, 0.25 * breaking));

@@ -193,16 +193,16 @@ and of chunks. A serial step on one cell runs the same way on a chunk of its own
 from it: its taker today is the plain taker of the tests (`worldgen::testkit::Taker`). The natural world names no
 module of a taker (`cli/tests/sides.rs`). It is plain data and functions over the one source, with no copy. **What a
 cell shows** a taker: its cover as a whole, each slot by the height its plants stand at, and the seeds lying on its
-ground (`contract::shown`, `contract::slots`, `Layer::Seeds`): the mass and the amount of each substance a taker can reach; its place as the month's start left it
+ground (`contract::shown`, `contract::slots`, `Layer::Seeds`): the mass and the amount of each substance a taker can reach, and the energy to break it (`life::breaking`: each part's volume times its breaking stress, body matter as living tissue at `rho_body`); its place as the month's start left it
 (`contract::place`: the ground's temperature, the depth of the liquid standing on it, its height, and the depth of the
 soft solid lying on its land, `Scratch::soft_land`, at the solid's density). **Snow hides** what lies under it
 (`contract::above`): a plant's matter is spread evenly over its height (the stand's law draws it as a stem of its
 height), so of a slot whose plants stand h high under snow d deep a taker reaches the share 1 − d / h (none at d ≥ h),
 and of the seeds lying, on the ground, nothing where any snow lies. **Take**
-(`contract::take`): a taker asks the whole cover, one slot or the seeds lying for an amount of a substance and gets what is granted,
-never more than it can reach, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
+(`contract::take`): a taker bites a mass of the whole cover, one slot or the seeds lying; a bite takes all the parts
+it reaches in their own proportions, as a mouth takes a piece of a plant, never more than it can reach, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
 (`contract::give`): matter and heat back to the ground, through the cell's view of the store. **Press**
-(`contract::press`): work spent on a cell breaks its cover by the share it pays for (`Cover::breaking`), and what breaks
+(`contract::press`): work spent on a cell breaks its cover by the share it pays for (`life::breaking` of all its slots), and what breaks
 goes to the ground as remains with its heat. **What stands on a cell** (`contract::Stand`): the cover's mass, capture
 area and the light it absorbs and keeps, at each month's start (`Cover::stand`); Flow reads it (1.3, 1.4). A cell shows
 itself as the month's start left its place and what stands, and its cover as it is; takes land in the takers' month,
@@ -852,7 +852,7 @@ seeds fill it:
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
   12). Every move is booked through the cell's view (`store::Moves`), its gas within the cell's share of the air.
 - **Taken and broken**: only through the contract (section 0): a taker takes from the whole cover, from one slot or
-  from the seeds lying (`contract::take`, `Layer::Seeds`), each slot or lot giving in proportion to what it holds; work
+  from the seeds lying (`contract::take`, `Layer::Seeds`), each slot or lot giving the same share of all its parts; work
   pressed on a cell breaks the cover by its share (`contract::press`).
 - **What it is to the rest**: its mass, capture area and the light it absorbs and keeps are what stands on its cell
   (`Cover::stand`, `contract::Stand`), so it shades (1.4) and holds the ground (1.3).

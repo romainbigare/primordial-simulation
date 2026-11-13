@@ -4,8 +4,9 @@
 //! from its cover when a taker asks. Its taker today is the plain taker of the tests (`worldgen::testkit::Taker`).
 //!
 //! - **What a cell shows**: its cover as a whole and slot by slot by the height its plants stand at (`shown`,
-//!   `slots`), the seeds lying on its ground, and its place (`place`).
-//! - **Take** (`take`), **give** (`give`) and **press** (`press`): each booked on both sides, never more than is there.
+//!   `slots`), with the energy to break it, the seeds lying on its ground, and its place (`place`).
+//! - **Take** (`take`, a bite of all a layer's parts in their proportions), **give** (`give`) and **press** (`press`):
+//!   each booked on both sides, never more than is there.
 //! - **What stands on a cell** (`Stand`, `stand`): what life there weighs and catches of the light; Flow reads it.
 //!
 //! When: the place is as the month's start left it (`surroundings`), and so is what stands; the cover is as it is now.
@@ -134,11 +135,13 @@ fn reach<'a>(w: &'a World, cell: &'a Cell, p: &'a Parts, layer: Layer, snow: f64
     }
 }
 
-/// A layer of a cell's cover as a taker sees it: its mass, kg, and what it holds of each substance, mol.
+/// A layer of a cell's cover as a taker sees it: its mass, kg, what it holds of each substance, mol, and the energy to
+/// break all of it, J (`life::breaking`).
 #[derive(Clone, Copy, Debug)]
 pub struct Shown {
     pub kg: f64,
     pub mol: [f64; MAX_SUBSTANCES],
+    pub breaking: f64,
 }
 
 /// What `layer` of the cover of cell `i` shows a taker (`Cover::shown`, `Cover::shown_lying`): what it can reach above
@@ -147,8 +150,8 @@ pub fn shown(w: &World, i: usize, cell: &Cell, layer: Layer) -> Option<Shown> {
     let p = Parts::of(&w.chem)?;
     let of = reach(w, cell, &p, layer, place(w, i).snow);
     Some(match layer {
-        Layer::Seeds => cell.cover.shown_lying(&w.chem, &p, of(0)),
-        _ => cell.cover.shown(&w.chem, &p, of),
+        Layer::Seeds => cell.cover.shown_lying(&w.chem, &w.cfg.phys, &p, of(0)),
+        _ => cell.cover.shown(&w.chem, &w.cfg.phys, &p, of),
     })
 }
 
@@ -160,29 +163,40 @@ pub fn slots(w: &World, cell: &Cell) -> Vec<(Layer, f64)> {
     v
 }
 
-/// A taker asks `layer` of the cover of cell `i` of chunk `d` for `mol` of substance `k`: it gets what is granted, mol
-/// (no more than the layer holds within its reach above the snow, `reach`), and the heat that goes with it, J. The cover books its side (`Cover::take`,
-/// `Cover::take_lying`), what it loses counted as taken (`Counters::cover_lost` or `Counters::seeds`, `cover::TAKERS` of
-/// its budget); the taker books its own.
-pub fn take(w: &World, d: &mut Chunk, i: usize, layer: Layer, (k, mol): (usize, f64)) -> (f64, f64) {
-    let Some(p) = Parts::of(&w.chem) else { return (0.0, 0.0) };
-    let e = p.content(&w.chem);
+/// What a taker took in one bite (`take`): its mass, kg, what it holds of each substance, mol, and its heat, J.
+#[derive(Clone, Copy, Debug)]
+pub struct Bite {
+    pub kg: f64,
+    pub mol: [f64; MAX_SUBSTANCES],
+    pub heat: f64,
+}
+
+/// A taker bites `want` kg of `layer` of the cover of cell `i` of chunk `d`: a bite takes the parts of what it reaches whole,
+/// each in its own proportion, as a mouth takes a piece of a plant (no more than the layer shows within its reach above
+/// the snow, `reach`). It gets what is granted (`Bite`). The cover books its side (`Cover::take`, `Cover::take_lying`),
+/// what it loses counted as taken (`Counters::cover_lost` or `Counters::seeds`, `cover::TAKERS` of its budget); the taker
+/// books its own.
+pub fn take(w: &World, d: &mut Chunk, i: usize, layer: Layer, want: f64) -> Bite {
+    let none = Bite { kg: 0.0, mol: [0.0; MAX_SUBSTANCES], heat: 0.0 };
+    let Some(p) = Parts::of(&w.chem) else { return none };
+    let Some(seen) = shown(w, i, d.at(i), layer).filter(|s| s.kg > 0.0 && want > 0.0) else { return none };
+    let (e, g) = (p.content(&w.chem), (want / seen.kg).min(1.0));
     let held = d.cover(i).content(&e);
     let of: Vec<f64> = {
         let f = reach(w, d.at(i), &p, layer, place(w, i).snow);
         (0..SLOTS).map(f).collect()
     };
-    let (got, heat) = match layer {
-        Layer::Seeds => d.cover(i).take_lying(&w.chem, &p, (k, mol), of[0]),
-        _ => d.cover(i).take(&w.chem, &p, (k, mol), |x| of[x]),
+    let (mol, heat) = match layer {
+        Layer::Seeds => d.cover(i).take_lying(&w.chem, &p, g, of[0]),
+        _ => d.cover(i).take(&w.chem, &p, g, |x| of[x]),
     };
-    let kg = got * w.chem.subs[k].molar_mass;
+    let kg: f64 = mol.iter().zip(&w.chem.subs).map(|(m, s)| m * s.molar_mass).sum();
     match layer {
         Layer::Seeds => d.counts.seeds[TAKEN_LYING] += kg,
         _ => d.counts.cover_lost[TAKEN as usize] += kg,
     }
     d.counts.cover_budget[TAKERS] += d.cover(i).content(&e) - held;
-    (got, heat)
+    Bite { kg, mol, heat }
 }
 
 /// A taker gives `amounts` (substance, mol) and `heat` J to the ground of cell `i` of chunk `d` (remains, what passes
@@ -192,17 +206,16 @@ pub fn give(w: &World, d: &mut Chunk, i: usize, amounts: impl IntoIterator<Item 
 }
 
 /// Work `energy` J spent pressing on the cover of cell `i` of chunk `d` breaks it: the share `energy` over the energy
-/// to break all of it (`Cover::breaking`), at most all, goes to the ground as remains with its heat (`cover::lose`),
-/// through the chunk's moves in the name of the cover's node.
+/// to break all of it (`life::breaking` of all its slots), at most all, goes to the ground as remains with its heat
+/// (`cover::lose`), through the chunk's moves in the name of the node of the cell's life.
 pub fn press(w: &World, d: &mut Chunk, i: usize, energy: f64) {
     let Some(p) = Parts::of(&w.chem) else { return };
-    let (c, mm) = (&d.at(i).cover, p.mm(&w.chem));
-    let kg: f64 = (0..SLOTS).map(|x| c.kg(&mm, x)).sum();
-    if kg <= 0.0 {
+    let all = d.at(i).cover.shown(&w.chem, &w.cfg.phys, &p, |_| 1.0);
+    if all.kg <= 0.0 {
         return;
     }
-    let f = (energy / c.breaking(&w.chem, &w.cfg, &p).max(1e-30)).min(1.0);
-    d.counts.cover_lost[BROKEN as usize] += f * kg;
+    let f = (energy / all.breaking.max(1e-30)).min(1.0);
+    d.counts.cover_lost[BROKEN as usize] += f * all.kg;
     let e = p.content(&w.chem);
     let held = d.cover(i).content(&e);
     d.moves.open(w, i, Node::new(crate::store::Class::Life, i));
