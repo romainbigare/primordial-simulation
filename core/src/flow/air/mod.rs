@@ -10,12 +10,14 @@ mod edge;
 mod exchange;
 mod radiation;
 mod planet;
+mod outs;
 mod rain;
 mod seen;
 mod sky;
 mod step;
 mod stretch;
 mod surf;
+mod together;
 mod wind;
 
 pub(super) use corners::Corners;

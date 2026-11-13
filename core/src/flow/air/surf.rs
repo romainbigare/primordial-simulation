@@ -6,7 +6,8 @@
 
 use super::super::land::{boil_off, column, layers, melts, reflectance, thaw_at, wet_share, NONE};
 use super::super::{basin::{one_surface, phases}, parts::{amounts, Piece, LAND, TOP}, scratch::Latent, Scratch};
-use super::cells::{exchange, put, rise, sunlight, Ctx, Response, Work, FIXED, LINK, SPACE, UP};
+use super::cells::{exchange, rise, sunlight, Ctx, Response, Work, FIXED, LINK, SPACE, UP};
+use super::outs::put;
 use super::radiation::on_slope;
 use super::exchange::bucket;
 use super::lerp;
@@ -196,7 +197,7 @@ pub(super) fn groups(w: &World, member: impl Fn(usize) -> bool, key: impl Fn(usi
     by.into_values().filter(|p| p.len() > 1).collect()
 }
 
-/// The answer of one patch to the air it sees (`cells::Response`): its cells, in order; its parts (`cells::put`) at the
+/// The answer of one patch to the air it sees (`cells::Response`): its cells, in order; its parts (`outs::put`) at the
 /// air it sees at the step's start, `air`, with their slopes, what each mol of each gas carries, and its changing outputs
 /// from them; its fixed outputs; per cell its share of the heat parts (by the heat capacity of what faces the air, so
 /// they warm alike) and of each active gas (by what that holds of it; by area where none holds any), `[c * (1 + nx) +
