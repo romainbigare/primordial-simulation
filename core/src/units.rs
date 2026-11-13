@@ -9,9 +9,6 @@ pub const HOUR_S: u64 = 3_600;
 /// Seconds in a day, as a real number.
 pub const DAY: f64 = DAY_S as f64;
 
-/// The planet's spin, rad/s: one turn in a sidereal day of 86,164 s.
-pub const SPIN: f64 = 7.292e-5;
-
 /// Gas constant, J/(mol K).
 pub const R_GAS: f64 = 8.314;
 

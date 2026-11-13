@@ -49,10 +49,8 @@ pub struct Config {
     pub evap: f64,
     /// Transfer speed of a dissolving gas on the liquid's side of its surface (in series with `evap`), m/s
     pub dissolve: f64,
-    /// Overturning air speed per K/m of warmth gradient where the planet's spin turns none of it, m²/(s K)
+    /// Overturning air speed per K/m of warmth gradient, m²/(s K)
     pub wind: f64,
-    /// Friction rate of the near-ground air on the ground, 1/s
-    pub friction: f64,
     /// Mixing of neighbouring air columns by eddies, m²/s
     pub mix: f64,
     /// Time condensed liquid stays a cloud's droplets before it gathers into drops that fall, s
@@ -525,8 +523,6 @@ impl Config {
         require(self.cloud_life >= 0.0 && self.drop_m > 0.0, || format!("cloud_life ({}) must not be below 0 and drop_m ({}) above it", self.cloud_life, self.drop_m))?;
         let lit = (0.0..1.0).contains(&self.drop_forward) && self.drop_dark.iter().all(|x| (0.0..=1.0).contains(x));
         require(lit, || format!("drop_forward ({}) must be from 0 to below 1 and drop_dark ({:?}) from 0 to 1", self.drop_forward, self.drop_dark))?;
-        // The overturning's share down the gradient divides by the friction and the spin's squares (`wind::ekman`).
-        require(self.friction > 0.0 && self.friction.is_finite(), || format!("friction ({}) must be above 0", self.friction))?;
         // Rain lands over a width the drift sets (`seen::Seen::landing` divides by it).
         require(self.rain_drift_m > 0.0, || format!("rain_drift_m ({}) must be above 0", self.rain_drift_m))?;
         // Hardening lowers a lethal limit, never raises it.
@@ -579,8 +575,7 @@ impl Default for Config {
             sensible: 10.0,
             evap: 0.006,
             dissolve: 5e-5,
-            wind: 9.7e6,
-            friction: 1.0 / DAY,
+            wind: 4e5,
             mix: 1.3e6,
             cloud_life: 1000.0,
             drop_m: 1e-5,

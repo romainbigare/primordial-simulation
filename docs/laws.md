@@ -665,15 +665,8 @@ explicitly: the sender's air, each link at most half of what evens it over the c
 nodes, so no node gives more than half of each gas it holds. **Known limit:** sound is faster than that, so a pressure
 difference across many links of blocks takes days to even out. **Eddies** mix the columns (`mix`, width over length),
 each mol with its node's heat. **Overturning**: the lower half flows to the warmer column and the upper half back, a
-mass flux of `wind` per K/m of the warmth gradient through half the link's cross-section, so it does not depend on the
-size of the nodes. The planet's spin turns it (`wind::ekman`): the near-ground air, pushed by the gradient G, dragged by
-the ground at the rate `friction` and turned by the Coriolis force f = 2 Ω sin(latitude) (Ω the spin, `units::SPIN`,
-times `rotation`), flows as (r G + f ẑ × G) / (r² + f²) (Ekman's balance), so across a link the share r² / (r² + f²)
-of `wind` runs down the gradient along it (its difference over its length) and the share r f / (r² + f²) comes from
-the gradient across it. Down the gradient the cell is whole at the equator, 1 / 24 of that at 22.5° and dies
-toward the poles, where the eddies carry the heat, as the overturning cell of the low latitudes ends in the
-subtropics (Held and Hou 1980); with `rotation` 0 it runs whole down the gradient at every latitude. **Known limit:**
-the cell of the middle latitudes that turns the other way (Ferrel's), which the eddies drive, is not made.
+mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by the
+planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the nodes.
 Each half carries the air of the node it leaves, vapour crowding low, each mol with its node's heat per mol, and the
 upper half holds more heat per mol than the lower by the rise of the static energy cp T + M g z over half the column's
 depth, (M g - cp gam) × depth / 2, gam the column's drop with height (none where the air cools with height as fast as
