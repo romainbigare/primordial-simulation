@@ -1,8 +1,8 @@
 // The map, drawn on the GPU (gpu.ts) at the screen's own pixels: under it the page's background and the map's shadow,
 // then the live map from the ground's tiles and the cells' table (land.ts), or a tape's map of squares (fields.ts, a
 // texel a square), then what others draw on the GPU (the plant cover, vegetation.ts).
-// Over it a 2D canvas holds what is drawn by hand: the things (avatars.ts), a globe's lines of latitude, the squares
-// under the pointer and picked, and the scale bar.
+// Over it a 2D canvas holds what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
+// picked, and the scale bar.
 import { Draw, Gpu, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook } from './field-window';
@@ -13,8 +13,7 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 
 /** The part of the map in view: its window in squares (clipped to the map), the pixels a square takes, and the zoom (1: the map fits). */
 export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
-/** The most pixels a metre takes on screen: a body of 0.3 m (a member of about 8 kg) at 24 pixels, so one animal shows
- * its shape and can be picked. */
+/** The most pixels a metre takes on screen. */
 const MOST_PX_PER_M = 80;
 /** The map's shadow on the page: it falls this far south and is blurred this much (a Gaussian's deviation), css px, and
  * darkens the background this much at most. */
@@ -25,8 +24,6 @@ const FRAME_BUDGET_MS = 16, LEAST_SCALE = 0.25, SCALE_UP = 1.25;
 /** The time the view rests before the map drawn at fewer pixels is drawn anew at the screen's own, ms, a tile a frame,
  * each of about `FRAME_BUDGET_MS` on the GPU and no less than `TILE_LEAST` px a side. */
 const REST_MS = 300, TILE_LEAST = 64;
-/** The map's colours under the view, `w` x `h` texels of four bytes, rows top first. */
-export interface Under { w: number; h: number; rgba: Uint8Array }
 
 /** Drawn on the GPU over the map by another module, in the map's pass, at every frame: what it works out before the
  * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` device px, and the view is
@@ -55,7 +52,7 @@ export class MapView {
   /** The map's squares (a tape's map, and the classes of the live map's squares), and the live map. */
   private map: FieldWindow | null = null;
   private land: Land | null = null;
-  private look: MapLook = { mode: 'earth', layer: '', ramp: [], paths: false };
+  private look: MapLook = { mode: 'earth', layer: '', ramp: [] };
   /** The map's classes asked for: what waits for them, and the texture they are drawn into. */
   private asked: ((cls: Uint8Array) => void)[] = [];
   private classes: Texture | null = null;
@@ -75,11 +72,6 @@ export class MapView {
   private flowTimer = 0;
   private sharpening: { tiles: number[][]; xs: number[]; d: number } | null = null;
   private sharp: Texture | null = null;
-  /** The map's colours under the view asked for (`under`): what waits for them, the css px a texel and the texture they
-   * are drawn into. */
-  private underAsked: ((u: Under) => void)[] = [];
-  private underPx = 1;
-  private underTex: Texture | null = null;
   /** Drawn by another module on the GPU over the map, and on the 2D canvas over it at each redraw: its context, where
    * the map's corner is and the pixels a square takes. */
   layer: GpuLayer | null = null;
@@ -205,9 +197,6 @@ export class MapView {
       clearTimeout(this.sharpTimer);
       this.sharpening = null;
       this.drawGpu(this.gpu, xs, d);
-    } else if (this.gpu && this.underAsked.length) {
-      this.readUnder(this.gpu, xs);
-      this.gpu.submit();
     }
     this.overlay?.(ctx, ox, oy, s);
     if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
@@ -246,7 +235,6 @@ export class MapView {
       q.end();
     }
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
-    if (this.underAsked.length) this.readUnder(gpu, xs);
     gpu.submit();
     this.time(gpu, r);
     if (r < 1 && !fading) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
@@ -315,29 +303,6 @@ export class MapView {
     const program = seenFrom('land', this.cellM / (s * k));
     if (land) xs.forEach((_, c) => p.draw(program, { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: land }, false));
     else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
-  }
-
-  /** The map's colours under the view (without what is drawn over them), a texel each `cssPx` css px a side, once the
-   * GPU has drawn them. */
-  under(cssPx: number): Promise<Under> {
-    const done = new Promise<Under>(resolve => this.underAsked.push(resolve));
-    this.underPx = cssPx;
-    this.redraw();
-    return done;
-  }
-
-  /** Draw the map at `underPx` css px a pixel (`drawMap`) and hand it to those that asked. */
-  private readUnder(gpu: Gpu, xs: number[]): void {
-    const asked = this.underAsked, w = Math.max(1, Math.ceil(this.cv.clientWidth / this.underPx)), h = Math.max(1, Math.ceil(this.cv.clientHeight / this.underPx));
-    this.underAsked = [];
-    if (this.underTex?.w !== w || this.underTex.h !== h) {
-      if (this.underTex) gpu.drop(this.underTex);
-      this.underTex = gpu.texture(w, h, 'rgba8unorm', 1, 1, true);
-    }
-    const p = gpu.pass(this.underTex);
-    this.drawMap(gpu, p, xs, 1 / this.underPx, [w, h]);
-    p.end();
-    gpu.read(this.underTex).then(rgba => asked.forEach(a => a({ w, h, rgba })));
   }
 
   /** Time the frame just sent at `r` of the screen's pixels along each axis on the GPU (one at a time), and take the

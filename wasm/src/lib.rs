@@ -178,8 +178,8 @@ pub extern "C" fn discharge() -> *const u8 {
     give(bytes)
 }
 
-/// What lies in each cell of the window from column `x` and row `y`, `w` x `h` squares: its bodies, cover and parts
-/// (`tape::things`), for the page to draw one by one.
+/// What lies in each cell of the window from column `x` and row `y`, `w` x `h` squares: its slots of cover
+/// (`tape::things`), for the page to show.
 #[no_mangle]
 pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     let bytes = with(|l| tape::things(&l.world, [x, y, w, h]));

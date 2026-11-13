@@ -5,7 +5,7 @@
 // Each lattice lies fixed in the world, one mark a cell, so the marks hold while the camera moves, and a pan or a zoom
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
-import { Style } from './sprites';
+import { Style } from './style';
 import { FIELD, Kinds, LATTICES, KIND_PLANES, SWARD_SEEN, half } from './canopy';
 import { clamp } from './earth';
 

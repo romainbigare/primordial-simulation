@@ -193,7 +193,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
-  p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
+  p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z);
   p.river = 0.0;
   p.river_depth = 0.0;
   p.mouth = 0.0;
@@ -250,6 +250,6 @@ const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
     truth = mix(under, SNOW, placed);
   }
   truth = mix(truth, spots.dry.bed, spots.dry.rock);
-  let rgb = in_view_of(c, blended(VIEW, cs).xy, truth);
+  let rgb = in_view_of(c, blended(VIEW, cs).x, truth);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

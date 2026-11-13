@@ -9,7 +9,7 @@
 @group(0) @binding(4) var byte_field: texture_2d<f32>;
 // The ground's own colour (red, green, blue), 0..1.
 @group(0) @binding(8) var ground_field: texture_2d<f32>;
-// The byte of the layer a view draws, and of the worn paths, 0..1.
+// The byte of the layer a view draws, 0..1.
 @group(0) @binding(5) var view_field: texture_2d<f32>;
 @group(0) @binding(6) var smooth_sampler: sampler;
 // How wet the ground is, 0..1; the depth of the river through it, m; the share of the ground the plant cover leaves
@@ -97,5 +97,5 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
 // Shaded colour `c` at uv in the view drawn (`in_view_of`).
 fn in_view(c: Shaded, uv: vec2f) -> vec3f {
   let o = textureSampleLevel(view_field, smooth_sampler, uv, 0.0);
-  return in_view_of(c, o.xy, textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).xyz);
+  return in_view_of(c, o.x, textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).xyz);
 }

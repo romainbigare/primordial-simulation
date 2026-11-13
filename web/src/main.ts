@@ -1,14 +1,14 @@
 import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
-import { CLASSES, PATH_LAYER, mapFields, rampFor, rampCss } from './earth';
+import { CLASSES, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats } from './live';
 import { GroundTiles } from './ground';
 import { Land } from './land';
-import { Avatars, THINGS_PX } from './avatars';
+import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
-import { Style } from './sprites';
+import { Style } from './style';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
@@ -29,7 +29,7 @@ const ASK_MS = 150;
 
 let world: World | null = null;
 let live: Live | null = null;
-let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null, paths = false;
+let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null;
 let cls: Uint8Array = new Uint8Array(0);
 
 const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => viewSoon(v));
@@ -38,23 +38,23 @@ let land: Land | null = null;
 /** The core's WebAssembly, for the worker that makes the ground's tiles of each new world. */
 let coreWasm: ArrayBuffer | null = null;
 let viewTimer = 0;
-/** The things of the window in view, drawn one by one when the map is close (live world only), and the window asked for. */
-const avatars = new Avatars();
+/** The slots of cover of the window in view, asked for when the map is close (live world only), and the window asked for. */
+const slots = new CoverSlots();
 let thingsKey = '';
-/** The cover of the live map (earth view only), under the avatars. */
+/** The cover of the live map (earth view only). */
 const vegetation = new Vegetation();
 /** Where the player keeps the style life is drawn in (one per viewer). */
 const LIFE_KEY = 'ew.life';
 /** How life is drawn: from above or angled, as the player last chose (from above if the browser keeps nothing). */
 let life: Style = 'above';
 try { if (localStorage.getItem(LIFE_KEY) === 'angled') life = 'angled'; } catch { /* no storage: the default */ }
-avatars.style = vegetation.style = life;
+vegetation.style = life;
 map.layer = vegetation;
-map.overlay = (ctx, ox, oy, s) => avatars.draw(ctx, ox, oy, s, px => map.under(px));
+map.overlay = (_, ox, oy, s) => slots.seen(ox, oy, s);
 /** Which GPU draws the map (none: the page cannot draw it). */
 let drawnWith = '';
 map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
-avatars.listen($<HTMLCanvasElement>('cv'), () => { inspect(); map.redraw(); });
+slots.listen($<HTMLCanvasElement>('cv'), () => inspect());
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 
 // ---- loading
@@ -107,8 +107,7 @@ function setup(w: World): void {
     el.onclick = () => { setFrame(i); tip(el, text); };
     return el;
   }));
-  $('paths').hidden = !w.index.has(PATH_LAYER);
-  playing = false; layer = null; paths = false;
+  playing = false; layer = null;
   setFrame(0); setLayer(null); syncUi();
   if (live) togglePlay();
 }
@@ -134,7 +133,7 @@ function setFrame(f: number): void {
 /** Draw frame `frame` in the view shown; the map's classes come back from the GPU for the inspector. */
 function repaint(): void {
   if (!world) return;
-  const w = world, f = frame, squares = mapFields(w, f), look = mapLook(w);
+  const w = world, f = frame, squares = mapFields(w, f), look = mapLook();
   map.setMap(squares.fields);
   if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
   vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
@@ -147,12 +146,9 @@ function repaint(): void {
   inspect();
 }
 
-/** What the map draws: the view or the layer shown, and the worn paths if they are. */
-function mapLook(w: World): MapLook {
-  return {
-    mode: layer ? 'layer' : view === 'true' ? 'true' : 'earth', layer: layer ?? '', ramp: layer ? rampFor(layer) : [],
-    paths: paths && w.index.has(PATH_LAYER),
-  };
+/** What the map draws: the view or the layer shown. */
+function mapLook(): MapLook {
+  return { mode: layer ? 'layer' : view === 'true' ? 'true' : 'earth', layer: layer ?? '', ramp: layer ? rampFor(layer) : [] };
 }
 
 function setLayer(n: string | null): void {
@@ -172,13 +168,12 @@ function syncUi(): void {
   document.querySelectorAll<HTMLElement>('#life button').forEach(b => b.classList.toggle('on', b.dataset.life === life));
   document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
   document.querySelectorAll<HTMLElement>('#speeds button').forEach(b => b.classList.toggle('on', b.dataset.speed === String(speed)));
-  $('paths').classList.toggle('on', paths);
   $('play').classList.toggle('playing', playing);
 }
 
 function setView(v: string): void { view = v; layer = null; setLayer(null); }
 function setLife(style: Style): void {
-  life = avatars.style = vegetation.style = style;
+  life = vegetation.style = style;
   try { localStorage.setItem(LIFE_KEY, style); } catch { /* no storage: kept for this page only */ }
   syncUi(); map.invalidate();
 }
@@ -193,8 +188,8 @@ function button(text: string, fn: () => void, layerName?: string): HTMLButtonEle
 // ---- inspect
 function inspect(): void {
   const el = $('inspect'), i = map.hover >= 0 ? map.hover : map.pick;
-  const thing = avatars.inspect(map.hover >= 0);
-  if (thing) { el.innerHTML = thing; return; }
+  const cover = slots.inspect();
+  if (cover) { el.innerHTML = cover; return; }
   if (!world || i < 0) { el.innerHTML = '<p class="hint">Hover or tap the map.</p>'; return; }
   const { meta } = world, [name, color] = CLASSES[cls[i]];
   let rows = '';
@@ -247,7 +242,6 @@ function togglePlay(): void {
 // ---- wiring
 $('play').onclick = togglePlay;
 $('fit').onclick = () => map.fit();
-$('paths').onclick = () => { paths = !paths; syncUi(); repaint(); };
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
 document.querySelectorAll<HTMLElement>('#life button').forEach(b => (b.onclick = () => setLife(b.dataset.life === 'angled' ? 'angled' : 'above')));
@@ -262,7 +256,6 @@ addEventListener('keydown', e => {
   else if (e.key === 'ArrowRight' && tag !== 'INPUT') setFrame(frame + (e.shiftKey ? 10 : 1));
   else if (e.key === 'Escape') { setLayer(null); map.pick = -1; inspect(); map.invalidate(); }
   else if (e.key === 'f') map.fit();
-  else if (e.key === 'p' && tag !== 'INPUT') $('paths').click();
 });
 let depth = 0;
 addEventListener('dragenter', e => { e.preventDefault(); depth++; $('drop').hidden = false; });
@@ -289,8 +282,8 @@ async function startLive(): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => newWorld(),
-    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; avatars.set(null, w.meta.cell_m); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
-    things: data => { if (live === l && world) avatars.set(data, world.meta.cell_m); },
+    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
+    things: data => { if (live === l && world) slots.set(data); },
     frame: (stats, changed) => {
       if (live !== l) return;
       if (changed) setFrame(0);
@@ -315,13 +308,13 @@ function landOf(w: World): Land | null {
   const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, [m.lat_south, m.lat_north], { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, shown => { if (shown) map.invalidate(); if (live) showStats(live.stats); }, say);
   return new Land(tiles, m.laws, m.samples);
 }
-/** From `THINGS_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
+/** From `THINGS_PX` pixels a square on, the core is asked for the slots of cover of the window in view. */
 function thingsOf(v: View): void {
   const at: [number, number, number, number] | null = v.s >= THINGS_PX && v.w > 0 && v.h > 0 ? [v.x, v.y, v.w, v.h] : null;
   const key = JSON.stringify(at);
   if (!live || key === thingsKey) return;
   thingsKey = key;
-  if (!at) avatars.set(null, world?.meta.cell_m ?? 1);
+  if (!at) slots.set(null);
   live.things(at);
 }
 /** The date, the pace, the cells and the ground's tiles kept and still to come in view. */

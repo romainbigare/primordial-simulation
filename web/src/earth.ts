@@ -64,8 +64,6 @@ function oceanFill(wet: Uint8Array, W: number, H: number, globe: boolean): Uint8
   return sea;
 }
 
-/** Where movers wore paths (the `worn` layer: the most cleared link of the cell), drawn over the map. */
-export const PATH_LAYER = 'worn';
 
 /** The squares of the map that hold standing liquid, and those of them that are the sea's (a byte each). */
 export interface Wet { wet: Uint8Array; sea: Uint8Array }
