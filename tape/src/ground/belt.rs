@@ -8,7 +8,7 @@
 //! in most grown bends: Hickin and Nanson 1975; Williams 1986). The length of a half bend is what carries the line
 //! from its apex to the next one. So no two bends are alike in length or swing, some stretches run nearly straight,
 //! and where a wide reach meets a tight radius the line turns back on itself in a loop. On a steep reach the bed is
-//! hard: the belt is narrow there (`bends`), and the line runs in nearly straight stretches from one short sharp turn
+//! hard: the belt is narrow there (`bends`), and the line runs in nearly straight stretches from one short turn
 //! to the next (`HARD_RADIUS`, `HARD_VARY`), its heading no farther from the valley's line than `HARD_HEADING`. Each
 //! number is a function of the seed, the channel and the place along it alone.
 
@@ -19,12 +19,13 @@ pub(super) const STEPS: u32 = 24;
 /// A bend's heading turns from the valley's line by no more than this, rad: past a right angle the line runs back up
 /// the valley in a loop, and the farther it turns the nearer the loop's two limbs come.
 const HEADING_MOST: f64 = 1.85;
-/// An apex turns on a radius between these, in channel widths: the tighter ones the more often (the draw squared);
-/// on a hard bed between `HARD_RADIUS` (most turns are gentle, one in ten a sharp one on a radius under a width and
-/// a half: a hard bed's channel runs in nearly straight stretches from one sharp turn to the next), and its heading
+/// An apex turns on a radius between these, in channel widths: the tighter ones the more often (the draw squared),
+/// none tighter than two widths (a tighter turn at the end of a long limb reads as a corner);
+/// on a hard bed between `HARD_RADIUS` (most turns are gentle, the tightest on a width and a half: a hard bed's
+/// channel runs in nearly straight stretches from one turn to the next), and its heading
 /// turns by no more than `HARD_HEADING`, rad.
-const RADIUS_WIDTHS: [f64; 2] = [1.4, 5.0];
-const HARD_RADIUS: [f64; 2] = [0.4, 12.0];
+const RADIUS_WIDTHS: [f64; 2] = [2.0, 5.0];
+const HARD_RADIUS: [f64; 2] = [1.5, 12.0];
 const HARD_HEADING: f64 = 0.8;
 /// An apex reaches between these shares of the belt's half width where the belt is at its widest (the smaller ones
 /// the more often: the draw to the power `REACH_SKEW`), and lies at least `FAR_LEAST` of its reach across from the

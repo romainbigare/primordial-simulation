@@ -12,10 +12,11 @@ use pcore::space::network::NONE;
 const STEP_TEXELS: f64 = 0.5;
 const CALM_STEPS: usize = 48;
 /// A tile draws a channel's sway (its bends, and its wander) fully where its length is at least `BEND_TEXELS` texels,
-/// and not at all under `BEND_FROM`: shorter, it moves the line by less than a texel. Between, it grows, the same at
-/// both ends of a joint.
-const BEND_FROM: f64 = 4.0;
-const BEND_TEXELS: f64 = 8.0;
+/// and not at all under `BEND_FROM`: a shell draws a channel from afar as a line several texels wide, and a sway whose
+/// turns are tighter than that line is wide reads as the teeth of a saw (a bend turns on about a fifth of its
+/// length). Between, it grows, the same at both ends of a joint, and its turns are wider as it is drawn less.
+const BEND_FROM: f64 = 24.0;
+const BEND_TEXELS: f64 = 72.0;
 
 /// A point of a channel's line as drawn: its place, samples; the share of its piece's curve it lies along (0 to 1);
 /// and how far along the channel's line from its head, m.
@@ -118,8 +119,18 @@ impl Channels<'_> {
             let (a, c, at, from) = (next.line[i.saturating_sub(1)].p, next.line[(i + 1).min(next.line.len() - 1)].p, next.line[i].p, own.line[own.line.len() - 1]);
             let len = (c[0] - a[0]).hypot(c[1] - a[1]).max(f64::MIN_POSITIVE);
             let last = (at[0] - from.p[0]).hypot(at[1] - from.p[1]);
-            own.line.push(Vertex { p: at, t: 1.0, s: from.s + last * r.metres });
-            own.calm.push(next.calm[next.calm.len() / 2]);
+            // The way on to the join sways by the tributary's wander (`bends::Bends::joins`), as far as the tile draws
+            // a wander: no channel runs straight into the one it joins.
+            let (calm_from, calm_at, run) = (own.calm[own.calm.len() - 1], next.calm[next.calm.len() / 2], last * r.metres);
+            let wanders = ease(BEND_FROM, BEND_TEXELS, r.wander_length() / texel);
+            let across = [-(at[1] - from.p[1]) / last.max(f64::MIN_POSITIVE), (at[0] - from.p[0]) / last.max(f64::MIN_POSITIVE)];
+            let n = ((run / (STEP_TEXELS * texel)).ceil() as usize).clamp(1, CALM_STEPS);
+            for x in (1..=n).map(|i| i as f64 / n as f64) {
+                let off = wanders * self.bends.joins(r, k, x * run, run) / r.metres;
+                let on = |from: [f64; 2], to: [f64; 2]| [from[0] + (to[0] - from[0]) * x + across[0] * off, from[1] + (to[1] - from[1]) * x + across[1] * off];
+                own.line.push(Vertex { p: on(from.p, at), t: 1.0, s: from.s + x * run });
+                own.calm.push(on(calm_from, calm_at));
+            }
             Join { at, along: [(c[0] - a[0]) / len, (c[1] - a[1]) / len], bank: r.bed_of(j as usize).0 / (2.0 * r.metres), last }
         });
         Some((own, join))

@@ -8,9 +8,6 @@
 // What grows along a channel is read within this many of its bed's half widths of its line: its bed, its banks and the
 // stones beside a steep reach lie within them.
 const CHANNEL_NEAR = 3.0;
-// Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
-// samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
-const FILM_M = 0.05;
 // A channel's stones lie on its bed and its bars, in `IN_CHANNEL` of the places they could, fewer where it moves
 // only sand (`BAR_SAND_STONE`); beside a steep reach they lie out to `STONES_OUT` of its bed's half widths from its
 // line, thinning, and there the bed is bare (`WALL` of it: a steep reach runs between walls of its bed), and blocks
@@ -29,14 +26,15 @@ const RELIEF_EDGE_SLOPE = 0.1;
 // Cells nearly all under snow keep their true colour as it is: the ground under it is not found from so little.
 const SNOW_CELLS_ALL = 0.95;
 
-// What is at a point: the ground without the channel's water (`dry`), the channel's water (`wet`) and the share of the
-// pixel that water covers; the share the bars of its bed cover (`bars`, the dry spot as washed gravel); and the share
+// What is at a point: the ground without the channel's water (`dry`: on the bars of its bed washed gravel, bare, as
+// far as they cover the pixel, river.wgsl `river_spots`), the channel's water (`wet`) and the share of the
+// pixel that water covers; and the share
 // of the pixel standing liquid covers (`pool`): the pixel's footprint across the line where the depth crosses `FILM_M`,
-// so a shore is a smooth line at any zoom, not the pixels' steps; the bars' colour and their height over the water, m;
+// so a shore is a smooth line at any zoom, not the pixels' steps;
 // and of the channel's water: the signs of its flow (lib/flow.wgsl `flow_signs`), and (`water`) its depth over the
 // depth the channel law gives its middle and how near its edge the point lies, 0..1; and the way it runs (`down`, a
 // unit vector east and south).
-struct Spots { dry: Spot, wet: Spot, share: f32, bars: f32, pool: f32, snow_cells: f32, bar: vec3f, bar_over: f32, flow: vec3f, water: vec2f, down: vec2f }
+struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, snow_cells: f32, flow: vec3f, water: vec2f, down: vec2f }
 
 // Inside a cell its snow lies first where the ground holds it (`snow_bares`): high ground before low (colder: the air's
 // fall with height; over `SNOW_RISE_M` a unit), slopes turned from the sun before those facing it (they melt first;
@@ -109,8 +107,8 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
 
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_on`), the
 // ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl); and
-// its channel (rock.wgsl `channel_at`), from its own sample's discharge. The channel's bed is cut into the ground, so
-// where it runs into standing liquid that liquid takes it over at its shore at the same depth. Beside it the ground is
+// its channel (rock.wgsl `channel_at`), from its own sample's discharge. The channel's bed is cut into the ground, and
+// where it runs into standing liquid it runs on through that liquid's band of shallows (`river_spots`). Beside it the ground is
 // wet by the capillary fringe over its water, which rises from the water's edge as the valley's side does, at least as
 // steeply as the channel's own banks. Its water (`river_on`) is as deep as its bed lies there; a pixel wider than the
 // channel sees its mean depth.
@@ -142,7 +140,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
     q = mix(q, discharge_of(next.s), next.share);
     banks = banks_of(q);
   }
-  let ch = channel_of(g, q, banks);
+  let mouth = through_band(g, e);
+  let ch = channel_of(g, q, banks, mouth);
   let st = state_on(at, g, cs, depth_in(g, ch));
   let surface = blended(SURFACE, cs);
   var p: Spot;
@@ -197,24 +196,27 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
   p.river = 0.0;
   p.river_depth = 0.0;
+  p.mouth = 0.0;
   p.at = at;
   p.e = e;
   // The depth less the film, signed (under the ground drawn: minus its height over the level, as the share of the point
   // that is the ponds' weighs it), over the depth's change across a pixel.
   let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
-  var out = Spots(p, p, 0.0, 0.0, pool, st.snow, vec3f(0.0), 0.0, vec3f(0.0), vec2f(0.0), vec2f(0.0));
-  if (p.depth > 0.0 || ch.water <= 0.0) { return out; }
-  out.dry.over = shore_over;
+  var out = Spots(p, p, 0.0, pool, st.snow, vec3f(0.0), vec2f(0.0), vec2f(0.0));
+  // A channel is drawn on the land and through the band of shallows of the liquid it runs into, no farther.
+  if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
+  if (p.depth <= 0.0) { out.dry.over = shore_over; }
   if (!near) { return out; }
-  return river_spots(out, g, ch, q, moved, grows, line_of(q, e));
+  return river_spots(out, g, ch, q, moved, grows, line_of(q, e), mouth);
 }
 
-// The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); the
-// bars of a channel's bed, washed gravel, bare, rising from the water's edge (`LAYER_BARS`); where the edge of
-// standing liquid crosses the pixel, the other side of it (`LAYER_EDGE`); a channel's water (`LAYER_RIVER`). One loop
-// draws them all, so the colour's code (its ground, rock and stones) is compiled once.
-const LAYER_GROUND = 0; const LAYER_BARS = 1; const LAYER_EDGE = 2; const LAYER_RIVER = 3; const LAYERS = 4;
+// The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); where
+// the edge of standing liquid crosses the pixel, the other side of it (`LAYER_EDGE`); then a channel's water. One loop
+// draws the first two, so their colour's code is compiled once. A graphics card that runs both sides of every branch
+// runs each layer's code at every pixel: so the layers are few (a channel's bars are part of the ground's), and the
+// water's own colour (`river_on`) stands after the loop, run once a pixel.
+const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
   let at = earth.place.xy + v.uv * earth.place.zw;
@@ -224,27 +226,17 @@ const LAYER_GROUND = 0; const LAYER_BARS = 1; const LAYER_EDGE = 2; const LAYER_
   for (var k = LAYER_GROUND; k < LAYERS; k++) {
     var p = spots.dry;
     var share = 1.0;
-    if (k == LAYER_BARS) {
-      share = spots.bars;
-      p.sand = 0.0;
-      p.ground = spots.bar;
-      p.rock = 0.0;
-      p.cover = vec4f(0.0);
-      p.over = spots.bar_over;
-      p.wet = 0.0;
-    } else if (k == LAYER_EDGE) {
+    if (k == LAYER_EDGE) {
       share = select(0.0, select(1.0 - spots.pool, spots.pool, spots.dry.depth <= 0.0), spots.pool > 0.0 && spots.pool < 1.0);
       p.depth = select(FILM_M, 0.0, spots.dry.depth > 0.0);
-    } else if (k == LAYER_RIVER) {
-      share = spots.share;
-      p = spots.wet;
     }
     if (share <= 0.0) { continue; }
-    let running = k == LAYER_RIVER;
-    let g = ground_for(p, running);
-    var o: Shaded;
-    if (running) { o = river_on(p, g, spots.flow, spots.water, spots.down); } else { o = colour_on(p, g); }
-    c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, k != LAYER_BARS && share > 0.5));
+    let o = colour_on(p, ground_for(p, false));
+    c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, share > 0.5));
+  }
+  if (spots.share > 0.0) {
+    let o = river_on(spots.wet, ground_for(spots.wet, true), spots.flow, spots.water, spots.down);
+    c = Shaded(mix(c.rgb, o.rgb, spots.share), mix(c.m, o.m, spots.share), select(c.kind, o.kind, spots.share > 0.5));
   }
   // The true colour is the cells', and the bed's where it shows; their snow placed as the Earth view places it: the
   // cells' colour is taken as their ground's under their share of snow, and that ground drawn under the point's snow.

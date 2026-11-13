@@ -4,15 +4,17 @@
 // flow, where the current's shear ripples the surface, in lanes `LANE_M` wide (`LANES` of them at least and at most
 // across half the water) and dashes `STREAK_M` long; many over a riffle, few on a pool, whose water lies smooth and
 // dark. A riffle's water breaks in small white flecks `FLECK_M` long. A steep reach falls in steps every `STEP_M` or
-// so (step-pool reaches: Montgomery and Buffington 1997): white water starts at a step, on a line that wavers across
-// the channel, and fades down the flow over `STEP_FADE` of the way to the next, in streaks; a step is white over part
+// so (step-pool reaches: Montgomery and Buffington 1997): white water starts at a step, on a line across the channel that
+// wavers by up to `STEP_WAVE` of a step along it and bows over `STEP_BOW` of the waver's cells from the water's middle
+// to its edge (a line that swung more ran along the flow, and the white water's edge with it, a straight edge down the
+// channel), and fades down the flow over `STEP_FADE` of the way to the next, in streaks; a step is white over part
 // of the channel's width only, in patches `STEP_PATCH` steps long; past the white water it lies in a small pool
 // (`STEP_POOL` deeper, `POOL_CALM` slower) up to the lip of the next step, where it runs fast and shallow. The signs slide down the channel (`land.reach.z` m for the slowest water): a pool's at that pace,
 // a riffle's twice, a steep reach's up to four times as fast (each a whole number of times, blended, so the slide has
 // no jump where it comes round); the steps stay where they are.
 const LANE_M = 0.45; const LANES = vec2f(3.0, 12.0); const STREAK_M = 8.0; const STREAK = 0.55;
 const FLECK_M = 2.0; const FLECK = 0.3;
-const STEP_M = 8.0; const STEP_WAVE = 0.7; const STEP_FADE = 0.3; const STEP_PATCH = 2.0; const FOAM_STEEP = 0.9;
+const STEP_M = 8.0; const STEP_WAVE = 0.5; const STEP_BOW = 0.4; const STEP_FADE = 0.3; const STEP_PATCH = 2.0; const FOAM_STEEP = 0.9;
 const STEP_POOL = 0.6; const POOL_CALM = 0.8;
 // The white water begins over this length below a step's line, m: the place along a channel is known to a few
 // centimetres (the tiles keep it as a 16-bit float), and an edge sharper than that would draw the texels' lattice.
@@ -48,7 +50,7 @@ fn flow_signs(e: f32, along: f32, x: f32, c: Channel, steep: f32) -> vec3f {
   f.y = FLECK * shown * mid * riffle * riffle * (1.0 - steep) * ease(0.5, 0.8, slid(along, pace, FLECK_M, 2.0 * x * lanes, FLOW_FLECK));
   if (steep > 0.0) {
     // The steps: each a line across the channel that wavers, of its own strength, more of them white the steeper.
-    let p = along / STEP_M + STEP_WAVE * noise_reach(along, 2.0 * STEP_M, 1.5 * x, FLOW_STEP);
+    let p = along / STEP_M + STEP_WAVE * noise_reach(along, 2.0 * STEP_M, STEP_BOW * x, FLOW_STEP);
     let cells = i32(round(land.reach.x / STEP_M));
     let own = f32(lowbias(vec2i(((i32(floor(p)) % cells) + cells) % cells, 0), FLOW_STRENGTH) & 1023u) / 1023.0;
     let broken = ease(-0.3, 0.2, noise_reach(along, STEP_PATCH * STEP_M, 1.3 * x + 7.0 * own, FLOW_STRENGTH) + steep - 0.7 + 0.4 * own);

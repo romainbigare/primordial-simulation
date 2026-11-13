@@ -61,6 +61,9 @@ const REACH_SAMPLES: usize = 2;
 /// The valley's side holds the sway where the ground stands this many bed depths over the channel: a bank a few times
 /// as high as the bed is deep is cut back by the bends, a higher one is the valley's wall.
 const WALL_DEPTHS: f64 = 4.0;
+/// A tributary's way on from its piece's end to the line it joins sways by its wander as far as this share of the
+/// way's length to each side: its turns stay as round as the wander's own.
+const JOIN_SWAY: f64 = 0.15;
 /// The most a line sways from the curve through the samples, in samples: it stays inside the window of samples whose
 /// curves a tile reads (`channels::SPAN`).
 pub(super) const BEND_MOST: f64 = 0.8;
@@ -325,5 +328,15 @@ impl Bends {
         let wide = |j: u32, runs: bool| if runs { 0.5 * (r.bed_of(k).0 + r.bed_of(j as usize).0) } else { r.bed_of(k).0 };
         let width = wide(s.main[k], up) + (wide(s.to[k], on) - wide(s.main[k], up)) * t;
         most * wander(r.seed, self.head[k], self.down[k] + u / (WANDER_EVERY * r.metres), width / (WANDER_EVERY * r.metres))
+    }
+
+    /// How far the line of sample `k` of `r`, a tributary, leans from the straight way on from its piece's end to the
+    /// line it joins, `u` m along that way of `run` m, m: its wander there (`wander::wander`, running on from its
+    /// piece's), as far as `JOIN_SWAY` of the way's length and no farther than its piece leans; none, and no turn,
+    /// at either end.
+    pub(super) fn joins(&self, r: &Reaches, k: usize, u: f64, run: f64) -> f64 {
+        let down = self.down[k] + (r.frame(k).map_or(0.0, |f| f.len()) + u) / (WANDER_EVERY * r.metres);
+        let held = (std::f64::consts::PI * (u / run.max(1e-9)).clamp(0.0, 1.0)).sin().powi(2);
+        (JOIN_SWAY * run).min(self.lean[k]) * held * wander(r.seed, self.head[k], down, r.bed_of(k).0 / (WANDER_EVERY * r.metres))
     }
 }

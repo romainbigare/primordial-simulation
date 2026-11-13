@@ -115,9 +115,30 @@ impl Shore {
         Shore { across: s.across, down: s.down, level, offset, depth, far }
     }
 
-    /// The level of the pond nearest the sample at column `c` and row `r` (`NEAR_SAMPLES`), m; NaN for none.
-    pub(super) fn level(&self, c: i64, r: i64) -> f64 {
-        self.level[r.clamp(0, self.down as i64 - 1) as usize * self.across + c.clamp(0, self.across as i64 - 1) as usize]
+    /// The four samples between whose centres the point `p` (samples from the map's corner) lies, each with its weight
+    /// there (bilinear; off the map, the edge's).
+    fn about(&self, p: [f64; 2]) -> [(usize, f64); 4] {
+        let (u, w) = (p[0] - 0.5, p[1] - 0.5);
+        let (fx, fy) = (u - u.floor(), w - w.floor());
+        let at = |dc: i64, dr: i64| (w.floor() as i64 + dr).clamp(0, self.down as i64 - 1) as usize * self.across + (u.floor() as i64 + dc).clamp(0, self.across as i64 - 1) as usize;
+        [(at(0, 0), (1.0 - fx) * (1.0 - fy)), (at(1, 0), fx * (1.0 - fy)), (at(0, 1), (1.0 - fx) * fy), (at(1, 1), fx * fy)]
+    }
+
+    /// The share of the weight of the point `p` (samples from the map's corner) that lies on the samples about it
+    /// that `on` holds for: 1 at such a sample's centre, 0 at another's, even between.
+    pub(super) fn share(&self, p: [f64; 2], on: impl Fn(usize) -> bool) -> f64 {
+        self.about(p).iter().filter(|(k, _)| on(*k)).map(|(_, w)| w).sum()
+    }
+
+    /// The level of the pond beside the point `p` (samples from the map's corner), m: its own sample's (the nearest
+    /// pond's within `NEAR_SAMPLES`), or where that has none, the level of the heaviest of the samples about it that
+    /// has one (NaN: none has); and the share of the point's weight on the samples that have one (`share`).
+    pub(super) fn beside(&self, p: [f64; 2]) -> (f64, f64) {
+        let own = (p[1] as usize).min(self.down - 1) * self.across + (p[0] as usize).min(self.across - 1);
+        let about = self.about(p);
+        let heaviest = about.iter().filter(|(k, _)| !self.level[*k].is_nan()).max_by(|a, b| a.1.total_cmp(&b.1));
+        let level = if self.level[own].is_nan() { heaviest.map_or(f64::NAN, |(k, _)| self.level[*k]) } else { self.level[own] };
+        (level, self.share(p, |k| !self.level[k].is_nan()))
     }
 
     /// The offset and the depth at `p` (samples from the map's corner) as cubic B-splines through the samples' centres:
@@ -162,9 +183,10 @@ impl Shore {
         from
     }
 
-    /// The height drawn at `p` (samples from the map's corner) whose own height is `h`, m, beside liquid at `level` (the
-    /// nearest pond's of its sample, `level`; NaN: none): the module's doc.
-    pub(super) fn drawn(&self, p: [f64; 2], h: f64, level: f64) -> f64 {
+    /// The height drawn at `p` (samples from the map's corner) whose own height is `h`, m, beside liquid at `level`
+    /// (`beside`; NaN: none), `share` of the point's weight on samples beside it: the module's doc, as far as that
+    /// share, so the ground has no step where a sample beside a pond meets one beside none.
+    pub(super) fn drawn(&self, p: [f64; 2], h: f64, level: f64, share: f64) -> f64 {
         let own = (p[1] as usize).min(self.down - 1) * self.across + (p[0] as usize).min(self.across - 1);
         if level.is_nan() || self.far[own] {
             return h;
@@ -174,14 +196,14 @@ impl Shore {
         let push = SIDE * d.abs() * (1.0 - ease(SIDE_FROM * SHORE_M, SHORE_M, d.abs()));
         let sided = level + side * (side * (h - level)).max(push);
         if d >= 0.0 {
-            return sided;
+            return h + (sided - h) * share;
         }
         // Under the level: the bed leans to a smooth depth, the offset's at the shore and the blurred depth's farther
         // out, the more the shallower (all of it at the shore, so the shallows have no bumps a sample wide).
         let deep = d + (depth.min(d) - d) * ease(0.0, SHORE_M, -d);
         let f = 1.0 - ease(0.0, WATER_M, -deep);
         let w = f / (1.0 - f).max(1e-12);
-        (sided + w * (level + deep)) / (1.0 + w)
+        h + ((sided + w * (level + deep)) / (1.0 + w) - h) * share
     }
 }
 

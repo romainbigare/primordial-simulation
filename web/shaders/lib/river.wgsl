@@ -138,33 +138,54 @@ const BAR_LIFT = 1.7; const BAR_PALE = 0.35; const BAR_RISE = 0.6;
 // centimetres show.
 const EDGE_M = 0.35; const EDGE_LIGHT = 0.25;
 
+// A river runs into standing liquid through its band of shallows (`mouth` of the way through it, land.wgsl
+// `through_band`), where its bed lies under that liquid: its bars go under within `MOUTH_BARS` of the band, so the
+// band's pale bed runs on from them; its water keeps its look and widens (rock.wgsl `MOUTH_FLARE`), its signs of flow
+// fading and its bed's shape across it flattening into the open water's depth as the band's own does, and from
+// `MOUTH_MELTS` of the band on it melts into that water, all of it at the band's end. The sea's foam breaks no nearer
+// its line than its bed is half wide, all of it from `MOUTH_CALM` times that. A channel cuts through the shallows only
+// as far as it is deeper than they are: it melts into them from where the liquid stands `MOUTH_REACH.x` times as deep
+// as the channel law makes its middle, gone at `MOUTH_REACH.y` times, so a rill ends at the water's edge.
+const MOUTH_BARS = 0.5; const MOUTH_MELTS = 0.5; const MOUTH_CALM = 2.0; const MOUTH_REACH = vec2f(1.0, 2.0);
+
 // The spots `s` of a point with its channel `ch` of discharge `q`, which moves stones of `stone` m, on ground `g` (the
 // place along the channel growing by `grows` a pixel east and south), drawn no thinner than `line` m half wide
 // (`line_of`): the bed (rock.wgsl `banks_of`) and this month's water in it (lib/river.wgsl `reach_at`), apart where the bed
 // takes a few pixels and is wider than the line; the bars' look, the banks' light and the water's depth and signs of
-// flow.
-fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, grows: vec2f, line: f32) -> Spots {
+// flow; `mouth` of the way through the shallows of the liquid it runs into (`MOUTH_BARS`).
+fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, grows: vec2f, line: f32, mouth: f32) -> Spots {
   var out = s;
   let at = s.dry.at;
   let e = s.dry.e;
+  let wide = max(ch.bed, line);
+  let middle = BED_MIDDLE * ch.mean * (1.0 + MOUTH_FLARE * mouth);
+  let cuts = (1.0 - ease(MOUTH_REACH.x * middle, MOUTH_REACH.y * middle, standing(g))) * (1.0 - ease(MOUTH_MELTS, 1.0, mouth));
+  out.dry.mouth = cuts * (1.0 - ease(wide, MOUTH_CALM * wide + 2.0 * e, g.d));
   // Outside its bed, its banks and its line from afar a channel draws nothing more.
   if (g.d > BED_OUT.x * ch.bed + BED_OUT.y + 2.0 * e && g.d > line + 2.0 * e) { return out; }
   var open = 0.0;
   // (No bed takes `BED_PX` pixels in a program made for draws from this far: rock.wgsl `BED_MOST_M`.)
   if (BED_PX * least_e() < BED_MOST_M) { open = ease(BED_PX * e, 2.0 * BED_PX * e, ch.law) * (1.0 - ease(ch.law, 2.0 * ch.law, line)); }
   let r = reach_at(at, e, g, ch, line, open, stone);
-  out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line));
-  out.bars = r.bars;
+  let runs = 1.0 - mouth;
+  out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line)) * cuts;
   // The bars' colour: the bed's make washed, sand on the gentlest reaches; the bed seen through the water is the same.
   let washed = mix(min(bed_make_at(at) * BAR_LIFT, vec3f(1.0)), BEACH_SAND, BAR_PALE);
   let gravel = mix(BEACH_SAND, washed, ease(0.0, BAR_SAND_STONE, stone));
-  out.bar = gravel * bar_tone(at, e, g.along, r);
-  out.bar_over = BAR_RISE * r.edge;
+  // On its bars the ground is that gravel, bare, rising from the water's edge, as far as they cover the pixel.
+  let bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth));
+  out.dry.ground = mix(out.dry.ground, gravel * bar_tone(at, e, g.along, r), bars);
+  out.dry.sand *= 1.0 - bars;
+  out.dry.rock *= 1.0 - bars;
+  out.dry.cover *= 1.0 - bars;
+  out.dry.canopy *= 1.0 - bars;
+  out.dry.wet *= 1.0 - bars;
+  out.dry.over = mix(out.dry.over, BAR_RISE * r.edge, bars);
   out.dry.small *= 1.0 - BAR_FINES * r.up;
   out.wet.ground = gravel;
   // The banks' light falls on the ground beside the bed, on its bars and on the water under the bank.
   var banks = 1.0;
-  if (open > 0.0) { banks = mix(1.0, bank_light(e, g, ch, r), open); }
+  if (open > 0.0) { banks = mix(1.0, bank_light(e, g, ch, r), open * runs); }
   out.dry.shade *= banks;
   // Where the bed is drawn apart from the water and the water takes a few pixels, its depth shows: its pools and
   // riffles and its bed's shape across it; else its mean depth.
@@ -175,13 +196,15 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, grows: vec2f
     // (Below a step's white water a steep reach's water lies in a pool: slower, and `STEP_POOL` deeper.)
     let signs = flow_signs(e, g.along, x, ch, r.steep);
     out.wet.depth *= 1.0 + STEP_POOL * resolved * (r.steep - signs.z);
-    out.flow = resolved * signs;
+    out.flow = resolved * runs * signs;
   }
   // Down the flow: square to the distance's slope, the way the place along the channel grows.
   let square = vec2f(-g.d_slope.y, g.d_slope.x);
   out.down = square * sign(dot(square, grows));
   // (A channel too narrow for its bed's shape to show is coloured as the river's deep water.)
-  out.water = vec2f(mix(1.0, out.wet.depth / (BED_MIDDLE * ch.mean), resolved), resolved * (1.0 - ease(0.0, EDGE_M, (1.0 - abs(x)) * ch.water)));
+  out.water = vec2f(mix(1.0, out.wet.depth / (BED_MIDDLE * ch.mean), resolved * runs), resolved * runs * (1.0 - ease(0.0, EDGE_M, (1.0 - abs(x)) * ch.water)));
+  out.wet.stony *= runs;
+  out.wet.blocks *= runs;
   out.wet.sand = 0.0;
   out.wet.cover = vec4f(0.0);
   // The bed's slope across the water, d(depth)/d(distance from its middle) along that distance's own slope; where the
