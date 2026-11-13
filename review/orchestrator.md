@@ -125,22 +125,42 @@ of flow that slide six steps a second and ask for a frame only while a river is 
 the true bed, mouths that reach their lake or sea with a fan. The tiles' second texture holds four numbers a texel
 (56 layers: 61 MB).
 
-**Known faults of the rivers (in work, the rivers' helper, round four):** a lattice of thin white lines in fast water
-close up; small side streams and one last reach before a mouth run dead straight; crowns stand on a mouth's fan and
-shallow water; thin dark straight strokes and faint straight outlines on land near rivers at the 200 m bar; a thin
-white straight line on a ridge's snow; ticks where a small stream meets a far line; the 200 m bar on a phone cost 31
-to 35% more than before the rivers (software, one quiet pair; the guard asked of the helper: +10% there, +5% at the
-other bars, measured by CPU time). Small plants' marks show as little grids of yellow dots on bare ground close up.
+**One width, one water (on main):** a river's width on screen is the larger of its true bed and a least line of 1 to
+2.5 css px by discharge, at every zoom and whatever tile is loaded (`web/src/land.ts` `drawn`); every channel wanders;
+lakes, ponds and the sea take the rivers' water (`river_seen` in `lib/style.wgsl`); nothing of a channel is drawn
+under standing water. The owner: "amazing, much better".
 
-**In work:** the rivers' faults above (branch `wip/rivers`). The sorted start as the start of every world (the cover's
-helper, package H, on `wip/cover-nursery-g2`'s work: 2.5 to 4.5 s in the browser; a world from it is steady, heavier,
-and keeps a covered north that the random start never reaches).
+**Round five of the rivers is on `wip/rivers` (5ea498ce), not on main:** the river cuts a dark wedge through the
+shore's band and ends at the shore line with a jump of width and tone; tiny rills cut needles through the band; with
+no crown in drawn water (`FILM_M`, good) the band lies bare, wide and nearly white. A new helper works in the same
+worktree (`.claude/worktrees/agent-ab76b80ac68603520`; its scripts in the scratch folder `rv/`).
+
+**Known faults of the rivers (in work):** the owner's wish first: the shore's pale
+band must break where a river crosses it, the river's water running through into the lake or sea (and the sea's foam
+rim too). Then: crowns in standing water 5 to 30 cm deep; thin straight-edged outlines in the forest near ponds (a
+step in the drawn ground along a sample's edge); the wander reads as a saw from afar; pale straight-edged patches in
+fast water; the pan frame draws a river about 1.5 times wider (the small stretched picture); the cost in software by
+CPU time against before the rivers: fitted view +15%, 2 km bar +26%, 200 m bar +45% (cause not found; the guard asked
+is +5% and +10%). Small plants' marks show as little grids of yellow dots on bare ground close up.
+
+**In work:** the rivers' faults above (branch `wip/rivers`). The air and sunlight (the cover's helper, branch
+`air-light`: first a measure of today's budget against Earth's and a proposal, then the law in steps).
+
+**The sorted start is parked** (`wip/nursery-start`, built on 32e9cb4c: every world's cover placed by the nursery, the
+random placing deleted, `SNAPSHOT_VERSION` 128, a fast test of the garden, a status line on the page, 1 to 1.9 s in
+the browser). It is not on main because: the page loses its look (one blue-green, a bare floor with dots where main
+has a sward, a mosaic of 2 km squares where classes meet); some warm wet rows start bare at year 3 (the garden reads
+the bare year's dry air); the eaters collapse in the key world (cover 11.49 against 9.505, eaters 5.38 against 8.417
+log10 kg); `the_sleep_of_change_keeps_the_chemistry` and `the_long_step_keeps_the_climate` fail because each run sorts
+its own start (they must start from one placed world); stands of 24 to 41 kg/m² building 4 to 7.8 kg a year in the
+south and 0.3 m of liquid a year through leaves in a rainless far north. Take it up again on the mended light.
 
 ## 5. What to do next, in order
 
 1. **The rivers' faults** (round four) to main when the pictures pass and the cost guard holds.
-2. **The sorted start** as the start of every world (the owner's word: yes; in work: it replaces the random start, no
-   switch stays on main; the key numbers' references move with it).
+2. **The air and sunlight** (item 4 below) comes first now; then **the sorted start** again (parked, see section 4:
+   classes that blend, a garden whose air feels its film, tests that start from one placed world, kinds that draw
+   with variety and a sward).
    Not run since the cover's law, by the owner's word "skip these slow tests just this once": the two slow learning
    tests of `core/tests/choose.rs`, the slow test of `lots.rs` and of `tape/tests/scale.rs`. Run them on a quiet
    machine before the next change of the laws for bodies.
@@ -152,7 +172,13 @@ and keeps a covered north that the random start never reaches).
    W/m²), so a warm wet stand builds 2 to 4 kg of dry matter a year where real ones build 0.5 to 2.5. A law for what
    clear air scatters and absorbs and for the cloud's share, with the globe's climate test as its guard; the air's
    heat-absorbing side then has to hold the same temperature with less sun.
-5. Channels that lay down their load (plains, marsh, deltas); ice that cuts valleys; the exact solve of the surface's
+5. Channels that lay down their load (plains, marsh, deltas). The owner asked for wide deltas at some mouths, and
+   agreed to wait if it is a big change: it is. A true delta's size is the load that reached the mouth over the depth
+   of the water there (Gilbert 1885; Galloway 1975), so it shows where a river of much load meets shallow calm water
+   and not elsewhere. Today the made ground holds a fan under water at a mouth (`space::shelf`), the running world's
+   load lands on a whole cell, and the tiles draw one channel to the shore. The package: the load settles at the
+   mouth below the cell's size, the fan's top reaches the water's level, the tiles split the channel over it
+   (Edmonds and Slingerland 2007), plants take it. Also: ice that cuts valleys; the exact solve of the surface's
    step by pieces; the True view's water.
 
 ## 6. The live world for the owner
@@ -192,7 +218,7 @@ The owner's word: no work lives only on one machine. Push a helper's branch as s
 - `experiment/climate-bands`: merged to main; kept as it was pushed.
 - `experiment/sorted-start`: the sorted start (`worldgen/src/life/nursery/`). Its first commit, the cover's month
   reading one view (`cover::Around`), is on the work branch.
-- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover`, `wip/rivers` (all merged), `wip/cover-nursery-g2` (the
-  sorted start, not merged): the helpers' work, pushed as it grows.
+- `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover`, `wip/rivers` (all merged), `wip/cover-nursery-g2` and
+  `wip/nursery-start` (the sorted start, parked, not merged): the helpers' work, pushed as it grows.
 - `tools/checks`: the check scripts and probes of this work (`tools/check/paused.js`, `phone.js`, `inspect.js`; the
   frame's bench in `tools/frame/`; the climate's and the ground's probes). Study files: never on main.

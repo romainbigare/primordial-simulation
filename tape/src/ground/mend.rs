@@ -1,11 +1,15 @@
 //! The strips of a field of channels mended (`channels::Channels::field`): a small channel that crosses the reach of a
-//! larger one lies nearer over its scale in a strip a texel wide, which would notch the line a shell draws the larger
-//! one as from afar. A texel that holds a channel between two texels (left and right, or above and below) that both
-//! hold one other channel, which drains more, is given to that channel.
+//! larger one lies nearer over its scale in a strip a texel or two wide, which would notch the line a shell draws the
+//! larger one as from afar. A texel that holds a channel and lies within `STRIP` texels, to its left and to its right
+//! or above and below, of texels that hold one other channel, which drains more (with none but its own channel's
+//! between), is given to that channel.
 
 use super::channels::{to_segment, Channels, Field, Near, Window, NO_CHANNEL_M};
 use pcore::space::network::NONE;
 use std::collections::HashMap;
+
+/// The widest strip mended, texels.
+pub(super) const STRIP: usize = 2;
 
 /// The point of the line through `pts` nearest `at` (samples): the square of its distance, the side `at` lies on, and
 /// the piece and the share of it the point lies along; none for a line of less than two points.
@@ -22,13 +26,16 @@ impl Channels<'_> {
         let (s, wide, sample) = (self.r.s, win.wide, f.sample.clone());
         let lines: HashMap<u32, &Near> = near.iter().map(|l| (l.q as u32, l)).collect();
         let head = |q: u32| self.bends.head(q as usize);
-        for i in wide..sample.len() - wide {
-            if i % wide == 0 || i % wide == wide - 1 || sample[i] == NONE {
-                continue;
-            }
-            for (a, b) in [(i - 1, i + 1), (i - wide, i + wide)] {
+        for i in (0..sample.len()).filter(|&i| sample[i] != NONE) {
+            // The first texel of another channel within `STRIP` of this one along `step` (none past the window's row,
+            // or past a texel that holds no channel).
+            let beside = |step: isize| {
+                (1..=STRIP as isize).map(|n| i as isize + n * step).take_while(|&j| j >= 0 && (j as usize) < sample.len() && (step.unsigned_abs() > 1 || j as usize / wide == i / wide) && sample[j as usize] != NONE).map(|j| j as usize).find(|&j| head(sample[j]) != head(sample[i]))
+            };
+            for step in [1, wide as isize] {
+                let (Some(a), Some(b)) = (beside(-step), beside(step)) else { continue };
                 let (qa, qb) = (sample[a], sample[b]);
-                if qa == NONE || qb == NONE || head(qa) != head(qb) || head(qa) == head(sample[i]) || s.up[qa as usize].min(s.up[qb as usize]) <= s.up[sample[i] as usize] {
+                if head(qa) != head(qb) || s.up[qa as usize].min(s.up[qb as usize]) <= s.up[sample[i] as usize] {
                     continue;
                 }
                 let at = win.texel(win.x0 + (i % wide) as i64, win.y0 + (i / wide) as i64).0;

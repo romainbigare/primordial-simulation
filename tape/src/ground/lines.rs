@@ -10,7 +10,7 @@ use pcore::space::network::NONE;
 /// A stretch of a line is drawn in straight pieces no shorter than this many texels (and a stretch without bends in
 /// at most `CALM_STEPS`): a curve departs from shorter chords by far less than a texel.
 const STEP_TEXELS: f64 = 0.5;
-const CALM_STEPS: usize = 16;
+const CALM_STEPS: usize = 48;
 /// A tile draws a channel's sway (its bends, and its wander) fully where its length is at least `BEND_TEXELS` texels,
 /// and not at all under `BEND_FROM`: shorter, it moves the line by less than a texel. Between, it grows, the same at
 /// both ends of a joint.

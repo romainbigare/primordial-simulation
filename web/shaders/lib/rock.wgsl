@@ -135,10 +135,8 @@ fn discharge_at(g: Tiled, at: vec2f) -> f32 {
 // that carries `q` m³/s this month, m: the channel law's (flow/channel.rs) at that many times it.
 fn banks_of(q: f32) -> f32 { return 0.5 * land.channel.x * pow(land.reach.y * q, land.channel.y); }
 
-// At one place a channel's water grows wider with its discharge as its power `STATION_EXP` (at-a-station hydraulic
-// geometry, Leopold and Maddock 1953: 0.26), far less than from channel to channel: at its mean flow the water fills
-// most of the bed its floods cut.
-const STATION_EXP = 0.26;
+// At one place a channel's water grows wider with its discharge far less than from channel to channel (tape/src/ground/
+// bends.rs `STATION_EXP`): at its mean flow the water is `land.reach.w` of the bed its floods cut wide.
 // A bed's width varies along it by up to `BED_VARY` either way, over lengths of `BED_VARY_M` (the second half as
 // strong), each a whole share of the length the place along a channel is kept modulo. (Farther from the line than
 // `BED_NEAR` of the bed's half widths the width is the law's: nothing drawn there tells the two apart, and no noise is
@@ -173,25 +171,34 @@ fn noise_reach(along: f32, cell: f32, across: f32, k: i32) -> f32 {
   return mix(mix(v.x, v.y, u.x), mix(v.z, v.w, u.x), u.y);
 }
 
+// A channel widens into the standing liquid it runs into: its bed and its water `MOUTH_FLARE` wider (and its water
+// that much shallower) where the ground lies at that liquid's level, none of it from `MOUTH_OVER_M` over the level
+// (land.wgsl `over_ponds`). A channel that moves no stones of `BAR_SAND_STONE` m carries sand and silt alone.
+const MOUTH_FLARE = 1.5; const MOUTH_OVER_M = 1.5;
+const BAR_SAND_STONE = 0.03;
+
 // A channel at a point of ground `g`, of this month's discharge `q`, m³/s: the half width of its bed on the point's
 // side of its line, m (`banks_of`, varied along it); the half width of this month's
 // water, m, and where its middle lies across the line (as `Tiled.sd`), m: against the outer bank in a bend; its mean
 // depth by the channel law, m, and what the depth there is of the law's (a pool is deeper, a riffle shallower: the same
 // flow through a narrower or a wider water); how much of a bend the place is, 0..1; and the side its outer bank lies
-// on (the sign of `Tiled.sd` there).
-struct Channel { bed: f32, water: f32, middle: f32, mean: f32, deep: f32, bend: f32, outer: f32 }
-fn channel_at(g: Tiled, q: f32) -> Channel {
-  if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0); }
-  let law = banks_of(q);
+// on (the sign of `Tiled.sd` there); and the half width the channel law gives its bed, m (`banks_of`).
+struct Channel { bed: f32, water: f32, middle: f32, mean: f32, deep: f32, bend: f32, outer: f32, law: f32 }
+fn channel_at(g: Tiled, q: f32) -> Channel { return channel_of(g, q, banks_of(q)); }
+// (The same, of a channel whose bed the law makes `banks` m half wide.)
+fn channel_of(g: Tiled, q: f32, banks: f32) -> Channel {
+  if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0); }
+  let flare = 1.0 + MOUTH_FLARE * (1.0 - ease(0.0, MOUTH_OVER_M, over_ponds(g, 0.0)));
+  let law = banks * flare;
   var vary = 1.0;
   if (!unseen(BED_VARY * BED_MOST_M) && g.d < BED_NEAR * law) { vary += BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5; }
   let bend = ease(BEND_OFF.x * law, BEND_OFF.y * law, abs(g.lean));
   let outer = select(1.0, -1.0, g.lean < 0.0);
   let bed = law * vary;
   let wide = mix(1.0 + RIFFLE_WIDE, 1.0 - POOL_NARROW, bend);
-  let water = min(law * vary * pow(land.reach.y, -STATION_EXP) * wide, law * vary);
+  let water = min(law * vary * land.reach.w * wide, law * vary);
   let middle = outer * ease(0.0, POOL_AT_BANK, bend) * (law * vary - water);
-  return Channel(bed, water, middle, land.channel.z * pow(q, land.channel.w), 1.0 / wide, bend, outer);
+  return Channel(bed, water, middle, land.channel.z * pow(q, land.channel.w) / flare, 1.0 / wide, bend, outer, banks);
 }
 
 // The depth of the bed of channel `c` under its water's surface, m, the share `x` of the way across the water from its
@@ -202,7 +209,9 @@ fn depth_across(c: Channel, x: f32) -> f32 {
   return BED_MIDDLE * c.mean * c.deep * (1.0 - x * x) * (1.0 + POOL_SKEW * c.bend * x);
 }
 
-// The depth of the bed of channel `c` under its water's surface at the point of ground `g`, m (`depth_across`).
+// The depth of the bed of channel `c` under its water's surface at the point of ground `g`, m (`depth_across`): none
+// where the point is standing liquid's (the share of it that is: a body's floor is its own, and no channel is cut
+// into it).
 fn depth_in(g: Tiled, c: Channel) -> f32 {
-  return depth_across(c, clamp((g.sd - c.middle) * c.outer / max(c.water, 1e-6), -1.0, 1.0));
+  return depth_across(c, clamp((g.sd - c.middle) * c.outer / max(c.water, 1e-6), -1.0, 1.0)) * (1.0 - g.water.y);
 }

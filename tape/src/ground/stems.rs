@@ -2,8 +2,8 @@
 //! and corners, so down a valley across the grid it steps like a stair. Its line runs through each sample's point here
 //! instead: the mean of the centres of the samples along its stem, `SMOOTH_SAMPLES` up and down, weighted the more the
 //! nearer (a moving average along the polyline of the centres, as corner cutting smooths a polygon: Chaikin 1974), as
-//! many each way as the stem has, so a head, the end of a stem at a body or at the low ground, and the sample a
-//! tributary joins keep their place, and a tributary ends on the smoothed point of the stem it joins. A point moves at
+//! many each way as the stem has (a stem runs on through a body's samples, along its floor), so a head, a stem's end
+//! and the sample a tributary joins keep their place, and a tributary ends on the smoothed point of the stem it joins. A point moves at
 //! most `SMOOTH_MOST` from its sample's centre. The point of a sample that liquid runs into and none out of (a line's
 //! end in standing liquid) lies where the shore drawn puts that liquid (`shore::Shore::mouth`), so a river reaches
 //! its lake or its sea. A function of the samples alone.
@@ -23,8 +23,7 @@ fn centre(s: &Samples, k: usize) -> [f64; 2] {
 }
 
 /// The point of each sample of `s`, whose shore is drawn as `shore`, its line runs through, samples (the module's doc). Down the stem a sample's way goes
-/// on to the sample it runs to, but not into a body (a pond) and not past the sample a tributary joins: that one counts
-/// at its own point. In the order the flood reached them, so a joined sample's point is found first.
+/// on to the sample it runs to, but not past the sample a tributary joins: that one counts at its own point. In the order the flood reached them, so a joined sample's point is found first.
 pub(super) fn points(s: &Samples, shore: &Shore) -> Vec<[f64; 2]> {
     let mut at: Vec<[f64; 2]> = (0..s.h.len()).map(|k| centre(s, k)).collect();
     for &k in &s.order {
@@ -37,7 +36,7 @@ pub(super) fn points(s: &Samples, shore: &Shore) -> Vec<[f64; 2]> {
         }
         let mut down = Vec::with_capacity(SMOOTH_SAMPLES);
         let mut q = k;
-        while down.len() < SMOOTH_SAMPLES && s.to[q] != NONE && s.pond[s.to[q] as usize] == NONE {
+        while down.len() < SMOOTH_SAMPLES && s.to[q] != NONE {
             let j = s.to[q] as usize;
             if s.main[j] != q as u32 {
                 down.push(at[j]);

@@ -210,8 +210,11 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     if (styled()) {
       // The style: clear water over a pale bed, deepening to the open water, the sea's foam at its edge (style.wgsl;
       // a lake's small waves make none, and on its fine shore it would only fleck).
-      let seen = mix(lake_seen(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M), p.depth, p.sea);
-      water = mix(water_painted(bed, seen, ripple), FOAM_RGB, p.sea * foam(p.depth, p.slope / earth.look.x, p.e));
+      // One water: standing liquid is coloured by the channel's law (style.wgsl `river_seen`), its shore the
+      // channel's shallows and its open water the channel's deep thread, so a river runs into a lake or the sea with
+      // no step of colour; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
+      let seen = river_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
+      water = mix(water_painted(BED_SHOWN * bed, seen, ripple), FOAM_RGB, p.sea * foam(p.depth, p.slope / earth.look.x, p.e));
     } else {
       water = water_over(bed, p.depth, ripple);
     }
