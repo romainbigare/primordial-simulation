@@ -274,17 +274,38 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     under the air carries nothing sideways. Main has the same fault, hidden by its weak grey air.
   - A probe with the overturning weakened by r / (r² + f²), the eddies halved and Earth's clouds held low keeps 1.6 m
     of ice through the summer; no one of the three does alone.
-  - In work now: the overturning's law with the rotation (the near-ground layer's balance, down and across the
-    gradient) and `mix` anchored to Earth's eddies, each its own commit on the branch; then the globe, a Wide island
-    and the key numbers measured, with pictures. No cloud law without the orchestrator's word.
+  - Two forms were built and taken back out: the near-ground friction balance for the overturning (to keep the
+    cell at 22.5° it had to be 24 times too strong at the equator), and `mix` set from Earth's column gradient (it
+    rose to 2.7e6: the fault was the form, whole columns exchanged at their mean heat).
+  - **On the branch now, and they give an ice line:** the eddies carry the near-ground air's energy (cp T + M g z at
+    the column's ground) with `mix` the measured 1.06e6 m²/s (Hwang and Frierson 2010); the overturning runs only
+    inside the edge the upper air's spin sets (Held and Hou 1980: 22.2° from the world's own numbers). The lifeless
+    globe: pole 259.6 K with ice that lasts the summer, equator 296.0 K, equator to pole 36 K, mean ground 288.6 K,
+    the polar circle Earth-like per K. The globe has two stable states; the normal start is the Earth-like one.
+    Main's grey air with the same two laws freezes to 34°: the package goes to main whole. Known: the globe's polar
+    ice grows without end (40 m in 40 years); three key numbers leave their ranges on the package (land 287.88 K,
+    swing 11.93 K, cover 9.43); `the_long_step_keeps_the_climate` fails on its count of river cells.
+  - In work: the last round before the merge (a Wide island for 150 years, is its ice bounded; the long step's
+    rivers measured as water; every check again on the merged branch; what the package changes for the owner's
+    worlds; pictures on matching days). No cloud law and no law of the liquid's reflectance without the
+    orchestrator's word.
   - Found on the way: on the globe the polar band's ground gains 0.65 m of liquid a year (rain that lands in a
     neighbour's row and is not levelled back); and the fixed liquid reflectance (0.079) is above Fresnel's for a
     high sun: the tropics would absorb 7 to 8 W/m² more with the true one, the pole 1 to 7 less.
-- Open on the drawn worlds, asked of the owner: rings and closed inner bodies of liquid are frequent (3 or 4 worlds
-  in 12 at size 64; about 2 in 12 close into a body 2,000 km² wide and 800 m deep standing above 0 m): the
-  orchestrator leans to rings that are rare and mostly open to the low ground. Drawn worlds hold less land (27%
-  against 31%) and fewer rivers on small maps; some are still one land with arms; the law's numbers are first
-  guesses. Found on the way, not of that work: the rain over open liquid shows a checkerboard in the planet's air.
+- On main: a world is drawn from its seed unless one island is asked for (`--shape one`; the page's choice). Rings
+  are 3 rises in 100 and mostly breached; where two rises raise the land alike the crust sags, so lands stand apart;
+  drawn worlds hold about a third of land. Every test builds `worldgen::testkit::one_rise`. The live page is its
+  Version 46. Open on the drawn worlds (the next round of that work, not started): on maps of 128 the lands read as
+  smooth long blocks each in its own moat, and some straits run straight (the sag follows a line; the noise's warp
+  is not on it); the noise is sized to the map, so a 128 map is a 64 map scaled up: the proposal is the noise's unit
+  by km (the 64 map's), which leaves worlds of 64 as they are and moves every other size, tests' worlds of 16, 24
+  and 32 among them (picture: `scratchpad/islands/round2/km/`); flat shelves with straight edges show on some 128
+  worlds; land reaches the map's edge in a few. Found on the way, not of that work: the rain over open liquid shows
+  a checkerboard in the planet's air.
+- In work, life track: what the land offers, first part (seeds that lie on the ground as lots that sprout by the
+  ground's state and die as dormant tissue; snow that hides what a taker could take; two map layers, the seeds and
+  the year's growth), by the life helper in its worktree; law changes, so the key numbers are measured and no
+  reference is moved without the orchestrator.
 - Timed in turn on a quiet machine, a 32 island of plants, 30 years: 261 ms a year before the contract, 262 to 266
   after.
 
