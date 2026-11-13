@@ -3,7 +3,7 @@
 //! centres and applies the laws at each pixel of the ground's tiles (`ground`). It is made with each frame, from the
 //! frame's own context (`Ctx`), and holds nothing a picture needs to make.
 
-use crate::ground::sample_index;
+use crate::ground::{sample_index, shore_dry};
 use crate::layers::{cover_melt, frame, pixels, Ctx};
 use pcore::inside::{soil_level, Means};
 use pcore::space::network::NONE;
@@ -18,12 +18,14 @@ const DRY_M: f64 = 0.1;
 
 /// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
 /// height over it, m, and the wetness index of the terrain's samples inside it with their shares of its area
-/// (`ground::sample_index`); and the cell of each of the terrain's samples.
+/// (`ground::sample_index`); the cell of each of the terrain's samples; and whether the shore a shell draws leaves
+/// each sample out of its pond's liquid (`ground::shore_dry`).
 pub struct Table {
     square: Vec<usize>,
     z: Vec<f64>,
     inside: Vec<(Vec<f64>, Vec<f64>)>,
     cell: Vec<u32>,
+    dry: Vec<bool>,
 }
 
 impl Table {
@@ -50,24 +52,26 @@ impl Table {
         for (t, a) in inside.iter_mut() {
             *a = vec![1.0 / t.len().max(1) as f64; t.len()];
         }
-        Table { square, z, inside, cell: of.iter().map(|&i| i as u32).collect() }
+        Table { square, z, inside, cell: of.iter().map(|&i| i as u32).collect(), dry: shore_dry(&s) }
     }
 
     /// The volume of liquid that runs through each of the terrain's samples, m³/s, row by row: its discharge
     /// (`World::discharge`) at the mol per m³ of the liquid its cell's ground holds (`World::liquid_in`); none where that
     /// cell holds no liquid. A shell sizes the channel of each sample by it (`Physics::channel`). A sample of a pond
-    /// carries no less than its main way upstream brings: a river runs on along a body's floor to its
-    /// lowest sample, and a shell draws that run where the body is drawn dry or its shore lies farther than the
-    /// samples' (under the body's liquid it does not show).
+    /// that holds no liquid, or that the shore a shell draws leaves out of the liquid (`dry`), carries no less than
+    /// its main way upstream brings: a river runs on along a dry body's floor, and to the shore drawn, which lies up
+    /// to a few samples from the samples' own. Under a body's liquid no channel runs.
     pub fn discharge(&self, w: &World) -> Vec<f32> {
         let per_m3: Vec<f64> = (0..w.mesh.cells().n()).map(|i| w.liquid_in(i, |k| w.g(k, i)).map_or(0.0, |l| l.1)).collect();
         let per = |k: usize| per_m3[self.cell[k] as usize];
         let mut out: Vec<f32> = w.discharge.iter().enumerate().map(|(k, &q)| if per(k) > 0.0 { (q as f64 / per(k)) as f32 } else { 0.0 }).collect();
-        let s = w.terrain_samples();
+        let (s, levels) = (w.terrain_samples(), w.pond_levels());
+        let shore = |k: usize| self.dry[k] || levels[s.pond[k] as usize].is_nan();
         // In the flood's order from the last sample reached: a sample comes before the one its liquid runs to.
         for &k in s.order.iter().rev() {
             let k = k as usize;
-            if s.pond[k] != NONE && s.main[k] != NONE {
+            // (And one sample on, so the line's last piece runs into the liquid drawn.)
+            if s.pond[k] != NONE && s.main[k] != NONE && (shore(k) || s.pond[s.main[k] as usize] == NONE || shore(s.main[k] as usize)) {
                 out[k] = out[k].max(out[s.main[k] as usize]);
             }
         }

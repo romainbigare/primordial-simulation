@@ -27,6 +27,10 @@ use std::collections::HashMap;
 /// flood of every year or two (Leopold and Maddock 1953; Wolman and Miller 1960; Dunne and Leopold 1978: 2 to 10 times
 /// in humid lands).
 pub const FLOOD: f64 = 5.0;
+/// At one place a channel's water grows wider with its discharge as its power this (at-a-station hydraulic geometry,
+/// Leopold and Maddock 1953), far less than from channel to channel: at its mean flow the water takes `FLOOD` to the
+/// power minus this of the width of the bed its floods cut.
+pub const STATION_EXP: f64 = 0.26;
 /// What a m² drained passes on in the flood that shapes a channel's bed, as a depth, m/s: the stand-in for a bed's
 /// width where a number that never changes needs one.
 pub const BED_RUNOFF: f64 = FLOOD * TYPICAL_RUNOFF;
@@ -41,7 +45,8 @@ const HARD_SHARE: f64 = 0.35;
 /// and the share of that left on a hard bed, whose walls hold the channel.
 const WANDER_SAMPLES: f64 = 0.4;
 const WANDER_HARD: f64 = 0.5;
-/// A bed narrower than this, m, is drawn on its valley's line: a rill, which a tile holds for a texel or two.
+/// A bed narrower than this, m, has no bends walked (a rill, whose bends are finer than the wander's finest turns):
+/// it wanders like any channel.
 const BENDS_FROM_M: f64 = 1.0;
 /// Below this slope of the reach a channel sways fully, above `STRAIGHT_ABOVE` its bed is hard: pool-riffle channels
 /// lie below about 0.015, step-pool and cascade ones above about 0.03 (Montgomery and Buffington 1997).
@@ -139,18 +144,21 @@ impl Reaches<'_> {
     }
 
     /// How far sample `k`'s line wanders to each side of its curve `frame`, m, how far its bends swing to each side
-    /// of that, m (the module's doc), and how hard its bed is, 0 to 1; no sway under standing liquid, at a sink and
-    /// for a bed under `BENDS_FROM_M`.
+    /// of that, m (the module's doc), and how hard its bed is, 0 to 1; no sway at a sink, and no bends (the wander
+    /// alone) under standing liquid and for a bed under `BENDS_FROM_M`.
     fn sway(&self, k: usize, frame: &Frame) -> [f64; 3] {
         let s = self.s;
         let (width, depth) = self.bed_of(k);
-        if s.to[k] == NONE || s.pond[k] != NONE || width < BENDS_FROM_M {
+        if s.to[k] == NONE {
             return [0.0; 3];
         }
         let [slope, across] = self.fall(k);
         let hard = ease(BENDS_BELOW, STRAIGHT_ABOVE, slope);
         let most = (TURN_SHARE * frame.radius()).min(BEND_MOST * self.metres);
         let wander = (WANDER_SAMPLES * self.metres * (1.0 + (WANDER_HARD - 1.0) * hard)).min(most);
+        if s.pond[k] != NONE || width < BENDS_FROM_M {
+            return [wander, 0.0, hard];
+        }
         let floor = if across > 0.0 { WALL_DEPTHS * depth / across } else { f64::INFINITY };
         let belt = BELT_WIDTHS * width * (1.0 + (HARD_SHARE - 1.0) * hard);
         [wander, belt.min(floor).min(self.widest(s.up[k]) - width).min(most - wander).max(0.0), hard]
@@ -304,12 +312,18 @@ impl Bends {
     /// How far the line of sample `k` of `r` leans from its curve `frame` by its wander, `u` m along the curve, m: the
     /// wander there (`wander::wander`) times the most it leans, which runs smoothly from the mean of its own and its
     /// main neighbour's upstream at the piece's start to the mean of its own and the next one's at its end, and is
-    /// none where the line starts or ends (a head; a join, a sink).
+    /// none where the line ends (a join, a sink); a head leans as its own sample does. The wander's finer turns are those of a bed as
+    /// wide as the channel's there (`wander::wander`), in samples, which runs between the same means.
     pub(super) fn leans(&self, r: &Reaches, k: usize, frame: &Frame, u: f64) -> f64 {
         let s = r.s;
+        let (up, on) = (s.main[k] != NONE, s.to[k] != NONE && s.main[s.to[k] as usize] == k as u32);
+        let t = ease(0.0, 1.0, u / frame.len());
         let joint = |j: u32, runs: bool| if runs { 0.5 * (self.lean[k] + self.lean[j as usize]) } else { 0.0 };
-        let (from, to) = (joint(s.main[k], s.main[k] != NONE), joint(s.to[k], s.to[k] != NONE && s.main[s.to[k] as usize] == k as u32));
-        let most = from + (to - from) * ease(0.0, 1.0, u / frame.len());
-        most * wander(r.seed, self.head[k], self.down[k] + u / (WANDER_EVERY * r.metres))
+        // (A head has no line to meet: it leans as its own sample does, so a rill of a sample or two wanders too.)
+        let from = if up { joint(s.main[k], up) } else { self.lean[k] };
+        let most = from + (joint(s.to[k], on) - from) * t;
+        let wide = |j: u32, runs: bool| if runs { 0.5 * (r.bed_of(k).0 + r.bed_of(j as usize).0) } else { r.bed_of(k).0 };
+        let width = wide(s.main[k], up) + (wide(s.to[k], on) - wide(s.main[k], up)) * t;
+        most * wander(r.seed, self.head[k], self.down[k] + u / (WANDER_EVERY * r.metres), width / (WANDER_EVERY * r.metres))
     }
 }

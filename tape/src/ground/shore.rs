@@ -138,6 +138,12 @@ impl Shore {
         (offset, depth)
     }
 
+    /// Whether the shore drawn leaves each sample out of its pond's liquid (the offset drawn at its centre over minus
+    /// `MOUTH_UNDER_M`): a narrow arm of a body is drawn as land, and a river runs on through it.
+    pub(super) fn dry(&self) -> Vec<bool> {
+        (0..self.offset.len()).map(|k| self.at([(k % self.across) as f64 + 0.5, (k / self.across) as f64 + 0.5]).0 > -MOUTH_UNDER_M).collect()
+    }
+
     /// Where a channel's line that the samples end at `from` (samples from the map's corner) ends as drawn (`MOUTH_MOST`):
     /// in the liquid of the shore drawn; `from` itself where it lies in it, or where none lies near.
     pub(super) fn mouth(&self, from: [f64; 2]) -> [f64; 2] {

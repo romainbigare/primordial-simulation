@@ -30,13 +30,14 @@ const FOAM_PX = vec2f(0.5, 1.5);
 // The bed under any water is drawn this far towards pale sand (`BEACH_SAND` times `BED_TONE`), so shallows read light
 // over a dark soaked bed too (a lake's as the sea's).
 const BED_LIGHTEN = 0.55; const BED_TONE = 0.85;
-// Lakes and rivers are metres deep where the sea is tens: each is coloured as if `LAKE_SCALE` times as deep plus
-// `LAKE_SHALLOWEST_M`, no deeper than `LAKE_DEEPEST_M` (an open blue, not the ocean's dark), and lighter towards its
-// shore: as if shallower where it is less than a rim's depth deep (`LAKE_RIM_M`), the shallower the nearer the shore
-// (its square): a band as wide as the bed's slope makes it, wide where the bed is gentle and no narrower than
-// `LAKE_RIM_PX` pixels where it is steep, so every shore has its light shallows.
-const LAKE_SCALE = 1.5; const LAKE_SHALLOWEST_M = 5.0; const LAKE_DEEPEST_M = 45.0;
+// Lakes and rivers are metres deep where the sea is tens: each is coloured as if `LAKE_SCALE` times as deep, and by
+// one law (`river_seen`): lighter towards its shore, where it is less than a rim's depth deep (`LAKE_RIM_M`): a band
+// as wide as the bed's slope makes it, wide where the bed is gentle and no narrower than `LAKE_RIM_PX` pixels where
+// it is steep, so every shore has its light shallows. Under lake and river alike the bed shows `BED_SHOWN` of its
+// light: it reads through the shallows, and the water's own colour stays.
+const LAKE_SCALE = 1.5;
 const LAKE_RIM_M = 0.3; const LAKE_RIM_PX = 2.5;
+const BED_SHOWN = 0.8;
 
 // Beach sand (colour.wgsl `beach`), bright and dry; a beach takes this share of its colour from its loose ground's
 // own, lifted this many times (washed and dry, a ground is lighter).
@@ -72,11 +73,11 @@ fn relief_tint(c: vec3f, lit: f32) -> vec3f {
   return c * lit * mix(vec3f(1.0), tint, STYLE);
 }
 
-// The depth a lake or a river `depth` m deep is coloured as, where its bed rises at `slope` (rise over run) to a rim
-// `rim_m` deep, seen at `e` m a pixel (`LAKE_SCALE`, `LAKE_RIM_PX`).
-fn lake_seen(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
-  let rim = ease(0.0, max(rim_m, slope * LAKE_RIM_PX * e), depth);
-  return min(LAKE_SHALLOWEST_M + depth * LAKE_SCALE, LAKE_DEEPEST_M) * rim * rim;
+// How far from its shore standing liquid `depth` m deep lies, 0 at its edge to 1 where it is as deep as its rim: its
+// bed rises at `slope` (rise over run) to a rim `rim_m` deep, seen at `e` m a pixel (`LAKE_RIM_PX`). The share of
+// the deep water's colour it takes (`river_seen`'s `rel`: a lake's shallows are a river's).
+fn shore_rim(depth: f32, slope: f32, e: f32, rim_m: f32) -> f32 {
+  return ease(0.0, max(rim_m, slope * LAKE_RIM_PX * e), depth);
 }
 
 // A channel is a thin line of water decimetres deep: coloured by that depth alone it shows only its bed, a grey line

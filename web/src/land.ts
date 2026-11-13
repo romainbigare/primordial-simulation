@@ -12,7 +12,7 @@ import { half, unhalf } from './canopy';
 /** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), the discharge
  * per metre a css pixel takes past which a channel shows as a line, m³/s per m, and that line's law (its css pixels,
  * the power it widens by, the most times: tape/src/ground/channels.rs `LINE_PX`). */
-export interface Laws { soil_m: number; wet_depth: number; dormancy: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number }
+export interface Laws { soil_m: number; wet_depth: number; dormancy: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number; station: number }
 /** The terrain's samples: across, down, and their depth. */
 export interface SamplesOf { across: number; down: number; depth: number }
 
@@ -46,6 +46,9 @@ export const FLOW_FPS = 6;
 const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
 
 export class Land {
+  /** The pixels drawn a css pixel in the picture the map draws now: the screen's ratio times the scale the map is
+   * drawn at (a picture drawn small and stretched has larger pixels; what is sized in css pixels must not change). */
+  drawn = devicePixelRatio;
   private data: Float32Array | null = null;
   private tex: Texture | null = null;
   private due = false;
@@ -155,7 +158,7 @@ export class Land {
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)
       .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.dormancy, l.rooted_from).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
-      .vec4(s.across, s.down, s.depth, devicePixelRatio).vec4(tm.along_wrap, l.flood, this.slid(performance.now())).vec4(...l.line_law);
+      .vec4(s.across, s.down, s.depth, this.drawn).vec4(tm.along_wrap, l.flood, this.slid(performance.now()), l.flood ** -l.station).vec4(...l.line_law);
     return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
   }
 
