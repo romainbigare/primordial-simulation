@@ -3,7 +3,6 @@
 use super::{each, Body};
 use crate::chem::Stores;
 use crate::event::{Event, EventKind};
-use crate::store::Node;
 use crate::{bond, life::{Chunk, Handle}, World};
 
 /// Remains go to the ground node as loose amounts, with the body's heat.
@@ -22,7 +21,7 @@ pub(crate) fn perish(w: &World, d: &mut Chunk, b: &mut Body, (cause, day): (u8, 
 
 /// All that body `b` holds goes to its cell's ground node as loose amounts, with its heat (the update open moves it).
 pub(crate) fn remains(w: &World, d: &mut Chunk, b: &Body) {
-    d.moves.give_all(w, Node::ground(b.cell as usize), each(&w.chem, &b.store), b.e);
+    crate::contract::give(w, d, b.cell as usize, each(&w.chem, &b.store), b.e);
 }
 
 /// Amounts `m` (mol of each store, at most what it holds) go from body `b` to its cell's ground as loose amounts, with
@@ -31,7 +30,7 @@ pub(crate) fn to_ground(w: &World, d: &mut Chunk, b: &mut Body, m: &Stores) {
     let q = b.heat_with(&w.chem, m);
     b.lose(&w.chem, m);
     b.e -= q;
-    d.moves.give_all(w, Node::ground(b.cell as usize), each(&w.chem, m), q);
+    crate::contract::give(w, d, b.cell as usize, each(&w.chem, m), q);
 }
 
 /// `dead` (mol of each store, cut here to what it holds) goes from body `b` to the ground; in a node the remains of the

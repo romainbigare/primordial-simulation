@@ -5,7 +5,7 @@
 //! work it does (Archard 1953).
 
 use super::{at, fall_apart, held, restructure, shed, to_ground};
-use crate::{body::Body, chem::Chemistry, cover::{Cover, Parts}, life::{Cell, Chunk, Entry}, store::{Class, Node}, units::TABOR, World};
+use crate::{body::Body, chem::Chemistry, life::{Cell, Chunk, Entry}, store::{Class, Node}, units::TABOR, World};
 
 /// Scratch hardnesses within this share of each other are one: walls of substances of one hardness read it to rounding
 /// (their mean by volume, `Part::walls`).
@@ -35,12 +35,6 @@ impl Edge {
     /// `cut_at` for a joint of `area` m² between walls of hardness `a` and `b`: the softer gives way.
     pub(crate) fn cut_joint(&self, (a, b): (f64, f64), area: f64) -> f64 {
         self.cut_at(a.min(b), area.sqrt())
-    }
-    /// The share of the energy to break cover `c` of parts `p`, and of the force, that this edge leaves: each material as
-    /// `cut` says for the depth of its layer, its volume over the cell's `area` m² (laws.md 3.3).
-    pub fn cut_cover(&self, chem: &Chemistry, cfg: &crate::Config, (c, p): (&Cover, &Parts), area: f64) -> f64 {
-        let [v, blunt] = c.solids(chem, cfg, p, |_| 1.0);
-        c.solids(chem, cfg, p, |k| self.cut(chem, k, v / area))[1] / blunt.max(1e-300)
     }
     /// What these edges leave a body of `n` members, each holding at most one, of the energy and force to break a thing
     /// that an edge alone cuts to the share `cut`: (the share left, the share of the blunt work done through the

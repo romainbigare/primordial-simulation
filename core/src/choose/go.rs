@@ -6,6 +6,7 @@ use crate::life::BROKEN;
 use crate::chem::Phase;
 use crate::store::{Class, Node};
 use crate::units::DAY;
+use crate::contract::{self, Layer};
 use crate::{bond, copy, lanes, nodes, life::{Chunk, Entry}, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
@@ -27,7 +28,7 @@ pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) -> bool {
     if carried.is_none() {
         bond::let_go(d, b, true);
     }
-    let climb = (w.life.env[j][2] - w.life.env[i][2]).max(0.0);
+    let climb = (contract::place(w, j).z - contract::place(w, i).z).max(0.0);
     let (resist, dist) = (lanes::resist(w, i, j), w.mesh.cells().dist()[lanes::link(w, i, j)]);
     let (p, m1, mass) = (&w.cfg.phys, mb / b.n(), mb + carried.map_or(0.0, |c| c.1));
     let push = mass * (p.walk(m1) * dist + w.cfg.gravity * climb) * resist;
@@ -43,7 +44,7 @@ pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) -> bool {
     }
     // What it spends pushing through the bodies there breaks them at the next survey (`wear`) and clears the lane: the
     // ground whose cover that energy breaks.
-    let (pushed, all) = (push * (1.0 - 1.0 / resist), w.life.sum(j)[7]);
+    let (pushed, all) = (push * (1.0 - 1.0 / resist), contract::stand(w, j).breaking);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
     let eats = (w.days_to_phys() - dist / v.max(1e-9) / DAY).max(0.0);
     b.leaving = true;
@@ -55,7 +56,7 @@ pub fn go(w: &World, d: &mut Chunk, b: &mut Body, j: usize, kin: bool) -> bool {
 /// the body bears the `bump` share of the weight it moves (`Physics::bump`), since it pushes what it passes.
 fn can_go(w: &World, b: &Body, j: usize, load: f64) -> bool {
     let mb = b.mass(&w.chem);
-    (w.life.sum(j)[1] + mb) / w.cfg.phys.rho_body <= w.cfg.phys.layer * w.mesh.cells().area()[j]
+    (contract::stand(w, j).mass + mb) / w.cfg.phys.rho_body <= w.cfg.phys.layer * w.mesh.cells().area()[j]
         && bond::bears(w, b) >= w.cfg.phys.bump * (mb + load) * w.cfg.gravity
 }
 
@@ -105,21 +106,16 @@ pub(crate) fn land_move(w: &World, d: &mut Chunk, (mut b, brain): (Body, &[f32])
 /// survey, not once a move. (Those who held a part let go of it in the serial pass, `bond::let_go`.)
 pub fn wear(w: &World, d: &mut Chunk, j: usize, energy: f64) {
     let here: Vec<_> = d.cell(j).collect();
-    let parts = crate::cover::Parts::of(&w.chem);
-    let cover = parts.as_ref().map_or(0.0, |p| (0..crate::cover::SLOTS).map(|x| d.at(j).cover.kg(&p.mm(&w.chem), x)).sum());
+    let cover = contract::shown(w, d.at(j), Layer::Cover).map_or(0.0, |s| s.kg);
     let total: f64 = here.iter().map(|&s| d[s].mass(&w.chem)).sum::<f64>() + cover;
     if total <= 0.0 {
         return;
     }
+    // (The moves of the press and of the bodies' wounds are in the name of the cover's node.)
     d.moves.open(w, j, Node::new(Class::Cover, j));
     // The cover takes its share by mass as a body does: what that breaks of it goes to the ground as remains.
-    if let Some(p) = parts.as_ref().filter(|_| cover > 0.0) {
-        let f = (energy * cover / total / d.at(j).cover.breaking(&w.chem, &w.cfg, p, 1.0).max(1e-30)).min(1.0);
-        d.counts.cover_lost[BROKEN as usize] += f * cover;
-        let e = p.content(&w.chem);
-        let held = d.cover(j).content(&e);
-        crate::cover::lose(w, d, p, j, f);
-        d.counts.cover_budget[crate::cover::BODIES] += d.cover(j).content(&e) - held;
+    if cover > 0.0 {
+        contract::press(w, d, j, energy * cover / total);
     }
     for s in here {
         let o = std::mem::take(&mut d[s]);

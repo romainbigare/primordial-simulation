@@ -190,7 +190,7 @@ fn on_land(s: &Scratch, i: usize) -> bool {
 
 /// Share of carrying and creep the bodies on cell `i` leave there (1 when bare).
 fn bare_share(w: &World, i: usize) -> f64 {
-    1.0 / (1.0 + w.life.sum(i)[1] / w.mesh.cells().area()[i] / w.cfg.phys.hold)
+    1.0 / (1.0 + crate::contract::stand(w, i).mass / w.mesh.cells().area()[i] / w.cfg.phys.hold)
 }
 
 /// Weight of a step of `dt` seconds in a moving average over about a year.

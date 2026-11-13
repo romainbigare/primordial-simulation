@@ -151,7 +151,7 @@ fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -
     let take = (shape.h > 0).then(|| shape.verb(brain::TAKE_FROM) * shape.r() + shape.h);
     let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, burn: (f32::MAX, f32::MIN), copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
     for i in 0..w.mesh.cells().n() {
-        let lives = w.life.in_cell(i) > 0 || w.life.sum(i)[1] > 0.0;
+        let lives = w.life.in_cell(i) > 0 || pcore::contract::stand(w, i).mass > 0.0;
         if !open_land(w, i) || r.f64() >= b.chance || (!b.anywhere && !lives) {
             continue;
         }

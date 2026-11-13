@@ -3,11 +3,12 @@
 
 use crate::body::{self, Body, STRENGTH};
 use crate::life::TAKEN;
+use crate::contract::{self, Layer};
 use crate::chem::{Chemistry, Phase, Stores};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
 use crate::units::{BODY_STORES, DAY, MAX_SUBSTANCES};
-use crate::{bond, lanes, life::{Chunk, Handle}, store::Node, World};
+use crate::{bond, life::{Chunk, Handle}, store::Node, World};
 
 /// Mass of the amounts `m` (mol of each store) that the body at `t` K uses (`Body::uses`), kg.
 fn used_kg(w: &World, b: &Body, t: f64, m: &Stores) -> f64 {
@@ -40,21 +41,22 @@ pub const COVER: u64 = u64::MAX - 1;
 /// holds of it. A bite of cover takes all its parts in the field's proportions: what the body does not use (`Body::uses`:
 /// the frame without the enzyme that splits it) is bulk, which counts toward what it can take (`intake`, the gut) and
 /// passes through it to the ground at once, with its heat (a gut passage of days, within the update's step: it never
-/// becomes the body's own frame). What it takes of the cover it pays to break as a bite does (`Cover::breaking`), less
+/// becomes the body's own frame). It takes and gives through the contract (`contract::take`). What it takes of the cover
+/// it pays to break as a bite does (`contract::Shown::breaking`), less
 /// what a held edge saves (`bond::Edge`), which wears by the work it does. It takes only what lies within its reach
 /// (`bond::wading`): under liquid deeper than its height and its reach, neither the cover nor the solids of the ground,
 /// only what is liquid there. `days`: the time the meal feeds it, to its next meal (laws.md 5.3).
 pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let (i, chem, bc) = (b.cell as usize, &w.chem, w.chem.body());
     let (tg, reaches) = (w.t_ground_last(i), bond::wading(w, d, b, i).reaches);
-    let parts = crate::cover::Parts::of(chem).filter(|_| reaches);
+    let shown = contract::shown(w, d.at(i), Layer::Cover).filter(|_| reaches);
     // (What of the ground it reaches: its liquids, and its solids where it reaches the ground.)
     let within = |k: usize| match chem.phase(k, tg) {
         Phase::Gas => false,
         Phase::Liquid => true,
         Phase::Solid => reaches,
     };
-    let cover: [f64; MAX_SUBSTANCES] = parts.as_ref().map_or([0.0; MAX_SUBSTANCES], |p| d.at(i).cover.amounts(p));
+    let cover: [f64; MAX_SUBSTANCES] = shown.map_or([0.0; MAX_SUBSTANCES], |s| s.mol);
     // (The cover's parts are among the stores of bodies: its fuel, matter and built solids.)
     let (of_cover, t) = (|s: usize| bc.subs().get(s).map_or(0.0, |&k| cover[k]), b.temp(chem));
     // What it would take and of it what it would graze, by what lies on the ground (one look-up of the ground's view)
@@ -79,12 +81,12 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
         [&mut m, &mut grazed, &mut bulk].into_iter().for_each(|v| v.iter_mut().for_each(|a| *a *= f));
     }
     // (The cover has not changed since `cover` was read.)
-    let (all, kg) = (parts.as_ref().map_or(0.0, |_| cover.iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), bc.mass_of(&grazed) + bc.mass_of(&bulk));
-    let breaking = parts.as_ref().filter(|_| kg > 0.0).map_or(0.0, |p| d.at(i).cover.breaking(chem, &w.cfg, p, (kg / all.max(1e-300)).min(1.0)));
+    let (all, kg) = (shown.map_or(0.0, |_| cover.iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()), bc.mass_of(&grazed) + bc.mass_of(&bulk));
+    let breaking = shown.filter(|_| kg > 0.0).map_or(0.0, |s| (kg / all.max(1e-300)).min(1.0) * s.breaking);
     let edge = bond::edge(d.at(i), w, b).filter(|_| breaking > 0.0);
     let area = w.mesh.cells().area()[i];
-    let (left, through) = match (&edge, &parts) {
-        (Some(e), Some(p)) => e.leaves(b.n(), e.cut_cover(chem, &w.cfg, (&d.at(i).cover, p), area)),
+    let (left, through) = match (&edge, &shown) {
+        (Some(e), Some(_)) => e.leaves(b.n(), contract::cut_share(w, d.at(i), Layer::Cover, |k, v| e.cut(chem, k, v / area))),
         _ => (1.0, 0.0),
     };
     if !body::pay(w, d, b, w.cfg.phys.c_handle * (bc.mass_of(&m) + bc.mass_of(&bulk)) + left * breaking) {
@@ -99,15 +101,11 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
         let ev = EventKind::Took { by: b.id, from, used: used_kg(w, b, t, &part) as f32 };
         d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: x });
     }
-    if let Some(p) = parts.as_ref().filter(|_| kg > 0.0) {
-        let e = p.content(chem);
-        let held = d.cover(i).content(&e);
+    if shown.is_some() && kg > 0.0 {
         for (s, g) in grazed.iter().zip(&bulk).map(|(g, x)| g + x).enumerate().filter(|e| e.1 > 0.0) {
-            b.e += d.cover(i).take(chem, p, bc.subs()[s], g);
-            b.store[s] += g;
+            let (got, heat) = contract::take(w, d, i, Layer::Cover, (bc.subs()[s], g));
+            (b.e, b.store[s]) = (b.e + heat, b.store[s] + got);
         }
-        d.counts.cover_lost[TAKEN as usize] += kg;
-        d.counts.cover_budget[crate::cover::BODIES] += d.cover(i).content(&e) - held;
         if bulk.iter().any(|&x| x > 0.0) {
             body::to_ground(w, d, b, &bulk);
         }
@@ -120,7 +118,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
             continue;
         }
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
-        let (got, took) = d.moves.take_loose(w, i, (k, want), tg);
+        let (got, took) = contract::take(w, d, i, Layer::Ground, (k, want));
         (b.store[s], b.e, m[s]) = (b.store[s] + got, b.e + took, got + grazed[s]);
     }
     b.digest(chem, Body::matter_at(chem).map_or(0.0, |s| m[s]), &mut d.counts.rounded[0]);
@@ -196,7 +194,7 @@ pub fn take_body(w: &World, d: &mut Chunk, b: &mut Body, (s, days): (Handle, f64
     let per = reached.max(1.0 / o.n());
     let chance = reached / per;
     let m = b.wanted(w, |k| per * o.amount(bc, k), (kg * fb / (fb + fo + 1e-30), days), mb);
-    let resist = 1.0 + lanes::thickness(w, w.life.sum(b.cell as usize)[1], w.mesh.cells().area()[b.cell as usize]);
+    let resist = 1.0 + contract::thickness(w, contract::stand(w, b.cell as usize).mass, w.mesh.cells().area()[b.cell as usize]);
     let hit = reached;
     // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less
     // what the taker took (all they held, if they die).

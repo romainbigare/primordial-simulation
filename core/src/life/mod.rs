@@ -87,18 +87,14 @@ pub struct Life {
     parts_moved: BTreeMap<u64, u32>,
     /// What body code did outside its cell, waiting for the serial pass (`cross::land`)
     pub(crate) queued: Vec<Entry>,
-    /// Per cell, from the last survey: its members, then their visible traits summed, then the energy to break all its
-    /// bodies, J; then their capture area times their shade, m², and that times the share set aside for their light
-    /// reactions (`Life::sum`). The survey's caches are not saved: a snapshot is taken at a month's start, where the
-    /// survey builds them before any law reads them; this one the tape reads first, so `tape::load_snapshot` rebuilds it
-    /// (`survey::sums`)
+    /// Per cell, from the month's start: what stands on it (`contract::Stand`), and of its bodies their members and
+    /// their strength summed (`Life::sum`). Not saved: a snapshot is taken at a month's start, where they are built
+    /// before any law reads them; the tape reads them first, so `tape::load_snapshot` builds them again
+    /// (`contract::stands`, `survey::sums`)
+    pub(crate) stands: Vec<crate::contract::Stand>,
     pub(crate) sums: Vec<[f64; ROW]>,
-    /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb
-    pub absorb: Vec<f32>,
-    /// Per cell, from the last survey: the share of that absorbed light set aside for its bodies' light reactions
-    pub keep: Vec<f32>,
-    /// Per cell, from the last monthly survey:
-    /// ground temperature, liquid depth, surface height
+    /// Per cell, from the month's start (`contract::surroundings`): ground temperature, liquid depth, surface height
+    /// (`contract::place`)
     pub env: Vec<[f64; 3]>,
     /// Per cell, from the last survey: its features as every brain perceives them, then the same smoothed over the
     /// neighbours once to `choose::SIGHTS - 1` times (`choose::cells`, read by `feat`)
@@ -122,7 +118,7 @@ impl Life {
     pub fn new(mesh: &Mesh) -> Life {
         let n = mesh.cells().n();
         let cells = (0..n).map(|i| Cell { serial: i as u32, ..Default::default() }).collect();
-        let mut life = Life { cells, next_serial: n as u32, sums: vec![[0.0; ROW]; n], ..Default::default() };
+        let mut life = Life { cells, next_serial: n as u32, stands: vec![Default::default(); n], sums: vec![[0.0; ROW]; n], ..Default::default() };
         life.index();
         life
     }
@@ -180,7 +176,7 @@ impl Life {
         // (The cells are taken out of the world while a pass runs: the count comes from the features.)
         &self.feat[(sight.clamp(1, crate::choose::SIGHTS) - 1) * (self.feat.len() / crate::choose::SIGHTS) + i]
     }
-    /// The numbers of cell `i` from the last survey (`Cell::sum`).
+    /// The members of the bodies of cell `i` and their strength summed, from the month's start (`survey::sums`).
     pub fn sum(&self, i: usize) -> &[f64; ROW] {
         &self.sums[i]
     }

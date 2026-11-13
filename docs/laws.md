@@ -235,6 +235,23 @@ gone does nothing: a move of a body that died (its cost was paid), a watch whose
 a part act no longer possible or that cannot be paid; less than one member of a node's children with no node to join
 goes back into the parent's brood, or to the ground of the parent's cell if it died (`copy::back`).
 
+**The contract** (`contract`): what lies between the natural world (the ground, the air, the cover) and what takes
+from it (bodies today). Neither side names the other's modules (`cli/tests/sides.rs`). It is plain data and functions
+over the one source, with no copy. **What a cell shows** a taker: its cover as a whole and each slot by the height its
+plants stand at (`contract::shown`, `contract::slots`): the mass, the amount of each substance, the heat and the
+energy to break all of it loose; its place as the month's start left it (`contract::place`: the ground's temperature,
+the depth of the liquid standing on it, its height), how much it hides (`contract::hides`) and how thick what stands
+there is to pass (`contract::thickness`). The loose ground and the remains a taker reads through its cell's view of the
+store. **Take** (`contract::take`): a taker asks a layer (the ground, the whole cover, one slot) for an amount of a
+substance and gets what is granted, never more than is there, with its heat; the ground's side is booked in the view,
+the cover's by the cover (`Cover::take`), the taker books its own. **Give** (`contract::give`): matter and heat back to
+the ground, through the view. **Press** (`contract::press`): work spent on a cell breaks its cover by the share it pays
+for (`Cover::breaking`), and what breaks goes to the ground as remains with its heat. **What stands on a cell**
+(`contract::Stand`): its mass, capture area, the light it absorbs and keeps and the energy to break it, the cover's
+part at each month's start (`Cover::stand`) and each taker's added (`Stand::add`); Flow reads it (1.3, 1.4). A cell
+shows itself as the month's start left its place and what stands, and its cover as it is; takes land in the takers'
+month, and the cover feels them in its own next month.
+
 **Inside a cell** (`inside/`, handover 5.2): a cell holds means (its cover, the liquid in its soil, what stands on
 it). The ground inside it is the terrain's worn samples inside it, and what stands lies on them (`flow::curve`, 1.2).
 The shell draws inside the cells by general laws at each pixel of the ground's tiles (`tape::Ground`), blending its
@@ -851,7 +868,7 @@ each material k of what is broken, the energy and the force fall to the share c_
 the part's walls (their volume over half its outer surface, `Part::thickness`), l the width of what is broken (a member
 of a body, `Body::width`; the cover, its volume per m²; a joint, the root of its contact area), where the edge is
 harder than that material (scratch hardness, `Substance::hardness`: an indenter marks only what is softer, Tabor 1951),
-else c_k = 1. Over a thing, c̄ = Σ V σ c_k / Σ V σ (`Body::cut_by`, `Cover::cut_by`). A node's parts are one in each
+else c_k = 1. Over a thing, c̄ = Σ V σ c_k / Σ V σ (`Body::cut_by`, `contract::cut_share`). A node's parts are one in each
 of m of its n members' hands (a lot of m held, at most n), so the edges leave the node 1 − (1 − c̄) m / n
 (`Edge::leaves`), as m of its members cutting and the others breaking bluntly: a node of 100 holding 100 edges bites
 as 100 individuals each with one do (`core/tests/lots.rs`). The edges wear together, by the work done through all of
@@ -1147,12 +1164,14 @@ seeds fill it:
   their heat at the air's temperature and their latent heat) and to its cell's bodies' node (with theirs), as bodies
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
   12). Every move is booked through the cell's view (`store::Moves`), its gas within the cell's share of the air.
-- **Eaten and broken**: an animal's take from the place takes from its ground and its cover by one search
-  (`feed::take_node`, 5.3), paying to break what it takes of the cover (`Cover::breaking`, as a bite pays); movers that
-  push through a cell break the cover by its share of the cell's mass, as they break bodies (6.8, `choose::wear`).
-- **What it is to the rest**: its mass, capture area, the light it absorbs and the energy to break it are one more
-  body of the cell in the survey's sums (`Life::sum`), so it shades, holds the ground (1.3), hides bodies, slows
-  movers and makes lanes (1.7) as bodies do.
+- **Eaten and broken**: only through the contract (section 0): a taker takes from the whole cover or from one slot
+  (`contract::take`), each slot giving in proportion to what it holds, and pays to break what it takes
+  (`contract::Shown::breaking`); work pressed on a cell breaks the cover by its share (`contract::press`). An
+  animal's take takes from its ground and the whole cover by one search (`feed::take_node`, 5.3); movers that push
+  through a cell press on it by the cover's share of the cell's mass, as they break bodies (6.8, `choose::wear`).
+- **What it is to the rest**: its mass, capture area, the light it absorbs and keeps and the energy to break it are
+  its part of what stands on its cell (`Cover::stand`, `contract::Stand`), with the bodies' part added, so it shades,
+  holds the ground (1.3), hides bodies, slows movers and makes lanes (1.7) as bodies do.
 
 ## 5. Choose: a small brain sees a little, acts, learns and copies others
 Files: `core/src/choose/` (`mod`, `perceive`, `learn`, `feed`, `go`, `spread`), `core/src/brain.rs`.

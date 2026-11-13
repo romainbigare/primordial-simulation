@@ -61,6 +61,7 @@ pub fn read_snapshot<P: DeserializeOwned>(mut z: impl Read) -> io::Result<(World
     let plan = bincode::deserialize_from(&mut z).map_err(bad)?;
     w.mesh = World::mesh_of(&w.map, &w.cfg);
     w.life.each_mut(|b| b.prepare(&w.chem, &w.cfg));
+    pcore::contract::stands(&mut w);
     pcore::survey::sums(&mut w);
     Ok((w, plan))
 }

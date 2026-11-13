@@ -8,6 +8,7 @@ pub mod check;
 pub mod chem;
 pub mod choose;
 pub mod clock;
+pub mod contract;
 pub mod copy;
 pub mod cover;
 pub mod event;

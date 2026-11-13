@@ -46,7 +46,7 @@ pub(crate) fn room_air(d: &Chunk, b: &Body) -> Option<RoomAir> {
 
 /// Standing liquid on cell `i` whose ground holds `g` mol of each substance: depth m, density kg/m³, mol per m³.
 pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64, f64) {
-    w.liquid_in(i, g).map_or((0.0, 0.0, 0.0), |(rho, per_m3)| (w.life.env[i][1], rho, per_m3))
+    w.liquid_in(i, g).map_or((0.0, 0.0, 0.0), |(rho, per_m3)| (crate::contract::place(w, i).liquid, rho, per_m3))
 }
 
 /// How body `b` stands in the standing liquid of cell `i` (its own, or one it steps into, `choose::go`; laws.md 3.3).
@@ -67,7 +67,7 @@ pub(crate) struct Wading {
 /// than its height and what that structure (of a lot, all its parts) displaces weighs as much as both (Archimedes, as
 /// for parts): dry, at the surface, it reaches down its reach alone.
 pub(crate) fn wading(w: &World, d: &Chunk, b: &Body, i: usize) -> Wading {
-    let depth = w.life.env[i][1];
+    let depth = crate::contract::place(w, i).liquid;
     if depth <= 0.0 {
         return Wading { share: 0.0, reaches: true, rho: 0.0 };
     }
