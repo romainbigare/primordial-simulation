@@ -301,10 +301,10 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
         *c += act.iter().enumerate().filter(|p| p.1.cond).map(of).fold(0.0, f64::max) * share;
     }
     // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
-    // touching each place it falls on.
+    // touching each place it falls on, at the saturation ratio it rains at in the day (`ratio` holds the rain times it).
     let touched = ground.wet().touched(s, &t, &rain);
     let work = crate::par::shareable((0..nx * na).filter(|&i| rain[i] > 0.0).map(|i| ground.wet().nodes[i % na].cell.len() * MET_WORK));
-    let met = crate::par::map_n(nx * na, work, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
+    let met = crate::par::map_n(nx * na, work, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i] / rain[i]), &touched)).flatten());
     // What each node's layers send to space over the day, J, on the pool.
     let sky = crate::par::map_n(na, na.saturating_sub(1) * GLOW_WORK, |j| s.heat[j].sends(&w.chem, ts[j], UP) * air.area()[j] * dd);
     for j in 0..na {
