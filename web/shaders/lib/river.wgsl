@@ -169,12 +169,18 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, grows: vec2f
   let r = reach_at(at, e, g, ch, line, open, stone);
   let runs = 1.0 - mouth;
   out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line)) * cuts;
-  out.bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth));
   // The bars' colour: the bed's make washed, sand on the gentlest reaches; the bed seen through the water is the same.
   let washed = mix(min(bed_make_at(at) * BAR_LIFT, vec3f(1.0)), BEACH_SAND, BAR_PALE);
   let gravel = mix(BEACH_SAND, washed, ease(0.0, BAR_SAND_STONE, stone));
-  out.bar = gravel * bar_tone(at, e, g.along, r);
-  out.bar_over = BAR_RISE * r.edge;
+  // On its bars the ground is that gravel, bare, rising from the water's edge, as far as they cover the pixel.
+  let bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth));
+  out.dry.ground = mix(out.dry.ground, gravel * bar_tone(at, e, g.along, r), bars);
+  out.dry.sand *= 1.0 - bars;
+  out.dry.rock *= 1.0 - bars;
+  out.dry.cover *= 1.0 - bars;
+  out.dry.canopy *= 1.0 - bars;
+  out.dry.wet *= 1.0 - bars;
+  out.dry.over = mix(out.dry.over, BAR_RISE * r.edge, bars);
   out.dry.small *= 1.0 - BAR_FINES * r.up;
   out.wet.ground = gravel;
   // The banks' light falls on the ground beside the bed, on its bars and on the water under the bank.
