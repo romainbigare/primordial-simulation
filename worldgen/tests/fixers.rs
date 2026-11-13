@@ -2,7 +2,7 @@
 //! (`cover::FIX`), an initial condition drawn by each cell, printed in the seeding line; zero means none.
 
 use pcore::cover::{self, FIX};
-use worldgen::life::{self, Seeding, FIXERS, FIX_GENE};
+use worldgen::life::{self, Seeding, FIXERS, FIX_GENE, LIGHT_ROW};
 
 /// Slots of cover whose fixing gene is `FIX_GENE`, and slots of cover.
 fn fixers_of(w: &pcore::World) -> (usize, usize) {
@@ -13,7 +13,7 @@ fn fixers_of(w: &pcore::World) -> (usize, usize) {
 fn a_tenth_of_the_cover_starts_with_the_fixing_gene() {
     let mut w = worldgen::new_world(1, 64, 64);
     pcore::step(&mut w);
-    let line = life::seed(&mut w, 0);
+    let line = life::seed(&mut w, LIGHT_ROW);
     let (on, all) = fixers_of(&w);
     println!("{line}");
     let share = on as f64 / all as f64;
@@ -30,7 +30,7 @@ fn the_share_is_a_setting_of_the_start_and_zero_means_none() {
     for (share, want) in [(0.0, 0.0), (1.0, 1.0)] {
         let mut w = worldgen::new_world(1, 32, 32);
         pcore::step(&mut w);
-        life::seed_with(&mut w, 0, &Seeding { fixers: share, ..Default::default() });
+        life::seed_with(&mut w, LIGHT_ROW, &Seeding { fixers: share, ..Default::default() });
         let (on, all) = fixers_of(&w);
         assert_eq!(on as f64, want * all as f64, "share {share}: {on} of {all}");
     }

@@ -84,7 +84,7 @@ fn mild_world(side: usize) -> World {
 pub fn living(side: usize, months: u32) -> World {
     let mut w = crate::new_world(1, side, side);
     crate::life::soil(&mut w, &crate::chemistry0().1.soil);
-    _ = crate::life::seed(&mut w, 0);
+    _ = crate::life::seed(&mut w, crate::life::LIGHT_ROW);
     (0..months).for_each(|_| pcore::step(&mut w));
     w
 }
@@ -123,7 +123,8 @@ pub fn start() -> (World, usize) {
     (w, i)
 }
 
-/// `kg` per m² of the cover of the light-eaters (their genes and label, `life::LIGHT_ROW`) placed in cell `i` (`cover::place`).
+/// `kg` per m² of the cover of the light-eaters (their genes and label, `life::LIGHT_ROW`) placed in cell `i`
+/// (`cover::place`).
 pub fn cover(w: &mut World, i: usize, kg: f64) {
     assert!(pcore::cover::place(w, i, crate::life::KINDS[crate::life::LIGHT_ROW].genes, crate::life::LIGHT_ROW as u32, kg), "no room for cover in cell {i}");
 }

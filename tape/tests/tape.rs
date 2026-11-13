@@ -24,7 +24,7 @@ fn run(w: &mut World, months: u32) {
     }
 }
 
-/// `w` with two kinds of cover, none of it fixing: the light-eaters and the small fast ones (rows 0 and 1).
+/// `w` with two kinds of cover, none of it fixing: the small fast ones and the light-eaters (rows 0 and 1).
 fn fed(w: &mut World) {
     let how = worldgen::life::Seeding { fixers: 0.0, ..Default::default() };
     worldgen::life::seed_with(w, 0, &how);
