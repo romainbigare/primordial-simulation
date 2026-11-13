@@ -139,11 +139,19 @@ enough texels (`belt.rs`, `lines.rs`): no saw from afar. The shore's choice is b
 (`FILM_M`). The pixel runs two layers and colours the river's water once: against the page before the rivers, by CPU
 time in software, the fitted view costs -10%, the 2 km bar -7%, the 200 m bar +3%.
 
-**Known faults of the rivers and shores:** the band's sand does not turn upstream along a river's banks (the tile
-must name the pond for texels near it: `Ground::pond_tile`); the sea's foam is a busy lace close up; a lake's band
-is its true shallows, about 20 m wide; one lake shore runs straight for 200 m (the samples' shape); thin rills are
-nearly straight faint lines; bends come in between the 500 m and 200 m bars; the pan frame draws a river a little
-wide. Small plants' marks show as little grids of yellow dots on bare ground close up.
+**The shores' round (on main):** beside a pond the smooth shore lies lower on a channel's line, so the shore and its
+band make a short funnel up a river (`shore.rs` `drowned`, `MOUTH_DROWN`); the sea's foam close up is one line at the
+water's edge and two soft broken lines by the bed's depth (`style.wgsl` `foam`), compiled out of the far program; a
+channel is drawn only where its bed or far line takes half a pixel or more (`FRINGE_PX`); the herbs' flowers lie on
+two turned lattices (`cover_field.wgsl` `flowers_at`).
+
+**Known faults of the rivers and shores:** straight shores: a far-north lake of seed 1 follows a straight steep slope
+of the made ground 2 to 4 km long (the cause is in how the terrain is made, not in `shore.rs`), and one lake's west
+shore runs straight for 200 m (cause not found; look at the samples' heights along it first); the band's turn up a
+mouth is slight, hardly seen at the sea; the foam's broken lines are short soft dashes, and sheltered coves get foam
+(no number for shelter); thin tributaries seen from afar run nearly straight; bends come in between the 500 m and
+200 m bars; the pan frame draws a river a little wide. In work (a new drawing helper, same worktree): dark-red specks
+in closed forest at the 200 m bar, blocky dark patches at the 2 km bar, small plants and flowers drawn as dots.
 
 **The frame's cost in software says how much code a program holds, not what a pixel runs** (a branch never taken
 costs the same as one that runs; code removed at build time is what saves). The largest share is the sea ice
