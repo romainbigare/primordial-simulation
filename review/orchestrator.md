@@ -163,7 +163,11 @@ step). With the honest heat law the globe goes to 296.6 K with 70 kg/m² of vapo
 greenhouse hid that the planet absorbs 256 W/m² of sunlight (Earth 239: clouds reflect too little) and that the
 air's nodes sit near saturation (38 kg/m² at 288 K, Earth 25). So S3, in work, comes before the merge: humidity
 inside a node (the saturated share is the cloud's share of the sky, Sundqvist 1989; condensation in that share
-only) and the cloud's light from its liquid's path. S1 + S2 + S5 + S3 merge together, the references move once. A proposal for the plants'
+only) and the cloud's light from its liquid's path. S1 + S2 + S5 + S3 merge together, the references move once.
+The air's work lives in the worktree `.claude/worktrees/agent-ab92bfed03ac3c12c` (branch `air-light`); its first
+helper was lost in a restart of the machine with S3a half written and not committed (kept, and copied to the scratch
+folder `S3a-wip/`); a new helper has taken it on with the probes in the scratchpad (`rad_toggle.py`, `radprobe.rs`,
+`coverlaw/S5brun/`). Helpers commit work in progress early: the machine restarts without warning. A proposal for the plants'
 package: two bands of sunlight (a usable one, a near-infrared one) with `light_yield` on the usable light. Dry matter
 in the warm south stays 2 to 4 kg a year with Earth-like light: the excess is in the cover's law.
 
