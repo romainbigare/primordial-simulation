@@ -53,7 +53,7 @@ pub struct Config {
     pub wind: f64,
     /// Mixing of neighbouring air columns by eddies, m²/s
     pub mix: f64,
-    /// Time condensed liquid hangs in the air as a cloud before it has fallen, s
+    /// Time condensed liquid stays a cloud's droplets before it gathers into drops that fall, s
     pub cloud_life: f64,
     /// Radius of a cloud's droplets, m
     pub drop_m: f64,
@@ -577,7 +577,7 @@ impl Default for Config {
             dissolve: 5e-5,
             wind: 4e5,
             mix: 1.3e6,
-            cloud_life: 2000.0,
+            cloud_life: 1000.0,
             drop_m: 1e-5,
             drop_forward: 0.85,
             drop_dark: [0.214, 0.036],

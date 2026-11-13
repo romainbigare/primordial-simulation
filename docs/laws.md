@@ -539,9 +539,10 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   mean ground; the air touching a cell is the air it sees (bilinearly, its four nearest nodes), colder by the drop with
   height from that air's mean height.
 - **Clouds** (`exchange::cloud`, `radiation::Cloud`): each air node's cloud covers the share b of its sky that is
-  saturated (`Seen::clouded`, 1.5), a mean over the step before. What the node rained in that step hangs in the air for
-  `cloud_life` before it has fallen (the cloud time and the fallout time of Smith and Barstad 2004), under the cloud's
-  share alone: a path of liquid of the node's condensation rate × `cloud_life` / b, in droplets of radius `drop_m`.
+  saturated (`Seen::clouded`, 1.5), a mean over the step before. What the node rained in that step stays droplets for
+  `cloud_life` before it gathers into drops that fall (the cloud time of Smith and Barstad 2004; a falling drop is too
+  wide to take much light), under the cloud's share alone: a path of liquid of the node's condensation rate ×
+  `cloud_life` / b, in droplets of radius `drop_m`.
   A droplet much wider than the light's wave takes twice the light that falls on its cross-section out of a beam, so
   the cloud's optical depth to sunlight is 3 path / (2 `drop_m`) (Stephens 1978). **Its sunlight**: it reflects,
   passes and absorbs as two streams give (Eddington's form, the forward peak of the scattering taken as light that

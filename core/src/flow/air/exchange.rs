@@ -73,11 +73,11 @@ pub(super) fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f64) {
 }
 
 /// The cloud of an air node in whose saturated share `b` of the sky (`Seen::clouded`) `rate` m³ of liquid condense
-/// per m² of the node a second: [its share of the sky, its optical depth to sunlight there]. What condenses hangs in
-/// the air for `life` s before it has fallen (the cloud time and the fallout time of Smith and Barstad 2004), under
-/// the cloud's share alone: a path of `rate` × `life` / `b` m of liquid, in droplets of radius `r` m. A droplet much
-/// wider than the light's wave takes twice the light that falls on its cross-section out of a beam, so the depth is
-/// 3 path / (2 r) (Stephens 1978).
+/// per m² of the node a second: [its share of the sky, its optical depth to sunlight there]. What condenses stays
+/// droplets for `life` s before it gathers into drops that fall (the cloud time of Smith and Barstad 2004; a falling
+/// drop is too wide to take much light), under the cloud's share alone: a path of `rate` × `life` / `b` m of liquid,
+/// in droplets of radius `r` m. A droplet much wider than the light's wave takes twice the light that falls on its
+/// cross-section out of a beam, so the depth is 3 path / (2 r) (Stephens 1978).
 pub(super) fn cloud(b: f64, rate: f64, (life, r): (f64, f64)) -> [f64; 2] {
     if b > 0.0 && rate > 0.0 { [b, 3.0 * rate * life / b / (2.0 * r)] } else { [0.0; 2] }
 }
