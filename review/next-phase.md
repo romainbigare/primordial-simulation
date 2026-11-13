@@ -255,8 +255,8 @@ A 32 x 32 island (793 cells, 409 of land), seed 1, the roster, 70 years (section
 - All animals together weigh 2.9e6 kg: 1.7 g per m² of land. The cover weighs 1.35e10 kg (8.3 kg per m²).
 - They eat 7.8e6 kg of cover a year. By the cover's own budget in the tape, what bodies take or break is 1.7e14 J a
   year, 1% of what the cover's light stores less its upkeep and its building (1.6e16 J). On Earth grazers take a few
-  percent in forests and 10 to 60% in grasslands (McNaughton and others 1989, from memory). The cover gives 45 times more to the ground through its roots than to
-  all animals. So the animals hardly shape the plants.
+  percent in forests and 10 to 60% in grasslands (McNaughton and others 1989, from memory). The cover gives 45 times
+  more to the ground through its roots than to all animals. So the animals hardly shape the plants.
 - Eating other bodies: 2 to 3% of the animals' food.
 - Cost: 40 to 50 ms a year more than plants only, at 26 to 33 µs per update. It is cheap only because the animals
   are few. The older runs with full populations paid 0.8 s a year at 3,700 bodies and 1.5 s at 16,000.
