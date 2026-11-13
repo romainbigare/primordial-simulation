@@ -3,7 +3,7 @@
 
 use pcore::AIR;
 use pcore::store::Class;
-use worldgen::testkit::{in_all, DISSOLVED, LIQUID};
+use worldgen::testkit::{dry_land, in_all, DISSOLVED, LIQUID};
 
 /// An island's coarse cells (more than one square) all lie below 0 m, in its low basin's liquid, on islands of five
 /// seeds.
@@ -51,7 +51,8 @@ fn the_soil_is_given_to_the_land_and_booked() {
     let before = in_all(&w, mineral);
     println!("{}", worldgen::life::soil(&mut w, &soil));
     let (k, per_m2) = soil[0];
-    let cells = (in_all(&w, mineral) - before) / (per_m2 * w.mesh.cells().area()[0]);
+    // Land is in squares, each of a land cell's area.
+    let cells = (in_all(&w, mineral) - before) / (per_m2 * w.mesh.cells().area()[dry_land(&w)]);
     assert!(k == mineral && (cells - cells.round()).abs() < 1e-9 && cells >= 10.0 && cells <= w.mesh.cells().n() as f64, "{cells} cells' worth");
     let grams = per_m2 * w.chem.subs[k].elems[2] as f64 * 14.0;
     assert!((grams - 10.0).abs() < 0.05, "{grams} g of the gas's element to the m²");

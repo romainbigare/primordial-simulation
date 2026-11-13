@@ -153,10 +153,11 @@ fn frames_file_round_trip() {
     let (cells, layers, frames) = (SIDE * SIDE, meta["layers"].as_array().unwrap().len(), meta["frames"].as_array().unwrap().len());
     assert_eq!((meta["w"].as_u64(), frames, meta["globe"].as_bool()), (Some(SIDE as u64), 2, Some(false)));
     assert_eq!(raw.len() - 8 - n, cells * layers * frames);
-    // Layer "z" of frame 0 is the first layer: check one cell.
+    // Layer "z" of frame 0 is the first layer: check one square, which shows the cell that holds it.
     let z = &tape::LAYERS[0];
     assert_eq!(z.name, meta["layers"][0]["name"].as_str().unwrap());
-    let first = tape::quantise(z, world().surface_z(100));
+    let w0 = world();
+    let first = tape::quantise(z, w0.surface_z(tape::pixels(&w0)[100]));
     assert_eq!(raw[8 + n + 100], first);
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
 }

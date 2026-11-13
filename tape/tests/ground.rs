@@ -7,12 +7,17 @@ use tape::{unhalf, Ground, Law, GUTTER, TILE};
 /// Texels along a side of a tile with its gutter.
 const SIDE: usize = TILE + 2 * GUTTER;
 
-/// The ground of the island of seed 1, 16 x 16 squares, with the default laws.
+/// The seed and the side in squares of the island the tiles are made of: the north-west quarter of its tiles, which
+/// `a_texel_is_the_mean_of_its_four_children` checks, holds land, and it has ponds.
+const SEED: u64 = 3;
+const SIDE_SQUARES: usize = 24;
+
+/// The ground of the island of `SEED`, `SIDE_SQUARES` a side, with the default laws.
 fn ground() -> (Ground, std::ops::RangeInclusive<u8>) {
     let cfg = Config::default();
-    let (map, terrain) = worldgen::terrain::island_ground(1, (16, 16), pcore::space::terrain::Shape::One);
+    let (map, terrain) = worldgen::terrain::island_ground(SEED, (SIDE_SQUARES, SIDE_SQUARES), pcore::space::terrain::Shape::One);
     let depths = tape::depths(&map);
-    (Ground::new(1, map, terrain, (cfg.lat_south, cfg.lat_north), Law::of(&cfg.phys)), depths)
+    (Ground::new(SEED, map, terrain, (cfg.lat_south, cfg.lat_north), Law::of(&cfg.phys)), depths)
 }
 
 /// The samples about a pond in which its shore is drawn smooth (`tape/src/ground/shore.rs`: the nearest pond within 2,
@@ -39,8 +44,8 @@ fn at(t: &[u16], x: usize, y: usize, k: usize) -> f32 {
 fn a_texel_is_the_mean_of_its_four_children() {
     let (g, depths) = ground();
     let cfg = Config::default();
-    let (map, terrain) = worldgen::terrain::island_ground(1, (16, 16), pcore::space::terrain::Shape::One);
-    let s = terrain.samples(1, &map, (cfg.lat_south, cfg.lat_north));
+    let (map, terrain) = worldgen::terrain::island_ground(SEED, (SIDE_SQUARES, SIDE_SQUARES), pcore::space::terrain::Shape::One);
+    let s = terrain.samples(SEED, &map, (cfg.lat_south, cfg.lat_north));
     let metres = map.length(pcore::space::terrain::SAMPLE_DEPTH);
     let reach = (tape::VALLEY_M / metres).ceil() as i64 + 2;
     let near = |p: [f64; 2], reach: i64, hit: &dyn Fn(usize) -> bool| {

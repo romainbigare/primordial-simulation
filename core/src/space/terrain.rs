@@ -14,8 +14,13 @@ use crate::rng::{Purpose, Rng};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::TAU;
 
-/// Units of the coarsest noise across a map's longer side (a globe's equator).
-const ACROSS: f64 = 6.0;
+/// Units of the coarsest noise round a globe's equator (its noise is of the scale of its continents), and across the
+/// island its noise's length is anchored on, `ANCHOR_M` wide (`per_square`).
+pub(super) const ACROSS: f64 = 6.0;
+/// The width of the island of 64 squares, m: on every island a unit of the noise is `ANCHOR_M` / `ACROSS` long, 21.3
+/// km, so the coarsest octave's ridges and valleys lie 20 to 30 km apart, as the main valleys across a range do (Hovius
+/// 1996, from memory), and a hill is a hill's size on every map.
+const ANCHOR_M: f64 = 128e3;
 /// The keys mixed into the seed of the noise that warps the terrain along each axis, and how far it warps, in units of
 /// the noise.
 const WARP: [u64; 3] = [11, 13, 17];
@@ -166,7 +171,7 @@ fn spot(map: &Square, place: Place, per_square: f64) -> Spot {
     Spot::Round([r * lat.cos() * lon.cos(), r * lat.cos() * lon.sin(), r * lat.sin()])
 }
 
-/// The rise of the ground at `place` of `map` (`rise_at`), `ACROSS` units of the noise across the map's longer side;
+/// The rise of the ground at `place` of `map` (`rise_at`), `per_square` units of the noise a square;
 /// and how much of it stands over `level`, its land's as fast as the land rises there: an island's large shape (all
 /// but its fine octaves) lowered by how far it lies from the island's rises and scaled by their ranges (`Lift`), its
 /// fine octaves as much larger where a range raises the land faster than the mean and at their own size elsewhere, so a
@@ -190,9 +195,14 @@ pub fn rise(seed: u64, map: &Square, lift: &Lift, place: Place, level: f64) -> (
     }
 }
 
-/// Units of the noise a square of `map`: `ACROSS` across its longer side.
+/// Units of the noise a square of `map`: on an island `ACROSS` over `ANCHOR_M`; on a globe `ACROSS` round its equator.
 pub(super) fn per_square(map: &Square) -> f64 {
-    ACROSS / map.w.max(map.h) as f64
+    if map.wrap { ACROSS / map.w.max(map.h) as f64 } else { map.side * ACROSS / ANCHOR_M }
+}
+
+/// Units of the noise across the longer side of `map`.
+pub(super) fn across(map: &Square) -> f64 {
+    map.w.max(map.h) as f64 * per_square(map)
 }
 
 /// Height of ground whose rise lies `above` the level, m: land climbs steeply, low ground falls gently.

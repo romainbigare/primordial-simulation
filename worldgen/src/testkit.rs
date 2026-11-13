@@ -29,8 +29,14 @@ const ISLAND_SIDES: [usize; 4] = [16, 24, 32, 48];
 /// with what `has` found there: a scene states the ground it needs as a condition, and the island grows until its
 /// ground holds it.
 pub fn island_with<T>(seed: u64, has: impl Fn(&World) -> Option<T>) -> (World, T) {
+    island_in_with(seed, Config::default(), has)
+}
+
+/// `island_with` for an island of the settings `cfg` (its latitudes).
+pub fn island_in_with<T>(seed: u64, cfg: Config, has: impl Fn(&World) -> Option<T>) -> (World, T) {
     ISLAND_SIDES.iter().find_map(|&side| {
-        let w = squares(seed, side, side);
+        let (chem, init) = crate::chemistry0();
+        let w = crate::terrain::build(seed, crate::terrain::island(side, side), chem, &init, cfg.clone());
         has(&w).map(|found| (w, found))
     }).expect("an island whose ground has what the scene needs")
 }

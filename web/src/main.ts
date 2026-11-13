@@ -21,7 +21,9 @@ const label = (n: string) => LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).repla
 const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
-const LIVE_SIZE = 22;
+/** The live world's first size and its least and most, squares a side: the first shows a land with its valleys, a
+ * lake and an outlier; the most is the world the owner plans for. */
+const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = 128;
 /** The climates a live island may have: a name, and the band of latitudes it stands for (south, north; none: the core's
  * default band). The first is the page's. */
 const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['None: 40° to 42.3°', '']];
@@ -275,7 +277,7 @@ async function startLive(): Promise<void> {
   coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
   $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
-  $<HTMLInputElement>('size').value = q.get('size') ?? String(LIVE_SIZE);
+  Object.assign($<HTMLInputElement>('size'), { min: String(SIZE_LEAST), max: String(SIZE_MOST), value: q.get('size') ?? String(LIVE_SIZE) });
   // The climate: a band of latitudes the island stands for, from the URL's `band=S,N` or the first preset (`BANDS`).
   const bands = $<HTMLSelectElement>('band'), asked = q.get('band');
   const presets = asked && !BANDS.some(b => b[1] === asked) ? [...BANDS, [`${asked.replace(',', '° to ')}°`, asked]] : BANDS;
@@ -346,7 +348,7 @@ function bandOf(text: string | null): [number, number] {
 let banded = false;
 function newWorld(): void {
   const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
-  const size = Math.min(64, Math.max(8, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
+  const size = Math.min(SIZE_MOST, Math.max(SIZE_LEAST, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
   const band = bandOf($<HTMLSelectElement>('band').value);
   playing = false;
   say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
