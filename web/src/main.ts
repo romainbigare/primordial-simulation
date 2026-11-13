@@ -22,7 +22,7 @@ const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 /** The live world's first size and its least and most, squares a side: the first shows a land with its valleys, a
- * lake and an outlier; the most is the world the owner plans for. */
+ * lake and an outlier; the most is the largest island the laws are run on. */
 const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = 128;
 /** The climates a live island may have: a name, and the band of latitudes it stands for (south, north; none: the core's
  * default band). The first is the page's. */
