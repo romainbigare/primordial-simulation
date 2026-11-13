@@ -108,14 +108,18 @@ fn water_painted(bed: vec3f, depth: f32, g: vec2f) -> vec3f {
 // where it would only show the pixels.
 fn foam(depth: f32, slope: f32, e: f32, at: vec2f) -> f32 {
   let rise = max(slope, 1e-3);
-  let rim = FOAM_RIM * (1.0 - ease(0.0, FOAM_M, depth));
-  // The lines, counted from the edge of the water drawn (`FILM_M`): the nearest one's share at this depth.
-  let x = max(depth - FILM_M, 0.0) / FOAM_LINE_M;
-  let k = min(floor(x + 0.5), FOAM_LINES);
-  var line = (1.0 - smoothstep(0.0, FOAM_LINE_W, abs(x - k))) * pow(FOAM_LINE_FALL, k);
-  if (k > 0.0) { line *= ease(-0.2, 0.3, noise_turned(at / FOAM_BREAK_M + 7.3 * k, 110)); }
-  let lines = ease(FOAM_LINE_PX.x, FOAM_LINE_PX.y, FOAM_LINE_M / rise / max(e, 1e-3));
-  return FOAM * mix(rim, line, lines) * ease(FOAM_PX.x, FOAM_PX.y, FOAM_M / rise / max(e, 1e-3));
+  var white = FOAM_RIM * (1.0 - ease(0.0, FOAM_M, depth));
+  // (The lines' breaks cannot show in a program made for draws from far, draw.wgsl `LEAST_E`: there the foam is its
+  // rim, and the lines are not compiled.)
+  if (!unseen(FOAM_BREAK_M)) {
+    // The lines, counted from the edge of the water drawn (`FILM_M`): the nearest one's share at this depth.
+    let x = max(depth - FILM_M, 0.0) / FOAM_LINE_M;
+    let k = min(floor(x + 0.5), FOAM_LINES);
+    var line = (1.0 - smoothstep(0.0, FOAM_LINE_W, abs(x - k))) * pow(FOAM_LINE_FALL, k);
+    if (k > 0.0) { line *= ease(-0.2, 0.3, noise_turned(at / FOAM_BREAK_M + 7.3 * k, 110)); }
+    white = mix(white, line, ease(FOAM_LINE_PX.x, FOAM_LINE_PX.y, FOAM_LINE_M / rise / max(e, 1e-3)));
+  }
+  return FOAM * white * ease(FOAM_PX.x, FOAM_PX.y, FOAM_M / rise / max(e, 1e-3));
 }
 
 // The marks (cover.wgsl): a plant's light falls in soft bands (two or three tones, as a painter lays them), each mark
