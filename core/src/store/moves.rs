@@ -30,10 +30,10 @@ pub struct LinkFlux<'a> {
 }
 
 /// Energy a mol of substance `k` holds in a node of `class` apart from its heat, J/mol: its formation enthalpy, and in
-/// the air and in a bodies' node (which holds only gas) also its fusion and vaporisation enthalpy.
+/// the air and in an aside node (which holds only gas) also its fusion and vaporisation enthalpy.
 pub fn held(chem: &Chemistry, class: Class, k: usize) -> f64 {
     let s = &chem.subs[k];
-    s.hf + if matches!(class, Class::Air | Class::Bodies) { s.latent_gas() } else { 0.0 }
+    s.hf + if matches!(class, Class::Air | Class::Aside) { s.latent_gas() } else { 0.0 }
 }
 
 /// What a mol of substance `k` holds apart from heat more in a node of class `to` than in one of class `from`, J/mol

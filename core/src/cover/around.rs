@@ -1,4 +1,4 @@
-//! What the cover of a cell reads of its world in a month (laws.md 4.5): one view, `Around`, the full world's
+//! What the cover of a cell reads of its world in a month (laws.md 3): one view, `Around`, the full world's
 //! (`around`) or a year a nursery keeps; and what its leaves lose of the key liquid for the gas they take in (`thirst`).
 
 use super::Parts;

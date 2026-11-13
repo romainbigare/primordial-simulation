@@ -26,7 +26,7 @@ pub(super) struct Potential {
 }
 
 /// The classes of the store whose amounts `potential` reads per cell, in the order of `Found::holds`.
-const HELD: [Class; 4] = [Class::Ground, Class::Bed, Class::Deep, Class::Bodies];
+const HELD: [Class; 4] = [Class::Ground, Class::Bed, Class::Deep, Class::Aside];
 
 /// What the parts of Flow that follow each other (`flow::chain`) find once: the mass of each cell's life, kg
 /// (`Life::kg`: no law but Flow's runs between them, and none of them moves it); and per class of `HELD` a bit for each
@@ -50,7 +50,7 @@ impl Found {
 }
 
 /// The height each node's matter leaves from, m: a ground node's and its bed's, the top of its liquid
-/// (`stack::Column::top`); a bodies' node's, its cell's head; an air node's, the mean head of its cells; a
+/// (`stack::Column::top`); an aside node's, its cell's head; an air node's, the mean head of its cells; a
 /// store's, its liquid's table.
 #[derive(Clone, Debug)]
 struct Heights {
@@ -66,12 +66,12 @@ struct Heights {
 /// in its phase by the node's temperature and its plateau (`State`); its store lies `bed_depth` under its bed's top,
 /// filled from the bottom (`drain`). An air node's matter lies at the mean head of its cells: the height of its
 /// column above that is in its heat (its heat capacity at constant pressure holds the work its column does as it
-/// warms), so lifting matter into it lifts it to there. A bodies' node's gas, and the matter of the cell's life (its
-/// bodies, its cover with its seeds until they land, and its parts), lie at its cell's head (`stack::Column::head`).
+/// warms), so lifting matter into it lifts it to there. An aside node's gas, and the matter of the cell's life (its
+/// cover with its seeds until they land), lie at its cell's head (`stack::Column::head`).
 fn potential(w: &World, s: &Scratch, found: Option<Found>) -> Potential {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     let (n, na, ns) = (cells.n(), air.n(), w.chem.ns());
-    let (ground, bed, deep, bodies) = (w.store.amounts(Class::Ground), w.store.amounts(Class::Bed), w.store.amounts(Class::Deep), w.store.amounts(Class::Bodies));
+    let (ground, bed, deep, bodies) = (w.store.amounts(Class::Ground), w.store.amounts(Class::Bed), w.store.amounts(Class::Deep), w.store.amounts(Class::Aside));
     let found = found.unwrap_or_else(|| Found::of(w, s));
     let (life, holds) = (&found.life, found.holds);
     let same = Same::of(s);
@@ -202,7 +202,7 @@ pub(super) struct Moved {
 
 /// The array of `Moved::to` for a node that holds no matter here.
 const NOWHERE: u8 = u8::MAX;
-/// The array of the bodies' nodes (`slot`).
+/// The array of the aside nodes (`slot`).
 const BODIES: u8 = 3;
 /// The boundary nodes (`slot`): matter that comes from outside comes from 0 m, and what leaves takes its potential
 /// energy to the boundary node it goes to (`Lifts::book`).
@@ -215,7 +215,7 @@ fn slot(class: Class, index: u32) -> (u8, u32) {
         Class::Ground | Class::Bed => (0, index),
         Class::Air => (1, index),
         Class::Deep => (2, index),
-        Class::Bodies => (BODIES, index),
+        Class::Aside => (BODIES, index),
         Class::Boundary => (BOUNDARY, index),
         _ => (NOWHERE, index),
     }
@@ -265,8 +265,8 @@ impl Lifts {
     /// (so a node's own matter that leaves it, however much, takes what it held of it), but what only passes through a
     /// ground node from ground node to ground node carries on what it came with (`relayed`); each node's heat takes
     /// what came in less what left less the change of its own potential energy (`store::fall_heat`, which adds their sum to
-    /// `Store::lifted`). A bodies' node's gas lies at its cell's head, which the part moves with the ground's matter,
-    /// not its own: what its lifts and falls give or take is its ground node's (a bodies' node holds little heat of its
+    /// `Store::lifted`). An aside node's gas lies at its cell's head, which the part moves with the ground's matter,
+    /// not its own: what its lifts and falls give or take is its ground node's (an aside node holds little heat of its
     /// own). Returns the potential energy now, and the room of its moves, emptied.
     pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
         let (mut start, mut moved) = (self.start, self.moved);

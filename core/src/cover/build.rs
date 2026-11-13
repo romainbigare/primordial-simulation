@@ -1,4 +1,4 @@
-//! Growth of a slot of cover in its month (laws.md 4.5): it builds body matter and walls from its fuel and the minerals
+//! Growth of a slot of cover in its month (laws.md 3): it builds body matter and walls from its fuel and the minerals
 //! of its ground, fixing what it lacks if it can, and sends seeds out (`build`); and it builds walls alone, which pay no
 //! upkeep, up to those its plants hold (`frame`).
 

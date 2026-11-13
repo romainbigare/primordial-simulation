@@ -10,42 +10,36 @@ use crate::units::MAX_SUBSTANCES;
 impl Cover {
     /// What it stands on its cell as (`contract::Stand`): over its slots that hold cover its mass, capture area, that
     /// times the share of light it absorbs (`reflectance`) and that times the share set aside for its light reaction
-    /// (`Cover::keep`); and the energy to break all of it.
-    pub fn stand(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts) -> Stand {
+    /// (`Cover::keep`).
+    pub fn stand(&self, chem: &Chemistry, p: &Parts) -> Stand {
         let (mut s, mm) = (Stand::default(), p.mm(chem));
         for x in self.held() {
             let (leaf, abs) = (self.leaf(&mm, x), self.leaf(&mm, x) * (1.0 - self.reflectance(chem, p, x)));
             (s.mass, s.leaf, s.absorbed, s.kept) = (s.mass + self.kg(&mm, x), s.leaf + leaf, s.absorbed + abs, s.kept + abs * self.keep as f64);
         }
-        s.breaking += self.breaking(chem, cfg, p, 1.0);
         s
     }
-    /// What its slots `of` show a taker (`contract::Shown`): their mass, what they hold of each substance, their heat (the
-    /// cover has one temperature) and the energy to break all of them.
-    pub fn shown(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, of: impl Fn(usize) -> bool + Copy) -> Shown {
-        let (mm, t) = (p.mm(chem), self.temp(chem, p));
-        let (mut kg, mut mol, mut cap) = (0.0, [0.0; MAX_SUBSTANCES], 0.0);
+    /// What its slots `of` show a taker (`contract::Shown`): their mass and what they hold of each substance.
+    pub fn shown(&self, chem: &Chemistry, p: &Parts, of: impl Fn(usize) -> bool) -> Shown {
+        let mm = p.mm(chem);
+        let (mut kg, mut mol) = (0.0, [0.0; MAX_SUBSTANCES]);
         for x in (0..SLOTS).filter(|&x| of(x)) {
             kg += self.kg(&mm, x);
-            (0..NP).for_each(|q| (mol[p.sub[q]], cap) = (mol[p.sub[q]] + self.mol[x][q], cap + self.mol[x][q] * chem.subs[p.sub[q]].cp));
+            (0..NP).for_each(|q| mol[p.sub[q]] += self.mol[x][q]);
         }
-        Shown { kg, mol, heat: cap * t, breaking: self.solids(chem, cfg, p, of, |_| 1.0)[1] }
+        Shown { kg, mol }
     }
     /// The height the plants of slot `x` stand at, m (`Cover::height`, its walls at their own density).
     pub fn stands_at(&self, chem: &Chemistry, ph: &crate::Physics, p: &Parts, x: usize) -> f64 {
         self.height(ph, &p.mm(chem), chem.subs[p.sub[WALL]].density[0], x)
     }
-    /// The energy to break the share `f` of it, J: its soft tissue (as a body's, with its liquid) and its solids by
-    /// their breaking stresses (`life::solids_of`).
-    pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, f: f64) -> f64 {
-        f * self.solids(chem, cfg, p, |_| true, |_| 1.0)[1]
-    }
-    /// What its slots `of` are built of (`life::solids_of`), the energy to break substance `k` times `cut(k)`.
-    pub fn solids(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, of: impl Fn(usize) -> bool + Copy, cut: impl Fn(usize) -> f64) -> [f64; 2] {
-        let sum = |q: usize| self.mol.iter().enumerate().filter(|e| of(e.0)).map(|(_, m)| m[q]).sum::<f64>();
+    /// The energy to break all of it, J: its soft tissue (with its liquid) and its solids by their breaking stresses
+    /// (`life::solids_of`).
+    pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts) -> f64 {
+        let sum = |q: usize| self.mol.iter().map(|m| m[q]).sum::<f64>();
         let mm = p.mm(chem);
-        let living = (0..SLOTS).filter(|&x| of(x)).map(|x| self.living(&mm, x)).sum();
-        crate::life::solids_of(chem, cfg, living, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum), cut)
+        let living = (0..SLOTS).map(|x| self.living(&mm, x)).sum();
+        crate::life::solids_of(chem, cfg, living, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum), |_| 1.0)[1]
     }
     /// `mol` of substance `k` taken from its slots `of`, from each in proportion to what it holds of it: returns what is
     /// taken, mol (no more than they hold), and the heat that goes with it, J (at its temperature).

@@ -208,7 +208,7 @@ pub(super) fn node_state(w: &World, s: &Scratch, i: usize, (cap, thaw, full): (f
 }
 
 /// The melting point of each substance that varies in a ground node of amounts `amt(k)`, mol, lowered by what is
-/// dissolved (`Chemistry::melt_in`, laws.md 2.5), K, by substance.
+/// dissolved (`Chemistry::melt_in`, laws.md 2.4), K, by substance.
 pub(super) fn melts(w: &World, s: &Scratch, amt: impl Fn(usize) -> f64) -> [f64; MAX_SUBSTANCES] {
     let (mut melt, solvents) = ([0.0; MAX_SUBSTANCES], w.chem.solvents());
     for &k in &s.state.vary {
@@ -232,7 +232,7 @@ pub(super) fn thaw_at(s: &Scratch, c: f64, e: f64, amt: impl Fn(usize) -> f64, m
 
 /// Heat conducts sideways through the ground's active layer over `dt` seconds: an explicit sweep on the cells' links
 /// (`sweep::sweep`; rock passes a 2 km cell's heat to its neighbours in about 70,000 years, so a year is far below the
-/// limit there, laws.md 1.8), booked as heat-only link
+/// limit there, laws.md 1.7), booked as heat-only link
 /// fluxes. A link passes the harmonic mean of its nodes'
 /// conductivity × thickness (two half cells in series, Patankar 1980, 4.2) times width over length. A node on a plateau
 /// takes its share as if it warmed; the next `ground_state` sets its temperature from its energy.

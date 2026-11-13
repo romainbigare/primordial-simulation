@@ -121,7 +121,7 @@ are still to come, and which of WebGPU and WebGL2 draws. A tape holds no ground:
 On the live map the Earth view draws the plant cover plant by plant from its numbers, with no classes
 (`web/src/vegetation.ts`, `web/src/canopy.ts`, `web/shaders/cover.wgsl`). With each frame the core sends, for each
 square, up to 4 kinds of cover (the slots of its cell) and of each its plants as the cover's law holds them
-(`tape/src/stands.rs`, laws.md 4.5): as many a m² as the slot counts, as tall as the buckling limit lets their stems
+(`tape/src/stands.rs`, laws.md 3): as many a m² as the slot counts, as tall as the buckling limit lets their stems
 stand (McMahon 1973), each crown as wide as the ground it holds, in patches that cover as much of the ground as its
 leaves close; the loose ground their roots need and the share of the square that holds them; and its genes and state
 this month. A plant is drawn on one of three lattices fixed

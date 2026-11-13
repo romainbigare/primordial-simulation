@@ -18,10 +18,6 @@ impl Calendar {
     pub fn days(&self, t: u64) -> u64 {
         t / self.day
     }
-    /// The day a span that ends at time `t` (s) ends on: that of its last second.
-    pub fn day_ending(&self, t: u64) -> u64 {
-        t.saturating_sub(1) / self.day
-    }
     /// Whole months since the start at time `t` (s).
     pub fn months(&self, t: u64) -> u64 {
         t / self.month

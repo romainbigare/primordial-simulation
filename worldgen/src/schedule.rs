@@ -17,8 +17,8 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    /// Life from year `life` on: the soil, then the starting kinds `rows` (rows of `KINDS`: `life::TWO`, `life::ROSTER`,
-    /// or the cover of either, `life::plants`), each at its `Kind::year` after the first life.
+    /// Life from year `life` on: the soil, then the starting kinds `rows` (rows of `KINDS`: `life::ONE` or `life::ROSTER`),
+    /// each at its `Kind::year` after the first life.
     pub fn new(life: Option<u64>, rows: &[usize], seeding: Seeding) -> Self {
         let kinds = life.map_or(vec![], |y| rows.iter().map(|&k| (k, y + KINDS[k].year)).collect());
         Schedule { life, kinds, seeding }

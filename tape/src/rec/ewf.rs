@@ -1,6 +1,6 @@
 //! `world.ewf.gz`, the viewer's file and what a resumed run goes on from: gzip of `EWF2`, the header's length
 //! (`u32`, little-endian), the header (JSON: the world's size, whether it is a globe and the latitudes of its edges, the
-//! layers, the day of each frame, the series and their units, the events and the rows of `months.csv`) and the frames
+//! layers, the day of each frame, the series and their units, the events and the months) and the frames
 //! (one byte a cell and layer, `layers::frame`).
 
 use super::months::year_month;

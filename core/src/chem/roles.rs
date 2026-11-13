@@ -1,5 +1,5 @@
-//! What the reactions and conversions do for bodies: their heat, which burn, which keep their energy, what bodies
-//! build of, and the roles the first bodies are placed with (`life_roles`, `matter_roles`, `fixing`).
+//! What the reactions and conversions do for life: their heat, which burn, which keep their energy, what life builds
+//! of, and the roles the first life is placed with (`life_roles`, `matter_roles`, `fixing`).
 
 use super::{Chemistry, Phase, Reaction};
 use crate::units::T_SURF;
@@ -41,7 +41,7 @@ impl Chemistry {
     }
 
     /// Does reaction `r` get less heat out of a solid or liquid it takes than burning it does? Then it keeps the rest in
-    /// what it makes: no burning, run at its catalyst's pace (laws.md 2.4).
+    /// what it makes: no burning, run at its catalyst's pace (laws.md 2.1).
     pub fn keeps(&self, r: usize) -> bool {
         let per = |q: usize, k: u16| self.reactions[q].inputs.iter().find(|p| p.0 == k).map_or(f64::NEG_INFINITY, |p| -self.dh(q) / p.1 as f64);
         (self.reactions[r].inputs.iter().filter(|p| !self.gas_at_surface(p.0 as usize))).any(|p| (0..self.reactions.len()).any(|q| self.burning(q) && per(q, p.0) > (1.0 + KEEPS_MARGIN) * per(r, p.0)))
@@ -52,11 +52,6 @@ impl Chemistry {
         self.builds.iter().filter_map(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
-    /// Is `k` one of the solids bodies build besides their matter (`materials`)?
-    pub fn is_material(&self, k: usize) -> bool {
-        self.derived().materials >> k & 1 == 1
-    }
-
     /// The light reactions (`Reaction::light`), by number.
     pub fn light_reactions(&self) -> &[usize] {
         &self.derived().light
@@ -65,12 +60,6 @@ impl Chemistry {
     /// The body matter: the first output of growth (`build`), if bodies grow.
     pub fn matter(&self) -> Option<usize> {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
-    }
-
-    /// The reactions that release heat but for those that keep a part of a fuel's heat (`keeps`), each with the heat per
-    /// unit, J: a body's burnings when its catalyst is on (`Body::prepare`).
-    pub fn burners(&self) -> &[(usize, f64)] {
-        &self.derived().burners
     }
 
     /// What growth makes body matter of besides the fuel, with the mol per mol of matter: the inputs no reaction burns,

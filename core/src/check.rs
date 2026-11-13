@@ -8,7 +8,7 @@ pub struct Totals {
     pub elems: Vec<f64>,
     /// J
     pub thermal: f64,
-    /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air and the bodies' nodes)
+    /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air and the aside nodes)
     pub chemical: f64,
     /// J, the potential energy the world's matter gained since the start as the store books it (`Store::lifted`)
     pub lifted: f64,
@@ -39,36 +39,28 @@ impl Sum {
 
 pub fn totals(w: &World) -> Totals {
     let (chem, ns) = (&w.chem, w.chem.ns());
-    // mol of each substance, and the energy held as latent heat in the air and the bodies' nodes
+    // mol of each substance, and the energy held as latent heat in the air and the aside nodes
     let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
-    for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Bed, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n()), (Class::Deep, w.mesh.cells().n()), (Class::Bodies, w.mesh.cells().n())] {
-        let (store, latent) = (w.store.amounts(class), matches!(class, Class::Air | Class::Bodies));
+    for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Bed, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n()), (Class::Deep, w.mesh.cells().n()), (Class::Aside, w.mesh.cells().n())] {
+        let (store, latent) = (w.store.amounts(class), matches!(class, Class::Air | Class::Aside));
         for (k, sum) in subs.iter_mut().enumerate() {
             let mut s = Sum::default();
             store.get(k * len..(k + 1) * len).unwrap_or(&[]).iter().for_each(|&a| s.add(a));
             sum.add(s.get());
-            // Air and the bodies' nodes hold their gases' fusion and vaporisation enthalpy; the ground holds fusion in
+            // Air and the aside nodes hold their gases' fusion and vaporisation enthalpy; the ground holds fusion in
             // `e_ground`.
             if latent {
                 held.add(s.get() * chem.subs[k].latent_gas());
             }
         }
     }
-    // The light set aside in the bodies' nodes counts as heat until they store it.
-    [Class::Ground, Class::Air, Class::Bodies, Class::Deep].iter().flat_map(|&c| w.store.heat(c)).for_each(|&e| thermal.add(e));
-    for b in w.life.alive() {
-        chem.body().subs().iter().zip(&b.store).for_each(|(&k, &a)| subs[k].add(a));
-        thermal.add(b.e);
-    }
+    // The light set aside for the cover counts as heat until it stores it.
+    [Class::Ground, Class::Air, Class::Aside, Class::Deep].iter().flat_map(|&c| w.store.heat(c)).for_each(|&e| thermal.add(e));
     if let Some(p) = crate::cover::Parts::of(chem) {
         for c in w.life.cells.iter().map(|x| &x.cover) {
             c.mol.iter().flat_map(|m| m.iter().zip(p.sub)).for_each(|(&a, k)| subs[k].add(a));
             thermal.add(c.e);
         }
-    }
-    for p in w.life.parts() {
-        p.wall.iter().zip(&p.fill).zip(subs.iter_mut()).for_each(|((&a, &f), s)| s.add(a + f));
-        thermal.add(p.e);
     }
     let mut elems = vec![0.0; chem.n_elements];
     let mut chemical = held;
@@ -123,29 +115,19 @@ fn first_bad<T: Copy + Into<f64>>(name: &str, v: &[T], ok: impl Fn(f64) -> bool)
     v.iter().position(|&x| !ok(x.into())).map(|i| format!("{name}[{i}] = {}", v[i].into()))
 }
 
-/// The first state value that is NaN or infinite, or below 0 where it cannot be, or the first break of how bodies are
-/// stored (`Life::unsound`): None for a sound world.
+/// The first state value that is NaN or infinite, or below 0 where it cannot be: None for a sound world.
 pub fn broken(w: &World) -> Option<String> {
-    let (at_least_0, above_0) = (|x: f64| x.is_finite() && x >= 0.0, |x: f64| x.is_finite() && x > 0.0);
-    let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep)), ("bodies", w.store.amounts(Class::Bodies))];
+    let at_least_0 = |x: f64| x.is_finite() && x >= 0.0;
+    let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep)), ("aside", w.store.amounts(Class::Aside))];
     // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
-    let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_bodies", w.store.heat(Class::Bodies)), ("light", &w.light), ("rained", &w.rained)];
-    let f32s = [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("cleared", &w.links.cleared)];
+    let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_aside", w.store.heat(Class::Aside)), ("light", &w.light), ("rained", &w.rained)];
+    let f32s = [("rain", &w.rain), ("liquid_flux", &w.liquid_flux)];
     let found = amounts.into_iter().chain(energies).find_map(|(name, v)| first_bad(name, v, at_least_0));
     let found = found.or_else(|| f32s.into_iter().find_map(|(name, v)| first_bad(name, v, at_least_0)));
-    let body = w.life.alive().find_map(|b| {
-        let finite = w.life.rows_of(b).iter().all(|x| x.is_finite());
-        let bad = !finite || !above_0(b.e) || !above_0(b.count) || !b.store.iter().all(|&x| at_least_0(x));
-        bad.then(|| format!("body {}: energy {}, members {}, stores {:?}, brain ok {finite}", b.id, b.e, b.count, b.store))
-    });
-    let part = w.life.parts().find_map(|p| {
-        let bad = !above_0(p.e) || !above_0(p.count) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x));
-        bad.then(|| format!("part {}: energy {}, count {}, walls {:?}, fill {:?}", p.id, p.e, p.count, p.wall, p.fill))
-    });
     let cover = w.life.cells.iter().enumerate().find_map(|(i, x)| {
         let c = &x.cover;
         let mol = first_bad("mol", c.mol.as_flattened(), at_least_0);
         mol.or_else(|| first_bad("e", &[c.e], at_least_0)).or_else(|| first_bad("keep", &[c.keep], at_least_0)).map(|x| format!("the cover of cell {i}: {x}"))
     });
-    found.or(body).or(part).or(cover).or_else(|| w.life.unsound())
+    found.or(cover)
 }

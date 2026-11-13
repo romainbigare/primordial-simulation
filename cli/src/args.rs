@@ -19,29 +19,25 @@ pub const USAGE: &str = "usage:
     --frames-every N      a viewer frame every N years (10)
     --snapshots-every N   a snapshot every N years (0: only at the end)
     --pictures-every N    a PNG picture every N years, and at the start and the end (0: none)
-    --months              also write months.csv, a row a month
     --monthly-years N     a viewer frame every month in the first N years (2)
     --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
-    --roster              the thirteen kinds of worldgen::life::ROSTER, each at its year after the first life, not the two
-    --plants              only the cover of those kinds: no animals
-    --spray N             rounds of mutation of every founder (20)
+    --roster              the six kinds of cover of worldgen::life::ROSTER, each at its year after the first life, not
+                          the one
+    --spray N             rounds of mutation of the cover of every cell placed (20)
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
-    --neutral-eaters      animals start with neutral brains, not hand-set biases
-
-    --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --chunks N            a speed setting: the cells cut into N runs for the bodies' parallel passes (64; any count
+    --chunks N            a speed setting: the cells cut into N runs for the cover's parallel passes (64; any count
                           gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
-    --years N, --every N, --out DIR, --frames-every N, --snapshots-every N, --pictures-every N, --months,
-    --monthly-years N, --chunks N   as for run
+    --years N, --every N, --out DIR, --frames-every N, --snapshots-every N, --pictures-every N, --monthly-years N,
+    --chunks N            as for run
   ew view     draw a window of a snapshot's map as a PNG, each pixel the colour of the cell that holds its centre
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --window X,Y,W,H      the window from column X and row Y, W x H squares, fractions allowed (the whole map)
     --px N                pixels across; the height follows the window (512)
-    --layer NAME          map, temperature, rain, life, traffic, depth, or land (the map with no rivers) (map)
+    --layer NAME          map, temperature, rain, depth, or land (the map with no rivers) (map)
     --edges               darken the edges between cells
     --out FILE            the PNG (view.png)
   ew chem     print chemistry 0 as a table
@@ -131,27 +127,21 @@ impl Args {
         Ok(())
     }
 
-    /// Set what the flags of `ew run` change in a new world: the sun, the switches, the heat-absorbing gases.
+    /// Set what the flags of `ew run` change in a new world: the sun and the heat-absorbing gases.
     pub fn apply(&self, w: &mut World) {
-        let c = &mut w.cfg;
-        c.sun *= self.get("--sun", 1.0);
-        c.null = self.has("--null");
-
+        w.cfg.sun *= self.get("--sun", 1.0);
         worldgen::terrain::scale_absorbers(w, self.get("--absorber", 1.0));
     }
 
-    /// How the founders are placed: the animals with hand-set brain biases unless `--neutral-eaters` (the light-eaters
-    /// have no brain).
+    /// How the cover is placed (`--spray`, `--fixers`).
     pub fn seeding(&self) -> Seeding {
-        let hand = !self.has("--neutral-eaters");
-        Seeding { hand, rounds: self.get("--spray", 20), fixers: self.get("--fixers", FIXERS) }
+        Seeding { rounds: self.get("--spray", 20), fixers: self.get("--fixers", FIXERS) }
     }
 
-    /// The run's plan: what is placed when (`--life-year`, `--roster`, `--plants`, and the seeding flags).
+    /// The run's plan: what is placed when (`--life-year`, `--roster`, and the seeding flags).
     pub fn schedule(&self) -> Schedule {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
-        let rows: &[usize] = if self.has("--roster") { &worldgen::life::ROSTER } else { &worldgen::life::TWO };
-        let rows = if self.has("--plants") { worldgen::life::plants(rows) } else { rows.to_vec() };
-        Schedule::new(year("--life-year", 2), &rows, self.seeding())
+        let rows: &[usize] = if self.has("--roster") { &worldgen::life::ROSTER } else { &worldgen::life::ONE };
+        Schedule::new(year("--life-year", 2), rows, self.seeding())
     }
 }

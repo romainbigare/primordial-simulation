@@ -33,7 +33,7 @@ pub fn reversible(chem: &Chemistry) -> Vec<(usize, usize, u16, usize)> {
 impl Reactor {
     /// The amounts at which pairs of reactions that undo each other balance in one node at `t`, from the chemistry's own
     /// rates, with the gas around (`gas`) held: of each pair the substance the first makes, if the node holds none, is set
-    /// where the two go at equal rates (laws.md 2.6). Returns the substances set and their amounts.
+    /// where the two go at equal rates (laws.md 2.5). Returns the substances set and their amounts.
     pub fn balance(&mut self, chem: &Chemistry, n: &mut [f64], gas: &[f64], t: f64) -> Vec<(usize, f64)> {
         let mut out = Vec::new();
         for (f, b, m, u) in reversible(chem) {

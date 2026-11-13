@@ -1,4 +1,4 @@
-//! The cover of a cell as a viewer draws it (laws.md 4.5, docs/tape.md): each of its slots, and of each its plants. The
+//! The cover of a cell as a viewer draws it (laws.md 3, docs/tape.md): each of its slots, and of each its plants. The
 //! model holds each slot's mass, its count of plants, the loose ground their roots need and the share of the cell that
 //! holds them; a plant's height and its stem come from the cover's own law (`cover::height`, `cover::stem`: the buckling
 //! limit, McMahon 1973), and the crown from its share of the ground. The page only draws what they give.
@@ -126,8 +126,7 @@ mod tests {
         let mut w = worldgen::testkit::small_world();
         let i = worldgen::testkit::mild_land(&w);
         worldgen::testkit::cover(&mut w, i, 0.4);
-        let worldgen::life::Place::Field(f) = &worldgen::life::KINDS[0].place else { unreachable!("kind 0 is cover") };
-        let mut far = f.genes;
+        let mut far = worldgen::life::KINDS[0].genes;
         far[FROST] -= 30.0;
         assert!(cover::place(&mut w, i, far, 0, 0.2), "no room for the second slot");
         let p = Parts::of(&w.chem).expect("chemistry 0 has cover");

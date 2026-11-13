@@ -16,7 +16,7 @@ export interface Form { form: number; sure: number }
  * gene, K); wet ground (moisture gene over the middle); dry ground (moisture gene under the middle); slender (height
  * over crown's width); seedy (seeds' share). Middles near those of the starting trees (worldgen life kinds), spans their
  * spread after 50 years on the 22 islands of seeds 1 and 2; a stand's slenderness is its plants' count and mass at
- * work (the cover's law, laws.md 4.5: a young dense stand is poles, an old thinned one broad crowns), its middle and
+ * work (the cover's law, laws.md 3: a young dense stand is poles, an old thinned one broad crowns), its middle and
  * span the median and half of the 16% to 84% range, by built cover, of the stands 3 m and taller after 50 years on the
  * page's island of seed 1. */
 const BY_LEAF = [0.1, 0.1], BY_FROST = [269, 2], BY_WET = [-0.2, 0.15], BY_DRY = [-0.3, 0.2], BY_SLENDER = [4.4, 1], BY_SEED = [0.05, 0.012];

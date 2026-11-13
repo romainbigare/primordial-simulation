@@ -97,9 +97,6 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     std::fs::create_dir_all(&out).expect("create out dir");
     let (pictures, snapshots) = (a.get("--pictures-every", PICTURES_EVERY), a.get("--snapshots-every", SNAPSHOTS_EVERY));
     let mut rec = Recorder::new(&w, a.get("--frames-every", FRAMES_EVERY), a.get("--monthly-years", 2u64));
-    if a.has("--months") {
-        rec = rec.with_months_csv();
-    }
     let resumed = kept.is_some();
     if let Some(kept) = kept {
         rec.resume(&w, kept, &out).unwrap_or_else(|e| panic!("load the tape: {e}"));
@@ -114,7 +111,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     if pictures > 0 {
         render::save(&w, &format!("{out}/year{y0:04}.png"));
     }
-    let mut clock = Clock::new(y0, w.counts.updates);
+    let mut clock = Clock::new(y0);
     let mut writer = Writer::new();
     record(&mut rec, &mut w, &clock);
     let (mut settled_from, mut settled_to) = (clock.total(), clock.total());
@@ -153,11 +150,11 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             settled_to = clock.total();
         }
         if y % every == 0 || last {
-            println!("{}", report::year(&w, y, &t0, &clock, &rec));
+            println!("{}", report::year(&w, y, &t0, &clock));
             if let Some(line) = report::edges(&w) {
                 println!("{line}");
             }
-            clock.print_at(y, w.counts.updates);
+            clock.print_at(y);
         }
         if pictures > 0 && (y % pictures == 0 || last) {
             let t = Instant::now();

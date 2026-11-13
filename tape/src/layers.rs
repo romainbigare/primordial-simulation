@@ -2,7 +2,6 @@
 //! To add a layer, add one line to `LAYERS` (and the data it needs to `Ctx`).
 
 use pcore::par;
-use pcore::body::Body;
 use pcore::cover::{per_m2, Cover};
 use pcore::chem::{Phase, Substance};
 use pcore::{World, AIR};
@@ -155,40 +154,23 @@ pub(crate) struct Ctx<'a> {
     pub vapor: Vec<f64>,
     pub absorber: Vec<f64>,
     /// Per ground cell: the cover's mass ("plants", `cover::per_m2`), its walls ("wood"), kg/m², and its capture area
-    /// ("leaf"), m²/m²; the bodies' mass ("animals", all members of each node), kg/m²; bodies (nodes and individuals)
+    /// ("leaf"), m²/m²
     pub plants: Vec<f64>,
     pub wood: Vec<f64>,
     pub leaf: Vec<f64>,
-    pub animals: Vec<f64>,
-    pub bodies: Vec<f64>,
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
     pub wet: Vec<f64>,
-    /// Per ground cell: mass of made objects (parts), kg/m²
-    pub parts: Vec<f64>,
-    /// Per living body (`Life::alive`): its mass, kg
-    pub mass: Vec<f64>,
 }
 
 impl<'a> Ctx<'a> {
     pub(crate) fn new(w: &'a World) -> Self {
         let n = w.mesh.cells().n();
         let t_air = (0..w.mesh.level(AIR).n()).map(|j| w.t_air(j)).collect();
-        let bodies: Vec<&Body> = w.life.alive().collect();
-        let mass = par::map(&bodies, |b| b.mass(&w.chem));
         let f = fields(w);
         let means = pcore::flow::means(w, &(0..n).collect::<Vec<usize>>()).unwrap_or_else(|| vec![Default::default(); n]);
         let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), animals: vec![0.0; n], bodies: vec![0.0; n], wet, parts: vec![0.0; n], mass };
-        for p in w.life.parts() {
-            let i = p.cell as usize;
-            c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
-        }
-        for (b, &mass) in bodies.iter().zip(&c.mass) {
-            let i = b.cell as usize;
-            c.animals[i] += mass / w.mesh.cells().area()[i];
-            c.bodies[i] += 1.0;
-        }
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), wet };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
@@ -246,11 +228,6 @@ pub const LAYERS: &[Layer] = &[
     l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| c.plants[i]),
     l("wood", "kg/m2", "log", 0.01, 300.0, |c, i| c.wood[i]),
     l("leaf", "m2/m2", "log", 0.01, 30.0, |c, i| c.leaf[i]),
-    l("animals", "kg/m2", "log", 1e-4, 10.0, |c, i| c.animals[i]),
-    l("bodies", "1", "lin", 0.0, 32.0, |c, i| c.bodies[i]),
-    l("traffic", "1/yr", "log", 1.0, 1e4, |c, i| c.w.counts.traffic.get(i).copied().unwrap_or(0.0) as f64),
-    l("worn", "1", "log", 1.0, 100.0, |c, i| c.w.mesh.cells().around(i).0.iter().map(|&l| pcore::lanes::eased(c.w, l as usize)).fold(1.0, f64::max)),
-    l("structures", "kg/m2", "log", 1e-6, 1.0, |c, i| c.parts[i]),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),

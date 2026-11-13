@@ -44,7 +44,7 @@ impl World {
         out
     }
 
-    /// What stands over the pores of each cell at the world's start, m³ (laws.md 8): each of its parts of a body of
+    /// What stands over the pores of each cell at the world's start, m³ (laws.md 5): each of its parts of a body of
     /// standing liquid with a pass full to the pass; a part of the open low ground, and all the ground of a cell that
     /// holds no pond's samples, up to the level `low`, m. Each part keeps what it holds as the runoff's pass leaves a
     /// part (`State::held`), so every body stands at that level from the first step.
@@ -184,14 +184,14 @@ pub(super) fn one_surface(w: &World, s: &Scratch, i: usize) -> bool {
         Some(m) => (m.piece[TOP].pk, m.piece[TOP].cover[2]),
         None => (s.state.pk[i], s.cover[i][2]),
     };
-    s.basin.is[i] && pk == NONE && cover <= 0.0 && w.canopy[i] <= 0.0
+    s.basin.is[i] && pk == NONE && cover <= 0.0 && crate::contract::stand(w, i).canopy(w.mesh.cells().area()[i]) <= 0.0
 }
 
 /// Does the liquid of cell `i` of a body mix as one with the body's (`mix_heat`, `air::dissolve`)? A cell that faces
 /// the air as one surface with it (`one_surface`); of a cell of parts, its liquid's top, off its plateaus, with no soft
 /// cover and no cover of bodies.
 pub(super) fn mixes(w: &World, s: &Scratch, i: usize) -> bool {
-    s.mixed(i).map(|m| &m.piece[TOP]).map_or(one_surface(w, s, i), |p| s.basin.body[i] && p.pk == NONE && p.cover[2] <= 0.0 && w.canopy[i] <= 0.0)
+    s.mixed(i).map(|m| &m.piece[TOP]).map_or(one_surface(w, s, i), |p| s.basin.body[i] && p.pk == NONE && p.cover[2] <= 0.0 && crate::contract::stand(w, i).canopy(w.mesh.cells().area()[i]) <= 0.0)
 }
 
 /// What is molten in the liquid of cell `i` that mixes (`mixes`), one bit per substance: of a cell of parts its

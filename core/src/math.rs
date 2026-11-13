@@ -7,48 +7,6 @@ pub(crate) fn one_minus_exp(x: f64) -> f64 {
     -(-x).exp_m1()
 }
 
-/// A time as a multiple of the time a rate is anchored at (the rates of Choose: a month, `Config::span`), and each kind
-/// of rate over it. At exactly 1 each gives the anchored number itself, bit for bit.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Span(pub f64);
-
-impl Span {
-    /// A share `a` per anchor time that composes, as the weight of the newest value in a moving average: 1 - (1 - a)^t
-    /// (`share64`).
-    pub fn share(self, a: f32) -> f32 {
-        self.share64(a as f64) as f32
-    }
-    /// A share `a` per anchor time that composes, as the members a cold spell kills or the weight of the newest value in
-    /// a moving average: 1 - (1 - a)^t, written a - (1 - a) (e^((t - 1) ln(1 - a)) - 1) so that it is `a` itself at
-    /// t = 1. A share of 1 stays 1.
-    pub fn share64(self, a: f64) -> f64 {
-        if a >= 1.0 {
-            return a;
-        }
-        a - (1.0 - a) * ((self.0 - 1.0) * (-a).ln_1p()).exp_m1()
-    }
-    /// A weight `g` per anchor time that multiplies, as a discount: g^t.
-    pub fn weight(self, g: f32) -> f32 {
-        (g as f64).powf(self.0) as f32
-    }
-    /// An amount `x` per anchor time that adds, as a cost or a step: x t.
-    pub fn amount(self, x: f64) -> f64 {
-        x * self.0
-    }
-}
-
-/// The bits set in `bits`, lowest first: a set of a few of 64 things (substances, key liquids) visited without the rest.
-#[inline]
-pub(crate) fn ones(mut bits: u64) -> impl Iterator<Item = usize> {
-    std::iter::from_fn(move || {
-        (bits != 0).then(|| {
-            let k = bits.trailing_zeros() as usize;
-            bits &= bits - 1;
-            k
-        })
-    })
-}
-
 /// What rounding took from `a + b`, given their computed sum `s`, exactly (Neumaier 1974): kept apart, it makes a sum
 /// exact.
 #[inline]
@@ -62,13 +20,6 @@ pub(crate) fn rounding_lost(a: f64, b: f64, s: f64) -> f64 {
 pub(crate) fn central(i: usize, n: usize, f: impl Fn(usize) -> f64, len: f64) -> f64 {
     let (lo, hi) = (i.saturating_sub(1), (i + 1).min(n - 1));
     if hi > lo { (f(hi) - f(lo)) / (len * (hi - lo) as f64) } else { 0.0 }
-}
-
-/// `n` times the surface of a cube of volume `v`: n 6 v^(2/3), as the square of the edge (`n` first, for the order of
-/// the products).
-#[inline]
-pub(crate) fn cube_area(n: f64, v: f64) -> f64 {
-    n * 6.0 * v.cbrt().powi(2)
 }
 
 /// (1 - exp(-x)) / x: the mean over a time of a pulse that decays `x` time constants in it (grows, below zero; 1 within
@@ -172,8 +123,7 @@ pub(crate) fn ways_down<I: Iterator<Item = (usize, bool, f64)>>(h: &[f64], p: us
     (ways, sum)
 }
 
-/// A list of at most `N` small things held in place (no heap): a body's genes (`body::Genes`) and what it works out
-/// from them (`body::Consts`). Saved as the list it holds.
+/// A list of at most `N` small things held in place (no heap): the ways down from a point (`ways_down`).
 #[derive(Clone, Copy, Debug)]
 pub struct Few<T: Copy + Default, const N: usize> {
     v: [T; N],
@@ -183,22 +133,6 @@ pub struct Few<T: Copy + Default, const N: usize> {
 impl<T: Copy + Default + PartialEq, const N: usize> PartialEq for Few<T, N> {
     fn eq(&self, o: &Self) -> bool {
         **self == **o
-    }
-}
-
-impl<T: Copy + Default + serde::Serialize, const N: usize> serde::Serialize for Few<T, N> {
-    fn serialize<S: serde::Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        (**self).serialize(to)
-    }
-}
-
-impl<'de, T: Copy + Default + serde::Deserialize<'de>, const N: usize> serde::Deserialize<'de> for Few<T, N> {
-    fn deserialize<D: serde::Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
-        let v = Vec::<T>::deserialize(from)?;
-        if v.len() > N {
-            return Err(serde::de::Error::invalid_length(v.len(), &"at most the room held"));
-        }
-        Ok(Few::of(&v))
     }
 }
 

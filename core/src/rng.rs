@@ -17,21 +17,11 @@ pub(crate) fn mix(mut z: u64) -> u64 {
 #[repr(u64)]
 pub enum Purpose {
     Terrain = 1,
-    /// A child's genes and its mate (`copy::copy`)
-    Mutate = 5,
-    Choose,
     Chem = 9,
-    /// Whether an individual dies of a share that kills members (`body::live::lose_share`)
-    Death,
-    /// The order among equally alike mates (`copy::partner`)
-    Partner,
-    /// The new weights of a resized brain (`lineage::resize`)
-    Resize = 15,
     /// Where the founders of a starting kind go (`worldgen::life::seed`)
-    Place,
-    /// The mutation rounds of a founder's born rows and of its genes (`worldgen`)
-    Spray,
-    Make,
+    Place = 16,
+    /// The mutation rounds of a founder's genes (`worldgen::life::seed`)
+    Make = 18,
     /// Which founders carry the fixing reaction's gene (`worldgen`)
     Fixer,
     /// Where a slot of cover sends its seeds, and their mutation (`cover::grow`)
@@ -40,8 +30,6 @@ pub enum Purpose {
     Quarter,
 }
 
-/// Reach of `Rng::near_normal` (a sum of four uniforms, centred and scaled): 2 sqrt(3).
-pub(crate) const REACH: f32 = 3.464_101_6;
 /// The number of values of a 16-bit uniform.
 const U16_SPAN: f32 = 65536.0;
 

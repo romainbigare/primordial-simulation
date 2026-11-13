@@ -1,24 +1,24 @@
-//! What all life shares, the cover and bodies alike: the causes it dies of, the liquid share of living tissue, and what
-//! a living thing is built of against breaking (laws.md 4.5, 6.1, 6.8).
+//! What life shares: the causes it dies of (the cover's books count what it loses by them, `Counters::cover_lost`), the
+//! liquid share of living tissue, and what a living thing is built of against breaking (laws.md 3).
 
 use crate::chem::Chemistry;
 
-/// Death causes: a store below its safe minimum; a key liquid froze or boiled; upkeep not paid; taken by a body.
+/// Causes of death, the places of `Counters::cover_lost`: a store below its safe minimum; a key liquid froze; upkeep not
+/// paid; taken by a taker (`contract::take`).
 pub const LACK: u8 = 0;
 pub const PHASE: u8 = 1;
 pub const SPENT: u8 = 2;
 pub const TAKEN: u8 = 3;
-/// Bonds broken by bodies moving through its cell.
+/// Broken loose by work pressed on its cell (`contract::press`).
 pub const BROKEN: u8 = 4;
-/// Worn out by living (its wear, `body::live`, `cover::live`).
+/// Worn out by living (its wear, `cover::live`).
 pub const AGE: u8 = 5;
-/// The liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of working body (`Body::built`,
-/// `Cover::living`).
+/// The liquid share of living tissue: a kg of matter makes 1 / (1 - this) kg of living tissue (`Cover::living`).
 pub const WET_TISSUE: f64 = 0.75;
 
-/// What a living thing of `built` kg of soft tissue (`Body::built`) and `mol(k)` of each solid it builds is built of:
-/// [volume m³, Σ volume × breaking stress × `cut(k)`], its soft tissue at `rho_body` (as substance `chem.matter()`).
-/// `cut(k)`: the share of the energy to break substance `k` that is spent (1 blunt).
+/// What a living thing of `built` kg of soft tissue and `mol(k)` of each solid it builds is built of: [volume m³,
+/// Σ volume × breaking stress × `cut(k)`], its soft tissue at `rho_body` (as substance `chem.matter()`). `cut(k)`: the
+/// share of the energy to break substance `k` that is spent (1 blunt).
 pub fn solids_of(chem: &Chemistry, cfg: &crate::Config, built: f64, mol: impl Fn(usize) -> f64, cut: impl Fn(usize) -> f64) -> [f64; 2] {
     let Some(m) = chem.matter() else { return [0.0; 2] };
     let soft = built.max(0.0) / cfg.phys.rho_body;

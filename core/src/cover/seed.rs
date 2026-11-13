@@ -1,4 +1,4 @@
-//! Seeds (laws.md 4.5): what a slot sends out in its month lands, when every cell has had its month, in the cell it
+//! Seeds (laws.md 3): what a slot sends out in its month lands, when every cell has had its month, in the cell it
 //! goes to, cell by cell in the order made, and always takes hold there (`lodge`): in the nearest slot of its kind, or
 //! as seedlings in a slot of its own; what lives after is the light's to decide.
 

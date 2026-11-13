@@ -10,7 +10,7 @@ use pcore::space::square::Square;
 use pcore::space::samples::Samples;
 use pcore::space::terrain::{self, Place, Terrain, ISLAND_LEVEL};
 use pcore::space::Level;
-use pcore::store::{Boundary, Class, Links, Node, Store};
+use pcore::store::{Boundary, Class, Node, Store};
 use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
 use std::f64::consts::PI;
@@ -234,8 +234,6 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         }
     }
 
-    let links = Links::new(mesh.cells().a().len());
-
     let life = Life::new(&mesh);
     let mut world = World {
         cfg,
@@ -254,9 +252,6 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         evap: vec![0.0; n],
         off_land: vec![0.0; n],
         life,
-
-        canopy: vec![0.0; n],
-        links,
         terrain,
         rise_south: Vec::new(),
         loose_bins: Vec::new(),
@@ -287,7 +282,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
     }
     let e_air = t_air.iter().enumerate().map(|(j, &t)| world.heat_cap_air(j) * t).collect();
     world.store = Store::new(n, (amounts(&world, Class::Ground), amounts(&world, Class::Bed), e_ground), (amounts(&world, Class::Air), e_air));
-    // The liquid starts at balance with the air (`Reactor::balance`, laws.md 2.6); a cell with no liquid holds none. The
+    // The liquid starts at balance with the air (`Reactor::balance`, laws.md 2.5); a cell with no liquid holds none. The
     // node takes the heat of its new amounts at its temperature, once they are in the store.
     let mut rc = Reactor::new(&world.chem, &world.cfg);
     let (mut ground, mut balanced) = (amounts(&world, Class::Ground), Vec::new());

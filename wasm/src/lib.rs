@@ -77,7 +77,7 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64) -> u32
     if world.cfg.validate().is_err() {
         return 1;
     }
-    let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::plants(&worldgen::life::ROSTER), Seeding { hand: true, rounds: SPRAY_ROUNDS, fixers: FIXERS });
+    let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::ROSTER, Seeding { rounds: SPRAY_ROUNDS, fixers: FIXERS });
     let cells = tape::Table::new(&world);
     LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
     0

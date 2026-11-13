@@ -1,12 +1,11 @@
 //! Law 1 (Flow): heat and radiation, the air, gases dissolving, liquid in the pores, drainage and runoff, what the
-//! liquid carries, erosion, and the edges that moving bodies clear.
+//! liquid carries, and erosion.
 
-use pcore::life::Handle;
 use pcore::chem::Phase;
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::DAY;
-use pcore::{body, brain, choose, lanes, World, AIR};
-use worldgen::testkit::{flow_step, ground_of, hold_ground, loose_volume as loose, put, set_amount, set_heat, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
+use pcore::{World, AIR};
+use worldgen::testkit::{flow_step, ground_of, hold_ground, loose_volume as loose, put, set_amount, set_heat, Books, DISSOLVED, LIQUID, MINERAL};
 
 /// One step of radiation and the air.
 const DT: f64 = 3.0 * DAY;
@@ -964,79 +963,6 @@ fn an_island_loses_ground_at_a_real_rate() {
     assert!(rate > 0.003 && rate < 1.0, "{rate} mm a year");
 }
 
-/// Cover per area in the two cells of the lane scene, kg/m².
-const COVER: f64 = 20.0;
-
-/// Two land cells side by side in a warm world, each under `COVER` of light-eaters, and an eater in the first: the
-/// world, the two cells and the eater's slot.
-fn lane_scene() -> (World, usize, usize, Handle) {
-    let (chem, init) = worldgen::chemistry0();
-    let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
-    let mut w = worldgen::terrain::build(3, worldgen::terrain::island(12, 8), chem, &init, cfg);
-    pcore::step(&mut w);
-    let n = w.mesh.cells().n();
-    let a = (0..n - 1).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i + 1][2] > 0.0 && i % 12 < 11).expect("two land cells");
-    let brain = Brain { verbs: [OFF; brain::VERBS + brain::OVERBS], seed: 3, ..Brain::neutral() };
-    let line = Line::new(&mut w, &brain, 1);
-    for cell in [a, a + 1] {
-        worldgen::testkit::cover(&mut w, cell, COVER);
-    }
-    // (It takes nothing where it lands: the scene moves it many times at one moment of the world, not about eating.)
-    let mut m = line.founder(&mut w, 1, a);
-    let lay = body::Layout::of(&w.chem);
-    (0..w.chem.body().n()).for_each(|s| m.genes[lay.upt + s] = -1.0);
-    m.prepare(&w.chem, &w.cfg);
-    let slot = w.add(m);
-    (w, a, a + 1, slot)
-}
-
-/// Edges remember use: a body going back and forth through cover between two cells clears the ground along their
-/// edge (it gets cheaper to cross), and the cover grows back over decades once the moving stops. A body too weak to
-/// give the push of a mover does not move.
-#[test]
-fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
-    let (mut w, a, b, mut slot) = lane_scene();
-    let link = w.mesh.cells().link(a, b).expect("the cells are neighbours");
-    pcore::month_start(&mut w);
-    assert!((lanes::eased(&w, link) - 1.0).abs() < 1e-9);
-    let mut crossed = 0;
-    // Moving needs force: with the strength of the starting light-eaters (0.05: a force of 0.025 of its weight) the
-    // body cannot give the push of a mover (`bump`, 0.05 of its weight) and stays; with its own (0.6) it goes.
-    let mut weak = w.life[slot].clone();
-    weak.genes[body::STRENGTH] = 0.05;
-    w.in_cell(a, |w, d| choose::go(w, d, &mut weak, b, false));
-    assert!(!weak.leaving, "a body too weak to push walked");
-    for t in 0..5000 {
-        // Fuel for the trip each time (the scene is not about eating), with its heat at the body's temperature.
-        let mut m = std::mem::take(&mut w.life[slot]);
-        m.e += (1e3 - m.amount(w.chem.body(), RICH)) * w.chem.subs[RICH].cp * m.temp(&w.chem);
-        *m.store_of(&w.chem, RICH) = 1e3;
-        let ((from, to), id) = (if t % 2 == 0 { (a, b) } else { (b, a) }, m.id);
-        assert_eq!(m.cell as usize, from);
-        w.in_cell(from, |w, d| choose::go(w, d, &mut m, to, false));
-        w.life[slot] = m;
-        // (The move lands from the outbox.)
-        pcore::life::land(&mut w);
-        slot = w.life.find(id).expect("the body lives");
-        crossed += (w.life[slot].cell as usize == to) as u32;
-        pcore::month_start(&mut w);
-        if lanes::eased(&w, link) > 3.0 {
-            break;
-        }
-    }
-    let worn = lanes::eased(&w, link);
-    assert!(crossed > 10 && worn > 3.0, "{crossed} crossings, edge {worn} times easier");
-    // Moving stops: the cover grows back into the cleared ground over some decades.
-    let year = 360.0 * DAY;
-    let mut left = vec![worn];
-    for _ in 0..40 {
-        lanes::regrow(&mut w, year);
-        left.push(lanes::eased(&w, link));
-    }
-    assert!(left[1] > 1.2, "recovers slowly: {left:?}");
-    assert!(left.windows(2).all(|p| p[1] <= p[0] + 1e-9) && left[40] < 1.01, "and fully: {left:?}");
-}
-
 /// A small globe without life (8 rows, from pole to pole) runs 10 years whole and keeps its books, with liquid, heat
 /// and wind crossing the wrap of its rows.
 #[test]
@@ -1258,7 +1184,7 @@ fn the_lifted_energy_is_what_the_matter_gained() {
     for _ in 0..5 * w.cfg.months_per_year {
         pcore::step(&mut w);
     }
-    assert!(w.life.alive().count() > 0, "nothing lives");
+    assert!(pcore::cover::sums(&w).iter().any(|s| s.slots > 0.0), "nothing lives");
     let (gained, lifted) = (pcore::flow::potential(&w).expect("Flow's state") - p0, w.store.lifted() - l0);
     assert!(lifted.abs() > 1e-7 * heat, "the matter moved: {lifted:e} J");
     assert!((gained - lifted).abs() < 1e-6 * lifted.abs(), "gained {gained:e} J, lifted {lifted:e} J");
