@@ -175,7 +175,7 @@ fn random_round(w: &mut World, r: &mut Rng) {
 #[test]
 fn random_changes_keep_the_books() {
     let mut w = small_world();
-    let (t0, mut r) = (check::totals(&w), Rng::new(1, 0, 0, Purpose::Chem));
+    let (t0, mut r) = (check::totals(&w), Rng::new(1, 0, 0, Purpose::Make));
     for _ in 0..CHANGES / PER_ROUND {
         random_round(&mut w, &mut r);
     }

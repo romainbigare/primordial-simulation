@@ -41,7 +41,6 @@ pub const USAGE: &str = "usage:
     --edges               darken the edges between cells
     --out FILE            the PNG (view.png)
   ew chem     print chemistry 0 as a table
-    --seed N              a generated chemistry instead
   ew numbers OLD NEW      the fields of Physics and Config that differ between two runs (directories or physics.json)";
 
 /// Years between viewer frames when `--frames-every` is not given.

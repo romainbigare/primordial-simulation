@@ -219,7 +219,6 @@ The world has its own chemistry. This is not a law. It is the **data** the laws 
 
 - It is copied roughly from Earth: 6 elements, 14 substances, 14 reactions. Only rough numbers (melting points, densities, reaction heats); never precise field data.
 - In `core` and `worldgen`, substances are **numbers only** (substance 0, 1, 2…). The data file holds numbers, not names. The Earth names of chemistry 0 ("≈ water", "≈ sugar") live **only** in `library/`, as a normal recognition entry. The word ban still holds.
-- The chemistry generator and the richness checks in `worldgen` are used by no world; they move to a branch (`review/roadmap.md` section 8, C2).
 
 **Elements.** A small number of base elements, for example `B = 6 to 8`. Elements are never created or destroyed.
 
@@ -490,7 +489,7 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
   tests/      one file per law (flow, change, bond, copy, choose, body, bodies), one per base part (space, store,
               clock, solve, inside), cover, populations, lots, damage, threads (threads and chunks change nothing),
               chemistry0, numbers
-worldgen/   terrain, chemistry 0 (chem0.toml) and the chemistry generator, richness checks, first life (life/), what is
+worldgen/   terrain, chemistry 0 (chem0.toml), first life (life/), what is
               placed when (schedule.rs), the planet's strip for an island's air (planet.rs); the test kit
               (worldgen::testkit, behind the `testkit` feature)
 tape/       the recorder (rec/, its yearly columns in rec/cols/, the viewer file in rec/ewf.rs), snapshots

@@ -17,7 +17,6 @@ pub(crate) fn mix(mut z: u64) -> u64 {
 #[repr(u64)]
 pub enum Purpose {
     Terrain = 1,
-    Chem = 9,
     /// Where the founders of a starting kind go (`worldgen::life::seed`)
     Place = 16,
     /// The mutation rounds of a founder's genes (`worldgen::life::seed`)

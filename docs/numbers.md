@@ -162,7 +162,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
 | `life::WET_TISSUE` (0.75) | share | the liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of living body (`Cover::living`), whatever liquid the body holds | lean animal tissue is 0.7 to 0.75 liquid, herbs 0.8 to 0.9 (from memory) | anchored |
-| `pcore::units::T_SURF` (290) | K | typical surface temperature: where the starting kinds' reactions, the richness checks and `ew chem` look at phases | the same as `t_cat` | anchored |
+| `pcore::units::T_SURF` (290) | K | typical surface temperature: where the starting kinds' reactions and `ew chem` look at phases | the same as `t_cat` | anchored |
 | `Kind::year` (0) | years | when each starting kind is placed after the first life | run: the cover's kinds together, at the first life | tuned |
 | `Seeding::default` (20 rounds), `worldgen/src/life/seeding.rs` | none | how much a start is sprayed with mutation | run: one generation's step is too small for selection to pick from in the time a start has | tuned |
 | `worldgen::life::FIXERS` (0.1) | share | the share of the starting light-eaters that carry the fixing gene (an initial condition; `--fixers` sets it) | the legumes are about 19,000 species, 7% of flowering plants (checked in part: Judd et al. 2002; Christenhusz and Byng 2016), not all of them fix, so about 5%; 10% is within 2 times | anchored |

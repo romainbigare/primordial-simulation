@@ -58,7 +58,7 @@ fn main() {
             drive(w, &args, plan, Some(kept));
         }
         "view" => view(&args),
-        "chem" => chem::run(&args),
+        "chem" => chem::run(),
         "numbers" => numbers::run(&args.0),
         _ => unreachable!("`Args::check` passes only the commands of the usage"),
     }
