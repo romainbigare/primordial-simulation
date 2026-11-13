@@ -209,8 +209,15 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -
         levels.push(top);
         let own: Vec<f64> = parts.iter().map(|&(p, z, ..)| p.volume(top - z)).collect();
         // Each cell wants what it holds apart from its part, what its part holds under the level, and what the pores of
-        // the ground it newly covers take.
-        let want: Vec<f64> = (0..cells.len()).map(|c| vol[c] - h.part[cells[c] as usize][body.part[c]] + own[c] + soak[c]).collect();
+        // the ground it newly covers take. What it holds apart from its part is at least what its other parts hold: where
+        // this part holds nearly all its liquid, the difference would round away what another holds, and the cell would
+        // be left holding less than its parts.
+        let apart = |c: usize| {
+            let (i, q) = (cells[c] as usize, body.part[c]);
+            let others: f64 = h.part[i].iter().enumerate().filter(|&(r, _)| r != q).map(|(_, v)| v).sum();
+            (vol[c] - h.part[i][q]).max(others)
+        };
+        let want: Vec<f64> = (0..cells.len()).map(|c| apart(c) + own[c] + soak[c]).collect();
         let (hub, change, left) = share_out(cells, (&held, &vol), &want, (width, over));
         for (c, &i) in cells.iter().enumerate() {
             let i = i as usize;
