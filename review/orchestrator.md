@@ -195,9 +195,21 @@ south and 0.3 m of liquid a year through leaves in a rainless far north. Take it
 
 ## 5. What to do next, in order
 
-The owner's word for the end of this working session: mend the lakes' two faults (rectangles cutting a northern lake of
-seed 1 at the 200 m bar; a shore in steps at the 5 m bar), bring the air and sunlight to main, then take up the sorted
-start on the new light, mend what kept it off main and bring it to main, then finalise this file and stop.
+The owner's word for the end of this working session: mend the lakes' two faults (blocks of water beside the outlet
+of a small summit lake of seed 1 at the 200 m bar, since the blend of the pond's choice between samples; a shore in
+steps at the 5 m bar); mend the ice and bring the air and sunlight to main; in parallel take up the sorted start,
+mend what kept it off main and bring it to main ("push everything to main when ready"); then finalise this file and
+stop.
+
+**The air and sunlight is whole on `wip/air-light`** (S1, S2, S5, S3a, S3b; the work branch merged in; the full gate
+passes; the lifeless globe: surface absorbs 162.5 W/m², reflects 108, back light 355, 290.8 K, vapour 38.5 kg/m²,
+cloud share 0.37). What holds it off main: (1) no ice anywhere: the globe holds none at its poles and the default
+island no sea ice and no summer snow, so the cold end is too warm (the cause is being measured: the clouds of the
+dark months, the back light of cold dry air, or the heat carried poleward); (2) the long step evaporates 0.7% less on
+land than 1-day steps, so `the_long_step_keeps_the_climate` fails on rivers; (3) the references move (land 288.18 K,
+absorber 366 ppm; the cover on the key island is 7.86 log10 kg with eaters, 9.43 without: the eaters strip a cover
+that grows 3% a year where it grew 9%, and by the owner's word the eaters do not count). Plants answer the Earth-like
+light by growing about 2.3 times slower; forests are thinner at year 30 and as heavy by year 100.
 
 1. **The air and sunlight** to main (S1 + S2 + S5 together, see section 4); the rivers' small faults above after it.
 2. **The air and sunlight** (item 4 below) comes first now; then **the sorted start** again (parked, see section 4:
