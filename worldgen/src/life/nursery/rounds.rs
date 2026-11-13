@@ -95,13 +95,14 @@ impl Class {
 
     /// The race's best grown alone from `START_KG` for `GROW_YEARS` into the stand: the others come as seeds
     /// (`invade`).
-    pub fn grow(&mut self, w: &World, p: &Parts, lived: Lived) {
+    pub fn grow(&mut self, w: &World, p: &Parts, lived: Lived, known: &[Entrant]) {
         let mut g = Garden::bare(&w.chem, self.cell, lived.0);
-        if let Some(e) = self.entrants.first() {
+        let sown: Vec<Entrant> = self.race.iter().map(|e| e.0).chain(known.iter().copied()).collect();
+        for e in &sown {
             g.put(w, p, (e.genes, e.root), START_KG, lived.0[0].around.t);
         }
         run(&mut g, w, p, lived, GROW_YEARS);
-        self.entrants.truncate(1);
+        self.entrants = sown;
         self.garden = Some(g);
     }
 

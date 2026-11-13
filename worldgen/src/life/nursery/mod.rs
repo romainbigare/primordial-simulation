@@ -40,10 +40,6 @@ pub const START_KG: f64 = 0.1;
 pub const ARRIVE_KG: f64 = 0.005;
 /// Generations of mutation (`cover::mutate`) of a mutant newcomer.
 pub const MUTANT_GENERATIONS: u32 = 5;
-/// A cell lies between two classes where its climate is nearer another class's representative than this many times
-/// its own's distance; it gets that class's heaviest kind as seeds of `RARE_KG` kg per m².
-pub const BETWEEN: f64 = 1.5;
-pub const RARE_KG: f64 = 0.001;
 
 /// Per month of a cell's year, per mineral: the share of it that stays, and what comes in, mol (`wash`).
 type Wash = Vec<Vec<(usize, f64, f64)>>;
@@ -71,20 +67,24 @@ fn wash(chem: &pcore::chem::Chemistry, before: &[f64; pcore::units::MAX_SUBSTANC
 /// fix (Cleveland et al. 1999).
 pub const FIX_GENE: f32 = -8.3;
 
-/// The kinds known before (the hand-made kinds of cover, `Place::Field`), each as it is and with the fixing gene on
-/// (`FIX_GENE`), labelled by its row: the first newcomers of every class's race, beside the draws.
-fn known() -> Vec<Entrant> {
+/// The kinds known before (the hand-made kinds of cover, `Place::Field`), as they are, labelled by their row.
+fn hand() -> Vec<Entrant> {
     let cover = super::KINDS.iter().enumerate().filter_map(|(k, kind)| match &kind.place {
-        super::Place::Field(f) => Some((f.genes, k as u32)),
+        super::Place::Field(f) => Some(Entrant { genes: f.genes, root: k as u32, raced: true }),
         super::Place::Bodies(_) => None,
     });
-    cover
-        .flat_map(|(genes, root)| {
-            let mut fixer = genes;
-            fixer[cover::FIX] = FIX_GENE;
-            [Entrant { genes, root, raced: true }, Entrant { genes: fixer, root, raced: true }]
-        })
-        .collect()
+    cover.collect()
+}
+
+/// The kinds known before (`hand`), each as it is and with the fixing gene on (`FIX_GENE`): the first newcomers of
+/// every class's race, beside the draws.
+fn known() -> Vec<Entrant> {
+    let fixer = |e: Entrant| {
+        let mut genes = e.genes;
+        genes[cover::FIX] = FIX_GENE;
+        Entrant { genes, ..e }
+    };
+    hand().into_iter().flat_map(|e| [e, fixer(e)]).collect()
 }
 
 /// Each class's heaviest kind of its stand, or its first champion before it grew one.
@@ -121,10 +121,11 @@ pub fn start(w: &mut World) -> String {
     let on: Vec<Lived> = one.iter().zip(&washes).map(|(m, x)| (m.as_slice(), x.as_slice())).collect();
     let w0: &World = w;
     let known = known();
+    let hand = hand();
     each(w0, &p, &mut gardens, (&near, &on), |g, l, _| g.race(w0, &p, l, (&known, &[]), RACE_TRIALS));
     each(w0, &p, &mut gardens, (&near, &on), |g, l, guests| {
         g.race(w0, &p, l, (&[], guests), GUEST_TRIALS);
-        g.grow(w0, &p, l);
+        g.grow(w0, &p, l, &hand);
     });
     each(w0, &p, &mut gardens, (&near, &on), |g, l, guests| g.invade(w0, &p, l, guests, (0, INVADE_ROUNDS)));
     // The second year: under the cover the first sorting grew.
@@ -156,11 +157,13 @@ struct Placed {
 /// The first starting kind (`Cover::root`) of the nursery's kinds: past the rows of the hand-made kinds (`KINDS`).
 const FIRST_ROOT: u32 = super::KINDS.len() as u32;
 
-/// Place the kinds each class's stand holds (`Class::set`) on its cells (`classes`: places in `cells`), each at the
-/// mass per m² it holds there with a generation's scatter of its genes (`cover::mutate`, keyed by the cell); then, on
-/// each cell whose climate (`features`) lies `BETWEEN` it and another class, that class's heaviest kind as `RARE_KG`
-/// of seeds. Kinds within `APART` × `alike` of each other (`cover::distance`) share a starting kind, numbered from
-/// `FIRST_ROOT` in the order of the classes and their kinds.
+/// Place on each cell the kinds of the classes nearest its climate (`features`, `year::distance`): each class's stand
+/// (`Class::set`) at the mass per m² it holds there times the class's weight by inverse distance, 1/d² over its sum
+/// (Shepard 1968; d the climate distance to the class's representative, which takes its own class alone), so the
+/// cover changes as smoothly as the climate does. Kinds within `APART` × `alike` of each other (`cover::distance`)
+/// share a starting kind, numbered from `FIRST_ROOT` in the order of the classes and their kinds, and join as arriving
+/// seeds of one kind do (`cover::lodge`); of the starting kinds the heaviest that fit the cell's `SLOTS` are placed,
+/// each with a generation's scatter of its genes (`cover::mutate`, keyed by the cell).
 fn place(w: &mut World, p: &Parts, (classes, cells, features): (&[Vec<usize>], &[usize], &[year::Features]), gardens: &[Class]) -> Placed {
     let alike = APART * w.cfg.phys.alike;
     let sets: Vec<Vec<(Entrant, f64)>> = gardens.iter().map(|g| g.set(w, p)).collect();
@@ -175,24 +178,30 @@ fn place(w: &mut World, p: &Parts, (classes, cells, features): (&[Vec<usize>], &
     let labelled: Vec<Vec<([f32; NG], u32, f64)>> = sets.iter().map(|s| s.iter().map(|(e, kg)| (e.genes, root_of(&e.genes), *kg)).collect()).collect();
     let (mut out, cover_mut) = (Placed { cells: 0, kg: 0.0, roots: roots.len() }, w.cfg.phys.cover_mut);
     let spread = year::spread(features);
-    for (k, members) in classes.iter().enumerate() {
+    for members in classes {
         for &m in members {
             let i = cells[m];
-            let mut r = Rng::new(w.seed, k as u64, i as u64, Purpose::Nursery);
+            let near: Vec<f64> = classes.iter().map(|c| 1.0 / year::distance(&features[m], &features[c[0]], &spread)).collect();
+            let weight: Vec<f64> = match near.iter().position(|d| d.is_infinite()) {
+                Some(own) => (0..classes.len()).map(|c| (c == own) as u8 as f64).collect(),
+                None => near.iter().map(|d| d / near.iter().sum::<f64>()).collect(),
+            };
+            let mut kinds: Vec<([f32; NG], u32, f64)> = labelled.iter().zip(&weight).flat_map(|(set, &wt)| set.iter().map(move |&(g, r, kg)| (g, r, kg * wt))).collect();
+            let mass = |r: u32| kinds.iter().filter(|e| e.1 == r).map(|e| e.2).sum::<f64>();
+            let mut held: Vec<(u32, f64)> = kinds.iter().map(|e| (e.1, mass(e.1))).collect();
+            held.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+            held.dedup_by_key(|e| e.0);
+            held.truncate(cover::SLOTS);
+            kinds.retain(|e| e.2 > 0.0 && held.iter().any(|h| h.0 == e.1));
+            kinds.sort_by(|a, b| b.2.total_cmp(&a.2).then(a.1.cmp(&b.1)));
+            let mut r = Rng::new(w.seed, i as u64, 0, Purpose::Nursery);
             let mut any = false;
-            for &(genes, root, kg) in &labelled[k] {
+            for (genes, root, kg) in kinds {
                 if cover::place(w, i, cover::mutate(&genes, cover_mut, &mut r), root, kg) {
                     (any, out.kg) = (true, out.kg + kg * w.mesh.cells().area()[i]);
                 }
             }
             out.cells += any as usize;
-            let d = |c: usize| year::distance(&features[m], &features[classes[c][0]], &spread);
-            let own = d(k);
-            if let Some(o) = (0..classes.len()).filter(|&c| c != k && d(c) <= BETWEEN * BETWEEN * own).min_by(|&a, &b| d(a).total_cmp(&d(b))) {
-                if let Some(&(genes, root, _)) = labelled[o].first() {
-                    cover::place(w, i, cover::mutate(&genes, cover_mut, &mut r), root, RARE_KG);
-                }
-            }
         }
     }
     out
