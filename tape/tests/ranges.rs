@@ -23,7 +23,7 @@
 
 mod common;
 
-use common::{run, run_stepped, LIFE_YEAR};
+use common::{go_from, placed, run, LIFE_YEAR};
 use pcore::chem::Phase;
 use pcore::{Config, World};
 use std::fmt;
@@ -234,11 +234,15 @@ const SLEEP_FROM: u64 = 5;
 /// ground of land and of sea (12, the mineral of the fixed gas), and the dead body matter and frame.
 const CHEMISTRY: [&str; 5] = ["air_3", "min0_land", "min0_sea", "dead_10", "dead_13"];
 
-/// The `columns` at the end of each year from `SLEEP_FROM` of the sleep test's world of `seed` with the settings `set`
-/// makes.
-fn yearly(seed: u64, columns: &[&str], set: impl Fn(&mut Config)) -> Vec<Vec<f64>> {
+/// The `columns` at the end of each year from `SLEEP_FROM` of the sleep test's world, from its start `start` (its cover
+/// placed, `common::placed`) on with the settings `set` makes.
+fn yearly(start: &World, columns: &[&str], set: impl Fn(&mut Config)) -> Vec<Vec<f64>> {
     let mut years = vec![];
-    run(seed, SLEEP_SIDE, SLEEP_YEARS, false, set, |y, _, rec| {
+    let mut w = start.clone();
+    set(&mut w.cfg);
+    w.cfg.validate().expect("a world `Config::validate` accepts");
+    let done = w.cfg.calendar().years(w.time);
+    go_from(w, SLEEP_YEARS - done, false, pcore::step, |y, _, rec| {
         if y >= SLEEP_FROM {
             years.push(columns.iter().map(|c| rec.last(c)).collect());
         }
@@ -278,7 +282,8 @@ fn off_by_noise<S: Copy>(columns: &[&str], runs: &[Vec<Vec<f64>>], settings: &[S
 const GAS_SLEEP_BIAS: f64 = 3e-6;
 
 /// Sleep against no sleep, and each speed setting of the sleep x2 and /2 (`docs/numbers.md`, speed settings): the
-/// longest sleep (`sleep_days`) and the gain that wakes a node (`wake_share`). Against every node awake every step, the
+/// longest sleep (`sleep_days`) and the gain that wakes a node (`wake_share`), each from one start whose cover the
+/// nursery placed once (`common::placed`). Against every node awake every step, the
 /// mean of each of the chemistry's key numbers over the last years moves by less than its noise, the spread of its
 /// values over those years with every node awake; the heat-absorbing gas by less than `GAS_SLEEP_BIAS`.
 #[test]
@@ -286,8 +291,9 @@ const GAS_SLEEP_BIAS: f64 = 3e-6;
 fn the_sleep_of_change_keeps_the_chemistry() {
     let (set, share) = (Config::default().sleep_days, Config::default().wake_share);
     let settings = [(0, share), (set, share), (2 * set, share), (set / 2, share), (set, 2.0 * share), (set, share / 2.0)];
+    let start = &placed(SEEDS[0], SLEEP_SIDE, false);
     let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<_> = settings.iter().map(|&(days, wake)| s.spawn(move || yearly(SEEDS[0], &CHEMISTRY, |c| (c.sleep_days, c.wake_share) = (days, wake)))).collect();
+        let runs: Vec<_> = settings.iter().map(|&(days, wake)| s.spawn(move || yearly(start, &CHEMISTRY, |c| (c.sleep_days, c.wake_share) = (days, wake)))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
     });
     let out = off_by_noise(&CHEMISTRY, &runs, &settings, &[("air_3", GAS_SLEEP_BIAS)], |(days, wake)| format!("sleep {days} days, wake at {wake}"));
@@ -359,11 +365,12 @@ const SHORT_AIR_DAYS: [u32; 1] = [1];
 /// The `CLIMATE` columns that count whole things: their mean over the years moves by no less than one over those years.
 const COUNTS: [&str; 1] = ["rivers"];
 
-/// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's steps `days` long.
-fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
+/// The `CLIMATE` columns at the end of each year from `STEP_FROM` of the long-step test's world, from its start `start`
+/// (its cover placed, `common::placed`) on with the air's steps `days` long.
+fn climate(start: &World, days: u32) -> Vec<[f64; CLIMATE.len()]> {
     let mut years = vec![];
-    let w = worldgen::new_world(seed, STEP_SIDE, STEP_SIDE);
-    run_stepped(w, STEP_YEARS, false, |_| {}, |w| pcore::step_with_air(w, days), |y, _, rec| {
+    let done = start.cfg.calendar().years(start.time);
+    go_from(start.clone(), STEP_YEARS - done, false, |w| pcore::step_with_air(w, days), |y, _, rec| {
         if y >= STEP_FROM {
             years.push(CLIMATE.map(|c| rec.last(c)));
         }
@@ -373,15 +380,20 @@ fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
 
 /// The long step against shorter ones (the air's step is a speed setting, `pcore::AIR_STEP_DAYS`): on small worlds with life,
 /// the mean over the seeds of what the default air step moves each of the climate's key numbers (the mean of its last
-/// years) from the step of each of `SHORT_AIR_DAYS`, each seed against itself, is less than `STEP_K` for a temperature
+/// years) from the step of each of `SHORT_AIR_DAYS`, each seed against itself from one start whose cover the nursery
+/// placed once (`common::placed`), is less than `STEP_K` for a temperature
 /// and less than its year-to-year spread at the short step for the others, or than a count's grain (`COUNTS`: one over
 /// the years averaged) where that is larger.
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
     let days: Vec<u32> = std::iter::once(pcore::AIR_STEP_DAYS).chain(SHORT_AIR_DAYS).collect();
+    let starts: Vec<World> = std::thread::scope(|s| {
+        let starts: Vec<_> = STEP_SEEDS.iter().map(|&seed| s.spawn(move || placed(seed, STEP_SIDE, false))).collect();
+        starts.into_iter().map(|w| w.join().expect("a start")).collect()
+    });
     let runs: Vec<Vec<Vec<[f64; CLIMATE.len()]>>> = std::thread::scope(|s| {
-        let runs: Vec<Vec<_>> = STEP_SEEDS.iter().map(|&seed| days.iter().map(|&d| s.spawn(move || climate(seed, d))).collect()).collect();
+        let runs: Vec<Vec<_>> = starts.iter().map(|start| days.iter().map(|&d| s.spawn(move || climate(start, d))).collect()).collect();
         runs.into_iter().map(|seed| seed.into_iter().map(|r| r.join().expect("a run")).collect()).collect()
     });
     let mut out = vec![];

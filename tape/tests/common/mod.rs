@@ -36,6 +36,21 @@ pub fn run_stepped(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Con
     w.cfg.validate().expect("a world `Config::validate` accepts");
     // `ew run` scales the air's heat-absorbing gases by `--absorber` (1), which sets each air node's heat again.
     worldgen::terrain::scale_absorbers(&mut w, 1.0);
+    go_from(w, years, roster, step, each_year)
+}
+
+/// The world of `ew run --seed <seed> --size <side>` (with `--roster` if `roster`) at the end of the year its life
+/// starts in, its cover placed by the nursery: one start for runs that differ only after it (`go_from`).
+#[allow(dead_code)]
+pub fn placed(seed: u64, side: usize, roster: bool) -> World {
+    run(seed, side, LIFE_YEAR + 1, roster, |_| {}, |_, _, _| {}).0
+}
+
+/// `years` more years of `w` with the settings `set` makes, each month advanced by `step`, recorded from now by a new
+/// recorder as `ew run` records it: `each_year(year, world, recorder)` after each year, counted from the run's start.
+/// Checks the books from now to the end.
+#[allow(dead_code)]
+pub fn go_from(mut w: World, years: u64, roster: bool, step: impl Fn(&mut World), each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
     let mut rec = Recorder::new(&w, 0, 0);
     record(&mut rec, &mut w);
     let w = go_on(w, &mut rec, years, roster, step, each_year);
