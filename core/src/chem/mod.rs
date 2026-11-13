@@ -181,15 +181,19 @@ impl Chemistry {
         &self.derived().body
     }
 
-    /// The share of a body's heat radiation at `t` K in each band (`heat_spans`, Planck's law), by its table at whole
-    /// K, linear between them; they sum to 1. A body warmer than the table's top takes its top's.
+    /// The share of a body's heat radiation at `t` K in each band (`heat_spans`, Planck's law): they sum to 1.
     pub fn heat_shares(&self, t: f64) -> [f64; HEAT_BANDS] {
+        std::array::from_fn(|b| self.heat_share(t, b))
+    }
+
+    /// The share of a body's heat radiation at `t` K in band `b`, by its table at whole K, linear between them; the
+    /// last band the rest of the others. A body warmer than the table's top takes its top's.
+    pub fn heat_share(&self, t: f64, b: usize) -> f64 {
         let table = &self.derived().heat_shares;
         let at = t.clamp(0.0, planck::TABLE_K as f64);
         let (k, frac) = ((at as usize).min(planck::TABLE_K - 1), at - (at as usize).min(planck::TABLE_K - 1) as f64);
-        let mut s: [f64; HEAT_BANDS] = std::array::from_fn(|b| table[k][b] + frac * (table[k + 1][b] - table[k][b]));
-        s[HEAT_BANDS - 1] = 1.0 - s[..HEAT_BANDS - 1].iter().sum::<f64>();
-        s
+        let one = |b: usize| table[k][b] + frac * (table[k + 1][b] - table[k][b]);
+        if b < HEAT_BANDS - 1 { one(b) } else { 1.0 - (0..HEAT_BANDS - 1).map(one).sum::<f64>() }
     }
 
     /// Does substance `k` absorb heat radiation in any band?

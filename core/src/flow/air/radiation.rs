@@ -280,14 +280,27 @@ impl Heat {
     /// What its layers send to side `side` (`DOWN`, `UP`) over air at `tl` K, W/m², and its slope with `tl`, W/(m² K).
     pub fn glow(&self, chem: &Chemistry, tl: f64, side: usize) -> [f64; 2] {
         let mut out = [0.0; 2];
-        for q in 0..SUBS {
+        for q in (0..SUBS).filter(|&q| self.f[q] != 0.0) {
             let (b, k) = (q / PARTS, SIGMA * self.f[q] / (LAYERS * PARTS) as f64);
             for &d in &self.lay[q][side] {
                 let t = (tl + d).max(1.0);
-                let s = chem.heat_shares(t)[b];
-                let ds = (chem.heat_shares(t + SHARE_STEP_K)[b] - chem.heat_shares(t - SHARE_STEP_K)[b]) / (2.0 * SHARE_STEP_K);
+                let s = chem.heat_share(t, b);
+                let ds = (chem.heat_share(t + SHARE_STEP_K, b) - chem.heat_share(t - SHARE_STEP_K, b)) / (2.0 * SHARE_STEP_K);
                 out[0] += k * s * t.powi(4);
                 out[1] += k * (4.0 * s + t * ds) * t.powi(3);
+            }
+        }
+        out
+    }
+
+    /// What its layers send to side `side` over air at `tl` K, W/m²: `glow` without its slope.
+    pub fn sends(&self, chem: &Chemistry, tl: f64, side: usize) -> f64 {
+        let mut out = 0.0;
+        for q in (0..SUBS).filter(|&q| self.f[q] != 0.0) {
+            let (b, k) = (q / PARTS, SIGMA * self.f[q] / (LAYERS * PARTS) as f64);
+            for &d in &self.lay[q][side] {
+                let t = (tl + d).max(1.0);
+                out += k * chem.heat_share(t, b) * t.powi(4);
             }
         }
         out
@@ -320,6 +333,12 @@ impl Skies {
     pub(crate) fn absorbs(&self, chem: &Chemistry, t: f64) -> f64 {
         let clear = self.clear.absorbs(chem, t);
         self.cloud.as_ref().map_or(clear, |(share, under)| (1.0 - share) * clear + share * under.absorbs(chem, t))
+    }
+
+    /// `Heat::sends` of the whole sky.
+    pub(crate) fn sends(&self, chem: &Chemistry, tl: f64, side: usize) -> f64 {
+        let clear = self.clear.sends(chem, tl, side);
+        self.cloud.as_ref().map_or(clear, |(share, under)| (1.0 - share) * clear + share * under.sends(chem, tl, side))
     }
 
     /// `Heat::glow` of the whole sky.

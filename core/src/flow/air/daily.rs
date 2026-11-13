@@ -19,7 +19,7 @@ const BLOCK_DAY: f64 = DAY;
 const GIVE_WORK: usize = 7;
 /// Instructions of a multiply-add of `Ground::gives_any`, its products in a loop (`par::pays`).
 const GIVE_ANY_WORK: usize = 17;
-/// Instructions of a node's heat radiation to space (`Heat::glow`, `par::pays`).
+/// Instructions of a node's heat radiation to space (`Skies::glow`, `par::pays`).
 const GLOW_WORK: usize = 480;
 /// Instructions of the vapour's day (`Pool::day`, `par::pays`) per node and active gas (its saturation and sums), about
 /// 760 a raining node-day in all with the next two on a settled island.
@@ -306,7 +306,7 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let work = crate::par::shareable((0..nx * na).filter(|&i| rain[i] > 0.0).map(|i| ground.wet().nodes[i % na].cell.len() * MET_WORK));
     let met = crate::par::map_n(nx * na, work, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
     // What each node's layers send to space over the day, J, on the pool.
-    let sky = crate::par::map_n(na, na.saturating_sub(1) * GLOW_WORK, |j| s.heat[j].glow(&w.chem, ts[j], UP)[0] * air.area()[j] * dd);
+    let sky = crate::par::map_n(na, na.saturating_sub(1) * GLOW_WORK, |j| s.heat[j].sends(&w.chem, ts[j], UP) * air.area()[j] * dd);
     for j in 0..na {
         out.t[j] += t[j] * share;
         let (sky, day) = (sky[j], &got[j * (1 + nx)..(j + 1) * (1 + nx)]);
