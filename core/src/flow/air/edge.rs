@@ -7,7 +7,7 @@
 use super::super::Scratch;
 use super::planet::Beyond;
 use super::stretch::Stretch;
-use super::wind::{push, End};
+use super::wind::{cell_edge, push, End};
 use crate::{World, AIR};
 
 /// The edges that are open, as the side of the map beyond them [east, south] from a node of that edge: north, south,
@@ -40,6 +40,7 @@ impl Edges {
         let corner = (0..air.n()).map(|j| tree.block_xy(j)).fold((0, 0), |m, (a, b)| (m.0.max(a), m.1.max(b)));
         // Degrees of latitude from one row of air nodes to the next.
         let row = (w.cfg.lat_north - w.cfg.lat_south) / (corner.1 + 1) as f64;
+        let edge = cell_edge(&w.cfg);
         for (j, node) in ends.iter().enumerate() {
             let (bx, by) = tree.block_xy(j);
             let at_edge = [by == 0, by == corner.1, bx == corner.0, bx == 0];
@@ -53,7 +54,7 @@ impl Edges {
                 let cp = s.state.gas.iter().zip(&share).map(|(&k, v)| v * s.sp[k].cp).sum::<f64>();
                 let end = beyond_end(w, (node, lat, &beyond, cp), st);
                 let ab = [dir[0] * spacing, dir[1] * spacing];
-                let [mix, over, rise, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab));
+                let [mix, over, rise, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab), edge);
                 x.heat_of.push(beyond.t * cp);
                 x.node.push(j as u32);
                 x.side.push(side);

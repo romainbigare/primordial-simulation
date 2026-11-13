@@ -675,6 +675,17 @@ goes by its share of the whole column, not the near-ground air's, so its latent 
 that diffusion of the near-ground air's moisture would carry. **Overturning**: the lower half flows to the warmer column and the upper half back, a
 mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by the
 planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the nodes.
+Down the gradient it runs only inside the cell of the low latitudes (`wind::cell_edge`): the upper air flows poleward
+keeping its angular momentum, and past a latitude the warmth's fall can no longer balance the wind that gives it
+(Held and Hou 1980), φ = sqrt(5 g H Δ / (3 Ω² a²)), H the air's depth (`air_top_m`), a the planet's radius, Ω its spin
+(`units::SPIN` × `rotation`), Δ the fractional fall of the warmth of radiative balance from the equator to the pole,
+from the planet's own yearly sunlight by latitude, 1 - (pole's / equator's)^¼: with the default sun and tilt
+Δ = 0.198 and φ = 22.2°. The share of the flux down the gradient falls as 1 - (latitude / φ)² from the equator to
+none at φ, where the theory's cell ends, and is none beyond; the part turned across the link stays. With `rotation` 0
+the cell spans the planet. The same at a link inside the map and at an island's open edge, by the link's latitude; an
+island alone is at its own rows' latitudes (`lat_south`, `lat_north`). **Known limit:** the cell of the middle
+latitudes that turns the other way (Ferrel's), which the eddies drive, is not made; past the cell the eddies alone
+carry heat poleward.
 Each half carries the air of the node it leaves, vapour crowding low, each mol with its node's heat per mol, and the
 upper half holds more heat per mol than the lower by the rise of the static energy cp T + M g z over half the column's
 depth, (M g - cp gam) × depth / 2, gam the column's drop with height (none where the air cools with height as fast as

@@ -4,8 +4,9 @@
 
 use super::super::Scratch;
 use super::daily::{temps, Moved};
+use super::radiation::{declination, insolation};
 use super::stretch::Stretch;
-use crate::{solve::line::{self, Lines}, solve::sweep::HALF_WAY, space::Level, units::R_GAS, Config, World};
+use crate::{solve::line::{self, Lines}, solve::sweep::HALF_WAY, space::Level, units::{R_GAS, SPIN}, Config, World};
 
 /// A fit of a gradient whose neighbours nearly line up (the determinant below this share of the product of its
 /// diagonal) is made along each axis alone.
@@ -76,23 +77,51 @@ pub(super) fn aloft(cp: f64, mg: f64, gam: f64, (zair, za): (f64, f64)) -> f64 {
     cp * gam * (zair - za) + mg * za
 }
 
+/// Points of the year at which the sun's mean by latitude is taken for the overturning cell's edge (`cell_edge`).
+const YEAR_POINTS: usize = 360;
+
+/// The latitude where the overturning cell of the low latitudes ends, degrees: where the upper air, flowing poleward
+/// and keeping its angular momentum, can no longer be balanced by the warmth's fall (Held and Hou 1980), in their
+/// small-angle form φ = sqrt(5 g H Δ / (3 Ω² a²)): H the air's depth (`air_top_m`), a the planet's radius, Ω its spin
+/// (`units::SPIN` × `rotation`), and Δ the fractional fall of the warmth of radiative balance from the equator to the
+/// pole, from the planet's own sun: 1 - (pole's / equator's yearly mean sunlight)^¼, as a body in balance with its
+/// sunlight warms as its fourth root. With no spin the cell spans the planet (infinite).
+pub(super) fn cell_edge(cfg: &Config) -> f64 {
+    let spin = SPIN * cfg.rotation;
+    if spin == 0.0 {
+        return f64::INFINITY;
+    }
+    let yearly = |lat: f64| (0..YEAR_POINTS).map(|k| insolation(cfg.sun, lat, declination(cfg.tilt, (k as f64 + 0.5) / YEAR_POINTS as f64))).sum::<f64>();
+    let fall = 1.0 - (yearly(std::f64::consts::FRAC_PI_2) / yearly(0.0)).powf(0.25);
+    (5.0 * cfg.gravity * cfg.air_top_m * fall / (3.0 * (spin * cfg.radius_m).powi(2))).sqrt().to_degrees()
+}
+
+/// The share of the overturning down the warmth gradient at latitude `lat`, degrees, in a cell that ends at `edge`
+/// (`cell_edge`): whole at the equator, falling as 1 - (lat / edge)² to none at the edge, where the cell's flow does in
+/// Held and Hou's theory, and none beyond it.
+pub(super) fn in_cell(lat: f64, edge: f64) -> f64 {
+    (1.0 - (lat / edge).powi(2)).max(0.0)
+}
+
 /// The pushes on a link from end `a` to end `b`, of width `wd` and length `d` as the stretched air takes them
 /// (`Stretch::length`), `ab` apart on the map, m [east, south]: its eddies, mol/s each way; its overturning, mol/s of the
 /// lower half from `a` to `b`; the heat per mol its upper half holds over its lower, J/mol; the conductance of its
 /// evening of pressure, mol/(Pa s) (`Pushes`); and the heat its eddies carry from `a` to `b` over what the columns'
 /// mean heat per mol carries, W: each mol they exchange holds its column's near-ground energy (`aloft`), as eddies stir
 /// the lower air, where the contrast is the ground's.
-pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab): (f64, f64, [f64; 2])) -> [f64; 5] {
+/// The overturning cell ends at `edge` degrees of latitude (`cell_edge`).
+pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab): (f64, f64, [f64; 2]), edge: f64) -> [f64; 5] {
     let (rho, depth) = ((a.rho + b.rho) / 2.0, cfg.air_top_m - (a.za + b.za) / 2.0);
-    let turn = cfg.rotation * ((a.lat + b.lat) / 2.0).to_radians().sin();
+    let lat = (a.lat + b.lat) / 2.0;
+    let (turn, cell) = (cfg.rotation * lat.to_radians().sin(), in_cell(lat, edge));
     // The warmth's difference across the link, as its gradient times its offset: on the map's metres, as the stretch
     // lengthens both alike.
     let (ga, gb) = (a.grad, b.grad);
     let across = ((ga[0] + gb[0]) * ab[1] - (ga[1] + gb[1]) * ab[0]) / 2.0;
     let mix = st.per_column(cfg.mix * rho * depth * wd / d);
     // A mass flux by the gradient, the link's difference over its length `d`, through its half cross-section, so it
-    // does not depend on `d`.
-    let over = st.per_column(cfg.wind * (b.warmth - a.warmth + turn * across) / d * rho * wd * depth / 2.0);
+    // does not depend on `d`: down the gradient inside the cell of the low latitudes (`in_cell`).
+    let over = st.per_column(cfg.wind * (cell * (b.warmth - a.warmth) + turn * across) / d * rho * wd * depth / 2.0);
     // The middles of a column's halves lie half its depth apart.
     let rise = (a.rise + b.rise) / 2.0 * depth / 2.0;
     // Sound crosses the link in d / its speed. The stretched column holds the stretch squared times the mol at the same
@@ -103,16 +132,18 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
 }
 
 /// Three pushes on each link (`push`): the column's pressure, evened in the time sound takes to cross it (Lamb waves,
-/// Lindzen 1990, 9.2); overturning by the warmth gradient, turned by the rotation at the link's latitude, its lower half
-/// toward the warmer node at `wind` per K/m; and eddy mixing (`mix` × width / length). Each over the link's length and
+/// Lindzen 1990, 9.2); overturning by the warmth gradient, its lower half toward the warmer node at `wind` per K/m
+/// inside the cell of the low latitudes (`cell_edge`, `in_cell`), turned by the rotation at the link's latitude; and eddy
+/// mixing (`mix` × width / length). Each over the link's length and
 /// width as the stretched air takes them, and a rate between the stretched columns (`Stretch`). From the air of each
 /// node as the last state left it (`ends`).
 pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, links: &Links) -> Pushes {
     let v = || Vec::with_capacity(links.id.len());
     let mut p = Pushes { mix: v(), stir: v(), over: v(), rise: v(), even: v() };
+    let edge = cell_edge(cfg);
     for &l in &links.id {
         let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, st.length(air.width()[l]), st.length(air.dist()[l]));
-        let [mix, over, rise, even, stir] = push(cfg, st, (&ends[a], &ends[b]), (wd, d, air.offset(a, b)));
+        let [mix, over, rise, even, stir] = push(cfg, st, (&ends[a], &ends[b]), (wd, d, air.offset(a, b)), edge);
         p.mix.push(mix);
         p.stir.push(stir);
         p.over.push(over);
@@ -354,7 +385,21 @@ fn cross((q, flows): (usize, impl Iterator<Item = (usize, f64)>), (x, e): (&mut 
 
 #[cfg(test)]
 mod tests {
-    use super::aloft;
+    use super::{aloft, cell_edge, in_cell};
+    use crate::Config;
+
+    /// On a planet that spins as the one known, the overturning cell of the low latitudes ends in the subtropics: whole at
+    /// the equator, none down the gradient at 45°; with no spin it spans the planet, whole at every latitude.
+    #[test]
+    fn the_overturning_cell_ends_where_the_spin_says() {
+        let cfg = Config::default();
+        let edge = cell_edge(&cfg);
+        assert!(edge > 15.0 && edge < 35.0, "the cell ends at {edge}°");
+        assert_eq!((in_cell(0.0, edge), in_cell(45.0, edge), in_cell(-45.0, edge)), (1.0, 0.0, 0.0));
+        assert!(in_cell(edge / 2.0, edge) == 0.75 && in_cell(edge, edge) == 0.0);
+        let still = Config { rotation: 0.0, ..Config::default() };
+        assert!([-80.0, 0.0, 45.0, 89.0].iter().all(|&lat| in_cell(lat, cell_edge(&still)) == 1.0));
+    }
 
     /// Two columns with the same air at the ground but different heat aloft (one cooling faster with height, so a lower
     /// mean heat per mol) hold the same near-ground energy per mol, and their eddies carry no heat; a contrast of the
