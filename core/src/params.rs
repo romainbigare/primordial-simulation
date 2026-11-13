@@ -581,7 +581,7 @@ impl Default for Config {
             dissolve: 5e-5,
             wind: 9.7e6,
             friction: 1.0 / DAY,
-            mix: 2.7e6,
+            mix: 1.3e6,
             cloud_life: 1000.0,
             drop_m: 1e-5,
             drop_forward: 0.85,

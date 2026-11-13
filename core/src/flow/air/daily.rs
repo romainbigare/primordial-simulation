@@ -12,7 +12,7 @@ use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
 use std::collections::BTreeMap;
 
 /// The time in which eddies even out a block of air, s: the air's day, so a block's side is the distance a diffusion of
-/// `mix` spreads in it, sqrt(`mix` × this) (Taylor 1922), about 480 km (`blocks`).
+/// `mix` spreads in it, sqrt(`mix` × this) (Taylor 1922), about 340 km (`blocks`).
 const BLOCK_DAY: f64 = DAY;
 
 /// Instructions of a multiply-add of `Ground::gives_of`, its products unrolled (`par::pays`).

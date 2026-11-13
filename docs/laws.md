@@ -656,7 +656,7 @@ as well as its top (1.1), so a deep sea takes up gas in months; a real one takes
 
 ### 1.6 Wind
 `flow::air::wind`, `daily`. Eddies (`mix`) even out the air within a day over the distance sqrt(`mix` × day), about
-480 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
+340 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
 a block is shared among its nodes by their volumes and its heat so that each has the block's warmth (its temperature
 raised to a common height by the block's drop with height), so its pressure, shares and warmth are the block's. An
 island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, each day from the air at
