@@ -16,7 +16,7 @@ export interface Leafy { leaf: number; wood: number; moist: number; frost: numbe
 
 /** A kind's look this month: the colours its plants span (each plant takes a point between them by its own random
  * number), a reflectance each; the share of its crown left (less as it stands bare while dormant); and its flowers:
- * their colour and the share of its plants in flower (on a bush, in flower or in fruit). */
+ * their colour and the share of its crowns their flowers cover (on a bush, in flower or in fruit). */
 export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom: number }
 
 /** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (cover.wgsl `plant`), and a herb,
@@ -32,7 +32,7 @@ const TREE_M = 3, BUSH_WOOD = 0.6;
 // departure from the starting cover's.
 /** Hue at the starting cover's numbers, degrees, and its change per decade of capture area, per K of frost gene, per
  * decade of moisture gene. */
-const HUE_MID = 140, HUE_PER_LEAF = -55, HUE_PER_FROST = -4, HUE_PER_MOIST = 25;
+const HUE_MID = 140, HUE_PER_LEAF = -55, HUE_PER_FROST = -1, HUE_PER_MOIST = 25;
 /** The greens' hues stay living greens, from yellow-green to blue-green, degrees: a kind of thick hardy leaves is the
  * bluest green of the palette, not a teal. */
 const HUE_GREENS = [105, 150];
@@ -84,10 +84,13 @@ const TURN_SPREAD = 0.2;
 /** A dormant crown keeps this share of its leaves. */
 const BARE_LEFT = 0.35;
 
-// Flowers: a herb in its active season flowers as much as it puts into seeds, a bush as much in flower or in fruit; the
-// flowers' colour turns round the hue circle with its seed share and its moisture gene.
+// Flowers: a herb in its active season flowers as much as it puts into seeds, a bush as much in flower or in fruit; a
+// plant in flower shows its flowers over part of its crown, its leaves over the rest, so even a kind all in flower
+// leaves its sward green. The flowers' colour turns round the hue circle with its seed share and its moisture gene.
 /** The share of plants in flower per share of what is built that goes to seeds, at most 1. */
 const BLOOM_PER_SEED = 2.5;
+/** The share of a crown in flower that its flowers cover seen from above. */
+const PETAL_SHARE = 0.3;
 /** The flowers' place on their palette (0..1, round) at the starting cover, and its change per share of seeds and per
  * decade of moisture gene. */
 const PETAL_0 = 0.15, PETAL_PER_SEED = 2.2, PETAL_PER_MOIST = 0.8;
@@ -172,7 +175,7 @@ export function kindLook(k: Leafy, phys: Rgb, falling: number): KindLook {
   return {
     from: at(cold - spread, reach - HUE_SPREAD), to: at(cold + spread, reach + HUE_SPREAD), left: 1 - (1 - BARE_LEFT) * dormant,
     petal: linear(lerp3(fromLch(PETALS[i]), fromLch(PETALS[(i + 1) % PETALS.length]), x - i)),
-    bloom: clamp(BLOOM_PER_SEED * k.seed) * (1 - Math.max(cold, drought)),
+    bloom: PETAL_SHARE * clamp(BLOOM_PER_SEED * k.seed) * (1 - Math.max(cold, drought)),
   };
 }
 
