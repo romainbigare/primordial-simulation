@@ -2,15 +2,14 @@
 //! amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the solid it builds)
 //! and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
 //! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to the cells around
-//! (`seed`), where they lie on the ground until it lets them grow (`lying`); alike kinds share a slot (`kin`). The
-//! cover of a cell, with the seeds lying on its ground, is a node of the store (`Class::Cover`) whose law books its own
+//! (`seed`), where they lie on the ground until it lets them grow (`lying`); alike kinds share a slot (`life::kin`). The
+//! cover of a cell, with the seeds lying on its ground, is a node of the store (`Class::Life`) whose law books its own
 //! side; what takes from it or presses on it does so through the contract (`contract`), whose cover side is `show`.
 
 mod around;
 mod budget;
 mod build;
 mod grow;
-mod kin;
 mod lying;
 mod month;
 mod seed;
@@ -72,8 +71,7 @@ pub const APART: f32 = 0.5;
 pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0)];
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
-/// The root of an empty slot.
-pub const NO_ROOT: u32 = u32::MAX;
+pub use crate::life::NO_ROOT;
 
 /// The substances of the cover and the reactions it runs, found from the chemistry's numbers (`Chemistry::life_roles`).
 #[derive(Clone, Copy, Debug)]

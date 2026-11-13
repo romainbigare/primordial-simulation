@@ -5,8 +5,9 @@
 
 use super::budget::{held, DIED, PLACED, SEEDS};
 use super::lying::LANDED;
-use super::{built_kg, dec, kin, Cover, Parts, FUEL, MATTER, NG, NP, SLOTS, STORE, WALL, WALLS};
+use super::{built_kg, dec, distance, Cover, APART, Parts, FUEL, MATTER, NG, NP, SLOTS, STORE, WALL, WALLS};
 use crate::chem::Chemistry;
+use crate::life::kin;
 use crate::store::{apply, Class, Move, Node};
 use crate::World;
 
@@ -84,7 +85,7 @@ pub enum Landed {
 pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, ph: &crate::Physics, area: f64) -> Landed {
     let kg = built_kg(mm, &s.mol);
     let plants = super::stand::founded(ph, kg, area);
-    if let Some(x) = kin::kin(&c.genes, &c.root, (&s.genes, s.root), ph.alike) {
+    if let Some(x) = kin::kin(&c.genes, &c.root, (&s.genes, s.root), APART * ph.alike, distance) {
         c.plants[x] += plants;
         super::stand::thin(c, mm, ph, area, x);
         // The seeds join as a slot of their own would, the genes the mean by built cover.
@@ -108,7 +109,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, ph: &crate::Physics, area:
 /// (`distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the slots are a limit of the
 /// bookkeeping, and the two hold the same niche to within what it resolves. Returns the slot it leaves empty.
 fn room(c: &mut Cover, mm: &[f64; NP], ph: &crate::Physics, area: f64) -> usize {
-    let (a, z) = kin::nearest(&c.genes);
+    let (a, z) = kin::nearest(&c.genes, distance);
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
     super::stand::join(c, (mm, ph, area), big, small);
     small
@@ -133,7 +134,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
             w.counts.cover_budget[DIED] -= held(&p.content(&w.chem), &m);
             let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
             c.e -= q;
-            let (from, to) = (Node::new(Class::Cover, i), Node::ground(i));
+            let (from, to) = (Node::new(Class::Life, i), Node::ground(i));
             let mut moves: Vec<_> = (0..NP).map(|x| Move { from, to, k: p.sub[x] as u16, mol: m[x], heat: 0.0 }).collect();
             moves.push(Move { from, to, k: 0, mol: 0.0, heat: q });
             apply(w, &[], &moves);
@@ -141,7 +142,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     }
     w.counts.cover_budget[PLACED] += held(&p.content(&w.chem), &mol);
     // (The cover's side is its own: the store books the outside node's.)
-    w.cross((crate::store::Boundary::Outside, Node::new(Class::Cover, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
+    w.cross((crate::store::Boundary::Outside, Node::new(Class::Life, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
     w.life.cells[i].cover.mark = w.light[i];
     true
 }

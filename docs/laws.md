@@ -724,7 +724,7 @@ matter with the liquid of living tissue (matter / (1 − `WET_TISSUE`), `Cover::
 its walls are a frame, which pays no upkeep and does not wear, so its capacity, capture area,
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
 1990, from memory). The cover of a cell is a node of the
-store (`Class::Cover`) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
+store (`Class::Life`, the life of its cell) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
 chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
 task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a real count of plants (`Cover::plants`,
@@ -828,7 +828,7 @@ seeds fill it:
   amounts of the three parts, its genes and its starting kind, at the cover's temperature (their heat is the cover's,
   and they are matter of the cover's node: in its books, its budget and its potential energy). Seeds that land join the
   most alike lot of their kind within `APART` × `alike` steps (the genes the mean by built matter), else an empty lot,
-  else the two nearest lots join and they take the lot freed: the rule of the slots (`kin`). A seed is a small dormant
+  else the two nearest lots join and they take the lot freed: the rule of the slots (`life::kin`). A seed is a small dormant
   plant, so the cover's laws hold for it: each month, before its cover's own, of each lot the share its wear gives dies
   (the wear of dormant cover: its upkeep at full activity a kg, `upkeep_rates`, at the floor `dormant`, over `e_life` ×
   10^`REPAIR`) and the share frozen below its hardened limit (`cover::frozen` at activity 0), to the ground as remains

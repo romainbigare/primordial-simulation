@@ -87,7 +87,7 @@ impl World {
     pub fn in_cell<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
         let mut one = [std::mem::take(&mut self.life.cells[i])];
         let mut c = Chunk::new(i, &mut one, self.chem.ns());
-        c.moves.open(self, i, Node::new(Class::Cover, i));
+        c.moves.open(self, i, Node::new(Class::Life, i));
         let r = f(self, &mut c);
         let done = vec![(c.moves, c.counts)];
         let [cell] = one;

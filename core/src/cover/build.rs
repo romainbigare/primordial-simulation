@@ -55,7 +55,7 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
     let fixed = p.fix.filter(|_| g[FIX] > FIX_OFF).and_then(|r| {
         let rx = &chem.reactions[r];
         let &(m, out) = rx.outputs.iter().find(|o| need[o.0 as usize] > 0.0)?;
-        let most = (dec(g[FIX]) * s.living * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt).min(b.room(p, rx));
+        let most = (dec(g[FIX]) * s.living * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt).min(b.room(&p.sub, rx));
         Some((rx, m as usize, out as f64, per_input(rx, p.sub[FUEL])?, most))
     });
     let others = minerals().filter(|&k| fixed.is_none_or(|f| f.1 != k)).map(by).fold(surplus / fpk, f64::min);
@@ -67,10 +67,10 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
         if with > kg {
             (kg, y) = (with, (with * need[m] - ground[m]).max(0.0) / out);
         }
-        b.run(chem, p, &mut c.mol[x], rx, y);
+        b.run(chem, &p.sub, &mut c.mol[x], rx, y);
     }
     // Building's work burns fuel with the gas the cell's share of its air node still offers.
-    kg = kg.min(b.room(p, burn) * burn_e / ph.c_copy.max(1e-300));
+    kg = kg.min(b.room(&p.sub, burn) * burn_e / ph.c_copy.max(1e-300));
     if kg <= 0.0 {
         return;
     }
@@ -78,10 +78,10 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
     if let Some((_, m, out, ..)) = fixed {
         ground[m] += y * out - (y * out).min(kg * need[m]);
     }
-    b.run(chem, p, &mut c.mol[x], burn, kg * ph.c_copy / burn_e);
+    b.run(chem, &p.sub, &mut c.mol[x], burn, kg * ph.c_copy / burn_e);
     // What it builds goes into the slot; the share `SEED` of it leaves as seeds.
     let before = c.mol[x];
-    units.iter().for_each(|(rx, u)| b.run(chem, p, &mut c.mol[x], rx, kg * u));
+    units.iter().for_each(|(rx, u)| b.run(chem, &p.sub, &mut c.mol[x], rx, kg * u));
     // Each seed carries its store of fuel at its `STORE` gene, from the slot's fuel: a slot short of it makes fewer seeds.
     let grew: [f64; NP] = std::array::from_fn(|q| if q == FUEL { 0.0 } else { (c.mol[x][q] - before[q]).max(0.0) });
     let new = super::built_kg(&mm, &grew);
@@ -135,10 +135,10 @@ pub(super) fn frame(w: &World, c: &mut Cover, p: &Parts, x: usize, b: &mut Books
     let units = 1.0 / mm[WALL] / wall.outputs[0].1 as f64;
     let fpk = per_input(wall, p.sub[FUEL]).unwrap_or(0.0) * units + ph.c_copy / burn_e * fuel_burn;
     let surplus = (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * c.built(&mm, x) / mm[FUEL]).max(0.0);
-    let kg = short.min(surplus / fpk).min(b.room(p, burn) * burn_e / ph.c_copy.max(1e-300));
+    let kg = short.min(surplus / fpk).min(b.room(&p.sub, burn) * burn_e / ph.c_copy.max(1e-300));
     if kg > 0.0 {
-        b.run(chem, p, &mut c.mol[x], burn, kg * ph.c_copy / burn_e);
-        b.run(chem, p, &mut c.mol[x], wall, kg * units);
+        b.run(chem, &p.sub, &mut c.mol[x], burn, kg * ph.c_copy / burn_e);
+        b.run(chem, &p.sub, &mut c.mol[x], wall, kg * units);
     }
 }
 

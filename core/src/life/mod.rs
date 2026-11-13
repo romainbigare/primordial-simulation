@@ -1,14 +1,18 @@
 //! The life of each ground cell (laws.md 0, 3): its cover (`Cell`), and from the month's start what stands on it and
 //! its place (`contract`). The cover's month runs on chunks of cells (`chunk`), one task per chunk on the pool.
 
+mod books;
 mod chunk;
 mod disperse;
+pub mod kin;
 mod saved;
 mod shared;
 
+pub use books::{book, Books};
 pub use chunk::Chunk;
 pub(crate) use chunk::run;
 pub use disperse::lot;
+pub use kin::NO_ROOT;
 pub use shared::{AGE, BROKEN, LACK, PHASE, SPENT, TAKEN, WET_TISSUE};
 
 use crate::cover::Cover;

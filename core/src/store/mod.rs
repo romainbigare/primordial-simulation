@@ -82,7 +82,7 @@ impl World {
         let d = |c: Class, k: usize| if c == to.class { moves.iter().filter(|m| m.k as usize == k).map(|m| m.mol).sum() } else { 0.0 };
         match to.class {
             Class::Ground | Class::Bed | Class::Deep | Class::Aside => crate::flow::gain(self, to.index, d, 0.0),
-            Class::Cover => crate::flow::gain(self, to.index, |_, _| 0.0, kg),
+            Class::Life => crate::flow::gain(self, to.index, |_, _| 0.0, kg),
             Class::Air => kg * self.cfg.gravity * crate::flow::air_head(self, to.index),
             Class::Boundary => 0.0,
         }

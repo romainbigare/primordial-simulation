@@ -19,9 +19,9 @@ pub enum Class {
     Aside,
     /// A node beyond the world's boundary (`Boundary`): it holds what crossed, with a node's sign, so it may go below zero
     Boundary,
-    /// The cover of a cell (`cover::Cover`): it holds its own amounts and heat, and its law books its side. Its index is
-    /// its cell.
-    Cover,
+    /// The life of a cell (`life::Cell`: its cover): it holds its own amounts and heat, and its laws book its side. Its
+    /// index is its cell.
+    Life,
 }
 
 /// A fixed node: its class and its index in that class's arrays.
@@ -66,5 +66,5 @@ pub const BOUNDARIES: usize = 3;
 
 impl Class {
     /// Every class, by its index (`class as usize`).
-    pub(crate) const ALL: [Class; 7] = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Aside, Class::Boundary, Class::Cover];
+    pub(crate) const ALL: [Class; 7] = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Aside, Class::Boundary, Class::Life];
 }

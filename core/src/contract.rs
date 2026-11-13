@@ -205,7 +205,7 @@ pub fn press(w: &World, d: &mut Chunk, i: usize, energy: f64) {
     d.counts.cover_lost[BROKEN as usize] += f * kg;
     let e = p.content(&w.chem);
     let held = d.cover(i).content(&e);
-    d.moves.open(w, i, Node::new(crate::store::Class::Cover, i));
+    d.moves.open(w, i, Node::new(crate::store::Class::Life, i));
     crate::cover::lose(w, d, &p, i, f);
     d.counts.cover_budget[TAKERS] += d.cover(i).content(&e) - held;
 }
