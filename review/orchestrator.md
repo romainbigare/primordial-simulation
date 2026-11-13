@@ -144,7 +144,16 @@ CPU time against before the rivers: fitted view +15%, 2 km bar +26%, 200 m bar +
 is +5% and +10%). Small plants' marks show as little grids of yellow dots on bare ground close up.
 
 **In work:** the rivers' faults above (branch `wip/rivers`). The air and sunlight (the cover's helper, branch
-`air-light`: first a measure of today's budget against Earth's and a proposal, then the law in steps).
+`wip/air-light`, not on main): S1 gases absorb sunlight (`sw_abs`, `sw_sat`, `radiation::Column`, one pass down and
+one up), S2 the clear air scatters (`scatter`), both committed with their tests; the lifeless globe then absorbs 189
+W/m² at the surface (243 before, Earth 160) and 66 in the air, at 288.3 K. Alone they make winters too cold (the key
+world's land 284.6 K, swing 16.3 K, rain 0.98 m a year; the frost test's scene and the long step's rivers fail)
+because the air's back radiation is too low (276 against Earth's 342). A grey column cannot hold both the back
+radiation (Prata 1996) and the forcing of doubling the absorber (3.7 W/m²; today's is 9.4): so S5, in work, is heat
+light in three bands with each absorber at its own height. S1 + S2 + S5 merge together, the references move once.
+Then the clouds from a liquid path with a fraction of the sky, as their own package. A proposal for the plants'
+package: two bands of sunlight (a usable one, a near-infrared one) with `light_yield` on the usable light. Dry matter
+in the warm south stays 2 to 4 kg a year with Earth-like light: the excess is in the cover's law.
 
 **The sorted start is parked** (`wip/nursery-start`, built on 32e9cb4c: every world's cover placed by the nursery, the
 random placing deleted, `SNAPSHOT_VERSION` 128, a fast test of the garden, a status line on the page, 1 to 1.9 s in
