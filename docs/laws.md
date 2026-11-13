@@ -144,14 +144,19 @@ no new pit and no new peak.) Nothing random is laid on it. So a leaf has a mean 
 point (the tape's frames, a byte a square; the pictures) asks the tree for the leaf that holds it (`Tree::cell_at`).
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it) is a fixed list of passes
-(`schedule::month`), each for the whole month: the survey (`survey::survey`: one task per chunk on the pool with the
-feature `threads`, in each of its cells the wear of movers, the shade and the sums; a death that lets go of a part
-queues that for the serial pass, as in a batch; it rebuilds Flow's
-state in full for the cells' surroundings, and Flow's own pass leaves it then); Flow: the air in steps of
+(`schedule::month`), each for the whole month. The natural world's passes run with no body; the bodies' passes stand
+between them where one side reads what the other left, and with no body they do nothing. First the month's start
+(`schedule::START`, alone `month_start`): the bodies' press (`survey::press`: one task per chunk on the pool with the
+feature `threads`, in each of its cells what movers pushed breaks its bodies and its cover, `contract::press`; a death
+that lets go of a part queues that for the serial pass, as in a batch); what stands on each cell, the cover's part and
+the shade it casts (`contract::stand_up`); the bodies' part of it, and the queue of the press lands
+(`survey::stand`); the surroundings (`contract::surroundings`: Flow's state rebuilt in full and each cell's place from
+it, which Flow's own pass then leaves); what the bodies see (`survey::features`). Then Flow: the air in steps of
 `AIR_STEP_DAYS` (15 days, two a month, each at its own time in the month), after each the sink of the liquid over
-field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly; the cover's month;
-Change; Bond (each chunk's cell by cell, the chunks on the pool: in a cell the turns of its parts in the order of its
-list, on its view, then the loads of its structures in the order of their roots); then the bodies (`survey::batch`).
+field capacity into the bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the cover's
+month (`cover::month`) and Change. Then the bodies: Bond (each chunk's cell by cell, the chunks on the pool: in a cell
+the turns of its parts in the order of its list, on its view, then the loads of its structures in the order of their
+roots); the lanes' regrowth yearly (1.7); the bodies' update (`survey::batch`).
 **The bodies' step** (`survey/steps.rs`): a move is one link a decision, and every cell steps a month (the pace the
 numbers of bodies are anchored at). The random draws of the bodies are keyed by the day (`World::key_at`). **Every
 body updates at the month's start**, after the month's Flow, Change and Bond: one batch holds every living body.
@@ -545,7 +550,7 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   trades sensible heat with the air (`sensible`).
 - **The bodies' node** (`Class::Bodies`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
-  it does not claim goes back to the ground before each air step (`survey::release`).
+  it does not claim goes back to the ground before each air step (`cover::release`).
 - **A body as one surface** (`air::surf`): under each air node a body's cells that mix as one (1.2) face the air as
   one surface: one balance with their summed area, heat, heat capacity and gases, at their mean temperature (by heat
   capacity), reflectance, height and air (by area) and the sunlight of their mean latitude. It answers the air as one

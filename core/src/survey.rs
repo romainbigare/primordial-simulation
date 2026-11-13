@@ -9,9 +9,7 @@ use crate::life::{self, Chunk, Handle, Of};
 use crate::store::{Class, Node};
 use crate::{choose, World};
 
-mod draws;
 mod steps;
-pub(crate) use draws::release;
 pub use steps::Grid;
 
 /// At each month's start, first: what movers broke since the last month's start breaks (`choose::wear`), in each cell
@@ -69,25 +67,11 @@ pub fn features(w: &mut World) {
     w.life.cells.iter_mut().for_each(|c| c.crossings = 0.0);
 }
 
-/// At each month's start, in order: what movers broke (`press`), what stands on each cell, the cover's part
-/// (`contract::stand_up`) and the bodies' (`sums`), the queue of the press (`life::land`), the surroundings
-/// (`contract::surroundings`) and what the bodies see (`features`).
-pub fn survey(w: &mut World) {
-    press(w);
-    crate::contract::stand_up(w);
+/// The bodies' part of what stands on each cell and their own numbers (`sums`), then what the press queued lands
+/// (`life::land`), before Flow's state is built from the store.
+pub fn stand(w: &mut World) {
     sums(w);
     life::land(w);
-    crate::contract::surroundings(w);
-    features(w);
-}
-
-/// Once a month, after Flow's state is built in full: the cover's month (`cover::step`) in each cell that holds any,
-/// one task per chunk on the pool; then its seeds land (`cover::land`).
-pub fn cover(w: &mut World) {
-    let load = w.life.cells.iter().filter(|c| c.cover.any()).count();
-    life::run(w, Of::All, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| crate::cover::step(w, d));
-    life::land(w);
-    crate::cover::land(w);
 }
 
 /// The cells `of` whose life `holds` it, in order.

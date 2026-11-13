@@ -314,7 +314,7 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     let s = w.add(n);
     let books = Books::now(&w);
     w.time += DAY_S;
-    pcore::survey::survey(&mut w);
+    pcore::month_start(&mut w);
     for round in 0..3 {
         let mut n = std::mem::take(&mut w.life[s]);
         n.prepare(&w.chem, &w.cfg);

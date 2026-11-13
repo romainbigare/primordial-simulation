@@ -18,9 +18,10 @@ fn day_month_and_season_come_from_the_seconds() {
     assert_eq!(cal.season(cal.year / 2), 0.5);
 }
 
-/// A month of `step`: the survey, Flow's state, the air (with the sink into the bed's store) in steps of `AIR_STEP_DAYS`,
-/// the liquid (with creep and the refresh at their months), the cover's month, Change, Bond, then the bodies, each
-/// once. The clock ends a whole month on, and `day_with_month_at_start` moves it by one day, the month's passes only at a month's start.
+/// A month of `step`: its start (the bodies' press, what stands, the bodies' part of it, the surroundings, what the
+/// bodies see), Flow's state, the air (with the sink into the bed's store) in steps of `AIR_STEP_DAYS`, the liquid (with
+/// creep and the refresh at their months), the cover's month, Change, Bond, then the bodies (with the lanes at creep's
+/// months), each once. The clock ends a whole month on, and `day_with_month_at_start` moves it by one day, the month's passes only at a month's start.
 #[test]
 fn a_month_runs_its_passes_in_their_order() {
     let mut w = small_world();
@@ -29,9 +30,11 @@ fn a_month_runs_its_passes_in_their_order() {
     pcore::step_marked(&mut w, &mut |_, s| marks.push(s));
     assert_eq!(w.time, t0 + cal.month);
     let air = (w.cfg.days_per_month / pcore::AIR_STEP_DAYS) as usize;
-    let flow = marks[1..].iter().take_while(|&&m| m == Stage::Flow).count();
-    assert!(marks[0] == Stage::Bodies && flow >= 2 + air, "{marks:?}");
-    assert_eq!(marks[1 + flow..], [Stage::Bodies, Stage::Change, Stage::Parts, Stage::Bodies]);
+    let start = [Stage::Bodies, Stage::Bodies, Stage::Bodies, Stage::Flow, Stage::Bodies];
+    let flow = marks[start.len()..].iter().take_while(|&&m| m == Stage::Flow).count();
+    assert!(marks[..start.len()] == start && flow >= 2 + air, "{marks:?}");
+    let end = &marks[start.len() + flow..];
+    assert!(end[..3] == [Stage::Bodies, Stage::Change, Stage::Parts] && end[3..].iter().all(|&m| m == Stage::Bodies), "{marks:?}");
     let (d, m) = (w.day(), w.month());
     pcore::day_with_month_at_start(&mut w);
     assert_eq!((w.day(), w.month(), w.time % cal.day), (d + 1, m, 0));

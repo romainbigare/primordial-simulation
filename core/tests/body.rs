@@ -367,7 +367,7 @@ fn a_cell_left_with_no_bodies_holds_nothing_at_the_next_survey() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::testkit::eater_nodes(&mut w, 10.0);
-    pcore::survey::survey(&mut w);
+    pcore::month_start(&mut w);
     let i = w.life.living().map(|x| w.life[x.0].cell as usize).next().expect("a body");
     let members: f64 = w.life.cell(i).map(|s| w.life[s].n()).sum();
     assert!(members > 0.0 && w.life.sum(i)[0] == members, "{members} members, sum {}", w.life.sum(i)[0]);
@@ -376,7 +376,7 @@ fn a_cell_left_with_no_bodies_holds_nothing_at_the_next_survey() {
         let b = std::mem::take(&mut w.life[h]);
         w.in_cell(i, |w, d| body::die(w, d, h, b, pcore::life::LACK));
     }
-    pcore::survey::survey(&mut w);
+    pcore::month_start(&mut w);
     assert!(w.life.sum(i).iter().all(|&x| x == 0.0), "the emptied cell still holds something");
     assert_eq!(pcore::check::broken(&w), None);
 }
