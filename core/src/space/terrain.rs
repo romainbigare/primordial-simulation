@@ -1,11 +1,12 @@
 //! The terrain (laws.md 0 and 8): the height of the ground at any point of the map, one function of the world's seed,
 //! its map and its level (`Terrain`), at any size. Value noise summed over octaves (fractal noise), with ridges, its
 //! domain warped so coasts and ridges bend (Perlin 1985; Musgrave 1989), raised to heights, says how high the ground
-//! would stand; an island falls away from the middle of its map. The ground at the samples (`SAMPLE_DEPTH`) is that
-//! worn at the world's start (`space::samples`, `space::wear`). It gives the cells their starting heights
+//! would stand; an island's falls away from its rises (`space::rises`). The ground at the samples (`SAMPLE_DEPTH`) is
+//! that worn at the world's start (`space::samples`, `space::wear`). It gives the cells their starting heights
 //! (`worldgen`). Below `SAMPLE_DEPTH` the ground goes on smooth (`space::below`), so a leaf of any depth has a mean
 //! height, and a shell draws that ground.
 
+pub use super::rises::{Lift, Shape};
 use super::samples::Samples;
 use super::square::Square;
 use super::{Leaf, Level};
@@ -32,21 +33,15 @@ const LAND_M: f64 = 3600.0;
 const LAND_POWER: f64 = 1.3;
 const LOW_M: f64 = 1500.0;
 const FLOOR_M: f64 = -800.0;
-/// An island's rise falls by (`FALL_BY` x its distance from the middle, in sides)^`FALL_POWER`.
-const FALL_BY: f64 = 2.0;
-const FALL_POWER: f64 = 1.6;
 /// The first octave of the base noise that keeps its own size where the land rises slowly (`rise`): a quarter of the
 /// coarsest's wavelength and finer, the ground's own swells and hollows.
 const FINE_FROM: u32 = 2;
 /// The rise an island's level 0 m lies at.
 pub const ISLAND_LEVEL: f64 = 0.27;
-/// An island's range (`Range`): the key of its draws; how far its axis lies from the middle of the map at most, and
-/// the least and the most half-width of its band, in units of the noise; and how fast land rises far from it and on
-/// its axis, times the mean.
-const RANGE_KEY: u64 = 19;
-const RANGE_OFF: f64 = 1.0;
-const RANGE_WIDE: [f64; 2] = [0.7, 1.4];
-const RISES: [f64; 2] = [0.2, 1.3];
+/// The least and the most scale of a drawn island's rises against the one rise's reach, and the halvings between them
+/// that find the scale that gives its share of land (`Terrain::lift`): the share to about a hundredth.
+const SCALES: [f64; 2] = [0.2, 3.0];
+const SCALE_HALVINGS: usize = 10;
 /// The depth below its air block whose leaves' centres sample the terrain inside a coarser cell (`Terrain::inside`):
 /// 1/64 of a block's side, 125 m on the island, finer than the noise's finest octave there.
 pub const SAMPLE_DEPTH: u8 = 6;
@@ -54,13 +49,15 @@ pub const SAMPLE_DEPTH: u8 = 6;
 /// What the terrain of a world needs beside its map: the seed of its noise (the world's as built: a run that draws
 /// chance anew from another seed, `World::seed`, stands on the same ground); the rise its level 0 m lies at (an
 /// island's `ISLAND_LEVEL`; a globe's the one that leaves a share of its area above it, `worldgen`); how much faster
-/// flowing liquid wears each make of its bed than the first (`space::strata`; the chemistry's, `worldgen`); and its
-/// drained samples, found from those when first read (`Terrain::samples`), not saved.
+/// flowing liquid wears each make of its bed than the first (`space::strata`; the chemistry's, `worldgen`); an
+/// island's large shape (`Shape`); and its drained samples, found from those when first read (`Terrain::samples`), not
+/// saved.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Terrain {
     pub seed: u64,
     pub level: f64,
     pub cut: Vec<f64>,
+    pub shape: Shape,
     #[serde(skip)]
     pub(super) kept: super::samples::Kept,
 }
@@ -143,34 +140,6 @@ fn rise_at<const D: usize>(seed: u64, warp: [f64; D]) -> (f64, f64) {
     (base * BASE_WEIGHT + ridge.powi(3) * RIDGE_WEIGHT, fine * BASE_WEIGHT)
 }
 
-/// The range of an island: a band along an axis where its land rises fast, falling off to the low ground where it
-/// rises slowly, as the crust is raised in blocks (a range, its foothills, a low plain), not alike everywhere. The axis
-/// passes `RANGE_OFF` units of the noise from the middle of the map at most, at any heading, and the band is
-/// `RANGE_WIDE` wide, all drawn from the seed, so the island's share of range, hills and plain, and where they lie,
-/// differ from seed to seed. On the warped noise, so the axis bends as the ridges do.
-struct Range {
-    at: [f64; 2],
-    across: [f64; 2],
-    wide: f64,
-}
-
-impl Range {
-    /// The range of `seed` on the flat map `map`, `per_square` units of the noise a square.
-    fn of(seed: u64, map: &Square, per_square: f64) -> Range {
-        let draw = |k: u64| Rng::new(seed, RANGE_KEY, k, Purpose::Terrain).f64();
-        let (heading, off) = (draw(0) * TAU / 2.0, (2.0 * draw(1) - 1.0) * RANGE_OFF);
-        let across = [heading.sin(), -heading.cos()];
-        let middle = [map.w, map.h].map(|n| (n as f64 / 2.0 - 0.5) * per_square);
-        Range { at: [middle[0] + off * across[0], middle[1] + off * across[1]], across, wide: RANGE_WIDE[0] + (RANGE_WIDE[1] - RANGE_WIDE[0]) * draw(2) }
-    }
-    /// How fast the land rises at the warped point `warp`, against the mean (`RISES`): fastest on the axis, by a bell
-    /// across it, down to the low ground's far from it.
-    fn fast(&self, warp: [f64; 2]) -> f64 {
-        let d = (warp[0] - self.at[0]) * self.across[0] + (warp[1] - self.at[1]) * self.across[1];
-        RISES[0] + (RISES[1] - RISES[0]) * (-(d / self.wide).powi(2)).exp()
-    }
-}
-
 /// Fractal noise of `octaves` (in roughly [0, 1)) at `place` of `map` with key `seed`, `per_square` units of the noise a
 /// square: on a flat map at its place, in squares, less half a square; on a globe at the point over it on a sphere
 /// `per_square` units a square round its equator (no seam where the rows wrap).
@@ -197,33 +166,31 @@ fn spot(map: &Square, place: Place, per_square: f64) -> Spot {
 
 /// The rise of the ground at `place` of `map` (`rise_at`), `ACROSS` units of the noise across the map's longer side;
 /// and how much of it stands over `level`, its land's as fast as the land rises there: an island's large shape (all
-/// but its fine octaves) by the island's range (`Range`), its fine octaves as much larger where the range raises the
-/// land faster than the mean and at their own size elsewhere, so a plain keeps its own swells and hollows while its
-/// large heights stay low; a
-/// globe's alike everywhere (its noise is of the scale of its continents, its cells wider than a range). The second is
-/// the first less `level` where the land rises at the mean.
-pub fn rise(seed: u64, map: &Square, place: Place, level: f64) -> (f64, f64) {
-    let per_square = ACROSS / map.w.max(map.h) as f64;
-    let (warp, fast) = match spot(map, place, per_square) {
+/// but its fine octaves) lowered by how far it lies from the island's rises and scaled by their ranges (`Lift`), its
+/// fine octaves as much larger where a range raises the land faster than the mean and at their own size elsewhere, so a
+/// plain keeps its own swells and hollows while its large heights stay low; a globe's alike everywhere (its noise is of
+/// the scale of its continents, its cells wider than a range). The second is the first less `level` where the land
+/// rises at the mean.
+pub fn rise(seed: u64, map: &Square, lift: &Lift, place: Place, level: f64) -> (f64, f64) {
+    match spot(map, place, per_square(map)) {
         Spot::Flat(p) => {
             let warp = warped(seed, p);
             let (r, fine) = rise_at(seed, warp);
-            let fast = Range::of(seed, map, per_square).fast(warp);
-            let large = r - fine - level - fall(map, place);
-            return (r, if large > 0.0 { large * fast } else { large } + fine * fast.max(1.0));
+            let share = |c: f64, len: usize| c / map.side / len as f64;
+            let fast = lift.fast(warp);
+            let large = r - fine - level - lift.fall([share(place.centre[0], map.w), share(place.centre[1], map.h)]);
+            (r, if large > 0.0 { large * fast } else { large } + fine * fast.max(1.0))
         }
-        Spot::Round(p) => (warped(seed, p), 1.0),
-    };
-    let r = rise_at(seed, warp).0;
-    (r, (r - level) * fast)
+        Spot::Round(p) => {
+            let r = rise_at(seed, warped(seed, p)).0;
+            (r, r - level)
+        }
+    }
 }
 
-/// How far an island's rise falls at `place` of the flat map `map`: by (`FALL_BY` x its distance from the middle, in
-/// sides)^`FALL_POWER`.
-fn fall(map: &Square, place: Place) -> f64 {
-    let middle = |c: f64, len: usize| c / map.side / len as f64 - 0.5;
-    let (dx, dy) = (middle(place.centre[0], map.w), middle(place.centre[1], map.h));
-    ((dx * dx + dy * dy).sqrt() * FALL_BY).powf(FALL_POWER)
+/// Units of the noise a square of `map`: `ACROSS` across its longer side.
+pub(super) fn per_square(map: &Square) -> f64 {
+    ACROSS / map.w.max(map.h) as f64
 }
 
 /// Height of ground whose rise lies `above` the level, m: land climbs steeply, low ground falls gently.
@@ -237,9 +204,42 @@ impl Terrain {
     pub fn new(seed: u64, level: f64, cut: Vec<f64>) -> Terrain {
         Terrain { seed, level, cut, ..Terrain::default() }
     }
-    /// The height of the noise at `place`, m: how high the ground would stand there unworn.
-    pub(super) fn sample(&self, seed: u64, map: &Square, place: Place) -> f64 {
-        height_of(rise(seed, map, place, self.level).1)
+    /// The terrain of an island of `shape` for `seed` (`Lift`), its level 0 m at `ISLAND_LEVEL`.
+    pub fn island(seed: u64, shape: Shape, cut: Vec<f64>) -> Terrain {
+        Terrain { seed, level: ISLAND_LEVEL, cut, shape, ..Terrain::default() }
+    }
+    /// The rises of this terrain's island on the flat map `map` for `seed` (`Lift`): one in the middle, or those drawn
+    /// from the seed, scaled so the share of the centres of its squares above the level (`land`) is their drawn share
+    /// (`rises::drawn_share`), found by halving `SCALE_HALVINGS` times between `SCALES`.
+    pub fn lift(&self, seed: u64, map: &Square) -> Lift {
+        if self.shape == Shape::One {
+            return Lift::one(seed, map);
+        }
+        let (share, mut range) = (super::rises::drawn_share(seed), SCALES);
+        for _ in 0..SCALE_HALVINGS {
+            let mid = (range[0] + range[1]) / 2.0;
+            if self.land(seed, map, &Lift::drawn(seed, map, mid)) < share {
+                range[0] = mid;
+            } else {
+                range[1] = mid;
+            }
+        }
+        Lift::drawn(seed, map, (range[0] + range[1]) / 2.0)
+    }
+    /// The share of the centres of the squares of the flat map `map` whose noise stands above the level for `seed`, its
+    /// island raised by `lift` (`rise`).
+    fn land(&self, seed: u64, map: &Square, lift: &Lift) -> f64 {
+        let above = |s: usize| {
+            let (x, y) = map.xy(s);
+            let place = Place { centre: [(x as f64 + 0.5) * map.side, (y as f64 + 0.5) * map.side], lat: 0.0, lon: 0.0 };
+            rise(seed, map, lift, place, self.level).1 > 0.0
+        };
+        crate::par::map_n(map.n(), crate::par::UNCOUNTED, above).iter().filter(|&&a| a).count() as f64 / map.n() as f64
+    }
+    /// The height of the noise at `place` of `map` for `seed`, its island raised by `lift`, m: how high the ground
+    /// would stand there unworn.
+    pub(super) fn sample(&self, seed: u64, map: &Square, lift: &Lift, place: Place) -> f64 {
+        height_of(rise(seed, map, lift, place, self.level).1)
     }
     /// The terrain's mean height by area over leaf `l` of `map` (its rows between latitudes `south` and `north`), m.
     /// The ground is sampled at the centres of the leaves of `SAMPLE_DEPTH`, worn (`Terrain::samples`); below them it

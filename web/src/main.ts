@@ -24,6 +24,8 @@ const LIVE_SIZE = 22;
 /** The climates a live island may have: a name, and the band of latitudes it stands for (south, north; none: the core's
  * default band). The first is the page's. */
 const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['None: 40° to 42.3°', '']];
+/** The large shapes a live island may have: a name, and the URL's word for it. The first is the page's. */
+const SHAPES: string[][] = [['One island', 'one'], ['Drawn from the seed', 'drawn']];
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
 
@@ -285,6 +287,10 @@ async function startLive(): Promise<void> {
   const presets = asked && !BANDS.some(b => b[1] === asked) ? [...BANDS, [`${asked.replace(',', '° to ')}°`, asked]] : BANDS;
   bands.innerHTML = presets.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
   bands.value = asked ?? BANDS[0][1];
+  // The large shape: from the URL's `shape=one|drawn` or the first (`SHAPES`).
+  const shapes = $<HTMLSelectElement>('shape');
+  shapes.innerHTML = SHAPES.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
+  shapes.value = SHAPES.some(s => s[1] === q.get('shape')) ? (q.get('shape') as string) : SHAPES[0][1];
   live?.stop();
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
@@ -312,7 +318,7 @@ function viewSoon(v: View): void {
 function landOf(w: World): Land | null {
   const m = w.meta;
   if (!coreWasm || !m.tiles || !m.laws || !m.samples || m.square_depth === undefined) return null;
-  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, [m.lat_south, m.lat_north], { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, shown => { if (shown) map.invalidate(); if (live) showStats(live.stats); }, say);
+  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, [m.lat_south, m.lat_north], m.shape === 'Drawn', { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, shown => { if (shown) map.invalidate(); if (live) showStats(live.stats); }, say);
   return new Land(tiles, m.laws, m.samples);
 }
 /** From `THINGS_PX` pixels a square on, the core is asked for the things of the window in view, to draw them one by one. */
@@ -351,10 +357,11 @@ function newWorld(): void {
   playing = false;
   say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
   banded ||= band[0] < band[1];
-  live?.newWorld(seed, size, band);
+  live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn');
 }
 $('live').onsubmit = e => { e.preventDefault(); newWorld(); };
 $('band').onchange = () => newWorld();
+$('shape').onchange = () => newWorld();
 
 requestAnimationFrame(loop);
 const embedded = document.getElementById('world-data')?.textContent?.trim();

@@ -8,7 +8,7 @@ use pcore::flow::scale_height;
 use pcore::life::Life;
 use pcore::space::square::Square;
 use pcore::space::samples::Samples;
-use pcore::space::terrain::{self, Place, Terrain, ISLAND_LEVEL};
+use pcore::space::terrain::{self, Lift, Place, Shape, Terrain};
 use pcore::space::Level;
 use pcore::store::{Boundary, Class, Links, Node, Store};
 use pcore::units::P_REF;
@@ -33,12 +33,13 @@ const LAPSE: f64 = 0.0065;
 const MOLTEN_MARGIN: f64 = 2.0;
 
 /// The terrain of `seed` on `map` whose samples are `cells` (`space::terrain`): an island's level 0 m lies at the rise
-/// `ISLAND_LEVEL`; a globe's leaves the share `LAND_SHARE` of the area of the samples above it.
+/// `ISLAND_LEVEL` (`Terrain::island`); a globe's leaves the share `LAND_SHARE` of the area of the samples above it.
 fn terrain_of(seed: u64, map: &Square, cells: &Level, cut: Vec<f64>) -> Terrain {
     if !map.wrap {
-        return Terrain::new(seed, ISLAND_LEVEL, cut);
+        return Terrain::island(seed, Shape::One, cut);
     }
-    let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, Place::of(cells, i), 0.0).0).collect();
+    let lift = Lift::one(seed, map);
+    let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, &lift, Place::of(cells, i), 0.0).0).collect();
     let mut order: Vec<usize> = (0..cells.n()).collect();
     order.sort_by(|&a, &b| rise[b].total_cmp(&rise[a]));
     let (total, mut above) = (cells.area().iter().sum::<f64>(), 0.0);
@@ -115,24 +116,25 @@ pub fn new_map(seed: u64, map: Square) -> World {
     build(seed, map, chem, &init, Config::default())
 }
 
-/// A new island from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry 0, ground,
-/// liquid and air. One terrain, so its worn samples are found once.
+/// A new island of one rise from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain,
+/// chemistry 0, ground, liquid and air. One terrain, so its worn samples are found once.
 pub fn new_world(seed: u64, w: usize, h: usize) -> World {
-    new_island(seed, w, h, Config::default())
+    new_island(seed, (w, h), Shape::One, Config::default())
 }
 
-/// `new_world` with the settings `cfg`: its rows between the latitudes `Config::lat_south` and `lat_north`.
-pub fn new_island(seed: u64, w: usize, h: usize, cfg: Config) -> World {
-    let ((squares, terrain), (chem, init)) = (island_ground(seed, w, h), chemistry0());
+/// `new_world` of `w × h` squares with the large shape `shape` (`space::rises`) and the settings `cfg`: its rows
+/// between the latitudes `Config::lat_south` and `lat_north`.
+pub fn new_island(seed: u64, (w, h): (usize, usize), shape: Shape, cfg: Config) -> World {
+    let ((squares, terrain), (chem, init)) = (island_ground(seed, (w, h), shape), chemistry0());
     let map = coarse_low(seed, squares, &terrain, &cfg);
     build_on(seed, map, terrain, (chem, &init), cfg)
 }
 
-/// The ground of the island of `w × h` squares `new_world` makes from `seed`: the map of its squares and its terrain
-/// (how its cells are cut does not change the ground).
-pub fn island_ground(seed: u64, w: usize, h: usize) -> (Square, Terrain) {
+/// The ground of the island of `w × h` squares and the large shape `shape` that `new_island` makes from `seed`: the
+/// map of its squares and its terrain (how its cells are cut does not change the ground).
+pub fn island_ground(seed: u64, (w, h): (usize, usize), shape: Shape) -> (Square, Terrain) {
     let (chem, init) = chemistry0();
-    (island(w, h), Terrain::new(seed, ISLAND_LEVEL, cuts_of(&chem, &init)))
+    (island(w, h), Terrain::island(seed, shape, cuts_of(&chem, &init)))
 }
 
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
