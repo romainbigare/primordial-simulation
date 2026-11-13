@@ -190,6 +190,10 @@ south and 0.3 m of liquid a year through leaves in a rainless far north. Take it
 
 ## 5. What to do next, in order
 
+The owner's word for the end of this working session: mend the lakes' two faults (rectangles cutting a northern lake of
+seed 1 at the 200 m bar; a shore in steps at the 5 m bar), bring the air and sunlight to main, then take up the sorted
+start on the new light, mend what kept it off main and bring it to main, then finalise this file and stop.
+
 1. **The air and sunlight** to main (S1 + S2 + S5 together, see section 4); the rivers' small faults above after it.
 2. **The air and sunlight** (item 4 below) comes first now; then **the sorted start** again (parked, see section 4:
    classes that blend, a garden whose air feels its film, tests that start from one placed world, kinds that draw
