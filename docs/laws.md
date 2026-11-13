@@ -229,7 +229,7 @@ one, in the order queued, each a serial step (`World::in_cell`); what they queue
 holders of each lineage and born rows are counted from the bodies (`Life::recount`): a lineage left
 with none dies out, born rows left with none are freed. Each entry is applied by its law on the bodies and parts as
 they are then. A move lands (`choose::land_move`): the body enters the cell, carries what it holds if it paid to (else
-it lets go of it), counts in the cell's crossings, and its push breaks the bodies there at the next survey; members of
+it lets go of it), counts in the cell's crossings, and its push breaks the bodies there at the next month's start; members of
 a node who moved join their kind there (`copy::kin`) as an amount with their genes and rows, not as a body; then its push reaches the structures there, the structure it
 carries comes along (any other body that held a part of it, left behind, lets go of it), and it clears the lane
 (`Entry::Passed`). A litter joins its kind there or starts a body, and its
@@ -287,10 +287,10 @@ ground (its level-volume curve) at its centroid; its store `bed_depth` under its
 air node's matter lies at the mean head of its cells (their solid surface and liquid as a column, as Flow's state
 stacks them), for the height of a column above its ground is in its heat (its heat capacity at constant pressure holds
 the work the column does as it rises); a bodies' node's gas and the matter of a cell's life (its bodies, its cover
-with the seeds it sends until they land, its parts) at its cell's head. The parts of a month's Flow after the survey
+with the seeds it sends until they land, its parts) at its cell's head. The parts of a month's Flow after its start
 (state, the air's steps, liquid, creep, refresh) follow each other with nothing between (`flow::chain`) and are
-booked as one at their end; the survey's own
-build of Flow's state, and a part run alone, are booked at their own end. In each booking every move carries its
+booked as one at their end; the build of Flow's state at the month's start (`contract::surroundings`), and a part run
+alone, are booked at their own end. In each booking every move carries its
 potential energy from the height it leaves (a ground node's liquid top: the table of its pores, or the level of what
 stands where that lies higher, so liquid standing in a pit under its full pores leaves with them and the top never
 rises as liquid leaves, `stack::Column::top`; a bodies' node's head; an air node's mean head; a store's table; each the mean of the booking's start and

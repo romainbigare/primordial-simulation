@@ -144,9 +144,9 @@ fn shown(w: &pcore::World, i: usize, layer: Layer) -> contract::Shown {
     contract::shown(w, w.life.cell_at(i), layer).expect("the cover's parts")
 }
 
-/// A taker on the contract (`testkit::Taker`) takes each month a share of the slot of a cell's cover that holds the
-/// most and passes it to the ground: what it takes is what that slot loses, to rounding, every element and the energy
-/// are kept, and the cell grazed harder holds less cover after a year.
+/// A taker on the contract (`testkit::Taker`) takes each month a share of the lowest slot of a cell's cover
+/// (`contract::slots`) and passes it to the ground: what it takes is what that slot loses, to rounding, every element
+/// and the energy are kept, and the cell grazed harder holds less cover after a year.
 #[test]
 fn what_a_taker_takes_its_slot_loses() {
     let (mut w, i) = start();
@@ -157,9 +157,8 @@ fn what_a_taker_takes_its_slot_loses() {
         let (books, mut taker) = (Books::now(&w), Taker::new(i, Layer::Cover, share));
         for _ in 0..12 {
             pcore::step(&mut w);
-            let most = w.life.cover(i).held().map(|x| (x, shown(&w, i, Layer::Slot(x)).kg)).max_by(|a, b| a.1.total_cmp(&b.1));
-            let Some((x, _)) = most else { break };
-            taker.layer = Layer::Slot(x);
+            let Some(&(lowest, _)) = contract::slots(&w, w.life.cell_at(i)).first() else { break };
+            taker.layer = lowest;
             let before = shown(&w, i, taker.layer);
             let took = taker.month(&mut w);
             let after = shown(&w, i, taker.layer);
