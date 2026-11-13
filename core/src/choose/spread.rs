@@ -4,7 +4,8 @@
 //! rest where it ends, so the share of the members and the share of their time follow one rule (laws.md 4.4).
 
 use super::*;
-use crate::body::{die, LACK};
+use crate::body::die;
+use crate::life::LACK;
 use crate::life::Handle;
 
 use crate::nodes;

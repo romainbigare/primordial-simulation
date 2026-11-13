@@ -5,14 +5,18 @@
 mod brains;
 mod chunk;
 mod cross;
+mod disperse;
 mod registry;
 mod saved;
+mod shared;
 mod touched;
 
 pub use brains::{Block, Brains, Mind};
 pub use chunk::Chunk;
 pub(crate) use chunk::{bounds, chunks, run, Of};
 pub use cross::{land, Entry};
+pub use disperse::lot;
+pub use shared::{solids_of, AGE, BROKEN, LACK, PHASE, SPENT, TAKEN, WET_TISSUE};
 pub use registry::Genome;
 
 use crate::body::Body;

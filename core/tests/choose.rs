@@ -109,7 +109,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         for s in w.life.living().map(|x| x.0).collect::<Vec<_>>() {
             if w.life[s].id != id {
                 let c = std::mem::take(&mut w.life[s]);
-                w.in_cell(c.cell as usize, |w, d| body::die(w, d, s, c, body::LACK));
+                w.in_cell(c.cell as usize, |w, d| body::die(w, d, s, c, pcore::life::LACK));
             }
         }
         if let Some(slot) = w.life.find(id).filter(|_| w.counts.updates > u) {

@@ -2,7 +2,8 @@
 //! (`survey`), and every body's update at the month's start, in a parallel and a serial pass (`batch`; the steps,
 //! `steps`).
 
-use crate::body::{die, live, perish, Layout, Lived, LiveTmp, LACK};
+use crate::body::{die, live, perish, Layout, Lived, LiveTmp};
+use crate::life::LACK;
 use crate::life::{self, Chunk, Handle, Of};
 use crate::store::{Class, Node};
 use crate::{choose, World};

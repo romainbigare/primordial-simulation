@@ -11,7 +11,6 @@ mod pay;
 mod tissue;
 mod drink;
 
-pub use tissue::solids_of;
 
 pub use death::{die, wound};
 use death::thin;
@@ -31,23 +30,12 @@ use crate::math::Few;
 use crate::units::{BODY_REACTIONS, BODY_STORES};
 use serde::{Deserialize, Serialize};
 
-/// Death causes: a store below its safe minimum; a key liquid froze or boiled; upkeep not paid; taken by a body.
-pub const LACK: u8 = 0;
-pub const PHASE: u8 = 1;
-pub const SPENT: u8 = 2;
-pub const TAKEN: u8 = 3;
-/// Bonds broken by bodies moving through its cell.
-pub const BROKEN: u8 = 4;
-/// Worn out by living (its wear, `body::live`).
-pub const AGE: u8 = 5;
 /// Margins of well-being (`Body::wellbeing_at`) count from `MARGIN_MIN` up to this: a key store's log share over its
 /// minimum, and its reactions over its upkeep (`live` plans for this many upkeeps).
 pub(crate) const MARGIN: f64 = 2.0;
 const MARGIN_MIN: f64 = 1e-3;
 /// Well-being falls as a key liquid comes within this of freezing or boiling, K.
 const PHASE_MARGIN: f32 = 5.0;
-/// The liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of working body (`Body::built`).
-pub const WET_TISSUE: f64 = 0.75;
 /// Most numbers of a brain's memory (the top of the `MEMORY` gene's range).
 pub const MEMORY_MOST: usize = 12;
 /// The visible traits of a body (`Body::vis`).

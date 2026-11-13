@@ -1,7 +1,8 @@
 //! The body as tissue: matter and brood, size and supply, the levels of its stores and its materials (laws.md 6.1,
 //! 3.6).
 
-use super::{Body, Layout, WET_TISSUE};
+use super::{Body, Layout};
+use crate::life::{solids_of, WET_TISSUE};
 use crate::chem::{Chemistry, Phase, Stores};
 
 /// The most share of a body its keep gene of a key liquid, or the solids it builds together, may make up.
@@ -200,14 +201,4 @@ impl Body {
         let (lay, size, bc) = (Layout::of(chem), self.size(chem), chem.body());
         self.empty_at(m) || (0..bc.n()).any(|s| self.store[s] * bc.mm[s] < self.gene(lay.min + s) * size && !self.burns_at(chem, bc.subs()[s], t))
     }
-}
-
-/// What a living thing of `built` kg of soft tissue (`Body::built`) and `mol(k)` of each solid it builds is built of:
-/// [volume m³, Σ volume × breaking stress × `cut(k)`], its soft tissue at `rho_body` (as substance `chem.matter()`).
-/// `cut(k)`: the share of the energy to break substance `k` that is spent (1 blunt).
-pub fn solids_of(chem: &Chemistry, cfg: &crate::Config, built: f64, mol: impl Fn(usize) -> f64, cut: impl Fn(usize) -> f64) -> [f64; 2] {
-    let Some(m) = chem.matter() else { return [0.0; 2] };
-    let soft = built.max(0.0) / cfg.phys.rho_body;
-    let of = |v: f64, k: usize| [v, v * chem.subs[k].rupture * cut(k)];
-    chem.materials().map(|k| of(mol(k).max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], k)).fold(of(soft, m), |a, x| [a[0] + x[0], a[1] + x[1]])
 }

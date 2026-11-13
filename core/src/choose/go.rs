@@ -1,7 +1,8 @@
 //! Moving: a body steps to a neighbour cell (`go`), landing there in the serial pass (`land_move`), clearing a lane, and
 //! what it pushes through wears (`wear`).
 
-use crate::body::{self, Body, BROKEN};
+use crate::body::{self, Body};
+use crate::life::BROKEN;
 use crate::chem::Phase;
 use crate::store::{Class, Node};
 use crate::units::DAY;

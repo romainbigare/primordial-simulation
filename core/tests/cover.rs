@@ -1,7 +1,7 @@
 //! The cover (laws.md 4.5): a field of light-eaters per cell grows in light and dies in frost, keeping the books, and
 //! animals graze it by their take from the place.
 
-use pcore::body::{PHASE, TAKEN};
+use pcore::life::{PHASE, TAKEN};
 use pcore::cover::{self, FROST};
 use pcore::event::EventKind;
 use worldgen::life::{Place, KINDS};

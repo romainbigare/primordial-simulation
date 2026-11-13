@@ -3,7 +3,7 @@
 //! cells and the worn edges at the last decade).
 
 use super::{Recorder, CAUSES};
-use pcore::body::SPENT;
+use pcore::life::SPENT;
 use pcore::event::{Event, EventKind};
 use pcore::World;
 use serde::{Deserialize, Serialize};

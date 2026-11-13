@@ -94,7 +94,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     let matter = chem.matter_roles();
     let at = |k: usize| chem.body().place(k).expect("life's roles are stores");
     let h = genes[lay.keep + at(liquid)].clamp(0.0, MAX_LIQUID_SHARE as f32) as f64;
-    let mass = 10f64.powf(genes[body::COPY_MASS] as f64) * if matter.is_some() { (1.0 - body::WET_TISSUE) / (1.0 - h) / (1.0 - kind.store) } else { 1.0 };
+    let mass = 10f64.powf(genes[body::COPY_MASS] as f64) * if matter.is_some() { (1.0 - pcore::life::WET_TISSUE) / (1.0 - h) / (1.0 - kind.store) } else { 1.0 };
     let count = 1.0;
     let mut store = vec![0.0; ns];
     let (fuel, liq, mat) = split(kind.store, genes[lay.keep + at(liquid)] as f64, matter.is_some());

@@ -2,7 +2,8 @@
 //! warm by burning and cool by evaporating), its key liquid (drinking, frost, boiling), digestion and its age. Damage:
 //! `damage.rs`.
 
-use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, PHASE, STRENGTH};
+use pcore::body::{self, Body, Layout, COOL_T, HEAT, KEEP_T, STRENGTH};
+use pcore::life::PHASE;
 use pcore::life::Handle;
 use pcore::event::EventKind;
 use pcore::{brain, World, AIR};
@@ -373,7 +374,7 @@ fn a_cell_left_with_no_bodies_holds_nothing_at_the_next_survey() {
     let all: Vec<Handle> = w.life.cell(i).collect();
     for h in all {
         let b = std::mem::take(&mut w.life[h]);
-        w.in_cell(i, |w, d| body::die(w, d, h, b, body::LACK));
+        w.in_cell(i, |w, d| body::die(w, d, h, b, pcore::life::LACK));
     }
     pcore::survey::survey(&mut w);
     assert!(w.life.sum(i).iter().all(|&x| x == 0.0), "the emptied cell still holds something");
@@ -386,7 +387,8 @@ fn a_cell_left_with_no_bodies_holds_nothing_at_the_next_survey() {
 /// (the repair share, a quarter at gene 0, doubles per unit). Matter and energy are kept.
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
-    use pcore::body::{AGE, COPY_MASS, DISPERSE, LEARN, REPAIR, STRENGTH};
+    use pcore::body::{COPY_MASS, DISPERSE, LEARN, REPAIR, STRENGTH};
+    use pcore::life::AGE;
     use pcore::brain;
     const ONES: usize = 60;
     // A cell of dry land for each individual and two for the nodes.

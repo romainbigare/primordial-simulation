@@ -1,7 +1,8 @@
 //! What the tests of the laws share (the `testkit` feature, for dev-dependencies only): a small world, founders of a
 //! chosen brain, edits booked from outside, the books, and the substances of chemistry 0 by number.
 
-use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, STRENGTH, WET_TISSUE};
+use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, STRENGTH};
+use pcore::life::WET_TISSUE;
 use pcore::bond;
 use pcore::brain::{self, FIXED, OVERBS, VERBS};
 use pcore::check::{self, Totals};

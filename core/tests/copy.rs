@@ -741,7 +741,7 @@ fn a_cell_holds_one_node_per_kind_and_stage() {
     let others: Vec<Handle> = w.life.cell(i).filter(|&h| w.life[h].id != id).collect();
     for h in others {
         let b = std::mem::take(&mut w.life[h]);
-        w.in_cell(i, |w, d| body::die(w, d, h, b, body::LACK));
+        w.in_cell(i, |w, d| body::die(w, d, h, b, pcore::life::LACK));
     }
     for x in 0..12 {
         let mut b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
@@ -892,7 +892,7 @@ fn landed(w: &World, from: Leaf, draws: usize, stream: u64) -> BTreeMap<Leaf, f6
     let mut r = Rng::new(w.seed, stream, i as u64, Purpose::Cover);
     let mut by_leaf = BTreeMap::new();
     for _ in 0..draws {
-        if let Some(j) = copy::lot(w, i, &mut r) {
+        if let Some(j) = pcore::life::lot(w, i, &mut r) {
             *by_leaf.entry(w.map.leaves()[j]).or_insert(0.0) += 1.0 / draws as f64;
         }
     }

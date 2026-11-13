@@ -191,17 +191,6 @@ pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
     distance(lay, a, b, |_| limit).is_some()
 }
 
-/// Reach of `noise` (a sum of four uniforms, centred and scaled): 2 sqrt(3).
-pub(crate) const REACH: f32 = 3.464_101_6;
-/// The number of values of a 16-bit uniform.
-const U16_SPAN: f32 = 65536.0;
-
-/// Noise near a standard normal, within `REACH`: a sum of four 16-bit uniforms from one draw, centred and scaled.
-pub(crate) fn noise(r: &mut Rng) -> f32 {
-    let u = r.u64();
-    (((u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48)) as f32 - 2.0 * (U16_SPAN - 1.0)) * (3f32.sqrt() / U16_SPAN)
-}
-
 /// How far `x` lies inside the walls `lo` and `hi` (0 outside).
 pub(crate) fn wall_room(x: f32, lo: f32, hi: f32) -> f32 {
     (x - lo).min(hi - x).max(0.0)
@@ -231,8 +220,8 @@ pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, bra
             let (step, lo, hi) = range(lay, g);
             let held = !brain && BRAIN_SIZES.contains(&g);
             let (u2, s2) = (if held { 0.0 } else { (step * size).powi(2) }, spread_at(spread, g));
-            let room = wall_room(v, lo, hi) / REACH;
-            let x = (v + ((u2 + s2.min((room * room * m - u2).max(0.0))) / m).sqrt() * noise(r)).clamp(lo, hi);
+            let room = wall_room(v, lo, hi) / crate::rng::REACH;
+            let x = (v + ((u2 + s2.min((room * room * m - u2).max(0.0))) / m).sqrt() * r.near_normal()).clamp(lo, hi);
             if m > 1.0 {
                 left.push(spread_kept(lay, g, x, ((u2 + s2) * (1.0 - 1.0 / m)).min(most(step, alike))));
             }

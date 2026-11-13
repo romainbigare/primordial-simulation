@@ -2,7 +2,8 @@
 //! and hold parts.
 
 use pcore::bond;
-use pcore::body::{die, Body, COOL_T, COPY_MASS, HEAT, LACK, STRENGTH};
+use pcore::body::{die, Body, COOL_T, COPY_MASS, HEAT, STRENGTH};
+use pcore::life::LACK;
 use pcore::brain;
 use pcore::chem::Phase;
 use pcore::life::Entry;

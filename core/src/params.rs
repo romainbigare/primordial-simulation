@@ -144,7 +144,7 @@ pub struct Physics {
     pub rho_pass: f64,
     /// Width of the passage a mover clears through bodies, m
     pub lane: f64,
-    /// Standard deviation of the near scale of the dispersal kernel, m (`copy::lot`)
+    /// Standard deviation of the near scale of the dispersal kernel, m (`life::lot`)
     pub kernel_near: f64,
     /// Standard deviation of the far scale of the dispersal kernel, m
     pub kernel_far: f64,
@@ -522,7 +522,7 @@ impl Config {
         require(p.channel_width > 0.0 && p.channel_depth > 0.0, || format!("channel_width ({}) and channel_depth ({}) must be above 0", p.channel_width, p.channel_depth))?;
         let floor = p.node_floor;
         require((0.0..1.0).contains(&floor), || format!("node_floor ({floor}) must be at least 0 and below 1"))?;
-        // The dispersal kernel's scales are lengths and its far share a share (`copy::lot`).
+        // The dispersal kernel's scales are lengths and its far share a share (`life::lot`).
         require(p.kernel_near > 0.0 && p.kernel_far > 0.0 && (0.0..=1.0).contains(&p.kernel_far_share), || format!("kernel_near ({}) and kernel_far ({}) must be above 0, kernel_far_share ({}) from 0 to 1", p.kernel_near, p.kernel_far, p.kernel_far_share))?;
         let light = p.light_yield;
         require(light > 0.0 && light <= 1.0, || format!("light_yield ({light}) must be above 0 and at most 1"))

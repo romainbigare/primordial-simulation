@@ -1,7 +1,8 @@
 //! Taking and giving: from the cell's ground (`take_node`), to it (`put`), from another body (`take_body`), and to
 //! another body (`give`), each by the intake law of bodies (`Body::wanted`).
 
-use crate::body::{self, Body, STRENGTH, TAKEN};
+use crate::body::{self, Body, STRENGTH};
+use crate::life::TAKEN;
 use crate::chem::{Chemistry, Phase, Stores};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
@@ -83,7 +84,7 @@ pub(super) fn take_node(w: &World, d: &mut Chunk, b: &mut Body, days: f64) {
     let edge = bond::edge(d.at(i), w, b).filter(|_| breaking > 0.0);
     let area = w.mesh.cells().area()[i];
     let (left, through) = match (&edge, &parts) {
-        (Some(e), Some(p)) => e.leaves(b.n(), d.at(i).cover.cut_by(chem, &w.cfg, p, e, area)),
+        (Some(e), Some(p)) => e.leaves(b.n(), e.cut_cover(chem, &w.cfg, (&d.at(i).cover, p), area)),
         _ => (1.0, 0.0),
     };
     if !body::pay(w, d, b, w.cfg.phys.c_handle * (bc.mass_of(&m) + bc.mass_of(&bulk)) + left * breaking) {

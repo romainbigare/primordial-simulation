@@ -932,7 +932,7 @@ eat with it at every sub-step after, whatever the step. A child has a body of
 provisions of the other stores in its parent's proportions (the key liquid × 10^`WET`, so children may be dry and
 dormant), its share of heat, and the genes plus noise. A node keeps half a child of brood per member
 (`copy::BROOD_HELD`), so its members' broods lie evenly between none and one child, as individuals' do. A share
-`DISPERSE` of the children disperses by the dispersal kernel (`copy::lot`): a lot starts at a point drawn evenly over
+`DISPERSE` of the children disperses by the dispersal kernel (`life::lot`): a lot starts at a point drawn evenly over
 its cell and moves by an offset drawn from a kernel of two scales, a near and a far one (Clark et al. 1999: most within
 tens of metres, a long tail to km). Each scale is an isotropic Gaussian, `Physics::kernel_near` and `kernel_far` m
 wide; the far one is drawn with the share `kernel_far_share`. The lot lands in the cell that holds the point (none: off
@@ -1119,7 +1119,7 @@ seeds fill it:
   out. The fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves in `seed::LOTS` (8) equal lots, each landing where the dispersal
-  kernel draws it, as children do (`copy::lot`, 4.2); the lots of a cell make a packet each (`seed::send`; what lands
+  kernel draws it, as children do (`life::lot`, 4.2); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
   `cover_mut`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening

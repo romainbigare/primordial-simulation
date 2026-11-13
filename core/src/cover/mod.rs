@@ -19,7 +19,7 @@ pub use grow::{live, step, Books};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub use stand::{height, loose_bins, stem, BINS};
 
-use crate::body::WET_TISSUE;
+use crate::life::WET_TISSUE;
 use crate::chem::Chemistry;
 use crate::units::MAX_SUBSTANCES;
 use serde::{Deserialize, Serialize};
@@ -191,22 +191,16 @@ impl Cover {
         if c > 0.0 { self.e / c } else { 0.0 }
     }
     /// The energy to break the share `f` of it, J: its soft tissue (as a body's, with its liquid) and its solids by
-    /// their breaking stresses (`body::solids_of`).
+    /// their breaking stresses (`life::solids_of`).
     pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, f: f64) -> f64 {
         f * self.solids(chem, cfg, p, |_| 1.0)[1]
     }
-    /// The share of the energy to break it, and of the force, that the edge `e` leaves: each material as `Edge::cut`
-    /// says for the depth of its layer, its volume over the cell's `area` m² (laws.md 3.3).
-    pub fn cut_by(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, e: &crate::bond::Edge, area: f64) -> f64 {
-        let [v, blunt] = self.solids(chem, cfg, p, |_| 1.0);
-        self.solids(chem, cfg, p, |k| e.cut(chem, k, v / area))[1] / blunt.max(1e-300)
-    }
-    /// What it is built of (`body::solids_of`), the energy to break substance `k` times `cut(k)`.
-    fn solids(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, cut: impl Fn(usize) -> f64) -> [f64; 2] {
+    /// What it is built of (`life::solids_of`), the energy to break substance `k` times `cut(k)`.
+    pub fn solids(&self, chem: &Chemistry, cfg: &crate::Config, p: &Parts, cut: impl Fn(usize) -> f64) -> [f64; 2] {
         let sum = |q: usize| self.mol.iter().map(|m| m[q]).sum::<f64>();
         let mm = p.mm(chem);
         let living = (0..SLOTS).map(|x| self.living(&mm, x)).sum();
-        crate::body::solids_of(chem, cfg, living, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum), cut)
+        crate::life::solids_of(chem, cfg, living, |s| p.sub.iter().position(|&q| q == s).map_or(0.0, sum), cut)
     }
     /// The reflectance of the cover of slot `x`: the mean of its solid parts' three bands, by volume.
     pub fn reflectance(&self, chem: &Chemistry, p: &Parts, x: usize) -> f64 {
@@ -267,7 +261,7 @@ pub fn built_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
 /// Genes `g` after one generation's mutation of size `size` (`Physics::cover_mut`): each moves by noise of its step
 /// times that, within its range.
 pub fn mutate(g: &[f32; NG], size: f32, r: &mut crate::rng::Rng) -> [f32; NG] {
-    std::array::from_fn(|q| (g[q] + crate::body::noise(r) * RANGE[q].0 * size).clamp(RANGE[q].1, RANGE[q].2))
+    std::array::from_fn(|q| (g[q] + r.near_normal() * RANGE[q].0 * size).clamp(RANGE[q].1, RANGE[q].2))
 }
 
 /// The cover of one starting kind (`Cover::root`), summed over the world for the shell: its slots, its cover (kg), its

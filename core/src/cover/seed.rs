@@ -18,7 +18,7 @@ pub struct Seed {
     pub heat: f64,
 }
 
-/// The whole lots the seeds of a slot's month go in: each lands at a point the dispersal kernel draws (`copy::lot`). It
+/// The whole lots the seeds of a slot's month go in: each lands at a point the dispersal kernel draws (`life::lot`). It
 /// sets the noise of where the seeds land, not the mean: in expectation they land as the kernel says, at any size of cell.
 pub(super) const LOTS: usize = 8;
 
@@ -27,7 +27,7 @@ pub(super) const LOTS: usize = 8;
 const STAYS_LEAST: f64 = 1e-9;
 
 /// Seeds of slot `x` (`mol` of each part, `heat` J, `genes`) shared out over the cells they land in, `lands` (cell,
-/// share; the lots of `copy::lot`), what stays in cell `i` last: each part as a packet of its own (`Seed`), the last taking
+/// share; the lots of `life::lot`), what stays in cell `i` last: each part as a packet of its own (`Seed`), the last taking
 /// what the others leave of each part and of the heat, so they hold all of it exactly.
 pub(super) fn send(c: &mut Cover, x: usize, (mol, heat): ([f64; NP], f64), genes: [f32; NG], (i, mut lands): (usize, Vec<(usize, f64)>)) {
     let stays = 1.0 - lands.iter().map(|l| l.1).sum::<f64>();

@@ -1,6 +1,6 @@
 //! The order of the laws: one world step is one month, a fixed list of passes, written once here (laws.md 0).
 
-use crate::{bond, change, check, flow, survey, world::World};
+use crate::{bond, change, check, flow, lanes, survey, world::World};
 
 /// The air runs in steps of this many days, a whole number of them in a month: each cell's exchange over a step is
 /// solved once and taken as linear in its air (`flow::air`), so a longer step smooths the seasons. The long-step test
@@ -97,6 +97,7 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
     pass(w, Stage::Flow, "liquid", &|w| flow::liquid(w, len as f64));
     if months.is_multiple_of(CREEP_MONTHS) {
         pass(w, Stage::Flow, "creep", &|w| flow::creep(w, (CREEP_MONTHS * len) as f64));
+        pass(w, Stage::Bodies, "lanes", &|w| lanes::regrow(w, (CREEP_MONTHS * len) as f64));
     }
     if months.is_multiple_of(REFRESH_MONTHS) {
         pass(w, Stage::Flow, "refresh", &flow::refresh);
