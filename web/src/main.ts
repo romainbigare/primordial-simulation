@@ -25,7 +25,7 @@ const LIVE_SIZE = 22;
  * default band). The first is the page's. */
 const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['None: 40° to 42.3°', '']];
 /** The large shapes a live island may have: a name, and the URL's word for it. The first is the page's. */
-const SHAPES: string[][] = [['One island', 'one'], ['Drawn from the seed', 'drawn']];
+const SHAPES: string[][] = [['Drawn from the seed', 'drawn'], ['One island', 'one']];
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
 

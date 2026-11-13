@@ -14,7 +14,7 @@ const SIDE: usize = 16;
 
 /// The world of the tape tests: seed 1, `SIDE` x `SIDE` cells.
 fn world() -> World {
-    worldgen::new_world(1, SIDE, SIDE)
+    worldgen::testkit::one_rise(1, SIDE, SIDE)
 }
 
 /// `months` months of `w`.

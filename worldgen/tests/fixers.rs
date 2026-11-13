@@ -11,7 +11,7 @@ fn fixers_of(w: &pcore::World) -> (usize, usize) {
 
 #[test]
 fn a_tenth_of_the_cover_starts_with_the_fixing_gene() {
-    let mut w = worldgen::new_world(1, 64, 64);
+    let mut w = worldgen::testkit::one_rise(1, 64, 64);
     pcore::step(&mut w);
     let line = life::seed(&mut w, LIGHT_ROW);
     let (on, all) = fixers_of(&w);
@@ -28,7 +28,7 @@ fn a_tenth_of_the_cover_starts_with_the_fixing_gene() {
 #[test]
 fn the_share_is_a_setting_of_the_start_and_zero_means_none() {
     for (share, want) in [(0.0, 0.0), (1.0, 1.0)] {
-        let mut w = worldgen::new_world(1, 32, 32);
+        let mut w = worldgen::testkit::one_rise(1, 32, 32);
         pcore::step(&mut w);
         life::seed_with(&mut w, LIGHT_ROW, &Seeding { fixers: share, ..Default::default() });
         let (on, all) = fixers_of(&w);

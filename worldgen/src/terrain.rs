@@ -116,14 +116,10 @@ pub fn new_map(seed: u64, map: Square) -> World {
     build(seed, map, chem, &init, Config::default())
 }
 
-/// A new island of one rise from a seed, its low ground away from land in coarse cells (`coarse_low`): terrain,
-/// chemistry 0, ground, liquid and air. One terrain, so its worn samples are found once.
-pub fn new_world(seed: u64, w: usize, h: usize) -> World {
-    new_island(seed, (w, h), Shape::One, Config::default())
-}
-
-/// `new_world` of `w × h` squares with the large shape `shape` (`space::rises`) and the settings `cfg`: its rows
-/// between the latitudes `Config::lat_south` and `lat_north`.
+/// A new island of `w × h` squares from a seed with the large shape `shape` (`space::rises`; `ew run` and the page draw
+/// it from the seed unless one rise is asked for) and the settings `cfg`, its rows between the latitudes
+/// `Config::lat_south` and `lat_north`, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry
+/// 0, ground, liquid and air. One terrain, so its worn samples are found once.
 pub fn new_island(seed: u64, (w, h): (usize, usize), shape: Shape, cfg: Config) -> World {
     let ((squares, terrain), (chem, init)) = (island_ground(seed, (w, h), shape), chemistry0());
     let map = coarse_low(seed, squares, &terrain, &cfg);

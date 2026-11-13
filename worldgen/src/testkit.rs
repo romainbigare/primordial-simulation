@@ -15,6 +15,13 @@ pub fn squares(seed: u64, w: usize, h: usize) -> World {
     crate::terrain::new_map(seed, crate::terrain::island(w, h))
 }
 
+/// An island of one rise in the middle of its map (`Shape::One`) of `w × h` squares from a seed, its low ground away
+/// from land in coarse cells (`terrain::new_island`): the world the tests of the laws stand on, as `ew run --shape one`
+/// makes it.
+pub fn one_rise(seed: u64, w: usize, h: usize) -> World {
+    crate::terrain::new_island(seed, (w, h), pcore::space::terrain::Shape::One, Config::default())
+}
+
 /// The sides, in cells, of the islands `island_with` tries, smallest first.
 const ISLAND_SIDES: [usize; 4] = [16, 24, 32, 48];
 
@@ -82,7 +89,7 @@ fn mild_world(side: usize) -> World {
 /// An island of `side` x `side` cells of seed 1 with the kind of `ew run` placed at its start as `ew run` places it
 /// (the soil, the light-eaters: `life::seed`), after `months` months.
 pub fn living(side: usize, months: u32) -> World {
-    let mut w = crate::new_world(1, side, side);
+    let mut w = one_rise(1, side, side);
     crate::life::soil(&mut w, &crate::chemistry0().1.soil);
     _ = crate::life::seed(&mut w, crate::life::LIGHT_ROW);
     (0..months).for_each(|_| pcore::step(&mut w));

@@ -22,7 +22,7 @@ pub fn record(rec: &mut Recorder, w: &mut World) {
 /// end.
 #[allow(dead_code)]
 pub fn run(seed: u64, side: usize, years: u64, rows: &[usize], set: impl Fn(&mut Config), each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
-    run_on(worldgen::new_world(seed, side, side), years, rows, set, each_year)
+    run_on(worldgen::testkit::one_rise(seed, side, side), years, rows, set, each_year)
 }
 
 /// As `run`, on the new world `w`.

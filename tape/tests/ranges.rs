@@ -285,7 +285,7 @@ const COUNTS: [&str; 1] = ["rivers"];
 /// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's steps `days` long.
 fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
     let mut years = vec![];
-    let w = worldgen::new_world(seed, STEP_SIDE, STEP_SIDE);
+    let w = worldgen::testkit::one_rise(seed, STEP_SIDE, STEP_SIDE);
     run_stepped(w, STEP_YEARS, &ONE, |_| {}, |w| pcore::step_with_air(w, days), |y, _, rec| {
         if y >= STEP_FROM {
             years.push(CLIMATE.map(|c| rec.last(c)));
