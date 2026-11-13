@@ -36,8 +36,8 @@ can hold. **A make of bed** is a kind of rock. **A push** is what drives a flow 
   without a rule that already holds the answer; small numbers (the last ten animals of a kind); the balance between
   plants and grazers; and people.
 - **A field is right for wild animals. It is not enough for people.** Houses, stores, tools and trade need single
-  things with a place and a life. People will need a second layer of single agents on top of the field. That layer
-  should be designed on paper before the field is built (section 4.8), so the field does not close the way to it.
+  things with a place and a life. People will need a second layer of single agents on top of the field (section
+  4.8). By the owner's decision no work goes into it before the animal layer is done.
 - **The natural world misses things that animals and people will need:** years that differ (today every year is the
   same year), a store of seeds on the ground, fresh water against salt water, fire, life in the water, soil that
   builds up, and useful rocks (ores, fuels, clay, salt). None is urgent for plants. Several decide whether farming,
@@ -46,8 +46,11 @@ can hold. **A make of bed** is a kind of rock. **A push** is what drives a flow 
   animals. That is less simple than it looks: the plants' month runs on the animals' machinery and must be cut free
   first. Done in the right order (section 8), a plants-only run stays the same to the last digit.
 - **The roadmap changes shape.** Not M0 to M8 on one growing code base, but layers, each ended by a picture the owner
-  can judge: finish nature, clean, what the land offers, animals as a field, the small game (god tools on a living
-  island), then people.
+  can judge. The owner's order: free the plants from the animals, delete the animals, build them again as a field;
+  beside it, nature goes on (the air and sunlight, the sorted start, worlds that differ). Then the small game, and
+  people after the animal layer. Section 7.1 is the one list of priorities, joined with the last session's handover.
+- **A thin contract between the land and the bodies** is the first step (section 4.9): what a cell shows, and four
+  ways to take from it and give to it, all through the books.
 
 ## 1. The shift: what changed
 
@@ -408,10 +411,68 @@ for each number. A member leaves a slot as an agent with its exact share of the 
 again by sums. The old code already has this mathematics (`nodes::Lot`, `nodes::rejoin`), and it has the queue that
 lands what crosses a cell in an order fixed by the data. That knowledge should be kept in writing.
 
-What I ask for now is small: **one page of design for this passage before the field is built** (a step of stage C
-or F1), so that the field's slots, counts and books are made in a way that an agent can leave and join. No code for
-it until the people stage. I cannot promise the field will carry people; I can only say that wild animals do not
-need more, and that the passage is the thing to get right.
+The owner's decision: people come after the animal layer is done, and no work goes into them before. Two things
+done for the animals also serve this passage, at no extra cost: counts that are real and split and join exactly
+(4.3), and the contract of 4.9, where a single agent is one more taker beside the field. I cannot promise the field
+will carry people; I can only say that wild animals do not need more, and that the passage is the thing to get right
+when its time comes.
+
+### 4.9 A contract between the land and the bodies
+
+The owner's idea: a layer between the natural world (plants and what the land holds) and the bodies, so that each
+side can change without the other. I looked at it with care. **It is a good idea, in a thin form.**
+
+**What the code has today.** The ground and the air already have such a contract: a body never touches them, it
+asks the cell's view of the store (`store::Moves`), which gives no more than is there and books both sides. The
+plants have none. Bodies reach into the cover's own numbers in eight places: `Cover::take`, `Cover::breaking`,
+`Cover::cut_by`, `cover::lose` (what movers break), `World::canopy` (hiding), and the cell's sums by position
+(`Life::sum(i)[1]` is mass, `[7]` is the energy to break). And the land reads the bodies the same way (the mass
+that holds the ground against the flow, the light kept). This is why the plants cannot be cut free in an hour.
+
+**The contract, as I would write it.** One small module that both sides use. Neither side uses the other.
+
+| Part | What it is | Who writes it | Who reads it |
+|---|---|---|---|
+| **What a cell shows** | Its layers of matter that can be taken: loose ground, remains, each slot of cover by the height it stands at, later the seeds on the ground and the standing liquid. For each: how much of each substance per m², its heat, and the energy to break a kg of it loose. And the place: ground warmth, depth of liquid, depth of snow, how hard it is to pass, how much it hides | the natural world, once a month, only if someone reads | every taker; the tape (this table **is** "what the land offers", section 6.1) |
+| **Take** | "I ask for this much of this layer." The answer is what is given, with its heat, and what breaking it costs | a taker | booked on both sides through the store |
+| **Give** | Matter and heat back to the ground: remains, droppings, seeds dropped | a taker | the same |
+| **Press** | Work spent on a cell breaks its cover by one law (what movers trample) | a taker | the same |
+| **What stands on a cell** | The mass on it, the light it catches and keeps | life (plants today, animals later) | Flow |
+
+Three rules make it honest:
+
+1. **It moves matter through the books, it holds no copy.** What a cell shows is read from the one source; a take
+   is a move in the store. Nothing can differ between the two sides (`CLAUDE.md` 3.1, 3.3).
+2. **It shares when takers ask for more than is there.** Each gets its share of what it asked for, so no cell is
+   overdrawn (`CLAUDE.md` 3.4). The order is fixed by the data.
+3. **It says when.** The cell shows itself as the month's start left it; takes land during the takers' month; the
+   cover feels the loss in its own next month.
+
+**What it gives.**
+
+- The plants build, run and are tested with no body code. The world with no taker is the plants-only world.
+- A **test taker** ("takes a tenth of the low layer each month") lets the cover's tests check what grazing does to
+  plants before any animal exists. It also keeps the door in use between the deletion and the new animals, so no
+  code lies unused.
+- The animals can be deleted, built again, and changed later without one edit in the cover or in Flow.
+- Later takers come through the same door: the animal field, single agents, a god's hand.
+- A test can guard it, as the word ban is guarded: no file of the natural world names a module of bodies.
+
+**Where it can go wrong.**
+
+- **Too much machinery.** Version 1 died of layers. This must be plain data and four functions, about 150 to 250
+  lines (est.), with no plug-in system and no switch. If it grows past that, it is wrong.
+- **Too narrow.** Not all that passes between land and bodies is food. Shade, shelter, snow, trampling, seeds
+  carried in a gut are in the table above because they are easy to forget. What is missing from the contract will be
+  taken behind its back.
+- **Fixed too early.** The first real taker (grazers) will show what is missing. The contract should change freely
+  until then: no old form kept.
+- **A cost with no taker.** The table of a cell is made only when a taker reads it, as the brains' features are
+  today.
+- **Blurred layers.** A grazer must be able to take the low leaves and not the trunk. So the cover shows itself by
+  slot and height, not as one mean of the cell (today a bite takes "all its parts in the field's proportions").
+
+So: yes. It is the right first step of "free the plants" (C1a), not an extra one.
 
 ## 5. What to be mindful of
 
@@ -439,8 +500,8 @@ need more, and that the passage is the thing to get right.
    to appear. The animals will look too stable until that is mended.
 8. **Threads.** A field makes this simple: one task per run of cells, movers gathered in cell order. The rule "one
    writer for each number" stays; the queue and its landing rounds go.
-9. **The people stage needs single agents** (section 4.8). Write the page on the passage between a slot and an
-   agent before the field's books are fixed.
+9. **The people stage needs single agents** (section 4.8). No work on it now. Keep counts real and exact, and keep
+   the contract (4.9) open to a taker that is one being.
 10. **Deleting first leaves a time with no animals on `main`,** and some unused doors (section 2.1). That is already
     so in practice (`--plants` everywhere). Tag the last commit that has them, and keep the description of what is
     worth building again.
@@ -464,7 +525,8 @@ Ranked by how much each one decides later. "Kind of work" says whether it is a l
 | 10 | **Patches inside a cell.** A cell's cover is one stack of layers over its deep ground. No cleared, burnt, grazed or tended patch | A field of crops is a patch of a cell. So is a burn scar or a grazing lawn | Law: a cell's land as a few tiles (the ground already has land, top and deep as tiles) | Before people |
 | 11 | **Cycles over thousands of years.** The carbon gas has no source (it settled near 260 ppm in older runs); the mineral washes to the sea and only fixers bring it back | A run of 5,000 years must not drift into ice or bare ground by a missing term | A check first: one run of 3,000 years, plants only, reading the gas and the mineral | In the clean-up, as a measure |
 | 12 | **Snow on food, and natural shelter.** A grazer reaches the cover under any depth of snow (only standing liquid hides it). No cave, no lee of a hill, no warmer air under tall cover: a body's heat reads the open ground alone | Winter is the hungry season because snow hides food; shelter in the cold was the old world's first failure (`docs/reports/m3.md`) | Law: reach under the soft cover, as under liquid; the warmth of a place inside a cell (the law inside a cell, 4.2) | With F1 and F3 |
-| 13 | **Sickness** (bodies inside bodies) | Plagues, medicine. The spec parks it | Later, as a field inside the animal field | After people |
+| 13 | **Worlds that differ in shape.** The land falls away from the middle of the map by one rule (`terrain::fall`), so every world is one island in the middle with small islands off its drowned coast | Several islands make kinds that differ from island to island, crossings, and later boats and far lands. A game wants each seed to give another world | Start condition (`space::terrain`): the fall from the middle becomes a drawn field of several rises, with channels of sea between; the share of land, the count of islands and their sizes drawn from the seed | In the nature track, after the air |
+| 14 | **Sickness** (bodies inside bodies) | Plagues, medicine. The spec parks it | Later, as a field inside the animal field | After people |
 
 ### 6.1 Counting what the land offers
 
@@ -481,84 +543,119 @@ year", "fresh water", "building stone", "good soil". From these one can say, bef
 grazers of 100 kg a valley can feed. That number is the check of section 4.7, and later the first estimate of how
 many people a land holds.
 
-## 7. The roadmap, revamped
+## 7. The roadmap
 
 The old milestones (M0 to M8) were steps of one growing agent world. The new road is by layers. Every stage ends
 with pictures at the owner's views and a short list of numbers in range. A stage that changes laws deletes what it
 replaces in the same merge.
 
-**The world's size.** Not a planet. The reference world is **one island or small continent in the planet's air**
-(the Wide band), 64 x 64 squares to judge by and 128 x 128 to show. The globe stays a climate test only (decision 3).
+**The world's size and shape** (the owner's decision). No globe. A world is a square map of **128 x 128 squares**
+(256 km a side), 64 to judge by; 256 or 512 at the very most. A world of 512 has 64 times the cells of a world of 64,
+so today it would cost about 64 times as much per year: sizes above 128 wait until speed is looked at. Worlds should
+differ as much as they can: one island, several, a ring, a long coast (section 6, item 13).
+
+**Speed** (the owner's decision): no target now. Build the most true, most interesting and best-made system; cut
+back when it has become too slow. Each merge still writes down its cost per year, so that the day of cutting back
+has numbers to cut by.
+
+### 7.1 The one list of priorities
+
+This list joins the handover of the last coding session (`review/orchestrator.md` on `main`) with this look. Two
+tracks run side by side, one helper each: **nature** (N) and **life** (L). The orchestrator does the docs between.
+
+| # | Track | What | Why here | From |
+|---|---|---|---|---|
+| 1 | L | **Free the plants.** The contract (4.9); the natural world's month stated on its own; the gate and the key numbers without animals (C1a, C1b of section 8) | The owner's first priority. It must be on `main` before item 2, so that the references move once, on a gate that no animal can fail | this look |
+| 2 | N | **The air's low cloud, then the air and sunlight to `main`.** A check on paper first (does a low cloud made by cooling from below give the pole its cloud and an ice line?), then the law, then the whole package in one merge. The references move once; tell the owner each value | The light sets how fast every plant grows (about 2.3 times slower with true light). Everything that feeds on plants is judged after it | handover 1 |
+| 3 | L | **Delete the old animals** (C1c), then the tree's tools and the small dead things (C2) | The owner's second priority. The test taker keeps the contract in use | this look |
+| 4 | — | **The spec and the docs say what is true** (C4, C5): no globe, the sizes, fields, the contract, this list. `review/` down to the handover and one roadmap | So that the next agent does not build toward a planet with cells that split | this look |
+| 5 | N | **The sorted start**, after the air: first main and a sorted world run side by side to year 300; then its kinds and stands; then its look. To `main` only when its pictures are at least as good | Asked for by the owner. Its gardens change with the light, so it follows item 2 | handover 2 |
+| 6 | L | **What the land offers, first part**: seeds that lie on the ground; snow that hides food; the contract's table recorded in the tape as the count of resources | The first animals read all three | this look |
+| 7 | L | **Grazers** (F1): the animal field with a few kinds of grazers, no eaters of animals, no movement | The owner's third priority: build again, one level at a time | this look |
+| 8 | N | **Worlds that differ**: several islands and other shapes from the seed; sizes to 128. The globe as a world leaves (`--globe`, `--fine`, its view on the page) | The owner's word on size and variety. After item 2, because the air's law is judged on the lifeless globe until it is merged | the owner; this look |
+| 9 | N | **Small things on the page**: the four commits on small plants (`wip/lakes`), reviewed with pairs; dark-red specks and blocky dark patches; straight shores; a program without ice where there is none | Fill-in work between packages | handover 3, 4 |
+| 10 | L | **Movement** (F2), then **eaters and the web** (F3) | | this look |
+| 11 | N | **Years that differ** (to study first), **a wet and a dry side** (the mean wind) | Animals look too steady without bad years; rain shadows make dry land | this look; handover 6 |
+| 12 | L | **Animals on the page** (F4): single animals and herds drawn from the field | The owner judges by pictures | this look |
+| 13 | both | **The small game** (G): god tools on the living island; fire as a law | A whole thing by itself, before people | this look |
+| 14 | N | **Channels that lay down their load** (plains, marsh, deltas), with grain sizes of loose ground and soil that builds up; then ice that cuts valleys; the exact solve of the surface's step; the True view's water | Large and already agreed to wait | handover 7; this look |
+| 15 | L | **Habits that are learned** (F5); life in the water; a term for saltiness | | this look |
+| 16 | — | **People** (P0, a design round with the owner, then P1 and on); useful rocks and metals with them; names (T) | After the animal layer is done, by the owner's word | this look |
+
+What the handover's list held that is no longer needed: its item 5 (run the slow tests of bodies before the next
+change of the laws for bodies). Those tests leave with the old animals; `tape/tests/scale.rs` stays and is run with
+item 3.
+
+Still asked of the owner by the handover, with no answer yet: do the summit lake of seed 1 at the 200 m bar and a
+lake's shore at the 5 m bar look right on the live page; does the pale rounded band round a summit lake bother them;
+does zooming and panning feel slower on their phone.
+
+### 7.2 The stages of the life track, with their gates
 
 | Stage | Goal | Ends when |
 |---|---|---|
-| **N. Nature, finished** (in work) | The air and sunlight; the sorted start; a wet and a dry side; mud and sand (plains, marsh, deltas); ice last | The orchestrator's list of section 5 is on `main` |
-| **C. The clean base** (section 8) | The natural world's month and its gate stand without animals; the tree's tools and the stale docs are out; the spec says what is true. The old animals themselves go here or at the start of F1 (decision 1) | a plants-only run the same to the last digit; the spec rewritten; `core` under about 11,000 lines once the animals are out |
-| **R. What the land offers** | Years that differ; seeds on the ground; a term for saltiness; snow on food; the count of resources in the tape and as maps | A map of "food for grazers" and of fresh water that reads right. Over 100 years, rain on land differs from year to year by 10% or more and the winter by 0.5 K or more (today 0.02% and 0.005 K), with the climate's key numbers still in their ranges |
-| **F1. Grazers** | The page on the passage to single agents (4.8). Then the animal field with a few kinds of grazers of different sizes, no eaters of animals, no movement between cells: plants and grazers hold each other | Rows 1 and 2 of 4.7 (the share eaten, the grazers' mass) in range for 500 years; numbers fall with body mass across the kinds (row 3); the books; the cost |
+| **C. The clean base** (section 8) | The contract; the natural world's month and its gate stand without animals; the old animals, the tree's tools and the stale docs are out; the spec says what is true | a plants-only run the same to the last digit through C1; the spec rewritten; `core` under about 11,000 lines |
+| **R. What the land offers** | Seeds on the ground; snow on food; the count of resources in the tape and as maps. Later: years that differ; a term for saltiness | A map of "food for grazers" and of fresh water that reads right. For years that differ: over 100 years, rain on land differs from year to year by 10% or more and the winter by 0.5 K or more (today 0.02% and 0.005 K), with the climate's key numbers still in their ranges |
+| **F1. Grazers** | The animal field with a few kinds of grazers of different sizes, no eaters of animals, no movement between cells: plants and grazers hold each other | Rows 1 and 2 of 4.7 (the share eaten, the grazers' mass) in range for 500 years; numbers fall with body mass across the kinds (row 3); the books; the cost |
 | **F2. Movement** | The flow between cells by what is sensed; dispersal; new kinds by the slot rule | Kinds sort by zone (row 5); the gain per member comes out nearly even between neighbour cells, without being put in; a wide ranger's mean latitude turns over the year more than a short ranger's (row 7) |
 | **F3. Eaters and the web** | Eaters of animals, eaters of remains; group size; overlap inside a cell | Rows 4 and 6 of 4.7; a kind dies out in one region and comes back from next door |
 | **F4. Animals on the page** | Single animals and herds drawn from the field, in the Earth style; the inspect panel | The owner sees a herd at the 200 m view, where its kind likes |
-| **G. The small game** | God tools on the living island: fire, flood, drought, raise land, add and remove life; save before each; "then and now" | An action has a result one can see after 50 years. This is a finished thing by itself (the spec's option 3) |
+| **G. The small game** | God tools on the living island: fire, flood, drought, raise land, add and remove life; save before each; "then and now" | An action has a result one can see after 50 years |
 | **F5. Habits** | Learned habits as a field (4.4, step two); day and night; life in the water | A habit spreads across the map faster than a gene, against a null run |
-| **P0. The people decision** | One design round with the owner: what a people-like kind needs beyond F5. My sketch: stores outside the body (a general law: some animals cache); ground that a kind changes (patches, item 10; some animals dam and dig); single agents and single things on top of the field (4.8) | A page of decisions, before any code |
-| **P1 and on** | Tending and stores; settlements; routes; then metals and fuels | Each with its own watch report |
-| **T. Names** (beside F4 and later) | The pattern finder and the library on what exists: biomes, kinds ("≈ deer"), later the rest | A person who does not know the project can say what they see |
+| **P. People** | After the animal layer. First one design round with the owner: stores outside the body; ground that a kind changes (patches); single agents and single things on top of the field (4.8) | A page of decisions, before any code |
 
-What changes in the spirit:
-
-- **G moves early.** A living island that one can poke is a good, whole thing. It also gives fire, flood and drought
-  a use long before people.
-- **Choose with brains is no longer the next big step.** It was the plan of October ("the only road to
-  settlements"). The reports since say small brains per node did not learn. The road now goes through an ecosystem
-  that stands (F1 to F3), then habits as a field (F5), then single agents only for the few who need them (P).
-- **The world search (M7) and random chemistries wait** until one world makes something worth searching for.
-- **Speed is a track of its own, with one number.** Flow is 80% of a plants-only year. At size 64 a year costs 1.5 s,
-  so 5,000 years take 2 hours; at 128, about 8 hours (est.). For the people stage that is too slow. The honest
-  options: Flow's own cost (the air's solve), cells of 4 km for the slow physics with the ground's samples staying
-  at 125 m, or an air that is solved less often when its inputs did not move. Measure, then choose. Target to agree
-  with the owner: **1,000 years of the 64 island in 10 minutes** (0.6 s a year), all layers.
-- **People will also need short time.** A person acts in hours and days and at metres; the world steps in months on
-  2 km. The single agents of 4.8 will need their own short steps in the few places where they are. That is a second
-  speed number, to set at P0.
+**Why R and F1 go side by side, and not one after the other.** R is a list of things the land should offer. Only
+two of them are read by the very first grazers: seeds that lie on the ground (a food that keeps) and snow that hides
+food (why winter is hungry). Those two come first (item 6). The rest of R does not block grazers: years that differ
+needs a study of its own, and saltiness, fire and life in the water matter later. If all of R had to be done before
+any animal, the animals would wait for months for things they do not read yet. And the first grazers will show what
+else the land must offer: it is better to learn that early. So: the two that F1 reads, then F1, with the rest of R
+going on beside it in the nature track.
 
 ## 8. The clean-up cycle
 
-Yes. Before animals, and before the spec misleads one more agent. In this order, each its own merge:
+Before the new animals, and before the spec misleads one more agent. Each step is its own merge.
 
 | Step | What | Check |
 |---|---|---|
-| C0 | **Wait for the two branches in flight** (the air and sunlight; the sorted start) or agree which files the clean-up may not touch (`flow/air/`, `chem/`, `cover/`, `worldgen/life/`) | no merge conflict by design |
-| C1a | **The natural world's month on its own.** State what a plants-only month runs, in today's order, without the bodies' modules: the cell sums the air reads, the cover's month and its seeds' landing, the release of the light set aside. Move the shared helpers to a neutral place. Plant kinds keep the numbers their draws are keyed by | `ew run --roster --plants` at sizes 22 and 32: `series.csv` the same to the last digit, before and after |
-| C1b | **The gate without animals.** The main guard and the key numbers plants-only (seven of the nine numbers stay as they are). The three thread tests of the natural world in `core/tests/threads.rs` stay and keep running | the fast suite passes with `--plants` worlds only |
+| C1a | **The contract and the natural world's month on its own** (4.9). The eight places where bodies reach into the cover become the contract's four verbs and its table. State what a plants-only month runs, in today's order, without the bodies' modules: the cell sums the air reads, the cover's month and its seeds' landing, the release of the light set aside. Move the shared helpers to a neutral place. Plant kinds keep the numbers their draws are keyed by. A test guards that no file of the natural world names a module of bodies | a plants-only world (`--roster --plants`) at sizes 22 and 32 gives the same `series.csv` to the last digit, before and after |
+| C1b | **The gate without animals.** The main guard and the key numbers plants-only (seven of the nine numbers stay as they are). The three thread tests of the natural world in `core/tests/threads.rs` stay. A test taker on the contract | the fast suite passes with plants-only worlds |
 | C1c | **Tag `animals-v2`, then delete the old animal world** (section 2.1): code, tests, tape columns, start rows, drawing, the pattern finder's three detectors. A short file keeps the anchored laws and what is worth building again (4.8) | as C1a, on every column that stays. `SNAPSHOT_VERSION` up |
-| C2 | **The tree's tools** (section 2.2): ids without serials; the most depth; the cases of cells finer than a square or a sample; the stale comments. And the small dead things of 2.3 and 2.4 | bit for bit |
-| C3 | **One helper per idea**, from the roadmap's section 8 and section 11 here: one solid surface of a cell (three formulas today); one heat capacity of a ground node (two); the light the cover catches (the air and the cover each have a law); one meaning of "sea"; seeds mixed by a real hash, not XOR; one name for one thing | bit for bit where no law changes; else its own law commit |
-| C4 | **The spec rewritten** to the present: sections 3 to 8 and 12 to 15 of `docs/handover.md` by the seven rules of 1.3 and the roadmap of 7; it says which document wins; `docs/laws.md` loses sections 3, 5, 6 and the body half of 4 (kept in the tag, and their anchored rows in a short file); `README.md` checked line by line | the list of section 11.2 is empty |
-| C5 | **`review/` down to two files**: the orchestrator's handover and one roadmap of what is open (this file's sections 6 to 9 can be its base). The older looks and both reports leave (git keeps them). `CLAUDE.md` section 1 points to what exists | a new agent reads under 15,000 words before work |
-| C6 | **Measures**, no code, made before C3 so that it has a base to compare with: one plants-only run of 3,000 years (item 11 of section 6); the cost per layer at sizes 32, 64, 128 | two tables in the handover |
+| C2 | **The tree's tools** (section 2.2): ids without serials; the most depth; the cases of cells finer than a square or a sample; the stale comments. And the small dead things of 2.3 and 2.4. The chemistry generator and its checks move to a branch | the same to the last digit |
+| C3 | **One helper per idea**, from the roadmap's section 8 and section 11 here: one solid surface of a cell (three formulas today); one heat capacity of a ground node (two); the light the cover catches (the air and the cover each have a law); one meaning of "sea"; seeds mixed by a real hash, not XOR; one name for one thing | the same to the last digit where no law changes; else its own law commit |
+| C4 | **The spec rewritten** to the present: sections 3 to 8 and 12 to 15 of `docs/handover.md` by the seven rules of 1.3, the contract and the list of 7.1; it says which document wins; `docs/laws.md` loses sections 3, 5, 6 and the body half of 4 (kept in the tag, and their anchored rows in a short file); `README.md` checked line by line | the list of section 11.2 is empty |
+| C5 | **`review/` down to two files**: the orchestrator's handover and one roadmap of what is open (this file's sections 6 to 8 can be its base). The older looks and both reports leave (git keeps them). `CLAUDE.md` section 1 points to what exists | a new agent reads under 15,000 words before work |
+| C6 | **Measures** before C3, so that it has a base to compare with: one plants-only world of 3,000 years (item 11 of section 6); the cost per layer at sizes 32, 64, 128 | two tables in the handover |
+
+The two branches that are parked (`wip/air-light`, `wip/sorted-start`) touch `flow/air/`, `chem/`, `cover/` and
+`worldgen/life/`. C1a touches `survey.rs`, `life/`, the cover's doors and the tests. They meet in the cover and in
+`tape/tests/ranges.rs`: C1a and C1b go to `main` first, and the parked branches merge `main` in.
 
 Two to three weeks with two helpers (est.). C1a is where a surprise can hide: it touches the order of the plants'
 month. If it cannot be made the same to the last digit, it becomes a change of its own, judged by the key numbers,
 and the owner is told.
 
 What I would **not** clean now: the chunks of `life/` that the cover runs on (the animal field will use them), the
-parts of a cell in Flow, the sleep of Change (it is used), the globe (decision 3), the thread tests of the natural
-world.
+parts of a cell in Flow, the sleep of Change (it is used), the thread tests of the natural world, and the round
+mesh in `space/`: the strip of the planet that gives an island its climate is built on it (`worldgen/src/planet.rs`),
+and the air's law is judged on a lifeless globe until it is on `main`. Only the globe as a world to play leaves
+(item 8 of 7.1).
 
-## 9. Decisions for the owner
+## 9. The owner's decisions
 
-1. **Delete the old animal world now** (with a tag), and build the animal field new? Or keep it on `main` until the
-   field replaces it? I recommend: do C1a and C1b now in any case (they free the natural world's gate), and delete
-   (C1c) when F1 is about to start, so that no door stays unused for long.
-2. **Animals as a field** (section 4), with no brain per animal in the first stages? I recommend: yes.
-3. **The globe:** keep it as a climate test only, or delete it and the `--fine` window with it? I recommend: keep the
-   test, delete `--fine`. It is the owner's word that the world need not be full scale.
-4. **The chemistry generator and richness checks:** move to a branch until a world search is near? I recommend: yes.
-5. **The order after the clean-up:** R (what the land offers) before F1 (grazers), or side by side? I recommend:
-   side by side, with "seeds on the ground" and "snow on food" first, since F1 reads both.
-6. **The small game (G) before people?** I recommend: yes.
-7. **The speed target** of section 7 (1,000 years of the 64 island in 10 minutes)?
+1. **The order:** free the plants from the animals, then delete the animals, then build them again safely. A thin
+   contract between the land and the bodies (4.9) is the first step of it.
+2. **Animals as a field.** Yes.
+3. **No globe.** A world of 128 x 128 is already very large for a game; 256 or 512 at the very most. Worlds should
+   differ as much as they can, with several islands among their shapes.
+4. **The chemistry generator and its checks move to a branch.** They make a chemistry of chance from a seed (its
+   elements, its substances and their numbers, its reactions) and test that it could carry a world (a liquid, a gas
+   that holds heat, a reaction that stores light, things that burn, a metal that heat can free). The spec planned
+   them for a far stage: many worlds, each with its own matter. No world uses them today: every world runs on the
+   one hand-made chemistry, and a chemistry of chance cannot grow life yet. They are not needed until then.
+5. **"What the land offers" beside the first grazers,** with the two pieces the grazers read coming first (7.2).
+6. **The small game before people.** People come after the animal layer is done.
+7. **No speed target now.** Build well; cut back when it has become too slow.
 
 ## 10. The measures behind this look
 

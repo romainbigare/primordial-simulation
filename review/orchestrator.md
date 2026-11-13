@@ -1,6 +1,8 @@
 # Handover to the next orchestrator
 
 For the next agent who leads the work. Simple English, as the owner asks. Read this first, then `CLAUDE.md`, then
+`review/next-phase.md` (the owner's decisions in its section 9, the one list of priorities in 7.1, the contract in
+4.9, the clean-up in 8), then
 `review/roadmap.md` (why the work has this shape, and section 10: where each stage stands), then `docs/laws.md`. The
 spec is `docs/handover.md`; where it and the code differ, the code and `docs/laws.md` are the truth. The other files
 in `review/` (`handover.md`, `plan.md`, `top-30.md`, `objects.md`, `big-look.md`) are older looks; this file and the
@@ -246,26 +248,41 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
 
 ## 5. What to do next, in order
 
-The session that wrote this ended by the owner's word. On main: the lakes' mend. Not reached: the air and sunlight
-with its ice, and the sorted start with its look (both parked with their notes in section 4, both asked for by the
-owner: "push everything to main when ready").
+The owner's order (`review/next-phase.md` section 9): free the plants from the animals, delete the animals, build
+them again as a field; beside it nature goes on. No globe as a world; a world is 128 x 128 squares, 256 or 512 at
+the very most, and worlds should differ in shape (several islands). No speed target now. People after the animal
+layer. The full list with its reasons is `review/next-phase.md` 7.1; two tracks side by side, one helper each.
 
+**Life track**
+1. **Free the plants** (`next-phase.md` 4.9 and 8, steps C1a and C1b): a thin contract between the land and the
+   bodies (what a cell shows; take, give, press; what stands on a cell), the natural world's month stated on its own
+   in today's order, the main guard and the key numbers without animals, a test taker. A plants-only world stays the
+   same to the last digit. To `main` before the air's package, so that the references move once on a gate that no
+   animal can fail.
+2. **Delete the old animals** (C1c: tag `animals-v2` first), then the tree's tools and the small dead things (C2).
+3. **What the land offers, first part**: seeds that lie on the ground; snow that hides food; the contract's table in
+   the tape as the count of resources.
+4. **Grazers** (F1), then movement (F2), eaters and the web (F3), animals on the page (F4); gates in
+   `next-phase.md` 7.2. Then the small game (god tools, fire).
+
+**Nature track**
 1. **The air's low cloud, then the air and sunlight to main.** A paper check first (does a low cloud made by cooling
    from below give the pole Earth's cloud share and liquid, and an ice line, without turning a number?), then the
    law on `wip/air-light`, then the whole package in one merge: the references move once, tell the owner each value.
 2. **The sorted start**, after the air (the light changes how fast every kind grows, so the gardens change): first
    the run to year 300 of section 4, then the nursery's kinds and stands, then the look. It goes to main only when
    its pictures are at least as good as main's.
-3. **The four commits on small plants** (`wip/lakes`): review each with pairs; take what looks better. With them or
-   after: the dark-red specks at the 200 m bar and the blocky dark patches at the 2 km bar.
-4. **Small faults of the shores** (section 4): the straight shores of the made ground; the pale band round a summit
-   pond if the owner minds it. The page's cut: a program without ice when no cell holds ice on water.
-5. Not run since the cover's law, by the owner's word "skip these slow tests just this once": the two slow learning
-   tests of `core/tests/choose.rs`, the slow test of `lots.rs` and of `tape/tests/scale.rs`. Run them on a quiet
-   machine before the next change of the laws for bodies.
-6. Wet and dry sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an
-   all-liquid, lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
-7. Channels that lay down their load (plains, marsh, deltas). The owner asked for wide deltas at some mouths, and
+3. **Worlds that differ**: several islands and other shapes drawn from the seed (the land falls from the middle of
+   the map by one rule today, `space::terrain` `fall`); the globe as a world leaves (`--globe`, `--fine`, its view
+   on the page). The round mesh stays: the planet's strip is built on it, and the air's law is judged on the
+   lifeless globe until it is on main.
+4. **Fill-in, on the page**: the four commits on small plants (`wip/lakes`), each reviewed with pairs; the dark-red
+   specks at the 200 m bar and the blocky dark patches at the 2 km bar; the straight shores of the made ground; the
+   pale band round a summit pond if the owner minds it; a program without ice when no cell holds ice on water.
+5. **Years that differ** (a study first: today rain on land changes by 0.02% from year to year), and wet and dry
+   sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an all-liquid,
+   lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
+6. Channels that lay down their load (plains, marsh, deltas). The owner asked for wide deltas at some mouths, and
    agreed to wait if it is a big change: it is. A true delta's size is the load that reached the mouth over the depth
    of the water there (Gilbert 1885; Galloway 1975), so it shows where a river of much load meets shallow calm water
    and not elsewhere. Today the made ground holds a fan under water at a mouth (`space::shelf`), the running world's
@@ -273,6 +290,11 @@ owner: "push everything to main when ready").
    mouth below the cell's size, the fan's top reaches the water's level, the tiles split the channel over it
    (Edmonds and Slingerland 2007), plants take it. Also: ice that cuts valleys; the exact solve of the surface's
    step by pieces; the True view's water.
+
+**The orchestrator, between packages**: the spec and the docs say what is true (`next-phase.md` 8, steps C4 and C5).
+
+The slow tests of bodies that were skipped once (`core/tests/choose.rs`, `lots.rs`) leave with the old animals;
+`tape/tests/scale.rs` stays and is run with the deletion.
 
 ## 6. The live world for the owner
 
