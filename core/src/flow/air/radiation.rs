@@ -39,6 +39,53 @@ pub fn on_slope(sun: [f64; 2], rise: f64) -> f64 {
     (sun[0] + rise * sun[1]).max(0.0)
 }
 
+/// The sun's mean height over the hours it is up at latitude `lat`, radians, on the days of declinations `decl`: the
+/// mean sine of its elevation over those hours (the daily sunlight, `sun_by_latitude`, over the top's `s0` times the
+/// share of the day it is up), the slant its light takes through the air being 1 / that. 1 (overhead) where it never
+/// rises.
+pub fn sun_height(s0: f64, lat: f64, decl: &[f64]) -> f64 {
+    let (mut q, mut up) = (0.0, 0.0);
+    for &d in decl {
+        let day = sun_by_latitude(s0, lat, d)[0];
+        let h0 = (-lat.tan() * d.tan()).clamp(-1.0, 1.0).acos();
+        (q, up) = (q + day, up + s0 * h0 / PI);
+    }
+    if q > 0.0 { (q / up).clamp(f64::MIN_POSITIVE, 1.0) } else { 1.0 }
+}
+
+/// The slant of light that leaves a surface diffuse, on its way through the air: the mean of 1 / cos over a hemisphere
+/// weighted by cos, as the two-stream methods take it (Elsasser's diffusivity factor 1.66).
+const DIFFUSE: f64 = 1.66;
+
+/// What a column of air does to sunlight (laws.md 1.4), per unit of the light that enters it: on the way down along the
+/// sun's slant, then on the way up as diffuse light of what the surface reflects (`DIFFUSE`), each pass [absorbed by its
+/// gases, passed].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Column {
+    down: [f64; 2],
+    up: [f64; 2],
+}
+
+impl Column {
+    /// The column whose gases absorb with the optical depth `absorbs(slant)` on a path `slant` times its height
+    /// (`Chemistry::sun_depth` of the amount on the path), under the sun's mean height `mu` (`sun_height`).
+    pub(crate) fn of(absorbs: impl Fn(f64) -> f64, mu: f64) -> Column {
+        let pass = |slant: f64| {
+            let gone = one_minus_exp(absorbs(slant));
+            [gone, 1.0 - gone]
+        };
+        Column { down: pass(1.0 / mu), up: pass(DIFFUSE) }
+    }
+
+    /// Per unit of the sunlight that enters it at the top, over a surface that reflects the share `alb`: [what reaches
+    /// the surface; what the air absorbs, on the way down and of what the surface reflects; what goes back to space].
+    /// What the surface absorbs, (1 − `alb`) of the first, and the other two add up to 1.
+    pub(crate) fn shares(&self, alb: f64) -> [f64; 3] {
+        let ([a1, t1], [a2, t2]) = (self.down, self.up);
+        [t1, a1 + a2 * alb * t1, t2 * alb * t1]
+    }
+}
+
 /// Layers of the air in `column`.
 pub(crate) const LAYERS: usize = 2;
 
@@ -178,7 +225,7 @@ impl Surface<'_> {
 #[cfg(test)]
 mod tests {
     use super::super::super::scratch::Latent;
-    use super::{Air, Surf, Surface, NONE};
+    use super::{Air, Column, Surf, Surface, NONE};
     use crate::units::{DAY, MAX_SUBSTANCES, SIGMA};
 
     /// A ground node of 1 m² at the melting point `tm` that holds `fusion` J of the plateau's substance, `phi` of it
@@ -224,6 +271,24 @@ mod tests {
             let want_ts = share * held + (1.0 - share) * after;
             assert!((ts - want_ts).abs() < 1e-9 * TM, "sun {sun}: the surface {ts} K, the plateau then the rest {want_ts} K");
             assert!((q_all - (q.signum() * used + q_rest)).abs() < 1e-9 * q.abs(), "sun {sun}: {q_all} J, the plateau's {used} J and the rest's {q_rest} J");
+        }
+    }
+
+    /// What reaches the surface and is absorbed there, what the air absorbs and what goes back to space make up all the
+    /// sunlight that enters a column, to rounding, whatever the column, the sun's height and the surface's reflectance;
+    /// a surface that reflects more leaves more of the light to the air on its way back up.
+    #[test]
+    fn a_columns_sunlight_closes() {
+        for (depth, mu) in [(0.0, 0.5), (0.05, 0.3), (0.2, 0.7), (3.0, 1.0)] {
+            let c = Column::of(|slant| depth * slant.sqrt(), mu);
+            let mut was = f64::NEG_INFINITY;
+            for alb in [0.0, 0.1, 0.5, 0.9] {
+                let [ground, air, space] = c.shares(alb);
+                let all = ground * (1.0 - alb) + air + space;
+                assert!((all - 1.0).abs() < 1e-12, "depth {depth}, mu {mu}, reflectance {alb}: {all}");
+                assert!(air >= was, "the air absorbed less over a brighter surface: {air} after {was}");
+                was = air;
+            }
         }
     }
 }

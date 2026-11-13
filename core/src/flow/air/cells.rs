@@ -33,11 +33,12 @@ pub(super) const LINK: usize = 1;
 pub(super) const SPACE: usize = 2;
 pub(super) const UP: usize = 3;
 /// The outputs that do not: the sunlight it absorbs, J; the light per unit of its cover's capture area, J/m²; the light
-/// set aside for its cover, J.
+/// set aside for its cover, J; the sunlight the air over it absorbs on its way down and back up, J (`Column::shares`).
 pub(super) const SUN: usize = 0;
 pub(super) const LIGHT: usize = 1;
 pub(super) const KEPT: usize = 2;
-pub(super) const FIXED: usize = 3;
+pub(super) const AIR_SUN: usize = 3;
+pub(super) const FIXED: usize = 4;
 /// The parts the changing outputs are made of (`put`), each laid out as an output is: the heat the cell gives its air
 /// node and the heat it sends to space, J (`Balance`), then what evaporates of each active gas, mol.
 pub(super) const TO_AIR: usize = 0;
@@ -54,6 +55,8 @@ pub(super) struct Ctx<'a> {
     pub(super) x0: &'a [f64],
     pub(super) dt: f64,
     pub(super) decl: &'a [f64],
+    /// What the air of each node does to sunlight (`Column`)
+    pub(super) light: &'a [super::radiation::Column],
 }
 
 /// Each cell's response to the air it sees: per cell the fixed outputs, then, of a cell alone, each changing output's
@@ -114,6 +117,10 @@ impl Response {
         }
         for p in &self.patches {
             add(w.mesh.cells().parent()[p.cells[0] as usize] as usize, &p.out, &mut p.sees.iter().map(|&(at, wt)| (at as usize, wt)));
+        }
+        // The sunlight the air of each node absorbs over its cells: a gain the air it sees does not move.
+        for j in 0..air.n() {
+            g.base[j * outs] += air.children(j).iter().map(|&i| self.rows[i as usize * width + AIR_SUN]).sum::<f64>();
         }
         g
     }
@@ -209,7 +216,7 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
     for p in &patches {
         for (&i, share) in p.cells.iter().zip(p.share.chunks_exact(1 + nx)) {
             let heat = share[0];
-            rows[i as usize * width..i as usize * width + FIXED].copy_from_slice(&[p.fixed[SUN] * heat, p.fixed[LIGHT], p.fixed[KEPT] * heat]);
+            rows[i as usize * width..i as usize * width + FIXED].copy_from_slice(&[p.fixed[SUN] * heat, p.fixed[LIGHT], p.fixed[KEPT] * heat, p.fixed[AIR_SUN] * heat]);
         }
     }
     Response { nx, rows, seen, patches, alone, wet }
@@ -300,8 +307,10 @@ pub(super) struct Work {
 }
 
 /// The exchange of the ground `g` over the step under the air it sees, `air` (its temperature, K, then each active gas,
-/// mol): into `work`, its parts (`put`) and what each mol of each gas carries (`carried`); returned, its fixed outputs. Sunlight past the clouds, what the cover intercepts less the share its light reaction
-/// stores (set aside for it, laws.md 1.4); the surface balance with what evaporates, by Newton's steps about its end
+/// mol): into `work`, its parts (`put`) and what each mol of each gas carries (`carried`); returned, its fixed outputs.
+/// Sunlight past the clouds and through the air of its node, down and back up over what the surface and its cover
+/// reflect (`Column::shares`), what the cover intercepts less the share its light reaction stores (set aside for it,
+/// laws.md 1.4); the surface balance with what evaporates, by Newton's steps about its end
 /// temperature, under the reflectance its surface has at the step's start; where a soft cover lies, under the
 /// reflectance it ends the step with, as backward Euler takes it (`end_reflectance`): from the start's, each guess
 /// followed to the end it gives, and halved between two once a guess and its end cross, until they agree, so a cover
@@ -310,13 +319,18 @@ pub(super) struct Work {
 pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64; FIXED] {
     let (w, s, dt, act) = (cx.w, cx.s, cx.dt, cx.act);
     let (na, j, area) = (w.mesh.level(AIR).n(), g.j, g.area);
-    let (adt, tl, sun) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun * (1.0 - s.state.cloud[j][0]));
+    let (adt, tl, top) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun * (1.0 - s.state.cloud[j][0]));
     let a = g.canopy;
     let cover = if a > 0.0 { one_minus_exp(a) } else { 0.0 };
     let caught = cover * g.absorb;
-    // Per unit of capture area the cover intercepts cover / a of the light, all of it where it is thin.
-    let kept = sun * caught * g.keep;
-    let sw = |alb: f64| sun * ((1.0 - cover) * (1.0 - alb) + caught) - kept;
+    // Under the reflectance `alb` of its ground, the share its cover and ground reflect, and the column's shares of the
+    // light past the clouds (`Column::shares`).
+    let shares = |alb: f64| cx.light[j].shares((1.0 - cover) * alb + cover * (1.0 - g.absorb));
+    // The sunlight that reaches it, in all its passes; per unit of capture area the cover intercepts cover / a of it,
+    // all of it where it is thin.
+    let sun = |alb: f64| top * shares(alb)[0];
+    let kept = |alb: f64| sun(alb) * caught * g.keep;
+    let sw = |alb: f64| sun(alb) * ((1.0 - cover) * (1.0 - alb) + caught) - kept(alb);
     let (f, lay) = (s.absorbs[j], &s.lay[j][0]);
     let rad = Air { tl, f, down: glow(f, tl, lay), slope: glow_slope(f, tl, lay) };
     // The share of the air it sees that lies over it (`over_cell`).
@@ -391,6 +405,6 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     }
     hold(cx, g, (air, adt * sw(alb)), carry, (p, loss));
     let per_area = if cover > 0.0 { cover / a } else { 1.0 };
-    [adt * sw(alb), sun * per_area * dt, kept * adt]
+    [adt * sw(alb), sun(alb) * per_area * dt, kept(alb) * adt, adt * top * shares(alb)[1]]
 }
 

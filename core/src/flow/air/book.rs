@@ -5,7 +5,7 @@
 use super::super::{follow, year_weight, Scratch};
 use super::super::parts::{after_air, LAND, TOP};
 use super::super::potential::apply;
-use super::cells::{Response, KEPT, LIGHT, LINK, SPACE, SUN, UP};
+use super::cells::{Response, AIR_SUN, KEPT, LIGHT, LINK, SPACE, SUN, UP};
 use super::daily::Mean;
 use super::rain::Landed;
 use super::exchange::cloud;
@@ -33,7 +33,7 @@ pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
 /// step's mean air (`Response::booked`, the law the air's days summed); over the links to each node it sees its rain
 /// (`rain`, per active gas (cell, node, mol)), reaching it at the temperature of the air touching it (`touching`), the
 /// air paying what warms it on the way down, frozen or liquid as the node's days rained it; the sunlight it absorbs and keeps
-/// for its cover, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and
+/// for its cover, the sunlight its air absorbs, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and
 /// falls (`potential`). Then what each part of a cell of parts gained (`parts_moved`), the light on the cover, the clouds of
 /// what rained (which the next step's sunlight passes), and the tape's rain and evaporation.
 pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Active], &Response, &[Landed]), mean: &Mean, dt: f64) {
@@ -68,14 +68,20 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
             kept.link((sun, i), response.fixed(i, KEPT));
         }
     }
-    let mut sky = Batch::new([Class::Air, Class::Boundary], &[]);
+    let (mut sky, mut aired) = (Batch::new([Class::Air, Class::Boundary], &[]), Batch::new([Class::Boundary, Class::Air], &[]));
     for (j, &q) in mean.space.iter().enumerate() {
         sky.link((j, space), q);
+    }
+    // The sunlight each node's air absorbs over its cells (`Column::shares`).
+    let mut air_sun = vec![0.0; na];
+    (0..n).for_each(|i| air_sun[parent[i] as usize] += response.fixed(i, AIR_SUN));
+    for (j, &q) in air_sun.iter().enumerate().filter(|e| *e.1 > 0.0) {
+        aired.link((sun, j), q);
     }
     let up = LinkFlux { class: [Class::Ground, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &link };
     let m = &mean.moved;
     let wind = LinkFlux { class: [Class::Air, Class::Air], a: &m.a, b: &m.b, ks: &gases, mol: &m.mol, heat: &m.heat };
-    let mut fluxes = vec![up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()];
+    let mut fluxes = vec![up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux(), aired.flux()];
     let edges = edges(w, &mean.edges, &gases);
     if let Some((outside, heat)) = &edges {
         let e = &mean.edges;

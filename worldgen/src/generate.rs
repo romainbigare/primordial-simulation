@@ -75,6 +75,8 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
                 refl: [band(&mut r, 1.0), band(&mut r, 0.3)],
                 ir_abs: if boil < T_SURF && used.len() >= 2 && n >= 3.0 { 10f64.powf(-3.0 + 2.0 * r.f64()) } else { 0.0 },
                 ir_sat: 0.0,
+                sw_abs: 0.0,
+                sw_sat: 0.0,
                 solubility: r.f64().powi(3),
                 conductivity: if melt > T_SURF { 0.5 + 60.0 * coh * coh } else { 0.03 },
                 hf: -120e3 * n * spread * (0.4 + 0.7 * r.f64()),

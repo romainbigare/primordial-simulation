@@ -10,7 +10,7 @@ use super::cells::{respond, Ctx};
 use super::rain::{landed, wet};
 use super::daily::run;
 use super::surf::patches;
-use super::radiation::declination;
+use super::radiation::{declination, sun_height, Column};
 use crate::{store::Class, units::DAY, World, AIR};
 
 /// The saturation tables reach this far above the warmest node at a step's start, K: no node warms more in a step.
@@ -43,13 +43,28 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let t0: Vec<f64> = (0..na).map(|j| air_temp(w.store.heat(Class::Air)[j], s.state.gas.iter().map(|&k| w.store.amounts(Class::Air)[k * na + j] * s.sp[k].cp).sum())).collect();
     let x0: Vec<f64> = act.iter().flat_map(|ac| w.store.amounts(Class::Air)[ac.k * na..(ac.k + 1) * na].iter().copied()).collect();
     let room = std::mem::take(&mut s.spare.response);
-    let cx = Ctx { w, s, act: &act, t0: &t0, x0: &x0, dt, decl: &decl };
+    let light = columns(w, s, &decl);
+    let cx = Ctx { w, s, act: &act, t0: &t0, x0: &x0, dt, decl: &decl, light: &light };
     let response = respond(&cx, &patches, room);
     let ground = response.ground(&cx, wet(w, s, &act, &t0, &patches));
     let mean = run(w, s, &act, &ground, dt);
     let rain = landed(&act, ground.wet(), &mean);
     book(w, s, (&act, &response, &rain), &mean, dt);
     s.spare.response = response.rows();
+}
+
+/// What the air of each node does to sunlight over the step (`Column`): its gases that absorb it, per m² of the node
+/// (`Chemistry::sun_depth`), under the sun's mean height at its latitude (`sun_height`).
+fn columns(w: &World, s: &Scratch, decl: &[f64]) -> Vec<Column> {
+    let (air, chem) = (w.mesh.level(AIR), &w.chem);
+    let na = air.n();
+    let lit: Vec<usize> = s.state.gas.iter().copied().filter(|&k| chem.subs[k].sw_abs > 0.0).collect();
+    (0..na)
+        .map(|j| {
+            let cols: Vec<(usize, f64)> = lit.iter().map(|&k| (k, w.store.amounts(Class::Air)[k * na + j] / air.area()[j])).collect();
+            Column::of(|slant| cols.iter().map(|&(k, c)| chem.sun_depth(k, c * slant)).sum(), sun_height(w.cfg.sun, air.lat()[j].to_radians(), decl))
+        })
+        .collect()
 }
 
 /// The gases that leave the ground or may condense (not those of `henry`, which dissolve), with their saturation

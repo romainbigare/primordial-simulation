@@ -508,7 +508,14 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   r the cell's mean rise toward the south (section 0), the equivalent latitude of Lee (1962) and Swift (1976) in plan form. An
   hour a face turns away from the sun counts against it, as the shadow it casts on the ground beyond, so the beam is
   kept whatever the slopes; a cell whose day sums below zero takes none (the one place a square and its cells differ).
-  A cell under a body's level (1.2) lies level and takes the flat sun. All the sunlight that passes the clouds is taken as beam:
+  A cell under a body's level (1.2) lies level and takes the flat sun. **Through the air** (`radiation::Column`, read
+  by the surface's step and by the books alike): past the clouds, the gases of its air node absorb sunlight with the
+  optical depth of the amount on its path (`Chemistry::sun_depth`: `sw_abs` a mol/m², past `sw_sat` as the square root
+  of the amount, the form of their heat radiation), on the way down along the sun's slant, 1 / its mean height over
+  the hours it is up (`sun_height`), and of what the surface and its cover reflect on the way back up as diffuse
+  light (slant 1.66, Elsasser's diffusivity factor). What the air absorbs warms its node (booked from the sun to the
+  air, and summed into its days as a gain the air does not move); what reaches the surface, the surface's balance
+  takes; what passes back up leaves to space. The three add up to what came in, to rounding. All the sunlight that passes the clouds is taken as beam:
   a cloud is one reflectance, with no share of the sky it covers, so what passes it cannot be split into beam and
   diffuse; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
   with the slope with latitude found beside the daily mean, once per latitude. The surface reflects as its cover is at the step's start (`land::reflectance`),

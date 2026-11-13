@@ -45,6 +45,11 @@ struct S {
     /// mol/m² (`Substance::ir_sat`); optional in the file (none: 0, the optical depth always in proportion)
     #[serde(default)]
     sat: f64,
+    /// m²/mol and mol/m² (`Substance::sw_abs`, `sw_sat`); optional in the file (none: 0)
+    #[serde(default)]
+    sw: f64,
+    #[serde(default)]
+    swsat: f64,
     sol: f64,
     cond: f64,
     hf: f64,
@@ -114,6 +119,8 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             refl: s.refl,
             ir_abs: s.ir,
             ir_sat: s.sat,
+            sw_abs: s.sw,
+            sw_sat: s.swsat,
             solubility: s.sol,
             conductivity: s.cond,
             hf: s.hf * 1000.0,

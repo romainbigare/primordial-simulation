@@ -51,6 +51,10 @@ pub struct Substance {
     pub ir_abs: f64,
     /// Column amount past which absorption grows as the square root (bands fill up), mol/m²; 0: never
     pub ir_sat: f64,
+    /// Absorption of sunlight per column amount (m²/mol), gas only, and the column amount past which it grows as the
+    /// square root, mol/m² (0: never)
+    pub sw_abs: f64,
+    pub sw_sat: f64,
     /// Solubility in liquids: the mole fraction that dissolves (a gas: alone at the reference pressure, `T_SOL`)
     pub solubility: f64,
     /// Heat conductivity of the solid, W/(m K)
@@ -216,6 +220,8 @@ impl Chemistry {
             require(s.lv > 0.0, || format!("substance {k}: vaporisation enthalpy must be above 0"))?;
             require(s.density.iter().all(|&d| d > 0.0), || format!("substance {k}: densities must be above 0"))?;
             require(s.dense > 0.0 && s.dense_drop >= 0.0, || format!("substance {k}: the temperature of its densest liquid must be above 0, its lowering not below"))?;
+            let light = [s.ir_abs, s.ir_sat, s.sw_abs, s.sw_sat];
+            require(light.iter().all(|&x| x >= 0.0 && x.is_finite()), || format!("substance {k}: its absorption of light must be finite and not below 0"))?;
         }
         // Each reaction, then each conversion: a conversion needs inputs and a product, a reaction no more orders than
         // inputs. Its molar masses must agree with its elements to rounding: it keeps mass.

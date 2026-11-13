@@ -104,3 +104,17 @@ fn the_liquid_freezes_lower_by_what_is_dissolved_in_it() {
     a[LIQUID] = 0.0;
     assert_eq!(chem.melt_in(LIQUID, |k| a[k]), melt);
 }
+
+/// A gas absorbs sunlight as it absorbs heat radiation (`Chemistry::sun_depth`): in proportion to the amount on the
+/// path up to its band's column `sw_sat`, past it as the square root of the amount. In chemistry 0 the liquid's vapour
+/// does, and no other gas.
+#[test]
+fn the_vapour_absorbs_sunlight_as_its_bands_fill() {
+    let (chem, _) = worldgen::chemistry0();
+    let s = &chem.subs[LIQUID];
+    assert!(s.sw_abs > 0.0 && s.sw_sat > 0.0);
+    let d = |c: f64| chem.sun_depth(LIQUID, c);
+    assert!((d(0.5 * s.sw_sat) - 0.5 * d(s.sw_sat)).abs() < 1e-15 * d(s.sw_sat), "not in proportion below its band");
+    assert!((d(4.0 * s.sw_sat) - 2.0 * d(s.sw_sat)).abs() < 1e-12 * d(s.sw_sat), "not the square root past its band");
+    assert!((0..chem.ns()).filter(|&k| k != LIQUID).all(|k| chem.sun_depth(k, 1e5) == 0.0));
+}
