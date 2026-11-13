@@ -285,10 +285,34 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     Main's grey air with the same two laws freezes to 34°: the package goes to main whole. Known: the globe's polar
     ice grows without end (40 m in 40 years); three key numbers leave their ranges on the package (land 287.88 K,
     swing 11.93 K, cover 9.43); `the_long_step_keeps_the_climate` fails on its count of river cells.
-  - In work: the last round before the merge (a Wide island for 150 years, is its ice bounded; the long step's
-    rivers measured as water; every check again on the merged branch; what the package changes for the owner's
-    worlds; pictures on matching days). No cloud law and no law of the liquid's reflectance without the
-    orchestrator's word.
+  - The package is whole on the branch `wip/air-heat` (pushed; head 5419dbd, `SNAPSHOT_VERSION` 136): on a Wide
+    island its ice is bounded (0.5 to 1.3 m of ice on the low ground's liquid in the far north, steady from the
+    second decade) where main's grows without end (21 m, 166 m of soft solid on one cell, the low liquid down
+    24.5 m in 150 years); the island is green to its north shore in summer; the warm south holds half of main's
+    cover and does not catch up by year 100. The key numbers' seven references are set there to the package's own
+    means (land 287.88 K, swing 11.93 K, rain 2.488e-3, gas 353.5 ppm, river cells 236.3, worn 0.2142 mm/yr, cover
+    9.428), told to the owner. `the_long_step_keeps_the_climate` holds the river cells' summed flux now, not their
+    count (told to the owner), and **fails on it by its own rule: +1.32% against 0.76%** (the 15-day step
+    evaporates about 0.7% less on land): this alone holds the package off main.
+  - The cause, measured (`scratchpad/air2/numbers/`): the rain of a 15-day step lands as one pulse at its end, so the
+    ground dries for the whole step and the pulse pushes more past field capacity (land runoff +0.90%, evaporation
+    -0.67%). With the step's rain spread in the bucket the runoff is off by +0.16%. The river cells' flux adds a
+    threshold on top: one cell of seed 3 at the floor adds about +1.2% alone.
+  - Decided: no second pass of the air and no cloud of the step itself (the air's cost may not double);
+    `AIR_STEP_DAYS` stays 15 (one step a month moves the warmest month by +0.90 K); the balance solved exactly by
+    pieces stays parked on the local branch `surface-exact` (31eb1d1: right for the temperature, but it raises the
+    long step's water cycle by 0.3 to 0.4%).
+  - In work, on the branch `surface-step` (ec2f531, main merged in, `SNAPSHOT_VERSION` 137), by the same helper;
+    scratch `scratchpad/air2/`: (1) `snapshot_round_trip_at_every_month` fails after the merge (a cell fully under
+    liquid keeps about 1e-10 J in its empty land part, and a loaded world steps it differently): its cause mended;
+    (2) the step's rain lands in the bucket through the step, in one pass; (3) `daily.rs` gives `rain_air` the
+    ratio, not rain times ratio; (4) the long step's test may hold the land's runoff (`runoff_sea`) in place of the
+    river cells' flux, only if the law before the mend still fails it. Then the globe, the cost, the references
+    set once more, pictures, and the package goes to main whole.
+  - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
+    through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
+    map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's
+    word.
   - Found on the way: on the globe the polar band's ground gains 0.65 m of liquid a year (rain that lands in a
     neighbour's row and is not levelled back); and the fixed liquid reflectance (0.079) is above Fresnel's for a
     high sun: the tropics would absorb 7 to 8 W/m² more with the true one, the pole 1 to 7 less.
@@ -302,10 +326,34 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   and 32 among them (picture: `scratchpad/islands/round2/km/`); flat shelves with straight edges show on some 128
   worlds; land reaches the map's edge in a few. Found on the way, not of that work: the rain over open liquid shows
   a checkerboard in the planet's air.
-- In work, life track: what the land offers, first part (seeds that lie on the ground as lots that sprout by the
-  ground's state and die as dormant tissue; snow that hides what a taker could take; two map layers, the seeds and
-  the year's growth), by the life helper in its worktree; law changes, so the key numbers are measured and no
-  reference is moved without the orchestrator.
+- On main, life track: seeds lie on the ground (lots of the cover that wake by the ground's state, wear at the
+  dormant floor and freeze below their hardened limit; `core/src/cover/kin.rs` is the one joining rule of slots and
+  lots), the soft solid on a cell hides what lies under it from a taker (`contract::Place` holds its depth), and two
+  map layers show the seeds and the last year's growth. The live page is its Version 47. Open on the seeds: the
+  ground holds 5 to 150 g of seeds per m² (measured banks: 0.1 to some tens) because a full slot sends all it builds
+  as seeds; by `dormant` and `e_life` a lying seed would last about 700 years (the row says years to decades); seeds
+  lie on low-ground cells near the shore and the two layers bleed over the liquid there; nothing hides a buried
+  plant from the light (the air's step lets the canopy catch light over any snow). To measure again on the new air.
+- Designed, not built: the first takers of the cover (F1), `review/f1-design.md`, with the orchestrator's
+  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). Its builder
+  starts when a heavy helper's place is free; commits 1 and 2 of its plan do not wait for the air.
+- On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
+  lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
+  a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
+  (made in 38 s, 1.6 months a second in a headless browser). Pictures: `scratchpad/islands/round3/`. Open:
+  - A cell that holds parts of two ponds, one of them a speck, gave 0/0 in the runoff's pass (`flow/runoff.rs`
+    `stand`) and hung Change: mended on main (a cell keeps at least what its other parts hold), and a reaction heat
+    that is not a number stops the run. Seeds 1 to 12 at 64 squares in the planet's air run 15 years clean. The
+    slow tests were not run after this mend (the 64 one-rise world is the same to the last digit): the air
+    package's gate runs them.
+  - Land in the map's edge row in 14 of 60 worlds of 128 (2 of 60 at 64): the low ground does not ring the map
+    there. To mend: the ground falls to the low ground within a margin in km of the edge.
+  - The shelf's platforms with straight edges: mended on the local branch `round3-shelf-lobes` (4b488e0, straight
+    distance in place of steps along the grid). It moves the worlds of 64 squares, so it lands with the air
+    package's setting of the key numbers' references.
+  - Each land sits in an even shallow ring (the low ground follows the rise's smooth fall); some small rises have
+    flat tops. Taking the rises' fall at the warped point bends the straits but pushes land onto the edge: dropped
+    (`scratchpad/islands/round3/B1_warp.diff`).
 - Timed in turn on a quiet machine, a 32 island of plants, 30 years: 261 ms a year before the contract, 262 to 266
   after.
 
@@ -362,7 +410,7 @@ The slow tests of bodies that were skipped once (`core/tests/choose.rs`, `lots.r
 ## 6. The live world for the owner
 
 The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (private to them). It shows main
-(its Version 43, "Lakes without blocks"). To update it after a push to main:
+(the version label says what it shows). To update it after a push to main:
 1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html` and `web/dist/ew.wasm`).
 2. Copy `ew.wasm` to a scratch folder, and the page with these removed (regexes, case-insensitive, with `\b` after
    the tag names): the doctype, the `html`, `head` and `body` tags, the `meta charset` and `meta viewport` tags, the

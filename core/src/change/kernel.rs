@@ -346,6 +346,8 @@ impl Reactor {
             if heat <= MAX_DT_K * c || iter >= MAX_SUBSTEPS || sub <= left * MIN_SUB {
                 break;
             }
+            // A heat that is not a number would never shorten the sub-step: the run stops here, not in an endless loop.
+            assert!(!heat.is_nan(), "reactions {:?} of a node at {c} J/K: their heat over {sub} s is {heat} J", self.on);
             // The heat is concave in the length, so it falls by less than half when the length halves: the first try
             // jumps to the fewest halvings that can be enough, ceil(log2(heat / bound)), not past the shortest sub-step.
             let most = (1.0 / MIN_SUB).log2().ceil();

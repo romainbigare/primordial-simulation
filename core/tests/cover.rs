@@ -21,6 +21,9 @@ const WARM_BAND: [f64; 2] = [30.0, 36.0];
 const COLD_BAND: [f64; 2] = [50.0, 60.0];
 /// The fewest land cells a band holds.
 const BAND_CELLS: usize = 5;
+/// A band's cells are its land whose ground lies under this height, m: the winters the test weighs are those of the
+/// latitude, and the ground's lapse with height (about 6.5 K a km) stays under a third of a step of the gene there.
+const BAND_UNDER_M: f64 = 250.0;
 /// The two frost genes of the selection test, K, three steps (15 K) apart: the tender one above the key liquid's melting
 /// point (273 K), so its cover is still active (its ground's liquid liquid) when a winter's ground falls below it and
 /// frost can kill it before dormancy hardens it, and below the warm band's coldest ground, so the warm band's winters
@@ -343,9 +346,9 @@ fn seeds_take_the_slot_in_deficit() {
 /// cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
 /// (lowered by dormancy), frost kills the cover of that gene (laws.md 3), and the lower one (dearer to keep: `c_firm`)
 /// wins; where it does not, the higher one wins. The cover's mean frost gene (by built cover) ends more than a step
-/// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`). The scene's premises are asserted, so a
-/// later ground that breaks them says so: the frost law (dormancy's hardening included) kills some of the tender kind in
-/// the cold band's winters and none in the warm band's.
+/// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`), each its land under `BAND_UNDER_M`. The
+/// scene's premises are asserted, so a later ground that breaks them says so: the frost law (dormancy's hardening
+/// included) kills some of the tender kind in the cold band's winters and none in the warm band's.
 #[test]
 #[ignore = "slow: a 60-year run of a 16 x 16 world"]
 fn the_frost_gene_falls_where_winters_are_cold() {
@@ -361,7 +364,7 @@ fn the_frost_gene_falls_where_winters_are_cold() {
         cover::place(&mut w, i, g, 0, 0.05);
         cover::place(&mut w, i, low, 0, 0.05);
     }
-    let band = |b: [f64; 2]| -> Vec<usize> { land.iter().copied().filter(|&i| (b[0]..b[1]).contains(&w.mesh.cells().lat()[i])).collect() };
+    let band = |b: [f64; 2]| -> Vec<usize> { land.iter().copied().filter(|&i| (b[0]..b[1]).contains(&w.mesh.cells().lat()[i]) && w.surface_z(i) < BAND_UNDER_M).collect() };
     let (warm, cold) = (band(WARM_BAND), band(COLD_BAND));
     assert!(warm.len() >= BAND_CELLS && cold.len() >= BAND_CELLS, "land cells in the bands: {} warm, {} cold", warm.len(), cold.len());
     let coldest = |w: &pcore::World, cells: &[usize]| cells.iter().map(|&i| w.t_ground_last(i)).fold(f64::MAX, f64::min);

@@ -37,7 +37,11 @@ cell's height is the terrain's mean over it (`Terrain::inside`, below), the heig
 **The terrain**
 (`space::terrain`) is one function of the world's seed and a point of the map, at any size: value noise summed over
 octaves, with ridges, its domain warped (Perlin 1985; Musgrave 1989), raised to heights, an island's falling away from
-its rises, says how high the ground would stand. **An island's crust is raised by rises** (`space::rises`, `Lift`):
+its rises, says how high the ground would stand. On an island a unit of the noise is 21.3 km on every map
+(`ANCHOR_M`: 6 units across the island of 64 squares, which the key numbers are measured on), so its coarsest ridges
+and valleys lie 20 to 30 km apart, as the main valleys across a range do (Hovius 1996), and a hill is a hill's size on
+a map of any size: a larger map holds more of them, not larger ones; a globe's noise has 6 units round its equator.
+**An island's crust is raised by rises** (`space::rises`, `Lift`):
 the noise's large shape falls by (the distance from the nearest rise, in its reaches)^p, so land stands round each rise
 and low ground that the liquid fills lies between them. An island of **drawn rises** (`Shape::Drawn`, the default of
 `ew run` and of the page) has one to several, all drawn from its seed: their count the most its map holds or one
@@ -63,9 +67,9 @@ always the larger scale's). The wear and the drowning take some: 22 to 43% of th
 squares, seeds 1 to 12, 33% on average, against 24 to 37% (31%) on islands of one rise. An island of **one rise**
 (`Shape::One`, `--shape one`; the tests' worlds) has one in the middle of its map, reaching half its side, p = 1.6.
 **Each rise has its range** (`Range`): along an axis drawn from the seed (any heading, up to a
-unit of the noise from the middle of the map, bent by the warp; on a drawn rise along its length, up to a unit for a
-rise of the one rise's reach from its middle and fading past its ends) lies a range, a band half 0.7 to 1.4 units wide
-(drawn; on a drawn rise as much narrower as its reach is) where the land's rise over its level is 1.3 times the mean on
+unit of the noise from the middle of the map, bent by the warp; on a drawn rise along its length, fading past its
+ends) lies a range, a band half 0.7 to 1.4 units wide, its offset and width for a rise reaching 64 km (the one rise of
+the map of 64 squares) and in proportion to its reach for any other (drawn: a range is as wide as its raised block is) where the land's rise over its level is 1.3 times the mean on
 the axis, falling by a bell across it to 0.2 times the mean far from every range (`RISES`): a high rough range, its
 foothills, and a wide low plain where the land rises slowly. That scales the noise's large shape; its base's octaves
 from the third on (`FINE_FROM`, a quarter of the coarsest's wavelength and finer) keep their own size where the land
@@ -73,7 +77,7 @@ rises slower than the mean and grow with it where faster, so a plain keeps its o
 hollows of tens of metres while its large heights stay low. A globe's land rises alike everywhere (its noise is of the scale of its continents, its cells
 wider than a range); the world keeps what it needs beside its seed and its map
 (`World::terrain`: the rise its level 0 m lies at, and an island's shape). The
-noise's finest octave is 670 m on the 64 x 64 island and 200 km on a globe. The ground is held at **samples**, the
+noise's finest octave is 670 m on every island and 200 km on a globe of 64 rows. The ground is held at **samples**, the
 leaves of `SAMPLE_DEPTH` (1/64 of a block: 125 m on the island, 20 km on a globe of 64 rows), and **the samples are
 worn** (`space::samples`, `space::wear`, found once from the seed when first read, not saved): the ground has a
 history. The noise is read at the centres of the samples of a grid of 2 x 2 samples to one (`NOISE_BY`,
