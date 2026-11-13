@@ -10,7 +10,10 @@
 //! `SIDE` of the offset where it does not; a closed pond's deep samples stay under it (`KEEP_M`). Under the level the
 //! bed leans to a smooth depth, the offset at the shore and farther out the samples' depth held within `WATER_M` and
 //! blurred alike (`depth`), all of it in the shallows and less the deeper, so the shallows' colour follows the coast as
-//! one band. Each number is a function of the samples alone.
+//! one band. Liquid may stand on a texel beside a pond where the offset drawn lies under `EDGE_M`, and the ground drawn
+//! there lies over the level wherever the offset does (`drawn`): the edge of where it may stand is dry ground, a smooth
+//! line of the place, so no tile at any depth draws an edge of liquid along its texels or the samples. Each number is a
+//! function of the samples alone.
 
 use super::bends::ease;
 use pcore::space::network::NONE;
@@ -54,6 +57,10 @@ const MOUTH_STEP: f64 = 0.1;
 const MOUTH_DROWN: f64 = 0.25;
 const MOUTH_WIDE: f64 = 5.0;
 const MOUTH_LONG: f64 = 4.0;
+/// Liquid may stand on a point beside a pond where the offset drawn lies under this, m; the ground drawn lies over the
+/// level by `SIDE` of the offset at least (by all of it where no sample about it has a pond near, `Shore::beside`), all
+/// the way to here and none from `SHORE_M` on: the edge of where liquid may stand lies on dry ground.
+const EDGE_M: f64 = 2.0;
 
 /// A channel's mouth at a point `off` m from the line of a channel whose bed is `width` m wide and `depth` m deep:
 /// how far the offset lies lower at the shore, m, and the way from the shore over which that fades out, m
@@ -62,12 +69,13 @@ pub(super) fn drowned(width: f64, depth: f64, off: f64) -> [f64; 2] {
     [MOUTH_DROWN * depth * (1.0 - ease(0.5 * width, MOUTH_WIDE * 0.5 * width, off)), MOUTH_LONG * width]
 }
 
-/// Of each sample of the terrain: the level of the pond it lies in or of the nearest within `NEAR_SAMPLES` (NaN: none),
-/// m, and its offset and its depth under that level, blurred (the module's doc), m.
+/// Of each sample of the terrain: the pond it lies in or the nearest within `NEAR_SAMPLES` (`NONE`: none), and its
+/// offset and its depth under that pond's level, blurred (the module's doc), m; and the level of each pond, m.
 pub(super) struct Shore {
     across: usize,
     down: usize,
-    level: Vec<f64>,
+    pond: Vec<u32>,
+    levels: Vec<f64>,
     offset: Vec<f64>,
     depth: Vec<f64>,
     far: Vec<bool>,
@@ -79,24 +87,34 @@ fn level_of(s: &Samples, q: u32) -> f64 {
     if p.pass == NONE { SEA_M } else { p.level }
 }
 
+/// The pond beside a point (`Shore::beside`; `NONE`: none) and its level, m (NaN: none), and the share of the point's
+/// weight on the samples about it that have a pond near.
+pub(super) struct Beside {
+    pub(super) pond: u32,
+    pub(super) level: f64,
+    pub(super) share: f64,
+}
+
 impl Shore {
     /// The shore of the samples `s`.
     pub(super) fn new(s: &Samples) -> Shore {
         let (across, down) = (s.across as i64, s.down as i64);
         let at = |c: i64, r: i64| r.clamp(0, down - 1) as usize * s.across + c.clamp(0, across - 1) as usize;
-        let level: Vec<f64> = (0..s.h.len())
+        let pond: Vec<u32> = (0..s.h.len())
             .map(|k| {
                 let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
                 let near = (-NEAR_SAMPLES..=NEAR_SAMPLES)
                     .flat_map(|dr| (-NEAR_SAMPLES..=NEAR_SAMPLES).map(move |dc| (dc, dr)))
                     .filter(|&(dc, dr)| s.pond[at(c + dc, r + dr)] != NONE)
                     .min_by_key(|&(dc, dr)| dc * dc + dr * dr);
-                let level = near.map_or(f64::NAN, |(dc, dr)| level_of(s, s.pond[at(c + dc, r + dr)]));
-                // Out of a pond and under its level is the ground its liquid spills down below its pass: it holds none
-                // and is drawn as it is (a lake's water ends at its own samples there, `Ground::pond_tile`).
-                if s.pond[k] == NONE && s.h[k] < level { f64::NAN } else { level }
+                let q = near.map_or(NONE, |(dc, dr)| s.pond[at(c + dc, r + dr)]);
+                // Out of a pond and under its level is the ground its liquid spills down below its pass: it holds none,
+                // and its offset is held over the level, as land's.
+                if q != NONE && s.pond[k] == NONE && s.h[k] < level_of(s, q) { NONE } else { q }
             })
             .collect();
+        let levels: Vec<f64> = (0..s.ponds.len() as u32).map(|q| level_of(s, q)).collect();
+        let level: Vec<f64> = pond.iter().map(|&q| if q == NONE { f64::NAN } else { levels[q as usize] }).collect();
         // Each sample's height over its level, held; a sample with no pond near stands over any.
         let held = |lo: f64, hi: f64| -> Vec<f64> { (0..s.h.len()).map(|k| if level[k].is_nan() { hi } else { (s.h[k] - level[k]).clamp(lo, hi) }).collect() };
         let kernel: Vec<f64> = (-SMOOTH_REACH..=SMOOTH_REACH).map(|d| (-0.5 * (d as f64 / SMOOTH_SAMPLES).powi(2)).exp()).collect();
@@ -127,7 +145,7 @@ impl Shore {
                 all(&|j| offset[j] >= SHORE_M) || all(&|j| offset[j] <= -SHORE_M && depth[j] <= -WATER_M)
             })
             .collect();
-        Shore { across: s.across, down: s.down, level, offset, depth, far }
+        Shore { across: s.across, down: s.down, pond, levels, offset, depth, far }
     }
 
     /// The four samples between whose centres the point `p` (samples from the map's corner) lies, each with its weight
@@ -145,33 +163,35 @@ impl Shore {
         self.about(p).iter().filter(|(k, _)| on(*k)).map(|(_, w)| w).sum()
     }
 
-    /// The level of the pond beside the point `p` (samples from the map's corner), m: its own sample's (the nearest
-    /// pond's within `NEAR_SAMPLES`), or where that has none, the level of the heaviest of the samples about it that
-    /// has one (NaN: none has); and the share of the point's weight on the samples that have one (`share`).
-    pub(super) fn beside(&self, p: [f64; 2]) -> (f64, f64) {
+    /// The pond beside the point `p` (samples from the map's corner): its own sample's (the nearest within
+    /// `NEAR_SAMPLES`), or where that has none, the heaviest's of the samples about it that have one, or of the samples
+    /// its offset is drawn from (`at`), so every point whose offset lies under `SHORE_M` has one; and the share of the
+    /// point's weight on the samples about it that have one (`share`).
+    pub(super) fn beside(&self, p: [f64; 2]) -> Beside {
         let own = (p[1] as usize).min(self.down - 1) * self.across + (p[0] as usize).min(self.across - 1);
-        let about = self.about(p);
-        let heaviest = about.iter().filter(|(k, _)| !self.level[*k].is_nan()).max_by(|a, b| a.1.total_cmp(&b.1));
-        let level = if self.level[own].is_nan() { heaviest.map_or(f64::NAN, |(k, _)| self.level[*k]) } else { self.level[own] };
-        (level, self.share(p, |k| !self.level[k].is_nan()))
+        let heaviest = |about: &[(usize, f64)]| about.iter().filter(|(k, _)| self.pond[*k] != NONE).max_by(|a, b| a.1.total_cmp(&b.1)).map(|(k, _)| self.pond[*k]);
+        let pond = if self.pond[own] != NONE { self.pond[own] } else { heaviest(&self.about(p)).or_else(|| heaviest(&self.spline(p))).unwrap_or(NONE) };
+        let level = if pond == NONE { f64::NAN } else { self.levels[pond as usize] };
+        Beside { pond, level, share: self.share(p, |k| self.pond[k] != NONE) }
+    }
+
+    /// The sixteen samples whose centres a cubic B-spline at `p` (samples from the map's corner) runs through, each with
+    /// its weight there, row by row (off the map, the edge's).
+    fn spline(&self, p: [f64; 2]) -> [(usize, f64); 16] {
+        let (u, w) = (p[0] - 0.5, p[1] - 0.5);
+        let (c, r) = (u.floor() as i64, w.floor() as i64);
+        let (wx, wy) = (bspline(u - u.floor()), bspline(w - w.floor()));
+        std::array::from_fn(|n| {
+            let (i, j) = (n % 4, n / 4);
+            let k = (r + j as i64 - 1).clamp(0, self.down as i64 - 1) as usize * self.across + (c + i as i64 - 1).clamp(0, self.across as i64 - 1) as usize;
+            (k, wy[j] * wx[i])
+        })
     }
 
     /// The offset and the depth at `p` (samples from the map's corner) as cubic B-splines through the samples' centres:
     /// smooth with their slopes, so the shore is a smooth line.
     fn at(&self, p: [f64; 2]) -> (f64, f64) {
-        let (u, w) = (p[0] - 0.5, p[1] - 0.5);
-        let (c, r) = (u.floor() as i64, w.floor() as i64);
-        let (wx, wy) = (bspline(u - u.floor()), bspline(w - w.floor()));
-        let cols: [usize; 4] = std::array::from_fn(|i| (c + i as i64 - 1).clamp(0, self.across as i64 - 1) as usize);
-        let (mut offset, mut depth) = (0.0, 0.0);
-        for (j, wj) in wy.iter().enumerate() {
-            let row = (r + j as i64 - 1).clamp(0, self.down as i64 - 1) as usize * self.across;
-            for (i, wi) in wx.iter().enumerate() {
-                let (k, w) = (row + cols[i], wj * wi);
-                (offset, depth) = (offset + w * self.offset[k], depth + w * self.depth[k]);
-            }
-        }
-        (offset, depth)
+        self.spline(p).iter().fold((0.0, 0.0), |(offset, depth), &(k, w)| (offset + w * self.offset[k], depth + w * self.depth[k]))
     }
 
     /// Whether the shore drawn leaves each sample out of its pond's liquid (the offset drawn at its centre over minus
@@ -198,16 +218,22 @@ impl Shore {
         from
     }
 
-    /// The height drawn at `p` (samples from the map's corner) whose own height is `h`, m, beside liquid at `level`
-    /// (`beside`; NaN: none), `share` of the point's weight on samples beside it: the module's doc, as far as that
-    /// share, so the ground has no step where a sample beside a pond meets one beside none; its offset lower by its
-    /// channel's mouth (`drowned`: `mouth[0]` m at the shore, none `mouth[1]` samples from it, the way from the shore
-    /// taken as the offset over its slope).
-    pub(super) fn drawn(&self, p: [f64; 2], h: f64, level: f64, share: f64, mouth: [f64; 2]) -> f64 {
+    /// The height drawn at `p` (samples from the map's corner) whose own height is `h`, m, beside the pond `by`
+    /// (`beside`): the module's doc, as far as the share of the point's weight on samples beside a pond, so the ground
+    /// has no step where a sample beside a pond meets one beside none, and over the level where the offset lies under
+    /// `EDGE_M` whatever that share; its offset lower by its channel's mouth (`drowned`: `mouth[0]` m at the shore, none
+    /// `mouth[1]` samples from it, the way from the shore taken as the offset over its slope). And whether `by`'s
+    /// liquid may stand on the point: where the offset lies under `EDGE_M`.
+    pub(super) fn drawn(&self, p: [f64; 2], h: f64, by: &Beside, mouth: [f64; 2]) -> (f64, bool) {
         let own = (p[1] as usize).min(self.down - 1) * self.across + (p[0] as usize).min(self.across - 1);
-        if level.is_nan() || self.far[own] {
-            return h;
+        let stands = |d: f64| d < EDGE_M;
+        if by.pond == NONE {
+            return (h, false);
         }
+        if self.far[own] {
+            return (h, stands(self.offset[own]));
+        }
+        let (level, share) = (by.level, by.share);
         let (mut d, depth) = self.at(p);
         if mouth[0] > 0.0 {
             let slope = [self.at([p[0] + MOUTH_STEP, p[1]]).0 - self.at([p[0] - MOUTH_STEP, p[1]]).0, self.at([p[0], p[1] + MOUTH_STEP]).0 - self.at([p[0], p[1] - MOUTH_STEP]).0];
@@ -218,14 +244,20 @@ impl Shore {
         let push = SIDE * d.abs() * (1.0 - ease(SIDE_FROM * SHORE_M, SHORE_M, d.abs()));
         let sided = level + side * (side * (h - level)).max(push);
         if d >= 0.0 {
-            return h + (sided - h) * share;
+            // Where a sample about the point has no pond near (the ground a pond spills down below its pass), the
+            // share blends in ground under the level: it is lifted over the level by the push, and by as much as the
+            // offset where none of the samples about it has a pond near, all of it to `EDGE_M`, so the edge of where
+            // liquid may stand lies as high over the level as the offset says.
+            let blended = h + (sided - h) * share;
+            let least = level + push + (d - push) * (1.0 - share);
+            return (blended + (blended.max(least) - blended) * (1.0 - ease(EDGE_M, SHORE_M, d)), stands(d));
         }
         // Under the level: the bed leans to a smooth depth, the offset's at the shore and the blurred depth's farther
         // out, the more the shallower (all of it at the shore, so the shallows have no bumps a sample wide).
         let deep = d + (depth.min(d) - d) * ease(0.0, SHORE_M, -d);
         let f = 1.0 - ease(0.0, WATER_M, -deep);
         let w = f / (1.0 - f).max(1e-12);
-        h + ((sided + w * (level + deep)) / (1.0 + w) - h) * share
+        (h + ((sided + w * (level + deep)) / (1.0 + w) - h) * share, stands(d))
     }
 }
 

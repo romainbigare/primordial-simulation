@@ -3,7 +3,7 @@
 //! shader reads a texel's neighbours inside the tile. Per texel: the terrain's mean height over it
 //! (`Terrain::heights`, so a texel is the mean of its four children), the wetness index of the place (`wetness`), and
 //! the channel it is nearest by the channel law (`channels`), with how far along that channel's line it lies and how
-//! far from that line without its bends; and apart, the pond it lies in (`Ground::pond_tile`).
+//! far from that line without its bends; and the pond whose liquid may stand on it (`shore`).
 //! Each is a function of the seed, the map and the place alone: the same texel holds the same numbers in every tile
 //! that holds it. A tile is 16-bit floats (`half`), so a graphics card keeps many: the height as the sum of two of
 //! them, to a millimetre (a shore is the difference of two heights).
@@ -41,9 +41,6 @@ pub const TILE: usize = 256;
 pub const GUTTER: usize = 2;
 /// The ponds a tile names exactly (`Ground::tile`): a 16-bit float holds every whole number up to 2^11.
 pub const PONDS_EXACT: usize = 2048;
-/// The samples each way about a texel's own in which a pond may take it (`Ground::pond_tile`): as far as the drawn shore
-/// may lie from the samples' (`shore`).
-const REACH: i64 = 2;
 /// The finest tiles' texels are no longer than this, m: finer, a shell magnifies them.
 const FINEST_M: f64 = 1.0;
 
@@ -101,8 +98,9 @@ impl Ground {
     /// texel, m, as the sum of two (the nearest 16-bit float to it, and what it lacks); the wetness index of the place
     /// (`wetness::field`); and the distance to the line of the channel it keeps, m, signed by the side
     /// (`channels::Field`; 60,000 where none reaches it). The second, four a texel: that channel's sample, as its
-    /// step from the sample that holds the texel's centre (`channels::code`; 0 for none), and one more than the pond the
-    /// texel lies in (`pond_tile`; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT`; and of
+    /// step from the sample that holds the texel's centre (`channels::code`; 0 for none), and one more than the pond
+    /// whose liquid may stand on the texel (`shore::Shore::drawn`; 0 for none), whole numbers a 16-bit float holds
+    /// exactly up to `PONDS_EXACT`; and of
     /// the nearest point of that channel's line, how far along the channel it lies, m, modulo `ALONG_WRAP_M`, and the
     /// distance to the nearest channel's line without its bends, m, signed by the side (60,000 where none reaches it).
     /// Texels off the map are those of its edge.
@@ -124,80 +122,37 @@ impl Ground {
         // (`shore::Shore::beside`) a valley only lowers the ground, and never under the pond's level where the ground is
         // not: its mouth meets the level of the pond it runs into. Then the shore drawn smooth (`shore`). Which of
         // these a texel takes is blended between the samples' centres (the share of its weight on the samples in a
-        // pond, and on those beside one), so the ground has no step along a sample's edge.
-        let heights: Vec<f64> = heights
+        // pond, and on those beside one), so the ground has no step along a sample's edge. The pond whose liquid may
+        // stand on a texel is the shore's (`shore::Shore::drawn`): a function of the place, the same in every tile.
+        let (heights, ponds): (Vec<f64>, Vec<f32>) = heights
             .iter()
             .enumerate()
             .map(|(i, &h)| {
                 let p = self.centre(depth, win[0] + (i % wide) as i64, win[1] + (i / wide) as i64);
-                let (level, beside) = self.shore.beside(p);
+                let by = self.shore.beside(p);
                 let in_pond = self.shore.share(p, |k| self.samples.pond[k] != NONE);
                 let valley = near.drawn(i, h);
-                let met = if level.is_nan() { valley } else { valley + (valley.min(h).max(h.min(level)) - valley) * beside };
+                let met = if by.level.is_nan() { valley } else { valley + (valley.min(h).max(h.min(by.level)) - valley) * by.share };
                 let bed = (near.sample[i] != NONE).then(|| self.reaches().bed_of(near.sample[i] as usize));
                 let mouth = bed.map_or([0.0; 2], |(width, depth)| shore::drowned(width, depth, near.dist[i].abs()));
                 let mouth = [mouth[0], mouth[1] / self.map.length(SAMPLE_DEPTH)];
-                self.shore.drawn(p, met + (h - met) * in_pond, level, beside, mouth)
+                let (drawn, wet) = self.shore.drawn(p, met + (h - met) * in_pond, &by, mouth);
+                (drawn, if wet { (by.pond + 1) as f32 } else { 0.0 })
             })
-            .collect();
+            .unzip();
         let at = |p: usize| (clamp(x0 + (p % side) as i64, across) - win[0]) as usize + (clamp(y0 + (p / side) as i64, down) - win[1]) as usize * wide;
         let mut out = Vec::with_capacity(8 * side * side);
         for i in (0..side * side).map(at) {
             let hi = half(heights[i] as f32);
             out.extend([hi, half((heights[i] - unhalf(hi) as f64) as f32), half(twi[i] as f32), half(near.dist[i] as f32)]);
         }
-        let ponds = self.pond_tile(depth, tx, ty, |p| heights[at(p)]);
-        for (p, i) in (0..side * side).map(|p| (p, at(p))) {
-            let pond = if ponds[p] == NONE { 0.0 } else { (ponds[p] + 1) as f32 };
+        for i in (0..side * side).map(at) {
+            let pond = ponds[i];
             let texel = [win[0] + (i % wide) as i64, win[1] + (i / wide) as i64];
             let along = near.along[i].rem_euclid(ALONG_WRAP_M);
             out.extend([half(channels::code(&self.samples, texel, k, near.sample[i]) as f32), half(pond), half(along as f32), half(near.calm[i] as f32)]);
         }
         out
-    }
-
-    /// The pond each texel of the tile of `depth` at column `tx` and row `ty` lies in, laid out as `tile`'s texels, its
-    /// height `h(p)`, m: the pond (`Samples::pond`, an index into `ponds`; `network::NONE` for none) of the sample that
-    /// holds the texel's centre, or where that lies in none, of the nearest of the samples within `REACH` that lies in a pond
-    /// whose pass the texel lies under, where that sample stands over the pond's level (its rim: not the pass, nor the
-    /// ground its liquid runs down below it) or the pond is of the open low ground. So a shell draws each pond flat at
-    /// its own level, its shore where the ground rises over that level, not at the edges of the samples.
-    pub fn pond_tile(&self, depth: u8, tx: i64, ty: i64, h: impl Fn(usize) -> f64) -> Vec<u32> {
-        let side = TILE + 2 * GUTTER;
-        let (x0, y0) = (tx * TILE as i64 - GUTTER as i64, ty * TILE as i64 - GUTTER as i64);
-        let s = &self.samples;
-        let pond_at = |r: i64, c: i64| s.pond[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
-        let sample = |x: i64, y: i64| self.centre(depth, x, y).map(|v| v.floor() as i64);
-        // The samples within `REACH`, nearest first; the samples that hold the tile's texels' centres: of each, the
-        // ponds of those about it, each once, in the order they are tried.
-        let mut by: Vec<(i64, i64)> = (-REACH..=REACH).flat_map(|dr| (-REACH..=REACH).map(move |dc| (dc, dr))).collect();
-        by.sort_by_key(|&(dc, dr)| dc * dc + dr * dr);
-        let ([c0, r0], [c1, r1]) = (sample(x0, y0), sample(x0 + side as i64 - 1, y0 + side as i64 - 1));
-        let wide = (c1 - c0 + 1) as usize;
-        let near: Vec<Vec<u32>> = (r0..=r1)
-            .flat_map(|r| (c0..=c1).map(move |c| (r, c)))
-            .map(|(r, c)| {
-                let own = s.h[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
-                let rim = |q: u32| q != NONE && (s.ponds[q as usize].pass == NONE || own > s.ponds[q as usize].level);
-                let mut ponds: Vec<u32> = Vec::new();
-                for q in by.iter().map(|(dc, dr)| pond_at(r + dr, c + dc)).filter(|&q| rim(q)) {
-                    if !ponds.contains(&q) {
-                        ponds.push(q);
-                    }
-                }
-                ponds
-            })
-            .collect();
-        (0..side * side)
-            .map(|p| {
-                let [c, r] = sample(x0 + (p % side) as i64, y0 + (p / side) as i64);
-                let own = pond_at(r, c);
-                if own != NONE {
-                    return own;
-                }
-                near[(r - r0) as usize * wide + (c - c0) as usize].iter().copied().find(|&q| h(p) < s.ponds[q as usize].level).unwrap_or(NONE)
-            })
-            .collect()
     }
 
     /// The rock of each of the terrain's samples, row by row in two planes of four 16-bit floats a sample: the depth of
