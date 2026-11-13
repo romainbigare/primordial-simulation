@@ -1,0 +1,105 @@
+   Compiling worldgen v0.1.0 (/home/user/primordial-simulation/.claude/worktrees/agent-af39338b26ff16ec2/worldgen)
+   Compiling tape v0.1.0 (/home/user/primordial-simulation/.claude/worktrees/agent-af39338b26ff16ec2/tape)
+    Finished `release` profile [optimized + debuginfo] target(s) in 42.72s
+     Running tests/ranges.rs (target/release/deps/ranges-69010fea80e29faa)
+
+running 5 tests
+test a_globe_without_life_keeps_an_earth_like_climate has been running for over 60 seconds
+test the_eaters_live_and_stop_growing has been running for over 60 seconds
+test the_key_numbers_stay_in_their_ranges has been running for over 60 seconds
+test the_long_step_keeps_the_climate has been running for over 60 seconds
+surface 290.85 K, vapour 0.0062, rain on land 1.148 m/yr
+land 288.53 K, drift -0.010 K a year, ice at most 0.119
+test a_globe_without_life_keeps_an_earth_like_climate ... ok
+air_3, sleep 90 days, wake at 0.05: 2.761334e-4, against 2.756408e-4, off by 4.926e-7, noise 8.339e-5, limit 3.000e-6
+air_3, sleep 180 days, wake at 0.05: 2.760832e-4, against 2.756408e-4, off by 4.424e-7, noise 8.339e-5, limit 3.000e-6
+air_3, sleep 45 days, wake at 0.05: 2.757874e-4, against 2.756408e-4, off by 1.466e-7, noise 8.339e-5, limit 3.000e-6
+air_3, sleep 90 days, wake at 0.1: 2.762350e-4, against 2.756408e-4, off by 5.942e-7, noise 8.339e-5, limit 3.000e-6
+air_3, sleep 90 days, wake at 0.025: 2.760536e-4, against 2.756408e-4, off by 4.127e-7, noise 8.339e-5, limit 3.000e-6
+min0_land, sleep 90 days, wake at 0.05: 8.572548e-2, against 8.574380e-2, off by -1.832e-5, noise 4.511e-3, limit 4.511e-3
+min0_land, sleep 180 days, wake at 0.05: 8.572751e-2, against 8.574380e-2, off by -1.629e-5, noise 4.511e-3, limit 4.511e-3
+min0_land, sleep 45 days, wake at 0.05: 8.572960e-2, against 8.574380e-2, off by -1.420e-5, noise 4.511e-3, limit 4.511e-3
+min0_land, sleep 90 days, wake at 0.1: 8.577083e-2, against 8.574380e-2, off by 2.703e-5, noise 4.511e-3, limit 4.511e-3
+min0_land, sleep 90 days, wake at 0.025: 8.577611e-2, against 8.574380e-2, off by 3.231e-5, noise 4.511e-3, limit 4.511e-3
+min0_sea, sleep 90 days, wake at 0.05: 1.414345e-1, against 1.413424e-1, off by 9.214e-5, noise 4.786e-2, limit 4.786e-2
+min0_sea, sleep 180 days, wake at 0.05: 1.414050e-1, against 1.413424e-1, off by 6.264e-5, noise 4.786e-2, limit 4.786e-2
+min0_sea, sleep 45 days, wake at 0.05: 1.414156e-1, against 1.413424e-1, off by 7.316e-5, noise 4.786e-2, limit 4.786e-2
+min0_sea, sleep 90 days, wake at 0.1: 1.413837e-1, against 1.413424e-1, off by 4.129e-5, noise 4.786e-2, limit 4.786e-2
+min0_sea, sleep 90 days, wake at 0.025: 1.413705e-1, against 1.413424e-1, off by 2.807e-5, noise 4.786e-2, limit 4.786e-2
+dead_10, sleep 90 days, wake at 0.05: 1.860133e0, against 1.861071e0, off by -9.383e-4, noise 6.118e-1, limit 6.118e-1
+dead_10, sleep 180 days, wake at 0.05: 1.860253e0, against 1.861071e0, off by -8.188e-4, noise 6.118e-1, limit 6.118e-1
+dead_10, sleep 45 days, wake at 0.05: 1.860564e0, against 1.861071e0, off by -5.079e-4, noise 6.118e-1, limit 6.118e-1
+dead_10, sleep 90 days, wake at 0.1: 1.860107e0, against 1.861071e0, off by -9.640e-4, noise 6.118e-1, limit 6.118e-1
+dead_10, sleep 90 days, wake at 0.025: 1.859965e0, against 1.861071e0, off by -1.106e-3, noise 6.118e-1, limit 6.118e-1
+dead_13, sleep 90 days, wake at 0.05: 4.984859e0, against 4.985138e0, off by -2.785e-4, noise 1.762e-1, limit 1.762e-1
+dead_13, sleep 180 days, wake at 0.05: 4.985069e0, against 4.985138e0, off by -6.902e-5, noise 1.762e-1, limit 1.762e-1
+dead_13, sleep 45 days, wake at 0.05: 4.984756e0, against 4.985138e0, off by -3.820e-4, noise 1.762e-1, limit 1.762e-1
+dead_13, sleep 90 days, wake at 0.1: 4.988952e0, against 4.985138e0, off by 3.814e-3, noise 1.762e-1, limit 1.762e-1
+dead_13, sleep 90 days, wake at 0.025: 4.984914e0, against 4.985138e0, off by -2.238e-4, noise 1.762e-1, limit 1.762e-1
+test the_sleep_of_change_keeps_the_chemistry ... ok
+t_land: the default step off by -1.283e-1 from 1-day steps, limit 3.000e-1
+t_land_summer: the default step off by -4.984e-2 from 1-day steps, limit 3.000e-1
+t_land_winter: the default step off by 1.038e-1 from 1-day steps, limit 3.000e-1
+rain_land: the default step off by -1.572e-6 from 1-day steps, limit 2.227e-5
+air_3: the default step off by -1.210e-5 from 1-day steps, limit 9.178e-6: OUT
+rivers: the default step off by 2.667e-1 from 1-day steps, limit 6.667e-1
+
+thread 'the_long_step_keeps_the_climate' (27683) panicked at tape/tests/ranges.rs:414:5:
+the long step changed: ["air_3 at 1 days"]
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:689:5
+   1: core::panicking::panic_fmt
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/panicking.rs:80:14
+   2: ranges::the_long_step_keeps_the_climate
+             at ./tests/ranges.rs:414:5
+   3: ranges::the_long_step_keeps_the_climate::{closure#0}
+             at ./tests/ranges.rs:389:37
+   4: <ranges::the_long_step_keeps_the_climate::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+   5: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+test the_long_step_keeps_the_climate ... FAILED
+ground temperature on land: 287.520734 K (seeds [286.680818, 288.055447, 287.825937]), reference 289.19 +-1: OUT
+seasonal swing on land: 13.677288 K (seeds [14.683566, 13.026820, 13.321478]), reference 13.6 +-1.5
+rain on land: 0.002861 mol/m2/s (seeds [0.002829, 0.002860, 0.002895]), reference 0.003065 x/ 1.3
+heat-absorbing gas: 223.452981 ppm (seeds [202.249154, 231.331779, 236.778012]), reference 325.8 +-40: OUT
+river cells: 234.333333  (seeds [265.400000, 201.400000, 236.200000]), reference 233.6 x/ 1.5
+land worn down: 0.224136 mm/yr (seeds [0.191402, 0.256503, 0.224503]), reference 0.2389 x/ 2
+cover: 11.256111 log10 kg (seeds [11.323790, 11.284165, 11.160378]), reference 9.505 +-0.3: OUT
+eaters: 6.807416 log10 kg (seeds [5.613850, 7.585986, 7.222412]), reference 8.417 +-0.5: OUT
+life of eaters: 2.987608 yr (seeds [7.514191, 0.811288, 0.637345]), reference 0.701 x/ 2: OUT
+rain on land 1.602 m/yr, against Earth's 0.76 x/ 3
+the cover's stored share 0.154 (seeds [0.169, 0.160, 0.132]), under 0.5
+heat-absorbing gas 223.5 ppm, within Earth's [180.0, 420.0]
+
+thread 'the_key_numbers_stay_in_their_ranges' (27682) panicked at tape/tests/ranges.rs:224:5:
+out of their ranges: ["ground temperature on land", "heat-absorbing gas", "cover", "eaters", "life of eaters"]
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/std/src/panicking.rs:689:5
+   1: core::panicking::panic_fmt
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/panicking.rs:80:14
+   2: ranges::the_key_numbers_stay_in_their_ranges
+             at ./tests/ranges.rs:224:5
+   3: ranges::the_key_numbers_stay_in_their_ranges::{closure#0}
+             at ./tests/ranges.rs:198:42
+   4: <ranges::the_key_numbers_stay_in_their_ranges::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+   5: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/2d8144b7880597b6e6d3dfd63a9a9efae3f533d3/library/core/src/ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+test the_key_numbers_stay_in_their_ranges ... FAILED
+eaters at year 100, seeds [1, 2, 3]: (members, kg per km2 of land, births and deaths from year 71) [[59307.12594668778, 503.1920922594157, 6879439.524020977, 6941479.348200585], [6294070.126607556, 76725.80010740968, 355802870.84299606, 353639565.1432654], [1085392.1424153317, 18533.16685334965, 96545077.42874847, 96382046.15310702]]
+test the_eaters_live_and_stop_growing ... ok
+
+failures:
+
+failures:
+    the_key_numbers_stay_in_their_ranges
+    the_long_step_keeps_the_climate
+
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 1 filtered out; finished in 307.28s
+
+error: test failed, to rerun pass `-p tape --test ranges`
