@@ -19,6 +19,15 @@ pub struct Counters {
     /// The flows of the cover's budget, J, + into the cover (`cover::BUDGET`)
     #[serde(skip)]
     pub cover_budget: [f64; crate::cover::BUDGET.len()],
+    /// The flows of the seeds, kg (`cover::SEED_FLOWS`)
+    #[serde(skip)]
+    pub seeds: [f64; crate::cover::SEED_FLOWS.len()],
+    /// What the cover of a cell built in a month, kg of dry matter (cell, kg), until its month ends (`cover::month`)
+    #[serde(skip)]
+    pub grown: Vec<(u32, f64)>,
+    /// Per cell, what its cover built in the year so far, and in the last whole year, kg of dry matter
+    pub grown_year: Vec<f64>,
+    pub grown_last: Vec<f64>,
     /// Heat that crossed into the map at its open north, south, east and west edges since the start, J: sensible and
     /// latent
     pub edges: [f64; 4],
@@ -28,11 +37,15 @@ impl Counters {
     /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
     /// cannot be left out.
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { clamped_heat, rounded, cover_lost, cover_budget, edges } = std::mem::take(c);
+        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, grown, grown_year, grown_last, edges } = std::mem::take(c);
         self.clamped_heat += clamped_heat;
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
         self.cover_budget.iter_mut().zip(cover_budget).for_each(|(a, b)| *a += b);
+        self.seeds.iter_mut().zip(seeds).for_each(|(a, b)| *a += b);
+        self.grown.extend(grown);
+        // (A chunk's counts hold no year: the world's are its own.)
+        debug_assert!(grown_year.is_empty() && grown_last.is_empty(), "a chunk counted a year");
         self.edges.iter_mut().zip(edges).for_each(|(a, b)| *a += b);
     }
     /// What a booking set from just below zero to zero is added (`Counters::rounded`): mol, and J.
@@ -46,6 +59,7 @@ impl Counters {
 pub struct Taken {
     pub cover_lost: [f64; 6],
     pub cover_budget: [f64; crate::cover::BUDGET.len()],
+    pub seeds: [f64; crate::cover::SEED_FLOWS.len()],
 }
 
 /// The whole state of a world: what `step` advances, and what a snapshot saves.
@@ -119,10 +133,10 @@ impl World {
     pub fn drain_events(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.events)
     }
-    /// Hand the shell the yearly counts (`Counters::cover_lost`, `cover_budget`), and start them again.
+    /// Hand the shell the yearly counts (`Counters::cover_lost`, `cover_budget`, `seeds`), and start them again.
     pub fn take_counters(&mut self) -> Taken {
         let c = &mut self.counts;
-        Taken { cover_lost: std::mem::take(&mut c.cover_lost), cover_budget: std::mem::take(&mut c.cover_budget) }
+        Taken { cover_lost: std::mem::take(&mut c.cover_lost), cover_budget: std::mem::take(&mut c.cover_budget), seeds: std::mem::take(&mut c.seeds) }
     }
     pub fn days_per_year(&self) -> u64 {
         self.cfg.calendar().days(self.cfg.calendar().year)

@@ -6,11 +6,28 @@ use crate::store::{apply, Batch, Class};
 use crate::World;
 
 /// Once a month, after Flow's state is built in full: the cover's month (`cover::step`) in each cell that holds any,
-/// one task per chunk on the pool; then its seeds land (`cover::land`).
+/// one task per chunk on the pool; then its seeds land (`cover::land`); and what each cell's cover built is counted
+/// into its year (`grown`).
 pub fn month(w: &mut World) {
     let load = w.life.cells.iter().filter(|c| c.cover.any()).count();
     life::run(w, load, super::step);
     super::land(w);
+    grown(w);
+}
+
+/// What each cell's cover built in the month is added to its year (`Counters::grown_year`); after the year's last
+/// month that year is the last whole one (`Counters::grown_last`), for the tape.
+fn grown(w: &mut World) {
+    let (n, year) = (w.mesh.cells().n(), w.cfg.months_per_year as u64);
+    let last = w.month() % year == year - 1;
+    let c = &mut w.counts;
+    c.grown_year.resize(n, 0.0);
+    for (i, kg) in std::mem::take(&mut c.grown) {
+        c.grown_year[i as usize] += kg;
+    }
+    if last {
+        c.grown_last = std::mem::take(&mut c.grown_year);
+    }
 }
 
 /// Per cell, what its cover claims of its aside node, J: the light set aside for it since its last month

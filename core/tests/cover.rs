@@ -461,3 +461,27 @@ fn seeds_keep_the_books() {
     (0..24).for_each(|_| pcore::step(&mut w));
     books.assert_kept(&w, 1e-9);
 }
+
+/// A taker on the contract takes from the seeds lying on a cell's ground (`Layer::Seeds`): what it takes is what they
+/// lose, to rounding, and is counted as seeds taken; every element and the energy are kept.
+#[test]
+fn what_a_taker_takes_of_the_seeds_lying_they_lose() {
+    let mut w = testkit::living(8, 12);
+    let books = Books::now(&w);
+    let lying = cover::lying(&w);
+    let i = (0..lying.len()).max_by(|&a, &b| lying[a].total_cmp(&lying[b])).expect("cells");
+    let before = shown(&w, i, Layer::Seeds);
+    assert!(before.kg > 0.0, "no seeds lie on the ground after a year");
+    w.take_counters();
+    let mut taker = Taker::new(i, Layer::Seeds, 0.5);
+    let took = taker.month(&mut w);
+    let after = shown(&w, i, Layer::Seeds);
+    for (k, &t) in took.iter().enumerate() {
+        let lost = before.mol[k] - after.mol[k];
+        assert!((lost - t).abs() <= 1e-12 * before.mol[k], "substance {k}: took {t:e} mol, the seeds lost {lost:e}");
+    }
+    let kg: f64 = took.iter().zip(&w.chem.subs).map(|(m, s)| m * s.molar_mass).sum();
+    let counted = w.take_counters().seeds[cover::TAKEN_LYING];
+    assert!(kg > 0.0 && (counted - kg).abs() <= 1e-9 * kg, "took {kg} kg, counted {counted} kg as taken");
+    books.assert_kept(&w, 1e-9);
+}

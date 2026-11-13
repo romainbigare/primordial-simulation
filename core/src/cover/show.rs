@@ -1,5 +1,6 @@
-//! The cover's side of the contract (`contract`): what it stands on its cell as (`Cover::stand`), what a part of it
-//! shows a taker (`Cover::shown`), and what a take and a press do to it (`Cover::take`, `lose`). All of it is read from
+//! The cover's side of the contract (`contract`): what it stands on its cell as (`Cover::stand`), what a part of it and
+//! the seeds lying show a taker (`Cover::shown`, `Cover::shown_lying`), and what a take and a press do to it
+//! (`Cover::take`, `Cover::take_lying`, `lose`). All of it is read from
 //! the cover's own numbers when asked; it keeps no copy.
 
 use super::{Cover, Parts, NP, SLOTS, WALL};
@@ -21,13 +22,11 @@ impl Cover {
     }
     /// What its slots `of` show a taker (`contract::Shown`): their mass and what they hold of each substance.
     pub fn shown(&self, chem: &Chemistry, p: &Parts, of: impl Fn(usize) -> bool) -> Shown {
-        let mm = p.mm(chem);
-        let (mut kg, mut mol) = (0.0, [0.0; MAX_SUBSTANCES]);
-        for x in (0..SLOTS).filter(|&x| of(x)) {
-            kg += self.kg(&mm, x);
-            (0..NP).for_each(|q| mol[p.sub[q]] += self.mol[x][q]);
-        }
-        Shown { kg, mol }
+        shown_of(p, &p.mm(chem), self.mol.iter().enumerate().filter(|e| of(e.0)).map(|e| e.1))
+    }
+    /// What the seeds lying on its ground show a taker: their mass and what they hold of each substance.
+    pub fn shown_lying(&self, chem: &Chemistry, p: &Parts) -> Shown {
+        shown_of(p, &p.mm(chem), self.lying.mol.iter())
     }
     /// The height the plants of slot `x` stand at, m (`Cover::height`, its walls at their own density).
     pub fn stands_at(&self, chem: &Chemistry, ph: &crate::Physics, p: &Parts, x: usize) -> f64 {
@@ -49,17 +48,45 @@ impl Cover {
     /// `mol` of substance `k` taken from its slots `of`, from each in proportion to what it holds of it: returns what is
     /// taken, mol (no more than they hold), and the heat that goes with it, J (at its temperature).
     pub(crate) fn take(&mut self, chem: &Chemistry, p: &Parts, (k, mol): (usize, f64), of: impl Fn(usize) -> bool) -> (f64, f64) {
-        let Some(q) = p.sub.iter().position(|&s| s == k) else { return (0.0, 0.0) };
-        let all = self.mol.iter().enumerate().filter(|e| of(e.0)).map(|(_, m)| m[q]).sum::<f64>();
-        if all <= 0.0 || mol <= 0.0 {
-            return (0.0, 0.0);
-        }
-        let (f, t) = ((mol / all).min(1.0), self.temp(chem, p));
-        self.mol.iter_mut().enumerate().filter(|e| of(e.0)).for_each(|(_, m)| m[q] -= m[q] * f);
-        let heat = (mol.min(all) * chem.subs[k].cp * t).min(self.e);
+        let t = self.temp(chem, p);
+        let (got, heat) = take_from(chem, p, (k, mol), t, self.mol.iter_mut().enumerate().filter(|e| of(e.0)).map(|e| e.1));
+        let heat = heat.min(self.e);
         self.e -= heat;
-        (mol.min(all), heat)
+        (got, heat)
     }
+    /// `mol` of substance `k` taken from the seeds lying on its ground, from each lot in proportion to what it holds of
+    /// it: returns what is taken, mol, and its heat, J (`take`).
+    pub(crate) fn take_lying(&mut self, chem: &Chemistry, p: &Parts, (k, mol): (usize, f64)) -> (f64, f64) {
+        let t = self.temp(chem, p);
+        let (got, heat) = take_from(chem, p, (k, mol), t, self.lying.mol.iter_mut());
+        let heat = heat.min(self.e);
+        self.e -= heat;
+        (got, heat)
+    }
+}
+
+/// What amounts `of` (mol of each part) show a taker: their mass and what they hold of each substance.
+fn shown_of<'a>(p: &Parts, mm: &[f64; NP], of: impl Iterator<Item = &'a [f64; NP]>) -> Shown {
+    let (mut kg, mut mol) = (0.0, [0.0; MAX_SUBSTANCES]);
+    for m in of {
+        kg += (0..NP).map(|q| m[q] * mm[q]).sum::<f64>();
+        (0..NP).for_each(|q| mol[p.sub[q]] += m[q]);
+    }
+    Shown { kg, mol }
+}
+
+/// `mol` of substance `k` taken from amounts `of` (mol of each part) at `t` K, from each in proportion to what it holds
+/// of it: what is taken, mol (no more than they hold), and the heat that goes with it, J.
+fn take_from<'a>(chem: &Chemistry, p: &Parts, (k, mol): (usize, f64), t: f64, of: impl Iterator<Item = &'a mut [f64; NP]>) -> (f64, f64) {
+    let Some(q) = p.sub.iter().position(|&s| s == k) else { return (0.0, 0.0) };
+    let mut of: Vec<&mut [f64; NP]> = of.collect();
+    let all: f64 = of.iter().map(|m| m[q]).sum();
+    if all <= 0.0 || mol <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let f = (mol / all).min(1.0);
+    of.iter_mut().for_each(|m| m[q] -= m[q] * f);
+    (mol.min(all), mol.min(all) * chem.subs[k].cp * t)
 }
 
 /// The share `f` of the cover of cell `i` of `d` breaks: it goes to the cell's ground as remains, with its heat,

@@ -4,14 +4,14 @@
 //! from its cover when a taker asks. Its taker today is the plain taker of the tests (`worldgen::testkit::Taker`).
 //!
 //! - **What a cell shows**: its cover as a whole and slot by slot by the height its plants stand at (`shown`,
-//!   `slots`), and its place (`place`).
+//!   `slots`), the seeds lying on its ground, and its place (`place`).
 //! - **Take** (`take`), **give** (`give`) and **press** (`press`): each booked on both sides, never more than is there.
 //! - **What stands on a cell** (`Stand`, `stand`): what life there weighs and catches of the light; Flow reads it.
 //!
 //! When: the place is as the month's start left it (`surroundings`), and so is what stands; the cover is as it is now.
 //! Takes land during the takers' month, and the cover feels them in its own next month.
 
-use crate::cover::{Parts, SLOTS, TAKERS};
+use crate::cover::{Parts, SLOTS, TAKEN_LYING, TAKERS};
 use crate::life::{Cell, Chunk, BROKEN, TAKEN};
 use crate::store::Node;
 use crate::units::MAX_SUBSTANCES;
@@ -99,6 +99,8 @@ pub enum Layer {
     Cover,
     /// The plants of one slot of the cover
     Slot(usize),
+    /// The seeds lying on the ground, each lot giving in proportion to what it holds
+    Seeds,
 }
 
 impl Layer {
@@ -107,6 +109,7 @@ impl Layer {
         match self {
             Layer::Cover => true,
             Layer::Slot(y) => x == y,
+            Layer::Seeds => false,
         }
     }
 }
@@ -118,10 +121,14 @@ pub struct Shown {
     pub mol: [f64; MAX_SUBSTANCES],
 }
 
-/// What `layer` of the cover of `cell` shows (`Cover::shown`); none with no cover in the chemistry.
+/// What `layer` of the cover of `cell` shows (`Cover::shown`, `Cover::shown_lying`); none with no cover in the
+/// chemistry.
 pub fn shown(w: &World, cell: &Cell, layer: Layer) -> Option<Shown> {
     let p = Parts::of(&w.chem)?;
-    Some(cell.cover.shown(&w.chem, &p, |x| layer.holds(x)))
+    Some(match layer {
+        Layer::Seeds => cell.cover.shown_lying(&w.chem, &p),
+        _ => cell.cover.shown(&w.chem, &p, |x| layer.holds(x)),
+    })
 }
 
 /// The slots of the cover of `cell` that hold plants, each with the height they stand at, m, from the lowest.
@@ -133,14 +140,22 @@ pub fn slots(w: &World, cell: &Cell) -> Vec<(Layer, f64)> {
 }
 
 /// A taker asks `layer` of the cover of cell `i` of chunk `d` for `mol` of substance `k`: it gets what is granted, mol
-/// (no more than the layer holds), and the heat that goes with it, J. The cover books its side (`Cover::take`), what it
-/// loses counted as taken (`Counters::cover_lost`, `cover::TAKERS` of its budget); the taker books its own.
+/// (no more than the layer holds), and the heat that goes with it, J. The cover books its side (`Cover::take`,
+/// `Cover::take_lying`), what it loses counted as taken (`Counters::cover_lost` or `Counters::seeds`, `cover::TAKERS` of
+/// its budget); the taker books its own.
 pub fn take(w: &World, d: &mut Chunk, i: usize, layer: Layer, (k, mol): (usize, f64)) -> (f64, f64) {
     let Some(p) = Parts::of(&w.chem) else { return (0.0, 0.0) };
     let e = p.content(&w.chem);
     let held = d.cover(i).content(&e);
-    let (got, heat) = d.cover(i).take(&w.chem, &p, (k, mol), |x| layer.holds(x));
-    d.counts.cover_lost[TAKEN as usize] += got * w.chem.subs[k].molar_mass;
+    let (got, heat) = match layer {
+        Layer::Seeds => d.cover(i).take_lying(&w.chem, &p, (k, mol)),
+        _ => d.cover(i).take(&w.chem, &p, (k, mol), |x| layer.holds(x)),
+    };
+    let kg = got * w.chem.subs[k].molar_mass;
+    match layer {
+        Layer::Seeds => d.counts.seeds[TAKEN_LYING] += kg,
+        _ => d.counts.cover_lost[TAKEN as usize] += kg,
+    }
     d.counts.cover_budget[TAKERS] += d.cover(i).content(&e) - held;
     (got, heat)
 }

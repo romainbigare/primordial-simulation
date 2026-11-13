@@ -1,9 +1,11 @@
 //! Seeds (laws.md 3): what a slot sends out in its month lands, when every cell has had its month, in the cell it
-//! goes to, cell by cell in the order made, and always takes hold there (`lodge`): in the nearest slot of its kind, or
-//! as seedlings in a slot of its own; what lives after is the light's to decide.
+//! goes to, cell by cell in the order made, and lies on its ground (`lying`); what wakes there takes hold in the cover
+//! (`lodge`): in the nearest slot of its kind, or as seedlings in a slot of its own; what lives after is the light's to
+//! decide.
 
 use super::budget::{held, DIED, PLACED, SEEDS};
-use super::{built_kg, dec, distance, Cover, Parts, APART, FUEL, MATTER, NG, NO_ROOT, NP, SLOTS, STORE, WALL, WALLS};
+use super::lying::LANDED;
+use super::{built_kg, dec, kin, Cover, Parts, FUEL, MATTER, NG, NP, SLOTS, STORE, WALL, WALLS};
 use crate::chem::Chemistry;
 use crate::store::{apply, Class, Move, Node};
 use crate::World;
@@ -44,38 +46,27 @@ pub(super) fn send(c: &mut Cover, x: usize, (mol, heat): ([f64; NP], f64), genes
     }
 }
 
-/// Land the seeds of every cell's last month (`Cover::seeds`), cell by cell in the order made; the cover of a slot in
-/// deficit they take goes to the ground of their cell as remains, booked at once. The potential energy of the
-/// life that left a cell's head and came to it is booked once for each cell and way (`store::life_sent`).
+/// Land the seeds of every cell's last month (`Cover::seeds`), cell by cell in the order made: they lie on the ground of
+/// the cell they reach (`Lying::lodge`) with their heat. The potential energy of the life that left a cell's head and
+/// came to it is booked once for each cell and way (`store::life_sent`).
 pub fn land(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let mm = p.mm(&w.chem);
-    let (mut moves, mut sent) = (Vec::new(), vec![[0.0; 2]; w.life.cells.len()]);
+    let mut sent = vec![[0.0; 2]; w.life.cells.len()];
     let e = p.content(&w.chem);
     for from in 0..w.life.cells.len() {
         for s in std::mem::take(&mut w.life.cells[from].cover.seeds) {
             let i = s.to as usize;
             let kg: f64 = (0..NP).map(|q| s.mol[q] * mm[q]).sum();
             (sent[from][0], sent[i][1]) = (sent[from][0] + kg, sent[i][1] + kg);
-            let c = &mut w.life.cells[i].cover;
-            let t = c.temp(&w.chem, &p);
             w.counts.cover_budget[SEEDS] += held(&e, &s.mol);
-            let (mol, heat) = match lodge(c, &mm, &s, &w.cfg.phys, w.mesh.cells().area()[i]) {
-                Landed::In => continue,
-                Landed::Out(m) => {
-                    w.counts.cover_budget[DIED] -= held(&e, &m);
-                    let heat = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t).min(c.e);
-                    c.e -= heat;
-                    (m, heat)
-                }
-            };
-            let cover = Node::new(Class::Cover, i);
-            moves.extend((0..NP).filter(|&q| mol[q] > 0.0).map(|q| Move { from: cover, to: Node::ground(i), k: p.sub[q] as u16, mol: mol[q], heat: 0.0 }));
-            moves.push(Move { from: cover, to: Node::ground(i), k: 0, mol: 0.0, heat });
+            w.counts.seeds[LANDED] += kg;
+            let c = &mut w.life.cells[i].cover;
+            c.lying.lodge(&mm, &s, w.cfg.phys.alike);
+            c.e += s.heat;
         }
     }
     crate::store::life_sent(w, sent.into_iter().enumerate().filter(|x| x.1 != [0.0; 2]));
-    apply(w, &[], &moves);
 }
 
 /// Where seeds went (`lodge`): into the cell's cover, or into a slot in deficit, whose amounts (mol of each part) die.
@@ -93,8 +84,7 @@ pub enum Landed {
 pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, ph: &crate::Physics, area: f64) -> Landed {
     let kg = built_kg(mm, &s.mol);
     let plants = super::stand::founded(ph, kg, area);
-    let kin = (0..SLOTS).filter(|&x| c.root[x] == s.root);
-    if let Some((_, x)) = kin.map(|x| (distance(&c.genes[x], &s.genes), x)).filter(|e| e.0 <= APART * ph.alike).min_by(|a, b| a.0.total_cmp(&b.0)) {
+    if let Some(x) = kin::kin(&c.genes, &c.root, (&s.genes, s.root), ph.alike) {
         c.plants[x] += plants;
         super::stand::thin(c, mm, ph, area, x);
         // The seeds join as a slot of their own would, the genes the mean by built cover.
@@ -104,7 +94,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, ph: &crate::Physics, area:
         return Landed::In;
     }
     let poorest = (0..SLOTS).filter(|&x| c.net[x] < 0.0).min_by(|&a, &b| c.net[a].total_cmp(&c.net[b]).then(c.built(mm, a).total_cmp(&c.built(mm, b))));
-    let (x, out) = match ((0..SLOTS).find(|&x| c.root[x] == NO_ROOT), poorest) {
+    let (x, out) = match (kin::empty(&c.root), poorest) {
         (Some(x), _) => (x, None),
         (None, Some(x)) => (x, Some(c.mol[x])),
         (None, None) => (room(c, mm, ph, area), None),
@@ -118,8 +108,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, ph: &crate::Physics, area:
 /// (`distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the slots are a limit of the
 /// bookkeeping, and the two hold the same niche to within what it resolves. Returns the slot it leaves empty.
 fn room(c: &mut Cover, mm: &[f64; NP], ph: &crate::Physics, area: f64) -> usize {
-    let pairs = (0..SLOTS).flat_map(|a| (a + 1..SLOTS).map(move |z| (a, z)));
-    let (a, z) = pairs.min_by(|p, q| distance(&c.genes[p.0], &c.genes[p.1]).total_cmp(&distance(&c.genes[q.0], &c.genes[q.1]))).expect("a cell holds two slots");
+    let (a, z) = kin::nearest(&c.genes);
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
     super::stand::join(c, (mm, ph, area), big, small);
     small
@@ -144,15 +133,15 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
             w.counts.cover_budget[DIED] -= held(&p.content(&w.chem), &m);
             let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
             c.e -= q;
-            let (from, to) = (crate::store::Node::new(crate::store::Class::Cover, i), crate::store::Node::ground(i));
-            let mut moves: Vec<_> = (0..NP).map(|x| crate::store::Move { from, to, k: p.sub[x] as u16, mol: m[x], heat: 0.0 }).collect();
-            moves.push(crate::store::Move { from, to, k: 0, mol: 0.0, heat: q });
-            crate::store::apply(w, &[], &moves);
+            let (from, to) = (Node::new(Class::Cover, i), Node::ground(i));
+            let mut moves: Vec<_> = (0..NP).map(|x| Move { from, to, k: p.sub[x] as u16, mol: m[x], heat: 0.0 }).collect();
+            moves.push(Move { from, to, k: 0, mol: 0.0, heat: q });
+            apply(w, &[], &moves);
         }
     }
     w.counts.cover_budget[PLACED] += held(&p.content(&w.chem), &mol);
     // (The cover's side is its own: the store books the outside node's.)
-    w.cross((crate::store::Boundary::Outside, crate::store::Node::new(crate::store::Class::Cover, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
+    w.cross((crate::store::Boundary::Outside, Node::new(Class::Cover, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
     w.life.cells[i].cover.mark = w.light[i];
     true
 }

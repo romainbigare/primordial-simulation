@@ -235,7 +235,9 @@ are not recorded.
 | `cells` | | the cells of the map |
 | `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |
 | `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (by a taker, `contract::take`), `broken` (pressed loose, `contract::press`); `lack` is never written to |
-| `cover_budget_<flow>` | J/yr | the flows of the cover's budget in the year, + into the cover (`cover::BUDGET`): what its parts hold as fuel changes by their sum. `stored` (light reaction); the upkeep's parts `basal`, `capacity`, `firmness`, `leaves`, `sapwood`, `root_breath`, `root_renew`; `building` (its work and fixing); `shed`, `died`, `exuded` (fuel its roots give the ground), `seeds` (out and in), `takers` (taken or pressed loose through the contract), `placed`, `rounded` |
+| `cover_budget_<flow>` | J/yr | the flows of the cover's budget in the year, + into the cover (`cover::BUDGET`): what its parts and the seeds lying on the ground hold as fuel changes by their sum. `stored` (light reaction); the upkeep's parts `basal`, `capacity`, `firmness`, `leaves`, `sapwood`, `root_breath`, `root_renew`; `building` (its work and fixing); `shed`, `died`, `exuded` (fuel its roots give the ground), `seeds` (out and landed), `seeds_died` (seeds lying that wore out or froze), `takers` (taken or pressed loose through the contract), `placed`, `rounded` |
+| `seeds_kg` | kg | the seeds lying on the ground of the world (`cover::Lying`) |
+| `seeds_<flow>` | kg/yr | the seeds' flows in the year (`cover::SEED_FLOWS`): `landed` (on a ground), `sprouted` (took hold in the cover), `worn`, `frozen`, `taken` (by a taker, `contract::take` of `Layer::Seeds`) |
 | `cover_median`, `cover_max` | kg/m² | the cover's mass on a land cell: median and largest |
 | `dead_<k>` | kg/m² | dead fuel, matter and built solids on the ground of the land |
 

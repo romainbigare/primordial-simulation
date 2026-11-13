@@ -1,23 +1,27 @@
 //! The cover: the light-eaters as a field (laws.md 4). Each ground cell holds up to `SLOTS` kinds of cover, each the
 //! amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the solid it builds)
 //! and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
-//! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to a neighbour cell
-//! (`seed`); alike kinds share a slot. A split of a cell shares its cover out, and a join gathers it (`tree`). The
-//! cover of a cell is a node of the store (`Class::Cover`) whose law books its own side; what takes from it or presses
-//! on it does so through the contract (`contract`), whose cover side is `show`.
+//! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to the cells around
+//! (`seed`), where they lie on the ground until it lets them grow (`lying`); alike kinds share a slot (`kin`). The
+//! cover of a cell, with the seeds lying on its ground, is a node of the store (`Class::Cover`) whose law books its own
+//! side; what takes from it or presses on it does so through the contract (`contract`), whose cover side is `show`.
 
 mod around;
 mod budget;
 mod build;
 mod grow;
+mod kin;
+mod lying;
 mod month;
 mod seed;
 mod show;
 mod stand;
+mod upkeep;
 
 pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
+pub use lying::{Lying, FROZEN, LANDED, LOTS_LYING, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{month, release};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub(crate) use show::lose;
@@ -127,6 +131,8 @@ pub struct Cover {
     pub e: f64,
     pub mark: f64,
     pub keep: f32,
+    /// The seeds lying on its cell's ground (`lying`), at its temperature
+    pub lying: Lying,
     /// Seeds made in its last step, landed after every cell had its step (`land`); not saved
     #[serde(skip)]
     pub(crate) seeds: Vec<Seed>,
@@ -135,7 +141,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, e: 0.0, mark: 0.0, keep: 0.0, seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
     }
 }
 
@@ -145,9 +151,13 @@ impl Cover {
     pub fn sent(&mut self) -> Vec<Seed> {
         std::mem::take(&mut self.seeds)
     }
-    /// Whether it holds any cover.
+    /// Whether it holds any cover or seeds lying.
     pub fn any(&self) -> bool {
-        self.root.iter().any(|&r| r != NO_ROOT)
+        self.root.iter().chain(&self.lying.root).any(|&r| r != NO_ROOT)
+    }
+    /// The amounts of each of its slots, then of each lot of seeds lying (mol of each part).
+    pub fn all_mol(&self) -> impl Iterator<Item = &[f64; NP]> + '_ {
+        self.mol.iter().chain(&self.lying.mol)
     }
     /// Its slots that hold cover.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
@@ -182,13 +192,13 @@ impl Cover {
     pub fn leaf(&self, mm: &[f64; NP], x: usize) -> f64 {
         dec(self.genes[x][LEAF]) * self.living(mm, x)
     }
-    /// The mol of substance `k` it holds (0 for a substance it is not made of).
+    /// The mol of substance `k` it holds with its seeds lying (0 for a substance it is not made of).
     pub fn amount(&self, p: &Parts, k: usize) -> f64 {
-        p.sub.iter().position(|&s| s == k).map_or(0.0, |q| self.mol.iter().map(|m| m[q]).sum())
+        p.sub.iter().position(|&s| s == k).map_or(0.0, |q| self.all_mol().map(|m| m[q]).sum())
     }
-    /// Its heat capacity, J/K.
+    /// Its heat capacity with its seeds lying, J/K.
     pub fn cap(&self, chem: &Chemistry, p: &Parts) -> f64 {
-        self.mol.iter().map(|m| (0..NP).map(|q| m[q] * chem.subs[p.sub[q]].cp).sum::<f64>()).sum()
+        self.all_mol().map(|m| (0..NP).map(|q| m[q] * chem.subs[p.sub[q]].cp).sum::<f64>()).sum()
     }
     /// Its temperature, K (0 for none).
     pub fn temp(&self, chem: &Chemistry, p: &Parts) -> f64 {
@@ -205,10 +215,10 @@ impl Cover {
         }
         r / v
     }
-    /// Its amounts by substance, mol (`MAX_SUBSTANCES`).
+    /// Its amounts by substance with its seeds lying, mol (`MAX_SUBSTANCES`).
     pub fn amounts(&self, p: &Parts) -> [f64; MAX_SUBSTANCES] {
         let mut a = [0.0; MAX_SUBSTANCES];
-        for m in &self.mol {
+        for m in self.all_mol() {
             (0..NP).for_each(|q| a[p.sub[q]] += m[q]);
         }
         a
@@ -261,14 +271,21 @@ pub fn slots(w: &crate::World) -> impl Iterator<Item = (u32, &[f32; NG])> {
     w.life.cells.iter().flat_map(|c| c.cover.root.iter().zip(&c.cover.genes)).filter(|x| *x.0 != NO_ROOT).map(|(&r, g)| (r, g))
 }
 
-/// The cover of the whole world by substance, mol (`MAX_SUBSTANCES`).
+/// The cover of the whole world with its seeds lying, by substance, mol (`MAX_SUBSTANCES`).
 pub fn totals(w: &crate::World) -> [f64; MAX_SUBSTANCES] {
     let mut a = [0.0; MAX_SUBSTANCES];
     let Some(p) = Parts::of(&w.chem) else { return a };
     for c in w.life.cells.iter().map(|x| &x.cover) {
-        c.mol.iter().for_each(|m| (0..NP).for_each(|q| a[p.sub[q]] += m[q]));
+        c.all_mol().for_each(|m| (0..NP).for_each(|q| a[p.sub[q]] += m[q]));
     }
     a
+}
+
+/// The seeds lying on the ground of each cell, kg per m² (`Lying::kg`).
+pub fn lying(w: &crate::World) -> Vec<f64> {
+    let Some(p) = Parts::of(&w.chem) else { return vec![0.0; w.mesh.cells().n()] };
+    let (mm, area) = (p.mm(&w.chem), w.mesh.cells().area());
+    w.life.cells.iter().enumerate().map(|(i, c)| c.cover.lying.kg(&mm) / area[i]).collect()
 }
 
 /// What the cover of each ground cell holds per m², summed over its slots by `of` (`Cover::kg`, `Cover::walls`,
