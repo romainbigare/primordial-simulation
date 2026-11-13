@@ -201,7 +201,12 @@ height), so of a slot whose plants stand h high under snow d deep a taker reache
 and of the seeds lying, on the ground, nothing where any snow lies. **Take**
 (`contract::take`): a taker bites a mass of the whole cover, one slot or the seeds lying; a bite takes all the parts
 it reaches in their own proportions, as a mouth takes a piece of a plant, never more than it can reach, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
-(`contract::give`): matter and heat back to the ground, through the cell's view of the store. **Press**
+(`contract::give`): matter and heat back to the ground, through the cell's view of the store. **The key liquid**
+(`contract::liquid`): what a cell's ground holds of it, split four ways: open (standing on it, as deep as the month's
+start found it), in its pores (the cover's roots reach it, a mouth does not), frozen and lying on it as the soft solid
+(as deep as the month's start found it), and frozen in its pores. **Vapour** (`contract::vapour`): a taker sheds heat
+by turning open liquid and soft solid into vapour, given to the cell's aside node as the cover's books give a gas; it
+pays the vapour's latent heat less what the ground held (a solid's heat of fusion too). **Press**
 (`contract::press`): work spent on a cell breaks its cover by the share it pays for (`life::breaking` of all its slots), and what breaks
 goes to the ground as remains with its heat. **What stands on a cell** (`contract::Stand`): the cover's mass, capture
 area and the light it absorbs and keeps, at each month's start (`Cover::stand`); Flow reads it (1.3, 1.4). A cell shows
