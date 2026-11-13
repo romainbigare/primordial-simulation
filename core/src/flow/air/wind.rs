@@ -5,7 +5,7 @@
 use super::super::Scratch;
 use super::daily::{temps, Moved};
 use super::stretch::Stretch;
-use crate::{solve::line::{self, Lines}, solve::sweep::HALF_WAY, space::Level, units::R_GAS, Config, World};
+use crate::{solve::line::{self, Lines}, solve::sweep::HALF_WAY, space::Level, units::{R_GAS, SPIN}, Config, World};
 
 /// A fit of a gradient whose neighbours nearly line up (the determinant below this share of the product of its
 /// diagonal) is made along each axis alone.
@@ -63,21 +63,33 @@ impl End {
     }
 }
 
+/// The share of the near-ground air's flow that runs down a push at latitude `lat`, degrees, and the share turned
+/// across it, of what it would be on a planet with no spin: the balance of the push, the friction of the ground at
+/// the rate r (`Config::friction`) and the Coriolis force of f = 2 Ω sin(lat) (`units::SPIN`, times
+/// `Config::rotation`) gives the flow (r G + f ẑ × G) / (r² + f²) for a push G (Ekman's balance of a layer that the
+/// ground drags), so [r² / (r² + f²), r f / (r² + f²)]. Down the push it is whole at the equator and dies toward the
+/// poles, as the overturning cell of the low latitudes does (Held and Hou 1980); with no spin, all of it runs down.
+pub(super) fn ekman(cfg: &Config, lat: f64) -> [f64; 2] {
+    let (r, f) = (cfg.friction, 2.0 * SPIN * cfg.rotation * lat.to_radians().sin());
+    let all = r * r + f * f;
+    [r * r / all, r * f / all]
+}
+
 /// The pushes on a link from end `a` to end `b`, of width `wd` and length `d` as the stretched air takes them
 /// (`Stretch::length`), `ab` apart on the map, m [east, south]: its eddies, mol/s each way; its overturning, mol/s of the
 /// lower half from `a` to `b`; the heat per mol its upper half holds over its lower, J/mol; and the conductance of its
 /// evening of pressure, mol/(Pa s) (`Pushes`).
 pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab): (f64, f64, [f64; 2])) -> [f64; 4] {
     let (rho, depth) = ((a.rho + b.rho) / 2.0, cfg.air_top_m - (a.za + b.za) / 2.0);
-    let turn = cfg.rotation * ((a.lat + b.lat) / 2.0).to_radians().sin();
+    let [down, turned] = ekman(cfg, (a.lat + b.lat) / 2.0);
     // The warmth's difference across the link, as its gradient times its offset: on the map's metres, as the stretch
     // lengthens both alike.
     let (ga, gb) = (a.grad, b.grad);
     let across = ((ga[0] + gb[0]) * ab[1] - (ga[1] + gb[1]) * ab[0]) / 2.0;
     let mix = st.per_column(cfg.mix * rho * depth * wd / d);
     // A mass flux by the gradient, the link's difference over its length `d`, through its half cross-section, so it
-    // does not depend on `d`.
-    let over = st.per_column(cfg.wind * (b.warmth - a.warmth + turn * across) / d * rho * wd * depth / 2.0);
+    // does not depend on `d`: down the gradient along the link, and turned from the gradient across it (`ekman`).
+    let over = st.per_column(cfg.wind * (down * (b.warmth - a.warmth) + turned * across) / d * rho * wd * depth / 2.0);
     // The middles of a column's halves lie half its depth apart.
     let rise = (a.rise + b.rise) / 2.0 * depth / 2.0;
     // Sound crosses the link in d / its speed. The stretched column holds the stretch squared times the mol at the same
@@ -88,8 +100,8 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
 }
 
 /// Three pushes on each link (`push`): the column's pressure, evened in the time sound takes to cross it (Lamb waves,
-/// Lindzen 1990, 9.2); overturning by the warmth gradient, turned by the rotation at the link's latitude, its lower half
-/// toward the warmer node at `wind` per K/m; and eddy mixing (`mix` × width / length). Each over the link's length and
+/// Lindzen 1990, 9.2); overturning by the warmth gradient, its lower half toward the warmer node at `wind` per K/m and
+/// turned by the planet's spin at the link's latitude (`ekman`); and eddy mixing (`mix` × width / length). Each over the link's length and
 /// width as the stretched air takes them, and a rate between the stretched columns (`Stretch`). From the air of each
 /// node as the last state left it (`ends`).
 pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, links: &Links) -> Pushes {
@@ -333,5 +345,25 @@ fn cross((q, flows): (usize, impl Iterator<Item = (usize, f64)>), (x, e): (&mut 
         v[ib] += d;
         count[p] += d;
         kg[p] += mm[q] * d;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ekman;
+    use crate::{units::SPIN, Config};
+
+    /// The overturning down a gradient is whole at the equator and at 60° the share r² / (r² + f²) of it, the rest turned
+    /// across; on a planet with no spin it runs whole down the gradient at every latitude.
+    #[test]
+    fn the_overturning_feels_the_spin() {
+        let cfg = Config::default();
+        let (r, f) = (cfg.friction, 2.0 * SPIN * 60f64.to_radians().sin());
+        assert_eq!(ekman(&cfg, 0.0), [1.0, 0.0]);
+        let [down, turned] = ekman(&cfg, 60.0);
+        assert!((down - r * r / (r * r + f * f)).abs() < 1e-12 && down < 0.05, "down {down}");
+        assert!((turned - r * f / (r * r + f * f)).abs() < 1e-12 && ekman(&cfg, -60.0)[1] == -turned, "turned {turned}");
+        let still = Config { rotation: 0.0, ..Config::default() };
+        assert!([-80.0, -30.0, 0.0, 45.0, 89.0].iter().all(|&lat| ekman(&still, lat) == [1.0, 0.0]));
     }
 }
