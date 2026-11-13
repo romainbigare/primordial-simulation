@@ -193,6 +193,12 @@ are the wrong level: a costly model per node, and not enough nodes to make an ec
 
 ## 4. Animals as a field: the design I propose
 
+The first stage (F1, the takers of the cover) is designed in full in `review/f1-design.md`, with the
+orchestrator's decisions at its top. Where it and this section differ on F1, it holds: eight genes, not twelve; the
+young disperse by the seeds' kernel already in F1; a mutant never founds a slot by one generation's step (the slot
+rule chooses between kinds that exist, for the cover as for takers: a kind that splits in two is a law still to
+write); the refuge that keeps takers from eating a cell bare is what a mouth cannot reach.
+
 ### 4.1 The idea
 
 Do for animals what was done for plants. Each land cell holds a **fauna**: a fixed number of slots (8 to start; a
@@ -307,7 +313,7 @@ By numbers of real ecosystems, as ranges in one slow test, and by pictures:
 | Check | The real range | Source (from memory; to verify when the test is written) |
 |---|---|---|
 | Grazers eat a real share of what plants grow | a few percent in forest, 10 to 60% in grassland | McNaughton and others 1989 |
-| Grazer mass follows rain and plant growth | 1 to 20 g per m² in savanna | Coe, Cumming and Phillipson 1976 |
+| Grazer mass follows rain and plant growth | 0.1 to 10 g per m² over African parks, typical 1.7 | Fritz and others 2002; Hempson and others 2015; Coe, Cumming and Phillipson 1976 |
 | Numbers fall with body mass as mass^-0.75 | across kinds | Damuth 1981 |
 | Eater mass grows slower than prey mass (power near 0.75) | across places | Hatton and others 2015 |
 | Size and coat follow the cold on a Wide island | larger and thicker in the north | Bergmann's rule |
