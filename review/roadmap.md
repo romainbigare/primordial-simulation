@@ -145,17 +145,10 @@ samples are its leaves of depth 6. What remains of the tree **that moved** is th
 
 - `core/src/space/tree.rs`: the most depth is 24 ("a leaf of 0.5 mm, finer than any body"). Cells need depth 2,
   samples 6, the tiles about 13.
-- Ids by "cell serial" with a table from serial to index, "none once it split or joined" (`core/src/life/mod.rs`):
-  no code adds or removes a cell, so the serial is always the index. About 45 lines, and it is saved.
-- `Purpose::Quarter` in `rng.rs` ("the quarter a body goes to when its cell splits (`life::tree`)"): never used, and
-  no such module.
-- `choose/features.rs` (`Regions`, `across_corners`, about 75 lines), `Leaf::parent`: so that a cell finer than a
-  square sees as far as a square. No world has such a cell.
+- `Leaf::parent`: so that a cell finer than a square sees as far as a square. No world has such a cell.
 - `Terrain::below` and the branches `SAMPLE_DEPTH.max(l.depth)` in `flow/`: the case of a cell finer than a sample.
-- `survey/steps.rs`: a general grid of "2^halvings steps a month" that is only ever made with 0 and 2.
 - `Mesh` of any number of levels (`space/mod.rs`): it always builds two.
-- Comments that still tell of splits: the module doc of `cover/mod.rs` ("a split of a cell shares its cover out,
-  `tree`"), `nodes.rs`, `worldgen/src/terrain.rs`, `flow/drain.rs` ("sub-stepped where a cell is too small").
+- Comments that still tell of splits: `flow/drain.rs` ("sub-stepped where a cell is too small").
 - In the spec: 5.2, 7.2, 7.3 and 7.4 still describe cells that split and join, the camera as a recorded input, the
   step that follows the size, and zoom that slows time. `docs/laws.md` 1.8 is still titled "The step by the size".
 
@@ -165,25 +158,20 @@ samples are its leaves of depth 6. What remains of the tree **that moved** is th
 
 - `core/src/inside/` (the law inside a cell): no law of the core reads it now. Only the tape and the page do. It
   is the right idea in the wrong crate until the animals need it (section 4.2); say so in its doc, or move it.
-- `worldgen/src/generate.rs` and `richness.rs` (about 300 lines): the generator of random chemistries and its
-  checks, for "M7". A random chemistry cannot grow life today (the spec says so). It is a plan, not a part.
 - `ew view` (a window of a snapshot as a PNG, with a "depth" layer): made to look at fine cells.
 - `--fine`, and the globe: see the owner's decision 3 in section 9.
-- The 631 columns of `series.csv`: most are per-kind columns of bodies and counters of acts.
-- Small dead things: `units::HOUR_S`; five classes in the sleep clock where two are used; test-only doors in the
-  core (`Life::part_mut`, `rows_mut`, `Body::store_of`, `World::even_ground`).
-- Names that mean two things (`CLAUDE.md` 2.8): "bodies" is animals, ponds (`flow/bodies.rs`), a store class and a
-  worldgen struct; `Grid` is three types; `Books` is three.
+- Small dead things: five classes in the sleep clock where two are used.
+- Names that mean two things (`CLAUDE.md` 2.8): "bodies" is the bodies of standing liquid (`flow/bodies.rs`) and
+  the plants' bodies (`body matter`); `Grid` is three types; `Books` is three.
 
 ### 2.5 The docs
 
 - The documents are `CLAUDE.md` (the rules), `docs/handover.md` (the spec), `docs/laws.md`, `docs/numbers.md`,
-  `docs/tape.md`, `docs/analyze.md`, this roadmap and `review/orchestrator.md` (the handover). The spec says which
-  one wins (its section 0).
+  `docs/tape.md`, this roadmap and `review/orchestrator.md` (the handover). The spec says which one wins (its
+  section 0). `CLAUDE.md` still names `docs/analyze.md`, which is gone with the pattern finder.
 - The spec's sections about the old animals (the laws of bodies in 6.1 to 6.6, the pattern finder and the library in
-  9, god mode in 11) describe code that leaves with C1c. They are rewritten or cut in the same merge.
-- `docs/laws.md` is true to the code. Its sections 3, 5, 6 and the body half of 4 describe the old animals and leave
-  with C1c; "a finer cell" wording stays in 5.2, 5.3 and 6.3 until then.
+  9, god mode in 11) describe code that is gone (the tag `animals-v2` keeps it). They are rewritten or cut (C4).
+- `docs/laws.md` is true to the code and describes no animal.
 
 ## 3. The animal world today, measured
 
@@ -554,9 +542,9 @@ Before the new animals, and before the spec misleads one more agent. Each step i
 
 | Step | What | Check |
 |---|---|---|
-| C2 | **The tree's tools** (section 2.2): ids without serials; the most depth; the cases of cells finer than a square or a sample; the stale comments. And the small dead things of 2.3 and 2.4. The chemistry generator and its checks move to a branch | the same to the last digit |
+| C2 | **The tree's tools** (section 2.2): the most depth; the cases of cells finer than a square or a sample; the stale comments. And the sleep clock's classes (2.4) | the same to the last digit |
 | C3 | **One helper per idea**, one solid surface of a cell (three formulas today); one heat capacity of a ground node (two); the light the cover catches (the air and the cover each have a law); one meaning of "sea"; seeds mixed by a real hash, not XOR; one name for one thing | the same to the last digit where no law changes; else its own law commit |
-| C4 | **The docs of the old animals leave**: the spec's sections about bodies (2.5) and `docs/laws.md` sections 3, 5, 6 and the body half of 4 (kept in the tag, and their anchored rows in a short file) | the list of section 11.2 is empty |
+| C4 | **The spec's sections about the old animals leave** (2.5; their anchored laws are in section 13) | the list of section 11.2 is empty |
 | C6 | **Measures** before C3, so that it has a base to compare with: one plants-only world of 3,000 years (item 11 of section 6); the cost per layer at sizes 32, 64, 128 | two tables in the handover |
 
 The two branches that are parked (`wip/air-light`, `wip/sorted-start`) touch `flow/air/`, `chem/`, `cover/` and
@@ -616,18 +604,11 @@ hand. (a) is dead: nothing reaches it. (b) is reached but does nothing under the
 
 | What | Where | Class | Lines (about) |
 |---|---|---|---|
-| `Purpose::Quarter` | `core/src/rng.rs:39` | a | 2 |
-| `units::HOUR_S` | `core/src/units.rs:7` | a | 1 |
-| `Chemistry::light_reactions`, `Derived::light` | `core/src/chem/roles.rs:60`, `chem/mod.rs:143` | a | 8 |
-| `World::rained` (written and saved, read by no law) | `core/src/world.rs:122`, `flow/air/book.rs:99` | a | 6, a snapshot bump |
 | `Terrain::below` and its branch in `Terrain::inside` | `core/src/space/below.rs:112`, `terrain.rs:249` | a | 8 |
-| Cell serials (`at_serial`, `GONE`, `next_serial`, `Life::at`) | `core/src/life/mod.rs:28-265`, `life/saved.rs` | b | 45, a snapshot bump |
-| `Regions`, `across_corners`, `Leaf::parent` | `core/src/choose/features.rs:110-195`, `space/tree.rs:44` | b | 75 |
+| `Leaf::parent` | `core/src/space/tree.rs:45` | b | 10 |
 | A cell finer than a sample | `flow/bodies.rs:68`, `flow/basin.rs:70`, `flow/curve.rs:262`, `space/samples.rs:116` | b | 15 |
 | `Mesh` of any number of levels | `core/src/space/mod.rs:207-259` | b | 15 |
 | `DEPTH_MOST` 24 | `core/src/space/tree.rs:8` | c | a number |
-| `Bodies::anywhere` (always false), `Bodies::cat[0]` (always off) | `worldgen/src/life/kinds.rs:31-34` | b | 6 |
-| `Life::absorb`, `Life::keep`, rows 2, 8, 9 of the sums | `core/src/life/mod.rs:86-95`, `survey.rs:122-158` | c, in the wrong place | 20 |
 | The test of a tree of three depths | `core/tests/space.rs:227` | tests what no world has | 30 |
 | Five `#[serde(default)]` on the chemistry file's fields | `worldgen/src/chemistry.rs:39-71` | c, against the letter of rule 2.5 | 5 |
 | The solid surface of a cell, three formulas | `ground.rs:162`, `flow/land.rs:287`, `flow/stack.rs:42` | c | one helper |
@@ -637,18 +618,12 @@ hand. (a) is dead: nothing reaches it. (b) is reached but does nothing under the
 Checked and clean: no flag of the dropped designs is left in `cli/src/args.rs`; every export of `wasm/` is called;
 every file and shader of `web/` is used; no `#[serde(default)]` reads an old save; no TODO.
 
-The parts of the old animal world, to size the deletion of C1 (raw lines, comments counted): `body` 1,510, `bond`
-1,500, `choose` 1,440, `life` 1,400 (most of it), `copy` 750, `brain.rs` 310, `nodes.rs` 250, `lineage.rs` 120,
-`lanes.rs` 60. Inside them, parked for longer still: two parents (`copy/mix.rs`), watching (`choose/learn.rs`),
-lots (`bond/lots.rs`), rooms and wading (`bond/sense.rs`). About 45 of the 130 fields of `Physics` and `Config` are
-read by animal code only.
-
 ### 11.2 Docs
 
 | Document | State | What to do |
 |---|---|---|
-| `docs/handover.md` | true to the owner's decisions, except the sections about the old animals (6.1 to 6.6, 9, 11 and the lines of 10 and 12 that name them) | rewrite or cut with C1c (C4) |
-| `docs/laws.md` | true; sections 3, 5, 6 and the body half of 4 describe the old animals; "a finer cell" wording in 5.2, 5.3, 6.3 | leave with C1c (C4) |
+| `docs/handover.md` | true to the owner's decisions, except the sections about the old animals (6.1 to 6.6, 9, 11 and the lines of 10 that name them), whose code is gone | rewrite or cut (C4) |
+| `CLAUDE.md` | names `docs/analyze.md`, which is gone | the owner mends it |
 | `review/orchestrator.md` | current; items 1, 2 and 4 of its section 5 are the same item | the orchestrator mends it |
 
 ## 12. Open items of the natural world and its page
