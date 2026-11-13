@@ -59,8 +59,10 @@ pub struct Config {
     pub cloud_ir: f64,
     /// How many times a band's mean optical depth its core of strong lines has, its wings of weak lines 1 / that
     pub line_spread: f64,
-    /// Time in which vapour over saturation rains out, s
+    /// Time in which a saturated part of an air node's air rains out what the node holds over its saturation, s
     pub rain_time: f64,
+    /// Least ratio of an air node's vapour to what saturates it at which its moistest air saturates
+    pub moist_min: f64,
     /// Distance the wind carries condensed rain before it lands, m
     pub rain_drift_m: f64,
     /// Loose solid volume moving liquid carries off per J it dissipates, m³/J
@@ -510,6 +512,8 @@ impl Config {
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
+        // The moistest air of a node saturates before the node does, and not when it holds nothing (`seen::saturated`).
+        require(self.moist_min > 0.0 && self.moist_min < 1.0, || format!("moist_min ({}) must be above 0 and below 1", self.moist_min))?;
         // Rain lands over a width the drift sets (`seen::Seen::landing` divides by it).
         require(self.rain_drift_m > 0.0, || format!("rain_drift_m ({}) must be above 0", self.rain_drift_m))?;
         // Hardening lowers a lethal limit, never raises it.
@@ -568,6 +572,7 @@ impl Default for Config {
             cloud_ir: 6.7,
             line_spread: 4.0,
             rain_time: 86400.0,
+            moist_min: 0.7,
             rain_drift_m: 2e4,
             carry: 2e-11,
             wear: 1.4e-11,

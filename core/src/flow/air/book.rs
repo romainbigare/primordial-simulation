@@ -98,7 +98,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     s.state.cloud = (0..na)
         .map(|j| {
             let (m, mr) = act.iter().enumerate().map(|(y, ac)| (mean.rain[y * na + j], mean.rain[y * na + j] * s.sp[ac.k].refl[0])).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
-            cloud((w.cfg.cloud, w.cfg.cloud_ir), (m, mr), w.mesh.level(AIR).area()[j], dt)
+            cloud((w.cfg.cloud, w.cfg.cloud_ir), (m, mr), mean.cloud[j], w.mesh.level(AIR).area()[j], dt)
         })
         .collect();
     let ema = year_weight(w, dt);

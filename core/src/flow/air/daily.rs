@@ -115,8 +115,9 @@ impl Ground {
 
 /// What the air level does over a step: per node its mean temperature, K, and the heat it sends to space, J; per gas
 /// of the air and node (`[gi * na + j]`) its mean amount, mol; per active gas and node what rains, mol, the fusion
-/// enthalpy it keeps as it falls liquid, J, and the saturation ratio it rains at, a mean by rain; what moves between
-/// nodes (`Moved`); and what crosses the map's open edges (`Edges`).
+/// enthalpy it keeps as it falls liquid, J, and the saturation ratio it rains at, a mean by rain; per node the share of
+/// its sky its clouds cover, a mean over the step; what moves between nodes (`Moved`); and what crosses the map's open
+/// edges (`Edges`).
 pub(super) struct Mean {
     pub(super) t: Vec<f64>,
     pub(super) space: Vec<f64>,
@@ -124,6 +125,7 @@ pub(super) struct Mean {
     pub(super) rain: Vec<f64>,
     pub(super) rain_fusion: Vec<f64>,
     pub(super) ratio: Vec<f64>,
+    pub(super) cloud: Vec<f64>,
     pub(super) moved: Moved,
     pub(super) edges: Edges,
 }
@@ -177,7 +179,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs] };
     let v = |len: usize| vec![0.0; len];
     let edges = Edges::of(w, s, &ends);
-    let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), moved, edges };
+    let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), ratio: v(nx * na), cloud: v(na), moved, edges };
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();
     let imp = Implicit::of(s, (&push, &border, &lines), (&out.moved.a, &out.moved.b), &x, dd);
@@ -290,6 +292,11 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let [mean, rain, ratio, dx] = vapour(w, s, (act, ground), (blocks, one), (x, &got, &ts), (dd, dt), rooms);
     one.shared(&mut got, &dx);
     (0..s.state.gas.len() * na).for_each(|at| out.x[at] += mean[at] * share);
+    // The share of each node's sky its clouds cover at the day's mean vapour (`Seen::clouded`), the most of its gases'.
+    for (j, c) in out.cloud.iter_mut().enumerate() {
+        let of = |(y, ac): (usize, &Active)| ground.wet().nodes[j].clouded(y, mean[ac.gi * na + j] / saturating(w, s, ac, j, ts[j]), w.cfg.moist_min);
+        *c += act.iter().enumerate().filter(|p| p.1.cond).map(of).fold(0.0, f64::max) * share;
+    }
     // The air each node's rain meets (`rain_air`), per active gas and node (`[y * na + j]`), on the pool, from the air
     // touching each place it falls on.
     let touched = ground.wet().touched(s, &t, &rain);
@@ -355,6 +362,13 @@ fn warmth(w: &World, s: &Scratch, blocks: &[Vec<u32>], one: &Together, (x, start
     (t, warms)
 }
 
+/// What saturates air node `j` of active gas `ac` at `ts` K at its mean ground, mol: the gas at its saturation pressure
+/// there filling the height its amount fills (`Scratch::hk`).
+fn saturating(w: &World, s: &Scratch, ac: &Active, j: usize, ts: f64) -> f64 {
+    let na = w.mesh.level(AIR).n();
+    (s.sat[ac.k].at(ts) * w.mesh.level(AIR).area()[j] * s.hk[ac.gi * na + j] / (R_GAS * ts)).max(0.0)
+}
+
 /// The mean air of a day of `dd` seconds from the air `x` at its start (`[gi * na + j]`), at the day's mean
 /// temperatures `t` (per node, K; `ts` at its mean ground): per block and active gas what its ground gives and what its
 /// nodes rain, of what each holds over what saturates the cells that see it in `rain_time` (`Wet`), follow the block's
@@ -362,7 +376,7 @@ fn warmth(w: &World, s: &Scratch, blocks: &[Vec<u32>], one: &Together, (x, start
 /// o]`). With per active gas and node (`[y * na + j]`) what it rains over the day, mol, and that times the ratio it rains
 /// at; and per active gas and block (`[y * nb + b]`) the change of its vapour from the day's start to its mean, mol.
 fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, got, ts): (&[f64], &[f64], &[f64]), (dd, dt): (f64, f64), rooms: &mut [Room]) -> [Vec<f64>; 4] {
-    let (air, na, nx, nb) = (w.mesh.level(AIR), ts.len(), act.len(), blocks.len());
+    let (na, nx, nb) = (ts.len(), act.len(), blocks.len());
     // Per active gas and block (`[y * nb + b]`), each on the pool: the block's vapour at the day's start and its mean
     // over the day, mol, and per node of the block what it rains and that times its ratio (`Pool::day`).
     let mut days: Vec<(usize, [f64; 2], &mut Room)> = rooms.iter_mut().enumerate().map(|(i, room)| (i, [0.0; 2], room)).collect();
@@ -374,7 +388,7 @@ fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
     let day = |(i, sums, room): &mut (usize, [f64; 2], &mut Room)| {
         let (y, b) = (*i / nb, *i % nb);
         let (ac, nodes) = (&act[y], &blocks[b]);
-        let full = |j: usize| if ac.cond { (s.sat[ac.k].at(ts[j]) * air.area()[j] * s.hk[ac.gi * na + j] / (R_GAS * ts[j])).max(0.0) } else { 0.0 };
+        let full = |j: usize| if ac.cond { saturating(w, s, ac, j, ts[j]) } else { 0.0 };
         let held = |j: u32| x[ac.gi * na + j as usize];
         let all: f64 = nodes.iter().map(|&j| held(j)).sum();
         let gives: f64 = nodes.iter().map(|&j| got[j as usize * (1 + nx) + 1 + y]).sum();

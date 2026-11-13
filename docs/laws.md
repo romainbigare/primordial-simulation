@@ -537,10 +537,10 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   lifts the layer that reaches space into colder air and the ground warms. The layers are each air node's, over its
   mean ground; the air touching a cell is the air it sees (bilinearly, its four nearest nodes), colder by the drop with
   height from that air's mean height.
-- **Clouds** (`exchange::cloud`): scattering depth x = condensation rate / `cloud`, from what each air node rained in
-  the step before; they reflect x / (1 + x) of the sunlight (two-stream, Lacis and Hansen 1974) and absorb heat
-  radiation at depth `cloud_ir` × x (Stephens 1978). A globe of Earth's size without life holds about Earth's
-  climate. **Known limit:** their depth is spread like the air's mass, not set where they condense. The ground also
+- **Clouds** (`exchange::cloud`): each air node's cloud covers the share b of its sky that is saturated
+  (`seen::saturated`, 1.5), a mean over the step before; under it the scattering depth x = condensation rate in the
+  cloud / `cloud`, from what the node rained; it reflects b x / (1 + x) of the sunlight (two-stream, Lacis and Hansen
+  1974) and absorbs heat radiation at depth `cloud_ir` × the node's rate / `cloud` (Stephens 1978). **Known limit:** their depth is spread like the air's mass, not set where they condense. The ground also
   trades sensible heat with the air (`sensible`).
 - **The bodies' node** (`Class::Bodies`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
@@ -564,15 +564,21 @@ stands, the rest what its pores hold, each a bucket by its area); and through a 
 one stands over its land (`World::second_film`: the cover's open pores, 4.5), in series with the air's film, at its
 open rate while the share of the ground's liquid behind it lasts (no wet threshold: its roots reach that liquid),
 from what the first leaves; both inside the surface's balance, taking the heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
-point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: what an air node holds of a
-gas over what saturates the air touching each of its cells (colder higher up) rains out in `rain_time`. Each node's air
+point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: a node's air is not evenly
+moist. Over each cell it is `seen::MOIST_PARTS` equal parts that saturate one after another as the node moistens: the
+moistest when the node holds `moist_min` of what saturates the air touching the cell (colder higher up), the last at
+saturation, so the share saturated is 1 − √((1 − r) / (1 − `moist_min`)) at the node's ratio r to that (Sundqvist et
+al. 1989; it is a uniform spread of moisture whose saturated part holds no more than saturates it, Tompkins 2005).
+Each saturated part rains out in `rain_time` what the node holds over the ratio it saturates at, so the node's mean
+stays under saturation; the saturated share is the cloud's share of the sky (1.4). The surface's evaporation reads
+the node's mean vapour. Each node's air
 lies over the cells that see it (bilinearly), each by its share; the cells' saturation is taken as the step starts, as
-a ratio to the node's, so the day sums them in rising order. In the air's day the vapour of each block (1.6), evened
+a ratio to the node's, so the day sums the parts in rising order. In the air's day the vapour of each block (1.6), evened
 as the eddies even it, follows what its cells evaporate by their law and what its nodes rain: both are linear in the
 vapour between two of the ratios at which a cell starts or stops raining, so the day goes exactly from one such ratio
 to the next, with no smaller steps (`rain::Pool`); the air outside the block is as at the day's start. What a node
-rained in the step condenses over those cells (the sea under one air node as one place, 1.4) by what each would hold
-over its own saturation at the ratio the node rained at, so it is heaviest over high ground; it lands there by the share
+rained in the step condenses over those cells (the sea under one air node as one place, 1.4) by what the parts over
+each would hold over their own saturation at the ratio the node rained at, so it is heaviest over high ground; it lands there by the share
 1 - e^(-d / `rain_drift_m`) of it, d the place's width (the root of its area), and the rest drifts with the wind while
 its drops form and fall and lands over all the node's cells by the share of its air over each (the linear theory of
 orographic rain, Smith and Barstad 2004: a cloud time and a fallout time of about 1000 s each carry rain some 20 km at
