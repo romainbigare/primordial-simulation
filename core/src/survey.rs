@@ -1,101 +1,76 @@
-//! The bodies seen from their cells: at each month's start what each cell holds and the shade of its bodies
-//! (`survey`), and every body's update at the month's start, in a parallel and a serial pass (`batch`; the steps,
+//! The bodies seen from their cells, the contract's first taker (`contract`): at each month's start what movers broke
+//! (`press`), what the bodies add to what stands on each cell and their own numbers (`sums`), and what they see
+//! (`features`); and every body's update at the month's start, in a parallel and a serial pass (`batch`; the steps,
 //! `steps`).
 
-use crate::body::{die, live, perish, Layout, Lived, LiveTmp, LACK};
-use crate::life::{self, Chunk, Handle, Of};
+use crate::body::{die, live, perish, Layout, Lived, LiveTmp};
+use crate::life::{self, Chunk, Handle, Of, LACK};
 use crate::store::{Class, Node};
 use crate::{choose, World};
 
-mod draws;
 mod steps;
-pub(crate) use draws::release;
 pub use steps::Grid;
 
-
-/// Temperature, depth of the standing liquid and surface height of a ground cell as life stands on it (a cell of
-/// parts' land, `flow::parts`), as Flow's last step left them (once Flow's working memory is built, `flow::ensure`).
-pub fn env_of(w: &World, i: usize) -> [f64; 3] {
-    let (d, z) = w.scratch.standing_land(i);
-    [w.t_ground_last(i), d, z]
+/// At each month's start, first: what movers broke since the last month's start breaks (`choose::wear`), in each cell
+/// one task per chunk on the pool (`life::run`), and the bodies' visible traits that changed are worked out again
+/// (`Chunk::see_changed`). A death that lets go of a part queues that, for the serial pass after (`life::land`, laws.md
+/// 0). With no body and nothing pushed there is nothing to do.
+pub fn press(w: &mut World) {
+    w.life.compact();
+    if !w.life.cells.iter().any(|c| c.pushed > 0.0 || !c.bodies.is_empty()) {
+        return;
+    }
+    let load = w.life.cells.iter().filter(|c| !c.bodies.is_empty()).count();
+    life::run(w, Of::All, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| {
+        for i in d.cells() {
+            let e = std::mem::take(&mut d.at_mut(i).pushed);
+            if e > 0.0 && (!d.at(i).bodies.is_empty() || d.at(i).cover.any()) {
+                choose::wear(w, d, i, e);
+            }
+        }
+        d.see_changed(w);
+    });
 }
 
-/// At each month's start: what movers broke and what each cell holds (`break_and_sum`). Then the caches of the cells
-/// (`caches`), once a month the traffic and each cell's surroundings, and the cells' features (`choose::cells`); both
-/// read the members that moved in since the last month's survey, and that count starts again. Only the decisions of
-/// bodies read the features (`choose`): with no body living they are not made. A body comes only from one living or
-/// from a placement between months (`worldgen::schedule`), so the survey of its first month makes them before it
-/// decides.
-pub fn survey(w: &mut World) {
-    let n = w.mesh.cells().n();
-    let monthly = monthly(w);
-    break_and_sum(w, Of::All, &|_| true);
-    life::land(w);
-    caches(w);
-    if monthly && w.time > 0 {
-        traffic(w);
+/// After the cover's part of what stands on each cell (`contract::stands`): the bodies' part, each in the order they
+/// came (their mass, `Body::vis`, and the energy to break them, `Stand::add`), and their own numbers per cell (`ROW`:
+/// their members, and their strength summed by members).
+pub fn sums(w: &mut World) {
+    let World { life, chem, cfg, .. } = w;
+    for (i, c) in life.cells.iter().enumerate() {
+        let mut row = [0.0; ROW];
+        for b in c.bodies.iter().filter(|b| b.alive) {
+            let m = b.n();
+            row[0] += m;
+            row[1] += b.vis[1] as f64 * m;
+            life.stands[i].add(b.vis[0] as f64 * m, b.breaking(chem, cfg, 1.0));
+        }
+        life.sums[i] = row;
     }
-    if monthly || w.life.env.len() != n {
-        // From Flow's state rebuilt in full, as at a month's start, so a resumed run reads what an unbroken one does.
-        crate::flow::state(w, true);
-        w.life.env = (0..n).map(|i| env_of(w, i)).collect();
+}
+
+/// After the surroundings (`contract::surroundings`): once a month the traffic, and the cells' features
+/// (`choose::cells`), which read the members that moved in since the last month's start; that count starts again.
+/// Only the decisions of bodies read the features: with no body living they are not made. A body comes only from one
+/// living or from a placement between months (`worldgen::schedule`), so the start of its first month makes them before
+/// it decides.
+pub fn features(w: &mut World) {
+    if w.time.is_multiple_of(w.cfg.calendar().month) && w.time > 0 {
+        traffic(w);
     }
     if w.life.alive().next().is_some() {
         choose::cells(w);
     } else {
         w.life.feat.clear();
     }
-    // (The members that moved in since the last survey are read by both; the count starts again.)
     w.life.cells.iter_mut().for_each(|c| c.crossings = 0.0);
 }
 
-/// One task per chunk of the cells `of` on the pool (`life::run`): in each that `steps`, what movers broke since its last
-/// survey (`choose::wear`); then in every cell the visible traits that changed and what it holds (`rows`, `Life::sum`).
-/// A death that lets go of a part queues that, for the serial pass after (`life::land`, laws.md 0).
-fn break_and_sum(w: &mut World, of: Of, steps: &(dyn Fn(usize) -> bool + Sync)) {
-    w.life.compact();
-    let load = cells_of(w, of).filter(|&i| !w.life.cells[i].bodies.is_empty()).count();
-    let sums = life::run(w, of, rows_of(w, of), load, |_| (), |w, d, sums, _| {
-        for i in d.cells().filter(|&i| steps(i)) {
-            // (A cell with no bodies and no cover has nothing to break or sum.)
-            if d.at(i).bodies.is_empty() && !d.at(i).cover.any() {
-                d.at_mut(i).pushed = 0.0;
-                continue;
-            }
-            let e = std::mem::take(&mut d.at_mut(i).pushed);
-            if e > 0.0 {
-                choose::wear(w, d, i, e);
-            }
-        }
-        d.see_changed(w);
-        rows(w, d, sums);
-    });
-    match of {
-        Of::All => w.life.sums = sums.concat(),
-        Of::Only(list) => list.iter().zip(sums.concat()).for_each(|(&i, r)| w.life.sums[i as usize] = r),
-    }
-}
-
-/// Once a month, after Flow's state is built in full: the cover's month (`cover::step`) in each cell that holds any,
-/// one task per chunk on the pool; then its seeds land (`cover::land`).
-pub fn cover(w: &mut World) {
-    let load = w.life.cells.iter().filter(|c| c.cover.any()).count();
-    life::run(w, Of::All, vec![(); life::chunks(w)], load, |_| (), |w, d, _, _| crate::cover::step(w, d));
+/// The bodies' part of what stands on each cell and their own numbers (`sums`), then what the press queued lands
+/// (`life::land`), before Flow's state is built from the store.
+pub fn stand(w: &mut World) {
+    sums(w);
     life::land(w);
-    crate::cover::land(w);
-}
-
-/// Whether it is a month's start: the survey adds up the traffic and rebuilds Flow's state in full.
-fn monthly(w: &World) -> bool {
-    w.time.is_multiple_of(w.cfg.calendar().month)
-}
-
-/// Per chunk, a row of zeros for each of its cells of `of` (`rows`).
-fn rows_of(w: &World, of: Of) -> Vec<Vec<[f64; ROW]>> {
-    let b = life::bounds(w);
-    let mut per = vec![0; b.len() - 1];
-    cells_of(w, of).for_each(|i| per[b.partition_point(|&x| x <= i) - 1] += 1);
-    per.into_iter().map(|k| vec![[0.0; ROW]; k]).collect()
 }
 
 /// The cells `of` whose life `holds` it, in order.
@@ -111,62 +86,8 @@ fn cells_of<'a>(w: &World, of: Of<'a>) -> Box<dyn Iterator<Item = usize> + 'a> {
     }
 }
 
-/// The numbers of the cells of chunk `d` (`Life::sum`), in `sums`.
-fn rows(w: &World, d: &Chunk, sums: &mut [[f64; ROW]]) {
-    for (i, row) in d.cells().zip(sums) {
-        *row = cell_row(w, d, i);
-    }
-}
-
-/// The numbers of cell `i` of chunk `d` (`Life::sum`), from its cover and its bodies in the order they came: their
-/// members, then their visible traits summed, then the energy to break them; then the cover's capture area times the
-/// share of light it absorbs, and that times the share set aside for its light reaction.
-fn cell_row(w: &World, d: &Chunk, i: usize) -> [f64; ROW] {
-    let mut row = [0.0; ROW];
-    let cell = d.at(i);
-    // Its cover, as one more body of no members: its mass, capture area and energy to break, and the light it absorbs
-    // at its mean shade (its kinds share it out among them, `cover::step`).
-    if let Some(p) = crate::cover::Parts::of(&w.chem) {
-        let (c, mm) = (&cell.cover, p.mm(&w.chem));
-        for x in c.held() {
-            let (leaf, abs) = (c.leaf(&mm, x), c.leaf(&mm, x) * (1.0 - c.reflectance(&w.chem, &p, x)));
-            (row[1], row[2], row[8], row[9]) = (row[1] + c.kg(&mm, x), row[2] + leaf, row[8] + abs, row[9] + abs * c.keep as f64);
-        }
-        row[7] += c.breaking(&w.chem, &w.cfg, &p, 1.0);
-    }
-    for b in cell.bodies.iter().filter(|b| b.alive) {
-        let m = b.n();
-        row[0] += m;
-        // (Its mass, then its strength and colour past the capture area, `row[2]`: bodies catch no light.)
-        row[1] += b.vis[0] as f64 * m;
-        row[3..7].iter_mut().zip(&b.vis[1..]).for_each(|(x, &v)| *x += v as f64 * m);
-        row[7] += b.breaking(&w.chem, &w.cfg, 1.0);
-    }
-    row
-}
-
-/// Per cell: the capture area of its bodies per ground area, the light they absorb and the share set aside for their
-/// light reactions.
-fn caches(w: &mut World) {
-    let (n, World { life, mesh, canopy, .. }) = (w.mesh.cells().n(), w);
-    life.absorb.resize(n, 0.0);
-    life.keep.resize(n, 0.0);
-    let area = mesh.cells().area();
-    for (i, r) in life.sums.iter().enumerate() {
-        canopy[i] = (r[2] / area[i]) as f32;
-        life.absorb[i] = if r[2] > 0.0 { (r[8] / r[2]) as f32 } else { 0.0 };
-        life.keep[i] = if r[8] > 0.0 { (r[9] / r[8]) as f32 } else { 0.0 };
-    }
-}
-
-/// The numbers of `Life::sum` per cell.
-pub(crate) const ROW: usize = 10;
-
-/// Per cell (`Life::sum`), on the pool.
-pub fn sums(w: &mut World) {
-    let load = w.life.cells.len();
-    w.life.sums = life::run(w, Of::All, rows_of(w, Of::All), load, |_| (), |w, d, sums, _| rows(w, d, sums)).concat();
-}
+/// The numbers of the bodies of a cell (`Life::sum`).
+pub(crate) const ROW: usize = 2;
 
 /// The yearly moving average of the crossings of each cell (`Cell::crossings`), once a month.
 fn traffic(w: &mut World) {

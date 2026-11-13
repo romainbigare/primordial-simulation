@@ -90,7 +90,7 @@ impl<'de> Deserialize<'de> for Life {
             life.cells.push(Cell { serial: c.serial, bodies, placed: c.placed, pushed: c.pushed, crossings: c.crossings, cover, brains, parts, bonds, parts_made: c.parts_made });
         }
         life.index();
-        life.sums = vec![[0.0; crate::survey::ROW]; life.cells.len()];
+        (life.stands, life.sums) = (vec![Default::default(); life.cells.len()], vec![[0.0; crate::survey::ROW]; life.cells.len()]);
         Ok(life)
     }
 }

@@ -7,7 +7,7 @@ use super::around::{around, Around};
 use super::budget::{self, BUDGET, BUILDING, DIED, EXUDED, ROUNDED, SEEDS, SHED, STORED, UPKEEP, UPKEEP_PARTS};
 use super::build::per_input;
 use super::{dec, Cover, Parts, EMPTY_KG, FROST, FUEL, LIGHT, MATTER, MOIST, NO_ROOT, NP, REPAIR, SLOTS, STORE, WALL};
-use crate::body::{AGE, PHASE, SPENT};
+use crate::life::{AGE, PHASE, SPENT};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::store::{Class, Moves, Node};
 use crate::units::{DAY, MAX_SUBSTANCES};

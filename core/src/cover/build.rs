@@ -4,7 +4,7 @@
 
 use super::grow::{Books, Slot};
 use super::{dec, Cover, Parts, FIX, FIX_OFF, FUEL, MATTER, NP, SEED, SLOTS, STORE, WALL, WALLS};
-use crate::body::WET_TISSUE;
+use crate::life::WET_TISSUE;
 use crate::chem::Reaction;
 use crate::rng::{Purpose, Rng};
 use crate::units::MAX_SUBSTANCES;
@@ -28,7 +28,7 @@ pub(super) fn living_cost(chem: &crate::chem::Chemistry, ph: &crate::Physics, p:
 /// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its share of walls (`WALLS`),
 /// paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
 /// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds, in `seed::LOTS` lots
-/// that land where the dispersal kernel draws (`copy::lot`, `seed::send`), with a generation's mutation; all of it where
+/// that land where the dispersal kernel draws (`life::lot`, `seed::send`), with a generation's mutation; all of it where
 /// one more kg would not pay its upkeep (`pays` false: its light at the bottom of its layer is under its compensation
 /// point), so a cover stops thickening where its lowest leaves would not pay for themselves (Monsi and Saeki 1953;
 /// Hirose 2005).
@@ -102,7 +102,7 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
         let mut r = Rng::new(w.seed, tick, (i * SLOTS + x) as u64, Purpose::Cover);
         let mut lands: Vec<(usize, f64)> = Vec::new();
         for _ in 0..super::seed::LOTS {
-            let Some(j) = crate::copy::lot(w, i, &mut r).filter(|&j| j != i) else { continue };
+            let Some(j) = crate::life::lot(w, i, &mut r).filter(|&j| j != i) else { continue };
             match lands.iter_mut().find(|l| l.0 == j) {
                 Some(l) => l.1 += 1.0 / super::seed::LOTS as f64,
                 None => lands.push((j, 1.0 / super::seed::LOTS as f64)),

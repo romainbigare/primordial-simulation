@@ -1,6 +1,7 @@
 //! Growth: a body builds body matter (and the other solids it builds) from its stores, paid by work (`grow`).
 
-use crate::body::{self, Body, Layout, ALLOC, WET_TISSUE};
+use crate::body::{self, Body, Layout, ALLOC};
+use crate::life::WET_TISSUE;
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::store::Node;
 use crate::{life::Chunk, World};

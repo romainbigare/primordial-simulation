@@ -1,10 +1,10 @@
-//! The yearly part of Flow: creep of loose solids, and the regrowth of bodies into cleared ground.
+//! The yearly part of Flow: creep of loose solids.
 
 use super::{bare_share, land::{lift, melted, molten, rise}, on_land, potential::apply, range, Scratch};
 use crate::{store::{Batch, Class}, World};
 
 /// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
-/// call, out of land cells (`on_land`) down their slopes; then bodies spread back into cleared links (`lanes::regrow`). Over each link they creep from the higher node
+/// call, out of land cells (`on_land`) down their slopes. Over each link they creep from the higher node
 /// `a` to `b` with their heat, and the fall heats `b` (`potential`); they cross the border of the link by its width (none
 /// across a corner), whatever the sizes of the two cells.
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
@@ -55,5 +55,4 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
         }
     }
     apply(w, s, &[moved.flux()], &[]);
-    crate::lanes::regrow(w, dt);
 }

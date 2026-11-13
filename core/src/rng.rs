@@ -40,6 +40,11 @@ pub enum Purpose {
     Quarter,
 }
 
+/// Reach of `Rng::near_normal` (a sum of four uniforms, centred and scaled): 2 sqrt(3).
+pub(crate) const REACH: f32 = 3.464_101_6;
+/// The number of values of a 16-bit uniform.
+const U16_SPAN: f32 = 65536.0;
+
 pub struct Rng(u64);
 
 impl Rng {
@@ -64,6 +69,12 @@ impl Rng {
     #[inline]
     pub fn below(&mut self, n: usize) -> usize {
         (((self.u64() >> 32) * n as u64) >> 32) as usize
+    }
+    /// Noise near a standard normal, within `REACH`: a sum of four 16-bit uniforms from one draw, centred and scaled
+    /// (the mutation of genes).
+    pub fn near_normal(&mut self) -> f32 {
+        let u = self.u64();
+        (((u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48)) as f32 - 2.0 * (U16_SPAN - 1.0)) * (3f32.sqrt() / U16_SPAN)
     }
     /// Standard normal (Box-Muller).
     pub fn normal(&mut self) -> f64 {

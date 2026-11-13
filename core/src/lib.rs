@@ -8,6 +8,7 @@ pub mod check;
 pub mod chem;
 pub mod choose;
 pub mod clock;
+pub mod contract;
 pub mod copy;
 pub mod cover;
 pub mod event;
@@ -31,5 +32,5 @@ pub mod units;
 mod world;
 
 pub use params::{Config, Physics};
-pub use schedule::{day_with_month_at_start, day_with_month_at_start_marked, step, step_marked, step_with_air, Stage, AIR_STEP_DAYS};
+pub use schedule::{day_with_month_at_start, day_with_month_at_start_marked, month_start, step, step_marked, step_with_air, Stage, AIR_STEP_DAYS};
 pub use world::{Counters, Taken, World, AIR};

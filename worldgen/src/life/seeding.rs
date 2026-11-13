@@ -108,7 +108,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
 /// Place the cover of field row `f` of kind `which` on the open land, each cell by its chance: its genes after `rounds`
 /// rounds of mutation (a random walk keyed by the cell), the fixing gene on in the share `fixers` of the cells.
 fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> String {
-    pcore::survey::survey(w);
+    pcore::month_start(w);
     let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
     let (mut cells, mut fixers, mut kg) = (0, 0, 0.0);
     for i in 0..w.mesh.cells().n() {
@@ -139,7 +139,7 @@ fn field(w: &mut World, which: usize, kind: &Kind, f: &Field, how: &Seeding) -> 
 /// Place the bodies of row `b` of kind `which`.
 fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -> String {
     let Some((_, _, _, burn)) = w.chem.life_roles() else { return String::new() };
-    pcore::survey::survey(w);
+    pcore::month_start(w);
     let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
     let hand = b.hand.filter(|_| how.hand);
     let (shape, lineage, rows) = founder_lineage(w, which, b, hand, &mut r);
@@ -151,7 +151,7 @@ fn bodies(w: &mut World, which: usize, kind: &Kind, b: &Bodies, how: &Seeding) -
     let take = (shape.h > 0).then(|| shape.verb(brain::TAKE_FROM) * shape.r() + shape.h);
     let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, burn: (f32::MAX, f32::MIN), copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
     for i in 0..w.mesh.cells().n() {
-        let lives = w.life.in_cell(i) > 0 || w.life.sum(i)[1] > 0.0;
+        let lives = w.life.in_cell(i) > 0 || pcore::contract::stand(w, i).mass > 0.0;
         if !open_land(w, i) || r.f64() >= b.chance || (!b.anywhere && !lives) {
             continue;
         }

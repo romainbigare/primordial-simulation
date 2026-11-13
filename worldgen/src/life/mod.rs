@@ -14,14 +14,14 @@ pub use soil::soil;
 
 use pcore::body::Body;
 use pcore::store::{Boundary, Class, Node};
-use pcore::{survey, World};
+use pcore::World;
 
 /// Land under more standing liquid than this, m, gets no soil and no founder (a basin of standing liquid).
 const MAX_STANDING_M: f64 = 0.5;
 
 /// Whether life starts on cell `i`: land under no more than `MAX_STANDING_M` of standing liquid.
 fn open_land(w: &World, i: usize) -> bool {
-    w.is_land(i) && survey::env_of(w, i)[1] <= MAX_STANDING_M
+    w.is_land(i) && pcore::contract::env_of(w, i)[1] <= MAX_STANDING_M
 }
 
 /// Book a new body like an edit: its stores and its heat, from outside the world, at its cell's head.

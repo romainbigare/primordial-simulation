@@ -33,7 +33,7 @@ pub struct Counters {
     /// Members that drew "form", by who they are (`choose::Forms`)
     #[serde(skip)]
     pub forms: crate::choose::Forms,
-    /// Cover that died, kg, by the cause a body would die of (`body::LACK` to `AGE`)
+    /// Cover that died, kg, by the cause a body would die of (`life::LACK` to `AGE`)
     #[serde(skip)]
     pub cover_lost: [f64; 6],
     /// The flows of the cover's budget, J, + into the cover (`cover::BUDGET`)
