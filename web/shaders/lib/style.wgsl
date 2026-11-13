@@ -23,8 +23,9 @@ const SOIL_TINT = vec3f(1.25, 1.08, 0.82);
 const CLEAR_ATTENUATION = vec3f(0.09, 0.04, 0.026);
 const OPEN_WATER = vec3f(0.006, 0.07, 0.20); const DEEP_WATER_PAINT = vec3f(0.004, 0.022, 0.10);
 const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
-// Foam at the water's edge: white, at most this share, over the water shallower than `FOAM_M`.
-const FOAM = 0.55; const FOAM_M = 0.4; const FOAM_RGB = vec3f(0.85, 0.92, 0.95);
+// Foam at the water's edge: white, at most this share, over the water shallower than `FOAM_M` and no farther from the
+// edge than `FOAM_WIDE_M` (the swash of small waves on a gentle shore), or than the band's full pixels from afar.
+const FOAM = 0.55; const FOAM_M = 0.4; const FOAM_WIDE_M = 3.0; const FOAM_RGB = vec3f(0.85, 0.92, 0.95);
 // The pixels across the foam's band over which it fades in.
 const FOAM_PX = vec2f(0.5, 1.5);
 // The bed under any water is drawn this far towards pale sand (`BEACH_SAND` times `BED_TONE`), so shallows read light
@@ -100,8 +101,9 @@ fn water_painted(bed: vec3f, depth: f32, g: vec2f) -> vec3f {
 // The foam over water `depth` m deep where the bed rises at `slope` (rise over run), seen at `e` m a pixel: fading out
 // as its band grows narrower than a pixel (`FOAM_PX`), where it would only show the pixels.
 fn foam(depth: f32, slope: f32, e: f32) -> f32 {
-  let band = FOAM_M / max(slope, 1e-3);
-  return FOAM * (1.0 - ease(0.0, FOAM_M, depth)) * ease(FOAM_PX.x, FOAM_PX.y, band / max(e, 1e-3));
+  let rise = max(slope, 1e-3);
+  let band = min(FOAM_M / rise, max(FOAM_WIDE_M, FOAM_PX.y * e));
+  return FOAM * (1.0 - ease(0.0, band * rise, depth)) * ease(FOAM_PX.x, FOAM_PX.y, band / max(e, 1e-3));
 }
 
 // The marks (cover.wgsl): a plant's light falls in soft bands (two or three tones, as a painter lays them), each mark

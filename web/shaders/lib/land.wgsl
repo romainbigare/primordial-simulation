@@ -275,6 +275,15 @@ fn over_ponds(g: Tiled, cut: f32) -> f32 {
   return min(max(g.h - cut - g.water.x, 0.0) / g.water.y, NO_LIQUID_M);
 }
 
+// How far through the band of shallows round standing liquid a point of ground `g` lies, seen at `e` m a pixel: 0 where
+// none stands over the ground drawn, 1 from the open water past the band on (style.wgsl `shore_rim`).
+fn through_band(g: Tiled, e: f32) -> f32 {
+  if (g.water.y <= 0.0) { return 0.0; }
+  return shore_rim(standing(g), length(g.slope), e, LAKE_RIM_M);
+}
+// The depth of the liquid of the ponds about a point that stands over its ground `g` as drawn, m.
+fn standing(g: Tiled) -> f32 { return max(g.water.x - g.h, 0.0) * g.water.y; }
+
 // The state at `at`, m from the map's north-west corner, on ground `g` whose bed a channel cuts `cut` m deep there
 // (`depth_in`): the cells' values blended between the squares' centres (`cs`), and the laws inside a cell applied at the
 // point.

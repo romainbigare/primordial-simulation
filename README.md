@@ -85,7 +85,8 @@ which comes with a frame when it has changed enough to show), its share of the p
 covers. Its line winds between the samples' centres by a law: a bend every 11 widths (Leopold and Wolman 1960), where
 the valley's slope is low and within the valley's floor, none where it is steep (Montgomery and Buffington 1997). Its
 bed is a parabola cut into the ground, as deep at its middle as its mean depth makes it (its banks catch the light),
-so where it runs into a lake or the sea their water takes it over at the same depth; over it runs water that carries
+and where it runs into a lake or the sea it runs on through their band of shallows, widening, its bars going under
+and its water melting into the open water past the band (a rill ends at the water's edge); over it runs water that carries
 what it wears and washes, turbid as inland water is (1 to 4 per m, Kirk 1994), over a bed of washed sand and gravel
 under a film of algae: a brook shows its stones, a river a metre deep is dark water. The ground beside it is wet by
 the capillary fringe over its water. From afar no channel whose discharge matters at that zoom is thinner than a line
@@ -158,7 +159,7 @@ place (`web/shaders/lib/style.wgsl` for each pixel, `web/src/style.ts` for the p
 layer views keep the physical colours. Every look still means what the model holds. The colours are cleaner, with
 more contrast; slopes have a clear lit side and a soft cool shade. Water is coloured by its depth through the clear
 water of the clearest coasts, drawn stretched, so the bed shows to tens of metres: sand, pale shallows, turquoise,
-blue, then the deep, with foam at its edge where its band takes a pixel or more; a lake and a river read the same way at their own
+blue, then the deep, with the sea's foam along its edge, a few metres wide, which stops at a river's mouth; a lake and a river read the same way at their own
 scale (as if one and a half times as deep and 2 m more, so the first tens of metres of depth read light, lighter over their shallow rim and banks), and a lake's shore shallows to
 none across its last texel, so its outline is soft. Under any water the bed is drawn lighter. A beach lies on gentle loose ground a few
 metres over the sea (lower by a lake), none on a steep coast. Each kind of plant has its own green from its

@@ -5,9 +5,6 @@
 // (web/shade, draw.wgsl `LEAST_E`): seen from afar, the detail of the ground and the plants that cannot show is
 // compiled out (from 30 m, the whole island on a phone, the sea ice's floes and the pack's texture: ice.wgsl).
 
-// Through the standing liquid's shallows at its mouth a river's water reaches this share of its half width farther to
-// each side, shallowing to none there.
-const MOUTH_SOFT = 1.0;
 // What grows along a channel is read within this many of its bed's half widths of its line: its bed, its banks and the
 // stones beside a steep reach lie within them.
 const CHANNEL_NEAR = 3.0;
@@ -109,8 +106,8 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
 
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_on`), the
 // ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl); and
-// its channel (rock.wgsl `channel_at`), from its own sample's discharge. The channel's bed is cut into the ground, so
-// where it runs into standing liquid that liquid takes it over at its shore at the same depth. Beside it the ground is
+// its channel (rock.wgsl `channel_at`), from its own sample's discharge. The channel's bed is cut into the ground, and
+// where it runs into standing liquid it runs on through that liquid's band of shallows (`river_spots`). Beside it the ground is
 // wet by the capillary fringe over its water, which rises from the water's edge as the valley's side does, at least as
 // steeply as the channel's own banks. Its water (`river_on`) is as deep as its bed lies there; a pixel wider than the
 // channel sees its mean depth.
@@ -142,7 +139,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
     q = mix(q, discharge_of(next.s), next.share);
     banks = banks_of(q);
   }
-  let ch = channel_of(g, q, banks);
+  let mouth = through_band(g, e);
+  let ch = channel_of(g, q, banks, mouth);
   let st = state_on(at, g, cs, depth_in(g, ch));
   let surface = blended(SURFACE, cs);
   var p: Spot;
@@ -195,19 +193,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.w, p.over, length(g.slope), p.loose, look.z);
-  // A river runs through the shore's band into the open water: where its water (as wide as the channel law makes it,
-  // no thinner than its line) crosses standing liquid's shallows, the liquid is as deep as the open water past the
-  // band (and past the sea's foam). So the band ends at a mouth, the colour runs on from the river's thread to the
-  // body's open water, and past the band nothing changes.
-  if (near && p.depth > 0.0 && ch.water > 0.0) {
-    let wide = max(ch.law * land.reach.w, line_of(q, e));
-    // (Deepest on the river's line and shallower to its sides, as the river's own bed: a parabola across it.)
-    let across = g.d / (wide * (1.0 + MOUTH_SOFT) + e);
-    let through = max(1.0 - across * across, 0.0);
-    p.depth = max(p.depth, through * max(rim_depth(length(g.slope), e, LAKE_RIM_M), p.sea * FOAM_M));
-  }
   p.river = 0.0;
   p.river_depth = 0.0;
+  p.mouth = 0.0;
   p.at = at;
   p.e = e;
   // The depth less the film, signed (under the ground drawn: minus its height over the level, as the share of the point
@@ -215,10 +203,11 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
   var out = Spots(p, p, 0.0, 0.0, pool, st.snow, vec3f(0.0), 0.0, vec3f(0.0), vec2f(0.0), vec2f(0.0));
-  if (p.depth > 0.0 || ch.water <= 0.0) { return out; }
-  out.dry.over = shore_over;
+  // A channel is drawn on the land and through the band of shallows of the liquid it runs into, no farther.
+  if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
+  if (p.depth <= 0.0) { out.dry.over = shore_over; }
   if (!near) { return out; }
-  return river_spots(out, g, ch, q, moved, grows, line_of(q, e));
+  return river_spots(out, g, ch, q, moved, grows, line_of(q, e), mouth);
 }
 
 // The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); the
