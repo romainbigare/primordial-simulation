@@ -10,12 +10,15 @@ The other documents:
 - `docs/laws.md`: how each law works **now**, part by part, with the code that does it.
 - `docs/numbers.md`: every free number, its unit, its source and whether it is physical, anchored or tuned.
 - `docs/tape.md`: what a run records.
+- `docs/analyze.md`: the fact cards made from a tape.
+- `review/roadmap.md`: the plan, the priorities and the owner's decisions.
+- `review/orchestrator.md`: the handover of the work, with where things stand.
 
 ---
 
 ## 0. How to use this document
 
-- This is the single source of truth for the plan and the rules of work. If anything else conflicts with it, **this document wins**. For how a law works now, read `docs/laws.md`; there the code is the truth.
+- **Which document wins.** This document holds the principles and the rules of work: where another document conflicts with it on those, **this document wins**. `docs/laws.md` and the code are the truth for how a law works now. `review/roadmap.md` is the truth for the plan and the order of work.
 - **Version 2 lives in this repository.** You do not have the version 1 code or documents, and you do not need them. Section 2 explains what went wrong in version 1. Section 18 contains, in full, the few ideas worth keeping from it.
 - When the owner changes a decision, update this file in the same change (and `docs/laws.md` when a law changes).
 - When this document says "must", it is a decision the owner has made. When it says "suggested" or "default", you may change it if you measure a better option. Tell the owner when you do.
@@ -51,7 +54,7 @@ None of these needs to match Earth exactly. They can be new mixtures of physical
 
 ### What the player can do
 
-1. **Watch.** A 2D map with small angled sprites, from the whole planet down to one street. Speed controls. A timeline over thousands of years.
+1. **Watch.** A 2D map with small angled sprites, from the whole world down to one street. A world is one map of 128 x 128 squares of 2 km (256 or 512 squares a side at the very most): one island or several, not a planet. Speed controls. A timeline over thousands of years.
 2. **Understand.** Things look like what they are: a house looks like a house, a herd like a herd. Clicking anything explains what it is, what it is made of, its history, and why it got that name.
 3. **Play god.** Set a city on fire, move or dry up a river, cause a drought, change the climate, add or remove animals. Then fast-forward and see what happens over the next 200 years. **There is only one timeline** (Section 11).
 
@@ -87,7 +90,7 @@ What went wrong:
 6. **The translation layer is one-way.** Names, Earth matches and stories are computed *from* the history. They never flow back into the simulation.
 7. **One timeline.** No branches, no alternative futures.
 8. **Cheap repeatability only.** Same seed, same version and same machine give the same history. Do not build anything more (Section 12.5).
-9. **Small code.** Hard budgets in Section 14.3.
+9. **Small code.** Keep `core` small by computing less (Section 14.3).
 10. **Speed matters.** Thousands of years must run in minutes. Rough far away, detailed where it matters (Section 7).
 
 ---
@@ -98,8 +101,8 @@ What went wrong:
 |---|---|
 | Core idea | 5 laws on one graph: Flow, Change, Bond, Copy, Choose |
 | Coordination, trade, property, institutions | **Not** primitives. They must emerge from Choose + Bond + Flow + Copy (+ signals) |
-| Actors | Individual bodies where it matters. Groups of similar bodies merged into population nodes elsewhere (Section 7) |
-| Body scale | Bodies are **real-sized**: an individual weighs what a real living thing weighs (grams to tonnes, set by its genes and selection). Plant cover holds real mass per m² (about 1 to 50 kg/m²). **No hard-coded limit on bodies per cell**: density is an outcome of light, cover, crowding and food. Speed comes from population nodes (Section 7.1) and better algorithms, never from giant bodies |
+| Actors | Plants are a field per cell, the cover, not bodies. Animals are being rebuilt as fields (`review/roadmap.md` section 4); until then the old animals are bodies, with similar ones merged into population nodes (Section 7.1). People come after the animal layer |
+| Body scale | Living things are **real-sized**: an individual weighs what a real living thing weighs (grams to tonnes, set by its genes and selection). Plant cover holds real mass per m² (about 1 to 50 kg/m²). **No hard-coded limit on how much a cell holds**: density is an outcome of light, cover, crowding and food. Speed comes from fields (Section 7.1) and better algorithms, never from giant bodies |
 | Free numbers | A number comes from a real measured size where one exists (anchored). The count of tuned numbers may not grow (Section 14.3) |
 | What a body is | A body is fuel plus a body built of matter. Building matter costs work and time; storing fuel is cheap |
 | Children | Bodies copy by physics only: a mature body puts a share of what it builds into children, never by a brain's choice |
@@ -117,9 +120,9 @@ What went wrong:
 | Moving | Moving needs force |
 | Materials | Bodies are built of several materials; physics reads the material (breaking, digestion) |
 | Freezing | One freezing law for bodies, ground, lakes and the sea |
-| The start | What is placed at the start is an initial condition and every run prints it. Animals start with hand-set brain biases, plants with no brain (`HIDDEN` 0: their life is their body's physics), founders as adults |
-| Waits | Natural fire starts wait for M4. Disease (bodies inside bodies) waits until after M4 |
-| World chemistry | One fixed Earth-like "chemistry 0" through M6 (numbers only, no names in core). Random chemistry per world from M7 (Section 6.0) |
+| The start | What is placed at the start is an initial condition and every run prints it. Plants are the cover, a field with no brain: their life is the physics of their numbers. The old animals start with hand-set brain biases, founders as adults; the rebuilt animals start as the roadmap's design says (section 4) |
+| Waits | Natural fire starts and disease (bodies inside bodies) wait until after the animal layer (`review/roadmap.md` section 7) |
+| World chemistry | One hand-made, Earth-like "chemistry 0" (numbers only, no names in core). No random chemistry is planned (Section 6.0) |
 | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
 | Visuals | **2D map, no 3D**: colour-coded pixels for land plus small axonometric sprites. Earth view (default) with a switch to true view |
 | Translation | Pattern finder (normal code) → fact cards → matcher (normal code) → small LLM for leftovers and stories (cached, read-only) |
@@ -157,30 +160,32 @@ An edge holds:
 
 **There are no edge types like "road", "river" or "trade link".** Every edge is the same kind of thing. What differs are its numbers. A route is simply an edge whose conductance became high because it was used a lot.
 
-### 5.2 Graph inside a graph (hierarchy)
+### 5.2 Three layers: fixed cells, a fixed ground, a picture
 
 ```
-planet → regions → cells → groups / bodies → parts
+Layer 3  THE PICTURE  per pixel, on the graphics card, only where one looks. It reads layers 1 and 2 and writes
+                      nothing back.
+Layer 2  THE GROUND   fixed samples, made once at the world's start by an erosion law. It is state, and it changes
+                      slowly.
+Layer 1  THE BOOKS    slow physics and life as fields on fixed cells. Every element and the energy are kept exactly.
 ```
 
-- A node can **collapse**: its children are replaced by one node with the summed contents and combined conductances.
-- A node can **expand**: the children are created again (or generated to match the totals).
-- Collapse where nothing interesting happens. Expand where something changes fast, or where the player looks closely.
-- **Conservation must hold exactly across collapse and expand.** The total of every element and the total energy must be the same before and after.
-
-- **One kind of cell at every size.** A cell splits into 4 children or joins back into one, and the same laws run at
-  every size, with the cell's size and its step as inputs of each law (adaptive mesh refinement, Berger and Oliger
-  1984). The step of a cell lets nothing cross more than one cell; where a fine cell meets a coarse one, the fine side
-  sums what it sends and the coarse side books that sum once (Berger and Colella 1989). The plan is `review/plan.md`.
-
+- **Fixed cells.** The cells of a world are made once and stay the same for its whole life. The same seed gives the
+  same world; the camera is not an input of the run. Zoom is drawing. A field is a number per cell (kg per m²), not a
+  list of single things, and the cost of a cell is fixed whatever lives in it.
+- **A fixed ground with a history.** The ground below the cells is held at samples (125 m on the island), made once
+  when the world starts by running the erosion law (the stream power law, creep, the rebound of what was worn). So it
+  has valleys, ponds with one level and one network of channels. `docs/laws.md` 0 says how.
+- **The picture per pixel.** The page draws the map from tiles of the ground and the cells' table (10.1, 10.3). It
+  makes nothing the world reads.
 - **Inside a cell.** A cell holds means (its plant cover, the liquid in its soil, its snow). Inside it, one rule shares
   each mean over the cell's own ground, from the ground's shape alone: how much water gathers at a point (its upslope
   area over its slope, Beven and Kirkby 1979), its slope, the way it faces, its curve, and its height over the cell's
-  liquid level; and for each plant kind, how wet a place its genes like. The shares keep each mean exactly. A split
-  gives each child the share of its own ground, and the viewer draws inside a cell with the same shares, so what the
-  owner sees before a zoom is what the world goes on with.
-
-This is the main tool for speed. Do not build it first (see milestones). Build the detailed form first, then the collapsed form, and check that both give similar patterns.
+  liquid level; and for each plant kind, how wet a place its genes like. The shares keep each mean exactly. The page
+  draws inside a cell with the same shares, so what the owner sees is what the world goes on with.
+- **Detail is derived, not simulated.** Whoever needs detail calls the law inside a cell at a point: the picture today,
+  a single animal later. The cover holds kg per m²; the count and size of its plants follow from it. Nobody stores a
+  tree.
 
 ### 5.3 Storage
 
@@ -188,11 +193,14 @@ This is the main tool for speed. Do not build it first (see milestones). Build t
 - **Bodies, structures and long links** are a sparse graph: arrays of nodes and edges with stable integer IDs and a generation counter for reuse.
 - Use chunks (for example 32×32 cells) so parts of the world can be saved, loaded, collapsed and expanded separately.
 
-### 5.4 Suggested world sizes
+### 5.4 World sizes
 
-- **Prototype island:** 128 × 128 cells, about 1 km per cell. Up to about 10,000–50,000 individual bodies.
-- **Later, planet:** a latitude-longitude grid of squares that wraps east to west, with finer cells only where needed.
-- **The size follows a time budget, not the other way round.**
+- **A world** is one square map of 128 x 128 squares. A square is 2 km, so the map is 256 km a side. 64 x 64 is the
+  size to judge by in tests and pictures. 256 or 512 squares a side is the most we plan for.
+- A world of 512 has 64 times the cells of a world of 64, so it costs about 64 times as much per year. Sizes above 128
+  wait until speed is looked at (`review/roadmap.md` section 7).
+- There is no planet and no globe as a world to play. Worlds should differ as much as they can: one island or several.
+- There is no speed target for now (12.6).
 
 ---
 
@@ -204,24 +212,21 @@ This section is the design of each law. How each one works now, in detail and wi
 
 Notation: `a[i,k]` is the amount of substance `k` in node `i`. `E[i]` is the heat energy of node `i`. `T[i]` is its temperature.
 
-### 6.0 The world's chemistry (generated per world)
+### 6.0 The world's chemistry
 
 The world has its own chemistry. This is not a law. It is the **data** the laws read.
 
-**Decision: start with one fixed, Earth-like chemistry. Random chemistry comes later (M7).**
+**Decision: one hand-made, Earth-like chemistry, "chemistry 0". No random chemistry is planned.**
 
-A random chemistry can be dead or boring, and finding out can waste weeks. So for M0 to M6:
-
-- Use **one hand-made chemistry, "chemistry 0"**, copied roughly from Earth. About 8 elements and about 30 substances. Only rough numbers (melting points, densities, reaction heats); never precise field data.
-- It must contain at least: a common liquid that rains and flows; a gas mixture with one heat-absorbing gas; a light-storing reaction (plant-like energy); energy-rich substances that burn in the gas; hard solids freed from rock by heat plus fuel; and pairs of hard solids that mix into a harder one. That is, it must pass all the richness checks below.
-- In `core` and `worldgen`, substances are **numbers only** (substance 0, 1, 2…). The data file holds numbers, not names. The Earth names of chemistry 0 ("≈ water", "≈ iron") live **only** in `library/`, as a normal recognition entry. The word ban still holds.
-- Write the chemistry generator and the richness checks anyway (they are small), but run the world on chemistry 0 until M7. At M7, the world search generates random chemistries and chemistry 0 is just one of them.
+- It is copied roughly from Earth: 6 elements, 14 substances, 14 reactions. Only rough numbers (melting points, densities, reaction heats); never precise field data.
+- In `core` and `worldgen`, substances are **numbers only** (substance 0, 1, 2…). The data file holds numbers, not names. The Earth names of chemistry 0 ("≈ water", "≈ sugar") live **only** in `library/`, as a normal recognition entry. The word ban still holds.
+- The chemistry generator and the richness checks in `worldgen` are used by no world; they move to a branch (`review/roadmap.md` section 8, C2).
 
 **Elements.** A small number of base elements, for example `B = 6 to 8`. Elements are never created or destroyed.
 
-**Substances.** About 16 to 48 substances. Each substance is a small vector of element counts (for example `[2,0,1,0,0,0]`). This makes conservation automatic: every reaction must balance element counts.
+**Substances.** Each substance is a small vector of element counts (for example `[2,0,1,0,0,0]`). This makes conservation automatic: every reaction must balance element counts.
 
-**Substance properties.** Each substance gets physical numbers. They are derived partly from its elements (so related substances have related properties, which makes discovery possible) plus random noise:
+**Substance properties.** Each substance gets physical numbers, set by hand in `worldgen/src/chem0.toml`; where a number is derived, the derivation is in `docs/numbers.md`:
 
 | Property | Used by |
 |---|---|
@@ -238,19 +243,16 @@ A random chemistry can be dead or boring, and finding out can waste weeks. So fo
 
 **Reactions.** Each reaction has inputs and outputs (balanced in elements), a speed `k`, an energy barrier `Ea`, and an energy change `ΔH` (gives heat or takes heat). Some reactions take **light** instead of heat as their energy source.
 
-**Richness checks.** A random chemistry can be dead. Generate many chemistries and keep only those that pass physical checks like these. The checks state physical possibilities. They never place an outcome or name an Earth thing.
+**What chemistry 0 offers.** These are physical possibilities. They never place an outcome or name an Earth thing.
 
-- At least one abundant substance is **liquid** across most surface temperatures (needed for rain, flow and erosion).
-- There is an abundant **gas mixture**, and at least one gas **absorbs outgoing heat** (needed for climate and climate change).
-- At least one reaction stores **light energy** into a solid or liquid (needed for life to get energy).
-- Substances that store energy **release it** when they react with an abundant gas, above some temperature (needed for burning and breathing).
-- Some solids in rocks **release a new, harder solid** when heated together with an energy-rich substance above a high temperature (needed for metal-like processing).
-- Some pairs of hard solids **mix into a harder solid** (needed for alloy-like materials).
-- The range of melting points and bond strengths is wide (needed for a variety of tools and structures).
+- A common substance that is **liquid** across most surface temperatures: it rains, flows and wears the ground.
+- A **gas mixture** with one gas that **absorbs outgoing heat**: climate and climate change.
+- One reaction that **stores light energy** in a solid: the energy of plants.
+- Energy-rich substances that **release it** when they react with the oxidising gas above some temperature: burning and breathing.
+- Rock of five makes, with different hardness and bond strength.
+- It has **no metal**: no solid is freed from rock by heat plus fuel, and no pair of hard solids mixes into a harder one. Useful rocks and metals are an open item of the roadmap (`review/roadmap.md` section 6).
 
-**Chemistry 0 as built** (`worldgen/src/chem0.toml`: 6 elements, 14 substances, 14 reactions) also has what life needs: a **body matter** that bodies build from the energy-rich solid by a growth conversion (`Chemistry::build`), so the fuel a body stores and the tissue it is built of are different matter; one **mineral** that body matter needs (a nitrogen mineral, living dissolved in the liquid); and one more **solid bodies can build** (a frame, `Chemistry::builds`). A random chemistry has none of these yet (its bodies do not grow); a generator that makes them is for M7. The roles and reactions are listed in `docs/laws.md` (2.7).
-
-Later, add a **world search** (Section 13, M7): generate hundreds of worlds and keep the ones where most new things happen.
+**Chemistry 0 as built** (`worldgen/src/chem0.toml`: 6 elements, 14 substances, 14 reactions) also has what life needs: a **body matter** that bodies build from the energy-rich solid by a growth conversion (`Chemistry::build`), so the fuel a body stores and the tissue it is built of are different matter; one **mineral** that body matter needs (a nitrogen mineral, living dissolved in the liquid); and one more **solid bodies can build** (a frame, `Chemistry::builds`). The roles and reactions are listed in `docs/laws.md` (2.7).
 
 ### 6.1 Law 1: Flow
 
@@ -288,7 +290,7 @@ cost = base(body mass) · slope_factor · (1 + resistance of bonded structures i
 When the structures (for example plants) are worn away, the cost falls.
 
 **Radiation (climate).** Radiation is also Flow, between surface nodes, air nodes and a single "space" node:
-- The sun gives energy to surface nodes by latitude, season and planet settings (sun strength, axial tilt, day length). The island's rows span only what its size spans on the planet (40° to 42.3°, where Earth's surface is near its mean); real latitude bands come with the planet at M4.
+- The sun gives energy to surface nodes by latitude, season and planet settings (sun strength, axial tilt, day length). The island's rows span only what its size spans on the planet (40° to 42.3°, where Earth's surface is near its mean); an island can stand in the planet's air with a real latitude band (`--band`, `docs/laws.md` 1.6).
 - Surface reflects part of it, based on the reflectance of its substances (ice and sand reflect more, dark plants less).
 - Surface emits `ε · σ · T⁴`.
 - The air column absorbs a fraction `1 − exp(−x)` of the outgoing heat, where `x` (the optical depth) is the sum over the gases of amount × absorption.
@@ -405,7 +407,7 @@ Having children is not a choice: it is physics (Section 6.4). There is no "farm"
 **Implementation:**
 - A small neural network per body: a base per lineage, rows that are genes of each body, plus what the body (or its population node) learned. Keep the brain code apart from the rest, so it can be swapped.
 - **One brain per body or population node.** Each body has its own brain rows; a population node's members share the node's.
-- **A brain has a size and a cost.** Its sizes are genes, and zero is a size: a body with no hidden units takes no decisions and pays nothing for a brain. A brain is paid and learns per second of its pace, not per decision, so a body that decides every hour in a fine cell and every month in a coarse one pays and learns alike over a year (7.3; `review/plan.md` WP9).
+- **A brain has a size and a cost.** Its sizes are genes, and zero is a size: a body with no hidden units takes no decisions and pays nothing for a brain. A brain is paid and learns per second of its pace, not per decision.
 - Simple learning is enough to start: a policy gradient against a learned baseline (actor-critic), plus evolution.
 
 ### 6.6 What is deliberately NOT a law
@@ -416,68 +418,46 @@ These must emerge. If one does not, improve physics, perception, memory or learn
 
 ---
 
-## 7. Speed: groups and coarse regions
+## 7. Speed: fields, groups and threads
 
-Thousands of years with millions of individual brains will not run on one computer. Two tools solve this. **Both are speed tools, not new laws.** They must give the same patterns as the detailed form.
+Thousands of years of a living world will not run on one computer if every living thing is a single body with its own brain. The world is therefore made of fields on fixed cells, with groups where single bodies are too many. These are **speed tools, not new laws**. They must give the same patterns as the detailed form.
 
-### 7.1 Population nodes
+### 7.1 Fields and population nodes
 
-- When many bodies of the same lineage sit in the same area, have similar states and act similarly, **merge** them into one population node.
-- A population node holds: the count, average stores, a small summary of how they differ, and one shared brain.
-- It runs the same five laws in average form: flows × count, reactions × count, children as a birth rate, choices as a spread of actions.
-- **Split** it back into individuals when the player looks closely, or when its members start to differ a lot.
-- Conservation must hold exactly when merging and splitting.
+- **Plants are a field.** Each cell holds a few slots of cover, each with amounts and genes (`docs/laws.md` 4.5). A plant is not a body.
+- **Animals will be a field too**, built the same way (`review/roadmap.md` section 4). Until then, the old animals are bodies: when many of the same lineage sit in one area with similar states, they are merged into one population node (`docs/laws.md` 4.4). It holds the count, average stores, a small summary of how they differ, and one shared brain, and runs the same laws in average form. Conservation holds exactly when merging and splitting.
+- A body of count 1 is an individual in the maths: there is one set of rules for both.
 
-Population nodes are built; how they work is in `docs/laws.md` 4.4. A body of count 1 is an individual in the maths: there is one set of rules for both.
+### 7.2 Fixed cells
 
-### 7.2 Coarse regions
-
-- The planet is coarse everywhere, and finer where it matters: a region of finer cells is built into the mesh at the
-  start, or rebuilt at a god action. The sea lives on a coarser level, as the air does, so its cells are cheap.
-- Cells split and join by themselves while the world runs (5.2), so a player can zoom anywhere: a cell may be as
-  fine as 1/2^24 of its air block (7.5 cm under a globe's block of 1,250 km), and its hidden relief below the
-  terrain's samples is a smooth continuation of them with a midpoint displacement that continues the noise, one
-  ground that the cells and the map read alike (`docs/laws.md` 0).
-- **Detail follows a budget.** A run has a fixed count of active cells (a number of the run, never the machine's
-  clock). Each cell has an interest score: the camera, how fast things change there, brains, parts and bonds, rare
-  events. Each month the cells of the highest score split and those of the lowest join, until the budget is full.
-  Every split and join is a recorded event.
-- The camera is an input of the run, recorded in the tape as a god action is, so the same seed and the same camera
-  path give the same history (3.8). A run with no camera (the world search, M7) refines by the other terms. The live
-  viewer sends the camera away after a few minutes without input, as a recorded change of the camera, so a world
-  left alone joins its fine cells and speeds up again.
-- One life model at every grain: a group of `n` members (7.1) on cells of any size; it splits as its cell splits,
-  down to `n` = 1, and joins as its cells join.
+- The cells of a world are made once, with the world, and stay for its whole life: squares on land, and in the open low ground cells of 2 or 4 squares on a side (`docs/laws.md` 0). The air lives on a coarser level of blocks of 4 x 4 squares.
+- The camera is not an input of the run, and zoom does not change the step or the cells. The same seed gives the same history.
+- The ground below the cells is the fixed samples of 125 m, made once with the world (5.2). The page reads the cells and the samples; it adds detail per pixel and writes nothing back.
 
 ### 7.3 Time steps (multi-rate)
 
-Not everything needs the same step. These are suggested defaults to measure and adjust:
+Not everything needs the same step. Each law steps at its own pace (`core/src/schedule.rs`, `docs/laws.md` 0 and 1.8):
 
-| Process | Default step |
+| Process | Step |
 |---|---|
-| Heat, air, rain, water (coarse world) | 1 month, with sub-steps if unstable |
-| Ground uplift, slow wearing | 10 to 100 years |
-| Bodies (population nodes and single bodies) | their cell's step: 1 month for a square (2 km on the island) or a coarser cell, a month / 2^k for a cell 2^k finer (whole seconds, at least one: 2.8 hours for 8 m on the island, 79 s for 10 m on a globe of 64 rows), so none crosses more than one cell a step; each step one parallel pass over chunks of cells, one serial pass for what crosses cells |
+| The air (heat, wind, rain, the sun's season) | 15 days, two a month |
+| Liquid and erosion, the cover, Change, Bond, the bodies | 1 month |
+| Heat sideways and creep | 1 year |
+| The slow ground and the substances present, rechecked | every 3 months |
+| The ground's long wear | once, when the world is made |
 | Snapshots for the history tape | at the end of a run, every `--snapshots-every` years if asked (and before every god action) |
 
-There is **one world clock**. A fast process in a detailed area may sub-step inside a month. Seasons must exist, because they matter for food and migration.
-
-**The step follows the size.** A cell steps so that nothing crosses more than one cell in a step: big cells once a
-month, a fine cell more often. The one world clock moves at the pace of the finest cell, so zooming in slows time by
-itself. A body's learning, its discount and its brain's cost are per second (6.5), so the same kind learns and pays
-alike at every grain. A run of many years sets the finest size its year budget allows, so a long headless run never
-falls to hour steps.
+There is **one world clock**. The cells are fixed, so no step depends on the size of a cell or on where one looks. Seasons exist because the air steps twice a month and the sun moves, and they matter for food and migration.
 
 ### 7.4 Threads: chunks and the serial pass
 
 This is a speed tool, not a law: the history is the same with and without threads, on any number of threads (the feature `threads` of `core`) and for any count of chunks.
 
 - The cells are cut into **chunks**: `Config::chunks` runs of neighbouring cells, the same for any number of threads. A chunk owns its cells, their bodies, their cover and its view of the store.
-- Bodies update at their cell's step (7.3), each step in one **parallel pass**: one task per chunk on the pool, the world read only, a chunk writing only its own cells. What leaves a chunk (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the chunk's queue. A chunk updates its bodies cell by cell, all the stages of one cell before the next, so its queue, its events and the lineages and born rows it makes come in the order of the cells, whatever the chunks. Then one **serial pass** lands the queues in that order (by the cell each lands in, then the order queued), the moves and litters on the pool, each in the chunk of the cell it goes to; the acts on parts run there too.
+- Bodies update once a month, in one **parallel pass**: one task per chunk on the pool, the world read only, a chunk writing only its own cells. What leaves a chunk (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the chunk's queue. A chunk updates its bodies cell by cell, all the stages of one cell before the next, so its queue, its events and the lineages and born rows it makes come in the order of the cells, whatever the chunks. Then one **serial pass** lands the queues in that order (by the cell each lands in, then the order queued), the moves and litters on the pool, each in the chunk of the cell it goes to; the acts on parts run there too.
 - Flow's air step and Change's reactors and the survey's wear, merge and shade use the same pool where a loop is large enough to pay for a call into it (30 to 55 µs).
 - How it works: `docs/laws.md` 0.
 - The tape's recorder uses the same pool (`pcore::par::map`, `map_n` and `join`, under the one feature `threads` of `pcore`): its walks over bodies and cells, and the parts of a yearly row that write different columns, run side by side, and every sum is added in the order of the data, so its files are the same with and without threads.
-- The bodies of cells finer than a square run sub-steps inside the month (7.3), each a parallel pass and a serial pass of its own over the cells that step then (`survey::substeps`).
 
 ---
 
@@ -491,8 +471,10 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
               one folder per law (core/src/<law>/; the air in flow/air/)
   src/body/   bodies: genes, tissue, metabolism, exchange, the update, its physics, paying, death, intake
   src/chem/   the chemistry: its data, its physics (phases, melting), the roles of reactions
-  src/space/  the shape of the world: the mesh (cells, links, levels; flat or on a sphere), the square map (an island,
-              or a globe whose rows wrap east to west), the tree of cells under each air block, stacks of layers
+  src/space/  the shape of the world: the mesh (cells, links, levels), the square map (an island, or a globe whose rows
+              wrap east to west), the tree of cells under each air block, the terrain and its worn samples (wear,
+              ponds, the network of channels, the makes of bed in strata, the shelf), stacks of layers
+  src/inside/ the law inside a cell: how a cell's means lie over its own ground (read by the tape and the page)
   src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the bodies' node of
               each cell; a part by slot and generation), what the fixed ones hold (`Store`: private arrays, read
               through methods), the boundary nodes sun, space and outside, the one way to change them (`apply`:
@@ -500,23 +482,28 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
               which adds as `apply` adds),
               and the moves of a body's or a part's update (`Moves`)
   src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
-  src/solve/  the shared maths: sweep (explicit step on links), downhill, line (implicit step along lines of links)
+  src/solve/  the shared maths: sweep (explicit step on links), line (implicit step along lines of links)
   src/life/   the bodies by cell and the chunks of cells that body code runs on (the parallel pass, the serial pass)
-  src/cover/  the plant field: the starting cover of a cell, its growth and seeding
+  src/cover/  the plant field: the starting cover of a cell, its growth, seeding and yearly budget
+  src/survey/ the cells as bodies see them: the draws and the steps of the bodies' batch
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
-              lineage, nodes (population nodes), lanes (paths), survey (the cells bodies see), brain, rng, event,
-              math, units, par
-  tests/      one file per law (flow, change, bond, copy, choose, body), one per base part (space, store, clock,
-              solve), cover, populations, damage, threads (threads and chunks change nothing), chemistry0, numbers
+              lineage, nodes (population nodes), lanes (paths), survey, brain, rng, event, math, units, par
+  tests/      one file per law (flow, change, bond, copy, choose, body, bodies), one per base part (space, store,
+              clock, solve, inside), cover, populations, lots, damage, threads (threads and chunks change nothing),
+              chemistry0, numbers
 worldgen/   terrain, chemistry 0 (chem0.toml) and the chemistry generator, richness checks, first life (life/), what is
-              placed when (schedule.rs); the test kit (worldgen::testkit, behind the `testkit` feature)
-tape/       the recorder (rec/, its yearly columns in rec/cols/), snapshots (snapshot.rs), map layers, measures,
-              the fingerprint of a world; tests: tape.rs, ranges.rs, scale.rs
+              placed when (schedule.rs), the planet's strip for an island's air (planet.rs); the test kit
+              (worldgen::testkit, behind the `testkit` feature)
+tape/       the recorder (rec/, its yearly columns in rec/cols/, the viewer file in rec/ewf.rs), snapshots
+              (snapshot.rs), map layers (layers.rs), the cells' table (table.rs), the cover's stands as a viewer draws
+              them (stands.rs), the things of a window (things.rs), the ground in tiles (ground/), measures, the
+              fingerprint of a world; tests: tape.rs, ranges.rs, scale.rs, ground.rs, things.rs
 library/    the recognition library (data files); today the Earth names of chemistry 0
-cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`; flags in args.rs), pictures; the word ban test
+cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`, `ew view`; flags in args.rs), pictures; tests:
+              the word ban, writer, view
 wasm/       the core as WebAssembly for the live viewer: a small shell of `extern "C"` exports (`ew-wasm`)
-web/        the 2D map viewer (TypeScript): plays a tape, or runs a live world in a worker
-analyze/    the pattern finder (`ew-analyze`): fact cards from a run's folder (docs/analyze.md); not built yet (M5): recognition matching, interest score
+web/        the 2D map viewer (TypeScript): plays a tape, or runs a live world in a worker; its shaders draw the map
+analyze/    the pattern finder (`ew-analyze`): fact cards from a run's folder (docs/analyze.md); recognition matching is not built yet
 ```
 
 ### 8.2 Core rules (must)
@@ -787,7 +774,7 @@ as a light, subtle blob; the zoom goes deep enough to see single animals.
 
 ### 10.3 The base map (pixels)
 
-Each cell is one pixel (or one small tile when zoomed in). Its colour comes from a **map class**, chosen by the **viewer**, never by the core:
+The base map is drawn per pixel, on the graphics card, from the tiles of the ground and the cells' table (10.1). The colour of a pixel comes from a **map class**, chosen by the **viewer**, never by the core:
 
 | Map class | Comes from | Colour idea |
 |---|---|---|
@@ -923,7 +910,7 @@ What the tests must cover:
 
 How the suite is built:
 
-- **The normal suite** (`cargo test --release --workspace`) stays under about 30 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `populations.rs` for Copy in populations, `damage.rs` for the damage to a body and `cover.rs` for the plant field), one per part of the base (`core/tests/{space, store, clock, solve}.rs`), `core/tests/threads.rs` (the number of threads and the count of chunks change nothing), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (every field has a row in `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `tape/tests/ranges.rs`, whose test `the_world_lives_and_keeps_its_books` is the main guard (a roster island runs past its last placement, keeps every element and the energy, has no number that is not finite, and ends with the base kinds and enough animal kinds alive); `cli/tests/word_ban.rs` (14.4) and `cli/tests/writer.rs` (a run resumed into its folder leaves the files of the unbroken run).
+- **The normal suite** (`cargo test --release --workspace`) stays under about 30 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `bodies.rs` and `lots.rs` for bodies, `populations.rs` for Copy in populations, `damage.rs` for the damage to a body and `cover.rs` for the plant field), one per part of the base (`core/tests/{space, store, clock, solve, inside}.rs`), `core/tests/threads.rs` (the number of threads and the count of chunks change nothing), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (every field has a row in `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run), `tape/tests/ground.rs` (the ground's tiles) and `tape/tests/things.rs` (the things of a window); `tape/tests/ranges.rs`, whose test `the_world_lives_and_keeps_its_books` is the main guard (a roster island runs past its last placement, keeps every element and the energy, has no number that is not finite, and ends with the base kinds alive; until the old animals are deleted it also needs enough animal kinds alive, `review/roadmap.md` section 8, C1b); `cli/tests/word_ban.rs` (14.4), `cli/tests/writer.rs` (a run resumed into its folder leaves the files of the unbroken run) and `cli/tests/view.rs`; `analyze/tests/cards.rs`.
 - **The contract between the layers** needs no test: the store's arrays are private
   fields of `store::Store`, which only `store::apply` and `store::book_by_array` (for the bodies' moves and the air's step, adding as `apply`
   adds) write, both inside the module `store`, so the compiler checks it; the sums of the boundary nodes and the
@@ -936,7 +923,7 @@ That is the core of testing, until something emerges. Reviews of the code and of
 
 ### 12.4 Watch reports
 
-Each milestone ends with a short report for the owner, in simple English, saved in the repository as `docs/reports/<name>.md` with its pictures (the repository is the record):
+Each milestone ends with a short report for the owner, in simple English, with its pictures:
 - what we built (a few lines)
 - **pictures or a short video**
 - key numbers (speed, population, how many kinds, how many patterns)
@@ -950,70 +937,17 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 - Purpose: finding bugs, and replaying a run.
 - **Do not** build identical results across machines, CPU/GPU agreement to the last bit, receipts or replay proofs.
 
-### 12.6 Speed targets (goals to measure, not promises)
+### 12.6 Speed
 
-| Milestone | Target |
-|---|---|
-| M0 island physics | 1 simulated year in under 50 ms |
-| M1–M3 island with life | 1,000 years in under 10 minutes |
-| M4 planet, coarse with detail in places | 1,000 years in under 15 minutes, on the largest planet that fits (the size follows the budget, 5.4) |
-| M6 god mode | 200 years of one region in about 1–2 minutes |
-
-**Be honest about these targets.** They are hard. For example, 50,000 bodies with one step per day for 1,000 years in 10 minutes means about 30 million brain decisions per second, plus physics. Expect to miss the M1–M3 target at first. Report the real number (years per second) in every watch report, and do not slow down the project to chase the target before something has emerged.
-
-If a target fails, use the speed tools of Section 7 (population nodes, coarse regions, multi-rate steps), profile, or move the field laws to the GPU. **Never remove a law to get speed.**
+There is **no speed target for now**. Build the most true, most interesting and best-made system; cut back when it has become too slow. Each merge writes down its cost per year (native, ms a year at sizes 32, 64 and 128), so that the day of cutting back has numbers to cut by. **Never remove a law to get speed**: use the speed tools of Section 7, profile, or move field laws to the GPU.
 
 ---
 
-## 13. Milestones
+## 13. Order of work
 
-Each milestone ends with "watch it and see". The **watch-for** column says what we hope to see. If it does not appear, the next step is to change physics, perception, memory or learning, and **never** to add a named rule.
+The order of work is in `review/roadmap.md` section 7: two tracks side by side, **nature** and **life**; then the small game; people after the animal layer. The old milestones M0 to M8 are not used.
 
-| # | Build | Watch for |
-|---|---|---|
-| **M0** | Workspace; chemistry generator with richness checks; terrain generator; Flow (liquid, gas, heat, radiation, wind, dissipation and carrying); Change (non-living); history tape; simple viewer: terrain plus layers plus timeline | Rain falls; **rivers and lakes form by themselves** and carve valleys over centuries; climate bands; deserts behind mountains; weaker sun → ice spreads; more heat-absorbing gas → warmer world |
-| **M1** | Bodies; catalysis; Copy with mutation; simple Choose (move, take, put, copy, rest) | Light-eaters spread where conditions fit; eaters of eaters appear; kinds differ by climate; populations rise, fall and cycle; extinctions happen |
-| **M2** | Better Choose: memory, memory of individuals, imitation, signals; movement dissipation; optional planning | **Trails form** between often-visited places; seasonal movement; learned behaviours spread by imitation; signals settle into consistent use; first giving or exchange between bodies |
-| **M3** | Bond v1: holding, joining, structures, containment, load and failure, floating | Held objects used as tools (they change what actions achieve); **shelters** used in cold times; containers; floating structures |
-| **M4** | Speed: population nodes, coarse regions, multi-rate steps, planet-size world | M1–M3 patterns still appear in merged form; speed targets met |
-| **M5** | Pattern finder; recognition library (about 40 concepts); matcher; LLM translator; Earth view with map colours and sprites | A non-expert looks at the screen and **can say what they see** |
-| **M6** | God mode: actions, auto-save, then-and-now view, "what happened since" story | Interventions have visible, believable consequences |
-| **M7** | Long runs and **world search**: an interest score, hundreds of worlds, keep the best | In some worlds: **tending and domestication**, settlements, exchange routes, metal-like processing, large settlements, polity-like patterns, burning of fuel, climate change |
-| **M8+** | Bond v2 (rotation) and v3 (lift); more library concepts; art; performance (GPU); game polish | Wheel-like and sail-like things; engines; car-like and plane-like things in rich worlds |
-
-### 13.1 Check point after M3 (must)
-
-Part 1 (M0 to M3) is well understood: rivers, climate, simple life, trails and shelters have been shown by other projects. Part 2 (M4 to M7: farming, metal, settlements, polities) has **never** been done from a few laws and small learning brains. It is research, and it may fail.
-
-So after M3, **stop and decide**. Write a watch report with:
-- which M0–M3 watch-for items really appeared (with pictures), and which did not
-- the real speed (years per second) and the real code size
-- the three biggest things that did not emerge, and the best guess why (physics, perception, memory, learning)
-
-Then the owner decides one of:
-1. **Continue** to M4–M7 as planned.
-2. **Spend a fixed time** (for example one month) on Choose improvements (planning, longer memory, imitation) to get past "animals and trails", then check again.
-3. **Stop and polish** Part 1 as a smaller, finished thing: a living island with climate, life, trails and shelters that can be watched and poked in god mode. This is already a good result.
-
-Do not drift into Part 2 without this decision.
-
-**The decision taken:** option 1, toward the zoomable world, in the order of `review/plan.md` (the watch report is
-`docs/reports/m3.md`). Its first package is the physics that lets a held part change what an act achieves (9.4).
-
-**Interest score (for M7), suggested ingredients:**
-- number of different repeated structures
-- size of the largest lasting settlement
-- number of new substances made by bodies
-- length of the longest copy lineage (of behaviours and designs)
-- variety of cultures
-- number of polity-like patterns that rose and fell
-- distance covered by the longest lasting route
-
-Use it only to **choose worlds and tune free physics numbers**. Never use it to add rules.
-
-### 13.2 Open items for M4
-
-Open items are listed in `review/big-look.md` section 2.5 until the next watch report.
+Each stage ends with "watch it and see": pictures at the owner's views and a few key numbers in range. A stage has a **watch-for** list: what we hope to see. If it does not appear, the next step is to change physics, perception, memory or learning, and **never** to add a named rule.
 
 ---
 
@@ -1036,18 +970,11 @@ All of these must be true:
 4. It is under about 300 lines.
 5. The owner agrees.
 
-### 14.3 Code budgets
+### 14.3 Size and tuned numbers
 
-| Part | Budget |
-|---|---|
-| `core` (five laws, state, random numbers) | ≤ 10,000 lines of code through M7, not counting comments and blank lines; a warning sign, not a daily constraint |
-| `worldgen` | ≤ 3,000 lines |
-| `analyze` + `library` loader | ≤ 6,000 lines |
-| whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
+**Size.** Keep `core` small by computing less, never by cramming lines (`CLAUDE.md` 2.11). There is no line count to pass.
 
-**Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row. **The rule: the count of tuned rows and of the rules chosen for a run (the second table, things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders) may not grow.** A new number must be physical or anchored, or it replaces a tuned one. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
-
-If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2).
+**Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row. **The rule: the count of tuned rows and of the rules chosen for a run (the second table, things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders) may not grow.** A new number must be physical or anchored, or it replaces a tuned one.
 
 ### 14.4 Earth-word ban in `core` and `worldgen`
 
@@ -1078,12 +1005,11 @@ Note: words like `liquid`, `gas`, `solid`, `energy`, `heat`, `body`, `bond`, `fl
 
 | Risk | Sign | What to do |
 |---|---|---|
-| Emergence stalls at "animals and trails" | M3 or M7 watch-for fails for a long time | Improve Choose: planning, memory, imitation. Search more worlds (M7). Check that the physics allows the wanted thing (Section 9.4). |
+| Emergence stalls at "animals and trails" | A watch-for of a stage fails for a long time | Improve Choose: planning, memory, imitation. Check that the physics allows the wanted thing (Section 9.4). |
 | Long-term behaviours (taming, farming) never appear | No lasting flows between kinds | Planning and longer memory; check that tended kinds really change under Copy; check that seasons give a reason to store |
 | Bond physics too slow | Profile shows load computation dominates | Simpler load approximation; update loads only when a structure changes |
 | Brains too slow | Bodies dominate the step time | Shared brain bases per lineage; no brain where nothing is decided (light-eaters); population nodes; fewer updates; GPU later |
-| Long chains of actions never learned (for example heat rock with fuel, wait, get a new solid) | Bodies find food and shelter but never make new substances | This is the main research risk. Planning (look-ahead), curiosity-like exploration in the brain, longer memory, imitation. Use the M3 check point (Section 13.1). Do not add a named recipe |
-| Boring chemistry | Few reactions happen; nothing new is made | Stronger richness checks; world search |
+| Long chains of actions never learned (for example heat rock with fuel, wait, get a new solid) | Bodies find food and shelter but never make new substances | This is the main research risk. Planning (look-ahead), curiosity-like exploration in the brain, longer memory, imitation. Use the watch of each stage (Section 13). Do not add a named recipe |
 | Pattern finder too slow | Analysis falls far behind the simulation | Analyse fewer snapshots; analyse changed chunks only; run in the background |
 | Art cost explodes | Many concepts without sprites | Few variants per concept, material tints instead of new drawings; generic block sprites as fallback |
 | Earth view misleads players | Players think the world copies Earth | Keep "≈" badges, "why this name", and the true-view switch |
@@ -1244,8 +1170,8 @@ At every step, other outcomes were possible.
 
 ## 19. Open items
 
-- **A law for mud and sand (sediment).** Liquid that runs fast takes up ground; where it slows, it lays it down (Exner
-  1925; transport after Meyer-Peter and Müller 1948). With it, deltas, mud flats, beaches, levees and filled valleys
-  form by themselves, and the ground below the cells follows where matter was laid down rather than a random surface.
-  It is a change of the laws (Flow on the ground), with its own books (each element of the ground moved with its heat)
-  and long runs. Until then, the drawing shows channels and wet ground from the shape of the ground only (10.1).
+- **A law for mud and sand (sediment) in a running world.** The made ground already has a history and a shelf under the
+  shore (`docs/laws.md` 0). What is open is the law for a running world: liquid that runs fast takes up ground; where it
+  slows, it lays it down (Exner 1925; transport after Meyer-Peter and Müller 1948), so deltas, mud flats, beaches and
+  filled valleys form by themselves. It is a change of the laws (Flow on the ground), with its own books and long runs
+  (`review/roadmap.md` section 12).
