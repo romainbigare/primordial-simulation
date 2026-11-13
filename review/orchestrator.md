@@ -211,19 +211,36 @@ south and 0.3 m of liquid a year through leaves in a rainless far north. Take it
 
 The owner's word for the end of this working session: mend the lakes' two faults (blocks of water beside the outlet
 of a small summit lake of seed 1 at the 200 m bar, since the blend of the pond's choice between samples; a shore in
-steps at the 5 m bar); mend the ice and bring the air and sunlight to main; in parallel take up the sorted start,
+steps at the 5 m bar); the air and sunlight was to follow with its ice mended, which this session did not reach (below); take up the sorted start,
 mend what kept it off main and bring it to main ("push everything to main when ready"); then finalise this file and
 stop.
 
-**The air and sunlight is whole on `wip/air-light`** (S1, S2, S5, S3a, S3b; the work branch merged in; the full gate
-passes; the lifeless globe: surface absorbs 162.5 W/m², reflects 108, back light 355, 290.8 K, vapour 38.5 kg/m²,
-cloud share 0.37). What holds it off main: (1) no ice anywhere: the globe holds none at its poles and the default
-island no sea ice and no summer snow, so the cold end is too warm (the cause is being measured: the clouds of the
-dark months, the back light of cold dry air, or the heat carried poleward); (2) the long step evaporates 0.7% less on
-land than 1-day steps, so `the_long_step_keeps_the_climate` fails on rivers; (3) the references move (land 288.18 K,
-absorber 366 ppm; the cover on the key island is 7.86 log10 kg with eaters, 9.43 without: the eaters strip a cover
-that grows 3% a year where it grew 9%, and by the owner's word the eaters do not count). Plants answer the Earth-like
-light by growing about 2.3 times slower; forests are thinner at year 30 and as heavy by year 100.
+**The air and sunlight stays on `wip/air-light`, not merged** (S1, S2, S5, S3a, S3b; the work branch merged in; the
+full gate passes; the lifeless globe: the surface absorbs 162.5 W/m², the planet reflects 108, back light 355, ground
+290.8 K, vapour 38.5 kg/m², cloud share 0.37). **What holds it off main is the ice:** the globe holds none at its
+poles and the page's default island no sea ice and no summer snow, where the owner wants an ice line.
+- The cause, measured: the pole absorbs 142 W/m² of sunlight (Earth about 80), the planet's albedo is 0.23 at the
+  pole and 0.34 at the equator (Earth: 0.55 to 0.6 and 0.25), equator to pole is 11 K (Earth 40, main 26). Too few
+  clouds at the pole (0.21 of the sky, 0.10 to 0.16 in summer; Earth 0.7, the summer the cloudiest) and they hold
+  almost no liquid (17 g/m², Earth's summer stratus 50 to 100). One warm state: with 0.85 of the sun for 15 years the
+  pole grows 0.48 m of ice, gone 2 years after the sun is back.
+- The radiation is not at fault (the polar winter's clear-sky back light is 262 W/m² against Prata's 261 for that
+  air). Main's ice is the gift of its weak grey air (back light 104 to 157 where Prata gives about 200).
+- Tried on paper and failed: the node's column read as layers with Quaas's critical humidity by height and overlap by
+  a decorrelation depth: the cover goes to 1.00 everywhere (the upper air passes the critical humidity unless the
+  vapour's profile is capped aloft) and the pole's sunlight falls by 2 W/m² only.
+- **The missing law** (next session, with a paper check first): a cloud's liquid made by cooling from below, in the
+  near-ground air over a cold surface (low cloud and fog that hold their liquid without rain), where S3b's cloud has
+  only the liquid its node's rain leaves in a cloud's life. A warm sea, no low cloud, much sun and a warm sea hold
+  each other up. Small and anchored, built or to build: the liquid's reflectance by the sun's height (Fresnel;
+  Taylor et al. 1996), 5 to 10 W/m² at the pole.
+- Other facts for the merge: the long step's extra runoff of about 1% against 1-day steps is older than the package
+  (main: +0.5 to +0.8% through rain) and moved to evaporation, so `the_long_step_keeps_the_climate` fails on its
+  count of rivers (cells within 3% of the floor); the references move (land 288.18 K, absorber 366 ppm; the cover on
+  the key island 7.86 log10 kg with eaters, 9.43 without: the eaters strip a cover that grows 3% a year where it
+  grew 9%, and the eaters do not count for now); plants answer Earth-like light by growing about 2.3 times slower:
+  forests thinner at year 30, as heavy by year 100; a step costs +6% (globe) to +15% (Wide island).
+- Scripts and tables: the scratchpad's `s3/` (`S3b/`, `final/globe/`, `final/tools/`, `final/key/`).
 
 1. **The air and sunlight** to main (S1 + S2 + S5 together, see section 4); the rivers' small faults above after it.
 2. **The air and sunlight** (item 4 below) comes first now; then **the sorted start** again (parked, see section 4:
