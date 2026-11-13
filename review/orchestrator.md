@@ -341,10 +341,11 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
   (made in 38 s, 1.6 months a second in a headless browser). Pictures: `scratchpad/islands/round3/`. Open:
-  - **A world hangs**: `ew run --seed 9 --size 128 --band 20,65 --roster` stops in year 12: two land cells in the
-    middle of the map (4942, 5213) get a NaN ground heat, then `change/kernel.rs` `sub_step` never ends. The NaN
-    comes from a law before Change, likely Flow's planet air. The page's climates use the band. To find first:
-    the source of the NaN, and whether it is there on `surface-step`; a NaN must stop a run loudly, never hang it.
+  - A cell that holds parts of two ponds, one of them a speck, gave 0/0 in the runoff's pass (`flow/runoff.rs`
+    `stand`) and hung Change: mended on main (a cell keeps at least what its other parts hold), and a reaction heat
+    that is not a number stops the run. Seeds 1 to 12 at 64 squares in the planet's air run 15 years clean. The
+    slow tests were not run after this mend (the 64 one-rise world is the same to the last digit): the air
+    package's gate runs them.
   - Land in the map's edge row in 14 of 60 worlds of 128 (2 of 60 at 64): the low ground does not ring the map
     there. To mend: the ground falls to the low ground within a margin in km of the edge.
   - The shelf's platforms with straight edges: mended on the local branch `round3-shelf-lobes` (4b488e0, straight
