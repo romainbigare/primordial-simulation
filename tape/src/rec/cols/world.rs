@@ -72,6 +72,11 @@ impl Recorder {
         for (flow, &x) in pcore::cover::BUDGET.iter().zip(&self.year.cover_budget) {
             row.push(format!("cover_budget_{flow}"), "J/yr", x);
         }
+        // The seeds lying on the ground, kg, and their flows in the year, kg/yr (`cover::SEED_FLOWS`).
+        row.push("seeds_kg", "kg", pcore::cover::lying(w).iter().zip(w.mesh.cells().area()).map(|(s, a)| s * a).sum::<f64>());
+        for (flow, &x) in pcore::cover::SEED_FLOWS.iter().zip(&self.year.seeds) {
+            row.push(format!("seeds_{flow}"), "kg/yr", x);
+        }
         // The cover's mass per m² on land: median and largest.
         let mut cover: Vec<f64> = land.iter().map(|&i| c.plants[i]).collect();
         cover.sort_by(|a, b| a.total_cmp(b));

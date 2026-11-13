@@ -175,7 +175,7 @@ impl Recorder {
         );
         let Some(c) = ctx else { return };
         if let Some(t) = taken.filter(|_| yearly) {
-            (self.year.cover_lost, self.year.cover_budget) = (t.cover_lost, t.cover_budget);
+            (self.year.cover_lost, self.year.cover_budget, self.year.seeds) = (t.cover_lost, t.cover_budget, t.seeds);
         }
         if yearly {
             self.push_series(&c, spent);

@@ -23,8 +23,8 @@ const FIRE = ramps('#fcf4dd', '#f6c26b', '#e4793c', '#b0382f', '#5f1a45', '#1e0f
 export function rampFor(name: string): RGB[] {
   if (/^t_|temp/.test(name)) return TURBO;
   if (/rain|vapor|depth|flux|water/.test(name)) return WATER;
-  if (/plant|forest|grass|crop/.test(name)) return GREEN;
-  if (/loose|sediment|soil/.test(name)) return EARTHY;
+  if (/plant|forest|grass|crop|grown/.test(name)) return GREEN;
+  if (/loose|sediment|soil|seed/.test(name)) return EARTHY;
   if (/ice|snow/.test(name)) return ICY;
   if (/absorb|fire|heat|energy/.test(name)) return FIRE;
   return VIRIDIS;

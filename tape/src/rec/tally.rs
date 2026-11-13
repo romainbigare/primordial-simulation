@@ -15,6 +15,8 @@ pub(super) struct YearTally {
     pub cover_lost: [f64; 6],
     /// The flows of the cover's budget, J (`Counters::cover_budget`)
     pub cover_budget: [f64; pcore::cover::BUDGET.len()],
+    /// The flows of the seeds, kg (`Counters::seeds`)
+    pub seeds: [f64; pcore::cover::SEED_FLOWS.len()],
 }
 
 impl Recorder {

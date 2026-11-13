@@ -148,7 +148,7 @@ fn the_cover_dies_in_frost() {
 
 /// What `layer` of the cover of cell `i` shows (`contract::shown`).
 fn shown(w: &pcore::World, i: usize, layer: Layer) -> contract::Shown {
-    contract::shown(w, w.life.cell_at(i), layer).expect("the cover's parts")
+    contract::shown(w, i, w.life.cell_at(i), layer).expect("the cover's parts")
 }
 
 /// A taker on the contract (`testkit::Taker`) takes each month a share of the lowest slot of a cell's cover
@@ -165,6 +165,8 @@ fn what_a_taker_takes_its_slot_loses() {
         w.take_counters();
         for _ in 0..12 {
             pcore::step(&mut w);
+            // (In the open: no snow hides any of it, `snow_hides_what_lies_under_it`.)
+            w.life.env[i][3] = 0.0;
             let Some(&(lowest, _)) = contract::slots(&w, w.life.cell_at(i)).first() else { break };
             taker.layer = lowest;
             let before = shown(&w, i, taker.layer);
@@ -194,6 +196,8 @@ fn what_is_pressed_loose_the_ground_gains() {
     assert!(cover::place(&mut w, i, genes(), 0, 1.0));
     let (n, books) = (w.mesh.cells().n(), Books::now(&w));
     let ground = |w: &World, k: usize| w.store.amounts(Class::Ground)[k * n + i];
+    // (In the open: no snow hides any of it.)
+    w.life.env[i][3] = 0.0;
     let all = shown(&w, i, Layer::Cover);
     let breaking = w.life.cover(i).breaking(&w.chem, &w.cfg, &cover::Parts::of(&w.chem).expect("the cover's parts"));
     w.take_counters();
@@ -460,4 +464,45 @@ fn seeds_keep_the_books() {
     let books = Books::now(&w);
     (0..24).for_each(|_| pcore::step(&mut w));
     books.assert_kept(&w, 1e-9);
+}
+
+/// A taker on the contract takes from the seeds lying on a cell's ground (`Layer::Seeds`): what it takes is what they
+/// lose, to rounding, and is counted as seeds taken; every element and the energy are kept.
+#[test]
+fn what_a_taker_takes_of_the_seeds_lying_they_lose() {
+    let mut w = testkit::living(8, 12);
+    let books = Books::now(&w);
+    let lying = cover::lying(&w);
+    let i = (0..lying.len()).max_by(|&a, &b| lying[a].total_cmp(&lying[b])).expect("cells");
+    let before = shown(&w, i, Layer::Seeds);
+    assert!(before.kg > 0.0, "no seeds lie on the ground after a year");
+    w.take_counters();
+    let mut taker = Taker::new(i, Layer::Seeds, 0.5);
+    let took = taker.month(&mut w);
+    let after = shown(&w, i, Layer::Seeds);
+    for (k, &t) in took.iter().enumerate() {
+        let lost = before.mol[k] - after.mol[k];
+        assert!((lost - t).abs() <= 1e-12 * before.mol[k], "substance {k}: took {t:e} mol, the seeds lost {lost:e}");
+    }
+    let kg: f64 = took.iter().zip(&w.chem.subs).map(|(m, s)| m * s.molar_mass).sum();
+    let counted = w.take_counters().seeds[cover::TAKEN_LYING];
+    assert!(kg > 0.0 && (counted - kg).abs() <= 1e-9 * kg, "took {kg} kg, counted {counted} kg as taken");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// Snow hides what lies under it (`contract::above`): of a slot whose plants stand h high under snow h / 2 deep, a taker
+/// sees and takes half; the seeds lying show nothing under any snow.
+#[test]
+fn snow_hides_what_lies_under_it() {
+    let mut w = testkit::living(8, 12);
+    let lying = cover::lying(&w);
+    let i = (0..lying.len()).max_by(|&a, &b| lying[a].total_cmp(&lying[b])).expect("cells");
+    let (layer, h) = *contract::slots(&w, w.life.cell_at(i)).first().expect("a slot");
+    let open = shown(&w, i, layer);
+    w.life.env[i][3] = 0.5 * h;
+    let hidden = shown(&w, i, layer);
+    assert!((hidden.kg - 0.5 * open.kg).abs() <= 1e-9 * open.kg, "under snow half its height a slot shows {} of {} kg", hidden.kg, open.kg);
+    assert_eq!(shown(&w, i, Layer::Seeds).kg, 0.0, "seeds show under snow");
+    let took: f64 = Taker::new(i, layer, 1.0).month(&mut w).iter().zip(&w.chem.subs).map(|(m, s)| m * s.molar_mass).sum();
+    assert!(took <= 0.5 * open.kg * (1.0 + 1e-9) && took > 0.0, "a taker took {took} kg of the {} kg above the snow", hidden.kg);
 }
