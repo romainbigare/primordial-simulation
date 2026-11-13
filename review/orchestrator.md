@@ -130,20 +130,27 @@ the true bed, mouths that reach their lake or sea with a fan. The tiles' second 
 lakes, ponds and the sea take the rivers' water (`river_seen` in `lib/style.wgsl`); nothing of a channel is drawn
 under standing water. The owner: "amazing, much better".
 
-**Round five of the rivers is on `wip/rivers` (5ea498ce), not on main:** the river cuts a dark wedge through the
-shore's band and ends at the shore line with a jump of width and tone; tiny rills cut needles through the band; with
-no crown in drawn water (`FILM_M`, good) the band lies bare, wide and nearly white. A new helper works in the same
-worktree (`.claude/worktrees/agent-ab76b80ac68603520`; its scripts in the scratch folder `rv/`).
+**Mouths (on main):** a channel is drawn on land and through the band of shallows (`river_spots` in
+`lib/river.wgsl`, `through_band` / `standing` in `lib/land.wgsl`): it widens (`MOUTH_FLARE`), keeps its water and
+flow signs, and melts into the open water at the band's end; a rill ends at the water's edge; the sea's foam is the
+first metres only and stops at a mouth. A bend turns on at least two bed widths and a tile draws a sway only from
+enough texels (`belt.rs`, `lines.rs`): no saw from afar. The shore's choice is blended between sample centres
+(`shore.rs` `share`): no straight outlines. One number says where liquid is water for the picture and the plants
+(`FILM_M`). The pixel runs two layers and colours the river's water once: against the page before the rivers, by CPU
+time in software, the fitted view costs -10%, the 2 km bar -7%, the 200 m bar +3%.
 
-**Known faults of the rivers (in work):** the owner's wish first: the shore's pale
-band must break where a river crosses it, the river's water running through into the lake or sea (and the sea's foam
-rim too). Then: crowns in standing water 5 to 30 cm deep; thin straight-edged outlines in the forest near ponds (a
-step in the drawn ground along a sample's edge); the wander reads as a saw from afar; pale straight-edged patches in
-fast water; the pan frame draws a river about 1.5 times wider (the small stretched picture); the cost in software by
-CPU time against before the rivers: fitted view +15%, 2 km bar +26%, 200 m bar +45% (cause not found; the guard asked
-is +5% and +10%). Small plants' marks show as little grids of yellow dots on bare ground close up.
+**Known faults of the rivers and shores:** the band's sand does not turn upstream along a river's banks (the tile
+must name the pond for texels near it: `Ground::pond_tile`); the sea's foam is a busy lace close up; a lake's band
+is its true shallows, about 20 m wide; one lake shore runs straight for 200 m (the samples' shape); thin rills are
+nearly straight faint lines; bends come in between the 500 m and 200 m bars; the pan frame draws a river a little
+wide. Small plants' marks show as little grids of yellow dots on bare ground close up.
 
-**In work:** the rivers' faults above (branch `wip/rivers`). The air and sunlight (the cover's helper, branch
+**The frame's cost in software says how much code a program holds, not what a pixel runs** (a branch never taken
+costs the same as one that runs; code removed at build time is what saves). The largest share is the sea ice
+(`lib/ice.wgsl`): without it a frame costs 28 to 45% less. The next cut: a program without ice when no cell holds
+ice on water. A real phone is not measured.
+
+**In work:** the air and sunlight (the cover's helper, branch
 `wip/air-light`, not on main): S1 gases absorb sunlight (`sw_abs`, `sw_sat`, `radiation::Column`, one pass down and
 one up), S2 the clear air scatters (`scatter`), both committed with their tests; the lifeless globe then absorbs 189
 W/m² at the surface (243 before, Earth 160) and 66 in the air, at 288.3 K. Alone they make winters too cold (the key
@@ -166,7 +173,7 @@ south and 0.3 m of liquid a year through leaves in a rainless far north. Take it
 
 ## 5. What to do next, in order
 
-1. **The rivers' faults** (round four) to main when the pictures pass and the cost guard holds.
+1. **The air and sunlight** to main (S1 + S2 + S5 together, see section 4); the rivers' small faults above after it.
 2. **The air and sunlight** (item 4 below) comes first now; then **the sorted start** again (parked, see section 4:
    classes that blend, a garden whose air feels its film, tests that start from one placed world, kinds that draw
    with variety and a sward).
