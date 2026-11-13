@@ -1,4 +1,4 @@
-//! The plants of a slot of cover (laws.md 4.5): the model holds a slot's mass and its count of plants, so each plant's
+//! The plants of a slot of cover (laws.md 3): the model holds a slot's mass and its count of plants, so each plant's
 //! mass is known, and from it the plant's height by the buckling limit (McMahon 1973), how many plants a stand of that
 //! mass holds at most (the self-thinning law, Yoda and others 1963), how deep its roots reach (Schenk and Jackson
 //! 2002), and the share of its cell whose loose ground holds them. One place for these laws: the light's layers

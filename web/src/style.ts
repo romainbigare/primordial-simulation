@@ -5,8 +5,11 @@
 // smoothly from its parent. The marks near (cover.wgsl) and the field far away (cover_field.wgsl) draw the same colours
 // (`seenFar`). Colours are worked in OKLab (Ottosson 2020), whose distances follow the eye's, and handed on as
 // reflectances in linear light.
-import type { Rgb } from './sprites';
 import { clamp, smooth } from './earth';
+
+export type Rgb = [number, number, number];
+/** How the plants are drawn: from above, or angled. */
+export type Style = 'above' | 'angled';
 
 /** The numbers of a kind its look reads (`Kind::row`): its capture area per kg, log10 m²/kg; its walls' share; its
  * moisture gene; its frost gene, K; its light capacity per m² of capture area, log10 mol/m²/s; its activity; the share

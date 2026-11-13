@@ -57,7 +57,7 @@ impl Chemistry {
     }
 
     /// Melting point of `k` among the amounts `a(j)` of one node or body, K: `t_melt` at its share among itself and what
-    /// is dissolved in it, where `k` is the solvent (laws.md 2.5). A gas counts not: it dissolves only to Henry's share,
+    /// is dissolved in it, where `k` is the solvent (laws.md 2.4). A gas counts not: it dissolves only to Henry's share,
     /// a thousandth of a kelvin. Where `k` is absent it melts at its own point.
     pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
         let Some(js) = self.mixes(k).filter(|_| self.lowers_melt(k)) else { return self.subs[k].melt };
@@ -139,11 +139,6 @@ impl Chemistry {
     #[inline]
     pub fn heat_cap_of(&self, m: &[f64]) -> f64 {
         m.iter().zip(&self.subs).map(|(a, s)| a * s.cp).sum()
-    }
-
-    /// Mass of amounts `m` (mol of each substance), kg.
-    pub fn mass_of(&self, m: &[f64]) -> f64 {
-        m.iter().zip(&self.subs).map(|(a, s)| a * s.molar_mass).sum()
     }
 
     /// Optical depth to outgoing heat radiation of a column of `c` mol/m² of substance `k`.

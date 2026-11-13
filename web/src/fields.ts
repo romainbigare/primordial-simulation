@@ -20,7 +20,7 @@ export interface Fields {
    * per m² the `leaf` layer); one unused. */
   inside: Float32Array;
   /** The layers of the table (tape/src/layers.rs) the window holds, a byte a texel, layer after layer (`names`, in
-   * their order): a layer view and the worn paths read them. */
+   * their order): a layer view reads them. */
   layers: Uint8Array; names: string[];
   /** How the shader reads them (earth.wgsl `Earth.look`): the slope's factor, the melting point by which a texel's own
    * temperature lays snow (0: the ice alone), the height up to which a sea's shore is sand, m, and the bytes of a layer

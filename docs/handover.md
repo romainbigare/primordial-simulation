@@ -10,7 +10,6 @@ The other documents:
 - `docs/laws.md`: how each law works **now**, part by part, with the code that does it.
 - `docs/numbers.md`: every free number, its unit, its source and whether it is physical, anchored or tuned.
 - `docs/tape.md`: what a run records.
-- `docs/analyze.md`: the fact cards made from a tape.
 - `review/roadmap.md`: the plan, the priorities and the owner's decisions.
 - `review/orchestrator.md`: the handover of the work, with where things stand.
 
@@ -101,7 +100,7 @@ What went wrong:
 |---|---|
 | Core idea | 5 laws on one graph: Flow, Change, Bond, Copy, Choose |
 | Coordination, trade, property, institutions | **Not** primitives. They must emerge from Choose + Bond + Flow + Copy (+ signals) |
-| Actors | Plants are a field per cell, the cover, not bodies. Animals are being rebuilt as fields (`review/roadmap.md` section 4); until then the old animals are bodies, with similar ones merged into population nodes (Section 7.1). People come after the animal layer |
+| Actors | Plants are a field per cell, the cover, not bodies. Animals are being rebuilt as fields (`review/roadmap.md` section 4); the old animals, bodies merged into population nodes, are deleted (the tag `animals-v2` keeps them). People come after the animal layer |
 | Body scale | Living things are **real-sized**: an individual weighs what a real living thing weighs (grams to tonnes, set by its genes and selection). Plant cover holds real mass per m² (about 1 to 50 kg/m²). **No hard-coded limit on how much a cell holds**: density is an outcome of light, cover, crowding and food. Speed comes from fields (Section 7.1) and better algorithms, never from giant bodies |
 | Free numbers | A number comes from a real measured size where one exists (anchored). The count of tuned numbers may not grow (Section 14.3) |
 | What a body is | A body is fuel plus a body built of matter. Building matter costs work and time; storing fuel is cheap |
@@ -120,7 +119,7 @@ What went wrong:
 | Moving | Moving needs force |
 | Materials | Bodies are built of several materials; physics reads the material (breaking, digestion) |
 | Freezing | One freezing law for bodies, ground, lakes and the sea |
-| The start | What is placed at the start is an initial condition and every run prints it. Plants are the cover, a field with no brain: their life is the physics of their numbers. The old animals start with hand-set brain biases, founders as adults; the rebuilt animals start as the roadmap's design says (section 4) |
+| The start | What is placed at the start is an initial condition and every run prints it. Plants are the cover, a field with no brain: their life is the physics of their numbers. The rebuilt animals start as the roadmap's design says (section 4) |
 | Waits | Natural fire starts and disease (bodies inside bodies) wait until after the animal layer (`review/roadmap.md` section 7) |
 | World chemistry | One hand-made, Earth-like "chemistry 0" (numbers only, no names in core). No random chemistry is planned (Section 6.0) |
 | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
@@ -220,7 +219,6 @@ The world has its own chemistry. This is not a law. It is the **data** the laws 
 
 - It is copied roughly from Earth: 6 elements, 14 substances, 14 reactions. Only rough numbers (melting points, densities, reaction heats); never precise field data.
 - In `core` and `worldgen`, substances are **numbers only** (substance 0, 1, 2…). The data file holds numbers, not names. The Earth names of chemistry 0 ("≈ water", "≈ sugar") live **only** in `library/`, as a normal recognition entry. The word ban still holds.
-- The chemistry generator and the richness checks in `worldgen` are used by no world; they move to a branch (`review/roadmap.md` section 8, C2).
 
 **Elements.** A small number of base elements, for example `B = 6 to 8`. Elements are never created or destroyed.
 
@@ -336,7 +334,7 @@ Burning, rotting, rusting-like decay, smelting-like reduction, cooking-like chan
 - **Failure.** If `load > strength`, the bond breaks. If the structure loses its support, parts fall.
 - **Holding.** A body holding a part is a bond too. Its strength is the body's force (strength gene × its living body × gravity × grip). A body takes hold of a part only if that force bears the weight of the part's structure, and lets go when it no longer does.
 - **Force is of the body.** Taking, lifting, holding, carrying, digging and pushing go by the living body, not by the fuel it carries; a hurt body is weaker. **Moving needs force:** a body moves only if its force can push what it passes.
-- **Materials.** How high a body stands is what its materials hold up against its weight; the energy to break a body is what its materials resist (`docs/laws.md` 3.6).
+- **Materials.** How high a body stands is what its materials hold up against its weight; the energy to break a body is what its materials resist (`docs/laws.md` 3.6 in the tag `animals-v2`).
 - **Making bonds.**
   - By Change: some reactions make solids that join their neighbours (setting, drying).
   - By Choose: a body spends energy to join two things it holds or touches.
@@ -402,7 +400,7 @@ Having children is not a choice: it is physics (Section 6.4). There is no "farm"
 
 **Signals.** A signal has no meaning at first. Meaning comes from learning. If signals become useful, a language-like system may emerge.
 
-**Planning** (a first step is built: a look-ahead of one step with the critic, `docs/laws.md` 5.3): bodies learn a small model of "what happens if I do X" and look a few steps ahead. This makes long plans much easier to find. Taming an animal, for example, pays off only after many seasons.
+**Planning** (a first step is built: a look-ahead of one step with the critic, `docs/laws.md` 5.3 in the tag `animals-v2`): bodies learn a small model of "what happens if I do X" and look a few steps ahead. This makes long plans much easier to find. Taming an animal, for example, pays off only after many seasons.
 
 **Implementation:**
 - A small neural network per body: a base per lineage, rows that are genes of each body, plus what the body (or its population node) learned. Keep the brain code apart from the rest, so it can be swapped.
@@ -424,8 +422,8 @@ Thousands of years of a living world will not run on one computer if every livin
 
 ### 7.1 Fields and population nodes
 
-- **Plants are a field.** Each cell holds a few slots of cover, each with amounts and genes (`docs/laws.md` 4.5). A plant is not a body.
-- **Animals will be a field too**, built the same way (`review/roadmap.md` section 4). Until then, the old animals are bodies: when many of the same lineage sit in one area with similar states, they are merged into one population node (`docs/laws.md` 4.4). It holds the count, average stores, a small summary of how they differ, and one shared brain, and runs the same laws in average form. Conservation holds exactly when merging and splitting.
+- **Plants are a field.** Each cell holds a few slots of cover, each with amounts and genes (`docs/laws.md` 3). A plant is not a body.
+- **Animals will be a field too**, built the same way (`review/roadmap.md` section 4).
 - A body of count 1 is an individual in the maths: there is one set of rules for both.
 
 ### 7.2 Fixed cells
@@ -466,32 +464,29 @@ This is a speed tool, not a law: the history is the same with and without thread
 ### 8.1 Workspace layout
 
 ```
-core/       the five laws, world state, random numbers. No IO, no Earth words.
-  src/flow/ src/change/ src/bond/ src/copy/ src/choose/
+core/       the laws of the natural world, world state, random numbers. No IO, no Earth words.
+  src/flow/ src/change/ src/cover/
               one folder per law (core/src/<law>/; the air in flow/air/)
-  src/body/   bodies: genes, tissue, metabolism, exchange, the update, its physics, paying, death, intake
   src/chem/   the chemistry: its data, its physics (phases, melting), the roles of reactions
   src/space/  the shape of the world: the mesh (cells, links, levels), the square map (an island, or a globe whose rows
               wrap east to west), the tree of cells under each air block, the terrain and its worn samples (wear,
               ponds, the network of channels, the makes of bed in strata, the shelf), stacks of layers
   src/inside/ the law inside a cell: how a cell's means lie over its own ground (read by the tape and the page)
-  src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the bodies' node of
+  src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the aside node of
               each cell; a part by slot and generation), what the fixed ones hold (`Store`: private arrays, read
               through methods), the boundary nodes sun, space and outside, the one way to change them (`apply`:
-              moves and link fluxes; and `book_by_array` for the bodies' moves, the air's step and Change's rows,
+              moves and link fluxes; and `book_by_array` for the chunks' moves, the air's step and Change's rows,
               which adds as `apply` adds),
-              and the moves of a body's or a part's update (`Moves`)
+              and the moves of a chunk (`Moves`)
   src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
   src/solve/  the shared maths: sweep (explicit step on links), line (implicit step along lines of links)
-  src/life/   the bodies by cell and the chunks of cells that body code runs on (the parallel pass, the serial pass)
+  src/life/   the cells' cover and the chunks of cells the cover's month runs on (the parallel pass), the seeds' landing
   src/cover/  the plant field: the starting cover of a cell, its growth, seeding and yearly budget
-  src/survey/ the cells as bodies see them: the draws and the steps of the bodies' batch
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
-              lineage, nodes (population nodes), lanes (paths), survey, brain, rng, event, math, units, par
-  tests/      one file per law (flow, change, bond, copy, choose, body, bodies), one per base part (space, store,
-              clock, solve, inside), cover, populations, lots, damage, threads (threads and chunks change nothing),
-              chemistry0, numbers
-worldgen/   terrain, chemistry 0 (chem0.toml) and the chemistry generator, richness checks, first life (life/), what is
+              contract (what a taker may read and do to a cell), rng, event, math, units, par
+  tests/      one file per law (flow, change, cover; bodies for the bodies of standing liquid), one per base part
+              (space, store, clock, solve, inside), threads (threads and chunks change nothing), chemistry0, numbers
+worldgen/   terrain, chemistry 0 (chem0.toml), first life (life/), what is
               placed when (schedule.rs), the planet's strip for an island's air (planet.rs); the test kit
               (worldgen::testkit, behind the `testkit` feature)
 tape/       the recorder (rec/, its yearly columns in rec/cols/, the viewer file in rec/ewf.rs), snapshots
@@ -500,10 +495,9 @@ tape/       the recorder (rec/, its yearly columns in rec/cols/, the viewer file
               fingerprint of a world; tests: tape.rs, ranges.rs, scale.rs, ground.rs, things.rs
 library/    the recognition library (data files); today the Earth names of chemistry 0
 cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`, `ew view`; flags in args.rs), pictures; tests:
-              the word ban, writer, view
+              the word ban, sides, writer, view
 wasm/       the core as WebAssembly for the live viewer: a small shell of `extern "C"` exports (`ew-wasm`)
 web/        the 2D map viewer (TypeScript): plays a tape, or runs a live world in a worker; its shaders draw the map
-analyze/    the pattern finder (`ew-analyze`): fact cards from a run's folder (docs/analyze.md); recognition matching is not built yet
 ```
 
 ### 8.2 Core rules (must)
@@ -518,13 +512,11 @@ analyze/    the pattern finder (`ew-analyze`): fact cards from a run's folder (d
 ### 8.3 What the simulation records (the history tape)
 
 - **Snapshots:** at the end of a run, every `--snapshots-every` years if asked, and before every god action, save the full state, compressed (bincode, then gzip). A run can go on from any snapshot (`ew resume`).
-- **Raw physical events:** body born, body died (and cause: lacking a store, frozen or boiled, could not pay, taken, broken, age), taken from, given to, watched, bond made or broken, first time a substance appears in the world, god action applied. Only raw physical facts. **"A city was founded" is not a raw event.** The pattern finder detects that later.
-- **Summary series** every year (`series.csv`): totals per element, energy, temperatures, absorbing-gas amounts, population counts, births and deaths by cause, traffic, gifts and imitation. Columns are named by index, never by Earth names (`elem_<j>`, `air_<k>`, `cat_<r>`).
-- **Columns by starting kind** (`root_<k>_*`): `<k>` is the starting kind a body descends from. Members, mass, births and deaths by cause, the life the genes allow and the life lived, and the means of the main genes, counted by members (a node of 10⁸ members counts 10⁸ times). In a roster run, read the number of kinds alive from these columns.
-- **Months** (`months.csv`, with `--months`): births and deaths by kind and cause each month, so seasons show.
+- **Raw physical events:** the first time a substance appears in the world. Only raw physical facts. **"A city was founded" is not a raw event.**
+- **Summary series** every year (`series.csv`): totals per element, energy, temperatures, absorbing-gas amounts, the water, the cover and what it lost by cause, the cover's budget. Columns are named by index, never by Earth names (`elem_<j>`, `air_<k>`, `min<q>_*`).
+- **Columns by starting kind** (`root_<k>_*`): `<k>` is the starting kind of cover a slot descends from (its row of `worldgen::life::KINDS`). Its slots, mass and capture area, and the means of its genes, weighted by its built cover. In a roster run, read the number of kinds alive from these columns.
 - **The run's numbers** (`physics.json`): every field of `Physics` and `Config`. `ew numbers OLD NEW` prints the fields that differ between two runs, so no number changes without the reader seeing it.
 - **Viewer frames** (`world.ewf.gz`): map layers every 10 years (`--frames-every`), with the series and the events.
-- **A null run** (`ew run --null`, column `null`): learning and imitation off, brain rows frozen, genes still evolve. Compare a real run with its null run (Section 18.3).
 
 The full list of columns is in `docs/tape.md`.
 
@@ -905,19 +897,19 @@ What the tests must cover:
 - **No NaN, no infinity, no negative amounts.**
 - **Repeatability:** run the same seed twice on the same machine, and the state must be the same, bit for bit, with any number of threads (12.5).
 - **Snapshot round-trip:** save, load, continue. The result must match an unbroken run.
-- **One tiny scene per law** showing basic physical behaviour: liquid flows downhill; heat spreads; a reaction runs faster when hot; a bond breaks under too much load; a child has its parent's genes plus noise; a body learns to move towards food.
+- **One tiny scene per law** showing basic physical behaviour: liquid flows downhill; heat spreads; a reaction runs faster when hot; the cover grows by what its budget books and dies in frost; what a taker takes the cover loses.
 - **Speed benchmark:** years per second on the reference island. Track it over time.
 
 How the suite is built:
 
-- **The normal suite** (`cargo test --release --workspace`) stays under about 30 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `bodies.rs` and `lots.rs` for bodies, `populations.rs` for Copy in populations, `damage.rs` for the damage to a body and `cover.rs` for the plant field), one per part of the base (`core/tests/{space, store, clock, solve, inside}.rs`), `core/tests/threads.rs` (the number of threads and the count of chunks change nothing), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (every field has a row in `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run), `tape/tests/ground.rs` (the ground's tiles) and `tape/tests/things.rs` (the things of a window); `tape/tests/ranges.rs`, whose test `the_world_lives_and_keeps_its_books` is the main guard (a roster island runs past its last placement, keeps every element and the energy, has no number that is not finite, and ends with the base kinds alive; until the old animals are deleted it also needs enough animal kinds alive, `review/roadmap.md` section 8, C1b); `cli/tests/word_ban.rs` (14.4), `cli/tests/writer.rs` (a run resumed into its folder leaves the files of the unbroken run) and `cli/tests/view.rs`; `analyze/tests/cards.rs`.
+- **The normal suite** (`cargo test --release --workspace`) stays under about 30 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, cover}.rs` (with `bodies.rs` for the bodies of standing liquid), one per part of the base (`core/tests/{space, store, clock, solve, inside}.rs`), `core/tests/threads.rs` (the number of threads and the count of chunks change nothing), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (every field has a row in `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming), `tape/tests/ground.rs` (the ground's tiles) and `tape/tests/things.rs` (the slots of cover of a window); `tape/tests/ranges.rs`, whose test `the_world_lives_and_keeps_its_books` is the main guard (a roster island runs past its last placement, keeps every element and the energy, has no number that is not finite, and ends with each of its cover kinds alive); `cli/tests/word_ban.rs` (14.4), `cli/tests/sides.rs` (the natural world names no module of a taker), `cli/tests/writer.rs` (a run resumed into its folder leaves the files of the unbroken run) and `cli/tests/view.rs`.
 - **The contract between the layers** needs no test: the store's arrays are private
-  fields of `store::Store`, which only `store::apply` and `store::book_by_array` (for the bodies' moves and the air's step, adding as `apply`
+  fields of `store::Store`, which only `store::apply` and `store::book_by_array` (for the chunks' moves and the air's step, adding as `apply`
   adds) write, both inside the module `store`, so the compiler checks it; the sums of the boundary nodes and the
   potential are added by `Store::add_far_heat`. A test or an edit changes the
   store by moves from the outside node (`World::cross`).
-- **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, founders, edits booked from the outside node, the rock of a cell, the books of a world, chemistry 0's substances by number). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
-- **Slow tests** are marked `#[ignore]`: the learning scene over many seeds, long runs that keep their books, the island's erosion, coarse against fine (`tape/tests/scale.rs`), and the key-number tests of climate, land and life (`tape/tests/ranges.rs`). Run them before the last push of a phase (`cargo test --release --workspace --no-fail-fast -- --ignored`); there is no CI on GitHub for now.
+- **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, edits booked from the outside node, the rock of a cell, the books of a world, chemistry 0's substances by number, a plain taker on the contract). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
+- **Slow tests** are marked `#[ignore]`: long runs that keep their books, the island's erosion, coarse against fine (`tape/tests/scale.rs`), and the key-number tests of climate, land and life (`tape/tests/ranges.rs`). Run them before the last push of a phase (`cargo test --release --workspace --no-fail-fast -- --ignored`); there is no CI on GitHub for now.
 
 That is the core of testing, until something emerges. Reviews of the code and of the laws happen in rounds, by the agent and the owner together. What stays banned is proof machinery: receipts, proof campaigns, cross-machine determinism, replay proofs.
 
@@ -982,7 +974,7 @@ Add an automatic check (a script in CI or a test) that fails if these words appe
 
 > farm, crop, harvest, sow, herd, livestock, domestic, tame, pasture, house, home, hut, village, town, city, settlement, road, route, trail, river, lake, ocean, sea, market, trade, money, price, coin, wage, debt, loan, property, owner, king, queen, lord, council, kingdom, empire, nation, war, army, weapon, church, temple, religion, god, tool, axe, plough, wheel, cart, car, boat, ship, plane, engine, metal, iron, copper, bronze, steel, gold, wood, stone, coal, oil, fire, food, grain, meat, water, medicine, disease, tribe, family, household, culture
 
-Allowed elsewhere: `analyze/`, `library/`, `web/`, documentation and LLM prompts.
+Allowed elsewhere: `library/`, `web/`, documentation and LLM prompts.
 
 Note: words like `liquid`, `gas`, `solid`, `energy`, `heat`, `body`, `bond`, `flow`, `node`, `edge`, `kind` are fine. They describe physics or structure, not Earth history.
 

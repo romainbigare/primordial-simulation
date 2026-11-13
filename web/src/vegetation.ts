@@ -7,7 +7,7 @@
 import { World } from './data';
 import { kindsOf } from './canopy';
 import { cooling } from './style';
-import { Style } from './sprites';
+import { Style } from './style';
 import { CoverMarks, Marks } from './textures';
 import { Draw, Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';

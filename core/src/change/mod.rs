@@ -10,7 +10,6 @@ mod rows;
 
 pub use balance::reversible;
 pub use kernel::Reactor;
-pub(crate) use kernel::{frac, rate, scarce, terms};
 
 use crate::{store::Class, AIR, World};
 use rows::Rows;

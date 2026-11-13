@@ -1,7 +1,7 @@
-//! The roster of starting kinds (`worldgen::life::ROSTER`): every kind can be placed, cover labelled by its row and
-//! bodies each in their own lineage, and the world stays whole (elements and energy booked, nothing negative).
+//! The roster of starting kinds (`worldgen::life::ROSTER`): every kind can be placed, its cover labelled by its row,
+//! and the world stays whole (elements and energy booked, nothing negative).
 
-use worldgen::life::{seed, Place, KINDS, ROSTER};
+use worldgen::life::{seed, KINDS, ROSTER};
 
 #[test]
 fn every_roster_kind_is_placed_and_the_world_holds() {
@@ -9,20 +9,10 @@ fn every_roster_kind_is_placed_and_the_world_holds() {
     let t0 = pcore::check::totals(&w);
     pcore::step(&mut w);
     for &k in &ROSTER {
-        let (lineages, old): (usize, Vec<u32>) = (w.life.brains.len(), w.life.alive().map(|b| b.lineage).collect());
         let line = seed(&mut w, k);
         let name = KINDS[k].name;
         assert!(line.contains(name), "no seeding line for kind {k}: {line:?}");
-        match KINDS[k].place {
-            Place::Field(_) => assert!(pcore::cover::sums(&w).get(k).is_some_and(|s| s.slots > 0.0), "kind {name} placed no cover"),
-            Place::Bodies(_) => {
-                assert_eq!(w.life.brains.len(), lineages + 1, "kind {name} has its own lineage");
-                assert_eq!(w.life.brains[lineages].as_ref().map(|l| l.root), Some(k as u32), "kind {name} labels its lineage with its row");
-                // Counted by its own lineage: placing also surveys the cells, where other bodies may merge or die.
-                assert!(w.life.alive().any(|b| !old.contains(&b.lineage)), "kind {name} placed nothing");
-            }
-        }
-        // Bodies are found in their cells after a month (animals are placed where life already is).
+        assert!(pcore::cover::sums(&w).get(k).is_some_and(|s| s.slots > 0.0), "kind {name} placed no cover");
         pcore::step(&mut w);
     }
     assert_eq!(pcore::check::broken(&w), None);

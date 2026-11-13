@@ -18,7 +18,7 @@ use crate::{store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 /// its head, m (`touching`); its temperature, K, plateau's substance and molten share; heat capacity, J/K; fusion
 /// enthalpy held and the energies it holds it between (`Latent`); soft cover (`Scratch::cover`); reflectance; pore
 /// space as a depth, m; heat, J; what it holds of each active gas, mol (`amt[k]`); the fusion enthalpy of its
-/// plateau's substance, J; its cover of bodies (`World::canopy`) and the share of light they absorb and keep; and a
+/// plateau's substance, J; its cover's capture area per m² (`Stand::canopy`) and the share of light it absorbs and keeps; and a
 /// cell of it, whose other numbers (its layers, for a soft cover's end reflectance) it is, with the part of that cell it
 /// is (`parts`; none: the whole cell) and that part's share of the cell's area.
 pub(super) struct Surf {
@@ -90,7 +90,7 @@ impl Surf {
             heat: w.store.heat(Class::Ground)[i],
             amt,
             fusion: if pk != NONE { ground[pk * n + i] * s.sp[pk].lf } else { 0.0 },
-            canopy: w.canopy[i] as f64,
+            canopy: crate::contract::stand(w, i).canopy(w.mesh.cells().area()[i]),
             absorb: crate::contract::stand(w, i).absorb(),
             keep: crate::contract::stand(w, i).keep(),
             second: w.second_film(i).map(|(k, film, reach)| (k, film * w.mesh.cells().area()[i], reach)),

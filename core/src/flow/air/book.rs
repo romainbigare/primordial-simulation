@@ -14,18 +14,18 @@ use super::{sums, touching};
 use crate::store::{held_more, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
-/// The gas the bodies' nodes hold comes up whole into their cells' air nodes, holding its latent heat as the air does;
-/// the air pays its lift (laws.md 1.5, `potential`). The bodies' nodes hold only gases of the air.
+/// The gas the aside nodes hold comes up whole into their cells' air nodes, holding its latent heat as the air does;
+/// the air pays its lift (laws.md 1.5, `potential`). The aside nodes hold only gases of the air.
 pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
     let n = w.mesh.cells().n();
-    let held = w.store.amounts(Class::Bodies);
+    let held = w.store.amounts(Class::Aside);
     let ks: Vec<u16> = s.state.gas.iter().copied().filter(|&k| held[k * n..(k + 1) * n].iter().any(|&m| m != 0.0)).map(|k| k as u16).collect();
     if ks.is_empty() {
         return;
     }
     let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
     let mol: Vec<f64> = ks.iter().flat_map(|&k| held[k as usize * n..(k as usize + 1) * n].iter().copied()).collect();
-    let up = LinkFlux { class: [Class::Bodies, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &[] };
+    let up = LinkFlux { class: [Class::Aside, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &[] };
     apply(w, s, &[up], &[]);
 }
 
@@ -60,7 +60,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
         }
     }
     let (sun, space) = (Boundary::Sun as usize, Boundary::Space as usize);
-    let (mut lit, mut kept, mut cooled) = (Batch::new([Class::Boundary, Class::Ground], &[]), Batch::new([Class::Boundary, Class::Bodies], &[]), Batch::new([Class::Ground, Class::Boundary], &[]));
+    let (mut lit, mut kept, mut cooled) = (Batch::new([Class::Boundary, Class::Ground], &[]), Batch::new([Class::Boundary, Class::Aside], &[]), Batch::new([Class::Ground, Class::Boundary], &[]));
     for (i, &out) in to_space.iter().enumerate() {
         lit.link((sun, i), response.fixed(i, SUN));
         cooled.link((i, space), out);
@@ -96,11 +96,10 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
         })
         .collect();
     let ema = year_weight(w, dt);
-    for (i, ((r, sum), e)) in w.rain.iter_mut().zip(&mut w.rained).zip(&mut w.evap).enumerate() {
+    for (i, (r, e)) in w.rain.iter_mut().zip(&mut w.evap).enumerate() {
         let (got, up) = ((0..nx).map(|y| fell[y * n + i]).sum::<f64>(), (0..nx).map(|y| mol[y * n + i]).sum::<f64>());
         follow(r, (got / (area[i] * dt)) as f32, ema);
         follow(e, (up / (area[i] * dt)) as f32, ema);
-        *sum += got / area[i];
     }
     sums(w, s);
 }

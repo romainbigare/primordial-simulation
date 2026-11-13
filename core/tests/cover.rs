@@ -1,13 +1,16 @@
-//! The cover (laws.md 4.5): a field of light-eaters per cell grows in light and dies in frost, keeping the books, and
-//! what takes from it through the contract takes what it loses: a plain taker, and animals by their take from the
-//! place.
+//! The cover (laws.md 3): a field of light-eaters per cell grows in light and dies in frost, keeping the books; what
+//! takes from it or presses on it through the contract takes what it loses; its seeds land by the dispersal kernel.
 
-use pcore::life::{PHASE, TAKEN};
-use pcore::cover::{self, FROST};
-use pcore::event::EventKind;
-use worldgen::life::{Place, KINDS};
 use pcore::contract::{self, Layer};
-use worldgen::testkit::{dry_lands, eater, small_world, Books, Taker};
+use pcore::cover::{self, FROST};
+use pcore::life::{BROKEN, PHASE, TAKEN};
+use pcore::rng::{Purpose, Rng};
+use pcore::space::Leaf;
+use pcore::store::Class;
+use pcore::World;
+use std::collections::BTreeMap;
+use worldgen::life::KINDS;
+use worldgen::testkit::{self, dry_lands, small_world, Books, Taker};
 
 /// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the tropics to the cold,
 /// so its air brings every band the heat of the lower latitudes, as a real place gets.
@@ -23,10 +26,14 @@ const BAND_CELLS: usize = 5;
 /// spare it (the test asserts both).
 const FROST_GENES: [f32; 2] = [276.0, 261.0];
 
-/// The genes of the starting cover (kind 0).
+/// The row of the big slow kind of cover (a tree), its label.
+const TREE_ROW: usize = 2;
+/// The big slow kind of cover.
+const TREE: &worldgen::life::Kind = &KINDS[TREE_ROW];
+
+/// The genes of the light-eaters.
 fn genes() -> [f32; cover::NG] {
-    let Place::Field(f) = &KINDS[0].place else { unreachable!("kind 0 is cover") };
-    f.genes
+    KINDS[worldgen::life::LIGHT_ROW].genes
 }
 
 /// The world's cover, kg.
@@ -145,8 +152,8 @@ fn shown(w: &pcore::World, i: usize, layer: Layer) -> contract::Shown {
 }
 
 /// A taker on the contract (`testkit::Taker`) takes each month a share of the lowest slot of a cell's cover
-/// (`contract::slots`) and passes it to the ground: what it takes is what that slot loses, to rounding, every element
-/// and the energy are kept, and the cell grazed harder holds less cover after a year.
+/// (`contract::slots`) and passes it to the ground: what it takes is what that slot loses, to rounding, and is counted
+/// as taken; every element and the energy are kept; and the cell grazed harder holds less cover after a year.
 #[test]
 fn what_a_taker_takes_its_slot_loses() {
     let (mut w, i) = start();
@@ -155,6 +162,7 @@ fn what_a_taker_takes_its_slot_loses() {
     for share in [0.05, 0.25] {
         let mut w = w.clone();
         let (books, mut taker) = (Books::now(&w), Taker::new(i, Layer::Cover, share));
+        w.take_counters();
         for _ in 0..12 {
             pcore::step(&mut w);
             let Some(&(lowest, _)) = contract::slots(&w, w.life.cell_at(i)).first() else { break };
@@ -168,6 +176,9 @@ fn what_a_taker_takes_its_slot_loses() {
             }
         }
         books.assert_kept(&w, 1e-9);
+        let kg: f64 = taker.took.iter().zip(&w.chem.subs).map(|(m, s)| m * s.molar_mass).sum();
+        let counted = w.take_counters().cover_lost[TAKEN as usize];
+        assert!((counted - kg).abs() <= 1e-9 * kg, "took {kg} kg, counted {counted} kg as taken");
         left.push(shown(&w, i, Layer::Cover).kg);
         println!("a share {share} taken a month: took {:.3e} mol, {:.3e} J; the cell keeps {:.3e} kg", taker.took.iter().sum::<f64>(), taker.heat, left[left.len() - 1]);
         assert!(taker.took.iter().sum::<f64>() > 0.0, "the taker took nothing");
@@ -175,24 +186,28 @@ fn what_a_taker_takes_its_slot_loses() {
     assert!(left[1] < left[0], "the cell grazed harder holds more: {left:?}");
 }
 
-/// An animal whose brain only takes from the place, in a cell of thick cover, takes from the cover (grazing): its
-/// event says so, the cover loses what was eaten (`TAKEN`), and the books are kept.
+/// Work pressed on a cell of cover breaks it (`contract::press`): what it loses of each substance its ground gains, to
+/// rounding; what it lost is counted as broken; the books are kept; and work enough to break all of it breaks all of it.
 #[test]
-fn grazing_takes_from_the_cover() {
+fn what_is_pressed_loose_the_ground_gains() {
     let (mut w, i) = start();
     assert!(cover::place(&mut w, i, genes(), 0, 1.0));
-    let b = eater(&mut w, i, pcore::brain::TAKE, 1.0);
-    w.add(b);
-    let books = Books::now(&w);
+    let (n, books) = (w.mesh.cells().n(), Books::now(&w));
+    let ground = |w: &World, k: usize| w.store.amounts(Class::Ground)[k * n + i];
+    let all = shown(&w, i, Layer::Cover);
+    let breaking = w.life.cover(i).breaking(&w.chem, &w.cfg, &cover::Parts::of(&w.chem).expect("the cover's parts"));
     w.take_counters();
-    w.events.clear();
-    for _ in 0..60 {
-        pcore::day_with_month_at_start(&mut w);
+    let before: Vec<f64> = (0..w.chem.ns()).map(|k| ground(&w, k)).collect();
+    w.in_cell(i, |w, d| contract::press(w, d, i, 0.25 * breaking));
+    let after = shown(&w, i, Layer::Cover);
+    for (k, &g) in before.iter().enumerate() {
+        let (lost, gained) = (all.mol[k] - after.mol[k], ground(&w, k) - g);
+        assert!((lost - gained).abs() <= 1e-9 * all.mol[k].max(g), "substance {k}: the cover lost {lost:e} mol, its ground gained {gained:e}");
     }
-    let grazed: f64 = w.events.iter().filter_map(|e| matches!(e.kind, EventKind::Took { from: pcore::choose::COVER, .. }).then_some(e.value)).sum();
-    let lost = w.take_counters().cover_lost[TAKEN as usize];
-    println!("grazed {grazed:.3} kg; the cover lost {lost:.3} kg to it");
-    assert!(grazed > 0.0 && (lost - grazed).abs() <= 1e-9 * grazed, "grazed {grazed}, lost {lost}");
+    let broken = w.take_counters().cover_lost[BROKEN as usize];
+    assert!((after.kg - 0.75 * all.kg).abs() <= 1e-9 * all.kg && (broken - 0.25 * all.kg).abs() <= 1e-9 * all.kg, "a quarter of the work broke {broken} of {} kg", all.kg);
+    w.in_cell(i, |w, d| contract::press(w, d, i, 2.0 * breaking));
+    assert!(shown(&w, i, Layer::Cover).kg <= 1e-9 * all.kg, "work enough to break all of it left some");
     books.assert_kept(&w, 1e-9);
 }
 
@@ -257,8 +272,7 @@ fn a_new_kind_enters_a_full_cell() {
 fn a_stand_never_passes_the_thinning_law_as_it_grows_tall() {
     let (mut w, i) = start();
     let books = Books::now(&w);
-    let Place::Field(f) = &KINDS[3].place else { unreachable!("kind 3 is cover") };
-    assert!(cover::place(&mut w, i, f.genes, 3, 0.001));
+    assert!(cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 0.001));
     let p = cover::Parts::of(&w.chem).expect("cover parts");
     let (mm, area, rho) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.chem.subs[p.sub[cover::WALL]].density[0]);
     let stand = |w: &pcore::World| {
@@ -286,12 +300,11 @@ fn tall_plants_hold_less_of_thin_ground() {
     let (mut w, _) = start();
     let mean = |b: &[f32; cover::BINS]| b.iter().enumerate().map(|(k, &s)| s as f64 * k as f64).sum::<f64>();
     let i = dry_lands(&w).into_iter().min_by(|&a, &b| mean(&w.loose_bins[a]).total_cmp(&mean(&w.loose_bins[b]))).expect("dry land");
-    let Place::Field(f) = &KINDS[3].place else { unreachable!("kind 3 is cover") };
-    assert!(cover::place(&mut w, i, genes(), 0, 0.1) && cover::place(&mut w, i, f.genes, 3, 10.0));
+    assert!(cover::place(&mut w, i, genes(), 0, 0.1) && cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 10.0));
     pcore::step(&mut w);
     let c = w.life.cover(i);
     let held = |root: u32| c.held().find(|&x| c.root[x] == root).map(|x| c.rooted[x]).expect("the kind lives");
-    let (low, tall) = (held(0), held(3));
+    let (low, tall) = (held(0), held(TREE_ROW as u32));
     println!("rooted share of the low kind {low:.3}, of the tall kind {tall:.3}");
     assert!(tall < low && tall < 1.0, "the tall kind holds {tall} of the cell, the low kind {low}");
 }
@@ -320,10 +333,10 @@ fn seeds_take_the_slot_in_deficit() {
     }
 }
 
-/// The frost gene of the cover moves down where winters kill (laws.md 4.5): two variants of the starting cover, of
+/// The frost gene of the cover moves down where winters kill (laws.md 3): two variants of the starting cover, of
 /// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of one island from the tropics to the
 /// cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
-/// (lowered by dormancy, 6.5), frost kills the cover of that gene (4.5), and the lower one (dearer to keep: `c_firm`)
+/// (lowered by dormancy), frost kills the cover of that gene (laws.md 3), and the lower one (dearer to keep: `c_firm`)
 /// wins; where it does not, the higher one wins. The cover's mean frost gene (by built cover) ends more than a step
 /// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`). The scene's premises are asserted, so a
 /// later ground that breaks them says so: the frost law (dormancy's hardening included) kills some of the tender kind in
@@ -381,4 +394,70 @@ fn the_frost_gene_falls_where_winters_are_cold() {
     assert!(cold_kill > 0.0, "the cold band's winters do not kill the tender kind: coldest ground {cold_winter} K");
     assert!(warm_kill == 0.0, "the warm band's winters kill the tender kind ({warm_kill} a month): coldest ground {warm_winter} K");
     assert!(warm_mean - cold_mean > step, "no selection: mean frost gene {warm_mean} K (warm band) and {cold_mean} K (cold band)");
+}
+
+/// Lots drawn from a cell by the tests of the dispersal kernel.
+const DRAWS: usize = 400_000;
+/// Points along a side of the cells in the numerical integral of the kernel.
+const POINTS: usize = 2000;
+/// Standard errors within which what lands must match what the kernel says: four, as the test makes about thirty
+/// comparisons (three would fail one run in ten by chance).
+const SIGMAS: f64 = 4.0;
+/// Fewest lots expected in a cell for its share to be tested (so the normal law holds for its count).
+const ENOUGH: f64 = 30.0;
+
+/// The lots of `DRAWS` that land in each cell, by its leaf, drawn from the cell `from` (stream `stream`).
+fn landed(w: &World, from: Leaf, draws: usize, stream: u64) -> BTreeMap<Leaf, f64> {
+    let i = w.map.cell(from).expect("a cell");
+    let mut r = Rng::new(w.seed, stream, i as u64, Purpose::Cover);
+    let mut by_leaf = BTreeMap::new();
+    for _ in 0..draws {
+        if let Some(j) = pcore::life::lot(w, i, &mut r) {
+            *by_leaf.entry(w.map.leaves()[j]).or_insert(0.0) += 1.0 / draws as f64;
+        }
+    }
+    by_leaf
+}
+
+/// The share of what starts evenly along a line of `side` m that a Gaussian of `sigma` m puts along a line of the same
+/// length `o` m on, by the midpoint rule over `POINTS` points on each.
+fn along(sigma: f64, side: f64, o: f64) -> f64 {
+    let at = |k: usize| ((k as f64 + 0.5) / POINTS as f64 - 0.5) * side;
+    let density = |d: f64| (-0.5 * d * d / (sigma * sigma)).exp() / (std::f64::consts::TAU.sqrt() * sigma);
+    let sum: f64 = (0..POINTS).flat_map(|a| (0..POINTS).map(move |c| (a, c))).map(|(a, c)| density(o + at(c) - at(a))).sum();
+    sum * side / (POINTS * POINTS) as f64
+}
+
+/// The share of what leaves cell `i` that the kernel puts in cell `j` of the same size: its two Gaussians, each a product
+/// over east and south, integrated over `j` from points spread evenly over `i`.
+fn kernel_share(w: &World, i: usize, j: usize) -> f64 {
+    let (p, o) = (&w.cfg.phys, w.mesh.cells().offset(i, j));
+    let south = w.map.length(w.map.leaves()[i].depth);
+    let side = [w.mesh.cells().area()[i] / south, south];
+    let by = |sigma: f64| along(sigma, side[0], o[0]) * along(sigma, side[1], o[1]);
+    (1.0 - p.kernel_far_share) * by(p.kernel_near) + p.kernel_far_share * by(p.kernel_far)
+}
+
+/// What disperses lands by one kernel (`life::lot`), in expectation: over many lots, the share in each cell near the
+/// source is the kernel's integral over it, within `SIGMAS` standard errors.
+#[test]
+fn lots_land_by_the_kernel() {
+    let coarse = testkit::small_world();
+    let source = coarse.map.leaves()[coarse.mesh.tree().cell_at(coarse.map.point_at(8.0, 8.0))];
+    let whole = landed(&coarse, source, DRAWS, 1);
+    let i = coarse.map.cell(source).expect("a cell");
+    for (leaf, &share) in whole.iter().filter(|(_, s)| **s * DRAWS as f64 > ENOUGH) {
+        let want = kernel_share(&coarse, i, coarse.map.cell(*leaf).expect("a cell"));
+        let se = (want * (1.0 - want) / DRAWS as f64).sqrt();
+        assert!((share - want).abs() <= SIGMAS * se, "{leaf:?}: {share} lands, the kernel says {want}, {SIGMAS} standard errors are {}", SIGMAS * se);
+    }
+}
+
+/// Seeds keep the books: elements and energy over two years of a living world, which sends seeds every month.
+#[test]
+fn seeds_keep_the_books() {
+    let mut w = testkit::living(8, 0);
+    let books = Books::now(&w);
+    (0..24).for_each(|_| pcore::step(&mut w));
+    books.assert_kept(&w, 1e-9);
 }

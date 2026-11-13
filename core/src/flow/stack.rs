@@ -15,7 +15,7 @@ pub(super) const ROW: usize = 6;
 pub(super) const LEAVES: usize = 5;
 
 /// What a ground cell's stack is made of: the mass, kg, and the volume, m³, of each layer (bed, solids, liquid), then
-/// of its store, then the mass at its head, kg (its bodies' node's gas and its life), then the volume of its loose
+/// of its store, then the mass at its head, kg (its aside node's gas and its life), then the volume of its loose
 /// solids, m³ (those not soft, whose pores take liquid, `Sp::soft`).
 pub(super) const LAYERS: usize = 10;
 pub(super) const HEAD: usize = 8;
@@ -157,41 +157,32 @@ pub(super) fn stack(w: &World, s: &Scratch, x: &[f64; LAYERS], i: usize) -> [f64
     [e, x[6] * g * (floor + fill / 2.0), head, floor + fill, x[HEAD] * g * head, top]
 }
 
-/// The matter of the cells' life, which lies at their heads: the substances of a body and of the cover's parts.
+/// The matter of the cells' life, which lies at their heads: the substances of the cover's parts.
 pub(super) struct Life {
-    body: Vec<usize>,
     cover: Option<[usize; crate::cover::NP]>,
 }
 
 impl Life {
     pub(super) fn of(w: &World) -> Life {
-        Life { body: w.chem.body().subs().to_vec(), cover: crate::cover::Parts::of(&w.chem).map(|p| p.sub) }
+        Life { cover: crate::cover::Parts::of(&w.chem).map(|p| p.sub) }
     }
     /// The mass of the life of each cell (`kg`).
     pub(super) fn every(&self, w: &World, sp: &[Sp]) -> Vec<f64> {
         crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.kg(w, sp, i))
     }
-    /// The mass of the life of cell `i`, kg: its living bodies, its cover with the seeds it sends out until they land
-    /// (`cover::land`), and its parts.
+    /// The mass of the life of cell `i`, kg: its cover with the seeds it sends out until they land (`cover::land`).
     pub(super) fn kg(&self, w: &World, sp: &[Sp], i: usize) -> f64 {
-        let cell = w.life.cell_at(i);
+        let c = w.life.cover(i);
         let mut kg = 0.0;
-        for b in cell.bodies.iter().filter(|b| b.alive) {
-            kg += self.body.iter().zip(&b.store).map(|(&k, &a)| a * sp[k].mm).sum::<f64>();
-        }
         if let Some(sub) = self.cover {
-            let (c, seeds) = (&cell.cover, cell.cover.seeds.iter().map(|s| &s.mol));
-            kg += c.mol.iter().chain(seeds).flat_map(|m| m.iter().zip(sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
-        }
-        for p in &cell.parts {
-            kg += p.wall.iter().zip(&p.fill).zip(sp).map(|((&a, &f), sp)| (a + f) * sp.mm).sum::<f64>();
+            kg += c.mol.iter().chain(c.seeds.iter().map(|s| &s.mol)).flat_map(|m| m.iter().zip(sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
         }
         kg
     }
 }
 
 /// The row of `potential` (`ROW`) of ground cell `i` alone, its nodes changed by `d(class, k)` mol of substance `k`
-/// (its ground, its bed, its store and its bodies' node) and `life` kg at its head (the mass of its life, `Life::kg`):
+/// (its ground, its bed, its store and its aside node) and `life` kg at its head (the mass of its life, `Life::kg`):
 /// its layers as `potential` adds them up, substance by substance, so the same numbers come out.
 pub(super) fn row_of(w: &World, s: &Scratch, same: &[Same], i: usize, change: (impl Fn(Class, usize) -> f64, f64)) -> [f64; ROW] {
     stack(w, s, &layers_of(w, s, same, i, change), i)
@@ -205,14 +196,14 @@ pub(super) fn layers_of(w: &World, s: &Scratch, same: &[Same], i: usize, (d, lif
         bed_layer(&mut x, sp, at(Class::Bed, k));
         ground_of(&mut x, s, same[k], (k, i), at(Class::Ground, k));
         deep_of(&mut x, s, same[k], (k, i), at(Class::Deep, k));
-        x[HEAD] += at(Class::Bodies, k) * sp.mm;
+        x[HEAD] += at(Class::Aside, k) * sp.mm;
     }
     x[HEAD] += life;
     x
 }
 
 /// What the potential energy of the world's matter gains, J, when the nodes of ground cell `i` change by `d(class, k)`
-/// mol of substance `k` (its ground, its bed, its store and its bodies' node) and the mass of its life by `life` kg, by
+/// mol of substance `k` (its ground, its bed, its store and its aside node) and the mass of its life by `life` kg, by
 /// Flow's state of its ground (`potential`): its stack, its store and the matter at its head, and its air node's matter,
 /// which lies at the mean head of its cells, so it rises by the cell's share of that node's area of what the head rises.
 /// None before Flow first built the state of the ground (`potential::stated`).

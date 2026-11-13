@@ -1,8 +1,6 @@
-//! `ew chem [--seed N]`: print chemistry 0 (or a generated one) as a table.
+//! `ew chem`: print chemistry 0 as a table.
 
-use crate::args::Args;
-use pcore::chem::{Chemistry, Phase};
-use worldgen::richness::ignition;
+use pcore::chem::{Chemistry, Phase, Reaction};
 use worldgen::terrain::air_column;
 
 /// The depth of loose ground the balance is shown for, m: a metre, about the median the wear leaves on land.
@@ -30,21 +28,26 @@ fn formula(c: &Chemistry, k: usize, sym: &[String]) -> String {
     s
 }
 
+/// The rate at which a reaction counts as running (its ignition), 1/s.
+const IGNITION_RATE: f64 = 1e-6;
+
+/// Temperature where a reaction runs at `IGNITION_RATE`: `k exp(-ea/T) = IGNITION_RATE`.
+fn ignition(rx: &Reaction) -> f64 {
+    let l = (rx.k / IGNITION_RATE).ln();
+    if l > 0.0 {
+        rx.ea / l
+    } else {
+        f64::INFINITY
+    }
+}
+
 /// Depths of liquid, m, and temperatures, K, of the balance table.
 const DEPTHS: [f64; 3] = [10.0, 100.0, 500.0];
 const TEMPS: [f64; 3] = [278.0, 288.0, 298.0];
 
-pub fn run(args: &Args) {
-    let seed = args.value::<u64>("--seed");
-    let (c, init) = match seed {
-        Some(s) => worldgen::generate(s),
-        None => worldgen::chemistry0(),
-    };
-    let (sym, name, rnames) = if seed.is_none() {
-        (names("elements"), names("substances"), names("reactions"))
-    } else {
-        ((0..c.n_elements).map(|j| ((b'A' + j as u8) as char).to_string()).collect(), vec![], vec![])
-    };
+pub fn run() {
+    let (c, init) = worldgen::chemistry0();
+    let (sym, name, rnames) = (names("elements"), names("substances"), names("reactions"));
     println!("{:>3}  {:<22} {:<14} {:>7} {:>6} {:>6} {:>5} {:>5} {:>9}", "#", "name", "formula", "g/mol", "melt", "boil", "hard", "str", "hf kJ");
     for (k, s) in c.subs.iter().enumerate() {
         println!(
@@ -71,10 +74,6 @@ pub fn run(args: &Args) {
         );
     }
     balances(&c, &init);
-    println!("\nrichness:");
-    for (what, ok) in worldgen::richness(&c, &init) {
-        println!("  {} {what}", if ok { "pass" } else { "FAIL" });
-    }
 }
 
 /// For each pair of reactions that undo each other: what the first makes, per m2 of a column of

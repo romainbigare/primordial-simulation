@@ -1,4 +1,4 @@
-//! Quick PNG pictures of a world: map, temperature, rain, life, traffic and the depth of the cells side by side, and
+//! Quick PNG pictures of a world: map, temperature, rain, the cover and the depth of the cells side by side, and
 //! one panel of a window of the map (`window`).
 
 use pcore::World;
@@ -11,9 +11,9 @@ const ICE_M: f64 = 0.05;
 /// Pixels per cell, the panels side by side and the gap between them.
 const PX: usize = 3;
 /// The panels of the pictures of a world, in the order they are drawn side by side.
-const SIDE_BY_SIDE: usize = 6;
+const SIDE_BY_SIDE: usize = 5;
 /// The panels `ew view` draws: those of the pictures and the land with no river drawn over it.
-pub const PANELS: [&str; 7] = ["map", "temperature", "rain", "life", "traffic", "depth", "land"];
+pub const PANELS: [&str; 6] = ["map", "temperature", "rain", "life", "depth", "land"];
 const GAP: usize = 4;
 /// Seconds of a year for the rain panel (1e4 mol/(m² year) is about 0.2 m of liquid).
 const YEAR_S: f64 = 3.15e7;
@@ -39,24 +39,13 @@ fn ramp(stops: &[(f64, Rgb)], v: f64) -> Rgb {
 struct Look<'a> {
     w: &'a World,
     f: Fields,
-    /// Mass per area of the cover (green) and of the bodies (orange dots), kg/m².
+    /// Mass per area of the cover (green), kg/m².
     green: Vec<f64>,
-    other: Vec<f64>,
-    /// Cells holding made objects.
-    made: Vec<bool>,
 }
 
 impl<'a> Look<'a> {
     fn new(w: &'a World) -> Self {
-        let mut other = vec![0.0; w.mesh.cells().n()];
-        for b in w.life.alive() {
-            other[b.cell as usize] += b.mass(&w.chem) / w.mesh.cells().area()[b.cell as usize];
-        }
-        let mut made = vec![false; w.mesh.cells().n()];
-        for p in w.life.parts() {
-            made[p.cell as usize] = true;
-        }
-        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), other, made }
+        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg) }
     }
 
     /// The colour of panel `panel` (index in `PANELS`) for cell `i`; `beside` are the cells west and north of it, `step`
@@ -65,19 +54,13 @@ impl<'a> Look<'a> {
         let (w, f) = (self.w, &self.f);
         match panel {
             0 => self.map(i, beside, step, true),
-            6 => self.map(i, beside, step, false),
+            5 => self.map(i, beside, step, false),
             1 => ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
             // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
             2 => ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.rain[i] as f64 * YEAR_S).max(1.0).log10()),
             3 => {
                 let base = if f.depth[i] > STANDING_M { [40, 50, 70] } else { [90, 85, 80] };
                 ramp(&[(-1.5, base), (0.0, [60, 120, 40]), (1.5, [30, 200, 40])], self.green[i].max(1e-9).log10())
-            }
-            // Bodies moving into the cell per year, on a log scale, over the map in grey.
-            4 => {
-                let t = w.counts.traffic.get(i).copied().unwrap_or(0.0) as f64;
-                let g = self.map(i, beside, step, true).map(|v| v / 3 + 40);
-                if t < 1.0 { g } else { ramp(&[(0.0, [90, 70, 120]), (1.0, [200, 60, 160]), (2.0, [255, 160, 40]), (3.0, [255, 255, 200])], t.log10()) }
             }
             // The depth of the cell at the square's centre against a square's: coarser dark, a square light grey, each
             // depth finer warmer.
@@ -136,13 +119,9 @@ pub fn save(w: &World, path: &str) {
             let c = look.colour(p, i, beside, w.map.side);
             for dy in 0..s {
                 for dx in 0..s {
-                    let dot = p == 3 && look.other[i] > 1e-5 && dx == 1 && dy == 1;
-                    let c = &if dot { ramp(&[(-5.0, [255, 170, 60]), (-2.0, [255, 30, 0])], look.other[i].log10()) } else { c };
-                    // Made objects: a white dot in the corner.
-                    let c = &if p == 3 && look.made[i] && dx == 0 && dy == 0 { [255, 255, 255] } else { *c };
                     let px = p * (gw * s + GAP) + x * s + dx;
                     let o = ((y * s + dy) * pw + px) * 3;
-                    img[o..o + 3].copy_from_slice(c);
+                    img[o..o + 3].copy_from_slice(&c);
                 }
             }
         }
@@ -152,7 +131,7 @@ pub fn save(w: &World, path: &str) {
 
 /// Draw panel `panel` (a name of `PANELS`) of `window` (column, row, width and height in squares) `px` pixels wide and as high as the window's shape asks,
 /// each the colour of the cell that holds its centre, so cells finer than a square are seen; with `edges`, a pixel
-/// whose east or south neighbour is another cell is darkened. Bodies and made objects are not marked.
+/// whose east or south neighbour is another cell is darkened.
 pub fn window(w: &World, window: [f64; 4], px: usize, panel: &str, edges: bool, path: &str) -> Result<(), String> {
     let panel = PANELS.iter().position(|p| *p == panel).ok_or(format!("unknown layer {panel}; the layers are {}", PANELS.join(", ")))?;
     let down = ((px as f64 * window[3] / window[2]).round() as usize).max(1);

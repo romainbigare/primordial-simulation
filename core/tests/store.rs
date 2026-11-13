@@ -6,7 +6,7 @@ use pcore::check;
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{apply, held, fall_heat, Boundary, Class, LinkFlux, Move, Node, BOUNDARIES};
 use pcore::{World, AIR};
-use worldgen::testkit::{eater, put, scale, set_amount, small_world, start, Books, LIQUID, ROCK};
+use worldgen::testkit::{cover, put, set_amount, small_world, start, Books, LIQUID, ROCK};
 
 /// Random changes the books test makes, in all (rounds of `PER_ROUND`).
 const CHANGES: usize = 1_000_000;
@@ -21,7 +21,7 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
     let len = match class {
         Class::Air => w.mesh.level(AIR).n(),
         Class::Boundary => BOUNDARIES,
-        Class::Part | Class::Body => unreachable!("a part's or a body's amounts lie in it"),
+        Class::Cover => unreachable!("the cover's amounts lie in it"),
         _ => w.mesh.cells().n(),
     };
     (w.store.amounts(class), w.store.heat(class), len)
@@ -175,7 +175,7 @@ fn random_round(w: &mut World, r: &mut Rng) {
 #[test]
 fn random_changes_keep_the_books() {
     let mut w = small_world();
-    let (t0, mut r) = (check::totals(&w), Rng::new(1, 0, 0, Purpose::Chem));
+    let (t0, mut r) = (check::totals(&w), Rng::new(1, 0, 0, Purpose::Make));
     for _ in 0..CHANGES / PER_ROUND {
         random_round(&mut w, &mut r);
     }
@@ -208,20 +208,17 @@ fn what_crosses_the_boundary_keeps_the_books() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Life's matter lies at its cell's head and its ground's in the stack: the remains of a body fall from the head into
-/// the stack, raising what lies above them and the air over the cell, and the ground's heat pays what that gains
-/// (`store::life_moved`), so the potential energy of what the nodes hold (`flow::potential`) changes as `Store::lifted`
-/// books it, and the books close on it.
+/// Life's matter lies at its cell's head and its ground's in the stack: the remains of the cover, pressed loose
+/// (`contract::press`), fall from the head into the stack, raising what lies above them and the air over the cell, and
+/// the ground's heat pays what that gains (`store::life_moved`), so the potential energy of what the nodes hold
+/// (`flow::potential`) changes as `Store::lifted` books it, and the books close on it.
 #[test]
 fn remains_carry_their_potential_energy_into_the_ground() {
     let (mut w, i) = start();
-    let mut b = eater(&mut w, i, pcore::brain::REST, 0.0);
     // (Heavy enough that its fall shows above the rounding of a sum over the world.)
-    scale(&mut w, &mut b, 1e8);
-    let h = w.add(b);
+    cover(&mut w, i, 100.0);
     let (books, p0, l0) = (Books::now(&w), pcore::flow::potential(&w).expect("Flow's state"), w.store.lifted());
-    let b = std::mem::take(&mut w.life[h]);
-    w.in_cell(i, |w, d| pcore::body::die(w, d, h, b, pcore::life::LACK));
+    w.in_cell(i, |w, d| pcore::contract::press(w, d, i, f64::MAX));
     let (gained, lifted) = (pcore::flow::potential(&w).expect("Flow's state") - p0, w.store.lifted() - l0);
     assert!(gained.abs() > 1e9, "the remains moved the matter: {gained:e} J");
     assert!((gained - lifted).abs() < 1e-6 * gained.abs(), "gained {gained:e} J, booked {lifted:e} J");
