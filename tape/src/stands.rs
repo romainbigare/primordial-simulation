@@ -28,7 +28,7 @@ pub struct Plants {
 /// The plants of a stand of `kg` built cover, `leaf` capture area and `per_m2` plants per m² of its cell, standing on
 /// the share `rooted` of it, of which `walls` is the share its walls make, of walls of density `rho` kg/m³. A kind
 /// stands on the share of its cell that holds its roots alone, its capture area a layer of leaf / rooted there (laws.md
-/// 4.5): its crowns cover of that ground the share whose light the layer stops, 1 - e^-(leaf / rooted), the cover's
+/// 3): its crowns cover of that ground the share whose light the layer stops, 1 - e^-(leaf / rooted), the cover's
 /// own light law (`math::shade`), so a stand the law holds closed to the light is drawn closed; they stand in patches
 /// where they close, each plant's crown the ground it holds there; its stem and height are the cover's law for a plant
 /// of its mass (`cover::stem`, `cover::height`).

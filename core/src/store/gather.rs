@@ -1,11 +1,11 @@
-//! The view of the store that body code of a chunk reads and writes (laws.md 0). Each cell it runs on sees its own
+//! The view of the store that the code of a chunk reads and writes (laws.md 0). Each cell it runs on sees its own
 //! ground, bed and aside node, and its share of its air node (`Mesh::share` of its amounts, of its heat and of what
-//! bodies see of it, `World::a_seen`), as the store held them when the cell was first touched, with its own moves since;
+//! the cover sees of it, `World::a_seen`), as the store held them when the cell was first touched, with its own moves since;
 //! any other node as the store holds it, which nothing changes while chunks run. So a cell never overdraws its own nodes,
 //! nor its air node with the other cells under it. A move changes only the nodes of the cell running, the potential
-//! energy of lifts (summed apart per cell, `Store::lifted`), and a body, a part or a cover, whose law books its side. The
-//! view keeps beside each number its change since it was taken, which the booking adds to the store once
-//! (`World::take_chunks`): what a body reads differs from what is booked by less than `ROUNDING`.
+//! energy of lifts (summed apart per cell, `Store::lifted`), and the cover, whose law books its side. The view keeps
+//! beside each number its change since it was taken, which the booking adds to the store once (`World::take_chunks`):
+//! what the cover reads differs from what is booked by less than `ROUNDING`.
 
 use super::apply::ROUNDING;
 use super::{heat_received, held_more, Booker, Class, Node};
@@ -17,7 +17,7 @@ use crate::{World, AIR};
 const RUNNING: &str = "an update running";
 
 /// Where a cell's numbers lie in its row of the view (`Moves::view`), by the count of substances `ns`: its ground's
-/// amounts, its bed's, its aside node's, its share of its air node's, its share of what bodies see of that, then the
+/// amounts, its bed's, its aside node's, its share of its air node's, its share of what the cover sees of that, then the
 /// heat of its ground, of its aside node and its share of its air node's.
 #[derive(Clone, Copy)]
 struct Row(usize);
@@ -26,7 +26,7 @@ impl Row {
     fn len(self) -> usize {
         5 * self.0 + 3
     }
-    /// The first amount of the nodes of `class` (a ground, bed, bodies' or air node).
+    /// The first amount of the nodes of `class` (a ground, bed, aside or air node).
     fn amounts(self, class: Class) -> usize {
         self.0 * match class {
             Class::Ground => 0,
@@ -234,7 +234,7 @@ impl Moves {
         let (at, f) = self.own_of(x).unwrap_or((None, 1.0));
         at.map_or_else(|| f * w.store.heat(x.class)[x.index], |at| self.view[at + Row(self.ns).heat(x.class)][0])
     }
-    /// What bodies and parts see in air node `j` (`World::a_seen`) as the cell running sees it (its share, if it is the
+    /// What the cover sees in air node `j` (`World::a_seen`) as the cell running sees it (its share, if it is the
     /// cell's own): of substance `k`, mol, at `k`.
     #[inline]
     pub(crate) fn seen<'a>(&'a self, w: &'a World, j: usize) -> impl Fn(usize) -> f64 + 'a {
@@ -267,7 +267,7 @@ impl Moves {
     }
 }
 
-/// What bodies and parts see of substance `k` in air node `j` (`World::a_seen`): as the parallel pass running found it at
+/// What the cover sees of substance `k` in air node `j` (`World::a_seen`): as the parallel pass running found it at
 /// its start (`Life::air_seen`), or as the store holds it now.
 #[inline]
 fn air_seen(w: &World, k: usize, j: usize) -> f64 {

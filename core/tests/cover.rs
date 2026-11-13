@@ -336,7 +336,7 @@ fn seeds_take_the_slot_in_deficit() {
 /// The frost gene of the cover moves down where winters kill (laws.md 3): two variants of the starting cover, of
 /// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of one island from the tropics to the
 /// cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
-/// (lowered by dormancy, 6.5), frost kills the cover of that gene (4.5), and the lower one (dearer to keep: `c_firm`)
+/// (lowered by dormancy), frost kills the cover of that gene (laws.md 3), and the lower one (dearer to keep: `c_firm`)
 /// wins; where it does not, the higher one wins. The cover's mean frost gene (by built cover) ends more than a step
 /// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`). The scene's premises are asserted, so a
 /// later ground that breaks them says so: the frost law (dormancy's hardening included) kills some of the tender kind in

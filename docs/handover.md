@@ -100,7 +100,7 @@ What went wrong:
 |---|---|
 | Core idea | 5 laws on one graph: Flow, Change, Bond, Copy, Choose |
 | Coordination, trade, property, institutions | **Not** primitives. They must emerge from Choose + Bond + Flow + Copy (+ signals) |
-| Actors | Plants are a field per cell, the cover, not bodies. Animals are being rebuilt as fields (`review/roadmap.md` section 4); until then the old animals are bodies, with similar ones merged into population nodes (Section 7.1). People come after the animal layer |
+| Actors | Plants are a field per cell, the cover, not bodies. Animals are being rebuilt as fields (`review/roadmap.md` section 4); the old animals, bodies merged into population nodes, are deleted (the tag `animals-v2` keeps them). People come after the animal layer |
 | Body scale | Living things are **real-sized**: an individual weighs what a real living thing weighs (grams to tonnes, set by its genes and selection). Plant cover holds real mass per m² (about 1 to 50 kg/m²). **No hard-coded limit on how much a cell holds**: density is an outcome of light, cover, crowding and food. Speed comes from fields (Section 7.1) and better algorithms, never from giant bodies |
 | Free numbers | A number comes from a real measured size where one exists (anchored). The count of tuned numbers may not grow (Section 14.3) |
 | What a body is | A body is fuel plus a body built of matter. Building matter costs work and time; storing fuel is cheap |
@@ -119,7 +119,7 @@ What went wrong:
 | Moving | Moving needs force |
 | Materials | Bodies are built of several materials; physics reads the material (breaking, digestion) |
 | Freezing | One freezing law for bodies, ground, lakes and the sea |
-| The start | What is placed at the start is an initial condition and every run prints it. Plants are the cover, a field with no brain: their life is the physics of their numbers. The old animals start with hand-set brain biases, founders as adults; the rebuilt animals start as the roadmap's design says (section 4) |
+| The start | What is placed at the start is an initial condition and every run prints it. Plants are the cover, a field with no brain: their life is the physics of their numbers. The rebuilt animals start as the roadmap's design says (section 4) |
 | Waits | Natural fire starts and disease (bodies inside bodies) wait until after the animal layer (`review/roadmap.md` section 7) |
 | World chemistry | One hand-made, Earth-like "chemistry 0" (numbers only, no names in core). No random chemistry is planned (Section 6.0) |
 | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
@@ -334,7 +334,7 @@ Burning, rotting, rusting-like decay, smelting-like reduction, cooking-like chan
 - **Failure.** If `load > strength`, the bond breaks. If the structure loses its support, parts fall.
 - **Holding.** A body holding a part is a bond too. Its strength is the body's force (strength gene × its living body × gravity × grip). A body takes hold of a part only if that force bears the weight of the part's structure, and lets go when it no longer does.
 - **Force is of the body.** Taking, lifting, holding, carrying, digging and pushing go by the living body, not by the fuel it carries; a hurt body is weaker. **Moving needs force:** a body moves only if its force can push what it passes.
-- **Materials.** How high a body stands is what its materials hold up against its weight; the energy to break a body is what its materials resist (`docs/laws.md` 3.6).
+- **Materials.** How high a body stands is what its materials hold up against its weight; the energy to break a body is what its materials resist (`docs/laws.md` 3.6 in the tag `animals-v2`).
 - **Making bonds.**
   - By Change: some reactions make solids that join their neighbours (setting, drying).
   - By Choose: a body spends energy to join two things it holds or touches.
@@ -400,7 +400,7 @@ Having children is not a choice: it is physics (Section 6.4). There is no "farm"
 
 **Signals.** A signal has no meaning at first. Meaning comes from learning. If signals become useful, a language-like system may emerge.
 
-**Planning** (a first step is built: a look-ahead of one step with the critic, `docs/laws.md` 5.3): bodies learn a small model of "what happens if I do X" and look a few steps ahead. This makes long plans much easier to find. Taming an animal, for example, pays off only after many seasons.
+**Planning** (a first step is built: a look-ahead of one step with the critic, `docs/laws.md` 5.3 in the tag `animals-v2`): bodies learn a small model of "what happens if I do X" and look a few steps ahead. This makes long plans much easier to find. Taming an animal, for example, pays off only after many seasons.
 
 **Implementation:**
 - A small neural network per body: a base per lineage, rows that are genes of each body, plus what the body (or its population node) learned. Keep the brain code apart from the rest, so it can be swapped.
@@ -422,8 +422,8 @@ Thousands of years of a living world will not run on one computer if every livin
 
 ### 7.1 Fields and population nodes
 
-- **Plants are a field.** Each cell holds a few slots of cover, each with amounts and genes (`docs/laws.md` 4.5). A plant is not a body.
-- **Animals will be a field too**, built the same way (`review/roadmap.md` section 4). Until then, the old animals are bodies: when many of the same lineage sit in one area with similar states, they are merged into one population node (`docs/laws.md` 4.4). It holds the count, average stores, a small summary of how they differ, and one shared brain, and runs the same laws in average form. Conservation holds exactly when merging and splitting.
+- **Plants are a field.** Each cell holds a few slots of cover, each with amounts and genes (`docs/laws.md` 3). A plant is not a body.
+- **Animals will be a field too**, built the same way (`review/roadmap.md` section 4).
 - A body of count 1 is an individual in the maths: there is one set of rules for both.
 
 ### 7.2 Fixed cells

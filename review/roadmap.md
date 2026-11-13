@@ -282,7 +282,7 @@ of it say it learned nothing that beats chance beyond its hand-set start. I prop
 - **Step one: habits as inherited numbers.** This is still Law 5, with the smallest brain: what a kind senses (its
   hunger, the warmth, the food, the crowd and the eaters, here and next door) times a few weights gives the shares
   of its time over the same general acts as today (take, move, rest). The weights are genes and evolve as every gene
-  does. It is "choices as a spread of actions" (`laws.md` 4.4), which nodes already are, with no hidden layer, no
+  does. It is "choices as a spread of actions" (`laws.md` 4.4 in the tag `animals-v2`), which nodes already are, with no hidden layer, no
   learning, no trace and no memory. The list of what can be sensed and the list of acts are the only things written
   by hand, as they are today; no weight is set to get a wanted habit, and a run with all weights at zero is the
   null run to compare with.

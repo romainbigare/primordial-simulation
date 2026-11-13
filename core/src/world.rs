@@ -168,8 +168,8 @@ impl World {
     pub fn a(&self, k: usize, j: usize) -> f64 {
         self.stock(Node::air(j))(k)
     }
-    /// Amount of substance `k` that bodies and parts see in air node `j`, mol: what it holds (`a`) and what the bodies'
-    /// nodes under it hold until the air's step takes it up.
+    /// Amount of substance `k` that the cover sees in air node `j`, mol: what it holds (`a`) and what the aside nodes
+    /// under it hold until the air's step takes it up.
     pub fn a_seen(&self, k: usize, j: usize) -> f64 {
         let kids = self.mesh.level(AIR).children(j);
         self.a(k, j) + kids.iter().map(|&i| self.stock(Node::aside(i as usize))(k)).sum::<f64>()

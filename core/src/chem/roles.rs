@@ -47,23 +47,23 @@ impl Chemistry {
         (self.reactions[r].inputs.iter().filter(|p| !self.gas_at_surface(p.0 as usize))).any(|p| (0..self.reactions.len()).any(|q| self.burning(q) && per(q, p.0) > (1.0 + KEEPS_MARGIN) * per(r, p.0)))
     }
 
-    /// The solids bodies build besides their matter (the first output of each of `builds`).
+    /// The solids life builds besides its matter (the first output of each of `builds`).
     pub fn materials(&self) -> impl Iterator<Item = usize> + '_ {
         self.builds.iter().filter_map(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
-    /// The body matter: the first output of growth (`build`), if bodies grow.
+    /// The body matter: the first output of growth (`build`), if life grows.
     pub fn matter(&self) -> Option<usize> {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
     /// What growth makes body matter of besides the fuel, with the mol per mol of matter: the inputs no reaction burns,
-    /// which a body takes from the ground or what it eats. Empty where bodies do not grow or grow from one fuel.
+    /// which life takes from the ground. Empty where life does not grow or grows from one fuel.
     pub fn minerals(&self) -> &[(usize, f64)] {
         &self.derived().minerals
     }
 
-    /// The roles a first body's chemistry is built on, found from the numbers: the light reaction (one that takes
+    /// The roles the first life's chemistry is built on, found from the numbers: the light reaction (one that takes
     /// energy), the energy-rich solid it makes, the liquid it uses, and the reaction that burns that solid with a gas.
     pub fn life_roles(&self) -> Option<(usize, usize, usize, usize)> {
         self.derived().roles
@@ -79,7 +79,7 @@ impl Chemistry {
         Some((r_light, rich, liquid, self.burner(rich)?))
     }
 
-    /// Body matter and the reaction that burns it with a gas (none where bodies do not grow).
+    /// Body matter and the reaction that burns it with a gas (none where life does not grow).
     pub fn matter_roles(&self) -> Option<(usize, usize)> {
         let m = self.matter()?;
         Some((m, self.burner(m)?))

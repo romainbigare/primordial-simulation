@@ -5,7 +5,7 @@ use super::nodes::{Class, Node};
 use crate::chem::Chemistry;
 
 /// `mol` of substance `k` and `heat` J leave node `from` for node `to`, which receives `heat` less what the mol hold
-/// more there (`held_more`): so the law chooses who pays a gas's latent heat. A body's or part's end is its law's.
+/// more there (`held_more`): so the law chooses who pays a gas's latent heat. The cover's end is its law's.
 #[derive(Clone, Copy, Debug)]
 pub struct Move {
     pub from: Node,

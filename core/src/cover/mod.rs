@@ -52,7 +52,7 @@ pub const FROST: usize = 4;
 pub const MOIST: usize = 5;
 /// Share of what it builds that goes to seeds
 pub const SEED: usize = 6;
-/// Repair, log10, as a body's `REPAIR`
+/// Repair, log10: its wear life is 10^REPAIR times the rate of living's (laws.md 3)
 pub const REPAIR: usize = 7;
 /// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below `FIX_OFF`
 pub const FIX: usize = 8;

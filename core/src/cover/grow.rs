@@ -288,9 +288,8 @@ fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64
     // What the burning took of its content, shared out over the parts of the upkeep as they asked for it.
     let paid = budget::held(&e, &c.mol[x]) - unburnt;
     (0..UPKEEP_PARTS).for_each(|q| b.budget[UPKEEP + q] += if cost > 0.0 { paid * parts[q] / cost } else { 0.0 });
-    // Members of a field wear out at the rate of living as a body's do, a dormant one at least at `Physics::dormant` of
-    // the active rate (laws.md 3); below its frost gene, hardened by its dormancy, its frozen share dies (laws.md
-    // 6.5).
+    // Members of a field wear out at the rate of living (Rubner 1908), a dormant one at least at `Physics::dormant` of
+    // the active rate; below its frost gene, hardened by its dormancy, its frozen share dies (laws.md 3).
     let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
     let frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
     let mut lost = [0.0; 6];

@@ -1,4 +1,4 @@
-//! The life of each ground cell (laws.md 0, 4.5): its cover (`Cell`), and from the month's start what stands on it and
+//! The life of each ground cell (laws.md 0, 3): its cover (`Cell`), and from the month's start what stands on it and
 //! its place (`contract`). The cover's month runs on chunks of cells (`chunk`), one task per chunk on the pool.
 
 mod chunk;
