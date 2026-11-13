@@ -112,7 +112,8 @@ pub(super) struct State {
     /// Substance held at its melting point in each ground node (or `NONE`), and its molten share.
     pub(super) pk: Vec<usize>,
     pub(super) phi: Vec<f64>,
-    /// Of the clouds of each air node: their reflectance, and their optical depth to heat radiation.
+    /// Of the clouds of each air node: the share of its sky they cover, and their optical depth to sunlight there
+    /// (`exchange::cloud`).
     pub(super) cloud: Vec<[f64; 2]>,
     /// Substances present in loose ground, in order (`refresh`; exchange and liquid add new ones).
     pub(super) loose: Vec<usize>,
@@ -194,8 +195,8 @@ pub struct Scratch {
     /// height the air touching the cell is, K (`air::touching`, at each air state).
     pub(super) seen: Vec<f64>,
     pub(super) cool: Vec<f64>,
-    /// What the column of each air node does to heat radiation (`air::Heat`).
-    pub(super) heat: Vec<air::Heat>,
+    /// What the air of each node does to heat radiation, clear and under its cloud (`air::Skies`).
+    pub(super) heat: Vec<air::Skies>,
     /// Mean height of the ground under each air node, m; the air's volume, m³.
     pub(super) za: Vec<f64>,
     pub(super) vol: Vec<f64>,

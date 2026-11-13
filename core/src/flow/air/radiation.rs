@@ -86,9 +86,115 @@ impl Column {
     /// D, and again the share b scattered back down of what it sends up, so in all D / (1 − `alb` b); what it absorbs,
     /// (1 − `alb`) of that, and the other two add up to 1.
     pub(crate) fn shares(&self, alb: f64) -> [f64; 3] {
-        let ([a1, s1, t1], [a2, s2, t2]) = (self.down, self.up);
+        self.through(self.down, alb)
+    }
+
+    /// `shares` of light that enters at the top with the pass `down`: the sun's beam (`Column::down`), or diffuse light,
+    /// whose pass down is its pass up.
+    fn through(&self, down: [f64; 3], alb: f64) -> [f64; 3] {
+        let ([a1, s1, t1], [a2, s2, t2]) = (down, self.up);
         let ground = (t1 + 0.5 * s1) / (1.0 - alb * 0.5 * s2);
         [ground, a1 + a2 * alb * ground, 0.5 * s1 + (t2 + 0.5 * s2) * alb * ground]
+    }
+
+    /// `shares` under a cloud that lies over the column, per unit of the sunlight that enters the cloud; what the
+    /// cloud absorbs counts with the air's. What the cloud passes straight goes on as the beam, what it passes
+    /// scattered as diffuse light; of what the column and the surface send back up, U, the cloud's base reflects the
+    /// share r down again as diffuse light and passes the share t to space. So the diffuse light that enters the column
+    /// is in all D = (scattered + r straight u_b) / (1 − r u_d), u_b and u_d the shares the column and the surface
+    /// send back of a beam and of diffuse light, and U = straight u_b + D u_d; the three still add up to 1.
+    pub(crate) fn under(&self, cloud: &Cloud, alb: f64) -> [f64; 3] {
+        let ([ground_b, air_b, up_b], [ground_d, air_d, up_d]) = (self.through(self.down, alb), self.through(self.up, alb));
+        let ([back, scattered, straight], [back_d, passed_d]) = (cloud.beam, cloud.diffuse);
+        let diffuse = (scattered + back_d * straight * up_b) / (1.0 - back_d * up_d);
+        let up = straight * up_b + diffuse * up_d;
+        let in_cloud = (1.0 - back - scattered - straight) + up * (1.0 - back_d - passed_d);
+        [straight * ground_b + diffuse * ground_d, straight * air_b + diffuse * air_d + in_cloud, back + up * passed_d]
+    }
+}
+
+/// How near to 1 a layer's fall of diffuse light along the beam, k μ, may come before the beam's height is moved by
+/// twice this share: at 1 the two-stream solution divides nothing by nothing.
+const BEAM_APART: f64 = 1e-6;
+
+/// A layer of scatterers of optical depth `tau` that scatter the share `w0` of the light they meet, forward by the mean
+/// cosine `g`, under a beam from the height `mu` (the sine of its elevation): [reflected, passed in all, passed
+/// straight], per unit of the beam. Two streams in Eddington's form (Meador and Weaver 1980), the forward peak of the
+/// scattering taken as light that passes (Joseph, Wiscombe and Weinman 1976), so a thin layer under a high sun
+/// reflects no less than nothing.
+fn two_stream(tau: f64, w0: f64, g: f64, mu: f64) -> [f64; 3] {
+    let peak = g * g;
+    let (tau, w0, g) = ((1.0 - w0 * peak) * tau, (1.0 - peak) * w0 / (1.0 - w0 * peak), g / (1.0 + g));
+    let (g1, g2) = ((7.0 - w0 * (4.0 + 3.0 * g)) / 4.0, -(1.0 - w0 * (4.0 - 3.0 * g)) / 4.0);
+    // How fast diffuse light falls with depth in the layer; none where nothing is absorbed.
+    let k = (g1 * g1 - g2 * g2).max(0.0).sqrt();
+    let mu = if (1.0 - k * mu).abs() < BEAM_APART { mu * (1.0 + 2.0 * BEAM_APART) } else { mu };
+    let (g3, direct) = ((2.0 - 3.0 * g * mu) / 4.0, (-tau / mu).exp());
+    let g4 = 1.0 - g3;
+    let [back, passed] = if w0 >= 1.0 {
+        let back = (g1 * tau + (g3 - g1 * mu) * (1.0 - direct)) / (1.0 + g1 * tau);
+        [back, 1.0 - back]
+    } else {
+        let (a1, a2) = (g1 * g4 + g2 * g3, g1 * g3 + g2 * g4);
+        // Every term over e^(k τ), so a deep layer overflows nothing.
+        let (e1, e2) = ((-k * tau).exp(), (-2.0 * k * tau).exp());
+        let per = w0 / ((1.0 - k * k * mu * mu) * (k + g1 + (k - g1) * e2));
+        let back = per * ((1.0 - k * mu) * (a2 + k * g3) - (1.0 + k * mu) * (a2 - k * g3) * e2 - 2.0 * k * (g3 - a2 * mu) * direct * e1);
+        let through = ((1.0 + k * mu) * (a1 + k * g4) - (1.0 - k * mu) * (a1 - k * g4) * e2) * direct - 2.0 * k * (g4 + a1 * mu) * e1;
+        [back, direct - per * through]
+    };
+    let back = back.clamp(0.0, 1.0 - direct);
+    [back, passed.clamp(direct, 1.0 - back), direct]
+}
+
+/// What a cloud, a layer of droplets, does to sunlight (laws.md 1.4), per unit of the light that enters it: of the
+/// sun's beam [reflected, passed scattered, passed straight], and of diffuse light [reflected, passed]; the rest it
+/// absorbs.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Cloud {
+    beam: [f64; 3],
+    diffuse: [f64; 2],
+}
+
+impl Cloud {
+    /// The cloud of optical depth `tau` under the sun's mean height `mu` (`sun_height`), its droplets scattering forward
+    /// by the mean cosine `g` (`two_stream`); in the share `dark[0]` of the sunlight (the wavelengths their liquid
+    /// absorbs) a droplet absorbs the share `dark[1]` of what it meets, in the rest none. Diffuse light crosses it as a
+    /// beam on the slant `DIFFUSE`.
+    pub(crate) fn of(tau: f64, mu: f64, g: f64, dark: [f64; 2]) -> Cloud {
+        let lit = |mu: f64| {
+            let (clear, dim) = (two_stream(tau, 1.0, g, mu), two_stream(tau, 1.0 - dark[1], g, mu));
+            [0, 1, 2].map(|q| (1.0 - dark[0]) * clear[q] + dark[0] * dim[q])
+        };
+        let ([back, passed, straight], [back_d, passed_d, _]) = (lit(mu), lit(1.0 / DIFFUSE));
+        Cloud { beam: [back, passed - straight, straight], diffuse: [back_d, passed_d] }
+    }
+}
+
+/// What the air of a node does to sunlight (laws.md 1.4): its clear column, and where a cloud covers a share of its
+/// sky, that share and the cloud, which lies over the same column.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Light {
+    clear: Column,
+    cloud: Option<(f64, Cloud)>,
+}
+
+impl Light {
+    pub(crate) fn of(clear: Column, cloud: Option<(f64, Cloud)>) -> Light {
+        Light { clear, cloud }
+    }
+
+    /// `Column::shares` of the node's whole sky: the clear part's and the part's under the cloud (`Column::under`),
+    /// each by its share.
+    pub(crate) fn shares(&self, alb: f64) -> [f64; 3] {
+        let clear = self.clear.shares(alb);
+        match &self.cloud {
+            None => clear,
+            Some((share, cloud)) => {
+                let under = self.clear.under(cloud, alb);
+                [0, 1, 2].map(|q| (1.0 - share) * clear[q] + share * under[q])
+            }
+        }
     }
 }
 
@@ -188,8 +294,49 @@ impl Heat {
     }
 }
 
+/// A cloud's optical depth to heat radiation, from its depth `tau` to sunlight: a droplet wider than the wave absorbs
+/// the heat radiation that falls on its cross-section, half of what it takes out of a beam of sunlight (the other
+/// half it bends past its edge), and the radiation crosses the cloud on the slant of diffuse light (`DIFFUSE`). For
+/// droplets of 10 µm that is 125 m² a kg of liquid; measured, 130 upward and 158 downward (Stephens 1978).
+pub(super) fn drops_heat(tau: f64) -> f64 {
+    0.5 * DIFFUSE * tau
+}
+
+/// What the air over a place does to heat radiation under a sky a cloud covers a share of (laws.md 1.4): the clear
+/// part's column and, where there is a cloud, its share and the column under it (`Heat`), each absorbing and sending
+/// by its share.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Skies {
+    clear: Heat,
+    cloud: Option<(f64, Heat)>,
+}
+
+impl Skies {
+    pub(crate) fn of(clear: Heat, cloud: Option<(f64, Heat)>) -> Skies {
+        Skies { clear, cloud }
+    }
+
+    /// `Heat::absorbs` of the whole sky.
+    pub(crate) fn absorbs(&self, chem: &Chemistry, t: f64) -> f64 {
+        let clear = self.clear.absorbs(chem, t);
+        self.cloud.as_ref().map_or(clear, |(share, under)| (1.0 - share) * clear + share * under.absorbs(chem, t))
+    }
+
+    /// `Heat::glow` of the whole sky.
+    pub(crate) fn glow(&self, chem: &Chemistry, tl: f64, side: usize) -> [f64; 2] {
+        let clear = self.clear.glow(chem, tl, side);
+        match &self.cloud {
+            None => clear,
+            Some((share, under)) => {
+                let under = under.glow(chem, tl, side);
+                [0, 1].map(|q| (1.0 - share) * clear[q] + share * under[q])
+            }
+        }
+    }
+}
+
 /// The air touching a ground node over a step: its temperature, K; the share of the surface's heat radiation it absorbs
-/// (`Heat::absorbs`); what its layers send down (`Heat::glow`), W/m²; and the slope of that with its temperature,
+/// (`Skies::absorbs`); what its layers send down (`Skies::glow`), W/m²; and the slope of that with its temperature,
 /// W/(m² K).
 pub(super) struct Air {
     pub(super) tl: f64,
@@ -297,7 +444,7 @@ impl Surface<'_> {
 #[cfg(test)]
 mod tests {
     use super::super::super::scratch::Latent;
-    use super::{Air, Column, Surf, Surface, NONE};
+    use super::{Air, Cloud, Column, Light, Surf, Surface, NONE};
     use crate::units::{DAY, MAX_SUBSTANCES, SIGMA};
 
     /// A ground node of 1 m² at the melting point `tm` that holds `fusion` J of the plateau's substance, `phi` of it
@@ -360,7 +507,35 @@ mod tests {
                 assert!((all - 1.0).abs() < 1e-12, "depth {depth}, mu {mu}, reflectance {alb}: {all}");
                 assert!(air >= was, "the air absorbed less over a brighter surface: {air} after {was}");
                 was = air;
+                // Under a cloud over half its sky too.
+                for tau in [0.5, 8.0, 80.0] {
+                    let [ground, air, space] = Light::of(c, Some((0.5, Cloud::of(tau, mu, 0.85, [0.2, 0.04])))).shares(alb);
+                    let all = ground * (1.0 - alb) + air + space;
+                    assert!((all - 1.0).abs() < 1e-12, "depth {depth}, mu {mu}, reflectance {alb}, cloud {tau}: {all}");
+                }
             }
+        }
+    }
+
+    /// A thicker cloud reflects more of the sun's beam and passes less, and reflects less the higher the sun stands;
+    /// one of no depth does nothing, and none reflects or passes less than nothing.
+    #[test]
+    fn a_thicker_cloud_reflects_more_and_a_higher_sun_less() {
+        let (g, dark) = (0.85, [0.2, 0.04]);
+        assert_eq!((Cloud::of(0.0, 0.5, g, dark).beam, Cloud::of(0.0, 0.5, g, dark).diffuse), ([0.0, 0.0, 1.0], [0.0, 1.0]));
+        for mu in [0.05, 0.3, 0.6, 1.0] {
+            let mut was = Cloud::of(0.0, mu, g, dark);
+            for tau in [0.3, 1.0, 3.0, 10.0, 30.0, 100.0, 1000.0] {
+                let c = Cloud::of(tau, mu, g, dark);
+                let (passed, absorbed) = (c.beam[1] + c.beam[2], 1.0 - c.beam.iter().sum::<f64>());
+                assert!(c.beam[0] > was.beam[0] && passed < was.beam[1] + was.beam[2], "depth {tau}, sun {mu}: {c:?} after {was:?}");
+                assert!(c.beam.iter().chain(&c.diffuse).all(|&x| (0.0..=1.0).contains(&x)) && absorbed > 0.0 && absorbed < 0.2, "depth {tau}, sun {mu}: {c:?}");
+                was = c;
+            }
+        }
+        for tau in [1.0, 10.0, 100.0] {
+            let back = |mu: f64| Cloud::of(tau, mu, g, dark).beam[0];
+            assert!(back(0.2) > back(0.5) && back(0.5) > back(0.9), "depth {tau}: {} {} {}", back(0.2), back(0.5), back(0.9));
         }
     }
 

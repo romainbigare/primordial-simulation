@@ -508,8 +508,8 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   r the cell's mean rise toward the south (section 0), the equivalent latitude of Lee (1962) and Swift (1976) in plan form. An
   hour a face turns away from the sun counts against it, as the shadow it casts on the ground beyond, so the beam is
   kept whatever the slopes; a cell whose day sums below zero takes none (the one place a square and its cells differ).
-  A cell under a body's level (1.2) lies level and takes the flat sun. **Through the air** (`radiation::Column`, read
-  by the surface's step and by the books alike): past the clouds, the gases of its air node absorb sunlight with the
+  A cell under a body's level (1.2) lies level and takes the flat sun. **Through the air** (`radiation::Light`, read
+  by the surface's step and by the books alike): the gases of its air node absorb sunlight (`radiation::Column`) with the
   optical depth of the amount on its path (`Chemistry::sun_depth`: `sw_abs` a mol/m², past `sw_sat` as the square root
   of the amount, the form of their heat radiation) and their molecules scatter it (Rayleigh: `scatter` a mol/m² on the
   path, half of it on up and half down, so the surface gets what passes and half of what is scattered, and again half
@@ -517,9 +517,10 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   the hours it is up (`sun_height`), and of what the surface and its cover reflect on the way back up as diffuse
   light (slant 1.66, Elsasser's diffusivity factor). What the air absorbs warms its node (booked from the sun to the
   air, and summed into its days as a gain the air does not move); what reaches the surface, the surface's balance
-  takes; what passes back up leaves to space. The three add up to what came in, to rounding. All the sunlight that passes the clouds is taken as beam:
-  a cloud is one reflectance, with no share of the sky it covers, so what passes it cannot be split into beam and
-  diffuse; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
+  takes; what passes back up leaves to space. The three add up to what came in, to rounding. Under the share of the
+  node's sky that its cloud covers, the cloud lies over that column (**Clouds**, below), and a cell takes the clear part
+  and the part under the cloud each by its share. All the sunlight at the top of the air is taken as on the cell's
+  slope, whatever a cloud scatters of it; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
   with the slope with latitude found beside the daily mean, once per latitude. The surface reflects as its cover is at the step's start (`land::reflectance`),
   over the cell's own ground: the share of it under the level of what stands over its pores (`curve::Fill::wet`) as a
   column with that liquid over the share, the rest as one whose liquid is what its pores hold, by area;
@@ -532,17 +533,31 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   pressure is, as the pressure broadens them: at height hk H / (hk + H), hk the height its amount fills
   (`Scratch::hk`), H the air's. Its continuum (`cont`) goes by its amount times its own pressure, in every band; that
   product falls by e over hk / 2, so the continuum lies at half the gas's height. Each band is a core of strong lines
-  `line_spread` times its depth and wings 1 / that times, each half its light; clouds, whose drops are grey, add
-  their depth to every part at the air's height; each part absorbs 1 − exp(−x) and emits from 2 grey layers that cool with height, so more gas
+  `line_spread` times its depth and wings 1 / that times, each half its light; under a cloud (below) its drops, which
+  are grey, add their depth to every part at the air's height; each part absorbs 1 − exp(−x) and emits from 2 grey layers that cool with height, so more gas
   lifts the layer that reaches space into colder air and the ground warms. The layers are each air node's, over its
   mean ground; the air touching a cell is the air it sees (bilinearly, its four nearest nodes), colder by the drop with
   height from that air's mean height.
-- **Clouds** (`exchange::cloud`): each air node's cloud covers the share b of its sky that is saturated
-  (`Seen::clouded`, 1.5), a mean over the step before. Under it the scattering depth is x = the node's condensation
-  rate / b / `cloud`, from what the node rained; the node reflects b x / (1 + x) of the sunlight (two-stream, Lacis and
-  Hansen 1974) and absorbs heat radiation at depth `cloud_ir` × the node's rate / `cloud` (Stephens 1978). **Known
-  limit:** their depth to heat radiation is spread over the node's whole sky and like the air's mass, not set where
-  they condense. The ground also trades sensible heat with the air (`sensible`).
+- **Clouds** (`exchange::cloud`, `radiation::Cloud`): each air node's cloud covers the share b of its sky that is
+  saturated (`Seen::clouded`, 1.5), a mean over the step before. What the node rained in that step hangs in the air for
+  `cloud_life` before it has fallen (the cloud time and the fallout time of Smith and Barstad 2004), under the cloud's
+  share alone: a path of liquid of the node's condensation rate × `cloud_life` / b, in droplets of radius `drop_m`.
+  A droplet much wider than the light's wave takes twice the light that falls on its cross-section out of a beam, so
+  the cloud's optical depth to sunlight is 3 path / (2 `drop_m`) (Stephens 1978). **Its sunlight**: it reflects,
+  passes and absorbs as two streams give (Eddington's form, the forward peak of the scattering taken as light that
+  passes: Meador and Weaver 1980; Joseph, Wiscombe and Weinman 1976) under the sun's mean height (`sun_height`), its
+  droplets scattering forward by the mean cosine `drop_forward`; in the share `drop_dark[0]` of the sunlight (the
+  near-infrared, which the liquid absorbs) a droplet absorbs the share `drop_dark[1]` of what it meets (Slingo 1989),
+  and that warms the air node with what its gases absorb. The cloud lies over the node's column: what it passes
+  straight goes on as the beam, what it passes scattered as diffuse light, and its base sends back down its share of
+  what the column and the surface reflect up (`Column::under`). **Its heat radiation**: a droplet absorbs the heat
+  radiation that falls on its cross-section, half of what it takes out of a beam of sunlight, so the cloud's depth is
+  half its depth to sunlight on the slant of diffuse light, the same in every band (`radiation::drops_heat`). The
+  clear part of a node's sky and the part under its cloud are each their own column, for sunlight
+  (`radiation::Light`) and for heat radiation (`radiation::Skies`); a cell's balance and the node's own radiation to
+  space take the two by the cloud's share. **Known limit:** the cloud's droplets are spread like the air's mass, not
+  set where they condense, so a deep cloud sends its heat to space from the top of the air. The ground also trades
+  sensible heat with the air (`sensible`).
 - **The bodies' node** (`Class::Bodies`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
   it does not claim goes back to the ground before each air step (`survey::release`).

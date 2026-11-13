@@ -35,7 +35,8 @@ pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
 /// air paying what warms it on the way down, frozen or liquid as the node's days rained it; the sunlight it absorbs and keeps
 /// for its cover, the sunlight its air absorbs, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and
 /// falls (`potential`). Then what each part of a cell of parts gained (`parts_moved`), the light on the cover, the clouds of
-/// what rained (which the next step's sunlight passes), and the tape's rain and evaporation.
+/// what rained (`exchange::cloud`, which the next step's sunlight and heat radiation pass), and the tape's rain and
+/// evaporation.
 pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Active], &Response, &[Landed]), mean: &Mean, dt: f64) {
     let (n, na, nx, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), act.len(), w.mesh.cells().area().to_vec());
     // Each cell's outputs at the mean air it saw.
@@ -72,7 +73,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     for (j, &q) in mean.space.iter().enumerate() {
         sky.link((j, space), q);
     }
-    // The sunlight each node's air absorbs over its cells (`Column::shares`).
+    // The sunlight each node's air absorbs over its cells (`Light::shares`).
     let mut air_sun = vec![0.0; na];
     (0..n).for_each(|i| air_sun[parent[i] as usize] += response.fixed(i, AIR_SUN));
     for (j, &q) in air_sun.iter().enumerate().filter(|e| *e.1 > 0.0) {
@@ -97,8 +98,9 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     w.light.iter_mut().enumerate().for_each(|(i, l)| *l += response.fixed(i, LIGHT));
     s.state.cloud = (0..na)
         .map(|j| {
-            let (m, mr) = act.iter().enumerate().map(|(y, ac)| (mean.rain[y * na + j], mean.rain[y * na + j] * s.sp[ac.k].refl[0])).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
-            cloud((w.cfg.cloud, w.cfg.cloud_ir), (m, mr), mean.cloud[j], w.mesh.level(AIR).area()[j], dt)
+            // What condensed over the node in the step as liquid, m³.
+            let liquid: f64 = act.iter().enumerate().map(|(y, ac)| mean.rain[y * na + j] * s.sp[ac.k].v[1]).sum();
+            cloud(mean.cloud[j], liquid / (w.mesh.level(AIR).area()[j] * dt), (w.cfg.cloud_life, w.cfg.drop_m))
         })
         .collect();
     let ema = year_weight(w, dt);

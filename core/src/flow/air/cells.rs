@@ -33,7 +33,8 @@ pub(super) const LINK: usize = 1;
 pub(super) const SPACE: usize = 2;
 pub(super) const UP: usize = 3;
 /// The outputs that do not: the sunlight it absorbs, J; the light per unit of its cover's capture area, J/m²; the light
-/// set aside for its cover, J; the sunlight the air over it absorbs on its way down and back up, J (`Column::shares`).
+/// set aside for its cover, J; the sunlight the air over it and its cloud absorb on its way down and back up, J
+/// (`Light::shares`).
 pub(super) const SUN: usize = 0;
 pub(super) const LIGHT: usize = 1;
 pub(super) const KEPT: usize = 2;
@@ -55,8 +56,8 @@ pub(super) struct Ctx<'a> {
     pub(super) x0: &'a [f64],
     pub(super) dt: f64,
     pub(super) decl: &'a [f64],
-    /// What the air of each node does to sunlight (`Column`)
-    pub(super) light: &'a [super::radiation::Column],
+    /// What the air of each node does to sunlight (`Light`)
+    pub(super) light: &'a [super::radiation::Light],
 }
 
 /// Each cell's response to the air it sees: per cell the fixed outputs, then, of a cell alone, each changing output's
@@ -308,8 +309,8 @@ pub(super) struct Work {
 
 /// The exchange of the ground `g` over the step under the air it sees, `air` (its temperature, K, then each active gas,
 /// mol): into `work`, its parts (`put`) and what each mol of each gas carries (`carried`); returned, its fixed outputs.
-/// Sunlight past the clouds and through the air of its node, down and back up over what the surface and its cover
-/// reflect (`Column::shares`), what the cover intercepts less the share its light reaction stores (set aside for it,
+/// Sunlight through the air of its node, clear and under its cloud, down and back up over what the surface and its
+/// cover reflect (`Light::shares`), what the cover intercepts less the share its light reaction stores (set aside for it,
 /// laws.md 1.4); the surface balance with what evaporates, by Newton's steps about its end
 /// temperature, under the reflectance its surface has at the step's start; where a soft cover lies, under the
 /// reflectance it ends the step with, as backward Euler takes it (`end_reflectance`): from the start's, each guess
@@ -319,12 +320,12 @@ pub(super) struct Work {
 pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64; FIXED] {
     let (w, s, dt, act) = (cx.w, cx.s, cx.dt, cx.act);
     let (na, j, area) = (w.mesh.level(AIR).n(), g.j, g.area);
-    let (adt, tl, top) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun * (1.0 - s.state.cloud[j][0]));
+    let (adt, tl, top) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun);
     let a = g.canopy;
     let cover = if a > 0.0 { one_minus_exp(a) } else { 0.0 };
     let caught = cover * g.absorb;
-    // Under the reflectance `alb` of its ground, the share its cover and ground reflect, and the column's shares of the
-    // light past the clouds (`Column::shares`).
+    // Under the reflectance `alb` of its ground, the share its cover and ground reflect, and its air's shares of the
+    // light at the top, clear and under its cloud (`Light::shares`).
     let shares = |alb: f64| cx.light[j].shares((1.0 - cover) * alb + cover * (1.0 - g.absorb));
     // The sunlight that reaches it, in all its passes; per unit of capture area the cover intercepts cover / a of it,
     // all of it where it is thin.

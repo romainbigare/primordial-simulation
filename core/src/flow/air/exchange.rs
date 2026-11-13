@@ -72,15 +72,14 @@ pub(super) fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f64) {
     }
 }
 
-/// The cloud where `m` mol condense over `area` m² in `dt` seconds, all in the share `b` of the sky it covers
-/// (`Seen::clouded`), a layer of droplets whose optical depth grows with the rate under it: [the node's reflectance,
-/// its optical depth to heat radiation]. A layer of scattering depth x reflects x / (1 + x) (two-stream, Lacis and
-/// Hansen 1974), half at the rate `cloud`, times the condensate's mean reflectance `mr / m` as it scatters like its
-/// powder, over the share `b`; the same droplets absorb heat radiation, with the depth `cloud_ir` at that rate, as a
-/// mean over the node (Stephens 1978).
-pub(super) fn cloud((cloud, cloud_ir): (f64, f64), (m, mr): (f64, f64), b: f64, area: f64, dt: f64) -> [f64; 2] {
-    let x = m / (area * dt) / cloud;
-    if m > 0.0 && b > 0.0 { [b * (x / b) / (1.0 + x / b) * mr / m, cloud_ir * x] } else { [0.0; 2] }
+/// The cloud of an air node in whose saturated share `b` of the sky (`Seen::clouded`) `rate` m³ of liquid condense
+/// per m² of the node a second: [its share of the sky, its optical depth to sunlight there]. What condenses hangs in
+/// the air for `life` s before it has fallen (the cloud time and the fallout time of Smith and Barstad 2004), under
+/// the cloud's share alone: a path of `rate` × `life` / `b` m of liquid, in droplets of radius `r` m. A droplet much
+/// wider than the light's wave takes twice the light that falls on its cross-section out of a beam, so the depth is
+/// 3 path / (2 r) (Stephens 1978).
+pub(super) fn cloud(b: f64, rate: f64, (life, r): (f64, f64)) -> [f64; 2] {
+    if b > 0.0 && rate > 0.0 { [b, 3.0 * rate * life / b / (2.0 * r)] } else { [0.0; 2] }
 }
 
 /// The gases of the air that cannot condense on the ground, colder than `tmin` K at its coldest, and dissolve in its

@@ -10,7 +10,7 @@ use super::cells::{respond, Ctx};
 use super::rain::{landed, wet};
 use super::daily::run;
 use super::surf::patches;
-use super::radiation::{declination, sun_height, Column};
+use super::radiation::{declination, sun_height, Cloud, Column, Light};
 use crate::{store::Class, units::DAY, World, AIR};
 
 /// The saturation tables reach this far above the warmest node at a step's start, K: no node warms more in a step.
@@ -43,7 +43,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let t0: Vec<f64> = (0..na).map(|j| air_temp(w.store.heat(Class::Air)[j], s.state.gas.iter().map(|&k| w.store.amounts(Class::Air)[k * na + j] * s.sp[k].cp).sum())).collect();
     let x0: Vec<f64> = act.iter().flat_map(|ac| w.store.amounts(Class::Air)[ac.k * na..(ac.k + 1) * na].iter().copied()).collect();
     let room = std::mem::take(&mut s.spare.response);
-    let light = columns(w, s, &decl);
+    let light = lights(w, s, &decl);
     let cx = Ctx { w, s, act: &act, t0: &t0, x0: &x0, dt, decl: &decl, light: &light };
     let response = respond(&cx, &patches, room);
     let ground = response.ground(&cx, wet(w, s, &act, &t0, &patches));
@@ -53,9 +53,10 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     s.spare.response = response.rows();
 }
 
-/// What the air of each node does to sunlight over the step (`Column`): its gases that absorb it (`Chemistry::sun_depth`)
-/// or scatter it (`Substance::scatter`), per m² of the node, under the sun's mean height at its latitude (`sun_height`).
-fn columns(w: &World, s: &Scratch, decl: &[f64]) -> Vec<Column> {
+/// What the air of each node does to sunlight over the step (`Light`): its gases that absorb it (`Chemistry::sun_depth`)
+/// or scatter it (`Substance::scatter`), per m² of the node, under the sun's mean height at its latitude
+/// (`sun_height`); and over the share of its sky the cloud of the step before covers, that cloud (`Cloud`).
+fn lights(w: &World, s: &Scratch, decl: &[f64]) -> Vec<Light> {
     let (air, chem) = (w.mesh.level(AIR), &w.chem);
     let na = air.n();
     let lit: Vec<usize> = s.state.gas.iter().copied().filter(|&k| chem.subs[k].sw_abs > 0.0 || chem.subs[k].scatter > 0.0).collect();
@@ -63,7 +64,8 @@ fn columns(w: &World, s: &Scratch, decl: &[f64]) -> Vec<Column> {
         .map(|j| {
             let cols: Vec<(usize, f64)> = lit.iter().map(|&k| (k, w.store.amounts(Class::Air)[k * na + j] / air.area()[j])).collect();
             let depths = |slant: f64| cols.iter().fold([0.0; 2], |[a, b], &(k, c)| [a + chem.sun_depth(k, c * slant), b + chem.subs[k].scatter * c * slant]);
-            Column::of(depths, sun_height(w.cfg.sun, air.lat()[j].to_radians(), decl))
+            let (mu, [share, depth]) = (sun_height(w.cfg.sun, air.lat()[j].to_radians(), decl), s.state.cloud[j]);
+            Light::of(Column::of(depths, mu), (share > 0.0).then(|| (share, Cloud::of(depth, mu, w.cfg.drop_forward, w.cfg.drop_dark))))
         })
         .collect()
 }

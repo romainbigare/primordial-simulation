@@ -53,10 +53,14 @@ pub struct Config {
     pub wind: f64,
     /// Mixing of neighbouring air columns by eddies, m²/s
     pub mix: f64,
-    /// Condensation in the air at which its cloud reflects half of what its droplets can, mol/(m² s)
-    pub cloud: f64,
-    /// Optical depth to heat radiation of a cloud at the condensation `cloud`
-    pub cloud_ir: f64,
+    /// Time condensed liquid hangs in the air as a cloud before it has fallen, s
+    pub cloud_life: f64,
+    /// Radius of a cloud's droplets, m
+    pub drop_m: f64,
+    /// Mean cosine of the angle by which a cloud's droplets turn the sunlight they scatter
+    pub drop_forward: f64,
+    /// Share of the sunlight in the wavelengths a cloud's droplets absorb, and the share a droplet absorbs of what it meets there
+    pub drop_dark: [f64; 2],
     /// How many times a band's mean optical depth its core of strong lines has, its wings of weak lines 1 / that
     pub line_spread: f64,
     /// Time in which a saturated part of an air node's air rains out what the node holds over its saturation, s
@@ -514,6 +518,11 @@ impl Config {
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
         // The moistest air of a node saturates before the node does, and not when it holds nothing (`seen::saturated`).
         require(self.moist_min > 0.0 && self.moist_min < 1.0, || format!("moist_min ({}) must be above 0 and below 1", self.moist_min))?;
+        // A cloud's depth divides its liquid's path by its droplets' radius (`exchange::cloud`); its droplets scatter
+        // no further forward than straight on and absorb no more than they meet (`radiation::Cloud`).
+        require(self.cloud_life >= 0.0 && self.drop_m > 0.0, || format!("cloud_life ({}) must not be below 0 and drop_m ({}) above it", self.cloud_life, self.drop_m))?;
+        let lit = (0.0..1.0).contains(&self.drop_forward) && self.drop_dark.iter().all(|x| (0.0..=1.0).contains(x));
+        require(lit, || format!("drop_forward ({}) must be from 0 to below 1 and drop_dark ({:?}) from 0 to 1", self.drop_forward, self.drop_dark))?;
         // Rain lands over a width the drift sets (`seen::Seen::landing` divides by it).
         require(self.rain_drift_m > 0.0, || format!("rain_drift_m ({}) must be above 0", self.rain_drift_m))?;
         // Hardening lowers a lethal limit, never raises it.
@@ -568,8 +577,10 @@ impl Default for Config {
             dissolve: 5e-5,
             wind: 4e5,
             mix: 1.3e6,
-            cloud: 1.2e-2,
-            cloud_ir: 6.7,
+            cloud_life: 2000.0,
+            drop_m: 1e-5,
+            drop_forward: 0.85,
+            drop_dark: [0.214, 0.036],
             line_spread: 4.0,
             rain_time: 86400.0,
             moist_min: 0.5,
