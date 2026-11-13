@@ -84,8 +84,6 @@ pub struct World {
     pub life: crate::life::Life,
     /// Light intercepted in each cell per m² of light-capture area since the start (its cover's mean), J/m²
     pub light: Vec<f64>,
-    /// Rain fallen on each cell since the start, mol/m² (its bodies catch what fell since their last update)
-    pub rained: Vec<f64>,
     /// The terrain the world was built on (`space::terrain`)
     pub terrain: crate::space::terrain::Terrain,
     /// The mean rise of the ground of each cell toward the south, m per m, which the sun on it reads (`flow::on_slope`):

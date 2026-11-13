@@ -120,7 +120,7 @@ pub fn broken(w: &World) -> Option<String> {
     let at_least_0 = |x: f64| x.is_finite() && x >= 0.0;
     let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep)), ("aside", w.store.amounts(Class::Aside))];
     // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
-    let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_aside", w.store.heat(Class::Aside)), ("light", &w.light), ("rained", &w.rained)];
+    let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_aside", w.store.heat(Class::Aside)), ("light", &w.light)];
     let f32s = [("rain", &w.rain), ("liquid_flux", &w.liquid_flux)];
     let found = amounts.into_iter().chain(energies).find_map(|(name, v)| first_bad(name, v, at_least_0));
     let found = found.or_else(|| f32s.into_iter().find_map(|(name, v)| first_bad(name, v, at_least_0)));

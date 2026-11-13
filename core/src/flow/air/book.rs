@@ -96,11 +96,10 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
         })
         .collect();
     let ema = year_weight(w, dt);
-    for (i, ((r, sum), e)) in w.rain.iter_mut().zip(&mut w.rained).zip(&mut w.evap).enumerate() {
+    for (i, (r, e)) in w.rain.iter_mut().zip(&mut w.evap).enumerate() {
         let (got, up) = ((0..nx).map(|y| fell[y * n + i]).sum::<f64>(), (0..nx).map(|y| mol[y * n + i]).sum::<f64>());
         follow(r, (got / (area[i] * dt)) as f32, ema);
         follow(e, (up / (area[i] * dt)) as f32, ema);
-        *sum += got / area[i];
     }
     sums(w, s);
 }

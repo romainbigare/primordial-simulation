@@ -257,7 +257,6 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         loose_bins: Vec::new(),
         planet: None,
         light: vec![0.0; n],
-        rained: vec![0.0; n],
         events: Vec::new(),
         scratch: Default::default(),
     };
