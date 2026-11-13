@@ -3,7 +3,8 @@
 
 use super::super::land::NONE;
 use super::surf::Surf;
-use crate::{math::one_minus_exp, units::SIGMA};
+use crate::chem::{Chemistry, HEAT_BANDS};
+use crate::{math::one_minus_exp, units::{R_GAS, SIGMA}};
 use std::f64::consts::{PI, TAU};
 
 /// The sun's declination at `season` (0..1 from the solstice of the north's winter) on a circular orbit with axial tilt
@@ -110,20 +111,85 @@ pub fn column(x: f64, gam: f64, l: f64, h: f64) -> [[f64; LAYERS]; 2] {
     out
 }
 
-/// What layers (`column`) over ground with air at `tl` that absorbs a share `f` send, W/m².
-pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> f64 {
-    let k = SIGMA * f / LAYERS as f64;
-    lay.iter().map(|&d| k * (tl + d).max(1.0).powi(4)).sum()
+/// Per band of heat radiation, the optical depth and the height its absorbers fill, each by its depth: of `gases`
+/// (substance, mol/m², the height its amount fills, m) under air at `t` K whose own height is `big` m, a gas's lines
+/// (`Chemistry::depth`) where its amount times the pressure is, as the pressure broadens them (height hk H / (hk + H),
+/// hk its own, H the air's); its continuum, `continuum` times the column of its amount times its own pressure,
+/// c p₀ / 2 = c² R T / (2 hk) (p₀ its partial pressure at the ground; both fall by e over hk, so their product over
+/// hk / 2, the height it fills), in every band; and a cloud of optical depth `cloud`, spread like the air.
+pub fn bands(chem: &Chemistry, gases: &[(usize, f64, f64)], (t, big): (f64, f64), cloud: f64) -> [(f64, f64); HEAT_BANDS] {
+    let mut sum = [[0.0; 2]; HEAT_BANDS];
+    let mut add = |b: usize, d: f64, h: f64| (sum[b][0], sum[b][1]) = (sum[b][0] + d, sum[b][1] + d * h);
+    for &(k, c, hk) in gases {
+        (0..HEAT_BANDS).for_each(|b| add(b, chem.depth(k, b, c), hk * big / (hk + big)));
+        let near = chem.subs[k].continuum * c * c * R_GAS * t / (2.0 * hk);
+        (0..HEAT_BANDS).for_each(|b| add(b, near, 0.5 * hk));
+    }
+    (0..HEAT_BANDS).for_each(|b| add(b, cloud, big));
+    sum.map(|[d, dh]| (d, if d > 0.0 { dh / d } else { big }))
 }
 
-/// The slope of `glow` with `tl`, W/(m² K).
-pub(super) fn glow_slope(f: f64, tl: f64, lay: &[f64; LAYERS]) -> f64 {
-    let k = 4.0 * SIGMA * f / LAYERS as f64;
-    lay.iter().map(|&d| k * (tl + d).max(1.0).powi(3)).sum()
+/// The parts of each band of heat radiation (`Heat`): its core and its wings.
+const PARTS: usize = 2;
+const SUBS: usize = HEAT_BANDS * PARTS;
+/// The step of temperature over which the slope of a band's share is taken, K.
+const SHARE_STEP_K: f64 = 0.5;
+
+/// What the air over a place does to heat radiation (laws.md 1.4): per band of it (`Chemistry::heat_spans`), its
+/// absorbers' optical depth and the height they fill near the ground; each band in two parts, its core `spread` times
+/// its depth and its wings 1 / `spread` times, each half its light, as a band's lines are some strong and many weak;
+/// each part a grey column (`column`) whose layers send in the band the share of their own temperature's light
+/// (`Chemistry::heat_shares`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Heat {
+    f: [f64; SUBS],
+    lay: [[[f64; LAYERS]; 2]; SUBS],
 }
 
-/// The air touching a ground node over a step: its temperature, K; the share of heat radiation it absorbs; what its
-/// layers send down (`glow`), W/m²; and the slope of that with its temperature (`glow_slope`), W/(m² K).
+/// The side a column's layers send to: down to the ground, up to space.
+pub const DOWN: usize = 0;
+pub const UP: usize = 1;
+
+impl Heat {
+    /// The air whose absorbers have in each band the optical depth and height `bands` (depth, m), its air falling by
+    /// `gam` K/m over its column of `l` m, a band's core and wings `spread` apart.
+    pub fn of(bands: [(f64, f64); HEAT_BANDS], (gam, l): (f64, f64), spread: f64) -> Heat {
+        let mut heat = Heat::default();
+        for (b, &(x, h)) in bands.iter().enumerate() {
+            for (p, part) in [spread, 1.0 / spread].into_iter().enumerate() {
+                let q = b * PARTS + p;
+                (heat.f[q], heat.lay[q]) = (one_minus_exp(x * part), column(x * part, gam, l, h));
+            }
+        }
+        heat
+    }
+
+    /// The share of the heat radiation of a surface at `t` K that the air absorbs.
+    pub fn absorbs(&self, chem: &Chemistry, t: f64) -> f64 {
+        let shares = chem.heat_shares(t);
+        (0..SUBS).map(|q| shares[q / PARTS] / PARTS as f64 * self.f[q]).sum()
+    }
+
+    /// What its layers send to side `side` (`DOWN`, `UP`) over air at `tl` K, W/m², and its slope with `tl`, W/(m² K).
+    pub fn glow(&self, chem: &Chemistry, tl: f64, side: usize) -> [f64; 2] {
+        let mut out = [0.0; 2];
+        for q in 0..SUBS {
+            let (b, k) = (q / PARTS, SIGMA * self.f[q] / (LAYERS * PARTS) as f64);
+            for &d in &self.lay[q][side] {
+                let t = (tl + d).max(1.0);
+                let s = chem.heat_shares(t)[b];
+                let ds = (chem.heat_shares(t + SHARE_STEP_K)[b] - chem.heat_shares(t - SHARE_STEP_K)[b]) / (2.0 * SHARE_STEP_K);
+                out[0] += k * s * t.powi(4);
+                out[1] += k * (4.0 * s + t * ds) * t.powi(3);
+            }
+        }
+        out
+    }
+}
+
+/// The air touching a ground node over a step: its temperature, K; the share of the surface's heat radiation it absorbs
+/// (`Heat::absorbs`); what its layers send down (`Heat::glow`), W/m²; and the slope of that with its temperature,
+/// W/(m² K).
 pub(super) struct Air {
     pub(super) tl: f64,
     pub(super) f: f64,

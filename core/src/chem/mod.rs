@@ -2,6 +2,7 @@
 //! solubility, heat capacity; `roles`: what the reactions do for bodies.
 
 mod body;
+mod planck;
 mod roles;
 mod thermo;
 
@@ -10,6 +11,9 @@ pub use body::{BodyChem, Stores};
 use crate::{params::require, units::{MAX_REACTIONS, MAX_SUBSTANCES}};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
+
+/// Bands of heat radiation a substance absorbs in (`Substance::heat`, `Chemistry::heat_spans`).
+pub const HEAT_BANDS: usize = 3;
 
 /// A reaction keeps mass where its two sides differ by no more than this share (the sums of molar masses round).
 const MASS_ROUNDING: f64 = 1e-12;
@@ -47,10 +51,12 @@ pub struct Substance {
     pub strength: f64,
     /// Visible reflectance in 3 bands as [solid, liquid]
     pub refl: [[f32; 3]; 2],
-    /// Absorption of outgoing heat radiation per column amount (m²/mol), gas only
-    pub ir_abs: f64,
-    /// Column amount past which absorption grows as the square root (bands fill up), mol/m²; 0: never
-    pub ir_sat: f64,
+    /// Absorption of heat radiation in each band of it (`Chemistry::heat_spans`), gas only: [m²/mol, the column amount
+    /// past which it grows as the square root as its lines fill up, mol/m² (0: never)] (`Chemistry::depth`)
+    pub heat: [[f64; 2]; HEAT_BANDS],
+    /// Absorption of heat radiation in every band by its column times its own partial pressure (its continuum, from
+    /// molecules near one another), m²/(mol Pa), gas only
+    pub continuum: f64,
     /// Absorption of sunlight per column amount (m²/mol), gas only, and the column amount past which it grows as the
     /// square root, mol/m² (0: never)
     pub sw_abs: f64,
@@ -123,6 +129,9 @@ pub struct Chemistry {
     pub builds: Vec<Reaction>,
     /// Mole fractions of the starting air, per substance (empty: none known), for its heat capacity (`Chemistry::air_cp`).
     pub air: Vec<f64>,
+    /// The bands of heat radiation the substances absorb in, as wavelength spans, µm: the first `HEAT_BANDS` − 1; the
+    /// last band is all the other wavelengths
+    pub heat_spans: [[f64; 2]; HEAT_BANDS - 1],
     /// What follows from the fields above, made at its first use (not saved)
     #[serde(skip)]
     derived: OnceLock<Derived>,
@@ -150,14 +159,16 @@ struct Derived {
     light: Vec<usize>,
     /// `Chemistry::body`
     body: BodyChem,
+    /// `Chemistry::heat_shares` by whole K from 0 to `planck::TABLE_K`
+    heat_shares: Vec<[f64; HEAT_BANDS]>,
 }
 
 impl Chemistry {
     /// A chemistry whose starting air has the mole fractions `air` (substance, fraction); the other substances none.
-    pub fn new(n_elements: usize, subs: Vec<Substance>, reactions: Vec<Reaction>, build: Option<Reaction>, builds: Vec<Reaction>, air: &[(usize, f64)]) -> Self {
+    pub fn new(n_elements: usize, subs: Vec<Substance>, reactions: Vec<Reaction>, (build, builds): (Option<Reaction>, Vec<Reaction>), air: &[(usize, f64)], heat_spans: [[f64; 2]; HEAT_BANDS - 1]) -> Self {
         let mut shares = vec![0.0; subs.len()];
         air.iter().for_each(|&(k, x)| shares[k] = x);
-        Chemistry { n_elements, subs, reactions, build, builds, air: shares, derived: OnceLock::new() }
+        Chemistry { n_elements, subs, reactions, build, builds, air: shares, heat_spans, derived: OnceLock::new() }
     }
 
     pub fn ns(&self) -> usize {
@@ -168,6 +179,23 @@ impl Chemistry {
     #[inline]
     pub fn body(&self) -> &BodyChem {
         &self.derived().body
+    }
+
+    /// The share of a body's heat radiation at `t` K in each band (`heat_spans`, Planck's law), by its table at whole
+    /// K, linear between them; they sum to 1. A body warmer than the table's top takes its top's.
+    pub fn heat_shares(&self, t: f64) -> [f64; HEAT_BANDS] {
+        let table = &self.derived().heat_shares;
+        let at = t.clamp(0.0, planck::TABLE_K as f64);
+        let (k, frac) = ((at as usize).min(planck::TABLE_K - 1), at - (at as usize).min(planck::TABLE_K - 1) as f64);
+        let mut s: [f64; HEAT_BANDS] = std::array::from_fn(|b| table[k][b] + frac * (table[k + 1][b] - table[k][b]));
+        s[HEAT_BANDS - 1] = 1.0 - s[..HEAT_BANDS - 1].iter().sum::<f64>();
+        s
+    }
+
+    /// Does substance `k` absorb heat radiation in any band?
+    pub fn absorbs_heat(&self, k: usize) -> bool {
+        let s = &self.subs[k];
+        s.continuum > 0.0 || s.heat.iter().any(|b| b[0] > 0.0)
     }
 
     /// What follows from the chemistry (`Derived`), made at the first call (`derive`).
@@ -194,7 +222,8 @@ impl Chemistry {
             let light = (0..self.reactions.len()).filter(|&r| self.reactions[r].light).collect();
             let (roles, fixing) = (self.find_life_roles(), self.find_fixing(&minerals));
             let body = BodyChem::of(self);
-            Derived { minerals, air_cp, burners, roles, fixing, mixes, solvents, materials, light, body }
+            let heat_shares = planck::table(&self.heat_spans);
+            Derived { minerals, air_cp, burners, roles, fixing, mixes, solvents, materials, light, body, heat_shares }
         })
     }
 
@@ -222,9 +251,12 @@ impl Chemistry {
             require(s.lv > 0.0, || format!("substance {k}: vaporisation enthalpy must be above 0"))?;
             require(s.density.iter().all(|&d| d > 0.0), || format!("substance {k}: densities must be above 0"))?;
             require(s.dense > 0.0 && s.dense_drop >= 0.0, || format!("substance {k}: the temperature of its densest liquid must be above 0, its lowering not below"))?;
-            let light = [s.ir_abs, s.ir_sat, s.sw_abs, s.sw_sat, s.scatter];
-            require(light.iter().all(|&x| x >= 0.0 && x.is_finite()), || format!("substance {k}: its absorption and scattering of light must be finite and not below 0"))?;
+            let light = s.heat.iter().flatten().chain(&[s.continuum, s.sw_abs, s.sw_sat, s.scatter]).all(|&x| x >= 0.0 && x.is_finite());
+            require(light, || format!("substance {k}: its absorption and scattering of light must be finite and not below 0"))?;
         }
+        let spans = self.heat_spans;
+        let apart = spans.iter().all(|b| b[0] > 0.0 && b[1] > b[0] && b[1].is_finite()) && spans.iter().enumerate().all(|(i, a)| spans[i + 1..].iter().all(|b| a[1] <= b[0] || b[1] <= a[0]));
+        require(apart, || format!("the bands of heat radiation {spans:?} must be spans of wavelength above 0 that do not overlap"))?;
         // Each reaction, then each conversion: a conversion needs inputs and a product, a reaction no more orders than
         // inputs. Its molar masses must agree with its elements to rounding: it keeps mass.
         let mass = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].molar_mass).sum::<f64>();

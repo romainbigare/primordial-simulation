@@ -4,7 +4,7 @@
 use crate::chemistry::{molar_mass, RICHARDS, TROUTON};
 use crate::richness::{liquid_temps, IGNITION_RATE};
 use crate::Init;
-use pcore::chem::{Chemistry, Reaction, Substance};
+use pcore::chem::{Chemistry, Reaction, Substance, HEAT_BANDS};
 use pcore::rng::{Purpose, Rng};
 use pcore::units::{R_GAS, T_SURF};
 use std::collections::BTreeMap;
@@ -13,6 +13,9 @@ type Side = Vec<(u16, u16)>;
 
 /// A gas of a generated world boils at most this share of the coldest melting point of its liquids.
 const GAS_BELOW: f64 = 0.9;
+/// The bands of heat radiation of a drawn chemistry but the last, µm (`Chemistry::heat_spans`): a split of a ground's
+/// heat radiation in three of about equal shares near 290 K.
+const HEAT_SPANS: [[f64; 2]; HEAT_BANDS - 1] = [[8.0, 12.5], [12.5, 18.0]];
 
 fn noise(r: &mut Rng, s: f64) -> f64 {
     (s * r.normal()).exp()
@@ -73,8 +76,12 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
                 hardness: (strength * (0.5 + 0.7 * r.f64())).min(1.0),
                 strength,
                 refl: [band(&mut r, 1.0), band(&mut r, 0.3)],
-                ir_abs: if boil < T_SURF && used.len() >= 2 && n >= 3.0 { 10f64.powf(-3.0 + 2.0 * r.f64()) } else { 0.0 },
-                ir_sat: 0.0,
+                heat: {
+                    let (absorbs, band) = (boil < T_SURF && used.len() >= 2 && n >= 3.0, r.below(HEAT_BANDS));
+                    let strength = 10f64.powf(-3.0 + 2.0 * r.f64());
+                    std::array::from_fn(|b| [if absorbs && b == band { strength } else { 0.0 }, 0.0])
+                },
+                continuum: 0.0,
                 sw_abs: 0.0,
                 sw_sat: 0.0,
                 scatter: 0.0,
@@ -101,7 +108,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
     let mut gases: Vec<usize> = (0..ns).filter(|&k| gas(k)).collect();
     shuffle(&mut r, &mut gases);
     let mut air: Vec<(usize, f64)> = gases.iter().take(2).zip([0.78, 0.21]).map(|(&k, f)| (k, f)).collect();
-    if let Some(&k) = gases.iter().find(|&&k| subs[k].ir_abs > 0.0 && !air.iter().any(|p| p.0 == k)) {
+    if let Some(&k) = gases.iter().find(|&&k| subs[k].heat.iter().any(|b| b[0] > 0.0) && !air.iter().any(|p| p.0 == k)) {
         air.push((k, 4e-4));
     }
     let low = (0..ns).filter(|k| !air.iter().any(|p| p.0 == *k)).max_by_key(|&k| (liquid_temps(&subs[k]), ns - k)).unwrap();
@@ -182,7 +189,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         reactions.push(Reaction { inputs: a, outputs: b, k, ea, light, open: 1.0, ord: Vec::new() });
     }
     // (No growth in a random chemistry yet: its bodies are their mass, `Chemistry::build`.)
-    let chem = Chemistry::new(ne, subs, reactions, None, Vec::new(), &init.air);
+    let chem = Chemistry::new(ne, subs, reactions, (None, Vec::new()), &init.air, HEAT_SPANS);
     debug_assert!(chem.validate().is_ok());
     (chem, init)
 }

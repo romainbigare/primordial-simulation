@@ -42,7 +42,7 @@ pub fn richness(chem: &Chemistry, init: &Init) -> Vec<(&'static str, bool)> {
     let in_air = |k: u16| air.contains(&(k as usize));
 
     let liquid_often = all.iter().any(|&k| liquid_temps(&chem.subs[k]) > WINDOW_STEPS / 2);
-    let greenhouse = air.len() >= 2 && init.air.iter().any(|&(k, _)| at(k) == Phase::Gas && chem.subs[k].ir_abs > 0.0);
+    let greenhouse = air.len() >= 2 && init.air.iter().any(|&(k, _)| at(k) == Phase::Gas && chem.absorbs_heat(k));
     let stores_light = chem.reactions.iter().enumerate().any(|(r, rx)| {
         rx.light
             && chem.dh(r) > 0.0

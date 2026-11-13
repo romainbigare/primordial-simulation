@@ -194,10 +194,8 @@ pub struct Scratch {
     /// height the air touching the cell is, K (`air::touching`, at each air state).
     pub(super) seen: Vec<f64>,
     pub(super) cool: Vec<f64>,
-    /// How much colder than the air at its mean ground each layer of an air node is, [down, up], K (`air::column`), and
-    /// the share of heat radiation its absorber takes.
-    pub(super) lay: Vec<[[f64; air::LAYERS]; 2]>,
-    pub(super) absorbs: Vec<f64>,
+    /// What the column of each air node does to heat radiation (`air::Heat`).
+    pub(super) heat: Vec<air::Heat>,
     /// Mean height of the ground under each air node, m; the air's volume, m³.
     pub(super) za: Vec<f64>,
     pub(super) vol: Vec<f64>,
@@ -205,8 +203,7 @@ pub struct Scratch {
     pub(super) nt: Vec<f64>,
     pub(super) capa: Vec<f64>,
     pub(super) mass: Vec<f64>,
-    /// Of each air node: optical depth of its gases for heat radiation; temperature drop, K/m; mean height, m; temperature, K.
-    pub(super) fabs: Vec<f64>,
+    /// Of each air node: temperature drop, K/m; mean height, m; temperature, K.
     pub(super) gam: Vec<f64>,
     pub(super) zair: Vec<f64>,
     pub(super) ta: Vec<f64>,
@@ -328,7 +325,7 @@ pub(super) fn room(w: &World, s: &mut Scratch) {
     for v in [&mut s.skin, &mut s.cap, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb] {
         *v = vec![0.0; n];
     }
-    for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta] {
+    for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.gam, &mut s.zair, &mut s.ta] {
         *v = vec![0.0; na];
     }
     s.cover = vec![[0.0; 3]; n];

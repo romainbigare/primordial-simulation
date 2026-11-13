@@ -22,7 +22,7 @@ mod stack;
 mod basin;
 mod channel;
 pub(crate) use air::air_temp;
-pub use air::{column, declination, glow, insolation, on_slope, scale_height, sun_by_latitude, Planet};
+pub use air::{bands, column, declination, insolation, on_slope, scale_height, sun_by_latitude, Heat, Planet, DOWN, UP};
 pub use potential::total as potential;
 pub use basin::Pool;
 pub use channel::Channel;
@@ -53,7 +53,7 @@ pub fn state(w: &mut World, full: bool) {
 /// (each month's start, after the month's refresh changed what is present) or when the caches are new. A full build
 /// notes the time it was made (`built_now`).
 fn ground_now(w: &World, s: &mut Scratch, full: bool) {
-    let full = full || s.lay.len() != w.mesh.level(AIR).n();
+    let full = full || s.heat.len() != w.mesh.level(AIR).n();
     ground_state(w, s, (full, true));
     s.built_at = Some(w.time);
     if full {

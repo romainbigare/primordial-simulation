@@ -7,7 +7,7 @@ use super::rain::{rain_air, Pool, Room, Wet};
 use super::stretch::Stretch;
 use super::edge::Edges;
 use super::wind::{ends, even, lines, pushes, wind, Implicit, Links};
-use super::{air_temp, at_height, radiation::{glow, glow_slope}, step::Active};
+use super::{air_temp, at_height, radiation::UP, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
 use std::collections::BTreeMap;
 
@@ -19,8 +19,8 @@ const BLOCK_DAY: f64 = DAY;
 const GIVE_WORK: usize = 7;
 /// Instructions of a multiply-add of `Ground::gives_any`, its products in a loop (`par::pays`).
 const GIVE_ANY_WORK: usize = 17;
-/// Instructions of a node's heat radiation to space (`glow`, `par::pays`).
-const GLOW_WORK: usize = 80;
+/// Instructions of a node's heat radiation to space (`Heat::glow`, `par::pays`).
+const GLOW_WORK: usize = 480;
 /// Instructions of the vapour's day (`Pool::day`, `par::pays`) per node and active gas (its saturation and sums), about
 /// 760 a raining node-day in all with the next two on a settled island.
 const DAY_NODE_WORK: usize = 100;
@@ -277,7 +277,7 @@ impl Together {
 /// sensible heat and the gas they evaporate), so the book, which takes each cell's law at the step's mean air
 /// (`cells::Response::booked`), gives the air just what its days did. Rain frees its vaporisation enthalpy (and its fusion
 /// enthalpy where the air at the node's mean ground is below the gas's melting point: snow); the node's layers send
-/// heat to space (`glow`).
+/// heat to space (`Heat::glow`).
 fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, e): (&mut [f64], &mut [f64]), (dd, dt): (f64, f64), (out, rooms): (&mut Mean, &mut [Room])) {
     let (air, na, nx, share) = (w.mesh.level(AIR), e.len(), act.len(), dd / dt);
     // What the ground gives at the day's start (`given`); at the day's warmth (`Together::warmed`) as the vapour reads
@@ -296,7 +296,7 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let work = crate::par::shareable((0..nx * na).filter(|&i| rain[i] > 0.0).map(|i| ground.wet().nodes[i % na].cell.len() * MET_WORK));
     let met = crate::par::map_n(nx * na, work, |i| (rain[i] > 0.0).then(|| rain_air(ground.wet(), (i / na, i % na, ratio[i]), &touched)).flatten());
     // What each node's layers send to space over the day, J, on the pool.
-    let sky = crate::par::map_n(na, na.saturating_sub(1) * GLOW_WORK, |j| glow(s.absorbs[j], ts[j], &s.lay[j][1]) * air.area()[j] * dd);
+    let sky = crate::par::map_n(na, na.saturating_sub(1) * GLOW_WORK, |j| s.heat[j].glow(&w.chem, ts[j], UP)[0] * air.area()[j] * dd);
     for j in 0..na {
         out.t[j] += t[j] * share;
         let (sky, day) = (sky[j], &got[j * (1 + nx)..(j + 1) * (1 + nx)]);
@@ -328,16 +328,16 @@ fn given(ground: &Ground, act: &[Active], (t, x): (&[f64], &[f64])) -> Vec<f64> 
 
 /// Each node's mean temperature over a day of `dd` seconds, K, from its air `x` (`[gi * na + j]`) at `start` K, with
 /// what its ground gives it there (`got`, `[j * (1 + nx) + o]`), and its block's warming, K: its block's heat follows
-/// what its ground gives it (`Ground::gives`) and what its layers send to space (`glow`), each linear in the block's
-/// temperature through the day (`Together::heat`, `glow_slope`), all its nodes warming alike.
+/// what its ground gives it (`Ground::gives`) and what its layers send to space (`Heat::glow`, with its slope), each
+/// linear in the block's temperature through the day (`Together::heat`), all its nodes warming alike.
 fn warmth(w: &World, s: &Scratch, blocks: &[Vec<u32>], one: &Together, (x, start, got): (&[f64], &[f64], &[f64]), (dd, dt): (f64, f64)) -> (Vec<f64>, Vec<f64>) {
     let (air, na) = (w.mesh.level(AIR), start.len());
     let outs = got.len() / na.max(1);
     let (mut t, mut warms) = (start.to_vec(), Vec::with_capacity(blocks.len()));
     // Per node what its layers send to space, W, and its slope with the temperature, W/K, on the pool.
     let sky = crate::par::map_n(na, na.saturating_sub(1) * GLOW_WORK, |j| {
-        let (f, lay, area, ts) = (s.absorbs[j], &s.lay[j][1], air.area()[j], at_height(start[j], s.gam[j], s.za[j], s.zair[j]));
-        [glow(f, ts, lay) * area, glow_slope(f, ts, lay) * area]
+        let (area, ts) = (air.area()[j], at_height(start[j], s.gam[j], s.za[j], s.zair[j]));
+        s.heat[j].glow(&w.chem, ts, UP).map(|x| x * area)
     });
     for (b, nodes) in blocks.iter().enumerate() {
         let (mut rate, mut slope, mut capa) = (0.0, -one.heat[b] / dt, 0.0);

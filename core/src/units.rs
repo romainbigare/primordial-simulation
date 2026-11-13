@@ -15,6 +15,9 @@ pub const R_GAS: f64 = 8.314;
 /// Stefan-Boltzmann constant, W/(m² K⁴): every surface emits σT⁴ (emissivity 1).
 pub const SIGMA: f64 = 5.670e-8;
 
+/// Planck's second radiation constant h c / k, m K.
+pub const C2: f64 = 1.438_777e-2;
+
 /// Reference pressure at which saturation and solubility are given, Pa.
 pub const P_REF: f64 = 101_325.0;
 

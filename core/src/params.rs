@@ -57,6 +57,8 @@ pub struct Config {
     pub cloud: f64,
     /// Optical depth to heat radiation of a cloud at the condensation `cloud`
     pub cloud_ir: f64,
+    /// How many times a band's mean optical depth its core of strong lines has, its wings of weak lines 1 / that
+    pub line_spread: f64,
     /// Time in which vapour over saturation rains out, s
     pub rain_time: f64,
     /// Distance the wind carries condensed rain before it lands, m
@@ -500,6 +502,8 @@ impl Config {
         require(self.radius_m > 0.0 && self.radius_m.is_finite(), || format!("radius_m ({}) must be above 0", self.radius_m))?;
         let wake = self.wake_share;
         require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
+        // A band's core holds at least its mean depth (`flow::air::Heat`).
+        require(self.line_spread >= 1.0 && self.line_spread.is_finite(), || format!("line_spread ({}) must be at least 1", self.line_spread))?;
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
         // what it stores over this share).
         require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
@@ -562,6 +566,7 @@ impl Default for Config {
             mix: 1.3e6,
             cloud: 1.2e-2,
             cloud_ir: 6.7,
+            line_spread: 4.0,
             rain_time: 86400.0,
             rain_drift_m: 2e4,
             carry: 2e-11,

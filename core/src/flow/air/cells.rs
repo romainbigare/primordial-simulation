@@ -7,7 +7,7 @@
 use super::super::Scratch;
 use super::daily::Ground;
 use super::rain::Wet;
-use super::radiation::{glow, glow_slope, on_slope, sun_by_latitude, Air, Surface};
+use super::radiation::{on_slope, sun_by_latitude, Air, Surface, DOWN};
 use super::step::Active;
 use super::surf::{end_reflectance, parts_respond, Patch, Surf, Vapour};
 use super::{at_height, lerp};
@@ -331,8 +331,9 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     let sun = |alb: f64| top * shares(alb)[0];
     let kept = |alb: f64| sun(alb) * caught * g.keep;
     let sw = |alb: f64| sun(alb) * ((1.0 - cover) * (1.0 - alb) + caught) - kept(alb);
-    let (f, lay) = (s.absorbs[j], &s.lay[j][0]);
-    let rad = Air { tl, f, down: glow(f, tl, lay), slope: glow_slope(f, tl, lay) };
+    // The heat radiation its air absorbs of what it sends, at the shares of its temperature at the step's start.
+    let [down, slope] = s.heat[j].glow(&w.chem, tl, DOWN);
+    let rad = Air { tl, f: s.heat[j].absorbs(&w.chem, g.tg), down, slope };
     // The share of the air it sees that lies over it (`over_cell`).
     let over = area / g.seen_area;
     let Work { gas, ev, p, carry, out, loss } = work;

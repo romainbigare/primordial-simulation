@@ -271,7 +271,7 @@ fn yearly_series_names_gases_and_catalysts() {
     let Recording { w, dir, .. } = recording();
     let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
     let head: Vec<&str> = csv.lines().next().unwrap().split(',').collect();
-    let gases = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0).count();
+    let gases = (0..w.chem.ns()).filter(|&k| w.chem.absorbs_heat(k)).count();
     assert!(gases > 0 && head.contains(&"absorber"));
     assert_eq!(head.iter().filter(|h| h.starts_with("air_")).count(), gases);
     assert_eq!(head.iter().filter(|h| h.starts_with("cat_")).count(), w.chem.reactions.len());

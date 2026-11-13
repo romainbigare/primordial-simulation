@@ -325,15 +325,17 @@ fn heat_crosses_the_border_between_cells_of_two_sizes_by_its_width() {
 }
 
 /// More heat-absorbing gas keeps warming the ground: under 240 W/m² of sunlight, with the air following the ground by
-/// the lapse rate, the balance at optical depth 17 is clearly warmer than at 9 (one slab at the air's mean temperature
-/// would give both the same).
+/// the lapse rate, the balance at optical depth 17 in every band is clearly warmer than at 9 (one slab at the air's
+/// mean temperature would give both the same).
 #[test]
 fn more_gas_warms_with_no_ceiling() {
+    let (chem, _) = worldgen::chemistry0();
     let ground = |x: f64| {
+        let heat = pcore::flow::Heat::of([(x, 7600.0); pcore::chem::HEAT_BANDS], (0.0065, 1e4), 1.0);
         let (mut lo, mut hi) = (150.0, 500.0);
         for _ in 0..60 {
             let t: f64 = (lo + hi) / 2.0;
-            let up = (-x).exp() * 5.670e-8 * t.powi(4) + pcore::flow::glow(-(-x).exp_m1(), t, &pcore::flow::column(x, 0.0065, 1e4, 7600.0)[1]);
+            let up = (1.0 - heat.absorbs(&chem, t)) * pcore::units::SIGMA * t.powi(4) + heat.glow(&chem, t, pcore::flow::UP)[0];
             (lo, hi) = if up > 240.0 { (lo, t) } else { (t, hi) };
         }
         lo

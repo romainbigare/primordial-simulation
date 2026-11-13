@@ -150,7 +150,8 @@ pub fn river_count(w: &World, f: &Fields) -> usize {
 pub(crate) struct Ctx<'a> {
     pub w: &'a World,
     pub f: Fields,
-    /// Per air node: temperature K, column of condensable gases mol/m², heat-absorbing column (Σ n·ir_abs / area)
+    /// Per air node: temperature K, column of condensable gases mol/m², heat-absorbing column (its lines' optical depth
+    /// summed over the bands, `air_column`)
     pub t_air: Vec<f64>,
     pub vapor: Vec<f64>,
     pub absorber: Vec<f64>,
@@ -201,12 +202,13 @@ impl<'a> Ctx<'a> {
     }
 }
 
-/// Air node `j`: its heat-absorbing column (Σ n·ir_abs / area) and the column of condensable gases, mol/m².
+/// Air node `j`: its heat-absorbing column (the optical depth of its gases' lines, `Chemistry::depth`, summed over the
+/// bands of heat radiation) and the column of condensable gases, mol/m².
 fn air_column(w: &World, j: usize) -> (f64, f64) {
     let (mut absorber, mut vapor, area) = (0.0, 0.0, w.mesh.level(AIR).area()[j]);
     for (k, s) in w.chem.subs.iter().enumerate() {
         let n = w.a(k, j);
-        absorber += w.chem.depth(k, n / area);
+        absorber += (0..pcore::chem::HEAT_BANDS).map(|b| w.chem.depth(k, b, n / area)).sum::<f64>();
         if s.boil > VAPOR_BOIL {
             vapor += n / area;
         }

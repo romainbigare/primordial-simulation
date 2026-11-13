@@ -36,7 +36,7 @@ impl Recorder {
         // one that rises shows in these).
         row.push("absorber", "1", area_mean(c.absorber.iter().copied().zip(air_area.iter().copied())));
         let (na, all) = (w.mesh.level(AIR).n(), w.store.amounts(Class::Air).iter().sum::<f64>());
-        for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0) {
+        for k in (0..w.chem.ns()).filter(|&k| w.chem.absorbs_heat(k)) {
             row.push(format!("air_{k}"), "1", w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>() / all);
         }
         row.push("ice_frac", "1", area_mean(c.f.ice.iter().zip(area).map(|(&v, &a)| ((v >= COVER_MIN) as u8 as f64, a))));

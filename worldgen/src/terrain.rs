@@ -88,7 +88,7 @@ fn t_start(lat: f64, z: f64) -> f64 {
 pub fn scale_absorbers(w: &mut World, factor: f64) {
     for j in 0..w.mesh.level(AIR).n() {
         let t = w.t_air(j);
-        let more: Vec<(usize, f64)> = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0).map(|k| (k, w.a(k, j) * (factor - 1.0))).collect();
+        let more: Vec<(usize, f64)> = (0..w.chem.ns()).filter(|&k| w.chem.absorbs_heat(k)).map(|k| (k, w.a(k, j) * (factor - 1.0))).collect();
         let heat = more.iter().map(|&(k, m)| m * (w.chem.subs[k].cp * t + w.chem.subs[k].latent_gas())).sum();
         w.cross((Boundary::Outside, Node::air(j)), more, heat);
     }

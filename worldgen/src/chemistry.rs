@@ -1,6 +1,6 @@
 //! The loader of a chemistry file (chemistry 0, `chem0.toml`), and the latent heats where a file gives none.
 
-use pcore::chem::{Chemistry, Reaction, Substance};
+use pcore::chem::{Chemistry, Reaction, Substance, HEAT_BANDS};
 use serde::Deserialize;
 
 /// Trouton's rule: the vaporisation entropy of a liquid at its boiling point, J/(mol K) (lv = TROUTON x boil).
@@ -12,6 +12,8 @@ pub(crate) const RICHARDS: f64 = 9.5;
 struct File {
     /// g/mol of each element
     element_masses: Vec<f64>,
+    /// µm: the bands of heat radiation but the last (`Chemistry::heat_spans`)
+    heat_bands: [[f64; 2]; HEAT_BANDS - 1],
     s: Vec<S>,
     r: Vec<R>,
     build: B,
@@ -41,10 +43,12 @@ struct S {
     hard: f64,
     str: f64,
     refl: [[f32; 3]; 2],
-    ir: f64,
-    /// mol/m² (`Substance::ir_sat`); optional in the file (none: 0, the optical depth always in proportion)
+    /// m²/mol and mol/m² in each band of heat radiation (`Substance::heat`); m²/(mol Pa) (`Substance::continuum`);
+    /// optional in the file (none: 0)
     #[serde(default)]
-    sat: f64,
+    heat: [[f64; 2]; HEAT_BANDS],
+    #[serde(default)]
+    cont: f64,
     /// m²/mol and mol/m² (`Substance::sw_abs`, `sw_sat`), and m²/mol (`Substance::scatter`); optional in the file
     /// (none: 0)
     #[serde(default)]
@@ -120,8 +124,8 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             hardness: s.hard,
             strength: s.str,
             refl: s.refl,
-            ir_abs: s.ir,
-            ir_sat: s.sat,
+            heat: s.heat,
+            continuum: s.cont,
             sw_abs: s.sw,
             sw_sat: s.swsat,
             scatter: s.ray,
@@ -135,7 +139,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
         .collect();
     let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, open: r.open.unwrap_or(1.0), ord: r.ord }).collect();
     let conversion = |b: &B| Reaction::conversion(pair(&b.i), pair(&b.o));
-    let chem = Chemistry::new(f.element_masses.len(), subs, reactions, Some(conversion(&f.build)), f.builds.iter().map(conversion).collect(), &f.init.air);
+    let chem = Chemistry::new(f.element_masses.len(), subs, reactions, (Some(conversion(&f.build)), f.builds.iter().map(conversion).collect()), &f.init.air, f.heat_bands);
     chem.validate()?;
     Ok((chem, f.init))
 }
