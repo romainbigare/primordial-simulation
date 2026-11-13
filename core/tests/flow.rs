@@ -331,7 +331,7 @@ fn heat_crosses_the_border_between_cells_of_two_sizes_by_its_width() {
 fn more_gas_warms_with_no_ceiling() {
     let (chem, _) = worldgen::chemistry0();
     let ground = |x: f64| {
-        let heat = pcore::flow::Heat::of([(x, 7600.0); pcore::chem::HEAT_BANDS], (0.0065, 1e4), 1.0);
+        let heat = pcore::flow::Heat::of([(x, 7600.0); pcore::chem::HEAT_BANDS], (0.0, 7600.0), (0.0065, 1e4), 1.0);
         let (mut lo, mut hi) = (150.0, 500.0);
         for _ in 0..60 {
             let t: f64 = (lo + hi) / 2.0;

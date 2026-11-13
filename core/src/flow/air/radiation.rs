@@ -116,8 +116,8 @@ pub fn column(x: f64, gam: f64, l: f64, h: f64) -> [[f64; LAYERS]; 2] {
 /// (`Chemistry::depth`) where its amount times the pressure is, as the pressure broadens them (height hk H / (hk + H),
 /// hk its own, H the air's); its continuum, `continuum` times the column of its amount times its own pressure,
 /// c p₀ / 2 = c² R T / (2 hk) (p₀ its partial pressure at the ground; both fall by e over hk, so their product over
-/// hk / 2, the height it fills), in every band; and a cloud of optical depth `cloud`, spread like the air.
-pub fn bands(chem: &Chemistry, gases: &[(usize, f64, f64)], (t, big): (f64, f64), cloud: f64) -> [(f64, f64); HEAT_BANDS] {
+/// hk / 2, the height it fills), in every band.
+pub fn band_depths(chem: &Chemistry, gases: &[(usize, f64, f64)], (t, big): (f64, f64)) -> [(f64, f64); HEAT_BANDS] {
     let mut sum = [[0.0; 2]; HEAT_BANDS];
     let mut add = |b: usize, d: f64, h: f64| (sum[b][0], sum[b][1]) = (sum[b][0] + d, sum[b][1] + d * h);
     for &(k, c, hk) in gases {
@@ -125,7 +125,6 @@ pub fn bands(chem: &Chemistry, gases: &[(usize, f64, f64)], (t, big): (f64, f64)
         let near = chem.subs[k].continuum * c * c * R_GAS * t / (2.0 * hk);
         (0..HEAT_BANDS).for_each(|b| add(b, near, 0.5 * hk));
     }
-    (0..HEAT_BANDS).for_each(|b| add(b, cloud, big));
     sum.map(|[d, dh]| (d, if d > 0.0 { dh / d } else { big }))
 }
 
@@ -138,7 +137,7 @@ const SHARE_STEP_K: f64 = 0.5;
 /// What the air over a place does to heat radiation (laws.md 1.4): per band of it (`Chemistry::heat_spans`), its
 /// absorbers' optical depth and the height they fill near the ground; each band in two parts, its core `spread` times
 /// its depth and its wings 1 / `spread` times, each half its light, as a band's lines are some strong and many weak;
-/// each part a grey column (`column`) whose layers send in the band the share of their own temperature's light
+/// a cloud's drops, grey, add the same depth to every part; each part a grey column (`column`) whose layers send in the band the share of their own temperature's light
 /// (`Chemistry::heat_shares`).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Heat {
@@ -151,14 +150,16 @@ pub const DOWN: usize = 0;
 pub const UP: usize = 1;
 
 impl Heat {
-    /// The air whose absorbers have in each band the optical depth and height `bands` (depth, m), its air falling by
-    /// `gam` K/m over its column of `l` m, a band's core and wings `spread` apart.
-    pub fn of(bands: [(f64, f64); HEAT_BANDS], (gam, l): (f64, f64), spread: f64) -> Heat {
+    /// The air whose gases have in each band the optical depth and height `bands` (depth, m, `band_depths`) under a
+    /// cloud of `cloud` (depth, m), its air falling by `gam` K/m over its column of `l` m, a band's core and wings
+    /// `spread` apart.
+    pub fn of(bands: [(f64, f64); HEAT_BANDS], (c, hc): (f64, f64), (gam, l): (f64, f64), spread: f64) -> Heat {
         let mut heat = Heat::default();
-        for (b, &(x, h)) in bands.iter().enumerate() {
+        for (b, &(d, hd)) in bands.iter().enumerate() {
             for (p, part) in [spread, 1.0 / spread].into_iter().enumerate() {
-                let q = b * PARTS + p;
-                (heat.f[q], heat.lay[q]) = (one_minus_exp(x * part), column(x * part, gam, l, h));
+                let (q, x) = (b * PARTS + p, d * part + c);
+                let h = if x > 0.0 { (d * part * hd + c * hc) / x } else { hc };
+                (heat.f[q], heat.lay[q]) = (one_minus_exp(x), column(x, gam, l, h));
             }
         }
         heat

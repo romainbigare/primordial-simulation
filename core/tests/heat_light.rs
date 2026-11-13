@@ -1,7 +1,7 @@
 //! Heat radiation through the air (laws.md 1.4): its bands' shares, a column's books, and chemistry 0's anchors.
 
 use pcore::chem::Chemistry;
-use pcore::flow::{bands, scale_height, Heat, DOWN, UP};
+use pcore::flow::{band_depths, scale_height, Heat, DOWN, UP};
 use pcore::units::{C2, SIGMA};
 use worldgen::testkit::{ABSORBER, LIQUID};
 
@@ -47,7 +47,7 @@ fn the_bands_share_all_the_light_as_planck_says() {
 #[test]
 fn an_even_column_sends_what_it_takes() {
     let (chem, _) = worldgen::chemistry0();
-    let heat = Heat::of([(0.3, 2000.0), (2.0, 8000.0), (40.0, 1500.0)], (0.0, TOP), 4.0);
+    let heat = Heat::of([(0.3, 2000.0), (2.0, 8000.0), (40.0, 1500.0)], (1.0, 8000.0), (0.0, TOP), 4.0);
     for t in [220.0_f64, 288.0, 320.0] {
         let (black, f) = (SIGMA * t.powi(4), heat.absorbs(&chem, t));
         let (down, up) = (heat.glow(&chem, t, DOWN)[0], heat.glow(&chem, t, UP)[0]);
@@ -62,7 +62,7 @@ fn clear_sky(chem: &Chemistry, t: f64, w: f64, ppm: f64) -> (f64, f64) {
     let big = scale_height(t, 1.0, AIR_KG_PER_MOL, GRAVITY);
     let air_mol = 101_325.0 / (GRAVITY * AIR_KG_PER_MOL);
     let gases = [(LIQUID, w * 10.0 / chem.subs[LIQUID].molar_mass, 2000.0), (ABSORBER, ppm * 1e-6 * air_mol, big)];
-    let heat = Heat::of(bands(chem, &gases, (t, big), 0.0), (GAM, TOP), 4.0);
+    let heat = Heat::of(band_depths(chem, &gases, (t, big)), (0.0, big), (GAM, TOP), 4.0);
     let black = SIGMA * t.powi(4);
     (heat.glow(chem, t, DOWN)[0] / black, (1.0 - heat.absorbs(chem, t)) * black + heat.glow(chem, t, UP)[0])
 }

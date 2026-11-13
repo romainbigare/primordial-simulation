@@ -525,15 +525,15 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   column with that liquid over the share, the rest as one whose liquid is what its pores hold, by area;
   where a soft cover lies, as it is at the step's end, so a cover that melts away darkens the ground in its step. Snow
   reflects from the step after it falls.
-- **Heat radiation** (`radiation::bands`, `radiation::Heat`): surfaces emit σT⁴, split in three bands of wavelength
+- **Heat radiation** (`radiation::band_depths`, `radiation::Heat`): surfaces emit σT⁴, split in three bands of wavelength
   (`Chemistry::heat_spans`), each body sending in a band its share at its own temperature (Planck's law,
   `Chemistry::heat_shares`; the shares sum to 1). In each band a gas's lines have the optical depth
   `Chemistry::depth` (in proportion to its column, past `sat` as its square root) and lie where its amount times the
   pressure is, as the pressure broadens them: at height hk H / (hk + H), hk the height its amount fills
   (`Scratch::hk`), H the air's. Its continuum (`cont`) goes by its amount times its own pressure, in every band; that
-  product falls by e over hk / 2, so the continuum lies at half the gas's height. Clouds add their depth to every band
-  at the air's height. Each band is a core of strong lines `line_spread` times its depth and wings 1 / that times,
-  each half its light; each part absorbs 1 − exp(−x) and emits from 2 grey layers that cool with height, so more gas
+  product falls by e over hk / 2, so the continuum lies at half the gas's height. Each band is a core of strong lines
+  `line_spread` times its depth and wings 1 / that times, each half its light; clouds, whose drops are grey, add
+  their depth to every part at the air's height; each part absorbs 1 − exp(−x) and emits from 2 grey layers that cool with height, so more gas
   lifts the layer that reaches space into colder air and the ground warms. The layers are each air node's, over its
   mean ground; the air touching a cell is the air it sees (bilinearly, its four nearest nodes), colder by the drop with
   height from that air's mean height.

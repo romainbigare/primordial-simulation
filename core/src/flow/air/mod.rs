@@ -22,7 +22,7 @@ pub(super) use corners::Corners;
 pub use planet::Planet;
 pub(super) use daily::blocks;
 pub(super) use exchange::{dissolve, henry, Sat};
-pub use radiation::{bands, column, declination, insolation, on_slope, sun_by_latitude, Heat, DOWN, UP};
+pub use radiation::{band_depths, column, declination, insolation, on_slope, sun_by_latitude, Heat, DOWN, UP};
 pub(super) use step::step;
 
 use super::Scratch;
@@ -213,7 +213,7 @@ fn heights(w: &World, s: &mut Scratch) {
 }
 
 /// What each air node's column does to heat radiation (`Heat`): its gases that absorb it, each with the height its
-/// amount fills (`Scratch::hk`), and the clouds of the step before (`radiation::bands`).
+/// amount fills (`Scratch::hk`, `radiation::band_depths`), and the clouds of the step before, spread like the air.
 fn layers(w: &World, s: &mut Scratch) {
     let (air, chem, g, top) = (w.mesh.level(AIR), &w.chem, w.cfg.gravity, w.cfg.air_top_m);
     let na = air.n();
@@ -221,7 +221,7 @@ fn layers(w: &World, s: &mut Scratch) {
         .map(|j| {
             let gases: Vec<(usize, f64, f64)> = s.state.gas.iter().enumerate().filter(|e| chem.absorbs_heat(*e.1)).map(|(gi, &k)| (k, w.store.amounts(Class::Air)[k * na + j] / air.area()[j], s.hk[gi * na + j].max(COLUMN_MIN))).collect();
             let big = node_scale_height(s, j, g);
-            Heat::of(bands(chem, &gases, (s.ta[j], big), s.state.cloud[j][1]), (s.gam[j], (top - s.za[j]).max(COLUMN_MIN)), w.cfg.line_spread)
+            Heat::of(band_depths(chem, &gases, (s.ta[j], big)), (s.state.cloud[j][1], big), (s.gam[j], (top - s.za[j]).max(COLUMN_MIN)), w.cfg.line_spread)
         })
         .collect();
 }
