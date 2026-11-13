@@ -252,8 +252,14 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   reference is 9.881, the world of plants' own mean); worlds that differ (`core/src/space/rises.rs`, `ew run --shape
   drawn`, the page's choice of shape; one island stays the default until the owner has seen the drawn worlds). The
   live page is its Version 44.
-- In work, life track: the deletion of the old animals (step 2 below), by the helper that freed the plants, in its
-  worktree `.claude/worktrees/agent-abcfb0efca1cd5295`. The tag `animals-v2` goes on the last commit that holds them.
+- On main, life track: the old animal world is deleted (bodies, brains, parts, nodes, lanes, their tests, tape
+  columns, start and drawing; the random chemistry with them). The last commit that holds it is `16a774d` (a tag
+  cannot be pushed from this machine: the name `animals-v2` exists only locally). A world of plants gives the same
+  series to the last digit and the page the same picture. `core/src` is 11,300 lines of code (16,900 before),
+  `series.csv` 141 columns (323), `docs/laws.md` 16,600 words (28,700). The contract stays (`core/src/contract.rs`):
+  Flow and the cover read `Stand` and `Place`; `take`, `give`, `press`, `shown`, `slots` are used by the plain taker
+  of the test kit alone until the animal field comes. Every world is a world of plants: `--plants` and `--null` are
+  gone, `--roster` is six kinds of cover against one.
 - In work, nature track: the air's heat toward the poles, on the branch `air-low-cloud` (made from
   `wip/air-light` with main merged in; worktree `.claude/worktrees/agent-acdb88dbd7f62d7f6`; scratch
   `scratchpad/air/`, its tables in `numbers/`). What its helper measured, with books that close to 2%:
@@ -293,7 +299,9 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    in today's order, the main guard and the key numbers without animals, a test taker. A plants-only world stays the
    same to the last digit. To `main` before the air's package, so that the references move once on a gate that no
    animal can fail.
-2. **Delete the old animals** (C1c: tag `animals-v2` first), then the tree's tools and the small dead things (C2).
+2. Done: the old animals are deleted. Left of the clean-up: the tree's tools in `core/src/space/` (the most
+   depth of 24, `Terrain::below`, a mesh of any number of levels), the cell serials in `life/` if nothing needs them,
+   one helper per idea (roadmap 8, C3), and the spec's sections on the old animals (C4).
 3. **What the land offers, first part**: seeds that lie on the ground; snow that hides food; the contract's table in
    the tape as the count of resources.
 4. **Grazers** (F1), then movement (F2), eaters and the web (F3), animals on the page (F4); gates in

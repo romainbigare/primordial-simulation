@@ -126,7 +126,7 @@ the list below is overdue. The details and line numbers are in the appendix (sec
 
 ### 2.1 The old animal world: deleted
 
-The old animal world is gone from the code (the tag `animals-v2` keeps it): bodies, brains, Copy for bodies,
+The old animal world is gone from the code (the commit `16a774d` on main's history is the last that holds it): bodies, brains, Copy for bodies,
 population nodes, Bond's parts and structures, lanes, the registry and queue of `life/`, the bodies' half of the
 survey, their tests, tape columns, start rows and drawing, and the pattern finder with its three detectors. What the
 cover's month runs on stays: the cells with their cover, the chunks and the parallel pass, the seeds' landing. The
@@ -170,7 +170,7 @@ samples are its leaves of depth 6. What remains of the tree **that moved** is th
   `docs/tape.md`, this roadmap and `review/orchestrator.md` (the handover). The spec says which one wins (its
   section 0). `CLAUDE.md` still names `docs/analyze.md`, which is gone with the pattern finder.
 - The spec's sections about the old animals (the laws of bodies in 6.1 to 6.6, the pattern finder and the library in
-  9, god mode in 11) describe code that is gone (the tag `animals-v2` keeps it). They are rewritten or cut (C4).
+  9, god mode in 11) describe code that is gone (the commit `16a774d` on main's history is the last that holds it). They are rewritten or cut (C4).
 - `docs/laws.md` is true to the code and describes no animal.
 
 ## 3. The animal world today, measured
@@ -270,7 +270,7 @@ of it say it learned nothing that beats chance beyond its hand-set start. I prop
 - **Step one: habits as inherited numbers.** This is still Law 5, with the smallest brain: what a kind senses (its
   hunger, the warmth, the food, the crowd and the eaters, here and next door) times a few weights gives the shares
   of its time over the same general acts as today (take, move, rest). The weights are genes and evolve as every gene
-  does. It is "choices as a spread of actions" (`laws.md` 4.4 in the tag `animals-v2`), which nodes already are, with no hidden layer, no
+  does. It is "choices as a spread of actions" (`laws.md` 4.4 at the commit `16a774d`), which nodes already are, with no hidden layer, no
   learning, no trace and no memory. The list of what can be sensed and the list of acts are the only things written
   by hand, as they are today; no weight is set to get a wanted habit, and a run with all weights at zero is the
   null run to compare with.
@@ -703,7 +703,7 @@ section 4, with its known faults; the lines here are the rest.
 ## 13. Anchored laws kept for the animal field
 
 The old animal world's laws whose numbers have an anchor, as `docs/numbers.md` and `docs/laws.md` held them before
-the deletion (the code is in the tag `animals-v2`). The new animals reuse them; nothing here is new. `M` is a
+the deletion (the code is at the commit `16a774d`). The new animals reuse them; nothing here is new. `M` is a
 member's living body, kg; `T` its temperature, K; `pace(T)` the bare rate law of its main burning,
 k e^(−Ea/T) over its value at `t_cat` (290 K; chemistry 0's reaction 1, Ea 7,760 K, gives 5.62 at 310 K).
 
