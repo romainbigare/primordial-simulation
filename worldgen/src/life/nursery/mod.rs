@@ -1,11 +1,11 @@
 //! The nursery: the cover a world starts with, sorted by its own law on the world's own year before it is placed
 //! (laws.md 8). A copy of the world runs a year without life (`Year`); its open land falls in classes of like climate
-//! (`year::classes`), and each class's representative cell is a garden (`garden`) where kinds race on bare ground and
-//! then try to enter the grown stand as seeds (`rounds`): first draws over the genes' whole range, then also the other
-//! classes' champions. A second year is kept under the cover the first sorting grew, as the cover cools its own ground,
-//! and the stands go on there. Each class's cells then get the kinds its stand holds, at the mass they hold there, each
-//! with a generation's scatter of its genes, and the cells between two classes the other class's heaviest kind as rare
-//! seeds. A fixed amount of work, keyed by the world's seed: the same world on every machine.
+//! (`year::classes`), and each class's representative cell is a garden (`garden`) where kinds race on bare ground, the
+//! best and the hand-made kinds grow together into a stand, and newcomers try to enter it as seeds (`rounds`): first
+//! draws over the genes' whole range, then also the other classes' champions. A second year is kept under the cover
+//! the first sorting grew, as the cover cools its own ground, and the stands go on there. Each cell then gets the
+//! classes' stands mixed by the nearness of its climate to each (`place`), each kind with a generation's scatter of its
+//! genes. A fixed amount of work, keyed by the world's seed: the same world on every machine.
 
 mod garden;
 mod rounds;

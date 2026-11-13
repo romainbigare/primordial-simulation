@@ -214,4 +214,7 @@ gives a herd's count. The map zooms to 80 pixels a metre, so one animal shows it
 
 By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
 light-eaters with no brain. When life starts (year 2) the cover is sorted by its own law on the world's own year before
-it is placed (the nursery, `docs/laws.md` 8): that month takes a few seconds, more in the browser.
+it is placed (the nursery, `docs/laws.md` 8): the land falls in classes of like climate; in each a garden races
+kinds over the genes' whole range, grows the best with the hand-made kinds into a stand and lets newcomers try to
+enter it; each cell then takes the classes' stands mixed by how near its climate is to each. The page says "Sorting
+the plants..." while it runs: about a second here, a few in the browser.

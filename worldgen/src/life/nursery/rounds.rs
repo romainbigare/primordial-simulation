@@ -1,6 +1,7 @@
-//! The two tests by the law a class's garden runs (`Garden`): the race, where kinds start equal on bare ground and the
-//! heaviest after some years go on; and the invasion, where a newcomer arrives as seeds into the grown stand and holds
-//! there or not. What holds the stand at the end is the set the law keeps.
+//! The tests by the law a class's garden runs (`Garden`): the race, where kinds start equal on bare ground and the
+//! heaviest after some years go on; the stand, where they and the hand-made kinds grow together; and the invasion,
+//! where a newcomer arrives as seeds into the grown stand and holds there or not. What holds the stand at the end is the
+//! set the law keeps.
 
 use super::garden::Garden;
 use super::year::Month;
@@ -21,9 +22,9 @@ pub(super) struct Entrant {
 /// A year kept of a class's cell, month by month, with the minerals' change in each (`Garden::month`).
 pub(super) type Lived<'a> = (&'a [Month], &'a [Vec<(usize, f64, f64)>]);
 
-/// A class's garden over its tests: its cell, the champions of its race and the kinds that came into its stand as seeds
-/// and held (`entrants`), its stand once grown, its next own number for a newcomer, and the newcomers that came as seeds
-/// and those of them that held.
+/// A class's garden over its tests: its cell, the kinds sown into its stand (its race's champions and the hand-made
+/// kinds) and those that came into it as seeds and held (`entrants`), its stand once grown, its next own number for a
+/// newcomer, and the newcomers that came as seeds and those of them that held.
 #[derive(Clone)]
 pub(super) struct Class {
     pub cell: usize,
@@ -93,8 +94,9 @@ impl Class {
         self.entrants = self.race.iter().map(|e| e.0).collect();
     }
 
-    /// The race's best grown alone from `START_KG` for `GROW_YEARS` into the stand: the others come as seeds
-    /// (`invade`).
+    /// The race's champions and the kinds `known` (the hand-made kinds) sown together on bare ground at `START_KG` each
+    /// and grown `GROW_YEARS` into the stand, as a world's first cover grows: the law sorts them into the layers it
+    /// holds. Newcomers then come as seeds (`invade`).
     pub fn grow(&mut self, w: &World, p: &Parts, lived: Lived, known: &[Entrant]) {
         let mut g = Garden::bare(&w.chem, self.cell, lived.0);
         let sown: Vec<Entrant> = self.race.iter().map(|e| e.0).chain(known.iter().copied()).collect();

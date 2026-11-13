@@ -1505,15 +1505,21 @@ read a kind.
   kind tried alone on bare ground (the hand-made kinds of cover and their fixing variants, the fixing gene at
   `FIX_GENE`, then mutants of the best,
   draws over the genes' whole range, then other classes' best), and the `CHAMPIONS` that hold the most cover after
-  `RACE_YEARS` kept. **The invasion**: the best is grown alone into a stand; newcomers (mutants of the stand,
-  runners-up and other classes' best, draws) arrive as seeds by the law's own way in (`cover::lodge`); what the stand
-  holds after the rounds is the class's set. A second year is kept under the cover the first sorting grew (the cover
+  `RACE_YEARS` kept. **The stand**: the champions and the hand-made kinds are sown together at `START_KG` each on bare
+  ground and grow `GROW_YEARS`, as a world's first cover would, so the law sorts them into the layers it holds (trees,
+  and the herbs and bushes on the light they leave and on thin ground). **The invasion**: newcomers (mutants of the
+  stand, runners-up and other classes' best, draws) arrive as seeds by the law's own way in (`cover::lodge`); what the
+  stand holds after the rounds is the class's set. A second year is kept under the cover the first sorting grew (the cover
   shades its own ground and its leaves feed the air; its liquid stays the year's without life, on which the gardens'
-  covers draw themselves) and the invasion goes on there. Each class's cells get
-  its set at the mass per m² it holds, each kind with a generation's scatter of its genes (`cover::mutate`, keyed by the
-  cell), from outside as the hand-made kinds are placed; a cell whose climate lies near another class gets that class's
-  best as rare seeds. Kinds alike within `APART` × `alike` share a starting kind. A fixed count of work, keyed by the
-  seed.
+  covers draw themselves) and the invasion goes on there. Each cell takes the classes' sets by the nearness of its
+  climate to each class's representative (in the classes' own space): each set at the mass per m² it holds, times the
+  class's weight 1/d² over its sum (inverse distance weighting, Shepard 1968; a representative takes its own class
+  alone), so the cover changes as smoothly as the climate where classes meet. Kinds alike within `APART` × `alike`
+  share a starting kind; the heaviest starting kinds that fit the cell's slots are placed, each kind with a
+  generation's scatter of its genes (`cover::mutate`, keyed by the cell), from outside as the hand-made kinds are
+  placed. A fixed count of work, keyed by the seed. The garden's air is the year's, which over a bare first year is
+  drier than over a cover (the cover's own wetting of the air near its ground is left out); the mixed sowing lives
+  through that first summer where a lone kind did not.
 - **Brains**: eaters start with hand-set biases (`Seeding::hand`; `--neutral-eaters` without), since neutral founders
   die before they learn: they take from the place, its ground and its cover (1), before they bite a body (0.5), and keep
   out of deep liquid (a move's odds fall as 1 / (1 + depth / m)). They score making a part at -10, so they make one only
