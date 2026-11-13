@@ -119,8 +119,18 @@ impl Channels<'_> {
             let (a, c, at, from) = (next.line[i.saturating_sub(1)].p, next.line[(i + 1).min(next.line.len() - 1)].p, next.line[i].p, own.line[own.line.len() - 1]);
             let len = (c[0] - a[0]).hypot(c[1] - a[1]).max(f64::MIN_POSITIVE);
             let last = (at[0] - from.p[0]).hypot(at[1] - from.p[1]);
-            own.line.push(Vertex { p: at, t: 1.0, s: from.s + last * r.metres });
-            own.calm.push(next.calm[next.calm.len() / 2]);
+            // The way on to the join sways by the tributary's wander (`bends::Bends::joins`), as far as the tile draws
+            // a wander: no channel runs straight into the one it joins.
+            let (calm_from, calm_at, run) = (own.calm[own.calm.len() - 1], next.calm[next.calm.len() / 2], last * r.metres);
+            let wanders = ease(BEND_FROM, BEND_TEXELS, r.wander_length() / texel);
+            let across = [-(at[1] - from.p[1]) / last.max(f64::MIN_POSITIVE), (at[0] - from.p[0]) / last.max(f64::MIN_POSITIVE)];
+            let n = ((run / (STEP_TEXELS * texel)).ceil() as usize).clamp(1, CALM_STEPS);
+            for x in (1..=n).map(|i| i as f64 / n as f64) {
+                let off = wanders * self.bends.joins(r, k, x * run, run) / r.metres;
+                let on = |from: [f64; 2], to: [f64; 2]| [from[0] + (to[0] - from[0]) * x + across[0] * off, from[1] + (to[1] - from[1]) * x + across[1] * off];
+                own.line.push(Vertex { p: on(from.p, at), t: 1.0, s: from.s + x * run });
+                own.calm.push(on(calm_from, calm_at));
+            }
             Join { at, along: [(c[0] - a[0]) / len, (c[1] - a[1]) / len], bank: r.bed_of(j as usize).0 / (2.0 * r.metres), last }
         });
         Some((own, join))

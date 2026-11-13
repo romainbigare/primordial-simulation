@@ -21,14 +21,14 @@ pub(super) const WANDER_EVERY: f64 = 1.6;
 /// as strong (its steepest lean across the way down is `WANDER_FINE` times `WANDER_FINE_SHARE` of the last's).
 const WANDER_OCTAVES: u64 = 5;
 const WANDER_FINE: f64 = 2.7;
-const WANDER_FINE_SHARE: f64 = 0.25;
+const WANDER_FINE_SHARE: f64 = 0.33;
 /// A channel wanders in the octaves whose corners lie at least this many of its bed's widths apart (fully from twice
 /// that): a turn every few widths is a bend's, and a wide bed's bends are walked (`belt`).
 const TURN_WIDTHS: f64 = 8.0;
 /// The octaves' sum is taken this many times: gradient noise seldom passes a third of its range, and a wander that
 /// used a third of its room would leave a line nearly straight; more would steepen its swings into straight limbs
 /// between sharp turns.
-const WANDER_GAIN: f64 = 1.5;
+const WANDER_GAIN: f64 = 1.75;
 /// The lattice of the wander's draws among a channel's (`belt::Walk::noise` takes the others).
 const WANDER_LATTICE: u64 = 3;
 

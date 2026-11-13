@@ -102,11 +102,12 @@ so a river reaches its lake or its sea. The line wanders about that curve (`tape
 meander belt (`bends.rs`, `belt.rs`). The samples place a valley's line no closer than a share of a sample, so the
 line wanders up to 0.4 of a sample to each side (half of that on a hard bed), in long swings of no fixed length: a
 smooth noise along the way down the valley, a corner of its lattice every 1.6 samples and four finer octaves, each
-2.7 times as often as the last and 0.25 as strong, so each leans the line less steeply than the last and its turns
+2.7 times as often as the last and 0.33 as strong, so each leans the line less steeply than the last and its turns
 are round and of uneven size (a channel takes those whose corners lie 8 of its bed's widths apart
 or more, fully from 16: a wide bed's finer turns are its bends', and a rill turns every few metres), the sum taken
-1.5 times and held smoothly within the most, whose slope runs on across the corners (gradient noise, Perlin 2002), none at
-a head, a join and a sink. Every channel wanders, a rill and a body's floor too: none runs straight. A bed is shaped by its floods, so the bends are sized by the bed's width; a tile is made once, so that width
+1.75 times and held smoothly within the most, whose slope runs on across the corners (gradient noise, Perlin 2002), none at
+a head, a join and a sink. Every channel wanders, a rill and a body's floor too, and a tributary's way on from its own piece to the line it
+joins (by 0.15 of that way's length, none at its ends): none runs straight. A bed is shaped by its floods, so the bends are sized by the bed's width; a tile is made once, so that width
 and the bed's depth are stand-ins: the channel law's at the drained area times `BED_RUNOFF`, 5 times (`FLOOD`: the
 bankfull flood, Leopold and Maddock 1953; Dunne and Leopold 1978) `TYPICAL_RUNOFF` (8.5e-9 m/s, Earth's mean: 0.27 m a
 year, Dai and Trenberth 2002). The bends swing 3.5 bed widths to each side of the wander where nothing holds them
