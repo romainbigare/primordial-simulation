@@ -5,10 +5,8 @@
 //! The key numbers of a run with no animal: `ew run --seed N --size 64 --plants` for seeds 1, 2 and 3, 30 years each,
 //! on threads. The mean of each number over the three seeds must lie in its range around its reference, the mean of the
 //! same three seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world
-//! before the cover and the short body model; for the cover, the runs of the bodies' laws alike at every step, with the
-//! eaters of `TWO` (a body pays its upkeep at the temperature it stands at, laws.md 6.3; children who start a body
-//! decide at birth, 0). The climate and the land worn down are means over years 21 to 30. Each run also keeps its
-//! books. Three numbers are also held to wide bounds around Earth's, as the references only keep a world near itself:
+//! before the cover and the short body model; for the cover, these runs of plants themselves. The climate and the land
+//! worn down are means over years 21 to 30. Each run also keeps its books. Three numbers are also held to wide bounds around Earth's, as the references only keep a world near itself:
 //! the rain on land, the heat-absorbing gas of the air, and the share of the cover's dry mass it holds as its stored
 //! solid.
 //!
@@ -54,7 +52,7 @@ const RIVERS: f64 = 233.6;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.2389;
 /// The cover (starting kind 0) at year 30, log10 kg (`root_0_cover_kg`), in the reference runs.
-const COVER_KG: f64 = 9.505;
+const COVER_KG: f64 = 9.881;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
