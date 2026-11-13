@@ -150,6 +150,20 @@ water's edge and two soft broken lines by the bed's depth (`style.wgsl` `foam`),
 channel is drawn only where its bed or far line takes half a pixel or more (`FRINGE_PX`); the herbs' flowers lie on
 two turned lattices (`cover_field.wgsl` `flowers_at`).
 
+**Where a lake is (on main):** a texel is in a pond only where the smooth shore's offset is under `EDGE_M`
+(`shore.rs`; `Shore::beside` gives the pond's id), a function of the place alone, so every tile at every depth agrees;
+up to that edge the ground is kept above the pond's level, so the edge of what is named is dry ground
+(`every_tile_agrees_on_where_a_pond_is`). It mends blocks of water beside a lake's outlet (the valley's blended
+ground lay under the level in the samples next to it) and the cut of the water texel by texel on low ground (the
+owner's shore in steps at the 5 m bar: the cause is gone, the same steps were not reproduced). Low ground beside a
+pond's sill is raised to just over its level: a pale rounded band round a summit pond from afar.
+
+**Not merged, on `wip/lakes` under the lakes' commit:** four commits on small plants (067873ae reeds by their cell's
+herbs; 73cdb42d no crown under 1.5 css px, a thin stand's clumps as its tone; 842e39f6 a square without a layer's
+plants borrows its neighbours' numbers; 0d13a9a7 a herb's tufts drawn as small plants). Their helper was stopped
+before its report; in the pictures the trees read thinner at the 100 m bar and the ground gains pale balls and ochre
+patches: review them with pairs before taking any.
+
 **Known faults of the rivers and shores:** straight shores: a far-north lake of seed 1 follows a straight steep slope
 of the made ground 2 to 4 km long (the cause is in how the terrain is made, not in `shore.rs`), and one lake's west
 shore runs straight for 200 m (cause not found; look at the samples' heights along it first); the band's turn up a
