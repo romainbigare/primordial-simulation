@@ -324,14 +324,16 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     let a = g.canopy;
     let cover = if a > 0.0 { one_minus_exp(a) } else { 0.0 };
     let caught = cover * g.absorb;
-    // Under the reflectance `alb` of its ground, the share its cover and ground reflect, and its air's shares of the
-    // light at the top, clear and under its cloud (`Light::shares`).
-    let shares = |alb: f64| cx.light[j].shares((1.0 - cover) * alb + cover * (1.0 - g.absorb));
-    // The sunlight that reaches it, in all its passes; per unit of capture area the cover intercepts cover / a of it,
-    // all of it where it is thin.
-    let sun = |alb: f64| top * shares(alb)[0];
-    let kept = |alb: f64| sun(alb) * caught * g.keep;
-    let sw = |alb: f64| sun(alb) * ((1.0 - cover) * (1.0 - alb) + caught) - kept(alb);
+    // Under the reflectance `alb` of its ground, with the share its cover and ground reflect and its air's shares of
+    // the light at the top, clear and under its cloud (`Light::shares`): [the sunlight that reaches it, in all its
+    // passes (per unit of capture area the cover intercepts cover / a of it, all of it where it is thin); what it
+    // absorbs; what is set aside for its cover], W/m², and the share of the light at the top its air absorbs.
+    let lit = |alb: f64| {
+        let [ground, in_air, _] = cx.light[j].shares((1.0 - cover) * alb + cover * (1.0 - g.absorb));
+        let sun = top * ground;
+        let kept = sun * caught * g.keep;
+        [sun, sun * ((1.0 - cover) * (1.0 - alb) + caught) - kept, kept, in_air]
+    };
     // The heat radiation its air absorbs of what it sends, at the shares of its temperature at the step's start.
     let [down, slope] = s.heat[j].glow(&w.chem, tl, DOWN);
     let rad = Air { tl, f: s.heat[j].absorbs(&w.chem, g.tg), down, slope };
@@ -368,10 +370,11 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
         bal
     };
     let (nx, stride) = (act.len(), 2 + act.len());
-    // The parts (`TO_AIR`) under the reflectance `alb`, what evaporates at the end temperature, with their slopes: the
-    // air's temperature moves the air touching the cell and each gas's partial pressure, a gas's amount its own.
-    let parts = |alb: f64, p: &mut Vec<f64>, ev: &mut Vec<[f64; 3]>| {
-        let bal = solve(sw(alb));
+    // The parts (`TO_AIR`) where it absorbs the sunlight `sw`, what evaporates at the end temperature, with their
+    // slopes: the air's temperature moves the air touching the cell and each gas's partial pressure, a gas's amount
+    // its own.
+    let parts = |sw: f64, p: &mut Vec<f64>, ev: &mut Vec<[f64; 3]>| {
+        let bal = solve(sw);
         ev.clear();
         ev.extend(gas.iter().map(|g| g.evaporate(s, bal.ts, dt)));
         p.clear();
@@ -390,23 +393,26 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     carry.clear();
     carry.extend(act.iter().map(|ac| carried(cx, g, ac.k)));
     let (mut alb, mut lo, mut hi) = (g.alb, f64::NAN, f64::NAN);
-    parts(alb, p, ev);
+    let mut light = lit(alb);
+    parts(light[1], p, ev);
     if g.cover[2] > 0.0 {
         out.resize(Response::width(nx) - FIXED, 0.0);
         put(p, carry, out);
     }
     for _ in 1..if g.cover[2] > 0.0 { REFLECT_ROUNDS } else { 1 } {
-        let end = end_reflectance(cx, g, (adt * sw(alb), out));
+        let end = end_reflectance(cx, g, (adt * light[1], out));
         if (end - alb).abs() < REFLECT_STILL {
             break;
         }
         (lo, hi) = if end > alb { (alb, hi) } else { (lo, alb) };
         alb = if lo.is_nan() || hi.is_nan() { end } else { 0.5 * (lo + hi) };
-        parts(alb, p, ev);
+        light = lit(alb);
+        parts(light[1], p, ev);
         put(p, carry, out);
     }
-    hold(cx, g, (air, adt * sw(alb)), carry, (p, loss));
+    let [sun, sw, kept, in_air] = light;
+    hold(cx, g, (air, adt * sw), carry, (p, loss));
     let per_area = if cover > 0.0 { cover / a } else { 1.0 };
-    [adt * sw(alb), sun(alb) * per_area * dt, kept(alb) * adt, adt * top * shares(alb)[1]]
+    [adt * sw, sun * per_area * dt, kept * adt, adt * top * in_air]
 }
 
