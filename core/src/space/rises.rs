@@ -6,6 +6,7 @@
 //! outliers, a long land, now and then a breached ring round an inner basin.
 
 use super::square::Square;
+use super::terrain::{across, per_square, ACROSS};
 use crate::rng::{Purpose, Rng};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::{PI, TAU};
@@ -18,8 +19,9 @@ const POWER: [f64; 2] = [1.8, 3.0];
 /// middle, in sides)^`FALL_POWER`.
 const ONE_REACH: f64 = 0.5;
 /// An island's range (`Range`): the key of the draws of an island of one rise; how far its axis lies from its rise's
-/// middle at most, and the least and the most half-width of its band, in units of the noise for a rise of `ONE_REACH`;
-/// and how fast land rises far from it and on its axis, times the mean.
+/// middle at most, and the least and the most half-width of its band, in units of the noise for a rise of `ONE_REACH`
+/// on a map `ACROSS` units wide (a range is as wide as its raised block is); and how fast land rises far from it and on
+/// its axis, times the mean.
 const RANGE_KEY: u64 = 19;
 const RANGE_OFF: f64 = 1.0;
 const RANGE_WIDE: [f64; 2] = [0.7, 1.4];
@@ -160,16 +162,15 @@ pub(super) fn drawn_share(seed: u64) -> f64 {
 
 impl Lift {
     /// One rise in the middle of the flat map `map` for `seed`, its range along an axis at any heading up to
-    /// `RANGE_OFF` units of the noise from the middle, its band `RANGE_WIDE` wide, all drawn from the seed, with no
-    /// end.
+    /// `RANGE_OFF` from the middle, its band `RANGE_WIDE` wide, all drawn from the seed, with no end.
     pub fn one(seed: u64, map: &Square) -> Lift {
-        let per_square = super::terrain::per_square(map);
+        let (per_square, by) = (per_square(map), across(map) / ACROSS);
         let draw = |k: u64| Rng::new(seed, RANGE_KEY, k, Purpose::Terrain).f64();
-        let (heading, off) = (draw(0) * TAU / 2.0, (2.0 * draw(1) - 1.0) * RANGE_OFF);
-        let across = [heading.sin(), -heading.cos()];
+        let (heading, off) = (draw(0) * TAU / 2.0, (2.0 * draw(1) - 1.0) * RANGE_OFF * by);
+        let side_way = [heading.sin(), -heading.cos()];
         let middle = [map.w, map.h].map(|n| (n as f64 / 2.0 - 0.5) * per_square);
-        let wide = RANGE_WIDE[0] + (RANGE_WIDE[1] - RANGE_WIDE[0]) * draw(2);
-        let range = Range { at: [middle[0] + off * across[0], middle[1] + off * across[1]], across, wide, long: f64::INFINITY };
+        let wide = (RANGE_WIDE[0] + (RANGE_WIDE[1] - RANGE_WIDE[0]) * draw(2)) * by;
+        let range = Range { at: [middle[0] + off * side_way[0], middle[1] + off * side_way[1]], across: side_way, wide, long: f64::INFINITY };
         let rise = Rise { at: [0.5, 0.5], along: [1.0, 0.0], reach: [ONE_REACH; 2], ring: 0.0, tilt: 0.0, low_side: [1.0, 0.0], lift: 0.0, power: FALL_POWER, range };
         Lift { rises: vec![rise] }
     }
@@ -181,7 +182,7 @@ impl Lift {
     /// tilted up to `TILT_MOST`, lifted up to `LIFT_MOST`, its range along its length. The largest are placed first,
     /// each where its land stays `EDGE_SQUARES` from the map's edge (`place`). The draws do not depend on `scale`.
     pub(super) fn drawn(seed: u64, map: &Square, scale: f64) -> Lift {
-        let per_square = super::terrain::per_square(map);
+        let (per_square, across) = (per_square(map), across(map));
         let mut key = 0;
         let mut draw = || {
             key += 1;
@@ -215,10 +216,10 @@ impl Lift {
             place(&mut rise, map, &rises, &mut draw);
             // The range along the rise's length, as far off its axis and as wide as the one rise's for its reach.
             let (off, wide) = ((2.0 * draw() - 1.0) * RANGE_OFF, between(RANGE_WIDE, draw()));
-            let (across, at) = ([-along[1], along[0]], noise_of(map, rise.at, per_square));
-            let by = (rise.reach[0] * rise.reach[1]).sqrt() / band / ONE_REACH;
-            let long = rise.reach[0] * rise.extent(TOP) * map.w.max(map.h) as f64 * per_square;
-            rise.range = Range { at: [at[0] + off * by * across[0], at[1] + off * by * across[1]], across, wide: wide * by, long };
+            let (side_way, at) = ([-along[1], along[0]], noise_of(map, rise.at, per_square));
+            let by = (rise.reach[0] * rise.reach[1]).sqrt() / band / ONE_REACH * (across / ACROSS);
+            let long = rise.reach[0] * rise.extent(TOP) * across;
+            rise.range = Range { at: [at[0] + off * by * side_way[0], at[1] + off * by * side_way[1]], across: side_way, wide: wide * by, long };
             rises.push(rise);
         }
         Lift { rises }
