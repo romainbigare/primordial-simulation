@@ -246,6 +246,24 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
 
 ## 5. What to do next, in order
 
+**Where the two tracks stand** (the orchestrator keeps these lines true):
+- On main: the docs' clean-up; the plants made free (`core/src/contract.rs`, the natural world's month on its own, a
+  test that guards the sides, `cli/tests/sides.rs`, the gate and the key numbers on worlds of plants: the cover's
+  reference is 9.881, the world of plants' own mean); worlds that differ (`core/src/space/rises.rs`, `ew run --shape
+  drawn`, the page's choice of shape; one island stays the default until the owner has seen the drawn worlds). The
+  live page is its Version 44.
+- In work, life track: the deletion of the old animals (step 2 below), by the helper that freed the plants, in its
+  worktree `.claude/worktrees/agent-abcfb0efca1cd5295`. The tag `animals-v2` goes on the last commit that holds them.
+- In work, nature track: the air's low cloud, part 1, a check on paper (step 1 of the nature track); its helper
+  stops and reports before any law is built. Scratch: `scratchpad/air/`.
+- Open on the drawn worlds, asked of the owner: rings and closed inner bodies of liquid are frequent (3 or 4 worlds
+  in 12 at size 64; about 2 in 12 close into a body 2,000 km² wide and 800 m deep standing above 0 m): the
+  orchestrator leans to rings that are rare and mostly open to the low ground. Drawn worlds hold less land (27%
+  against 31%) and fewer rivers on small maps; some are still one land with arms; the law's numbers are first
+  guesses. Found on the way, not of that work: the rain over open liquid shows a checkerboard in the planet's air.
+- Timed in turn on a quiet machine, a 32 island of plants, 30 years: 261 ms a year before the contract, 262 to 266
+  after.
+
 The owner's order (`review/roadmap.md` section 9): free the plants from the animals, delete the animals, build
 them again as a field; beside it nature goes on. No globe as a world; a world is 128 x 128 squares, 256 or 512 at
 the very most, and worlds should differ in shape (several islands). No speed target now. People after the animal
