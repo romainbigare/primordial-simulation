@@ -285,10 +285,23 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     Main's grey air with the same two laws freezes to 34°: the package goes to main whole. Known: the globe's polar
     ice grows without end (40 m in 40 years); three key numbers leave their ranges on the package (land 287.88 K,
     swing 11.93 K, cover 9.43); `the_long_step_keeps_the_climate` fails on its count of river cells.
-  - In work: the last round before the merge (a Wide island for 150 years, is its ice bounded; the long step's
-    rivers measured as water; every check again on the merged branch; what the package changes for the owner's
-    worlds; pictures on matching days). No cloud law and no law of the liquid's reflectance without the
-    orchestrator's word.
+  - The package is whole on the branch `wip/air-heat` (pushed; head 5419dbd, `SNAPSHOT_VERSION` 136): on a Wide
+    island its ice is bounded (0.5 to 1.3 m of ice on the low ground's liquid in the far north, steady from the
+    second decade) where main's grows without end (21 m, 166 m of soft solid on one cell, the low liquid down
+    24.5 m in 150 years); the island is green to its north shore in summer; the warm south holds half of main's
+    cover and does not catch up by year 100. The key numbers' seven references are set there to the package's own
+    means (land 287.88 K, swing 11.93 K, rain 2.488e-3, gas 353.5 ppm, river cells 236.3, worn 0.2142 mm/yr, cover
+    9.428), told to the owner. `the_long_step_keeps_the_climate` holds the river cells' summed flux now, not their
+    count (told to the owner), and **fails on it by its own rule: +1.32% against 0.76%** (the 15-day step
+    evaporates about 0.7% less on land): this alone holds the package off main.
+  - In work: the surface's step mended at its cause (the planned form: the balance solved exactly by pieces), on a
+    branch `surface-step` from `wip/air-heat`, by a new helper; scratch `scratchpad/air2/`. Its gate: the long
+    step's test passes with nothing widened; then the 30-day step measured (one air step a month would halve the
+    air's work: the orchestrator decides), the references set once more, and the package goes to main whole.
+  - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
+    through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
+    map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's
+    word.
   - Found on the way: on the globe the polar band's ground gains 0.65 m of liquid a year (rain that lands in a
     neighbour's row and is not levelled back); and the fixed liquid reflectance (0.079) is above Fresnel's for a
     high sun: the tropics would absorb 7 to 8 W/m² more with the true one, the pole 1 to 7 less.
@@ -302,10 +315,19 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   and 32 among them (picture: `scratchpad/islands/round2/km/`); flat shelves with straight edges show on some 128
   worlds; land reaches the map's edge in a few. Found on the way, not of that work: the rain over open liquid shows
   a checkerboard in the planet's air.
-- In work, life track: what the land offers, first part (seeds that lie on the ground as lots that sprout by the
-  ground's state and die as dormant tissue; snow that hides what a taker could take; two map layers, the seeds and
-  the year's growth), by the life helper in its worktree; law changes, so the key numbers are measured and no
-  reference is moved without the orchestrator.
+- On main, life track: seeds lie on the ground (lots of the cover that wake by the ground's state, wear at the
+  dormant floor and freeze below their hardened limit; `core/src/cover/kin.rs` is the one joining rule of slots and
+  lots), the soft solid on a cell hides what lies under it from a taker (`contract::Place` holds its depth), and two
+  map layers show the seeds and the last year's growth. The live page is its Version 47. Open on the seeds: the
+  ground holds 5 to 150 g of seeds per m² (measured banks: 0.1 to some tens) because a full slot sends all it builds
+  as seeds; by `dormant` and `e_life` a lying seed would last about 700 years (the row says years to decades); seeds
+  lie on low-ground cells near the shore and the two layers bleed over the liquid there; nothing hides a buried
+  plant from the light (the air's step lets the canopy catch light over any snow). To measure again on the new air.
+- In work, life track, on paper only: the design of the first takers of the cover (F1), by a designer with no
+  worktree: `scratchpad/life/f1-design.md`. The orchestrator reviews it before anything is built.
+- In work, the drawn worlds' third round (the noise's unit in km so a hill is a hill's size on every map, lands
+  that look grown on maps of 128, straits that bend, the straight-edged shelves): its own helper and worktree;
+  worlds of 64 squares must stay the same to the last digit; scratch `scratchpad/islands/round3/`.
 - Timed in turn on a quiet machine, a 32 island of plants, 30 years: 261 ms a year before the contract, 262 to 266
   after.
 
