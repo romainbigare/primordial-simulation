@@ -10,7 +10,6 @@ The other documents:
 - `docs/laws.md`: how each law works **now**, part by part, with the code that does it.
 - `docs/numbers.md`: every free number, its unit, its source and whether it is physical, anchored or tuned.
 - `docs/tape.md`: what a run records.
-- `docs/analyze.md`: the fact cards made from a tape.
 - `review/roadmap.md`: the plan, the priorities and the owner's decisions.
 - `review/orchestrator.md`: the handover of the work, with where things stand.
 
@@ -503,7 +502,6 @@ cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`, `ew v
               the word ban, writer, view
 wasm/       the core as WebAssembly for the live viewer: a small shell of `extern "C"` exports (`ew-wasm`)
 web/        the 2D map viewer (TypeScript): plays a tape, or runs a live world in a worker; its shaders draw the map
-analyze/    the pattern finder (`ew-analyze`): fact cards from a run's folder (docs/analyze.md); recognition matching is not built yet
 ```
 
 ### 8.2 Core rules (must)
@@ -910,7 +908,7 @@ What the tests must cover:
 
 How the suite is built:
 
-- **The normal suite** (`cargo test --release --workspace`) stays under about 30 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `bodies.rs` and `lots.rs` for bodies, `populations.rs` for Copy in populations, `damage.rs` for the damage to a body and `cover.rs` for the plant field), one per part of the base (`core/tests/{space, store, clock, solve, inside}.rs`), `core/tests/threads.rs` (the number of threads and the count of chunks change nothing), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (every field has a row in `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run), `tape/tests/ground.rs` (the ground's tiles) and `tape/tests/things.rs` (the things of a window); `tape/tests/ranges.rs`, whose test `the_world_lives_and_keeps_its_books` is the main guard (a roster island runs past its last placement, keeps every element and the energy, has no number that is not finite, and ends with the base kinds alive; until the old animals are deleted it also needs enough animal kinds alive, `review/roadmap.md` section 8, C1b); `cli/tests/word_ban.rs` (14.4), `cli/tests/writer.rs` (a run resumed into its folder leaves the files of the unbroken run) and `cli/tests/view.rs`; `analyze/tests/cards.rs`.
+- **The normal suite** (`cargo test --release --workspace`) stays under about 30 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `bodies.rs` and `lots.rs` for bodies, `populations.rs` for Copy in populations, `damage.rs` for the damage to a body and `cover.rs` for the plant field), one per part of the base (`core/tests/{space, store, clock, solve, inside}.rs`), `core/tests/threads.rs` (the number of threads and the count of chunks change nothing), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (every field has a row in `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run), `tape/tests/ground.rs` (the ground's tiles) and `tape/tests/things.rs` (the things of a window); `tape/tests/ranges.rs`, whose test `the_world_lives_and_keeps_its_books` is the main guard (a roster island runs past its last placement, keeps every element and the energy, has no number that is not finite, and ends with the base kinds alive; until the old animals are deleted it also needs enough animal kinds alive, `review/roadmap.md` section 8, C1b); `cli/tests/word_ban.rs` (14.4), `cli/tests/writer.rs` (a run resumed into its folder leaves the files of the unbroken run) and `cli/tests/view.rs`.
 - **The contract between the layers** needs no test: the store's arrays are private
   fields of `store::Store`, which only `store::apply` and `store::book_by_array` (for the bodies' moves and the air's step, adding as `apply`
   adds) write, both inside the module `store`, so the compiler checks it; the sums of the boundary nodes and the
@@ -982,7 +980,7 @@ Add an automatic check (a script in CI or a test) that fails if these words appe
 
 > farm, crop, harvest, sow, herd, livestock, domestic, tame, pasture, house, home, hut, village, town, city, settlement, road, route, trail, river, lake, ocean, sea, market, trade, money, price, coin, wage, debt, loan, property, owner, king, queen, lord, council, kingdom, empire, nation, war, army, weapon, church, temple, religion, god, tool, axe, plough, wheel, cart, car, boat, ship, plane, engine, metal, iron, copper, bronze, steel, gold, wood, stone, coal, oil, fire, food, grain, meat, water, medicine, disease, tribe, family, household, culture
 
-Allowed elsewhere: `analyze/`, `library/`, `web/`, documentation and LLM prompts.
+Allowed elsewhere: `library/`, `web/`, documentation and LLM prompts.
 
 Note: words like `liquid`, `gas`, `solid`, `energy`, `heat`, `body`, `bond`, `flow`, `node`, `edge`, `kind` are fine. They describe physics or structure, not Earth history.
 
