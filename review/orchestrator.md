@@ -325,14 +325,18 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     that holds land, soil and cover per m² of its land by Flow's one land share (`flow::land_shares`); the
     references set (land 287.81 K, swing 11.83 K, rain 2.490e-3, gas 348.6 ppm, river cells 235.4, worn 0.2087
     mm/yr, cover 9.494). Flow costs +5.5% against main at 128 squares.
-  - **One thing holds the package off main**: `the_laws_do_not_depend_on_the_size_of_the_cells` fails narrowly on
-    two numbers (`air_3` 5.14e-6 against 5.05e-6; `root_1_cover_area` 5.45e-2 against 4.91e-2). Not loosened: it
-    sees a real fault. In a cell of parts the cover's month uses the whole cell's area for its light, its room
-    and its wetness, so a coast cell under a quarter land stands up to 15 times denser per m² of land than
-    inland (`scratchpad/air2/coast/coast_table_final.txt`). In work, by the same helper: the cover of a cell
-    lives on the cell's land (one call `contract::land`), then the scale test, the references, the gate.
-  - To pass on to the takers' builder after it: the take searches the cell's area, not its land's
-    (`core/src/fauna/month.rs`).
+  - On `surface-step` (9375556, saved as `wip/surface-step`): **the cover of a cell lives on the cell's land**
+    (`contract::land`, `Life::land` found each month start; the layering of leaves, the room, founding and the
+    seeds on the land; a cell of parts' cover reads its land part's own liquid). Coast cells under a quarter land
+    fall from 14 to 3.5 kg per m² of land (90th percentile 136 to 24); whole land cells do not move; the gas +0.5
+    to +2.3%.
+  - **One thing holds the package off main**: `the_laws_do_not_depend_on_the_size_of_the_cells` is red on two
+    numbers after that law (`root_1_cover_area` 6.60e-2 against 5.25e-2, +3.6% of its mean; `air_3` 4.93e-6
+    against 4.39e-6, +1.4%). Main shows +5.9% on the cover's area and passes on its wider year-to-year spread.
+    Not loosened. In work: the package made ready all the same (main merged, references, ignored set, gate,
+    pictures, the low liquid's level over 150 years), and one bounded hunt (the cover per m² of land by land
+    share and way to the shore at 2 km against 1 km; where the gas's element sits). **Put to the owner**: land
+    the package with this one slow test red and its hunt open, or wait.
   - **The owner's finding: the low liquid falls and the rivers' mouths are left dry.** Measured on main, a 32
     drawn world, seed 1, 150 years (`scratchpad/sea/`): in the band 20 to 65 the level falls 23 m (15 cm a year,
     steady), with 39% of the map under ice that grows without end (main's cold north) and the air's edges open;
@@ -400,9 +404,27 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   - Open: `contract::reached` spreads a slot's matter evenly over its height, so a mouth at the ground reaches a
     share of a tall slot's soft part though its leaves stand in its crown; and a slot's living matter holds its
     fine roots, which a mouth may be shown. Both asked of the next builder, with numbers, not mended.
-  In work, by a second builder in its own worktree (scratch `scratchpad/f1/b2/`, `notes.md` there): growth,
-  births, maturing, whole counts, mutation and the slot rule (design 12, item 4), then a 250-year run with its
-  measures and pictures. No tuning: a kind that dies out is reported with the line of its budget that fails.
+  - On main too (merge fcd736d): growth and births. A slot is its adults and its young; the surplus builds the
+    young at the cap of the rate of living (West, Brown and Enquist 2001, read: B0 m^(3/4) / E_m, no new number);
+    maturing; whole counts by draws that keep the mean. A 64 drawn world, takers at year 50, 250 years
+    (`scratchpad/f1/shots2/`, `b2/m64.txt`): books kept (energy drift 4.7e-13); three kinds alive at year 250
+    (30 g, 3 kg, the cold-bodied 2 kg), slope -0.81 beside Damuth's -0.75; the 60 kg and 400 kg kinds go out
+    cell by cell by year 225 (the young do not leave their cell yet); **the cover falls to 31 to 44% of its
+    twin's**: the cold-bodied kind takes 10 to 20 times its need (its work runs at min(1, pace) over `t_cat`, its
+    upkeep at a sixth of a warm body's) and reaches 13.6 t per km²; a mother at her cap bears about her own mass
+    of young a month. About 12 millionths of a second per land cell and month.
+  - Roots are not shown to a mouth (the cover does not store them). The even spread over height lets a 30 g
+    mouth reach 0.05 kg/m² of a 23 m slot's soft part at the trunk's foot (none if it stood in the top third):
+    kept for now, open.
+  In work, by the second builder (branch `worktree-agent-a3977242362ec202f`; scratch `scratchpad/f1/b2/`,
+  `notes.md` there), a commit each: (A) every rate of a body's work runs at the pace of its body over the pace
+  at the body temperature the rows were measured at; (B) a newborn has grown from nothing by the law every body
+  grows by, so the time of bearing follows from it (about 25 days at 30 g, 350 at 400 kg, by the integral) and
+  a mother's cap bears a fraction of what it builds; (C) mutation and the slot rule, with one table of the
+  takers' genes built as the cover's (the orchestrator's word given for that one tuned row); (D) the young leave
+  by the seeds' kernel through an outbox, and the fetched drink is booked in the far cell; (E) the 250-year run
+  again. To pass on once the air package is on main: the takers read the cell's land (`contract::land`), not its
+  area.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
