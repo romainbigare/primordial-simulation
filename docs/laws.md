@@ -847,7 +847,13 @@ task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a rea
 walls (its walls' share of its built cover) make a stem of `stem_form` and `stem_solid` at the walls' density, as tall
 as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973). Seeds that found a slot are one plant per
 `seed_kg`; a stand holds at most (`thin_kg` / kg per m²)² plants a m², the self-thinning law (Yoda and others 1963): a
-denser stand loses plants, not mass, after it builds; what dies of unpaid upkeep, wear or frost is whole plants (the
+plant of m kg holds (m / `thin_kg`)^(2/3) m² of ground in a full stand. The law is the crowns of a stand filling its
+space, so plants crowd the plants whose crowns share their layer of the air (`Cover::crown`: from its top down the depth
+its capture area fills at `crown_density`), whatever slot holds them, and the layers of a stand thin apart (an
+understory under a closed canopy): after its seeds wake and after it builds (`stand::thin`), the ground the plants of
+a slot's layer hold, each other slot's counted by the share of the slot's crown its own crown shares, is set against
+the cell's ground, and where it is more the slot loses plants, not mass, as its whole layer would (by that excess
+cubed). So a stand cut into slots thins as the whole. What dies of unpaid upkeep, wear or frost is whole plants (the
 count falls with the mass); seeds that join a stand of their kind, and slots that join, add their plants (each seed
 lot one plant per `seed_kg`, as many as the thinning law lets stand). So a stand that recruits sits on the thinning
 line, its plants' mass (kg per m²)³ / `thin_kg`², and its height grows with its mass: a kind that holds much mass

@@ -59,10 +59,41 @@ pub(super) fn most_plants(ph: &Physics, kg: f64) -> f64 {
     (ph.thin_kg / kg.max(1e-300)).powi(2)
 }
 
-/// Slot `x` of cover `c` on its ground of `area` m² (`cover::ground`) thins out: a stand denser than the self-thinning law allows for its mass
-/// loses plants, not mass, and the survivors take what the dead freed (Yoda and others 1963).
-pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], ph: &Physics, area: f64, x: usize) {
-    c.plants[x] = c.plants[x].min(area * most_plants(ph, c.built(mm, x) / area));
+/// The ground a plant of `mass` kg of built cover holds where its stand is as dense as the self-thinning law allows, m²:
+/// (mass / `thin_kg`)^(2/3) (`most_plants`: n plants a m² of mean mass m fill the ground at n (m / thin_kg)^(2/3) = 1).
+fn plant_ground(ph: &Physics, mass: f64) -> f64 {
+    (mass / ph.thin_kg).powf(2.0 / 3.0)
+}
+
+/// The plants of the `n` slots in use of cover `c` on its ground of `area` m² (`cover::ground`), its walls of density
+/// `rho` kg/m³, thin out together: plants crowd the plants whose crowns share their layer of the air (`Cover::crown`),
+/// whatever slot holds them, as the self-thinning law is the crowns of a stand filling its space (Yoda and others 1963)
+/// and the layers of a stand thin apart (an understory under a closed canopy). Of each slot the ground its layer's
+/// plants hold (`plant_ground`), each slot's counted by the share of its crown's depth that slot's crown shares, is set against
+/// its ground; where it is more, the slot loses plants, not mass, as its whole layer would: by that excess cubed (a
+/// plant's ground goes as its mass^(2/3), and its mass as 1 / the count), and the survivors take what the dead freed.
+pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, usize), area: f64) {
+    let held: Vec<usize> = (0..n).filter(|&x| c.root[x] != NO_ROOT && c.plants[x] > 0.0 && c.built(mm, x) > 0.0).collect();
+    let span: Vec<(f64, f64)> = held.iter().map(|&x| c.crown(ph, mm, rho, area, x)).collect();
+    let ground: Vec<f64> = held.iter().map(|&x| c.plants[x] * plant_ground(ph, c.built(mm, x) / c.plants[x])).collect();
+    let crowd: Vec<f64> = span.iter().map(|&(b, t)| span.iter().zip(&ground).map(|(&(b2, t2), g)| shared((b, t), (b2, t2)) * g).sum()).collect();
+    for (k, &x) in held.iter().enumerate() {
+        if crowd[k] > area {
+            c.plants[x] *= (area / crowd[k]).powi(3);
+        }
+    }
+}
+
+/// The share of the crown from `b` to `t` m that the crown from `b2` to `t2` shares; of a crown of no depth, whether the
+/// other holds its height.
+fn shared((b, t): (f64, f64), (b2, t2): (f64, f64)) -> f64 {
+    if t > b {
+        (t.min(t2) - b.max(b2)).max(0.0) / (t - b)
+    } else if b2 <= t && t <= t2 {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// The loose ground a plant `height` m tall roots in, m: `root_per_height` of its height, no less than `root_least`
@@ -107,21 +138,21 @@ pub(super) fn founded(ph: &Physics, kg: f64, area: f64) -> f64 {
 
 /// Alike kinds of a cell (`APART` × `Physics::alike` steps in every gene, `distance`) share a slot: of its `n` slots in
 /// use, the lighter joins the heavier (`join`).
-pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usize), area: f64) {
+pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usize)) {
     for a in 0..n {
         for z in a + 1..n {
             if !kin::together(&c.genes, &c.root, (a, z), super::APART * ph.alike, super::distance) {
                 continue;
             }
             let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
-            join(c, (mm, ph, area), big, small);
+            join(c, mm, big, small);
         }
     }
 }
 
-/// Slot `small` joins slot `big` of the same cover on its ground of `area` m²: amounts and plants added (then thinned, `thin`), genes and
-/// balance the mean by built cover, its starting kind the heavier's; `small` is empty after.
-pub(super) fn join(c: &mut Cover, (mm, ph, area): (&[f64; NP], &Physics, f64), big: usize, small: usize) {
+/// Slot `small` joins slot `big` of the same cover: amounts and plants added (the stand thins at its month, `thin`),
+/// genes and balance the mean by built cover, its starting kind the heavier's; `small` is empty after.
+pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
     let (wb, ws) = (c.built(mm, big), c.built(mm, small));
     let f = (ws / (wb + ws).max(1e-300)) as f32;
     let (gs, ms) = (c.genes[small], c.mol[small]);
@@ -129,6 +160,5 @@ pub(super) fn join(c: &mut Cover, (mm, ph, area): (&[f64; NP], &Physics, f64), b
     c.net[big] += f * (c.net[small] - c.net[big]);
     c.plants[big] += c.plants[small];
     (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
-    thin(c, mm, ph, area, big);
     (c.mol[small], c.root[small], c.full[small], c.net[small], c.plants[small], c.need[small]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0, 0.0);
 }

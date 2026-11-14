@@ -77,6 +77,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     // The seeds lying on its ground first: what wakes takes part in the month as seedlings.
     let mut flows = [0.0; BUDGET.len()];
     let lying = super::lying::month(w, c, p, a, (i, area, dt), &mut flows, counts);
+    super::stand::thin(c, &mm, (ph, rho, n), area);
     let mut s = [Slot::default(); SLOTS];
     let mut layers = Vec::with_capacity(n);
     for (q, sq) in s.iter_mut().enumerate().take(n) {
@@ -136,7 +137,6 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         // What it built, kg of dry matter: what it holds more of, and what it sent as seeds.
         let seeds: f64 = c.seeds[out..].iter().map(|s| super::built_kg(&mm, &s.mol)).sum();
         counts.grown.push((i as u32, c.built(&mm, x) - made + seeds));
-        super::stand::thin(c, &mm, ph, area, x);
         // The fuel it holds past its reserve when it has built what it could goes to its ground, as roots exude the
         // fuel a plant cannot use (Jones, Hodge and Kuzyakov 2004), where the open world's rot takes it.
         let over = (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * c.built(&mm, x) / mm[FUEL]).max(0.0);
@@ -150,7 +150,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             counts.rounded[0] -= std::mem::take(m);
         }
     }
-    super::stand::merge_alike(c, &mm, (ph, n), area);
+    super::stand::thin(c, &mm, (ph, rho, n), area);
+    super::stand::merge_alike(c, &mm, (ph, n));
     for x in 0..n {
         if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);

@@ -176,17 +176,10 @@ pub fn above(snow: f64, span: (f64, f64)) -> f64 {
     reached((0.0, f64::INFINITY), snow, span)
 }
 
-/// The crown of the plants of slot `x` of the cover of `cell` (cell `i`), from its base to its top, m: its leaves, and the
-/// thin stems that carry them, stand where the light is, over the depth their capture area fills at the density of a
-/// crown's leaves: the capture area over the ground its plants hold (`Cover::leaf` over the cell's land, `land`, times
-/// the share its roots hold, `Cover::rooted`), over `crown_density` m² a m³, down from its top (its height,
-/// `Cover::stands_at`), and no lower than the ground: a sward is as dense as that over its whole height.
+/// The crown of the plants of slot `x` of the cover of `cell` (cell `i`), from its base to its top, m (`Cover::crown` on
+/// the cell's land, `land`).
 pub fn crown(w: &World, i: usize, cell: &Cell, p: &Parts, x: usize) -> (f64, f64) {
-    let c = &cell.cover;
-    let top = c.stands_at(&w.chem, &w.cfg.phys, p, x);
-    let patch = land(w, i) * c.rooted[x].max(f32::MIN_POSITIVE) as f64;
-    let depth = c.leaf(&p.mm(&w.chem), x) / patch.max(1e-300) / w.cfg.phys.crown_density;
-    ((top - depth).max(0.0), top)
+    cell.cover.crown(&w.cfg.phys, &p.mm(&w.chem), w.chem.subs[p.sub[crate::life::WALL]].density[0], land(w, i), x)
 }
 
 /// The share of each part of each slot of `layer` of cell `i` a taker can reach (`above`): of each part the layer holds

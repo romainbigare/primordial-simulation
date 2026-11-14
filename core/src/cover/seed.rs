@@ -89,7 +89,6 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
     let plants = super::stand::founded(ph, kg, area);
     if let Some(x) = kin::kin(&c.genes, &c.root, (&s.genes, s.root), APART * ph.alike, distance) {
         c.plants[x] += plants;
-        super::stand::thin(c, mm, ph, area, x);
         // The seeds join as a slot of their own would, the genes the mean by built cover.
         (0..NG).for_each(|g| c.genes[x][g] += (kg / (kg + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
         (0..NP).for_each(|q| c.mol[x][q] += s.mol[q]);
@@ -100,7 +99,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
     let (x, out) = match (kin::empty(&c.root[..n]), poorest) {
         (Some(x), _) => (x, None),
         (None, Some(x)) => (x, Some(c.mol[x])),
-        (None, None) => (room(c, mm, (ph, n), area), None),
+        (None, None) => (room(c, mm, n), None),
     };
     (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, plants, 0.0);
     c.e += s.heat;
@@ -110,10 +109,10 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
 /// Room in cover `c` whose `n` slots in use all hold cover that pays its way: the two nearest each other by their genes
 /// (`distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the slots are a limit of the
 /// bookkeeping, and the two hold the same niche to within what it resolves. Returns the slot it leaves empty.
-fn room(c: &mut Cover, mm: &[f64; NP], (ph, n): (&crate::Physics, usize), area: f64) -> usize {
+fn room(c: &mut Cover, mm: &[f64; NP], n: usize) -> usize {
     let (a, z) = kin::nearest(&c.genes[..n], distance);
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
-    super::stand::join(c, (mm, ph, area), big, small);
+    super::stand::join(c, mm, big, small);
     small
 }
 
