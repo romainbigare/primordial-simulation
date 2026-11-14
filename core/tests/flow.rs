@@ -999,6 +999,24 @@ fn an_island_in_the_planets_air_keeps_its_books_and_carries_heat_north() {
     assert!(mean(true) > mean(false) + 2.0, "south {} K, north {} K", mean(true), mean(false));
 }
 
+/// The open low ground of an island in the planet's air is the planet's: its level holds at the level the world is
+/// made with (`space::wear::STAND_M`) month by month, what its air gains or loses through the open edges as vapour
+/// crossing them as liquid (this island's air brings in more vapour than it takes out, and as much liquid leaves),
+/// and the books, with what crossed the edges counted, are kept.
+#[test]
+fn the_open_low_ground_of_an_island_in_the_planets_air_holds_the_planets_level() {
+    let mut w = worldgen::terrain::new_island(1, (16, 16), pcore::space::terrain::Shape::One, worldgen::terrain::banded((30.0, 55.0)));
+    worldgen::planet::stand(&mut w);
+    let books = Books::now(&w);
+    for month in 0..3 * w.cfg.months_per_year {
+        pcore::step(&mut w);
+        let low = w.pools().into_iter().filter(|l| l.low).max_by(|a, b| a.area.total_cmp(&b.area)).expect("open low ground");
+        assert!((low.level - pcore::space::wear::STAND_M).abs() < 1e-6, "month {month}: the open low ground at {} m", low.level);
+    }
+    assert!(w.counts.edge_liquid[0] < 0.0, "{} m3 came in at the edges", w.counts.edge_liquid[0]);
+    books.assert_kept(&w, 1e-9);
+}
+
 /// A globe of 32 rows without life keeps its books to rounding over 100 years, through its ice and its soft covers: its
 /// air nodes and cells take no more than they hold (the air's days and the cells' exchange are one law), so nothing is
 /// set to zero.

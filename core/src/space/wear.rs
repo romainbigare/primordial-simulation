@@ -28,6 +28,9 @@ const WEAR_YEARS: f64 = 2.0e6;
 /// The height of the liquid of the open low ground while the land is worn, m: the low stand the valleys are cut to,
 /// before it rises to 0 m and drowns them.
 const LOW_STAND_M: f64 = -100.0;
+/// The height the liquid of the open low ground rises to after the wear, m: the level the world is made with, and the
+/// level of the planet's low liquid beyond the edges of a map in the planet's air (`flow::runoff`).
+pub const STAND_M: f64 = 0.0;
 /// The stream power law's K for m = 1/2 and n = 1, per year: ground under liquid that drains 1 m² lowers by K a year
 /// on a unit slope.
 const CUT: f64 = 3.0e-7;
@@ -156,8 +159,8 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, body
     let offshore = g.carried((from, &offshore), 1);
     books.shelf = lay(g, &mut h, (&low, LOW_STAND_M, &offshore), &mut loose);
     books.beyond = (0..g.n()).map(|k| offshore[k] * g.area(k)).sum::<f64>() - books.shelf;
-    // The liquid rises to 0 m: what lies under it and joins the open low ground is of it.
-    let open = open_low(g, &h, 0.0);
+    // The liquid rises to its stand: what lies under it and joins the open low ground is of it.
+    let open = open_low(g, &h, STAND_M);
     Worn { h, open, loose, make, books }
 }
 

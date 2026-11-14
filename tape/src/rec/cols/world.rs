@@ -56,6 +56,9 @@ impl Recorder {
         row.push("lake_m3", "km3", up.iter().map(|l| l.volume).sum::<f64>() / GIGA);
         let low = lakes.iter().filter(|l| l.low).max_by(|a, b| a.area.total_cmp(&b.area));
         row.push("low_level", "m", low.map_or(f64::NAN, |l| l.level));
+        // What crossed into the open low ground at the map's open edges since the start, and its heat.
+        row.push("edge_liquid", "km3", w.counts.edge_liquid[0] / GIGA);
+        row.push("edge_liquid_heat", "PJ", w.counts.edge_liquid[1] / 1e15);
         // Rivers as the web viewer draws them.
         row.push("rivers", "1", river_count(w, &c.f) as f64);
         row.push("river_flux", "mol/s", river_flux(w, &c.f));
