@@ -31,6 +31,7 @@ pub const USAGE: &str = "usage:
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
+    --variety N           kinds of cover a cell may hold, a setting of the world from 1 to 12 (cover::SLOTS) (4)
     --chunks N            a speed setting: the cells cut into N runs for the cover's parallel passes (64; any count
                           gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
@@ -139,9 +140,11 @@ impl Args {
         Ok(())
     }
 
-    /// Set what the flags of `ew run` change in a new world: the sun and the heat-absorbing gases.
+    /// Set what the flags of `ew run` change in a new world: the sun, the heat-absorbing gases and the kinds of cover a
+    /// cell may hold (`Config::variety`, checked with the rest by `Config::validate`).
     pub fn apply(&self, w: &mut World) {
         w.cfg.sun *= self.get("--sun", 1.0);
+        w.cfg.variety = self.get("--variety", w.cfg.variety);
         worldgen::terrain::scale_absorbers(w, self.get("--absorber", 1.0));
     }
 

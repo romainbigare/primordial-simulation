@@ -822,7 +822,8 @@ the world has no source of it (an input from below, as volcanoes give, would be 
 not built).
 
 ## 3. Life: the cover, light-eaters as a field
-`core/src/cover/`. Each cell holds up to `SLOTS` (4) kinds of **cover**, each the
+`core/src/cover/`. Each cell holds up to its world's `Config::variety` kinds of **cover** (a setting of a world, 4
+unless a start chooses other, at most `cover::SLOTS`, 12, the size of its arrays), each the
 amounts of three substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10 and its walls
 13: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
 `STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). Its **living cover** is its body

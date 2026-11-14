@@ -172,7 +172,8 @@ the level of the wetness index its soil's liquid departs about (`inside::soil_le
 month's start found it, the land its cover lives on). Before Flow built its state the level and
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
-cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (19) f32 each, the heaviest first: the slots of
+cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 4 unless the
+start chose other) of `KIND_ROW` (19) f32 each, the heaviest first: the slots of
 its cover, each as the law holds it, per m² of the cell's land (`layers::per_land`; a cell that holds no land has no
 kinds); of each its starting kind (-1: none); its built cover, kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m² (the slot's count, `Cover::plants`), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-its leaf area); its walls' share of its built cover; its
@@ -240,7 +241,7 @@ are not recorded.
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The report counts the same way |
 | `river_flux` | mol/s | the liquid flux of those river cells, summed (`tape::river_flux`): the water the count stands for |
 | `cells` | | the cells of the map |
-| `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |
+| `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`Config::variety` a cell at most), and its mass |
 | `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (by a taker, `contract::take`), `broken` (pressed loose, `contract::press`); `lack` is never written to |
 | `cover_budget_<flow>` | J/yr | the flows of the cover's budget in the year, + into the cover (`cover::BUDGET`): what its parts and the seeds lying on the ground hold as fuel changes by their sum. `stored` (light reaction); the upkeep's parts `basal`, `capacity`, `firmness`, `leaves`, `sapwood`, `root_breath`, `root_renew`; `building` (its work and fixing); `shed`, `died`, `exuded` (fuel its roots give the ground), `seeds` (out and landed), `seeds_died` (seeds lying that wore out or froze), `takers` (taken or pressed loose through the contract), `placed`, `rounded` |
 | `seeds_kg` | kg | the seeds lying on the ground of the world (`cover::Lying`) |

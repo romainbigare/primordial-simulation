@@ -15,6 +15,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
   - **tuned:** set so a run came out a certain way. The row names the run or the reason. `tuned, first guess` is the same mark for a number with no real size and no recorded run: it was written by hand to get a sensible start. It counts as tuned. The first job of any of them is to find a size and become anchored.
   - **switch:** an on/off setting of an experiment, not a number of the world. **container:** a field that holds other rows.
   - **speed:** a speed setting: it says when the model may save time, not how the world works. Speed settings are outside the tuned budget, and each must pass the test that ×2 and ÷2 change no key number beyond its noise.
+  - **setting:** a setting of a world, chosen at its start as its seed and its size are: what world to make, not how the world works. Settings are outside the tuned budget and are not searched.
 
 **The M7 world search varies only tuned and anchored numbers, within their anchors, and never the physical ones.** Switches are not searched. For an anchored number "within its anchor" means within the real order named in its row (about a factor of 3 each way unless the row says more). For a tuned number it means around its value, by the factor its row suggests. Every run prints the numbers it used (`physics.json`).
 
@@ -30,6 +31,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `tilt` | degrees | axial tilt: sets the size of the seasons | the planet's tilt, 23.4 | physical |
 | `lat_south` | degrees | latitude of the map's south edge | where the surface is 287 K, near the global mean: on Earth at about 38° to 40° in both hemispheres (zonal means, from memory); on the model's globe without life at 37.5° N and 44° S | anchored |
 | `lat_north` | degrees | latitude of the map's north edge | `lat_south` + 2.3: the island spans 256 km (`ew run --band S,N` sets both) | anchored |
+| `variety` | kinds | the kinds of cover a cell may hold, its slots (`cover::lodge`), from 1 to `cover::SLOTS` (12, the size of its arrays): how much variety a world has room for; how many kinds live together in a cell stays with the laws. The cover's month costs about in proportion to it | a setting of a world: 4 (`ew run --variety N`, the page's "variety") | setting |
 | `radius_m` | m | the radius of the planet: a globe's squares (`ew run --globe`: with `--size` rows, a cell is pi x radius / rows from north to south), and the length of an island's band of latitudes, which its air stands for (`Stretch`, laws.md 1.6) | the mean radius of Earth, 6,371 km | physical |
 | `rotation` | none (0 = none) | strength of the turning of moving air by the planet's spin | 1 is the real size of the spin's effect; the wind closure is crude (unchecked) | anchored |
 | `days_per_month` | days | the calendar | 12 x 30 = 360 days for a year of 365 | anchored |
@@ -347,7 +349,7 @@ Not rows of the model: real sizes that a run's results can be held against, kept
 
 ## Counts
 
-The 109 rows of `Config` and `Physics` are their 109 fields; the constants outside the structs are counted by their mark.
+The 110 rows of `Config` and `Physics` are their 110 fields; the constants outside the structs are counted by their mark.
 
 | mark | rows | which |
 |---|---|---|
@@ -356,6 +358,7 @@ The 109 rows of `Config` and `Physics` are their 109 fields; the constants outsi
 | tuned | 5, and 36 outside the structs | `rain_time`, `c_leaf`, `kernel_far`, `kernel_far_share`, `alike` |
 | tuned, first guess | 9, and 16 outside the structs | `hard_min`, `c_firm`, `root_per_height`, `root_least`, `rooted_from`, `hide`, `soft`, `still`, `hold` |
 | speed | 2, and 4 outside the structs | `wake_share`, `sleep_days` |
+| setting | 1 | `variety` |
 | container | 1 | `phys` |
 
 Rows marked tuned: 14 fields, and 51 rows of constants outside the structs (those of the ground's tiles and of the page among them). Rules chosen for a run: 1.

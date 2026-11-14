@@ -253,20 +253,23 @@ fn seeds_join_their_kind_or_found_a_slot() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A kind new to a cell takes hold where four variants of another kind hold every slot and all pay their way
-/// (`seed::lodge`): the two nearest each other by their genes join to make room, and the cover keeps its mass.
+/// A kind new to a cell takes hold where variants of another kind hold every slot its world uses (`Config::variety`,
+/// here 3) and all pay their way (`seed::lodge`): the two nearest each other by their genes join to make room, the cell
+/// never holds more slots than its world's setting, and the cover keeps its mass.
 #[test]
 fn a_new_kind_enters_a_full_cell() {
     let (mut w, i) = start();
+    w.cfg.variety = 3;
     let (g, step) = (genes(), cover::RANGE[FROST].0);
-    for k in 0..cover::SLOTS {
+    for k in 0..w.cfg.variety {
         let mut v = g;
         v[FROST] -= 3.0 * step * k as f32;
         assert!(cover::place(&mut w, i, v, 0, 0.1));
     }
     let before: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
-    assert_eq!(slots_of(&w, i).len(), cover::SLOTS, "four variants hold every slot");
+    assert_eq!(slots_of(&w, i).len(), w.cfg.variety, "the variants hold every slot");
     assert!(cover::place(&mut w, i, g, 1, 0.01), "seeds of a second kind find no room");
+    assert_eq!(slots_of(&w, i).len(), w.cfg.variety, "the cell holds more slots than its world's setting");
     let c = w.life.cover(i);
     assert_eq!(c.held().filter(|&x| c.root[x] == 1).count(), 1, "the new kind holds a slot");
     let after: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
@@ -322,18 +325,19 @@ fn tall_plants_hold_less_of_thin_ground() {
 #[test]
 fn seeds_take_the_slot_in_deficit() {
     let (chem, _) = worldgen::chemistry0();
-    let (p, ph) = (cover::Parts::of(&chem).expect("chemistry 0 has cover"), pcore::Physics::default());
+    let (p, cfg) = (cover::Parts::of(&chem).expect("chemistry 0 has cover"), pcore::Config::default());
+    let ph = &cfg.phys;
     let (mm, g, step) = (p.mm(&chem), genes(), cover::RANGE[FROST].0);
-    let seeds = |v, root, kg| cover::sown(&chem, &ph, &p, (0, 1.0, 280.0), v, root, kg);
+    let seeds = |v, root, kg| cover::sown(&chem, ph, &p, (0, 1.0, 280.0), v, root, kg);
     let mut c = cover::Cover::default();
-    for k in 0..cover::SLOTS {
+    for k in 0..cfg.variety {
         let mut v = g;
         v[FROST] -= 3.0 * step * k as f32;
-        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &ph, 1.0), cover::Landed::In));
+        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &cfg, 1.0), cover::Landed::In));
     }
     (c.net[1], c.net[2]) = (-1.0, -3.0);
     let (held, worst) = (c.clone(), c.mol[2]);
-    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &ph, 1.0) else { panic!("the seeds took no slot in deficit") };
+    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &cfg, 1.0) else { panic!("the seeds took no slot in deficit") };
     assert_eq!(died, worst, "the worst in deficit gave way");
     assert_eq!(c.root[2], 9, "the new kind holds the slot");
     for x in [0, 1, 3] {

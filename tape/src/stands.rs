@@ -3,12 +3,10 @@
 //! holds them; a plant's height and its stem come from the cover's own law (`cover::height`, `cover::stem`: the buckling
 //! limit, McMahon 1973), and the crown from its share of the ground. The page only draws what they give.
 
-use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, LEAF, LIGHT, MOIST, NP, SEED, SLOTS, STORE};
+use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, LEAF, LIGHT, MOIST, NP, SEED, STORE};
 use crate::layers::per_land;
 use pcore::{Physics, World};
 
-/// Kinds a square's row holds at most: the slots of its cell.
-pub const KINDS: usize = SLOTS;
 /// Numbers a kind holds in a square's row (`row`).
 pub const KIND_ROW: usize = 19;
 
@@ -97,12 +95,12 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
     ]
 }
 
-/// The kinds of cell `i` of `w`, of which the share `land` is land, `KINDS` rows of `KIND_ROW` numbers (`row`): its
-/// slots, the heaviest first; an empty kind is all 0 with its starting kind -1, and a cell that holds no land has none
-/// (no land to draw them on).
-pub fn rows(w: &World, i: usize, land: f64) -> [f64; KINDS * KIND_ROW] {
-    let mut out = [0.0; KINDS * KIND_ROW];
-    (0..KINDS).for_each(|k| out[k * KIND_ROW] = -1.0);
+/// The kinds of cell `i` of `w`, of which the share `land` is land, a row of `KIND_ROW` numbers (`row`) for each slot
+/// its world uses (`Config::variety`): its slots, the heaviest first; an empty kind is all 0 with its starting kind -1,
+/// and a cell that holds no land has none (no land to draw them on).
+pub fn rows(w: &World, i: usize, land: f64) -> Vec<f64> {
+    let mut out = vec![0.0; w.cfg.variety * KIND_ROW];
+    out.iter_mut().step_by(KIND_ROW).for_each(|r| *r = -1.0);
     let Some(p) = Parts::of(&w.chem).filter(|_| land > 0.0) else { return out };
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
     let g = Ground {

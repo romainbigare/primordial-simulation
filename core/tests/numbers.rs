@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-const MARKS: [&str; 6] = ["physical", "anchored", "tuned", "switch", "container", "speed"];
+const MARKS: [&str; 7] = ["physical", "anchored", "tuned", "switch", "container", "speed", "setting"];
 
 /// The headings whose tables have the rows of the fields.
 const FIELD_HEADINGS: [&str; 3] = ["Config", "Speed settings", "Physics"];

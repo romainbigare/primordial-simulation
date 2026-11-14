@@ -86,8 +86,8 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
       let m = decided(l, k);
       if (m.x < 0.0) { continue; }
       let packed = i32(m.x);
-      let s = packed / 4;
-      plant(dst, mark_plant(l, k, vec2i(s % n, s / n), packed % 4), p, e, fade * m.y, m.z);
+      let s = packed / kinds_n();
+      plant(dst, mark_plant(l, k, vec2i(s % n, s / n), packed % kinds_n()), p, e, fade * m.y, m.z);
     }
   }
 }

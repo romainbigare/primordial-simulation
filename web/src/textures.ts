@@ -6,7 +6,7 @@
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './style';
-import { FIELD, Kinds, LATTICES, KIND_PLANES, SWARD_SEEN, half } from './canopy';
+import { FIELD, Kinds, LATTICES, PLANES_DOWN, SWARD_SEEN, half } from './canopy';
 import { clamp } from './earth';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */
@@ -64,11 +64,11 @@ export class CoverMarks {
   /** Send what waits to the GPU. */
   private upload(gpu: Gpu): void {
     if (!this.due && this.fieldTex) return;
-    const k = this.kinds, w = k?.w ?? 1, h = k?.h ?? 1;
-    if (this.fieldTex?.w !== w || this.fieldTex.h !== h) {
+    const k = this.kinds, w = k?.w ?? 1, h = k?.h ?? 1, tw = (k?.cols ?? 1) * w, th = Math.min(k?.planes.count ?? 1, PLANES_DOWN) * h;
+    if (this.fieldTex?.w !== w || this.fieldTex.h !== h || this.tableTex?.w !== tw || this.tableTex.h !== th) {
       if (this.tableTex) gpu.drop(this.tableTex);
       if (this.fieldTex) gpu.drop(this.fieldTex);
-      this.tableTex = gpu.texture(w, KIND_PLANES.count * h, 'rgba32float');
+      this.tableTex = gpu.texture(tw, th, 'rgba32float');
       this.fieldTex = gpu.texture(w, h, 'rgba16float', FIELD.count, (k?.field.mips.length ?? 0) + 1);
     }
     if (k) {
@@ -115,7 +115,7 @@ export class CoverMarks {
       this.marksTex.forEach(t => gpu.drop(t));
       this.marksTex = MARK_BINDINGS.map(() => gpu.texture(Math.max(cols, was?.w ?? 0), Math.max(row, was?.h ?? 0), 'rgba8unorm', 1, 1, true));
     }
-    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(...k.walls, 0).vec4(...grids.map(g => g.cells.row));
+    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(...k.walls, k.planes.kinds).vec4(...grids.map(g => g.cells.row));
     grids.forEach(g => u.vec4(...g.frac, g.a, g.rows));
     grids.forEach(g => u.vec4(g.near));
     grids.forEach(g => u.ivec4(...g.base));

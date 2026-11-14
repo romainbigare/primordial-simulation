@@ -24,6 +24,9 @@ const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 /** The live world's first size and its least and most, squares a side: the first shows a land with its valleys, a
  * lake and an outlier; the most is the largest island the laws are run on. */
 const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = 128;
+/** The live world's kinds of cover a cell may hold, a setting of the world (the core's `Config::variety`), and its
+ * most (the core's `cover::SLOTS`). */
+const LIVE_VARIETY = 4, VARIETY_MOST = 12;
 /** The climates a live island may have: a name, and the band of latitudes it stands for (south, north), its air the
  * planet's air over that band. The first is the page's. */
 const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55']];
@@ -271,13 +274,14 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { ch
 $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"></s>${n}</li>`).join('');
 
 // ---- start
-/** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the seed and size from the page. */
+/** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the seed, size and variety from the page. */
 async function startLive(): Promise<void> {
   const wasm = await fetch('ew.wasm').then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`ew.wasm: ${r.status}`))));
   coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
   $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
   Object.assign($<HTMLInputElement>('size'), { min: String(SIZE_LEAST), max: String(SIZE_MOST), value: q.get('size') ?? String(LIVE_SIZE) });
+  Object.assign($<HTMLInputElement>('variety'), { min: '1', max: String(VARIETY_MOST), value: q.get('variety') ?? String(LIVE_VARIETY) });
   // The climate: a band of latitudes the island stands for, from the URL's `band=S,N` or the first preset (`BANDS`).
   const bands = $<HTMLSelectElement>('band'), asked = q.get('band');
   const presets = asked && !BANDS.some(b => b[1] === asked) ? [...BANDS, [`${asked.replace(',', '° to ')}°`, asked]] : BANDS;
@@ -349,11 +353,12 @@ let banded = false;
 function newWorld(): void {
   const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
   const size = Math.min(SIZE_MOST, Math.max(SIZE_LEAST, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
+  const variety = Math.min(VARIETY_MOST, Math.max(1, Math.floor(+$<HTMLInputElement>('variety').value) || LIVE_VARIETY));
   const band = bandOf($<HTMLSelectElement>('band').value);
   playing = false;
   say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
   banded ||= band[0] < band[1];
-  live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn');
+  live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn', variety);
 }
 $('live').onsubmit = e => { e.preventDefault(); newWorld(); };
 $('band').onchange = () => newWorld();
