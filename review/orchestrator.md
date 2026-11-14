@@ -109,17 +109,17 @@ tests of `tape/tests/ranges` pass):
 - **The plants' marks decided once a frame per cell** (`marks.wgsl`, `lib/mark.wgsl`), kept in rgba8 textures.
 
 **Known faults on the page:**
-- **A band of bright flat green beside rock or brown land when zoomed in** (the owner's fault as they meant it;
-  their picture: seed 1, 32 squares, Wide, year 15.92, the 100 m bar). Found (`scratchpad/coast/notes.md`,
-  `pics/green_band.png`): it is the herbs' layer, the near view's sward pass in `lib/cover_field.wgsl`, drawn
-  where the trees' roots do not hold (thin loose ground by the bare bed). The low layer is real and dense (a cell
-  with 17.3 kg of trees and 0.52 kg, 3.01 m² of leaf, of herbs per m² of land). Not real: the hard straight
-  ragged edge (the herbs fade over one pixel of loose depth, and the depth is blended from the 125 m samples); the
-  tone (lighter and greener than the forest beside it, and bright in early winter while the trees are drawn
-  dormant); a young slot of a tree kind drawn as meadow (`designOf` in `style.ts`: any slot under 3 m that is
-  mostly leaf). In work (branch `green-band`): the fade tied to the samples' spacing; young trees drawn as young
-  trees; the meadow's tone in the far view's palette with ground showing through thin herbs; the sward's dormant
-  tone by the same rule as the trees'.
+- **A band of bright flat green beside rock or brown land when zoomed in** (the owner's fault; their picture:
+  seed 1, 32 squares, Wide, year 15.92, the 100 m bar): it is the herbs' layer (the near view's sward pass in
+  `lib/cover_field.wgsl`) where the trees' roots do not hold (thin loose ground by the bare bed); the low layer is
+  real. Mended on main: each slot's roots fade over the change of loose depth across one of the ground's 125 m
+  samples (no straight line across a sample's square); herbs cover the share their leaves close by the cover's
+  light law (the setting that drew a thin sward five times too wide is gone); a young stand of a woody kind (60%
+  of its grown dry mass in walls, from its walls gene: `KIND_ROW` is 20) is drawn as bushes of its own colour, not
+  as meadow. Left: the herbs' tone and fine pattern are as they were (calmer only because they cover less); young
+  trees are bushes, not small crowns of their form; no place with dark rock like the owner's was found to show
+  it there; the herb slot's activity on that winter day was not read (the page uses one rule of dormancy for
+  herbs and trees; that cell's herbs are hardier, 265 K against 270 K, so they turn later).
 - The green grain over thin cover when zoomed in (found on the way, not what the owner meant) is mended on main: the near view drew
   each crown at least 1.5 pixels wide whatever the plants' size (`grain` in `lib/cover_field.wgsl`); a crown is
   now as wide as the plants' own marks and drawn only where those span 1.5 pixels, else the near view shows the
