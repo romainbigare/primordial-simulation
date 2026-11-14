@@ -106,7 +106,12 @@ tests of `tape/tests/ranges` pass):
 - **The plants' marks decided once a frame per cell** (`marks.wgsl`, `lib/mark.wgsl`), kept in rgba8 textures.
 
 **Known faults on the page:**
-- The green grain over thin cover when zoomed in (the owner's finding) is mended on main: the near view drew
+- **A band of bright flat green beside rock or brown land when zoomed in** (the owner's fault as they meant it;
+  their picture: seed 1, 32 squares, Wide, year 15.92, the 100 m bar): 150 to 300 m wide, no crowns, soft toward
+  the stand, ending against the bare bed in a hard ragged straight line; it appears only close up; "not sure it
+  relates to anything real in the numbers". In work (branch `green-band`): which term draws it, what the cells
+  under it hold, whether the cover can stand on bare bed at all; a report before a mend.
+- The green grain over thin cover when zoomed in (found on the way, not what the owner meant) is mended on main: the near view drew
   each crown at least 1.5 pixels wide whatever the plants' size (`grain` in `lib/cover_field.wgsl`); a crown is
   now as wide as the plants' own marks and drawn only where those span 1.5 pixels, else the near view shows the
   mean tone as the far view does. Left: a cell with no cover still takes green from the cells about it through
