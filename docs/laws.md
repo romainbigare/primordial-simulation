@@ -1075,9 +1075,9 @@ read a kind.
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
   (`Terrain::inside`, on the worn samples, 0), whatever its size.
-- **Open land**: a cell that holds land (`World::land_share`: of a cell of parts its land part, also where the cell's
-  mean ground lies under the level; else the whole cell where its mean ground stands above it) under no more than half
-  a metre of standing liquid (`MAX_STANDING_M`). Life starts per m² of its land, not of the cell.
+- **Open land**: a cell that holds land (`flow::land_shares`: the share of its area out of the liquid that stands over
+  its pores, as the page draws the cover on it; the land part of a cell of parts among them, also where the cell's
+  mean ground lies under the level) under no more than half a metre of standing liquid (`MAX_STANDING_M`). Life starts per m² of its land, not of the cell.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS`: kg per m² of land and genes, on every open land cell
   by its chance, each kind's draws keyed by its own key, its label its row, `Cover::root`); without `--roster` the herb
   (`ONE`), with it the six kinds in their order (`ROSTER`): a small fast herb, a herb, a big slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody

@@ -17,13 +17,13 @@ use pcore::World;
 /// Land under more standing liquid than this, m, gets no soil and no cover (a basin of standing liquid).
 const MAX_STANDING_M: f64 = 0.5;
 
-/// Whether life starts on cell `i`: it holds land (`World::land_share`, the land part of a cell of parts whose mean
-/// ground lies under the level among them) under no more than `MAX_STANDING_M` of standing liquid.
-fn open_land(w: &World, i: usize) -> bool {
-    w.land_share(i) > 0.0 && pcore::contract::env_of(w, i)[1] <= MAX_STANDING_M
-}
-
-/// The area of the land of cell `i`, m², on which life starts per m² (`World::land_share`).
-fn land_area(w: &World, i: usize) -> f64 {
-    w.mesh.cells().area()[i] * w.land_share(i)
+/// The open land, where life starts, by Flow's state of the world now: each cell that holds land (`flow::land_shares`,
+/// the share of its area out of the liquid that stands over its pores; a cell of parts whose mean ground lies under the
+/// level among them) under no more than `MAX_STANDING_M` of standing liquid, in the order of the cells, with the area
+/// of its land, m², on which life starts per m².
+fn open_land(w: &World) -> Vec<(usize, f64)> {
+    let all: Vec<usize> = (0..w.mesh.cells().n()).collect();
+    let land = pcore::flow::land_shares(w, &all).expect("Flow's state is built before life starts");
+    let area = w.mesh.cells().area();
+    all.into_iter().filter(|&i| land[i] > 0.0 && pcore::contract::env_of(w, i)[1] <= MAX_STANDING_M).map(|i| (i, area[i] * land[i])).collect()
 }

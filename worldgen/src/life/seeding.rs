@@ -1,7 +1,7 @@
 //! Placing the cover of a starting kind: a spray of variants, the fixers among it, and the line that reports it.
 
 use super::kinds::KINDS;
-use super::{land_area, open_land};
+use super::open_land;
 use pcore::rng::{Purpose, Rng};
 use pcore::{cover, World};
 use serde::{Deserialize, Serialize};
@@ -42,7 +42,7 @@ pub fn seed(w: &mut World, which: usize) -> String {
     seed_with(w, which, &Seeding::default())
 }
 
-/// Place the cover of starting kind `which` on the open land, its `kg` per m² of each cell's land (`land_area`), with
+/// Place the cover of starting kind `which` on the open land, its `kg` per m² of each cell's land (`open_land`), with
 /// the choices of `how`, each cell by its chance: its
 /// genes after `rounds` rounds of mutation (a random walk keyed by the cell), the fixing gene on in the share `fixers`
 /// of the cells. Returns what was placed, in one line.
@@ -51,8 +51,8 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     pcore::month_start(w);
     let mut r = Rng::new(w.seed, w.day(), kind.key as u64, Purpose::Place);
     let (mut cells, mut fixers, mut kg) = (0, 0, 0.0);
-    for i in 0..w.mesh.cells().n() {
-        if !open_land(w, i) || r.f64() >= kind.chance {
+    for (i, m2) in open_land(w) {
+        if r.f64() >= kind.chance {
             continue;
         }
         let id = founder_id(kind.key, i);
@@ -66,8 +66,8 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
             genes[cover::FIX] = FIX_GENE;
         }
         // `kind.kg` per m² of the cell's land, as `cover::place` takes it per m² of the cell.
-        if cover::place(w, i, genes, which as u32, kind.kg * w.land_share(i)) {
-            (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + kind.kg * land_area(w, i));
+        if cover::place(w, i, genes, which as u32, kind.kg * m2 / w.mesh.cells().area()[i]) {
+            (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + kind.kg * m2);
         }
     }
     let g = &kind.genes;

@@ -38,7 +38,7 @@ fn a_world_starts_with_the_dissolved_mineral_in_its_liquid() {
 }
 
 /// The soil is given to the land when life starts: `Init::soil` mol per m² of the fixed gas's mineral (10 g of the
-/// gas's element, 14 g a mol, to the m²) on each cell's land (`World::land_share`), none where a cell has none, booked
+/// gas's element, 14 g a mol, to the m²) on each cell's land (`flow::land_shares`), none where a cell has none, booked
 /// as new matter and energy.
 #[test]
 fn the_soil_is_given_to_the_land_and_booked() {
@@ -53,12 +53,14 @@ fn the_soil_is_given_to_the_land_and_booked() {
     let before = w.store.amounts(Class::Ground)[mineral * n..(mineral + 1) * n].to_vec();
     println!("{}", worldgen::life::soil(&mut w, &soil));
     let (k, per_m2) = soil[0];
+    let all: Vec<usize> = (0..n).collect();
+    let shares = pcore::flow::land_shares(&w, &all).unwrap();
     let (mut cells, mut parted) = (0, 0);
-    for i in 0..n {
-        let (got, land) = (w.store.amounts(Class::Ground)[mineral * n + i] - before[i], per_m2 * w.mesh.cells().area()[i] * w.land_share(i));
+    for (i, (&was, &share)) in before.iter().zip(&shares).enumerate() {
+        let (got, land) = (w.store.amounts(Class::Ground)[mineral * n + i] - was, per_m2 * w.mesh.cells().area()[i] * share);
         assert!(got == 0.0 || (got - land).abs() <= 1e-9 * land, "cell {i}: {got} mol, its land {land}");
         cells += (got > 0.0) as usize;
-        parted += (got > 0.0 && w.land_share(i) < 1.0) as usize;
+        parted += (got > 0.0 && share < 1.0) as usize;
     }
     assert!(k == mineral && cells >= 10 && parted > 0 && in_all(&w, mineral) > 0.0, "{cells} cells, {parted} of them cells of parts");
     let grams = per_m2 * w.chem.subs[k].elems[2] as f64 * 14.0;
