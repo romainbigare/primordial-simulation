@@ -14,14 +14,20 @@ pub struct Schedule {
     pub kinds: Vec<(usize, u64)>,
     /// How the kinds are placed
     pub seeding: Seeding,
+    /// The year the starting kinds of takers are placed (`life::place_takers`); none: no takers
+    pub takers: Option<u64>,
 }
+
+/// The takers are placed this many years after the first life: herbs fill the land in a few years and the low layers of
+/// the cover stand steady by then, while trees still grow (laws.md 5).
+pub const TAKERS_AFTER: u64 = 50;
 
 impl Schedule {
     /// Life from year `life` on: the soil, then the starting kinds `rows` (rows of `KINDS`: `life::ONE` or `life::ROSTER`),
-    /// each at its `Kind::year` after the first life.
+    /// each at its `Kind::year` after the first life, and the takers `TAKERS_AFTER` years after the first life.
     pub fn new(life: Option<u64>, rows: &[usize], seeding: Seeding) -> Self {
         let kinds = life.map_or(vec![], |y| rows.iter().map(|&k| (k, y + KINDS[k].year)).collect());
-        Schedule { life, kinds, seeding }
+        Schedule { life, kinds, seeding, takers: life.map(|y| y + TAKERS_AFTER) }
     }
 
     /// Place what is due in the world's year now (call at the start of each year): the soil, then the kinds in their
@@ -36,6 +42,9 @@ impl Schedule {
             if at == year {
                 said.push(life::seed_with(w, kind, &self.seeding));
             }
+        }
+        if self.life.is_some() && self.takers == Some(year) {
+            said.extend(life::place_takers(w));
         }
         said
     }

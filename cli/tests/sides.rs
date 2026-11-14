@@ -4,7 +4,12 @@
 //!
 //! Files that may name both sides: `schedule.rs` (it lists the passes of both sides in their order), `lib.rs` (it
 //! declares every module), `world.rs` (the world holds the bodies' registry and their counters), `survey.rs` and
-//! `life/` (the bodies' passes and their registry, which the cover's chunks share), `params.rs` (the numbers of both).
+//! `life/` (the passes of a cell's life and its registry, which the cover's chunks share), `params.rs` (the numbers of
+//! both).
+//!
+//! The other way round, the takers (`fauna/`) reach the land only through the contract: they name no module of the
+//! natural world's laws, only the contract, the shared life (`life`) and plain data (the chemistry, the units, the
+//! numbers, the draws).
 
 use std::path::Path;
 
@@ -12,7 +17,10 @@ use std::path::Path;
 const NATURAL: [&str; 14] = ["flow", "change", "cover", "space", "store", "chem", "solve", "clock", "inside", "ground.rs", "check.rs", "math.rs", "units.rs", "contract.rs"];
 
 /// The modules of the bodies.
-const BODIES: [&str; 8] = ["body", "choose", "copy", "bond", "nodes", "brain", "lineage", "lanes"];
+const BODIES: [&str; 9] = ["body", "choose", "copy", "bond", "nodes", "brain", "lineage", "lanes", "fauna"];
+
+/// The modules of the natural world's laws, which the takers reach only through the contract.
+const LAND_LAWS: [&str; 10] = ["flow", "change", "cover", "space", "store", "solve", "clock", "inside", "ground", "check"];
 
 /// A line without its comment: the code before `//`.
 fn code(line: &str) -> &str {
@@ -50,17 +58,17 @@ fn crate_modules(code: &str) -> Vec<String> {
     out
 }
 
-/// Every line under `p` whose code names a module of the bodies.
-fn scan(p: &Path, hits: &mut Vec<String>) {
+/// Every line under `p` whose code names one of the modules `named`.
+fn scan(p: &Path, named: &[&str], hits: &mut Vec<String>) {
     if p.is_dir() {
         for e in std::fs::read_dir(p).unwrap().flatten() {
-            scan(&e.path(), hits);
+            scan(&e.path(), named, hits);
         }
         return;
     }
     let text = std::fs::read_to_string(p).unwrap();
     for (i, line) in text.lines().enumerate() {
-        for m in crate_modules(code(line)).iter().filter(|m| BODIES.contains(&m.as_str())) {
+        for m in crate_modules(code(line)).iter().filter(|m| named.contains(&m.as_str())) {
             hits.push(format!("{}:{}: crate::{m}", p.display(), i + 1));
         }
     }
@@ -77,7 +85,16 @@ fn the_natural_world_names_no_module_of_the_bodies() {
     for n in NATURAL {
         let p = src.join(n);
         assert!(p.exists(), "{} is gone: say what the natural world is", p.display());
-        scan(&p, &mut hits);
+        scan(&p, &BODIES, &mut hits);
     }
     assert!(hits.is_empty(), "the natural world names the bodies:\n{}", hits.join("\n"));
+}
+
+#[test]
+fn the_takers_reach_the_land_only_through_the_contract() {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../core/src/fauna");
+    assert!(p.exists(), "{} is gone: say where the takers are", p.display());
+    let mut hits = Vec::new();
+    scan(&p, &LAND_LAWS, &mut hits);
+    assert!(hits.is_empty(), "the takers name a law of the land:\n{}", hits.join("\n"));
 }

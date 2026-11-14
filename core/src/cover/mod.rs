@@ -21,7 +21,7 @@ pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
 pub use lying::{Lying, FROZEN, LANDED, LOTS_LYING, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
-pub use month::{month, release};
+pub use month::{landed, release};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use stand::{height, loose_bins, stem, BINS};
@@ -65,6 +65,7 @@ pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
 pub use crate::life::{Parts, FUEL, MATTER, NO_ROOT, NP, WALL};
+pub use crate::math::dec;
 
 /// The cover of one ground cell, in `SLOTS` slots.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -304,12 +305,6 @@ impl crate::World {
         let c = self.life.cover(i);
         (c.film > 0.0).then(|| Parts::of(&self.chem).map(|p| (p.liquid, c.film as f64, c.reach as f64))).flatten()
     }
-}
-
-/// 10 to the power of a gene.
-#[inline]
-pub fn dec(g: f32) -> f64 {
-    (g as f64 * std::f64::consts::LN_10).exp()
 }
 
 /// How far apart two gene vectors are, in steps: the largest gap of a gene over its step.

@@ -177,11 +177,11 @@ point (the tape's frames, a byte a square; the pictures) asks the tree for the l
 stands on each cell (`contract::stands`), and the surroundings (`contract::surroundings`: Flow's state rebuilt in full
 and each cell's place from it, which Flow's own pass then leaves). Then Flow: the air in steps of `AIR_STEP_DAYS` (15
 days, two a month, each at its own time in the month), after each the sink of the liquid over field capacity into the
-bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the cover's month (`cover::month`) and
-Change.
+bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: the cover's,
+then the takers') and Change.
 **Chunks and the parallel pass** (`life::run`). The cells are cut into `Config::chunks` runs of neighbouring indices,
 the same for any number of threads. Each chunk is one task on the pool, its cells' life taken out of the world, the
-world read only; in each cell in order the cover's month runs on the cell's **view of the store** (`store::Moves`): its
+world read only; in each cell in order the cover's month and then the takers' run on the cell's **view of the store** (`store::Moves`): its
 ground, bed and aside node as the store held them at the pass's start with its own moves since, and **its share of its
 air node** (`Mesh::share`, its area over the air node's) of the air's amounts and heat: a cell never takes more than
 that, so the cells under one air node never overdraw it together. When the chunks end the world takes their counters
@@ -190,7 +190,7 @@ and books their moves (each array of the store by one task, the changes cell by 
 and of chunks. A serial step on one cell runs the same way on a chunk of its own (`World::in_cell`).
 
 **The contract** (`contract`): what lies between the natural world (the ground, the air, the cover) and what takes
-from it: its taker today is the plain taker of the tests (`worldgen::testkit::Taker`). The natural world names no
+from it: its takers are the takers' field (`fauna`, 3b) and the plain taker of the tests (`worldgen::testkit::Taker`). The natural world names no
 module of a taker (`cli/tests/sides.rs`). It is plain data and functions over the one source, with no copy. **What a
 cell shows** a taker: its cover as a whole, each slot by the height its plants stand at, and the seeds lying on its
 ground (`contract::shown`, `contract::slots`, `Layer::Seeds`): the mass and the amount of each substance a taker can reach, and the energy to break it (`life::breaking`: each part's volume times its breaking stress, body matter as living tissue at `rho_body`); its place as the month's start left it
@@ -862,6 +862,49 @@ seeds fill it:
 - **What it is to the rest**: its mass, capture area and the light it absorbs and keeps are what stands on its cell
   (`Cover::stand`, `contract::Stand`), so it shades (1.4) and holds the ground (1.3).
 
+## 3b. Life: the takers, as a field
+
+Each ground cell holds up to 8 slots of takers (`fauna::Fauna`, `life::Cell::fauna`): a slot is one kind of takers
+in its cell, its **members** a real count (whole below `N_WHOLE` = 64), the mol of the fuel they store (5) and of their
+body matter (10, life's `Parts`), its heat, J (each slot at its own temperature), and 8 genes (`fauna::MASS`, `CHILD`,
+`YOUNG`, `ENZYME`, `REACH`, `KEEP`, `COAT`, `REPAIR`). A member's **living mass** is its share of the body matter with
+the liquid of living tissue (matter / (1 − `WET_TISSUE`), as the cover's); that liquid is not in the books. The takers
+of a cell are part of the node of its life (`Class::Life`): the chunk of the cell is their one writer. They reach the
+land only through the contract (section 0; `cli/tests/sides.rs`), and their books are the life's (`life::Books`,
+`life::book`). The takers take nothing from the cover: they live on their store.
+
+**One month** (`fauna::step`), in the same pass of a cell's life, right after its cover's month, slot by slot:
+- **Body and pace.** A member stands at its `KEEP` gene where its ground (`contract::place`) is colder, else at its
+  ground's temperature; its upkeep runs at the pace of its burning there, the rate law's at its temperature over that
+  at `t_cat` (Gillooly et al. 2001): 5.6 at 310 K, so a body that keeps no heat of its own pays far less where it is
+  cold.
+- **Upkeep** (Kleiber's law): (`c_basal` + `c_muscle`) × m^`upkeep_exp` × pace × its repair factor (`Physics::repair`)
+  a day per member, m its living mass, kg (Kleiber 1932; Elia 1992).
+- **Heat.** A member held above its ground loses g (T_b − t) through its coat, g = `meeh` m^(2/3) / (`r_air` + COAT ×
+  `r_coat`) W/K (Meeh 1879; Scholander et al. 1950). Where its upkeep gives less heat, it burns the rest to keep its
+  temperature; where more, the excess must leave as vapour of the key liquid, at its heat of vaporisation. A body at its
+  ground's temperature gives all its heat to its ground and needs no vapour.
+- **Thirst.** A body drinks open liquid only: the liquid standing on its cell and the soft solid lying there, which
+  costs its heat of fusion (`contract::liquid`). Its need is the vapour that cools it plus the least liquid it passes
+  through, `drink_least` × m^`drink_exp` kg a day (Nagy and Peterson 1988), which goes back to the cell in the month and
+  is not booked. The slots of a cell share what is there by one share of their needs; the vapour that share sheds goes
+  to the cell's aside node with its latent heat, paid from the bodies' heat (`contract::vapour`). Of a slot that must
+  shed heat, the share of its members whose heat stays unshed dies (`LACK`). A body reaches no liquid of another cell.
+- **Burning.** It burns its store (reaction 1) for its upkeep and its heat, no more than its store and the gas the
+  cell's share of its air node offers (`Books::room`).
+- **Deaths**, each cause a share of the members on what the one before left (as the cover's): the share of the energy
+  unpaid (`SPENT`); 1 − e^-wear (`AGE`), wear the energy a member burns per kg over `e_life` × 10^REPAIR (Rubner 1908);
+  the frozen share at its body's temperature (`Physics::frozen`, the key liquid's melting point lowered by `harden` ×
+  (1 − min(1, pace)): `PHASE`); and `LACK`. Below `N_WHOLE` members the dead are a binomial draw (keyed by the seed,
+  the month, the cell and the slot, `Purpose::Fauna`); a count that falls below it becomes whole by a draw that keeps
+  its mean, never rounded up as a rule. The dead's share of the body matter and the store goes to the ground as
+  remains; a slot of no members is empty, and all it held goes there.
+- **The books.** Gases from and to the cell's share of its air node, remains to its ground, each with its heat, through
+  the books of the cell's life; each slot's heat ends at its heat capacity times its body's temperature, and the rest of
+  what the burning released goes to the ground.
+- **What it is to the rest**: its mass lies at its cell's head (`flow::stack`, the potential energy); it stands on its
+  cell as nothing (`contract::Stand` is the cover's: takers neither shade nor hold the ground).
+
 ## 4. Soil and minerals
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
 and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
@@ -900,3 +943,8 @@ read a kind.
   cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a tall fast cover with seeds spread
   wide. Its genes get a spray of mutation (`--spray`).
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
+- **Takers** 50 years after the first life (`TAKERS_AFTER`; `--fauna-year`): the five kinds of `worldgen::life::TAKER_KINDS`
+  (30 g, 3 kg, 60 kg and 400 kg kinds that keep 310 to 311 K, and a 2 kg kind that keeps none) on every open land cell,
+  all adults, at a third of Damuth's line of members per area against body mass (`START_SHARE`; Damuth 1981), whole
+  below `N_WHOLE` by a keyed draw, each with a store of a tenth of its living mass as fuel (`START_STORE`), at its
+  body's temperature, booked from the outside node (`fauna::place`, `contract::placed`).

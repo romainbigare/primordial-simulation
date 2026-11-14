@@ -7,6 +7,7 @@ pub mod clock;
 pub mod contract;
 pub mod cover;
 pub mod event;
+pub mod fauna;
 pub mod flow;
 mod ground;
 pub mod inside;

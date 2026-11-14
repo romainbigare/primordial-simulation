@@ -38,6 +38,10 @@ impl<'a> Chunk<'a> {
     pub fn cover(&mut self, i: usize) -> &mut crate::cover::Cover {
         &mut self.cells[i - self.first].cover
     }
+    /// The takers of its cell `i`, its view and its counters, each apart (`fauna::step`).
+    pub(crate) fn fauna_with(&mut self, i: usize) -> (&mut crate::fauna::Fauna, &mut Moves, &mut Counters) {
+        (&mut self.cells[i - self.first].fauna, &mut self.moves, &mut self.counts)
+    }
     /// The cover of its cell `i`, its view and its counters, each apart (`cover::step`).
     pub(crate) fn cover_with(&mut self, i: usize) -> (&mut crate::cover::Cover, &mut Moves, &mut Counters) {
         (&mut self.cells[i - self.first].cover, &mut self.moves, &mut self.counts)

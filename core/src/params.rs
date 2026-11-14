@@ -163,6 +163,21 @@ pub struct Physics {
     /// Share of its roots' need of loose ground below which a point holds none of a kind
     pub rooted_from: f64,
 
+    // The takers (`fauna`)
+    /// Upkeep of a taker's resting muscle, J per kg^`upkeep_exp` per day at `t_cat`, on top of `c_basal`
+    pub c_muscle: f64,
+    /// Power of a taker's living mass, kg, its upkeep grows as (Kleiber's law)
+    pub upkeep_exp: f64,
+    /// A taker's surface over its living mass to the 2/3, m² per kg^(2/3)
+    pub meeh: f64,
+    /// Insulation of the still air at a taker's surface, and of its coat at a `COAT` gene of 1, m² K/W
+    pub r_air: f64,
+    pub r_coat: f64,
+    /// The least key liquid a taker of 1 kg living passes through in a day besides its cooling, kg, and the power of its
+    /// living mass that grows as
+    pub drink_least: f64,
+    pub drink_exp: f64,
+
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
     pub hide: [f64; 3],
@@ -267,6 +282,13 @@ impl Default for Physics {
             root_per_height: 0.1,
             root_least: 0.02,
             rooted_from: 0.25,
+            c_muscle: 1.12e4,
+            upkeep_exp: 0.75,
+            meeh: 0.1,
+            r_air: 0.12,
+            r_coat: 0.9,
+            drink_least: 0.0928,
+            drink_exp: 0.818,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,
@@ -322,6 +344,8 @@ impl Config {
         require(self.rain_drift_m > 0.0, || format!("rain_drift_m ({}) must be above 0", self.rain_drift_m))?;
         // Hardening lowers a lethal limit, never raises it.
         require(p.harden >= 0.0 && p.harden.is_finite(), || format!("harden ({}) must be at least 0", p.harden))?;
+        // A taker's coat divides by its insulation (`fauna`).
+        require(p.r_air > 0.0 && p.r_coat >= 0.0, || format!("r_air ({}) must be above 0 and r_coat ({}) not below", p.r_air, p.r_coat))?;
         // The soil's shares inside a cell (`inside`) divide by it.
         require(p.soil_m > 0.0, || format!("soil_m ({}) must be above 0", p.soil_m))?;
         // A channel's speed is its discharge over its width times its depth (`Physics::channel`).

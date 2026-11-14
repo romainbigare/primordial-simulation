@@ -124,6 +124,18 @@ The costs of keeping living tissue (`c_basal`, `c_leaf`) are per kg of living co
 | `root_turnover` | per year | the fine roots a slot builds anew a year, at the cost of building living cover (`cover::build::living_cost`) | fine roots turn over about 0.5 to 1 times a year, 0.56 the mean over the world's biomes (Gill and Jackson 2000, from memory) | anchored, from memory |
 | `seed_kg` | kg | the built cover of one plant a seed founds: seeds that found a slot are one plant per this (`seed::lodge`) | seeds of most plants weigh 0.1 to 100 mg, a few mg in the middle (Moles and others 2005, from memory); a seedling once it stands is some times its seed: 10 mg | anchored, first guess |
 
+### The takers (`fauna`)
+
+| name | unit | fact | anchor (source) | mark |
+|---|---|---|---|---|
+| `c_muscle` | J per kg^`upkeep_exp` per day at `t_cat` | upkeep of a taker's resting muscle, on top of `c_basal` (`fauna::body`) | a mammal's muscles take a fifth of its resting rate, 6.3e4 J a day per kg^0.75 at 310 K (Elia 1992, as the row of `c_basal` says), 1.12e4 at `t_cat` (/5.62); with `c_basal` Kleiber's 3e5 at 310 K | anchored |
+| `upkeep_exp` | none | the power of a taker's living mass its upkeep grows as (`fauna::body`) | Kleiber's 3/4 (Kleiber 1932 and 1947, checked as the row of `c_basal` says); 0.755 over mammals (Ernest et al. 2003, from memory) | anchored |
+| `meeh` | m² per kg^(2/3) | a taker's surface over its living mass to the 2/3: the area its coat loses heat through (`fauna::body`) | Meeh's rule, k about 0.1 for mammals (Meeh 1879, from memory) | anchored |
+| `r_air` | m² K/W | insulation of the still air at a taker's surface (`fauna::body`) | the boundary layer of a body in light wind, 0.1 to 0.2 (Campbell and Norman 1998, from memory) | anchored |
+| `r_coat` | m² K/W | insulation of a taker's coat at a `COAT` gene of 1 (`fauna::body`) | fur of large arctic mammals insulates about 0.5 to 1.5 (Scholander et al. 1950, from memory) | anchored |
+| `drink_least` | kg of the key liquid per day | what a taker of 1 kg living passes through its body in a day besides the vapour that cools it; it goes back to its cell in the month, so only its supply is a need (`fauna::body`) | the water influx of free-living eutherian mammals, 0.326 M^0.818 mL a day, M in g (Nagy and Peterson 1988): 0.0928 kg at 1 kg. From memory; checked in part: Nagy and Montgomery (silky anteaters) give 31.7 mL a day as the flux of a typical eutherian of 269 g by Nagy and Peterson 1988, which the equation gives (31.7) | anchored, from memory |
+| `drink_exp` | none | the power of the living mass `drink_least` grows as | 0.818 for free-living eutherians (Nagy and Peterson 1988; from memory, checked in part as `drink_least`) | anchored, from memory |
+
 ### Flow, as ground cover and moving liquid feel it
 
 | name | unit | fact | anchor (source) | mark |
@@ -167,6 +179,11 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 | `Seeding::default` (20 rounds), `worldgen/src/life/seeding.rs` | none | how much a start is sprayed with mutation | run: one generation's step is too small for selection to pick from in the time a start has | tuned |
 | `worldgen::life::FIXERS` (0.1) | share | the share of the starting light-eaters that carry the fixing gene (an initial condition; `--fixers` sets it) | the legumes are about 19,000 species, 7% of flowering plants (checked in part: Judd et al. 2002; Christenhusz and Byng 2016), not all of them fix, so about 5%; 10% is within 2 times | anchored |
 | `worldgen::life::FIX_GENE` (-8.3) | log10 mol per kg of living cover per s | the fixing capacity of those founders (`cover::FIX`) | about 10 g of the fixed element per m² a year for a kg of the starting cover per m² (2 kg living), what real fixing stands fix (Cleveland et al. 1999) | anchored |
+| `fauna::N_WHOLE` (64) | members | below this many members a slot's count is whole and changes by draws | the relative noise of a count of 64 is an eighth, which a mean would hide (a rule of the model) | anchored |
+| `worldgen::life::TAKER_KINDS` | the takers' genes (`fauna::MASS` ... `fauna::REPAIR`) | the five starting kinds of takers (an initial condition) | masses of real plant-eaters of 30 g, 3 kg, 60 kg, 400 kg and a cold-bodied 2 kg; the temperature kept a mammal's 310 to 311 K (physical), 250 K for the kind that keeps none; coat, newborn share, share to young, gut and reach from the sizes of those kinds (first guesses; of these the laws read only the coat and the repair) | anchored, in part first guess |
+| `worldgen::life` `START_SHARE` (1/3), `DAMUTH_A` (4.23), `DAMUTH_EXP` (0.75) | share; log10 per km²; none | how many takers start in a cell: a third of Damuth's line, log10 D = 4.23 − 0.75 log10 W (D per km², W in g) | Damuth 1981, Nature 290: 699 (checked); a third so the takers grow into their range | anchored |
+| `worldgen::life::START_STORE` (0.1) | kg of fuel per kg living | the store a starting taker carries | mammals store 20 to 40% of their lean mass before a winter (from memory); the start at half the low end | anchored |
+| `worldgen::schedule::TAKERS_AFTER` (50) | years | when the takers are placed after the first life (`--fauna-year` sets it) | herbs fill the land in a few years and the cover's low layers stand steady by then | anchored |
 | `LAND_SHARE` (0.29, `worldgen/src/terrain.rs`) | share | the share of a globe's area its starting level leaves above 0 m (an initial condition) | Earth's land is 29% of its surface | anchored |
 | `LAND_RING` (1, `worldgen/src/terrain.rs`) | squares | the squares below 0 m round the land that stay squares when an island's open water is made coarse (`coarse_low`; an initial condition of the mesh) | the coasts keep the squares' detail; the open water farther out, where nothing but the liquid and its heat move, is in cells of up to an air block | speed |
 | `REAL_SLOPE` (0.1) at `REAL_LENGTH_M` (30 m) and `HURST` (0.8), `core/src/inside/mod.rs` | rise over run; m; none | the rms slope of real ground over 30 m, and the Hurst exponent by which it changes with the length ℓ it is measured over, ℓ^(H − 1): the least slope of the ground inside a cell in its wetness index (`inside::real_slope`, laws.md 0) | the slope of land at 10 to 100 m is a few per cent to ten per cent (rms about 0.1 on the 30 m grids of the world's land), and topography is self-affine with H about 0.7 to 0.9 (Mark and Aronson 1984; Turcotte 1997), from memory | anchored |
@@ -294,12 +311,12 @@ Not rows of the model: real sizes that a run's results can be held against, kept
 
 ## Counts
 
-The 83 rows of `Config` and `Physics` are their 83 fields; the constants outside the structs are counted by their mark.
+The 90 rows of `Config` and `Physics` are their 90 fields; the constants outside the structs are counted by their mark.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 5 | `sun`, `tilt`, `radius_m`, `gravity`, `rho_body` |
-| anchored | 59, and 27 outside the structs | `lat_south`, `lat_north`, `rotation`, `days_per_month`, `months_per_year`, `skin_m`, `air_top_m`, `sensible`, `evap`, `dissolve`, `wind`, `rain_drift_m`, `cloud_ir`, `carry`, `wear`, `creep`, `bury`, `light_depth`, `light_yield`, `gas_floor`, `gas_ref`, `wet_depth`, `t_cat`, `frost_k`, `harden`, `c_basal`, `e_life`, `c_repair`, `dormant`, `dormancy`, `kernel_near`, `c_copy`, `c_light`, `mut_size`, `thin_kg`, `tall`, `stem_form`, `stem_solid`, `wall_kg`, `drawdown`, `huber`, `c_sapwood`, `root_uptake`, `root_turnover`, `seed_kg`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `soil_m`, `hill`, `channel_width`, `channel_width_exp`, `channel_depth`, `channel_depth_exp`, `h_mix`, `thermocline` |
+| anchored | 66, and 32 outside the structs | `lat_south`, `lat_north`, `rotation`, `days_per_month`, `months_per_year`, `skin_m`, `air_top_m`, `sensible`, `evap`, `dissolve`, `wind`, `rain_drift_m`, `cloud_ir`, `carry`, `wear`, `creep`, `bury`, `light_depth`, `light_yield`, `gas_floor`, `gas_ref`, `wet_depth`, `t_cat`, `frost_k`, `harden`, `c_basal`, `e_life`, `c_repair`, `dormant`, `dormancy`, `kernel_near`, `c_copy`, `c_light`, `mut_size`, `thin_kg`, `tall`, `stem_form`, `stem_solid`, `wall_kg`, `drawdown`, `huber`, `c_sapwood`, `root_uptake`, `root_turnover`, `seed_kg`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `soil_m`, `hill`, `channel_width`, `channel_width_exp`, `channel_depth`, `channel_depth_exp`, `h_mix`, `thermocline`, `c_muscle`, `upkeep_exp`, `meeh`, `r_air`, `r_coat`, `drink_least`, `drink_exp` |
 | tuned | 5, and 34 outside the structs | `rain_time`, `c_leaf`, `kernel_far`, `kernel_far_share`, `alike` |
 | tuned, first guess | 11, and 16 outside the structs | `mix`, `cloud`, `hard_min`, `c_firm`, `root_per_height`, `root_least`, `rooted_from`, `hide`, `soft`, `still`, `hold` |
 | speed | 2, and 4 outside the structs | `wake_share`, `sleep_days` |

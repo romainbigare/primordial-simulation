@@ -56,10 +56,11 @@ pub fn totals(w: &World) -> Totals {
     }
     // The light set aside for the cover counts as heat until it stores it.
     [Class::Ground, Class::Air, Class::Aside, Class::Deep].iter().flat_map(|&c| w.store.heat(c)).for_each(|&e| thermal.add(e));
-    if let Some(p) = crate::cover::Parts::of(chem) {
-        for c in w.life.cells.iter().map(|x| &x.cover) {
-            c.all_mol().flat_map(|m| m.iter().zip(p.sub)).for_each(|(&a, k)| subs[k].add(a));
-            thermal.add(c.e);
+    if let Some(p) = crate::life::Parts::of(chem) {
+        for x in &w.life.cells {
+            x.amounts(&p).for_each(|(k, a)| subs[k].add(a));
+            thermal.add(x.cover.e);
+            thermal.add(x.fauna.heat());
         }
     }
     let mut elems = vec![0.0; chem.n_elements];
@@ -129,5 +130,10 @@ pub fn broken(w: &World) -> Option<String> {
         let mol = first_bad("mol", c.mol.as_flattened(), at_least_0).or_else(|| first_bad("lying", c.lying.mol.as_flattened(), at_least_0));
         mol.or_else(|| first_bad("e", &[c.e], at_least_0)).or_else(|| first_bad("keep", &[c.keep], at_least_0)).map(|x| format!("the cover of cell {i}: {x}"))
     });
-    found.or(cover)
+    let takers = w.life.cells.iter().enumerate().find_map(|(i, x)| {
+        let f = &x.fauna;
+        let mol = first_bad("mol", f.mol.as_flattened(), at_least_0).or_else(|| first_bad("members", &f.adults, at_least_0));
+        mol.or_else(|| first_bad("e", &f.e, at_least_0)).map(|x| format!("the takers of cell {i}: {x}"))
+    });
+    found.or(cover).or(takers)
 }

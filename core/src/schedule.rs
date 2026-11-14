@@ -1,6 +1,6 @@
 //! The order of the laws: one world step is one month, a fixed list of passes, written once here (laws.md 0).
 
-use crate::{change, check, contract, cover, flow, world::World};
+use crate::{change, check, contract, flow, life, world::World};
 
 /// The air runs in steps of this many days, a whole number of them in a month: each cell's exchange over a step is
 /// solved once and taken as linear in its air (`flow::air`), so a longer step smooths the seasons. The long-step test
@@ -19,7 +19,7 @@ pub enum Stage {
     Flow,
     /// `change::step`
     Change,
-    /// the cover: what stands on each cell and its month (`contract::stands`, `cover::month`)
+    /// life: what stands on each cell and the month of its cover and its takers (`contract::stands`, `life::month`)
     Cover,
 }
 
@@ -115,7 +115,8 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
         pass(w, Stage::Flow, "refresh", &flow::refresh);
     }
     flow::chain(w, false);
-    // The cover's month reads Flow's state and the air as its last step left it; then Change.
-    pass(w, Stage::Cover, "cover", &cover::month);
+    // The month of life (the cover, then the takers) reads Flow's state and the air as its last step left it; then
+    // Change.
+    pass(w, Stage::Cover, "life", &life::month);
     pass(w, Stage::Change, "change", &|w| change::step(w, len as f64));
 }

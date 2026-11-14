@@ -1,14 +1,16 @@
-//! First life: cover placed on land at the start, initial conditions only (laws.md 5); its reactions are found from
-//! the chemistry's numbers (`Chemistry::life_roles`). `kinds`: the table; `seeding`: placing a kind; `soil`: the
-//! mineral of the land when life starts.
+//! First life: cover and takers placed on land at the start, initial conditions only (laws.md 5); its reactions are
+//! found from the chemistry's numbers (`Chemistry::life_roles`). `kinds`: the table of the cover; `seeding`: placing a
+//! kind of cover; `soil`: the mineral of the land when life starts; `takers`: the takers' table and their placing.
 
 mod kinds;
 mod seeding;
 mod soil;
+mod takers;
 
 pub use kinds::{Kind, KINDS, LIGHT_ROW, ONE, ROSTER};
 pub use seeding::{seed, seed_with, Seeding, FIXERS, FIX_GENE};
 pub use soil::soil;
+pub use takers::{place_takers, start_members, TakerKind, START_STORE, TAKER_KINDS};
 
 use pcore::World;
 

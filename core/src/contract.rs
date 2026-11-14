@@ -1,13 +1,15 @@
 //! The contract between the natural world (the ground, the air and the cover) and what takes from it (laws.md 0, "The
 //! contract"): a taker reads a cell and moves matter only through what is here, and Flow reads what stands on a cell
 //! only as a `Stand`. It is plain data and functions over the one source and holds no copy: what a cell shows is read
-//! from its cover when a taker asks. Its taker today is the plain taker of the tests (`worldgen::testkit::Taker`).
+//! from its cover when a taker asks. Its takers are the takers' field (`fauna`) and the plain taker of the tests
+//! (`worldgen::testkit::Taker`).
 //!
 //! - **What a cell shows**: its cover as a whole and slot by slot by the height its plants stand at (`shown`,
 //!   `slots`), with the energy to break it, the seeds lying on its ground, and its place (`place`).
 //! - **Take** (`take`, a bite of all a layer's parts in their proportions), **give** (`give`) and **press** (`press`):
 //!   each booked on both sides, never more than is there.
 //! - **The key liquid** of a cell (`liquid`: open, in the pores, frozen) and a taker's **vapour** (`vapour`).
+//! - A taker's moves (`open`), the gas its air offers it (`air`), and life placed from outside (`placed`).
 //! - **What stands on a cell** (`Stand`, `stand`): what life there weighs and catches of the light; Flow reads it.
 //!
 //! When: the place is as the month's start left it (`surroundings`), and so is what stands; the cover is as it is now.
@@ -250,6 +252,26 @@ pub fn vapour(w: &World, d: &mut Chunk, i: usize, [liquid, solid]: [f64; 2]) -> 
     d.moves.gas(w, k, mol, w.lift(i));
     d.moves.give(w, Node::aside(i), 0, 0.0, mol * s.cp * t);
     mol * (s.cp * t + s.latent_gas()) - got
+}
+
+/// A taker's moves on cell `i` of chunk `d` open, in the name of the life of the cell: what it takes and gives from here
+/// is booked through the cell's view.
+pub fn open(w: &World, d: &mut Chunk, i: usize) {
+    d.moves.open(w, i, Node::new(crate::store::Class::Life, i));
+}
+
+/// What the cell's share of its air node offers a taker of cell `i` of chunk `d` as the cell's view holds it now, mol
+/// of each substance that is a gas at the ground's temperature (infinite for the rest: the ground's are limited where
+/// they are read), for its books (`life::Books`).
+pub fn air(w: &World, d: &Chunk, i: usize) -> [f64; MAX_SUBSTANCES] {
+    let (seen, t, chem) = (d.moves.seen(w, w.mesh.up(i, 0, crate::AIR)), place(w, i).t, &w.chem);
+    std::array::from_fn(|k| if k < chem.ns() && chem.phase(k, t) == crate::chem::Phase::Gas { seen(k) } else { f64::INFINITY })
+}
+
+/// Life placed on cell `i` from outside the world (an edit): `amounts` (substance, mol) and `heat` J come from the
+/// outside node into the node of the cell's life (`World::cross`).
+pub fn placed(w: &mut World, i: usize, amounts: impl IntoIterator<Item = (usize, f64)>, heat: f64) {
+    w.cross((crate::store::Boundary::Outside, Node::new(crate::store::Class::Life, i)), amounts, heat);
 }
 
 /// Work `energy` J spent pressing on the cover of cell `i` of chunk `d` breaks it: the share `energy` over the energy

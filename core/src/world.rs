@@ -22,7 +22,7 @@ pub struct Counters {
     /// The flows of the seeds, kg (`cover::SEED_FLOWS`)
     #[serde(skip)]
     pub seeds: [f64; crate::cover::SEED_FLOWS.len()],
-    /// What the cover of a cell built in a month, kg of dry matter (cell, kg), until its month ends (`cover::month`)
+    /// What the cover of a cell built in a month, kg of dry matter (cell, kg), until its month ends (`cover::landed`)
     #[serde(skip)]
     pub grown: Vec<(u32, f64)>,
     /// Per cell, what its cover built in the year so far, and in the last whole year, kg of dry matter

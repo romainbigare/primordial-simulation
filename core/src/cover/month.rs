@@ -1,16 +1,13 @@
-//! The cover's passes of a month: its month on the chunks of `life` (`month`), and before each air step the release of
-//! the light set aside in each cell's aside node that its cover does not claim (`claims`, `release`; laws.md 1.4).
+//! The cover's passes of a month: after its month on the chunks of `life` (`life::month`) its seeds land and what it
+//! built is counted (`landed`), and before each air step the light set aside in each cell's aside node that its cover
+//! does not claim goes back to the ground (`claims`, `release`; laws.md 1.4).
 
-use crate::life;
 use crate::store::{apply, Batch, Class};
 use crate::World;
 
-/// Once a month, after Flow's state is built in full: the cover's month (`cover::step`) in each cell that holds any,
-/// one task per chunk on the pool; then its seeds land (`cover::land`); and what each cell's cover built is counted
-/// into its year (`grown`).
-pub fn month(w: &mut World) {
-    let load = w.life.cells.iter().filter(|c| c.cover.any()).count();
-    life::run(w, load, super::step);
+/// After the month of every chunk (`life::month`): the cover's seeds land (`cover::land`), and what each cell's cover
+/// built is counted into its year (`grown`).
+pub fn landed(w: &mut World) {
     super::land(w);
     grown(w);
 }
