@@ -3,14 +3,14 @@
 //! holds them; a plant's height and its stem come from the cover's own law (`cover::height`, `cover::stem`: the buckling
 //! limit, McMahon 1973), and the crown from its share of the ground. The page only draws what they give.
 
-use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, LEAF, LIGHT, MOIST, NP, SEED, SLOTS, STORE};
+use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, LEAF, LIGHT, MOIST, NP, SEED, SLOTS, STORE, WALLS};
 use crate::layers::per_land;
 use pcore::{Physics, World};
 
 /// Kinds a square's row holds at most: the slots of its cell.
 pub const KINDS: usize = SLOTS;
 /// Numbers a kind holds in a square's row (`row`).
-pub const KIND_ROW: usize = 19;
+pub const KIND_ROW: usize = 20;
 
 /// The plants of a stand: how many a m², each one's mass, kg, height, stem's width and crown's width, m, the share of
 /// the ground the crowns cover, and how closed one crown is (the light it stops, as the cover's light law: 1 - e^-leaf
@@ -64,7 +64,8 @@ struct Ground {
 /// activity there (`cover::activity`); the share of it frozen this month (`cover::frozen`); the share of what it builds
 /// that goes to seeds (`SEED`); the share of the land whose loose ground holds its plants (`Cover::rooted`, a share of the
 /// ground its cover lives on) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
-/// whose need is not found yet: seeds that landed since its cell's last month).
+/// whose need is not found yet: seeds that landed since its cell's last month); and its walls gene, log10 kg of walls
+/// per kg of matter (`WALLS`), by which a viewer knows a woody kind while its plants are young.
 fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
     let (built, genes) = (c.built(mm, x), c.genes[x]);
     let walls = c.walls(mm, x) / built.max(1e-300);
@@ -94,6 +95,7 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
         gene(SEED),
         rooted,
         need as f64,
+        gene(WALLS),
     ]
 }
 

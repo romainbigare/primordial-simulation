@@ -21,7 +21,7 @@ const ROOTED_ALL = 0.999;
 /** A bush's mark is a clump of its plants this many times as wide as one, so its lobes read at a 10 m scale bar. */
 const BUSH_GROW = 2.5;
 /** The numbers of a kind in the core's row (tape/src/stands.rs `row`). */
-const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16, rooted: 17, need: 18 } as const;
+const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16, rooted: 17, need: 18, walls: 19 } as const;
 /** The planes of the kinds' table (cover.wgsl): of each lattice the chance a cell holds a mark of each kind where its
  * roots hold (over the share of its square that holds it, the core's `Cover::rooted`; on the lattice of stands,
  * `STANDS`, negated for its square's first kind, `Paint`) and the mark's width, m; how wet each kind needs its ground
@@ -216,7 +216,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       const r = rows.subarray(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
       if (r[K.root] < 0 || r[K.kg] <= 0) continue;
       // The square's ground temperature (the table's second number of a row) and the frozen cover's melting point.
-      const design = designOf(r[K.height], r[K.wood]), look = lookOfRow(r, design, walls, rows[1 + row * i + 1], rows[0], falling);
+      const design = designOf(r[K.height], r[K.walls]), look = lookOfRow(r, design, walls, rows[1 + row * i + 1], rows[0], falling);
       const c = seenFar(look), crown = r[K.crown] * look.left;
       const shape = formOf({ leaf: r[K.leaf], frost: r[K.frost], moist: r[K.moist], height: r[K.height], width: r[K.width], seed: r[K.seed] });
       // The share of the square that holds its plants and the loose ground their roots need, as the core found them.
