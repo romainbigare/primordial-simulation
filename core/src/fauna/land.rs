@@ -87,7 +87,7 @@ pub fn land(w: &mut World) {
             let kg: f64 = (0..NF).map(|q| b.mol[q] * mm[q]).sum();
             (sent[from][0], sent[to][1]) = (sent[from][0] + kg, sent[to][1] + kg);
             let mut r = Rng::new(w.seed, w.month(), LANDING | (from as u64) << SENT_BITS | k as u64, Purpose::Fauna);
-            let died = if w.is_land(to) { arrive(w, to, &b, &mut r) } else { Some(b.n) };
+            let died = if contract::land(w, to) > 0.0 { arrive(w, to, &b, &mut r) } else { Some(b.n) };
             if let Some(dead) = died {
                 w.counts.takers_died[SPENT as usize] += dead;
                 contract::died_at(w, to, (0..NF).map(|q| (sub[q], b.mol[q])), b.heat);

@@ -145,12 +145,14 @@ pub fn adult(g: &[f32; NG]) -> f64 {
     crate::math::dec(g[MASS])
 }
 
-/// The living mass of the takers of each ground cell per km² of it, kg (none where it holds none).
+/// The living mass of the takers of each ground cell per km² of its land, kg (`contract::lands`; none where it holds
+/// none or has no land).
 pub fn per_km2(w: &crate::World) -> Vec<f64> {
-    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
+    let (n, land) = (w.mesh.cells().n(), crate::contract::lands(w));
     let Some(p) = Parts::of(&w.chem) else { return vec![0.0; n] };
     let mm = mm(&w.chem, &p);
-    (0..n).map(|i| w.life.cell_at(i).fauna.held().map(|x| w.life.cell_at(i).fauna.living(&mm, x)).sum::<f64>() / area[i] * 1e6).collect()
+    let kg = |i: usize| w.life.cell_at(i).fauna.held().map(|x| w.life.cell_at(i).fauna.living(&mm, x)).sum::<f64>();
+    (0..n).map(|i| if land[i] > 0.0 { kg(i) / land[i] * 1e6 } else { 0.0 }).collect()
 }
 
 /// The takers of the world by starting kind (index: the root), in the order of the cells and their slots: members and

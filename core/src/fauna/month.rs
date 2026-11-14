@@ -35,7 +35,7 @@ pub fn step(w: &World, d: &mut Chunk) {
 /// (`grow`), and the books.
 fn cell(w: &World, d: &mut Chunk, (p, gut): (&Parts, &Gut), i: usize) {
     let (chem, dt, t) = (&w.chem, w.cfg.calendar().month as f64, contract::place(w, i).t);
-    let (area, lv, days) = (w.mesh.cells().area()[i], chem.subs[p.liquid].lv, dt / DAY);
+    let (area, lv, days) = (contract::land(w, i), chem.subs[p.liquid].lv, dt / DAY);
     let mm = mm(chem, p);
     contract::open(w, d, i);
     // What lies on its ground, kg a m², and each member's share of the cell's: each sits in its own heap.
@@ -45,7 +45,8 @@ fn cell(w: &World, d: &mut Chunk, (p, gut): (&Parts, &Gut), i: usize) {
         let f = &d.at(i).fauna;
         std::array::from_fn(|g| body(w, p, f, (g, &mm), (i, t), (gut.per_wall(chem), remains, share)))
     };
-    let layers = take::layers(w, d, i);
+    // A cell with no land offers no ground to search: its takers find nothing there and starve by the law of upkeep.
+    let layers = if area > 0.0 { take::layers(w, d, i) } else { Vec::new() };
     let reach = take::reachable(w, i, &layers, &bodies);
     let found = contract::liquid(w, d, i);
     let plan = plan(w, p, (i, &bodies), (&layers, &reach), &found);
@@ -121,7 +122,7 @@ struct Plan {
 fn plan(w: &World, p: &Parts, (i, bodies): (usize, &[Body; GROUPS]), (layers, reach): (&[take::Found], &take::Reach), found: &contract::Liquid) -> Plan {
     let (chem, dt) = (&w.chem, w.cfg.calendar().month as f64);
     let (lv, liquid_mm, days) = (chem.subs[p.liquid].lv, chem.subs[p.liquid].molar_mass, dt / DAY);
-    let (full, searching) = take::scheme(&take::eaters(bodies, &reach.share, &[1.0; GROUPS]), (&reach.stock, &reach.breaking), w.mesh.cells().area()[i], days);
+    let (full, searching) = take::scheme(&take::eaters(bodies, &reach.share, &[1.0; GROUPS]), (&reach.stock, &reach.breaking), contract::land(w, i), days);
     let matter = chem.subs[p.sub[MATTER]].molar_mass;
     let wet: Vec<f64> = layers.iter().map(|f| f.shown.mol[p.sub[MATTER]] * matter / f.shown.kg * WET_TISSUE / (1.0 - WET_TISSUE) / liquid_mm).collect();
     let walks: [f64; GROUPS] = std::array::from_fn(|x| bodies[x].speed * searching[x] / DAY);

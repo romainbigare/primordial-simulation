@@ -973,7 +973,11 @@ at its own temperature), its balance over about a year (`Fauna::net`), and 8 gen
 the liquid of living tissue (matter / (1 − `WET_TISSUE`), as the cover's); that liquid is not in the books. The takers
 of a cell are part of the node of its life (`Class::Life`): the chunk of the cell is their one writer. They reach the
 land only through the contract (section 0; `cli/tests/sides.rs`), and their books are the life's (`life::Books`,
-`life::book`). They take from the cover and the seeds lying, digest, and live on what they took and their store.
+`life::book`). They take from the cover and the seeds lying, digest, and live on what they took and their store. They live on the cell's
+land, as its cover does (`contract::land`): they search its land, the remains they rest in lie on it (`contract::remains`,
+kg a m² of land), and their mass per area is per km² of land (`fauna::per_km2`); on a cell whose land goes under they
+find nothing to take and die there by the law of upkeep, their matter to the cell's ground, and young that land on a
+cell with no land die there.
 
 **One month** (`fauna::step`), in the same pass of a cell's life, right after its cover's month, group by group (a
 young member is a body of its own mass, with its own band, floor, upkeep and heat):
