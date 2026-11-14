@@ -570,13 +570,17 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    **The orchestrator's order from it** (each a package with its measure and its picture):
    1. Done: the page's climate "Warm" (5 to 50).
    2. **Plants and the ground's liquid** (a builder; branch in its worktree, scratch `scratchpad/water/`).
-      - Law 1, built, good, waits for one mend: the share a plant can draw is (how full the pores are − `wilt`) /
-        (`field` − `wilt`), `wilt` 0.25 anchored (Saxton and Rawls 2006). Kinds sort by the liquid (the moisture
-        gene by mass: −0.8 on the driest ground, −0.3 on wet ground; before −0.2 everywhere). 64 drawn world, year
-        100: forest 86 → 78% (band 20 to 65), 72 → 64% (5 to 50), the warm band's bare south becomes open low
-        cover (bare 16 → 9%, open 12 → 28%); cover 32 → 23 kg/m². **It draws the air's blocks as green squares**
-        (the rain of an air node lands evenly on its block): it goes to main after the air's helper shares a
-        node's rain smoothly between the nodes' centres.
+      - Law 1, on main and on the page (`SNAPSHOT_VERSION` 145): the share a plant can draw is (how full the
+        pores are − `wilt`) / (`field` − `wilt`), `wilt` 0.25 anchored (Saxton and Rawls 2006). Kinds sort by the
+        liquid (the moisture gene by mass: −0.8 on the driest ground, −0.4 to −0.3 on wet ground; before −0.2
+        everywhere). 64 drawn world, year 100: forest 87 → 78% (band 20 to 65), 71 → 62% (5 to 50); open 10 → 18%
+        and 16 → 27%; cover 33 → 22 and 28 → 19 kg/m². On the page the thin open cover of the warm band reads as
+        bare ground (the 32 island's south and north shore).
+      - **A fault of main it makes visible: the ground's liquid in the driest warm month steps at the edges of
+        the air's blocks** (from 0.2 to 0.9 of field capacity in one cell round a rectangle of 2 × 2 blocks; the
+        year's rain is smooth there), so the page draws green squares on the warm 64 island. With the air's
+        helper, first in its queue: which of a cell's readings of its air node steps (the month's rain, or what
+        rises from the ground), shared smoothly between the nodes' centres.
       - Law 2, built, not good yet: roots under the depth where the pores are full get no gas and split their fuel
         by the chemistry's own reaction (13 times the fuel for the same work); a gene for open channels
         (`CHANNEL`, cost 1/(1−ε) of the fine roots) carries gas down by diffusion (Armstrong 1979); a starting
