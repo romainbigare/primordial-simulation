@@ -24,9 +24,9 @@ const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 /** The live world's first size and its least and most, squares a side: the first shows a land with its valleys, a
  * lake and an outlier; the most is the largest island the laws are run on. */
 const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = 128;
-/** The climates a live island may have: a name, and the band of latitudes it stands for (south, north; none: the core's
- * default band). The first is the page's. */
-const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['None: 40° to 42.3°', '']];
+/** The climates a live island may have: a name, and the band of latitudes it stands for (south, north), its air the
+ * planet's air over that band. The first is the page's. */
+const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55']];
 /** The large shapes a live island may have: a name, and the URL's word for it. The first is the page's. */
 const SHAPES: string[][] = [['Drawn from the seed', 'drawn'], ['One island', 'one']];
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */

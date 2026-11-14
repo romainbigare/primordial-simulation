@@ -686,8 +686,8 @@ it, nor the rain's drift, nor anything on the ground. `stretch` is the band's le
 times the band in radians) over the map's from south to north, for a world in the planet's air (below); alone, and
 on a globe (its own band), 1.
 **Alone or in the planet's air** (`air::edge`, `air::planet`, `World::planet`). A world is made either alone: its air
-closed at the map's edges, it makes its own climate from its own sun, sea and life (the page's climate None, and every
-world made without a band); or in the planet's air: made with a band (`ew run --band S,N`, the page's Wide or Mild, or
+closed at the map's edges, it makes its own climate from its own sun, sea and life (every world made without a band:
+`ew run` with no `--band`; the page makes none); or in the planet's air: made with a band (`ew run --band S,N`, the page's Wide or Mild, or
 `band=`), it holds the planet's table (`flow::Planet`) and, its band longer than its own span (`stretch` above 1), its
 edges open to the air of its latitudes, and its air's sideways laws take the band's stretch (alone, the map's own
 metres: a closed box stretched over a wide band freezes over). The table's presence is the state. The planet's air comes from a strip of the planet from pole to pole, run by
