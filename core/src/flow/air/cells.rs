@@ -283,7 +283,7 @@ fn changing(nx: usize) -> usize {
 /// (`Air::moves`), held to what the cell holds (`hold`).
 pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64; FIXED] {
     let (w, s, dt, act) = (cx.w, cx.s, cx.dt, cx.act);
-    let (na, j, area) = (w.mesh.level(AIR).n(), g.j, g.area);
+    let (na, area) = (w.mesh.level(AIR).n(), g.area);
     let (adt, tl, top) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun);
     let a = g.canopy;
     let cover = if a > 0.0 { one_minus_exp(a) } else { 0.0 };
@@ -292,20 +292,24 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     // the light at the top, clear and under its cloud (`Light::shares`): [the sunlight that reaches it, in all its
     // passes (per unit of capture area the cover intercepts cover / a of it, all of it where it is thin); what it
     // absorbs; what is set aside for its cover], W/m², and the share of the light at the top its air absorbs.
+    // What it reads of its air, as the air's temperature and vapour: shared between the centres of the nodes it sees
+    // (`lerp`), so nothing it reads steps at a node's border; what it gives and takes is booked with its node.
+    let seen = |f: &dyn Fn(usize) -> f64| s.near[g.cell].iter().zip(&s.wt[g.cell]).filter(|e| *e.1 > 0.0).map(|(&q, &x)| x * f(q as usize)).sum::<f64>();
     let lit = |alb: f64| {
-        let [ground, in_air, _] = cx.light[j].shares((1.0 - cover) * alb + cover * (1.0 - g.absorb));
+        let shares = |q: usize| cx.light[q].shares((1.0 - cover) * alb + cover * (1.0 - g.absorb));
+        let [ground, in_air] = [0, 1].map(|c| seen(&|q| shares(q)[c]));
         let sun = top * ground;
         let kept = sun * caught * g.keep;
         [sun, sun * ((1.0 - cover) * (1.0 - alb) + caught) - kept, kept, in_air]
     };
     // The heat radiation its air absorbs of what it sends, at the shares of its temperature at the step's start.
-    let [down, slope] = s.heat[j].glow(&w.chem, tl, DOWN);
-    let rad = Air { tl, f: s.heat[j].absorbs(&w.chem, g.tg), down, slope };
+    let [down, slope] = [0, 1].map(|c| seen(&|q| s.heat[q].glow(&w.chem, tl, DOWN)[c]));
+    let rad = Air { tl, f: seen(&|q| s.heat[q].absorbs(&w.chem, g.tg)), down, slope };
     // The share of the air it sees that lies over it (`over_cell`).
     let over = area / g.seen_area;
     let Work { gas, ev, p, carry, out, loss, soak } = work;
     gas.clear();
-    gas.extend(act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, g, ac, air[1 + y], super::per_mol(over, tl, area, s.hk[ac.gi * na + j]))));
+    gas.extend(act.iter().enumerate().map(|(y, &ac)| Vapour::of(cx, g, ac, air[1 + y], super::per_mol(over, tl, area, seen(&|q| s.hk[ac.gi * na + q])))));
     let gas = &*gas;
     // The balance with what evaporates linearised about `t0`.
     let balance = |t0: f64, sw: f64| {
