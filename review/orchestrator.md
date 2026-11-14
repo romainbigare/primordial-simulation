@@ -237,8 +237,12 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   the last digit), the garden keeps that many and tries newcomers in proportion, the CLI and the page offer it.
   It gives room for kinds; how many live together in a cell stays with the laws. The cover's month costs about
   in proportion to the slots used.
-- **Its steps**: (0) main alone to year 300 on the new air, the target (running: `scratchpad/sorted/target/`,
-  seed 1 at 64 squares: the band with the roster, no band with the roster, no band with one kind); (1) a spike
+- **Its steps**: (0) main alone to year 300 on the new air, the target: done (`scratchpad/sorted/target/`, seed
+  1 at 64 squares). The cover is steady from year 100 in all three: in the band with the roster 1.33 to 1.40e11
+  kg, nearly all the land covered, the gas held at 386 ppm, land 283.7 K, the low liquid down 1.2 m at year 300;
+  with no band and the roster 4.9 to 5.1e10 kg, the shores bare, the gas drawn down to 212 ppm by year 50; with
+  no band and one kind 1.1e10 kg, the gas 289 ppm and still falling. So a closed island holds about a third of
+  the cover the same island holds in the planet's air: the gas, not the light; (1) a spike
   of the port on a branch; (2) the garden check: a garden grown on a cell of main's year-300 world with that
   cell's kinds against the world's own mass there; (3) side by side to year 300 with pictures; (4) the same after
   the roots' package; (5) the design's mends, a commit each; (6) to main with the references set once; (7) the
