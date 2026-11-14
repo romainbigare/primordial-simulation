@@ -90,7 +90,8 @@ const CROWN_SHADOW = 0.5;
 /** The sun at 45° lays a plant's shadow as long as it is tall: m of shadow per m of height. */
 const SHADOW_RUN = 1;
 
-const mix = (a: Rgb, b: Rgb, t: number): Rgb => a.map((v, i) => v + (b[i] - v) * clamp(t)) as Rgb;
+/** Colour `a` moved the share `t` (0..1) towards `b`. */
+export const mix = (a: Rgb, b: Rgb, t: number): Rgb => a.map((v, i) => v + (b[i] - v) * clamp(t)) as Rgb;
 
 /** The reflectance of the crowns of the kind of row `r` whose walls reflect `walls`: a leaf's, less the more pigment
  * per area and the thicker its leaves (and duller), greyer the drier the ground it is made for, bluer the hardier to

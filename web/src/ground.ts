@@ -12,7 +12,7 @@ import type { View } from './map';
  * the gutter along each edge, the depths from the coarsest to the finest, the most steps along each axis by which a
  * texel names its channel's sample, the length its place along its channel is kept modulo, m, numbers of a row of the
  * cells' table, and the reflectance of the walls the cover builds. */
-export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; along_wrap: number; row: number; kinds: number; kind_row: number; walls: [number, number, number] }
+export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; along_wrap: number; row: number; kinds: number; kind_row: number; taker_slots: number; taker_row: number; walls: [number, number, number] }
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
 export interface MapOf { w: number; h: number; cell_m: number; square_depth: number }
 

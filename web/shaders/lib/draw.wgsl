@@ -57,6 +57,9 @@ fn shows_at(size: f32, e: f32) -> f32 {
   return 1.0 - ease(0.5 * size, 1.5 * size, 2.0 * e);
 }
 
+// Paint colour rgb with coverage a over dst (premultiplied).
+fn over(dst: ptr<function, vec4f>, rgb: vec3f, a: f32) { *dst = vec4f(rgb * a, a) + *dst * (1.0 - a); }
+
 // A random word of the grid cell c and the stream k, fixed in the world (lowbias32, Wellons 2018).
 fn lowbias(c: vec2i, k: i32) -> u32 {
   var x = (u32(c.x) * 0x9E3779B1u) ^ (u32(c.y) * 0x85EBCA77u) ^ (u32(k) * 0xC2B2AE3Du);

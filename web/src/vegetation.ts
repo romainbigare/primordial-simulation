@@ -3,12 +3,13 @@
 // kinds of cover with each frame (tape/src/stands.rs); canopy.ts sets them out on three lattices of marks, and the GPU
 // draws them at every frame (textures.ts, web/shaders/cover.wgsl, web/shaders/lib/cover_field.wgsl), so a pan, a zoom
 // or a new frame shows them at once. A tape's map holds only totals per square and draws the cover in its ground's
-// colours (colour.wgsl).
+// colours (colour.wgsl). Over the plants stand the takers, one by one where one takes a pixel (herds.ts).
 import { World } from './data';
 import { kindsOf } from './canopy';
 import { cooling } from './style';
 import { Style } from './style';
 import { CoverMarks, Marks } from './textures';
+import { Herds } from './herds';
 import { Draw, Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
@@ -20,6 +21,7 @@ const COVER_ALPHA = 0.85;
 /** The cover over the live map: what it reads (`set`), drawn by the GPU at every frame. */
 export class Vegetation implements GpuLayer {
   private marks = new CoverMarks(COVER_ALPHA);
+  private herds = new Herds();
   private cellM = 1;
   private mapW = 0;
   private mapH = 0;
@@ -30,15 +32,16 @@ export class Vegetation implements GpuLayer {
   /** The draw of the marks `prepare` decided last (none: no cover drawn). */
   private drawn: Marks | null = null;
 
-  /** The kinds of world `w` from its table `rows` (tape/src/table.rs), or none (another view than the earth's, or a
-   * tape). */
+  /** The kinds and the takers of world `w` from its table `rows` (tape/src/table.rs), or none (another view than the
+   * earth's, or a tape). */
   set(w: World | null, rows: Float32Array | null): void {
     const t = w?.meta.tiles;
-    if (!w || !rows || !t) { this.marks.set(null, this.cellM); return; }
+    if (!w || !rows || !t) { this.marks.set(null, this.cellM); this.herds.set(null, 1, 1, 0, 0, 0); return; }
     const m = w.meta, n = m.w * m.h;
     this.cellM = m.cell_m; this.mapW = m.w; this.mapH = m.h;
     const falling = cooling(w.meta.frames[0].year, (m.lat_north + m.lat_south) / 2);
     this.marks.set(kindsOf(m.w, m.h, rows, t.row, 1 + n * t.row, t.kinds, t.kind_row, t.walls, falling), m.cell_m);
+    this.herds.set(rows, m.w, m.h, 1 + n * (t.row + t.kinds * t.kind_row), t.taker_slots, t.taker_row);
   }
 
   /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px. */
@@ -47,7 +50,7 @@ export class Vegetation implements GpuLayer {
   }
 
   /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` device px
-   * a css px, in a view `W` x `H` css px, before the map's pass (textures.ts `prepare`). */
+   * a css px, in a view `W` x `H` css px, before the map's pass (textures.ts `prepare`), and the takers' draw (herds.ts). */
   prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, W: number, H: number): void {
     this.drawn = null;
     const land = this.land?.lawBinds(gpu);
@@ -59,10 +62,13 @@ export class Vegetation implements GpuLayer {
     if (x1 <= x0 || y1 <= y0) return;
     this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, cssMpp: mpp, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], style: this.style, land };
     this.marks.prepare(gpu, this.drawn);
+    this.herds.prepare(gpu, this.drawn.rect, this.drawn.at, this.drawn.mpp, land);
   }
 
-  /** Draw the cover in pass `p`, as `prepare` decided it. */
+  /** Draw the cover and the takers over it in pass `p`, as `prepare` decided them. */
   draw(p: Pass): void {
-    if (this.drawn) this.marks.draw(p, this.drawn);
+    if (!this.drawn) return;
+    this.marks.draw(p, this.drawn);
+    this.herds.draw(p);
   }
 }

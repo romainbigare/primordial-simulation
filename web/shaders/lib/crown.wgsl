@@ -12,9 +12,6 @@ struct Plant {
   form: f32, sure: f32, petal: vec3f, blooms: f32, lean: vec2f, reach: f32,
 }
 
-// Paint colour rgb with coverage a over dst (premultiplied).
-fn over(dst: ptr<function, vec4f>, rgb: vec3f, a: f32) { *dst = vec4f(rgb * a, a) + *dst * (1.0 - a); }
-
 // What a plant's body shows at a point: its coverage, its light (1 on flat ground), and how near its rim the point is
 // (0 inside .. 1 at its edge).
 struct Body { a: f32, lit: f32, rim: f32 }

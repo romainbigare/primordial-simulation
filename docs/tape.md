@@ -185,7 +185,20 @@ seeds is not found). The page thins a
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /
-that share), the cover's own light law, in patches where they close, each crown the ground it holds there; a plant's stem and height are the cover's own (`cover::stem`, `cover::height`, laws.md 3). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
+that share), the cover's own light law, in patches where they close, each crown the ground it holds there; a plant's stem and height are the cover's own (`cover::stem`, `cover::height`, laws.md 3). Then for each square row by row its cell's takers
+(`tape/src/takers.rs`), `TAKER_SLOTS` (8) of `TAKER_ROW` (8) f32 each, slot by slot in the cell's own order: its starting
+kind (-1: none); its adults and its young in the square (the cell's real counts shared evenly over the squares that show
+it; a land cell is one square); the living mass of an adult by its genes (`fauna::adult`) and the mean living mass of
+a young one, kg; its coat gene, the body
+temperature it keeps, K, and the middle of the band of heights it searches, log10 m; a cell that holds no land has none.
+The page draws them one by one where one takes a pixel (`web/shaders/herds.wgsl`, `web/src/herds.ts`): a square is cut
+into k x k parts, k the least whose square holds the slot's groups, and a fixed random order of the parts, keyed by the
+square and the slot, gives the first of them one group each, an adult with its share of the slot's young beside it (young
+alone where the adults are too few to lead them in groups of 6), at a random place in its part; so exactly as many stand
+as the slot holds (whole: the count rounded down), each at a place fixed by its square, slot and number. None stands in
+standing liquid or under snow deeper than it is tall (at its group's place). A body is 0.33 m × its mass in kg to the
+power 1/3 long; members show from where that takes a quarter of a device pixel (fully from a half), drawn no shorter than
+4 device pixels (a young one 2.6), as a dot of its body's area. Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
 less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The samples' rock** (`Ground::rock`,
 `tape/src/ground/rock.rs`), made once with the ground: of each of the terrain's samples, row by row, four 16-bit floats:
 the depth of its loose ground, m (`Samples::loose`), the largest stone its channel moves, m: `STONE_M` (0.001) ×

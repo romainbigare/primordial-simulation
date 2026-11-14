@@ -80,7 +80,8 @@ impl Table {
 
     /// The present state of world `w` as one tape frame, as a tape would keep it (`frame`), and its table: the melting point of the frozen
     /// cover, K (`cover_melt`), then `ROW` f32 numbers for each square, row by row (`row`), then the kinds of cover of
-    /// each square, row by row (`stands::rows`, `KINDS` × `KIND_ROW` f32), then the level of each pond of the terrain's
+    /// each square, row by row (`stands::rows`, `KINDS` × `KIND_ROW` f32), then the takers of each square, row by row
+    /// (`takers::rows`, `TAKER_SLOTS` × `TAKER_ROW` f32, the members of a cell shared over its squares), then the level of each pond of the terrain's
     /// samples, m (`World::pond_levels`: NaN where no body holds it, or where its body holds less than `DRY_M` of liquid on
     /// its mean: dry ground), which a shell draws each pond's liquid flat at, over the ground that lies under it.
     pub fn frame(&self, w: &World) -> (Vec<u8>, Vec<f32>) {
@@ -96,6 +97,10 @@ impl Table {
         table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
         let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i, c.land[i])).collect();
         table.extend(self.square.iter().flat_map(|&i| kinds[i].map(|v| v as f32)));
+        let mut squares = vec![0usize; n];
+        self.square.iter().for_each(|&i| squares[i] += 1);
+        let takers: Vec<_> = (0..n).map(|i| crate::takers::rows(w, i, c.land[i], squares[i])).collect();
+        table.extend(self.square.iter().flat_map(|&i| takers[i].map(|v| v as f32)));
         let mut ponds = w.pond_levels();
         for p in w.pools().iter().filter(|p| p.volume <= DRY_M * p.area) {
             ponds[p.pond] = f64::NAN;
