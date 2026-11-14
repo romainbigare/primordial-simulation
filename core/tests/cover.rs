@@ -203,7 +203,7 @@ fn what_is_pressed_loose_the_ground_gains() {
     // (In the open: no snow hides any of it.)
     w.life.env[i][3] = 0.0;
     let all = shown(&w, i, Layer::Cover);
-    let breaking = w.life.cover(i).breaking(&w.chem, &w.cfg, &cover::Parts::of(&w.chem).expect("the cover's parts"));
+    let breaking = all.breaking;
     w.take_counters();
     let before: Vec<f64> = (0..w.chem.ns()).map(|k| ground(&w, k)).collect();
     w.in_cell(i, |w, d| contract::press(w, d, i, 0.25 * breaking));
@@ -509,4 +509,29 @@ fn snow_hides_what_lies_under_it() {
     assert_eq!(shown(&w, i, Layer::Seeds).kg, 0.0, "seeds show under snow");
     let took: f64 = Taker::new(i, layer, 1.0).month(&mut w).iter().zip(&w.chem.subs).map(|(m, s)| m * s.molar_mass).sum();
     assert!(took <= 0.5 * open.kg * (1.0 + 1e-9) && took > 0.0, "a taker took {took} kg of the {} kg above the snow", hidden.kg);
+}
+
+/// A taker's vapour (`contract::vapour`): of the key liquid a cell shows (`contract::liquid`, its parts adding to what
+/// its ground holds), what it sheds as vapour leaves the ground for the aside node, and the taker pays its heat of
+/// vaporisation; with that heat taken back from the ground every element and the energy are kept.
+#[test]
+fn a_takers_vapour_leaves_the_ground_for_the_air() {
+    let (mut w, i) = start();
+    let (k, n, books) = (cover::Parts::of(&w.chem).expect("the cover's parts").liquid, w.mesh.cells().n(), Books::now(&w));
+    let (ground, aside) = (|w: &World| w.store.amounts(Class::Ground)[k * n + i], |w: &World| w.store.amounts(Class::Aside)[k * n + i]);
+    // (A pond stands on it: a metre deep.)
+    w.life.env[i][1] = 1.0;
+    let found = w.in_cell(i, |w, d| contract::liquid(w, d, i));
+    let all = found.open + found.pores + found.soft + found.frozen;
+    assert!((all - ground(&w)).abs() <= 1e-12 * all && found.open > 0.0, "the key liquid shows {found:?} of {} mol", ground(&w));
+    let (g0, a0, mol) = (ground(&w), aside(&w), 0.5 * found.open);
+    let paid = w.in_cell(i, |w, d| {
+        let paid = contract::vapour(w, d, i, [mol, 0.0]);
+        contract::give(w, d, i, [], -paid);
+        paid
+    });
+    assert!((g0 - ground(&w) - mol).abs() <= 1e-9 * mol && (aside(&w) - a0 - mol).abs() <= 1e-9 * mol, "{mol} mol of vapour moved {} from the ground, {} to the air", g0 - ground(&w), aside(&w) - a0);
+    let lv = mol * w.chem.subs[k].lv;
+    assert!((paid - lv).abs() <= 1e-9 * lv, "the taker paid {paid} J for vapour whose heat of vaporisation is {lv} J");
+    books.assert_kept(&w, 1e-9);
 }

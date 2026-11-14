@@ -38,6 +38,10 @@ impl<'a> Chunk<'a> {
     pub fn cover(&mut self, i: usize) -> &mut crate::cover::Cover {
         &mut self.cells[i - self.first].cover
     }
+    /// The takers of its cell `i`, its view and its counters, each apart (`fauna::step`).
+    pub(crate) fn fauna_with(&mut self, i: usize) -> (&mut crate::fauna::Fauna, &mut Moves, &mut Counters) {
+        (&mut self.cells[i - self.first].fauna, &mut self.moves, &mut self.counts)
+    }
     /// The cover of its cell `i`, its view and its counters, each apart (`cover::step`).
     pub(crate) fn cover_with(&mut self, i: usize) -> (&mut crate::cover::Cover, &mut Moves, &mut Counters) {
         (&mut self.cells[i - self.first].cover, &mut self.moves, &mut self.counts)
@@ -87,7 +91,7 @@ impl World {
     pub fn in_cell<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
         let mut one = [std::mem::take(&mut self.life.cells[i])];
         let mut c = Chunk::new(i, &mut one, self.chem.ns());
-        c.moves.open(self, i, Node::new(Class::Cover, i));
+        c.moves.open(self, i, Node::new(Class::Life, i));
         let r = f(self, &mut c);
         let done = vec![(c.moves, c.counts)];
         let [cell] = one;

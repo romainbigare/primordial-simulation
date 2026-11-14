@@ -173,6 +173,8 @@ pub(crate) struct Ctx<'a> {
     /// year, kg of dry matter per m² a year (`Counters::grown_last`; none before a year has passed)
     pub seeds: Vec<f64>,
     pub grown: Vec<f64>,
+    /// Per ground cell: the living mass of its takers per km² of it, kg (`fauna::per_km2`)
+    pub takers: Vec<f64>,
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
     pub wet: Vec<f64>,
@@ -187,7 +189,7 @@ impl<'a> Ctx<'a> {
         let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, wet };
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
@@ -248,6 +250,7 @@ pub const LAYERS: &[Layer] = &[
     l("leaf", "m2/m2", "log", 0.01, 30.0, |c, i| c.leaf[i]),
     l("seeds", "kg/m2", "log", 1e-5, 0.1, |c, i| c.seeds[i]),
     l("grown", "kg/m2/yr", "log", 0.01, 10.0, |c, i| c.grown[i]),
+    l("takers", "kg/km2", "log", 1.0, 1e4, |c, i| c.takers[i]),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),

@@ -149,7 +149,7 @@ impl Moves {
     /// Panics on a node of the store that is not of the cell running.
     #[inline(always)]
     fn row_of(&mut self, w: &World, x: Node) -> Option<usize> {
-        if x.class == Class::Cover {
+        if x.class == Class::Life {
             return None;
         }
         assert!(self.own_of(x).is_some(), "a move of {x:?}, outside the cell running");

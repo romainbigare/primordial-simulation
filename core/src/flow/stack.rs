@@ -157,26 +157,27 @@ pub(super) fn stack(w: &World, s: &Scratch, x: &[f64; LAYERS], i: usize) -> [f64
     [e, x[6] * g * (floor + fill / 2.0), head, floor + fill, x[HEAD] * g * head, top]
 }
 
-/// The matter of the cells' life, which lies at their heads: the substances of the cover's parts.
+/// The matter of the cells' life, which lies at their heads: the substances of life's parts.
 pub(super) struct Life {
-    cover: Option<[usize; crate::cover::NP]>,
+    parts: Option<crate::life::Parts>,
 }
 
 impl Life {
     pub(super) fn of(w: &World) -> Life {
-        Life { cover: crate::cover::Parts::of(&w.chem).map(|p| p.sub) }
+        Life { parts: crate::life::Parts::of(&w.chem) }
     }
     /// The mass of the life of each cell (`kg`).
     pub(super) fn every(&self, w: &World, sp: &[Sp]) -> Vec<f64> {
         crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.kg(w, sp, i))
     }
-    /// The mass of the life of cell `i`, kg: its cover, the seeds lying on its ground, and the seeds it sends out until
-    /// they land (`cover::land`).
+    /// The mass of the life of cell `i`, kg: its cover, the seeds lying on its ground, the seeds it sends out until
+    /// they land (`cover::land`), and its takers.
     pub(super) fn kg(&self, w: &World, sp: &[Sp], i: usize) -> f64 {
         let c = w.life.cover(i);
         let mut kg = 0.0;
-        if let Some(sub) = self.cover {
-            kg += c.all_mol().chain(c.seeds.iter().map(|s| &s.mol)).flat_map(|m| m.iter().zip(sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
+        if let Some(p) = &self.parts {
+            kg += c.all_mol().chain(c.seeds.iter().map(|s| &s.mol)).flat_map(|m| m.iter().zip(p.sub)).map(|(&a, k)| a * sp[k].mm).sum::<f64>();
+            kg += w.life.cell_at(i).takers_kg(p, |k| sp[k].mm);
         }
         kg
     }

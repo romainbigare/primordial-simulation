@@ -177,11 +177,11 @@ point (the tape's frames, a byte a square; the pictures) asks the tree for the l
 stands on each cell (`contract::stands`), and the surroundings (`contract::surroundings`: Flow's state rebuilt in full
 and each cell's place from it, which Flow's own pass then leaves). Then Flow: the air in steps of `AIR_STEP_DAYS` (15
 days, two a month, each at its own time in the month), after each the sink of the liquid over field capacity into the
-bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the cover's month (`cover::month`) and
-Change.
+bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: the cover's,
+then the takers') and Change.
 **Chunks and the parallel pass** (`life::run`). The cells are cut into `Config::chunks` runs of neighbouring indices,
 the same for any number of threads. Each chunk is one task on the pool, its cells' life taken out of the world, the
-world read only; in each cell in order the cover's month runs on the cell's **view of the store** (`store::Moves`): its
+world read only; in each cell in order the cover's month and then the takers' run on the cell's **view of the store** (`store::Moves`): its
 ground, bed and aside node as the store held them at the pass's start with its own moves since, and **its share of its
 air node** (`Mesh::share`, its area over the air node's) of the air's amounts and heat: a cell never takes more than
 that, so the cells under one air node never overdraw it together. When the chunks end the world takes their counters
@@ -190,19 +190,30 @@ and books their moves (each array of the store by one task, the changes cell by 
 and of chunks. A serial step on one cell runs the same way on a chunk of its own (`World::in_cell`).
 
 **The contract** (`contract`): what lies between the natural world (the ground, the air, the cover) and what takes
-from it: its taker today is the plain taker of the tests (`worldgen::testkit::Taker`). The natural world names no
+from it: its takers are the takers' field (`fauna`, 3b) and the plain taker of the tests (`worldgen::testkit::Taker`). The natural world names no
 module of a taker (`cli/tests/sides.rs`). It is plain data and functions over the one source, with no copy. **What a
 cell shows** a taker: its cover as a whole, each slot by the height its plants stand at, and the seeds lying on its
-ground (`contract::shown`, `contract::slots`, `Layer::Seeds`): the mass and the amount of each substance a taker can reach; its place as the month's start left it
+ground (`contract::shown`, `contract::slots`, `Layer::Seeds`): the mass and the amount of each substance a taker can reach, and the energy to break it (`life::breaking`: each part's volume times its breaking stress, body matter as living tissue at `rho_body`); its place as the month's start left it
 (`contract::place`: the ground's temperature, the depth of the liquid standing on it, its height, and the depth of the
 soft solid lying on its land, `Scratch::soft_land`, at the solid's density). **Snow hides** what lies under it
 (`contract::above`): a plant's matter is spread evenly over its height (the stand's law draws it as a stem of its
 height), so of a slot whose plants stand h high under snow d deep a taker reaches the share 1 − d / h (none at d ≥ h),
 and of the seeds lying, on the ground, nothing where any snow lies. **Take**
-(`contract::take`): a taker asks the whole cover, one slot or the seeds lying for an amount of a substance and gets what is granted,
-never more than it can reach, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
-(`contract::give`): matter and heat back to the ground, through the cell's view of the store. **Press**
-(`contract::press`): work spent on a cell breaks its cover by the share it pays for (`Cover::breaking`), and what breaks
+(`contract::take`): a taker bites a mass of the whole cover, one slot or the seeds lying; a bite takes all the parts
+it reaches in their own proportions, as a mouth takes a piece of a plant, never more than it can reach, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
+(`contract::give`): matter and heat back to the ground, through the cell's view of the store. **The key liquid**
+(`contract::liquid`): what a cell's ground holds of it, split four ways: open (standing on it, as deep as the month's
+start found it), in its pores (the cover's roots reach it, a mouth does not), frozen and lying on it as the soft solid
+(as deep as the month's start found it), and frozen in its pores; and beside them what ran over it in the month (its main channel's month,
+`World::liquid_month`), which a mouth reaches though it is no amount of the cell's. **The way to it**
+(`contract::ways_to_liquid`, at the start of life's month, after Flow's): for each decade of liquid (`LEVELS`), the shortest way
+along the links between cells' centres over land from each cell to the nearest cell whose open liquid over the month
+(standing and running) holds that much (Dijkstra 1959; ties by the cell's index); `contract::to_liquid` gives it for a need
+rounded up to its decade. **Vapour** (`contract::vapour`):
+a taker sheds heat by turning liquid and soft solid of its ground into vapour (what it drank of the running liquid
+leaves the cell's liquid, which the running liquid joins), given to the cell's aside node as the cover's books give a gas; it
+pays the vapour's latent heat less what the ground held (a solid's heat of fusion too). **Press**
+(`contract::press`): work spent on a cell breaks its cover by the share it pays for (`life::breaking` of all its slots), and what breaks
 goes to the ground as remains with its heat. **What stands on a cell** (`contract::Stand`): the cover's mass, capture
 area and the light it absorbs and keeps, at each month's start (`Cover::stand`); Flow reads it (1.3, 1.4). A cell shows
 itself as the month's start left its place and what stands, and its cover as it is; takes land in the takers' month,
@@ -407,7 +418,8 @@ what the heat holds molten, as every law and the shell then read it.
   its discharge Q, m³/s (hydraulic geometry downstream, Leopold and Maddock 1953): width `channel_width` ×
   Q^`channel_width_exp`, depth `channel_depth` × Q^`channel_depth_exp`, and its liquid runs at Q over width × depth.
   The discharge of a cell is the most that runs through one of its samples, its main channel (`World::liquid_flux`, mol/s,
-  a moving average over about a year, from the samples' discharge), at the mol per m³ of the liquid its ground holds
+  a moving average over about a year, from the samples' discharge; the month's own, `World::liquid_month`, its own shed
+  among it, is what a taker can drink of the running liquid), at the mol per m³ of the liquid its ground holds
   (`World::liquid_in`). Its size does not depend on the cell's: every shell reads it
   here.
 - **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, 1.7): `seep` ×
@@ -804,7 +816,7 @@ matter with the liquid of living tissue (matter / (1 − `WET_TISSUE`), `Cover::
 its walls are a frame, which pays no upkeep and does not wear, so its capacity, capture area,
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
 1990, from memory). The cover of a cell is a node of the
-store (`Class::Cover`) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
+store (`Class::Life`, the life of its cell) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
 chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
 task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a real count of plants (`Cover::plants`,
@@ -855,7 +867,7 @@ seeds fill it:
   moisture need. The light its aside node set aside for it (`Cover::keep`, 1.4) pays first; what it stores beyond
   that comes from its ground, which that light warmed.
 - **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of living cover and day
-  `c_basal` plus `c_light` × what its capacity could store in a day (dearer by 1 + (melting point of the key liquid −
+  `c_basal` plus `c_capacity` × what its capacity could store in a day (dearer by 1 + (melting point of the key liquid −
   `FROST`) / `c_firm` for a cover that stands the cold), plus `c_leaf` per m² of capture area; times its repair factor
   (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only); and its
   conducting walls, alive in every season, `c_sapwood` per kg a day at the burning's pace: by the pipe model their
@@ -894,7 +906,7 @@ seeds fill it:
   kernel of two scales, a near and a far one, each an isotropic Gaussian, `kernel_near` and `kernel_far`: most within
   tens of metres, a long tail to km, Clark et al. 1999); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
-  `cover_mut`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
+  `mut_size`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
   where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
   run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
@@ -908,7 +920,7 @@ seeds fill it:
   amounts of the three parts, its genes and its starting kind, at the cover's temperature (their heat is the cover's,
   and they are matter of the cover's node: in its books, its budget and its potential energy). Seeds that land join the
   most alike lot of their kind within `APART` × `alike` steps (the genes the mean by built matter), else an empty lot,
-  else the two nearest lots join and they take the lot freed: the rule of the slots (`kin`). A seed is a small dormant
+  else the two nearest lots join and they take the lot freed: the rule of the slots (`life::kin`). A seed is a small dormant
   plant, so the cover's laws hold for it: each month, before its cover's own, of each lot the share its wear gives dies
   (the wear of dormant cover: its upkeep at full activity a kg, `upkeep_rates`, at the floor `dormant`, over `e_life` ×
   10^`REPAIR`) and the share frozen below its hardened limit (`cover::frozen` at activity 0), to the ground as remains
@@ -932,10 +944,82 @@ seeds fill it:
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
   12). Every move is booked through the cell's view (`store::Moves`), its gas within the cell's share of the air.
 - **Taken and broken**: only through the contract (section 0): a taker takes from the whole cover, from one slot or
-  from the seeds lying (`contract::take`, `Layer::Seeds`), each slot or lot giving in proportion to what it holds; work
+  from the seeds lying (`contract::take`, `Layer::Seeds`), each slot or lot giving the same share of all its parts; work
   pressed on a cell breaks the cover by its share (`contract::press`).
 - **What it is to the rest**: its mass, capture area and the light it absorbs and keeps are what stands on its cell
   (`Cover::stand`, `contract::Stand`), so it shades (1.4) and holds the ground (1.3).
+
+## 3b. Life: the takers, as a field
+
+Each ground cell holds up to 8 slots of takers (`fauna::Fauna`, `life::Cell::fauna`): a slot is one kind of takers
+in its cell, its **members** a real count (whole below `N_WHOLE` = 64), the mol of the fuel they store (5) and of their
+body matter (10, life's `Parts`), its heat, J (each slot at its own temperature), and 8 genes (`fauna::MASS`, `CHILD`,
+`YOUNG`, `ENZYME`, `REACH`, `KEEP`, `COAT`, `REPAIR`). A member's **living mass** is its share of the body matter with
+the liquid of living tissue (matter / (1 − `WET_TISSUE`), as the cover's); that liquid is not in the books. The takers
+of a cell are part of the node of its life (`Class::Life`): the chunk of the cell is their one writer. They reach the
+land only through the contract (section 0; `cli/tests/sides.rs`), and their books are the life's (`life::Books`,
+`life::book`). They take from the cover and the seeds lying, digest, and live on what they took and their store.
+
+**One month** (`fauna::step`), in the same pass of a cell's life, right after its cover's month, slot by slot:
+- **Body and pace.** A member stands at its `KEEP` gene where its ground (`contract::place`) is colder, else at its
+  ground's temperature; its upkeep runs at the pace of its burning there, the rate law's at its temperature over that
+  at `t_cat` (Gillooly et al. 2001): 5.6 at 310 K, so a body that keeps no heat of its own pays far less where it is
+  cold. Its work (walking, chewing) runs at that pace, at most 1.
+- **Upkeep at rest**: Kleiber's law, (`c_basal` + `c_muscle`) × m^`upkeep_exp` × pace × its repair factor
+  (`Physics::repair`) a day per member, m its living mass, kg (Kleiber 1932; Elia 1992); and its gut's capacity,
+  `c_capacity` of the fuel its capacity (`ENZYME`, mol of walls a kg living a s at `t_cat`) could free, at the same
+  pace and repair, as the cover pays for its light capacity.
+- **What it reaches** (`fauna::take`): each slot of the cover by the height its plants stand at, and the seeds lying
+  (`contract::slots`, `contract::shown`). A member of length L = (m / `rho_body`)^(1/3) searches the band of heights
+  ± `BAND` (half a decade) about its `REACH` gene, no higher than `reach_len` L, and bites no lower than `bite_floor` L
+  over the snow: of a plant h high it reaches the share of its stem within that (`contract::reached`); the seeds lying
+  only where its floor and its band's bottom are under `GROUND_M` (1 cm). What lies out of reach is the cover's refuge.
+- **The take** (Holling 1959, the disk law over many layers and slots): a member searches a strip as wide as its body
+  at its walking speed v = √(`walk_froude` g L) (Alexander and Jayes 1983), a = v L m²/s, for `busy` of the day (T),
+  and breaks what it takes by its chewing power P = `chew` m^`upkeep_exp`: a layer of D kg per m² of which it reaches
+  w, each kg taking b J to break (`Shown::breaking`), gives it I = T a w D / (1 + a Σ w D b / P) kg a day. Over the
+  month in `SUBSTEPS` (6) steps each layer falls by S (1 − e^(−k Δ)), k = Σ n I / S, so it is never overdrawn and the
+  slots share it by their rates, not by an order; the rates are those of the stocks at each step's middle (a half step
+  at the start's rates), so a slot switches to the next layer as one runs out. Then one bite of each layer for all
+  (`contract::take`: all its parts in their proportions), shared by the slots' parts.
+- **Heat.** A member held above its ground loses g (T_b − t) through its coat, g = `meeh` m^(2/3) / (`r_air` + COAT ×
+  `r_coat`) W/K (Meeh 1879; Scholander et al. 1950). It makes the heat of its rest and of its walk while searching
+  (v × its searching time at `c_move` × (m / `move_ref`)^`move_exp` J per kg and m, Taylor et al. 1982); where that is
+  less than its coat loses, it burns the rest to keep its temperature; where more, the excess must leave as vapour of
+  the key liquid, at its heat of vaporisation. A body at its ground's temperature gives all its heat to its ground and
+  needs no vapour.
+- **Thirst** (`fauna::thirst`). A body drinks open liquid only: the liquid standing on its cell, what ran over it in
+  the month, and the soft solid lying there, which costs its heat of fusion (`contract::liquid`); and it has the liquid
+  of what it eats (`WET_TISSUE` of the living mass of the body matter it takes). Its need is the vapour that cools it at
+  its work plus the least liquid it passes through, `drink_least` × m^`drink_exp` kg a day (Nagy and Peterson 1988),
+  which goes back to the cell in the month and is not booked. The slots of a cell share its open liquid by what they
+  ask of it. **The way to the liquid** (`fauna::way`): a slot still short walks to the nearest cell whose open liquid
+  over the month holds its shortfall (`contract::to_liquid`) and back, as often as its shortfall and what a member can lose
+  as liquid between drinks (`dry_most` of its mass) ask, at its walking speed and the law of walking's work, which it
+  burns; what the day's hours cannot walk stays short. Where a slot's liquid is still less than its need its work is
+  cut first (searching, handling and building together) down to where its heat to shed needs no more liquid than it
+  has: less work makes less heat. Only where at no work its need is still unmet do its members die, by the unmet share
+  (`LACK`). The vapour shed leaves the cell's liquid (the running liquid, what they ate and what they fetched join it
+  there), then the soft solid, for the cell's aside node with its latent heat, paid from the bodies' heat
+  (`contract::vapour`); where the cell's ground holds less, less is shed and its heat goes to the ground.
+- **Digestion** (`fauna::gut`, by the chemistry's own reactions): its gut splits walls into fuel (the reaction that
+  makes fuel of the walls alone, taking the key liquid of the ground) up to its capacity × its living mass × pace; it
+  burns for its upkeep and heat first the body matter it took (the burning of body matter, which gives its mineral to
+  the ground at once), then the fuel it took and split with its store, each no more than the gas the cell's share of its
+  air node offers (`Books::room`); it stores the fuel left up to `store_most` of its living mass; what it took and did
+  not use (walls not split, matter not burnt, fuel over its store) passes to the ground.
+- **Deaths**, each cause a share of the members on what the one before left (as the cover's): the share of the energy
+  unpaid (`SPENT`); 1 − e^-wear (`AGE`), wear the energy a member burns per kg over `e_life` × 10^REPAIR (Rubner 1908);
+  the frozen share at its body's temperature (`Physics::frozen`, the key liquid's melting point lowered by `harden` ×
+  (1 − min(1, pace)): `PHASE`); and `LACK`. Below `N_WHOLE` members the dead are a binomial draw (keyed by the seed,
+  the month, the cell and the slot, `Purpose::Fauna`); a count that falls below it becomes whole by a draw that keeps
+  its mean, never rounded up as a rule. The dead's share of the body matter and the store goes to the ground as
+  remains; a slot of no members is empty, and all it held goes there.
+- **The books.** Gases from and to the cell's share of its air node, remains to its ground, each with its heat, through
+  the books of the cell's life; each slot's heat ends at its heat capacity times its body's temperature, and the rest of
+  what the burning released goes to the ground.
+- **What it is to the rest**: its mass lies at its cell's head (`flow::stack`, the potential energy); it stands on its
+  cell as nothing (`contract::Stand` is the cover's: takers neither shade nor hold the ground).
 
 ## 4. Soil and minerals
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
@@ -975,3 +1059,8 @@ read a kind.
   cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a tall fast cover with seeds spread
   wide. Its genes get a spray of mutation (`--spray`).
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
+- **Takers**, only where a run asks for them (`--fauna-year`; none by default, and none on the page): the five kinds of `worldgen::life::TAKER_KINDS`
+  (30 g, 3 kg, 60 kg and 400 kg kinds that keep 310 to 311 K, and a 2 kg kind that keeps none) on every open land cell,
+  all adults, at a third of Damuth's line of members per area against body mass (`START_SHARE`; Damuth 1981), whole
+  below `N_WHOLE` by a keyed draw, each with a store of a tenth of its living mass as fuel (`START_STORE`), at its
+  body's temperature, booked from the outside node (`fauna::place`, `contract::placed`).

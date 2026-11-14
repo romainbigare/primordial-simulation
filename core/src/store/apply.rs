@@ -13,7 +13,7 @@ use crate::{World, AIR};
 pub(crate) const ROUNDING: f64 = 1e-9;
 /// The classes `apply` books, the first ones: those whose amounts and heat lie in the `Store` (the cover books its
 /// own).
-const BOOKED: usize = Class::Cover as usize;
+const BOOKED: usize = Class::Life as usize;
 /// The first array of the nodes that give all they are asked and may hold less than nothing: the boundary nodes
 /// (`Class::Boundary`).
 const BOUNDARY_ARRAYS: usize = 2 * Class::Boundary as usize;
@@ -243,7 +243,7 @@ pub(crate) fn life_sent(w: &mut World, sent: impl IntoIterator<Item = (usize, [f
 /// the order of the cells: what its ground (`[k]`) and its bed (`[ns + k]`) gained of each substance `k`, mol
 /// (`life_moved`).
 fn from_life(ns: usize, moves: &[Move]) -> Vec<(usize, Vec<f64>)> {
-    let life = |c: Class| c == Class::Cover;
+    let life = |c: Class| c == Class::Life;
     let mut d: std::collections::BTreeMap<usize, Vec<f64>> = Default::default();
     for m in moves.iter().filter(|m| m.mol != 0.0) {
         for (x, other, mol) in [(m.to, m.from, m.mol), (m.from, m.to, -m.mol)] {

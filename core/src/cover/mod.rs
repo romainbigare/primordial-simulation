@@ -2,15 +2,14 @@
 //! amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the solid it builds)
 //! and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
 //! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to the cells around
-//! (`seed`), where they lie on the ground until it lets them grow (`lying`); alike kinds share a slot (`kin`). The
-//! cover of a cell, with the seeds lying on its ground, is a node of the store (`Class::Cover`) whose law books its own
+//! (`seed`), where they lie on the ground until it lets them grow (`lying`); alike kinds share a slot (`life::kin`). The
+//! cover of a cell, with the seeds lying on its ground, is a node of the store (`Class::Life`) whose law books its own
 //! side; what takes from it or presses on it does so through the contract (`contract`), whose cover side is `show`.
 
 mod around;
 mod budget;
 mod build;
 mod grow;
-mod kin;
 mod lying;
 mod month;
 mod seed;
@@ -22,7 +21,7 @@ pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
 pub use lying::{Lying, FROZEN, LANDED, LOTS_LYING, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
-pub use month::{month, release};
+pub use month::{landed, release};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use stand::{height, loose_bins, stem, BINS};
@@ -34,13 +33,6 @@ use serde::{Deserialize, Serialize};
 
 /// Kinds of cover a cell holds at most.
 pub const SLOTS: usize = 4;
-/// The parts of the cover (`Parts`), by their place in `Cover::mol`: the fuel its light reaction makes, its body
-/// matter, and the solid it builds of the fuel alone (its walls).
-pub const NP: usize = 3;
-pub const FUEL: usize = 0;
-pub const MATTER: usize = 1;
-pub const WALL: usize = 2;
-
 // The genes of a kind of cover (laws.md 3).
 /// Capacity of the light reaction, log10 mol per kg of living cover per s at `t_cat` (at a moisture need of 1)
 pub const LIGHT: usize = 0;
@@ -68,37 +60,12 @@ pub const FIX_OFF: f32 = -10.0;
 /// variant keeps its genes apart and competes for light by height with the others (a rule of the model).
 pub const APART: f32 = 0.5;
 
-/// Mutation step (times `Physics::cover_mut`) and range of each gene.
+/// Mutation step (times `Physics::mut_size`) and range of each gene.
 pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0)];
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
-/// The root of an empty slot.
-pub const NO_ROOT: u32 = u32::MAX;
-
-/// The substances of the cover and the reactions it runs, found from the chemistry's numbers (`Chemistry::life_roles`).
-#[derive(Clone, Copy, Debug)]
-pub struct Parts {
-    /// The substance of each part
-    pub sub: [usize; NP],
-    /// The light reaction, the burning of the fuel, the fixing reaction (if any), and the key liquid
-    pub light: usize,
-    pub burn: usize,
-    pub fix: Option<usize>,
-    pub liquid: usize,
-}
-
-impl Parts {
-    /// The parts in `chem`: none unless it has the roles of life, body matter and a solid built of the fuel alone.
-    pub fn of(chem: &Chemistry) -> Option<Parts> {
-        let ((light, rich, liquid, burn), matter) = (chem.life_roles()?, chem.matter()?);
-        let wall = chem.builds.iter().find(|b| b.inputs.iter().all(|p| p.0 as usize == rich))?.outputs[0].0 as usize;
-        Some(Parts { sub: [rich, matter, wall], light, burn, fix: chem.fixing(), liquid })
-    }
-    /// The molar mass of each part, kg/mol.
-    pub fn mm(&self, chem: &Chemistry) -> [f64; NP] {
-        self.sub.map(|k| chem.subs[k].molar_mass)
-    }
-}
+pub use crate::life::{Parts, FUEL, MATTER, NO_ROOT, NP, WALL};
+pub use crate::math::dec;
 
 /// The cover of one ground cell, in `SLOTS` slots.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -230,7 +197,7 @@ pub fn built_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
     m[MATTER] * mm[MATTER] + m[WALL] * mm[WALL]
 }
 
-/// Genes `g` after one generation's mutation of size `size` (`Physics::cover_mut`): each moves by noise of its step
+/// Genes `g` after one generation's mutation of size `size` (`Physics::mut_size`): each moves by noise of its step
 /// times that, within its range.
 pub fn mutate(g: &[f32; NG], size: f32, r: &mut crate::rng::Rng) -> [f32; NG] {
     std::array::from_fn(|q| (g[q] + r.near_normal() * RANGE[q].0 * size).clamp(RANGE[q].1, RANGE[q].2))
@@ -338,12 +305,6 @@ impl crate::World {
         let c = self.life.cover(i);
         (c.film > 0.0).then(|| Parts::of(&self.chem).map(|p| (p.liquid, c.film as f64, c.reach as f64))).flatten()
     }
-}
-
-/// 10 to the power of a gene.
-#[inline]
-pub fn dec(g: f32) -> f64 {
-    (g as f64 * std::f64::consts::LN_10).exp()
 }
 
 /// How far apart two gene vectors are, in steps: the largest gap of a gene over its step.

@@ -25,6 +25,8 @@ pub enum Purpose {
     Fixer,
     /// Where a slot of cover sends its seeds, and their mutation (`cover::grow`)
     Cover,
+    /// The draws of a slot of takers in a month (`fauna::step`): its deaths
+    Fauna,
 }
 
 /// The number of values of a 16-bit uniform.
@@ -50,6 +52,11 @@ impl Rng {
     #[inline]
     pub fn f64(&mut self) -> f64 {
         (self.u64() >> 11) as f64 * (1.0 / (1u64 << 53) as f64)
+    }
+    /// How many of `n` trials succeed, each with chance `p`: a binomial draw, one uniform per trial (for the small
+    /// counts that draw).
+    pub fn binomial(&mut self, n: u32, p: f64) -> u32 {
+        (0..n).filter(|_| self.f64() < p).count() as u32
     }
     #[inline]
     pub fn below(&mut self, n: usize) -> usize {

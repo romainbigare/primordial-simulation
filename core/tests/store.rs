@@ -21,7 +21,7 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
     let len = match class {
         Class::Air => w.mesh.level(AIR).n(),
         Class::Boundary => BOUNDARIES,
-        Class::Cover => unreachable!("the cover's amounts lie in it"),
+        Class::Life => unreachable!("the cover's amounts lie in it"),
         _ => w.mesh.cells().n(),
     };
     (w.store.amounts(class), w.store.heat(class), len)

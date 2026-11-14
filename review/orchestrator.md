@@ -43,6 +43,8 @@ two files: this one and the roadmap.
   `series.csv` but the `ms_*` columns.
 - Work on the session's branch and push it freely. Push to `main` only as a fast-forward of a commit whose gate
   passed: `git fetch -q origin main && git merge-base --is-ancestor origin/main HEAD && git push origin HEAD:main`.
+  Then `git branch -f main origin/main`: the push does not move the local branch `main`, and a helper told to
+  start from or merge `main` takes the local one.
 - Worktrees and scratch files die with the container, and the container restarts without warning (three times in
   one day): tell every helper to commit its work in progress early, and push its branch to a `wip/` name as soon as
   it holds something. Anything worth keeping is merged or pushed before the session ends.
@@ -302,13 +304,31 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     `AIR_STEP_DAYS` stays 15 (one step a month moves the warmest month by +0.90 K); the balance solved exactly by
     pieces stays parked on the local branch `surface-exact` (31eb1d1: right for the temperature, but it raises the
     long step's water cycle by 0.3 to 0.4%).
-  - In work, on the branch `surface-step` (ec2f531, main merged in, `SNAPSHOT_VERSION` 137), by the same helper;
-    scratch `scratchpad/air2/`: (1) `snapshot_round_trip_at_every_month` fails after the merge (a cell fully under
-    liquid keeps about 1e-10 J in its empty land part, and a loaded world steps it differently): its cause mended;
-    (2) the step's rain lands in the bucket through the step, in one pass; (3) `daily.rs` gives `rain_air` the
-    ratio, not rain times ratio; (4) the long step's test may hold the land's runoff (`runoff_sea`) in place of the
-    river cells' flux, only if the law before the mend still fails it. Then the globe, the cost, the references
-    set once more, pictures, and the package goes to main whole.
+  - Done on the branch `surface-step` (99a56a4, main merged in at 6cc5690, `SNAPSHOT_VERSION` 137; full report in
+    the helper's last message, numbers in `scratchpad/air2/numbers/`): a loaded world's first build keeps its
+    saved parts (the snapshot round trip passes); the rain of a step wets the ground's bucket day by day as it
+    falls, in one pass (Flow +3%); `rain_air` takes the ratio; the long step's test holds the land's runoff
+    (`runoff_sea`; the law before the mend fails it, +0.90% against 0.62%) and passes (+0.35% against 0.65%); the
+    seven references set again (land 287.82 K, swing 11.83 K, rain 2.493e-3, gas 349.8 ppm, river cells 235.6,
+    worn 0.2089 mm/yr, cover 9.491); the lifeless globe passes (surface 288.54 K, ice 0.130). The whole package
+    costs Flow about +10 to 12% against main.
+  - The stripes of rain on banded worlds of 128 squares are mended at their cause (efdc0c2): the part of the
+    overturning that the spin turns along the isotherms carried the heat difference of its two halves as a fixed
+    flux of the day, which did not cancel where the links differ; now only the part that runs down the gradient
+    carries it. A fast test states it. No effect on the long step's test or the key numbers (one block of air);
+    the lifeless globe moves by 0.02 K. Sheet of the warmest and the coldest month, main beside the branch:
+    `scratchpad/air2/shots4/contact.png`: at 128 squares in the band main's land is frozen all year (262 K in
+    its warmest month, cover on the southern fringe only); the branch's is 290 K in summer, 273 K in winter, green
+    in summer, its rain smooth.
+  - **One thing holds the package off main**: `the_laws_do_not_depend_on_the_size_of_the_cells` fails on the
+    cover's area (5.7e-2 against 4.4e-2): the package depends less on the cells' size than main (+2.9% against
+    +5.9%) but its years are steadier, so its limit is tighter. Not loosened. In work, the last round on
+    `surface-step` (saved as `wip/surface-step`), by the same helper: main merged in (the takers' first part),
+    the round lobes of the shelf merged in (`round3-shelf-lobes`), life started on every cell that holds land
+    (`open_land` by the land part, soil and cover per m² of land), the scale test again, the references once
+    more, the full gate. If the scale test still fails, the orchestrator decides on its table.
+  - To decide after it: in a cell of parts, does the cover's month use the cell's area or its land's for light
+    and room (asked, with numbers).
   - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
     through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
     map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's
@@ -335,8 +355,35 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   lie on low-ground cells near the shore and the two layers bleed over the liquid there; nothing hides a buried
   plant from the light (the air's step lets the canopy catch light over any snow). To measure again on the new air.
 - Designed, not built: the first takers of the cover (F1), `review/f1-design.md`, with the orchestrator's
-  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). Its builder
-  starts when a heavy helper's place is free; commits 1 and 2 of its plan do not wait for the air.
+  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). On main
+  (merge 2081501), none placed unless asked for (`ew run --fauna-year N`; the page places none): the shared
+  ground as a pure clean-up; the fauna's state, placing and books (`core/src/fauna/`, eight small files); the
+  month's running liquid (`World::liquid_month`); the take (Holling's disk law in six steps at midpoint rates)
+  and digestion; thirst that cuts work before it kills; the way to another cell's liquid by the law of walking
+  (`core/src/contract/liquid.rs`); the map layer "Takers". Books with takers that eat: drift 1.7e-13 over 60
+  years at 64 squares; about 2.7 millionths of a second per land cell and month. Found:
+  - Placed at year 50 on a 64 drawn world with no births, most starve in the first year. The budget against
+    measured figures (`scratchpad/f1/budget.md`): no anchored row is on a wrong reading (rest, the coat's
+    conductance, the chewing power's slope agree with the measured; our warm takers burn 46 to 78% of a real
+    field metabolic rate). The start's guts were 4 to 7 times too large (a start condition, mended). On good low
+    cover every warm kind but the 30 g one pays 106 to 216% of its need. Two laws lack: a small body stands in
+    the open all day (the 30 g kind's coat passes 1.7 times a real field metabolic rate in the cold month); a
+    bite of a tree is 75 to 83% wood.
+  - No gathering by the liquid: on a wet island nearly every cell sheds liquid every month. Honest; the gate's
+    row needs a land with a dry belt.
+  - The drink fetched by walking is booked from the walker's own cell: to go right with the outbox of the young's
+    dispersal.
+  In work, by the same builder (branch `worktree-agent-ac136315104cd4ab3`, saved as `wip/takers`; scratch
+  `scratchpad/f1/`, `notes.md`): two laws decided by the orchestrator, each its own commit.
+  (1) A resting body sits in a shell of what lies on the ground: the ground node's remains at an anchored bulk
+  density, gathered round the sphere of the body's own surface; conduction through the shell in series with the
+  coat (the floor of the loss is 4 pi k r dT, so a 30 g body's loss about halves and a large body's need does not
+  move); no gene, no term for the standing cover; the soft solid only if Flow holds a number for how it
+  insulates. (2) A mouth breaks what its jaw can rupture: a slot shows its soft part (matter and fuel) and its
+  frame (walls) apart; the jaw's force by body mass from one fitted regression; a second strength of the frame's
+  substance for a cut across the grain (`shear`, in the chemistry; `rupture` stays the crushing along the
+  grain); the share of the frame in axes thinner than the cut is (d/D)^(2/3) by the pipe model. Then the budget
+  again, then births, growth, mutation and the slot rule with a 250-year run.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
@@ -354,6 +401,23 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   - Each land sits in an even shallow ring (the low ground follows the rise's smooth fall); some small rises have
     flat tops. Taking the rises' fall at the warped point bends the straits but pushes land onto the edge: dropped
     (`scratchpad/islands/round3/B1_warp.diff`).
+- **The bare coast** (the owner's question), measured on worlds of 32 squares, seeds 1 to 4
+  (`scratchpad/coast/`, `notes.md` and `pics/`): most of the bare shore is bare in the core, not in the drawing.
+  - Roots cost too much on warm low ground: `root_uptake` is anchored on a forest's yearly mean flow, but a slot
+    holds roots for its month's draw. Near the shore the water lost per mol of gas is 141 to 177 (9 to 45
+    inland, where the air near the ground is saturated), roots are half the upkeep, and stored over upkeep is 1.02
+    to 1.28. Accepted: the row anchored on the growing season's flow, in one package with the next point, after
+    the air lands, with one setting of the references.
+  - A cell whose mean ground is under the level gets no soil and no starting cover (`worldgen::life::open_land`
+    asks `is_land`), though it holds land: 3.4 to 4.9% of the land's samples, 26% of the land in the first km.
+    Accepted: soil and cover on the land part of such a cell.
+  - The drawing thins the first km: the layers divide by the whole cell's area but are drawn on its land only, and
+    the blend takes the zero of cells with no land. In work (a branch of its own; no law changes).
+  - Climate None: the island's closed air falls from 402 to 175 ppm of the gas by year 25 as the cover locks it
+    in its walls; the water lost per mol of gas grows with it. Open: whether an island's air is ever closed.
+  - Climate Wide (main's air): 45 to 50% of the land is bare at every distance from the shore, dry (wetness 0.4
+    to 0.5) or cold; emptied in the first year after life starts, refilled slowly by few seeds. To measure again
+    on the new air.
 - Timed in turn on a quiet machine, a 32 island of plants, 30 years: 261 ms a year before the contract, 262 to 266
   after.
 

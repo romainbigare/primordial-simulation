@@ -247,6 +247,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         rain: vec![0.0; n],
         discharge: Vec::new(),
         liquid_flux: vec![0.0; n],
+        liquid_month: vec![0.0; n],
         evap: vec![0.0; n],
         off_land: vec![0.0; n],
         life,

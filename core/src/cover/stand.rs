@@ -5,6 +5,7 @@
 //! (`grow`), the seeds (`seed`) and the page's drawing (`tape::stands`) read them.
 
 use super::{Cover, NG, NO_ROOT, NP, SLOTS};
+use crate::life::kin;
 use crate::Physics;
 use std::f64::consts::FRAC_PI_4;
 
@@ -109,7 +110,7 @@ pub(super) fn founded(ph: &Physics, kg: f64, area: f64) -> f64 {
 pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], ph: &Physics, area: f64) {
     for a in 0..SLOTS {
         for z in a + 1..SLOTS {
-            if !super::kin::together(&c.genes, &c.root, (a, z), ph.alike) {
+            if !kin::together(&c.genes, &c.root, (a, z), super::APART * ph.alike, super::distance) {
                 continue;
             }
             let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };

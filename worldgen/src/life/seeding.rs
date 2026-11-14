@@ -58,7 +58,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
         let mut genes = kind.genes;
         let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
         for _ in 0..how.rounds {
-            genes = cover::mutate(&genes, w.cfg.phys.cover_mut, &mut rg);
+            genes = cover::mutate(&genes, w.cfg.phys.mut_size, &mut rg);
         }
         let fixes = Rng::new(w.seed, w.day(), id, Purpose::Fixer).f64() < how.fixers;
         if fixes {
