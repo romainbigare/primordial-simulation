@@ -324,15 +324,17 @@ fn heat_crosses_the_border_between_cells_of_two_sizes_by_its_width() {
 }
 
 /// More heat-absorbing gas keeps warming the ground: under 240 W/m² of sunlight, with the air following the ground by
-/// the lapse rate, the balance at optical depth 17 is clearly warmer than at 9 (one slab at the air's mean temperature
-/// would give both the same).
+/// the lapse rate, the balance at optical depth 17 in every band is clearly warmer than at 9 (one slab at the air's
+/// mean temperature would give both the same).
 #[test]
 fn more_gas_warms_with_no_ceiling() {
+    let (chem, _) = worldgen::chemistry0();
     let ground = |x: f64| {
+        let heat = pcore::flow::Heat::of([(x, 7600.0); pcore::chem::HEAT_BANDS], (0.0, 7600.0), (0.0065, 1e4), 1.0);
         let (mut lo, mut hi) = (150.0, 500.0);
         for _ in 0..60 {
             let t: f64 = (lo + hi) / 2.0;
-            let up = (-x).exp() * 5.670e-8 * t.powi(4) + pcore::flow::glow(-(-x).exp_m1(), t, &pcore::flow::column(x, 0.0065, 1e4, 7600.0)[1]);
+            let up = (1.0 - heat.absorbs(&chem, t)) * pcore::units::SIGMA * t.powi(4) + heat.glow(&chem, t, pcore::flow::UP)[0];
             (lo, hi) = if up > 240.0 { (lo, t) } else { (t, hi) };
         }
         lo
@@ -1121,9 +1123,9 @@ const SNOW_KG: f64 = 30.0;
 const FACING: f64 = 0.3;
 const MELT_STEPS: usize = 60;
 
-/// Of two cells alike but for the way they face (the lowest two dry land cells side by side between `SNOW_LAT` that hold
-/// no part of a body of standing liquid, on the smallest island that has them, `testkit::island_in_with`, flat amid flat
-/// land at one height, `testkit::flat_round`), at one latitude
+/// Of two cells alike but for the way they face (the lowest two dry land cells side by side between `SNOW_LAT` under one
+/// air node that hold no part of a body of standing liquid, on the smallest island that has them,
+/// `testkit::island_in_with`, flat amid flat land at one height, `testkit::flat_round`), at one latitude
 /// under snow at the end of winter, the one that faces the equator takes more sun (`flow::on_slope`): it loses its snow
 /// first and is warmer meanwhile, with no other change. Each faces each way in turn, so nothing else tells them apart.
 /// Their island reaches the low latitudes
@@ -1137,7 +1139,8 @@ fn a_slope_facing_the_sun_loses_its_snow_first() {
         (0..TO_SPRING).for_each(|_| pcore::step(&mut w));
         let (gw, lat) = (w.map.w, |i: usize| w.mesh.cells().lat()[i]);
         let dry: Vec<usize> = worldgen::testkit::dry_lands(&w).into_iter().filter(|&i| (SNOW_LAT[0]..SNOW_LAT[1]).contains(&lat(i)) && !w.in_body(i)).collect();
-        let pairs = dry.iter().copied().filter(|&i| i % gw + 1 < gw && dry.contains(&(i + 1)));
+        let parent = w.mesh.cells().parent();
+        let pairs = dry.iter().copied().filter(|&i| i % gw + 1 < gw && dry.contains(&(i + 1)) && parent[i] == parent[i + 1]);
         pairs.min_by(|&x, &y| w.surface_z(x).total_cmp(&w.surface_z(y)))
     };
     let (mut w0, a) = worldgen::testkit::island_in_with(1, cfg, pair);
@@ -1217,5 +1220,21 @@ fn a_coast_cells_land_swings_more_than_the_cell() {
     let mean = |p: usize| two.iter().map(|&i| swing(i, p)).sum::<f64>() / two.len() as f64;
     let (land, node) = (mean(0), mean(1));
     assert!(land > node, "the land swings {land:.2} K, the node {node:.2} K, over {} cells", two.len());
+    books.assert_kept(&w, 1e-9);
+}
+
+/// A year of the small world, whose shores hold cells of parts (land beside its liquid's top, each facing the
+/// air, so the surface's temperature is not its land's), with its air's steps and their rain: the books are kept to
+/// rounding and no node is overdrawn (`Books::assert_kept`, `check::broken`).
+#[test]
+fn a_year_of_rain_on_cells_of_parts_keeps_the_books() {
+    let mut w = worldgen::testkit::small_world();
+    let (books, n) = (Books::now(&w), w.mesh.cells().n());
+    let mut two_faces = false;
+    for _ in 0..w.cfg.months_per_year {
+        pcore::step(&mut w);
+        two_faces |= (0..n).any(|i| w.t_surface_last(i) != w.t_ground_last(i));
+    }
+    assert!(two_faces, "no cell of parts with its land and its liquid's top facing the air");
     books.assert_kept(&w, 1e-9);
 }

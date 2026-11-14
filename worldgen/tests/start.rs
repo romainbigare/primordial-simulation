@@ -3,7 +3,7 @@
 
 use pcore::AIR;
 use pcore::store::Class;
-use worldgen::testkit::{dry_land, in_all, DISSOLVED, LIQUID};
+use worldgen::testkit::{in_all, DISSOLVED, LIQUID};
 
 /// An island's coarse cells (more than one square) all lie below 0 m, in its low basin's liquid, on islands of five
 /// seeds.
@@ -38,7 +38,8 @@ fn a_world_starts_with_the_dissolved_mineral_in_its_liquid() {
 }
 
 /// The soil is given to the land when life starts: `Init::soil` mol per m² of the fixed gas's mineral (10 g of the
-/// gas's element, 14 g a mol, to the m²) in whole cells of land, booked as new matter and energy.
+/// gas's element, 14 g a mol, to the m²) on each cell's land (`flow::land_shares`), none where a cell has none, booked
+/// as new matter and energy.
 #[test]
 fn the_soil_is_given_to_the_land_and_booked() {
     let mut w = worldgen::testkit::one_rise(1, 16, 16);
@@ -48,12 +49,20 @@ fn the_soil_is_given_to_the_land_and_booked() {
     let (mineral, _) = w.chem.minerals()[0];
     let soil = worldgen::chemistry0().1.soil;
     let t0 = pcore::check::totals(&w);
-    let before = in_all(&w, mineral);
+    let n = w.mesh.cells().n();
+    let before = w.store.amounts(Class::Ground)[mineral * n..(mineral + 1) * n].to_vec();
     println!("{}", worldgen::life::soil(&mut w, &soil));
     let (k, per_m2) = soil[0];
-    // Land is in squares, each of a land cell's area.
-    let cells = (in_all(&w, mineral) - before) / (per_m2 * w.mesh.cells().area()[dry_land(&w)]);
-    assert!(k == mineral && (cells - cells.round()).abs() < 1e-9 && cells >= 10.0 && cells <= w.mesh.cells().n() as f64, "{cells} cells' worth");
+    let all: Vec<usize> = (0..n).collect();
+    let shares = pcore::flow::land_shares(&w, &all).unwrap();
+    let (mut cells, mut parted) = (0, 0);
+    for (i, (&was, &share)) in before.iter().zip(&shares).enumerate() {
+        let (got, land) = (w.store.amounts(Class::Ground)[mineral * n + i] - was, per_m2 * w.mesh.cells().area()[i] * share);
+        assert!(got == 0.0 || (got - land).abs() <= 1e-9 * land, "cell {i}: {got} mol, its land {land}");
+        cells += (got > 0.0) as usize;
+        parted += (got > 0.0 && share < 1.0) as usize;
+    }
+    assert!(k == mineral && cells >= 10 && parted > 0 && in_all(&w, mineral) > 0.0, "{cells} cells, {parted} of them cells of parts");
     let grams = per_m2 * w.chem.subs[k].elems[2] as f64 * 14.0;
     assert!((grams - 10.0).abs() < 0.05, "{grams} g of the gas's element to the m²");
     let (de, dq) = pcore::check::drift(&w, &t0);

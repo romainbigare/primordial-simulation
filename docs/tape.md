@@ -47,7 +47,7 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
 size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground,
-`wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land`: the cover and its seeds live and are drawn on the land alone; 0 where the cell holds no land), the living mass of the takers per km² of the cell (`takers`, kg/km², `fauna::per_km2`, log from 1 to 10,000), true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
+`wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land` of the cell's amount per m² of its area and its land's share, `contract::lands`: the cover and its seeds live and are drawn on the land alone, divided by the land once; 0 where the cell holds no land), the living mass of the takers per km² of the cell (`takers`, kg/km², `fauna::per_km2`, log from 1 to 10,000), true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
 ground) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid, under
 the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `LITTER_KG`), 0.3 kg/m²). The tape holds whole-map frames only. The live viewer draws its map from two
 things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`), which never change, so a page
@@ -168,8 +168,8 @@ its centre: the terrain's mean height over the cell, m; its ground's temperature
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full); and the share of its area that is land, its own ground out of the liquid that
-stands over its pores (`flow::land_shares`). Before Flow built its state the level and
+0 where the pores are dry or full); and the share of its area that is land, its land over its area (`contract::lands`: as the
+month's start found it, the land its cover lives on). Before Flow built its state the level and
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (19) f32 each, the heaviest first: the slots of
@@ -237,6 +237,7 @@ are not recorded.
 | `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs down the terrain's samples from land cells into the open low ground (`World::off_land`), per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
 | `lakes`, `lake_area`, `lake_m3`, `low_level` | , km², km³, m | the bodies of standing liquid above the open low ground that hold liquid over their cells' pores (`World::pools`, laws.md 1.2), the area their liquid covers and its volume; and the level of the open low ground's largest body |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The report counts the same way |
+| `river_flux` | mol/s | the liquid flux of those river cells, summed (`tape::river_flux`): the water the count stands for |
 | `cells` | | the cells of the map |
 | `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`cover::SLOTS` a cell at most), and its mass |
 | `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (by a taker, `contract::take`), `broken` (pressed loose, `contract::press`); `lack` is never written to |

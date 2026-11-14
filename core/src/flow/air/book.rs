@@ -5,9 +5,10 @@
 use super::super::{follow, year_weight, Scratch};
 use super::super::parts::{after_air, LAND, TOP};
 use super::super::potential::apply;
-use super::cells::{Response, KEPT, LIGHT, LINK, SPACE, SUN, UP};
+use super::cells::{Response, AIR_SUN, KEPT, LIGHT, LINK, SPACE, SUN, UP};
 use super::daily::Mean;
 use super::rain::Landed;
+use super::soak::Soak;
 use super::exchange::cloud;
 use super::step::Active;
 use super::{sums, touching};
@@ -30,18 +31,20 @@ pub(super) fn up_from_bodies(w: &mut World, s: &mut Scratch) {
 }
 
 /// Book what the step of `dt` seconds moves: over each cell's link to its air node what evaporates and its heat, at the
-/// step's mean air (`Response::booked`, the law the air's days summed); over the links to each node it sees its rain
+/// step's mean air with what its rain added to what its buckets (`soaks`) evaporate (`Response::booked`, the law the
+/// air's days summed); over the links to each node it sees its rain
 /// (`rain`, per active gas (cell, node, mol)), reaching it at the temperature of the air touching it (`touching`), the
 /// air paying what warms it on the way down, frozen or liquid as the node's days rained it; the sunlight it absorbs and keeps
-/// for its cover, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and
+/// for its cover, the sunlight its air absorbs, the heat it and its air send to space; and the wind and the evening of blocks, with their lifts and
 /// falls (`potential`). Then what each part of a cell of parts gained (`parts_moved`), the light on the cover, the clouds of
-/// what rained (which the next step's sunlight passes), and the tape's rain and evaporation.
-pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Active], &Response, &[Landed]), mean: &Mean, dt: f64) {
+/// what rained (`exchange::cloud`, which the next step's sunlight and heat radiation pass), and the tape's rain and
+/// evaporation.
+pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain, soaks): (&[Active], &Response, &[Landed], &[Soak]), mean: &Mean, dt: f64) {
     let (n, na, nx, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), act.len(), w.mesh.cells().area().to_vec());
     // Each cell's outputs at the mean air it saw.
     let sr = &*s;
     let xs: Vec<&[f64]> = act.iter().map(|ac| &mean.x[ac.gi * na..(ac.gi + 1) * na]).collect();
-    let (out, wet) = response.booked(sr, &mean.t, &xs);
+    let (out, wet) = response.booked(sr, (&mean.t, &xs), (soaks, &mean.soaked));
     let at = |i: usize, o: usize| out[i * (UP + nx) + o];
     let (cells, parent): (Vec<u32>, Vec<u32>) = ((0..n as u32).collect(), w.mesh.cells().parent().to_vec());
     let (ks, gases): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
@@ -68,14 +71,20 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
             kept.link((sun, i), response.fixed(i, KEPT));
         }
     }
-    let mut sky = Batch::new([Class::Air, Class::Boundary], &[]);
+    let (mut sky, mut aired) = (Batch::new([Class::Air, Class::Boundary], &[]), Batch::new([Class::Boundary, Class::Air], &[]));
     for (j, &q) in mean.space.iter().enumerate() {
         sky.link((j, space), q);
+    }
+    // The sunlight each node's air absorbs over its cells (`Light::shares`).
+    let mut air_sun = vec![0.0; na];
+    (0..n).for_each(|i| air_sun[parent[i] as usize] += response.fixed(i, AIR_SUN));
+    for (j, &q) in air_sun.iter().enumerate().filter(|e| *e.1 > 0.0) {
+        aired.link((sun, j), q);
     }
     let up = LinkFlux { class: [Class::Ground, Class::Air], a: &cells, b: &parent, ks: &ks, mol: &mol, heat: &link };
     let m = &mean.moved;
     let wind = LinkFlux { class: [Class::Air, Class::Air], a: &m.a, b: &m.b, ks: &gases, mol: &m.mol, heat: &m.heat };
-    let mut fluxes = vec![up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux()];
+    let mut fluxes = vec![up, rained.flux(), wind, lit.flux(), kept.flux(), cooled.flux(), sky.flux(), aired.flux()];
     let edges = edges(w, &mean.edges, &gases);
     if let Some((outside, heat)) = &edges {
         let e = &mean.edges;
@@ -91,8 +100,9 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, response, rain): (&[Act
     w.light.iter_mut().enumerate().for_each(|(i, l)| *l += response.fixed(i, LIGHT));
     s.state.cloud = (0..na)
         .map(|j| {
-            let (m, mr) = act.iter().enumerate().map(|(y, ac)| (mean.rain[y * na + j], mean.rain[y * na + j] * s.sp[ac.k].refl[0])).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
-            cloud((w.cfg.cloud, w.cfg.cloud_ir), (m, mr), w.mesh.level(AIR).area()[j], dt)
+            // What condensed over the node in the step as liquid, m³.
+            let liquid: f64 = act.iter().enumerate().map(|(y, ac)| mean.rain[y * na + j] * s.sp[ac.k].v[1]).sum();
+            cloud(mean.cloud[j], liquid / (w.mesh.level(AIR).area()[j] * dt), (w.cfg.cloud_life, w.cfg.drop_m))
         })
         .collect();
     let ema = year_weight(w, dt);

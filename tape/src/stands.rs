@@ -62,13 +62,13 @@ struct Ground {
 /// area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s (more
 /// pigment per area); its moisture gene (`MOIST`) and frost gene, K (`FROST`); its fuel over its reserve (`STORE`); its
 /// activity there (`cover::activity`); the share of it frozen this month (`cover::frozen`); the share of what it builds
-/// that goes to seeds (`SEED`); the share of the land whose loose ground holds its plants (`Cover::rooted` over the land's
-/// share, at most all of it) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
+/// that goes to seeds (`SEED`); the share of the land whose loose ground holds its plants (`Cover::rooted`, a share of the
+/// ground its cover lives on) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
 /// whose need is not found yet: seeds that landed since its cell's last month).
 fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
     let (built, genes) = (c.built(mm, x), c.genes[x]);
     let walls = c.walls(mm, x) / built.max(1e-300);
-    let (rooted, need) = if c.need[x] > 0.0 { ((c.rooted[x] as f64 / g.land).min(1.0), c.need[x]) } else { (1.0, 0.0) };
+    let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x] as f64, c.need[x]) } else { (1.0, 0.0) };
     let on_land = |v: f64| per_land(v / g.area, g.land);
     let p = plants(ph, (on_land(built), on_land(c.leaf(mm, x)), on_land(c.plants[x])), rooted, walls, g.rho);
     let act = cover::activity(ph, &genes, g.wet);

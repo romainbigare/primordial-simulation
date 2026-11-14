@@ -42,6 +42,12 @@ impl Scratch {
         let (d, z) = self.view().standing(i);
         (if self.state.parts.get(i).and_then(Option::as_ref).is_some_and(Parts::land) { 0.0 } else { d }, z)
     }
+    /// Of a cell of parts that has land: the mol of substance `k` its land part holds and that part's share of the cell's
+    /// area, as Flow last set them (`Parts`); none for any other cell.
+    pub(crate) fn land_part(&self, i: usize, k: usize) -> Option<(f64, f64)> {
+        let p = self.state.parts.get(i)?.as_ref().filter(|p| p.land())?;
+        Some((p.amt[k][LAND], p.share(LAND)))
+    }
     /// The depth of the soft solid lying on the land of cell `i`, m, at its solid's density: of a cell of parts its
     /// land's, else the node's (`Scratch::cover`).
     pub(crate) fn soft_land(&self, i: usize) -> f64 {

@@ -10,24 +10,27 @@ mod edge;
 mod exchange;
 mod radiation;
 mod planet;
+mod outs;
 mod rain;
 mod seen;
+mod soak;
 mod sky;
 mod step;
 mod stretch;
 mod surf;
+mod together;
 mod wind;
 
 pub(super) use corners::Corners;
 pub use planet::Planet;
 pub(super) use daily::blocks;
 pub(super) use exchange::{dissolve, henry, Sat};
-pub(crate) use radiation::LAYERS;
-pub use radiation::{column, declination, glow, insolation, on_slope, sun_by_latitude};
+pub use radiation::{band_depths, column, declination, insolation, on_slope, sun_by_latitude, Heat, DOWN, UP};
+pub(super) use radiation::Skies;
 pub(super) use step::step;
 
 use super::Scratch;
-use crate::{math::one_minus_exp, store::Class, units::R_GAS, World, AIR};
+use crate::{store::Class, units::R_GAS, World, AIR};
 use std::f64::consts::LN_2;
 
 /// Least depth of the air over the ground, m (the air's top is `Config::air_top_m`).
@@ -155,14 +158,8 @@ fn nodes(w: &World, s: &mut Scratch) {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     sums(w, s);
     s.za.fill(0.0);
-    s.fabs.fill(0.0);
     for (i, &j) in cells.parent().iter().enumerate() {
         s.za[j as usize] += s.head[i] * cells.area()[i];
-    }
-    for &k in s.state.gas.iter().filter(|&&k| w.chem.subs[k].ir_abs > 0.0) {
-        for (j, &a) in w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().enumerate() {
-            s.fabs[j] += w.chem.depth(k, a / air.area()[j]);
-        }
     }
     for j in 0..na {
         s.za[j] /= air.area()[j];
@@ -219,14 +216,19 @@ fn heights(w: &World, s: &mut Scratch) {
     }
 }
 
-/// The layers of each air node's column that send its heat radiation (`column`) and the share of it its absorber takes:
-/// its gases and the clouds of the step before (spread like the air's mass, over its mean ground).
+/// What each air node's air does to heat radiation (`Skies`): its gases that absorb it, each with the height its
+/// amount fills (`Scratch::hk`, `radiation::band_depths`); and under the share of its sky the cloud of the step
+/// before covers, that cloud too (`radiation::drops_heat`), spread like the air.
 fn layers(w: &World, s: &mut Scratch) {
-    let (na, g, top) = (w.mesh.level(AIR).n(), w.cfg.gravity, w.cfg.air_top_m);
-    (s.lay, s.absorbs) = (0..na)
+    let (air, chem, g, top) = (w.mesh.level(AIR), &w.chem, w.cfg.gravity, w.cfg.air_top_m);
+    let na = air.n();
+    s.heat = (0..na)
         .map(|j| {
-            let x = s.fabs[j] + s.state.cloud[j][1];
-            (column(x, s.gam[j], (top - s.za[j]).max(COLUMN_MIN), node_scale_height(s, j, g)), one_minus_exp(x))
+            let gases: Vec<(usize, f64, f64)> = s.state.gas.iter().enumerate().filter(|e| chem.absorbs_heat(*e.1)).map(|(gi, &k)| (k, w.store.amounts(Class::Air)[k * na + j] / air.area()[j], s.hk[gi * na + j].max(COLUMN_MIN))).collect();
+            let (big, [share, depth]) = (node_scale_height(s, j, g), s.state.cloud[j]);
+            let bands = band_depths(chem, &gases, (s.ta[j], big));
+            let sky = |cloud: f64| Heat::of(bands, (cloud, big), (s.gam[j], (top - s.za[j]).max(COLUMN_MIN)), w.cfg.line_spread);
+            Skies::of(sky(0.0), (share > 0.0).then(|| (share, sky(radiation::drops_heat(depth)))))
         })
-        .unzip();
+        .collect();
 }

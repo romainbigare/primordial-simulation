@@ -141,15 +141,26 @@ pub fn is_river(w: &World, i: usize) -> bool {
 }
 
 /// The dry land cells (land under no more than `STANDING_M` of liquid) that are rivers (`is_river`).
+fn river_cells<'a>(w: &'a World, f: &'a Fields) -> impl Iterator<Item = usize> + 'a {
+    (0..w.mesh.cells().n()).filter(move |&i| w.is_land(i) && f.depth[i] <= STANDING_M && is_river(w, i))
+}
+
+/// How many dry land cells are rivers (`river_cells`).
 pub fn river_count(w: &World, f: &Fields) -> usize {
-    (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && f.depth[i] <= STANDING_M && is_river(w, i)).count()
+    river_cells(w, f).count()
+}
+
+/// The liquid flux of the dry land cells that are rivers (`river_cells`, `World::liquid_flux`), summed, mol/s.
+pub fn river_flux(w: &World, f: &Fields) -> f64 {
+    river_cells(w, f).map(|i| w.liquid_flux[i] as f64).sum()
 }
 
 /// Everything a layer, and a row of the series, may read.
 pub(crate) struct Ctx<'a> {
     pub w: &'a World,
     pub f: Fields,
-    /// Per air node: temperature K, column of condensable gases mol/m², heat-absorbing column (Σ n·ir_abs / area)
+    /// Per air node: temperature K, column of condensable gases mol/m², heat-absorbing column (its lines' optical depth
+    /// summed over the bands, `air_column`)
     pub t_air: Vec<f64>,
     pub vapor: Vec<f64>,
     pub absorber: Vec<f64>,
@@ -167,8 +178,8 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
     pub wet: Vec<f64>,
-    /// Per ground cell: the share of its area that is land, 0..1 (`flow::land_shares`; before Flow first built its
-    /// state, all of a land cell and none of the others)
+    /// Per ground cell: the share of its area that is land, 0..1: its land (`contract::lands`, which its cover lives
+    /// on) over its area
     pub land: Vec<f64>,
 }
 
@@ -181,8 +192,7 @@ impl<'a> Ctx<'a> {
         let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
-        let all: Vec<usize> = (0..n).collect();
-        let land = pcore::flow::land_shares(w, &all).unwrap_or_else(|| all.iter().map(|&i| if w.is_land(i) { 1.0 } else { 0.0 }).collect());
+        let land = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
         let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, land };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
@@ -202,12 +212,13 @@ pub(crate) fn per_land(per_m2: f64, land: f64) -> f64 {
     if land > 0.0 { per_m2 / land } else { f64::NAN }
 }
 
-/// Air node `j`: its heat-absorbing column (Σ n·ir_abs / area) and the column of condensable gases, mol/m².
+/// Air node `j`: its heat-absorbing column (the optical depth of its gases' lines, `Chemistry::depth`, summed over the
+/// bands of heat radiation) and the column of condensable gases, mol/m².
 fn air_column(w: &World, j: usize) -> (f64, f64) {
     let (mut absorber, mut vapor, area) = (0.0, 0.0, w.mesh.level(AIR).area()[j]);
     for (k, s) in w.chem.subs.iter().enumerate() {
         let n = w.a(k, j);
-        absorber += w.chem.depth(k, n / area);
+        absorber += (0..pcore::chem::HEAT_BANDS).map(|b| w.chem.depth(k, b, n / area)).sum::<f64>();
         if s.boil > VAPOR_BOIL {
             vapor += n / area;
         }

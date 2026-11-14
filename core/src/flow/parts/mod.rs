@@ -180,7 +180,12 @@ pub(super) fn solve_nodes(w: &World, s: &mut Scratch, anew: &[(u32, bool)], (ful
         match solved {
             Some((p, m, row)) => {
                 take_row(s, i, &row);
-                (s.state.parts[i], s.mixed[i]) = (Some(p), Some(Box::new(m)));
+                s.mixed[i] = Some(Box::new(m));
+                // A build of the caches alone keeps the saved parts as they are: the next solve that moves them starts
+                // from them, as an unbroken world's does.
+                if moving {
+                    s.state.parts[i] = Some(p);
+                }
             }
             None => {
                 (s.state.parts[i], s.mixed[i]) = (None, None);
@@ -256,8 +261,8 @@ fn liquid(f: &[Found; PARTS], por: f64) -> f64 {
 /// (`moves::reconcile`), each is found (`Found`); with `moving`, the liquid over the land's pores runs to the liquid
 /// (`moves::settle`), then the share of the cell under the liquid follows what stands on it (`Curve::wet`), with the
 /// ground it gains or gives (`moves::strip`), and the deep holds what stands deeper than `h_mix` (`deep::layer`). The
-/// parts, as the air's step reads them, and the node's row (`row`). None where nothing stands, or it covers the whole
-/// cell no deeper than `h_mix`: the cell is one.
+/// parts, as the air's step reads them, and the node's row (`row`). With `moving`, none where nothing stands, or it
+/// covers the whole cell no deeper than `h_mix`: the cell is one; without it the parts stay as they are.
 pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool) -> Option<(Parts, Mixed, [f64; STATE_ROW])> {
     let por = w.cfg.phys.porosity;
     let mut p = kept.clone();
@@ -267,7 +272,7 @@ pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool
         f = found(w, s, i, &p);
     }
     let (to, deep) = if moving { (moves::covers(s, i, &p, &f, (stands(&f, por), por)), deep::under(w, s.fill(i), liquid(&f, por))) } else { (p.wet, None) };
-    if to <= 0.0 || (to >= 1.0 && deep.is_none() && (moving || !p.deep())) {
+    if moving && (to <= 0.0 || (to >= 1.0 && deep.is_none())) {
         return None;
     }
     let to = to.min(1.0);

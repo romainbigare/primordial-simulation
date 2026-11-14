@@ -141,9 +141,21 @@ impl Chemistry {
         m.iter().zip(&self.subs).map(|(a, s)| a * s.cp).sum()
     }
 
-    /// Optical depth to outgoing heat radiation of a column of `c` mol/m² of substance `k`.
-    pub fn depth(&self, k: usize, c: f64) -> f64 {
-        let s = &self.subs[k];
-        s.ir_abs * if s.ir_sat > 0.0 && c > s.ir_sat { (s.ir_sat * c).sqrt() } else { c }
+    /// Optical depth to heat radiation in band `b` of a column of `c` mol/m² of substance `k` (`band`), its lines alone
+    /// (its continuum is the air's to add, `flow`'s heat).
+    pub fn depth(&self, k: usize, b: usize, c: f64) -> f64 {
+        let [abs, sat] = self.subs[k].heat[b];
+        band((abs, sat), c)
     }
+
+    /// Optical depth to sunlight that a column of `c` mol/m² of substance `k` absorbs (`band`).
+    pub fn sun_depth(&self, k: usize, c: f64) -> f64 {
+        band((self.subs[k].sw_abs, self.subs[k].sw_sat), c)
+    }
+}
+
+/// The optical depth of a column of `c` mol/m² of a gas that absorbs `abs` m²/mol: in proportion up to `sat` mol/m², past
+/// it as the square root of the amount, as its bands fill up (0: always in proportion).
+fn band((abs, sat): (f64, f64), c: f64) -> f64 {
+    abs * if sat > 0.0 && c > sat { (sat * c).sqrt() } else { c }
 }
