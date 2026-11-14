@@ -48,6 +48,8 @@ two files: this one and the roadmap.
 - **The disk fills** (it did, twice): each helper's worktree holds a build folder of 2 to 3 GB. When a helper is
   done and its branch is merged or saved, delete its `target` (`rm -rf .claude/worktrees/agent-*/target` of the
   finished ones); tell helpers to delete scratch runs and old binaries once their numbers are in a table.
+- **Ports are shared too**: helpers serve their own page builds on port 8765. The orchestrator's smoke tests
+  serve `web/dist` on a port of their own (8791) and stop only that one; stopping 8765 stops a helper's server.
 - Worktrees and scratch files die with the container, and the container restarts without warning (three times in
   one day): tell every helper to commit its work in progress early, and push its branch to a `wip/` name as soon as
   it holds something. Anything worth keeping is merged or pushed before the session ends.
@@ -267,27 +269,42 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   not measured: each slot is thinned on its own, and is its own layer in the light and in the rooted share, so
   one stand cut into more slots holds more plants and more leaf. The law that should hold: a slot cut into two
   alike halves gives the same world.
-- **The mend of the slots is built, not on main** (the builder's worktree; scratch `scratchpad/sorted/spike/`,
-  `notes.md`, `table_m2.txt`). Five laws broke it and each has its commit: thinning by the crowns' layer
-  (`Cover::crown`), seeds keyed by the cell and the genes and waking for their kin (`kin::kins`), light and
-  liquid on the rings of nested rooted shares (`math::rings`, `grow::drawn`), minerals shared by what each slot
-  would take (`build::wants`); the lots of seeds lying follow the variety (`SNAPSHOT_VERSION` 145). The test
-  `core/tests/stand.rs`: a stand cut in two and in four gives the uncut cell's year within 1e-9. What holds it
-  back:
-  - no pictures yet (asked);
-  - the cover's stage costs about 1.7 times at variety 4, a rough number: a measure on one thread and cuts are
-    asked;
-  - **the variety is still not neutral, by the rule at the limit**: 0.85e10, 2.48e10, 4.57e10, 4.55e10 kg at
-    2, 4, 8, 12 (the limit never binds at 12). At 4, 98,000 forced joins of two slots and 15,000 young stands
-    killed in 60 years. In trial: a full cell never blends unlike stands (only kin join; a newcomer without a
-    slot stays as seeds lying);
-  - the world at 4 moves much (key world: cover 9.867 → 10.146 log10 kg, the gas 315.6 → 264.2 ppm, land worn
-    0.1847 → 0.1295 mm/yr; the 32 drawn world: cover 4.10e10 → 2.48e10 kg);
-  - **the slow test `the_long_step_keeps_the_climate` turns red with it**: the default step moves `runoff_sea`
-    by 0.45%, as on main (0.49%), but the world's year-to-year spread, the test's limit, falls from 0.50% to
-    0.27%. Not loosened. The long step's error on what runs off the land is the thing to mend (the air's helper).
-  The drought law and this mend both change the cover's growth: whichever lands second merges the other.
-- Then, same builder: the spike of the nursery on its branch behind `--sorted` (no race by mass, newcomers near
+- **The mend of the slots is built, not on main** (on the remote as `wip/slots`, merged with main 6f7dfe1b;
+  notes and tables in `scratchpad/sorted/spike/`: `notes.md`, `contact_round3.png`, `pics/`). Five laws broke
+  "a slot cut into alike pieces gives the same world" and each has its commit: thinning by the crowns' layer
+  (`Cover::crown`), seeds keyed by the cell and the genes (rounded to 1/1024 of a step) and waking for their kin
+  (`kin::kins`), light and liquid on the rings of nested rooted shares (`math::rings`, `cover/canopy.rs`,
+  `grow::drawn`), minerals shared by what each slot would take (`build::wants`); the seeds lying keep all 12
+  lots at any variety. The test `core/tests/stand.rs`: a stand cut in two and in four gives the uncut cell's
+  year within 1e-6 (the genes are 32-bit, and seeds joining one packet at a time round the mean genes in the
+  last bit, about 1e-8 a year; a law that acts on a slot moves it by 1e-4 or more). Where it stands:
+  - **The pictures are the same world** (the page and the what-stands maps, 32 and 64, both bands, years 60 and
+    100: forest a few points up in the band 20 to 65, the rest within two points). The mass moves: the key
+    world's cover 9.831 → 10.119 log10 kg, the gas 330.7 → 287.0 ppm, land worn 0.1875 → 0.1333 mm/yr; the 32
+    drawn world's cover falls by 40% (the light passes down through each crown, so the trees that hold the mass
+    grow lighter: the builder's reading, not measured).
+  - **Cost**: the cover's stage +12% for a cell of one slot, +48% per slot-month with four kinds a cell (counted
+    instructions); its share of a 30-year run 16.5% → 20.5%. The cuts that keep the results to the last digit
+    are in.
+  - **The variety is not neutral, and that is the limit itself, on main too**: cover at 2, 4, 8, 12 is 0.55e10,
+    1.52e10, 2.67e10, 2.61e10 kg on the branch (main: 0.59, 2.55, 3.81, 4.10): from about 8 the setting no
+    longer matters. Full cells of stands that pay their way shut better kinds out. Tried and dropped: a full
+    cell joining only kin and keeping the newcomer as seeds lying (worse: 1.06e10 at 4). Almost all forced
+    joins are of unlike stands (118,000 at 4 in 60 years, 2.9 steps apart on average). Open: a default of 8
+    (the cover's stage then costs about twice), or a better rule at the limit.
+  - **Three fast tests of the takers are red on the branch** since it merged the drought law
+    (`newborns_grow_by_the_law_of_growth_and_the_books_are_kept`, `the_young_leave_and_the_books_are_kept`,
+    `the_soft_part_stands_in_the_crown`): in a dry month the test cell's herb stand has a tiny gain, does not
+    pay, and `grow::shed` drops all its living matter. The same fragile spot the fire builder's work replaces
+    (a leaf's gain by the liquid in a straight line; shedding by what it costs to keep).
+  - The long step's test passes on main and on the branch now (`runoff_sea` +0.24% against 0.35%).
+  **Order**: the straight line of the leaf's gain lands on main first; then a fresh builder (this one's room is
+  used up; it reads `notes.md`) merges main into `wip/slots`, sees the three tests, resets the references, and it
+  goes to main; the fire builder's upkeep and shedding merge after it.
+- **On main: a world's variety is from 2** (`Config::validate`, the page's field): at 1 a full cell looked for
+  two slots to join and the run stopped. The mend that lets 1 stand is on `wip/slots` (a cell of one slot held
+  by a stand that pays its way refuses the seeds, `seed::Landed::Refused`); the bound goes back to 1 with it.
+- Then, by a fresh builder and only after the look of the habitats (the owner's order): the spike of the nursery on its branch behind `--sorted` (no race by mass, newcomers near
   known kinds, the garden check, bands' tables, a contact sheet): numbers and pictures, not for main as it is.
 - **Its steps**: (0) main alone to year 300 on the new air, the target: done (`scratchpad/sorted/target/`, seed
   1 at 64 squares). The cover is steady from year 100 in all three: in the band with the roster 1.33 to 1.40e11
