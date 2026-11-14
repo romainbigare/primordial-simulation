@@ -10,7 +10,7 @@ use super::gut::{digest, Gut};
 use super::thirst::{self, Thirst};
 use super::{mm, sub, take, way, Fauna, FS, NF, N_WHOLE, REPAIR};
 use crate::contract;
-use crate::life::{book, Books, Chunk, Parts, MATTER, NO_ROOT, NP, WET_TISSUE};
+use crate::life::{book, Books, Chunk, Parts, AGE, LACK, MATTER, NO_ROOT, NP, PHASE, SPENT, WET_TISSUE};
 use crate::math::one_minus_exp;
 use crate::rng::{Purpose, Rng};
 use crate::units::DAY;
@@ -58,7 +58,8 @@ fn cell(w: &World, d: &mut Chunk, (p, gut): (&Parts, &Gut), i: usize) {
     for x in (0..FS).filter(|&x| bodies[x].n > 0.0) {
         let burnt = bodies[x].heat(walks[x], plan.work[x]) + plan.way[x] / (bodies[x].n * dt);
         let r = Rng::new(w.seed, w.month(), (i * FS + x) as u64, Purpose::Fauna);
-        settle(w, (p, gut), (f, x, &bodies[x]), (&took[x], burnt, plan.lack[x]), (&mut liquid, r, &mut b));
+        let died = settle(w, (p, gut), (f, x, &bodies[x]), (&took[x], burnt, plan.lack[x]), (&mut liquid, r, &mut b));
+        counts.takers_died.iter_mut().zip(died).for_each(|(a, d)| *a += d);
         rounded(f, x, &mut counts.rounded[0]);
     }
     // Each slot's heat ends at its members' temperature; what the burning released beyond it goes to the ground.
@@ -103,8 +104,8 @@ fn plan(w: &World, p: &Parts, (i, bodies): (usize, &[Body; FS]), (layers, reach)
 /// Slot `x` of `f`, its members `b`, digests `took` (mol of each substance) for the energy it burns, `burnt` W a member
 /// (`gut::digest`, its gut splitting walls with the cell's `liquid`), and loses the members it could not keep, drawn
 /// from `r`: unpaid, worn out, frozen, and `lack` of them for the heat they could not shed even at rest; an empty slot's
-/// amounts go to the remains.
-fn settle(w: &World, (p, gut): (&Parts, &Gut), (f, x, b): (&mut Fauna, usize, &Body), (took, burnt, lack): (&[f64; crate::units::MAX_SUBSTANCES], f64, f64), (liquid, mut r, books): (&mut f64, Rng, &mut Books<0>)) {
+/// amounts go to the remains. Returns the members that died by cause (`life::LACK` to `AGE`).
+fn settle(w: &World, (p, gut): (&Parts, &Gut), (f, x, b): (&mut Fauna, usize, &Body), (took, burnt, lack): (&[f64; crate::units::MAX_SUBSTANCES], f64, f64), (liquid, mut r, books): (&mut f64, Rng, &mut Books<0>)) -> [f64; 6] {
     let (chem, ph, dt) = (&w.chem, &w.cfg.phys, w.cfg.calendar().month as f64);
     let (sub, mm) = (sub(p), mm(chem, p));
     let part: [f64; NP] = std::array::from_fn(|q| took[p.sub[q]]);
@@ -112,11 +113,20 @@ fn settle(w: &World, (p, gut): (&Parts, &Gut), (f, x, b): (&mut Fauna, usize, &B
     let spent = digest(chem, (p, gut), (f, x), (part, b.gut * b.n * dt, liquid), (burnt * b.n * dt, store), books);
     let frozen = ph.frozen((chem.subs[p.liquid].melt, ph.harden), b.tb, b.pace.min(1.0));
     let worn = one_minus_exp(b.wear(ph, f.genes[x][REPAIR], burnt, dt));
-    die(f, (x, &sub), [spent, worn, frozen, lack], &mut r, books);
+    let causes = [(spent, SPENT), (worn, AGE), (frozen, PHASE), (lack, LACK)];
+    let dead = die(f, (x, &sub), causes.map(|c| c.0), &mut r, books);
     if f.adults[x] <= 0.0 {
         (0..NF).for_each(|q| books.dead[sub[q]] += f.mol[x][q]);
         (f.adults[x], f.mol[x], f.root[x]) = (0.0, [0.0; NF], NO_ROOT);
     }
+    // The dead shared by the causes as they combine, each on what the one before left.
+    let (mut left, mut by) = (1.0, [0.0; 6]);
+    let all = 1.0 - causes.iter().map(|c| 1.0 - c.0.clamp(0.0, 1.0)).product::<f64>();
+    for (share, cause) in causes {
+        by[cause as usize] = if all > 0.0 { dead * share.clamp(0.0, 1.0) * left / all } else { 0.0 };
+        left *= 1.0 - share.clamp(0.0, 1.0);
+    }
+    by
 }
 
 /// What rounding left below zero of slot `x` of `f` is set to zero and counted in `rounded`, mol.
@@ -129,8 +139,8 @@ fn rounded(f: &mut Fauna, x: usize, rounded: &mut f64) {
 /// The members of slot `x` of `f` (its parts the substances `sub`) die by the shares `causes`, each on what the one
 /// before left (as the cover's causes combine); their share of its body matter and store goes to the cell's remains
 /// (`Books::dead`). Below `N_WHOLE` members the count is whole: the dead are a binomial draw from `r`, and a count that
-/// falls below it becomes whole by a draw that keeps its mean (it is never rounded up as a rule).
-fn die(f: &mut Fauna, (x, sub): (usize, &[usize; NF]), causes: [f64; 4], r: &mut Rng, b: &mut Books<0>) {
+/// falls below it becomes whole by a draw that keeps its mean (it is never rounded up as a rule). Returns the dead.
+fn die(f: &mut Fauna, (x, sub): (usize, &[usize; NF]), causes: [f64; 4], r: &mut Rng, b: &mut Books<0>) -> f64 {
     let n = f.adults[x];
     let left: f64 = causes.iter().map(|c| 1.0 - c.clamp(0.0, 1.0)).product();
     let dead = if n < N_WHOLE { r.binomial(n as u32, 1.0 - left) as f64 } else { n * (1.0 - left) };
@@ -145,4 +155,5 @@ fn die(f: &mut Fauna, (x, sub): (usize, &[usize; NF]), causes: [f64; 4], r: &mut
         b.dead[k] += m;
     }
     f.adults[x] = after;
+    dead
 }

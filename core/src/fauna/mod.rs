@@ -115,6 +115,14 @@ pub fn adult(g: &[f32; NG]) -> f64 {
     crate::math::dec(g[MASS])
 }
 
+/// The living mass of the takers of each ground cell per km² of it, kg (none where it holds none).
+pub fn per_km2(w: &crate::World) -> Vec<f64> {
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
+    let Some(p) = Parts::of(&w.chem) else { return vec![0.0; n] };
+    let mm = mm(&w.chem, &p);
+    (0..n).map(|i| w.life.cell_at(i).fauna.held().map(|x| w.life.cell_at(i).fauna.living(&mm, x)).sum::<f64>() / area[i] * 1e6).collect()
+}
+
 /// The takers of the world by starting kind (index: the root), in the order of the cells and their slots: members and
 /// living mass, kg.
 pub fn sums(w: &crate::World) -> Vec<[f64; 2]> {

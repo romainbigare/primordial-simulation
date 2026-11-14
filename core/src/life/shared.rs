@@ -1,7 +1,7 @@
 //! What life shares: the causes it dies of (the cover's books count what it loses by them, `Counters::cover_lost`), the
 //! liquid share of living tissue and what it takes to break it (laws.md 3).
 
-/// Causes of death, the places of `Counters::cover_lost`: a store below its safe minimum; a key liquid froze; upkeep not
+/// Causes of death, the places of `Counters::cover_lost` and `Counters::takers_died`: a store below its safe minimum; a key liquid froze; upkeep not
 /// paid; taken by a taker (`contract::take`).
 pub const LACK: u8 = 0;
 pub const PHASE: u8 = 1;
