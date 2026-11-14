@@ -410,12 +410,16 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     (`scratchpad/islands/round3/B1_warp.diff`).
 - **The bare coast** (the owner's question), measured on worlds of 32 squares, seeds 1 to 4
   (`scratchpad/coast/`, `notes.md` and `pics/`): most of the bare shore is bare in the core, not in the drawing.
-  - Roots cost too much on warm low ground: `root_uptake` is anchored on a forest's yearly mean flow, but a slot
-    holds roots for its month's draw. Near the shore the water lost per mol of gas is 141 to 177 (9 to 45
-    inland, where the air near the ground is saturated), roots are half the upkeep, and stored over upkeep is 1.02
-    to 1.28. In work, by the helper that diagnosed it (branch `roots` in `.claude/worktrees/agent-cover-land`,
-    scratch `scratchpad/coast/`): the table again on today's main, then `root_uptake` anchored on the growing
-    season's flow (about 1e-3 mol per kg a s, 2.4 times the row), its effect, the references set once, pictures.
+  - Roots cost too much on warm low ground: **mended on main** (the roots' package): `root_uptake` is 1.1e-3 mol
+    per kg a s, the flow of the growing season's peak month (3 mm a day through 1.76 kg of living fine roots per
+    m²; Jackson, Mooney and Schulze 1997, Table 1, read), where the row was a year's mean. In the band, 0 to 1 km
+    from the shore: the roots' share of the upkeep 0.49 to 0.27, living cover 1.25 to 1.87 kg per m² of land; the
+    island's cover at year 100 2.96e10 to 4.58e10 kg, its climate unmoved. The shores are covered; in summer the
+    page draws them straw and orange (dormant, dry cover), not green. The references are the world's own means
+    again: land 287.71 K, swing 11.72 K, rain 2.509e-3, gas 315.6 ppm, river cells 234.5, worn 0.1847 mm/yr,
+    cover 9.867. A closed island with the roster falls to 157 ppm of the gas (221 before), under the 180 of
+    Earth's range: no test holds that world, and the page makes none. The 3 mm a day is from excerpts, not whole
+    papers.
   - A cell whose mean ground is under the level gets no soil and no starting cover (`worldgen::life::open_land`
     asks `is_land`), though it holds land: 3.4 to 4.9% of the land's samples, 26% of the land in the first km.
     Accepted: soil and cover on the land part of such a cell.
@@ -452,8 +456,7 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    `roadmap.md` 7.2. Then the small game (god tools, fire).
 
 **Nature track**
-1. **The roots' package** (in work, "the bare coast" above): `root_uptake` anchored on the growing season's flow,
-   the references set once. Then the page's green speckle over bare land (section 4, known faults on the page).
+1. **The page's green speckle over bare land when zoomed in** (section 4, known faults on the page): in work.
 2. **The sorted start**, carried over by hand in the steps of section 4 (its target, main alone to year 300, is
    measured), with the amount of variety as a setting of a world. It goes to main only when its pictures are at
    least as good as main's.
