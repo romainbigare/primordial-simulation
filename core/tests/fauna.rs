@@ -1,7 +1,7 @@
 //! The takers (laws.md 3b): slots of members that pay their upkeep from their store and die by what they cannot pay,
 //! keeping the books, their counts whole when few.
 
-use pcore::fauna::{self, Fauna, BODY, FS, KEEP, N_WHOLE, REPAIR, STORE};
+use pcore::fauna::{self, take, Fauna, BODY, FS, KEEP, N_WHOLE, REPAIR, STORE};
 use pcore::life::{Parts, NO_ROOT, WET_TISSUE};
 use pcore::units::DAY;
 use pcore::World;
@@ -12,13 +12,13 @@ use worldgen::testkit::{self, Books};
 const COLD_ROW: usize = 4;
 /// Members of the slot the law of the store is read on: real counts (over `N_WHOLE`).
 const MANY: f64 = 1000.0;
-/// The months of upkeep its store holds: three are paid in full, the fourth half.
-const STORE_MONTHS: f64 = 3.5;
+/// The share of a month's upkeep its store holds (within the most a taker stores, `store_most`).
+const STORE_MONTHS: f64 = 0.75;
 
-/// A small world with its soil and the cover of `ew run` after a month, and its mildest dry land cell, a pond standing
-/// on it (a metre: liquid for any thirst) and no snow.
+/// A small world with no life after a month, and its mildest dry land cell, a pond standing on it (a metre: liquid for
+/// any thirst) and no snow: takers there find nothing to take.
 fn start() -> (World, usize) {
-    let mut w = testkit::living(8, 1);
+    let mut w = testkit::small_world();
     let i = testkit::mild_land(&w);
     w.life.env[i][1] = 1.0;
     w.life.env[i][3] = 0.0;
@@ -30,16 +30,27 @@ fn of(w: &World, i: usize) -> &Fauna {
     &w.life.cell_at(i).fauna
 }
 
-/// The energy a member of the starting kind of row `row` burns in a day on ground at `t` K by the law of upkeep and
-/// heat, J, its living mass `m` kg: Kleiber's (`c_basal` + `c_muscle`) m^`upkeep_exp` at the pace of its burning at its
-/// body's temperature, times its repair factor; more where its coat loses more to colder ground.
+/// The energy a member of the starting kind of row `row` burns in a day on ground at `t` K, finding nothing, by the
+/// law of upkeep, the walk and the heat, J, its living mass `m` kg: at rest Kleiber's (`c_basal` + `c_muscle`)
+/// m^`upkeep_exp` and its gut's capacity (`c_capacity` of the fuel it could free), at the pace of its burning at its
+/// body's temperature, times its repair factor; the walk of its whole working time searching (speed
+/// (`walk_froude` g L)^0.5 at `c_move` (m / `move_ref`)^`move_exp` J per kg and m); no less than its coat loses to
+/// colder ground.
 fn burnt_a_day(w: &World, row: usize, m: f64, t: f64) -> f64 {
-    let (ph, g) = (&w.cfg.phys, &TAKER_KINDS[row].genes);
-    let rx = &w.chem.reactions[Parts::of(&w.chem).expect("life's parts").burn];
+    let (ph, g, chem) = (&w.cfg.phys, &TAKER_KINDS[row].genes, &w.chem);
+    let p = Parts::of(chem).expect("life's parts");
+    let rx = &chem.reactions[p.burn];
     let tb = (g[KEEP] as f64).max(t);
-    let rest = (ph.c_basal + ph.c_muscle) * m.powf(ph.upkeep_exp) * rx.arrhenius(tb) / rx.arrhenius(ph.t_cat) * ph.repair(g[REPAIR] as f64);
+    let pace = rx.arrhenius(tb) / rx.arrhenius(ph.t_cat);
+    let makes = |v: &[(u16, u16)], k: usize| v.iter().any(|q| q.0 as usize == p.sub[k]);
+    let split = chem.reactions.iter().find(|r| makes(&r.inputs, pcore::life::WALL) && makes(&r.outputs, pcore::life::FUEL)).expect("walls split into fuel");
+    let fuel_a_wall = split.outputs.iter().find(|q| q.0 as usize == p.sub[pcore::life::FUEL]).map_or(0.0, |q| q.1 as f64) * per_kg(w) * chem.subs[p.sub[pcore::life::FUEL]].molar_mass;
+    let gut = ph.c_capacity * 10f64.powf(g[fauna::ENZYME] as f64) * m * fuel_a_wall * DAY;
+    let rest = ((ph.c_basal + ph.c_muscle) * m.powf(ph.upkeep_exp) + gut) * pace * ph.repair(g[REPAIR] as f64);
+    let speed = (ph.walk_froude * w.cfg.gravity * (m / ph.rho_body).cbrt()).sqrt() * pace.min(1.0);
+    let walk = speed * ph.busy * DAY * ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m;
     let coat = ph.meeh * m.powf(2.0 / 3.0) / (ph.r_air + g[fauna::COAT] as f64 * ph.r_coat);
-    rest.max(coat * (g[KEEP] as f64 - t).max(0.0) * DAY)
+    (rest + walk).max(coat * (g[KEEP] as f64 - t).max(0.0) * DAY)
 }
 
 /// The energy a kg of the takers' store frees when burnt, J.
@@ -50,10 +61,10 @@ fn per_kg(w: &World) -> f64 {
     -w.chem.dh(p.burn) / per / w.chem.subs[p.sub[pcore::life::FUEL]].molar_mass
 }
 
-/// A slot with no reachable cover starves by the law of upkeep: a store of 3.5 months of Kleiber's upkeep (a kind
-/// that keeps no heat, on ground warm enough that it neither freezes nor sheds vapour) pays three months in full, its
-/// members falling only by their wear (1 − e^-wear), and half of the fourth, when half the rest die unpaid; the
-/// remains of the dead reach the ground. For every starting kind the month its store first runs short is the one the
+/// A slot with no cover to take starves by the law of upkeep: a store of three quarters of a month of its upkeep and
+/// its walk (a kind that keeps no heat, on ground warm enough that it neither freezes nor sheds vapour) pays three
+/// quarters of its first month, its members falling by their wear (1 − e^-wear) and by the quarter unpaid, and none of
+/// the second, when all die; their remains reach the ground and the books are kept. For every starting kind the month its store first runs short is the one the
 /// law of upkeep and heat gives.
 #[test]
 fn a_slot_that_takes_nothing_starves_as_its_upkeep_says() {
@@ -67,15 +78,15 @@ fn a_slot_that_takes_nothing_starves_as_its_upkeep_says() {
     testkit::takers(&mut w, i, COLD_ROW, (MANY, store));
     let wear = 1.0 - (-month / (m * w.cfg.phys.e_life * pcore::cover::dec(TAKER_KINDS[COLD_ROW].genes[REPAIR]))).exp();
     let mut n = MANY;
-    for k in 1..=4 {
+    let store_most = w.cfg.phys.store_most * m;
+    assert!(store <= store_most, "a store of {store} kg is over the most a member stores, {store_most} kg");
+    for k in 1..=2 {
         testkit::takers_month(&mut w, i);
-        n *= (1.0 - wear) * if k == 4 { 1.0 - (STORE_MONTHS - 3.0) } else { 1.0 };
+        n = if k == 1 { n * (1.0 - wear) * STORE_MONTHS } else { 0.0 };
         let f = of(&w, i);
-        assert!((f.adults[0] - n).abs() <= 1e-9 * n, "month {k}: {} members, the law says {n}", f.adults[0]);
-        let store = f.mol[0][STORE] / f.adults[0];
-        println!("month {k}: {:.3} members, store {store:.3e} mol each", f.adults[0]);
+        assert!((f.adults[0] - n).abs() <= 1e-9 * n, "month {k}: {} members, the law says {n} (at {t} K)", f.adults[0]);
+        println!("month {k}: {:.3} members", f.adults[0]);
     }
-    assert!(of(&w, i).mol[0][STORE] <= 1e-9 * MANY, "the store outlived its months");
     books.assert_kept(&w, 1e-9);
     for (row, kind) in TAKER_KINDS.iter().enumerate() {
         let mut w = w0.clone();
@@ -139,4 +150,73 @@ fn counts_are_never_rounded_up() {
     let left: f64 = of(&w, i).adults.iter().sum();
     println!("members left after 50 months: {left}; living kg {:.3e}", (0..FS).map(|x| of(&w, i).mol[x][BODY]).sum::<f64>() * w.chem.subs[10].molar_mass / (1.0 - WET_TISSUE));
     books.assert_kept(&w, 1e-9);
+}
+
+/// Members `n` of one eater of the scheme, searching `search` m²/s for `busy` s a day, chewing at `chew` W, reaching
+/// all of `layers` layers.
+fn eater(n: f64, (search, busy, chew): (f64, f64, f64), layers: usize) -> take::Eater {
+    take::Eater { n, search, busy, chew, reach: vec![1.0; layers] }
+}
+
+/// The take in steps meets the exact answer (Holling's disk law over a month): one eater on one layer falls as
+/// ln(D/D0) + a h (D − D0) = −(N/A) T a t (D the layer per m², a the area searched a s, h the handling time a kg, T the
+/// working time a day, t in days), found by halving, within 1%; and with two layers the eater switches: of a hard
+/// layer it reaches little of it takes far more once the one that filled its time runs out than the month's first rates
+/// would give.
+#[test]
+fn the_take_in_steps_meets_the_exact_answer() {
+    let (area, days, a, busy, chew) = (4e6, 30.0, 0.5, 43_200.0, 30.0);
+    let (n, d0, breaking) = (200.0, 0.05, 4e4);
+    let (taken, _) = take::scheme(&[eater(n, (a, busy, chew), 1)], (&[d0 * area], &[breaking]), area, days);
+    let h = breaking / chew;
+    let gap = |d: f64| (d / d0).ln() + a * h * (d - d0) + n / area * busy * a * days;
+    let (mut lo, mut hi) = (0.0, d0);
+    for _ in 0..200 {
+        let mid = 0.5 * (lo + hi);
+        if gap(mid) > 0.0 { hi = mid } else { lo = mid }
+    }
+    let exact = (d0 - lo) * area;
+    println!("one layer: the steps take {:.4e} kg, the exact answer {exact:.4e} kg (left {:.1}%)", taken[0][0], 100.0 * lo / d0);
+    assert!((taken[0][0] - exact).abs() <= 0.01 * exact && lo < 0.8 * d0, "the steps took {} kg, the exact answer is {exact} kg", taken[0][0]);
+    // A layer that fills its handling time (a D h = 10) and runs out in about ten days, and one it reaches a tenth of.
+    let (first_layer, second, w2) = ((0.2 * area, 3e3), (0.01 * area, 3e3), 0.1);
+    let mut both = eater(n, (a, busy, chew), 2);
+    both.reach[1] = w2;
+    let (taken, _) = take::scheme(&[both], (&[first_layer.0, second.0], &[first_layer.1, second.1]), area, days);
+    let slow = 1.0 + a * (first_layer.0 * first_layer.1 + w2 * second.0 * second.1) / area / chew;
+    let first = n * busy * a * w2 * second.0 / area / slow * days;
+    println!("two layers: the first {:.3e} of {:.3e} kg taken; of the second {:.3e} kg, at the month's first rates {first:.3e} kg", taken[0][0], first_layer.0, taken[0][1]);
+    assert!(taken[0][0] > 0.9 * first_layer.0 && taken[0][1] > 2.0 * first, "the eater did not switch: {:?}", taken[0]);
+}
+
+/// A taker takes no more than it reaches: a slot of many members asks far more than a cell's cover holds within its
+/// band and over its bite's floor; each layer loses no more than that reachable stock (`contract::reached` of what it
+/// shows), the cover keeps the rest as a refuge, and the books are kept.
+#[test]
+fn a_taker_takes_no_more_than_it_reaches() {
+    let mut w = testkit::living(8, 12);
+    let i = testkit::mild_land(&w);
+    (w.life.env[i][1], w.life.env[i][3]) = (1.0, 0.0);
+    let (row, ph) = (3, w.cfg.phys);
+    let (g, m) = (TAKER_KINDS[row].genes, fauna::adult(&TAKER_KINDS[row].genes));
+    let len = (m / ph.rho_body).cbrt();
+    let reach = 10f64.powf(g[fauna::REACH] as f64);
+    let band = (reach / 10f64.powf(fauna::BAND), (reach * 10f64.powf(fauna::BAND)).min(ph.reach_len * len));
+    let before: Vec<(f64, f64)> = pcore::contract::slots(&w, w.life.cell_at(i)).iter().map(|&(l, h)| (shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect();
+    let books = Books::now(&w);
+    testkit::takers(&mut w, i, row, (1e4, 0.1 * m));
+    testkit::takers_month(&mut w, i);
+    let after: Vec<f64> = pcore::contract::slots(&w, w.life.cell_at(i)).iter().map(|&(l, _)| shown(&w, i, l)).collect();
+    assert!(before.len() == after.len() && before.iter().any(|b| b.1 > 0.0), "no layer within reach: {before:?}");
+    for ((kg, r), now) in before.iter().zip(&after) {
+        println!("a layer of {kg:.3e} kg, {:.0}% within reach: {now:.3e} kg left", 100.0 * r);
+        assert!(*now >= kg * (1.0 - r) * (1.0 - 1e-9), "a layer of {kg} kg, {r} of it within reach, kept {now} kg");
+    }
+    assert!(after.iter().zip(&before).any(|(a, b)| *a < b.0), "nothing was taken");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// The kg that `layer` of cell `i` shows.
+fn shown(w: &World, i: usize, layer: pcore::contract::Layer) -> f64 {
+    pcore::contract::shown(w, i, w.life.cell_at(i), layer).map_or(0.0, |s| s.kg)
 }

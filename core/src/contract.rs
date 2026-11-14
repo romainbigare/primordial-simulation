@@ -121,11 +121,26 @@ impl Layer {
     }
 }
 
-/// The share of a plant `height` m tall that stands above `snow` m of soft solid: its matter is spread evenly over its
-/// height (the stand's law draws a plant as a stem of its height, `cover::stem`), so the share above is 1 − snow /
-/// height. What lies on the ground (height 0) shows only where no snow lies.
+/// What lies on the ground (the seeds lying, height 0) stands this high to a mouth, m: a mouth whose floor is under it
+/// and whose band reaches under it takes what lies there (a rule of the model: about a seed's size).
+pub const GROUND_M: f64 = 0.01;
+
+/// The share of a plant `height` m tall that a mouth reaches between the heights `band` m, above `floor` m (the snow
+/// lying, and the least height its bite reaches down to): its matter is spread evenly over its height (the stand's law
+/// draws a plant as a stem of its height, `cover::stem`), so the share is the length of its stem within the band and
+/// over the floor over its height. What lies on the ground (height 0) is reached whole where the floor and the band's
+/// bottom are under `GROUND_M`, else not at all.
+pub fn reached((low, high): (f64, f64), floor: f64, height: f64) -> f64 {
+    if height <= 0.0 {
+        return if floor < GROUND_M && low < GROUND_M { 1.0 } else { 0.0 };
+    }
+    ((high.min(height) - low.max(floor)) / height).clamp(0.0, 1.0)
+}
+
+/// The share of a plant `height` m tall that stands above `snow` m of soft solid (`reached` with no band and the snow
+/// as the floor).
 pub fn above(snow: f64, height: f64) -> f64 {
-    if snow <= 0.0 { 1.0 } else if height <= 0.0 { 0.0 } else { (1.0 - snow / height).max(0.0) }
+    reached((0.0, f64::INFINITY), snow, height)
 }
 
 /// The share of each part of `layer` of cell `i` a taker can reach (`above`): of each slot of its cover the share of its

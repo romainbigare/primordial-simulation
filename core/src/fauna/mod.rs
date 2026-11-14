@@ -6,9 +6,13 @@
 //! contract (`contract`); its books are the life of the cell's (`life::book`).
 
 mod body;
+mod gut;
 mod month;
 mod place;
+pub mod take;
+mod thirst;
 
+pub use body::BAND;
 pub use month::step;
 pub use place::place;
 

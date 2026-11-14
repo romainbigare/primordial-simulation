@@ -874,27 +874,52 @@ body matter (10, life's `Parts`), its heat, J (each slot at its own temperature)
 the liquid of living tissue (matter / (1 − `WET_TISSUE`), as the cover's); that liquid is not in the books. The takers
 of a cell are part of the node of its life (`Class::Life`): the chunk of the cell is their one writer. They reach the
 land only through the contract (section 0; `cli/tests/sides.rs`), and their books are the life's (`life::Books`,
-`life::book`). The takers take nothing from the cover: they live on their store.
+`life::book`). They take from the cover and the seeds lying, digest, and live on what they took and their store.
 
 **One month** (`fauna::step`), in the same pass of a cell's life, right after its cover's month, slot by slot:
 - **Body and pace.** A member stands at its `KEEP` gene where its ground (`contract::place`) is colder, else at its
   ground's temperature; its upkeep runs at the pace of its burning there, the rate law's at its temperature over that
   at `t_cat` (Gillooly et al. 2001): 5.6 at 310 K, so a body that keeps no heat of its own pays far less where it is
-  cold.
-- **Upkeep** (Kleiber's law): (`c_basal` + `c_muscle`) × m^`upkeep_exp` × pace × its repair factor (`Physics::repair`)
-  a day per member, m its living mass, kg (Kleiber 1932; Elia 1992).
+  cold. Its work (walking, chewing) runs at that pace, at most 1.
+- **Upkeep at rest**: Kleiber's law, (`c_basal` + `c_muscle`) × m^`upkeep_exp` × pace × its repair factor
+  (`Physics::repair`) a day per member, m its living mass, kg (Kleiber 1932; Elia 1992); and its gut's capacity,
+  `c_capacity` of the fuel its capacity (`ENZYME`, mol of walls a kg living a s at `t_cat`) could free, at the same
+  pace and repair, as the cover pays for its light capacity.
+- **What it reaches** (`fauna::take`): each slot of the cover by the height its plants stand at, and the seeds lying
+  (`contract::slots`, `contract::shown`). A member of length L = (m / `rho_body`)^(1/3) searches the band of heights
+  ± `BAND` (half a decade) about its `REACH` gene, no higher than `reach_len` L, and bites no lower than `bite_floor` L
+  over the snow: of a plant h high it reaches the share of its stem within that (`contract::reached`); the seeds lying
+  only where its floor and its band's bottom are under `GROUND_M` (1 cm). What lies out of reach is the cover's refuge.
+- **The take** (Holling 1959, the disk law over many layers and slots): a member searches a strip as wide as its body
+  at its walking speed v = √(`walk_froude` g L) (Alexander and Jayes 1983), a = v L m²/s, for `busy` of the day (T),
+  and breaks what it takes by its chewing power P = `chew` m^`upkeep_exp`: a layer of D kg per m² of which it reaches
+  w, each kg taking b J to break (`Shown::breaking`), gives it I = T a w D / (1 + a Σ w D b / P) kg a day. Over the
+  month in `SUBSTEPS` (6) steps each layer falls by S (1 − e^(−k Δ)), k = Σ n I / S, so it is never overdrawn and the
+  slots share it by their rates, not by an order; the rates are those of the stocks at each step's middle (a half step
+  at the start's rates), so a slot switches to the next layer as one runs out. Then one bite of each layer for all
+  (`contract::take`: all its parts in their proportions), shared by the slots' parts.
 - **Heat.** A member held above its ground loses g (T_b − t) through its coat, g = `meeh` m^(2/3) / (`r_air` + COAT ×
-  `r_coat`) W/K (Meeh 1879; Scholander et al. 1950). Where its upkeep gives less heat, it burns the rest to keep its
-  temperature; where more, the excess must leave as vapour of the key liquid, at its heat of vaporisation. A body at its
-  ground's temperature gives all its heat to its ground and needs no vapour.
-- **Thirst.** A body drinks open liquid only: the liquid standing on its cell, what ran over it in the month, and the soft solid lying there, which
-  costs its heat of fusion (`contract::liquid`). Its need is the vapour that cools it plus the least liquid it passes
-  through, `drink_least` × m^`drink_exp` kg a day (Nagy and Peterson 1988), which goes back to the cell in the month and
-  is not booked. The slots of a cell share what is there by one share of their needs; the vapour that share sheds goes
-  to the cell's aside node with its latent heat, paid from the bodies' heat (`contract::vapour`). Of a slot that must
-  shed heat, the share of its members whose heat stays unshed dies (`LACK`). A body reaches no liquid of another cell.
-- **Burning.** It burns its store (reaction 1) for its upkeep and its heat, no more than its store and the gas the
-  cell's share of its air node offers (`Books::room`).
+  `r_coat`) W/K (Meeh 1879; Scholander et al. 1950). It makes the heat of its rest and of its walk while searching
+  (v × its searching time at `c_move` × (m / `move_ref`)^`move_exp` J per kg and m, Taylor et al. 1982); where that is
+  less than its coat loses, it burns the rest to keep its temperature; where more, the excess must leave as vapour of
+  the key liquid, at its heat of vaporisation. A body at its ground's temperature gives all its heat to its ground and
+  needs no vapour.
+- **Thirst** (`fauna::thirst`). A body drinks open liquid only: the liquid standing on its cell, what ran over it in
+  the month, and the soft solid lying there, which costs its heat of fusion (`contract::liquid`); and it has the liquid
+  of what it eats (`WET_TISSUE` of the living mass of the body matter it takes). Its need is the vapour that cools it at
+  its work plus the least liquid it passes through, `drink_least` × m^`drink_exp` kg a day (Nagy and Peterson 1988),
+  which goes back to the cell in the month and is not booked. The slots of a cell share its open liquid by what they
+  ask of it. Where a slot's liquid is less than its need its work is cut first (searching, handling and building
+  together) down to where its heat to shed needs no more liquid than it has: less work makes less heat. Only where at
+  no work its need is still unmet do its members die, by the unmet share (`LACK`). The vapour shed leaves the cell's
+  liquid (the running liquid and what they ate join it there), then the soft solid, for the cell's aside node with its
+  latent heat, paid from the bodies' heat (`contract::vapour`). A body reaches no liquid of another cell.
+- **Digestion** (`fauna::gut`, by the chemistry's own reactions): its gut splits walls into fuel (the reaction that
+  makes fuel of the walls alone, taking the key liquid of the ground) up to its capacity × its living mass × pace; it
+  burns for its upkeep and heat first the body matter it took (the burning of body matter, which gives its mineral to
+  the ground at once), then the fuel it took and split with its store, each no more than the gas the cell's share of its
+  air node offers (`Books::room`); it stores the fuel left up to `store_most` of its living mass; what it took and did
+  not use (walls not split, matter not burnt, fuel over its store) passes to the ground.
 - **Deaths**, each cause a share of the members on what the one before left (as the cover's): the share of the energy
   unpaid (`SPENT`); 1 − e^-wear (`AGE`), wear the energy a member burns per kg over `e_life` × 10^REPAIR (Rubner 1908);
   the frozen share at its body's temperature (`Physics::frozen`, the key liquid's melting point lowered by `harden` ×

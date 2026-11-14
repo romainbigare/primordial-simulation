@@ -177,6 +177,23 @@ pub struct Physics {
     /// living mass that grows as
     pub drink_least: f64,
     pub drink_exp: f64,
+    /// A taker's walking speed over that of a pendulum of its length, squared (its Froude number)
+    pub walk_froude: f64,
+    /// Work a taker of `move_ref` kg spends walking a m per kg of its living mass, J/(kg m), the reference mass, kg, and
+    /// the power of its mass over the reference that the work per kg and m goes as
+    pub c_move: f64,
+    pub move_ref: f64,
+    pub move_exp: f64,
+    /// A taker's chewing power over its living mass to `upkeep_exp`, J per kg^`upkeep_exp` per day at `t_cat`
+    pub chew: f64,
+    /// Share of the day a taker searches and takes
+    pub busy: f64,
+    /// Least height a taker's bite reaches down to, a share of its body's length
+    pub bite_floor: f64,
+    /// Highest a taker reaches, body lengths
+    pub reach_len: f64,
+    /// Most fuel a taker stores, kg per kg of its living mass
+    pub store_most: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -289,6 +306,15 @@ impl Default for Physics {
             r_coat: 0.9,
             drink_least: 0.0928,
             drink_exp: 0.818,
+            walk_froude: 0.25,
+            c_move: 3.0,
+            move_ref: 30.0,
+            move_exp: -0.32,
+            chew: 2.9e3,
+            busy: 0.5,
+            bite_floor: 0.1,
+            reach_len: 5.0,
+            store_most: 0.3,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,
