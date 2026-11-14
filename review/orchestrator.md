@@ -367,12 +367,16 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   - The drink fetched by walking is booked from the walker's own cell: to go right with the outbox of the young's
     dispersal.
   In work, by the same builder (branch `worktree-agent-ac136315104cd4ab3`, saved as `wip/takers`; scratch
-  `scratchpad/f1/`, `notes.md`): two laws decided by the orchestrator, each its own commit: (1) a body at rest
-  sits in what lies on the ground (litter, low cover, the soft solid) up to its own height: a resistance of
-  still air in series with its coat, no gene; (2) a mouth breaks what its jaw can rupture: a slot shows its soft
-  part and its frame apart, and a body cuts the share of the frame in axes thinner than its jaw's force over the
-  frame's rupture stress allows, about (d/D)^(2/3) by the pipe model. Then the budget again, then births, growth,
-  mutation and the slot rule with a 250-year run.
+  `scratchpad/f1/`, `notes.md`): two laws decided by the orchestrator, each its own commit.
+  (1) A resting body sits in a shell of what lies on the ground: the ground node's remains at an anchored bulk
+  density, gathered round the sphere of the body's own surface; conduction through the shell in series with the
+  coat (the floor of the loss is 4 pi k r dT, so a 30 g body's loss about halves and a large body's need does not
+  move); no gene, no term for the standing cover; the soft solid only if Flow holds a number for how it
+  insulates. (2) A mouth breaks what its jaw can rupture: a slot shows its soft part (matter and fuel) and its
+  frame (walls) apart; the jaw's force by body mass from one fitted regression; a second strength of the frame's
+  substance for a cut across the grain (`shear`, in the chemistry; `rupture` stays the crushing along the
+  grain); the share of the frame in axes thinner than the cut is (d/D)^(2/3) by the pipe model. Then the budget
+  again, then births, growth, mutation and the slot rule with a 250-year run.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
