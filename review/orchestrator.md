@@ -266,9 +266,27 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   at 12, with the same six starting kinds (variants of one kind found slots of their own). The builder's guess,
   not measured: each slot is thinned on its own, and is its own layer in the light and in the rooted share, so
   one stand cut into more slots holds more plants and more leaf. The law that should hold: a slot cut into two
-  alike halves gives the same world. **In work before the nursery's spike**, by the same builder (scratch
-  `scratchpad/sorted/spike/`, `notes.md` there): which laws break it, a test that states it, the mend, its
-  effect at variety 4 (the references move if it moves the world).
+  alike halves gives the same world.
+- **The mend of the slots is built, not on main** (the builder's worktree; scratch `scratchpad/sorted/spike/`,
+  `notes.md`, `table_m2.txt`). Five laws broke it and each has its commit: thinning by the crowns' layer
+  (`Cover::crown`), seeds keyed by the cell and the genes and waking for their kin (`kin::kins`), light and
+  liquid on the rings of nested rooted shares (`math::rings`, `grow::drawn`), minerals shared by what each slot
+  would take (`build::wants`); the lots of seeds lying follow the variety (`SNAPSHOT_VERSION` 145). The test
+  `core/tests/stand.rs`: a stand cut in two and in four gives the uncut cell's year within 1e-9. What holds it
+  back:
+  - no pictures yet (asked);
+  - the cover's stage costs about 1.7 times at variety 4, a rough number: a measure on one thread and cuts are
+    asked;
+  - **the variety is still not neutral, by the rule at the limit**: 0.85e10, 2.48e10, 4.57e10, 4.55e10 kg at
+    2, 4, 8, 12 (the limit never binds at 12). At 4, 98,000 forced joins of two slots and 15,000 young stands
+    killed in 60 years. In trial: a full cell never blends unlike stands (only kin join; a newcomer without a
+    slot stays as seeds lying);
+  - the world at 4 moves much (key world: cover 9.867 → 10.146 log10 kg, the gas 315.6 → 264.2 ppm, land worn
+    0.1847 → 0.1295 mm/yr; the 32 drawn world: cover 4.10e10 → 2.48e10 kg);
+  - **the slow test `the_long_step_keeps_the_climate` turns red with it**: the default step moves `runoff_sea`
+    by 0.45%, as on main (0.49%), but the world's year-to-year spread, the test's limit, falls from 0.50% to
+    0.27%. Not loosened. The long step's error on what runs off the land is the thing to mend (the air's helper).
+  The drought law and this mend both change the cover's growth: whichever lands second merges the other.
 - Then, same builder: the spike of the nursery on its branch behind `--sorted` (no race by mass, newcomers near
   known kinds, the garden check, bands' tables, a contact sheet): numbers and pictures, not for main as it is.
 - **Its steps**: (0) main alone to year 300 on the new air, the target: done (`scratchpad/sorted/target/`, seed
