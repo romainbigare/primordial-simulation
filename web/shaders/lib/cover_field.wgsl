@@ -356,11 +356,16 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
 // shows, those three as their one layer (canopy.ts `FIELD.low`).
 fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   land_weights(at);
+  // The plants' roots find the loose ground's depth as the ground's samples know it: their share of the ground fades
+  // over the change of that depth across a sample, never over less (`rooted`), so no edge sharper than the samples
+  // runs across a sample's square.
+  var bs = b;
+  bs.loose_px = b.loose_px * max(1.0, land.map.x * land.map.y / land.samples.x / max(e, 1e-6));
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
   let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
-  var hold = held_at(at, b);
-  hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * b.loose_px, THIN_TO_M + 0.5 * b.loose_px, b.loose));
+  var hold = held_at(at, bs);
+  hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * bs.loose_px, THIN_TO_M + 0.5 * bs.loose_px, b.loose));
   // The trees' field, read once: their crowns' share, and their layer below (plainly blended where their marks show in
   // its place: only the shade under them reads it).
   var trees = vec4f(0.0);
