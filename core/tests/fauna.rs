@@ -12,6 +12,8 @@ use worldgen::testkit::{self, Books};
 const COLD_ROW: usize = 4;
 /// Members of the slot the law of the store is read on: real counts (over `N_WHOLE`).
 const MANY: f64 = 1000.0;
+/// Members so few that what they take leaves the cover as it was, to within a millionth of what they take.
+const FEW: f64 = 0.01;
 /// The share of a month's upkeep its store holds (within the most a taker stores, `store_most`).
 const STORE_MONTHS: f64 = 0.6;
 
@@ -33,8 +35,8 @@ fn of(w: &World, i: usize) -> &Fauna {
 /// The energy a member of the starting kind of row `row` burns in a day on ground at `t` K, finding nothing, by the
 /// law of upkeep, the walk and the heat, J, its living mass `m` kg: at rest Kleiber's (`c_basal` + `c_muscle`)
 /// m^`upkeep_exp` and its gut's capacity (`c_capacity` of the fuel it could free), at the pace of its burning at its
-/// body's temperature, times its repair factor; the walk of its whole working time searching (speed
-/// (`walk_froude` g L)^0.5 at `c_move` (m / `move_ref`)^`move_exp` J per kg and m); no less than its coat loses to
+/// body's temperature, times its repair factor; the walk of its whole working time searching, bite by bite (speed
+/// (`walk_froude` g L)^0.5, slowed by the cropping of its bites, at `c_move` (m / `move_ref`)^`move_exp` J per kg and m); no less than its coat loses to
 /// colder ground.
 fn burnt_a_day(w: &World, row: usize, m: f64, t: f64) -> f64 {
     let (ph, g, chem) = (&w.cfg.phys, &TAKER_KINDS[row].genes, &w.chem);
@@ -47,8 +49,11 @@ fn burnt_a_day(w: &World, row: usize, m: f64, t: f64) -> f64 {
     let fuel_a_wall = split.outputs.iter().find(|q| q.0 as usize == p.sub[pcore::life::FUEL]).map_or(0.0, |q| q.1 as f64) * per_kg(w) * chem.subs[p.sub[pcore::life::FUEL]].molar_mass;
     let gut = ph.c_capacity * 10f64.powf(g[fauna::ENZYME] as f64) * m * fuel_a_wall * DAY;
     let rest = ((ph.c_basal + ph.c_muscle) * m.powf(ph.upkeep_exp) + gut) * pace * ph.repair(g[REPAIR] as f64);
-    let speed = (ph.walk_froude * w.cfg.gravity * (m / ph.rho_body).cbrt()).sqrt() * (rx.arrhenius(tb) / rx.arrhenius(fauna::WORK_T)).min(1.0);
-    let walk = speed * ph.busy * DAY * ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m;
+    let (work, len) = ((rx.arrhenius(tb) / rx.arrhenius(fauna::WORK_T)).min(1.0), (m / ph.rho_body).cbrt());
+    let speed = (ph.walk_froude * w.cfg.gravity * len).sqrt() * work;
+    let bite = (ph.bite_breadth * m.powf(ph.bite_exp)).powi(2);
+    let walking = 1.0 / (1.0 / (speed * len) + ph.crop_time / work / bite) / len;
+    let walk = walking * ph.busy * DAY * ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m;
     let coat = ph.meeh * m.powf(2.0 / 3.0) / (ph.r_air + g[fauna::COAT] as f64 * ph.r_coat);
     (rest + walk).max(coat * (g[KEEP] as f64 - t).max(0.0) * DAY)
 }
@@ -383,7 +388,7 @@ fn a_cold_body_takes_in_the_proportion_it_burns() {
         let mut genes = TAKER_KINDS[COLD_ROW].genes;
         (genes[KEEP], genes[fauna::COAT]) = (keep, coat);
         let m = fauna::adult(&genes);
-        assert!(fauna::place(&mut w, i, (genes, COLD_ROW as u32), (1.0, 0.1 * m)));
+        assert!(fauna::place(&mut w, i, (genes, COLD_ROW as u32), (FEW, 0.1 * m)));
         let before = cover(&w);
         testkit::takers_month(&mut w, i);
         before - cover(&w)
@@ -437,7 +442,7 @@ fn the_young_leave_and_the_books_are_kept() {
     let mut w = testkit::living(8, 12);
     let i = testkit::mild_land(&w);
     let books = Books::now(&w);
-    testkit::takers(&mut w, i, 0, (1e4, 0.1 * fauna::adult(&TAKER_KINDS[0].genes)));
+    testkit::takers(&mut w, i, 1, (MANY, 0.1 * fauna::adult(&TAKER_KINDS[1].genes)));
     let held = |w: &World| (0..w.mesh.cells().n()).filter(|&j| of(w, j).any()).count();
     let mut most = 1;
     for _ in 0..3 * w.cfg.months_per_year {
@@ -447,4 +452,31 @@ fn the_young_leave_and_the_books_are_kept() {
     println!("cells with takers: at most {most}, at the end {}", held(&w));
     assert!(most > 1, "no young left the cell they were born in");
     books.assert_kept(&w, 1e-9);
+}
+
+/// A member takes its food bite by bite (laws.md 3b): the ground it crops a s is 1 / (1 / (v L) + `crop_time` / A),
+/// A = (`bite_breadth` m^`bite_exp`)² its bite's area. On thin cover the take grows as the cover (twice the cover, twice
+/// the take) and stays under the bites a day can crop, (T / `crop_time`) A D; a larger body crops more ground a day, as
+/// its bite's area is larger.
+#[test]
+fn a_member_takes_its_food_bite_by_bite() {
+    let ph = pcore::Config::default().phys;
+    let (area, days, busy, n) = (4e6, 30.0, ph.busy * DAY, 1.0);
+    let cropped = |m: f64, d: f64| {
+        let len = (m / ph.rho_body).cbrt();
+        let speed = (ph.walk_froude * 9.81 * len).sqrt();
+        let bite = (ph.bite_breadth * m.powf(ph.bite_exp)).powi(2);
+        let search = 1.0 / (1.0 / (speed * len) + ph.crop_time / bite);
+        let chew = ph.chew * m.powf(ph.upkeep_exp) / DAY;
+        let (taken, _) = take::scheme(&[eater(n, (search, busy, chew), 1)], (&[d * area], &[3e3]), area, days);
+        (taken[0][0] / (n * days), busy / ph.crop_time * bite * d)
+    };
+    let thin = 1e-4;
+    for m in [3.0, 400.0] {
+        let ((once, most), (twice, _)) = (cropped(m, thin), cropped(m, 2.0 * thin));
+        println!("{m} kg on {thin} kg/m2: {once:.4e} kg a day, its bites crop at most {most:.4e}; on twice the cover {twice:.4e}");
+        assert!(once <= most && (twice / once - 2.0).abs() <= 0.01, "{m} kg: {once} kg a day against at most {most}, {twice} on twice the cover");
+    }
+    let (small, large) = (cropped(3.0, thin).0, cropped(400.0, thin).0);
+    assert!(large > small, "a body of 400 kg crops {large} kg a day, one of 3 kg {small}");
 }

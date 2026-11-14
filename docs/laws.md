@@ -1016,7 +1016,11 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   over the snow: of a plant h high it reaches the share of its stem within that (`contract::reached`); the seeds lying
   only where its floor and its band's bottom are under `GROUND_M` (1 cm). What lies out of reach is the cover's refuge.
 - **The take** (Holling 1959, the disk law over many layers and slots): a member searches a strip as wide as its body
-  at its walking speed v = √(`walk_froude` g L) (Alexander and Jayes 1983), a = v L m²/s, for `busy` of the day (T),
+  at its walking speed v = √(`walk_froude` g L) (Alexander and Jayes 1983), bite by bite: a bite crops the cover on
+  the area of its mouth, A = (`bite_breadth` m^`bite_exp`)² (the incisor arcade's breadth, Illius and Gordon 1987;
+  bite area as its square, Gordon, Illius and Milne 1996), and takes `crop_time` to crop whatever it holds (Shipley et
+  al. 1994); the walk to the next bite and the cropping add, so the ground it crops a s is a = 1 / (1 / (v L) +
+  `crop_time` / A) m²/s (it walks only between bites, at a / L m/s), for `busy` of the day (T),
   and breaks what it takes by its chewing power P = `chew` m^`upkeep_exp`: a layer of D kg per m² of which it reaches
   w, each kg taking b J to break (`Shown::breaking`), gives it I = T a w D / (1 + a Σ w D b / P) kg a day. Over the
   month in `SUBSTEPS` (6) steps each layer falls by S (1 − e^(−k Δ)), k = Σ n I / S, so it is never overdrawn and the
