@@ -576,11 +576,11 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         everywhere). 64 drawn world, year 100: forest 87 → 78% (band 20 to 65), 71 → 62% (5 to 50); open 10 → 18%
         and 16 → 27%; cover 33 → 22 and 28 → 19 kg/m². On the page the thin open cover of the warm band reads as
         bare ground (the 32 island's south and north shore).
-      - **A fault of main it makes visible: the ground's liquid in the driest warm month steps at the edges of
-        the air's blocks** (from 0.2 to 0.9 of field capacity in one cell round a rectangle of 2 × 2 blocks; the
-        year's rain is smooth there), so the page draws green squares on the warm 64 island. With the air's
-        helper, first in its queue: which of a cell's readings of its air node steps (the month's rain, or what
-        rises from the ground), shared smoothly between the nodes' centres.
+      - Mended on main with it: a cell read three things from its own air node alone (the share of the sunlight
+        its air and cloud let through, the heat its air sends down and takes up, the height its vapour fills),
+        so the ground's liquid in the driest warm month stepped at the nodes' borders and the page drew green
+        squares. All three are shared between the nodes' centres as the temperature is (the mean jump across a
+        border over that inside a node: 1.14 → 1.00).
       - Law 2, built on the branch `soaked`, in review: roots under the depth where the pores are full get no gas
         and split their fuel by the chemistry's own reaction (13 times the fuel for the same work); a gene for
         open channels (`CHANNEL`, cost 1/(1−ε) of the fine roots and conducting walls) carries gas down by
