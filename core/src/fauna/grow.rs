@@ -65,10 +65,11 @@ pub(super) fn grow(w: &World, (p, gut): (&Parts, &Gut), (f, x, bodies): (&mut Fa
         pot += to_young + over;
     }
     let cost = p.living_cost(chem, ph);
-    let (per_kg, kg_of) = (ph.c_copy * (1.0 - WET_TISSUE), mm[BODY] / (1.0 - WET_TISSUE));
+    let (work, kg_of) = (ph.c_copy * (1.0 - WET_TISSUE), mm[BODY] / (1.0 - WET_TISSUE));
     let mut matter = surplus.matter;
-    // Builds at most `upto` kg of living mass into group `k`, from the pot's fuel and the matter left; returns the kg.
-    let mut build = |f: &mut Fauna, k: usize, upto: f64, pot: &mut f64, matter: &mut f64| -> f64 {
+    // Builds at most `upto` kg of living mass into group `k`, from the pot's fuel at `per_kg` J a kg and the matter left;
+    // returns the kg.
+    let mut build = |f: &mut Fauna, (k, upto, per_kg): (usize, f64, f64), pot: &mut f64, matter: &mut f64| -> f64 {
         let afford = *pot * gut.fuel(chem) / per_kg;
         let kg = upto.min(*matter * kg_of).min(afford).max(0.0);
         let mut fuel = [*pot, 0.0];
@@ -84,7 +85,7 @@ pub(super) fn grow(w: &World, (p, gut): (&Parts, &Gut), (f, x, bodies): (&mut Fa
     if f.n[young] > 0.0 {
         let before = f.living_of(&mm, young);
         let upto = cap(w, bodies.1, cost) * f.n[young] * dt;
-        build(f, young, upto, &mut pot, &mut matter);
+        build(f, (young, upto, work), &mut pot, &mut matter);
         let (m, grown) = (f.living_of(&mm, young) / f.n[young], (f.living_of(&mm, young) / before.max(1e-300)).ln());
         let share = if m >= m_adult { 1.0 } else { (grown / (m_adult / m_child).ln().max(1e-9)).clamp(0.0, 1.0) };
         let n = f.n[young];
@@ -97,10 +98,11 @@ pub(super) fn grow(w: &World, (p, gut): (&Parts, &Gut), (f, x, bodies): (&mut Fa
         }
         (f.n[young], f.n[old], out.matured) = (n - matured, f.n[old] + matured, matured);
     }
-    // The adults bear newborns, each at the share `bearing` of its cap.
+    // The adults bear newborns, each at the share `bearing` of its cap, paying their building and their burning before
+    // birth (`unborn`).
     if f.n[old] > 0.0 && m_child > 0.0 {
-        let upto = cap(w, bodies.0, cost) * bearing(m_child / m_adult) * f.n[old] * dt;
-        let kg = build(f, young, upto, &mut pot, &mut matter);
+        let (u, upto) = ((m_child / m_adult).powf(0.25), cap(w, bodies.0, cost) * bearing(m_child / m_adult) * f.n[old] * dt);
+        let kg = build(f, (young, upto, work + (unborn(u) - 1.0) * cost), &mut pot, &mut matter);
         let mut born = kg / m_child;
         if f.n[young] + born < N_WHOLE {
             born = born.floor() + (r.f64() < born.fract()) as u8 as f64;
@@ -119,18 +121,29 @@ pub(super) fn grow(w: &World, (p, gut): (&Parts, &Gut), (f, x, bodies): (&mut Fa
 }
 
 /// The newborn mass a mother bears a s over her cap (`cap`), where her newborns hold the share `child` of her mass M:
-/// an unborn grows from nothing by the law every body grows by (West, Brown and Enquist 2001: dm/dt = a m^(3/4)
-/// (1 − u), u = (m / M)^(1/4)), fed from her pot, so it reaches the newborn's u_c = `child`^(1/4) after
-/// t = 4 M^(1/4) (−ln(1 − u_c)) / a; its need a M^(3/4) u³ (1 − u) is greatest at its birth (or at u = 3/4), and her cap,
-/// a M^(3/4), feeds at once a litter of 1 / that greatest u³ (1 − u). Litter after litter, she bears u_c⁴ M a litter
-/// each t: the share u_c⁴ / (4 (−ln(1 − u_c)) max u³ (1 − u)) of her cap, a quarter for a small newborn.
+/// an unborn grows from nothing by the law every body grows by (West, Brown and Enquist 2001: it burns a E_m m^(3/4),
+/// of which the share 1 − u, u = (m / M)^(1/4), becomes body: dm/dt = a m^(3/4) (1 − u)), all of it paid by its mother,
+/// so it reaches the newborn's u_c = `child`^(1/4) after t = 4 M^(1/4) (−ln(1 − u_c)) / a; its burning a E_m M^(3/4) u³
+/// is greatest at its birth, and her cap, a E_m M^(3/4), feeds at once a litter of 1 / u_c³. Litter after litter she
+/// bears u_c⁴ M a litter each t: the share u_c / (4 (−ln(1 − u_c))) of her cap, a quarter for a small newborn.
 fn bearing(child: f64) -> f64 {
     let u = child.clamp(0.0, 1.0).powf(0.25);
     if u <= 0.0 || u >= 1.0 {
         return if u >= 1.0 { 0.0 } else { 0.25 };
     }
-    let most = |v: f64| v.powi(3) * (1.0 - v);
-    u.powi(4) / (4.0 * -(1.0 - u).ln() * most(u.min(0.75)))
+    u / (4.0 * -(1.0 - u).ln())
+}
+
+/// What an unborn burns from nothing to the newborn's u_c, over the energy its body holds and cost to build (E_m a kg,
+/// `Parts::living_cost`): its burning over the time of bearing, ∫ a E_m m^(3/4) dt = 4 M E_m ∫₀^u_c u³ / (1 − u) du, over
+/// E_m M u_c⁴; at least 1, the rest its upkeep before birth (1.7 at a CHILD of a sixteenth). Its mother pays the rest
+/// beside the work of building (`c_copy`): its content comes from the body matter she took.
+fn unborn(u: f64) -> f64 {
+    if u <= 0.0 {
+        return 1.0;
+    }
+    let integral = -(1.0 - u).ln() - u - u * u / 2.0 - u.powi(3) / 3.0;
+    4.0 * integral / u.powi(4)
 }
 
 /// A count `n` below `N_WHOLE` that is not whole becomes whole by a draw from `r` that keeps its mean: its whole part,

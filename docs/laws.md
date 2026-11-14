@@ -1091,10 +1091,14 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   min(1, Δln m / ln(M / m0)), Δln m the young's growth in the month). Then the adults bear newborns, one parent each, a
   newborn holding `CHILD` of the adult's mass. An unborn grows from nothing by the same law, dm/dt = a m^(3/4)
   (1 − u), u = (m / M)^(1/4), a her cap over M^(3/4), fed from her pot: it reaches the newborn's u_c = `CHILD`^(1/4)
-  after 4 M^(1/4) (−ln(1 − u_c)) / a (26 days for the 30 g kind, 258 for the 400 kg kind at 310 K). Its need is
-  greatest at its birth (or at u = 3/4), so her cap feeds at once a litter of 1 / max u³ (1 − u); litter after litter
-  she bears the share u_c⁴ / (4 (−ln(1 − u_c)) max u³ (1 − u)) of her cap (`grow::bearing`): a quarter for a small
-  newborn, 0.33 to 0.36 for the starting kinds. Below `N_WHOLE` the young
+  after 4 M^(1/4) (−ln(1 − u_c)) / a (26 days for the 30 g kind, 258 for the 400 kg kind at 310 K). It burns
+  a E_m m^(3/4) (E_m the energy a kg of living tissue holds and costs, `Parts::living_cost`), of which the share 1 − u
+  becomes body, and its mother pays all of it: over the time of bearing 4 E_m ∫₀^u_c u³ / (1 − u) du / u_c⁴ a kg of
+  newborn (`grow::unborn`: 1.4 to 1.7 times E_m for the starting kinds). The pot pays that less E_m, its upkeep before
+  birth, and the work of building, `c_copy` a kg of body matter; the body matter itself is what she took, so nothing is
+  paid twice. Its burning is greatest at its birth, so her cap feeds at once a litter of 1 / u_c³; litter after litter
+  she bears the share u_c / (4 (−ln(1 − u_c))) of her cap (`grow::bearing`): a quarter for a small newborn, 0.18 to
+  0.20 for the starting kinds. Below `N_WHOLE` the young
   that mature are a binomial draw and the newborns the whole part of what was built and one more by a draw on the rest;
   what was built stays (a draw never makes matter, it moves the mean mass of the young a little), and a group of no
   members gives its amounts to the slot's other group (matter built into newborns none of whom was drawn stays in the

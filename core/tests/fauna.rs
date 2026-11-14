@@ -321,8 +321,9 @@ fn a_mouth_cuts_what_its_jaw_can_rupture() {
 
 /// The newborn mass a mother bears a unit of time over her cap, where her newborns hold the share `child` of her mass:
 /// her unborn grow from nothing by dm/dt = a m^(3/4) (1 − (m/M)^(1/4)) (West, Brown and Enquist 2001), found here step
-/// by step in u = (m/M)^(1/4), du/dt = a (1 − u) / (4 M^(1/4)), with a = M = 1; her cap feeds at once the litter whose
-/// greatest need over its growth is her cap; she bears litter after litter.
+/// by step in u = (m/M)^(1/4), du/dt = a (1 − u) / (4 M^(1/4)), with a = M = 1; each burns a m^(3/4) = u³, all paid by
+/// her; her cap feeds at once the litter whose greatest burning over its growth is her cap; she bears litter after
+/// litter.
 fn bearing(child: f64) -> f64 {
     let (end, steps) = (child.powf(0.25), 100_000);
     let (mut t, mut most) = (0.0, 0.0f64);
@@ -330,7 +331,7 @@ fn bearing(child: f64) -> f64 {
         let u = (k as f64 + 0.5) / steps as f64 * end;
         t += 4.0 / (1.0 - u) * end / steps as f64;
         let at = (k + 1) as f64 / steps as f64 * end;
-        most = most.max(at.powi(3) * (1.0 - at));
+        most = most.max(at.powi(3));
     }
     child / most / t
 }
