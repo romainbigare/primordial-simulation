@@ -73,6 +73,10 @@ the world stays near itself; the Earth anchors in that test are separate and fix
 and the rain, all nine references were measured again (ranges unchanged). Measure them again only with a change of the
 laws that moves the world on purpose, in a commit of its own, and tell the owner each time.
 
+**One slow test is red on main and stays so by the owner's decision**:
+`the_laws_do_not_depend_on_the_size_of_the_cells` (section 5, nature track). It does not hold a merge. It is not to
+be loosened, skipped or hunted without the owner's word.
+
 ## 4. Where things stand
 
 **Main** (and the live page) holds, all gated: fixed cells; the worn ground with bare bed on steep ground
@@ -182,44 +186,8 @@ costs the same as one that runs; code removed at build time is what saves). The 
 (`lib/ice.wgsl`): without it a frame costs 28 to 45% less. The next cut: a program without ice when no cell holds
 ice on water. A real phone is not measured.
 
-**On main the air is still grey**: the clear air takes nothing from sunlight and the clouds reflect about 5% of it
-(`flow/air/cells.rs`, `exchange::cloud`), so the ground at 38° gets about 1.6 times Earth's sunlight (284 against
-about 180 W/m²) and a warm wet stand builds 2 to 4 kg of dry matter a year where real ones build 0.5 to 2.5.
-
-**The air and sunlight is parked on `wip/air-light`** (9ac418e3, not on main; main is merged in, the full gate
-passes, `SNAPSHOT_VERSION` 131 there). It holds: gases absorb sunlight (`sw_abs`, `sw_sat`, `radiation::Column`), the
-clear air scatters (`scatter`), heat light in three bands with each absorber at its own height (`radiation::Heat`,
-`chem/planck.rs`), humidity inside a node (the saturated share is the cloud's share of the sky, Sundqvist 1989), the
-cloud's light from its liquid's path. The lifeless globe: the surface absorbs 162.5 W/m² (Earth 160), the planet
-reflects 108, back light 355, ground 290.8 K, vapour 38.5 kg/m², cloud share 0.37. **What holds it off main is the
-ice:** the globe holds none at its poles and the page's default island no sea ice and no summer snow, where the owner
-wants an ice line.
-- The cause, measured: the pole absorbs 142 W/m² of sunlight (Earth about 80), the planet's albedo is 0.23 at the
-  pole and 0.34 at the equator (Earth: 0.55 to 0.6 and 0.25), equator to pole is 11 K (Earth 40, main 26). Too few
-  clouds at the pole (0.21 of the sky, 0.10 to 0.16 in summer; Earth 0.7, the summer the cloudiest) and they hold
-  almost no liquid (17 g/m², Earth's summer stratus 50 to 100). One warm state: with 0.85 of the sun for 15 years the
-  pole grows 0.48 m of ice, gone 2 years after the sun is back.
-- The radiation is not at fault (the polar winter's clear-sky back light is 262 W/m² against Prata's 261 for that
-  air). Main's ice is the gift of its weak grey air (back light 104 to 157 where Prata gives about 200).
-- Tried on paper and failed: the node's column read as layers with Quaas's critical humidity by height and overlap by
-  a decorrelation depth: the cover goes to 1.00 everywhere (the upper air passes the critical humidity unless the
-  vapour's profile is capped aloft) and the pole's sunlight falls by 2 W/m² only.
-- **The missing law**: a cloud's liquid made by cooling from below, in the near-ground air over a cold surface (low
-  cloud and fog that hold their liquid without rain), where the package's cloud has only the liquid its node's rain
-  leaves in a cloud's life. A warm sea, no low cloud and much sun hold each other up. Small and anchored, not built:
-  the liquid's reflectance by the sun's height (Fresnel; Taylor et al. 1996), 5 to 10 W/m² at the pole; it needs a
-  reflectance for the direct beam and one for diffuse light through `radiation.rs`, `land.rs` (`column`,
-  `reflectance`) and `surf.rs`.
-- Other facts for the merge: the long step's extra runoff of about 1% against 1-day steps is older than the package
-  (main: +0.5 to +0.8% through rain) and moved to evaporation, so `the_long_step_keeps_the_climate` fails on its
-  count of rivers (cells within 3% of the floor); the references move (land 288.18 K, absorber 366 ppm; the cover on
-  the key island 9.43 log10 kg without eaters); plants answer Earth-like light by growing about 2.3 times slower:
-  forests thinner at year 30, as heavy by year 100; a step costs +6% (globe) to +15% (Wide island). A proposal for
-  the plants' package: two bands of sunlight (a usable one, a near-infrared one) with `light_yield` on the usable
-  light.
-- Scripts and tables: branch `tools/checks`, folder `tools/air/` (the radiation budget's probe `rad_toggle5.py` with
-  `radprobe4.rs`, the globe by latitude `globeprobe.rs` with `polar_toggle.py`, the paper check `paper_clouds.py`,
-  the bands' fit `cw4.py`; the globe's states in `globe/`, the tables in `numbers/`).
+**The air's package is on main** (section 5, nature track): sunlight is absorbed by the gases and reflected by
+the clouds, the heat goes to the poles by the eddies and the overturning, the ice is bounded.
 
 **The sorted start is parked on `wip/sorted-start`** (33c1e353, not on main; main is merged in, the fast gate
 passes, `SNAPSHOT_VERSION` 128 there). It holds: every world's cover placed by the nursery
@@ -262,98 +230,35 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   Flow and the cover read `Stand` and `Place`; `take`, `give`, `press`, `shown`, `slots` are used by the plain taker
   of the test kit alone until the animal field comes. Every world is a world of plants: `--plants` and `--null` are
   gone, `--roster` is six kinds of cover against one.
-- In work, nature track: the air's heat toward the poles, on the branch `air-low-cloud` (made from
-  `wip/air-light` with main merged in; worktree `.claude/worktrees/agent-acdb88dbd7f62d7f6`; scratch
-  `scratchpad/air/`, its tables in `numbers/`). What its helper measured, with books that close to 2%:
-  - **The low cloud made by cooling from below is not built.** At the pole the surface is warmer than its air in
-    every month, so nothing starts it; in a state with ice it takes as much sunlight as it gives back in heat light.
-    Earth's own polar clouds forced in as a probe cool the pole by 1 to 4 K and leave no ice.
-  - **The cause is the air's own carrying, not the liquid's.** The overturning (`flow/air/wind.rs` `push`) moves the
-    same mass per K/m at every latitude: it carries 1.7 PW across 45° and 0.67 PW across 67.5°, where Earth's mean
-    cell runs the other way or stands still. The eddies carry about twice Earth's per K of ground difference (`mix`
-    is tuned and was raised to stand for the sea's share; whole columns are exchanged, and their mean difference is
-    1.8 times the ground's). Per K the globe carries 1.7 to 5 times Earth's, worst at the polar circle. The liquid
-    under the air carries nothing sideways. Main has the same fault, hidden by its weak grey air.
-  - A probe with the overturning weakened by r / (r² + f²), the eddies halved and Earth's clouds held low keeps 1.6 m
-    of ice through the summer; no one of the three does alone.
-  - Two forms were built and taken back out: the near-ground friction balance for the overturning (to keep the
-    cell at 22.5° it had to be 24 times too strong at the equator), and `mix` set from Earth's column gradient (it
-    rose to 2.7e6: the fault was the form, whole columns exchanged at their mean heat).
-  - **On the branch now, and they give an ice line:** the eddies carry the near-ground air's energy (cp T + M g z at
-    the column's ground) with `mix` the measured 1.06e6 m²/s (Hwang and Frierson 2010); the overturning runs only
-    inside the edge the upper air's spin sets (Held and Hou 1980: 22.2° from the world's own numbers). The lifeless
-    globe: pole 259.6 K with ice that lasts the summer, equator 296.0 K, equator to pole 36 K, mean ground 288.6 K,
-    the polar circle Earth-like per K. The globe has two stable states; the normal start is the Earth-like one.
-    Main's grey air with the same two laws freezes to 34°: the package goes to main whole. Known: the globe's polar
-    ice grows without end (40 m in 40 years); three key numbers leave their ranges on the package (land 287.88 K,
-    swing 11.93 K, cover 9.43); `the_long_step_keeps_the_climate` fails on its count of river cells.
-  - The package is whole on the branch `wip/air-heat` (pushed; head 5419dbd, `SNAPSHOT_VERSION` 136): on a Wide
-    island its ice is bounded (0.5 to 1.3 m of ice on the low ground's liquid in the far north, steady from the
-    second decade) where main's grows without end (21 m, 166 m of soft solid on one cell, the low liquid down
-    24.5 m in 150 years); the island is green to its north shore in summer; the warm south holds half of main's
-    cover and does not catch up by year 100. The key numbers' seven references are set there to the package's own
-    means (land 287.88 K, swing 11.93 K, rain 2.488e-3, gas 353.5 ppm, river cells 236.3, worn 0.2142 mm/yr, cover
-    9.428), told to the owner. `the_long_step_keeps_the_climate` holds the river cells' summed flux now, not their
-    count (told to the owner), and **fails on it by its own rule: +1.32% against 0.76%** (the 15-day step
-    evaporates about 0.7% less on land): this alone holds the package off main.
-  - The cause, measured (`scratchpad/air2/numbers/`): the rain of a 15-day step lands as one pulse at its end, so the
-    ground dries for the whole step and the pulse pushes more past field capacity (land runoff +0.90%, evaporation
-    -0.67%). With the step's rain spread in the bucket the runoff is off by +0.16%. The river cells' flux adds a
-    threshold on top: one cell of seed 3 at the floor adds about +1.2% alone.
-  - Decided: no second pass of the air and no cloud of the step itself (the air's cost may not double);
-    `AIR_STEP_DAYS` stays 15 (one step a month moves the warmest month by +0.90 K); the balance solved exactly by
-    pieces stays parked on the local branch `surface-exact` (31eb1d1: right for the temperature, but it raises the
-    long step's water cycle by 0.3 to 0.4%).
-  - Done on the branch `surface-step` (99a56a4, main merged in at 6cc5690, `SNAPSHOT_VERSION` 137; full report in
-    the helper's last message, numbers in `scratchpad/air2/numbers/`): a loaded world's first build keeps its
-    saved parts (the snapshot round trip passes); the rain of a step wets the ground's bucket day by day as it
-    falls, in one pass (Flow +3%); `rain_air` takes the ratio; the long step's test holds the land's runoff
-    (`runoff_sea`; the law before the mend fails it, +0.90% against 0.62%) and passes (+0.35% against 0.65%); the
-    seven references set again (land 287.82 K, swing 11.83 K, rain 2.493e-3, gas 349.8 ppm, river cells 235.6,
-    worn 0.2089 mm/yr, cover 9.491); the lifeless globe passes (surface 288.54 K, ice 0.130). The whole package
-    costs Flow about +10 to 12% against main.
-  - The stripes of rain on banded worlds of 128 squares are mended at their cause (efdc0c2): the part of the
-    overturning that the spin turns along the isotherms carried the heat difference of its two halves as a fixed
-    flux of the day, which did not cancel where the links differ; now only the part that runs down the gradient
-    carries it. A fast test states it. No effect on the long step's test or the key numbers (one block of air);
-    the lifeless globe moves by 0.02 K. Sheet of the warmest and the coldest month, main beside the branch:
-    `scratchpad/air2/shots4/contact.png`: at 128 squares in the band main's land is frozen all year (262 K in
-    its warmest month, cover on the southern fringe only); the branch's is 290 K in summer, 273 K in winter, green
-    in summer, its rain smooth.
-  - Done on `surface-step` (8c3e3b3, saved as `wip/surface-step`; main merged in at 6605bcc, `SNAPSHOT_VERSION`
-    139; gate passed but for one slow test): the round lobes of the shelf merged in; life starts on every cell
-    that holds land, soil and cover per m² of its land by Flow's one land share (`flow::land_shares`); the
-    references set (land 287.81 K, swing 11.83 K, rain 2.490e-3, gas 348.6 ppm, river cells 235.4, worn 0.2087
-    mm/yr, cover 9.494). Flow costs +5.5% against main at 128 squares.
-  - On `surface-step` (9375556, saved as `wip/surface-step`): **the cover of a cell lives on the cell's land**
-    (`contract::land`, `Life::land` found each month start; the layering of leaves, the room, founding and the
-    seeds on the land; a cell of parts' cover reads its land part's own liquid). Coast cells under a quarter land
-    fall from 14 to 3.5 kg per m² of land (90th percentile 136 to 24); whole land cells do not move; the gas +0.5
-    to +2.3%.
-  - **One thing holds the package off main**: `the_laws_do_not_depend_on_the_size_of_the_cells` is red on two
-    numbers after that law (`root_1_cover_area` 6.60e-2 against 5.25e-2, +3.6% of its mean; `air_3` 4.93e-6
-    against 4.39e-6, +1.4%). Main shows +5.9% on the cover's area and passes on its wider year-to-year spread.
-    Not loosened. In work: the package made ready all the same (main merged, references, ignored set, gate,
-    pictures, the low liquid's level over 150 years), and one bounded hunt (the cover per m² of land by land
-    share and way to the shore at 2 km against 1 km; where the gas's element sits). **Put to the owner**: land
-    the package with this one slow test red and its hunt open, or wait.
-  - **The owner's finding: the low liquid falls and the rivers' mouths are left dry.** Measured on main, a 32
-    drawn world, seed 1, 150 years (`scratchpad/sea/`): in the band 20 to 65 the level falls 23 m (15 cm a year,
-    steady), with 39% of the map under ice that grows without end (main's cold north) and the air's edges open;
-    with no band it falls 0.33 m in ten years as the land's pores fill, then holds (-0.345 m at year 150). The
-    books hold (drift 1e-15): the liquid is locked as ice and leaves as vapour. The package's bounded ice cuts
-    it to 6.4 mm a year (below). **Next after the package, first in line**: the low liquid of an island in the
-    planet's air is the planet's: open at the map's edges, its level held. The tiles' channels end at the shore
-    the world was made with, so a lower level leaves a dry gap to the shore: with the level held this does not
-    show; for levels that truly move (ice, a god's hand) the ground must be worn again where the level moved, at
-    a slow cadence, with the package of the mouths (section 5).
-  - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
-    through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
-    map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's
-    word.
-  - Found on the way: on the globe the polar band's ground gains 0.65 m of liquid a year (rain that lands in a
-    neighbour's row and is not levelled back); and the fixed liquid reflectance (0.079) is above Fresnel's for a
-    high sun: the tropics would absorb 7 to 8 W/m² more with the true one, the pole 1 to 7 less.
+- On main, nature track: **the air's package** (merge a75ccd0, `SNAPSHOT_VERSION` 140). Gases absorb sunlight
+  and clouds reflect it; the eddies carry the near-ground energy (`mix`, Hwang and Frierson 2010); the
+  overturning's cell ends where the spin sets it (Held and Hou 1980), and only its part that runs down the
+  gradient carries the heat difference of its two halves; the rain of a step wets the ground's bucket day by day
+  as it falls; a loaded world's first build keeps its saved parts; the round lobes of the shelf; life starts on
+  every cell that holds land; the cover of a cell lives on the cell's land (`contract::land`).
+  - What it gives: the lifeless globe keeps a bounded ice (surface 288.5 K, ice at most 0.12); a banded island of
+    128 squares is 290 K in summer and 273 K in winter and green, where it was frozen all year (262 K); its rain
+    is smooth (`scratchpad/air2/shots4/contact.png`); on a 32 drawn world in the band the low liquid falls 1.3 m
+    in 150 years and 11% of the map is under ice, where it fell 23 m with 40% under ice
+    (`scratchpad/air2/sea/table.txt`). Flow costs about 5 to 12% more than before it.
+  - The key numbers' references are the package's: land 287.86 K, swing 11.82 K, rain 2.506e-3, gas 354.1 ppm,
+    river cells 236.1, worn 0.1998 mm/yr, cover 9.492. The long step's test holds the land's runoff
+    (`runoff_sea`), not the river cells' flux.
+  - **One slow test is red on main, by the owner's decision** ("land the air package, forget the red test, move
+    on"): `the_laws_do_not_depend_on_the_size_of_the_cells`, on `root_1_cover_area` (6.60e-2 against 5.25e-2,
+    +3.6% of its mean) and `air_3` (4.93e-6 against 4.39e-6, +1.4%). Before the package the cover's area moved by
+    +5.9% and passed on a wider year-to-year spread. Nobody hunts it now. Do not loosen it. What a hunt found
+    before it was stopped (`scratchpad/air2/notes.md`): the difference is not in how it is measured; on land
+    under half a cell the 1 km squares stand thinner and read a larger vapour gap.
+  - Open on the air: the low liquid still falls 9 mm a year in the band (the air's edges are open, the low liquid
+    is closed): **next, first in line**: the low liquid of an island in the planet's air is the planet's, open at
+    the map's edges, its level held. The tiles' channels end at the shore the world was made with, so a lower
+    level leaves a dry gap between a river and the shore: with the level held this does not show; for levels
+    that truly move (ice, a god's hand) the ground must be worn again where the level moved, at a slow cadence,
+    with the package of the mouths. No cloud made by cooling from below; the `wind` row is "anchored, open"; the
+    exact solve of the surface's balance by pieces is parked on the local branch `surface-exact` (31eb1d1: right
+    for the temperature, it raises the long step's water cycle by 0.3 to 0.4%); one air step a month is refused
+    (the warmest month moves by +0.90 K).
 - On main: a world is drawn from its seed unless one island is asked for (`--shape one`; the page's choice). Rings
   are 3 rises in 100 and mostly breached; where two rises raise the land alike the crust sags, so lands stand apart;
   drawn worlds hold about a third of land. Every test builds `worldgen::testkit::one_rise`. The live page is its
@@ -423,8 +328,7 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   a mother's cap bears a fraction of what it builds; (C) mutation and the slot rule, with one table of the
   takers' genes built as the cover's (the orchestrator's word given for that one tuned row); (D) the young leave
   by the seeds' kernel through an outbox, and the fetched drink is booked in the far cell; (E) the 250-year run
-  again. To pass on once the air package is on main: the takers read the cell's land (`contract::land`), not its
-  area.
+  again. Passed on to that builder: the takers read the cell's land (`contract::land`), not its area.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
@@ -555,7 +459,7 @@ browser draws in software, so its frames per second mean nothing; the world's pa
 The owner's word: no work lives only on one machine. Push a helper's branch as soon as it holds something. A forced
 push is refused here: push to a new branch name instead.
 - `main` and the session's work branch are the same commit.
-- `wip/air-light`: the air and sunlight, parked (section 4).
+- `wip/air-light`, `wip/air-heat`, `wip/surface-step`: the air's package as it was built; all of it is on main.
 - `wip/sorted-start`: the sorted start, parked (section 4). `wip/nursery-start`, `wip/cover-nursery-g2` and
   `experiment/sorted-start` are its older states.
 - `wip/lakes`: four commits on small plants, not reviewed, under the lakes' mend that is on main.
