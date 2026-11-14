@@ -109,17 +109,17 @@ tests of `tape/tests/ranges` pass):
 - **The plants' marks decided once a frame per cell** (`marks.wgsl`, `lib/mark.wgsl`), kept in rgba8 textures.
 
 **Known faults on the page:**
-- **A band of bright flat green beside rock or brown land when zoomed in** (the owner's fault as they meant it;
-  their picture: seed 1, 32 squares, Wide, year 15.92, the 100 m bar). Found (`scratchpad/coast/notes.md`,
-  `pics/green_band.png`): it is the herbs' layer, the near view's sward pass in `lib/cover_field.wgsl`, drawn
-  where the trees' roots do not hold (thin loose ground by the bare bed). The low layer is real and dense (a cell
-  with 17.3 kg of trees and 0.52 kg, 3.01 m² of leaf, of herbs per m² of land). Not real: the hard straight
-  ragged edge (the herbs fade over one pixel of loose depth, and the depth is blended from the 125 m samples); the
-  tone (lighter and greener than the forest beside it, and bright in early winter while the trees are drawn
-  dormant); a young slot of a tree kind drawn as meadow (`designOf` in `style.ts`: any slot under 3 m that is
-  mostly leaf). In work (branch `green-band`): the fade tied to the samples' spacing; young trees drawn as young
-  trees; the meadow's tone in the far view's palette with ground showing through thin herbs; the sward's dormant
-  tone by the same rule as the trees'.
+- **A band of bright flat green beside rock or brown land when zoomed in** (the owner's fault; their picture:
+  seed 1, 32 squares, Wide, year 15.92, the 100 m bar): it is the herbs' layer (the near view's sward pass in
+  `lib/cover_field.wgsl`) where the trees' roots do not hold (thin loose ground by the bare bed); the low layer is
+  real. Mended on main: each slot's roots fade over the change of loose depth across one of the ground's 125 m
+  samples (no straight line across a sample's square); herbs cover the share their leaves close by the cover's
+  light law (the setting that drew a thin sward five times too wide is gone); a young stand of a woody kind (60%
+  of its grown dry mass in walls, from its walls gene: `KIND_ROW` is 20) is drawn as bushes of its own colour, not
+  as meadow. Left: the herbs' tone and fine pattern are as they were (calmer only because they cover less); young
+  trees are bushes, not small crowns of their form; no place with dark rock like the owner's was found to show
+  it there; the herb slot's activity on that winter day was not read (the page uses one rule of dormancy for
+  herbs and trees; that cell's herbs are hardier, 265 K against 270 K, so they turn later).
 - The green grain over thin cover when zoomed in (found on the way, not what the owner meant) is mended on main: the near view drew
   each crown at least 1.5 pixels wide whatever the plants' size (`grain` in `lib/cover_field.wgsl`); a crown is
   now as wide as the plants' own marks and drawn only where those span 1.5 pixels, else the near view shows the
@@ -521,11 +521,72 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    `roadmap.md` 7.2. Then the small game (god tools, fire).
 
 **Nature track**
-0. **The variety of habitat** (the owner's question: why no grassland, swamp, delta, desert, deep gorges, large
-   rivers; "I would love to have those environments emerging naturally through the laws we have"): a study with
-   measures, in work by an explorer that changes nothing (scratch `scratchpad/habitats/`: `report.md`, `why.png`):
-   per habitat what makes it on a real planet, what our laws hold, why it does not show, what would let it; a
-   ranked list of five changes. The orchestrator decides from it and puts the steps here.
+0. **The variety of habitat** (the owner's first priority). A study with measures is done (its report is in this
+   session's record; tables, probe and pictures in `scratchpad/habitats/`: `why.png`, `trials.png`, `notes.md`).
+   What it found on today's main (64 drawn world, band 20 to 65, six kinds, year 100: 85% forest, 7% open low
+   cover, 3% bare):
+   - **Nothing kills a tree but frost.** A plant is fully active until its ground holds about 1 cm of liquid
+     (`wet_depth`, read by `cover::wetness`): in the driest warm month a quarter of the land is under 46% of field
+     capacity, yet a herb is under half activity on 15 of 1,470 cells. So the wet-ground tree (`MOIST` -0.05) is
+     the commonest tree everywhere. No fire; every year the same; no root drowns (26% of land cells have full
+     pores six months or more).
+   - **Rain has no direction and almost no season**: east and west slopes get the same rain; the driest month
+     gets 0.62 of the wettest's (savanna and dry-summer lands: under 0.1). The planet's dry belt is weak and has
+     no season (1,165 to 1,230 mm at 18 to 28 degrees against 2,300 at the equator): the strip is all liquid and
+     the overturning cell's edge is set by the year's mean sun.
+   - **A band nearer the dry belt gives dry open land with today's laws** (the band 5 to 50, measured: at 10 to 20
+     degrees 20% forest, 23% open, 58% bare at year 100, 540 mm of rain; too harsh for that rain, and the dry
+     woody kind has not spread yet). On the page as the climate "Warm".
+   - A cold open belt is there (ground frozen 6 to 7 months: 40 to 56% open, a low mat of the dry woody kind);
+     its cause is the cost of frost hardiness, where a real tree line comes from a short warm season.
+   - The meadow on thin ground is real early (58% of the land holds no tall slot's roots at year 20) and is
+     closed later by woody plants of 4 to 6 m, not by shade from trees on deep ground: no fault of area in the
+     light law.
+   - Rivers stay small at every size (largest catchment 330 km² at 32 squares, 1,240 at 64, 2,600 at 128, 6,400
+     at 256: drawn worlds split into more islands as the map grows; the 64 world's largest river is 13 m³/s, 11 m
+     wide). A river of 1,000 m³/s needs about 100,000 km²: a world of 512 with one large land.
+   - No cliffs or canyons: the makes of bed wear at rates 1.5 times apart (real hard and soft layers: 10 to 100
+     times), the layers are folded, a 125 m sample holds no cliff. The ground's water numbers are one per world.
+   - The stretch already covers both directions for the air's sideways laws (to the air the middle of a 128 km
+     island is about 1,200 km from its shore): no more stretch.
+   **The orchestrator's order from it** (each a package with its measure and its picture):
+   1. Done: the page's climate "Warm" (5 to 50).
+   2. **Plants and the ground's liquid** (a builder; branch in its worktree, scratch `scratchpad/water/`).
+      - Law 1, built, good, waits for one mend: the share a plant can draw is (how full the pores are − `wilt`) /
+        (`field` − `wilt`), `wilt` 0.25 anchored (Saxton and Rawls 2006). Kinds sort by the liquid (the moisture
+        gene by mass: −0.8 on the driest ground, −0.3 on wet ground; before −0.2 everywhere). 64 drawn world, year
+        100: forest 86 → 78% (band 20 to 65), 72 → 64% (5 to 50), the warm band's bare south becomes open low
+        cover (bare 16 → 9%, open 12 → 28%); cover 32 → 23 kg/m². **It draws the air's blocks as green squares**
+        (the rain of an air node lands evenly on its block): it goes to main after the air's helper shares a
+        node's rain smoothly between the nodes' centres.
+      - Law 2, built, not good yet: roots under the depth where the pores are full get no gas and split their fuel
+        by the chemistry's own reaction (13 times the fuel for the same work); a gene for open channels
+        (`CHANNEL`, cost 1/(1−ε) of the fine roots) carries gas down by diffusion (Armstrong 1979); a starting
+        kind of soaked ground. Fault: that kind lives off the soaked ground, because a root's depth goes by the
+        plant's height (0.1 m per m) and channels reach 0.46 m. In work: the burning fine roots by the measured
+        profile (Jackson et al. 1996), the standing depth by height.
+      - Open, for the sorted start's garden check: **the moisture gene costs nothing real** (its cost is capacity
+        × 10^MOIST, and one step of the light gene gives the same capacity at the same upkeep).
+      - Open, a fault of the books in Flow: **the surface pass can take a liquid from a cell that holds none**
+        (`runoff::surface` → `Crossings::book`), seen when a substance piles up on the ground; counted as rounding
+        today. Notes to come in `scratchpad/water/overdraw.md`; not given out yet.
+   3. **Rain with a season and a direction** (the air's helper).
+      - On main: the overturning cell follows the month's sun (`air::cell`, Lindzen and Hou 1988). On the strip the
+        rain belt swings to 12 to 17 degrees; the driest month at 10 to 20 degrees gets 0.55 to 0.61 of the wettest
+        (land of the band 5 to 50: 0.48; a savanna: under 0.1). The belt peaks three and a half months after the
+        solstice (the measured one: about two).
+      - Open: **the dry belt stays wet** (1,120 to 1,170 mm at 22 to 35 degrees; the measured ocean belts: 600 to
+        900). Measured cause: the belt sends away 260 of its 1,430 mm of evaporation (the cell carries a fifth of
+        the measured flux, `wind` "anchored, open", and its share falls to none where the air sinks), and no term
+        of the rain law reads whether the air rises or sinks. The halves already carry their own vapour; the
+        vapour's profile is tall (about 4 km against the measured 2).
+      - In work: **rain follows the air's rise**, one law: a node's rising or sinking mass flux (the divergence of
+        the overturning's low flow, plus wind against the ground's rise, Smith and Barstad 2004); rising air
+        condenses, sinking air dries the low air. The dry belt, the wet windward side and the dry lee together.
+   4. Fire, as a fast event inside a month (needs 2 and 3 first).
+   5. Then: the ground's water numbers by grain (heath on coarse ground, wet meadow on fine); a wider spread of
+      the bed's wear rates and flat layers on a high land in some worlds (scarps); one large land in a world of
+      512 for a large river and a delta (with the package of the mouths).
 1. Nothing in work on the page. Next there: the first drawing of animals (life track).
 2. **The sorted start**, carried over by hand in the steps of section 4 (its target, main alone to year 300, is
    measured), with the amount of variety as a setting of a world. It goes to main only when its pictures are at

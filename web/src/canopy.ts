@@ -21,7 +21,7 @@ const ROOTED_ALL = 0.999;
 /** A bush's mark is a clump of its plants this many times as wide as one, so its lobes read at a 10 m scale bar. */
 const BUSH_GROW = 2.5;
 /** The numbers of a kind in the core's row (tape/src/stands.rs `row`). */
-const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16, rooted: 17, need: 18 } as const;
+const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16, rooted: 17, need: 18, walls: 19 } as const;
 /** The planes of the kinds' table (lib/mark.wgsl `kind`) for squares of `kinds` kinds (the world's variety, the core's
  * `Config::variety`): of each lattice the chance a cell holds a mark of each kind where its roots hold (over the share
  * of its square that holds it, the core's `Cover::rooted`; on the lattice of stands, `STANDS`, negated for its square's
@@ -50,9 +50,6 @@ export const PLANES_DOWN = 32;
 export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, low: LATTICES.length + 8, land: LATTICES.length + 9, count: LATTICES.length + 10 } as const;
 /** The number of a square's row of the core's table that is the share of its cell that is land (tape/src/table.rs `row`). */
 const LAND_AT = 10;
-/** Seen from above the herbs' leaves leaning and their shade cover more than their share: the ground they leave is
- * (1 - share) to this power (cover_field.wgsl `sward`, `lowOf`; an Earth view's style). */
-export const SWARD_SEEN = 5;
 /** The lattice whose kinds grow in stands of their own, near and far alike (cover_field.wgsl `stand_pick`): the trees'. */
 export const STANDS = 2;
 
@@ -231,7 +228,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       const r = rows.subarray(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
       if (r[K.root] < 0 || r[K.kg] <= 0) continue;
       // The square's ground temperature (the table's second number of a row) and the frozen cover's melting point.
-      const design = designOf(r[K.height], r[K.wood]), look = lookOfRow(r, design, walls, rows[1 + row * i + 1], rows[0], falling);
+      const design = designOf(r[K.height], r[K.walls]), look = lookOfRow(r, design, walls, rows[1 + row * i + 1], rows[0], falling);
       const c = seenFar(look), crown = r[K.crown] * look.left;
       const shape = formOf({ leaf: r[K.leaf], frost: r[K.frost], moist: r[K.moist], height: r[K.height], width: r[K.width], seed: r[K.seed] });
       // The share of the square that holds its plants and the loose ground their roots need, as the core found them.
@@ -276,11 +273,11 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
   return { w, h, planes: P, cols, table, field: { w, h, data: field, mips: mipsOf(field, w, h) }, held, tallest, walls };
 }
 
-/** Into the far layer of `field` at square `i` (`FIELD.low`, `layer` its place): the sward as it is seen
- * (`SWARD_SEEN`), the lattices under the trees' over it, each over the one below as cover_field.wgsl lays them, at their
+/** Into the far layer of `field` at square `i` (`FIELD.low`, `layer` its place): the sward, covering the share of the
+ * ground its leaves close by the cover's light law, the lattices under the trees' over it, each over the one below as cover_field.wgsl lays them, at their
  * mean (no patches, no grain: far away neither shows). */
 function lowOf(field: Float32Array, i: number, layer: (l: number, i: number) => number): void {
-  const s = layer(FIELD.sward, i), sward = field[s + 3], seen = sward > 0 ? 1 - (1 - Math.min(sward, 1)) ** SWARD_SEEN : 0;
+  const s = layer(FIELD.sward, i), sward = field[s + 3], seen = Math.min(sward, 1);
   const dst = [0, 1, 2].map(q => (sward > 0 ? (field[s + q] / sward) * seen : 0));
   let a = seen;
   for (let l = 0; l < STANDS; l++) {

@@ -640,18 +640,29 @@ goes by its share of the whole column, not the near-ground air's, so its latent 
 that diffusion of the near-ground air's moisture would carry. **Overturning**: the lower half flows to the warmer column and the upper half back, a
 mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by the
 planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the nodes.
-Down the gradient it runs only inside the cell of the low latitudes (`wind::cell_edge`): the upper air flows poleward
-keeping its angular momentum, and past a latitude the warmth's fall can no longer balance the wind that gives it
-(Held and Hou 1980), φ = sqrt(5 g H Δ / (3 Ω² a²)), H the air's depth (`air_top_m`), a the planet's radius, Ω its spin
-(`units::SPIN` × `rotation`), Δ the fractional fall of the warmth of radiative balance from the equator to the pole,
-from the planet's own yearly sunlight by latitude, 1 - (pole's / equator's)^¼: with the default sun and tilt
-Δ = 0.198 and φ = 22.2°. The share of the flux down the gradient falls as 1 - (latitude / φ)² from the equator to
-none at φ, where the theory's cell ends, and is none beyond; the part turned across the link stays. With `rotation` 0
-the cell spans the planet. The same at a link inside the map and at an island's open edge, by the link's latitude; an
+Down the gradient it runs only inside the month's cell of the low latitudes (`air::cell`): the upper air flows
+poleward keeping its angular momentum, and past a latitude the warmth's fall can no longer balance the wind that gives
+it (Held and Hou 1980). In their small-angle form, with the thermal Rossby number R = g H Δ / (Ω a)², H the air's
+depth (`air_top_m`), a the planet's radius, Ω its spin (`units::SPIN` × `rotation`), Δ the fractional fall of the
+warmth of radiative balance from the equator to the pole, from the planet's own yearly sunlight by latitude,
+1 - (pole's / equator's)^¼ (with the default sun and tilt Δ = 0.198): a heating that peaks on the equator makes the
+year's cell, from the equator to ±sqrt(5R/3) = 22.2°. The month's heating peaks where the sun by latitude, as the low
+liquid under it feels it, is greatest within the year's cell: a layer of `h_mix` of the key liquid answers the sun
+with a first-order lag, τ = its heat capacity / (4 σ T³), T the warmth of radiative balance of the equator's yearly
+sunlight (τ = 1.18 years with the defaults; each harmonic of the year damped by 1 / (1 + i k ω τ)); the peak swings
+between about 5.5° south and north, some two months after the solstices. About a peak off the equator the cell is
+Lindzen and Hou's (1988), in the same form: its two halves meet at the latitude the air rises at with one warmth, each
+ends where its warmth (angular momentum kept from there) meets radiative balance, and each holds as much warmth as
+radiative balance (equal areas); where the summer half has none, the winter half alone. So the air rises poleward of
+the peak (near 19° at a peak of 5.5°), and the winter half, across the equator, is the wide one (to about 36°); the
+rain belt and the sinking branch's dry air follow the months. The share of the flux down the gradient is whole where
+the air rises and falls as 1 - (distance from there / the half's width)² to none at the half's edge, where the
+theory's cell ends, and is none beyond; the part turned across the link stays. With `rotation` 0 the cell spans the
+planet. The same at a link inside the map and at an island's open edge, by the link's latitude; an
 island alone is at its own rows' latitudes (`lat_south`, `lat_north`). **Known limits:** the cell of the middle
 latitudes that turns the other way (Ferrel's), which the eddies drive, is not made; past the cell the eddies alone
-carry heat poleward. The cell is narrower than the measured one (22° against about 30°), as its edge is taken from
-the yearly sun's contrast (0.198), where the measured contrast of the air in radiative balance is nearer a third
+carry heat poleward. The year's cell is narrower than the measured one (22° against about 30°), as its edge is taken
+from the yearly sun's contrast (0.198), where the measured contrast of the air in radiative balance is nearer a third
 (Held and Hou 1980 take 1/3); and it is weaker: at half its edge its lower half carries about a fifth of the measured
 cell's 1e11 kg/s (`wind`).
 Each half carries the air of the node it leaves, vapour crowding low, each mol with its node's heat per mol, and the

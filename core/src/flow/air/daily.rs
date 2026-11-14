@@ -7,6 +7,7 @@ use super::rain::{Pool, Room, Wet};
 use super::soak::{land, Soak, Soaks};
 use super::stretch::Stretch;
 use super::together::Together;
+use super::cell::Cell;
 use super::edge::Edges;
 use super::wind::{ends, even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::UP, step::Active};
@@ -166,8 +167,8 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let days = (dt / DAY).ceil().max(1.0);
     let dd = dt / days;
     let (links, blocks) = (Links::of(air), blocks(w));
-    let ends = ends(&w.cfg, s, air);
-    let push = pushes(&w.cfg, Stretch::of(w), &ends, air, &links);
+    let (ends, cell) = (ends(&w.cfg, s, air), Cell::of(w));
+    let push = pushes(&w.cfg, Stretch::of(w), &ends, air, (&links, &cell));
     let mut block = vec![0; na];
     blocks.iter().enumerate().for_each(|(b, nodes)| nodes.iter().for_each(|&j| block[j as usize] = b));
     let one = Together::of(s, ground, (&blocks, &block), nx);
@@ -181,7 +182,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let lines = lines(air, (&links, &border), (&a, &b));
     let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs] };
     let v = |len: usize| vec![0.0; len];
-    let edges = Edges::of(w, s, &ends);
+    let edges = Edges::of(w, s, &ends, &cell);
     let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), landed: vec![Vec::new(); nx * na], soaked: v(ground.soaks.len()), cloud: v(na), moved, edges };
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();
