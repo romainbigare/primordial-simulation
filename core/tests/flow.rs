@@ -1225,8 +1225,7 @@ fn a_coast_cells_land_swings_more_than_the_cell() {
 
 /// A year of the small world, whose shores hold cells of parts (land beside its liquid's top, each facing the
 /// air, so the surface's temperature is not its land's), with its air's steps and their rain: the books are kept to
-/// rounding and no node is overdrawn (`Books::assert_kept`, `check::broken`): the rain of a step wets the bucket of each
-/// cell's own ground, never its liquid's top as well (`soak`).
+/// rounding and no node is overdrawn (`Books::assert_kept`, `check::broken`).
 #[test]
 fn a_year_of_rain_on_cells_of_parts_keeps_the_books() {
     let mut w = worldgen::testkit::small_world();
