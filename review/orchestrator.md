@@ -106,6 +106,15 @@ tests of `tape/tests/ranges` pass):
 - **The plants' marks decided once a frame per cell** (`marks.wgsl`, `lib/mark.wgsl`), kept in rgba8 textures.
 
 **Known faults on the page:**
+- **Bare land turns into a noisy, smudgy green when zoomed in** (the owner's finding, on the brown land by the
+  shore; they do not want it): the far view draws that land bare, the near view lays a green speckle over it. To
+  find: which pass draws it (the near plant field and the plants' marks, `marks.wgsl`, `lib/mark.wgsl`,
+  `cover_field.wgsl`), why land with almost no cover gets marks or a green floor at the near bars (a floor on the
+  marks' count or size, a blend toward a neighbour's cover, the sward's colour laid without its cover), and
+  whether the far and the near view read the same amount of cover for the same ground. The rule for the mend: a
+  pixel shows the cover its cell's land holds, the same at every zoom; where there is almost none the ground
+  stays bare. Pictures before and after at the 10 km, 1 km and 200 m bars on one bare shore and one green hill.
+  **On the task list: next page job** (a light helper; no law changes).
 - The frame's cost against before the drawing packages (software only; a real phone is not measured): far views 92 to
   97%, 50 m and 10 m 60 to 71%, the 200 m bar on a phone 176% (the near plant field at 0.69 m a pixel, snow and lakes).
 - Snow and ice cost 25 to 45% of a far frame in the headless browser, also on an island with no ice (the software
