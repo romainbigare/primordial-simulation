@@ -98,7 +98,7 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
                 None => lands.push((j, 1.0 / super::seed::LOTS as f64)),
             }
         }
-        let genes = super::mutate(&g, ph.mut_size, &mut r);
+        let genes = crate::life::kin::mutate(&g, &super::RANGE, ph.mut_size, &mut r);
         b.budget[super::budget::SEEDS] -= super::budget::held(&p.content(chem), &mol);
         super::seed::send(c, x, (mol, heat), genes, (i, lands));
     }

@@ -36,11 +36,14 @@ impl Gut {
 }
 
 /// What a group of takers kept of what it took in a month (`digest`): the share of its energy unpaid, the body matter
-/// it took and did not burn, mol, and the fuel its store gained, mol (none where it drew on its store).
+/// it took and did not burn, mol, the fuel its store gained, mol (none where it drew on its store), and its balance,
+/// J: what it digested less its upkeep (the change of its store and the body matter it kept, as burning them would
+/// free them, less what it could not pay).
 pub(super) struct Digested {
     pub(super) unpaid: f64,
     pub(super) matter: f64,
     pub(super) gained: f64,
+    pub(super) balance: f64,
 }
 
 /// Group `x` of `f` digests `took` (mol of life's parts) over the month: its gut splits up to `most` mol of walls, each
@@ -60,9 +63,11 @@ pub(super) fn digest(chem: &Chemistry, (p, gut): (&Parts, &Gut), (f, x): (&mut F
     let sub = super::sub(p);
     let mut eaten = [took[FUEL].max(0.0), 0.0];
     let mut left = burn(chem, gut, (&sub, &mut eaten), energy, b);
+    let mut per_matter = 0.0;
     if let Some(k) = gut.matter {
         let rx = &chem.reactions[k];
         let per = rx.inputs.iter().find(|q| q.0 as usize == p.sub[MATTER]).map_or(1.0, |q| q.1 as f64);
+        per_matter = -chem.dh(k) / per;
         let units = (took[MATTER].max(0.0) / per).min(left / -chem.dh(k)).min(b.room(&p.sub, rx));
         b.run(chem, &p.sub, &mut took, rx, units);
         left -= units * -chem.dh(k);
@@ -71,8 +76,9 @@ pub(super) fn digest(chem: &Chemistry, (p, gut): (&Parts, &Gut), (f, x): (&mut F
     f.mol[x][STORE] += eaten[STORE];
     let unpaid = burn(chem, gut, (&sub, &mut f.mol[x]), left, b);
     b.dead[p.sub[WALL]] += took[WALL].max(0.0);
-    let unpaid = if energy > 0.0 { unpaid / energy } else { 0.0 };
-    Digested { unpaid, matter: took[MATTER].max(0.0), gained: (f.mol[x][STORE] - before).max(0.0) }
+    let (change, matter) = (f.mol[x][STORE] - before, took[MATTER].max(0.0));
+    let balance = change * gut.fuel(chem) + matter * per_matter - unpaid;
+    Digested { unpaid: if energy > 0.0 { unpaid / energy } else { 0.0 }, matter, gained: change.max(0.0), balance }
 }
 
 /// Amounts `mol` (of the taker's parts, the substances `sub`) burn their store for `energy` J (the burning of the fuel,

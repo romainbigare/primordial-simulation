@@ -55,15 +55,12 @@ pub const FIX: usize = 8;
 pub const NG: usize = 9;
 /// A fixing gene at or below this is off.
 pub const FIX_OFF: f32 = -10.0;
-/// The share of `Physics::alike` within which seeds join a slot of their kind and slots of a cell merge
-/// (`seed::lodge`, `grow::merge_alike`); seeds farther from every slot of their kind found one of their own, so a
-/// variant keeps its genes apart and competes for light by height with the others (a rule of the model).
-pub const APART: f32 = 0.5;
 
 /// Mutation step (times `Physics::mut_size`) and range of each gene.
 pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0)];
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
+pub use crate::life::kin::APART;
 pub use crate::life::{Parts, FUEL, MATTER, NO_ROOT, NP, WALL};
 pub use crate::math::dec;
 
@@ -199,12 +196,6 @@ impl Cover {
 /// The built cover of amounts `m` (mol of each part): body matter and walls, kg.
 pub fn built_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
     m[MATTER] * mm[MATTER] + m[WALL] * mm[WALL]
-}
-
-/// Genes `g` after one generation's mutation of size `size` (`Physics::mut_size`): each moves by noise of its step
-/// times that, within its range.
-pub fn mutate(g: &[f32; NG], size: f32, r: &mut crate::rng::Rng) -> [f32; NG] {
-    std::array::from_fn(|q| (g[q] + r.near_normal() * RANGE[q].0 * size).clamp(RANGE[q].1, RANGE[q].2))
 }
 
 /// The cover of one starting kind (`Cover::root`), summed over the world for the shell: its slots, its cover (kg), its

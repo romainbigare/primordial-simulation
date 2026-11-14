@@ -136,7 +136,7 @@ pub struct Physics {
     pub rho_body: f64,
     /// Work to make one kg of body matter, J (`cover::build`)
     pub c_copy: f64,
-    /// Genes that differ by at most this many mutation steps are alike (`cover::APART`)
+    /// Genes that differ by at most this many mutation steps are alike (`life::kin::APART`)
     pub alike: f32,
 
     // The cover (`cover`)

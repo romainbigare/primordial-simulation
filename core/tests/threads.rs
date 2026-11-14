@@ -8,7 +8,7 @@ use worldgen::life::{place_takers, seed, ROSTER};
 const YEARS: u64 = 4;
 /// Counts of chunks other than the default: one chunk of all cells, and one that cuts the rows of the 16 x 16 map at
 /// other places.
-const OTHER_CHUNKS: [u32; 2] = [1, 7];
+const OTHER_CHUNKS: [u32; 2] = [1, 3];
 
 /// The 16 x 16 world of the roster, every starting kind of cover and of takers placed after its first month (and young born to them), run `YEARS`
 /// years on a pool of `threads` threads with its cells cut into `chunks` chunks. Its whole saved state.

@@ -10,13 +10,16 @@
 mod body;
 mod grow;
 mod gut;
+mod land;
+mod lodge;
 mod month;
 mod place;
 pub mod take;
 mod thirst;
 pub mod way;
 
-pub use body::{shell, BAND};
+pub use body::{shell, BAND, WORK_T};
+pub use land::land;
 pub use month::step;
 pub use place::place;
 
@@ -52,6 +55,8 @@ pub const COAT: usize = 6;
 /// Repair, log10: its wear life is 10^REPAIR times the rate of living's (laws.md 3)
 pub const REPAIR: usize = 7;
 pub const NG: usize = 8;
+/// Mutation step (times `Physics::mut_size`) and range of each gene.
+pub const RANGE: [(f32, f32, f32); NG] = [(0.05, -1.5, 3.5), (0.05, -3.0, -0.5), (0.05, 0.0, 1.0), (0.2, -12.0, -5.0), (0.05, -2.0, 1.0), (1.0, 250.0, 315.0), (0.05, 0.0, 2.0), (0.2, -3.0, 3.0)];
 
 /// Below this many members a slot's count is whole and changes by draws: the relative noise of a count of 64 is an
 /// eighth, which a mean would hide (a rule of the model).
@@ -69,12 +74,19 @@ pub struct Fauna {
     /// Per slot: its genes, and the starting kind it descends from (a label for the tape; `NO_ROOT` when empty)
     pub genes: [[f32; NG]; FS],
     pub root: [u32; FS],
+    /// Per slot: its balance over about its last year, J per kg living a month: what it digested less its upkeep
+    /// (`gut::Digested`), a running mean over a year's months; below zero it is in deficit and gives way to newborns that
+    /// find no room (`lodge`)
+    pub net: [f32; FS],
+    /// What its takers sent in their last month, landed after every chunk ran (`land`); not saved
+    #[serde(skip)]
+    pub(crate) out: land::Outbox,
 }
 
 impl Default for Fauna {
     /// No takers.
     fn default() -> Fauna {
-        Fauna { n: [0.0; GROUPS], mol: [[0.0; NF]; GROUPS], e: [0.0; FS], genes: [[0.0; NG]; FS], root: [NO_ROOT; FS] }
+        Fauna { n: [0.0; GROUPS], mol: [[0.0; NF]; GROUPS], e: [0.0; FS], genes: [[0.0; NG]; FS], root: [NO_ROOT; FS], net: [0.0; FS], out: land::Outbox::default() }
     }
 }
 
@@ -123,17 +135,24 @@ pub fn mm(chem: &Chemistry, p: &Parts) -> [f64; NF] {
     sub(p).map(|k| chem.subs[k].molar_mass)
 }
 
+/// How far apart two gene vectors of takers are, in steps: the largest gap of a gene over its step (`RANGE`).
+pub fn distance(a: &[f32; NG], b: &[f32; NG]) -> f32 {
+    (0..NG).map(|g| (a[g] - b[g]).abs() / RANGE[g].0).fold(0.0, f32::max)
+}
+
 /// The living mass of an adult of genes `g`, kg (its `MASS` gene).
 pub fn adult(g: &[f32; NG]) -> f64 {
     crate::math::dec(g[MASS])
 }
 
-/// The living mass of the takers of each ground cell per km² of it, kg (none where it holds none).
+/// The living mass of the takers of each ground cell per km² of its land, kg (`contract::lands`; none where it holds
+/// none or has no land).
 pub fn per_km2(w: &crate::World) -> Vec<f64> {
-    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
+    let (n, land) = (w.mesh.cells().n(), crate::contract::lands(w));
     let Some(p) = Parts::of(&w.chem) else { return vec![0.0; n] };
     let mm = mm(&w.chem, &p);
-    (0..n).map(|i| w.life.cell_at(i).fauna.held().map(|x| w.life.cell_at(i).fauna.living(&mm, x)).sum::<f64>() / area[i] * 1e6).collect()
+    let kg = |i: usize| w.life.cell_at(i).fauna.held().map(|x| w.life.cell_at(i).fauna.living(&mm, x)).sum::<f64>();
+    (0..n).map(|i| if land[i] > 0.0 { kg(i) / land[i] * 1e6 } else { 0.0 }).collect()
 }
 
 /// The takers of the world by starting kind (index: the root), in the order of the cells and their slots: members and

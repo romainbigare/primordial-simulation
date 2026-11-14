@@ -976,19 +976,28 @@ seeds fill it:
 Each ground cell holds up to 8 slots of takers (`fauna::Fauna`, `life::Cell::fauna`): a slot is one kind of takers
 in its cell, in two groups, its adults and its young; each group's **members** a real count (whole below `N_WHOLE` =
 64) and the mol of the fuel they store (5) and of their body matter (10, life's `Parts`); the slot's heat, J (each slot
-at its own temperature), and 8 genes (`fauna::MASS`, `CHILD`,
+at its own temperature), its balance over about a year (`Fauna::net`), and 8 genes (`fauna::MASS`, `CHILD`,
 `YOUNG`, `ENZYME`, `REACH`, `KEEP`, `COAT`, `REPAIR`). A member's **living mass** is its share of the body matter with
 the liquid of living tissue (matter / (1 − `WET_TISSUE`), as the cover's); that liquid is not in the books. The takers
 of a cell are part of the node of its life (`Class::Life`): the chunk of the cell is their one writer. They reach the
 land only through the contract (section 0; `cli/tests/sides.rs`), and their books are the life's (`life::Books`,
-`life::book`). They take from the cover and the seeds lying, digest, and live on what they took and their store.
+`life::book`). They take from the cover and the seeds lying, digest, and live on what they took and their store. They live on the cell's
+land, as its cover does (`contract::land`): they search its land, the remains they rest in lie on it (`contract::remains`,
+kg a m² of land), and their mass per area is per km² of land (`fauna::per_km2`); on a cell whose land goes under they
+find nothing to take and die there by the law of upkeep, their matter to the cell's ground, and young that land on a
+cell with no land die there.
 
 **One month** (`fauna::step`), in the same pass of a cell's life, right after its cover's month, group by group (a
 young member is a body of its own mass, with its own band, floor, upkeep and heat):
 - **Body and pace.** A member stands at its `KEEP` gene where its ground (`contract::place`) is colder, else at its
   ground's temperature; its upkeep runs at the pace of its burning there, the rate law's at its temperature over that
   at `t_cat` (Gillooly et al. 2001): 5.6 at 310 K, so a body that keeps no heat of its own pays far less where it is
-  cold. Its work (walking, chewing) runs at that pace, at most 1.
+  cold. Every rate runs at the pace of its body's temperature over the pace at the temperature its number was given
+  at: its upkeep, its gut's capacity and its growth (Kleiber's numbers) over the pace at `t_cat`; its work (walking,
+  chewing) over the pace at `WORK_T` (310 K, the body temperature of the mammals the rows of work were measured on), at
+  most 1. So a body at 288 K walks and chews at 0.6 of a warm body's speed and pays a sixth of its upkeep, and a cold
+  body's speed and power fall with its temperature as measured (Q10 about 2 to 3 below 25 °C in lizards, Bennett 1980
+  and 1990; the rate law's is 2.3 near 300 K).
 - **Upkeep at rest**: Kleiber's law, (`c_basal` + `c_muscle`) × m^`upkeep_exp` × pace × its repair factor
   (`Physics::repair`) a day per member, m its living mass, kg (Kleiber 1932; Elia 1992); and its gut's capacity,
   `c_capacity` of the fuel its capacity (`ENZYME`, mol of walls a kg living a s at `t_cat`) could free, at the same
@@ -1044,7 +1053,11 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   has: less work makes less heat. Only where at no work its need is still unmet do its members die, by the unmet share
   (`LACK`). The vapour shed leaves the cell's liquid (the running liquid, what they ate and what they fetched join it
   there), then the soft solid, for the cell's aside node with its latent heat, paid from the bodies' heat
-  (`contract::vapour`); where the cell's ground holds less, less is shed and its heat goes to the ground.
+  (`contract::vapour`); where the cell's ground holds less, less is shed and its heat goes to the ground. What was
+  fetched is the far cell's: it waits in the cell's outbox and, after every chunk ran, is taken from that cell's ground
+  (as far as its liquid then holds, the asks on it shared by what they ask) and given to the walkers' cell's ground with
+  its heat, carried in their bodies: its potential energy is booked as for life that moves between cells
+  (`fauna::land`, `contract::fetched`).
 - **Digestion** (`fauna::gut`, by the chemistry's own reactions): its gut splits walls into fuel (the reaction that
   makes fuel of the walls alone, taking the key liquid of the ground) up to its capacity × its living mass × pace; it
   burns for its upkeep and heat first the fuel it took and split, then the body matter it took (the burning of body
@@ -1068,15 +1081,39 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   temperature as Gillooly et al. 2002 find it. First the young grow, each at its cap; the share that crosses the adult's
   mass in the month joins the adults with its share of the young's amounts (von Foerster's flux across a mass, the
   young's masses taken as even in log mass between a newborn's, `CHILD` of the adult's, and the adult's: the share
-  min(1, Δln m / ln(M / m0)), Δln m the young's growth in the month). Then the adults bear newborns, one parent each,
-  each adult building at most at its cap, a newborn holding `CHILD` of the adult's mass. Below `N_WHOLE` the young
+  min(1, Δln m / ln(M / m0)), Δln m the young's growth in the month). Then the adults bear newborns, one parent each, a
+  newborn holding `CHILD` of the adult's mass. An unborn grows from nothing by the same law, dm/dt = a m^(3/4)
+  (1 − u), u = (m / M)^(1/4), a her cap over M^(3/4), fed from her pot: it reaches the newborn's u_c = `CHILD`^(1/4)
+  after 4 M^(1/4) (−ln(1 − u_c)) / a (26 days for the 30 g kind, 258 for the 400 kg kind at 310 K). Its need is
+  greatest at its birth (or at u = 3/4), so her cap feeds at once a litter of 1 / max u³ (1 − u); litter after litter
+  she bears the share u_c⁴ / (4 (−ln(1 − u_c)) max u³ (1 − u)) of her cap (`grow::bearing`): a quarter for a small
+  newborn, 0.33 to 0.36 for the starting kinds. Below `N_WHOLE` the young
   that mature are a binomial draw and the newborns the whole part of what was built and one more by a draw on the rest;
   what was built stays (a draw never makes matter, it moves the mean mass of the young a little), and a group of no
   members gives its amounts to the slot's other group (matter built into newborns none of whom was drawn stays in the
   mother). What is left of the pot goes back to the stores up to their most; the rest of it and of the matter passes to
   the ground. The draws of a slot in a month are one keyed stream (`Purpose::Fauna`), in the order: deaths of its
-  adults, of its young, its maturing, its births. A slot of no members is empty. The young stay in their cell (no
-  dispersal yet), and their genes are their parents' (no mutation yet).
+  adults, of its young, its maturing, its births, the dispersal of its maturing young, the mutation of its newborns.
+  A slot of no members is empty.
+- **The young leave** (`fauna::land`). The young that mature in a month leave in lots (one a member under `N_WHOLE`,
+  else 8), each landing in the cell the kernel of the seeds draws (`life::lot`: two Gaussian scales, `kernel_near` and
+  `kernel_far`); the lots that land in another cell leave the slot's adults for the cell's outbox with their heat at
+  the body's temperature. After every chunk ran they land, cell by cell in the order of the cells and of what each
+  sent: on land they join the adults of the slot of their kind they are alike to there, or found one, by the slot rule
+  below (a slot in deficit they take dies as remains), their count whole under `N_WHOLE` by a keyed draw; on a cell
+  with no land, or with no room, they die there, their matter and heat to its ground. The potential energy of what
+  moved is booked as for the seeds (`contract::travelled`).
+- **Mutation and the slot rule** (`fauna::lodge`, the shared rule of `life::kin`). The newborns of a slot in a month
+  are one packet; its genes are the slot's after one generation's mutation (each gene moves by noise of its step in
+  `fauna::RANGE` times `mut_size`, within its range: `life::kin::mutate`, as the cover's seeds). It joins the slot of its
+  starting kind within `APART` × `alike` steps of it in every gene (the genes the mean by living mass); else it founds
+  a slot of its own: an empty one, else the one most in deficit (`Fauna::net`, the slot's balance over about a year:
+  what it digested less its upkeep per kg living a month, a running mean; not its own slot nor one whose newborns wait
+  to lodge), whose members die as remains (counted as unpaid); else it stays in its parent slot with no new genes.
+  Slots of a cell alike in every gene join (the lighter into the heavier, the genes and balance the mean by living
+  mass). They never join because all slots are held (unlike the cover's): a mean of two unlike kinds is good at
+  neither. One generation moves a gene by about `mut_size` (0.063) of its step and the join is 2 steps wide, so a
+  packet almost never founds a slot by its own mutation: the rule selects between slots that exist.
 - **The books.** Gases from and to the cell's share of its air node, remains to its ground, each with its heat, through
   the books of the cell's life; each slot's heat ends at its heat capacity times its body's temperature, and the rest of
   what the burning released goes to the ground.

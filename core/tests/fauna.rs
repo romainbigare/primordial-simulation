@@ -47,7 +47,7 @@ fn burnt_a_day(w: &World, row: usize, m: f64, t: f64) -> f64 {
     let fuel_a_wall = split.outputs.iter().find(|q| q.0 as usize == p.sub[pcore::life::FUEL]).map_or(0.0, |q| q.1 as f64) * per_kg(w) * chem.subs[p.sub[pcore::life::FUEL]].molar_mass;
     let gut = ph.c_capacity * 10f64.powf(g[fauna::ENZYME] as f64) * m * fuel_a_wall * DAY;
     let rest = ((ph.c_basal + ph.c_muscle) * m.powf(ph.upkeep_exp) + gut) * pace * ph.repair(g[REPAIR] as f64);
-    let speed = (ph.walk_froude * w.cfg.gravity * (m / ph.rho_body).cbrt()).sqrt() * pace.min(1.0);
+    let speed = (ph.walk_froude * w.cfg.gravity * (m / ph.rho_body).cbrt()).sqrt() * (rx.arrhenius(tb) / rx.arrhenius(fauna::WORK_T)).min(1.0);
     let walk = speed * ph.busy * DAY * ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m;
     let coat = ph.meeh * m.powf(2.0 / 3.0) / (ph.r_air + g[fauna::COAT] as f64 * ph.r_coat);
     (rest + walk).max(coat * (g[KEEP] as f64 - t).max(0.0) * DAY)
@@ -248,7 +248,7 @@ fn the_way_to_the_liquid_costs_the_walk() {
     let mut w = testkit::living(8, 1);
     pcore::step(&mut w);
     let cells = w.mesh.cells();
-    let field = |need: f64| (0..cells.n()).map(|i| pcore::contract::to_liquid(&w, i, need)).collect::<Vec<f64>>();
+    let field = |need: f64| (0..cells.n()).map(|i| pcore::contract::to_liquid(&w, i, need).0).collect::<Vec<f64>>();
     let mixed = |v: &[f64]| v.contains(&0.0) && v.iter().any(|&d| d > 0.0 && d.is_finite());
     let need = (0..pcore::contract::LEVELS as i32).map(|k| 10f64.powi(k)).find(|&x| mixed(&field(x))).expect("a field of ways with some cells at the liquid and some off it");
     let way = field(need);
@@ -314,14 +314,30 @@ fn a_mouth_cuts_what_its_jaw_can_rupture() {
     }
 }
 
-/// Newborns are built at the cap of the rate of living, and the books are kept through births and growth: a slot of
-/// adults with a store over the most it keeps, on a cell of cover rich in body matter, bears in its first month the
-/// living mass its adults' cap allows (West, Brown and Enquist 2001: Kleiber's rest (`c_basal` + `c_muscle`)
+/// The newborn mass a mother bears a unit of time over her cap, where her newborns hold the share `child` of her mass:
+/// her unborn grow from nothing by dm/dt = a m^(3/4) (1 − (m/M)^(1/4)) (West, Brown and Enquist 2001), found here step
+/// by step in u = (m/M)^(1/4), du/dt = a (1 − u) / (4 M^(1/4)), with a = M = 1; her cap feeds at once the litter whose
+/// greatest need over its growth is her cap; she bears litter after litter.
+fn bearing(child: f64) -> f64 {
+    let (end, steps) = (child.powf(0.25), 100_000);
+    let (mut t, mut most) = (0.0, 0.0f64);
+    for k in 0..steps {
+        let u = (k as f64 + 0.5) / steps as f64 * end;
+        t += 4.0 / (1.0 - u) * end / steps as f64;
+        let at = (k + 1) as f64 / steps as f64 * end;
+        most = most.max(at.powi(3) * (1.0 - at));
+    }
+    child / most / t
+}
+
+/// Newborns grow at the law every body grows by, and the books are kept through births and growth: a slot of adults
+/// with a store over the most it keeps, on a cell of cover rich in body matter, bears in its first month the living mass
+/// its adults' cap feeds litter after litter (`bearing`; the cap: Kleiber's rest (`c_basal` + `c_muscle`)
 /// m^`upkeep_exp` at the pace of its body's temperature over the energy a kg of living tissue holds and costs,
 /// `Parts::living_cost`), as newborns of `CHILD` of their mass; over the next months its young grow and join its
 /// adults, every count under `N_WHOLE` is whole, and every element and the energy are kept.
 #[test]
-fn newborns_are_built_at_the_cap_and_the_books_are_kept() {
+fn newborns_grow_by_the_law_of_growth_and_the_books_are_kept() {
     let mut w = testkit::living(8, 12);
     let i = testkit::mild_land(&w);
     (w.life.env[i][1], w.life.env[i][3]) = (1.0, 0.0);
@@ -337,9 +353,9 @@ fn newborns_are_built_at_the_cap_and_the_books_are_kept() {
     let mm = fauna::mm(&w.chem, &p);
     testkit::takers_month(&mut w, i);
     let f = of(&w, i);
-    let (built, law) = (f.living_of(&mm, FS), cap * f.n[0] * w.cfg.days_per_month as f64);
-    println!("month 1: {:.1} adults bore {:.1} young, {built:.4e} kg; the cap {law:.4e} kg", f.n[0], f.n[FS]);
-    assert!((built - law).abs() <= 1e-9 * law, "the newborns hold {built} kg, the cap allows {law} kg");
+    let (built, law) = (f.living_of(&mm, FS), cap * bearing(child / m) * f.n[0] * w.cfg.days_per_month as f64);
+    println!("month 1: {:.1} adults bore {:.1} young, {built:.4e} kg; the law {law:.4e} kg (the share {:.4} of their cap)", f.n[0], f.n[FS], bearing(child / m));
+    assert!((built - law).abs() <= 1e-6 * law, "the newborns hold {built} kg, the law of growth gives {law} kg");
     assert!((f.n[FS] - built / child).abs() <= 1e-9 * f.n[FS], "{} newborns of {built} kg at {child} kg each", f.n[FS]);
     for k in 2..=6 {
         testkit::takers_month(&mut w, i);
@@ -348,5 +364,87 @@ fn newborns_are_built_at_the_cap_and_the_books_are_kept() {
         assert!(f.n.iter().all(|&n| n >= N_WHOLE || n.fract() == 0.0), "month {k}: a count under {N_WHOLE} not whole: {:?}", f.n);
     }
     assert!(of(&w, i).n[0] > 0.0 && of(&w, i).n[FS] > 0.0, "no adults or no young after six months");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// A body works at the pace of its own temperature (laws.md 3b): of two kinds alike but for the heat they keep, one at
+/// its ground's temperature and one held at `WORK_T` in a thick coat, on the same cell, the cold one takes the share
+/// pace(t) / pace(`WORK_T`) of what the warm one takes, the share its upkeep is of the warm one's: being cold does
+/// not multiply what it takes over what it burns.
+#[test]
+fn a_cold_body_takes_in_the_proportion_it_burns() {
+    let mut w0 = testkit::living(8, 12);
+    let i = testkit::mild_land(&w0);
+    (w0.life.env[i][1], w0.life.env[i][3]) = (1.0, 0.0);
+    let t = pcore::contract::place(&w0, i).t;
+    let cover = |w: &World| pcore::cover::per_m2(w, pcore::cover::Cover::kg)[i] + pcore::cover::lying(w)[i];
+    let taken = |keep: f32, coat: f32| {
+        let mut w = w0.clone();
+        let mut genes = TAKER_KINDS[COLD_ROW].genes;
+        (genes[KEEP], genes[fauna::COAT]) = (keep, coat);
+        let m = fauna::adult(&genes);
+        assert!(fauna::place(&mut w, i, (genes, COLD_ROW as u32), (1.0, 0.1 * m)));
+        let before = cover(&w);
+        testkit::takers_month(&mut w, i);
+        before - cover(&w)
+    };
+    let (cold, warm) = (taken(250.0, 0.0), taken(fauna::WORK_T as f32, 2.0));
+    let p = Parts::of(&w0.chem).expect("life's parts");
+    let rx = &w0.chem.reactions[p.burn];
+    let law = rx.arrhenius(t) / rx.arrhenius(fauna::WORK_T);
+    println!("at {t:.1} K a cold body took {cold:.4e} kg/m2, a warm one {warm:.4e}: {:.4} of it; its upkeep is {law:.4} of the warm one's", cold / warm);
+    assert!(warm > 0.0 && (cold / warm - law).abs() <= 1e-6 * law, "a cold body took {} of a warm one's take, its upkeep is {law} of the warm one's", cold / warm);
+}
+
+/// Kinds keep apart by the slot rule (`life::kin`): two kinds of takers far apart in the heights they search and the
+/// heat they keep, placed on every land cell of a small world, 20 years with their newborns mutating every month
+/// (`fauna::RANGE`, `mut_size`) and no dispersal: while they share cells no slot ever holds genes between them (every
+/// slot within `APART` × `alike` steps of one of the two in every gene), and the books are kept.
+#[test]
+fn kinds_keep_apart_by_the_slot_rule() {
+    let mut w = testkit::living(8, 12);
+    let (mut low, mut high) = (TAKER_KINDS[1].genes, TAKER_KINDS[1].genes);
+    (low[fauna::REACH], high[fauna::REACH], high[KEEP]) = (-1.5, -0.5, 300.0);
+    let books = Books::now(&w);
+    let cells: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
+    for &i in &cells {
+        for (root, g) in [(0, low), (1, high)] {
+            let m = fauna::adult(&g);
+            assert!(fauna::place(&mut w, i, (g, root), (N_WHOLE, 0.1 * m)));
+        }
+    }
+    let (within, mut shared) = (pcore::life::kin::APART * w.cfg.phys.alike, 0);
+    for month in 0..20 * w.cfg.months_per_year {
+        pcore::step(&mut w);
+        for &i in &cells {
+            let f = of(&w, i);
+            for x in f.held() {
+                let near = fauna::distance(&f.genes[x], &low).min(fauna::distance(&f.genes[x], &high));
+                assert!(near <= within, "month {month}, cell {i}, slot {x}: genes {:?} lie {near} steps from both kinds", f.genes[x]);
+            }
+            shared += (f.held().any(|x| f.root[x] == 0) && f.held().any(|x| f.root[x] == 1)) as u32;
+        }
+    }
+    println!("cell-months in which both kinds lived: {shared}");
+    assert!(shared > 0, "the two kinds never shared a cell");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// The young leave (laws.md 3b): takers placed on one cell of a small world spread to other cells by the kernel of
+/// the seeds as their young mature, and every element and the energy are kept across the cells they leave and reach.
+#[test]
+fn the_young_leave_and_the_books_are_kept() {
+    let mut w = testkit::living(8, 12);
+    let i = testkit::mild_land(&w);
+    let books = Books::now(&w);
+    testkit::takers(&mut w, i, 0, (1e4, 0.1 * fauna::adult(&TAKER_KINDS[0].genes)));
+    let held = |w: &World| (0..w.mesh.cells().n()).filter(|&j| of(w, j).any()).count();
+    let mut most = 1;
+    for _ in 0..3 * w.cfg.months_per_year {
+        pcore::step(&mut w);
+        most = most.max(held(&w));
+    }
+    println!("cells with takers: at most {most}, at the end {}", held(&w));
+    assert!(most > 1, "no young left the cell they were born in");
     books.assert_kept(&w, 1e-9);
 }

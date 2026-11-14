@@ -20,6 +20,16 @@ pub(super) struct Surplus {
     pub(super) matter: f64,
 }
 
+/// What a slot's month of growth made: its newborns and the mol of body matter they hold, and its young that matured
+/// and the mol of each part they took to its adults.
+#[derive(Default)]
+pub(super) struct Grown {
+    pub(super) born: f64,
+    pub(super) held: f64,
+    pub(super) matured: f64,
+    pub(super) moved: [f64; NF],
+}
+
 /// The most living mass a member like `b` builds a s, kg: the power its body's network delivers, Kleiber's rest
 /// (`c_basal` + `c_muscle`) × m^`upkeep_exp` at the pace of its body's temperature, over the energy a kg of living
 /// tissue holds and costs to build (`Parts::living_cost`): the cap of West, Brown and Enquist 2001 (dm/dt at most
@@ -35,15 +45,17 @@ fn cap(w: &World, b: &Body, cost: f64) -> f64 {
 /// body matter comes from what it took. First its young grow, each at most at its cap (`cap`); of them the share that
 /// crosses its adults' mass in the month joins its adults (von Foerster's flux across a mass: their masses taken as
 /// even in log mass between a newborn's and an adult's, the share min(1, Δln m / ln(M / m0))), with its share of the
-/// young's amounts; then its adults bear newborns of `CHILD` of their mass, each adult building at most at its cap.
+/// young's amounts; then its adults bear newborns of `CHILD` of their mass, each adult at most at the share `bearing`
+/// of its cap.
 /// Below `N_WHOLE` the young that mature are a binomial draw from `r` and the newborns the whole part of what was built
 /// and one more by a draw on the rest, so a draw never makes matter; a count that falls below `N_WHOLE` becomes whole
 /// (`whole`). What is left of the pot goes back to the stores up to their most, the rest of it and of the matter to
-/// the remains. Returns the newborns.
-pub(super) fn grow(w: &World, (p, gut): (&Parts, &Gut), (f, x, bodies): (&mut Fauna, usize, (&Body, &Body)), surplus: &Surplus, (r, b): (&mut Rng, &mut Books<0>)) -> f64 {
+/// the remains. Returns what grew (`Grown`).
+pub(super) fn grow(w: &World, (p, gut): (&Parts, &Gut), (f, x, bodies): (&mut Fauna, usize, (&Body, &Body)), surplus: &Surplus, (r, b): (&mut Rng, &mut Books<0>)) -> Grown {
     let (chem, ph, dt) = (&w.chem, &w.cfg.phys, w.cfg.calendar().month as f64);
     let (sub, mm, g) = (sub(p), super::mm(chem, p), f.genes[x]);
     let (old, young) = (x, FS + x);
+    let mut out = Grown::default();
     let store_most = |f: &Fauna, k: usize| ph.store_most * f.living_of(&mm, k) / mm[STORE];
     let mut pot = 0.0;
     for (k, gained) in [old, young].into_iter().zip(surplus.gained) {
@@ -81,19 +93,20 @@ pub(super) fn grow(w: &World, (p, gut): (&Parts, &Gut), (f, x, bodies): (&mut Fa
         for q in 0..NF {
             let moved = f.mol[young][q] * part;
             (f.mol[young][q], f.mol[old][q]) = (f.mol[young][q] - moved, f.mol[old][q] + moved);
+            out.moved[q] = moved;
         }
-        (f.n[young], f.n[old]) = (n - matured, f.n[old] + matured);
+        (f.n[young], f.n[old], out.matured) = (n - matured, f.n[old] + matured, matured);
     }
-    // The adults bear newborns.
-    let mut born = 0.0;
+    // The adults bear newborns, each at the share `bearing` of its cap.
     if f.n[old] > 0.0 && m_child > 0.0 {
-        let upto = cap(w, bodies.0, cost) * f.n[old] * dt;
+        let upto = cap(w, bodies.0, cost) * bearing(m_child / m_adult) * f.n[old] * dt;
         let kg = build(f, young, upto, &mut pot, &mut matter);
-        born = kg / m_child;
+        let mut born = kg / m_child;
         if f.n[young] + born < N_WHOLE {
             born = born.floor() + (r.f64() < born.fract()) as u8 as f64;
         }
         f.n[young] += born;
+        (out.born, out.held) = (born, kg / kg_of);
     }
     for k in [old, young] {
         f.n[k] = whole(f.n[k], r);
@@ -102,7 +115,22 @@ pub(super) fn grow(w: &World, (p, gut): (&Parts, &Gut), (f, x, bodies): (&mut Fa
     }
     b.dead[sub[STORE]] += pot;
     b.dead[sub[BODY]] += matter;
-    born
+    out
+}
+
+/// The newborn mass a mother bears a s over her cap (`cap`), where her newborns hold the share `child` of her mass M:
+/// an unborn grows from nothing by the law every body grows by (West, Brown and Enquist 2001: dm/dt = a m^(3/4)
+/// (1 − u), u = (m / M)^(1/4)), fed from her pot, so it reaches the newborn's u_c = `child`^(1/4) after
+/// t = 4 M^(1/4) (−ln(1 − u_c)) / a; its need a M^(3/4) u³ (1 − u) is greatest at its birth (or at u = 3/4), and her cap,
+/// a M^(3/4), feeds at once a litter of 1 / that greatest u³ (1 − u). Litter after litter, she bears u_c⁴ M a litter
+/// each t: the share u_c⁴ / (4 (−ln(1 − u_c)) max u³ (1 − u)) of her cap, a quarter for a small newborn.
+fn bearing(child: f64) -> f64 {
+    let u = child.clamp(0.0, 1.0).powf(0.25);
+    if u <= 0.0 || u >= 1.0 {
+        return if u >= 1.0 { 0.0 } else { 0.25 };
+    }
+    let most = |v: f64| v.powi(3) * (1.0 - v);
+    u.powi(4) / (4.0 * -(1.0 - u).ln() * most(u.min(0.75)))
 }
 
 /// A count `n` below `N_WHOLE` that is not whole becomes whole by a draw from `r` that keeps its mean: its whole part,

@@ -173,7 +173,7 @@ pub(crate) struct Ctx<'a> {
     /// year, kg of dry matter per m² a year (`Counters::grown_last`; none before a year has passed)
     pub seeds: Vec<f64>,
     pub grown: Vec<f64>,
-    /// Per ground cell: the living mass of its takers per km² of it, kg (`fauna::per_km2`)
+    /// Per ground cell: the living mass of its takers per km² of its land, kg (`fauna::per_km2`)
     pub takers: Vec<f64>,
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
