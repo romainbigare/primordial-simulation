@@ -330,8 +330,11 @@ as real as possible, with features dramatised for the game: textures, details, r
   stony stream, fallen logs, mossy rocks, many tree forms; a swamp with dark standing liquid, trees with wide
   feet, floating leaves, mud banks; high mountains with ice, scree, a milky lake; a braided river with gravel
   bars and green islands.
-- For the brief: every drawn thing stays tied to a number of the world (what stands, how tall, how dense, how
-  dry, the season); the drawing may dramatise, it may not invent; nothing placed on a grid; the look differs by
+- For the brief, **the owner's rule for the drawing (their word)**: procedural detail with artistic liberty is
+  welcome to make the world look alive (a boulder, a fallen log, a tuft, a flower that no number tracks), as
+  long as the numbers still guide the general outline and the behaviour of what is drawn: where forest, grass,
+  bare ground, liquid, snow and rock are, how tall and dense the plants, how dry, the season. Detail is keyed to
+  the place so it does not move between frames or zoom levels, and nothing stands on a grid; the look differs by
   habitat because the numbers differ. The animals' drawing stays paused (see the life track).
 
 **Where the two tracks stand** (the orchestrator keeps these lines true):
