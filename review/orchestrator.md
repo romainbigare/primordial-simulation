@@ -416,8 +416,11 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   - A cell whose mean ground is under the level gets no soil and no starting cover (`worldgen::life::open_land`
     asks `is_land`), though it holds land: 3.4 to 4.9% of the land's samples, 26% of the land in the first km.
     Accepted: soil and cover on the land part of such a cell.
-  - The drawing thins the first km: the layers divide by the whole cell's area but are drawn on its land only, and
-    the blend takes the zero of cells with no land. In work (a branch of its own; no law changes).
+  - The drawing thinned the first km: mended on main (ec8ff03): the cover's layers are per m² of a cell's land
+    (`tape::layers::per_land`, `flow::land_shares`) and the page blends them over the cells that hold land (a land
+    mask read once per pixel). Under 1% of the map's pixels change. Its cost could not be timed on the shared
+    machine (runs differ by 15%): 5 more texture reads per pixel; to time on a quiet machine, and a cheaper form
+    is known (a mark for squares whose 4 by 4 neighbours are all land).
   - Climate None: the island's closed air falls from 402 to 175 ppm of the gas by year 25 as the cover locks it
     in its walls; the water lost per mol of gas grows with it. Open: whether an island's air is ever closed.
   - Climate Wide (main's air): 45 to 50% of the land is bare at every distance from the shore, dry (wetness 0.4
