@@ -408,6 +408,12 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     all the soft part within its band, not the sward's top); no mutant founds a slot. No eaters of takers yet.
   - **The page places the takers** 50 years after the first life (`wasm/src/lib.rs` `TAKERS_YEAR`); the CLI
     places none unless asked (`--fauna-year`). The layer "Takers" shows them; no single animal is drawn yet.
+  - In work, the owner's three questions on the takers, by a third builder (scratch `scratchpad/f1/b3/`, `notes.md`
+    there), measure first: why the 30 g kind dies (its budget on three kinds of cell; real bite sizes and rates of
+    small bodies; a stretched row is mended, a lacking law is described); why large grazers pay their way on 70 kg
+    of dry matter per hectare (a leaf's cells have walls; a bite takes the top of what stands: each built only
+    from what the cover holds or one anchored row); what births our takers achieve in a world against wild ones
+    (the figures so far are at full food).
   - In work: the first drawing of animals on the page (the design's decision 10), by a page builder in its own
     worktree: two or three looks on branches from one base, pictures in `scratchpad/animals/` (`looks.png`); the
     owner picks, then one is merged. Then F2 (movement by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
@@ -477,6 +483,11 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    `roadmap.md` 7.2. Then the small game (god tools, fire).
 
 **Nature track**
+0. **The variety of habitat** (the owner's question: why no grassland, swamp, delta, desert, deep gorges, large
+   rivers; "I would love to have those environments emerging naturally through the laws we have"): a study with
+   measures, in work by an explorer that changes nothing (scratch `scratchpad/habitats/`: `report.md`, `why.png`):
+   per habitat what makes it on a real planet, what our laws hold, why it does not show, what would let it; a
+   ranked list of five changes. The orchestrator decides from it and puts the steps here.
 1. Nothing in work on the page. Next there: the first drawing of animals (life track).
 2. **The sorted start**, carried over by hand in the steps of section 4 (its target, main alone to year 300, is
    measured), with the amount of variety as a setting of a world. It goes to main only when its pictures are at
