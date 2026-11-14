@@ -106,15 +106,12 @@ tests of `tape/tests/ranges` pass):
 - **The plants' marks decided once a frame per cell** (`marks.wgsl`, `lib/mark.wgsl`), kept in rgba8 textures.
 
 **Known faults on the page:**
-- **Bare land turns into a noisy, smudgy green when zoomed in** (the owner's finding, on the brown land by the
-  shore; they do not want it): the far view draws that land bare, the near view lays a green speckle over it. To
-  find: which pass draws it (the near plant field and the plants' marks, `marks.wgsl`, `lib/mark.wgsl`,
-  `cover_field.wgsl`), why land with almost no cover gets marks or a green floor at the near bars (a floor on the
-  marks' count or size, a blend toward a neighbour's cover, the sward's colour laid without its cover), and
-  whether the far and the near view read the same amount of cover for the same ground. The rule for the mend: a
-  pixel shows the cover its cell's land holds, the same at every zoom; where there is almost none the ground
-  stays bare. Pictures before and after at the 10 km, 1 km and 200 m bars on one bare shore and one green hill.
-  **On the task list: next page job** (a light helper; no law changes).
+- The green grain over thin cover when zoomed in (the owner's finding) is mended on main: the near view drew
+  each crown at least 1.5 pixels wide whatever the plants' size (`grain` in `lib/cover_field.wgsl`); a crown is
+  now as wide as the plants' own marks and drawn only where those span 1.5 pixels, else the near view shows the
+  mean tone as the far view does. Left: a cell with no cover still takes green from the cells about it through
+  the smooth blend, at every zoom (bare land reads olive); faint arcs along the ground's contours in the owner's
+  picture were not found again (a guess: the water's-edge drawing in `land.wgsl`).
 - The frame's cost against before the drawing packages (software only; a real phone is not measured): far views 92 to
   97%, 50 m and 10 m 60 to 71%, the 200 m bar on a phone 176% (the near plant field at 0.69 m a pixel, snow and lakes).
 - Snow and ice cost 25 to 45% of a far frame in the headless browser, also on an island with no ice (the software
@@ -384,13 +381,26 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     against 8.50 kg per m² of land; 11% in the band), 42 to 80% of its growth eaten, by the 3 kg kind (11.8 t per
     km²) and the cold-bodied 2 kg kind (4.8 t); births are still 3 to 10 times real ones (Hamilton and others
     2011); no mutant founds a slot (as the design said); the slope against Damuth's is -1.0 to -1.4.
-  In work, by the second builder (branch `worktree-agent-a3977242362ec202f`; scratch `scratchpad/f1/b2/`,
-  `notes.md` there), a commit each: (1) a member takes its food bite by bite: the ground cropped in a day is
-  bounded by the bite's area over the cropping time (Spalinger and Hobbs 1992; Shipley and others 1994), so a
-  thin sward no longer feeds it; (2) a slot's soft part and the thin axes of its frame stand in its crown, from
-  h - L/rho to h (one anchored leaf area per volume of a crown), so a grown tree is out of a ground mouth's
-  reach; (3) a mother pays the whole burning of her unborn; (4) the 250-year run again, with the cover by height
-  class. There are no eaters of takers yet: the gate's row on the cover against its twin is judged knowing that.
+  - On main too (merge 0979bd6, `SNAPSHOT_VERSION` 143): a member takes its food bite by bite (the ground clipped
+    a day is bounded by the bite's area over the bite's time: 0.29 m² at 30 g, 7.8 at 3 kg, 67 at 60 kg, 264 at
+    400 kg, where the sweep gave 380 to 42,800; `bite_time` from Shipley, `bite_breadth` and `bite_exp` from
+    Illius and Gordon 1987, from memory and fitted on ruminants); a slot's soft part and the thin stems of its
+    frame stand in its crown, from h - L/`crown_density` to h (1 m² per m³, from memory); a mother pays the whole
+    burning of her unborn (births at full food 1.7 to 5 times Hamilton and others 2011).
+  - **Where F1 stands** (64 drawn world, takers at year 50, to year 250; `scratchpad/f1/shots4/`, `b2/me64.txt`;
+    the twin on the same head): the cover holds at 97% of its twin's (92% in the band), 5% of its growth eaten,
+    takers about 800 kg per km² of land, books at 2.2e-13, the tall slots live and young ones come up; four kinds
+    live 200 years. Not met: the 30 g kind dies out within ten years on both worlds (on a ground layer of 0.02 kg
+    per m² its bite of 6 mm² clips less than it burns: the bite's rule is stretched far under its data, and the
+    land has almost no open low cover: 0.06 kg per m² under 0.5 m); Damuth's slope is -0.6 to -1.0 on the
+    island and -0.2 to -0.6 in the band; a grazer of 60 or 400 kg pays its way down to about 70 kg of dry matter
+    per hectare where measured thresholds are near 1,000 (the soft part breaks at 3.6e3 J a kg, and a bite takes
+    all the soft part within its band, not the sward's top); no mutant founds a slot. No eaters of takers yet.
+  - **The page places the takers** 50 years after the first life (`wasm/src/lib.rs` `TAKERS_YEAR`); the CLI
+    places none unless asked (`--fauna-year`). The layer "Takers" shows them; no single animal is drawn yet.
+  - Next on this track: the first drawing of animals on the page (the design's decision 10), then F2 (movement
+    by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
+    reads `scratchpad/f1/b2/notes.md` first.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
@@ -456,7 +466,7 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    `roadmap.md` 7.2. Then the small game (god tools, fire).
 
 **Nature track**
-1. **The page's green speckle over bare land when zoomed in** (section 4, known faults on the page): in work.
+1. Nothing in work on the page. Next there: the first drawing of animals (life track).
 2. **The sorted start**, carried over by hand in the steps of section 4 (its target, main alone to year 300, is
    measured), with the amount of variety as a setting of a world. It goes to main only when its pictures are at
    least as good as main's.
