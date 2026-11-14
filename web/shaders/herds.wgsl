@@ -7,7 +7,7 @@
 // adult where the slot holds too few adults to lead them, `YOUNG_MOST`), at a random place in its part. Nothing depends
 // on the view: a member stands still while its slot's counts stand still. A member stands on land only (not in liquid
 // that stands over the ground, nor buried by snow deeper than it is tall: land.wgsl `state_at` at its group's place).
-// It is drawn at its body's length where that takes enough pixels, and no shorter than `look.zw` pixels; single
+// It is drawn seen from above, a trunk and a head over its shadow, at its body's length where that takes enough pixels, and no shorter than `look.zw` pixels; single
 // members show only from where one takes `look.x` of a pixel. Points are in metres from the map's north-west corner.
 
 struct Herds {
@@ -28,9 +28,15 @@ const PARTS = 2;
 const YOUNG_MOST = 6u;
 // A young one stands this many of its adult's drawn lengths from it, nearer or farther by up to `YOUNG_SPREAD` of that.
 const YOUNG_AWAY = 1.1; const YOUNG_SPREAD = 0.2;
-// A dot is as wide as a body of this share of its length's width would cover: the dot's area is the body's (a body
-// about a third as wide as long).
-const DOT_WIDE = 0.58;
+// A body seen from above: its trunk an ellipse this share of its length long and wide, centred this share behind its
+// middle, and its head a disc this share of its length across, centred this share ahead (a quadruped's plan, roughly).
+const TRUNK = vec2f(0.75, 0.34); const TRUNK_AT = -0.1; const HEAD = 0.22; const HEAD_AT = 0.36;
+// The sun from the north-west lays a body's shadow this share of its length to the south-east, as dark as `SHADOW`
+// (the sky's light still reaches it; cover.wgsl's shadow), soft over `SHADOW_SOFT` of its width.
+const SHADOW_RUN = 0.3; const SHADOW = 0.4; const SHADOW_SOFT = 0.5;
+// A young one turns from its adult's heading by up to this many radians either way.
+const YOUNG_TURN = 0.6;
+
 // The steps a permutation's walk takes at most to come back into its domain (`permute`): each step lands in it with a
 // chance over a half.
 const WALK_MOST = 64;
@@ -68,15 +74,36 @@ fn permute(q: u32, m: u32, key: u32) -> u32 {
 // A random number 0..1 of word w's 16 bits from bit `at`.
 fn part_of(w: u32, at: u32) -> f32 { return f32((w >> at) & 0xffffu) / 65536.0; }
 
-// Member of colour rgb with its centre at d (m from the pixel), drawn `len` m long, over dst, at e m a pixel: a dot of its body's area, lit from the north-west as a low dome, its rim darker.
-fn member(dst: ptr<function, vec4f>, rgb: vec3f, d: vec2f, len: f32, e: f32) {
-  let r = 0.5 * DOT_WIDE * len;
-  let rho = length(d) / r;
-  let a = clamp((r - length(d)) / e + 0.5, 0.0, 1.0);
+// How far inside an ellipse of semi-axes `r` (m) a point `b` (m from its centre, along its axes) lies, in pixels of
+// e m: positive inside.
+fn inside_ellipse(b: vec2f, r: vec2f, e: f32) -> f32 { return (1.0 - length(b / r)) * min(r.x, r.y) / e; }
+// Point v in the frame of a body whose axis is the unit vector ax: along it, and across it.
+fn in_frame(v: vec2f, ax: vec2f) -> vec2f { return vec2f(dot(v, ax), dot(v, vec2f(-ax.y, ax.x))); }
+
+// Member of colour rgb with its centre at d (m from the pixel), drawn `len` m long, facing `heading` (radians from
+// east, towards south), over dst, at e m a pixel: its shadow, its trunk lit from the north-west as a low dome, and its
+// head; its rim darker.
+fn member(dst: ptr<function, vec4f>, rgb: vec3f, d: vec2f, len: f32, e: f32, heading: f32) {
+  let ax = vec2f(cos(heading), sin(heading));
+  let trunk = 0.5 * len * TRUNK;
+  let in_shadow = in_frame(-d - SHADOW_RUN * len * vec2f(0.7071), ax) - vec2f(TRUNK_AT * len, 0.0);
+  let soft = max(SHADOW_SOFT * trunk.y / e, 1.0);
+  over(dst, vec3f(0.0), SHADOW * clamp(inside_ellipse(in_shadow, trunk, e) / soft, 0.0, 1.0));
+  let b = in_frame(-d, ax);
+  let t = b - vec2f(TRUNK_AT * len, 0.0);
+  let a_trunk = clamp(inside_ellipse(t, trunk, e) + 0.5, 0.0, 1.0);
+  let head = 0.5 * HEAD * len;
+  let h = b - vec2f(HEAD_AT * len, 0.0);
+  let a_head = clamp((head - length(h)) / e + 0.5, 0.0, 1.0);
+  let a = max(a_trunk, a_head);
   if (a <= 0.0) { return; }
-  let n = vec3f(-d / r, sqrt(max(1.0 - rho * rho, 0.0)));
+  // Lit as a low dome over the trunk: its normal from the point's place in it, turned back into the map's frame.
+  let q = t / trunk;
+  let rho = min(length(q), 1.0);
+  let flat = -vec2f(q.x * ax.x - q.y * ax.y, q.x * ax.y + q.y * ax.x);
+  let n = vec3f(flat, sqrt(max(1.0 - rho * rho, 0.0)));
   let lit = max(dot(n, LIGHT), 0.0) / LIGHT.z;
-  over(dst, mark_colour(rgb, lit, rim(rho, 1.0, r, e)), a);
+  over(dst, mark_colour(rgb, lit, rim(rho, 1.0, trunk.y, e)), a);
 }
 
 // The share of a member whose group stands at `at` that shows: none in standing liquid, less as snow buries it.
@@ -117,15 +144,16 @@ fn slot_members(dst: ptr<function, vec4f>, x: i32, sq: vec2i, u: vec2f, e: f32) 
       if (length(d) > reach + e) { continue; }
       var g = vec4f(0.0);
       let looks = plane(x, 1, sq);
+      let heading = 2.0 * PI * part_of(lowbias(vec2i(i32(q), i32(key)), x + 2 * i32(herds.corner.w)), 0u);
       let young = s.young / groups + select(0u, 1u, rank < s.young % groups);
       for (var j = 0u; j < young; j++) {
-        // (Its random word from a stream past the slots'.)
+        // (Its random word from a stream past the slots'; the heading's from the next.)
         let r = lowbias(vec2i(i32(q), i32(j)), x + i32(herds.corner.w));
         let turn = 2.0 * PI * part_of(r, 0u);
         let off = away * (1.0 + YOUNG_SPREAD * (2.0 * part_of(r, 16u) - 1.0)) * vec2f(cos(turn), sin(turn));
-        member(&g, looks.rgb, d + off, young_len, e);
+        member(&g, looks.rgb, d + off, young_len, e, heading + YOUNG_TURN * (2.0 * part_of(r, 8u) - 1.0));
       }
-      if (rank < s.adults) { member(&g, looks.rgb, d, len, e); }
+      if (rank < s.adults) { member(&g, looks.rgb, d, len, e, heading); }
       if (g.a <= 0.0) { continue; }
       let shows = fade * standing_at(vec2f(sq) * land.map.x + at, looks.w);
       *dst = g * shows + *dst * (1.0 - g.a * shows);

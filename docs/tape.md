@@ -198,7 +198,8 @@ alone where the adults are too few to lead them in groups of 6), at a random pla
 as the slot holds (whole: the count rounded down), each at a place fixed by its square, slot and number. None stands in
 standing liquid or under snow deeper than it is tall (at its group's place). A body is 0.33 m × its mass in kg to the
 power 1/3 long; members show from where that takes a quarter of a device pixel (fully from a half), drawn no shorter than
-4 device pixels (a young one 2.6), as a dot of its body's area. Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
+4 device pixels (a young one 2.6), seen from above: a trunk and a head over its shadow, facing a way fixed by its
+group (a young one turned a little from its adult's). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
 less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The samples' rock** (`Ground::rock`,
 `tape/src/ground/rock.rs`), made once with the ground: of each of the terrain's samples, row by row, four 16-bit floats:
 the depth of its loose ground, m (`Samples::loose`), the largest stone its channel moves, m: `STONE_M` (0.001) ×
