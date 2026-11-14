@@ -582,7 +582,23 @@ when the node holds `moist_min` of what saturates it, all of it at saturation, a
 b = 1 − √((1 − r) / (1 − `moist_min`)) at the node's ratio r to that (`seen::saturated`; Sundqvist et al. 1989, whose
 critical humidity is measured from cloud cover against humidity, Quaas 2012). The air over each cell is
 `seen::MOIST_PARTS` equal parts that saturate one after another by that law (`seen::parts`), against what saturates
-the air touching the cell (colder higher up). Each saturated part rains out in `rain_time` what the node holds over
+the air touching the cell (colder higher up). **The ground lifts the air** (`air::rise`). The wind over the ground is
+the overturning's own low flow (1.6) turned by the spin: `wind` times the warmth's gradient, down it inside the
+month's cell and turned by the spin across it. It comes from the planet's gradient at the node's latitude and month
+where the map's edges are open, from the air's own where a node is a block alone, and is none where a node shares its
+block (its air is evened) or the world has no planet's air. The warmth falls toward the pole at every latitude, so
+this wind is an easterly at every latitude here, of 0.4 to 1.6 m/s. **Known limits:** there are no westerlies of the
+middle latitudes, which the eddies drive (Vallis 2017, 15), so there the wet side of a range is its east, where on a planet
+like ours it is its west; and the wind is some five times weaker than the measured trades (5 to 10 m/s), as the
+overturning it is part of carries about a fifth of the measured flux (1.6). Where it climbs the ground's rise along it (the surface the air touches, the
+liquid's on the liquid, fitted to the bordering cells) it lifts the air at the ground's density, and where it
+descends lets it sink; summed per node, a rising (or sinking) mass flux. In `rain_time` the share f = min(1, |that| ×
+`rain_time` / the lower half's mol) of the node's lower air changes places with its upper half's, which holds
+ρ = split / (1 − split) of the vapour per mol the lower holds (`Scratch::split`, the column's profile): rising air
+condenses down to the upper half's cold, so the node saturates at what saturates it times 1 − f (1 − ρ); sinking air
+brings that much drier air down, so the node saturates only at that over 1 − f (1 − ρ) (Smith and Barstad 2004: rain
+where the wind climbs, a lee where it descends). It changes only what the rain law sees within a step: no number is
+kept, and the rain is booked as all rain is. Each saturated part rains out in `rain_time` what the node holds over
 the ratio the part saturates at: only the saturated share condenses, and the node's mean stays under saturation. That
 share is the cloud's share of the sky (`Seen::clouded`, 1.4). Evaporation reads the node's mean vapour: it is linear
 in the vapour, so the mean over the parts is what the mean vapour gives. Each node's air
