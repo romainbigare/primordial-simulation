@@ -680,6 +680,16 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         for every season in `grow::shed`, the expected months from the slot's own last year. About half the
         dry-season cover would become litter; in the cold season leaves are kept (leaves falling in the cold
         would need frost to act on leaves, not on whole plants).
+      - Built on `fire` (three commits, gate green, `Cover::idle` one number per cell, `SNAPSHOT_VERSION` 146;
+        `scratchpad/fire/step1_page.png`, `step1_tables/`), **not merged: the dry lands get far too bare.**
+        Year 100, 64 drawn, main → a → a+b: forest 0.78 → 0.44 → 0.47 (band 20 to 65), 0.62 → 0.38 → 0.37
+        (5 to 50); bare 0.05 → 0.29 → 0.26 and 0.12 → 0.36 → 0.35; land at 10 to 20 degrees half bare on 1,100
+        mm of rain; no wood that stands leafless through the dry season. The good half: herbs on open land cure,
+        dead fuel there 0.3 to 0.7 kg/m². Causes found: **a leaf's gain follows the liquid by the seeds' power
+        (activity to the 5.7, Harrington), so a half-dry month gains almost nothing** (a fault of main's drought
+        law; FAO-56 gives a straight line to the wilting point); and a plant pays a full month's upkeep before
+        it sheds, with a store of about one warm month. In work: (c) the straight line first, measured alone on
+        main; then a and b on it with shedding before the month's upkeep; then the stores against real ones.
       - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
         to the ground's wetness; the moisture of extinction falls out of the heat balance (0.17 to 0.18); a
         cell carries fire where fuel covers more than the percolation threshold of the ground; burnable cells
