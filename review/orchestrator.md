@@ -312,16 +312,23 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     seven references set again (land 287.82 K, swing 11.83 K, rain 2.493e-3, gas 349.8 ppm, river cells 235.6,
     worn 0.2089 mm/yr, cover 9.491); the lifeless globe passes (surface 288.54 K, ice 0.130). The whole package
     costs Flow about +10 to 12% against main.
-  - **Two things hold the package off main.** (1) On banded worlds of 128 squares the rain falls in strong
-    diagonal stripes and the temperature shows saw-teeth along the south (`scratchpad/air2/shots3/contact.png`);
-    it comes from the package, not from the rain law. In work, by the same helper: where and from which commit,
-    what kind of mode, the mend at its cause, a fast test, and a sheet of the warmest and the coldest month.
-    (2) `the_laws_do_not_depend_on_the_size_of_the_cells` fails on the cover's area (5.7e-2 against 4.4e-2): the
-    package depends less on the cells' size than main (+2.9% against +5.9%) but its years are steadier, so its
-    limit is tighter. Not loosened. A likely cause of the dependence is the coast cell that gets no cover (see
-    "the bare coast"): to run again once that mend is on main and merged in.
-  - Seen on the same sheet, on main and on the package alike: a banded world of 128 squares at year 100 holds
-    cover on its southern fringe only. To judge on the summer's sheet.
+  - The stripes of rain on banded worlds of 128 squares are mended at their cause (efdc0c2): the part of the
+    overturning that the spin turns along the isotherms carried the heat difference of its two halves as a fixed
+    flux of the day, which did not cancel where the links differ; now only the part that runs down the gradient
+    carries it. A fast test states it. No effect on the long step's test or the key numbers (one block of air);
+    the lifeless globe moves by 0.02 K. Sheet of the warmest and the coldest month, main beside the branch:
+    `scratchpad/air2/shots4/contact.png`: at 128 squares in the band main's land is frozen all year (262 K in
+    its warmest month, cover on the southern fringe only); the branch's is 290 K in summer, 273 K in winter, green
+    in summer, its rain smooth.
+  - **One thing holds the package off main**: `the_laws_do_not_depend_on_the_size_of_the_cells` fails on the
+    cover's area (5.7e-2 against 4.4e-2): the package depends less on the cells' size than main (+2.9% against
+    +5.9%) but its years are steadier, so its limit is tighter. Not loosened. In work, the last round on
+    `surface-step` (saved as `wip/surface-step`), by the same helper: main merged in (the takers' first part),
+    the round lobes of the shelf merged in (`round3-shelf-lobes`), life started on every cell that holds land
+    (`open_land` by the land part, soil and cover per m² of land), the scale test again, the references once
+    more, the full gate. If the scale test still fails, the orchestrator decides on its table.
+  - To decide after it: in a cell of parts, does the cover's month use the cell's area or its land's for light
+    and room (asked, with numbers).
   - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
     through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
     map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's
