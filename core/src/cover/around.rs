@@ -8,8 +8,10 @@ use crate::units::MAX_SUBSTANCES;
 use crate::{World, AIR};
 
 /// What the cover of a cell reads of its world in a month: the full world's (`around`) or a year a nursery keeps
-/// (`worldgen::life::nursery`). Its ground's temperature, K; of the key liquid in its ground, what is liquid, mol, and
-/// the share of what its ground holds for roots that it holds (`wet`); the share of the light that reaches it under
+/// (`worldgen::life::nursery`). Its ground's temperature, K; of the key liquid in its ground, what is liquid, mol, the
+/// share of what its ground holds for roots that it holds (`available`), and the depth from which its pores are full
+/// (`full_from`) in its loose ground of depth `loose`, m (`wet`); the partial pressure of the burning's gas in the air
+/// near its ground, Pa (`World::near_ground`; none before the air is known); the share of the light that reaches it under
 /// standing liquid; the cell's light (`World::light`), J/m²; the air's factor for the light reaction
 /// (`Physics::gas_factor`, the least over its gas inputs); the key liquid its leaves lose as vapour per mol of gas they
 /// take in (`thirst`), and the film of its pores for that vapour per mol a s of gas they take in (`pores`, mol K/(Pa s)
@@ -20,6 +22,9 @@ pub struct Around {
     pub t: f64,
     pub liquid: f64,
     pub moist: f64,
+    pub full: f64,
+    pub loose: f64,
+    pub breath: f64,
     pub reach: f64,
     pub light: f64,
     pub gas: f64,
@@ -34,7 +39,8 @@ pub struct Around {
 pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (j, t) = (w.mesh.up(i, 0, AIR), w.thaw_last(i).0);
-    let (liquid, moist) = super::wet(w, p, i, moves.amount(w, Node::ground(i), p.liquid));
+    let (liquid, filled, loose) = super::wet(w, p, i, moves.amount(w, Node::ground(i), p.liquid));
+    let (moist, full) = (super::available(ph, filled), super::full_from(ph, filled, loose));
     let reach = (-crate::contract::place(w, i).liquid / ph.light_depth).exp();
     let seen = moves.seen(w, j);
     let all: f64 = (0..chem.ns()).map(&seen).sum();
@@ -48,8 +54,10 @@ pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
     let film = near.map_or(0.0, |(gas, _, p_gas)| pores(chem, ph, (p.liquid, gas), t, p_gas));
     let thirst = near.map_or(0.0, |(_, p_liquid, _)| film * (chem.p_sat(p.liquid, t) - p_liquid).max(0.0) / t);
     let air = std::array::from_fn(|kk| if kk < chem.ns() && chem.phase(kk, t) == Phase::Gas { seen(kk) } else { f64::INFINITY });
+    let burning = chem.reactions[p.burn].inputs.iter().find(|q| chem.phase(q.0 as usize, t) == Phase::Gas);
+    let breath = burning.and_then(|q| w.near_ground(i, q.0 as usize)).unwrap_or(0.0);
     let ground = std::array::from_fn(|x| if x < chem.ns() { moves.amount(w, Node::ground(i), x) } else { 0.0 });
-    Around { t, liquid, moist, reach, light: w.light[i], gas, thirst, pores: film, air, ground, tick: w.month() }
+    Around { t, liquid, moist, full, loose, breath, reach, light: w.light[i], gas, thirst, pores: film, air, ground, tick: w.month() }
 }
 
 /// The film of a leaf's pores at `t` K for the vapour of the key liquid `liquid`, per mol a s of the gas `gas` they take

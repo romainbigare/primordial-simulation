@@ -34,6 +34,15 @@ const FROST_GENES: [f32; 2] = [276.0, 261.0];
 const TREE_ROW: usize = 2;
 /// The big slow kind of cover.
 const TREE: &worldgen::life::Kind = &KINDS[TREE_ROW];
+/// The roots test's plants: their mass, kg (a few metres tall), the loose ground they stand in, m, the share of the
+/// air that is the burning's gas, the light of its month, J/m² (200 W/m² for 30 days), the liquid its leaves lose a mol
+/// of gas they take in (`cover::thirst` at a mild leaf), and the open channels of the kind of soaked ground.
+const PLANT_KG: f64 = 0.5;
+const LOOSE_M: f64 = 2.0;
+const AIR_GAS: f64 = 0.21;
+const SUMMER_LIGHT: f64 = 5.2e8;
+const THIRST: f64 = 200.0;
+const SOAKED_CHANNEL: f32 = 0.4;
 /// The row of the woody kind of dry ground.
 const DRY_ROW: usize = 4;
 
@@ -132,6 +141,42 @@ fn a_plant_slows_from_its_share_to_the_wilting_point() {
     assert!(wilting == 0.0 && full == 1.0 && half > 0.0 && half < 1.0, "{wilting} {full} {half}");
     assert_eq!(act(&herb, 1.5), 1.0, "standing liquid is more than field capacity");
     assert_eq!(act(&dry, filled(0.5 * slows)), 1.0, "the kind of dry ground slowed where the light-eaters slow");
+}
+
+/// Roots in full pores get no gas from their ground (`cover::soaked`): a month of the same slot of the tree, its plants a
+/// few metres tall, on the same ground, its pores dry of free liquid or full to the top, pays its roots' breathing and
+/// building with several times the fuel when soaked, as its fuel splits without the gas; the same slot with open
+/// channels in 40% of its section (`CHANNEL`) carries the gas down to its roots and pays less there. Each month's
+/// content moves by exactly what its budget books.
+#[test]
+fn roots_in_full_pores_pay_more_unless_channels_feed_them() {
+    let (mut w, i) = start();
+    assert!(cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 10.0));
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[cover::WALL]].density[0]);
+    let mut c = w.life.cover(i).clone();
+    let x = c.held().next().expect("the tree's slot");
+    // Plants of this mass stand a few metres tall: their roots reach deeper than a dry-land root's channels feed them.
+    c.plants[x] = c.built(&mm, x) / PLANT_KG;
+    let h = c.height(&w.cfg.phys, &mm, rho, x);
+    let roots = [cover::BUDGET.iter().position(|&n| n == "root_breath"), cover::BUDGET.iter().position(|&n| n == "root_renew")].map(|q| q.expect("root parts"));
+    let month = |c: &cover::Cover, full: f64| {
+        let mut c = c.clone();
+        let a = cover::Around { t: w.cfg.phys.t_cat, liquid: 1e9, moist: 1.0, full, loose: LOOSE_M, breath: AIR_GAS * pcore::units::P_REF, reach: 1.0, light: w.light[i] + SUMMER_LIGHT, gas: 1.0, thirst: THIRST, pores: 0.0, air: [f64::INFINITY; pcore::units::MAX_SUBSTANCES], ground: [1e9; pcore::units::MAX_SUBSTANCES], tick: 0 };
+        let (mut counts, e) = (pcore::Counters::default(), c.content(&p.content(&w.chem)));
+        cover::live(&w, &mut c, &p, &a, (i, w.cfg.calendar().month as f64), &mut counts);
+        let flows = counts.cover_budget;
+        let moved = c.content(&p.content(&w.chem)) - e;
+        let scale = flows.iter().map(|f| f.abs()).sum::<f64>().max(e);
+        assert!((moved - flows.iter().sum::<f64>()).abs() <= 1e-9 * scale, "content moved by {moved} J, budget booked {}", flows.iter().sum::<f64>());
+        -(flows[roots[0]] + flows[roots[1]])
+    };
+    let mut open = c.clone();
+    open.genes[x][cover::CHANNEL] = SOAKED_CHANNEL;
+    let (dry, soaked, fed) = (month(&c, LOOSE_M), month(&c, 0.0), month(&open, 0.0));
+    println!("plants {h:.1} m tall; their roots' fuel a month, J: dry {dry:.3e}, soaked {soaked:.3e}, soaked with open channels {fed:.3e}");
+    assert!(dry > 0.0 && soaked > 3.0 * dry, "soaked roots did not pay more: {dry} {soaked}");
+    assert!(fed < 0.5 * soaked, "open channels did not feed the roots: {soaked} {fed}");
 }
 
 /// A leaf loses the key liquid for the gas it takes in (`cover::thirst`): nothing in air saturated at its temperature,
@@ -398,7 +443,7 @@ fn the_frost_gene_falls_where_winters_are_cold() {
     let tender = g;
     let kills = |w: &pcore::World, cells: &[usize]| {
         let at = |i: usize| {
-            let act = cover::activity(&w.cfg.phys, &tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
+            let act = cover::activity(&w.cfg.phys, &tender, cover::available(&w.cfg.phys, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1));
             cover::frozen(&w.cfg.phys, w.chem.subs[parts.liquid].melt, tender[FROST] as f64, (w.t_ground_last(i), act))
         };
         cells.iter().map(|&i| at(i)).fold(0.0, f64::max)

@@ -14,6 +14,7 @@ mod lying;
 mod month;
 mod seed;
 mod show;
+mod soaked;
 mod stand;
 mod upkeep;
 
@@ -53,12 +54,15 @@ pub const SEED: usize = 6;
 pub const REPAIR: usize = 7;
 /// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below `FIX_OFF`
 pub const FIX: usize = 8;
-pub const NG: usize = 9;
+/// Share of the section of its roots and stems that is open channels, which carry the air's gas down to its roots
+/// (`soaked`)
+pub const CHANNEL: usize = 9;
+pub const NG: usize = 10;
 /// A fixing gene at or below this is off.
 pub const FIX_OFF: f32 = -10.0;
 
 /// Mutation step (times `Physics::mut_size`) and range of each gene.
-pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0)];
+pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.03, 0.0, 0.55)];
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
 pub use crate::life::kin::APART;
@@ -273,11 +277,12 @@ pub fn ground(w: &crate::World, i: usize) -> f64 {
     crate::contract::land(w, i).max(LEAST_GROUND_M2)
 }
 
-/// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and the share
-/// of what its ground holds for roots that it holds (`available`), its pores' space read from Flow (`Scratch::land_pores`;
-/// one store over the depth of its loose ground). Of a cell of parts with land, its land part's own (`flow::parts`) over
-/// that part's area, no more than the cell holds; else the cell's over its area.
-pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
+/// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol; the share of
+/// its ground's pores that fills (standing liquid counts: it may pass 1), its pores' space read from Flow
+/// (`Scratch::land_pores`; one store over the depth of its loose ground); and the depth of its loose ground, m (that
+/// space over `porosity`). Of a cell of parts with land, its land part's own (`flow::parts`) over that part's area, no
+/// more than the cell holds; else the cell's over its area.
+pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64, f64) {
     let (t, plateau) = w.thaw_last(i);
     let molten = w.molten(p.liquid, i, t, plateau);
     let area = w.mesh.cells().area()[i];
@@ -285,8 +290,8 @@ pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
         Some((mol, share)) => (mol.min(held) * molten, area * share),
         None => (held * molten, area),
     };
-    let depth = liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / over;
-    (liquid, available(&w.cfg.phys, depth / w.scratch.land_pores(i).max(1e-9)))
+    let (depth, pores) = (liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / over, w.scratch.land_pores(i));
+    (liquid, depth / pores.max(1e-9), pores / w.cfg.phys.porosity)
 }
 
 /// The share of the liquid ground holds for roots that ground whose pores are the share `filled` full holds: none at the
@@ -294,6 +299,13 @@ pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
 /// soil physics; Saxton and Rawls 2006).
 pub fn available(ph: &crate::Physics, filled: f64) -> f64 {
     ((filled - ph.wilt) / (ph.field - ph.wilt)).clamp(0.0, 1.0)
+}
+
+/// The depth under its surface from which the pores of `loose` m of loose ground whose pores are the share `filled` full
+/// are full, m: what its pores hold against gravity (`field`) lies through it, what is over that lies in full pores at
+/// the bottom (the free liquid over a perched table), and liquid that stands fills them to the top.
+pub fn full_from(ph: &crate::Physics, filled: f64, loose: f64) -> f64 {
+    loose * (1.0 - ((filled - ph.field) / (1.0 - ph.field)).clamp(0.0, 1.0))
 }
 
 /// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots

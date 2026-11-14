@@ -836,8 +836,8 @@ not built).
 `core/src/cover/`. Each cell holds up to its world's `Config::variety` kinds of **cover** (a setting of a world, 4
 unless a start chooses other, at most `cover::SLOTS`, 12, the size of its arrays), each the
 amounts of three substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10 and its walls
-13: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
-`STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). Its **living cover** is its body
+13: `cover::Parts`, found from the chemistry's roles) and 10 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
+`STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`, `CHANNEL`; ranges in `cover::RANGE`). Its **living cover** is its body
 matter with the liquid of living tissue (matter / (1 − `WET_TISSUE`), `Cover::living`);
 its walls are a frame, which pays no upkeep and does not wear, so its capacity, capture area,
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
@@ -918,7 +918,24 @@ seeds fill it:
   as many kg of living cover as the key liquid it drew in the month needs at `root_uptake` mol a kg a s (the minerals
   come in that liquid by mass flow; Barber 1995), which breathe `c_basal` a kg a day at the burning's pace and are
   built anew `root_turnover` times a year at what a kg of living cover costs to build (`Parts::living_cost`; Gill and
-  Jackson 2000). The share unpaid
+  Jackson 2000). **Open channels** (`CHANNEL`, a share ε of the section of its roots and stems, 0 to 0.55): they
+  conduct nothing, so it needs 1 / (1 − ε) times the fine roots and the conducting walls. **Roots in full pores**
+  (`cover::soaked`): a root burns its fuel with the air's gas, which reaches it through its ground's open pores; in
+  liquid that gas moves about 10,000 times slower, so a root in full pores gets none from its ground. Its ground's
+  pores are full from the depth d = loose × (1 − (θ − `field`) / (1 − `field`)) within 0 and loose (`cover::full_from`:
+  what the pores hold against gravity lies through the loose ground, what is over it lies in full pores at its
+  bottom, and liquid that stands fills them to the top); its channels carry the gas down to L = (2 D ε C / ((1 − ε)
+  q))^½ (Armstrong 1979; D the gas's diffusivity in air, `units::D_GAS_AIR`, C its concentration in the air near the
+  ground, q what the roots' basal upkeep burns of it a m³ of living tissue a s): 0.10 m at ε 0.03, 0.46 m at 0.4, at
+  `t_cat` (measured: roots under 5% of air space grow 30 to 95 mm into soaked ground, over 35% 150 to 345 mm; Justin
+  and Armstrong 1987). Its roots reach `need` m (no deeper than the loose ground: the frame that holds it), but its fine roots,
+  which take up and burn, lie near the top whatever its height: the share above depth z is 1 − e^(−z / `fine_root_m`)
+  within that reach (Jackson, Mooney and Schulze 1997). The share of its fine roots that lies deeper than both d and
+  L splits its fuel without the gas (`Parts::split`: of the reactions that take the fuel alone and free heat, the
+  one that runs fastest at `T_SURF`, `Chemistry::splitter`; in chemistry 0 reaction 5, which frees 37 kJ a mol of fuel
+  against reaction 1's 484 kJ and gives its products to the air), so that share of its roots' breathing and building
+  takes 13.1 times the fuel (fermentation yields about a fifteenth of the energy of burning; Drew 1997, from memory);
+  where the chemistry has no such reaction that work goes unpaid. The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
   over (living cover × `e_life` × 10^`REPAIR`), by the rate of living (Rubner 1908). **Frost**: its `FROST` gene is the limit it
   reaches hardened, when dormant; growing tissue loses that hardiness and freezes at its key liquid's melting point,
@@ -1188,9 +1205,9 @@ read a kind.
   mean ground lies under the level) under no more than half a metre of standing liquid (`MAX_STANDING_M`). Life starts per m² of its land, not of the cell.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS`: kg per m² of land and genes, on every open land cell
   by its chance, each kind's draws keyed by its own key, its label its row, `Cover::root`); without `--roster` the herb
-  (`ONE`), with it the six kinds in their order (`ROSTER`): a small fast herb, a herb, a big slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody
-  cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a tall fast cover with seeds spread
-  wide. Its genes get a spray of mutation (`--spray`).
+  (`ONE`), with it the seven kinds in their order (`ROSTER`): a small fast herb, a herb, a big slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody
+  cover of dry ground (active at a tenth of saturation, thick leaves, slow), a tall fast cover with seeds spread
+  wide, and a big slow cover of soaked ground (open channels in 40% of its roots' and stems' section). Its genes get a spray of mutation (`--spray`).
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
 - **Takers**, only where a run asks for them (`--fauna-year`; none by default, and none on the page): the five kinds of `worldgen::life::TAKER_KINDS`
   (30 g, 3 kg, 60 kg and 400 kg kinds that keep 310 to 311 K, and a 2 kg kind that keeps none) on every open land cell,

@@ -170,6 +170,8 @@ pub struct Physics {
     /// Loose ground a plant roots in per m of its height, m per m, and at least, m
     pub root_per_height: f64,
     pub root_least: f64,
+    /// Depth over which the share of a plant's fine roots below a depth falls by e, m
+    pub fine_root_m: f64,
     /// Share of its roots' need of loose ground below which a point holds none of a kind
     pub rooted_from: f64,
 
@@ -328,6 +330,7 @@ impl Default for Physics {
             stem_solid: 0.4,
             root_per_height: 0.1,
             root_least: 0.02,
+            fine_root_m: 0.3,
             rooted_from: 0.25,
             c_muscle: 1.12e4,
             upkeep_exp: 0.75,
@@ -427,6 +430,8 @@ impl Config {
         require(p.r_air > 0.0 && p.r_coat >= 0.0, || format!("r_air ({}) must be above 0 and r_coat ({}) not below", p.r_air, p.r_coat))?;
         // A plant draws the liquid between the wilting point and field capacity (`cover::wet` divides by the span).
         require(p.wilt >= 0.0 && p.wilt < p.field && p.field <= 1.0, || format!("wilt ({}) must be from 0 to below field ({}), field at most 1", p.wilt, p.field))?;
+        // A plant's fine roots lie over a depth (`cover::soaked::drowned` divides by it).
+        require(p.fine_root_m > 0.0, || format!("fine_root_m ({}) must be above 0", p.fine_root_m))?;
         // The soil's shares inside a cell (`inside`) divide by it.
         require(p.soil_m > 0.0, || format!("soil_m ({}) must be above 0", p.soil_m))?;
         // A channel's speed is its discharge over its width times its depth (`Physics::channel`).

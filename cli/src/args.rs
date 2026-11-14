@@ -25,7 +25,7 @@ pub const USAGE: &str = "usage:
     --monthly-years N     a viewer frame every month in the first N years (2)
     --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
     --fauna-year N        the year the starting kinds of takers are placed (-1: none, the default)
-    --roster              the six kinds of cover of worldgen::life::ROSTER, each at its year after the first life, not
+    --roster              the seven kinds of cover of worldgen::life::ROSTER, each at its year after the first life, not
                           the one
     --spray N             rounds of mutation of the cover of every cell placed (20)
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)

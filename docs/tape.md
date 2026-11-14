@@ -266,4 +266,4 @@ out reads 0 (its means `NaN`). Means are by its built cover.
 |---|---|---|
 | `slots`, `cover_kg`, `cover_area` | , kg, m²/m² | its slots, its mass, its capture area per m² of land |
 | `cover_light`, `cover_leaf`, `cover_walls`, `cover_store`, `cover_moist`, `cover_repair`, `cover_fix` | log10 | the means of its genes (`cover::LIGHT` ...) |
-| `cover_frost`, `cover_seed` | K, | the means of its frost and seed genes |
+| `cover_frost`, `cover_seed`, `cover_channel` | K, , | the means of its frost, seed and open channel genes |

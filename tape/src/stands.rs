@@ -43,7 +43,8 @@ pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, wa
 }
 
 /// What a slot's row reads of its cell: the share of what its ground holds for roots that it holds (`cover::wet`), its
-/// temperature and the melting point of its key liquid, K, the density of its walls, kg/m³, its area, m², and the share of it that is land.
+/// temperature and the melting point of its key liquid, K, the density of its walls, kg/m³, its area, m², and the share
+/// of it that is land.
 struct Ground {
     wet: f64,
     t: f64,
@@ -106,7 +107,7 @@ pub fn rows(w: &World, i: usize, land: f64) -> Vec<f64> {
     let Some(p) = Parts::of(&w.chem).filter(|_| land > 0.0) else { return out };
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
     let g = Ground {
-        wet: cover::wet(w, &p, i, w.g(p.liquid, i)).1,
+        wet: cover::available(&w.cfg.phys, cover::wet(w, &p, i, w.g(p.liquid, i)).1),
         t: w.t_ground_last(i),
         melt: w.chem.subs[p.liquid].melt,
         rho: w.chem.subs[p.sub[cover::WALL]].density[0],

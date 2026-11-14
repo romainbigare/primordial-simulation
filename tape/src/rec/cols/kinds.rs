@@ -8,7 +8,7 @@ use crate::rec::Recorder;
 use pcore::cover;
 
 /// The genes of the cover averaged per kind: gene, column name and unit.
-const COVER_GENES: [(usize, &str, &str); 9] = [
+const COVER_GENES: [(usize, &str, &str); 10] = [
     (cover::LIGHT, "light", "log10"),
     (cover::LEAF, "leaf", "log10"),
     (cover::WALLS, "walls", "log10"),
@@ -18,6 +18,7 @@ const COVER_GENES: [(usize, &str, &str); 9] = [
     (cover::SEED, "seed", "1"),
     (cover::REPAIR, "repair", "log10"),
     (cover::FIX, "fix", "log10"),
+    (cover::CHANNEL, "channel", "1"),
 ];
 
 impl Recorder {

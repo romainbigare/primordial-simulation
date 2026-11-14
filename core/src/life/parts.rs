@@ -16,9 +16,11 @@ pub const WALL: usize = 2;
 pub struct Parts {
     /// The substance of each part
     pub sub: [usize; NP],
-    /// The light reaction, the burning of the fuel, the fixing reaction (if any), and the key liquid
+    /// The light reaction, the burning of the fuel, the splitting of the fuel without a gas (if any,
+    /// `Chemistry::splitter`), the fixing reaction (if any), and the key liquid
     pub light: usize,
     pub burn: usize,
+    pub split: Option<usize>,
     pub fix: Option<usize>,
     pub liquid: usize,
 }
@@ -28,7 +30,7 @@ impl Parts {
     pub fn of(chem: &Chemistry) -> Option<Parts> {
         let ((light, rich, liquid, burn), matter) = (chem.life_roles()?, chem.matter()?);
         let wall = chem.builds.iter().find(|b| b.inputs.iter().all(|p| p.0 as usize == rich))?.outputs[0].0 as usize;
-        Some(Parts { sub: [rich, matter, wall], light, burn, fix: chem.fixing(), liquid })
+        Some(Parts { sub: [rich, matter, wall], light, burn, split: chem.splitter(rich), fix: chem.fixing(), liquid })
     }
     /// The molar mass of each part, kg/mol.
     pub fn mm(&self, chem: &Chemistry) -> [f64; NP] {

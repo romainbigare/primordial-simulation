@@ -7,7 +7,7 @@ use super::around::{around, Around};
 use super::budget::{self, BUDGET, BUILDING, DIED, EXUDED, ROUNDED, SEEDS, SHED, STORED};
 use super::upkeep::upkeep;
 use super::build::per_input;
-use super::{dec, Cover, Parts, EMPTY_KG, FUEL, LIGHT, MATTER, MOIST, NO_ROOT, NP, SLOTS, STORE, WALL};
+use super::{dec, Cover, Parts, CHANNEL, EMPTY_KG, FUEL, LIGHT, MATTER, MOIST, NO_ROOT, NP, SLOTS, STORE, WALL};
 use crate::life::SPENT;
 use crate::chem::{Chemistry, Phase};
 use crate::store::{Class, Node};
@@ -30,7 +30,9 @@ pub fn step(w: &World, d: &mut Chunk) {
 
 /// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
 /// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer
-/// (`math::shade`); its activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`).
+/// (`math::shade`); its activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`);
+/// its conducting walls, kg (`stand::sapwood`); the key liquid it drew, mol (`light`); and the share of its roots that
+/// gets none of the burning's gas (`soaked::drowned`).
 #[derive(Clone, Copy, Default)]
 pub(super) struct Slot {
     pub(super) built: f64,
@@ -43,6 +45,7 @@ pub(super) struct Slot {
     pub(super) gain: f64,
     pub(super) sapwood: f64,
     pub(super) drunk: f64,
+    pub(super) drowned: f64,
 }
 
 /// What a cell's cover changes outside itself in a month, with the flows of its budget (`budget::BUDGET`).
@@ -70,6 +73,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let (area, mm, t, rho) = (super::ground(w, i), p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
     // The slots its world uses (`Config::variety`).
     let n = w.cfg.variety;
+    let burn = &chem.reactions[p.burn];
+    let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
     // The light since the last step: its capture areas share it by the height of their plants, tallest first, each on
     // the share of its ground its roots hold.
     let dl = (a.light - c.mark).max(0.0);
@@ -84,13 +89,16 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         if c.root[q] == NO_ROOT || built <= EMPTY_KG {
             continue;
         }
-        let act = super::activity(ph, &c.genes[q], a.moist);
-        let sapwood = super::stand::sapwood(ph, (leaf, c.height(ph, &mm, rho, q)), c.walls(&mm, q), rho);
-        *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, sapwood, ..Default::default() };
+        let (g, h) = (&c.genes[q], c.height(ph, &mm, rho, q));
+        let act = super::activity(ph, g, a.moist);
+        let sapwood = super::stand::sapwood(ph, (leaf, h), (c.walls(&mm, q), g[CHANNEL] as f64), rho);
+        let need = super::stand::need(ph, h);
+        // The share of its roots in full pores that its open channels do not reach.
+        let aerated = super::soaked::aerated(chem, ph, p, g, (t, pace, a.breath));
+        let drowned = super::soaked::drowned(ph, need, (a.full, a.loose), aerated);
+        *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, sapwood, drowned, ..Default::default() };
         // The share of its ground (`cover::ground`) its plants hold: where its loose ground is as deep as their roots need (found again
         // only when their need has moved by more than a bin of depth).
-        let h = c.height(ph, &mm, rho, q);
-        let need = super::stand::need(ph, h);
         if super::stand::moved(c.need[q], need) {
             c.rooted[q] = w.loose_bins.get(i).map_or(1.0, |b| super::stand::rooted_share(ph, b, need)) as f32;
             c.need[q] = need as f32;

@@ -18,6 +18,10 @@ pub const SIGMA: f64 = 5.670e-8;
 /// Planck's second radiation constant h c / k, m K.
 pub const C2: f64 = 1.438_777e-2;
 
+/// Diffusivity of a small gas in air at `T_SURF`, m²/s: about 0.2 cm²/s for the gases of air (Cussler 1997, from
+/// memory; soil physics courses give the same). In the key liquid a gas moves about 10,000 times slower.
+pub const D_GAS_AIR: f64 = 2.0e-5;
+
 /// Reference pressure at which saturation and solubility are given, Pa.
 pub const P_REF: f64 = 101_325.0;
 

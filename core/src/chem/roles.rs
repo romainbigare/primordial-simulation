@@ -40,6 +40,14 @@ impl Chemistry {
         (0..self.reactions.len()).find(|&r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
 
+    /// The reaction that frees heat from `k` alone, taking nothing else (no gas): of those, the one that runs fastest at
+    /// `T_SURF` (its rate constant k e^(−Ea/T)), the way the chemistry splits `k` where no gas reaches it.
+    pub fn splitter(&self, k: usize) -> Option<usize> {
+        let alone = |r: usize| !self.reactions[r].inputs.is_empty() && self.reactions[r].inputs.iter().all(|p| p.0 as usize == k);
+        let pace = |r: usize| self.reactions[r].arrhenius(T_SURF);
+        (0..self.reactions.len()).filter(|&r| alone(r) && self.dh(r) < 0.0).max_by(|&a, &b| pace(a).total_cmp(&pace(b)))
+    }
+
     /// Does reaction `r` get less heat out of a solid or liquid it takes than burning it does? Then it keeps the rest in
     /// what it makes: no burning, run at its catalyst's pace (laws.md 2.1).
     pub fn keeps(&self, r: usize) -> bool {

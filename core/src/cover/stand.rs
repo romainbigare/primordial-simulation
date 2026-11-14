@@ -48,9 +48,10 @@ pub(super) fn walled(ph: &Physics, mass: f64) -> f64 {
 /// The walls of a slot of `leaf` m² of capture area whose plants stand `height` m tall that conduct liquid to its leaves,
 /// kg, at most its walls `walls` kg of density `rho`: by the pipe model their cross-section goes with the leaf area they
 /// feed, `huber` m² a m² (Shinozaki and others 1964; Tyree and Ewers 1991), as tall as the plant, in stems of
-/// `stem_form` and `stem_solid`. They are alive and breathe (`c_sapwood`); the core inside them is dead.
-pub(super) fn sapwood(ph: &Physics, (leaf, height): (f64, f64), walls: f64, rho: f64) -> f64 {
-    (ph.huber * leaf * height * ph.stem_form * ph.stem_solid * rho).min(walls)
+/// `stem_form` and `stem_solid`, and the share `channel` of that section open channels that conduct nothing
+/// (`cover::CHANNEL`). They are alive and breathe (`c_sapwood`); the core inside them is dead.
+pub(super) fn sapwood(ph: &Physics, (leaf, height): (f64, f64), (walls, channel): (f64, f64), rho: f64) -> f64 {
+    (ph.huber * leaf * height * ph.stem_form * ph.stem_solid * rho / (1.0 - channel)).min(walls)
 }
 
 /// The most plants a m² a stand of `kg` per m² holds: (`thin_kg` / kg)², the self-thinning law, mean plant mass =
