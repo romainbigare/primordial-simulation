@@ -39,12 +39,12 @@ const STANDS = 2;
 // its cell, so no crowns stand in rows and none is cut at its cell's edge. Each is lit from the north-west, its light
 // departing from the flat ground's by up to `GRAIN_LIGHT`, and its tone its own, up to `GRAIN_TONE` either way.
 const GRAIN_FILL = 0.35; const GRAIN_LIGHT = 0.3; const GRAIN_TONE = 0.1;
-// A crown of the field is as wide as its plants' marks, and no less than `CLUMP_PX` css pixels: where a plant takes
-// less, a crown stands for the clump of plants about it, so the eye sees crowns and never a grain finer than it can
-// read. Its cells are a lattice's cells doubled as often as that takes; between two doublings a wide cell holds one
-// crown where the width, as a power of two, passes a draw of the cell between `WIDE_FROM` and `WIDE_TO`, else its four
-// cells hold theirs: crowns join one by one as the view draws back, and no line runs between two sizes. A clump wider
-// than `CLUMP_MOST_M` m is no crown: from there the field fades into its plants' mean, a calm tone, by twice as wide.
+// A crown of the field is as wide as its plants' marks, and is drawn only where those span `CLUMP_PX` css pixels: where
+// a plant takes less, the field is its plants' mean, as seen from afar, and no grain coarser than the plants stands
+// for them. Its cells are a lattice's cells doubled as often as the width takes; between two doublings a wide cell
+// holds one crown where the width, as a power of two, passes a draw of the cell between `WIDE_FROM` and `WIDE_TO`, else
+// its four cells hold theirs, and no line runs between two sizes. A crown wider than `CLUMP_MOST_M` m fades into its
+// plants' mean, a calm tone, by twice as wide.
 const CLUMP_PX = 1.5; const CLUMP_MOST_M = 10.0; const WIDE_FROM = 0.25; const WIDE_TO = 0.75;
 // Discs at random places leave gaps however closed their stand: as a layer's plants cover from `CLOSES.x` to `CLOSES.y`
 // of the ground, the gaps between its crowns fill with its canopy, `GAP_TONE` as light as a crown (their shade).
@@ -250,15 +250,16 @@ fn crowns(at: vec2f, l: i32, s: f32, e: f32, side: f32, level: i32, wide: bool, 
 }
 
 // The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean, seen at
-// `e` m a pixel, and their tone: their crowns, as wide as their marks there and no less than shows (`CLUMP_PX`), the
-// wide ones over the fine ones; their mean where a crown would stand for too wide a clump (`CLUMP_MOST_M`).
+// `e` m a pixel, and their tone: their crowns, as wide as their marks there, the wide ones over the fine ones, where
+// those span `CLUMP_PX` pixels; their mean where they span less, or where a crown would be too wide (`CLUMP_MOST_M`).
 fn grain(at: vec2f, l: i32, share: f32, e: f32) -> vec2f {
   let side = cover_look.sides[l];
   let mean = vec2f(min(share, 1.0), 1.0);
   let least = CLUMP_PX * e * land.samples.w;
   if (least >= 2.0 * CLUMP_MOST_M) { return mean; }
-  let across = max(max(field_at(at, WIDE_LAYER, 0.0)[l], least), side);
-  let shows = 1.0 - ease(CLUMP_MOST_M, 2.0 * CLUMP_MOST_M, across);
+  let own = field_at(at, WIDE_LAYER, 0.0)[l];
+  let across = max(own, side);
+  let shows = (1.0 - ease(CLUMP_MOST_M, 2.0 * CLUMP_MOST_M, across)) * ease(0.5 * least, least, own);
   if (shows <= 0.0) { return mean; }
   let k = log2(across / side);
   let level = floor(k);
