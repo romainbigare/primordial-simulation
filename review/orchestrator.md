@@ -298,9 +298,10 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     pay, and `grow::shed` drops all its living matter. The same fragile spot the fire builder's work replaces
     (a leaf's gain by the liquid in a straight line; shedding by what it costs to keep).
   - The long step's test passes on main and on the branch now (`runoff_sea` +0.24% against 0.35%).
-  **Order**: the straight line of the leaf's gain lands on main first; then a fresh builder (this one's room is
-  used up; it reads `notes.md`) merges main into `wip/slots`, sees the three tests, resets the references, and it
-  goes to main; the fire builder's upkeep and shedding merge after it.
+  **Order**: the fire builder's step 1 (the leaf's gain in a straight line, upkeep by temperature, shedding)
+  lands on main first, all three commits together; then a fresh builder (this one's room is used up; it reads
+  `notes.md` and the fire builder's list of functions touched) merges main into `wip/slots`, sees the three
+  tests, resets the references, and it goes to main.
 - **On main: a world's variety is from 2** (`Config::validate`, the page's field): at 1 a full cell looked for
   two slots to join and the run stopped. The mend that lets 1 stand is on `wip/slots` (a cell of one slot held
   by a stand that pays its way refuses the seeds, `seed::Landed::Refused`); the bound goes back to 1 with it.
@@ -704,9 +705,20 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         mm of rain; no wood that stands leafless through the dry season. The good half: herbs on open land cure,
         dead fuel there 0.3 to 0.7 kg/m². Causes found: **a leaf's gain follows the liquid by the seeds' power
         (activity to the 5.7, Harrington), so a half-dry month gains almost nothing** (a fault of main's drought
-        law; FAO-56 gives a straight line to the wilting point); and a plant pays a full month's upkeep before
-        it sheds, with a store of about one warm month. In work: (c) the straight line first, measured alone on
-        main; then a and b on it with shedding before the month's upkeep; then the stores against real ones.
+        law; FAO-56 gives a straight line to the wilting point); and a plant paid a full month's upkeep before
+        it shed.
+      - Second round on `fire` (c the straight line, a, b with shedding before the month's upkeep; gate green,
+        `scratchpad/fire/step1c_page.png`, `step1c_table.txt`): main → c → c+a → c+a+b, forest / open / bare,
+        band 20 to 65: 0.78/0.18/0.04 → 0.88/0.09/0.02 → 0.51/0.25/0.24 → 0.54/0.26/0.20; band 5 to 50:
+        0.62/0.26/0.12 → 0.76/0.18/0.06 → 0.41/0.27/0.32 → 0.46/0.34/0.20. Woods stand leafless in the dry
+        month on 6 to 7% of forest cells; dead fuel on open land in the driest month 0.28 to 0.54 kg/m² (real:
+        0.2 to 0.6). A leafless plant pays nothing (known limit); a kept leaf pays 2.7% of its dry mass a day at
+        295 K (real: 1 to 3%); the herb's store pays a quarter of a month of that, the tree's three months
+        (real stores: grasses 10 to 30% of dry mass, trees 5 to 10%): no change to the start's rows.
+        **Still not merged: a fifth of the land is bare in both bands.** In work: which cells went bare and
+        why, month by month; the orchestrator's guess: leaves kept through the cold season that the store
+        cannot pay for die as whole plants, where a plant should shed what it cannot pay for. The three commits
+        go to main together (c alone makes the page 88% forest); the slots' mend merges after them.
       - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
         to the ground's wetness; the moisture of extinction falls out of the heat balance (0.17 to 0.18); a
         cell carries fire where fuel covers more than the percolation threshold of the ground; burnable cells
