@@ -394,8 +394,9 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   - Roots cost too much on warm low ground: `root_uptake` is anchored on a forest's yearly mean flow, but a slot
     holds roots for its month's draw. Near the shore the water lost per mol of gas is 141 to 177 (9 to 45
     inland, where the air near the ground is saturated), roots are half the upkeep, and stored over upkeep is 1.02
-    to 1.28. Accepted: the row anchored on the growing season's flow, in one package with the next point, after
-    the air lands, with one setting of the references.
+    to 1.28. In work, by the helper that diagnosed it (branch `roots` in `.claude/worktrees/agent-cover-land`,
+    scratch `scratchpad/coast/`): the table again on today's main, then `root_uptake` anchored on the growing
+    season's flow (about 1e-3 mol per kg a s, 2.4 times the row), its effect, the references set once, pictures.
   - A cell whose mean ground is under the level gets no soil and no starting cover (`worldgen::life::open_land`
     asks `is_land`), though it holds land: 3.4 to 4.9% of the land's samples, 26% of the land in the first km.
     Accepted: soil and cover on the land part of such a cell.
