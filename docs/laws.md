@@ -860,18 +860,22 @@ line, its plants' mass (kg per m²)³ / `thin_kg`², and its height grows with i
 without leaf (walls, which pay no upkeep) stands tall, and a stand of few seeds is of few large plants until its own
 seeds fill it:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
-  area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), shared among its
-  kinds by the height of their plants (Beer's law, `math::shade`): the tallest take it first, and a seedling lives on
-  what reaches the bottom of the layers above it; under standing liquid times e^(−depth / `light_depth`). **Roots**: a
+  area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), passing down
+  through the crowns of its kinds (Beer's law, `math::shade`): each kind's capture area spread evenly through its
+  crown (`Cover::crown`), the light at each height absorbed by the capture area of all the crowns there, whatever
+  slot holds them, so the tallest take it first, crowns that share a layer share its light, and a seedling lives on
+  what reaches below the crowns above it; under standing liquid times e^(−depth / `light_depth`). **Roots**: a
   kind's plants root in `root_per_height` of their height of loose ground, at least `root_least` (rooting depth grows
   with a plant's size; Schenk and Jackson 2002), and hold a point of the cell where its loose ground reaches that need
   (none below `rooted_from` of it, all from it, smoothly between: bare bed anchors nothing and holds no liquid in
   pores). Each cell keeps the share of its area in each of 24 bins of loose depth, from its terrain's samples, found
   when the world is built (`World::loose_bins`, `cover::loose_bins`), and a kind holds the share s of the cell their
   mean gives (`Cover::rooted`, found again only when its need has moved by more than a bin). It stands on that share
-  alone: its capture area is a layer of x / s there, and those below it get 1 − s + s e^(−x / s) of its light (`math::shade`;
-  with s = 1 everywhere, Beer's law). So tall kinds compete on a cell's deep ground only, low kinds on its thin ground too,
-  and on bare bed nothing but the smallest stands.
+  alone, its capture area x / s per unit of it; the shares are nested, as ground that holds deep roots holds shallow
+  ones, so the cell's ground falls into rings (`math::rings`), each held by the kinds of a share at least its own, and
+  the light passes down through the crowns that stand on each ring (with s = 1 everywhere, Beer's law through the
+  canopy). So tall kinds compete on a cell's deep ground only, low kinds on its thin ground too, and on bare bed
+  nothing but the smallest stands.
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
@@ -888,8 +892,9 @@ seeds fill it:
   reach pays for at that rate, and leaves the film they make, D_v / D_g × T / (`drawdown` p_g) per mol a s of gas
   taken in (`cover::pores`), with the share of the ground's liquid its roots reach (`Cover::film`, `Cover::reach`), for
   the ground's evaporation to pass the liquid through day by day, inside the surface's energy balance (1.5). Each slot draws the liquid from
-  the pores its roots reach (its rooted share of the ground's liquid); where the ground cannot give it the pores close
-  and all slots store less together. All kinds of a cell are cut
+  the pores its roots reach: the liquid of each ring of its ground is the slots' that stand on it, and where they would
+  draw more there each draws it in proportion to what it would (`grow::drawn`); where the ground cannot give it the
+  pores close and all slots store less together. All kinds of a cell are cut
   together to the liquid share of its ground's key liquid and the carbon gas of its share of its air node; its
   burnings and fixing take their gas from what that share still offers, so the cover never takes more of the air's
   gas than its cell's share holds (`grow::Books::room`). A cover that works on drier ground works more slowly: its capacity goes with its
@@ -939,9 +944,9 @@ seeds fill it:
   drawn by the cell and the slot's genes (`rng::Purpose::Cover`), not by its place among the cell's slots; all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
   where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
-  run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
-  falls as e^-z with the capture area z above a leaf, so what a kg more would store at depth z is its bottom's times
-  e^(y − z), y its whole depth; its living cover below the depth where that falls to its upkeep a kg goes to its
+  run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): through its crown its
+  light falls as e^-z with the capture area z above a leaf, whatever slots' leaves it passes, so what a kg more would
+  store at depth z is its crown base's times e^(y − z), y the capture area through its crown; its living cover below the depth where that falls to its upkeep a kg goes to its
   remains, its walls and plants stay. Each seed carries its own
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the

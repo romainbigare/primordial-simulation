@@ -29,8 +29,9 @@ pub fn step(w: &World, d: &mut Chunk) {
 }
 
 /// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
-/// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer
-/// (`math::shade`); its activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`).
+/// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer (its
+/// crown's base), and the capture area per unit of ground the light passes through its crown (`math::shade`); its
+/// activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`).
 #[derive(Clone, Copy, Default)]
 pub(super) struct Slot {
     pub(super) built: f64,
@@ -39,6 +40,7 @@ pub(super) struct Slot {
     pub(super) abs: f64,
     pub(super) shade: f64,
     pub(super) bottom: f64,
+    pub(super) layer: f64,
     pub(super) act: f64,
     pub(super) gain: f64,
     pub(super) sapwood: f64,
@@ -70,8 +72,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let (area, mm, t, rho) = (super::ground(w, i), p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
     // The slots its world uses (`Config::variety`).
     let n = w.cfg.variety;
-    // The light since the last step: its capture areas share it by the height of their plants, tallest first, each on
-    // the share of its ground its roots hold.
+    // The light since the last step: its capture areas share it down through their crowns, each on the share of its
+    // ground its roots hold.
     let dl = (a.light - c.mark).max(0.0);
     c.mark = a.light;
     // The seeds lying on its ground first: what wakes takes part in the month as seedlings.
@@ -96,9 +98,10 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             c.rooted[q] = w.loose_bins.get(i).map_or(1.0, |b| super::stand::rooted_share(ph, b, need)) as f32;
             c.need[q] = need as f32;
         }
-        layers.push((h as f32, leaf / area, c.rooted[q] as f64, q));
+        let (base, top) = c.crown(ph, &mm, rho, area, q);
+        layers.push((base, top, leaf / area, c.rooted[q] as f64, q));
     }
-    crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
+    crate::math::shade(&layers, |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
     let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books::new(a.air, flows);
@@ -120,7 +123,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         let pays = s[x].gain * s[x].built > cost;
         c.full[x] = !pays;
         if !pays {
-            let shed = shed(c, x, (&s[x], cost), area * c.rooted[x].max(f32::MIN_POSITIVE) as f64);
+            let shed = shed(c, x, (&s[x], cost));
             counts.cover_lost[SPENT as usize] += shed * mm[MATTER];
             b.dead[p.sub[MATTER]] += shed;
             b.budget[SHED] -= shed * e[MATTER];
@@ -187,9 +190,7 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     let gas_in: f64 = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| q.1 as f64).sum();
     let lost = a.thirst * gas_in;
     let drink = per_input(rx, p.liquid).unwrap_or(0.0) + lost;
-    for (q, xq) in x.iter_mut().enumerate().take(s.len()) {
-        *xq = xq.min(liquid * c.rooted[q] as f64 / drink.max(1e-300));
-    }
+    drawn(c, &mut x[..s.len()], liquid / drink.max(1e-300));
     let all: f64 = x.iter().sum();
     (c.film, c.reach) = (0.0, 0.0);
     if all <= 0.0 {
@@ -218,14 +219,31 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     x.map(|xq| xq * f * dh)
 }
 
+/// The units of the light reaction `x` the slots in use of cover `c` would run, cut to the key liquid their roots reach:
+/// the liquid of each ring of its ground (`math::rings`, by the shares the slots' roots hold, `Cover::rooted`) is the
+/// slots' that stand on it, `units` of the reaction a unit of the ground in all; where they would draw more there, each
+/// draws it in proportion to what it would draw there. So the slots of a cell draw on the ground they share, whatever
+/// slots hold them.
+fn drawn(c: &Cover, x: &mut [f64], units: f64) {
+    let share = |q: usize| (c.rooted[q] as f64).max(1e-300);
+    let mut got = [0.0; SLOTS];
+    for (at_least, ring) in crate::math::rings((0..x.len()).map(share)) {
+        let on = || (0..x.len()).filter(|&q| share(q) >= at_least);
+        let f = (units * ring / on().map(|q| x[q] * ring / share(q)).sum::<f64>().max(1e-300)).min(1.0);
+        on().for_each(|q| got[q] += x[q] * ring / share(q) * f);
+    }
+    x.copy_from_slice(&got[..x.len()]);
+}
+
 /// Slot `x` of cover `c`, whose lowest leaves do not pay for themselves (`Cover::full`), sheds the living cover of the
 /// layers of its canopy that do not, as a canopy drops its leaves below its compensation point (Monsi and Saeki 1953;
-/// Hirose 2005): its light falls as e^-z with the capture area z above a leaf in its patch of `patch` m², so what one
-/// more kg would store at depth z is its gain at its bottom (`Slot::gain`) times e^(y - z), y its whole depth, and the
-/// layers deeper than where that falls to its upkeep a kg, `cost` J over its built cover, pay nothing. Returns the mol of
-/// body matter shed (to its remains); its walls and its plants stay.
-fn shed(c: &mut Cover, x: usize, (s, cost): (&Slot, f64), patch: f64) -> f64 {
-    let (y, per_kg) = (s.leaf / patch, cost / s.built.max(1e-300));
+/// Hirose 2005): its light falls as e^-z with the capture area z above a leaf in its crown (whatever slots' leaves the
+/// light passes there: `Slot::layer`, the capture area through its crown), so what one more kg would store at depth z
+/// is its gain at its crown's base (`Slot::gain`) times e^(y - z), y that whole depth, and the share of its leaves
+/// deeper than where that falls to its upkeep a kg, `cost` J over its built cover, pays nothing. Returns the mol of body
+/// matter shed (to its remains); its walls and its plants stay.
+fn shed(c: &mut Cover, x: usize, (s, cost): (&Slot, f64)) -> f64 {
+    let (y, per_kg) = (s.layer, cost / s.built.max(1e-300));
     if s.gain <= 0.0 || y <= 0.0 || per_kg <= 0.0 {
         return 0.0;
     }

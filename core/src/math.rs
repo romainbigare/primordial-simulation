@@ -39,24 +39,63 @@ pub(crate) fn mean_passed(x: f64) -> f64 {
     if x.abs() < SERIES_BELOW { 0.5 - x / 6.0 + x * x / 24.0 } else { (1.0 - mean_decay(x)) / x }
 }
 
-/// Light passing layers from the tallest down (Beer's law): `l` holds per member its height, its capture area per ground
-/// area x, the share s of the ground it stands on, and a tag, and is sorted here, tallest first (in their order where
-/// heights are equal). On its share a member is a layer of capture area x / s that absorbs 1 - exp(-x / s) of what
-/// reaches it; members stand at random over the ground, so a member passes on 1 - s + s exp(-x / s) of the light to those
-/// below it (with every s 1, Beer's law over the layers). `set(tag, f, bottom)` gets each member's light per unit of
-/// capture area over the mean of all (weighted by capture area, the factors have mean 1), and the light at the bottom of
-/// its layer per unit of capture area over the same mean.
-pub(crate) fn shade<T: Copy>(l: &mut [(f32, f64, f64, T)], mut set: impl FnMut(T, f64, f64)) {
-    l.sort_by(|a, b| b.0.total_cmp(&a.0));
-    let (mut reach, mut got) = (1.0, Vec::with_capacity(l.len()));
-    for &(_, x, s, tag) in l.iter() {
-        let y = x / s.max(1e-300);
-        got.push((tag, x, reach * mean_decay(y), reach * (-y).exp()));
-        reach *= 1.0 - s + s * (-y).exp();
+/// The rings of ground that members standing on nested shares `shares` of it make (a member of a smaller share stands
+/// within the ground of each larger one): each ring the share s its members stand on at least, and its own share of
+/// the ground, from the largest down.
+pub(crate) fn rings(shares: impl Iterator<Item = f64>) -> Vec<(f64, f64)> {
+    let mut s: Vec<f64> = shares.collect();
+    s.sort_by(|a, b| b.total_cmp(a));
+    s.dedup();
+    (0..s.len()).map(|k| (s[k], s[k] - s.get(k + 1).copied().unwrap_or(0.0))).filter(|r| r.1 > 0.0).collect()
+}
+
+/// Light passing down through the crowns of members over the ground they share (Beer's law): `l` holds per member its
+/// crown's base and top, m, its capture area per ground area x, the share s of the ground it stands on, and a tag. A
+/// member stands on its share s, the shares nested (a kind stands where the loose ground holds its roots, and ground that
+/// holds deep roots holds shallow ones), with capture area x / s per unit of it spread evenly through its crown (a crown of
+/// no depth a sheet at its top); so the ground falls into rings (`rings`), each held by the members of a share at least
+/// its own, and in each the light passes down through the capture area of all the crowns at each height, whatever
+/// member holds it, absorbing 1 - exp(-y) of what reaches it over capture area y per unit of ground (with every s 1,
+/// Beer's law through the canopy). `set(tag, f, bottom, depth)` gets each member's light per unit of capture area over
+/// the mean of all (weighted by capture area, the factors have mean 1), the light at its crown's base per unit of capture
+/// area over the same mean, and the capture area per unit of ground the light passes through its crown (ln of the light
+/// at its top over that at its base): each the mean over its rings by its capture area in each.
+pub(crate) fn shade<T: Copy>(l: &[(f64, f64, f64, f64, T)], mut set: impl FnMut(T, f64, f64, f64)) {
+    let share = |s: f64| s.max(1e-300);
+    let mut got = vec![[0.0; 3]; l.len()];
+    for (at_least, ring) in rings(l.iter().map(|m| share(m.3))) {
+        let on: Vec<usize> = (0..l.len()).filter(|&q| share(l[q].3) >= at_least).collect();
+        let mut heights: Vec<f64> = on.iter().flat_map(|&q| [l[q].0, l[q].1]).collect();
+        heights.sort_by(|a, b| b.total_cmp(a));
+        heights.dedup();
+        // The capture area per unit of ground the light has passed, the light each member's capture area gets, and
+        // what the light has passed at each one's top and base.
+        let (mut tau, mut lit, mut top, mut base) = (0.0f64, vec![0.0; l.len()], vec![0.0; l.len()], vec![0.0; l.len()]);
+        for (k, &h) in heights.iter().enumerate() {
+            on.iter().filter(|&&q| l[q].1 == h).for_each(|&q| top[q] = tau);
+            // The crowns of no depth at this height: one sheet.
+            let sheet = |q: usize| l[q].0 == h && l[q].1 == h;
+            let y: f64 = on.iter().filter(|&&q| sheet(q)).map(|&q| l[q].2 / share(l[q].3)).sum();
+            on.iter().filter(|&&q| sheet(q)).for_each(|&q| lit[q] += (-tau).exp() * mean_decay(y));
+            tau += y;
+            on.iter().filter(|&&q| sheet(q)).for_each(|&q| base[q] = tau);
+            let Some(&below) = heights.get(k + 1) else { break };
+            // The crowns through the span down to the next height, each its capture area spread over its depth.
+            let through = |q: usize| l[q].0 <= below && l[q].1 >= h && l[q].1 > l[q].0;
+            let part = |q: usize| (h - below) / (l[q].1 - l[q].0);
+            let y: f64 = on.iter().filter(|&&q| through(q)).map(|&q| l[q].2 / share(l[q].3) * part(q)).sum();
+            on.iter().filter(|&&q| through(q)).for_each(|&q| lit[q] += part(q) * (-tau).exp() * mean_decay(y));
+            tau += y;
+            on.iter().filter(|&&q| l[q].0 == below && l[q].1 > below).for_each(|&q| base[q] = tau);
+        }
+        for &q in &on {
+            let part = ring / share(l[q].3);
+            got[q] = [got[q][0] + part * lit[q], got[q][1] + part * (-base[q]).exp(), got[q][2] + part * (base[q] - top[q])];
+        }
     }
-    let (sum_x, sum_a) = got.iter().fold((0.0, 0.0), |(sx, sa), g| (sx + g.1, sa + g.1 * g.2));
+    let (sum_x, sum_a) = got.iter().zip(l.iter()).fold((0.0, 0.0), |(sx, sa), (g, m)| (sx + m.2, sa + m.2 * g[0]));
     let all = if sum_x > 0.0 { sum_a / sum_x } else { 1.0 };
-    got.iter().for_each(|&(tag, _, f, bottom)| set(tag, f / all.max(1e-300), bottom / all.max(1e-300)));
+    got.iter().zip(l.iter()).for_each(|(g, m)| set(m.4, g[0] / all.max(1e-300), g[1] / all.max(1e-300), g[2]));
 }
 
 /// Veltkamp's constant, 2^27 + 1: it splits a number into two halves of 26 bits (`add_times`).
