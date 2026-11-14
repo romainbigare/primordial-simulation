@@ -192,13 +192,15 @@ it; a land cell is one square); the living mass of an adult by its genes (`fauna
 a young one, kg; its coat gene, the body
 temperature it keeps, K, and the middle of the band of heights it searches, log10 m; a cell that holds no land has none.
 The page draws them one by one where one takes a pixel (`web/shaders/herds.wgsl`, `web/src/herds.ts`): a square is cut
-into k x k parts, k the least whose square holds the slot's groups, and a fixed random order of the parts, keyed by the
-square and the slot, gives the first of them one group each, an adult with its share of the slot's young beside it (young
-alone where the adults are too few to lead them in groups of 6), at a random place in its part; so exactly as many stand
-as the slot holds (whole: the count rounded down), each at a place fixed by its square, slot and number. None stands in
-standing liquid or under snow deeper than it is tall (at its group's place). A body is 0.33 m × its mass in kg to the
-power 1/3 long; members show from where that takes a quarter of a device pixel (fully from a half), drawn no shorter than
-4 device pixels (a young one 2.6), as a dot of its body's area. Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
+into k x k parts, k the least whose square holds the slot's herds, and a fixed random order of the parts, keyed by the
+square and the slot, gives the first of them one herd each: the slot's members shared evenly, at most 12 to a herd, its
+adults and its young each shared evenly too, at a random place in its part, standing on a sunflower's spiral about 3 of
+their lengths apart (closer where the herds are crowded); so exactly as many stand as the slot holds (whole: the count
+rounded down), each at a place fixed by its square, slot and number. None stands in standing liquid or under snow
+deeper than it is tall (at its herd's place). A body is 0.33 m × its mass in kg to the power 1/3 long; members show
+from where that takes a quarter of a device pixel (fully from a half), drawn no shorter than 4 device pixels (a young
+one 2.6), as a dot of its body's area. Where they do not show, each herd is a soft mark as wide as the ground it
+stands on, from where its radius takes a device pixel (fully from 2.5). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
 less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. **The samples' rock** (`Ground::rock`,
 `tape/src/ground/rock.rs`), made once with the ground: of each of the terrain's samples, row by row, four 16-bit floats:
 the depth of its loose ground, m (`Samples::loose`), the largest stone its channel moves, m: `STONE_M` (0.001) ×

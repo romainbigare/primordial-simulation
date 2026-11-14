@@ -24,6 +24,12 @@ const SHOW_PX = [0.25, 0.5];
 /** A body is drawn at least this many device pixels long, a young one at least the second: where its true length is
  * shorter (from `SHOW_PX`), it is drawn this large, so it reads as one taker. */
 const LEAST_PX = [4, 2.6];
+/** A herd holds at most this many members, and they stand about this many of their lengths apart (grazers in a herd
+ * keep a few body lengths from one another, from memory). */
+const HERD_MOST = 12, HERD_SPACE = 3;
+/** Where single members do not show, a herd is a soft mark from where its radius takes this many device pixels, fully
+ * from the second (herds.wgsl). */
+const MARK_PX = [1, 2.5];
 /** The body temperature, K, below which a kind keeps no heat of its own in any ground it lives on: a cold body's skin. */
 const WARM_K = 280;
 
@@ -49,7 +55,7 @@ function coatOf(r: Float32Array): Rgb {
 const lengthOf = (kg: number) => LENGTH_1KG * Math.cbrt(Math.max(kg, 0));
 
 /** The members of the uniforms of herds.wgsl (`Herds`), four-wide. */
-const HERDS_VEC4S = 2;
+const HERDS_VEC4S = 3;
 
 /** The takers on the GPU: their table, sent once a frame of the world, and the draw over the map. */
 export class Herds {
@@ -57,7 +63,8 @@ export class Herds {
   private w = 1;
   private h = 1;
   private slots = 0;
-  /** The longest body any square holds, m: no taker shows where it takes less than `SHOW_PX` pixels. */
+  /** The longest body any square holds, m: no taker shows where it takes less than `SHOW_PX` pixels, nor any herd
+   * where the widest herd takes less than `MARK_PX` (a herd of `HERD_MOST` of them). */
   private longest = 0;
   private tex: Texture | null = null;
   private due = false;
@@ -86,14 +93,15 @@ export class Herds {
    * m, a device pixel taking `e` m, with the live map's bindings `land`: none where no taker would take a pixel. */
   prepare(gpu: Gpu, rect: number[], at: [number, number], e: number, land: Draw['binds']): void {
     this.drawn = null;
-    if (!this.table || this.longest / e < SHOW_PX[0]) return;
+    const widest = this.longest * (HERD_SPACE * Math.sqrt(HERD_MOST) + 1);
+    if (!this.table || (this.longest / e < SHOW_PX[0] && widest / e < MARK_PX[0])) return;
     if (this.tex?.w !== this.w || this.tex.h !== PARTS * this.slots * this.h) {
       if (this.tex) gpu.drop(this.tex);
       this.tex = gpu.texture(this.w, PARTS * this.slots * this.h, 'rgba32float');
       this.due = true;
     }
     if (this.due) { gpu.write(this.tex, this.table); this.due = false; }
-    const u = new Uniforms(HERDS_VEC4S).vec4(...at, e, this.slots).vec4(...SHOW_PX, ...LEAST_PX);
+    const u = new Uniforms(HERDS_VEC4S).vec4(...at, e, this.slots).vec4(...SHOW_PX, ...LEAST_PX).vec4(HERD_MOST, HERD_SPACE, ...MARK_PX);
     this.drawn = { rect, binds: { ...land, 1: u.buffer, 4: this.tex } };
   }
 
