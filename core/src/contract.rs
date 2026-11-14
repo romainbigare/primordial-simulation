@@ -208,12 +208,14 @@ pub fn give(w: &World, d: &mut Chunk, i: usize, amounts: impl IntoIterator<Item 
     d.moves.give_all(w, Node::ground(i), amounts, heat);
 }
 
-/// The key liquid of a cell as a taker finds it, mol: open (standing on its ground, which a mouth reaches), in the
-/// pores of its ground (the cover's roots reach it, a mouth does not), frozen and lying on its ground as the soft solid
-/// (a mouth reaches it, paying its heat of fusion), and frozen in its pores.
+/// The key liquid of a cell as a taker finds it, mol: open (standing on its ground, which a mouth reaches), what ran
+/// over it in the month (its main channel's, `World::liquid_month`: a mouth reaches it too, but it has run on, so it is
+/// no amount of the cell's), in the pores of its ground (the cover's roots reach it, a mouth does not), frozen and
+/// lying on its ground as the soft solid (a mouth reaches it, paying its heat of fusion), and frozen in its pores.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Liquid {
     pub open: f64,
+    pub running: f64,
     pub pores: f64,
     pub soft: f64,
     pub frozen: f64,
@@ -222,7 +224,8 @@ pub struct Liquid {
 /// The key liquid of cell `i` as the cell's view in chunk `d` holds it now (`Liquid`): of what its ground holds, the
 /// share molten at its temperature (`World::molten`) is liquid, open as far as the depth standing on it at the month's
 /// start (`place`) holds, the rest in its pores; of the frozen, the soft solid lying on it as far as its depth at the
-/// month's start holds, the rest in its pores. None without a key liquid in the chemistry.
+/// month's start holds, the rest in its pores; what ran through its main channel in the month's runoff pass over the
+/// month. None without a key liquid in the chemistry.
 pub fn liquid(w: &World, d: &Chunk, i: usize) -> Liquid {
     let Some(p) = Parts::of(&w.chem) else { return Liquid::default() };
     let (k, area, at) = (p.liquid, w.mesh.cells().area()[i], place(w, i));
@@ -231,11 +234,13 @@ pub fn liquid(w: &World, d: &Chunk, i: usize) -> Liquid {
     let molten = held * w.molten(k, i, t, plateau);
     let open = molten.min(at.liquid * area / w.chem.molar_volume(k, crate::chem::Phase::Liquid));
     let soft = (held - molten).min(at.snow * area / w.chem.molar_volume(k, crate::chem::Phase::Solid));
-    Liquid { open, pores: molten - open, soft, frozen: held - molten - soft }
+    let running = w.liquid_month.get(i).map_or(0.0, |&f| f as f64 * w.cfg.calendar().month as f64);
+    Liquid { open, running, pores: molten - open, soft, frozen: held - molten - soft }
 }
 
 /// A taker of cell `i` of chunk `d` sheds heat as vapour of the key liquid: `[liquid, solid]` mol of it, taken from the
-/// open liquid and the soft solid of its ground (`liquid`; the caller asks no more than that), go to the cell's aside
+/// liquid and the soft solid of its ground (`liquid`: what it drank of the open or the running liquid leaves the cell's
+/// liquid, which the running liquid joins; the caller asks no more than its ground holds), go to the cell's aside
 /// node as vapour with their latent heat, as the cover's books give a gas (`life::book`). Returns the heat the taker pays
 /// for it, J: the vapour's heat and latent heat less the heat the liquid and the solid held in the ground (the solid
 /// holds no heat of fusion, so the taker pays it).

@@ -88,6 +88,11 @@ pub struct World {
     /// ground cell the most through one of its samples, its main channel: moving averages over about a year
     pub discharge: Vec<f32>,
     pub liquid_flux: Vec<f32>,
+    /// What ran through each ground cell's main channel in the month's runoff pass, its own shed among it, mol/s (the
+    /// month's `liquid_flux`, `flow::runoff`): what a taker can drink of the liquid running over the cell
+    /// (`contract::liquid`). Not saved: the runoff's pass writes it each month before life reads it
+    #[serde(skip)]
+    pub liquid_month: Vec<f32>,
     /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what runs over the
     /// surface of each land cell into cells that are not land (`is_land`), mol/s: moving averages over about a year,
     /// for the tape

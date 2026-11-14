@@ -204,8 +204,10 @@ it reaches in their own proportions, as a mouth takes a piece of a plant, never 
 (`contract::give`): matter and heat back to the ground, through the cell's view of the store. **The key liquid**
 (`contract::liquid`): what a cell's ground holds of it, split four ways: open (standing on it, as deep as the month's
 start found it), in its pores (the cover's roots reach it, a mouth does not), frozen and lying on it as the soft solid
-(as deep as the month's start found it), and frozen in its pores. **Vapour** (`contract::vapour`): a taker sheds heat
-by turning open liquid and soft solid into vapour, given to the cell's aside node as the cover's books give a gas; it
+(as deep as the month's start found it), and frozen in its pores; and beside them what ran over it in the month (its main channel's month,
+`World::liquid_month`), which a mouth reaches though it is no amount of the cell's. **Vapour** (`contract::vapour`):
+a taker sheds heat by turning liquid and soft solid of its ground into vapour (what it drank of the running liquid
+leaves the cell's liquid, which the running liquid joins), given to the cell's aside node as the cover's books give a gas; it
 pays the vapour's latent heat less what the ground held (a solid's heat of fusion too). **Press**
 (`contract::press`): work spent on a cell breaks its cover by the share it pays for (`life::breaking` of all its slots), and what breaks
 goes to the ground as remains with its heat. **What stands on a cell** (`contract::Stand`): the cover's mass, capture
@@ -412,7 +414,8 @@ what the heat holds molten, as every law and the shell then read it.
   its discharge Q, m³/s (hydraulic geometry downstream, Leopold and Maddock 1953): width `channel_width` ×
   Q^`channel_width_exp`, depth `channel_depth` × Q^`channel_depth_exp`, and its liquid runs at Q over width × depth.
   The discharge of a cell is the most that runs through one of its samples, its main channel (`World::liquid_flux`, mol/s,
-  a moving average over about a year, from the samples' discharge), at the mol per m³ of the liquid its ground holds
+  a moving average over about a year, from the samples' discharge; the month's own, `World::liquid_month`, its own shed
+  among it, is what a taker can drink of the running liquid), at the mol per m³ of the liquid its ground holds
   (`World::liquid_in`). Its size does not depend on the cell's: every shell reads it
   here.
 - **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, 1.7): `seep` ×
@@ -884,7 +887,7 @@ land only through the contract (section 0; `cli/tests/sides.rs`), and their book
   `r_coat`) W/K (Meeh 1879; Scholander et al. 1950). Where its upkeep gives less heat, it burns the rest to keep its
   temperature; where more, the excess must leave as vapour of the key liquid, at its heat of vaporisation. A body at its
   ground's temperature gives all its heat to its ground and needs no vapour.
-- **Thirst.** A body drinks open liquid only: the liquid standing on its cell and the soft solid lying there, which
+- **Thirst.** A body drinks open liquid only: the liquid standing on its cell, what ran over it in the month, and the soft solid lying there, which
   costs its heat of fusion (`contract::liquid`). Its need is the vapour that cools it plus the least liquid it passes
   through, `drink_least` × m^`drink_exp` kg a day (Nagy and Peterson 1988), which goes back to the cell in the month and
   is not booked. The slots of a cell share what is there by one share of their needs; the vapour that share sheds goes

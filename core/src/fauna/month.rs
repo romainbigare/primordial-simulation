@@ -62,8 +62,9 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize) {
 }
 
 /// The key liquid the slots of cell `i` need in the month (`Need`): their vapour and the least they pass through,
-/// which the open liquid and the soft solid lying on the ground (`contract::liquid`) meet by a share common to all
-/// slots. The vapour that share sheds goes to the air (`contract::vapour`), the open liquid first; the rest of what
+/// which the open liquid, what ran over the cell in the month and the soft solid lying on the ground
+/// (`contract::liquid`) meet by a share common to all slots. The vapour that share sheds goes to the air
+/// (`contract::vapour`), from the cell's liquid first (no more than its ground holds); the rest of what
 /// they drink goes back to the cell in the month. Of a slot that must shed heat as vapour, the members whose heat that
 /// share leaves unshed die (`LACK`). Returns the share met and the heat the vapour took from the bodies, J.
 fn thirst(w: &World, d: &mut Chunk, i: usize, needs: &[Need; FS]) -> (f64, f64) {
@@ -72,10 +73,11 @@ fn thirst(w: &World, d: &mut Chunk, i: usize, needs: &[Need; FS]) -> (f64, f64) 
         return (1.0, 0.0);
     }
     let found = contract::liquid(w, d, i);
-    let met = ((found.open + found.soft) / (vapour + least)).min(1.0);
+    let (open, liquid) = (found.open + found.running, found.open + found.pores);
+    let met = ((open + found.soft) / (vapour + least)).min(1.0);
     let shed = vapour * met;
-    let open = shed.min(found.open);
-    (met, contract::vapour(w, d, i, [open, (shed - open).min(found.soft)]))
+    let drunk = shed.min(open).min(liquid);
+    (met, contract::vapour(w, d, i, [drunk, (shed - drunk).min(found.soft)]))
 }
 
 /// Slot `x` of `f` (its parts the substances `sub`) burns its store for `energy` J (`life::Books::run` of the burning), no
