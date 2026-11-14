@@ -236,6 +236,7 @@ are not recorded.
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs down the terrain's samples from land cells into the open low ground (`World::off_land`), per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
 | `lakes`, `lake_area`, `lake_m3`, `low_level` | , km², km³, m | the bodies of standing liquid above the open low ground that hold liquid over their cells' pores (`World::pools`, laws.md 1.2), the area their liquid covers and its volume; and the level of the open low ground's largest body |
+| `edge_liquid`, `edge_liquid_heat` | km³, PJ | the liquid that crossed into the open low ground at the map's open edges since the start (out counts less), and its heat (`Counters::edge_liquid`, laws.md 1.6); 0 where the edges are closed |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The report counts the same way |
 | `river_flux` | mol/s | the liquid flux of those river cells, summed (`tape::river_flux`): the water the count stands for |
 | `cells` | | the cells of the map |

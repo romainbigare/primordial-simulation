@@ -706,7 +706,15 @@ pressure is the planet's, so no evening crosses. Each day, after the wind, each 
 the column beyond held. What crosses comes from and goes to the boundary node for outside, with its heat and the
 latent heat its gases hold in the air; mass that enters pays its lift from 0 m, mass that leaves takes its potential
 energy there (`potential::Lifts`). The heat that comes in at each edge is counted (`Counters::edges`, printed by
-`ew run`).
+`ew run`). **The planet's low liquid**: where the edges are open (`World::edges_open`), the part of the open low ground
+that holds a cell at the map's edge (`Body::edge`) is joined to the planet's low liquid, which stands at the level the
+world is made with (`space::wear::STAND_M`, 0 m): in the month's runoff (1.2, `runoff::stand`) it stands at that level
+as at a pass, what stands over it leaving, mixed, for the boundary node for outside, and what it lacks of it coming in
+from there at its cells at the edge, by the area their parts cover, as the liquid and heat those cells hold, mixed (the
+planet's strip holds only air). So what the island's air gains or loses through the edges as vapour comes back as
+liquid, and its level holds each month. Lakes and closed basins, and the open low ground of a world alone, are not
+joined; a cell of land at the map's edge opens nothing, only the cells of the open low ground there. What crosses is
+counted (`Counters::edge_liquid`, m³ and its heat; the series' `edge_liquid`, `ew run`'s line of the edges).
 
 ### 1.7 Each law takes one step
 An explicit step is safe while `dt Σ g / cap` of each node stays within 1/2 (no pattern changes sign in a step,

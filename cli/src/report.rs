@@ -13,12 +13,19 @@ pub fn config(w: &World, how: &Seeding) -> String {
 }
 
 /// The heat that came in at each open edge of the map since the start (`Counters::edges`), W per m of the edge it stands
-/// for (the stretch times the map's width); none where the edges are closed.
+/// for (the stretch times the map's width), and the liquid that came into the open low ground there
+/// (`Counters::edge_liquid`), m³ and m of its largest body's level a year, with its heat; none where the edges are closed.
 pub fn edges(w: &World) -> Option<String> {
     w.planet.as_ref()?;
     let per_m = |j: f64| j / w.time.max(1) as f64 * w.stretch() / (w.map.w as f64 * w.map.side);
     let [north, south, east, west] = w.counts.edges.map(per_m);
-    Some(format!("edges: heat in at the north {north:.3e}, south {south:.3e}, east {east:.3e}, west {west:.3e} W/m (sensible and latent, mean since the start)"))
+    let years = w.year().max(f64::MIN_POSITIVE);
+    let low = w.pools().into_iter().filter(|l| l.low).map(|l| l.area).fold(0.0, f64::max).max(f64::MIN_POSITIVE);
+    let [m3, heat] = w.counts.edge_liquid.map(|x| x / years);
+    Some(format!(
+        "edges: heat in at the north {north:.3e}, south {south:.3e}, east {east:.3e}, west {west:.3e} W/m (sensible and latent); liquid in {m3:.3e} m3 a year, {:.4} m of the open low ground's level, with {heat:.3e} J (means since the start)",
+        m3 / low
+    ))
 }
 
 /// The liquid's store at the start, set at balance with the air (`Reactor::balance`): what each reversible pair makes,

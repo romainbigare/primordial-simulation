@@ -81,6 +81,12 @@ pub(super) fn per_mol(over: f64, tl: f64, area: f64, hk: f64) -> f64 {
 }
 
 impl World {
+    /// Whether the map's edges are open on the planet (laws.md 1.6): it holds the planet's air (`World::planet`) and
+    /// stands for a band of latitudes wider than itself (`Stretch::compressed`). Its air crosses them (`edge`), and so
+    /// does its open low ground's liquid (`flow::runoff`).
+    pub fn edges_open(&self) -> bool {
+        self.planet.is_some() && stretch::Stretch::of(self).compressed()
+    }
     /// The partial pressure of gas `k` in the air near the ground of cell `i`, Pa, as the ground's evaporation reads it
     /// (`surf::Vapour`, `per_mol`): the amount the air it sees holds (`lerp`) at that air's temperature at the ground's
     /// head (`at_height`). None before the air has stepped, or where `k` is not a gas of the air.

@@ -34,13 +34,16 @@ pub struct Counters {
     /// Heat that crossed into the map at its open north, south, east and west edges since the start, J: sensible and
     /// latent
     pub edges: [f64; 4],
+    /// The liquid that crossed into the map's open low ground at its open edges since the start (`flow::runoff`): m³,
+    /// and its heat, J
+    pub edge_liquid: [f64; 2],
 }
 
 impl Counters {
     /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
     /// cannot be left out.
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, edges } = std::mem::take(c);
+        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, edges, edge_liquid } = std::mem::take(c);
         self.clamped_heat += clamped_heat;
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
@@ -51,6 +54,7 @@ impl Counters {
         // (A chunk's counts hold no year: the world's are its own.)
         debug_assert!(grown_year.is_empty() && grown_last.is_empty(), "a chunk counted a year");
         self.edges.iter_mut().zip(edges).for_each(|(a, b)| *a += b);
+        self.edge_liquid.iter_mut().zip(edge_liquid).for_each(|(a, b)| *a += b);
     }
     /// What a booking set from just below zero to zero is added (`Counters::rounded`): mol, and J.
     pub(crate) fn add_rounded(&mut self, [mol, heat]: [f64; 2]) {

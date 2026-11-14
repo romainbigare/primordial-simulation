@@ -8,19 +8,24 @@
 
 use super::basin::{movable, share_out};
 use super::bodies::Bodies;
+
+mod edge;
+use edge::come_in;
 use super::{curve::Part, level::{level_with, Level}};
 use super::{bare_share, drain::liquid_heat, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid}, potential::apply, year_weight, Scratch};
-use crate::{math::one_minus_exp, space::network::NONE, store::{Class, LinkFlux, Move, Node}, World};
+use crate::{math::one_minus_exp, space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux, Move, Node}, World};
 
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
 
-/// The moves of the pass, each from one cell to another: what crosses, a row of `kinds` (mol) then the heat (J).
+/// The moves of the pass, each from a node of the class `class[0]` to one of `class[1]` (a cell to another, or the
+/// boundary for outside to a cell): what crosses, a row of `kinds` (mol) then the heat (J).
 struct Crossings {
     a: Vec<u32>,
     b: Vec<u32>,
     rows: Vec<f64>,
     width: usize,
+    class: [Class; 2],
 }
 
 impl Crossings {
@@ -41,7 +46,7 @@ impl Crossings {
             row.iter().enumerate().for_each(|(c, &x)| col[c * links + l] = x);
         }
         let (at, ks) = ((self.width - 1) * links, kinds.iter().map(|&k| k as u16).collect::<Vec<u16>>());
-        book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &self.a, b: &self.b, ks: &ks, mol: &col[..at], heat: &col[at..] }]);
+        book(w, s, &[LinkFlux { class: self.class, a: &self.a, b: &self.b, ks: &ks, mol: &col[..at], heat: &col[at..] }]);
     }
 }
 
@@ -63,7 +68,8 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let all: Vec<u32> = (0..n as u32).collect();
     let (q, vol) = movable(w, s, liq, &all, tmin, (|k, i| super::land::wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
     let b = std::mem::take(&mut s.bodies);
-    let mut x = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1 };
+    let mut x = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1, class: [Class::Ground; 2] };
+    let mut edge = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1, class: [Class::Boundary, Class::Ground] };
     // (The room for what runs through each sample is kept from month to month, `spare::Spare`.)
     let mut into = std::mem::take(&mut s.spare.samples);
     into.clear();
@@ -71,15 +77,21 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into };
     let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
     send(w, s, &b, &mut h, &mut x, (slope, runs, &mm), dt);
-    s.basin.level = stand(s, &b, &mut h, &mut x, &mm);
+    let (levels, came) = stand(s, &b, &mut h, (&mut x, &mut edge), (&mm, w.edges_open()));
+    s.basin.level = levels;
     s.state.held = std::mem::take(&mut h.part);
     discharge(w, &b, &mut h.into);
     let flux = h.into;
     x.book(w, s, liq);
+    if !edge.a.is_empty() {
+        edge.book(w, s, liq);
+        let heat: f64 = edge.rows.chunks_exact(edge.width).map(|r| r[edge.width - 1]).sum();
+        (w.counts.edge_liquid[0], w.counts.edge_liquid[1]) = (w.counts.edge_liquid[0] + came, w.counts.edge_liquid[1] + heat);
+    }
     // What the liquid carries is booked apart from the liquid, so the heat of each lands with its own matter in a cell
     // of parts (`parts::to_liquid`).
     let sol = s.solids(tmin);
-    let mut load = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: sol.len() + 1 };
+    let mut load = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: sol.len() + 1, class: [Class::Ground; 2] };
     let broke = erode(w, s, &b, &flux, &sol, &mut load);
     load.book(w, s, &sol);
     apply(w, s, &[], &broke);
@@ -169,10 +181,7 @@ fn covered(s: &Scratch, i: usize, q: usize) -> f64 {
 /// left goes to those pores, by what each takes there.
 fn body_level(parts: &[Ground], vol: f64, pass: f64) -> (f64, Vec<f64>, bool) {
     let over: Vec<(&Part, f64)> = parts.iter().map(|g| (g.0, g.1)).collect();
-    let soaks = |q: usize, under: f64| {
-        let (_, _, now, [dry, own]) = parts[q];
-        ((under - now).max(0.0) * dry - own).max(0.0)
-    };
+    let soaks = |q: usize, under: f64| soaks(&parts[q], under);
     let soak = |x: f64| over.iter().enumerate().map(|(q, &(p, z))| soaks(q, p.under(x - z))).collect::<Vec<f64>>();
     match level_with(&over, vol, soaks) {
         Level::At(x) | Level::Step(x, _) if x > pass => (pass, soak(pass), true),
@@ -187,15 +196,24 @@ fn body_level(parts: &[Ground], vol: f64, pass: f64) -> (f64, Vec<f64>, bool) {
     }
 }
 
+/// What the pores of the ground part `g` newly covers take where its liquid covers `under` m², m³: what they lack over
+/// what the cell's own pores give them first (`parts::pores_first`).
+fn soaks(g: &Ground, under: f64) -> f64 {
+    let (_, _, now, [dry, own]) = *g;
+    ((under - now).max(0.0) * dry - own).max(0.0)
+}
+
 /// The bodies in order (`Bodies::list`), each brought to one level: what its parts hold (`Held::part`) stands at one
 /// level over their samples, no higher than its pass, the pores of the ground it newly covers filling first
 /// (`body_level`); each cell whose part holds more than its samples hold under that level gives the share of its liquid
 /// over it, mixed, to those that hold less (`share_out`), and what is over the pass leaves for the cell and the part
 /// its pass's way reaches, mixed, and into the samples' ways at the pass. Each part then holds what its samples hold
-/// under its body's level. Returns each body's level, m.
-fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -> Vec<f64> {
+/// under its body's level. Where the map's edges are open (`open`), the part of the open low ground at the edge stands
+/// at the planet's level: what it lacks comes in (`come_in`) and what stands over it leaves for the boundary for
+/// outside, as over a pass (`edge`). Returns each body's level, m, and the volume that came in at the edges, m³.
+fn stand(s: &Scratch, b: &Bodies, h: &mut Held, (x, edge): (&mut Crossings, &mut Crossings), (mm, open): (&[f64], bool)) -> (Vec<f64>, f64) {
     let width = h.width;
-    let mut levels = Vec::with_capacity(b.list.len());
+    let (mut levels, mut came) = (Vec::with_capacity(b.list.len()), 0.0);
     for body in &b.list {
         let cells = &body.cells;
         let ground = |(&i, &q): (&u32, &usize)| {
@@ -203,9 +221,14 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -
             (p, s.z[i], covered(s, i, q), pores_first(s, i))
         };
         let parts: Vec<Ground> = cells.iter().zip(&body.part).map(ground).collect();
+        let held_open = open && body.pass == NONE && !body.edge.is_empty();
+        if held_open {
+            came += come_in(body, &parts, h, edge);
+        }
         let held: Vec<f64> = cells.iter().flat_map(|&i| h.q[i as usize * width..(i as usize + 1) * width].iter().copied()).collect();
         let vol: Vec<f64> = cells.iter().map(|&i| h.vol[i as usize]).collect();
-        let (top, soak, over) = body_level(&parts, cells.iter().zip(&body.part).map(|(&i, &q)| h.part[i as usize][q]).sum(), body.level);
+        let pass = if held_open { STAND_M } else { body.level };
+        let (top, soak, over) = body_level(&parts, cells.iter().zip(&body.part).map(|(&i, &q)| h.part[i as usize][q]).sum(), pass);
         levels.push(top);
         let own: Vec<f64> = parts.iter().map(|&(p, z, ..)| p.volume(top - z)).collect();
         // Each cell wants what it holds apart from its part, what its part holds under the level, and what the pores of
@@ -227,7 +250,11 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -
                 x.push(cells[hub], i as u32, change[c * width..(c + 1) * width - 1].iter().copied().enumerate(), change[(c + 1) * width - 1]);
             }
         }
-        if over && left.iter().any(|&m| m > 0.0) {
+        if held_open && over && left.iter().any(|&m| m > 0.0) {
+            // (The hub's change, which `share_out` gives, holds what leaves over the planet's level.)
+            edge.push(Boundary::Outside as u32, cells[hub], left[..width - 1].iter().map(|m| -m).enumerate(), -left[width - 1]);
+            came -= vol.iter().sum::<f64>() - want.iter().sum::<f64>();
+        } else if over && left.iter().any(|&m| m > 0.0) {
             // (The hub's change, which `share_out` gives, holds what leaves over the pass.)
             let (to, gone) = (body.next.cell as usize, vol.iter().sum::<f64>() - want.iter().sum::<f64>());
             x.push(cells[hub], to as u32, left[..width - 1].iter().copied().enumerate(), left[width - 1]);
@@ -240,7 +267,7 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, mm: &[f64]) -
             (into[0], into[1]) = (into[0] + left[..width - 1].iter().sum::<f64>(), into[1] + left[..width - 1].iter().zip(mm).map(|(m, k)| m * k).sum::<f64>());
         }
     }
-    levels
+    (levels, came)
 }
 
 /// What runs through each sample in the pass, mol and kg: what the cells and the bodies sent into the samples' ways

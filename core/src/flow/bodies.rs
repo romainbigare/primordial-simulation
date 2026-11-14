@@ -14,7 +14,8 @@ use crate::World;
 
 /// A body of standing liquid: its pond (`Samples::ponds`); its cells in order, each with the index of its part in the
 /// cell's curve (`Curve::parts`); the sample of its pass (`NONE` for a part of the open low ground) and the level of
-/// the pass, m (infinite for none); and where what leaves over the pass goes (`Reach`).
+/// the pass, m (infinite for none); where what leaves over the pass goes (`Reach`); and of a part of the open low ground,
+/// which of its cells lie at the map's edge (their places in `cells`; none for a closed basin, or on a globe).
 #[derive(Clone, Debug)]
 pub(super) struct Body {
     pub(super) pond: u32,
@@ -23,6 +24,7 @@ pub(super) struct Body {
     pub(super) pass: u32,
     pub(super) level: f64,
     pub(super) next: Reach,
+    pub(super) edge: Vec<usize>,
 }
 
 /// Where liquid that runs down the samples' ways from a sample goes: the body it reaches (`NONE` where the way ends in
@@ -71,7 +73,7 @@ impl Bodies {
             }
         }
         let mut list: Vec<Body> = s.ponds.iter().enumerate().map(|(p, pond)| {
-            Body { pond: p as u32, cells: Vec::new(), part: Vec::new(), pass: pond.pass, level: pond.level, next: NOWHERE }
+            Body { pond: p as u32, cells: Vec::new(), part: Vec::new(), pass: pond.pass, level: pond.level, next: NOWHERE, edge: Vec::new() }
         }).collect();
         let mut of = vec![NONE; n];
         for (i, c) in curves.iter().enumerate() {
@@ -96,9 +98,15 @@ impl Bodies {
             }
         }
         b.ways.iter_mut().for_each(|v| v.sort_by_key(|x| (x.0.cell, x.0.part)));
-        for x in 0..b.list.len() {
-            let pass = b.list[x].pass;
-            b.list[x].next = if pass == NONE { NOWHERE } else { reach[pass as usize] };
+        let at_edge = |i: u32| {
+            let [west, north, east, south] = w.map.bounds(i as usize);
+            !w.map.wrap && (west <= 0.0 || north <= 0.0 || east >= w.map.w as f64 || south >= w.map.h as f64)
+        };
+        for body in b.list.iter_mut() {
+            body.next = if body.pass == NONE { NOWHERE } else { reach[body.pass as usize] };
+            if body.pass == NONE {
+                body.edge = (0..body.cells.len()).filter(|&c| at_edge(body.cells[c])).collect();
+            }
         }
         b.order();
         b
