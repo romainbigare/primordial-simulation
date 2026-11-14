@@ -34,9 +34,10 @@ impl Thirst {
     pub(super) fn need(&self, b: &Body, walk: f64, (dt, lv): (f64, f64), work: f64) -> f64 {
         self.least + b.vapour(walk, work, lv) * b.n * dt
     }
-    /// What it asks of its cell at full work, mol: its need less the liquid of what it eats.
+    /// What it asks of its cell at full work, mol: its whole need (the liquid of what it eats is a share of its work,
+    /// which a cut would lose).
     pub(super) fn asks(&self) -> f64 {
-        (self.least + self.rest + self.work - self.eaten).max(0.0)
+        self.least + self.rest + self.work
     }
 }
 

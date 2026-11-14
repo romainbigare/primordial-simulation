@@ -92,7 +92,7 @@ fn plan(w: &World, p: &Parts, (i, bodies): (usize, &[Body; FS]), (layers, reach)
     let mut given = thirst::shares(&thirsts, found.open + found.running + found.soft);
     let mut work_of_way = [0.0; FS];
     for x in (0..FS).filter(|&x| bodies[x].n > 0.0) {
-        let (b, short) = (&bodies[x], thirsts[x].asks() - given[x]);
+        let (b, short) = (&bodies[x], (thirsts[x].asks() - given[x] - thirsts[x].eaten).max(0.0));
         let got = way::fetch((b.n, b.m, b.speed, b.per_m), (short, liquid_mm, days), contract::to_liquid(w, i, short), w.cfg.phys.dry_most);
         (given[x], work_of_way[x]) = (given[x] + got.mol, got.work);
     }
