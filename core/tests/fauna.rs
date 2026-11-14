@@ -13,7 +13,7 @@ const COLD_ROW: usize = 4;
 /// Members of the slot the law of the store is read on: real counts (over `N_WHOLE`).
 const MANY: f64 = 1000.0;
 /// The share of a month's upkeep its store holds (within the most a taker stores, `store_most`).
-const STORE_MONTHS: f64 = 0.75;
+const STORE_MONTHS: f64 = 0.6;
 
 /// A small world with no life after a month, and its mildest dry land cell, a pond standing on it (a metre: liquid for
 /// any thirst) and no snow: takers there find nothing to take.
@@ -61,9 +61,9 @@ fn per_kg(w: &World) -> f64 {
     -w.chem.dh(p.burn) / per / w.chem.subs[p.sub[pcore::life::FUEL]].molar_mass
 }
 
-/// A slot with no cover to take starves by the law of upkeep: a store of three quarters of a month of its upkeep and
+/// A slot with no cover to take starves by the law of upkeep: a store of three fifths of a month of its upkeep and
 /// its walk (a kind that keeps no heat, on ground warm enough that it neither freezes nor sheds vapour) pays three
-/// quarters of its first month, its members falling by their wear (1 − e^-wear) and by the quarter unpaid, and none of
+/// fifths of its first month, its members falling by their wear (1 − e^-wear) and by the two fifths unpaid, and none of
 /// the second, when all die; their remains reach the ground and the books are kept. For every starting kind the month its store first runs short is the one the
 /// law of upkeep and heat gives.
 #[test]

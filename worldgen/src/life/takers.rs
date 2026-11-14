@@ -19,13 +19,17 @@ pub struct TakerKind {
 /// The starting kinds, each at the size of a real kind of plant-eater of its mass (the genes in the order of
 /// `pcore::fauna`'s: log10 mass, log10 newborn share, share of a surplus to young, log10 gut capacity for walls, log10
 /// middle of the heights searched, temperature kept, coat, repair): 30 g, 3 kg, 60 kg and 400 kg kinds that keep a
-/// mammal's heat, and a 2 kg kind that keeps none of its own.
+/// mammal's heat, and a 2 kg kind that keeps none of its own. Each gut's capacity splits the walls a member of its kind
+/// takes a day on a cell of good low cover in its warm month, and no more (its capacity is paid for whether used or
+/// not): walls w kg a day over their molar mass (0.162 kg/mol) over m × pace × a day's s, at the pace of its body's
+/// temperature (5.6 at 310 K; 0.83 for the cold kind at 288 K): 1.2 g, 40 g, 0.39 kg, 1.6 kg and 24 g of walls a day
+/// give 10^-6.3, 10^-6.8, 10^-7.1, 10^-7.3 and 10^-6.0 mol a kg a s.
 pub const TAKER_KINDS: [TakerKind; 5] = [
-    TakerKind { name: "small low takers", key: 101, genes: [-1.5, -1.2, 0.8, -8.0, -1.52, 310.0, 0.2, -0.5] },
-    TakerKind { name: "small takers", key: 102, genes: [0.477, -1.5, 0.6, -7.0, -0.824, 311.0, 0.4, 0.0] },
-    TakerKind { name: "high takers", key: 103, genes: [1.778, -1.2, 0.4, -6.8, 0.0, 311.0, 0.4, 0.0] },
-    TakerKind { name: "large low takers", key: 104, genes: [2.602, -1.3, 0.3, -6.5, -0.523, 311.0, 0.8, 0.0] },
-    TakerKind { name: "cold low takers", key: 105, genes: [0.301, -1.7, 0.3, -7.0, -1.0, 250.0, 0.0, 0.5] },
+    TakerKind { name: "small low takers", key: 101, genes: [-1.5, -1.2, 0.8, -6.3, -1.52, 310.0, 0.2, -0.5] },
+    TakerKind { name: "small takers", key: 102, genes: [0.477, -1.5, 0.6, -6.8, -0.824, 311.0, 0.4, 0.0] },
+    TakerKind { name: "high takers", key: 103, genes: [1.778, -1.2, 0.4, -7.1, 0.0, 311.0, 0.4, 0.0] },
+    TakerKind { name: "large low takers", key: 104, genes: [2.602, -1.3, 0.3, -7.3, -0.523, 311.0, 0.8, 0.0] },
+    TakerKind { name: "cold low takers", key: 105, genes: [0.301, -1.7, 0.3, -6.0, -1.0, 250.0, 0.0, 0.5] },
 ];
 
 /// Damuth's line of plant-eating mammals: log10 of the members per km² = `DAMUTH_A` − `DAMUTH_EXP` × log10 of the body
