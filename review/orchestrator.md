@@ -243,6 +243,11 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   the last digit), the garden keeps that many and tries newcomers in proportion, the CLI and the page offer it.
   It gives room for kinds; how many live together in a cell stays with the laws. The cover's month costs about
   in proportion to the slots used.
+- **In work**, by a builder in its own worktree (scratch `scratchpad/sorted/spike/`, `notes.md` there): part 1,
+  the variety as a setting of a world (`cover::SLOTS` the bound, the world's setting the count; the same world at
+  4; `ew run --variety N` and a field on the page), reported and merged on its own; part 2, the spike of the
+  nursery on the same branch behind `--sorted` (no race by mass, newcomers near known kinds, the garden check,
+  bands' tables, a contact sheet): numbers and pictures, not for main as it is.
 - **Its steps**: (0) main alone to year 300 on the new air, the target: done (`scratchpad/sorted/target/`, seed
   1 at 64 squares). The cover is steady from year 100 in all three: in the band with the roster 1.33 to 1.40e11
   kg, nearly all the land covered, the gas held at 386 ppm, land 283.7 K, the low liquid down 1.2 m at year 300;
@@ -398,8 +403,9 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     all the soft part within its band, not the sward's top); no mutant founds a slot. No eaters of takers yet.
   - **The page places the takers** 50 years after the first life (`wasm/src/lib.rs` `TAKERS_YEAR`); the CLI
     places none unless asked (`--fauna-year`). The layer "Takers" shows them; no single animal is drawn yet.
-  - Next on this track: the first drawing of animals on the page (the design's decision 10), then F2 (movement
-    by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
+  - In work: the first drawing of animals on the page (the design's decision 10), by a page builder in its own
+    worktree: two or three looks on branches from one base, pictures in `scratchpad/animals/` (`looks.png`); the
+    owner picks, then one is merged. Then F2 (movement by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
     reads `scratchpad/f1/b2/notes.md` first.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
