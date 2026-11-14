@@ -199,6 +199,11 @@ pub struct Physics {
     /// Bulk density of the remains lying on the ground, kg/m³, and their heat conductivity, W/(m K)
     pub litter_rho: f64,
     pub litter_k: f64,
+    /// The force a taker's jaw closes with at 1 kg living, N, and the power of its living mass it grows as
+    pub jaw: f64,
+    pub jaw_exp: f64,
+    /// The share of a plant's frame in stems thinner than d goes as (d / its main stem's width) to this power
+    pub thin_exp: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -323,6 +328,9 @@ impl Default for Physics {
             dry_most: 0.12,
             litter_rho: 40.0,
             litter_k: 0.06,
+            jaw: 50.9,
+            jaw_exp: 0.43,
+            thin_exp: 2.0 / 3.0,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,

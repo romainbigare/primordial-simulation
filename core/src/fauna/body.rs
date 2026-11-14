@@ -35,6 +35,8 @@ pub(super) struct Body {
     pub(super) busy: f64,
     /// The work a m walked costs it, J
     pub(super) per_m: f64,
+    /// The force its jaw closes with, N (`jaw` × m^`jaw_exp`)
+    pub(super) force: f64,
     /// The heights it reaches, m, and its bite's floor above the snow, m
     pub(super) band: (f64, f64),
     pub(super) floor: f64,
@@ -54,8 +56,9 @@ pub(super) struct Body {
 ///   lies on the ground (`shell`), `gathered` kg of it lying `remains` kg a m² of its cell.
 /// - The walk: speed √(`walk_froude` g L) (Alexander and Jayes 1983), at `c_move` × (m / `move_ref`)^`move_exp` J per
 ///   kg and m (Taylor et al. 1982); it searches a strip as wide as its body, `busy` of the day.
-/// - Its chewing power `chew` × m^`upkeep_exp`; the band ± `BAND` decades about its `REACH` gene, no higher than
-///   `reach_len` lengths; its bite's floor `bite_floor` lengths.
+/// - Its chewing power `chew` × m^`upkeep_exp`; its jaw's force `jaw` × m^`jaw_exp` (what frame it can cut,
+///   `contract::cut`); the band ± `BAND` decades about its `REACH` gene, no higher than `reach_len` lengths; its bite's
+///   floor `bite_floor` lengths.
 /// - Liquid: `drink_least` × m^`drink_exp` kg a day pass through it besides its cooling (Nagy and Peterson 1988).
 pub(super) fn body(w: &World, p: &Parts, f: &Fauna, (x, mm): (usize, &[f64; NF]), (i, t): (usize, f64), (fuel, remains, gathered): (f64, f64, f64)) -> Body {
     let (chem, ph, g, n) = (&w.chem, &w.cfg.phys, &f.genes[x], f.adults[x]);
@@ -93,6 +96,7 @@ pub(super) fn body(w: &World, p: &Parts, f: &Fauna, (x, mm): (usize, &[f64; NF])
         chew: ph.chew * m.powf(ph.upkeep_exp) / DAY * work,
         busy,
         per_m: ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m,
+        force: ph.jaw * m.powf(ph.jaw_exp),
         band,
         floor: ph.bite_floor * len + contract::place(w, i).snow,
         gut,

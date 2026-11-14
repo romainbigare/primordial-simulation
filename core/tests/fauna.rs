@@ -289,3 +289,26 @@ fn a_small_body_rests_in_what_lies_on_the_ground() {
     println!("{m:.0} kg at 275 K: open loss {open:.0} W, its rest makes {rest:.0} W");
     assert!(rest > open, "a large body loses more in the open than its rest makes: {open} W against {rest} W");
 }
+
+/// A mouth breaks what its jaw can rupture (`contract::cut`): a jaw of no force cuts nothing; it cuts a stem of width
+/// d where its force is the frame's stress for a cut over the solid wall of the stem's section, so of a frame whose main
+/// stem is wider it takes the share (d / width)^`thin_exp`, which grows with the jaw's force and so with the body's
+/// mass; a frame no wider than d it takes whole.
+#[test]
+fn a_mouth_cuts_what_its_jaw_can_rupture() {
+    let w = testkit::small_world();
+    let (ph, p) = (&w.cfg.phys, Parts::of(&w.chem).expect("life's parts"));
+    let shear = w.chem.subs[p.sub[pcore::life::WALL]].shear;
+    assert_eq!(pcore::contract::cut(&w, 0.1, 0.0), 0.0, "a jaw of no force cut something");
+    let mut last = 0.0;
+    for row in [0, 4, 1, 2, 3] {
+        let m = fauna::adult(&TAKER_KINDS[row].genes);
+        let force = ph.jaw * m.powf(ph.jaw_exp);
+        let d = (4.0 * force / (std::f64::consts::PI * shear * ph.stem_solid)).sqrt();
+        let share = pcore::contract::cut(&w, 0.2, force);
+        println!("{m:.2} kg: a jaw of {force:.0} N cuts stems up to {:.2} mm, {:.1}% of a frame whose main stem is 0.2 m wide", d * 1e3, share * 100.0);
+        assert!((share - (d / 0.2).powf(ph.thin_exp)).abs() <= 1e-12 && share > last, "{m} kg: a share {share} of the frame");
+        assert_eq!(pcore::contract::cut(&w, 0.5 * d, force), 1.0, "a frame thinner than d was not taken whole");
+        last = share;
+    }
+}

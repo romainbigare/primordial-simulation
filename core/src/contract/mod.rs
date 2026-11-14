@@ -16,7 +16,7 @@
 //! When: the place is as the month's start left it (`surroundings`), and so is what stands; the cover is as it is now.
 //! Takes land during the takers' month, and the cover feels them in its own next month.
 
-use crate::cover::{Parts, SLOTS, TAKEN_LYING, TAKERS};
+use crate::cover::{Parts, NP, SLOTS, TAKEN_LYING, TAKERS};
 use crate::life::{Cell, Chunk, BROKEN, TAKEN};
 use crate::store::Node;
 use crate::units::MAX_SUBSTANCES;
@@ -108,19 +108,23 @@ pub fn surroundings(w: &mut World) {
 pub enum Layer {
     /// All the cover, each slot giving in proportion to what it holds of what is taken (a bite of the field)
     Cover,
-    /// The plants of one slot of the cover
-    Slot(usize),
+    /// The soft part of the plants of one slot: its living matter (the leaves that capture light and the living cells of
+    /// its sapwood) and its fuel
+    Soft(usize),
+    /// The frame of the plants of one slot: its walls (its stems and branches, and the walls of its leaves)
+    Frame(usize),
     /// The seeds lying on the ground, each lot giving in proportion to what it holds
     Seeds,
 }
 
 impl Layer {
-    /// Whether this layer holds slot `x` of the cover.
-    fn holds(self, x: usize) -> bool {
+    /// The share of each part of slot `x` of the cover this layer holds (`life::Parts`: fuel, matter, walls).
+    fn parts(self, x: usize) -> [f64; NP] {
         match self {
-            Layer::Cover => true,
-            Layer::Slot(y) => x == y,
-            Layer::Seeds => false,
+            Layer::Cover => [1.0; NP],
+            Layer::Soft(y) if x == y => [1.0, 1.0, 0.0],
+            Layer::Frame(y) if x == y => [0.0, 0.0, 1.0],
+            _ => [0.0; NP],
         }
     }
 }
@@ -147,23 +151,28 @@ pub fn above(snow: f64, height: f64) -> f64 {
     reached((0.0, f64::INFINITY), snow, height)
 }
 
-/// The share of each part of `layer` of cell `i` a taker can reach (`above`): of each slot of its cover the share of its
-/// plants above the snow, of the seeds lying all where no snow lies, none where it lies.
-fn reach<'a>(w: &'a World, cell: &'a Cell, p: &'a Parts, layer: Layer, snow: f64) -> impl Fn(usize) -> f64 + 'a {
+/// The share of each part of each slot of `layer` of cell `i` a taker can reach (`above`): of each part the layer holds
+/// of a slot of its cover the share of its plants above the snow; of the seeds lying all where no snow lies, none where
+/// it lies.
+fn reach<'a>(w: &'a World, cell: &'a Cell, p: &'a Parts, layer: Layer, snow: f64) -> impl Fn(usize) -> [f64; NP] + 'a {
     move |x| match layer {
-        Layer::Seeds => above(snow, 0.0),
-        _ if layer.holds(x) => above(snow, cell.cover.stands_at(&w.chem, &w.cfg.phys, p, x)),
-        _ => 0.0,
+        Layer::Seeds => [above(snow, 0.0); NP],
+        _ => {
+            let parts = layer.parts(x);
+            if parts == [0.0; NP] { parts } else { parts.map(|f| f * above(snow, cell.cover.stands_at(&w.chem, &w.cfg.phys, p, x))) }
+        }
     }
 }
 
-/// A layer of a cell's cover as a taker sees it: its mass, kg, what it holds of each substance, mol, and the energy to
-/// break all of it, J (`life::breaking`).
+/// A layer of a cell's cover as a taker sees it: its mass, kg, what it holds of each substance, mol, the energy to
+/// break all of it, J (`life::breaking`), and of a frame the width of its plants' main stem, m (`Cover::width`; 0 for
+/// any other layer).
 #[derive(Clone, Copy, Debug)]
 pub struct Shown {
     pub kg: f64,
     pub mol: [f64; MAX_SUBSTANCES],
     pub breaking: f64,
+    pub width: f64,
 }
 
 /// What `layer` of the cover of cell `i` shows a taker (`Cover::shown`, `Cover::shown_lying`): what it can reach above
@@ -172,15 +181,33 @@ pub fn shown(w: &World, i: usize, cell: &Cell, layer: Layer) -> Option<Shown> {
     let p = Parts::of(&w.chem)?;
     let of = reach(w, cell, &p, layer, place(w, i).snow);
     Some(match layer {
-        Layer::Seeds => cell.cover.shown_lying(&w.chem, &w.cfg.phys, &p, of(0)),
+        Layer::Seeds => cell.cover.shown_lying(&w.chem, &w.cfg.phys, &p, of(0)[0]),
+        Layer::Frame(x) => {
+            let rho = w.chem.subs[p.sub[crate::life::WALL]].density[0];
+            Shown { width: cell.cover.width(&w.cfg.phys, &p.mm(&w.chem), rho, x), ..cell.cover.shown(&w.chem, &w.cfg.phys, &p, of) }
+        }
         _ => cell.cover.shown(&w.chem, &w.cfg.phys, &p, of),
     })
 }
 
-/// The slots of the cover of `cell` that hold plants, each with the height they stand at, m, from the lowest.
+/// The share of a frame of main stem `width` m that a jaw closing with `force` N can cut: it cuts a stem of width d
+/// where the force is at least the frame's stress for a cut (`Substance::shear`) over the solid wall of the stem's
+/// section (`stem_solid` of π d² / 4); a stand whose branches keep their section from stem to twigs (Shinozaki and
+/// others 1964) with lengths as the radius to 2/3 (West, Brown and Enquist 1999) holds the share (d / width)^`thin_exp`
+/// of its frame in stems thinner than d, at most all.
+pub fn cut(w: &World, width: f64, force: f64) -> f64 {
+    let Some(p) = Parts::of(&w.chem) else { return 0.0 };
+    let (ph, shear) = (&w.cfg.phys, w.chem.subs[p.sub[crate::life::WALL]].shear);
+    let d = (4.0 * force.max(0.0) / (std::f64::consts::PI * shear * ph.stem_solid).max(1e-300)).sqrt();
+    if width <= d { 1.0 } else { (d / width).powf(ph.thin_exp) }
+}
+
+/// The slots of the cover of `cell` that hold plants, each as its soft part and its frame, with the height they stand
+/// at, m, from the lowest.
 pub fn slots(w: &World, cell: &Cell) -> Vec<(Layer, f64)> {
     let Some(p) = Parts::of(&w.chem) else { return Vec::new() };
-    let mut v: Vec<(Layer, f64)> = cell.cover.held().map(|x| (Layer::Slot(x), cell.cover.stands_at(&w.chem, &w.cfg.phys, &p, x))).collect();
+    let at = |x: usize| cell.cover.stands_at(&w.chem, &w.cfg.phys, &p, x);
+    let mut v: Vec<(Layer, f64)> = cell.cover.held().flat_map(|x| [(Layer::Soft(x), at(x)), (Layer::Frame(x), at(x))]).collect();
     v.sort_by(|a, b| a.1.total_cmp(&b.1));
     v
 }
@@ -204,12 +231,12 @@ pub fn take(w: &World, d: &mut Chunk, i: usize, layer: Layer, want: f64) -> Bite
     let Some(seen) = shown(w, i, d.at(i), layer).filter(|s| s.kg > 0.0 && want > 0.0) else { return none };
     let (e, g) = (p.content(&w.chem), (want / seen.kg).min(1.0));
     let held = d.cover(i).content(&e);
-    let of: Vec<f64> = {
+    let of: Vec<[f64; NP]> = {
         let f = reach(w, d.at(i), &p, layer, place(w, i).snow);
         (0..SLOTS).map(f).collect()
     };
     let (mol, heat) = match layer {
-        Layer::Seeds => d.cover(i).take_lying(&w.chem, &p, g, of[0]),
+        Layer::Seeds => d.cover(i).take_lying(&w.chem, &p, g, of[0][0]),
         _ => d.cover(i).take(&w.chem, &p, g, |x| of[x]),
     };
     let kg: f64 = mol.iter().zip(&w.chem.subs).map(|(m, s)| m * s.molar_mass).sum();
@@ -260,7 +287,7 @@ pub fn placed(w: &mut World, i: usize, amounts: impl IntoIterator<Item = (usize,
 /// (`cover::lose`), through the chunk's moves in the name of the node of the cell's life.
 pub fn press(w: &World, d: &mut Chunk, i: usize, energy: f64) {
     let Some(p) = Parts::of(&w.chem) else { return };
-    let all = d.at(i).cover.shown(&w.chem, &w.cfg.phys, &p, |_| 1.0);
+    let all = d.at(i).cover.shown(&w.chem, &w.cfg.phys, &p, |_| [1.0; NP]);
     if all.kg <= 0.0 {
         return;
     }

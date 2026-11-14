@@ -60,6 +60,8 @@ pub struct Substance {
     pub hf: f64,
     /// The stress at which the solid as a material breaks, Pa (0: none given; body matter: soft tissue with its liquid)
     pub rupture: f64,
+    /// The stress to cut the solid across its fibres, Pa (0: none given)
+    pub shear: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -194,6 +196,11 @@ impl Chemistry {
             require(s.lv > 0.0, || format!("substance {k}: vaporisation enthalpy must be above 0"))?;
             require(s.density.iter().all(|&d| d > 0.0), || format!("substance {k}: densities must be above 0"))?;
             require(s.dense > 0.0 && s.dense_drop >= 0.0, || format!("substance {k}: the temperature of its densest liquid must be above 0, its lowering not below"))?;
+        }
+        // A taker's jaw cuts life's frame by its stress for a cut (`contract::cut`).
+        if let Some(p) = crate::life::Parts::of(self) {
+            let wall = p.sub[crate::life::WALL];
+            require(self.subs[wall].shear > 0.0, || format!("substance {wall}, life's frame: its stress for a cut (shear) must be above 0"))?;
         }
         // Each reaction, then each conversion: a conversion needs inputs and a product, a reaction no more orders than
         // inputs. Its molar masses must agree with its elements to rounding: it keeps mass.

@@ -201,7 +201,9 @@ height), so of a slot whose plants stand h high under snow d deep a taker reache
 and of the seeds lying, on the ground, nothing where any snow lies. **Take**
 (`contract::take`): a taker bites a mass of the whole cover, one slot or the seeds lying; a bite takes all the parts
 it reaches in their own proportions, as a mouth takes a piece of a plant, never more than it can reach, with its heat; the cover books its side (`Cover::take`), the taker its own. **Give**
-(`contract::give`): matter and heat back to the ground, through the cell's view of the store. **The key liquid**
+(`contract::give`): matter and heat back to the ground, through the cell's view of the store. A slot of cover shows a taker
+two layers, its soft part and its frame (`Layer::Soft`, `Layer::Frame`; the frame with its main stem's width), and
+`contract::cut` gives the share of a frame a jaw of a force can cut (3b). **The key liquid**
 (`contract::liquid`): what a cell's ground holds of it, split four ways: open (standing on it, as deep as the month's
 start found it), in its pores (the cover's roots reach it, a mouth does not), frozen and lying on it as the soft solid
 (as deep as the month's start found it), and frozen in its pores; and beside them what ran over it in the month (its main channel's month,
@@ -889,8 +891,16 @@ land only through the contract (section 0; `cli/tests/sides.rs`), and their book
   (`Physics::repair`) a day per member, m its living mass, kg (Kleiber 1932; Elia 1992); and its gut's capacity,
   `c_capacity` of the fuel its capacity (`ENZYME`, mol of walls a kg living a s at `t_cat`) could free, at the same
   pace and repair, as the cover pays for its light capacity.
-- **What it reaches** (`fauna::take`): each slot of the cover by the height its plants stand at, and the seeds lying
-  (`contract::slots`, `contract::shown`). A member of length L = (m / `rho_body`)^(1/3) searches the band of heights
+- **What it reaches** (`fauna::take`): each slot of the cover as two layers by the height its plants stand at, its
+  soft part and its frame, and the seeds lying (`contract::slots`, `contract::shown`). The soft part of a slot is its
+  living matter and its fuel (the leaves that capture light, and the living cells of its sapwood); the frame is its
+  walls (its stems and branches, and the walls of its leaves). **A mouth breaks what its jaw can rupture**
+  (`contract::cut`): a jaw closes with `jaw` × m^`jaw_exp` N and cuts an axis of width d where that force is the frame's
+  stress for a cut (`Substance::shear`) over the solid wall of its section (`stem_solid` of π d² / 4); a stand whose
+  branches keep their section from stem to twigs (Shinozaki and others 1964), their lengths as the radius to 2/3 (West,
+  Brown and Enquist 1999), holds the share (d / D)^`thin_exp` of its frame in axes thinner than d, D its main stem's
+  width (`Cover::width`, the stand's law), at most all. So a 30 g body cuts axes of 0.8 mm, a 400 kg one of 6 mm, and a
+  tree's trunk is nobody's. A member of length L = (m / `rho_body`)^(1/3) searches the band of heights
   ± `BAND` (half a decade) about its `REACH` gene, no higher than `reach_len` L, and bites no lower than `bite_floor` L
   over the snow: of a plant h high it reaches the share of its stem within that (`contract::reached`); the seeds lying
   only where its floor and its band's bottom are under `GROUND_M` (1 cm). What lies out of reach is the cover's refuge.
