@@ -307,7 +307,7 @@ impl Default for Physics {
             drawdown: 0.3,
             huber: 2e-4,
             c_sapwood: 1600.0,
-            root_uptake: 4e-4,
+            root_uptake: 1.1e-3,
             root_turnover: 0.6,
             wall_kg: 0.05,
             thin_kg: 5.0,
