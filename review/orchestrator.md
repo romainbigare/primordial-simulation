@@ -521,11 +521,47 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    `roadmap.md` 7.2. Then the small game (god tools, fire).
 
 **Nature track**
-0. **The variety of habitat** (the owner's question: why no grassland, swamp, delta, desert, deep gorges, large
-   rivers; "I would love to have those environments emerging naturally through the laws we have"): a study with
-   measures, in work by an explorer that changes nothing (scratch `scratchpad/habitats/`: `report.md`, `why.png`):
-   per habitat what makes it on a real planet, what our laws hold, why it does not show, what would let it; a
-   ranked list of five changes. The orchestrator decides from it and puts the steps here.
+0. **The variety of habitat** (the owner's first priority). A study with measures is done (its report is in this
+   session's record; tables, probe and pictures in `scratchpad/habitats/`: `why.png`, `trials.png`, `notes.md`).
+   What it found on today's main (64 drawn world, band 20 to 65, six kinds, year 100: 85% forest, 7% open low
+   cover, 3% bare):
+   - **Nothing kills a tree but frost.** A plant is fully active until its ground holds about 1 cm of liquid
+     (`wet_depth`, read by `cover::wetness`): in the driest warm month a quarter of the land is under 46% of field
+     capacity, yet a herb is under half activity on 15 of 1,470 cells. So the wet-ground tree (`MOIST` -0.05) is
+     the commonest tree everywhere. No fire; every year the same; no root drowns (26% of land cells have full
+     pores six months or more).
+   - **Rain has no direction and almost no season**: east and west slopes get the same rain; the driest month
+     gets 0.62 of the wettest's (savanna and dry-summer lands: under 0.1). The planet's dry belt is weak and has
+     no season (1,165 to 1,230 mm at 18 to 28 degrees against 2,300 at the equator): the strip is all liquid and
+     the overturning cell's edge is set by the year's mean sun.
+   - **A band nearer the dry belt gives dry open land with today's laws** (the band 5 to 50, measured: at 10 to 20
+     degrees 20% forest, 23% open, 58% bare at year 100, 540 mm of rain; too harsh for that rain, and the dry
+     woody kind has not spread yet). On the page as the climate "Warm".
+   - A cold open belt is there (ground frozen 6 to 7 months: 40 to 56% open, a low mat of the dry woody kind);
+     its cause is the cost of frost hardiness, where a real tree line comes from a short warm season.
+   - The meadow on thin ground is real early (58% of the land holds no tall slot's roots at year 20) and is
+     closed later by woody plants of 4 to 6 m, not by shade from trees on deep ground: no fault of area in the
+     light law.
+   - Rivers stay small at every size (largest catchment 330 km² at 32 squares, 1,240 at 64, 2,600 at 128, 6,400
+     at 256: drawn worlds split into more islands as the map grows; the 64 world's largest river is 13 m³/s, 11 m
+     wide). A river of 1,000 m³/s needs about 100,000 km²: a world of 512 with one large land.
+   - No cliffs or canyons: the makes of bed wear at rates 1.5 times apart (real hard and soft layers: 10 to 100
+     times), the layers are folded, a 125 m sample holds no cliff. The ground's water numbers are one per world.
+   - The stretch already covers both directions for the air's sideways laws (to the air the middle of a 128 km
+     island is about 1,200 km from its shore): no more stretch.
+   **The orchestrator's order from it** (each a package with its measure and its picture):
+   1. Done: the page's climate "Warm" (5 to 50).
+   2. **Plants and the ground's liquid** (a builder): a plant feels drought against the ground's own field
+      capacity (wilting, not 1 cm of liquid); roots in full pores get no gas (they burn without it, by the
+      chemistry's own reaction, at less energy), with a gene for carrying gas down at a cost, and a starting kind
+      of soaked ground. After the mend of the slots.
+   3. **Rain with a season and a direction** (the air's helper): the overturning cell's edge follows the month's
+      sun; rain made by the wind rising over ground (Smith and Barstad 2004), the wind from the band's own air,
+      at its real size.
+   4. Fire, as a fast event inside a month (needs 2 and 3 first).
+   5. Then: the ground's water numbers by grain (heath on coarse ground, wet meadow on fine); a wider spread of
+      the bed's wear rates and flat layers on a high land in some worlds (scarps); one large land in a world of
+      512 for a large river and a delta (with the package of the mouths).
 1. Nothing in work on the page. Next there: the first drawing of animals (life track).
 2. **The sorted start**, carried over by hand in the steps of section 4 (its target, main alone to year 300, is
    measured), with the amount of variety as a setting of a world. It goes to main only when its pictures are at
