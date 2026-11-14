@@ -54,6 +54,9 @@ struct S {
     /// MPa (`Substance::rupture`); optional in the file (none: 0)
     #[serde(default)]
     rupture: f64,
+    /// MPa (`Substance::shear`); optional in the file (none: 0)
+    #[serde(default)]
+    shear: f64,
 }
 
 #[derive(Deserialize)]
@@ -120,6 +123,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             lv: s.lv.map_or(TROUTON * s.boil, |l| l * 1000.0),
             lf: s.lf.map_or(RICHARDS * s.melt, |l| l * 1000.0),
             rupture: s.rupture * 1e6,
+            shear: s.shear * 1e6,
         })
         .collect();
     let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, open: r.open.unwrap_or(1.0), ord: r.ord }).collect();

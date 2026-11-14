@@ -142,6 +142,10 @@ impl Cover {
     pub fn height(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {
         stand::height(ph, self.plant(mm, x), self.walls(mm, x) / self.built(mm, x).max(1e-300), rho)
     }
+    /// The width of the main stem of the plants of slot `x`, m (`stand::stem`), its walls of density `rho` kg/m³.
+    pub fn width(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {
+        stand::stem(ph, self.plant(mm, x), self.walls(mm, x) / self.built(mm, x).max(1e-300), rho)
+    }
     /// All the cover of slot `x`, kg.
     pub fn kg(&self, mm: &[f64; NP], x: usize) -> f64 {
         self.built(mm, x) + self.mol[x][FUEL] * mm[FUEL]

@@ -93,10 +93,13 @@ pub(super) struct Reach {
     pub(super) share: Vec<Vec<f64>>,
 }
 
-/// What the slots of cell `i`, its members `bodies`, can reach of `layers` (`Reach`, `reach`).
+/// What the slots of cell `i`, its members `bodies`, can reach of `layers` (`Reach`, `reach`), of a frame only what its
+/// jaw can cut.
 pub(super) fn reachable(w: &World, i: usize, layers: &[Found], bodies: &[Body; FS]) -> Reach {
     let snow = contract::place(w, i).snow;
-    let reach: Vec<Vec<f64>> = bodies.iter().map(|b| layers.iter().map(|f| reach(b, f, snow)).collect()).collect();
+    // Of a frame, only the stems its jaw can cut (`contract::cut`).
+    let cuts = |b: &Body, f: &Found| if matches!(f.layer, Layer::Frame(_)) { contract::cut(w, f.shown.width, b.force) } else { 1.0 };
+    let reach: Vec<Vec<f64>> = bodies.iter().map(|b| layers.iter().map(|f| reach(b, f, snow) * cuts(b, f)).collect()).collect();
     let widest: Vec<f64> = (0..layers.len()).map(|l| reach.iter().map(|r| r[l]).fold(0.0, f64::max)).collect();
     let stock = layers.iter().zip(&widest).map(|(f, &r)| f.shown.kg * r).collect();
     let breaking = layers.iter().map(|f| f.shown.breaking / f.shown.kg).collect();
