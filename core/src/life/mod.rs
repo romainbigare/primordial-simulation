@@ -41,9 +41,9 @@ pub struct Life {
     /// (`contract::place`)
     pub env: Vec<[f64; 4]>,
     /// Per cell, from the start of life's month (`contract::ways_to_liquid`): the way over land to the nearest cell with open
-    /// liquid of at least each decade over the month, m (`contract::to_liquid`). Not saved: life's month finds it before any
+    /// liquid of at least each decade over the month, m, and that cell (`contract::to_liquid`). Not saved: life's month finds it before any
     /// law reads it
-    pub(crate) to_liquid: Vec<[f64; crate::contract::LEVELS]>,
+    pub(crate) to_liquid: Vec<[(f64, u32); crate::contract::LEVELS]>,
     /// While a parallel pass runs (`life::run`): what the cells see in each air node as the store held it at the
     /// pass's start (`World::a_seen`, of each substance), the same for every cell under it, worked out where first read;
     /// else empty
@@ -51,7 +51,7 @@ pub struct Life {
 }
 
 /// Once a month, after Flow's state is built in full: the month of each cell's life, one task per chunk on the pool:
-/// its cover's (`cover::step`), then its takers' (`fauna::step`), which find the cover as its month left it; then the
+/// cover's seeds land (`cover::landed`), and what the takers sent (`fauna::land`).
 /// cover's seeds land (`cover::landed`).
 pub fn month(w: &mut World) {
     crate::contract::ways_to_liquid(w);
@@ -61,6 +61,7 @@ pub fn month(w: &mut World) {
         crate::fauna::step(w, d);
     });
     crate::cover::landed(w);
+    crate::fauna::land(w);
 }
 
 impl Cell {

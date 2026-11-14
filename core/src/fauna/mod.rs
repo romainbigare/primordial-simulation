@@ -10,6 +10,7 @@
 mod body;
 mod grow;
 mod gut;
+mod land;
 mod lodge;
 mod month;
 mod place;
@@ -18,6 +19,7 @@ mod thirst;
 pub mod way;
 
 pub use body::{shell, BAND, WORK_T};
+pub use land::land;
 pub use month::step;
 pub use place::place;
 
@@ -76,12 +78,15 @@ pub struct Fauna {
     /// (`gut::Digested`), a running mean over a year's months; below zero it is in deficit and gives way to newborns that
     /// find no room (`lodge`)
     pub net: [f32; FS],
+    /// What its takers sent in their last month, landed after every chunk ran (`land`); not saved
+    #[serde(skip)]
+    pub(crate) out: land::Outbox,
 }
 
 impl Default for Fauna {
     /// No takers.
     fn default() -> Fauna {
-        Fauna { n: [0.0; GROUPS], mol: [[0.0; NF]; GROUPS], e: [0.0; FS], genes: [[0.0; NG]; FS], root: [NO_ROOT; FS], net: [0.0; FS] }
+        Fauna { n: [0.0; GROUPS], mol: [[0.0; NF]; GROUPS], e: [0.0; FS], genes: [[0.0; NG]; FS], root: [NO_ROOT; FS], net: [0.0; FS], out: land::Outbox::default() }
     }
 }
 

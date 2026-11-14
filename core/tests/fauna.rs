@@ -248,7 +248,7 @@ fn the_way_to_the_liquid_costs_the_walk() {
     let mut w = testkit::living(8, 1);
     pcore::step(&mut w);
     let cells = w.mesh.cells();
-    let field = |need: f64| (0..cells.n()).map(|i| pcore::contract::to_liquid(&w, i, need)).collect::<Vec<f64>>();
+    let field = |need: f64| (0..cells.n()).map(|i| pcore::contract::to_liquid(&w, i, need).0).collect::<Vec<f64>>();
     let mixed = |v: &[f64]| v.contains(&0.0) && v.iter().any(|&d| d > 0.0 && d.is_finite());
     let need = (0..pcore::contract::LEVELS as i32).map(|k| 10f64.powi(k)).find(|&x| mixed(&field(x))).expect("a field of ways with some cells at the liquid and some off it");
     let way = field(need);
@@ -427,5 +427,24 @@ fn kinds_keep_apart_by_the_slot_rule() {
     }
     println!("cell-months in which both kinds lived: {shared}");
     assert!(shared > 0, "the two kinds never shared a cell");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// The young leave (laws.md 3b): takers placed on one cell of a small world spread to other cells by the kernel of
+/// the seeds as their young mature, and every element and the energy are kept across the cells they leave and reach.
+#[test]
+fn the_young_leave_and_the_books_are_kept() {
+    let mut w = testkit::living(8, 12);
+    let i = testkit::mild_land(&w);
+    let books = Books::now(&w);
+    testkit::takers(&mut w, i, 0, (1e4, 0.1 * fauna::adult(&TAKER_KINDS[0].genes)));
+    let held = |w: &World| (0..w.mesh.cells().n()).filter(|&j| of(w, j).any()).count();
+    let mut most = 1;
+    for _ in 0..3 * w.cfg.months_per_year {
+        pcore::step(&mut w);
+        most = most.max(held(&w));
+    }
+    println!("cells with takers: at most {most}, at the end {}", held(&w));
+    assert!(most > 1, "no young left the cell they were born in");
     books.assert_kept(&w, 1e-9);
 }

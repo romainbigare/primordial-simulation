@@ -949,7 +949,10 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   has: less work makes less heat. Only where at no work its need is still unmet do its members die, by the unmet share
   (`LACK`). The vapour shed leaves the cell's liquid (the running liquid, what they ate and what they fetched join it
   there), then the soft solid, for the cell's aside node with its latent heat, paid from the bodies' heat
-  (`contract::vapour`); where the cell's ground holds less, less is shed and its heat goes to the ground.
+  (`contract::vapour`); where the cell's ground holds less, less is shed and its heat goes to the ground. What was
+  fetched is the far cell's: it waits in the cell's outbox and, after every chunk ran, is taken from that cell's ground
+  (as far as its liquid then holds, the asks on it shared by what they ask) and given to the walkers' cell's ground with
+  its heat (`fauna::land`, `contract::fetched`).
 - **Digestion** (`fauna::gut`, by the chemistry's own reactions): its gut splits walls into fuel (the reaction that
   makes fuel of the walls alone, taking the key liquid of the ground) up to its capacity × its living mass × pace; it
   burns for its upkeep and heat first the fuel it took and split, then the body matter it took (the burning of body
@@ -985,8 +988,16 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   members gives its amounts to the slot's other group (matter built into newborns none of whom was drawn stays in the
   mother). What is left of the pot goes back to the stores up to their most; the rest of it and of the matter passes to
   the ground. The draws of a slot in a month are one keyed stream (`Purpose::Fauna`), in the order: deaths of its
-  adults, of its young, its maturing, its births, the mutation of its newborns. A slot of no members is empty. The
-  young stay in their cell (no dispersal yet).
+  adults, of its young, its maturing, its births, the dispersal of its maturing young, the mutation of its newborns.
+  A slot of no members is empty.
+- **The young leave** (`fauna::land`). The young that mature in a month leave in lots (one a member under `N_WHOLE`,
+  else 8), each landing in the cell the kernel of the seeds draws (`life::lot`: two Gaussian scales, `kernel_near` and
+  `kernel_far`); the lots that land in another cell leave the slot's adults for the cell's outbox with their heat at
+  the body's temperature. After every chunk ran they land, cell by cell in the order of the cells and of what each
+  sent: on land they join the adults of the slot of their kind they are alike to there, or found one, by the slot rule
+  below (a slot in deficit they take dies as remains), their count whole under `N_WHOLE` by a keyed draw; on a cell
+  with no land, or with no room, they die there, their matter and heat to its ground. The potential energy of what
+  moved is booked as for the seeds (`contract::travelled`).
 - **Mutation and the slot rule** (`fauna::lodge`, the shared rule of `life::kin`). The newborns of a slot in a month
   are one packet; its genes are the slot's after one generation's mutation (each gene moves by noise of its step in
   `fauna::RANGE` times `mut_size`, within its range: `life::kin::mutate`, as the cover's seeds). It joins the slot of its

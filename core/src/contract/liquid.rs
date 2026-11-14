@@ -3,7 +3,7 @@
 
 use super::place;
 use crate::life::{Chunk, Parts};
-use crate::store::Node;
+use crate::store::{apply, Class, Move, Node};
 use crate::World;
 
 /// The key liquid of a cell as a taker finds it, mol: open (standing on its ground, which a mouth reaches), what ran
@@ -62,10 +62,31 @@ pub fn vapour(w: &World, d: &mut Chunk, i: usize, [liquid, solid]: [f64; 2]) -> 
 pub const LEVELS: usize = 13;
 
 /// The way from cell `i` over land to the nearest cell whose open liquid over the month can meet a need of `need` mol
-/// (at least the decade above it), m (`ways_to_liquid`; infinite where none is reached).
-pub fn to_liquid(w: &World, i: usize, need: f64) -> f64 {
+/// (at least the decade above it), m, and that cell (`ways_to_liquid`; an infinite way where none is reached).
+pub fn to_liquid(w: &World, i: usize, need: f64) -> (f64, usize) {
     let k = (need.max(1.0).log10().ceil() as usize).min(LEVELS - 1);
-    w.life.to_liquid.get(i).map_or(f64::INFINITY, |v| v[k])
+    w.life.to_liquid.get(i).map_or((f64::INFINITY, i), |v| (v[k].0, v[k].1 as usize))
+}
+
+/// What takers fetched from far cells in their month lands, after every chunk ran (`fauna::land`): each of `asks`
+/// (the cell it was taken from, the cell it was carried to, mol of the key liquid), in their order, is taken from its
+/// cell's ground as far as the liquid it holds now allows (the asks on a cell shared by what they ask), and given to the
+/// ground of the cell it was carried to with its heat at the temperature of the ground it left.
+pub fn fetched(w: &mut World, asks: &[(usize, usize, f64)]) {
+    let Some(p) = Parts::of(&w.chem) else { return };
+    let (k, n) = (p.liquid, w.mesh.cells().n());
+    let mut asked = std::collections::BTreeMap::new();
+    asks.iter().for_each(|&(from, _, mol)| *asked.entry(from).or_insert(0.0) += mol);
+    let s = &w.chem.subs[k];
+    let mut moves = Vec::with_capacity(asks.len());
+    for &(from, to, mol) in asks.iter().filter(|a| a.2 > 0.0) {
+        let (t, plateau) = w.thaw_last(from);
+        let liquid = w.store.amounts(Class::Ground)[k * n + from].max(0.0) * w.molten(k, from, t, plateau);
+        let got = mol * (liquid / asked[&from]).min(1.0);
+        let heat = got * (s.cp * w.t_ground_last(from) + s.lf);
+        moves.push(Move { from: Node::ground(from), to: Node::ground(to), k: k as u16, mol: got, heat });
+    }
+    apply(w, &[], &moves);
 }
 
 /// At the start of life's month, after Flow's: for each decade of liquid, the way of each cell to the nearest cell
@@ -78,7 +99,7 @@ pub fn ways_to_liquid(w: &mut World) {
     let n = cells.n();
     let volume = Parts::of(&w.chem).map_or(f64::INFINITY, |p| w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid));
     let open: Vec<f64> = (0..n).map(|i| place(w, i).liquid * cells.area()[i] / volume + w.liquid_month.get(i).map_or(0.0, |&f| f as f64 * month)).collect();
-    let mut field = vec![[f64::INFINITY; LEVELS]; n];
+    let mut field = vec![[(f64::INFINITY, 0); LEVELS]; n];
     for k in 0..LEVELS {
         let way = shortest(w, (0..n).filter(|&i| open[i] >= 10f64.powi(k as i32)));
         field.iter_mut().zip(way).for_each(|(f, d)| f[k] = d);
@@ -86,24 +107,25 @@ pub fn ways_to_liquid(w: &mut World) {
     w.life.to_liquid = field;
 }
 
-/// The shortest way of each cell over land to the nearest of `sources`, m (infinite where none is reached).
-fn shortest(w: &World, sources: impl Iterator<Item = usize>) -> Vec<f64> {
+/// The shortest way of each cell over land to the nearest of `sources`, m (infinite where none is reached), and that
+/// source.
+fn shortest(w: &World, sources: impl Iterator<Item = usize>) -> Vec<(f64, u32)> {
     let cells = w.mesh.cells();
-    let mut way = vec![f64::INFINITY; cells.n()];
+    let mut way = vec![(f64::INFINITY, 0); cells.n()];
     let mut next = std::collections::BinaryHeap::new();
     for i in sources {
-        way[i] = 0.0;
+        way[i] = (0.0, i as u32);
         next.push(std::cmp::Reverse((Far(0.0), i)));
     }
     while let Some(std::cmp::Reverse((Far(d), i))) = next.pop() {
-        if d > way[i] {
+        if d > way[i].0 {
             continue;
         }
         let (links, around) = cells.around(i);
         for (&l, &j) in links.iter().zip(around) {
             let (j, there) = (j as usize, d + cells.dist()[l as usize]);
-            if there < way[j] && w.is_land(j) {
-                way[j] = there;
+            if there < way[j].0 && w.is_land(j) {
+                way[j] = (there, way[i].1);
                 next.push(std::cmp::Reverse((Far(there), j)));
             }
         }

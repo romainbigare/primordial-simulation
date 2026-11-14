@@ -7,6 +7,7 @@
 
 use super::body::{body, Body};
 use super::grow::{grow, whole, Surplus};
+use super::land::disperse;
 use super::lodge::{lodge, merge_alike, Packet};
 use super::gut::{digest, Digested, Gut};
 use super::thirst::{self, Thirst};
@@ -74,14 +75,15 @@ fn cell(w: &World, d: &mut Chunk, (p, gut): (&Parts, &Gut), i: usize) {
             counts.takers_died.iter_mut().zip(died).for_each(|(a, d)| *a += d);
             (surplus.gained[c], surplus.matter, balance) = (kept.gained, surplus.matter + kept.matter, balance + kept.balance);
         }
-        let (n, body) = grow(w, (p, gut), (f, x, (&bodies[x], &bodies[FS + x])), &surplus, (&mut r, &mut b));
+        let grown = grow(w, (p, gut), (f, x, (&bodies[x], &bodies[FS + x])), &surplus, (&mut r, &mut b));
+        disperse(w, (f, x, i), (grown.matured, &grown.moved), &mut r);
         tidy(f, x, &sub(p), &mut b);
         [x, FS + x].into_iter().for_each(|g| rounded(f, g, &mut counts.rounded[0]));
         if f.root[x] != NO_ROOT {
             f.net[x] += ((balance / f.living(&mm, x).max(1e-300)) as f32 - f.net[x]) / year;
         }
-        if n > 0.0 {
-            packets.push((Packet { x, n, body }, r));
+        if grown.born > 0.0 {
+            packets.push((Packet { x, n: grown.born, body: grown.held }, r));
         }
     }
     // The newborns lodge in the order of their slots, then slots alike in every gene join.
@@ -90,20 +92,26 @@ fn cell(w: &World, d: &mut Chunk, (p, gut): (&Parts, &Gut), i: usize) {
         lodge(w, (f, &packet), (&sub(p), &mm), (&mut r, &mut b, &mut counts.takers_died[SPENT as usize]), &waiting[k + 1..]);
     }
     merge_alike(w, f, &mm);
-    // Each slot's heat ends at its members' temperature; what the burning released beyond it goes to the ground.
+    // The liquid fetched from far cells is theirs (`land`).
+    f.out.drink.extend((0..GROUPS).filter(|&g| plan.drink[g].0 != i && plan.drink[g].1 > 0.0).map(|g| (plan.drink[g].0 as u32, plan.drink[g].1)));
+    // Each slot's heat, and the young that leave, end at their members' temperature; what the burning released beyond
+    // it goes to the ground.
     let target: [f64; FS] = std::array::from_fn(|x| f.cap(chem, &sub(p), x) * (f.genes[x][KEEP] as f64).max(t));
-    let all: f64 = target.iter().sum();
+    let leaving: Vec<f64> = f.out.young.iter().map(|y| y.cap(chem, &sub(p)) * y.tb(t)).collect();
+    let all: f64 = target.iter().sum::<f64>() + leaving.iter().sum::<f64>();
     let left = book(w, moves, (i, t), (e, 0.0), all, &b);
     let share = if all > 0.0 { left / all } else { 0.0 };
     f.e = target.map(|x| x * share);
+    f.out.young.iter_mut().zip(leaving).for_each(|(y, h)| y.heat = h * share);
 }
 
 /// What the slots of cell `i` do for liquid in the month: the share of their work each keeps, the share of its members
-/// that die of thirst, and the work of their ways to the liquid, J.
+/// that die of thirst, the work of their ways to the liquid, J, and the cell each fetched liquid from and the mol.
 struct Plan {
     work: [f64; GROUPS],
     lack: [f64; GROUPS],
     way: [f64; GROUPS],
+    drink: [(usize, f64); GROUPS],
 }
 
 /// The plan of the slots `bodies` of cell `i` for liquid: what they would take of `layers` at full work and the
@@ -119,14 +127,15 @@ fn plan(w: &World, p: &Parts, (i, bodies): (usize, &[Body; GROUPS]), (layers, re
     let walks: [f64; GROUPS] = std::array::from_fn(|x| bodies[x].speed * searching[x] / DAY);
     let thirsts: [Thirst; GROUPS] = std::array::from_fn(|x| Thirst::of(&bodies[x], walks[x], (dt, lv), full[x].iter().zip(&wet).map(|(k, l)| k * l).sum()));
     let mut given = thirst::shares(&thirsts, found.open + found.running + found.soft);
-    let mut work_of_way = [0.0; GROUPS];
+    let (mut work_of_way, mut drink) = ([0.0; GROUPS], [(i, 0.0); GROUPS]);
     for x in (0..GROUPS).filter(|&x| bodies[x].n > 0.0) {
         let (b, short) = (&bodies[x], (thirsts[x].asks() - given[x] - thirsts[x].eaten).max(0.0));
-        let got = way::fetch((b.n, b.m, b.speed, b.per_m), (short, liquid_mm, days), contract::to_liquid(w, i, short), w.cfg.phys.dry_most);
-        (given[x], work_of_way[x]) = (given[x] + got.mol, got.work);
+        let (way, from) = contract::to_liquid(w, i, short);
+        let got = way::fetch((b.n, b.m, b.speed, b.per_m), (short, liquid_mm, days), way, w.cfg.phys.dry_most);
+        (given[x], work_of_way[x], drink[x]) = (given[x] + got.mol, got.work, (from, got.mol));
     }
     let (work, lack) = thirst::work(bodies, &thirsts, &walks, &given, (dt, lv));
-    Plan { work, lack, way: work_of_way }
+    Plan { work, lack, way: work_of_way, drink }
 }
 
 /// Group `g` of `f`, its members `b`, digests `took` (mol of each substance) for the energy it burns, `burnt` W a member
