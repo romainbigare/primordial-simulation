@@ -45,6 +45,9 @@ two files: this one and the roadmap.
   passed: `git fetch -q origin main && git merge-base --is-ancestor origin/main HEAD && git push origin HEAD:main`.
   Then `git branch -f main origin/main`: the push does not move the local branch `main`, and a helper told to
   start from or merge `main` takes the local one.
+- **The disk fills** (it did, twice): each helper's worktree holds a build folder of 2 to 3 GB. When a helper is
+  done and its branch is merged or saved, delete its `target` (`rm -rf .claude/worktrees/agent-*/target` of the
+  finished ones); tell helpers to delete scratch runs and old binaries once their numbers are in a table.
 - Worktrees and scratch files die with the container, and the container restarts without warning (three times in
   one day): tell every helper to commit its work in progress early, and push its branch to a `wip/` name as soon as
   it holds something. Anything worth keeping is merged or pushed before the session ends.
@@ -423,10 +426,23 @@ world). No rule that says where a habitat goes.
   - **The page places the takers** 50 years after the first life (`wasm/src/lib.rs` `TAKERS_YEAR`); the CLI
     places none unless asked (`--fauna-year`). The layer "Takers" shows them; no single animal is drawn yet.
   - **Paused by the owner** ("we'll continue that when we have sorted the habitat variety for them to live in"):
-    the takers' three open faults (why the 30 g kind dies; why large grazers pay their way on 70 kg of dry matter
-    per hectare; what births the takers achieve in a world against wild ones). A third builder had begun to
-    measure them and was stopped: what it found so far is in `scratchpad/f1/b3/notes.md`; its brief is in this
-    session's record. No work on the animals' numbers before the habitats and the sorted start.
+    the takers' three open faults. No work on the animals' numbers before the habitats and the sorted start. A
+    third builder measured them and was stopped; nothing is committed (its notes: `scratchpad/f1/b3/notes.md`;
+    its uncommitted trial as a patch beside them). What it found, to start from:
+    - **The 30 g kind**: the bite is not its limit (1 to 5% of its feeding time is search). Its chewing is: the
+      `chew` row stands for a whole day's eating but the code spends it over the working half of the day
+      (`busy`); it finds nothing for three months under snow; seeds are 70% walls and use up its chewing. With
+      the chewing spread over the feeding hours (tried, not committed, unchecked) the 30 g kind lives (2.5
+      million adults after 15 years at 32 squares), the cold-bodied kind booms and the 60 and 400 kg kinds fall.
+    - **Large grazers**: the "70 kg of dry matter per hectare" holds only without the bite's floor; with it a 60
+      kg grazer pays its way at 385 to 854 kg per hectare and a 400 kg one at 666 to 1,550, near the measured
+      1,000 to 1,500. "A bite takes the top of what stands" changes nothing there. But the soft part breaks so
+      easily that the most a grazer eats is 10 to 13 times its need; walls inside the leaf (one anchored row:
+      30 to 60% of a leaf's dry mass) would bring that to 1.1 to 1.9 times. Not built.
+    - **Births**: Hamilton and others 2011 count young at weaning, not at birth. Against real newborn mass our
+      births are 12 to 29 times too many (1.7 to 5 against weaned mass). Our young feed themselves at 3 to 6% of
+      the adult's mass; real young become independent at 17 to 40%. The step that is too easy is likely that a
+      newborn feeds itself at once. What the takers achieve in a world was not measured (the run was stopped).
   - In work: the first drawing of animals on the page (the design's decision 10), by a page builder in its own
     worktree: two or three looks on branches from one base, pictures in `scratchpad/animals/` (`looks.png`); the
     owner picks, then one is merged. Then F2 (movement by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
