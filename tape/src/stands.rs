@@ -42,8 +42,8 @@ pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, wa
     Plants { per_m2, mass, height, stem, width, cover, crown: -(-leaf / cover).exp_m1() }
 }
 
-/// What a slot's row reads of its cell: how wet its ground is (`cover::wet`), its temperature and the melting point of
-/// its key liquid, K, the density of its walls, kg/m³, its area, m², and the share of it that is land.
+/// What a slot's row reads of its cell: the share of what its ground holds for roots that it holds (`cover::wet`), its
+/// temperature and the melting point of its key liquid, K, the density of its walls, kg/m³, its area, m², and the share of it that is land.
 struct Ground {
     wet: f64,
     t: f64,
