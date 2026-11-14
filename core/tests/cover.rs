@@ -124,7 +124,7 @@ fn the_light_reaction_goes_with_its_gas() {
 fn a_plant_slows_from_its_share_to_the_wilting_point() {
     let ph = pcore::Physics::default();
     let (herb, dry) = (genes(), KINDS[DRY_ROW].genes);
-    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(&ph, g, cover::available(&ph, filled));
+    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(g, cover::available(&ph, filled));
     let filled = |share: f64| ph.wilt + share * (ph.field - ph.wilt);
     let slows = cover::dec(herb[cover::MOIST]);
     let (wilting, full, half) = (act(&herb, ph.wilt), act(&herb, filled(slows * (1.0 + 1e-9))), act(&herb, filled(0.5 * slows)));
@@ -398,7 +398,7 @@ fn the_frost_gene_falls_where_winters_are_cold() {
     let tender = g;
     let kills = |w: &pcore::World, cells: &[usize]| {
         let at = |i: usize| {
-            let act = cover::activity(&w.cfg.phys, &tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
+            let act = cover::activity(&tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
             cover::frozen(&w.cfg.phys, w.chem.subs[parts.liquid].melt, tender[FROST] as f64, (w.t_ground_last(i), act))
         };
         cells.iter().map(|&i| at(i)).fold(0.0, f64::max)

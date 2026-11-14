@@ -297,11 +297,13 @@ pub fn available(ph: &crate::Physics, filled: f64) -> f64 {
 }
 
 /// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots
-/// (`available`): full from the share its moisture gene sets (`MOIST`), less as it dries to the wilting point
-/// (`Physics::activity`). A plant transpires freely until its roots have drawn about half the liquid available to them
-/// (FAO-56's depletion fraction p of 0.3 to 0.7, 0.5 for most kinds; Allen and others 1998): a `MOIST` of log10(1 − p).
-pub fn activity(ph: &crate::Physics, genes: &[f32; NG], available: f64) -> f64 {
-    ph.activity(available / dec(genes[MOIST]))
+/// (`available`): full from the share its moisture gene sets (`MOIST`), falling in a straight line to none at the wilting
+/// point. A plant transpires freely until its roots have drawn about half the liquid available to them (FAO-56's
+/// depletion fraction p of 0.3 to 0.7, 0.5 for most kinds), a `MOIST` of log10(1 − p), and below that its transpiration
+/// falls with what is left, its stress coefficient Ks (Allen and others 1998, from memory). A dry seed's activity
+/// falls far more steeply (`Physics::activity`, `lying`).
+pub fn activity(genes: &[f32; NG], available: f64) -> f64 {
+    (available / dec(genes[MOIST])).clamp(0.0, 1.0)
 }
 
 /// The share of a kind of cover of frost gene `frost` K that freezes in a month at `t` K at activity `act`, where its key

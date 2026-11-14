@@ -282,7 +282,7 @@ impl Physics {
     pub fn frozen(&self, (limit, depth): (f64, f64), t: f64, act: f64) -> f64 {
         ((limit - depth * (1.0 - act) - t) / self.frost_k).clamp(0.0, 1.0)
     }
-    /// The activity of a living thing that holds the share `x` of the liquid it keeps: x^`dormancy`, 1 at or above it.
+    /// The activity of a dry seed that holds the share `x` of the liquid it takes in: x^`dormancy`, 1 at or above it.
     pub fn activity(&self, x: f64) -> f64 {
         if x >= 1.0 { 1.0 } else { x.max(0.0).powf(self.dormancy) }
     }

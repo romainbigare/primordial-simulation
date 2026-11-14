@@ -883,7 +883,7 @@ seeds fill it:
   and on bare bed nothing but the smallest stands.
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
-  `t_cat`, times its activity a = min(1, w / 10^`MOIST`)^`dormancy`. **Drought** is felt against the ground's own
+  `t_cat`, times its activity a = min(1, w / 10^`MOIST`), a straight line. **Drought** is felt against the ground's own
   pores (`cover::wet`, `cover::available`): w is the share of what its ground holds for roots that it holds, (θ −
   `wilt`) / (`field` − `wilt`) within 0 and 1, θ the share of the pores of the ground it stands on that its key liquid
   that is liquid fills (Flow's pore space, `Scratch::land_pores`; standing liquid counts, so θ may pass 1): none at the
@@ -891,8 +891,10 @@ seeds fill it:
   liquid is one store over the depth of its loose ground (Flow keeps no liquid by depth), so a deep root and a shallow
   one draw the same share. `MOIST` is where on that scale a kind is fully active: a plant transpires freely until its
   roots have drawn about half of what is available (FAO-56's depletion fraction 0.5; Allen and others 1998), `MOIST`
-  log10 0.5 = −0.3; a kind of dry ground, `MOIST` −1, stays active to a tenth, and pays for it in capacity (its
-  capacity per kg is 10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0; both the light
+  log10 0.5 = −0.3, and from there its transpiration falls in a straight line with what is left, to none at the wilting
+  point (FAO-56's water stress coefficient Ks; a leaf's pores close as its ground dries, its tissue keeps its liquid);
+  a kind of dry ground, `MOIST` −1, stays active to a tenth, and pays for it in capacity (its capacity per kg is
+  10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0; both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
   1980): nothing at or below the floor, so the cover cannot strip the air of that gas. **Liquid for gas**: its pores that
@@ -970,7 +972,8 @@ seeds fill it:
   plant, so the cover's laws hold for it: each month, before its cover's own, of each lot the share its wear gives dies
   (the wear of dormant cover: its upkeep at full activity a kg, `upkeep_rates`, at the floor `dormant`, over `e_life` ×
   10^`REPAIR`) and the share frozen below its hardened limit (`cover::frozen` at activity 0), to the ground as remains
-  (`seeds_died` of the budget); of the rest the share min(1, a × pace) **wakes**, a its kind's activity on that ground
+  (`seeds_died` of the budget); of the rest the share min(1, a × pace) **wakes**, a a seed's activity on that ground
+  by the seeds' rule, min(1, w / 10^`MOIST`)^`dormancy` (Harrington's: dry tissue, `Physics::activity`),
   and pace its burning's pace at the ground's temperature over that at `t_cat`: at `t_cat` all that is active wakes in a
   month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
   ground none. What wakes takes hold (`seed::lodge`): it joins the most alike slot of its starting kind in
