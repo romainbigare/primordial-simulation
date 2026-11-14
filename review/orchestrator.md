@@ -302,13 +302,24 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     `AIR_STEP_DAYS` stays 15 (one step a month moves the warmest month by +0.90 K); the balance solved exactly by
     pieces stays parked on the local branch `surface-exact` (31eb1d1: right for the temperature, but it raises the
     long step's water cycle by 0.3 to 0.4%).
-  - In work, on the branch `surface-step` (ec2f531, main merged in, `SNAPSHOT_VERSION` 137), by the same helper;
-    scratch `scratchpad/air2/`: (1) `snapshot_round_trip_at_every_month` fails after the merge (a cell fully under
-    liquid keeps about 1e-10 J in its empty land part, and a loaded world steps it differently): its cause mended;
-    (2) the step's rain lands in the bucket through the step, in one pass; (3) `daily.rs` gives `rain_air` the
-    ratio, not rain times ratio; (4) the long step's test may hold the land's runoff (`runoff_sea`) in place of the
-    river cells' flux, only if the law before the mend still fails it. Then the globe, the cost, the references
-    set once more, pictures, and the package goes to main whole.
+  - Done on the branch `surface-step` (99a56a4, main merged in at 6cc5690, `SNAPSHOT_VERSION` 137; full report in
+    the helper's last message, numbers in `scratchpad/air2/numbers/`): a loaded world's first build keeps its
+    saved parts (the snapshot round trip passes); the rain of a step wets the ground's bucket day by day as it
+    falls, in one pass (Flow +3%); `rain_air` takes the ratio; the long step's test holds the land's runoff
+    (`runoff_sea`; the law before the mend fails it, +0.90% against 0.62%) and passes (+0.35% against 0.65%); the
+    seven references set again (land 287.82 K, swing 11.83 K, rain 2.493e-3, gas 349.8 ppm, river cells 235.6,
+    worn 0.2089 mm/yr, cover 9.491); the lifeless globe passes (surface 288.54 K, ice 0.130). The whole package
+    costs Flow about +10 to 12% against main.
+  - **Two things hold the package off main.** (1) On banded worlds of 128 squares the rain falls in strong
+    diagonal stripes and the temperature shows saw-teeth along the south (`scratchpad/air2/shots3/contact.png`);
+    it comes from the package, not from the rain law. In work, by the same helper: where and from which commit,
+    what kind of mode, the mend at its cause, a fast test, and a sheet of the warmest and the coldest month.
+    (2) `the_laws_do_not_depend_on_the_size_of_the_cells` fails on the cover's area (5.7e-2 against 4.4e-2): the
+    package depends less on the cells' size than main (+2.9% against +5.9%) but its years are steadier, so its
+    limit is tighter. Not loosened. A likely cause of the dependence is the coast cell that gets no cover (see
+    "the bare coast"): to run again once that mend is on main and merged in.
+  - Seen on the same sheet, on main and on the package alike: a banded world of 128 squares at year 100 holds
+    cover on its southern fringe only. To judge on the summer's sheet.
   - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
     through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
     map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's
