@@ -21,9 +21,9 @@ pub const WORN: usize = 2;
 pub const FROZEN: usize = 3;
 pub const TAKEN_LYING: usize = 4;
 
-/// The seeds lying on a cell's ground, in lots, as many as the kinds its cover may hold (`Config::variety`, in arrays
-/// of `SLOTS`): each its mol of each part (`Parts`), its genes and its starting kind (`NO_ROOT`: empty). Their heat is
-/// the cover's (`Cover::e`): they lie at its temperature.
+/// The seeds lying on a cell's ground, in up to `SLOTS` lots, whatever the kinds its cover may hold: each its mol of each
+/// part (`Parts`), its genes and its starting kind (`NO_ROOT`: empty). Their heat is the cover's (`Cover::e`): they lie
+/// at its temperature.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Lying {
     pub mol: [[f64; NP]; SLOTS],
@@ -47,11 +47,10 @@ impl Lying {
     pub fn kg(&self, mm: &[f64; NP]) -> f64 {
         self.mol.iter().map(|m| (0..NP).map(|q| m[q] * mm[q]).sum::<f64>()).sum()
     }
-    /// Seeds `s` lie down in its first `n` lots (the world's `Config::variety`): they join the most alike lot of their
-    /// starting kind (`kin::kin`), the genes the mean by built matter; else an empty lot; else the two nearest lots join
-    /// (the lighter into the heavier, `join`) and they take the lot it frees. Their heat is the caller's to give the
-    /// cover.
-    pub fn lodge(&mut self, mm: &[f64; NP], s: &Seed, (alike, n): (f32, usize)) {
+    /// Seeds `s` lie down: they join the most alike lot of their starting kind (`kin::kin`), the genes the mean by built
+    /// matter; else an empty lot; else the two nearest lots join (the lighter into the heavier, `join`) and they take
+    /// the lot it frees. Their heat is the caller's to give the cover.
+    pub fn lodge(&mut self, mm: &[f64; NP], s: &Seed, alike: f32) {
         let kg = built_kg(mm, &s.mol);
         if let Some(x) = kin::kin(&self.genes, &self.root, (&s.genes, s.root), APART * alike, distance) {
             let f = (kg / (kg + built_kg(mm, &self.mol[x])).max(1e-300)) as f32;
@@ -59,13 +58,13 @@ impl Lying {
             (0..NP).for_each(|q| self.mol[x][q] += s.mol[q]);
             return;
         }
-        let x = kin::empty(&self.root[..n]).unwrap_or_else(|| self.join(mm, n));
+        let x = kin::empty(&self.root).unwrap_or_else(|| self.join(mm));
         (self.mol[x], self.genes[x], self.root[x]) = (s.mol, s.genes, s.root);
     }
-    /// Of its first `n` lots the two nearest each other by their genes join, the lighter into the heavier: amounts added,
-    /// genes the mean by built matter, its starting kind the heavier's. Returns the lot left empty.
-    fn join(&mut self, mm: &[f64; NP], n: usize) -> usize {
-        let (a, z) = kin::nearest(&self.genes[..n], distance);
+    /// The two lots nearest each other by their genes join, the lighter into the heavier: amounts added, genes the mean
+    /// by built matter, its starting kind the heavier's. Returns the lot left empty.
+    fn join(&mut self, mm: &[f64; NP]) -> usize {
+        let (a, z) = kin::nearest(&self.genes, distance);
         let (big, small) = if built_kg(mm, &self.mol[z]) > built_kg(mm, &self.mol[a]) { (z, a) } else { (a, z) };
         let f = (built_kg(mm, &self.mol[small]) / (built_kg(mm, &self.mol[big]) + built_kg(mm, &self.mol[small])).max(1e-300)) as f32;
         let (gs, ms) = (self.genes[small], self.mol[small]);
@@ -111,21 +110,25 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         let (gone, up): ([f64; NP], [f64; NP]) = (lot.map(|m| m * dies), lot.map(|m| m * wakes));
         budget[SEEDS_DIED] -= held(&e, &gone);
         (0..NP).for_each(|q| dead[q] += gone[q]);
-        c.lying.mol[x] = std::array::from_fn(|q| (lot[q] - gone[q] - up[q]).max(0.0));
+        // What wakes takes hold where the cover has room for it (`seed::lodge`); else it stays lying.
+        let woke = up.iter().any(|&m| m > 0.0) && match lodge(c, &mm, &Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 }, &w.cfg, area) {
+            Landed::In => true,
+            Landed::Out(m) => {
+                budget[DIED] -= held(&e, &m);
+                (0..NP).for_each(|q| dead[q] += m[q]);
+                true
+            }
+            Landed::Refused => false,
+        };
+        c.lying.mol[x] = std::array::from_fn(|q| (lot[q] - gone[q] - if woke { up[q] } else { 0.0 }).max(0.0));
+        if woke {
+            counts.seeds[SPROUTED] += wakes * kg;
+        }
         if built_kg(&mm, &c.lying.mol[x]) <= super::EMPTY_KG {
             let rest = std::mem::take(&mut c.lying.mol[x]);
             budget[SEEDS_DIED] -= held(&e, &rest);
             (0..NP).for_each(|q| dead[q] += rest[q]);
             c.lying.root[x] = NO_ROOT;
-        }
-        if up.iter().all(|&m| m <= 0.0) {
-            continue;
-        }
-        counts.seeds[SPROUTED] += wakes * kg;
-        let s = Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 };
-        if let Landed::Out(m) = lodge(c, &mm, &s, &w.cfg, area) {
-            budget[DIED] -= held(&e, &m);
-            (0..NP).for_each(|q| dead[q] += m[q]);
         }
     }
     dead

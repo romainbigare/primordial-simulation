@@ -972,7 +972,7 @@ seeds fill it:
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,
-  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in as many lots as the kinds its cover may hold (`Config::variety`), each its
+  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in up to `SLOTS` (12) lots at any variety, each its
   amounts of the three parts, its genes and its starting kind, at the cover's temperature (their heat is the cover's,
   and they are matter of the cover's node: in its books, its budget and its potential energy). Seeds that land join the
   most alike lot of their kind within `APART` × `alike` steps (the genes the mean by built matter), else an empty lot,
@@ -990,7 +990,8 @@ seeds fill it:
   year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
   below zero, the worst first (its cover dies as remains); else the two slots nearest each other by their genes,
   of any starting kind, join (`seed::room`: the slots are a limit of the bookkeeping, and the two hold the same niche
-  to within what it resolves) and they found the slot it frees. So a cell is never closed to seeds and a holder that pays its
+  to within what it resolves) and they found the slot it frees (a world of one kind a cell, `Config::variety` 1, has
+  no two to join: the seeds stay lying). So a cell of more slots is never closed to seeds and a holder that pays its
   way is never pushed out by weight: what lives after is the light's to decide, as seedlings live on their store and on
   the light that reaches the bottom of the layers above them, and what does not pay dies (the gap models, Shugart
   1984). A variant farther than `APART` × `alike` from its kind founds a slot of its own and competes with the others

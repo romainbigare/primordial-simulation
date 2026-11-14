@@ -63,25 +63,28 @@ pub fn land(w: &mut World) {
             w.counts.cover_budget[SEEDS] += held(&e, &s.mol);
             w.counts.seeds[LANDED] += kg;
             let c = &mut w.life.cells[i].cover;
-            c.lying.lodge(&mm, &s, (w.cfg.phys.alike, w.cfg.variety));
+            c.lying.lodge(&mm, &s, w.cfg.phys.alike);
             c.e += s.heat;
         }
     }
     crate::store::life_sent(w, sent.into_iter().enumerate().filter(|x| x.1 != [0.0; 2]));
 }
 
-/// Where seeds went (`lodge`): into the cell's cover, or into a slot in deficit, whose amounts (mol of each part) die.
+/// Where seeds went (`lodge`): into the cell's cover; into a slot in deficit, whose amounts (mol of each part) die; or
+/// nowhere, the cell's one slot held by a stand of another kind that pays its way (they stay as seeds).
 pub enum Landed {
     In,
     Out([f64; NP]),
+    Refused,
 }
 
 /// Seeds `s` lodge in cover `c` on its ground of `area` m² (`cover::ground`) of a world of settings `cfg`, with their
 /// heat and their store: into the most alike slot of their starting kind within `APART` × `alike` steps (`distance`),
 /// the genes the mean by built cover; else they found a slot of their own among the world's first `Config::variety`: an
 /// empty one; else the one in deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots
-/// nearest each other by their genes join (`room`) and they found the slot it frees. So a cell is never closed to seeds
-/// and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
+/// nearest each other by their genes join (`room`) and they found the slot it frees; a world whose cells hold one kind
+/// (`Config::variety` 1) has no two to join, and the seeds do not take hold (`Landed::Refused`). So a cell of more slots
+/// is never closed to seeds and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
 /// the light that reaches the bottom of the layers above them and what does not pay dies (the gap models, Shugart 1984).
 pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area: f64) -> Landed {
     let (ph, n) = (&cfg.phys, cfg.variety);
@@ -109,7 +112,8 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
     let (x, out) = match (kin::empty(&c.root[..n]), poorest) {
         (Some(x), _) => (x, None),
         (None, Some(x)) => (x, Some(c.mol[x])),
-        (None, None) => (room(c, mm, n), None),
+        (None, None) if n > 1 => (room(c, mm, n), None),
+        (None, None) => return Landed::Refused,
     };
     (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, plants, 0.0);
     c.e += s.heat;
@@ -128,8 +132,8 @@ fn room(c: &mut Cover, mm: &[f64; NP], n: usize) -> usize {
 
 /// Place `kg` per m² of its ground (`cover::ground`, the cell's land) of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
 /// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
-/// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover (nothing is placed
-/// then).
+/// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover or the cell has no
+/// room for it (nothing is placed then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, area) = (p.mm(&w.chem), super::ground(w, i));
@@ -139,6 +143,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
     match lodge(c, &mm, &s, &w.cfg, area) {
+        Landed::Refused => return false,
         Landed::In => {}
         // The slot in deficit it took goes to the ground as remains, with its heat.
         Landed::Out(m) => {
