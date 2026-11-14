@@ -19,6 +19,10 @@ const LIFE_YEAR: u64 = 2;
 /// Rounds of mutation given to the founders: the default of `ew run`.
 const SPRAY_ROUNDS: u32 = 20;
 
+/// The year the live island's starting kinds of takers are placed: 50 years after the first life, when the cover
+/// stands over most of the land it will hold (a start's choice, as `ew run --fauna-year`).
+const TAKERS_YEAR: u64 = LIFE_YEAR + 50;
+
 /// A channel's width goes as its discharge to the power `channel_width_exp` (about 1/2): the page is sent the samples'
 /// discharge again once one has changed by more than this share since it was last sent, a change of its width of
 /// about 5%, a pixel of a river 20 pixels wide.
@@ -83,7 +87,7 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
     if world.cfg.validate().is_err() {
         return 1;
     }
-    let plan = Schedule::new(Some(LIFE_YEAR), &worldgen::life::ROSTER, Seeding { rounds: SPRAY_ROUNDS, fixers: FIXERS });
+    let plan = Schedule { takers: Some(TAKERS_YEAR), ..Schedule::new(Some(LIFE_YEAR), &worldgen::life::ROSTER, Seeding { rounds: SPRAY_ROUNDS, fixers: FIXERS }) };
     let cells = tape::Table::new(&world);
     LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
     0
