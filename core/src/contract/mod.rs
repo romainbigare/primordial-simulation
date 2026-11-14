@@ -179,7 +179,9 @@ pub fn above(snow: f64, span: (f64, f64)) -> f64 {
 /// The crown of the plants of slot `x` of the cover of `cell` (cell `i`), from its base to its top, m (`Cover::crown` on
 /// the cell's land, `land`).
 pub fn crown(w: &World, i: usize, cell: &Cell, p: &Parts, x: usize) -> (f64, f64) {
-    cell.cover.crown(&w.cfg.phys, &p.mm(&w.chem), w.chem.subs[p.sub[crate::life::WALL]].density[0], land(w, i), x)
+    let (ph, mm) = (&w.cfg.phys, p.mm(&w.chem));
+    let top = cell.cover.height(ph, &mm, w.chem.subs[p.sub[crate::life::WALL]].density[0], x);
+    cell.cover.crown(ph, &mm, land(w, i), x, top)
 }
 
 /// The share of each part of each slot of `layer` of cell `i` a taker can reach (`above`): of each part the layer holds

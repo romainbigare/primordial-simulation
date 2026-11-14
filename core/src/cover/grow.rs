@@ -89,17 +89,17 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             continue;
         }
         let act = super::activity(ph, &c.genes[q], a.moist);
-        let sapwood = super::stand::sapwood(ph, (leaf, c.height(ph, &mm, rho, q)), c.walls(&mm, q), rho);
+        let h = c.height(ph, &mm, rho, q);
+        let sapwood = super::stand::sapwood(ph, (leaf, h), c.walls(&mm, q), rho);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, sapwood, ..Default::default() };
         // The share of its ground (`cover::ground`) its plants hold: where its loose ground is as deep as their roots need (found again
         // only when their need has moved by more than a bin of depth).
-        let h = c.height(ph, &mm, rho, q);
         let need = super::stand::need(ph, h);
         if super::stand::moved(c.need[q], need) {
             c.rooted[q] = w.loose_bins.get(i).map_or(1.0, |b| super::stand::rooted_share(ph, b, need)) as f32;
             c.need[q] = need as f32;
         }
-        let (base, top) = c.crown(ph, &mm, rho, area, q);
+        let (base, top) = c.crown(ph, &mm, area, q, h);
         layers.push((base, top, leaf / area, c.rooted[q] as f64, q));
     }
     crate::math::shade(&layers, |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
@@ -118,12 +118,15 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let pays = pay(w, c, p, (&s, &stored), &order, (t, dt), (&mut b, counts));
     // Its minerals in the ground, shared out over the slots by what each would take (`build::wants`): the slots' roots
     // share the cell's ground, and where it is short each gets its share of what it holds, whatever slots hold them.
-    let builds = |x: usize| pays[x] || super::build::frame_short(w, c, p, x) <= 0.0;
-    let wants: Vec<_> = order.iter().map(|&x| if builds(x) { super::build::wants(w, c, p, x, &s[x]) } else { [0.0; MAX_SUBSTANCES] }).collect();
-    let asked: Vec<f64> = (0..a.ground.len()).map(|k| wants.iter().map(|d| d[k]).sum()).collect();
-    for (&x, want) in order.iter().zip(&wants) {
-        let mut ground: [f64; MAX_SUBSTANCES] = std::array::from_fn(|k| if asked[k] > 0.0 { a.ground[k] * (want[k] / asked[k]) } else { 0.0 });
-        grow_slot(w, c, p, x, (&s[x], pays[x]), (i, a.tick, t, dt), &mut ground, (&mut b, counts));
+    // Where one more kg would not pay it builds living cover no more, but walls alone while its plants lack them.
+    let plans: Vec<_> = order.iter().map(|&x| (pays[x] || super::build::frame_short(w, c, p, x) <= 0.0).then(|| super::build::per_kg(w, c, p, x)).flatten()).collect();
+    let wants: Vec<_> = order.iter().zip(&plans).map(|(&x, k)| k.as_ref().map_or([0.0; MAX_SUBSTANCES], |k| super::build::wants(w, (c, k), p, x, &s[x]))).collect();
+    let ns = chem.ns();
+    let asked: Vec<f64> = (0..ns).map(|k| wants.iter().map(|d| d[k]).sum()).collect();
+    for ((&x, want), plan) in order.iter().zip(&wants).zip(&plans) {
+        let mut ground = [0.0; MAX_SUBSTANCES];
+        (0..ns).filter(|&k| want[k] > 0.0 && asked[k] > 0.0).for_each(|k| ground[k] = a.ground[k] * (want[k] / asked[k]));
+        grow_slot(w, c, p, x, (&s[x], pays[x], plan.as_ref()), (i, a.tick, t, dt), &mut ground, (&mut b, counts));
     }
     super::stand::thin(c, &mm, (ph, rho, n), area);
     super::stand::merge_alike(c, &mm, (ph, n));
@@ -162,16 +165,15 @@ fn pay(w: &World, c: &mut Cover, p: &Parts, (s, stored): (&[Slot; SLOTS], &[f64;
     pays
 }
 
-/// Slot `x` of cover `c` (cell `i`) builds from its fuel and its share `ground` of its ground's minerals (`build`), its
-/// walls (`frame`), counts what it built (`Counters::grown`), exudes the fuel past its reserve it could not use, and
-/// sets what rounding left below zero to zero. Where one more kg would not pay (`pays` false) it builds living cover no
-/// more, but walls alone while its plants lack them.
+/// Slot `x` of cover `c` (cell `i`) builds from its fuel and its share `ground` of its ground's minerals where it builds
+/// (`plan`, `build`), its walls (`frame`), counts what it built (`Counters::grown`), exudes the fuel past its reserve it
+/// could not use, and sets what rounding left below zero to zero.
 #[allow(clippy::too_many_arguments)]
-fn grow_slot(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, tick, t, dt): (usize, u64, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], (b, counts): (&mut Books, &mut Counters)) {
+fn grow_slot(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays, plan): (&Slot, bool, Option<&super::build::PerKg>), (i, tick, t, dt): (usize, u64, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], (b, counts): (&mut Books, &mut Counters)) {
     let (mm, e) = (p.mm(&w.chem), p.content(&w.chem));
     let (held, sent, made, out) = (budget::held(&e, &c.mol[x]), b.budget[SEEDS], c.built(&mm, x), c.seeds.len());
-    if pays || super::build::frame_short(w, c, p, x) <= 0.0 {
-        super::build::build(w, c, p, x, (s, pays), (i, tick, t, dt), ground, b);
+    if let Some(k) = plan {
+        super::build::build(w, (c, k), p, x, (s, pays), (i, tick, t, dt), ground, b);
     }
     super::build::frame(w, c, p, x, b);
     b.budget[BUILDING] += budget::held(&e, &c.mol[x]) - held - (b.budget[SEEDS] - sent);

@@ -140,13 +140,12 @@ impl Cover {
     pub fn height(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {
         stand::height(ph, self.plant(mm, x), self.walls(mm, x) / self.built(mm, x).max(1e-300), rho)
     }
-    /// The crown of the plants of slot `x` on ground of `land` m², from its base to its top, m: its leaves, and the thin
-    /// stems that carry them, stand where the light is, over the depth their capture area fills at the density of a
-    /// crown's leaves: its capture area over the ground its plants hold (`land` times the share its roots hold,
-    /// `Cover::rooted`), over `crown_density` m² a m³, down from its top (its height, its walls of density `rho`
-    /// kg/m³), and no lower than the ground: a sward is as dense as that over its whole height.
-    pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, land: f64, x: usize) -> (f64, f64) {
-        let top = self.height(ph, mm, rho, x);
+    /// The crown of the plants of slot `x`, `top` m tall (`Cover::height`), on ground of `land` m², from its base to its
+    /// top, m: its leaves, and the thin stems that carry them, stand where the light is, over the depth their capture
+    /// area fills at the density of a crown's leaves: its capture area over the ground its plants hold (`land` times the
+    /// share its roots hold, `Cover::rooted`), over `crown_density` m² a m³, down from its top, and no lower than the
+    /// ground: a sward is as dense as that over its whole height.
+    pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], land: f64, x: usize, top: f64) -> (f64, f64) {
         let patch = land * self.rooted[x].max(f32::MIN_POSITIVE) as f64;
         let depth = self.leaf(mm, x) / patch.max(1e-300) / ph.crown_density;
         ((top - depth).max(0.0), top)

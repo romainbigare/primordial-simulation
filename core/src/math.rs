@@ -63,28 +63,36 @@ pub(crate) fn rings(shares: impl Iterator<Item = f64>) -> Vec<(f64, f64)> {
 pub(crate) fn shade<T: Copy>(l: &[(f64, f64, f64, f64, T)], mut set: impl FnMut(T, f64, f64, f64)) {
     let share = |s: f64| s.max(1e-300);
     let mut got = vec![[0.0; 3]; l.len()];
+    // The light each member's capture area gets, and what the light has passed at each one's top and base, in a ring.
+    let (mut on, mut heights, mut lit, mut top, mut base) = (Vec::with_capacity(l.len()), Vec::with_capacity(2 * l.len()), vec![0.0; l.len()], vec![0.0; l.len()], vec![0.0; l.len()]);
     for (at_least, ring) in rings(l.iter().map(|m| share(m.3))) {
-        let on: Vec<usize> = (0..l.len()).filter(|&q| share(l[q].3) >= at_least).collect();
-        let mut heights: Vec<f64> = on.iter().flat_map(|&q| [l[q].0, l[q].1]).collect();
-        heights.sort_by(|a, b| b.total_cmp(a));
+        on.clear();
+        on.extend((0..l.len()).filter(|&q| share(l[q].3) >= at_least));
+        heights.clear();
+        heights.extend(on.iter().flat_map(|&q| [l[q].0, l[q].1]));
+        heights.sort_by(|a: &f64, b| b.total_cmp(a));
         heights.dedup();
-        // The capture area per unit of ground the light has passed, the light each member's capture area gets, and
-        // what the light has passed at each one's top and base.
-        let (mut tau, mut lit, mut top, mut base) = (0.0f64, vec![0.0; l.len()], vec![0.0; l.len()], vec![0.0; l.len()]);
+        [&mut lit, &mut top, &mut base].into_iter().for_each(|v| v.fill(0.0));
+        // The capture area per unit of ground the light has passed.
+        let mut tau = 0.0f64;
         for (k, &h) in heights.iter().enumerate() {
             on.iter().filter(|&&q| l[q].1 == h).for_each(|&q| top[q] = tau);
             // The crowns of no depth at this height: one sheet.
             let sheet = |q: usize| l[q].0 == h && l[q].1 == h;
-            let y: f64 = on.iter().filter(|&&q| sheet(q)).map(|&q| l[q].2 / share(l[q].3)).sum();
-            on.iter().filter(|&&q| sheet(q)).for_each(|&q| lit[q] += (-tau).exp() * mean_decay(y));
-            tau += y;
-            on.iter().filter(|&&q| sheet(q)).for_each(|&q| base[q] = tau);
+            if on.iter().any(|&q| sheet(q)) {
+                let y: f64 = on.iter().filter(|&&q| sheet(q)).map(|&q| l[q].2 / share(l[q].3)).sum();
+                let in_sheet = (-tau).exp() * mean_decay(y);
+                on.iter().filter(|&&q| sheet(q)).for_each(|&q| lit[q] += in_sheet);
+                tau += y;
+                on.iter().filter(|&&q| sheet(q)).for_each(|&q| base[q] = tau);
+            }
             let Some(&below) = heights.get(k + 1) else { break };
             // The crowns through the span down to the next height, each its capture area spread over its depth.
             let through = |q: usize| l[q].0 <= below && l[q].1 >= h && l[q].1 > l[q].0;
             let part = |q: usize| (h - below) / (l[q].1 - l[q].0);
             let y: f64 = on.iter().filter(|&&q| through(q)).map(|&q| l[q].2 / share(l[q].3) * part(q)).sum();
-            on.iter().filter(|&&q| through(q)).for_each(|&q| lit[q] += part(q) * (-tau).exp() * mean_decay(y));
+            let (reach, mean) = ((-tau).exp(), mean_decay(y));
+            on.iter().filter(|&&q| through(q)).for_each(|&q| lit[q] += part(q) * reach * mean);
             tau += y;
             on.iter().filter(|&&q| l[q].0 == below && l[q].1 > below).for_each(|&q| base[q] = tau);
         }

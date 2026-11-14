@@ -4,7 +4,7 @@
 //! 2002), and the share of its cell whose loose ground holds them. One place for these laws: the light's layers
 //! (`grow`), the seeds (`seed`) and the page's drawing (`tape::stands`) read them.
 
-use super::{Cover, NG, NO_ROOT, NP};
+use super::{Cover, NG, NO_ROOT, NP, SLOTS};
 use crate::life::kin;
 use crate::Physics;
 use std::f64::consts::FRAC_PI_4;
@@ -73,13 +73,21 @@ fn plant_ground(ph: &Physics, mass: f64) -> f64 {
 /// its ground; where it is more, the slot loses plants, not mass, as its whole layer would: by that excess cubed (a
 /// plant's ground goes as its mass^(2/3), and its mass as 1 / the count), and the survivors take what the dead freed.
 pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, usize), area: f64) {
-    let held: Vec<usize> = (0..n).filter(|&x| c.root[x] != NO_ROOT && c.plants[x] > 0.0 && c.built(mm, x) > 0.0).collect();
-    let span: Vec<(f64, f64)> = held.iter().map(|&x| c.crown(ph, mm, rho, area, x)).collect();
-    let ground: Vec<f64> = held.iter().map(|&x| c.plants[x] * plant_ground(ph, c.built(mm, x) / c.plants[x])).collect();
-    let crowd: Vec<f64> = span.iter().map(|&(b, t)| span.iter().zip(&ground).map(|(&(b2, t2), g)| shared((b, t), (b2, t2)) * g).sum()).collect();
-    for (k, &x) in held.iter().enumerate() {
-        if crowd[k] > area {
-            c.plants[x] *= (area / crowd[k]).powi(3);
+    let (mut held, mut ground, mut span) = ([0; SLOTS], [0.0; SLOTS], [(0.0, 0.0); SLOTS]);
+    let mut k = 0;
+    for x in (0..n).filter(|&x| c.root[x] != NO_ROOT && c.plants[x] > 0.0 && c.built(mm, x) > 0.0) {
+        (held[k], ground[k]) = (x, c.plants[x] * plant_ground(ph, c.built(mm, x) / c.plants[x]));
+        k += 1;
+    }
+    let (held, ground) = (&held[..k], &ground[..k]);
+    // A crown shares all of itself: a lone slot's crowd is its own ground, and its crown is not needed.
+    if k > 1 {
+        held.iter().zip(span.iter_mut()).for_each(|(&x, s)| *s = c.crown(ph, mm, area, x, c.height(ph, mm, rho, x)));
+    }
+    for (q, &x) in held.iter().enumerate() {
+        let crowd: f64 = (0..k).map(|r| if r == q { ground[r] } else { shared(span[q], span[r]) * ground[r] }).sum();
+        if crowd > area {
+            c.plants[x] *= (area / crowd).powi(3);
         }
     }
 }
