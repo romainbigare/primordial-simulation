@@ -14,9 +14,46 @@ pub(super) fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
     rx.inputs.iter().find(|q| q.0 as usize == k).map(|q| q.1 as f64)
 }
 
-/// Slot `x` builds what its fuel over its reserve (`STORE`) and the minerals of its ground (`ground`, mol, shared out
-/// as slots build) allow, by the conversions of growth (`Chemistry::build`, `builds`) at its share of walls (`WALLS`),
-/// paying `c_copy` per kg by burning fuel; a fixer (`FIX`) makes the mineral it lacks, at its
+/// What slot `x` of cover `c` builds a kg of at its share of walls (`WALLS`; a small plant builds few walls,
+/// `stand::walled`), by the conversions of growth (`Chemistry::build`, `builds`): the units of each conversion, what
+/// they take of each substance, mol, and the fuel a kg costs with the work of building (`c_copy`), mol. None where the
+/// chemistry builds no cover.
+struct PerKg<'a> {
+    units: [(&'a Reaction, f64); 2],
+    need: [f64; MAX_SUBSTANCES],
+    fpk: f64,
+}
+
+fn per_kg<'a>(w: &'a World, c: &Cover, p: &Parts, x: usize) -> Option<PerKg<'a>> {
+    let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
+    let bl = chem.build.as_ref()?;
+    let wall = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL])?;
+    let walls = dec(c.genes[x][WALLS]) * super::stand::walled(ph, c.plant(&mm, x));
+    let fm = 1.0 / (1.0 + walls);
+    let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, walls * fm / mm[WALL] / wall.outputs[0].1 as f64)];
+    let mut need = [0.0; MAX_SUBSTANCES];
+    units.iter().for_each(|(rx, u)| rx.inputs.iter().for_each(|&(k, n)| need[k as usize] += n as f64 * u));
+    let burn = &chem.reactions[p.burn];
+    let fpk = need[p.sub[FUEL]] + ph.c_copy / -chem.dh(p.burn) * per_input(burn, p.sub[FUEL]).unwrap_or(1.0);
+    Some(PerKg { units, need, fpk })
+}
+
+/// The fuel slot `x` of cover `c` (its slot `s` in the month) holds over its reserve (`STORE`), mol.
+fn surplus(c: &Cover, mm: &[f64; NP], x: usize, s: &Slot) -> f64 {
+    (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * s.built / mm[FUEL]).max(0.0)
+}
+
+/// What slot `x` of cover `c` (its slot `s` in the month) would take of each mineral of its ground were the ground to
+/// hold all it asks: what its fuel over its reserve builds (`build`), mol of each substance.
+pub(super) fn wants(w: &World, c: &Cover, p: &Parts, x: usize, s: &Slot) -> [f64; MAX_SUBSTANCES] {
+    let Some(k) = per_kg(w, c, p, x) else { return [0.0; MAX_SUBSTANCES] };
+    let kg = surplus(c, &p.mm(&w.chem), x, s) / k.fpk;
+    std::array::from_fn(|q| if q == p.sub[FUEL] { 0.0 } else { kg * k.need[q] })
+}
+
+/// Slot `x` builds what its fuel over its reserve (`STORE`) and its share of the minerals of its ground (`ground`,
+/// mol) allow, by the conversions of growth at its share of walls (`per_kg`), paying `c_copy` per kg by burning fuel; a
+/// fixer (`FIX`) makes the mineral it lacks, at its
 /// capacity, paid by the fixing reaction's fuel. The share `SEED` of what it builds leaves as seeds, in `seed::LOTS` lots
 /// that land where the dispersal kernel draws (`life::lot`, `seed::send`), with a generation's mutation; all of it where
 /// one more kg would not pay its upkeep (`pays` false: its light at the bottom of its layer is under its compensation
@@ -25,18 +62,11 @@ pub(super) fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, tick, t, dt): (usize, u64, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], b: &mut Books) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
-    let (Some(bl), mm) = (chem.build.as_ref(), p.mm(chem)) else { return };
-    let Some(wall) = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL]) else { return };
-    // Per kg built: the units of each conversion, and what they take; a small plant builds few walls (`stand::walled`).
-    let walls = dec(g[WALLS]) * super::stand::walled(ph, c.plant(&mm, x));
-    let fm = 1.0 / (1.0 + walls);
-    let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, walls * fm / mm[WALL] / wall.outputs[0].1 as f64)];
-    let mut need = [0.0; MAX_SUBSTANCES];
-    units.iter().for_each(|(rx, u)| rx.inputs.iter().for_each(|&(k, n)| need[k as usize] += n as f64 * u));
+    let mm = p.mm(chem);
+    let Some(PerKg { units, need, fpk }) = per_kg(w, c, p, x) else { return };
     let burn = &chem.reactions[p.burn];
-    let (fuel_burn, burn_e) = (per_input(burn, p.sub[FUEL]).unwrap_or(1.0), -chem.dh(p.burn));
-    let fpk = need[p.sub[FUEL]] + ph.c_copy / burn_e * fuel_burn;
-    let surplus = (c.mol[x][FUEL] - dec(g[STORE]) * s.built / mm[FUEL]).max(0.0);
+    let burn_e = -chem.dh(p.burn);
+    let surplus = surplus(c, &mm, x, s);
     // The most each limit allows, kg: the fuel, and each mineral from the ground; a fixer then makes what the mineral it
     // fixes lacks, its fuel counted.
     let minerals = || (0..chem.ns()).filter(|&k| need[k] > 0.0 && k != p.sub[FUEL]);

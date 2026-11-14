@@ -8,6 +8,7 @@ use super::budget::{self, BUDGET, BUILDING, DIED, EXUDED, ROUNDED, SEEDS, SHED, 
 use super::upkeep::upkeep;
 use super::build::per_input;
 use super::{dec, Cover, Parts, EMPTY_KG, FUEL, LIGHT, MATTER, MOIST, NO_ROOT, NP, SLOTS, STORE, WALL};
+use crate::units::MAX_SUBSTANCES;
 use crate::life::SPENT;
 use crate::chem::{Chemistry, Phase};
 use crate::store::{Class, Node};
@@ -112,46 +113,17 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     b.budget[STORED] += c.content(&e) - before;
     let all: f64 = stored.iter().sum();
     c.keep = if caught > 0.0 { (all / caught) as f32 } else { 0.0 };
-    let year = w.cfg.months_per_year as f32;
-    // Its minerals in the ground, shared out slot by slot (the tallest first) as each builds.
-    let mut ground = a.ground;
     let mut order: Vec<usize> = (0..n).filter(|&q| s[q].built > 0.0).collect();
     order.sort_by(|&a, &b| s[b].shade.total_cmp(&s[a].shade));
-    for x in order {
-        let (lost, cost) = upkeep(w, c, p, x, &s[x], (t, dt), &mut b);
-        counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
-        let pays = s[x].gain * s[x].built > cost;
-        c.full[x] = !pays;
-        if !pays {
-            let shed = shed(c, x, (&s[x], cost));
-            counts.cover_lost[SPENT as usize] += shed * mm[MATTER];
-            b.dead[p.sub[MATTER]] += shed;
-            b.budget[SHED] -= shed * e[MATTER];
-        }
-        // Its balance over about a year: what it stored less its upkeep, per kg.
-        c.net[x] += (((stored[x] - cost) / s[x].built) as f32 - c.net[x]) / year;
-        // Where one more kg would not pay it builds living cover no more, but walls alone while its plants lack them.
-        let (held, sent, made, out) = (budget::held(&e, &c.mol[x]), b.budget[SEEDS], c.built(&mm, x), c.seeds.len());
-        if pays || super::build::frame_short(w, c, p, x) <= 0.0 {
-            super::build::build(w, c, p, x, (&s[x], pays), (i, a.tick, t, dt), &mut ground, &mut b);
-        }
-        super::build::frame(w, c, p, x, &mut b);
-        b.budget[BUILDING] += budget::held(&e, &c.mol[x]) - held - (b.budget[SEEDS] - sent);
-        // What it built, kg of dry matter: what it holds more of, and what it sent as seeds.
-        let seeds: f64 = c.seeds[out..].iter().map(|s| super::built_kg(&mm, &s.mol)).sum();
-        counts.grown.push((i as u32, c.built(&mm, x) - made + seeds));
-        // The fuel it holds past its reserve when it has built what it could goes to its ground, as roots exude the
-        // fuel a plant cannot use (Jones, Hodge and Kuzyakov 2004), where the open world's rot takes it.
-        let over = (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * c.built(&mm, x) / mm[FUEL]).max(0.0);
-        (c.mol[x][FUEL], b.dead[p.sub[FUEL]]) = (c.mol[x][FUEL] - over, b.dead[p.sub[FUEL]] + over);
-        b.budget[EXUDED] -= over * e[FUEL];
-        // What rounding left below zero is set to zero and counted (a larger overdraw is this law's fault).
-        let (size, all) = (c.mol[x].iter().map(|m| m.abs()).sum::<f64>(), c.mol[x]);
-        for (q, m) in c.mol[x].iter_mut().enumerate().filter(|(_, m)| **m < 0.0) {
-            debug_assert!(-*m <= crate::store::ROUNDING * size, "the cover overdrew a part by {m}: {all:?}");
-            b.budget[ROUNDED] -= *m * e[q];
-            counts.rounded[0] -= std::mem::take(m);
-        }
+    let pays = pay(w, c, p, (&s, &stored), &order, (t, dt), (&mut b, counts));
+    // Its minerals in the ground, shared out over the slots by what each would take (`build::wants`): the slots' roots
+    // share the cell's ground, and where it is short each gets its share of what it holds, whatever slots hold them.
+    let builds = |x: usize| pays[x] || super::build::frame_short(w, c, p, x) <= 0.0;
+    let wants: Vec<_> = order.iter().map(|&x| if builds(x) { super::build::wants(w, c, p, x, &s[x]) } else { [0.0; MAX_SUBSTANCES] }).collect();
+    let asked: Vec<f64> = (0..a.ground.len()).map(|k| wants.iter().map(|d| d[k]).sum()).collect();
+    for (&x, want) in order.iter().zip(&wants) {
+        let mut ground: [f64; MAX_SUBSTANCES] = std::array::from_fn(|k| if asked[k] > 0.0 { a.ground[k] * (want[k] / asked[k]) } else { 0.0 });
+        grow_slot(w, c, p, x, (&s[x], pays[x]), (i, a.tick, t, dt), &mut ground, (&mut b, counts));
     }
     super::stand::thin(c, &mm, (ph, rho, n), area);
     super::stand::merge_alike(c, &mm, (ph, n));
@@ -164,6 +136,60 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     }
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
     (b, caught)
+}
+
+/// Each slot of cover `c` in `order` pays its upkeep over `dt` at `t` K (`upkeep`), what it lost counted in `counts`;
+/// where one more kg of it would not pay (its gain at the bottom of its layer, of its slot `s`, under its upkeep a kg)
+/// it sheds the layers that do not pay (`shed`); its balance over about a year moves by what it stored (`stored`) less
+/// its upkeep. Returns whether each pays.
+fn pay(w: &World, c: &mut Cover, p: &Parts, (s, stored): (&[Slot; SLOTS], &[f64; SLOTS]), order: &[usize], (t, dt): (f64, f64), (b, counts): (&mut Books, &mut Counters)) -> [bool; SLOTS] {
+    let (mm, e, year) = (p.mm(&w.chem), p.content(&w.chem), w.cfg.months_per_year as f32);
+    let mut pays = [false; SLOTS];
+    for &x in order {
+        let (lost, cost) = upkeep(w, c, p, x, &s[x], (t, dt), b);
+        counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
+        pays[x] = s[x].gain * s[x].built > cost;
+        c.full[x] = !pays[x];
+        if !pays[x] {
+            let shed = shed(c, x, (&s[x], cost));
+            counts.cover_lost[SPENT as usize] += shed * mm[MATTER];
+            b.dead[p.sub[MATTER]] += shed;
+            b.budget[SHED] -= shed * e[MATTER];
+        }
+        // Its balance over about a year: what it stored less its upkeep, per kg.
+        c.net[x] += (((stored[x] - cost) / s[x].built) as f32 - c.net[x]) / year;
+    }
+    pays
+}
+
+/// Slot `x` of cover `c` (cell `i`) builds from its fuel and its share `ground` of its ground's minerals (`build`), its
+/// walls (`frame`), counts what it built (`Counters::grown`), exudes the fuel past its reserve it could not use, and
+/// sets what rounding left below zero to zero. Where one more kg would not pay (`pays` false) it builds living cover no
+/// more, but walls alone while its plants lack them.
+#[allow(clippy::too_many_arguments)]
+fn grow_slot(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&Slot, bool), (i, tick, t, dt): (usize, u64, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], (b, counts): (&mut Books, &mut Counters)) {
+    let (mm, e) = (p.mm(&w.chem), p.content(&w.chem));
+    let (held, sent, made, out) = (budget::held(&e, &c.mol[x]), b.budget[SEEDS], c.built(&mm, x), c.seeds.len());
+    if pays || super::build::frame_short(w, c, p, x) <= 0.0 {
+        super::build::build(w, c, p, x, (s, pays), (i, tick, t, dt), ground, b);
+    }
+    super::build::frame(w, c, p, x, b);
+    b.budget[BUILDING] += budget::held(&e, &c.mol[x]) - held - (b.budget[SEEDS] - sent);
+    // What it built, kg of dry matter: what it holds more of, and what it sent as seeds.
+    let seeds: f64 = c.seeds[out..].iter().map(|s| super::built_kg(&mm, &s.mol)).sum();
+    counts.grown.push((i as u32, c.built(&mm, x) - made + seeds));
+    // The fuel it holds past its reserve when it has built what it could goes to its ground, as roots exude the
+    // fuel a plant cannot use (Jones, Hodge and Kuzyakov 2004), where the open world's rot takes it.
+    let over = (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * c.built(&mm, x) / mm[FUEL]).max(0.0);
+    (c.mol[x][FUEL], b.dead[p.sub[FUEL]]) = (c.mol[x][FUEL] - over, b.dead[p.sub[FUEL]] + over);
+    b.budget[EXUDED] -= over * e[FUEL];
+    // What rounding left below zero is set to zero and counted (a larger overdraw is this law's fault).
+    let (size, all) = (c.mol[x].iter().map(|m| m.abs()).sum::<f64>(), c.mol[x]);
+    for (q, m) in c.mol[x].iter_mut().enumerate().filter(|(_, m)| **m < 0.0) {
+        debug_assert!(-*m <= crate::store::ROUNDING * size, "the cover overdrew a part by {m}: {all:?}");
+        b.budget[ROUNDED] -= *m * e[q];
+        counts.rounded[0] -= std::mem::take(m);
+    }
 }
 
 /// The light reaction of each slot in use (`s`, the first of the cover's) over `dt` at the ground's temperature of `a`: what its share of the light caught
@@ -237,11 +263,11 @@ fn drawn(c: &Cover, x: &mut [f64], units: f64) {
 
 /// Slot `x` of cover `c`, whose lowest leaves do not pay for themselves (`Cover::full`), sheds the living cover of the
 /// layers of its canopy that do not, as a canopy drops its leaves below its compensation point (Monsi and Saeki 1953;
-/// Hirose 2005): its light falls as e^-z with the capture area z above a leaf in its crown (whatever slots' leaves the
-/// light passes there: `Slot::layer`, the capture area through its crown), so what one more kg would store at depth z
-/// is its gain at its crown's base (`Slot::gain`) times e^(y - z), y that whole depth, and the share of its leaves
-/// deeper than where that falls to its upkeep a kg, `cost` J over its built cover, pays nothing. Returns the mol of body
-/// matter shed (to its remains); its walls and its plants stay.
+/// Hirose 2005): its light falls as e^-z with the capture area z above a leaf in its layer (`Slot::layer`, whatever
+/// slots hold it, each leaf as deep in it as any), so what one more kg would store at depth z is its gain at its bottom
+/// (`Slot::gain`) times e^(y - z), y the layer's whole depth, and the share of its leaves deeper than where that falls
+/// to its upkeep a kg, `cost` J over its built cover, pays nothing. Returns the mol of body matter shed (to its remains);
+/// its walls and its plants stay.
 fn shed(c: &mut Cover, x: usize, (s, cost): (&Slot, f64)) -> f64 {
     let (y, per_kg) = (s.layer, cost / s.built.max(1e-300));
     if s.gain <= 0.0 || y <= 0.0 || per_kg <= 0.0 {

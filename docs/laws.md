@@ -925,7 +925,8 @@ seeds fill it:
   taken: `Counters::seeds`) and what each cell's cover built in the last whole year (`Counters::grown_last`) are counted
   for the tape. The tape records them each year.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
-  out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
+  out over the slots by what each would take, `build::wants`: where the ground holds less than they ask, each gets its
+  share of what it holds, whatever slots hold the kinds) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
   and others 2012) by the conversions of growth (`Chemistry::build`,
   `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
