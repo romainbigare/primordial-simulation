@@ -37,17 +37,29 @@ impl Crossings {
         self.a.push(from);
         self.b.push(to);
     }
-    /// Booked through the store as a link flux of the kinds `kinds` (`liquid::book`): the mol of each kind over the
-    /// links (`[c * links + l]`), then the heat.
-    fn book(&self, w: &mut World, s: &mut Scratch, kinds: &[usize]) {
+    /// Its moves as columns: the mol of each kind over the links (`[c * links + l]`), then the heat.
+    fn columns(&self) -> Vec<f64> {
         let links = self.a.len();
         let mut col = vec![0.0; self.width * links];
         for (l, row) in self.rows.chunks_exact(self.width).enumerate() {
             row.iter().enumerate().for_each(|(c, &x)| col[c * links + l] = x);
         }
-        let (at, ks) = ((self.width - 1) * links, kinds.iter().map(|&k| k as u16).collect::<Vec<u16>>());
-        book(w, s, &[LinkFlux { class: self.class, a: &self.a, b: &self.b, ks: &ks, mol: &col[..at], heat: &col[at..] }]);
+        col
     }
+}
+
+/// The moves `moves` of the kinds `kinds` booked through the store together, as one set of link fluxes
+/// (`liquid::book`): a cell may give in one what it gets in another (a cell at the open edge gives over its level what
+/// came in from the boundary), so each cell's sum is booked at once, never a part of it that would ask it for more than
+/// it holds.
+fn book_all(w: &mut World, s: &mut Scratch, kinds: &[usize], moves: &[&Crossings]) {
+    let ks: Vec<u16> = kinds.iter().map(|&k| k as u16).collect();
+    let cols: Vec<Vec<f64>> = moves.iter().map(|x| x.columns()).collect();
+    let fluxes: Vec<LinkFlux> = moves.iter().zip(&cols).filter(|(x, _)| !x.a.is_empty()).map(|(x, col)| {
+        let at = (x.width - 1) * x.a.len();
+        LinkFlux { class: x.class, a: &x.a, b: &x.b, ks: &ks, mol: &col[..at], heat: &col[at..] }
+    }).collect();
+    book(w, s, &fluxes);
 }
 
 /// What each cell holds that may move as the pass goes (`basin::movable`: rows of the liquids then the heat; and the
@@ -82,9 +94,8 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     s.state.held = std::mem::take(&mut h.part);
     discharge(w, &b, &mut h.into);
     let flux = h.into;
-    x.book(w, s, liq);
+    book_all(w, s, liq, &[&x, &edge]);
     if !edge.a.is_empty() {
-        edge.book(w, s, liq);
         let heat: f64 = edge.rows.chunks_exact(edge.width).map(|r| r[edge.width - 1]).sum();
         (w.counts.edge_liquid[0], w.counts.edge_liquid[1]) = (w.counts.edge_liquid[0] + came, w.counts.edge_liquid[1] + heat);
     }
@@ -93,7 +104,7 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let sol = s.solids(tmin);
     let mut load = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: sol.len() + 1, class: [Class::Ground; 2] };
     let broke = erode(w, s, &b, &flux, &sol, &mut load);
-    load.book(w, s, &sol);
+    book_all(w, s, &sol, &[&load]);
     apply(w, s, &[], &broke);
     follow_flux(w, &b, &flux, dt);
     (s.bodies, s.spare.samples) = (b, flux);
