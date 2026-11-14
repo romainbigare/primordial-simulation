@@ -6,14 +6,11 @@
 
 use super::budget::{held, DIED, SEEDS_DIED};
 use super::seed::{lodge, Landed, Seed};
-use super::{activity, built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, NG, NO_ROOT, NP, REPAIR};
+use super::{activity, built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, NG, NO_ROOT, NP, REPAIR, SLOTS};
 use crate::life::kin;
 use crate::units::DAY;
 use crate::{Counters, World};
 use serde::{Deserialize, Serialize};
-
-/// Lots of seeds a cell's ground holds at most: a limit of the bookkeeping, as `Config::variety` is of its cover.
-pub const LOTS_LYING: usize = 4;
 
 /// The flows of seeds counted for the tape (`Counters::seeds`), kg: landed on a ground, sprouted (taken hold in the
 /// cover), worn out, frozen, taken by a taker.
@@ -24,35 +21,37 @@ pub const WORN: usize = 2;
 pub const FROZEN: usize = 3;
 pub const TAKEN_LYING: usize = 4;
 
-/// The seeds lying on a cell's ground, in `LOTS_LYING` lots: each its mol of each part (`Parts`), its genes and its
-/// starting kind (`NO_ROOT`: empty). Their heat is the cover's (`Cover::e`): they lie at its temperature.
+/// The seeds lying on a cell's ground, in lots, as many as the kinds its cover may hold (`Config::variety`, in arrays
+/// of `SLOTS`): each its mol of each part (`Parts`), its genes and its starting kind (`NO_ROOT`: empty). Their heat is
+/// the cover's (`Cover::e`): they lie at its temperature.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Lying {
-    pub mol: [[f64; NP]; LOTS_LYING],
-    pub genes: [[f32; NG]; LOTS_LYING],
-    pub root: [u32; LOTS_LYING],
+    pub mol: [[f64; NP]; SLOTS],
+    pub genes: [[f32; NG]; SLOTS],
+    pub root: [u32; SLOTS],
 }
 
 impl Default for Lying {
     /// No seeds.
     fn default() -> Lying {
-        Lying { mol: [[0.0; NP]; LOTS_LYING], genes: [[0.0; NG]; LOTS_LYING], root: [NO_ROOT; LOTS_LYING] }
+        Lying { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS] }
     }
 }
 
 impl Lying {
     /// Its lots that hold seeds.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
-        (0..LOTS_LYING).filter(|&x| self.root[x] != NO_ROOT)
+        (0..SLOTS).filter(|&x| self.root[x] != NO_ROOT)
     }
     /// All its seeds, kg.
     pub fn kg(&self, mm: &[f64; NP]) -> f64 {
         self.mol.iter().map(|m| (0..NP).map(|q| m[q] * mm[q]).sum::<f64>()).sum()
     }
-    /// Seeds `s` lie down: they join the most alike lot of their starting kind (`kin::kin`), the genes the mean by built
-    /// matter; else an empty lot; else the two nearest lots join (the lighter into the heavier, `join`) and they take
-    /// the lot it frees. Their heat is the caller's to give the cover.
-    pub fn lodge(&mut self, mm: &[f64; NP], s: &Seed, alike: f32) {
+    /// Seeds `s` lie down in its first `n` lots (the world's `Config::variety`): they join the most alike lot of their
+    /// starting kind (`kin::kin`), the genes the mean by built matter; else an empty lot; else the two nearest lots join
+    /// (the lighter into the heavier, `join`) and they take the lot it frees. Their heat is the caller's to give the
+    /// cover.
+    pub fn lodge(&mut self, mm: &[f64; NP], s: &Seed, (alike, n): (f32, usize)) {
         let kg = built_kg(mm, &s.mol);
         if let Some(x) = kin::kin(&self.genes, &self.root, (&s.genes, s.root), APART * alike, distance) {
             let f = (kg / (kg + built_kg(mm, &self.mol[x])).max(1e-300)) as f32;
@@ -60,13 +59,13 @@ impl Lying {
             (0..NP).for_each(|q| self.mol[x][q] += s.mol[q]);
             return;
         }
-        let x = kin::empty(&self.root).unwrap_or_else(|| self.join(mm));
+        let x = kin::empty(&self.root[..n]).unwrap_or_else(|| self.join(mm, n));
         (self.mol[x], self.genes[x], self.root[x]) = (s.mol, s.genes, s.root);
     }
-    /// The two lots nearest each other by their genes join, the lighter into the heavier: amounts added, genes the mean
-    /// by built matter, its starting kind the heavier's. Returns the lot left empty.
-    fn join(&mut self, mm: &[f64; NP]) -> usize {
-        let (a, z) = kin::nearest(&self.genes, distance);
+    /// Of its first `n` lots the two nearest each other by their genes join, the lighter into the heavier: amounts added,
+    /// genes the mean by built matter, its starting kind the heavier's. Returns the lot left empty.
+    fn join(&mut self, mm: &[f64; NP], n: usize) -> usize {
+        let (a, z) = kin::nearest(&self.genes[..n], distance);
         let (big, small) = if built_kg(mm, &self.mol[z]) > built_kg(mm, &self.mol[a]) { (z, a) } else { (a, z) };
         let f = (built_kg(mm, &self.mol[small]) / (built_kg(mm, &self.mol[big]) + built_kg(mm, &self.mol[small])).max(1e-300)) as f32;
         let (gs, ms) = (self.genes[small], self.mol[small]);
@@ -95,7 +94,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
     let burn = &chem.reactions[p.burn];
     let pace = burn.arrhenius(a.t.max(1.0)) / burn.arrhenius(ph.t_cat);
     let melt = chem.subs[p.liquid].melt;
-    for x in 0..LOTS_LYING {
+    for x in 0..SLOTS {
         if c.lying.root[x] == NO_ROOT {
             continue;
         }

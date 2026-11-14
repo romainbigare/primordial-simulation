@@ -63,7 +63,7 @@ pub fn land(w: &mut World) {
             w.counts.cover_budget[SEEDS] += held(&e, &s.mol);
             w.counts.seeds[LANDED] += kg;
             let c = &mut w.life.cells[i].cover;
-            c.lying.lodge(&mm, &s, w.cfg.phys.alike);
+            c.lying.lodge(&mm, &s, (w.cfg.phys.alike, w.cfg.variety));
             c.e += s.heat;
         }
     }

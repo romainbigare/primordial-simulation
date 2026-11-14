@@ -952,7 +952,7 @@ seeds fill it:
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,
-  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in up to `LOTS_LYING` (4) lots, each its
+  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in as many lots as the kinds its cover may hold (`Config::variety`), each its
   amounts of the three parts, its genes and its starting kind, at the cover's temperature (their heat is the cover's,
   and they are matter of the cover's node: in its books, its budget and its potential energy). Seeds that land join the
   most alike lot of their kind within `APART` × `alike` steps (the genes the mean by built matter), else an empty lot,
