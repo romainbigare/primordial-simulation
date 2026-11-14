@@ -1025,7 +1025,7 @@ land only through the contract (section 0; `cli/tests/sides.rs`), and their book
 ## 4. Soil and minerals
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
 and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
-on land under less than half a metre of liquid; then only fixing adds it, rotting (7) returns it, heat (11) sends it
+per m² of land, on every open land cell; then only fixing adds it, rotting (7) returns it, heat (11) sends it
 to the air. Body matter holds no rock element: the **rock salt (11)** is rock chemistry, made in wet cells from lime
 (8), turned back by 9, near balance (2.5).
 
@@ -1054,7 +1054,10 @@ read a kind.
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
   (`Terrain::inside`, on the worn samples, 0), whatever its size.
-- **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS`: kg per m² and genes, on every open land cell
+- **Open land**: a cell that holds land (`World::land_share`: of a cell of parts its land part, also where the cell's
+  mean ground lies under the level; else the whole cell where its mean ground stands above it) under no more than half
+  a metre of standing liquid (`MAX_STANDING_M`). Life starts per m² of its land, not of the cell.
+- **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS`: kg per m² of land and genes, on every open land cell
   by its chance, each kind's draws keyed by its own key, its label its row, `Cover::root`); without `--roster` the herb
   (`ONE`), with it the six kinds in their order (`ROSTER`): a small fast herb, a herb, a big slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody
   cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a tall fast cover with seeds spread
@@ -1062,6 +1065,6 @@ read a kind.
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
 - **Takers**, only where a run asks for them (`--fauna-year`; none by default, and none on the page): the five kinds of `worldgen::life::TAKER_KINDS`
   (30 g, 3 kg, 60 kg and 400 kg kinds that keep 310 to 311 K, and a 2 kg kind that keeps none) on every open land cell,
-  all adults, at a third of Damuth's line of members per area against body mass (`START_SHARE`; Damuth 1981), whole
+  all adults, at a third of Damuth's line of members per area of land against body mass (`START_SHARE`; Damuth 1981), whole
   below `N_WHOLE` by a keyed draw, each with a store of a tenth of its living mass as fuel (`START_STORE`), at its
   body's temperature, booked from the outside node (`fauna::place`, `contract::placed`).

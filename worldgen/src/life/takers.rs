@@ -2,7 +2,7 @@
 //! open land cell at a third of the line of members per area against body mass that real plant-eaters follow (Damuth
 //! 1981), all adults, with a store of fuel.
 
-use super::open_land;
+use super::{land_area, open_land};
 use pcore::fauna::{self, CHILD, COAT, ENZYME, KEEP, MASS, NG, N_WHOLE, REACH, REPAIR, YOUNG};
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
@@ -50,7 +50,7 @@ pub fn start_members(m: f64, area: f64) -> f64 {
 }
 
 /// Place every starting kind of takers (`TAKER_KINDS`) on the open land, each in every open land cell with its genes, its
-/// members `start_members` (whole below `N_WHOLE` by a draw keyed by the cell that keeps the mean). Returns a line per
+/// members `start_members` on the cell's land (`land_area`) (whole below `N_WHOLE` by a draw keyed by the cell that keeps the mean). Returns a line per
 /// kind.
 pub fn place_takers(w: &mut World) -> Vec<String> {
     pcore::month_start(w);
@@ -59,7 +59,7 @@ pub fn place_takers(w: &mut World) -> Vec<String> {
     for (row, kind) in TAKER_KINDS.iter().enumerate() {
         let (mut cells, mut members, m) = (0, 0.0, fauna::adult(&kind.genes));
         for &i in &open {
-            let mut n = start_members(m, w.mesh.cells().area()[i]);
+            let mut n = start_members(m, land_area(w, i));
             if n < N_WHOLE {
                 let id = (kind.key as u64) << KIND_BIT | i as u64;
                 n = n.floor() + (Rng::new(w.seed, w.day(), id, Purpose::Place).f64() < n.fract()) as u8 as f64;

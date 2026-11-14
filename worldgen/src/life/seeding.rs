@@ -1,7 +1,7 @@
 //! Placing the cover of a starting kind: a spray of variants, the fixers among it, and the line that reports it.
 
 use super::kinds::KINDS;
-use super::open_land;
+use super::{land_area, open_land};
 use pcore::rng::{Purpose, Rng};
 use pcore::{cover, World};
 use serde::{Deserialize, Serialize};
@@ -42,7 +42,8 @@ pub fn seed(w: &mut World, which: usize) -> String {
     seed_with(w, which, &Seeding::default())
 }
 
-/// Place the cover of starting kind `which` on the open land with the choices of `how`, each cell by its chance: its
+/// Place the cover of starting kind `which` on the open land, its `kg` per m² of each cell's land (`land_area`), with
+/// the choices of `how`, each cell by its chance: its
 /// genes after `rounds` rounds of mutation (a random walk keyed by the cell), the fixing gene on in the share `fixers`
 /// of the cells. Returns what was placed, in one line.
 pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
@@ -64,8 +65,9 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
         if fixes {
             genes[cover::FIX] = FIX_GENE;
         }
-        if cover::place(w, i, genes, which as u32, kind.kg) {
-            (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + kind.kg * w.mesh.cells().area()[i]);
+        // `kind.kg` per m² of the cell's land, as `cover::place` takes it per m² of the cell.
+        if cover::place(w, i, genes, which as u32, kind.kg * w.land_share(i)) {
+            (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + kind.kg * land_area(w, i));
         }
     }
     let g = &kind.genes;

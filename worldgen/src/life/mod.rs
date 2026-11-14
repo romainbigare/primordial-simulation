@@ -17,7 +17,13 @@ use pcore::World;
 /// Land under more standing liquid than this, m, gets no soil and no cover (a basin of standing liquid).
 const MAX_STANDING_M: f64 = 0.5;
 
-/// Whether life starts on cell `i`: land under no more than `MAX_STANDING_M` of standing liquid.
+/// Whether life starts on cell `i`: it holds land (`World::land_share`, the land part of a cell of parts whose mean
+/// ground lies under the level among them) under no more than `MAX_STANDING_M` of standing liquid.
 fn open_land(w: &World, i: usize) -> bool {
-    w.is_land(i) && pcore::contract::env_of(w, i)[1] <= MAX_STANDING_M
+    w.land_share(i) > 0.0 && pcore::contract::env_of(w, i)[1] <= MAX_STANDING_M
+}
+
+/// The area of the land of cell `i`, m², on which life starts per m² (`World::land_share`).
+fn land_area(w: &World, i: usize) -> f64 {
+    w.mesh.cells().area()[i] * w.land_share(i)
 }

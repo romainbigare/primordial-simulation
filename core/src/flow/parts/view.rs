@@ -22,6 +22,15 @@ impl World {
             p.heat = [e - top - deep, top, deep];
         }
     }
+    /// The share of cell `i`'s area that is land, as Flow's last state found it: of a cell of parts its land's
+    /// (`Parts::share`), else all of it where its mean ground stands above the level (`World::is_land`) and none
+    /// where it lies under.
+    pub fn land_share(&self, i: usize) -> f64 {
+        match self.scratch.state.parts.get(i) {
+            Some(Some(p)) => p.share(LAND),
+            _ => self.is_land(i) as u8 as f64,
+        }
+    }
 }
 
 impl Scratch {
