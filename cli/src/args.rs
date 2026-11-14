@@ -24,7 +24,7 @@ pub const USAGE: &str = "usage:
     --pictures-every N    a PNG picture every N years, and at the start and the end (0: none)
     --monthly-years N     a viewer frame every month in the first N years (2)
     --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
-    --fauna-year N        the year the starting kinds of takers are placed (the life year + 50; -1: none)
+    --fauna-year N        the year the starting kinds of takers are placed (-1: none, the default)
     --roster              the six kinds of cover of worldgen::life::ROSTER, each at its year after the first life, not
                           the one
     --spray N             rounds of mutation of the cover of every cell placed (20)
@@ -155,7 +155,6 @@ impl Args {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
         let rows: &[usize] = if self.has("--roster") { &worldgen::life::ROSTER } else { &worldgen::life::ONE };
         let life = year("--life-year", 2);
-        let after = life.map_or(-1, |y| (y + worldgen::schedule::TAKERS_AFTER) as i64);
-        Schedule { takers: year("--fauna-year", after), ..Schedule::new(life, rows, self.seeding()) }
+        Schedule { takers: year("--fauna-year", -1), ..Schedule::new(life, rows, self.seeding()) }
     }
 }

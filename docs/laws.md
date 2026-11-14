@@ -979,7 +979,7 @@ read a kind.
   cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a tall fast cover with seeds spread
   wide. Its genes get a spray of mutation (`--spray`).
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
-- **Takers** 50 years after the first life (`TAKERS_AFTER`; `--fauna-year`): the five kinds of `worldgen::life::TAKER_KINDS`
+- **Takers**, only where a run asks for them (`--fauna-year`; none by default, and none on the page): the five kinds of `worldgen::life::TAKER_KINDS`
   (30 g, 3 kg, 60 kg and 400 kg kinds that keep 310 to 311 K, and a 2 kg kind that keeps none) on every open land cell,
   all adults, at a third of Damuth's line of members per area against body mass (`START_SHARE`; Damuth 1981), whole
   below `N_WHOLE` by a keyed draw, each with a store of a tenth of its living mass as fuel (`START_STORE`), at its
