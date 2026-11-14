@@ -36,7 +36,7 @@ fn of(w: &World, i: usize) -> &Fauna {
 /// law of upkeep, the walk and the heat, J, its living mass `m` kg: at rest Kleiber's (`c_basal` + `c_muscle`)
 /// m^`upkeep_exp` and its gut's capacity (`c_capacity` of the fuel it could free), at the pace of its burning at its
 /// body's temperature, times its repair factor; the walk of its whole working time searching, bite by bite (speed
-/// (`walk_froude` g L)^0.5, slowed by the cropping of its bites, at `c_move` (m / `move_ref`)^`move_exp` J per kg and m); no less than its coat loses to
+/// (`walk_froude` g L)^0.5, slowed by the clipping of its bites, at `c_move` (m / `move_ref`)^`move_exp` J per kg and m); no less than its coat loses to
 /// colder ground.
 fn burnt_a_day(w: &World, row: usize, m: f64, t: f64) -> f64 {
     let (ph, g, chem) = (&w.cfg.phys, &TAKER_KINDS[row].genes, &w.chem);
@@ -52,7 +52,7 @@ fn burnt_a_day(w: &World, row: usize, m: f64, t: f64) -> f64 {
     let (work, len) = ((rx.arrhenius(tb) / rx.arrhenius(fauna::WORK_T)).min(1.0), (m / ph.rho_body).cbrt());
     let speed = (ph.walk_froude * w.cfg.gravity * len).sqrt() * work;
     let bite = (ph.bite_breadth * m.powf(ph.bite_exp)).powi(2);
-    let walking = 1.0 / (1.0 / (speed * len) + ph.crop_time / work / bite) / len;
+    let walking = 1.0 / (1.0 / (speed * len) + ph.bite_time / work / bite) / len;
     let walk = walking * ph.busy * DAY * ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m;
     let coat = ph.meeh * m.powf(2.0 / 3.0) / (ph.r_air + g[fauna::COAT] as f64 * ph.r_coat);
     (rest + walk).max(coat * (g[KEEP] as f64 - t).max(0.0) * DAY)
@@ -455,31 +455,31 @@ fn the_young_leave_and_the_books_are_kept() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A member takes its food bite by bite (laws.md 3b): the ground it crops a s is 1 / (1 / (v L) + `crop_time` / A),
+/// A member takes what it eats bite by bite (laws.md 3b): the ground it clips a s is 1 / (1 / (v L) + `bite_time` / A),
 /// A = (`bite_breadth` m^`bite_exp`)² its bite's area. On thin cover the take grows as the cover (twice the cover, twice
-/// the take) and stays under the bites a day can crop, (T / `crop_time`) A D; a larger body crops more ground a day, as
+/// the take) and stays under the bites a day can clip, (T / `bite_time`) A D; a larger body clips more ground a day, as
 /// its bite's area is larger.
 #[test]
-fn a_member_takes_its_food_bite_by_bite() {
+fn a_member_takes_what_it_eats_bite_by_bite() {
     let ph = pcore::Config::default().phys;
     let (area, days, busy, n) = (4e6, 30.0, ph.busy * DAY, 1.0);
-    let cropped = |m: f64, d: f64| {
+    let clipped = |m: f64, d: f64| {
         let len = (m / ph.rho_body).cbrt();
         let speed = (ph.walk_froude * 9.81 * len).sqrt();
         let bite = (ph.bite_breadth * m.powf(ph.bite_exp)).powi(2);
-        let search = 1.0 / (1.0 / (speed * len) + ph.crop_time / bite);
+        let search = 1.0 / (1.0 / (speed * len) + ph.bite_time / bite);
         let chew = ph.chew * m.powf(ph.upkeep_exp) / DAY;
         let (taken, _) = take::scheme(&[eater(n, (search, busy, chew), 1)], (&[d * area], &[3e3]), area, days);
-        (taken[0][0] / (n * days), busy / ph.crop_time * bite * d)
+        (taken[0][0] / (n * days), busy / ph.bite_time * bite * d)
     };
     let thin = 1e-4;
     for m in [3.0, 400.0] {
-        let ((once, most), (twice, _)) = (cropped(m, thin), cropped(m, 2.0 * thin));
-        println!("{m} kg on {thin} kg/m2: {once:.4e} kg a day, its bites crop at most {most:.4e}; on twice the cover {twice:.4e}");
+        let ((once, most), (twice, _)) = (clipped(m, thin), clipped(m, 2.0 * thin));
+        println!("{m} kg on {thin} kg/m2: {once:.4e} kg a day, its bites clip at most {most:.4e}; on twice the cover {twice:.4e}");
         assert!(once <= most && (twice / once - 2.0).abs() <= 0.01, "{m} kg: {once} kg a day against at most {most}, {twice} on twice the cover");
     }
-    let (small, large) = (cropped(3.0, thin).0, cropped(400.0, thin).0);
-    assert!(large > small, "a body of 400 kg crops {large} kg a day, one of 3 kg {small}");
+    let (small, large) = (clipped(3.0, thin).0, clipped(400.0, thin).0);
+    assert!(large > small, "a body of 400 kg clips {large} kg a day, one of 3 kg {small}");
 }
 
 /// A slot's soft part stands in its crown (`contract::crown`): of a crown from 15 to 20 m a mouth whose band ends at

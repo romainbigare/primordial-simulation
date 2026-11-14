@@ -210,8 +210,8 @@ pub struct Physics {
     /// The force a taker's jaw closes with at 1 kg living, N, and the power of its living mass it grows as
     pub jaw: f64,
     pub jaw_exp: f64,
-    /// The time a taker takes to crop one bite, s, whatever its size
-    pub crop_time: f64,
+    /// The time a taker takes to clip one bite, s, whatever its size
+    pub bite_time: f64,
     /// The breadth of a taker's bite at 1 kg living, m, and the power of its living mass it grows as; its bite's area is
     /// the square of it
     pub bite_breadth: f64,
@@ -346,7 +346,7 @@ impl Default for Physics {
             litter_k: 0.06,
             jaw: 50.9,
             jaw_exp: 0.43,
-            crop_time: 0.9,
+            bite_time: 0.9,
             bite_breadth: 8.6e-3,
             bite_exp: 0.36,
             crown_density: 1.0,

@@ -177,7 +177,7 @@ pub fn above(snow: f64, span: (f64, f64)) -> f64 {
 }
 
 /// The crown of the plants of slot `x` of the cover of `cell` (cell `i`), from its base to its top, m: its leaves, and the
-/// thin axes that carry them, stand where the light is, over the depth their capture area fills at the density of a
+/// thin stems that carry them, stand where the light is, over the depth their capture area fills at the density of a
 /// crown's leaves: the capture area over the ground its plants hold (`Cover::leaf` over the cell's land, `land`, times
 /// the share its roots hold, `Cover::rooted`), over `crown_density` m² a m³, down from its top (its height,
 /// `Cover::stands_at`), and no lower than the ground: a sward is as dense as that over its whole height.
@@ -241,8 +241,8 @@ pub fn cut(w: &World, width: f64, force: f64) -> f64 {
 }
 
 /// The slots of the cover of `cell` (cell `i`) that hold plants, each as its soft part and its frame, with the span of
-/// their crown from its base to its top, m (`crown`: the frame a mouth can cut is the thin axes that carry the leaves;
-/// its thick axes stand on the ground, and no jaw cuts them), from the lowest top.
+/// their crown from its base to its top, m (`crown`: the frame a mouth can cut is the thin stems that carry the leaves;
+/// its thick stems stand on the ground, and no jaw cuts them), from the lowest top.
 pub fn slots(w: &World, i: usize, cell: &Cell) -> Vec<(Layer, (f64, f64))> {
     let Some(p) = Parts::of(&w.chem) else { return Vec::new() };
     let mut v: Vec<(Layer, (f64, f64))> = cell.cover.held().flat_map(|x| [(Layer::Soft(x), crown(w, i, cell, &p, x)), (Layer::Frame(x), crown(w, i, cell, &p, x))]).collect();
