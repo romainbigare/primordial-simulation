@@ -348,24 +348,31 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   lie on low-ground cells near the shore and the two layers bleed over the liquid there; nothing hides a buried
   plant from the light (the air's step lets the canopy catch light over any snow). To measure again on the new air.
 - Designed, not built: the first takers of the cover (F1), `review/f1-design.md`, with the orchestrator's
-  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). Built on
-  the local branch `worktree-agent-ac136315104cd4ab3` (14d4d5c, gate passed, not on main yet): the shared ground
-  as a pure clean-up; the fauna's state, placing and books (`core/src/fauna/`, eight small files); the month's
-  running liquid (`World::liquid_month`, one rate per cell from the runoff's pass); the take (Holling's disk law in
-  six steps at midpoint rates, 0.6% off the exact answer) and digestion; thirst that cuts work before it kills;
-  the way to another cell's liquid by the law of walking (`contract/liquid.rs`); the map layer "Takers". Books
-  with takers that eat: drift 1.7e-13 over 60 years at 64 squares. Cost about 2.7 millionths of a second per land
-  cell and month. Found on a 64 drawn world (climate None), takers placed at year 50, no births yet:
-  - most starve in the first year (the 30 g kind 99.5%, the 400 kg kind 91%, the cold-bodied 2 kg kind 32%); they
-    eat 0.1 to 0.3% of the cover's growth (the gate asks 2 to 40%);
-  - no gathering by the liquid: on a wet island nearly every cell sheds liquid every month. Honest; the gate's
-    row needs a land with a dry belt;
-  - the drink fetched by walking is booked from the walker's own cell: to go right with the outbox of the young's
+  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). On main
+  (merge 2081501), none placed unless asked for (`ew run --fauna-year N`; the page places none): the shared
+  ground as a pure clean-up; the fauna's state, placing and books (`core/src/fauna/`, eight small files); the
+  month's running liquid (`World::liquid_month`); the take (Holling's disk law in six steps at midpoint rates)
+  and digestion; thirst that cuts work before it kills; the way to another cell's liquid by the law of walking
+  (`core/src/contract/liquid.rs`); the map layer "Takers". Books with takers that eat: drift 1.7e-13 over 60
+  years at 64 squares; about 2.7 millionths of a second per land cell and month. Found:
+  - Placed at year 50 on a 64 drawn world with no births, most starve in the first year. The budget against
+    measured figures (`scratchpad/f1/budget.md`): no anchored row is on a wrong reading (rest, the coat's
+    conductance, the chewing power's slope agree with the measured; our warm takers burn 46 to 78% of a real
+    field metabolic rate). The start's guts were 4 to 7 times too large (a start condition, mended). On good low
+    cover every warm kind but the 30 g one pays 106 to 216% of its need. Two laws lack: a small body stands in
+    the open all day (the 30 g kind's coat passes 1.7 times a real field metabolic rate in the cold month); a
+    bite of a tree is 75 to 83% wood.
+  - No gathering by the liquid: on a wet island nearly every cell sheds liquid every month. Honest; the gate's
+    row needs a land with a dry belt.
+  - The drink fetched by walking is booked from the walker's own cell: to go right with the outbox of the young's
     dispersal.
-  In work, by the same builder (scratch `scratchpad/f1/`, `notes.md`, `budget.md`): the branch made fit for main
-  (no takers placed unless asked for, main merged in); a budget of each kind against measured figures (field
-  metabolic rate, daily intake, heat lost in the cold, intake rate) to find which of our numbers is off, no
-  tuning; then births, growth, mutation and the slot rule, with a 250-year run.
+  In work, by the same builder (branch `worktree-agent-ac136315104cd4ab3`, saved as `wip/takers`; scratch
+  `scratchpad/f1/`, `notes.md`): two laws decided by the orchestrator, each its own commit: (1) a body at rest
+  sits in what lies on the ground (litter, low cover, the soft solid) up to its own height: a resistance of
+  still air in series with its coat, no gene; (2) a mouth breaks what its jaw can rupture: a slot shows its soft
+  part and its frame apart, and a body cuts the share of the frame in axes thinner than its jaw's force over the
+  frame's rupture stress allows, about (d/D)^(2/3) by the pipe model. Then the budget again, then births, growth,
+  mutation and the slot rule with a 250-year run.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
