@@ -205,7 +205,11 @@ it reaches in their own proportions, as a mouth takes a piece of a plant, never 
 (`contract::liquid`): what a cell's ground holds of it, split four ways: open (standing on it, as deep as the month's
 start found it), in its pores (the cover's roots reach it, a mouth does not), frozen and lying on it as the soft solid
 (as deep as the month's start found it), and frozen in its pores; and beside them what ran over it in the month (its main channel's month,
-`World::liquid_month`), which a mouth reaches though it is no amount of the cell's. **Vapour** (`contract::vapour`):
+`World::liquid_month`), which a mouth reaches though it is no amount of the cell's. **The way to it**
+(`contract::ways_to_liquid`, at the start of life's month, after Flow's): for each decade of liquid (`LEVELS`), the shortest way
+along the links between cells' centres over land from each cell to the nearest cell whose open liquid over the month
+(standing and running) holds that much (Dijkstra 1959; ties by the cell's index); `contract::to_liquid` gives it for a need
+rounded up to its decade. **Vapour** (`contract::vapour`):
 a taker sheds heat by turning liquid and soft solid of its ground into vapour (what it drank of the running liquid
 leaves the cell's liquid, which the running liquid joins), given to the cell's aside node as the cover's books give a gas; it
 pays the vapour's latent heat less what the ground held (a solid's heat of fusion too). **Press**
@@ -909,11 +913,15 @@ land only through the contract (section 0; `cli/tests/sides.rs`), and their book
   of what it eats (`WET_TISSUE` of the living mass of the body matter it takes). Its need is the vapour that cools it at
   its work plus the least liquid it passes through, `drink_least` × m^`drink_exp` kg a day (Nagy and Peterson 1988),
   which goes back to the cell in the month and is not booked. The slots of a cell share its open liquid by what they
-  ask of it. Where a slot's liquid is less than its need its work is cut first (searching, handling and building
-  together) down to where its heat to shed needs no more liquid than it has: less work makes less heat. Only where at
-  no work its need is still unmet do its members die, by the unmet share (`LACK`). The vapour shed leaves the cell's
-  liquid (the running liquid and what they ate join it there), then the soft solid, for the cell's aside node with its
-  latent heat, paid from the bodies' heat (`contract::vapour`). A body reaches no liquid of another cell.
+  ask of it. **The way to the liquid** (`fauna::way`): a slot still short walks to the nearest cell whose open liquid
+  over the month holds its shortfall (`contract::to_liquid`) and back, as often as its shortfall and what a member can lose
+  as liquid between drinks (`dry_most` of its mass) ask, at its walking speed and the law of walking's work, which it
+  burns; what the day's hours cannot walk stays short. Where a slot's liquid is still less than its need its work is
+  cut first (searching, handling and building together) down to where its heat to shed needs no more liquid than it
+  has: less work makes less heat. Only where at no work its need is still unmet do its members die, by the unmet share
+  (`LACK`). The vapour shed leaves the cell's liquid (the running liquid, what they ate and what they fetched join it
+  there), then the soft solid, for the cell's aside node with its latent heat, paid from the bodies' heat
+  (`contract::vapour`); where the cell's ground holds less, less is shed and its heat goes to the ground.
 - **Digestion** (`fauna::gut`, by the chemistry's own reactions): its gut splits walls into fuel (the reaction that
   makes fuel of the walls alone, taking the key liquid of the ground) up to its capacity × its living mass × pace; it
   burns for its upkeep and heat first the body matter it took (the burning of body matter, which gives its mineral to

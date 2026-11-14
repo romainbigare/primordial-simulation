@@ -40,6 +40,10 @@ pub struct Life {
     /// Per cell, from the month's start (`contract::surroundings`): ground temperature, liquid depth, surface height
     /// (`contract::place`)
     pub env: Vec<[f64; 4]>,
+    /// Per cell, from the start of life's month (`contract::ways_to_liquid`): the way over land to the nearest cell with open
+    /// liquid of at least each decade over the month, m (`contract::to_liquid`). Not saved: life's month finds it before any
+    /// law reads it
+    pub(crate) to_liquid: Vec<[f64; crate::contract::LEVELS]>,
     /// While a parallel pass runs (`life::run`): what the cells see in each air node as the store held it at the
     /// pass's start (`World::a_seen`, of each substance), the same for every cell under it, worked out where first read;
     /// else empty
@@ -50,6 +54,7 @@ pub struct Life {
 /// its cover's (`cover::step`), then its takers' (`fauna::step`), which find the cover as its month left it; then the
 /// cover's seeds land (`cover::landed`).
 pub fn month(w: &mut World) {
+    crate::contract::ways_to_liquid(w);
     let load = w.life.cells.iter().filter(|c| c.cover.any() || c.fauna.any()).count();
     run(w, load, |w, d| {
         crate::cover::step(w, d);

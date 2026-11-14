@@ -84,17 +84,24 @@ pub fn scheme(eaters: &[Eater], (stock, breaking): (&[f64], &[f64]), area: f64, 
     (taken, searching)
 }
 
-/// What the slots of cell `i`, its members `bodies`, can reach of `layers`: the reachable stock of each layer, kg (the
-/// widest share any slot reaches of what it shows above the snow, `reach`), the energy to break a kg of it, J, and each
-/// slot's share of each layer's reachable stock.
-pub(super) fn reachable(w: &World, i: usize, layers: &[Found], bodies: &[Body; FS]) -> (Vec<f64>, Vec<f64>, Vec<Vec<f64>>) {
+/// What the slots of a cell can reach of its layers: the reachable stock of each layer, kg (the widest share any slot
+/// reaches of what it shows above the snow), the energy to break a kg of it, J, and each slot's share of each layer's
+/// reachable stock.
+pub(super) struct Reach {
+    pub(super) stock: Vec<f64>,
+    pub(super) breaking: Vec<f64>,
+    pub(super) share: Vec<Vec<f64>>,
+}
+
+/// What the slots of cell `i`, its members `bodies`, can reach of `layers` (`Reach`, `reach`).
+pub(super) fn reachable(w: &World, i: usize, layers: &[Found], bodies: &[Body; FS]) -> Reach {
     let snow = contract::place(w, i).snow;
     let reach: Vec<Vec<f64>> = bodies.iter().map(|b| layers.iter().map(|f| reach(b, f, snow)).collect()).collect();
     let widest: Vec<f64> = (0..layers.len()).map(|l| reach.iter().map(|r| r[l]).fold(0.0, f64::max)).collect();
     let stock = layers.iter().zip(&widest).map(|(f, &r)| f.shown.kg * r).collect();
     let breaking = layers.iter().map(|f| f.shown.breaking / f.shown.kg).collect();
     let share = reach.iter().map(|r| r.iter().zip(&widest).map(|(r, &m)| if m > 0.0 { r / m } else { 0.0 }).collect()).collect();
-    (stock, breaking, share)
+    Reach { stock, breaking, share }
 }
 
 /// The slots of `bodies` as eaters of the scheme, each of its members at work the share `work` of its working time (a

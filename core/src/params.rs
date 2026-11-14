@@ -194,6 +194,8 @@ pub struct Physics {
     pub reach_len: f64,
     /// Most fuel a taker stores, kg per kg of its living mass
     pub store_most: f64,
+    /// Key liquid a taker can lose before it dies, kg per kg of its living mass: what it carries between drinks
+    pub dry_most: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -315,6 +317,7 @@ impl Default for Physics {
             bite_floor: 0.1,
             reach_len: 5.0,
             store_most: 0.3,
+            dry_most: 0.12,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,

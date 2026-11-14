@@ -11,6 +11,7 @@ mod month;
 mod place;
 pub mod take;
 mod thirst;
+pub mod way;
 
 pub use body::BAND;
 pub use month::step;

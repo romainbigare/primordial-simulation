@@ -9,7 +9,8 @@
 //! - **Take** (`take`, a bite of all a layer's parts in their proportions), **give** (`give`) and **press** (`press`):
 //!   each booked on both sides, never more than is there.
 //! - **The key liquid** of a cell (`liquid`: open, in the pores, frozen) and a taker's **vapour** (`vapour`).
-//! - A taker's moves (`open`), the gas its air offers it (`air`), and life placed from outside (`placed`).
+//! - A taker's moves (`open`), the gas its air offers it (`air`), life placed from outside (`placed`), and the way to
+//!   the nearest open liquid (`to_liquid`, `ways_to_liquid`).
 //! - **What stands on a cell** (`Stand`, `stand`): what life there weighs and catches of the light; Flow reads it.
 //!
 //! When: the place is as the month's start left it (`surroundings`), and so is what stands; the cover is as it is now.
@@ -20,6 +21,9 @@ use crate::life::{Cell, Chunk, BROKEN, TAKEN};
 use crate::store::Node;
 use crate::units::MAX_SUBSTANCES;
 use crate::World;
+
+mod liquid;
+pub use liquid::{liquid, to_liquid, vapour, ways_to_liquid, Liquid, LEVELS};
 
 /// What stands on a cell: the cover's part, written at the month's start (`stands`); Flow reads it (`stand`).
 #[derive(Clone, Copy, Debug, Default)]
@@ -221,57 +225,6 @@ pub fn take(w: &World, d: &mut Chunk, i: usize, layer: Layer, want: f64) -> Bite
 /// through it, what it sheds), through the cell's view of the store.
 pub fn give(w: &World, d: &mut Chunk, i: usize, amounts: impl IntoIterator<Item = (usize, f64)>, heat: f64) {
     d.moves.give_all(w, Node::ground(i), amounts, heat);
-}
-
-/// The key liquid of a cell as a taker finds it, mol: open (standing on its ground, which a mouth reaches), what ran
-/// over it in the month (its main channel's, `World::liquid_month`: a mouth reaches it too, but it has run on, so it is
-/// no amount of the cell's), in the pores of its ground (the cover's roots reach it, a mouth does not), frozen and
-/// lying on its ground as the soft solid (a mouth reaches it, paying its heat of fusion), and frozen in its pores.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Liquid {
-    pub open: f64,
-    pub running: f64,
-    pub pores: f64,
-    pub soft: f64,
-    pub frozen: f64,
-}
-
-/// The key liquid of cell `i` as the cell's view in chunk `d` holds it now (`Liquid`): of what its ground holds, the
-/// share molten at its temperature (`World::molten`) is liquid, open as far as the depth standing on it at the month's
-/// start (`place`) holds, the rest in its pores; of the frozen, the soft solid lying on it as far as its depth at the
-/// month's start holds, the rest in its pores; what ran through its main channel in the month's runoff pass over the
-/// month. None without a key liquid in the chemistry.
-pub fn liquid(w: &World, d: &Chunk, i: usize) -> Liquid {
-    let Some(p) = Parts::of(&w.chem) else { return Liquid::default() };
-    let (k, area, at) = (p.liquid, w.mesh.cells().area()[i], place(w, i));
-    let held = d.moves.amount(w, Node::ground(i), k).max(0.0);
-    let (t, plateau) = w.thaw_last(i);
-    let molten = held * w.molten(k, i, t, plateau);
-    let open = molten.min(at.liquid * area / w.chem.molar_volume(k, crate::chem::Phase::Liquid));
-    let soft = (held - molten).min(at.snow * area / w.chem.molar_volume(k, crate::chem::Phase::Solid));
-    let running = w.liquid_month.get(i).map_or(0.0, |&f| f as f64 * w.cfg.calendar().month as f64);
-    Liquid { open, running, pores: molten - open, soft, frozen: held - molten - soft }
-}
-
-/// A taker of cell `i` of chunk `d` sheds heat as vapour of the key liquid: `[liquid, solid]` mol of it, taken from the
-/// liquid and the soft solid of its ground (`liquid`: what it drank of the open or the running liquid leaves the cell's
-/// liquid, which the running liquid joins; the caller asks no more than its ground holds), go to the cell's aside
-/// node as vapour with their latent heat, as the cover's books give a gas (`life::book`). Returns the heat the taker pays
-/// for it, J: the vapour's heat and latent heat less the heat the liquid and the solid held in the ground (the solid
-/// holds no heat of fusion, so the taker pays it).
-pub fn vapour(w: &World, d: &mut Chunk, i: usize, [liquid, solid]: [f64; 2]) -> f64 {
-    let Some(p) = Parts::of(&w.chem) else { return 0.0 };
-    let (k, mol) = (p.liquid, liquid + solid);
-    if mol <= 0.0 {
-        return 0.0;
-    }
-    let (s, t, ground) = (&w.chem.subs[k], w.t_ground_last(i), Node::ground(i));
-    let cap = d.moves.heat_cap_ground(w, i);
-    d.moves.take(w, ground, k, mol, 0.0);
-    let got = d.moves.take_from_ground(w, i, (0, 0.0, 0.0), mol * s.cp * t + liquid * s.lf, cap).1;
-    d.moves.gas(w, k, mol, w.lift(i));
-    d.moves.give(w, Node::aside(i), 0, 0.0, mol * s.cp * t);
-    mol * (s.cp * t + s.latent_gas()) - got
 }
 
 /// A taker's moves on cell `i` of chunk `d` open, in the name of the life of the cell: what it takes and gives from here

@@ -220,3 +220,41 @@ fn a_taker_takes_no_more_than_it_reaches() {
 fn shown(w: &World, i: usize, layer: pcore::contract::Layer) -> f64 {
     pcore::contract::shown(w, i, w.life.cell_at(i), layer).map_or(0.0, |s| s.kg)
 }
+
+/// The way to the liquid (`fauna::way::fetch`, `contract::ways_to_liquid`): a slot short of liquid fetches it from the nearest
+/// open liquid at the work of the walks there and back, which grows with the way as the law of walking says (twice
+/// the way, twice the work); beyond what the day's hours can walk it fetches less than it is short, and its work is cut
+/// for the rest. The field of ways is none at the cells with open liquid and the shortest way along the links over land
+/// elsewhere: no land cell's way is longer than a neighbour's and the link between them.
+#[test]
+fn the_way_to_the_liquid_costs_the_walk() {
+    let (w, _) = start();
+    let ph = &w.cfg.phys;
+    let m = fauna::adult(&TAKER_KINDS[3].genes);
+    let len = (m / ph.rho_body).cbrt();
+    let (speed, per_m) = ((ph.walk_froude * w.cfg.gravity * len).sqrt(), ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m);
+    let (n, short, mm, days) = (10.0, 3e4, 0.018, 30.0);
+    let at = |way: f64| fauna::way::fetch((n, m, speed, per_m), (short, mm, days), way, ph.dry_most);
+    let (near, far) = (at(1e3), at(2e3));
+    let trips = short * mm / (n * days) / (ph.dry_most * m);
+    println!("{trips:.2} trips a day; 1 km: {near:?}; 2 km: {far:?}");
+    assert!((near.mol - short).abs() <= 1e-9 * short && (far.work - 2.0 * near.work).abs() <= 1e-9 * far.work, "the walks' work does not go as the way: {near:?}, {far:?}");
+    assert!((near.work - trips * 2e3 * per_m * n * days).abs() <= 1e-9 * near.work, "the walks' work is not the law of walking's");
+    let reach = pcore::units::DAY * speed / (2.0 * trips);
+    let beyond = at(2.0 * reach);
+    println!("its day walks {reach:.0} m to the liquid at most; at twice that it fetches {beyond:?}");
+    assert!((beyond.mol - 0.5 * short).abs() <= 1e-9 * short, "beyond its reach a slot fetched {} of {short} mol", beyond.mol);
+    let mut w = testkit::living(8, 1);
+    pcore::step(&mut w);
+    let cells = w.mesh.cells();
+    let field = |need: f64| (0..cells.n()).map(|i| pcore::contract::to_liquid(&w, i, need)).collect::<Vec<f64>>();
+    let mixed = |v: &[f64]| v.contains(&0.0) && v.iter().any(|&d| d > 0.0 && d.is_finite());
+    let need = (0..pcore::contract::LEVELS as i32).map(|k| 10f64.powi(k)).find(|&x| mixed(&field(x))).expect("a field of ways with some cells at the liquid and some off it");
+    let way = field(need);
+    println!("ways to {need:e} mol a month: {:?}", way.iter().map(|d| d.round()).collect::<Vec<_>>());
+    for i in (0..cells.n()).filter(|&i| w.is_land(i) && way[i] > 0.0) {
+        let (links, around) = cells.around(i);
+        let best = links.iter().zip(around).map(|(&l, &j)| way[j as usize] + cells.dist()[l as usize]).fold(f64::INFINITY, f64::min);
+        assert!((way[i] - best).abs() <= 1e-9 * best.max(1.0), "cell {i}: a way of {} m where a neighbour gives {best} m", way[i]);
+    }
+}

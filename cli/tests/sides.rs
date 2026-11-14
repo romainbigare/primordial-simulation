@@ -14,7 +14,7 @@
 use std::path::Path;
 
 /// The natural world under `core/src`: its folders and its files, and the contract between it and the bodies.
-const NATURAL: [&str; 14] = ["flow", "change", "cover", "space", "store", "chem", "solve", "clock", "inside", "ground.rs", "check.rs", "math.rs", "units.rs", "contract.rs"];
+const NATURAL: [&str; 14] = ["flow", "change", "cover", "space", "store", "chem", "solve", "clock", "inside", "ground.rs", "check.rs", "math.rs", "units.rs", "contract"];
 
 /// The modules of the bodies.
 const BODIES: [&str; 9] = ["body", "choose", "copy", "bond", "nodes", "brain", "lineage", "lanes", "fauna"];
