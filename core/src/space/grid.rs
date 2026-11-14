@@ -20,6 +20,12 @@ pub(super) struct Grid {
     far: Vec<[f64; 8]>,
 }
 
+/// The distance between the centres of two samples `a` rows and `b` columns apart, m, in rows `dx` wide and `dy` long:
+/// along the rows by the mean of the two rows' widths.
+fn length(dx: [f64; 2], dy: f64, a: i64, b: i64) -> f64 {
+    ((dx[0] + dx[1]) / 2.0 * b as f64).hypot(dy * a as f64)
+}
+
 impl Grid {
     /// A grid `across` x `down` of samples `dy` m long, those of row r `dx[r]` m wide, round a globe if `wrap`.
     pub(super) fn new(across: usize, down: usize, wrap: bool, dy: f64, dx: Vec<f64>) -> Grid {
@@ -27,11 +33,21 @@ impl Grid {
             .map(|r| {
                 STEPS.map(|(a, b)| {
                     let r2 = (r as i64 + a).clamp(0, down as i64 - 1) as usize;
-                    ((dx[r] + dx[r2]) / 2.0 * b as f64).hypot(dy * a as f64)
+                    length([dx[r], dx[r2]], dy, a, b)
                 })
             })
             .collect();
         Grid { across, down, wrap, dy, dx, far }
+    }
+
+    /// The distance between the centres of samples `k` and `j`, m (`length`; the shorter way round a globe).
+    pub(super) fn apart(&self, k: usize, j: usize) -> f64 {
+        let (r, rj) = (k / self.across, j / self.across);
+        let mut b = (j % self.across) as i64 - (k % self.across) as i64;
+        if self.wrap && 2 * b.abs() > self.across as i64 {
+            b -= b.signum() * self.across as i64;
+        }
+        length([self.dx[r], self.dx[rj]], self.dy, rj as i64 - r as i64, b)
     }
 
     /// The number of samples.

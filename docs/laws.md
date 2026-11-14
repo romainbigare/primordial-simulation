@@ -124,7 +124,8 @@ twice as coarse until it fits (`MOST_SAMPLES`). **The shelf** (`space::shelf`): 
 ground is spread along the shore by the waves, each sample of the shore taking the load that reached the shore within
 5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 10 m under the low stand
 (`TOPSET_M`, a
-delta's topset), as wide as that load in proportion, fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
+delta's topset), as wide as that load in proportion (a round lobe: a sample the open low ground joins to a shore's sample lies inside
+that one's platform by its width less the straight distance between them), fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
 rest under liquid; Gilbert 1885). So a channel that brings much load builds a fan at its mouth and a coast that gets
 little keeps its steep drop; its edge is rounded over 250 m as a clinoform's top rolls over (`ROUNDED_M`), never over
 the platform's top; the width is found so the shelf holds all the load (where the platform fills the open low ground of
