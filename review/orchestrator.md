@@ -630,7 +630,10 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
       - In work: **rain follows the air's rise**, one law: a node's rising or sinking mass flux (the divergence of
         the overturning's low flow, plus wind against the ground's rise, Smith and Barstad 2004); rising air
         condenses, sinking air dries the low air. The dry belt, the wet windward side and the dry lee together.
-   4. Fire, as a fast event inside a month (needs 2 and 3 first).
+   4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
+      keeps grassland open (Bond, Woodward and Midgley 2005). In work, a fresh builder (branch `fire`, scratch
+      `scratchpad/fire/`): first a measure of fuel and dryness on main and a design note, then my word, then
+      the build.
    5. Then: the ground's water numbers by grain (heath on coarse ground, wet meadow on fine); a wider spread of
       the bed's wear rates and flat layers on a high land in some worlds (scarps); one large land in a world of
       512 for a large river and a delta (with the package of the mouths).
