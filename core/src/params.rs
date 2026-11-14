@@ -17,6 +17,8 @@ pub struct Config {
     pub lat_south: f64,
     /// Latitude of the map's north edge, degrees
     pub lat_north: f64,
+    /// Kinds of cover a cell holds at most, a setting of a world (at most `cover::SLOTS`)
+    pub variety: usize,
     /// Radius of the planet, m
     pub radius_m: f64,
     /// Strength of the deflection of moving air by the planet's rotation (0 = none)
@@ -392,6 +394,9 @@ impl Config {
         require(self.chunks > 0, || "chunks must be at least 1".to_string())?;
         let (south, north) = (self.lat_south, self.lat_north);
         require(-90.0 <= south && south < north && north <= 90.0, || format!("lat_south ({south}) must lie below lat_north ({north}), both from -90 to 90"))?;
+        // A cell's cover holds its kinds in arrays of `cover::SLOTS`.
+        let (v, most) = (self.variety, crate::cover::SLOTS);
+        require((1..=most).contains(&v), || format!("variety ({v}) must be from 1 to {most}"))?;
         // The air's sideways laws divide by the stretched lengths (`flow::air::Stretch`), a globe's squares by it.
         require(self.radius_m > 0.0 && self.radius_m.is_finite(), || format!("radius_m ({}) must be above 0", self.radius_m))?;
         let wake = self.wake_share;
@@ -440,6 +445,7 @@ impl Default for Config {
             tilt: 23.4,
             lat_south: 40.0,
             lat_north: 42.3,
+            variety: 4,
             radius_m: 6.371e6,
             rotation: 1.0,
             gravity: 9.81,

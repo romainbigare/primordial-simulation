@@ -3,7 +3,7 @@
 //! upkeep, up to those its plants hold (`frame`).
 
 use super::grow::{Books, Slot};
-use super::{dec, Cover, Parts, FIX, FIX_OFF, FUEL, MATTER, NP, SEED, SLOTS, STORE, WALL, WALLS};
+use super::{dec, Cover, Parts, FIX, FIX_OFF, FUEL, MATTER, NP, SEED, STORE, WALL, WALLS};
 use crate::chem::Reaction;
 use crate::rng::{Purpose, Rng};
 use crate::units::MAX_SUBSTANCES;
@@ -89,7 +89,7 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
         c.mol[x][FUEL] -= mol[FUEL];
         let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp * t).sum::<f64>();
         b.heat -= heat;
-        let mut r = Rng::new(w.seed, tick, (i * SLOTS + x) as u64, Purpose::Cover);
+        let mut r = Rng::new(w.seed, tick, (i * w.cfg.variety + x) as u64, Purpose::Cover);
         let mut lands: Vec<(usize, f64)> = Vec::new();
         for _ in 0..super::seed::LOTS {
             let Some(j) = crate::life::lot(w, i, &mut r).filter(|&j| j != i) else { continue };

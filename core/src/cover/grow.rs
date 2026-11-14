@@ -68,6 +68,8 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
 pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), counts: &mut Counters) -> (Books, f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (area, mm, t, rho) = (super::ground(w, i), p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
+    // The slots its world uses (`Config::variety`).
+    let n = w.cfg.variety;
     // The light since the last step: its capture areas share it by the height of their plants, tallest first, each on
     // the share of its ground its roots hold.
     let dl = (a.light - c.mark).max(0.0);
@@ -76,8 +78,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let mut flows = [0.0; BUDGET.len()];
     let lying = super::lying::month(w, c, p, a, (i, area, dt), &mut flows, counts);
     let mut s = [Slot::default(); SLOTS];
-    let mut layers = Vec::with_capacity(SLOTS);
-    for (q, sq) in s.iter_mut().enumerate() {
+    let mut layers = Vec::with_capacity(n);
+    for (q, sq) in s.iter_mut().enumerate().take(n) {
         let (built, leaf) = (c.built(&mm, q), c.leaf(&mm, q));
         if c.root[q] == NO_ROOT || built <= EMPTY_KG {
             continue;
@@ -96,20 +98,20 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         layers.push((h as f32, leaf / area, c.rooted[q] as f64, q));
     }
     crate::math::shade(&mut layers, |q, f, bottom| (s[q].shade, s[q].bottom) = (f, bottom));
-    let (a_abs, lit): (f64, f64) = (s.iter().map(|x| x.abs).sum(), s.iter().map(|x| x.abs * x.shade).sum());
+    let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books::new(a.air, flows);
     (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q]);
     let e = p.content(chem);
     let before = c.content(&e);
-    let stored = light(chem, ph, c, p, &mut s, (caught * a.reach / lit.max(1e-300), w.mesh.cells().area()[i], a, dt), &mut b);
+    let stored = light(chem, ph, c, p, &mut s[..n], (caught * a.reach / lit.max(1e-300), w.mesh.cells().area()[i], a, dt), &mut b);
     b.budget[STORED] += c.content(&e) - before;
     let all: f64 = stored.iter().sum();
     c.keep = if caught > 0.0 { (all / caught) as f32 } else { 0.0 };
     let year = w.cfg.months_per_year as f32;
     // Its minerals in the ground, shared out slot by slot (the tallest first) as each builds.
     let mut ground = a.ground;
-    let mut order: Vec<usize> = (0..SLOTS).filter(|&q| s[q].built > 0.0).collect();
+    let mut order: Vec<usize> = (0..n).filter(|&q| s[q].built > 0.0).collect();
     order.sort_by(|&a, &b| s[b].shade.total_cmp(&s[a].shade));
     for x in order {
         let (lost, cost) = upkeep(w, c, p, x, &s[x], (t, dt), &mut b);
@@ -148,8 +150,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             counts.rounded[0] -= std::mem::take(m);
         }
     }
-    super::stand::merge_alike(c, &mm, ph, area);
-    for x in 0..SLOTS {
+    super::stand::merge_alike(c, &mm, (ph, n), area);
+    for x in 0..n {
         if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);
             b.budget[DIED] -= budget::held(&e, &c.mol[x]);
@@ -160,19 +162,19 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     (b, caught)
 }
 
-/// The light reaction of each slot over `dt` at the ground's temperature of `a`: what its share of the light caught
+/// The light reaction of each slot in use (`s`, the first of the cover's) over `dt` at the ground's temperature of `a`: what its share of the light caught
 /// (`per` of it per unit of absorbing area times shade) stores at `light_yield`, at most its capacity times its
 /// activity and the reaction's pace, both times what the air's share of the reaction's gas allows (`Around::gas`); all
 /// slots cut together to the key liquid in the ground that is liquid (`Around::liquid`, mol) and the gas the cell's
 /// share of its air node holds.
 /// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
 /// energy each slot stored, J.
-fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], (per, cell, a, dt): (f64, f64, &Around, f64), b: &mut Books) -> [f64; SLOTS] {
+fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot], (per, cell, a, dt): (f64, f64, &Around, f64), b: &mut Books) -> [f64; SLOTS] {
     let (t, liquid, gas) = (a.t, a.liquid, a.gas);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
     let mut x = [0.0; SLOTS];
-    for q in 0..SLOTS {
+    for q in 0..s.len() {
         let need = dec(c.genes[q][MOIST]);
         let cap = dec(c.genes[q][LIGHT]) * need * pace * s[q].act * dt;
         let lit = |f: f64| per * s[q].abs * f * ph.light_yield / dh;
@@ -184,7 +186,7 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     let gas_in: f64 = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| q.1 as f64).sum();
     let lost = a.thirst * gas_in;
     let drink = per_input(rx, p.liquid).unwrap_or(0.0) + lost;
-    for (q, xq) in x.iter_mut().enumerate() {
+    for (q, xq) in x.iter_mut().enumerate().take(s.len()) {
         *xq = xq.min(liquid * c.rooted[q] as f64 / drink.max(1e-300));
     }
     let all: f64 = x.iter().sum();

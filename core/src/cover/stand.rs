@@ -4,7 +4,7 @@
 //! 2002), and the share of its cell whose loose ground holds them. One place for these laws: the light's layers
 //! (`grow`), the seeds (`seed`) and the page's drawing (`tape::stands`) read them.
 
-use super::{Cover, NG, NO_ROOT, NP, SLOTS};
+use super::{Cover, NG, NO_ROOT, NP};
 use crate::life::kin;
 use crate::Physics;
 use std::f64::consts::FRAC_PI_4;
@@ -105,11 +105,11 @@ pub(super) fn founded(ph: &Physics, kg: f64, area: f64) -> f64 {
     (kg / ph.seed_kg).min(area * most_plants(ph, kg / area))
 }
 
-/// Alike kinds of a cell (`APART` × `Physics::alike` steps in every gene, `distance`) share a slot: the lighter joins
-/// the heavier (`join`).
-pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], ph: &Physics, area: f64) {
-    for a in 0..SLOTS {
-        for z in a + 1..SLOTS {
+/// Alike kinds of a cell (`APART` × `Physics::alike` steps in every gene, `distance`) share a slot: of its `n` slots in
+/// use, the lighter joins the heavier (`join`).
+pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usize), area: f64) {
+    for a in 0..n {
+        for z in a + 1..n {
             if !kin::together(&c.genes, &c.root, (a, z), super::APART * ph.alike, super::distance) {
                 continue;
             }

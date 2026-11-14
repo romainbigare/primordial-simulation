@@ -126,7 +126,8 @@ pub extern "C" fn day() -> f64 {
 /// The header of a tape for this world, as JSON (no frames, series or events yet), with what a shell draws the ground
 /// by: the tiles (`tape::Ground`: texels a side, the gutter, the depths from the coarsest to the finest, the most steps
 /// by which a texel names its channel's sample, and the length its place along its channel is kept modulo; the numbers
-/// of a row of the table, `tape::Table`; the reflectance of the walls the cover builds), the terrain's samples (across,
+/// of a row of the table, `tape::Table`, the kinds of cover of a square, `Config::variety`, and the numbers of each;
+/// the reflectance of the walls the cover builds), the terrain's samples (across,
 /// down, their depth), the numbers of the laws the shell applies inside a cell (`Physics`), the discharge per metre a
 /// pixel takes past which a channel shows as a line, m³/s per m (`tape::TYPICAL_RUNOFF` × `tape::SHOW_M`), that line's
 /// law (`tape::LINE_PX`, `LINE_GROW`, `LINE_MOST`), and how many times the mean flow the flood that shapes a channel's
@@ -143,7 +144,7 @@ pub extern "C" fn meta() -> *const u8 {
         json!({
             "w": g.w, "h": g.h, "cell_m": g.side, "square_depth": g.square_depth(), "globe": g.wrap, "lat_north": w.cfg.lat_north, "lat_south": w.cfg.lat_south,
             "seed": w.seed, "shape": w.terrain.shape, "days_per_year": w.days_per_year(), "layers": layers,
-            "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "step_most": tape::STEP_MOST, "along_wrap": tape::ALONG_WRAP_M, "row": tape::ROW, "kinds": tape::KINDS, "kind_row": tape::KIND_ROW, "walls": walls},
+            "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "step_most": tape::STEP_MOST, "along_wrap": tape::ALONG_WRAP_M, "row": tape::ROW, "kinds": w.cfg.variety, "kind_row": tape::KIND_ROW, "walls": walls},
             "samples": {"across": s.across, "down": s.down, "depth": pcore::space::terrain::SAMPLE_DEPTH},
             "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "dormancy": ph.dormancy, "rooted_from": ph.rooted_from, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M, "line_law": [tape::LINE_PX, tape::LINE_GROW, tape::LINE_MOST], "flood": tape::FLOOD, "station": tape::STATION_EXP},
             "frames": [], "series": {}, "series_units": {}, "events": [], "months": [],

@@ -12,7 +12,7 @@ use crate::units::DAY;
 use crate::{Counters, World};
 use serde::{Deserialize, Serialize};
 
-/// Lots of seeds a cell's ground holds at most: a limit of the bookkeeping, as `SLOTS` is of its cover.
+/// Lots of seeds a cell's ground holds at most: a limit of the bookkeeping, as `Config::variety` is of its cover.
 pub const LOTS_LYING: usize = 4;
 
 /// The flows of seeds counted for the tape (`Counters::seeds`), kg: landed on a ground, sprouted (taken hold in the
@@ -124,7 +124,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         }
         counts.seeds[SPROUTED] += wakes * kg;
         let s = Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 };
-        if let Landed::Out(m) = lodge(c, &mm, &s, ph, area) {
+        if let Landed::Out(m) = lodge(c, &mm, &s, &w.cfg, area) {
             budget[DIED] -= held(&e, &m);
             (0..NP).for_each(|q| dead[q] += m[q]);
         }

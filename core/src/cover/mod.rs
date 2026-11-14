@@ -1,6 +1,6 @@
-//! The cover: the light-eaters as a field (laws.md 4). Each ground cell holds up to `SLOTS` kinds of cover, each the
-//! amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the solid it builds)
-//! and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
+//! The cover: the light-eaters as a field (laws.md 4). Each ground cell holds up to its world's `Config::variety` kinds
+//! of cover, each the amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the solid
+//! it builds) and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
 //! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to the cells around
 //! (`seed`), where they lie on the ground until it lets them grow (`lying`); alike kinds share a slot (`life::kin`). The
 //! cover of a cell, with the seeds lying on its ground, is a node of the store (`Class::Life`) whose law books its own
@@ -31,8 +31,9 @@ use crate::chem::Chemistry;
 use crate::units::MAX_SUBSTANCES;
 use serde::{Deserialize, Serialize};
 
-/// Kinds of cover a cell holds at most.
-pub const SLOTS: usize = 4;
+/// Kinds of cover a cell's arrays hold: the most a world's `Config::variety` may be. A cell uses its first `variety`
+/// slots; the rest stay empty.
+pub const SLOTS: usize = 12;
 // The genes of a kind of cover (laws.md 3).
 /// Capacity of the light reaction, log10 mol per kg of living cover per s at `t_cat` (at a moisture need of 1)
 pub const LIGHT: usize = 0;
@@ -64,7 +65,7 @@ pub use crate::life::kin::APART;
 pub use crate::life::{Parts, FUEL, MATTER, NO_ROOT, NP, WALL};
 pub use crate::math::dec;
 
-/// The cover of one ground cell, in `SLOTS` slots.
+/// The cover of one ground cell, in `SLOTS` slots, of which its world uses the first `Config::variety`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Cover {
     /// Per slot: mol of each part
@@ -257,7 +258,7 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
     let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, area) = (p.mm(&w.chem), w.mesh.cells().area());
     for (i, c) in w.life.cells.iter().enumerate() {
-        out[i] = (0..SLOTS).map(|x| of(&c.cover, &mm, x)).sum::<f64>() / area[i];
+        out[i] = (0..w.cfg.variety).map(|x| of(&c.cover, &mm, x)).sum::<f64>() / area[i];
     }
     out
 }
