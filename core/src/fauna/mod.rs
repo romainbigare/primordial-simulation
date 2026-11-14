@@ -13,7 +13,7 @@ pub mod take;
 mod thirst;
 pub mod way;
 
-pub use body::BAND;
+pub use body::{shell, BAND};
 pub use month::step;
 pub use place::place;
 

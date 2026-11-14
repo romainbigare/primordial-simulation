@@ -219,8 +219,9 @@ refl = [[0.35,0.30,0.20],[0.30,0.25,0.15]]
 sol = 0.0
 cond = 0.2
 hf = -986
-# docs/numbers.md: "rupture of substances 10 and 13".
+# docs/numbers.md: "rupture of substances 10 and 13", "shear of substance 13".
 rupture = 120
+shear = 60
 
 # Reactions: i/o = [[substance, count]], k 1/s, ea K, ord the power of each input in the rate law (`Reaction::ord`).
 [[r]] # 0

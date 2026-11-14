@@ -34,9 +34,12 @@ fn cell(w: &World, d: &mut Chunk, (p, gut): (&Parts, &Gut), i: usize) {
     let (area, lv, days) = (w.mesh.cells().area()[i], chem.subs[p.liquid].lv, dt / DAY);
     let mm = mm(chem, p);
     contract::open(w, d, i);
+    // What lies on its ground, kg a m², and each member's share of the cell's: each sits in its own heap.
+    let (remains, members) = (contract::remains(w, d, i), d.at(i).fauna.adults.iter().sum::<f64>());
+    let share = remains * area / members.max(1.0);
     let bodies: [Body; FS] = {
         let f = &d.at(i).fauna;
-        std::array::from_fn(|x| body(w, p, f, (x, &mm), (i, t), gut.per_wall(chem)))
+        std::array::from_fn(|x| body(w, p, f, (x, &mm), (i, t), (gut.per_wall(chem), remains, share)))
     };
     let layers = take::layers(w, d, i);
     let reach = take::reachable(w, i, &layers, &bodies);

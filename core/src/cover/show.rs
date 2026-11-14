@@ -20,22 +20,22 @@ impl Cover {
         }
         s
     }
-    /// What the share `of(x)` of each slot `x` shows a taker (`contract::Shown`): its mass, what it holds of each
-    /// substance and the energy to break it.
-    pub fn shown(&self, chem: &Chemistry, ph: &crate::Physics, p: &Parts, of: impl Fn(usize) -> f64) -> Shown {
+    /// What the shares `of(x)` of each part of each slot `x` show a taker (`contract::Shown`): its mass, what it holds of
+    /// each substance and the energy to break it.
+    pub fn shown(&self, chem: &Chemistry, ph: &crate::Physics, p: &Parts, of: impl Fn(usize) -> [f64; NP]) -> Shown {
         shown_of(chem, ph, p, self.mol.iter().enumerate().map(|(x, m)| (m, of(x))))
     }
     /// What the share `of` of the seeds lying on its ground shows a taker: its mass and what it holds of each substance.
     pub fn shown_lying(&self, chem: &Chemistry, ph: &crate::Physics, p: &Parts, of: f64) -> Shown {
-        shown_of(chem, ph, p, self.lying.mol.iter().map(|m| (m, of)))
+        shown_of(chem, ph, p, self.lying.mol.iter().map(|m| (m, [of; NP])))
     }
     /// The height the plants of slot `x` stand at, m (`Cover::height`, its walls at their own density).
     pub fn stands_at(&self, chem: &Chemistry, ph: &crate::Physics, p: &Parts, x: usize) -> f64 {
         self.height(ph, &p.mm(chem), chem.subs[p.sub[WALL]].density[0], x)
     }
-    /// The share `g` of the share `of(x)` of each slot `x` taken whole, each part in its own proportion (a bite):
-    /// returns what is taken of each substance, mol, and the heat that goes with it, J (at its temperature).
-    pub(crate) fn take(&mut self, chem: &Chemistry, p: &Parts, g: f64, of: impl Fn(usize) -> f64) -> ([f64; MAX_SUBSTANCES], f64) {
+    /// The share `g` of the shares `of(x)` of each part of each slot `x` taken whole, each part in its own proportion (a
+    /// bite): returns what is taken of each substance, mol, and the heat that goes with it, J (at its temperature).
+    pub(crate) fn take(&mut self, chem: &Chemistry, p: &Parts, g: f64, of: impl Fn(usize) -> [f64; NP]) -> ([f64; MAX_SUBSTANCES], f64) {
         let t = self.temp(chem, p);
         let (got, heat) = take_from(chem, p, g, t, self.mol.iter_mut().enumerate().map(|(x, m)| (m, of(x))));
         let heat = heat.min(self.e);
@@ -46,31 +46,31 @@ impl Cover {
     /// taken, mol of each substance, and its heat, J (`take`).
     pub(crate) fn take_lying(&mut self, chem: &Chemistry, p: &Parts, g: f64, of: f64) -> ([f64; MAX_SUBSTANCES], f64) {
         let t = self.temp(chem, p);
-        let (got, heat) = take_from(chem, p, g, t, self.lying.mol.iter_mut().map(|m| (m, of)));
+        let (got, heat) = take_from(chem, p, g, t, self.lying.mol.iter_mut().map(|m| (m, [of; NP])));
         let heat = heat.min(self.e);
         self.e -= heat;
         (got, heat)
     }
 }
 
-/// What the shares `of` (amounts, mol of each part, and the share of them shown) show a taker: their mass and what
-/// they hold of each substance, and the energy to break them (`life::breaking`).
-fn shown_of<'a>(chem: &Chemistry, ph: &crate::Physics, p: &Parts, of: impl Iterator<Item = (&'a [f64; NP], f64)>) -> Shown {
+/// What the shares `of` (amounts, mol of each part, and the share of each part shown) show a taker: their mass and
+/// what they hold of each substance, and the energy to break them (`life::breaking`).
+fn shown_of<'a>(chem: &Chemistry, ph: &crate::Physics, p: &Parts, of: impl Iterator<Item = (&'a [f64; NP], [f64; NP])>) -> Shown {
     let (mut kg, mut mol, mm) = (0.0, [0.0; MAX_SUBSTANCES], p.mm(chem));
-    for (m, f) in of.filter(|e| e.1 > 0.0) {
-        kg += (0..NP).map(|q| m[q] * mm[q]).sum::<f64>() * f;
-        (0..NP).for_each(|q| mol[p.sub[q]] += m[q] * f);
+    for (m, f) in of.filter(|e| e.1.iter().any(|&f| f > 0.0)) {
+        kg += (0..NP).map(|q| m[q] * mm[q] * f[q]).sum::<f64>();
+        (0..NP).for_each(|q| mol[p.sub[q]] += m[q] * f[q]);
     }
-    Shown { kg, mol, breaking: crate::life::breaking(chem, ph, &mol) }
+    Shown { kg, mol, breaking: crate::life::breaking(chem, ph, &mol), width: 0.0 }
 }
 
-/// The share `g` (at most all) of the shares `of` (amounts, mol of each part, and the share of them that can be taken)
-/// taken whole at `t` K: what is taken of each substance, mol, and the heat that goes with it, J.
-fn take_from<'a>(chem: &Chemistry, p: &Parts, g: f64, t: f64, of: impl Iterator<Item = (&'a mut [f64; NP], f64)>) -> ([f64; MAX_SUBSTANCES], f64) {
+/// The share `g` (at most all) of the shares `of` (amounts, mol of each part, and the share of each part that can be
+/// taken) taken whole at `t` K: what is taken of each substance, mol, and the heat that goes with it, J.
+fn take_from<'a>(chem: &Chemistry, p: &Parts, g: f64, t: f64, of: impl Iterator<Item = (&'a mut [f64; NP], [f64; NP])>) -> ([f64; MAX_SUBSTANCES], f64) {
     let (g, mut got) = (g.clamp(0.0, 1.0), [0.0; MAX_SUBSTANCES]);
-    for (m, f) in of.filter(|e| e.1 > 0.0) {
+    for (m, f) in of.filter(|e| e.1.iter().any(|&f| f > 0.0)) {
         for q in 0..NP {
-            let x = m[q].max(0.0) * f * g;
+            let x = m[q].max(0.0) * f[q] * g;
             (m[q], got[p.sub[q]]) = (m[q] - x, got[p.sub[q]] + x);
         }
     }
