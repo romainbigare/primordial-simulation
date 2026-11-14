@@ -213,6 +213,31 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   page's colours. Do not turn the page's palette to hide it.
 - Probes and tables: `tools/sorted/` on `tools/checks` (`probe.rs` gives rows by latitude; `rows_seed1.txt`,
   `rows_seed2.txt`, `slow_ranges.txt`).
+- **Read against today's main** (a reader's report, nothing run: `scratchpad/sorted/assessment.md`): the branch
+  cannot be merged (it stands on the old animal world, 169 commits back); the nursery itself is four files of
+  about 700 lines and is to be carried over by hand. Three things it reads are gone from main (`World::rained`,
+  `World::canopy`, `rng::Purpose::Mutate`); its garden uses the cell's area and the whole cell's wetness where
+  main's cover lives on the cell's land; its seeds do not lie on the ground. Faults of its design, read in the
+  code: its mutants do nothing (five generations move a gene 0.14 steps, seeds join their kind's slot within 2
+  steps, so all new variety comes from draws over each gene's whole range: its `numbers.md` says otherwise); its
+  race scores a kind by its mass alone after 12 years (walls are cheap mass); its three champions may be one
+  kind; it places stands about 200 garden-years old in year 2 (37 to 70 kg/m² where main places 0.05 to 0.3);
+  it adds about nine tuned rows; it runs two whole world-years on a copy (about 15 s at 128 squares in a
+  browser).
+- **The orchestrator's decisions for the port**: no race by mass: the mixed stand's own competition says who
+  stays; newcomers are draws near known kinds, far enough to found a slot by the slot rule, and no mutant rounds;
+  the palette is not touched before the kinds are judged; the age of the placed stand and whether a garden's air
+  gets its own vapour back are decided after the garden check; the roots' package lands before the nursery is
+  judged (a garden selects under the cover's laws). Not to be carried over: the branch as a merge, anything of
+  bodies, a renumbering of `rng::Purpose`, `World::rained` as saved state, a second wetness or area rule.
+- **Its steps**: (0) main alone to year 300 on the new air, the target (running: `scratchpad/sorted/target/`,
+  seed 1 at 64 squares: the band with the roster, no band with the roster, no band with one kind); (1) a spike
+  of the port on a branch; (2) the garden check: a garden grown on a cell of main's year-300 world with that
+  cell's kinds against the world's own mass there; (3) side by side to year 300 with pictures; (4) the same after
+  the roots' package; (5) the design's mends, a commit each; (6) to main with the references set once; (7) the
+  look. About 3 to 5 builder-days.
+- Found on main by that read: `Cover::sent()` has no caller; comments in `cover/around.rs` and `cover/mod.rs`
+  speak of a nursery main does not have. To delete, or to use with the port.
 
 ## 5. What to do next, in order
 
