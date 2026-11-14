@@ -268,6 +268,14 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
 
 ## 5. What to do next, in order
 
+**The owner's order of work** (their word): (1) the variety of habitat; (2) the sorted start, for plants and
+for animals, so that life is fitted to that variety from the start; (3) the animals' numbers run again after
+those. The world's size has a ceiling of 512 x 512 squares; they ask for honest or nearly honest and easy ways to
+get the variety on a land of manageable size (asked of the habitats' explorer: the planet's dry belt inside the
+band, a steady wind and its rain shadow, more relief, ground that differs by its grain, years that differ and
+fire, ground that stays wet, stretching the air's distance inland as the band stretches the latitudes, a larger
+world). No rule that says where a habitat goes.
+
 **Where the two tracks stand** (the orchestrator keeps these lines true):
 - On main: the docs' clean-up; the plants made free (`core/src/contract.rs`, the natural world's month on its own, a
   test that guards the sides, `cli/tests/sides.rs`, the gate and the key numbers on worlds of plants: the cover's
