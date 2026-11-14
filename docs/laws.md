@@ -1048,7 +1048,8 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   (`contract::vapour`); where the cell's ground holds less, less is shed and its heat goes to the ground. What was
   fetched is the far cell's: it waits in the cell's outbox and, after every chunk ran, is taken from that cell's ground
   (as far as its liquid then holds, the asks on it shared by what they ask) and given to the walkers' cell's ground with
-  its heat (`fauna::land`, `contract::fetched`).
+  its heat, carried in their bodies: its potential energy is booked as for life that moves between cells
+  (`fauna::land`, `contract::fetched`).
 - **Digestion** (`fauna::gut`, by the chemistry's own reactions): its gut splits walls into fuel (the reaction that
   makes fuel of the walls alone, taking the key liquid of the ground) up to its capacity × its living mass × pace; it
   burns for its upkeep and heat first the fuel it took and split, then the body matter it took (the burning of body

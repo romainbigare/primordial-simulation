@@ -71,22 +71,29 @@ pub fn to_liquid(w: &World, i: usize, need: f64) -> (f64, usize) {
 /// What takers fetched from far cells in their month lands, after every chunk ran (`fauna::land`): each of `asks`
 /// (the cell it was taken from, the cell it was carried to, mol of the key liquid), in their order, is taken from its
 /// cell's ground as far as the liquid it holds now allows (the asks on a cell shared by what they ask), and given to the
-/// ground of the cell it was carried to with its heat at the temperature of the ground it left.
+/// ground of the cell it was carried to with its heat at the temperature of the ground it left: it is carried in bodies,
+/// from the far cell's ground into its life and from the head of that cell to the head of the walkers' (the potential
+/// energy booked as for life that moves, `store::life_sent`), then from their cell's life into its ground.
 pub fn fetched(w: &mut World, asks: &[(usize, usize, f64)]) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let (k, n) = (p.liquid, w.mesh.cells().n());
     let mut asked = std::collections::BTreeMap::new();
     asks.iter().for_each(|&(from, _, mol)| *asked.entry(from).or_insert(0.0) += mol);
     let s = &w.chem.subs[k];
-    let mut moves = Vec::with_capacity(asks.len());
+    let (mut moves, mut sent) = (Vec::with_capacity(2 * asks.len()), vec![[0.0; 2]; n]);
     for &(from, to, mol) in asks.iter().filter(|a| a.2 > 0.0) {
         let (t, plateau) = w.thaw_last(from);
         let liquid = w.store.amounts(Class::Ground)[k * n + from].max(0.0) * w.molten(k, from, t, plateau);
         let got = mol * (liquid / asked[&from]).min(1.0);
         let heat = got * (s.cp * w.t_ground_last(from) + s.lf);
-        moves.push(Move { from: Node::ground(from), to: Node::ground(to), k: k as u16, mol: got, heat });
+        // It goes from the far cell's ground into the walkers there, over to their cell's head, and into its ground.
+        moves.push(Move { from: Node::ground(from), to: Node::new(Class::Life, from), k: k as u16, mol: got, heat });
+        moves.push(Move { from: Node::new(Class::Life, to), to: Node::ground(to), k: k as u16, mol: got, heat });
+        let kg = got * s.molar_mass;
+        (sent[from][0], sent[to][1]) = (sent[from][0] + kg, sent[to][1] + kg);
     }
     apply(w, &[], &moves);
+    crate::store::life_sent(w, sent.into_iter().enumerate().filter(|x| x.1 != [0.0; 2]));
 }
 
 /// At the start of life's month, after Flow's: for each decade of liquid, the way of each cell to the nearest cell
