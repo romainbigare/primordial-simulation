@@ -377,11 +377,13 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     }
     let [sun, sw, kept, in_air] = light;
     hold(cx, g, (air, adt * sw), carry, (p, loss));
-    // Each bucket the step's rain wets as it falls (`Vapour::soak`), and per mol the rain adds to what it evaporates its
+    // Each bucket of its own ground the step's rain wets as it falls (`Vapour::soak`), and per mol the rain adds to what it evaporates its
     // outputs: its latent heat moves the surface's balance (`Air::moves`) and so what the others evaporate.
     soak.clear();
     soak.resize(nx * cols(nx), 0.0);
-    for (y, block) in soak.chunks_exact_mut(cols(nx)).enumerate().filter(|e| act[e.0].cond) {
+    // The liquid's top of a cell of parts is a body's surface, not the cell's own ground.
+    let ground = g.part != Some(super::super::parts::TOP);
+    for (y, block) in soak.chunks_exact_mut(cols(nx)).enumerate().filter(|e| ground && act[e.0].cond) {
         let Some([share, held, e]) = gas[y].soak(s, bal.ts, dt) else { continue };
         let [dts, d_air, d_space] = rad.moves(g, dt, w.cfg.sensible, &bal, (0.0, -gas[y].lat(1.0) / adt));
         block[..SOAK].copy_from_slice(&[g.share, share, held, gas[y].wet(), e]);
