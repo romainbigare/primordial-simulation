@@ -230,6 +230,13 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   gets its own vapour back are decided after the garden check; the roots' package lands before the nursery is
   judged (a garden selects under the cover's laws). Not to be carried over: the branch as a merge, anything of
   bodies, a renumbering of `rng::Purpose`, `World::rained` as saved state, a second wetness or area rule.
+- **The owner's word: the amount of variety is a setting of a world**, like its seed, size and climate (a start's
+  choice, not a number of a law): how many kinds a garden keeps and a cell may hold, 4 today (`cover::SLOTS`, a
+  constant the arrays, the tape and the page are sized by), "what if we want 10". For the port: `SLOTS` becomes
+  the most a cell may hold and a world's setting says how many it uses (a pure clean-up at 4: the same world to
+  the last digit), the garden keeps that many and tries newcomers in proportion, the CLI and the page offer it.
+  It gives room for kinds; how many live together in a cell stays with the laws. The cover's month costs about
+  in proportion to the slots used.
 - **Its steps**: (0) main alone to year 300 on the new air, the target (running: `scratchpad/sorted/target/`,
   seed 1 at 64 squares: the band with the roster, no band with the roster, no band with one kind); (1) a spike
   of the port on a branch; (2) the garden check: a garden grown on a cell of main's year-300 world with that
