@@ -145,6 +145,8 @@ The costs of keeping living tissue (`c_basal`, `c_leaf`) are per kg of living co
 | `reach_len` | body lengths | the highest a taker reaches (`fauna::body`) | a tall browser reaches 5.5 m at a length of about 1 m; a small browser 2 m at 0.37 m (from memory) | anchored |
 | `store_most` | kg of fuel per kg living | the most fuel a taker stores (`fauna::gut`); what it takes beyond passes to the ground | mammals store 20 to 40% of their lean mass before a winter (from memory) | anchored |
 | `dry_most` | kg per kg living | the key liquid a taker can lose before it dies: what it carries between drinks on its way to the liquid (`fauna::way`) | most mammals die at a loss of about 12% of their body's mass as liquid (Kemenyfy Rojas et al. 2026, Curr. Opin. Neurobiol., a review; checked in part from its abstract); 18% fatal in the animals of Schmidt-Nielsen's desert work (Schmidt-Nielsen 1962, checked in part); 15% for desert songbirds (a 2017 study of their lethal water loss, checked in part); the hardiest, 25 to 30% (from memory) | anchored |
+| `litter_rho` | kg/m³ | the bulk density of the remains lying on the ground, which a resting taker gathers as a shell around itself (`fauna::shell`) | litter of forest floors 12 to 43 kg/m³ by kind (the US Forest Service's FERA fuels tables, checked in part), 35 kg/m³ in the top 10 cm of a black spruce floor (Sharratt 1997, checked in part from its abstract), 58 kg/m³ for a red pine floor (Pennypacker and others 1975, checked in part): 40 | anchored |
+| `litter_k` | W/(m K) | the heat conductivity of the remains lying on the ground (`fauna::shell`) | a black spruce forest floor's moss and litter 0.03 to 0.09 W/(m K) in place over a season (Sharratt 1997, checked in part from its abstract); dry litter 0.05 to 0.1 (from memory): 0.06 | anchored |
 
 ### Flow, as ground cover and moving liquid feel it
 
@@ -324,12 +326,12 @@ Not rows of the model: real sizes that a run's results can be held against, kept
 
 ## Counts
 
-The 100 rows of `Config` and `Physics` are their 100 fields; the constants outside the structs are counted by their mark.
+The 102 rows of `Config` and `Physics` are their 102 fields; the constants outside the structs are counted by their mark.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 5 | `sun`, `tilt`, `radius_m`, `gravity`, `rho_body` |
-| anchored | 76, and 34 outside the structs | `lat_south`, `lat_north`, `rotation`, `days_per_month`, `months_per_year`, `skin_m`, `air_top_m`, `sensible`, `evap`, `dissolve`, `wind`, `rain_drift_m`, `cloud_ir`, `carry`, `wear`, `creep`, `bury`, `light_depth`, `light_yield`, `gas_floor`, `gas_ref`, `wet_depth`, `t_cat`, `frost_k`, `harden`, `c_basal`, `e_life`, `c_repair`, `dormant`, `dormancy`, `kernel_near`, `c_copy`, `c_capacity`, `mut_size`, `thin_kg`, `tall`, `stem_form`, `stem_solid`, `wall_kg`, `drawdown`, `huber`, `c_sapwood`, `root_uptake`, `root_turnover`, `seed_kg`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `soil_m`, `hill`, `channel_width`, `channel_width_exp`, `channel_depth`, `channel_depth_exp`, `h_mix`, `thermocline`, `c_muscle`, `upkeep_exp`, `meeh`, `r_air`, `r_coat`, `drink_least`, `drink_exp`, `walk_froude`, `c_move`, `move_ref`, `move_exp`, `chew`, `busy`, `bite_floor`, `reach_len`, `store_most`, `dry_most` |
+| anchored | 78, and 34 outside the structs | `lat_south`, `lat_north`, `rotation`, `days_per_month`, `months_per_year`, `skin_m`, `air_top_m`, `sensible`, `evap`, `dissolve`, `wind`, `rain_drift_m`, `cloud_ir`, `carry`, `wear`, `creep`, `bury`, `light_depth`, `light_yield`, `gas_floor`, `gas_ref`, `wet_depth`, `t_cat`, `frost_k`, `harden`, `c_basal`, `e_life`, `c_repair`, `dormant`, `dormancy`, `kernel_near`, `c_copy`, `c_capacity`, `mut_size`, `thin_kg`, `tall`, `stem_form`, `stem_solid`, `wall_kg`, `drawdown`, `huber`, `c_sapwood`, `root_uptake`, `root_turnover`, `seed_kg`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `soil_m`, `hill`, `channel_width`, `channel_width_exp`, `channel_depth`, `channel_depth_exp`, `h_mix`, `thermocline`, `c_muscle`, `upkeep_exp`, `meeh`, `r_air`, `r_coat`, `drink_least`, `drink_exp`, `walk_froude`, `c_move`, `move_ref`, `move_exp`, `chew`, `busy`, `bite_floor`, `reach_len`, `store_most`, `dry_most`, `litter_rho`, `litter_k` |
 | tuned | 5, and 35 outside the structs | `rain_time`, `c_leaf`, `kernel_far`, `kernel_far_share`, `alike` |
 | tuned, first guess | 11, and 16 outside the structs | `mix`, `cloud`, `hard_min`, `c_firm`, `root_per_height`, `root_least`, `rooted_from`, `hide`, `soft`, `still`, `hold` |
 | speed | 2, and 4 outside the structs | `wake_share`, `sleep_days` |

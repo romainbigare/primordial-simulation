@@ -196,6 +196,9 @@ pub struct Physics {
     pub store_most: f64,
     /// Key liquid a taker can lose before it dies, kg per kg of its living mass: what it carries between drinks
     pub dry_most: f64,
+    /// Bulk density of the remains lying on the ground, kg/m³, and their heat conductivity, W/(m K)
+    pub litter_rho: f64,
+    pub litter_k: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -318,6 +321,8 @@ impl Default for Physics {
             reach_len: 5.0,
             store_most: 0.3,
             dry_most: 0.12,
+            litter_rho: 40.0,
+            litter_k: 0.06,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,

@@ -227,6 +227,14 @@ pub fn give(w: &World, d: &mut Chunk, i: usize, amounts: impl IntoIterator<Item 
     d.moves.give_all(w, Node::ground(i), amounts, heat);
 }
 
+/// What lies on the ground of cell `i` of chunk `d` (the remains of life in its ground node: its dead body matter and
+/// walls), kg a m² of the cell, as the cell's view holds it now.
+pub fn remains(w: &World, d: &Chunk, i: usize) -> f64 {
+    let Some(p) = Parts::of(&w.chem) else { return 0.0 };
+    let kg = |q: usize| d.moves.amount(w, Node::ground(i), p.sub[q]).max(0.0) * w.chem.subs[p.sub[q]].molar_mass;
+    (kg(crate::life::MATTER) + kg(crate::life::WALL)) / w.mesh.cells().area()[i]
+}
+
 /// A taker's moves on cell `i` of chunk `d` open, in the name of the life of the cell: what it takes and gives from here
 /// is booked through the cell's view.
 pub fn open(w: &World, d: &mut Chunk, i: usize) {

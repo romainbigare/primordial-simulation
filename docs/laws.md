@@ -905,9 +905,20 @@ land only through the contract (section 0; `cli/tests/sides.rs`), and their book
 - **Heat.** A member held above its ground loses g (T_b − t) through its coat, g = `meeh` m^(2/3) / (`r_air` + COAT ×
   `r_coat`) W/K (Meeh 1879; Scholander et al. 1950). It makes the heat of its rest and of its walk while searching
   (v × its searching time at `c_move` × (m / `move_ref`)^`move_exp` J per kg and m, Taylor et al. 1982); where that is
-  less than its coat loses, it burns the rest to keep its temperature; where more, the excess must leave as vapour of
+  less than its body loses, it burns the rest to keep its temperature; where more, the excess must leave as vapour of
   the key liquid, at its heat of vaporisation. A body at its ground's temperature gives all its heat to its ground and
   needs no vapour.
+- **A body at rest sits in what lies on the ground** (`fauna::shell`). For its working time (`busy` of the day) it is
+  in the open; for the rest it gathers around itself the remains lying on its ground (the dead body matter and walls
+  of its ground node, `contract::remains`, at `litter_rho`): its cell's remains shared by all the members of the cell's
+  slots alike (each sits in its own heap), no more than lie on the ground it searches in a day. That mass is a shell
+  around the sphere of the body's surface (its Meeh area, radius r = √(A / 4π)), out to R, R³ = r³ + 3 V / 4π; heat
+  crosses it as through a spherical shell, (1/r − 1/R) / (4π `litter_k`) K/W, in series with its coat, at the ground's
+  temperature outside. A shell without end passes 4π k r: a 30 g body loses 1.17 W in the open at 35 K and 0.50 W in a
+  kg of remains, as a nest about halves a small mammal's loss; a 400 kg body's open loss is already under the heat its
+  rest makes, so it gains nothing. In its shell a body loses no less than it makes (it sheds its shell before it must
+  sweat in it). The remains it sits in stay where they are; the soft solid lying is not part of the shell (Flow keeps
+  no density or conductivity of the lying solid).
 - **Thirst** (`fauna::thirst`). A body drinks open liquid only: the liquid standing on its cell, what ran over it in
   the month, and the soft solid lying there, which costs its heat of fusion (`contract::liquid`); and it has the liquid
   of what it eats (`WET_TISSUE` of the living mass of the body matter it takes). Its need is the vapour that cools it at

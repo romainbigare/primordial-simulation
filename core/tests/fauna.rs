@@ -258,3 +258,34 @@ fn the_way_to_the_liquid_costs_the_walk() {
         assert!((way[i] - best).abs() <= 1e-9 * best.max(1.0), "cell {i}: a way of {} m where a neighbour gives {best} m", way[i]);
     }
 }
+
+/// A body at rest sits in a shell of what lies on the ground (`fauna::shell`): a small warm body's loss falls as the
+/// remains it gathers grow, toward the loss of a shell without end, 4π k r ΔT; with nothing lying it is the open loss.
+/// A large warm body's open loss is already under the heat its rest makes, so a shell changes nothing it burns.
+#[test]
+fn a_small_body_rests_in_what_lies_on_the_ground() {
+    let ph = pcore::Config::default().phys;
+    let (dt, four_pi) = (35.0, 4.0 * std::f64::consts::PI);
+    for row in [0, 1] {
+        let g = TAKER_KINDS[row].genes;
+        let m = fauna::adult(&g);
+        let area = ph.meeh * m.powf(2.0 / 3.0);
+        let coat = area / (ph.r_air + g[fauna::COAT] as f64 * ph.r_coat);
+        let floor = four_pi * ph.litter_k * (area / four_pi).sqrt();
+        let losses: Vec<f64> = [0.0, 0.01, 0.1, 1.0, 1e6].iter().map(|&kg| fauna::shell(&ph, area, coat, kg) * dt).collect();
+        println!("{m:.2} kg: open {:.3} W; in 0, 10 g, 100 g, 1 kg, 1000 t of remains {losses:.3?} W; a shell without end {:.3} W", coat * dt, floor * dt);
+        assert!((losses[0] - coat * dt).abs() <= 1e-12 * coat * dt, "with nothing lying a body loses {} W, in the open {} W", losses[0], coat * dt);
+        assert!(losses.windows(2).all(|p| p[1] < p[0]), "the loss does not fall as the shell grows: {losses:?}");
+        let end = 1.0 / (1.0 / coat + 1.0 / floor) * dt;
+        assert!((losses[4] - end).abs() <= 0.01 * end, "a deep shell loses {} W, a shell without end {end} W", losses[4]);
+    }
+    let g = TAKER_KINDS[3].genes;
+    let m = fauna::adult(&g);
+    let open = ph.meeh * m.powf(2.0 / 3.0) / (ph.r_air + g[fauna::COAT] as f64 * ph.r_coat) * (g[fauna::KEEP] as f64 - 275.0);
+    let chem = worldgen::chemistry0().0;
+    let rx = &chem.reactions[Parts::of(&chem).expect("life's parts").burn];
+    let pace = rx.arrhenius(g[fauna::KEEP] as f64) / rx.arrhenius(ph.t_cat);
+    let rest = m.powf(ph.upkeep_exp) * (ph.c_basal + ph.c_muscle) * pace / DAY;
+    println!("{m:.0} kg at 275 K: open loss {open:.0} W, its rest makes {rest:.0} W");
+    assert!(rest > open, "a large body loses more in the open than its rest makes: {open} W against {rest} W");
+}
