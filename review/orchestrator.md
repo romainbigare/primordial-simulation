@@ -347,14 +347,23 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   plant from the light (the air's step lets the canopy catch light over any snow). To measure again on the new air.
 - Designed, not built: the first takers of the cover (F1), `review/f1-design.md`, with the orchestrator's
   decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). Built on
-  the local branch `worktree-agent-ac136315104cd4ab3` (c717f45; it waits there for the air package, then main is
-  merged in): the shared ground as a pure clean-up (a world of plants keeps its fingerprint) and the fauna's
-  state, placing and books with no eating (`core/src/fauna/`; takers placed at year 50 only starve: the store
-  lasts as the 3/4-power law of upkeep says, drift 4e-14 over 20 years). Found: with open liquid only where it
-  stands, takers die of thirst on nearly all land, since what runs over a cell is stored as a year's mean only.
-  In work, by the same builder (scratch `scratchpad/f1/`, notes in `notes.md`): the month's running liquid (one
-  rate per cell from the runoff's pass), the take and digestion, thirst that cuts work before it kills, the way
-  to another cell's liquid by the law of walking, and a first map layer of the takers.
+  the local branch `worktree-agent-ac136315104cd4ab3` (14d4d5c, gate passed, not on main yet): the shared ground
+  as a pure clean-up; the fauna's state, placing and books (`core/src/fauna/`, eight small files); the month's
+  running liquid (`World::liquid_month`, one rate per cell from the runoff's pass); the take (Holling's disk law in
+  six steps at midpoint rates, 0.6% off the exact answer) and digestion; thirst that cuts work before it kills;
+  the way to another cell's liquid by the law of walking (`contract/liquid.rs`); the map layer "Takers". Books
+  with takers that eat: drift 1.7e-13 over 60 years at 64 squares. Cost about 2.7 millionths of a second per land
+  cell and month. Found on a 64 drawn world (climate None), takers placed at year 50, no births yet:
+  - most starve in the first year (the 30 g kind 99.5%, the 400 kg kind 91%, the cold-bodied 2 kg kind 32%); they
+    eat 0.1 to 0.3% of the cover's growth (the gate asks 2 to 40%);
+  - no gathering by the liquid: on a wet island nearly every cell sheds liquid every month. Honest; the gate's
+    row needs a land with a dry belt;
+  - the drink fetched by walking is booked from the walker's own cell: to go right with the outbox of the young's
+    dispersal.
+  In work, by the same builder (scratch `scratchpad/f1/`, `notes.md`, `budget.md`): the branch made fit for main
+  (no takers placed unless asked for, main merged in); a budget of each kind against measured figures (field
+  metabolic rate, daily intake, heat lost in the cold, intake rate) to find which of our numbers is off, no
+  tuning; then births, growth, mutation and the slot rule, with a 250-year run.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
