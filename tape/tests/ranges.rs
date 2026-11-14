@@ -5,8 +5,8 @@
 //! on threads. The mean of each number over the three seeds must lie in its range around its reference, the mean of the
 //! same three seeds in the reference runs: these runs themselves, of the world whose air takes sunlight by its gases
 //! and clouds, whose eddies carry the near-ground air's energy, whose overturning ends at the cell of the low
-//! latitudes, and whose cover's roots take up the flow of the growing season's peak month (all seven numbers measured
-//! on that world, the same three seeds). The climate and the land
+//! latitudes, whose cover's roots take up the flow of the growing season's peak month, and whose cover's laws act on
+//! the stand, not on its slots (all seven numbers measured on that world, the same three seeds). The climate and the land
 //! worn down are means over years 21 to 30. Each run also keeps its books. Three numbers are also held to wide bounds
 //! around Earth's, as the references only keep a world near itself: the rain on land, the heat-absorbing gas of the
 //! air, and the share of the cover's dry mass it holds as its stored solid.
@@ -36,20 +36,20 @@ const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
 /// Ground temperature on land, K (series `t_land`), in the reference runs.
-const T_LAND: f64 = 287.71;
+const T_LAND: f64 = 287.58;
 /// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
 const SWING: f64 = 11.72;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
-const RAIN_LAND: f64 = 2.509e-3;
+const RAIN_LAND: f64 = 2.500e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs: it keeps the world near itself;
 /// `EARTH_ABSORBER_PPM` holds it near Earth's.
-const ABSORBER_PPM: f64 = 315.6;
+const ABSORBER_PPM: f64 = 264.2;
 /// Dry land cells that are rivers (`rivers`, `tape::is_river`), in the reference runs.
-const RIVERS: f64 = 234.5;
+const RIVERS: f64 = 235.4;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.1847;
+const WORN: f64 = 0.1295;
 /// The cover (the light-eaters, `LIGHT_ROW`) at year 30, log10 kg (`root_1_cover_kg`), in the reference runs.
-const COVER_KG: f64 = 9.867;
+const COVER_KG: f64 = 10.146;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
