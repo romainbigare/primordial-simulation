@@ -314,14 +314,30 @@ fn a_mouth_cuts_what_its_jaw_can_rupture() {
     }
 }
 
-/// Newborns are built at the cap of the rate of living, and the books are kept through births and growth: a slot of
-/// adults with a store over the most it keeps, on a cell of cover rich in body matter, bears in its first month the
-/// living mass its adults' cap allows (West, Brown and Enquist 2001: Kleiber's rest (`c_basal` + `c_muscle`)
+/// The newborn mass a mother bears a unit of time over her cap, where her newborns hold the share `child` of her mass:
+/// her unborn grow from nothing by dm/dt = a m^(3/4) (1 − (m/M)^(1/4)) (West, Brown and Enquist 2001), found here step
+/// by step in u = (m/M)^(1/4), du/dt = a (1 − u) / (4 M^(1/4)), with a = M = 1; her cap feeds at once the litter whose
+/// greatest need over its growth is her cap; she bears litter after litter.
+fn bearing(child: f64) -> f64 {
+    let (end, steps) = (child.powf(0.25), 100_000);
+    let (mut t, mut most) = (0.0, 0.0f64);
+    for k in 0..steps {
+        let u = (k as f64 + 0.5) / steps as f64 * end;
+        t += 4.0 / (1.0 - u) * end / steps as f64;
+        let at = (k + 1) as f64 / steps as f64 * end;
+        most = most.max(at.powi(3) * (1.0 - at));
+    }
+    child / most / t
+}
+
+/// Newborns grow at the law every body grows by, and the books are kept through births and growth: a slot of adults
+/// with a store over the most it keeps, on a cell of cover rich in body matter, bears in its first month the living mass
+/// its adults' cap feeds litter after litter (`bearing`; the cap: Kleiber's rest (`c_basal` + `c_muscle`)
 /// m^`upkeep_exp` at the pace of its body's temperature over the energy a kg of living tissue holds and costs,
 /// `Parts::living_cost`), as newborns of `CHILD` of their mass; over the next months its young grow and join its
 /// adults, every count under `N_WHOLE` is whole, and every element and the energy are kept.
 #[test]
-fn newborns_are_built_at_the_cap_and_the_books_are_kept() {
+fn newborns_grow_by_the_law_of_growth_and_the_books_are_kept() {
     let mut w = testkit::living(8, 12);
     let i = testkit::mild_land(&w);
     (w.life.env[i][1], w.life.env[i][3]) = (1.0, 0.0);
@@ -337,9 +353,9 @@ fn newborns_are_built_at_the_cap_and_the_books_are_kept() {
     let mm = fauna::mm(&w.chem, &p);
     testkit::takers_month(&mut w, i);
     let f = of(&w, i);
-    let (built, law) = (f.living_of(&mm, FS), cap * f.n[0] * w.cfg.days_per_month as f64);
-    println!("month 1: {:.1} adults bore {:.1} young, {built:.4e} kg; the cap {law:.4e} kg", f.n[0], f.n[FS]);
-    assert!((built - law).abs() <= 1e-9 * law, "the newborns hold {built} kg, the cap allows {law} kg");
+    let (built, law) = (f.living_of(&mm, FS), cap * bearing(child / m) * f.n[0] * w.cfg.days_per_month as f64);
+    println!("month 1: {:.1} adults bore {:.1} young, {built:.4e} kg; the law {law:.4e} kg (the share {:.4} of their cap)", f.n[0], f.n[FS], bearing(child / m));
+    assert!((built - law).abs() <= 1e-6 * law, "the newborns hold {built} kg, the law of growth gives {law} kg");
     assert!((f.n[FS] - built / child).abs() <= 1e-9 * f.n[FS], "{} newborns of {built} kg at {child} kg each", f.n[FS]);
     for k in 2..=6 {
         testkit::takers_month(&mut w, i);

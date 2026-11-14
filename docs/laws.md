@@ -973,8 +973,13 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   temperature as Gillooly et al. 2002 find it. First the young grow, each at its cap; the share that crosses the adult's
   mass in the month joins the adults with its share of the young's amounts (von Foerster's flux across a mass, the
   young's masses taken as even in log mass between a newborn's, `CHILD` of the adult's, and the adult's: the share
-  min(1, Δln m / ln(M / m0)), Δln m the young's growth in the month). Then the adults bear newborns, one parent each,
-  each adult building at most at its cap, a newborn holding `CHILD` of the adult's mass. Below `N_WHOLE` the young
+  min(1, Δln m / ln(M / m0)), Δln m the young's growth in the month). Then the adults bear newborns, one parent each, a
+  newborn holding `CHILD` of the adult's mass. An unborn grows from nothing by the same law, dm/dt = a m^(3/4)
+  (1 − u), u = (m / M)^(1/4), a her cap over M^(3/4), fed from her pot: it reaches the newborn's u_c = `CHILD`^(1/4)
+  after 4 M^(1/4) (−ln(1 − u_c)) / a (26 days for the 30 g kind, 258 for the 400 kg kind at 310 K). Its need is
+  greatest at its birth (or at u = 3/4), so her cap feeds at once a litter of 1 / max u³ (1 − u); litter after litter
+  she bears the share u_c⁴ / (4 (−ln(1 − u_c)) max u³ (1 − u)) of her cap (`grow::bearing`): a quarter for a small
+  newborn, 0.33 to 0.36 for the starting kinds. Below `N_WHOLE` the young
   that mature are a binomial draw and the newborns the whole part of what was built and one more by a draw on the rest;
   what was built stays (a draw never makes matter, it moves the mean mass of the young a little), and a group of no
   members gives its amounts to the slot's other group (matter built into newborns none of whom was drawn stays in the
