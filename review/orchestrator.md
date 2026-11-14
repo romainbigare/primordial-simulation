@@ -452,12 +452,11 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    `roadmap.md` 7.2. Then the small game (god tools, fire).
 
 **Nature track**
-1. **The air's low cloud, then the air and sunlight to main.** A paper check first (does a low cloud made by cooling
-   from below give the pole Earth's cloud share and liquid, and an ice line, without turning a number?), then the
-   law on `wip/air-light`, then the whole package in one merge: the references move once, tell the owner each value.
-2. **The sorted start**, after the air (the light changes how fast every kind grows, so the gardens change): first
-   the run to year 300 of section 4, then the nursery's kinds and stands, then the look. It goes to main only when
-   its pictures are at least as good as main's.
+1. **The roots' package** (in work, "the bare coast" above): `root_uptake` anchored on the growing season's flow,
+   the references set once. Then the page's green speckle over bare land (section 4, known faults on the page).
+2. **The sorted start**, carried over by hand in the steps of section 4 (its target, main alone to year 300, is
+   measured), with the amount of variety as a setting of a world. It goes to main only when its pictures are at
+   least as good as main's.
 3. **Worlds that differ**: several islands and other shapes drawn from the seed (the land falls from the middle of
    the map by one rule today, `space::terrain` `fall`); the globe as a world leaves (`--globe`, `--fine`, its view
    on the page). The round mesh stays: the planet's strip is built on it, and the air's law is judged on the
