@@ -632,10 +632,14 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         `contact_herb_trial.png`). Of the tall cover the soaked kind leads 36% on full ground and 41% off it;
         the new open land lies on dry ground and on the rim with standing liquid, not on soaked ground (open
         share of full ground 50 → 55%); a starting herb of soaked ground makes no marsh; the 10th gene costs 4
-        bytes a slot and no time that can be measured. One trial left, after the overdraw: a root without gas
-        does 1/13 of the work at the same fuel (its uptake falls) instead of burning 13 times the fuel for the
-        same work. If that shows no swamp either, law 2 is shelved until the sorted start can test kinds on
-        soaked ground.
+        bytes a slot and no time that can be measured. **Shelved until the sorted start can test kinds on soaked
+        ground.** The branch's last commit (360a94e8) holds the stronger reading, also tried: a root without
+        gas does 37/484 of the work on the same fuel, so the slot's uptake falls (a 20 m tree on ground soaked
+        to the top draws 0.34, with channels 0.80). It moves the soaked kind to 45% of the tall cover on full
+        ground against 41% off it and the other trees to 36%, the open share of full ground to 56%, the low
+        plants not at all: still no marsh (`contact_uptake.png`). The branch's references belong to the first
+        reading. What a swamp may need beyond these laws, not tried: no seedling under standing liquid, ground
+        that differs by its grain.
       - Open, for the sorted start's garden check: **the moisture gene costs nothing real** (its cost is capacity
         × 10^MOIST, and one step of the light gene gives the same capacity at the same upkeep).
       - On main, a mend of the books in Flow (`runoff::book_all`, test
