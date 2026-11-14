@@ -6,6 +6,16 @@
 
 /// The root of an empty entry.
 pub const NO_ROOT: u32 = u32::MAX;
+/// The share of `Physics::alike` within which what lands joins an entry of its kind and entries of a cell are one;
+/// what lands farther from every entry of its kind founds one of its own, so a variant keeps its genes apart (a rule of
+/// the model).
+pub const APART: f32 = 0.5;
+
+/// Genes `g` after one generation's mutation of size `size` (`Physics::mut_size`): each moves by noise of its step
+/// (`range`: its step, least and most) times that, within its range.
+pub fn mutate<const N: usize>(g: &[f32; N], range: &[(f32, f32, f32); N], size: f32, r: &mut crate::rng::Rng) -> [f32; N] {
+    std::array::from_fn(|q| (g[q] + r.near_normal() * range[q].0 * size).clamp(range[q].1, range[q].2))
+}
 
 /// Of the entries of genes `genes` and starting kinds `root`, the most alike of starting kind `r` to genes `g` within
 /// `within` by `distance`.

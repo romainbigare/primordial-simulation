@@ -395,3 +395,37 @@ fn a_cold_body_takes_in_the_proportion_it_burns() {
     println!("at {t:.1} K a cold body took {cold:.4e} kg/m2, a warm one {warm:.4e}: {:.4} of it; its upkeep is {law:.4} of the warm one's", cold / warm);
     assert!(warm > 0.0 && (cold / warm - law).abs() <= 1e-6 * law, "a cold body took {} of a warm one's take, its upkeep is {law} of the warm one's", cold / warm);
 }
+
+/// Kinds keep apart by the slot rule (`life::kin`): two kinds of takers far apart in the heights they search and the
+/// heat they keep, placed on every land cell of a small world, 20 years with their newborns mutating every month
+/// (`fauna::RANGE`, `mut_size`) and no dispersal: while they share cells no slot ever holds genes between them (every
+/// slot within `APART` × `alike` steps of one of the two in every gene), and the books are kept.
+#[test]
+fn kinds_keep_apart_by_the_slot_rule() {
+    let mut w = testkit::living(8, 12);
+    let (mut low, mut high) = (TAKER_KINDS[1].genes, TAKER_KINDS[1].genes);
+    (low[fauna::REACH], high[fauna::REACH], high[KEEP]) = (-1.5, -0.5, 300.0);
+    let books = Books::now(&w);
+    let cells: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
+    for &i in &cells {
+        for (root, g) in [(0, low), (1, high)] {
+            let m = fauna::adult(&g);
+            assert!(fauna::place(&mut w, i, (g, root), (N_WHOLE, 0.1 * m)));
+        }
+    }
+    let (within, mut shared) = (pcore::life::kin::APART * w.cfg.phys.alike, 0);
+    for month in 0..20 * w.cfg.months_per_year {
+        pcore::step(&mut w);
+        for &i in &cells {
+            let f = of(&w, i);
+            for x in f.held() {
+                let near = fauna::distance(&f.genes[x], &low).min(fauna::distance(&f.genes[x], &high));
+                assert!(near <= within, "month {month}, cell {i}, slot {x}: genes {:?} lie {near} steps from both kinds", f.genes[x]);
+            }
+            shared += (f.held().any(|x| f.root[x] == 0) && f.held().any(|x| f.root[x] == 1)) as u32;
+        }
+    }
+    println!("cell-months in which both kinds lived: {shared}");
+    assert!(shared > 0, "the two kinds never shared a cell");
+    books.assert_kept(&w, 1e-9);
+}

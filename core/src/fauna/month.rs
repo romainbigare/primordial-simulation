@@ -7,6 +7,7 @@
 
 use super::body::{body, Body};
 use super::grow::{grow, whole, Surplus};
+use super::lodge::{lodge, merge_alike, Packet};
 use super::gut::{digest, Digested, Gut};
 use super::thirst::{self, Thirst};
 use super::{mm, sub, take, way, Fauna, FS, GROUPS, KEEP, NF, N_WHOLE, REPAIR};
@@ -60,22 +61,35 @@ fn cell(w: &World, d: &mut Chunk, (p, gut): (&Parts, &Gut), i: usize) {
     let (f, moves, counts) = d.fauna_with(i);
     let e = f.heat() + heat.iter().sum::<f64>() - paid;
     let mut liquid = ground - drunk;
-    let held: Vec<usize> = f.held().collect();
+    let (held, year): (Vec<usize>, f32) = (f.held().collect(), w.cfg.months_per_year as f32);
+    let mut packets = Vec::new();
     for x in held {
         // One stream of draws per slot and month, drawn in a fixed order: deaths of its adults, of its young, its
-        // maturing, its births.
+        // maturing, its births, the mutation of its newborns.
         let mut r = Rng::new(w.seed, w.month(), (i * FS + x) as u64, Purpose::Fauna);
-        let mut surplus = Surplus { gained: [0.0; 2], matter: 0.0 };
+        let (mut surplus, mut balance) = (Surplus { gained: [0.0; 2], matter: 0.0 }, 0.0);
         for (c, g) in [x, FS + x].into_iter().enumerate().filter(|&(_, g)| bodies[g].n > 0.0) {
             let burnt = bodies[g].heat(walks[g], plan.work[g]) + plan.way[g] / (bodies[g].n * dt);
             let (died, kept) = settle(w, (p, gut), (f, g, &bodies[g]), (&took[g], burnt, plan.lack[g]), (&mut liquid, &mut r, &mut b));
             counts.takers_died.iter_mut().zip(died).for_each(|(a, d)| *a += d);
-            (surplus.gained[c], surplus.matter) = (kept.gained, surplus.matter + kept.matter);
+            (surplus.gained[c], surplus.matter, balance) = (kept.gained, surplus.matter + kept.matter, balance + kept.balance);
         }
-        grow(w, (p, gut), (f, x, (&bodies[x], &bodies[FS + x])), &surplus, (&mut r, &mut b));
+        let (n, body) = grow(w, (p, gut), (f, x, (&bodies[x], &bodies[FS + x])), &surplus, (&mut r, &mut b));
         tidy(f, x, &sub(p), &mut b);
         [x, FS + x].into_iter().for_each(|g| rounded(f, g, &mut counts.rounded[0]));
+        if f.root[x] != NO_ROOT {
+            f.net[x] += ((balance / f.living(&mm, x).max(1e-300)) as f32 - f.net[x]) / year;
+        }
+        if n > 0.0 {
+            packets.push((Packet { x, n, body }, r));
+        }
     }
+    // The newborns lodge in the order of their slots, then slots alike in every gene join.
+    let waiting: Vec<usize> = packets.iter().map(|q| q.0.x).collect();
+    for (k, (packet, mut r)) in packets.into_iter().enumerate() {
+        lodge(w, (f, &packet), (&sub(p), &mm), (&mut r, &mut b, &mut counts.takers_died[SPENT as usize]), &waiting[k + 1..]);
+    }
+    merge_alike(w, f, &mm);
     // Each slot's heat ends at its members' temperature; what the burning released beyond it goes to the ground.
     let target: [f64; FS] = std::array::from_fn(|x| f.cap(chem, &sub(p), x) * (f.genes[x][KEEP] as f64).max(t));
     let all: f64 = target.iter().sum();

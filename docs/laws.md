@@ -876,7 +876,7 @@ seeds fill it:
 Each ground cell holds up to 8 slots of takers (`fauna::Fauna`, `life::Cell::fauna`): a slot is one kind of takers
 in its cell, in two groups, its adults and its young; each group's **members** a real count (whole below `N_WHOLE` =
 64) and the mol of the fuel they store (5) and of their body matter (10, life's `Parts`); the slot's heat, J (each slot
-at its own temperature), and 8 genes (`fauna::MASS`, `CHILD`,
+at its own temperature), its balance over about a year (`Fauna::net`), and 8 genes (`fauna::MASS`, `CHILD`,
 `YOUNG`, `ENZYME`, `REACH`, `KEEP`, `COAT`, `REPAIR`). A member's **living mass** is its share of the body matter with
 the liquid of living tissue (matter / (1 − `WET_TISSUE`), as the cover's); that liquid is not in the books. The takers
 of a cell are part of the node of its life (`Class::Life`): the chunk of the cell is their one writer. They reach the
@@ -985,8 +985,19 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   members gives its amounts to the slot's other group (matter built into newborns none of whom was drawn stays in the
   mother). What is left of the pot goes back to the stores up to their most; the rest of it and of the matter passes to
   the ground. The draws of a slot in a month are one keyed stream (`Purpose::Fauna`), in the order: deaths of its
-  adults, of its young, its maturing, its births. A slot of no members is empty. The young stay in their cell (no
-  dispersal yet), and their genes are their parents' (no mutation yet).
+  adults, of its young, its maturing, its births, the mutation of its newborns. A slot of no members is empty. The
+  young stay in their cell (no dispersal yet).
+- **Mutation and the slot rule** (`fauna::lodge`, the shared rule of `life::kin`). The newborns of a slot in a month
+  are one packet; its genes are the slot's after one generation's mutation (each gene moves by noise of its step in
+  `fauna::RANGE` times `mut_size`, within its range: `life::kin::mutate`, as the cover's seeds). It joins the slot of its
+  starting kind within `APART` × `alike` steps of it in every gene (the genes the mean by living mass); else it founds
+  a slot of its own: an empty one, else the one most in deficit (`Fauna::net`, the slot's balance over about a year:
+  what it digested less its upkeep per kg living a month, a running mean; not its own slot nor one whose newborns wait
+  to lodge), whose members die as remains (counted as unpaid); else it stays in its parent slot with no new genes.
+  Slots of a cell alike in every gene join (the lighter into the heavier, the genes and balance the mean by living
+  mass). They never join because all slots are held (unlike the cover's): a mean of two unlike kinds is good at
+  neither. One generation moves a gene by about `mut_size` (0.063) of its step and the join is 2 steps wide, so a
+  packet almost never founds a slot by its own mutation: the rule selects between slots that exist.
 - **The books.** Gases from and to the cell's share of its air node, remains to its ground, each with its heat, through
   the books of the cell's life; each slot's heat ends at its heat capacity times its body's temperature, and the rest of
   what the burning released goes to the ground.
