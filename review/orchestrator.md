@@ -361,6 +361,23 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   - Each land sits in an even shallow ring (the low ground follows the rise's smooth fall); some small rises have
     flat tops. Taking the rises' fall at the warped point bends the straits but pushes land onto the edge: dropped
     (`scratchpad/islands/round3/B1_warp.diff`).
+- **The bare coast** (the owner's question), measured on worlds of 32 squares, seeds 1 to 4
+  (`scratchpad/coast/`, `notes.md` and `pics/`): most of the bare shore is bare in the core, not in the drawing.
+  - Roots cost too much on warm low ground: `root_uptake` is anchored on a forest's yearly mean flow, but a slot
+    holds roots for its month's draw. Near the shore the water lost per mol of gas is 141 to 177 (9 to 45
+    inland, where the air near the ground is saturated), roots are half the upkeep, and stored over upkeep is 1.02
+    to 1.28. Accepted: the row anchored on the growing season's flow, in one package with the next point, after
+    the air lands, with one setting of the references.
+  - A cell whose mean ground is under the level gets no soil and no starting cover (`worldgen::life::open_land`
+    asks `is_land`), though it holds land: 3.4 to 4.9% of the land's samples, 26% of the land in the first km.
+    Accepted: soil and cover on the land part of such a cell.
+  - The drawing thins the first km: the layers divide by the whole cell's area but are drawn on its land only, and
+    the blend takes the zero of cells with no land. In work (a branch of its own; no law changes).
+  - Climate None: the island's closed air falls from 402 to 175 ppm of the gas by year 25 as the cover locks it
+    in its walls; the water lost per mol of gas grows with it. Open: whether an island's air is ever closed.
+  - Climate Wide (main's air): 45 to 50% of the land is bare at every distance from the shore, dry (wetness 0.4
+    to 0.5) or cold; emptied in the first year after life starts, refilled slowly by few seeds. To measure again
+    on the new air.
 - Timed in turn on a quiet machine, a 32 island of plants, 30 years: 261 ms a year before the contract, 262 to 266
   after.
 
