@@ -43,9 +43,6 @@ export const KIND_PLANES = { chance: 0, width: 3, need: 6, roots: 7, form: 8, fr
 export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, low: LATTICES.length + 8, land: LATTICES.length + 9, count: LATTICES.length + 10 } as const;
 /** The number of a square's row of the core's table that is the share of its cell that is land (tape/src/table.rs `row`). */
 const LAND_AT = 10;
-/** Seen from above the herbs' leaves leaning and their shade cover more than their share: the ground they leave is
- * (1 - share) to this power (cover_field.wgsl `sward`, `lowOf`; an Earth view's style). */
-export const SWARD_SEEN = 5;
 /** The lattice whose kinds grow in stands of their own, near and far alike (cover_field.wgsl `stand_pick`): the trees'. */
 export const STANDS = 2;
 
@@ -264,11 +261,11 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
   return { w, h, table, field: { w, h, data: field, mips: mipsOf(field, w, h) }, held, tallest, walls };
 }
 
-/** Into the far layer of `field` at square `i` (`FIELD.low`, `layer` its place): the sward as it is seen
- * (`SWARD_SEEN`), the lattices under the trees' over it, each over the one below as cover_field.wgsl lays them, at their
+/** Into the far layer of `field` at square `i` (`FIELD.low`, `layer` its place): the sward, covering the share of the
+ * ground its leaves close by the cover's light law, the lattices under the trees' over it, each over the one below as cover_field.wgsl lays them, at their
  * mean (no patches, no grain: far away neither shows). */
 function lowOf(field: Float32Array, i: number, layer: (l: number, i: number) => number): void {
-  const s = layer(FIELD.sward, i), sward = field[s + 3], seen = sward > 0 ? 1 - (1 - Math.min(sward, 1)) ** SWARD_SEEN : 0;
+  const s = layer(FIELD.sward, i), sward = field[s + 3], seen = Math.min(sward, 1);
   const dst = [0, 1, 2].map(q => (sward > 0 ? (field[s + q] / sward) * seen : 0));
   let a = seen;
   for (let l = 0; l < STANDS; l++) {

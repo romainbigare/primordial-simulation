@@ -6,7 +6,7 @@
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './style';
-import { FIELD, Kinds, LATTICES, KIND_PLANES, SWARD_SEEN, half } from './canopy';
+import { FIELD, Kinds, LATTICES, KIND_PLANES, half } from './canopy';
 import { clamp } from './earth';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */
@@ -83,7 +83,7 @@ export class CoverMarks {
   fieldBinds(gpu: Gpu, cssMpp: number): Draw['binds'] {
     this.upload(gpu);
     // A lattice no square holds is sent with side 0: the field does not read it.
-    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => (this.kinds?.held[l] ? a : 0)), SWARD_SEEN).vec4(...this.shown(cssMpp)).vec4(this.kinds ? 1 : 0, this.alpha);
+    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => (this.kinds?.held[l] ? a : 0)), 0).vec4(...this.shown(cssMpp)).vec4(this.kinds ? 1 : 0, this.alpha);
     return { 14: u.buffer, 15: this.fieldTex!, 16: 'mip' };
   }
 
