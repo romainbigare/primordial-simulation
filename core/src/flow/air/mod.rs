@@ -99,8 +99,7 @@ impl World {
         }
         let x = lerp(s, &self.store.amounts(Class::Air)[k * na..(k + 1) * na], i);
         let tl = at_height(lerp(s, &s.ta, i), lerp(s, &s.gam, i), s.head[i], lerp(s, &s.zair, i));
-        let j = self.mesh.cells().parent()[i] as usize;
-        Some(x * per_mol(over_cell(self, s, i), tl, self.mesh.cells().area()[i], s.hk[gi * na + j]))
+        Some(x * per_mol(over_cell(self, s, i), tl, self.mesh.cells().area()[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i)))
     }
 }
 
