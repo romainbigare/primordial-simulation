@@ -29,7 +29,7 @@ const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = 128;
 const LIVE_VARIETY = 4, VARIETY_MOST = 12;
 /** The climates a live island may have: a name, and the band of latitudes it stands for (south, north), its air the
  * planet's air over that band. The first is the page's. */
-const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55']];
+const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['Warm: 5° to 50°', '5,50']];
 /** The large shapes a live island may have: a name, and the URL's word for it. The first is the page's. */
 const SHAPES: string[][] = [['Drawn from the seed', 'drawn'], ['One island', 'one']];
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
