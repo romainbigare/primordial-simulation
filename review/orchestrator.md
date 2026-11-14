@@ -43,6 +43,8 @@ two files: this one and the roadmap.
   `series.csv` but the `ms_*` columns.
 - Work on the session's branch and push it freely. Push to `main` only as a fast-forward of a commit whose gate
   passed: `git fetch -q origin main && git merge-base --is-ancestor origin/main HEAD && git push origin HEAD:main`.
+  Then `git branch -f main origin/main`: the push does not move the local branch `main`, and a helper told to
+  start from or merge `main` takes the local one.
 - Worktrees and scratch files die with the container, and the container restarts without warning (three times in
   one day): tell every helper to commit its work in progress early, and push its branch to a `wip/` name as soon as
   it holds something. Anything worth keeping is merged or pushed before the session ends.
