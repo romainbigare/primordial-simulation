@@ -373,17 +373,22 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     row needs a land with a dry belt.
   - The drink fetched by walking is booked from the walker's own cell: to go right with the outbox of the young's
     dispersal.
-  In work, by the same builder (branch `worktree-agent-ac136315104cd4ab3`, saved as `wip/takers`; scratch
-  `scratchpad/f1/`, `notes.md`): two laws decided by the orchestrator, each its own commit.
-  (1) A resting body sits in a shell of what lies on the ground: the ground node's remains at an anchored bulk
-  density, gathered round the sphere of the body's own surface; conduction through the shell in series with the
-  coat (the floor of the loss is 4 pi k r dT, so a 30 g body's loss about halves and a large body's need does not
-  move); no gene, no term for the standing cover; the soft solid only if Flow holds a number for how it
-  insulates. (2) A mouth breaks what its jaw can rupture: a slot shows its soft part (matter and fuel) and its
-  frame (walls) apart; the jaw's force by body mass from one fitted regression; a second strength of the frame's
-  substance for a cut across the grain (`shear`, in the chemistry; `rupture` stays the crushing along the
-  grain); the share of the frame in axes thinner than the cut is (d/D)^(2/3) by the pipe model. Then the budget
-  again, then births, growth, mutation and the slot rule with a 250-year run.
+  - On main too (merge 02c5534), two laws the budget asked for. A resting body sits in a shell of what lies on
+    the ground (the node's remains at `litter_rho`, conduction through a spherical shell at `litter_k`, in series
+    with the coat): a 30 g body's loss falls from 1.17 to 0.50 W; the 400 kg kind's need does not move, the 60 kg
+    kind's falls 15% in its coldest month; the soft solid is not in the shell (Flow holds no number for how it
+    insulates). A mouth breaks what its jaw can rupture: a slot shows its soft part (matter and fuel) and its
+    frame (walls) apart (`Layer::Soft`, `Layer::Frame`); the jaw's force from one fit of small mammals (log10 N =
+    0.43 log10 g + 0.416, an extrapolation for the large); `shear` of the frame 60 MPa (from memory); a jaw cuts
+    axes of 0.8 mm (30 g) to 6 mm (400 kg), 1 to 10% of a tree's frame and all of a herb's. With both, each kind
+    alone pays its way on good low cover and on tree cover (98 to 557% of its need; the cold-bodied 15 to 20
+    times).
+  - Open: `contract::reached` spreads a slot's matter evenly over its height, so a mouth at the ground reaches a
+    share of a tall slot's soft part though its leaves stand in its crown; and a slot's living matter holds its
+    fine roots, which a mouth may be shown. Both asked of the next builder, with numbers, not mended.
+  In work, by a second builder in its own worktree (scratch `scratchpad/f1/b2/`, `notes.md` there): growth,
+  births, maturing, whole counts, mutation and the slot rule (design 12, item 4), then a 250-year run with its
+  measures and pictures. No tuning: a kind that dies out is reported with the line of its budget that fails.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
