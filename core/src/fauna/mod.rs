@@ -1,11 +1,14 @@
 //! The takers: animals as a field (laws.md 3b). Each ground cell holds up to `FS` kinds of takers, each a slot of
-//! members of one kind: their real count, the amounts of the fuel they store and their body matter (`life::Parts`),
-//! their heat and a small vector of genes, as plain arrays per cell (`Fauna`). Once a month, right after the cover's
-//! month on the same cell, each slot pays its upkeep and keeps its body's heat (`month`), and its members die by what
-//! they could not pay, by wear, by frost and by thirst. A taker reads the land and moves matter only through the
+//! members of one kind in two groups, its adults and its young: their real counts, the amounts of the fuel they store
+//! and their body matter (`life::Parts`), the slot's heat and a small vector of genes, as plain arrays per cell
+//! (`Fauna`). Once a month, right after the cover's month on the same cell, each group takes, pays its upkeep and keeps
+//! its body's heat (`month`), and its members die by what they could not pay, by wear, by frost and by thirst; then each
+//! slot's surplus grows its young, its young that reach an adult's mass join its adults, and its adults bear young
+//! (`grow`). A taker reads the land and moves matter only through the
 //! contract (`contract`); its books are the life of the cell's (`life::book`).
 
 mod body;
+mod grow;
 mod gut;
 mod month;
 mod place;
@@ -23,6 +26,8 @@ use serde::{Deserialize, Serialize};
 
 /// Kinds of takers a cell holds at most.
 pub const FS: usize = 8;
+/// The groups of members of a cell's takers: of each slot its adults (group x), then its young (group `FS` + x).
+pub const GROUPS: usize = 2 * FS;
 /// The parts of a taker, by their place in `Fauna::mol`: the fuel it stores and its body matter (life's `FUEL` and
 /// `MATTER`).
 pub const NF: usize = 2;
@@ -52,13 +57,13 @@ pub const NG: usize = 8;
 /// eighth, which a mean would hide (a rule of the model).
 pub const N_WHOLE: f64 = 64.0;
 
-/// The takers of one ground cell, in `FS` slots.
+/// The takers of one ground cell, in `FS` slots, each of two groups of members: its adults and its young.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Fauna {
-    /// Per slot: its members, a real count (whole below `N_WHOLE`)
-    pub adults: [f64; FS],
-    /// Per slot: mol of each part (`STORE`, `BODY`)
-    pub mol: [[f64; NF]; FS],
+    /// Per group (`GROUPS`): its members, a real count (whole below `N_WHOLE`)
+    pub n: [f64; GROUPS],
+    /// Per group: mol of each part (`STORE`, `BODY`)
+    pub mol: [[f64; NF]; GROUPS],
     /// Per slot: its heat, J (its members at their own temperature)
     pub e: [f64; FS],
     /// Per slot: its genes, and the starting kind it descends from (a label for the tape; `NO_ROOT` when empty)
@@ -69,7 +74,7 @@ pub struct Fauna {
 impl Default for Fauna {
     /// No takers.
     fn default() -> Fauna {
-        Fauna { adults: [0.0; FS], mol: [[0.0; NF]; FS], e: [0.0; FS], genes: [[0.0; NG]; FS], root: [NO_ROOT; FS] }
+        Fauna { n: [0.0; GROUPS], mol: [[0.0; NF]; GROUPS], e: [0.0; FS], genes: [[0.0; NG]; FS], root: [NO_ROOT; FS] }
     }
 }
 
@@ -82,15 +87,23 @@ impl Fauna {
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
         (0..FS).filter(|&x| self.root[x] != NO_ROOT)
     }
-    /// The living mass of slot `x`, kg: its body matter with the liquid of living tissue (`life::WET_TISSUE`).
+    /// The living mass of group `g`, kg: its body matter with the liquid of living tissue (`life::WET_TISSUE`).
+    pub fn living_of(&self, mm: &[f64; NF], g: usize) -> f64 {
+        self.mol[g][BODY] * mm[BODY] / (1.0 - WET_TISSUE)
+    }
+    /// The living mass of slot `x`, its adults and its young, kg.
     pub fn living(&self, mm: &[f64; NF], x: usize) -> f64 {
-        self.mol[x][BODY] * mm[BODY] / (1.0 - WET_TISSUE)
+        self.living_of(mm, x) + self.living_of(mm, FS + x)
     }
-    /// The heat capacity of slot `x`, J/K.
+    /// The members of slot `x`, its adults and its young.
+    pub fn members(&self, x: usize) -> f64 {
+        self.n[x] + self.n[FS + x]
+    }
+    /// The heat capacity of slot `x`, its adults and its young, J/K.
     pub fn cap(&self, chem: &Chemistry, sub: &[usize; NF], x: usize) -> f64 {
-        (0..NF).map(|q| self.mol[x][q] * chem.subs[sub[q]].cp).sum()
+        [x, FS + x].iter().map(|&g| (0..NF).map(|q| self.mol[g][q] * chem.subs[sub[q]].cp).sum::<f64>()).sum()
     }
-    /// Its amounts of each part, slot by slot (mol).
+    /// Its amounts of each part, group by group (mol).
     pub fn all_mol(&self) -> impl Iterator<Item = &[f64; NF]> + '_ {
         self.mol.iter()
     }
@@ -135,7 +148,7 @@ pub fn sums(w: &crate::World) -> Vec<[f64; 2]> {
             if r >= out.len() {
                 out.resize(r + 1, [0.0; 2]);
             }
-            out[r] = [out[r][0] + f.adults[x], out[r][1] + f.living(&mm, x)];
+            out[r] = [out[r][0] + f.members(x), out[r][1] + f.living(&mm, x)];
         }
     }
     out
