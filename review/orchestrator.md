@@ -662,8 +662,16 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         coasts, about 4 months a year. The chemistry's burning rates are those of rot (the frame's bare
         reaction reaches 1e-6/s only at 796 K): what burns into what and the heat come from the chemistry, the
         speed from the heat balance (Rothermel 1972).
-      - In work, step 1, mergeable alone: **a leaf that costs more to keep than to rebuild is shed** (Kikuzawa
-        1991), one rule for the dry and the cold season, in `grow::shed`.
+      - In work, step 1, mergeable alone, two law commits. Measured first: with today's costs no leaf is ever
+        worth shedding, because the living upkeep is multiplied by activity and activity falls to about zero on
+        dry or frozen ground (keeping a kg through a dry season costs 0.005 to 0.007 of building it anew). So
+        (a) **upkeep follows temperature, not the ground's dryness** (a leaf on dry ground still breathes; the
+        gain keeps following the liquid; seeds lying and wear keep Harrington's rule): keeping then costs 1.1 to
+        2.4 times rebuilding through a dry season and 0.17 through a cold one; (b) **what costs more to keep
+        through the months a slot expects without gain than to build anew is shed** (Kikuzawa 1991), one rule
+        for every season in `grow::shed`, the expected months from the slot's own last year. About half the
+        dry-season cover would become litter; in the cold season leaves are kept (leaves falling in the cold
+        would need frost to act on leaves, not on whole plants).
       - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
         to the ground's wetness; the moisture of extinction falls out of the heat balance (0.17 to 0.18); a
         cell carries fire where fuel covers more than the percolation threshold of the ground; burnable cells
