@@ -653,9 +653,24 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         the overturning's low flow, plus wind against the ground's rise, Smith and Barstad 2004); rising air
         condenses, sinking air dries the low air. The dry belt, the wet windward side and the dry lee together.
    4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
-      keeps grassland open (Bond, Woodward and Midgley 2005). In work, a fresh builder (branch `fire`, scratch
-      `scratchpad/fire/`): first a measure of fuel and dryness on main and a design note, then my word, then
-      the build.
+      keeps grassland open (Bond, Woodward and Midgley 2005). A fresh builder (branch `fire`, scratch
+      `scratchpad/fire/`: `design.md`, `fire_today.png`, tables).
+      - Measured on main (64 drawn, year 60): **open land cannot carry fire: herbs never cure.** Living tissue
+        keeps its liquid in every season and `grow::shed` sheds nothing in a dry month, so open land holds 0.19
+        (band 20 to 65) and 0.01 kg/m² (5 to 50) of dead fuel (a real dry grassland: 0.2 to 0.6, cured). Forest
+        holds about 5 kg/m² but stays wet. Fire could run today in a thin ring of forest edge by the dry
+        coasts, about 4 months a year. The chemistry's burning rates are those of rot (the frame's bare
+        reaction reaches 1e-6/s only at 796 K): what burns into what and the heat come from the chemistry, the
+        speed from the heat balance (Rothermel 1972).
+      - In work, step 1, mergeable alone: **a leaf that costs more to keep than to rebuild is shed** (Kikuzawa
+        1991), one rule for the dry and the cold season, in `grow::shed`.
+      - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
+        to the ground's wetness; the moisture of extinction falls out of the heat balance (0.17 to 0.18); a
+        cell carries fire where fuel covers more than the percolation threshold of the ground; burnable cells
+        that touch join into regions, each burning the share its expected strikes give (no random draws, no
+        front solver); leaves under the scorch height die (Van Wagner 1973), young trees must outgrow the flame;
+        gases and heat to the air, ash to the ground, seeds lying survive. Five numbers and two of a sorption
+        curve, all anchored. Not in v1: a bark gene, the loss of the fixed element to the air, a reach limit.
    5. Then: the ground's water numbers by grain (heath on coarse ground, wet meadow on fine); a wider spread of
       the bed's wear rates and flat layers on a high land in some worlds (scarps); one large land in a world of
       512 for a large river and a delta (with the package of the mouths).
