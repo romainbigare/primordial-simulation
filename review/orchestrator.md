@@ -312,6 +312,28 @@ band, a steady wind and its rain shadow, more relief, ground that differs by its
 fire, ground that stays wet, stretching the air's distance inland as the band stretches the latitudes, a larger
 world). No rule that says where a habitat goes.
 
+**The owner's next order after the variety of habitat (their word): the look of the habitats, and everything else
+paused until it is done.** When the habitat work is complete (the air and the rain: the rain on rising ground, the
+dry belt; the orchestrator counts fire in, as what makes grassland), launch one page builder (the owner asks for a
+Sonnet agent: `model: sonnet`) to make the new variety of habitat look far better, and pause the sorted start and
+all other helpers until it is done. The owner's goal: the map as full of detail and information as possible and
+as real as possible, with features dramatised for the game: textures, details, relief, objects.
+- Faults the owner sees on the page (their pictures, on the remote as `wip/look-refs`, folder
+  `review/looks/faults/`; a copy in `scratchpad/looks/`): near views of the green cover show grid-like marks and
+  odd patterns (at the 20 m bar the crowns are a dark maze of straight strokes; at 50 m green and brown stand in
+  square blocks; at 2 m dark smears made of fine horizontal and vertical lines, and thin straight lines at tile
+  borders; at 10 m green over rock in straight lines and a grid); the new dry land is empty of detail; less and
+  less to look at; bushes look like small trees; trees are too simple; no flowers, no grass; no plant drawn
+  that fits the new habitats.
+- What the owner wants it to look like (`review/looks/want/` on that branch): a painted dry grassland with
+  flat-topped trees, tall straw grass, a dry sandy river bed, paths, mounds and herds; a forest glade with a
+  stony stream, fallen logs, mossy rocks, many tree forms; a swamp with dark standing liquid, trees with wide
+  feet, floating leaves, mud banks; high mountains with ice, scree, a milky lake; a braided river with gravel
+  bars and green islands.
+- For the brief: every drawn thing stays tied to a number of the world (what stands, how tall, how dense, how
+  dry, the season); the drawing may dramatise, it may not invent; nothing placed on a grid; the look differs by
+  habitat because the numbers differ. The animals' drawing stays paused (see the life track).
+
 **Where the two tracks stand** (the orchestrator keeps these lines true):
 - On main: the docs' clean-up; the plants made free (`core/src/contract.rs`, the natural world's month on its own, a
   test that guards the sides, `cli/tests/sides.rs`, the gate and the key numbers on worlds of plants: the cover's
