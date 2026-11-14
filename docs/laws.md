@@ -639,8 +639,11 @@ cell's 1e11 kg/s (`wind`).
 Each half carries the air of the node it leaves, vapour crowding low, each mol with its node's heat per mol, and the
 upper half holds more heat per mol than the lower by the rise of the static energy cp T + M g z over half the column's
 depth, (M g - cp gam) × depth / 2, gam the column's drop with height (none where the air cools with height as fast as
-dry air rising; Neelin and Held 1987). So the heat it carries a second is its mass flux times the difference of the
-two nodes' heat per mol, less that rise: the first part grows with the length of the link, the second does not.
+dry air rising; Neelin and Held 1987). The part of the flux down the gradient carries that rise from the warmer column
+to the colder; the part turned across the link runs along the isotherms, where what its halves carry of it warms no
+column (a flow along the isotherms crosses none; Holton 2004, 3.4), and it carries none of it. So the heat it carries a
+second is its mass flux times the difference of the two nodes' heat per mol, less the rise times its part down the
+gradient: the first part grows with the length of the link, the second does not.
 **Known limit:** as a half carries its node's air, on coarse nodes the overturning also mixes the two, as eddies of
 about its speed times half the length of the link would. The eddies and the overturning are one implicit (backward
 Euler) step a day, first along the lines the links between blocks make east and west, then along those north and south,

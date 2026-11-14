@@ -13,7 +13,7 @@ use crate::World;
 /// share of it its own column holds (`per_column`), so its warmth and shares change as those of the column it stands
 /// for.
 #[derive(Clone, Copy)]
-pub(super) struct Stretch(f64);
+pub(super) struct Stretch(pub(super) f64);
 
 impl Stretch {
     /// The stretch of the map of `w`: in the planet's air (`World::planet`), the length of its band of latitudes on the

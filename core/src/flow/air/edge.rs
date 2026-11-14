@@ -16,8 +16,8 @@ use crate::{World, AIR};
 const SIDES: [[f64; 2]; 4] = [[0.0, -1.0], [0.0, 1.0], [1.0, 0.0], [-1.0, 0.0]];
 
 /// The links of the step to the columns beyond the map's open edges (`SIDES`): per link its node, its side, its pushes
-/// (eddies, mol/s each way; overturning, mol/s of the lower half from the node outward; the heat per mol its upper
-/// half holds over its lower, J/mol; and the heat the eddies carry outward over the columns' mean heat per mol, W), the share of each gas of the air (`Scratch::state`) of the column beyond and its
+/// (eddies, mol/s each way; overturning, mol/s of the lower half from the node outward; the heat its halves carry
+/// inward over their mean heat per mol, W; and the heat the eddies carry outward over the columns' mean heat per mol, W), the share of each gas of the air (`Scratch::state`) of the column beyond and its
 /// heat per mol, J; and what crossed into the node over the step: per gas and link (`[q * links + l]`) mol, and per
 /// link the heat, J (its sensible heat as the air's days move it, `store::Class::Air`).
 pub(super) struct Edges {
@@ -54,11 +54,11 @@ impl Edges {
                 let cp = s.state.gas.iter().zip(&share).map(|(&k, v)| v * s.sp[k].cp).sum::<f64>();
                 let end = beyond_end(w, (node, lat, &beyond, cp), st);
                 let ab = [dir[0] * spacing, dir[1] * spacing];
-                let [mix, over, rise, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab), edge);
+                let [mix, over, contrast, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab), edge);
                 x.heat_of.push(beyond.t * cp);
                 x.node.push(j as u32);
                 x.side.push(side);
-                x.push.push([mix, over, rise, stir]);
+                x.push.push([mix, over, contrast, stir]);
                 x.share.push(share);
             }
         }
@@ -69,13 +69,13 @@ impl Edges {
     /// One day of `dd` seconds of the exchange across the open edges, after the wind, from the air `x` (`[gi * na + j]`)
     /// and its heat `e`, each link implicit (backward Euler) with the column beyond held: the eddies' mol each way and the
     /// overturning's halves, the lower half outward where the column beyond is warmer and the upper back, each half of
-    /// its own air (vapour crowding low, `Scratch::split`), heat by mol, the upper half holding `rise` more per mol, the
+    /// its own air (vapour crowding low, `Scratch::split`), heat by mol, the halves carrying `contrast` more inward, the
     /// eddies' mol each its column's near-ground energy (`wind::push`, `stir`). The
     /// column beyond lies over low open ground at 0 m: the node pays the lift of the mass that enters it (`wind::lift`).
     pub(super) fn day(&mut self, s: &Scratch, (x, e): (&mut [f64], &mut [f64]), dd: f64, g: f64) {
         let (na, ng, links) = (e.len(), s.state.gas.len(), self.node.len());
         for l in 0..links {
-            let (j, [mix, o, rise, stir]) = (self.node[l] as usize, self.push[l]);
+            let (j, [mix, o, contrast, stir]) = (self.node[l] as usize, self.push[l]);
             let split = |q: usize| s.split[q * na + j];
             let nt: f64 = (0..ng).map(|q| x[q * na + j]).sum::<f64>().max(f64::MIN_POSITIVE);
             let upper: f64 = (0..ng).map(|q| x[q * na + j] * split(q)).sum();
@@ -98,7 +98,7 @@ impl Edges {
                 *v = now;
             }
             let both = mix + o.abs();
-            let now = (e[j] + dd * (both * self.heat_of[l] + o * rise - stir)) / (1.0 + dd * both / nt);
+            let now = (e[j] + dd * (both * self.heat_of[l] + contrast - stir)) / (1.0 + dd * both / nt);
             self.heat[l] += now - e[j];
             e[j] = now - if kg > 0.0 { g * kg * s.za[j] } else { 0.0 };
         }

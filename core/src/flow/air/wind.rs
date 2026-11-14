@@ -29,13 +29,13 @@ impl Links {
 
 /// The pushes on each link (`Links`): mixing by eddies, mol/s each way, and the heat they carry from its `a` to its
 /// `b` over what the two columns' mean heat per mol carries, W (`stir`); overturning, mol/s of the lower half from its
-/// `a` to its `b` (the upper half comes back), and the heat per mol its upper half holds over its lower, J/mol; and the
-/// conductance of the evening of pressure, mol/(Pa s).
+/// `a` to its `b` (the upper half comes back), and the heat its halves carry from its `b` to its `a` over what their
+/// mean heat per mol carries, W (`contrast`); and the conductance of the evening of pressure, mol/(Pa s).
 pub(super) struct Pushes {
     pub(super) mix: Vec<f64>,
     pub(super) stir: Vec<f64>,
     pub(super) over: Vec<f64>,
-    pub(super) rise: Vec<f64>,
+    pub(super) contrast: Vec<f64>,
     pub(super) even: Vec<f64>,
 }
 
@@ -105,11 +105,14 @@ pub(super) fn in_cell(lat: f64, edge: f64) -> f64 {
 
 /// The pushes on a link from end `a` to end `b`, of width `wd` and length `d` as the stretched air takes them
 /// (`Stretch::length`), `ab` apart on the map, m [east, south]: its eddies, mol/s each way; its overturning, mol/s of the
-/// lower half from `a` to `b`; the heat per mol its upper half holds over its lower, J/mol; the conductance of its
-/// evening of pressure, mol/(Pa s) (`Pushes`); and the heat its eddies carry from `a` to `b` over what the columns'
-/// mean heat per mol carries, W: each mol they exchange holds its column's near-ground energy (`aloft`), as eddies stir
-/// the lower air, where the contrast is the ground's.
-/// The overturning cell ends at `edge` degrees of latitude (`cell_edge`).
+/// lower half from `a` to `b`; the heat its halves carry from `b` to `a` over their mean heat per mol, W; the conductance
+/// of its evening of pressure, mol/(Pa s) (`Pushes`); and the heat its eddies carry from `a` to `b` over what the
+/// columns' mean heat per mol carries, W: each mol they exchange holds its column's near-ground energy (`aloft`), as
+/// eddies stir the lower air, where the contrast is the ground's. The upper half holds more heat per mol than the lower
+/// (the rise of the static energy over half the column's depth), and the part of the overturning down the gradient
+/// carries that from the warmer column to the colder; the part turned across the link runs along the isotherms, so what
+/// its halves carry of it warms no column (a flow along the isotherms crosses none; Holton 2004, 3.4) and it carries
+/// none. The overturning cell ends at `edge` degrees of latitude (`cell_edge`).
 pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab): (f64, f64, [f64; 2]), edge: f64) -> [f64; 5] {
     let (rho, depth) = ((a.rho + b.rho) / 2.0, cfg.air_top_m - (a.za + b.za) / 2.0);
     let lat = (a.lat + b.lat) / 2.0;
@@ -121,14 +124,15 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
     let mix = st.per_column(cfg.mix * rho * depth * wd / d);
     // A mass flux by the gradient, the link's difference over its length `d`, through its half cross-section, so it
     // does not depend on `d`: down the gradient inside the cell of the low latitudes (`in_cell`).
-    let over = st.per_column(cfg.wind * (cell * (b.warmth - a.warmth) + turn * across) / d * rho * wd * depth / 2.0);
+    let per_k = st.per_column(cfg.wind / d * rho * wd * depth / 2.0);
+    let (down, over) = (per_k * cell * (b.warmth - a.warmth), per_k * (cell * (b.warmth - a.warmth) + turn * across));
     // The middles of a column's halves lie half its depth apart.
-    let rise = (a.rise + b.rise) / 2.0 * depth / 2.0;
+    let contrast = down * (a.rise + b.rise) / 2.0 * depth / 2.0;
     // Sound crosses the link in d / its speed. The stretched column holds the stretch squared times the mol at the same
     // pressure, so its c is that much less, and its rate per column of the map (`Stretch::per_column`) is this, with
     // the map's c, over the stretched `d`.
     let even = (a.sound + b.sound) / 2.0 / (d * (a.c + b.c));
-    [mix, over, rise, even, mix * (a.aloft - b.aloft)]
+    [mix, over, contrast, even, mix * (a.aloft - b.aloft)]
 }
 
 /// Three pushes on each link (`push`): the column's pressure, evened in the time sound takes to cross it (Lamb waves,
@@ -139,15 +143,15 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
 /// node as the last state left it (`ends`).
 pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, links: &Links) -> Pushes {
     let v = || Vec::with_capacity(links.id.len());
-    let mut p = Pushes { mix: v(), stir: v(), over: v(), rise: v(), even: v() };
+    let mut p = Pushes { mix: v(), stir: v(), over: v(), contrast: v(), even: v() };
     let edge = cell_edge(cfg);
     for &l in &links.id {
         let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, st.length(air.width()[l]), st.length(air.dist()[l]));
-        let [mix, over, rise, even, stir] = push(cfg, st, (&ends[a], &ends[b]), (wd, d, air.offset(a, b)), edge);
+        let [mix, over, contrast, even, stir] = push(cfg, st, (&ends[a], &ends[b]), (wd, d, air.offset(a, b)), edge);
         p.mix.push(mix);
         p.stir.push(stir);
         p.over.push(over);
-        p.rise.push(rise);
+        p.contrast.push(contrast);
         p.even.push(even);
     }
     p
@@ -274,7 +278,7 @@ impl Implicit {
                 };
                 ca[p] = mix / nt[ia] + o.abs() * half(ia, o < 0.0);
                 cb[p] = mix / nt[ib] + o.abs() * half(ib, o > 0.0);
-                k[p] = if q < ng { 0.0 } else { push.stir[l] - o * push.rise[l] };
+                k[p] = if q < ng { 0.0 } else { push.stir[l] - push.contrast[l] };
             }
             let step = line::factor(class, a, (&ca, &cb), dd);
             Flows { ca, cb, k, step }
@@ -293,8 +297,9 @@ type Job<'a> = (usize, [&'a Flows; 2], [Vec<f64>; 2]);
 /// pressure (`pressure`); then the eddies and the overturning, each implicit along the lines east and west, then along
 /// those north and south (`Implicit`, `solve::line`), so the day is stable and keeps its rates on any grid; each gas
 /// and the heat on its own task of the pool. What crosses is the sender's air, each mol with its node's heat per mol,
-/// a mol of the eddies with its node's near-ground energy (`Pushes::stir`); for the overturning by halves, the lower half to the warmer node and the upper half back, as many mol each way, the
-/// upper half holding `Pushes::rise` more heat per mol than the lower. The node the mass enters pays its lift.
+/// a mol of the eddies with its node's near-ground energy (`Pushes::stir`); for the overturning by halves, the lower
+/// half to the warmer node and the upper half back, as many mol each way, the halves carrying `Pushes::contrast`. The
+/// node the mass enters pays its lift.
 pub(super) fn wind(w: &World, s: &Scratch, (push, border, lines, imp): (&Pushes, &[usize], &[Lines; 2], &Implicit), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
     if border.is_empty() {
         return;
@@ -385,7 +390,8 @@ fn cross((q, flows): (usize, impl Iterator<Item = (usize, f64)>), (x, e): (&mut 
 
 #[cfg(test)]
 mod tests {
-    use super::{aloft, cell_edge, in_cell};
+    use super::super::stretch::Stretch;
+    use super::{aloft, cell_edge, in_cell, push, End};
     use crate::Config;
 
     /// On a planet that spins as the one known, the overturning cell of the low latitudes ends in the subtropics: whole at
@@ -415,5 +421,20 @@ mod tests {
         assert!((near(0.0045, ground) - near(0.0080, ground)).abs() < 1e-9, "heat aloft moved heat");
         assert!((near(0.0065, ground + 2.0) - near(0.0065, ground) - 2.0 * cp).abs() < 1e-9);
         assert!((near(0.0065, ground) - cp * ground - mg * za).abs() < 1e-9);
+    }
+
+    /// The overturning's halves carry the static energy the upper holds over the lower from the warmer column to the colder
+    /// as far as they run down the gradient, and none as far as they run along the isotherms: at 45° (past the cell),
+    /// two columns of one warmth with a gradient across their link move air along it, and no heat by their halves;
+    /// inside the cell, a warmer end draws heat from it.
+    #[test]
+    fn the_overturning_along_the_isotherms_carries_no_heat_by_its_halves() {
+        let cfg = Config::default();
+        let end = |lat: f64, warmth: f64, south: f64| End { rho: 40.0, aloft: 0.0, za: 0.0, lat, warmth, grad: [0.0, south], rise: 1.5, sound: 1e-6, c: 1e-3 };
+        let (st, link) = (Stretch(1.0), (1e5, 1e5, [1e5, 0.0]));
+        let [_, over, contrast, _, _] = push(&cfg, st, (&end(45.0, 280.0, 1e-5), &end(45.0, 280.0, 1e-5)), link, cell_edge(&cfg));
+        assert!(over != 0.0 && contrast == 0.0, "along the isotherms: {over} mol/s, {contrast} W by the halves");
+        let [_, over, contrast, _, _] = push(&cfg, st, (&end(10.0, 290.0, 0.0), &end(10.0, 291.0, 0.0)), (1e5, 1e5, [1e5, 0.0]), cell_edge(&cfg));
+        assert!(over > 0.0 && contrast > 0.0, "down the gradient: {over} mol/s, {contrast} W from the warmer end");
     }
 }
