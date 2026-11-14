@@ -602,9 +602,15 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         18 → 24% and 27 → 34%; the wet-ground tree halves on ground full six months or more. The soaked kind
         holds no more of the cover on full ground than off it: channels are cheap and pay wherever the free
         liquid nears the top for some months (seasonally soaked ground). Judged honest; a weaker stem for
-        channels is not (wood carries none). Asked before the merge: the pictures, the tall cover's leader by
-        ground class, where the new open land sits, a trial of a starting herb of soaked ground, the 10th gene's
-        cost.
+        channels is not (wood carries none). **Not merged: it gives no new habitat** (on the remote as
+        `wip/soaked`, gate green on main 6f7dfe1b; contact sheets `scratchpad/water/contact_soaked.png`,
+        `contact_herb_trial.png`). Of the tall cover the soaked kind leads 36% on full ground and 41% off it;
+        the new open land lies on dry ground and on the rim with standing liquid, not on soaked ground (open
+        share of full ground 50 → 55%); a starting herb of soaked ground makes no marsh; the 10th gene costs 4
+        bytes a slot and no time that can be measured. One trial left, after the overdraw: a root without gas
+        does 1/13 of the work at the same fuel (its uptake falls) instead of burning 13 times the fuel for the
+        same work. If that shows no swamp either, law 2 is shelved until the sorted start can test kinds on
+        soaked ground.
       - Open, for the sorted start's garden check: **the moisture gene costs nothing real** (its cost is capacity
         × 10^MOIST, and one step of the light gene gives the same capacity at the same upkeep).
       - Open, a fault of the books in Flow: **the surface pass can take a liquid from a cell that holds none**
