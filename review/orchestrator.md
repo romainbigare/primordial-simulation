@@ -335,9 +335,15 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   lie on low-ground cells near the shore and the two layers bleed over the liquid there; nothing hides a buried
   plant from the light (the air's step lets the canopy catch light over any snow). To measure again on the new air.
 - Designed, not built: the first takers of the cover (F1), `review/f1-design.md`, with the orchestrator's
-  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). In work:
-  commits 1 and 2 of its build plan (the shared ground as a pure clean-up; the fauna's state, placing and books
-  with no eating), by a builder in its own worktree; scratch `scratchpad/f1/`. They do not wait for the air.
+  decisions at its top (thirst is a law of F1: a body drinks open liquid only and pays the way to it). Built on
+  the local branch `worktree-agent-ac136315104cd4ab3` (c717f45; it waits there for the air package, then main is
+  merged in): the shared ground as a pure clean-up (a world of plants keeps its fingerprint) and the fauna's
+  state, placing and books with no eating (`core/src/fauna/`; takers placed at year 50 only starve: the store
+  lasts as the 3/4-power law of upkeep says, drift 4e-14 over 20 years). Found: with open liquid only where it
+  stands, takers die of thirst on nearly all land, since what runs over a cell is stored as a year's mean only.
+  In work, by the same builder (scratch `scratchpad/f1/`, notes in `notes.md`): the month's running liquid (one
+  rate per cell from the runoff's pass), the take and digestion, thirst that cuts work before it kills, the way
+  to another cell's liquid by the law of walking, and a first map layer of the takers.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
