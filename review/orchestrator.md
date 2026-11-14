@@ -638,10 +638,11 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         soaked ground.
       - Open, for the sorted start's garden check: **the moisture gene costs nothing real** (its cost is capacity
         × 10^MOIST, and one step of the light gene gives the same capacity at the same upkeep).
-      - Open, a fault of the books in Flow: **the surface pass can take a liquid from a cell that holds none**
-        (`runoff::surface` → `Crossings::book`), seen when a substance piles up on the ground; counted as rounding
-        today. Notes in `scratchpad/water/overdraw.md` (suspect: a cell's volume and its rows per liquid disagree
-        after a body's share-out). Given to the same builder after law 2, with a fast test of the law.
+      - On main, a mend of the books in Flow (`runoff::book_all`, test
+        `what_runs_off_takes_no_more_of_a_liquid_than_a_cell_holds`): a surface pass books all its moves
+        together, those between cells and those with the boundary at the open edge, so an edge cell never gives
+        of a second liquid what has come in before that is booked. A world of one liquid is the same to the last
+        digit.
    3. **Rain with a season and a direction** (the air's helper).
       - On main: the overturning cell follows the month's sun (`air::cell`, Lindzen and Hou 1988). On the strip the
         rain belt swings to 12 to 17 degrees; the driest month at 10 to 20 degrees gets 0.55 to 0.61 of the wettest
