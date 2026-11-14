@@ -286,12 +286,19 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     +5.9% and passed on a wider year-to-year spread. Nobody hunts it now. Do not loosen it. What a hunt found
     before it was stopped (`scratchpad/air2/notes.md`): the difference is not in how it is measured; on land
     under half a cell the 1 km squares stand thinner and read a larger vapour gap.
-  - Open on the air: the low liquid still falls 9 mm a year in the band (the air's edges are open, the low liquid
-    is closed): **next, first in line**: the low liquid of an island in the planet's air is the planet's, open at
-    the map's edges, its level held. The tiles' channels end at the shore the world was made with, so a lower
-    level leaves a dry gap between a river and the shore: with the level held this does not show; for levels
-    that truly move (ice, a god's hand) the ground must be worn again where the level moved, at a slow cadence,
-    with the package of the mouths. No cloud made by cooling from below; the `wind` row is "anchored, open"; the
+  - **The low liquid of an island in the planet's air is the planet's** (on main, merge ed14b23,
+    `SNAPSHOT_VERSION` 141; `flow/runoff/edge.rs`): the open low ground's body that touches the map's edge is held
+    at the level the world is made with (`space::wear::STAND_M`, 0 m): what stands over it leaves, what is
+    missing comes in at the edge cells with their own heat and dissolved matter, booked as a flux from the
+    boundary and counted (`edge_liquid`, `edge_liquid_heat`). In the band 20 to 65 about 9 mm of level a year
+    comes in; in 30 to 55 about 11 mm a year leaves (its air brings more vapour than it loses). A world with no
+    band is the same to the last digit. Open: the tiles' channels end at the shore the world was made with; for
+    levels that truly move (ice, a god's hand) the ground must be worn again where the level moved, at a slow
+    cadence, with the package of the mouths. `flow/runoff/mod.rs` is 376 lines.
+  - **The page makes islands in the planet's air only** (the owner's word: "remove None from the page"): the
+    closed island stays for the tests and the CLI. Measured: a closed island's air is drawn down to 212 ppm of the
+    gas and holds a third of the cover.
+  - Open on the air: No cloud made by cooling from below; the `wind` row is "anchored, open"; the
     exact solve of the surface's balance by pieces is parked on the local branch `surface-exact` (31eb1d1: right
     for the temperature, it raises the long step's water cycle by 0.3 to 0.4%); one air step a month is refused
     (the warmest month moves by +0.90 K).
