@@ -195,6 +195,10 @@ fn the_take_in_steps_meets_the_exact_answer() {
     assert!(taken[0][0] > 0.9 * first_layer.0 && taken[0][1] > 2.0 * first, "the eater did not switch: {:?}", taken[0]);
 }
 
+/// The living mass of the slot of takers of `a_taker_takes_no_more_than_it_reaches`, kg: 10,000 of the 400 kg kind, far
+/// more than a cell's cover feeds.
+const TAKER_SLOT_KG: f64 = 4e6;
+
 /// A taker takes no more than it reaches: a slot of many members asks far more than a cell's cover holds within its
 /// band and over its bite's floor; each layer loses no more than that reachable stock (`contract::reached` of what it
 /// shows), the cover keeps the rest as a refuge, and the books are kept.
@@ -203,14 +207,20 @@ fn a_taker_takes_no_more_than_it_reaches() {
     let mut w = testkit::living(8, 12);
     let i = testkit::mild_land(&w);
     (w.life.env[i][1], w.life.env[i][3]) = (1.0, 0.0);
-    let (row, ph) = (3, w.cfg.phys);
-    let (g, m) = (TAKER_KINDS[row].genes, fauna::adult(&TAKER_KINDS[row].genes));
-    let len = (m / ph.rho_body).cbrt();
-    let reach = 10f64.powf(g[fauna::REACH] as f64);
-    let band = (reach / 10f64.powf(fauna::BAND), (reach * 10f64.powf(fauna::BAND)).min(ph.reach_len * len));
-    let before: Vec<(f64, f64)> = pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, h)| (shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect();
+    let ph = w.cfg.phys;
+    // Of each layer of the cell, what it shows and the share of it within the reach of a taker of row `row`.
+    let layers = |row: usize| -> Vec<(f64, f64)> {
+        let (g, m) = (TAKER_KINDS[row].genes, fauna::adult(&TAKER_KINDS[row].genes));
+        let len = (m / ph.rho_body).cbrt();
+        let reach = 10f64.powf(g[fauna::REACH] as f64);
+        let band = (reach / 10f64.powf(fauna::BAND), (reach * 10f64.powf(fauna::BAND)).min(ph.reach_len * len));
+        pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, h)| (shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect()
+    };
+    // The first kind of taker that reaches a layer of the cell, as many of it as weigh `TAKER_SLOT_KG`.
+    let row = (0..TAKER_KINDS.len()).find(|&r| layers(r).iter().any(|b| b.1 > 0.0)).expect("a kind of taker that reaches the cover");
+    let (before, m) = (layers(row), fauna::adult(&TAKER_KINDS[row].genes));
     let books = Books::now(&w);
-    testkit::takers(&mut w, i, row, (1e4, 0.1 * m));
+    testkit::takers(&mut w, i, row, (TAKER_SLOT_KG / m, 0.1 * m));
     testkit::takers_month(&mut w, i);
     let after: Vec<f64> = pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, _)| shown(&w, i, l)).collect();
     assert!(before.len() == after.len() && before.iter().any(|b| b.1 > 0.0), "no layer within reach: {before:?}");
