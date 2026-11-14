@@ -87,11 +87,21 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
     let (ph, n) = (&cfg.phys, cfg.variety);
     let kg = built_kg(mm, &s.mol);
     let plants = super::stand::founded(ph, kg, area);
-    if let Some(x) = kin::kin(&c.genes, &c.root, (&s.genes, s.root), APART * ph.alike, distance) {
-        c.plants[x] += plants;
-        // The seeds join as a slot of their own would, the genes the mean by built cover.
-        (0..NG).for_each(|g| c.genes[x][g] += (kg / (kg + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
-        (0..NP).for_each(|q| c.mol[x][q] += s.mol[q]);
+    let kin: Vec<usize> = kin::kins(&c.genes[..n], &c.root[..n], (&s.genes, s.root), APART * ph.alike, distance).collect();
+    if !kin.is_empty() {
+        // The seeds join the stand of their kind, shared over the slots that hold it by their built cover (a kind cut
+        // into slots takes its seeds as the whole would), each as a slot of its own would, the genes the mean by built
+        // cover; the last takes what the others leave, so the amounts are kept exactly.
+        let all: f64 = kin.iter().map(|&x| c.built(mm, x)).sum();
+        let mut left = s.mol;
+        for (k, &x) in kin.iter().enumerate() {
+            let f = if all > 0.0 { c.built(mm, x) / all } else { 1.0 / kin.len() as f64 };
+            let part: [f64; NP] = std::array::from_fn(|q| if k + 1 == kin.len() { left[q] } else { (s.mol[q] * f).min(left[q]) });
+            (0..NP).for_each(|q| left[q] -= part[q]);
+            c.plants[x] += plants * f;
+            (0..NG).for_each(|g| c.genes[x][g] += (kg * f / (kg * f + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
+            (0..NP).for_each(|q| c.mol[x][q] += part[q]);
+        }
         c.e += s.heat;
         return Landed::In;
     }

@@ -89,7 +89,10 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
         c.mol[x][FUEL] -= mol[FUEL];
         let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp * t).sum::<f64>();
         b.heat -= heat;
-        let mut r = Rng::new(w.seed, tick, (i * w.cfg.variety + x) as u64, Purpose::Cover);
+        // The draws are keyed by the cell and what the slot is, its genes, not by its place among the cell's slots: a
+        // kind's seeds land and vary alike however its stand is cut into slots.
+        let node = g.iter().fold(i as u64, |h, q| crate::rng::mix(h ^ q.to_bits() as u64));
+        let mut r = Rng::new(w.seed, tick, node, Purpose::Cover);
         let mut lands: Vec<(usize, f64)> = Vec::new();
         for _ in 0..super::seed::LOTS {
             let Some(j) = crate::life::lot(w, i, &mut r).filter(|&j| j != i) else { continue };

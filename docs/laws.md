@@ -935,7 +935,8 @@ seeds fill it:
   kernel of two scales, a near and a far one, each an isotropic Gaussian, `kernel_near` and `kernel_far`: most within
   tens of metres, a long tail to km, Clark et al. 1999); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
-  `mut_size`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
+  `mut_size`), of body matter first and then walls (an embryo and its store); where its lots land and how they vary are
+  drawn by the cell and the slot's genes (`rng::Purpose::Cover`), not by its place among the cell's slots; all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
   where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
   run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
@@ -956,8 +957,9 @@ seeds fill it:
   (`seeds_died` of the budget); of the rest the share min(1, a × pace) **wakes**, a its kind's activity on that ground
   and pace its burning's pace at the ground's temperature over that at `t_cat`: at `t_cat` all that is active wakes in a
   month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
-  ground none. What wakes takes hold (`seed::lodge`): it joins the most alike slot of its starting kind in
-  the cell (every gene within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover);
+  ground none. What wakes takes hold (`seed::lodge`): it joins the stand of its starting kind in the cell, the slots
+  of it within `APART` (0.5) × `alike` steps (in every gene, `cover::distance`), shared over them by their built cover
+  (the genes of each the mean by built cover);
   else they found a slot of their own: an empty one; else the slot **in deficit**, whose balance over about its last
   year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
   below zero, the worst first (its cover dies as remains); else the two slots nearest each other by their genes,
