@@ -551,10 +551,25 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
      island is about 1,200 km from its shore): no more stretch.
    **The orchestrator's order from it** (each a package with its measure and its picture):
    1. Done: the page's climate "Warm" (5 to 50).
-   2. **Plants and the ground's liquid** (a builder): a plant feels drought against the ground's own field
-      capacity (wilting, not 1 cm of liquid); roots in full pores get no gas (they burn without it, by the
-      chemistry's own reaction, at less energy), with a gene for carrying gas down at a cost, and a starting kind
-      of soaked ground. After the mend of the slots.
+   2. **Plants and the ground's liquid** (a builder; branch in its worktree, scratch `scratchpad/water/`).
+      - Law 1, built, good, waits for one mend: the share a plant can draw is (how full the pores are − `wilt`) /
+        (`field` − `wilt`), `wilt` 0.25 anchored (Saxton and Rawls 2006). Kinds sort by the liquid (the moisture
+        gene by mass: −0.8 on the driest ground, −0.3 on wet ground; before −0.2 everywhere). 64 drawn world, year
+        100: forest 86 → 78% (band 20 to 65), 72 → 64% (5 to 50), the warm band's bare south becomes open low
+        cover (bare 16 → 9%, open 12 → 28%); cover 32 → 23 kg/m². **It draws the air's blocks as green squares**
+        (the rain of an air node lands evenly on its block): it goes to main after the air's helper shares a
+        node's rain smoothly between the nodes' centres.
+      - Law 2, built, not good yet: roots under the depth where the pores are full get no gas and split their fuel
+        by the chemistry's own reaction (13 times the fuel for the same work); a gene for open channels
+        (`CHANNEL`, cost 1/(1−ε) of the fine roots) carries gas down by diffusion (Armstrong 1979); a starting
+        kind of soaked ground. Fault: that kind lives off the soaked ground, because a root's depth goes by the
+        plant's height (0.1 m per m) and channels reach 0.46 m. In work: the burning fine roots by the measured
+        profile (Jackson et al. 1996), the standing depth by height.
+      - Open, for the sorted start's garden check: **the moisture gene costs nothing real** (its cost is capacity
+        × 10^MOIST, and one step of the light gene gives the same capacity at the same upkeep).
+      - Open, a fault of the books in Flow: **the surface pass can take a liquid from a cell that holds none**
+        (`runoff::surface` → `Crossings::book`), seen when a substance piles up on the ground; counted as rounding
+        today. Notes to come in `scratchpad/water/overdraw.md`; not given out yet.
    3. **Rain with a season and a direction** (the air's helper).
       - On main: the overturning cell follows the month's sun (`air::cell`, Lindzen and Hou 1988). On the strip the
         rain belt swings to 12 to 17 degrees; the driest month at 10 to 20 degrees gets 0.55 to 0.61 of the wettest
