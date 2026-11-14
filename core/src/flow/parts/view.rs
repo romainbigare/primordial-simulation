@@ -48,6 +48,15 @@ impl Scratch {
         let p = self.state.parts.get(i)?.as_ref().filter(|p| p.land())?;
         Some((p.amt[k][LAND], p.share(LAND)))
     }
+    /// The pore space of the ground life stands on in cell `i`, as a depth of liquid over it, m: of a cell of parts that
+    /// has land its land's (`Piece::pd`), else the node's, as Flow's last solve found them.
+    pub(crate) fn land_pores(&self, i: usize) -> f64 {
+        let land = self.state.parts.get(i).and_then(Option::as_ref).is_some_and(Parts::land);
+        match self.mixed(i) {
+            Some(m) if land => m.piece[LAND].pd,
+            _ => self.pd.get(i).copied().unwrap_or(0.0),
+        }
+    }
     /// The depth of the soft solid lying on the land of cell `i`, m, at its solid's density: of a cell of parts its
     /// land's, else the node's (`Scratch::cover`).
     pub(crate) fn soft_land(&self, i: usize) -> f64 {

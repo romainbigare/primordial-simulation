@@ -883,8 +883,16 @@ seeds fill it:
   and on bare bed nothing but the smallest stands.
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
-  `t_cat`, times its activity a = min(1, wet / 10^`MOIST`)^`dormancy` (wet: how wet its ground is as bodies feel it,
-  d / (d + `wet_depth`), d the depth of its key liquid that is liquid, in its pores and standing, `Physics::wetness`); both the light
+  `t_cat`, times its activity a = min(1, w / 10^`MOIST`)^`dormancy`. **Drought** is felt against the ground's own
+  pores (`cover::wet`, `cover::available`): w is the share of what its ground holds for roots that it holds, (θ −
+  `wilt`) / (`field` − `wilt`) within 0 and 1, θ the share of the pores of the ground it stands on that its key liquid
+  that is liquid fills (Flow's pore space, `Scratch::land_pores`; standing liquid counts, so θ may pass 1): none at the
+  wilting point, all at field capacity (the available water of soil physics; Saxton and Rawls 2006). The ground's
+  liquid is one store over the depth of its loose ground (Flow keeps no liquid by depth), so a deep root and a shallow
+  one draw the same share. `MOIST` is where on that scale a kind is fully active: a plant transpires freely until its
+  roots have drawn about half of what is available (FAO-56's depletion fraction 0.5; Allen and others 1998), `MOIST`
+  log10 0.5 = −0.3; a kind of dry ground, `MOIST` −1, stays active to a tenth, and pays for it in capacity (its
+  capacity per kg is 10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0; both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
   1980): nothing at or below the floor, so the cover cannot strip the air of that gas. **Liquid for gas**: its pores that

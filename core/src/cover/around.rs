@@ -9,12 +9,12 @@ use crate::{World, AIR};
 
 /// What the cover of a cell reads of its world in a month: the full world's (`around`) or a year a nursery keeps
 /// (`worldgen::life::nursery`). Its ground's temperature, K; of the key liquid in its ground, what is liquid, mol, and
-/// how wet that leaves its ground (`wet`); the share of the light that reaches it under standing liquid; the cell's light
-/// (`World::light`), J/m²; the air's factor for the light reaction (`Physics::gas_factor`, the least over its gas
-/// inputs); the key liquid its leaves lose as vapour per mol of gas they take in (`thirst`), and the film of its pores
-/// for that vapour per mol a s of gas they take in (`pores`, mol K/(Pa s) per mol/s); per substance what the
-/// cell's share of its air node offers as a gas, mol (infinite for what is not a gas), and what its ground holds, mol;
-/// and the tick that keys its seeds' draws (`World::month`).
+/// the share of what its ground holds for roots that it holds (`wet`); the share of the light that reaches it under
+/// standing liquid; the cell's light (`World::light`), J/m²; the air's factor for the light reaction
+/// (`Physics::gas_factor`, the least over its gas inputs); the key liquid its leaves lose as vapour per mol of gas they
+/// take in (`thirst`), and the film of its pores for that vapour per mol a s of gas they take in (`pores`, mol K/(Pa s)
+/// per mol/s); per substance what the cell's share of its air node offers as a gas, mol (infinite for what is not a
+/// gas), and what its ground holds, mol; and the tick that keys its seeds' draws (`World::month`).
 #[derive(Clone, Debug)]
 pub struct Around {
     pub t: f64,
