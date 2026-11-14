@@ -3,6 +3,7 @@
 //! exchange at the step's mean air is booked whole (`book`). Here: the state of the air nodes.
 
 mod book;
+mod cell;
 mod cells;
 mod corners;
 mod daily;
