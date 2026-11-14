@@ -333,6 +333,16 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     lives on the cell's land (one call `contract::land`), then the scale test, the references, the gate.
   - To pass on to the takers' builder after it: the take searches the cell's area, not its land's
     (`core/src/fauna/month.rs`).
+  - **The owner's finding: the low liquid falls and the rivers' mouths are left dry.** Measured on main, a 32
+    drawn world, seed 1, 150 years (`scratchpad/sea/`): in the band 20 to 65 the level falls 23 m (15 cm a year,
+    steady), with 39% of the map under ice that grows without end (main's cold north) and the air's edges open;
+    with no band it falls 0.33 m in ten years as the land's pores fill, then holds (-0.345 m at year 150). The
+    books hold (drift 1e-15): the liquid is locked as ice and leaves as vapour. The package's bounded ice cuts
+    it to 6.4 mm a year (below). **Next after the package, first in line**: the low liquid of an island in the
+    planet's air is the planet's: open at the map's edges, its level held. The tiles' channels end at the shore
+    the world was made with, so a lower level leaves a dry gap to the shore: with the level held this does not
+    show; for levels that truly move (ice, a god's hand) the ground must be worn again where the level moved, at
+    a slow cadence, with the package of the mouths (section 5).
   - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
     through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
     map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's
