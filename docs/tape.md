@@ -47,7 +47,7 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
 size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground,
-`wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
+`wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land`: the cover and its seeds live and are drawn on the land alone; 0 where the cell holds no land), true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
 ground) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid, under
 the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `LITTER_KG`), 0.3 kg/m²). The tape holds whole-map frames only. The live viewer draws its map from two
 things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`), which never change, so a page
@@ -163,22 +163,25 @@ lies under `EDGE_M`, 2 m; the ground drawn lies over the level up to there, by a
 about it has no pond near, so the edge of where liquid may stand is dry ground: a smooth line of the place, the same in
 every tile at every depth, never the texels' or the samples' edges; a shell draws the liquid where the ground drawn
 lies under the pond's level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
-frame: the melting point of the frozen cover, K, then for each square row by row 10 f32 (`ROW`) of the cell that holds
+frame: the melting point of the frozen cover, K, then for each square row by row 11 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full). Before Flow built its state the level and
-lowest ground are its solid surface and the depth that stands is its liquid's. Then for each square row by row its
+0 where the pores are dry or full); and the share of its area that is land, its own ground out of the liquid that
+stands over its pores (`flow::land_shares`). Before Flow built its state the level and
+lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
+none. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), `KINDS` (4) of `KIND_ROW` (19) f32 each, the heaviest first: the slots of
-its cover, each as the law holds it; of each its starting kind (-1: none); its built cover,
-kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m² (the slot's count, `Cover::plants`), height and crown's width, m, the share of the
+its cover, each as the law holds it, per m² of the cell's land (`layers::per_land`; a cell that holds no land has no
+kinds); of each its starting kind (-1: none); its built cover, kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m² (the slot's count, `Cover::plants`), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-its leaf area); its walls' share of its built cover; its
 capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s;
 its moisture gene and frost gene, K; its fuel over its reserve; its activity on its cell's ground (`cover::activity`);
 the share of it frozen this month (`cover::frozen`); the share of what it builds that goes to seeds (`SEED`); and the
-share of the cell whose loose ground holds its plants (`Cover::rooted`) with the loose ground their roots need, m
-(`Cover::need`; all of the cell and 0 while the need of a slot of newly landed seeds is not found). The page thins a
+share of the land whose loose ground holds its plants (`Cover::rooted` over the land's share, at most all of it) with
+the loose ground their roots need, m (`Cover::need`; all of the land and 0 while the need of a slot of newly landed
+seeds is not found). The page thins a
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /
@@ -201,7 +204,9 @@ live page gets it as 16-bit floats with a frame when one sample's has changed by
 (`wasm/src/lib.rs` `DISCHARGE_SHOWS`: its width by 5%), 2 bytes a sample (248 kB for a 22 island, 2 MB for a 64 one;
 with most frames, as a month's flow changes that much somewhere), and sizes each channel by the channel law from
 its own sample's discharge. The page's graphics card blends the table between the
-squares' centres and applies the laws inside a cell at each pixel of the tiles' ground (laws.md 0, "Inside a cell"). A tape's map is drawn
+squares' centres and applies the laws inside a cell at each pixel of the tiles' ground (laws.md 0, "Inside a cell").
+It blends the cover's field over the squares whose cell holds land alone, their weights made whole
+(`cover_field.wgsl` `on_land`): the cover is drawn on land only, and a square with no land is not bare ground beside it. A tape's map is drawn
 from its frames alone: the page makes fields of the squares (`web/src/fields.ts`, a texel a square: the height and its
 slope, the liquid's surface over the ground, below a dry square's ground by the depth it lacks to be wet and its height
 over the wet squares beside it, the ice, the ground's temperature, the sea, the share a channel covers, `channel_w`

@@ -11,7 +11,7 @@ use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::World;
 
 /// Numbers a square's row holds (`Table::frame`).
-pub const ROW: usize = 10;
+pub const ROW: usize = 11;
 /// A body that holds less liquid than this on its mean over its surface, m, is drawn dry: a film over a flat basin,
 /// soaked ground rather than water.
 const DRY_M: f64 = 0.1;
@@ -94,7 +94,7 @@ impl Table {
         let rows: Vec<[f64; ROW]> = (0..n).map(|i| self.row(&c, i, means.as_ref().map(|m| m[i]), levels.as_ref().map(|l| l[i]))).collect();
         let mut table = vec![cover_melt(w) as f32];
         table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
-        let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i)).collect();
+        let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i, c.land[i])).collect();
         table.extend(self.square.iter().flat_map(|&i| kinds[i].map(|v| v as f32)));
         let mut ponds = w.pond_levels();
         for p in w.pools().iter().filter(|p| p.volume <= DRY_M * p.area) {
@@ -108,8 +108,9 @@ impl Table {
     /// lowest ground and level (`flow::levels`), none before Flow first built its state (then its solid surface and the
     /// depth of its liquid): the terrain's mean height over it, m; its ground's temperature, K, and how fast the air
     /// cools with height there, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest
-    /// ground, m, and the depth that stands, m; the liquid in its pores and what they hold full, m, and the level of the
-    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly).
+    /// ground, m, and the depth that stands, m; the liquid in its pores and what they hold full, m, the level of the
+    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly), and the share of its
+    /// area that is land (`Ctx::land`), on which a shell draws its cover.
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
@@ -118,6 +119,6 @@ impl Table {
         let (twi, area) = &self.inside[i];
         let soil = soil_level(&w.cfg.phys, twi, area, m).unwrap_or(0.0);
         let cools = w.air_drop(i).unwrap_or(0.0);
-        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil]
+        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, c.land[i]]
     }
 }
