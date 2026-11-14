@@ -917,7 +917,9 @@ seeds fill it:
 - **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of living cover and day
   `c_basal` plus `c_capacity` × what its capacity could store in a day (dearer by 1 + (melting point of the key liquid −
   `FROST`) / `c_firm` for a cover that stands the cold), plus `c_leaf` per m² of capture area; times its repair factor
-  (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only); and its
+  (`Physics::repair`) and the burning's pace at T, in every month: its living cover keeps its liquid whatever its ground
+  holds, so it breathes in a dry month too, and only its gain follows the liquid it can draw (Flexas and others 2006;
+  Atkin and Macherel 2009); a dry seed's upkeep falls with its liquid, a leaf's does not; and its
   conducting walls, alive in every season, `c_sapwood` per kg a day at the burning's pace: by the pipe model their
   cross-section goes with the capture area they feed, `huber` m² a m², as tall as its plants (Shinozaki and others
   1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month; and its fine roots,
