@@ -45,7 +45,7 @@ pub const WALLS: usize = 2;
 pub const STORE: usize = 3;
 /// The ground temperature below which its frozen share dies, K
 pub const FROST: usize = 4;
-/// The wetness of the ground at which it is fully active, log10 of the share (`Physics::wetness`)
+/// The share of what its ground holds for roots at which it is fully active, log10 (`cover::activity`)
 pub const MOIST: usize = 5;
 /// Share of what it builds that goes to seeds
 pub const SEED: usize = 6;
@@ -283,10 +283,10 @@ pub fn ground(w: &crate::World, i: usize) -> f64 {
     crate::contract::land(w, i).max(LEAST_GROUND_M2)
 }
 
-/// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and how wet
-/// that leaves its ground as its cover feels it (`Physics::wetness`, as bodies feel it): its depth, in the pores and
-/// standing. Of a cell of parts with land, its land part's own (`flow::parts`) over that part's area, no more than the
-/// cell holds; else the cell's over its area.
+/// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and the share
+/// of what its ground holds for roots that it holds (`available`), its pores' space read from Flow (`Scratch::land_pores`;
+/// one store over the depth of its loose ground). Of a cell of parts with land, its land part's own (`flow::parts`) over
+/// that part's area, no more than the cell holds; else the cell's over its area.
 pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
     let (t, plateau) = w.thaw_last(i);
     let molten = w.molten(p.liquid, i, t, plateau);
@@ -295,19 +295,23 @@ pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
         Some((mol, share)) => (mol.min(held) * molten, area * share),
         None => (held * molten, area),
     };
-    (liquid, wetness(w, p, over, liquid))
+    let depth = liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / over;
+    (liquid, available(&w.cfg.phys, depth / w.scratch.land_pores(i).max(1e-9)))
 }
 
-/// How wet `liquid` mol of the key liquid that is liquid leave ground of `area` m² as its cover feels it
-/// (`Physics::wetness` of its depth).
-pub fn wetness(w: &crate::World, p: &Parts, area: f64, liquid: f64) -> f64 {
-    w.cfg.phys.wetness(liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / area)
+/// The share of the liquid ground holds for roots that ground whose pores are the share `filled` full holds: none at the
+/// wilting point (`wilt`), all at field capacity (`field`) and over it, in proportion between (the available liquid of
+/// soil physics; Saxton and Rawls 2006).
+pub fn available(ph: &crate::Physics, filled: f64) -> f64 {
+    ((filled - ph.wilt) / (ph.field - ph.wilt)).clamp(0.0, 1.0)
 }
 
-/// The activity of a kind of cover of genes `genes` on ground as wet as `wet` (`Physics::wetness`): full where the
-/// ground is as wet as its moisture gene needs (`MOIST`), less as it dries (`Physics::activity`).
-pub fn activity(ph: &crate::Physics, genes: &[f32; NG], wet: f64) -> f64 {
-    ph.activity(wet / dec(genes[MOIST]))
+/// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots
+/// (`available`): full from the share its moisture gene sets (`MOIST`), less as it dries to the wilting point
+/// (`Physics::activity`). A plant transpires freely until its roots have drawn about half the liquid available to them
+/// (FAO-56's depletion fraction p of 0.3 to 0.7, 0.5 for most kinds; Allen and others 1998): a `MOIST` of log10(1 − p).
+pub fn activity(ph: &crate::Physics, genes: &[f32; NG], available: f64) -> f64 {
+    ph.activity(available / dec(genes[MOIST]))
 }
 
 /// The share of a kind of cover of frost gene `frost` K that freezes in a month at `t` K at activity `act`, where its key

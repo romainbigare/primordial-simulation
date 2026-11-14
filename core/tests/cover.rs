@@ -34,6 +34,8 @@ const FROST_GENES: [f32; 2] = [276.0, 261.0];
 const TREE_ROW: usize = 2;
 /// The big slow kind of cover.
 const TREE: &worldgen::life::Kind = &KINDS[TREE_ROW];
+/// The row of the woody kind of dry ground.
+const DRY_ROW: usize = 4;
 
 /// The genes of the light-eaters.
 fn genes() -> [f32; cover::NG] {
@@ -112,6 +114,24 @@ fn the_light_reaction_goes_with_its_gas() {
     assert!((p.gas_factor(p.gas_ref) - 1.0).abs() < 1e-12);
     let half = p.gas_factor(0.5 * p.gas_ref);
     assert!(half > 0.0 && half < 1.0 && p.gas_factor(2.0 * p.gas_ref) > 1.0, "{half}");
+}
+
+/// A plant feels drought against the pores of its own ground (`cover::available`, `cover::activity`): it is fully active
+/// while its ground holds the share of what it holds for roots its moisture gene sets, none at the wilting point
+/// (`wilt`), between the two it slows; a kind of dry ground (`MOIST` -1) is still fully active where the light-eaters
+/// have slowed.
+#[test]
+fn a_plant_slows_from_its_share_to_the_wilting_point() {
+    let ph = pcore::Physics::default();
+    let (herb, dry) = (genes(), KINDS[DRY_ROW].genes);
+    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(&ph, g, cover::available(&ph, filled));
+    let filled = |share: f64| ph.wilt + share * (ph.field - ph.wilt);
+    let slows = cover::dec(herb[cover::MOIST]);
+    let (wilting, full, half) = (act(&herb, ph.wilt), act(&herb, filled(slows * (1.0 + 1e-9))), act(&herb, filled(0.5 * slows)));
+    println!("activity of the light-eaters at the wilting point {wilting}, at the share {slows:.2} {full}, at half that {half:.3}");
+    assert!(wilting == 0.0 && full == 1.0 && half > 0.0 && half < 1.0, "{wilting} {full} {half}");
+    assert_eq!(act(&herb, 1.5), 1.0, "standing liquid is more than field capacity");
+    assert_eq!(act(&dry, filled(0.5 * slows)), 1.0, "the kind of dry ground slowed where the light-eaters slow");
 }
 
 /// A leaf loses the key liquid for the gas it takes in (`cover::thirst`): nothing in air saturated at its temperature,
