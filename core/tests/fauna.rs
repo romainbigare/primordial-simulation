@@ -208,11 +208,11 @@ fn a_taker_takes_no_more_than_it_reaches() {
     let len = (m / ph.rho_body).cbrt();
     let reach = 10f64.powf(g[fauna::REACH] as f64);
     let band = (reach / 10f64.powf(fauna::BAND), (reach * 10f64.powf(fauna::BAND)).min(ph.reach_len * len));
-    let before: Vec<(f64, f64)> = pcore::contract::slots(&w, w.life.cell_at(i)).iter().map(|&(l, h)| (shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect();
+    let before: Vec<(f64, f64)> = pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, h)| (shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect();
     let books = Books::now(&w);
     testkit::takers(&mut w, i, row, (1e4, 0.1 * m));
     testkit::takers_month(&mut w, i);
-    let after: Vec<f64> = pcore::contract::slots(&w, w.life.cell_at(i)).iter().map(|&(l, _)| shown(&w, i, l)).collect();
+    let after: Vec<f64> = pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, _)| shown(&w, i, l)).collect();
     assert!(before.len() == after.len() && before.iter().any(|b| b.1 > 0.0), "no layer within reach: {before:?}");
     for ((kg, r), now) in before.iter().zip(&after) {
         println!("a layer of {kg:.3e} kg, {:.0}% within reach: {now:.3e} kg left", 100.0 * r);
@@ -479,4 +479,24 @@ fn a_member_takes_its_food_bite_by_bite() {
     }
     let (small, large) = (cropped(3.0, thin).0, cropped(400.0, thin).0);
     assert!(large > small, "a body of 400 kg crops {large} kg a day, one of 3 kg {small}");
+}
+
+/// A slot's soft part stands in its crown (`contract::crown`): of a crown from 15 to 20 m a mouth whose band ends at
+/// 2 m reaches nothing, one whose band holds the crown reaches it whole and one reaching to 17.5 m half of it; a short
+/// plant whose leaves fill its whole height is reached as before, and on the cover of a small world a herb's crown
+/// reaches the ground (a slot with no capture area has its crown at its top).
+#[test]
+fn the_soft_part_stands_in_the_crown() {
+    let reached = pcore::contract::reached;
+    let tree = (15.0, 20.0);
+    assert_eq!(reached((0.1, 2.0), 0.05, tree), 0.0, "a mouth under the crown reached its soft part");
+    assert_eq!(reached((0.1, 25.0), 0.05, tree), 1.0, "a mouth over all the crown did not reach it whole");
+    assert!((reached((0.1, 17.5), 0.05, tree) - 0.5).abs() < 1e-12, "a mouth up to half the crown's depth");
+    let young = (0.0, 1.5);
+    assert!((reached((0.1, 0.9), 0.05, young) - 0.8 / 1.5).abs() < 1e-12, "a young plant is not reached over its whole height");
+    let w = testkit::living(8, 12);
+    let i = testkit::mild_land(&w);
+    let slots = pcore::contract::slots(&w, i, w.life.cell_at(i));
+    slots.iter().for_each(|(layer, (base, top))| println!("{layer:?}: crown from {base:.3} to {top:.3} m"));
+    assert!(slots.iter().any(|s| s.1 .0 == 0.0 && s.1 .1 > 0.0), "no herb's crown reaches the ground: {slots:?}");
 }

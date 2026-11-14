@@ -13,19 +13,19 @@ use crate::World;
 /// of one running out (a rule of the model).
 pub const SUBSTEPS: usize = 6;
 
-/// A layer of the cell's cover as the takers find it: the contract's layer, what it shows above the snow, and the
-/// height its plants stand at, m.
+/// A layer of the cell's cover as the takers find it: the contract's layer, what it shows above the snow, and the span
+/// of heights it stands over, m (`contract::crown`).
 pub(super) struct Found {
     pub(super) layer: Layer,
     pub(super) shown: Shown,
-    pub(super) height: f64,
+    pub(super) span: (f64, f64),
 }
 
 /// The layers of the cover of cell `i` that show anything: each slot of its cover by height, then the seeds lying.
 pub(super) fn layers(w: &World, d: &Chunk, i: usize) -> Vec<Found> {
     let cell = d.at(i);
-    let slots = contract::slots(w, cell).into_iter().chain([(Layer::Seeds, 0.0)]);
-    slots.filter_map(|(layer, height)| Some(Found { layer, shown: contract::shown(w, i, cell, layer)?, height })).filter(|f| f.shown.kg > 0.0).collect()
+    let slots = contract::slots(w, i, cell).into_iter().chain([(Layer::Seeds, (0.0, 0.0))]);
+    slots.filter_map(|(layer, span)| Some(Found { layer, shown: contract::shown(w, i, cell, layer)?, span })).filter(|f| f.shown.kg > 0.0).collect()
 }
 
 /// A slot as a taker of the scheme (`scheme`): its members, the ground it searches a s per member, m²/s, its working
@@ -136,6 +136,6 @@ pub(super) fn bite(w: &World, d: &mut Chunk, i: usize, layers: &[Found], taken: 
 /// The share of what layer `f` shows above `snow` m of soft solid that a member `b` reaches: its band, over its bite's
 /// floor (`contract::reached`).
 fn reach(b: &Body, f: &Found, snow: f64) -> f64 {
-    let shown = contract::above(snow, f.height);
-    if b.n <= 0.0 || shown <= 0.0 { 0.0 } else { (contract::reached(b.band, b.floor, f.height) / shown).min(1.0) }
+    let shown = contract::above(snow, f.span);
+    if b.n <= 0.0 || shown <= 0.0 { 0.0 } else { (contract::reached(b.band, b.floor, f.span) / shown).min(1.0) }
 }

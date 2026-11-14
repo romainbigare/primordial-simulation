@@ -1013,7 +1013,10 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   width (`Cover::width`, the stand's law), at most all. So a 30 g body cuts axes of 0.8 mm, a 400 kg one of 6 mm, and a
   tree's trunk is nobody's. A member of length L = (m / `rho_body`)^(1/3) searches the band of heights
   ± `BAND` (half a decade) about its `REACH` gene, no higher than `reach_len` L, and bites no lower than `bite_floor` L
-  over the snow: of a plant h high it reaches the share of its stem within that (`contract::reached`); the seeds lying
+  over the snow: a slot's soft part, and the thin axes of its frame that carry its leaves, stand in its crown, from h −
+  L / `crown_density` to its height h, L its capture area over the ground its plants hold (its land times the share its
+  roots hold), no lower than the ground (`contract::crown`): a grown tree's leaves stand high, a sward's crown is its
+  whole height; of a crown it reaches the share within that, the matter spread evenly over it (`contract::reached`); the seeds lying
   only where its floor and its band's bottom are under `GROUND_M` (1 cm). What lies out of reach is the cover's refuge.
 - **The take** (Holling 1959, the disk law over many layers and slots): a member searches a strip as wide as its body
   at its walking speed v = √(`walk_froude` g L) (Alexander and Jayes 1983), bite by bite: a bite crops the cover on

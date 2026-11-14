@@ -171,7 +171,7 @@ fn what_a_taker_takes_its_slot_loses() {
             pcore::step(&mut w);
             // (In the open: no snow hides any of it, `snow_hides_what_lies_under_it`.)
             w.life.env[i][3] = 0.0;
-            let Some(&(lowest, _)) = contract::slots(&w, w.life.cell_at(i)).first() else { break };
+            let Some(&(lowest, _)) = contract::slots(&w, i, w.life.cell_at(i)).first() else { break };
             taker.layer = lowest;
             let before = shown(&w, i, taker.layer);
             let took = taker.month(&mut w);
@@ -494,16 +494,17 @@ fn what_a_taker_takes_of_the_seeds_lying_they_lose() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Snow hides what lies under it (`contract::above`): of a slot whose plants stand h high under snow h / 2 deep, a taker
+/// Snow hides what lies under it (`contract::above`): of a slot whose crown is h deep under snow to half its depth, a taker
 /// sees and takes half; the seeds lying show nothing under any snow.
 #[test]
 fn snow_hides_what_lies_under_it() {
     let mut w = testkit::living(8, 12);
     let lying = cover::lying(&w);
     let i = (0..lying.len()).max_by(|&a, &b| lying[a].total_cmp(&lying[b])).expect("cells");
-    let (layer, h) = *contract::slots(&w, w.life.cell_at(i)).first().expect("a slot");
+    let (layer, (base, top)) = *contract::slots(&w, i, w.life.cell_at(i)).iter().find(|s| s.1 .1 > s.1 .0).expect("a slot with a crown");
+    let h = top - base;
     let open = shown(&w, i, layer);
-    w.life.env[i][3] = 0.5 * h;
+    w.life.env[i][3] = base + 0.5 * h;
     let hidden = shown(&w, i, layer);
     assert!((hidden.kg - 0.5 * open.kg).abs() <= 1e-9 * open.kg, "under snow half its height a slot shows {} of {} kg", hidden.kg, open.kg);
     assert_eq!(shown(&w, i, Layer::Seeds).kg, 0.0, "seeds show under snow");
