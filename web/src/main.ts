@@ -281,7 +281,7 @@ async function startLive(): Promise<void> {
   const q = new URLSearchParams(location.search);
   $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
   Object.assign($<HTMLInputElement>('size'), { min: String(SIZE_LEAST), max: String(SIZE_MOST), value: q.get('size') ?? String(LIVE_SIZE) });
-  Object.assign($<HTMLInputElement>('variety'), { min: '1', max: String(VARIETY_MOST), value: q.get('variety') ?? String(LIVE_VARIETY) });
+  Object.assign($<HTMLInputElement>('variety'), { min: '2', max: String(VARIETY_MOST), value: q.get('variety') ?? String(LIVE_VARIETY) });
   // The climate: a band of latitudes the island stands for, from the URL's `band=S,N` or the first preset (`BANDS`).
   const bands = $<HTMLSelectElement>('band'), asked = q.get('band');
   const presets = asked && !BANDS.some(b => b[1] === asked) ? [...BANDS, [`${asked.replace(',', '° to ')}°`, asked]] : BANDS;
@@ -353,7 +353,7 @@ let banded = false;
 function newWorld(): void {
   const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
   const size = Math.min(SIZE_MOST, Math.max(SIZE_LEAST, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
-  const variety = Math.min(VARIETY_MOST, Math.max(1, Math.floor(+$<HTMLInputElement>('variety').value) || LIVE_VARIETY));
+  const variety = Math.min(VARIETY_MOST, Math.max(2, Math.floor(+$<HTMLInputElement>('variety').value) || LIVE_VARIETY));
   const band = bandOf($<HTMLSelectElement>('band').value);
   playing = false;
   say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
