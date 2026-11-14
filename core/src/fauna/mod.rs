@@ -16,7 +16,7 @@ pub mod take;
 mod thirst;
 pub mod way;
 
-pub use body::{shell, BAND};
+pub use body::{shell, BAND, WORK_T};
 pub use month::step;
 pub use place::place;
 

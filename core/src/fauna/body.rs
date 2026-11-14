@@ -11,6 +11,10 @@ use crate::World;
 
 /// The band of heights a taker searches, decades each side of its `REACH` gene (a rule of the model).
 pub const BAND: f64 = 0.5;
+/// The body temperature of the animals the rates of a taker's work were measured on, K (`walk_froude`, `chew`):
+/// mammals, whose bodies stand at 36 to 38 °C (a fact of those measurements). A body works at the pace of its burning
+/// at its own temperature over the pace at this one.
+pub const WORK_T: f64 = 310.0;
 
 /// A member of a group of a slot in a month, at its group's mean.
 #[derive(Clone, Copy, Default)]
@@ -48,7 +52,9 @@ pub(super) struct Body {
 /// A member of group `x` of `f` (`GROUPS`: its slot's adults or young; its parts' molar masses `mm`) of cell `i` on ground at `t` K, its gut splitting walls
 /// into `fuel` J of fuel a mol (`gut::split`).
 /// - Its body stands at its `KEEP` gene where the ground is colder, else at the ground's temperature; its upkeep and its
-///   work run at the pace of its burning there (the bare rate law, Gillooly et al. 2001); work at no more than 1.
+///   work run at the pace of its burning there (the bare rate law, Gillooly et al. 2001): its upkeep over the pace at
+///   `t_cat`, where Kleiber's numbers stand; its work (walking, chewing) over the pace at `WORK_T`, where the rows of
+///   work were measured, at most 1 (a cold body runs and bites slower: Bennett 1990).
 /// - Upkeep at rest: Kleiber's law, (`c_basal` + `c_muscle`) × m^`upkeep_exp` × pace × its repair factor a day (Kleiber
 ///   1932; Elia 1992), and its gut's capacity, `c_capacity` of the fuel it could free (as the cover's light capacity).
 /// - Heat: held above its ground it loses g (T_b − t) through its coat, g = `meeh` m^(2/3) / (`r_air` + COAT ×
@@ -74,7 +80,7 @@ pub(super) fn body(w: &World, p: &Parts, f: &Fauna, (x, mm): (usize, &[f64; NF])
     let gut = dec(g[ENZYME]) * m * pace;
     let rest = (m.powf(ph.upkeep_exp) * (ph.c_basal + ph.c_muscle) / DAY + ph.c_capacity * dec(g[ENZYME]) * m * fuel) * k;
     let held = keep > t;
-    let work = pace.min(1.0);
+    let work = (rx.arrhenius(tb.max(1.0)) / rx.arrhenius(WORK_T)).min(1.0);
     let speed = (ph.walk_froude * w.cfg.gravity * len).sqrt() * work;
     let (area, busy) = (ph.meeh * m.powf(2.0 / 3.0), ph.busy * DAY);
     let coat = area / (ph.r_air + g[COAT] as f64 * ph.r_coat);

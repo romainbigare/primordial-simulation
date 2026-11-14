@@ -47,7 +47,7 @@ fn burnt_a_day(w: &World, row: usize, m: f64, t: f64) -> f64 {
     let fuel_a_wall = split.outputs.iter().find(|q| q.0 as usize == p.sub[pcore::life::FUEL]).map_or(0.0, |q| q.1 as f64) * per_kg(w) * chem.subs[p.sub[pcore::life::FUEL]].molar_mass;
     let gut = ph.c_capacity * 10f64.powf(g[fauna::ENZYME] as f64) * m * fuel_a_wall * DAY;
     let rest = ((ph.c_basal + ph.c_muscle) * m.powf(ph.upkeep_exp) + gut) * pace * ph.repair(g[REPAIR] as f64);
-    let speed = (ph.walk_froude * w.cfg.gravity * (m / ph.rho_body).cbrt()).sqrt() * pace.min(1.0);
+    let speed = (ph.walk_froude * w.cfg.gravity * (m / ph.rho_body).cbrt()).sqrt() * (rx.arrhenius(tb) / rx.arrhenius(fauna::WORK_T)).min(1.0);
     let walk = speed * ph.busy * DAY * ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m;
     let coat = ph.meeh * m.powf(2.0 / 3.0) / (ph.r_air + g[fauna::COAT] as f64 * ph.r_coat);
     (rest + walk).max(coat * (g[KEEP] as f64 - t).max(0.0) * DAY)
@@ -349,4 +349,33 @@ fn newborns_are_built_at_the_cap_and_the_books_are_kept() {
     }
     assert!(of(&w, i).n[0] > 0.0 && of(&w, i).n[FS] > 0.0, "no adults or no young after six months");
     books.assert_kept(&w, 1e-9);
+}
+
+/// A body works at the pace of its own temperature (laws.md 3b): of two kinds alike but for the heat they keep, one at
+/// its ground's temperature and one held at `WORK_T` in a thick coat, on the same cell, the cold one takes the share
+/// pace(t) / pace(`WORK_T`) of what the warm one takes, the share its upkeep is of the warm one's: being cold does
+/// not multiply what it takes over what it burns.
+#[test]
+fn a_cold_body_takes_in_the_proportion_it_burns() {
+    let mut w0 = testkit::living(8, 12);
+    let i = testkit::mild_land(&w0);
+    (w0.life.env[i][1], w0.life.env[i][3]) = (1.0, 0.0);
+    let t = pcore::contract::place(&w0, i).t;
+    let cover = |w: &World| pcore::cover::per_m2(w, pcore::cover::Cover::kg)[i] + pcore::cover::lying(w)[i];
+    let taken = |keep: f32, coat: f32| {
+        let mut w = w0.clone();
+        let mut genes = TAKER_KINDS[COLD_ROW].genes;
+        (genes[KEEP], genes[fauna::COAT]) = (keep, coat);
+        let m = fauna::adult(&genes);
+        assert!(fauna::place(&mut w, i, (genes, COLD_ROW as u32), (1.0, 0.1 * m)));
+        let before = cover(&w);
+        testkit::takers_month(&mut w, i);
+        before - cover(&w)
+    };
+    let (cold, warm) = (taken(250.0, 0.0), taken(fauna::WORK_T as f32, 2.0));
+    let p = Parts::of(&w0.chem).expect("life's parts");
+    let rx = &w0.chem.reactions[p.burn];
+    let law = rx.arrhenius(t) / rx.arrhenius(fauna::WORK_T);
+    println!("at {t:.1} K a cold body took {cold:.4e} kg/m2, a warm one {warm:.4e}: {:.4} of it; its upkeep is {law:.4} of the warm one's", cold / warm);
+    assert!(warm > 0.0 && (cold / warm - law).abs() <= 1e-6 * law, "a cold body took {} of a warm one's take, its upkeep is {law} of the warm one's", cold / warm);
 }

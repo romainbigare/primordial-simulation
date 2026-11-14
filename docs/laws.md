@@ -888,7 +888,12 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
 - **Body and pace.** A member stands at its `KEEP` gene where its ground (`contract::place`) is colder, else at its
   ground's temperature; its upkeep runs at the pace of its burning there, the rate law's at its temperature over that
   at `t_cat` (Gillooly et al. 2001): 5.6 at 310 K, so a body that keeps no heat of its own pays far less where it is
-  cold. Its work (walking, chewing) runs at that pace, at most 1.
+  cold. Every rate runs at the pace of its body's temperature over the pace at the temperature its number was given
+  at: its upkeep, its gut's capacity and its growth (Kleiber's numbers) over the pace at `t_cat`; its work (walking,
+  chewing) over the pace at `WORK_T` (310 K, the body temperature of the mammals the rows of work were measured on), at
+  most 1. So a body at 288 K walks and chews at 0.6 of a warm body's speed and pays a sixth of its upkeep, and a cold
+  body's speed and power fall with its temperature as measured (Q10 about 2 to 3 below 25 °C in lizards, Bennett 1980
+  and 1990; the rate law's is 2.3 near 300 K).
 - **Upkeep at rest**: Kleiber's law, (`c_basal` + `c_muscle`) × m^`upkeep_exp` × pace × its repair factor
   (`Physics::repair`) a day per member, m its living mass, kg (Kleiber 1932; Elia 1992); and its gut's capacity,
   `c_capacity` of the fuel its capacity (`ENZYME`, mol of walls a kg living a s at `t_cat`) could free, at the same
