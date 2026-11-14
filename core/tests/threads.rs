@@ -10,7 +10,7 @@ const YEARS: u64 = 4;
 /// other places.
 const OTHER_CHUNKS: [u32; 2] = [1, 7];
 
-/// The 16 x 16 world of the roster, every starting kind of cover and of takers placed after its first month, run `YEARS`
+/// The 16 x 16 world of the roster, every starting kind of cover and of takers placed after its first month (and young born to them), run `YEARS`
 /// years on a pool of `threads` threads with its cells cut into `chunks` chunks. Its whole saved state.
 fn roster(threads: usize, chunks: u32) -> String {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
@@ -26,6 +26,7 @@ fn roster(threads: usize, chunks: u32) -> String {
             pcore::step(&mut w);
         }
         assert!(pcore::cover::sums(&w).iter().any(|s| s.slots > 0.0), "nothing lives");
+        assert!((0..w.mesh.cells().n()).any(|i| w.life.cell_at(i).fauna.n[pcore::fauna::FS..].iter().any(|&n| n > 0.0)), "no takers were born");
         serde_json::to_string(&w).expect("a world serialises")
     })
 }

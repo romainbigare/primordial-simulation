@@ -797,7 +797,7 @@ seeds fill it:
   1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month; and its fine roots,
   as many kg of living cover as the key liquid it drew in the month needs at `root_uptake` mol a kg a s (the minerals
   come in that liquid by mass flow; Barber 1995), which breathe `c_basal` a kg a day at the burning's pace and are
-  built anew `root_turnover` times a year at what a kg of living cover costs to build (`build::living_cost`; Gill and
+  built anew `root_turnover` times a year at what a kg of living cover costs to build (`Parts::living_cost`; Gill and
   Jackson 2000). The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
   over (living cover × `e_life` × 10^`REPAIR`), by the rate of living (Rubner 1908). **Frost**: its `FROST` gene is the limit it
@@ -874,15 +874,17 @@ seeds fill it:
 ## 3b. Life: the takers, as a field
 
 Each ground cell holds up to 8 slots of takers (`fauna::Fauna`, `life::Cell::fauna`): a slot is one kind of takers
-in its cell, its **members** a real count (whole below `N_WHOLE` = 64), the mol of the fuel they store (5) and of their
-body matter (10, life's `Parts`), its heat, J (each slot at its own temperature), and 8 genes (`fauna::MASS`, `CHILD`,
+in its cell, in two groups, its adults and its young; each group's **members** a real count (whole below `N_WHOLE` =
+64) and the mol of the fuel they store (5) and of their body matter (10, life's `Parts`); the slot's heat, J (each slot
+at its own temperature), and 8 genes (`fauna::MASS`, `CHILD`,
 `YOUNG`, `ENZYME`, `REACH`, `KEEP`, `COAT`, `REPAIR`). A member's **living mass** is its share of the body matter with
 the liquid of living tissue (matter / (1 − `WET_TISSUE`), as the cover's); that liquid is not in the books. The takers
 of a cell are part of the node of its life (`Class::Life`): the chunk of the cell is their one writer. They reach the
 land only through the contract (section 0; `cli/tests/sides.rs`), and their books are the life's (`life::Books`,
 `life::book`). They take from the cover and the seeds lying, digest, and live on what they took and their store.
 
-**One month** (`fauna::step`), in the same pass of a cell's life, right after its cover's month, slot by slot:
+**One month** (`fauna::step`), in the same pass of a cell's life, right after its cover's month, group by group (a
+young member is a body of its own mass, with its own band, floor, upkeep and heat):
 - **Body and pace.** A member stands at its `KEEP` gene where its ground (`contract::place`) is colder, else at its
   ground's temperature; its upkeep runs at the pace of its burning there, the rate law's at its temperature over that
   at `t_cat` (Gillooly et al. 2001): 5.6 at 310 K, so a body that keeps no heat of its own pays far less where it is
@@ -945,17 +947,36 @@ land only through the contract (section 0; `cli/tests/sides.rs`), and their book
   (`contract::vapour`); where the cell's ground holds less, less is shed and its heat goes to the ground.
 - **Digestion** (`fauna::gut`, by the chemistry's own reactions): its gut splits walls into fuel (the reaction that
   makes fuel of the walls alone, taking the key liquid of the ground) up to its capacity × its living mass × pace; it
-  burns for its upkeep and heat first the body matter it took (the burning of body matter, which gives its mineral to
-  the ground at once), then the fuel it took and split with its store, each no more than the gas the cell's share of its
-  air node offers (`Books::room`); it stores the fuel left up to `store_most` of its living mass; what it took and did
-  not use (walls not split, matter not burnt, fuel over its store) passes to the ground.
+  burns for its upkeep and heat first the fuel it took and split, then the body matter it took (the burning of body
+  matter, which gives its mineral to the ground at once), then its store, each no more than the gas the cell's share of
+  its air node offers (`Books::room`); the fuel it took and did not burn goes to its store; the walls it did not split
+  pass to the ground; the body matter it did not burn is for growth.
 - **Deaths**, each cause a share of the members on what the one before left (as the cover's): the share of the energy
   unpaid (`SPENT`); 1 − e^-wear (`AGE`), wear the energy a member burns per kg over `e_life` × 10^REPAIR (Rubner 1908);
   the frozen share at its body's temperature (`Physics::frozen`, the key liquid's melting point lowered by `harden` ×
   (1 − min(1, pace)): `PHASE`); and `LACK`. Below `N_WHOLE` members the dead are a binomial draw (keyed by the seed,
   the month, the cell and the slot, `Purpose::Fauna`); a count that falls below it becomes whole by a draw that keeps
   its mean, never rounded up as a rule. The dead's share of the body matter and the store goes to the ground as
-  remains; a slot of no members is empty, and all it held goes there.
+  remains.
+- **Growth and births** (`fauna::grow`), after the deaths, slot by slot. The share `YOUNG` of the fuel each group's
+  store gained in the month, and what each store holds beyond `store_most` of its group's living mass, are the slot's
+  pot. It pays the work of building, `c_copy` a kg of body matter, by burning; the body matter built is the matter its
+  groups took and did not burn (so growth needs matter in the food). A member builds at most Kleiber's rest
+  ((`c_basal` + `c_muscle`) m^`upkeep_exp` at the pace of its body's temperature) over the energy a kg of living tissue
+  holds and costs to build (`Parts::living_cost`, 6.8e6 J a kg): the cap of growth of West, Brown and Enquist 2001
+  (dm/dt at most B0 m^(3/4) / E_m, their E_m the energy content of tissue, 7e6 J a kg, their B0 Kleiber's), with the
+  temperature as Gillooly et al. 2002 find it. First the young grow, each at its cap; the share that crosses the adult's
+  mass in the month joins the adults with its share of the young's amounts (von Foerster's flux across a mass, the
+  young's masses taken as even in log mass between a newborn's, `CHILD` of the adult's, and the adult's: the share
+  min(1, Δln m / ln(M / m0)), Δln m the young's growth in the month). Then the adults bear newborns, one parent each,
+  each adult building at most at its cap, a newborn holding `CHILD` of the adult's mass. Below `N_WHOLE` the young
+  that mature are a binomial draw and the newborns the whole part of what was built and one more by a draw on the rest;
+  what was built stays (a draw never makes matter, it moves the mean mass of the young a little), and a group of no
+  members gives its amounts to the slot's other group (matter built into newborns none of whom was drawn stays in the
+  mother). What is left of the pot goes back to the stores up to their most; the rest of it and of the matter passes to
+  the ground. The draws of a slot in a month are one keyed stream (`Purpose::Fauna`), in the order: deaths of its
+  adults, of its young, its maturing, its births. A slot of no members is empty. The young stay in their cell (no
+  dispersal yet), and their genes are their parents' (no mutation yet).
 - **The books.** Gases from and to the cell's share of its air node, remains to its ground, each with its heat, through
   the books of the cell's life; each slot's heat ends at its heat capacity times its body's temperature, and the rest of
   what the burning released goes to the ground.

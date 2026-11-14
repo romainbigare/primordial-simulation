@@ -24,7 +24,7 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     // as many as the liquid it drew this month needs (`root_uptake`; the minerals come in that liquid by mass flow,
     // Barber 1995), breathe as living cover and are built anew `root_turnover` times a year (Gill and Jackson 2000).
     let roots = s.drunk / dt / ph.root_uptake;
-    let renew = roots * ph.root_turnover * super::build::living_cost(chem, ph, p) / w.cfg.months_per_year as f64;
+    let renew = roots * ph.root_turnover * p.living_cost(chem, ph) / w.cfg.months_per_year as f64;
     let parts: [f64; UPKEEP_PARTS] = [living[0] * s.act, living[1] * s.act, living[2] * s.act, ph.c_leaf * s.leaf * days * k * s.act, ph.c_sapwood * s.sapwood * days * pace, ph.c_basal * roots * days * pace, renew];
     let cost: f64 = parts.iter().sum();
     let (units, fuel) = (cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));

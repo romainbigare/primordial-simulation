@@ -132,7 +132,7 @@ pub fn broken(w: &World) -> Option<String> {
     });
     let takers = w.life.cells.iter().enumerate().find_map(|(i, x)| {
         let f = &x.fauna;
-        let mol = first_bad("mol", f.mol.as_flattened(), at_least_0).or_else(|| first_bad("members", &f.adults, at_least_0));
+        let mol = first_bad("mol", f.mol.as_flattened(), at_least_0).or_else(|| first_bad("members", &f.n, at_least_0));
         mol.or_else(|| first_bad("e", &f.e, at_least_0)).map(|x| format!("the takers of cell {i}: {x}"))
     });
     found.or(cover).or(takers)

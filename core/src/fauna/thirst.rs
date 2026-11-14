@@ -5,7 +5,7 @@
 //! still unmet do its members die, by the unmet share (`LACK`).
 
 use super::body::Body;
-use super::FS;
+use super::GROUPS;
 
 /// Halvings of the search for the share of work a slot's liquid allows: to a millionth.
 const HALVINGS: u32 = 20;
@@ -44,9 +44,9 @@ impl Thirst {
 /// The share of work each slot keeps and the share of its members that die of thirst (`LACK`), where `given` mol of its
 /// cell's liquid is each slot's: the most work at which its need is no more than that and the liquid of what it eats at
 /// that work (eaten as its work); at no work, the share of its need unmet.
-pub(super) fn work(bodies: &[Body; FS], thirsts: &[Thirst; FS], walks: &[f64; FS], given: &[f64; FS], (dt, lv): (f64, f64)) -> ([f64; FS], [f64; FS]) {
-    let (mut work, mut lack) = ([1.0; FS], [0.0; FS]);
-    for x in (0..FS).filter(|&x| bodies[x].n > 0.0) {
+pub(super) fn work(bodies: &[Body; GROUPS], thirsts: &[Thirst; GROUPS], walks: &[f64; GROUPS], given: &[f64; GROUPS], (dt, lv): (f64, f64)) -> ([f64; GROUPS], [f64; GROUPS]) {
+    let (mut work, mut lack) = ([1.0; GROUPS], [0.0; GROUPS]);
+    for x in (0..GROUPS).filter(|&x| bodies[x].n > 0.0) {
         let (b, s) = (&bodies[x], &thirsts[x]);
         let short = |f: f64| s.need(b, walks[x], (dt, lv), f) - given[x] - f * s.eaten;
         if short(1.0) <= 0.0 {
@@ -69,7 +69,7 @@ pub(super) fn work(bodies: &[Body; FS], thirsts: &[Thirst; FS], walks: &[f64; FS
 
 /// Each slot's share of `open` mol of its cell's liquid: what it asks (`Thirst::asks`), all of it where the cell holds
 /// enough for all, else by the share of what they ask.
-pub(super) fn shares(thirsts: &[Thirst; FS], open: f64) -> [f64; FS] {
+pub(super) fn shares(thirsts: &[Thirst; GROUPS], open: f64) -> [f64; GROUPS] {
     let all: f64 = thirsts.iter().map(Thirst::asks).sum();
     let f = if all > open { open / all } else { 1.0 };
     std::array::from_fn(|x| thirsts[x].asks() * f)
