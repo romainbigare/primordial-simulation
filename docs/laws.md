@@ -937,9 +937,13 @@ seeds fill it:
   within that reach (Jackson, Mooney and Schulze 1997). The share of its fine roots that lies deeper than both d and
   L splits its fuel without the gas (`Parts::split`: of the reactions that take the fuel alone and free heat, the
   one that runs fastest at `T_SURF`, `Chemistry::splitter`; in chemistry 0 reaction 5, which frees 37 kJ a mol of fuel
-  against reaction 1's 484 kJ and gives its products to the air), so that share of its roots' breathing and building
-  takes 13.1 times the fuel (fermentation yields about a fifteenth of the energy of burning; Drew 1997, from memory);
-  where the chemistry has no such reaction that work goes unpaid. The share unpaid
+  against reaction 1's 484 kJ and gives its products to the air): on the same fuel a drowned fine root does a
+  thirteenth of the work, and its uptake, which is active work, falls with it (`soaked::uptake`; Drew 1997, from
+  memory; a flooded tree's root conductance and uptake fall and its pores close, Herrera 2013). So a slot whose share
+  f of fine roots is drowned takes up 1 − f (1 − 37/484) of what its roots would: its light reaction draws, and so
+  stores, no more than that, while it keeps and pays for the roots of its whole draw (a tree 20 m tall on ground soaked
+  to its top: f 0.72, a third; with channels 0.4: f 0.21, four fifths). Where the chemistry has no such reaction a
+  drowned root does no work and uses no fuel. The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
   over (living cover × `e_life` × 10^`REPAIR`), by the rate of living (Rubner 1908). **Frost**: its `FROST` gene is the limit it
   reaches hardened, when dormant; growing tissue loses that hardiness and freezes at its key liquid's melting point,

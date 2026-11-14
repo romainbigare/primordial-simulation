@@ -1,9 +1,11 @@
 //! Roots in full pores (laws.md 3): a root burns its fuel with the air's gas, which reaches it through the open pores of
 //! its ground; in full pores that gas moves about 10,000 times slower than in air (`units::D_GAS_AIR`), so a root there
 //! gets none from its ground, only what its own open channels (`CHANNEL`) carry down from the air (Armstrong 1979).
-//! What gets none splits its fuel without the gas (`Parts::split`), which frees far less a mol of fuel (Drew 1997).
+//! What gets none splits its fuel without the gas (`Parts::split`), which frees far less a mol of fuel (Drew 1997): on
+//! the same fuel it does that much less work, and its uptake, which runs on that work, falls with it (`uptake`).
 
-use super::{Parts, CHANNEL, NG};
+use super::build::per_input;
+use super::{Parts, CHANNEL, FUEL, NG};
 use crate::chem::Chemistry;
 use crate::life::WET_TISSUE;
 use crate::units::{D_GAS_AIR, DAY, R_GAS};
@@ -36,4 +38,19 @@ pub(super) fn drowned(ph: &crate::Physics, need: f64, (full, loose): (f64, f64),
     }
     let above = |d: f64| -(-d / ph.fine_root_m).exp_m1();
     (1.0 - above(from) / above(deep)).clamp(0.0, 1.0)
+}
+
+/// The heat burning a mol of the fuel by reaction `r` frees, J.
+pub(super) fn per_fuel(chem: &Chemistry, p: &Parts, r: usize) -> f64 {
+    -chem.dh(r) / per_input(&chem.reactions[r], p.sub[FUEL]).unwrap_or(1.0)
+}
+
+/// The share of what its fine roots would take up that a plant takes up when the share `drowned` of them stands in
+/// full pores: a drowned fine root splits the fuel it would burn (`Parts::split`), so on that fuel it does the work,
+/// and takes up the liquid and its minerals, of the split's heat over the burning's (none where the chemistry has no
+/// such reaction). A root's uptake is active work, and under too little of the gas it falls (Drew 1997, from memory;
+/// a flooded tree's root conductance and uptake of the liquid fall and its pores close, Herrera 2013).
+pub fn uptake(chem: &Chemistry, p: &Parts, drowned: f64) -> f64 {
+    let works = p.split.map_or(0.0, |r| per_fuel(chem, p, r) / per_fuel(chem, p, p.burn));
+    1.0 - drowned * (1.0 - works)
 }

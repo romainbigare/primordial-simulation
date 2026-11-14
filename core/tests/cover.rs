@@ -144,12 +144,12 @@ fn a_plant_slows_from_its_share_to_the_wilting_point() {
 }
 
 /// Roots in full pores get no gas from their ground (`cover::soaked`): a month of the same slot of the tree, its plants a
-/// few metres tall, on the same ground, its pores dry of free liquid or full to the top, pays its roots' breathing and
-/// building with several times the fuel when soaked, as its fuel splits without the gas; the same slot with open
-/// channels in 40% of its section (`CHANNEL`) carries the gas down to its roots and pays less there. Each month's
-/// content moves by exactly what its budget books.
+/// few metres tall, on the same ground, its pores dry of free liquid or full to the top. Soaked, its drowned fine roots
+/// split the same fuel and take up less: its roots cost the same fuel and its light reaction stores about half; the
+/// same slot with open channels in 40% of its section (`CHANNEL`) carries the gas down to its fine roots and stores
+/// what it stores on dry ground. Each month's content moves by exactly what its budget books.
 #[test]
-fn roots_in_full_pores_pay_more_unless_channels_feed_them() {
+fn roots_in_full_pores_take_up_less_unless_channels_feed_them() {
     let (mut w, i) = start();
     assert!(cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 10.0));
     let p = cover::Parts::of(&w.chem).expect("cover parts");
@@ -159,7 +159,8 @@ fn roots_in_full_pores_pay_more_unless_channels_feed_them() {
     // Plants of this mass stand a few metres tall: their roots reach deeper than a dry-land root's channels feed them.
     c.plants[x] = c.built(&mm, x) / PLANT_KG;
     let h = c.height(&w.cfg.phys, &mm, rho, x);
-    let roots = [cover::BUDGET.iter().position(|&n| n == "root_breath"), cover::BUDGET.iter().position(|&n| n == "root_renew")].map(|q| q.expect("root parts"));
+    let at = |name: &str| cover::BUDGET.iter().position(|&n| n == name).expect("a part of the budget");
+    let (roots, stored) = ([at("root_breath"), at("root_renew")], at("stored"));
     let month = |c: &cover::Cover, full: f64| {
         let mut c = c.clone();
         let a = cover::Around { t: w.cfg.phys.t_cat, liquid: 1e9, moist: 1.0, full, loose: LOOSE_M, breath: AIR_GAS * pcore::units::P_REF, reach: 1.0, light: w.light[i] + SUMMER_LIGHT, gas: 1.0, thirst: THIRST, pores: 0.0, air: [f64::INFINITY; pcore::units::MAX_SUBSTANCES], ground: [1e9; pcore::units::MAX_SUBSTANCES], tick: 0 };
@@ -169,14 +170,15 @@ fn roots_in_full_pores_pay_more_unless_channels_feed_them() {
         let moved = c.content(&p.content(&w.chem)) - e;
         let scale = flows.iter().map(|f| f.abs()).sum::<f64>().max(e);
         assert!((moved - flows.iter().sum::<f64>()).abs() <= 1e-9 * scale, "content moved by {moved} J, budget booked {}", flows.iter().sum::<f64>());
-        -(flows[roots[0]] + flows[roots[1]])
+        (-(flows[roots[0]] + flows[roots[1]]), flows[stored])
     };
     let mut open = c.clone();
     open.genes[x][cover::CHANNEL] = SOAKED_CHANNEL;
     let (dry, soaked, fed) = (month(&c, LOOSE_M), month(&c, 0.0), month(&open, 0.0));
-    println!("plants {h:.1} m tall; their roots' fuel a month, J: dry {dry:.3e}, soaked {soaked:.3e}, soaked with open channels {fed:.3e}");
-    assert!(dry > 0.0 && soaked > 3.0 * dry, "soaked roots did not pay more: {dry} {soaked}");
-    assert!(fed < 0.5 * soaked, "open channels did not feed the roots: {soaked} {fed}");
+    println!("plants {h:.1} m tall; their roots' fuel and what the light reaction stored a month, J: dry {dry:?}, soaked {soaked:?}, soaked with open channels {fed:?}");
+    assert!(dry.0 > 0.0 && (soaked.0 - dry.0).abs() <= 1e-6 * dry.0, "soaked roots used other fuel: {dry:?} {soaked:?}");
+    assert!(soaked.1 < 0.6 * dry.1, "soaked roots took up as much: {dry:?} {soaked:?}");
+    assert!(fed.1 > 0.99 * dry.1, "open channels did not feed the roots: {dry:?} {fed:?}");
 }
 
 /// A leaf loses the key liquid for the gas it takes in (`cover::thirst`): nothing in air saturated at its temperature,

@@ -70,11 +70,10 @@ const TALL_FAST: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.9), (c
 /// carry the air's gas 0.46 m down at `t_cat` (`cover::soaked`: L = (2 D ε C / ((1 − ε) q))^½, D 2e-5 m²/s, C 8.8 mol
 /// per m³ of the gas at 21% of the air, q 1.1e-3 mol a m³ a s of its roots' basal upkeep), against 0.10 m at the
 /// others' 3%. Its fine roots lie as everyone's, a share e^(−z / 0.3 m) below depth z (`fine_root_m`), so on ground
-/// soaked to its top a plant 20 m tall (roots 2 m deep) splits its fuel in 21% of them, not 72%: its roots' work costs
-/// 0.79 + 0.21 × 13.1 = 3.6 times the work on dry ground, against 9.7 times, and a plant under 4.6 m none. It pays for
-/// its channels in every month: 1 / (1 − 0.4) = 1.67 times the fine roots for the liquid it draws and the conducting
-/// walls for its leaves (`cover::upkeep`), so on soaked ground its roots cost 6.0 times what a dry-ground plant's do
-/// on dry ground, the others' 9.7, and on dry ground 1.67 times the others'.
+/// soaked to its top a plant 20 m tall (roots 2 m deep) has 21% of them in full pores, not 72%, and takes up 1 − 0.21 ×
+/// (1 − 37/484) = 0.80 of what its roots would, against 0.34 (`cover::soaked::uptake`); a plant under 4.6 m takes up
+/// all. It pays for its channels in every month: 1 / (1 − 0.4) = 1.67 times the fine roots for the liquid it draws and
+/// the conducting walls for its leaves (`cover::upkeep`).
 const SOAKED_TREE: [f32; cover::NG] = with(TREE, &[(cover::MOIST, -0.05), (cover::CHANNEL, 0.4)]);
 
 /// Starting kinds of cover, in the order the roster places them. A row sets only what the laws read (genes, and where,

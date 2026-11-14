@@ -187,15 +187,16 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
         let cap = dec(c.genes[q][LIGHT]) * need * pace * s[q].act * dt;
         let lit = |f: f64| per * s[q].abs * f * ph.light_yield / dh;
         x[q] = lit(s[q].shade).min(cap * s[q].living).max(0.0) * gas;
-        s[q].gain = if s[q].built > 0.0 { (lit(s[q].bottom).min(cap * s[q].living) / s[q].built).max(0.0) * gas * dh } else { 0.0 };
+        s[q].gain = if s[q].built > 0.0 { (lit(s[q].bottom).min(cap * s[q].living) / s[q].built).max(0.0) * gas * dh * super::soaked::uptake(chem, p, s[q].drowned) } else { 0.0 };
     }
     // Per unit of the reaction its leaves would lose the key liquid as vapour, `thirst` per mol of gas taken in; each
     // slot draws it from the pores its roots reach (`Cover::rooted`), and opens its pores no wider than that pays for.
     let gas_in: f64 = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| q.1 as f64).sum();
     let lost = a.thirst * gas_in;
     let drink = per_input(rx, p.liquid).unwrap_or(0.0) + lost;
+    // Its roots take up the share of that their fine roots with the gas allow (`soaked::uptake`).
     for (q, xq) in x.iter_mut().enumerate().take(s.len()) {
-        *xq = xq.min(liquid * c.rooted[q] as f64 / drink.max(1e-300));
+        *xq = xq.min(liquid * c.rooted[q] as f64 / drink.max(1e-300)) * super::soaked::uptake(chem, p, s[q].drowned);
     }
     let all: f64 = x.iter().sum();
     (c.film, c.reach) = (0.0, 0.0);
