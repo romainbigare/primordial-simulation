@@ -155,33 +155,49 @@ impl Layer {
 /// and whose band reaches under it takes what lies there (a rule of the model: about a seed's size).
 pub const GROUND_M: f64 = 0.01;
 
-/// The share of a plant `height` m tall that a mouth reaches between the heights `band` m, above `floor` m (the snow
-/// lying, and the least height its bite reaches down to): its matter is spread evenly over its height (the stand's law
-/// draws a plant as a stem of its height, `cover::stem`), so the share is the length of its stem within the band and
-/// over the floor over its height. What lies on the ground (height 0) is reached whole where the floor and the band's
-/// bottom are under `GROUND_M`, else not at all.
-pub fn reached((low, high): (f64, f64), floor: f64, height: f64) -> f64 {
-    if height <= 0.0 {
+/// The share of what stands from `base` to `top` m that a mouth reaches between the heights `band` m, above `floor` m
+/// (the snow lying, and the least height its bite reaches down to): it is spread evenly over that span (a slot's soft
+/// part over its crown, `crown`), so the share is the length of the span within the band and over the floor over its
+/// length; a span of no length is reached whole where it lies within the band and over the floor. What lies on the
+/// ground (a top of 0) is reached whole where the floor and the band's bottom are under `GROUND_M`, else not at all.
+pub fn reached((low, high): (f64, f64), floor: f64, (base, top): (f64, f64)) -> f64 {
+    if top <= 0.0 {
         return if floor < GROUND_M && low < GROUND_M { 1.0 } else { 0.0 };
     }
-    ((high.min(height) - low.max(floor)) / height).clamp(0.0, 1.0)
+    if top <= base {
+        return if low.max(floor) <= top && top <= high { 1.0 } else { 0.0 };
+    }
+    ((high.min(top) - low.max(floor).max(base)) / (top - base)).clamp(0.0, 1.0)
 }
 
-/// The share of a plant `height` m tall that stands above `snow` m of soft solid (`reached` with no band and the snow
-/// as the floor).
-pub fn above(snow: f64, height: f64) -> f64 {
-    reached((0.0, f64::INFINITY), snow, height)
+/// The share of what stands from `base` to `top` m that stands above `snow` m of soft solid (`reached` with no band and
+/// the snow as the floor).
+pub fn above(snow: f64, span: (f64, f64)) -> f64 {
+    reached((0.0, f64::INFINITY), snow, span)
+}
+
+/// The crown of the plants of slot `x` of the cover of `cell` (cell `i`), from its base to its top, m: its leaves, and the
+/// thin stems that carry them, stand where the light is, over the depth their capture area fills at the density of a
+/// crown's leaves: the capture area over the ground its plants hold (`Cover::leaf` over the cell's land, `land`, times
+/// the share its roots hold, `Cover::rooted`), over `crown_density` m² a m³, down from its top (its height,
+/// `Cover::stands_at`), and no lower than the ground: a sward is as dense as that over its whole height.
+pub fn crown(w: &World, i: usize, cell: &Cell, p: &Parts, x: usize) -> (f64, f64) {
+    let c = &cell.cover;
+    let top = c.stands_at(&w.chem, &w.cfg.phys, p, x);
+    let patch = land(w, i) * c.rooted[x].max(f32::MIN_POSITIVE) as f64;
+    let depth = c.leaf(&p.mm(&w.chem), x) / patch.max(1e-300) / w.cfg.phys.crown_density;
+    ((top - depth).max(0.0), top)
 }
 
 /// The share of each part of each slot of `layer` of cell `i` a taker can reach (`above`): of each part the layer holds
-/// of a slot of its cover the share of its plants above the snow; of the seeds lying all where no snow lies, none where
-/// it lies.
-fn reach<'a>(w: &'a World, cell: &'a Cell, p: &'a Parts, layer: Layer, snow: f64) -> impl Fn(usize) -> [f64; NP] + 'a {
+/// of a slot of its cover the share of its crown above the snow (`crown`); of the seeds lying all where no snow lies,
+/// none where it lies.
+fn reach<'a>(w: &'a World, i: usize, cell: &'a Cell, p: &'a Parts, layer: Layer, snow: f64) -> impl Fn(usize) -> [f64; NP] + 'a {
     move |x| match layer {
-        Layer::Seeds => [above(snow, 0.0); NP],
+        Layer::Seeds => [above(snow, (0.0, 0.0)); NP],
         _ => {
             let parts = layer.parts(x);
-            if parts == [0.0; NP] { parts } else { parts.map(|f| f * above(snow, cell.cover.stands_at(&w.chem, &w.cfg.phys, p, x))) }
+            if parts == [0.0; NP] { parts } else { parts.map(|f| f * above(snow, crown(w, i, cell, p, x))) }
         }
     }
 }
@@ -201,7 +217,7 @@ pub struct Shown {
 /// the snow of its place (`reach`); none with no cover in the chemistry.
 pub fn shown(w: &World, i: usize, cell: &Cell, layer: Layer) -> Option<Shown> {
     let p = Parts::of(&w.chem)?;
-    let of = reach(w, cell, &p, layer, place(w, i).snow);
+    let of = reach(w, i, cell, &p, layer, place(w, i).snow);
     Some(match layer {
         Layer::Seeds => cell.cover.shown_lying(&w.chem, &w.cfg.phys, &p, of(0)[0]),
         Layer::Frame(x) => {
@@ -224,13 +240,13 @@ pub fn cut(w: &World, width: f64, force: f64) -> f64 {
     if width <= d { 1.0 } else { (d / width).powf(ph.thin_exp) }
 }
 
-/// The slots of the cover of `cell` that hold plants, each as its soft part and its frame, with the height they stand
-/// at, m, from the lowest.
-pub fn slots(w: &World, cell: &Cell) -> Vec<(Layer, f64)> {
+/// The slots of the cover of `cell` (cell `i`) that hold plants, each as its soft part and its frame, with the span of
+/// their crown from its base to its top, m (`crown`: the frame a mouth can cut is the thin stems that carry the leaves;
+/// its thick stems stand on the ground, and no jaw cuts them), from the lowest top.
+pub fn slots(w: &World, i: usize, cell: &Cell) -> Vec<(Layer, (f64, f64))> {
     let Some(p) = Parts::of(&w.chem) else { return Vec::new() };
-    let at = |x: usize| cell.cover.stands_at(&w.chem, &w.cfg.phys, &p, x);
-    let mut v: Vec<(Layer, f64)> = cell.cover.held().flat_map(|x| [(Layer::Soft(x), at(x)), (Layer::Frame(x), at(x))]).collect();
-    v.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let mut v: Vec<(Layer, (f64, f64))> = cell.cover.held().flat_map(|x| [(Layer::Soft(x), crown(w, i, cell, &p, x)), (Layer::Frame(x), crown(w, i, cell, &p, x))]).collect();
+    v.sort_by(|a, b| a.1 .1.total_cmp(&b.1 .1));
     v
 }
 
@@ -254,7 +270,7 @@ pub fn take(w: &World, d: &mut Chunk, i: usize, layer: Layer, want: f64) -> Bite
     let (e, g) = (p.content(&w.chem), (want / seen.kg).min(1.0));
     let held = d.cover(i).content(&e);
     let of: Vec<[f64; NP]> = {
-        let f = reach(w, d.at(i), &p, layer, place(w, i).snow);
+        let f = reach(w, i, d.at(i), &p, layer, place(w, i).snow);
         (0..SLOTS).map(f).collect()
     };
     let (mol, heat) = match layer {

@@ -106,7 +106,7 @@ where fractal noise over four scales from about 4 km down passes 0.66 (`BODY_ABO
 rises through strata. The top of the stack rises with the land and floats back up with it, so how deep the wear has
 cut under it, plus the fold, says which layer a sample's surface is in; at each step the wear cuts each sample at the
 rate of the make it has reached. So a soft layer opens into a wide vale, a hard one stands as a scarp or caps a
-tableland, and folded layers crop out in bands round the heights. A cell's bed is the mean of its samples' makes by
+tableland, and folded layers clip out in bands round the heights. A cell's bed is the mean of its samples' makes by
 area, substance by substance (`Samples::make`). Under a closed
 basin's level the liquid does not cut. What a step cuts spreads down as the liquid does; a closed basin keeps all that
 comes into it and fills its floor from the lowest up, as one level, toward the height its pass has now, and what it
@@ -1009,14 +1009,21 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   (`contract::cut`): a jaw closes with `jaw` × m^`jaw_exp` N and cuts an axis of width d where that force is the frame's
   stress for a cut (`Substance::shear`) over the solid wall of its section (`stem_solid` of π d² / 4); a stand whose
   branches keep their section from stem to twigs (Shinozaki and others 1964), their lengths as the radius to 2/3 (West,
-  Brown and Enquist 1999), holds the share (d / D)^`thin_exp` of its frame in axes thinner than d, D its main stem's
-  width (`Cover::width`, the stand's law), at most all. So a 30 g body cuts axes of 0.8 mm, a 400 kg one of 6 mm, and a
+  Brown and Enquist 1999), holds the share (d / D)^`thin_exp` of its frame in stems thinner than d, D its main stem's
+  width (`Cover::width`, the stand's law), at most all. So a 30 g body cuts stems of 0.8 mm, a 400 kg one of 6 mm, and a
   tree's trunk is nobody's. A member of length L = (m / `rho_body`)^(1/3) searches the band of heights
   ± `BAND` (half a decade) about its `REACH` gene, no higher than `reach_len` L, and bites no lower than `bite_floor` L
-  over the snow: of a plant h high it reaches the share of its stem within that (`contract::reached`); the seeds lying
+  over the snow: a slot's soft part, and the thin stems of its frame that carry its leaves, stand in its crown, from h −
+  L / `crown_density` to its height h, L its capture area over the ground its plants hold (its land times the share its
+  roots hold), no lower than the ground (`contract::crown`): a grown tree's leaves stand high, a sward's crown is its
+  whole height; of a crown it reaches the share within that, the matter spread evenly over it (`contract::reached`); the seeds lying
   only where its floor and its band's bottom are under `GROUND_M` (1 cm). What lies out of reach is the cover's refuge.
 - **The take** (Holling 1959, the disk law over many layers and slots): a member searches a strip as wide as its body
-  at its walking speed v = √(`walk_froude` g L) (Alexander and Jayes 1983), a = v L m²/s, for `busy` of the day (T),
+  at its walking speed v = √(`walk_froude` g L) (Alexander and Jayes 1983), bite by bite: a bite clips the cover on
+  the area of its mouth, A = (`bite_breadth` m^`bite_exp`)² (the incisor arcade's breadth, Illius and Gordon 1987;
+  bite area as its square, Gordon, Illius and Milne 1996), and takes `bite_time` to clip whatever it holds (Shipley et
+  al. 1994); the walk to the next bite and the clipping add, so the ground it clips a s is a = 1 / (1 / (v L) +
+  `bite_time` / A) m²/s (it walks only between bites, at a / L m/s), for `busy` of the day (T),
   and breaks what it takes by its chewing power P = `chew` m^`upkeep_exp`: a layer of D kg per m² of which it reaches
   w, each kg taking b J to break (`Shown::breaking`), gives it I = T a w D / (1 + a Σ w D b / P) kg a day. Over the
   month in `SUBSTEPS` (6) steps each layer falls by S (1 − e^(−k Δ)), k = Σ n I / S, so it is never overdrawn and the
@@ -1084,10 +1091,14 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   min(1, Δln m / ln(M / m0)), Δln m the young's growth in the month). Then the adults bear newborns, one parent each, a
   newborn holding `CHILD` of the adult's mass. An unborn grows from nothing by the same law, dm/dt = a m^(3/4)
   (1 − u), u = (m / M)^(1/4), a her cap over M^(3/4), fed from her pot: it reaches the newborn's u_c = `CHILD`^(1/4)
-  after 4 M^(1/4) (−ln(1 − u_c)) / a (26 days for the 30 g kind, 258 for the 400 kg kind at 310 K). Its need is
-  greatest at its birth (or at u = 3/4), so her cap feeds at once a litter of 1 / max u³ (1 − u); litter after litter
-  she bears the share u_c⁴ / (4 (−ln(1 − u_c)) max u³ (1 − u)) of her cap (`grow::bearing`): a quarter for a small
-  newborn, 0.33 to 0.36 for the starting kinds. Below `N_WHOLE` the young
+  after 4 M^(1/4) (−ln(1 − u_c)) / a (26 days for the 30 g kind, 258 for the 400 kg kind at 310 K). It burns
+  a E_m m^(3/4) (E_m the energy a kg of living tissue holds and costs, `Parts::living_cost`), of which the share 1 − u
+  becomes body, and its mother pays all of it: over the time of bearing 4 E_m ∫₀^u_c u³ / (1 − u) du / u_c⁴ a kg of
+  newborn (`grow::unborn`: 1.4 to 1.7 times E_m for the starting kinds). The pot pays that less E_m, its upkeep before
+  birth, and the work of building, `c_copy` a kg of body matter; the body matter itself is what she took, so nothing is
+  paid twice. Its burning is greatest at its birth, so her cap feeds at once a litter of 1 / u_c³; litter after litter
+  she bears the share u_c / (4 (−ln(1 − u_c))) of her cap (`grow::bearing`): a quarter for a small newborn, 0.18 to
+  0.20 for the starting kinds. Below `N_WHOLE` the young
   that mature are a binomial draw and the newborns the whole part of what was built and one more by a draw on the rest;
   what was built stays (a draw never makes matter, it moves the mean mass of the young a little), and a group of no
   members gives its amounts to the slot's other group (matter built into newborns none of whom was drawn stays in the

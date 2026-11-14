@@ -51,7 +51,7 @@ fn cell(w: &World, d: &mut Chunk, (p, gut): (&Parts, &Gut), i: usize) {
     let found = contract::liquid(w, d, i);
     let plan = plan(w, p, (i, &bodies), (&layers, &reach), &found);
     let (taken, searching) = take::scheme(&take::eaters(&bodies, &reach.share, &plan.work), (&reach.stock, &reach.breaking), area, days);
-    let walks: [f64; GROUPS] = std::array::from_fn(|g| bodies[g].speed * searching[g] / DAY);
+    let walks: [f64; GROUPS] = std::array::from_fn(|g| bodies[g].walking * searching[g] / DAY);
     let (took, heat) = take::bite(w, d, i, &layers, &taken);
     // The vapour they shed leaves the cell's liquid (the open liquid, what ran over it, what they ate and fetched join it
     // there), then the soft solid; the liquid their guts split walls with leaves it too.
@@ -125,7 +125,7 @@ fn plan(w: &World, p: &Parts, (i, bodies): (usize, &[Body; GROUPS]), (layers, re
     let (full, searching) = take::scheme(&take::eaters(bodies, &reach.share, &[1.0; GROUPS]), (&reach.stock, &reach.breaking), contract::land(w, i), days);
     let matter = chem.subs[p.sub[MATTER]].molar_mass;
     let wet: Vec<f64> = layers.iter().map(|f| f.shown.mol[p.sub[MATTER]] * matter / f.shown.kg * WET_TISSUE / (1.0 - WET_TISSUE) / liquid_mm).collect();
-    let walks: [f64; GROUPS] = std::array::from_fn(|x| bodies[x].speed * searching[x] / DAY);
+    let walks: [f64; GROUPS] = std::array::from_fn(|x| bodies[x].walking * searching[x] / DAY);
     let thirsts: [Thirst; GROUPS] = std::array::from_fn(|x| Thirst::of(&bodies[x], walks[x], (dt, lv), full[x].iter().zip(&wet).map(|(k, l)| k * l).sum()));
     let mut given = thirst::shares(&thirsts, found.open + found.running + found.soft);
     let (mut work_of_way, mut drink) = ([0.0; GROUPS], [(i, 0.0); GROUPS]);

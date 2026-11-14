@@ -35,6 +35,8 @@ pub(super) struct Body {
     /// Its walking speed, m/s; the width of ground it searches a s, m²/s; its chewing power, W; its working time, s a day
     pub(super) speed: f64,
     pub(super) search: f64,
+    /// Its speed over the ground while it searches, m/s: it walks between bites and stands while it clips
+    pub(super) walking: f64,
     pub(super) chew: f64,
     pub(super) busy: f64,
     /// The work a m walked costs it, J
@@ -61,7 +63,9 @@ pub(super) struct Body {
 ///   `r_coat`) (Meeh 1879; Scholander et al. 1950), at work in the open; at rest through the shell it gathers of what
 ///   lies on the ground (`shell`), `gathered` kg of it lying `remains` kg a m² of its cell.
 /// - The walk: speed √(`walk_froude` g L) (Alexander and Jayes 1983), at `c_move` × (m / `move_ref`)^`move_exp` J per
-///   kg and m (Taylor et al. 1982); it searches a strip as wide as its body, `busy` of the day.
+///   kg and m (Taylor et al. 1982); it searches a strip as wide as its body, `busy` of the day,
+///   bite by bite: a bite of area (`bite_breadth` m^`bite_exp`)² (Illius and Gordon 1987; Gordon, Illius and Milne 1996)
+///   takes `bite_time` to clip (Shipley et al. 1994), so the ground it clips is bounded by its bites.
 /// - Its chewing power `chew` × m^`upkeep_exp`; its jaw's force `jaw` × m^`jaw_exp` (what frame it can cut,
 ///   `contract::cut`); the band ± `BAND` decades about its `REACH` gene, no higher than `reach_len` lengths; its bite's
 ///   floor `bite_floor` lengths.
@@ -88,6 +92,11 @@ pub(super) fn body(w: &World, p: &Parts, f: &Fauna, (x, mm): (usize, &[f64; NF])
     let (open, shelled) = if held { (coat * (keep - t), shell(ph, area, coat, lying) * (keep - t)) } else { (0.0, 0.0) };
     let (reach, wide) = (dec(g[REACH]), 10f64.powf(BAND));
     let band = (reach / wide, (reach * wide).min(ph.reach_len * len));
+    // Its search by bites: each bite costs the walk over the bite's area at its swath and the clipping (work, at its
+    // pace), so the ground it clips a s is 1 / (1 / (v L) + t_bite / A_bite) (Spalinger and Hobbs 1992; Shipley et al.
+    // 1994).
+    let bite = (ph.bite_breadth * m.powf(ph.bite_exp)).powi(2);
+    let bitten = if speed > 0.0 { 1.0 / (1.0 / (speed * len) + ph.bite_time / work / bite) } else { 0.0 };
     Body {
         n,
         m,
@@ -98,7 +107,8 @@ pub(super) fn body(w: &World, p: &Parts, f: &Fauna, (x, mm): (usize, &[f64; NF])
         open,
         shelled,
         speed,
-        search: speed * len,
+        search: bitten,
+        walking: if speed * len > 0.0 { speed * bitten / (speed * len) } else { 0.0 },
         chew: ph.chew * m.powf(ph.upkeep_exp) / DAY * work,
         busy,
         per_m: ph.c_move * (m / ph.move_ref).powf(ph.move_exp) * m,
