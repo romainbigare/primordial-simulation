@@ -295,7 +295,8 @@ fn erode(w: &World, s: &mut Scratch, b: &Bodies, flux: &[[f64; 2]], sol: &[usize
     broke
 }
 
-/// The moving averages over about a year (`World::discharge`, `World::liquid_flux`, `World::off_land`), from what ran
+/// What ran through each cell's main channel in the month (`World::liquid_month`), and the moving averages over about a
+/// year (`World::discharge`, `World::liquid_flux`, `World::off_land`), from what ran
 /// through each sample in the pass of `dt` seconds (an average that is none stays none where none ran): a cell's flux
 /// is the most through one of its samples in no pond, its main channel; what leaves a land cell's samples for those of
 /// the open low ground runs off the land.
@@ -318,7 +319,9 @@ fn follow_flux(w: &mut World, b: &Bodies, flux: &[[f64; 2]], dt: f64) {
             off[i] += f[0];
         }
     }
+    w.liquid_month.resize(n, 0.0);
     for i in 0..n {
+        w.liquid_month[i] = (most[i] / dt) as f32;
         follow(&mut w.liquid_flux[i], (most[i] / dt) as f32, ema);
         follow(&mut w.off_land[i], (off[i] / dt) as f32, ema);
     }

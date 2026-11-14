@@ -22,7 +22,10 @@ pub struct Counters {
     /// The flows of the seeds, kg (`cover::SEED_FLOWS`)
     #[serde(skip)]
     pub seeds: [f64; crate::cover::SEED_FLOWS.len()],
-    /// What the cover of a cell built in a month, kg of dry matter (cell, kg), until its month ends (`cover::month`)
+    /// Takers that died, members, by cause (`life::LACK` to `AGE`)
+    #[serde(skip)]
+    pub takers_died: [f64; 6],
+    /// What the cover of a cell built in a month, kg of dry matter (cell, kg), until its month ends (`cover::landed`)
     #[serde(skip)]
     pub grown: Vec<(u32, f64)>,
     /// Per cell, what its cover built in the year so far, and in the last whole year, kg of dry matter
@@ -37,12 +40,13 @@ impl Counters {
     /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
     /// cannot be left out.
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, grown, grown_year, grown_last, edges } = std::mem::take(c);
+        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, edges } = std::mem::take(c);
         self.clamped_heat += clamped_heat;
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
         self.cover_budget.iter_mut().zip(cover_budget).for_each(|(a, b)| *a += b);
         self.seeds.iter_mut().zip(seeds).for_each(|(a, b)| *a += b);
+        self.takers_died.iter_mut().zip(takers_died).for_each(|(a, b)| *a += b);
         self.grown.extend(grown);
         // (A chunk's counts hold no year: the world's are its own.)
         debug_assert!(grown_year.is_empty() && grown_last.is_empty(), "a chunk counted a year");
@@ -88,6 +92,11 @@ pub struct World {
     /// ground cell the most through one of its samples, its main channel: moving averages over about a year
     pub discharge: Vec<f32>,
     pub liquid_flux: Vec<f32>,
+    /// What ran through each ground cell's main channel in the month's runoff pass, its own shed among it, mol/s (the
+    /// month's `liquid_flux`, `flow::runoff`): what a taker can drink of the liquid running over the cell
+    /// (`contract::liquid`). Not saved: the runoff's pass writes it each month before life reads it
+    #[serde(skip)]
+    pub liquid_month: Vec<f32>,
     /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what runs over the
     /// surface of each land cell into cells that are not land (`is_land`), mol/s: moving averages over about a year,
     /// for the tape

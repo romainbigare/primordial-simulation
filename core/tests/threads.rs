@@ -1,7 +1,7 @@
 //! The parallel passes (laws.md 0): the number of threads and the count of chunks the cells are cut into change
 //! nothing.
 
-use worldgen::life::{seed, ROSTER};
+use worldgen::life::{place_takers, seed, ROSTER};
 
 /// Years the roster's world runs in the test of threads and chunks, so that seeds from cells of two chunks land in one
 /// cell.
@@ -10,8 +10,8 @@ const YEARS: u64 = 4;
 /// other places.
 const OTHER_CHUNKS: [u32; 2] = [1, 7];
 
-/// The 16 x 16 world of the roster, every starting kind placed after its first month, run `YEARS` years on a pool of
-/// `threads` threads with its cells cut into `chunks` chunks. Its whole saved state.
+/// The 16 x 16 world of the roster, every starting kind of cover and of takers placed after its first month, run `YEARS`
+/// years on a pool of `threads` threads with its cells cut into `chunks` chunks. Its whole saved state.
 fn roster(threads: usize, chunks: u32) -> String {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().expect("a pool");
     pool.install(|| {
@@ -21,6 +21,7 @@ fn roster(threads: usize, chunks: u32) -> String {
         for &k in &ROSTER {
             seed(&mut w, k);
         }
+        assert!(!place_takers(&mut w).is_empty(), "no takers placed");
         for _ in 0..YEARS * w.cfg.months_per_year as u64 {
             pcore::step(&mut w);
         }
@@ -30,7 +31,7 @@ fn roster(threads: usize, chunks: u32) -> String {
 }
 
 /// The roster's world on 1 and on 4 threads, and with other counts of chunks (one chunk of all cells among them): the
-/// cover's month runs on the chunks and its seeds land after, so every order is fixed by the cells.
+/// month of the cover and the takers runs on the chunks and the seeds land after, so every order is fixed by the cells.
 #[test]
 fn the_threads_and_the_chunks_change_nothing() {
     let chunks = pcore::Config::default().chunks;

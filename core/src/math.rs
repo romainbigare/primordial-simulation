@@ -201,3 +201,9 @@ impl<T: Copy + Default, const N: usize> FromIterator<T> for Few<T, N> {
         f
     }
 }
+
+/// 10 to the power of a gene (a log10 in single precision).
+#[inline]
+pub fn dec(g: f32) -> f64 {
+    (g as f64 * std::f64::consts::LN_10).exp()
+}

@@ -30,11 +30,11 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     let (units, fuel) = (cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));
     // (What it burns is worked out first: one less a share near one would lose a small fuel to rounding.) It burns no
     // more than its fuel and the gas the cell's share of its air node still offers.
-    let burnt = (units * fuel).min(c.mol[x][FUEL].max(0.0)).min(b.room(p, burn) * fuel);
+    let burnt = (units * fuel).min(c.mol[x][FUEL].max(0.0)).min(b.room(&p.sub, burn) * fuel);
     let short = if units > 0.0 { 1.0 - burnt / (units * fuel) } else { 0.0 };
     let e = p.content(chem);
     let unburnt = budget::held(&e, &c.mol[x]);
-    b.run(chem, p, &mut c.mol[x], burn, burnt / fuel);
+    b.run(chem, &p.sub, &mut c.mol[x], burn, burnt / fuel);
     // What the burning took of its content, shared out over the parts of the upkeep as they asked for it.
     let paid = budget::held(&e, &c.mol[x]) - unburnt;
     (0..UPKEEP_PARTS).for_each(|q| b.budget[UPKEEP + q] += if cost > 0.0 { paid * parts[q] / cost } else { 0.0 });
@@ -66,11 +66,11 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
 }
 
 /// The upkeep of a kg of living cover of genes `g` a day at full activity, at `pace` of its burning's pace at `t_cat`,
-/// J: basal (`c_basal`), its capacity (a capacity that could store `cap` W per kg costs the share `c_light` of that) and
+/// J: basal (`c_basal`), its capacity (a capacity that could store `cap` W per kg costs the share `c_capacity` of that) and
 /// its firmness (dearer the colder it stands, as a firmer catalyst costs more), each times its repair factor.
 pub(super) fn upkeep_rates(chem: &Chemistry, ph: &crate::Physics, p: &Parts, g: &[f32; NG], pace: f64) -> [f64; 3] {
     let cap = dec(g[LIGHT]) * dec(g[MOIST]) * chem.dh(p.light) * DAY;
     let firm = 1.0 + (chem.subs[p.liquid].melt - g[FROST] as f64).max(0.0) / ph.c_firm;
     let k = ph.repair(g[REPAIR] as f64) * pace;
-    [ph.c_basal, ph.c_light * cap, ph.c_light * cap * (firm - 1.0)].map(|x| x * k)
+    [ph.c_basal, ph.c_capacity * cap, ph.c_capacity * cap * (firm - 1.0)].map(|x| x * k)
 }

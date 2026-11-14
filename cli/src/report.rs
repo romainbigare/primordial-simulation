@@ -62,7 +62,9 @@ impl Clock {
     }
 }
 
-/// The yearly line: drift since `t0` (the worst, and of each element signed), the cover, and the speed by stage.
+/// The yearly line: drift since `t0` (the worst, and of each element signed), the cover, the takers by starting kind
+/// (members and living kg, where any were placed, and the members that died since the start by cause), and the speed by
+/// stage.
 pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock) -> String {
     let ((de, dq), now) = (pcore::check::drift(w, t0), pcore::check::totals(w));
     let each: Vec<String> = (0..now.elems.len()).map(|j| format!("{:+.1e}", pcore::check::elem_drift(&now, t0, j))).collect();
@@ -70,8 +72,11 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock) -> String {
     let ms: Vec<f64> = clock.spent.iter().zip(&clock.printed).map(|(now, before)| (*now - *before).as_secs_f64() * 1000.0 / years).collect();
     let cover = pcore::cover::sums(w);
     let (kg, slots, kinds) = (cover.iter().map(|s| s.kg).sum::<f64>(), cover.iter().map(|s| s.slots).sum::<f64>(), cover.iter().filter(|s| s.slots > 0.0).count());
+    let takers = pcore::fauna::sums(w);
+    let died = &w.counts.takers_died;
+    let takers = if takers.is_empty() { String::new() } else { format!(", takers {} (died since the start: unpaid {:.0}, worn {:.0}, frozen {:.0}, short of liquid {:.0})", takers.iter().map(|[n, kg]| format!("{n:.0}/{kg:.2e} kg")).collect::<Vec<_>>().join(" "), died[pcore::life::SPENT as usize], died[pcore::life::AGE as usize], died[pcore::life::PHASE as usize], died[pcore::life::LACK as usize]) };
     format!(
-        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, potential energy gained {:.3e} J, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, cover {kg:.3e} kg in {slots} slots of {kinds} starting kinds; ms/yr flow {:.0}, change {:.0}, cover {:.0}, tape {:.0}",
+        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, potential energy gained {:.3e} J, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, cover {kg:.3e} kg in {slots} slots of {kinds} starting kinds{takers}; ms/yr flow {:.0}, change {:.0}, cover {:.0}, tape {:.0}",
         each.join(" "),
         w.store.lifted(),
         w.counts.clamped_heat,

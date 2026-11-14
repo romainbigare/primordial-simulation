@@ -132,10 +132,10 @@ pub struct Physics {
     pub alike: f32,
 
     // The cover (`cover`)
-    /// Upkeep of the cover's light capacity, as a share of what that capacity could store in the time
-    pub c_light: f64,
-    /// Mutation size of the cover's genes per generation, times each gene's step
-    pub cover_mut: f32,
+    /// Upkeep of a catalyst's capacity (the light reaction, a gut), a share of what it could make in the time
+    pub c_capacity: f64,
+    /// Mutation size of a living kind's genes per generation, times each gene's step
+    pub mut_size: f32,
     /// Built cover of one plant a seed founds, kg
     pub seed_kg: f64,
     /// Share of the air's gas a leaf draws it down by inside, where the light reaction takes it
@@ -162,6 +162,40 @@ pub struct Physics {
     pub root_least: f64,
     /// Share of its roots' need of loose ground below which a point holds none of a kind
     pub rooted_from: f64,
+
+    // The takers (`fauna`)
+    /// Upkeep of a taker's resting muscle, J per kg^`upkeep_exp` per day at `t_cat`, on top of `c_basal`
+    pub c_muscle: f64,
+    /// Power of a taker's living mass, kg, its upkeep grows as (Kleiber's law)
+    pub upkeep_exp: f64,
+    /// A taker's surface over its living mass to the 2/3, m² per kg^(2/3)
+    pub meeh: f64,
+    /// Insulation of the still air at a taker's surface, and of its coat at a `COAT` gene of 1, m² K/W
+    pub r_air: f64,
+    pub r_coat: f64,
+    /// The least key liquid a taker of 1 kg living passes through in a day besides its cooling, kg, and the power of its
+    /// living mass that grows as
+    pub drink_least: f64,
+    pub drink_exp: f64,
+    /// A taker's walking speed over that of a pendulum of its length, squared (its Froude number)
+    pub walk_froude: f64,
+    /// Work a taker of `move_ref` kg spends walking a m per kg of its living mass, J/(kg m), the reference mass, kg, and
+    /// the power of its mass over the reference that the work per kg and m goes as
+    pub c_move: f64,
+    pub move_ref: f64,
+    pub move_exp: f64,
+    /// A taker's chewing power over its living mass to `upkeep_exp`, J per kg^`upkeep_exp` per day at `t_cat`
+    pub chew: f64,
+    /// Share of the day a taker searches and takes
+    pub busy: f64,
+    /// Least height a taker's bite reaches down to, a share of its body's length
+    pub bite_floor: f64,
+    /// Highest a taker reaches, body lengths
+    pub reach_len: f64,
+    /// Most fuel a taker stores, kg per kg of its living mass
+    pub store_most: f64,
+    /// Key liquid a taker can lose before it dies, kg per kg of its living mass: what it carries between drinks
+    pub dry_most: f64,
 
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it: [soft solid, liquid, loose], m
@@ -251,8 +285,8 @@ impl Default for Physics {
             rho_body: 1e3,
             c_copy: 1e7,
             alike: 4.0,
-            c_light: 0.1,
-            cover_mut: 0.063,
+            c_capacity: 0.1,
+            mut_size: 0.063,
             seed_kg: 1e-5,
             drawdown: 0.3,
             huber: 2e-4,
@@ -267,6 +301,23 @@ impl Default for Physics {
             root_per_height: 0.1,
             root_least: 0.02,
             rooted_from: 0.25,
+            c_muscle: 1.12e4,
+            upkeep_exp: 0.75,
+            meeh: 0.1,
+            r_air: 0.12,
+            r_coat: 0.9,
+            drink_least: 0.0928,
+            drink_exp: 0.818,
+            walk_froude: 0.25,
+            c_move: 3.0,
+            move_ref: 30.0,
+            move_exp: -0.32,
+            chew: 2.9e3,
+            busy: 0.5,
+            bite_floor: 0.1,
+            reach_len: 5.0,
+            store_most: 0.3,
+            dry_most: 0.12,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
             still: 0.01,
@@ -322,6 +373,8 @@ impl Config {
         require(self.rain_drift_m > 0.0, || format!("rain_drift_m ({}) must be above 0", self.rain_drift_m))?;
         // Hardening lowers a lethal limit, never raises it.
         require(p.harden >= 0.0 && p.harden.is_finite(), || format!("harden ({}) must be at least 0", p.harden))?;
+        // A taker's coat divides by its insulation (`fauna`).
+        require(p.r_air > 0.0 && p.r_coat >= 0.0, || format!("r_air ({}) must be above 0 and r_coat ({}) not below", p.r_air, p.r_coat))?;
         // The soil's shares inside a cell (`inside`) divide by it.
         require(p.soil_m > 0.0, || format!("soil_m ({}) must be above 0", p.soil_m))?;
         // A channel's speed is its discharge over its width times its depth (`Physics::channel`).

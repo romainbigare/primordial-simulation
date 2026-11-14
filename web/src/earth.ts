@@ -26,7 +26,7 @@ export function rampFor(name: string): RGB[] {
   if (/plant|forest|grass|crop|grown/.test(name)) return GREEN;
   if (/loose|sediment|soil|seed/.test(name)) return EARTHY;
   if (/ice|snow/.test(name)) return ICY;
-  if (/absorb|fire|heat|energy/.test(name)) return FIRE;
+  if (/absorb|fire|heat|energy|taker/.test(name)) return FIRE;
   return VIRIDIS;
 }
 export const rampCss = (r: RGB[]) => `linear-gradient(90deg,${r.map(c => `rgb(${c})`).join(',')})`;

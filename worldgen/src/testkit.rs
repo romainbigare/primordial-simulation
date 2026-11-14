@@ -1,5 +1,6 @@
 //! What the tests of the laws share (the `testkit` feature, for dev-dependencies only): a small world, edits booked from
-//! outside, the books, the substances of chemistry 0 by number, and a plain taker on the contract (`taker`).
+//! outside (cover and takers among them), the books, the substances of chemistry 0 by number, and a plain taker on the
+//! contract (`taker`).
 
 mod taker;
 pub use taker::Taker;
@@ -140,6 +141,18 @@ pub fn start() -> (World, usize) {
 /// (`cover::place`).
 pub fn cover(w: &mut World, i: usize, kg: f64) {
     assert!(pcore::cover::place(w, i, crate::life::KINDS[crate::life::LIGHT_ROW].genes, crate::life::LIGHT_ROW as u32, kg), "no room for cover in cell {i}");
+}
+
+/// `members` takers of the starting kind of row `row` of `life::TAKER_KINDS` placed in cell `i`, each with `store` kg of
+/// fuel (`fauna::place`).
+pub fn takers(w: &mut World, i: usize, row: usize, (members, store): (f64, f64)) {
+    let genes = crate::life::TAKER_KINDS[row].genes;
+    assert!(pcore::fauna::place(w, i, (genes, row as u32), (members, store)), "no room for takers in cell {i}");
+}
+
+/// The takers' month of cell `i` alone, its surroundings as they stand (`fauna::step` on a chunk of that cell).
+pub fn takers_month(w: &mut World, i: usize) {
+    w.in_cell(i, pcore::fauna::step);
 }
 
 /// `mol` of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).

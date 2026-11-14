@@ -6,7 +6,8 @@
 
 use super::budget::{held, DIED, SEEDS_DIED};
 use super::seed::{lodge, Landed, Seed};
-use super::{activity, built_kg, dec, frozen, kin, Around, Cover, Parts, FROST, NG, NO_ROOT, NP, REPAIR};
+use super::{activity, built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, NG, NO_ROOT, NP, REPAIR};
+use crate::life::kin;
 use crate::units::DAY;
 use crate::{Counters, World};
 use serde::{Deserialize, Serialize};
@@ -53,7 +54,7 @@ impl Lying {
     /// the lot it frees. Their heat is the caller's to give the cover.
     pub fn lodge(&mut self, mm: &[f64; NP], s: &Seed, alike: f32) {
         let kg = built_kg(mm, &s.mol);
-        if let Some(x) = kin::kin(&self.genes, &self.root, (&s.genes, s.root), alike) {
+        if let Some(x) = kin::kin(&self.genes, &self.root, (&s.genes, s.root), APART * alike, distance) {
             let f = (kg / (kg + built_kg(mm, &self.mol[x])).max(1e-300)) as f32;
             (0..NG).for_each(|g| self.genes[x][g] += f * (s.genes[g] - self.genes[x][g]));
             (0..NP).for_each(|q| self.mol[x][q] += s.mol[q]);
@@ -65,7 +66,7 @@ impl Lying {
     /// The two lots nearest each other by their genes join, the lighter into the heavier: amounts added, genes the mean
     /// by built matter, its starting kind the heavier's. Returns the lot left empty.
     fn join(&mut self, mm: &[f64; NP]) -> usize {
-        let (a, z) = kin::nearest(&self.genes);
+        let (a, z) = kin::nearest(&self.genes, distance);
         let (big, small) = if built_kg(mm, &self.mol[z]) > built_kg(mm, &self.mol[a]) { (z, a) } else { (a, z) };
         let f = (built_kg(mm, &self.mol[small]) / (built_kg(mm, &self.mol[big]) + built_kg(mm, &self.mol[small])).max(1e-300)) as f32;
         let (gs, ms) = (self.genes[small], self.mol[small]);
