@@ -68,6 +68,19 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     (lost, cost)
 }
 
+/// What one kg of the living cover of slot `x` costs to keep for `dt` at `t` K in a month it draws no liquid, J: its
+/// upkeep (`upkeep_rates`), its capture area's (`c_leaf`) and that of the conducting walls that feed it (`stand::sapwood`
+/// of a kg's capture area, as tall as its plants); its fine roots draw nothing then. Defined with no living cover too.
+pub(super) fn keep_per_kg(w: &World, c: &Cover, p: &Parts, x: usize, (t, dt): (f64, f64)) -> f64 {
+    let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
+    let (mm, rho, days) = (p.mm(chem), chem.subs[p.sub[super::WALL]].density[0], dt / DAY);
+    let pace = chem.reactions[p.burn].arrhenius(t.max(1.0)) / chem.reactions[p.burn].arrhenius(ph.t_cat);
+    let leaf = dec(g[super::LEAF]);
+    let sapwood = super::stand::sapwood(ph, (leaf, c.height(ph, &mm, rho, x)), f64::INFINITY, rho);
+    let living: f64 = upkeep_rates(chem, ph, p, &g, pace).iter().sum();
+    (living + ph.c_leaf * leaf * ph.repair(g[REPAIR] as f64) * pace + ph.c_sapwood * sapwood * pace) * days
+}
+
 /// The upkeep of a kg of living cover of genes `g` a day at full activity, at `pace` of its burning's pace at `t_cat`,
 /// J: basal (`c_basal`), its capacity (a capacity that could store `cap` W per kg costs the share `c_capacity` of that) and
 /// its firmness (dearer the colder it stands, as a firmer catalyst costs more), each times its repair factor.

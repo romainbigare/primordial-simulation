@@ -949,7 +949,7 @@ seeds fill it:
   walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (`grow::frame`): walls are
   built of the fuel alone and pay no upkeep, so a plant short of minerals, or whose leaves are all its light pays for
   (it is **full** and builds no living cover then), still grows its frame and with it its height, and its stand thins
-  out. The fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
+  out. In season (below), the fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves in `seed::LOTS` (8) equal lots, each landing where the dispersal
   kernel draws it (`life::lot`: a lot starts at a point drawn evenly over its cell and moves by an offset drawn from a
@@ -962,7 +962,26 @@ seeds fill it:
   run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
   falls as e^-z with the capture area z above a leaf, so what a kg more would store at depth z is its bottom's times
   e^(y − z), y its whole depth; its living cover below the depth where that falls to its upkeep a kg goes to its
-  remains, its walls and plants stay. Each seed carries its own
+  remains, its walls and plants stay. **Shedding for a season** is the same rule over the months a leaf waits to gain
+  again (Kikuzawa 1991). A slot is **in season** while its top leaves gain what a kg of leaf costs to keep for the
+  month in which it draws no liquid (`upkeep::keep_per_kg`: its upkeep, its capture area's and its conducting
+  walls'); a layer that does not pay in season lies in its own canopy's shade and pays no more, so it goes as above,
+  once it has paid its month's upkeep. Out of season none of its leaves pay until the season comes back, after the
+  months its kinds expect without gain: the share of the last year's months in which its cell's ground held nothing
+  for roots, frozen or dry to the wilting point (`Cover::idle`, a running mean over a year's months, kept by the
+  cell's cover whether it holds slots or not, so a place's seasons outlive its plants), times the months of a year.
+  In the month its gain stops, before that month's upkeep is taken, it keeps the layers whose loss over those months,
+  `keep_per_kg` less their own gain, is less than building them anew (`Parts::living_cost`); in a month of no gain its
+  layers are alike, so it keeps all its leaves or drops all of them. With the costs of chemistry 0 the tree kind
+  drops its leaves for a season of four warm months (295 K) without liquid and keeps them through a frozen season of
+  any length, where the burning's pace is low. What it drops is its living cover (its leaves and the living cells that
+  serve them); its walls stand, its plants stay, and out of season it builds nothing and gives none of its fuel to its
+  ground, so its fuel is its store. A slot with no leaves pays no upkeep: its walls pay none, its conducting walls and
+  fine roots go with its leaves and the liquid they draw. What one more kg of leaf would gain is known with no leaves
+  too (its capture area per kg at the light that reaches its height): once that pays it is in season again and
+  builds, of its whole store while it holds no leaves, and matter alone in that month, on the walls it stands on. So
+  a tree stands bare through a long dry season and leafs out from its store; a herb keeps its stems and its store and
+  grows its leaves again, or, where its store is spent, comes back from its seeds lying. Each seed carries its own
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,

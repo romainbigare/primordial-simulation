@@ -91,6 +91,10 @@ pub struct Cover {
     /// cell (`around::pores`), and the share of its ground's liquid their roots reach
     pub film: f32,
     pub reach: f32,
+    /// The share of the last year's months in which its ground held nothing its roots could draw (frozen, or dry to the
+    /// wilting point), a running mean over a year's months (`grow::step`): the months its kinds expect without gain, by
+    /// which they shed their leaves (`grow::shed`). The ground's, so it outlives the slots.
+    pub idle: f32,
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its aside node sets aside for its light reaction
     pub e: f64,
@@ -106,7 +110,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
     }
 }
 
