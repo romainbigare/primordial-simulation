@@ -69,3 +69,17 @@ pub fn levels(w: &World, cells: &[usize]) -> Option<Vec<[f64; 2]>> {
     };
     Some((0..cells.len()).map(one).collect())
 }
+
+/// Of each of `cells`: the share of its area that is land, its own ground out of the liquid that stands over its pores
+/// (1 − `curve::Fill::wet`), 0..1, by Flow's state of the ground. None before Flow first built the state.
+pub fn land_shares(w: &World, cells: &[usize]) -> Option<Vec<f64>> {
+    if !stated(w) {
+        return None;
+    }
+    let x = wet(w, &scratch_of(w), cells);
+    let one = |c: usize| {
+        let stands = (x.vol[c] - x.vol[c].min(x.pores[c])).max(0.0);
+        1.0 - with_fill(w, &w.scratch, cells[c], |f| f.wet(stands))
+    };
+    Some((0..cells.len()).map(one).collect())
+}

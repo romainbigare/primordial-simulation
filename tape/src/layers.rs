@@ -167,6 +167,9 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
     pub wet: Vec<f64>,
+    /// Per ground cell: the share of its area that is land, 0..1 (`flow::land_shares`; before Flow first built its
+    /// state, all of a land cell and none of the others)
+    pub land: Vec<f64>,
 }
 
 impl<'a> Ctx<'a> {
@@ -178,7 +181,9 @@ impl<'a> Ctx<'a> {
         let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet };
+        let all: Vec<usize> = (0..n).collect();
+        let land = pcore::flow::land_shares(w, &all).unwrap_or_else(|| all.iter().map(|&i| if w.is_land(i) { 1.0 } else { 0.0 }).collect());
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, land };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
@@ -189,6 +194,12 @@ impl<'a> Ctx<'a> {
     pub(crate) fn channel(&self, i: usize) -> pcore::flow::Channel {
         self.w.channel(i, self.w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64)
     }
+}
+
+/// An amount per m² of a cell of which the share `land` is land, as per m² of that land: what lives on land only (the
+/// cover), as a viewer draws it on the land only; none (NaN) where the cell holds no land.
+pub(crate) fn per_land(per_m2: f64, land: f64) -> f64 {
+    if land > 0.0 { per_m2 / land } else { f64::NAN }
 }
 
 /// Air node `j`: its heat-absorbing column (Σ n·ir_abs / area) and the column of condensable gases, mol/m².
@@ -233,11 +244,11 @@ pub const LAYERS: &[Layer] = &[
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.rain.get(i).copied().unwrap_or(0.0) as f64),
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
-    l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| c.plants[i]),
-    l("wood", "kg/m2", "log", 0.01, 300.0, |c, i| c.wood[i]),
-    l("leaf", "m2/m2", "log", 0.01, 30.0, |c, i| c.leaf[i]),
-    l("seeds", "kg/m2", "log", 1e-5, 0.1, |c, i| c.seeds[i]),
-    l("grown", "kg/m2/yr", "log", 0.01, 10.0, |c, i| c.grown[i]),
+    l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| per_land(c.plants[i], c.land[i])),
+    l("wood", "kg/m2", "log", 0.01, 300.0, |c, i| per_land(c.wood[i], c.land[i])),
+    l("leaf", "m2/m2", "log", 0.01, 30.0, |c, i| per_land(c.leaf[i], c.land[i])),
+    l("seeds", "kg/m2", "log", 1e-5, 0.1, |c, i| per_land(c.seeds[i], c.land[i])),
+    l("grown", "kg/m2/yr", "log", 0.01, 10.0, |c, i| per_land(c.grown[i], c.land[i])),
     l("takers", "kg/km2", "log", 1.0, 1e4, |c, i| c.takers[i]),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
@@ -247,9 +258,10 @@ pub const LAYERS: &[Layer] = &[
     l("ground_b", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][2]),
 ];
 
-/// Quantise a value to a byte as the frames format defines.
+/// Quantise a value to a byte as the frames format defines: none (NaN) is 0, as nothing.
 pub fn quantise(l: &Layer, v: f64) -> u8 {
     let b = match l.scale {
+        _ if v.is_nan() => 0.0,
         "raw" => 255.0 * v,
         "log" if v < l.min => 0.0,
         "log" => 1.0 + 254.0 * (v.ln() - l.min.ln()) / (l.max.ln() - l.min.ln()),

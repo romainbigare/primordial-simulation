@@ -50,8 +50,8 @@ struct Land {
 
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
-// liquid in its pores, m; what its pores hold full, m, and the level of the wetness index its soil's liquid departs
-// about; the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn (its second number is
+// liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs
+// about, and the share of its area that is land; the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn (its second number is
 // not read); and in the last numbers of the true colour's and the layer's planes, the land's ice, m, its ground
 // temperature, K, and its mean height, m. (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
 const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
