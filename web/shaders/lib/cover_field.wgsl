@@ -134,31 +134,43 @@ const DOT_TURN = vec2f(0.55, 2.1);
 // those squares alone (`LAND_LAYER`).
 fn on_land(v: vec4f, held: f32) -> vec4f { return select(vec4f(0.0), v / held, held > LAND_LEAST); }
 
+// What the squares with land weigh at the point `cover_field` draws, plainly blended (`field_at`) and through the
+// squares' centres (`field_smooth`): read once a pixel (`land_weights`), as every layer read there shares them. Where
+// no cover field is drawn (the marks, cover.wgsl) they stay 1 and a layer is read as it is.
+var<private> land_plain: f32 = 1.0;
+var<private> land_smooth: f32 = 1.0;
+
+// Set `land_plain` and `land_smooth` at `at`, m from the map's north-west corner.
+fn land_weights(at: vec2f) {
+  let uv = at / (land.map.x * land.map.yz);
+  land_plain = select(field_tap(uv, LAND_LAYER).x, 0.0, any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)));
+  let b = bspline(at / land.map.x - 0.5, vec2f(textureDimensions(cover_field_tex).xy));
+  let top = b.g0.x * field_tap(b.h0, LAND_LAYER).x + b.g1.x * field_tap(vec2f(b.h1.x, b.h0.y), LAND_LAYER).x;
+  let bottom = b.g0.x * field_tap(vec2f(b.h0.x, b.h1.y), LAND_LAYER).x + b.g1.x * field_tap(b.h1, LAND_LAYER).x;
+  land_smooth = b.g0.y * top + b.g1.y * bottom;
+}
+
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
 // ground with (a reflectance, premultiplied) and the share they cover; at level 0 blended over the squares with land
-// (`on_land`; a level below holds the most of the texels above it, which no square without land lessens).
+// (`on_land`, `land_plain`; a level below holds the most of the texels above it, which no square without land lessens).
 fn field_at(at: vec2f, l: i32, lod: f32) -> vec4f {
   let uv = at / (land.map.x * land.map.yz);
   if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec4f(0.0); }
   let v = textureSampleLevel(cover_field_tex, cover_field_sampler, uv, l, lod);
   if (lod > 0.0) { return v; }
-  return on_land(v, field_tap(uv, LAND_LAYER).x);
+  return on_land(v, land_plain);
 }
 
 // The field of lattice l at uv, blended between its texels.
 fn field_tap(uv: vec2f, l: i32) -> vec4f { return textureSampleLevel(cover_field_tex, cover_field_sampler, uv, l, 0.0); }
 
 // The field of lattice l at `at` through its texels' centres as a cubic B-spline (draw.wgsl `bspline`) over the squares
-// with land (`on_land`): no square shows in it.
+// with land (`on_land`, `land_smooth`): no square shows in it.
 fn field_smooth(at: vec2f, l: i32) -> vec4f {
   let b = bspline(at / land.map.x - 0.5, vec2f(textureDimensions(cover_field_tex).xy));
-  let ne = vec2f(b.h1.x, b.h0.y);
-  let sw = vec2f(b.h0.x, b.h1.y);
-  let top = b.g0.x * field_tap(b.h0, l) + b.g1.x * field_tap(ne, l);
-  let bottom = b.g0.x * field_tap(sw, l) + b.g1.x * field_tap(b.h1, l);
-  let land_top = b.g0.x * field_tap(b.h0, LAND_LAYER).x + b.g1.x * field_tap(ne, LAND_LAYER).x;
-  let land_bottom = b.g0.x * field_tap(sw, LAND_LAYER).x + b.g1.x * field_tap(b.h1, LAND_LAYER).x;
-  return on_land(b.g0.y * top + b.g1.y * bottom, b.g0.y * land_top + b.g1.y * land_bottom);
+  let top = b.g0.x * field_tap(b.h0, l) + b.g1.x * field_tap(vec2f(b.h1.x, b.h0.y), l);
+  let bottom = b.g0.x * field_tap(vec2f(b.h0.x, b.h1.y), l) + b.g1.x * field_tap(b.h1, l);
+  return on_land(b.g0.y * top + b.g1.y * bottom, land_smooth);
 }
 
 // How much thicker than their mean the plants stand at `at` (`PATCH`).
@@ -342,6 +354,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
 // (`patchy`), as far as it holds there (`held_at`); far away, where the sward's and the low lattices' detail no longer
 // shows, those three as their one layer (canopy.ts `FIELD.low`).
 fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
+  land_weights(at);
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
   let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
