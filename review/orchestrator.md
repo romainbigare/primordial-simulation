@@ -555,9 +555,19 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
       capacity (wilting, not 1 cm of liquid); roots in full pores get no gas (they burn without it, by the
       chemistry's own reaction, at less energy), with a gene for carrying gas down at a cost, and a starting kind
       of soaked ground. After the mend of the slots.
-   3. **Rain with a season and a direction** (the air's helper): the overturning cell's edge follows the month's
-      sun; rain made by the wind rising over ground (Smith and Barstad 2004), the wind from the band's own air,
-      at its real size.
+   3. **Rain with a season and a direction** (the air's helper).
+      - On main: the overturning cell follows the month's sun (`air::cell`, Lindzen and Hou 1988). On the strip the
+        rain belt swings to 12 to 17 degrees; the driest month at 10 to 20 degrees gets 0.55 to 0.61 of the wettest
+        (land of the band 5 to 50: 0.48; a savanna: under 0.1). The belt peaks three and a half months after the
+        solstice (the measured one: about two).
+      - Open: **the dry belt stays wet** (1,120 to 1,170 mm at 22 to 35 degrees; the measured ocean belts: 600 to
+        900). Measured cause: the belt sends away 260 of its 1,430 mm of evaporation (the cell carries a fifth of
+        the measured flux, `wind` "anchored, open", and its share falls to none where the air sinks), and no term
+        of the rain law reads whether the air rises or sinks. The halves already carry their own vapour; the
+        vapour's profile is tall (about 4 km against the measured 2).
+      - In work: **rain follows the air's rise**, one law: a node's rising or sinking mass flux (the divergence of
+        the overturning's low flow, plus wind against the ground's rise, Smith and Barstad 2004); rising air
+        condenses, sinking air dries the low air. The dry belt, the wet windward side and the dry lee together.
    4. Fire, as a fast event inside a month (needs 2 and 3 first).
    5. Then: the ground's water numbers by grain (heath on coarse ground, wet meadow on fine); a wider spread of
       the bed's wear rates and flat layers on a high land in some worlds (scarps); one large land in a world of
