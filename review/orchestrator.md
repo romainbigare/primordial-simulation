@@ -107,10 +107,16 @@ tests of `tape/tests/ranges` pass):
 
 **Known faults on the page:**
 - **A band of bright flat green beside rock or brown land when zoomed in** (the owner's fault as they meant it;
-  their picture: seed 1, 32 squares, Wide, year 15.92, the 100 m bar): 150 to 300 m wide, no crowns, soft toward
-  the stand, ending against the bare bed in a hard ragged straight line; it appears only close up; "not sure it
-  relates to anything real in the numbers". In work (branch `green-band`): which term draws it, what the cells
-  under it hold, whether the cover can stand on bare bed at all; a report before a mend.
+  their picture: seed 1, 32 squares, Wide, year 15.92, the 100 m bar). Found (`scratchpad/coast/notes.md`,
+  `pics/green_band.png`): it is the herbs' layer, the near view's sward pass in `lib/cover_field.wgsl`, drawn
+  where the trees' roots do not hold (thin loose ground by the bare bed). The low layer is real and dense (a cell
+  with 17.3 kg of trees and 0.52 kg, 3.01 m² of leaf, of herbs per m² of land). Not real: the hard straight
+  ragged edge (the herbs fade over one pixel of loose depth, and the depth is blended from the 125 m samples); the
+  tone (lighter and greener than the forest beside it, and bright in early winter while the trees are drawn
+  dormant); a young slot of a tree kind drawn as meadow (`designOf` in `style.ts`: any slot under 3 m that is
+  mostly leaf). In work (branch `green-band`): the fade tied to the samples' spacing; young trees drawn as young
+  trees; the meadow's tone in the far view's palette with ground showing through thin herbs; the sward's dormant
+  tone by the same rule as the trees'.
 - The green grain over thin cover when zoomed in (found on the way, not what the owner meant) is mended on main: the near view drew
   each crown at least 1.5 pixels wide whatever the plants' size (`grain` in `lib/cover_field.wgsl`); a crown is
   now as wide as the plants' own marks and drawn only where those span 1.5 pixels, else the near view shows the
