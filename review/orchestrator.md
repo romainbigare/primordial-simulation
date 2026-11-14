@@ -320,15 +320,29 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     `scratchpad/air2/shots4/contact.png`: at 128 squares in the band main's land is frozen all year (262 K in
     its warmest month, cover on the southern fringe only); the branch's is 290 K in summer, 273 K in winter, green
     in summer, its rain smooth.
-  - **One thing holds the package off main**: `the_laws_do_not_depend_on_the_size_of_the_cells` fails on the
-    cover's area (5.7e-2 against 4.4e-2): the package depends less on the cells' size than main (+2.9% against
-    +5.9%) but its years are steadier, so its limit is tighter. Not loosened. In work, the last round on
-    `surface-step` (saved as `wip/surface-step`), by the same helper: main merged in (the takers' first part),
-    the round lobes of the shelf merged in (`round3-shelf-lobes`), life started on every cell that holds land
-    (`open_land` by the land part, soil and cover per m² of land), the scale test again, the references once
-    more, the full gate. If the scale test still fails, the orchestrator decides on its table.
-  - To decide after it: in a cell of parts, does the cover's month use the cell's area or its land's for light
-    and room (asked, with numbers).
+  - Done on `surface-step` (8c3e3b3, saved as `wip/surface-step`; main merged in at 6605bcc, `SNAPSHOT_VERSION`
+    139; gate passed but for one slow test): the round lobes of the shelf merged in; life starts on every cell
+    that holds land, soil and cover per m² of its land by Flow's one land share (`flow::land_shares`); the
+    references set (land 287.81 K, swing 11.83 K, rain 2.490e-3, gas 348.6 ppm, river cells 235.4, worn 0.2087
+    mm/yr, cover 9.494). Flow costs +5.5% against main at 128 squares.
+  - **One thing holds the package off main**: `the_laws_do_not_depend_on_the_size_of_the_cells` fails narrowly on
+    two numbers (`air_3` 5.14e-6 against 5.05e-6; `root_1_cover_area` 5.45e-2 against 4.91e-2). Not loosened: it
+    sees a real fault. In a cell of parts the cover's month uses the whole cell's area for its light, its room
+    and its wetness, so a coast cell under a quarter land stands up to 15 times denser per m² of land than
+    inland (`scratchpad/air2/coast/coast_table_final.txt`). In work, by the same helper: the cover of a cell
+    lives on the cell's land (one call `contract::land`), then the scale test, the references, the gate.
+  - To pass on to the takers' builder after it: the take searches the cell's area, not its land's
+    (`core/src/fauna/month.rs`).
+  - **The owner's finding: the low liquid falls and the rivers' mouths are left dry.** Measured on main, a 32
+    drawn world, seed 1, 150 years (`scratchpad/sea/`): in the band 20 to 65 the level falls 23 m (15 cm a year,
+    steady), with 39% of the map under ice that grows without end (main's cold north) and the air's edges open;
+    with no band it falls 0.33 m in ten years as the land's pores fill, then holds (-0.345 m at year 150). The
+    books hold (drift 1e-15): the liquid is locked as ice and leaves as vapour. The package's bounded ice cuts
+    it to 6.4 mm a year (below). **Next after the package, first in line**: the low liquid of an island in the
+    planet's air is the planet's: open at the map's edges, its level held. The tiles' channels end at the shore
+    the world was made with, so a lower level leaves a dry gap to the shore: with the level held this does not
+    show; for levels that truly move (ice, a god's hand) the ground must be worn again where the level moved, at
+    a slow cadence, with the package of the mouths (section 5).
   - Open, for a later package: on an island in the planet's air the low liquid falls 6.4 mm a year (vapour out
     through the open edges 0.162 m a year against 0.158 in): the low liquid should be open to the planet's at the
     map's edges, its level held. No cloud law and no law of the liquid's reflectance without the orchestrator's

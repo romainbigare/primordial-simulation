@@ -3,7 +3,7 @@
 //! their rates, switch to the next as one runs out, and never overdraw it in any order.
 
 use super::body::Body;
-use super::FS;
+use super::GROUPS;
 use crate::contract::{self, Layer, Shown};
 use crate::life::Chunk;
 use crate::units::MAX_SUBSTANCES;
@@ -95,7 +95,7 @@ pub(super) struct Reach {
 
 /// What the slots of cell `i`, its members `bodies`, can reach of `layers` (`Reach`, `reach`), of a frame only what its
 /// jaw can cut.
-pub(super) fn reachable(w: &World, i: usize, layers: &[Found], bodies: &[Body; FS]) -> Reach {
+pub(super) fn reachable(w: &World, i: usize, layers: &[Found], bodies: &[Body; GROUPS]) -> Reach {
     let snow = contract::place(w, i).snow;
     // Of a frame, only the stems its jaw can cut (`contract::cut`).
     let cuts = |b: &Body, f: &Found| if matches!(f.layer, Layer::Frame(_)) { contract::cut(w, f.shown.width, b.force) } else { 1.0 };
@@ -109,22 +109,22 @@ pub(super) fn reachable(w: &World, i: usize, layers: &[Found], bodies: &[Body; F
 
 /// The slots of `bodies` as eaters of the scheme, each of its members at work the share `work` of its working time (a
 /// slot cut to the share f works as f of its members would).
-pub(super) fn eaters(bodies: &[Body; FS], share: &[Vec<f64>], work: &[f64; FS]) -> Vec<Eater> {
-    (0..FS).map(|x| Eater { n: bodies[x].n * work[x], search: bodies[x].search, busy: bodies[x].busy, chew: bodies[x].chew, reach: share[x].clone() }).collect()
+pub(super) fn eaters(bodies: &[Body; GROUPS], share: &[Vec<f64>], work: &[f64; GROUPS]) -> Vec<Eater> {
+    (0..GROUPS).map(|x| Eater { n: bodies[x].n * work[x], search: bodies[x].search, busy: bodies[x].busy, chew: bodies[x].chew, reach: share[x].clone() }).collect()
 }
 
 /// One bite of each of `layers` of cell `i` of chunk `d` for all the slots (`contract::take`), `taken` kg of each layer
 /// per slot, shared by the slots' parts of it. Returns the mol of each substance each slot took, and the heat that came
 /// with it, J.
-pub(super) fn bite(w: &World, d: &mut Chunk, i: usize, layers: &[Found], taken: &[Vec<f64>]) -> ([[f64; MAX_SUBSTANCES]; FS], [f64; FS]) {
-    let (mut mol, mut heat) = ([[0.0; MAX_SUBSTANCES]; FS], [0.0; FS]);
+pub(super) fn bite(w: &World, d: &mut Chunk, i: usize, layers: &[Found], taken: &[Vec<f64>]) -> ([[f64; MAX_SUBSTANCES]; GROUPS], [f64; GROUPS]) {
+    let (mut mol, mut heat) = ([[0.0; MAX_SUBSTANCES]; GROUPS], [0.0; GROUPS]);
     for (l, f) in layers.iter().enumerate() {
         let want: f64 = taken.iter().map(|t| t[l]).sum();
         if want <= 0.0 {
             continue;
         }
         let got = contract::take(w, d, i, f.layer, want);
-        for x in 0..FS {
+        for x in 0..GROUPS {
             let share = taken[x][l] / want;
             mol[x].iter_mut().zip(&got.mol).for_each(|(a, b)| *a += b * share);
             heat[x] += got.heat * share;

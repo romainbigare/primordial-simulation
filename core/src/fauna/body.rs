@@ -2,7 +2,7 @@
 //! at rest, the heat its coat loses, how fast it walks, searches and chews, the band of heights it reaches, its gut's
 //! capacity, and the least liquid it passes through.
 
-use super::{Fauna, BODY, COAT, ENZYME, KEEP, NF, REACH, REPAIR};
+use super::{Fauna, BODY, COAT, ENZYME, FS, KEEP, NF, REACH, REPAIR};
 use crate::contract;
 use crate::life::{Parts, WET_TISSUE};
 use crate::math::dec;
@@ -12,10 +12,10 @@ use crate::World;
 /// The band of heights a taker searches, decades each side of its `REACH` gene (a rule of the model).
 pub const BAND: f64 = 0.5;
 
-/// A member of a slot in a month, at its slot's mean.
+/// A member of a group of a slot in a month, at its group's mean.
 #[derive(Clone, Copy, Default)]
 pub(super) struct Body {
-    /// Members of the slot
+    /// Members of the group
     pub(super) n: f64,
     /// Living mass, kg
     pub(super) m: f64,
@@ -45,7 +45,7 @@ pub(super) struct Body {
     pub(super) least: f64,
 }
 
-/// A member of slot `x` of `f` (its parts' molar masses `mm`) of cell `i` on ground at `t` K, its gut splitting walls
+/// A member of group `x` of `f` (`GROUPS`: its slot's adults or young; its parts' molar masses `mm`) of cell `i` on ground at `t` K, its gut splitting walls
 /// into `fuel` J of fuel a mol (`gut::split`).
 /// - Its body stands at its `KEEP` gene where the ground is colder, else at the ground's temperature; its upkeep and its
 ///   work run at the pace of its burning there (the bare rate law, Gillooly et al. 2001); work at no more than 1.
@@ -61,7 +61,7 @@ pub(super) struct Body {
 ///   floor `bite_floor` lengths.
 /// - Liquid: `drink_least` × m^`drink_exp` kg a day pass through it besides its cooling (Nagy and Peterson 1988).
 pub(super) fn body(w: &World, p: &Parts, f: &Fauna, (x, mm): (usize, &[f64; NF]), (i, t): (usize, f64), (fuel, remains, gathered): (f64, f64, f64)) -> Body {
-    let (chem, ph, g, n) = (&w.chem, &w.cfg.phys, &f.genes[x], f.adults[x]);
+    let (chem, ph, g, n) = (&w.chem, &w.cfg.phys, &f.genes[x % FS], f.n[x]);
     if n <= 0.0 || f.mol[x][BODY] <= 0.0 {
         return Body::default();
     }

@@ -22,7 +22,7 @@ pub fn place(w: &mut World, i: usize, (genes, root): ([f32; NG], u32), (members,
     let tb = (genes[KEEP] as f64).max(contract::place(w, i).t);
     let heat = (0..NF).map(|q| mol[q] * w.chem.subs[sub[q]].cp).sum::<f64>() * tb;
     let f = &mut w.life.cells[i].fauna;
-    (f.adults[x], f.mol[x], f.e[x], f.genes[x], f.root[x]) = (members, mol, heat, genes, root);
+    (f.n[x], f.mol[x], f.e[x], f.genes[x], f.root[x]) = (members, mol, heat, genes, root);
     // (The takers' side is their own: the store books the outside node's.)
     contract::placed(w, i, (0..NF).map(|q| (sub[q], mol[q])), heat);
     true

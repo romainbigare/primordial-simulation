@@ -84,8 +84,8 @@ fn a_slot_that_takes_nothing_starves_as_its_upkeep_says() {
         testkit::takers_month(&mut w, i);
         n = if k == 1 { n * (1.0 - wear) * STORE_MONTHS } else { 0.0 };
         let f = of(&w, i);
-        assert!((f.adults[0] - n).abs() <= 1e-9 * n, "month {k}: {} members, the law says {n} (at {t} K)", f.adults[0]);
-        println!("month {k}: {:.3} members", f.adults[0]);
+        assert!((f.n[0] - n).abs() <= 1e-9 * n, "month {k}: {} members, the law says {n} (at {t} K)", f.n[0]);
+        println!("month {k}: {:.3} members", f.n[0]);
     }
     books.assert_kept(&w, 1e-9);
     for (row, kind) in TAKER_KINDS.iter().enumerate() {
@@ -135,19 +135,20 @@ fn counts_are_never_rounded_up() {
         let store = 60.0 * burnt_a_day(&w, row, m, t) * w.cfg.days_per_month as f64 / per_kg(&w);
         testkit::takers(&mut w, i, row, (n, store));
     }
-    let mut was = of(&w, i).adults;
+    let mut was = of(&w, i).n;
     for k in 0..50 {
         testkit::takers_month(&mut w, i);
         let f = of(&w, i);
-        for (x, &n) in f.adults.iter().enumerate() {
-            assert!(n <= was[x], "month {k}, slot {x}: {n} members after {}", was[x]);
-            assert!(n >= N_WHOLE || n.fract() == 0.0, "month {k}, slot {x}: {n} members, not whole");
-            assert!(n > 0.0 || (f.root[x] == NO_ROOT && f.mol[x] == [0.0; 2]), "month {k}, slot {x}: an empty slot holds {:?}", f.mol[x]);
-            assert!(n == 0.0 || f.mol[x][BODY] > 0.0, "month {k}, slot {x}: members with no body");
+        for (g, &n) in f.n.iter().enumerate() {
+            assert!(n <= was[g], "month {k}, group {g}: {n} members after {}", was[g]);
+            assert!(n >= N_WHOLE || n.fract() == 0.0, "month {k}, group {g}: {n} members, not whole");
+            assert!(n > 0.0 || f.mol[g] == [0.0; 2], "month {k}, group {g}: a group of none holds {:?}", f.mol[g]);
+            assert!(n == 0.0 || f.mol[g][BODY] > 0.0, "month {k}, group {g}: members with no body");
         }
-        was = f.adults;
+        assert!((0..FS).all(|x| f.members(x) > 0.0 || f.root[x] == NO_ROOT), "month {k}: a slot of none is held");
+        was = f.n;
     }
-    let left: f64 = of(&w, i).adults.iter().sum();
+    let left: f64 = of(&w, i).n.iter().sum();
     println!("members left after 50 months: {left}; living kg {:.3e}", (0..FS).map(|x| of(&w, i).mol[x][BODY]).sum::<f64>() * w.chem.subs[10].molar_mass / (1.0 - WET_TISSUE));
     books.assert_kept(&w, 1e-9);
 }
@@ -311,4 +312,41 @@ fn a_mouth_cuts_what_its_jaw_can_rupture() {
         assert_eq!(pcore::contract::cut(&w, 0.5 * d, force), 1.0, "a frame thinner than d was not taken whole");
         last = share;
     }
+}
+
+/// Newborns are built at the cap of the rate of living, and the books are kept through births and growth: a slot of
+/// adults with a store over the most it keeps, on a cell of cover rich in body matter, bears in its first month the
+/// living mass its adults' cap allows (West, Brown and Enquist 2001: Kleiber's rest (`c_basal` + `c_muscle`)
+/// m^`upkeep_exp` at the pace of its body's temperature over the energy a kg of living tissue holds and costs,
+/// `Parts::living_cost`), as newborns of `CHILD` of their mass; over the next months its young grow and join its
+/// adults, every count under `N_WHOLE` is whole, and every element and the energy are kept.
+#[test]
+fn newborns_are_built_at_the_cap_and_the_books_are_kept() {
+    let mut w = testkit::living(8, 12);
+    let i = testkit::mild_land(&w);
+    (w.life.env[i][1], w.life.env[i][3]) = (1.0, 0.0);
+    let (row, ph) = (1, w.cfg.phys);
+    let g = TAKER_KINDS[row].genes;
+    let (m, child) = (fauna::adult(&g), fauna::adult(&g) * 10f64.powf(g[fauna::CHILD] as f64));
+    let books = Books::now(&w);
+    testkit::takers(&mut w, i, row, (MANY, 2.0 * ph.store_most * m));
+    let p = Parts::of(&w.chem).expect("life's parts");
+    let rx = &w.chem.reactions[p.burn];
+    let pace = rx.arrhenius(g[KEEP] as f64) / rx.arrhenius(ph.t_cat);
+    let cap = (ph.c_basal + ph.c_muscle) * m.powf(ph.upkeep_exp) * pace / p.living_cost(&w.chem, &ph);
+    let mm = fauna::mm(&w.chem, &p);
+    testkit::takers_month(&mut w, i);
+    let f = of(&w, i);
+    let (built, law) = (f.living_of(&mm, FS), cap * f.n[0] * w.cfg.days_per_month as f64);
+    println!("month 1: {:.1} adults bore {:.1} young, {built:.4e} kg; the cap {law:.4e} kg", f.n[0], f.n[FS]);
+    assert!((built - law).abs() <= 1e-9 * law, "the newborns hold {built} kg, the cap allows {law} kg");
+    assert!((f.n[FS] - built / child).abs() <= 1e-9 * f.n[FS], "{} newborns of {built} kg at {child} kg each", f.n[FS]);
+    for k in 2..=6 {
+        testkit::takers_month(&mut w, i);
+        let f = of(&w, i);
+        println!("month {k}: {:.1} adults, {:.1} young", f.n[0], f.n[FS]);
+        assert!(f.n.iter().all(|&n| n >= N_WHOLE || n.fract() == 0.0), "month {k}: a count under {N_WHOLE} not whole: {:?}", f.n);
+    }
+    assert!(of(&w, i).n[0] > 0.0 && of(&w, i).n[FS] > 0.0, "no adults or no young after six months");
+    books.assert_kept(&w, 1e-9);
 }

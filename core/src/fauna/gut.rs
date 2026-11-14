@@ -1,8 +1,8 @@
 //! What a slot of takers does with what it took (laws.md 3b), by the chemistry's own reactions: its gut splits walls
 //! into fuel up to its capacity (the reaction that makes fuel of the walls alone, taking the key liquid), it burns the
-//! body matter it took for its upkeep first (the burning of body matter, which gives back its mineral at once), then
-//! the fuel it took and split, then its store; what it took of fuel beyond its need it stores, up to `store_most`; what
-//! it did not use passes to the ground.
+//! fuel it took and split for its upkeep first, then the body matter it took (the burning of body matter, which gives
+//! back its mineral at once), then its store; the fuel it took beyond its need goes to its store and the body matter
+//! to its growth (`grow`); the walls it did not split pass to the ground.
 
 use super::{Fauna, NF, STORE};
 use crate::chem::Chemistry;
@@ -35,12 +35,20 @@ impl Gut {
     }
 }
 
-/// Slot `x` of `f` digests `took` (mol of life's parts) over the month: its gut splits up to `most` mol of walls, each
+/// What a group of takers kept of what it took in a month (`digest`): the share of its energy unpaid, the body matter
+/// it took and did not burn, mol, and the fuel its store gained, mol (none where it drew on its store).
+pub(super) struct Digested {
+    pub(super) unpaid: f64,
+    pub(super) matter: f64,
+    pub(super) gained: f64,
+}
+
+/// Group `x` of `f` digests `took` (mol of life's parts) over the month: its gut splits up to `most` mol of walls, each
 /// unit taking the key liquid the cell's ground still holds (`liquid`, mol, lessened by it); it burns for `energy` J the
-/// body matter it took, then the fuel it took and split with its store, each no more than the gas the cell's share of
-/// its air node offers; it stores the fuel left up to `store` mol; the rest of what it took goes to the remains
-/// (`Books::dead`). Returns the share of `energy` unpaid.
-pub(super) fn digest(chem: &Chemistry, (p, gut): (&Parts, &Gut), (f, x): (&mut Fauna, usize), (mut took, most, liquid): ([f64; NP], f64, &mut f64), (energy, store): (f64, f64), b: &mut Books<0>) -> f64 {
+/// fuel it took and split, then the body matter it took, then its store, each no more than the gas the cell's share of
+/// its air node offers; the fuel it took and did not burn goes to its store; the walls it did not split go to the
+/// remains (`Books::dead`). The body matter left is for growth (`grow`).
+pub(super) fn digest(chem: &Chemistry, (p, gut): (&Parts, &Gut), (f, x): (&mut Fauna, usize), (mut took, most, liquid): ([f64; NP], f64, &mut f64), energy: f64, b: &mut Books<0>) -> Digested {
     if let Some((k, _)) = gut.split {
         let rx = &chem.reactions[k];
         let per_liquid = rx.inputs.iter().find(|q| q.0 as usize == p.liquid).map_or(0.0, |q| q.1 as f64);
@@ -49,7 +57,9 @@ pub(super) fn digest(chem: &Chemistry, (p, gut): (&Parts, &Gut), (f, x): (&mut F
         b.run(chem, &p.sub, &mut took, rx, units);
         *liquid -= units * per_liquid;
     }
-    let mut left = energy;
+    let sub = super::sub(p);
+    let mut eaten = [took[FUEL].max(0.0), 0.0];
+    let mut left = burn(chem, gut, (&sub, &mut eaten), energy, b);
     if let Some(k) = gut.matter {
         let rx = &chem.reactions[k];
         let per = rx.inputs.iter().find(|q| q.0 as usize == p.sub[MATTER]).map_or(1.0, |q| q.1 as f64);
@@ -57,21 +67,18 @@ pub(super) fn digest(chem: &Chemistry, (p, gut): (&Parts, &Gut), (f, x): (&mut F
         b.run(chem, &p.sub, &mut took, rx, units);
         left -= units * -chem.dh(k);
     }
-    let sub = super::sub(p);
-    f.mol[x][STORE] += took[FUEL].max(0.0);
-    took[FUEL] = 0.0;
+    let before = f.mol[x][STORE];
+    f.mol[x][STORE] += eaten[STORE];
     let unpaid = burn(chem, gut, (&sub, &mut f.mol[x]), left, b);
-    let over = (f.mol[x][STORE] - store).max(0.0);
-    f.mol[x][STORE] -= over;
-    b.dead[sub[STORE]] += over;
-    (0..NP).for_each(|q| b.dead[p.sub[q]] += took[q].max(0.0));
-    if energy > 0.0 { unpaid / energy } else { 0.0 }
+    b.dead[p.sub[WALL]] += took[WALL].max(0.0);
+    let unpaid = if energy > 0.0 { unpaid / energy } else { 0.0 };
+    Digested { unpaid, matter: took[MATTER].max(0.0), gained: (f.mol[x][STORE] - before).max(0.0) }
 }
 
 /// Amounts `mol` (of the taker's parts, the substances `sub`) burn their store for `energy` J (the burning of the fuel,
 /// `life::Books::run`), no more than the store and the gas the cell's share of its air node offers. Returns the energy
 /// unpaid, J.
-fn burn(chem: &Chemistry, gut: &Gut, (sub, mol): (&[usize; NF], &mut [f64; NF]), energy: f64, b: &mut Books<0>) -> f64 {
+pub(super) fn burn(chem: &Chemistry, gut: &Gut, (sub, mol): (&[usize; NF], &mut [f64; NF]), energy: f64, b: &mut Books<0>) -> f64 {
     let (rx, per) = (&chem.reactions[gut.burn.0], gut.burn.1);
     let units = energy.max(0.0) / -chem.dh(gut.burn.0);
     let burnt = (units * per).min(mol[STORE].max(0.0)).min(b.room(sub, rx) * per);
