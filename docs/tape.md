@@ -173,7 +173,7 @@ month's start found it, the land its cover lives on). Before Flow built its stat
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 4 unless the
-start chose other) of `KIND_ROW` (19) f32 each, the heaviest first: the slots of
+start chose other) of `KIND_ROW` (20) f32 each, the heaviest first: the slots of
 its cover, each as the law holds it, per m² of the cell's land (`layers::per_land`; a cell that holds no land has no
 kinds); of each its starting kind (-1: none); its built cover, kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m² (the slot's count, `Cover::plants`), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-its leaf area); its walls' share of its built cover; its
@@ -182,7 +182,8 @@ its moisture gene and frost gene, K; its fuel over its reserve; its activity on 
 the share of it frozen this month (`cover::frozen`); the share of what it builds that goes to seeds (`SEED`); and the
 share of the land whose loose ground holds its plants (`Cover::rooted` over the land's share, at most all of it) with
 the loose ground their roots need, m (`Cover::need`; all of the land and 0 while the need of a slot of newly landed
-seeds is not found). The page thins a
+seeds is not found); and its walls gene (`WALLS`, log10 kg of walls per kg of matter), by which the page draws a woody
+kind as woody plants while they are young (web/src/style.ts `designOf`). The page thins a
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /

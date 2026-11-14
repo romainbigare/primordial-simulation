@@ -6,7 +6,7 @@
 
 struct CoverLook {
   // Of each lattice: its cell's side, m (0: no square holds it), and how strongly its marks show (the rest is the field);
-  // and how much more than its share the sward is seen to cover (`sides.w`, canopy.ts `SWARD_SEEN`).
+  // w is not read.
   sides: vec4f, shown: vec4f,
   // 1 where the cover is drawn (0: none); how strongly its marks cover the map.
   look: vec4f,
@@ -106,9 +106,9 @@ fn held_at(at: vec2f, b: Beneath) -> vec4f {
   return out;
 }
 
-// The herbs' sward: their plants thicker and thinner by up to `SWARD` of their mean over tufts of `SWARD_M`; seen from
-// above, their leaves leaning and their shade cover more than their share: the ground they leave is (1 - share)^
-// `cover_look.sides.w` (canopy.ts `SWARD_SEEN`, an Earth view's style). Its tone varies by up to `TUFT_TONE` over the tufts, by up to `SWATH` over
+// The herbs' sward: their plants thicker and thinner by up to `SWARD` of their mean over tufts of `SWARD_M`; they cover
+// the share of the ground their leaves close by the cover's light law (canopy.ts `Paint`, tape/src/stands.rs `plants`),
+// so a thin sward lets the ground show through. Its tone varies by up to `TUFT_TONE` over the tufts, by up to `SWATH` over
 // swathes of `SWATH_M` and by up to `BLADES` over blades `BLADE_W` wide and `BLADE_L` long, turned by tufts.
 const SWARD = 0.45; const SWARD_M = 0.35;
 // Under the trees' crowns the sward is in their shade: darker by up to `SWARD_SHADE` as they close over it.
@@ -311,8 +311,7 @@ fn flowers_at(at: vec2f, e: f32, bloom: f32, petal: vec3f) -> vec4f {
 }
 
 // The herbs' sward at `at`, seen at `e` m a pixel, over `b`, premultiplied: their colour in stands of their kinds, the
-// share they cover (thicker and thinner by `thick`, `patchy`, as far as they hold there, `hold`) seen from above
-// (canopy.ts `SWARD_SEEN`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees' crowns,
+// share they cover (thicker and thinner by `thick`, `patchy`, as far as they hold there, `hold`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees' crowns,
 // reeds on soaked ground and at the water's edge, and flowers over it.
 fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> vec4f {
   let f = field_smooth(at, SWARD_LAYER);
@@ -336,7 +335,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     c = mix(c, c * REED_TINT, reeds);
     tone += REED_TONE * reeds * shows_at(REED_W, e) * streaks(at, REED_W, REED_L, 0.3 * noise(at / REED_L, 76).x, 77);
   }
-  let seen = 1.0 - pow(1.0 - s, cover_look.sides.w);
+  let seen = s;
   c *= max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
@@ -356,11 +355,16 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
 // shows, those three as their one layer (canopy.ts `FIELD.low`).
 fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   land_weights(at);
+  // The plants' roots find the loose ground's depth as the ground's samples know it: their share of the ground fades
+  // over the change of that depth across a sample, never over less (`rooted`), so no edge sharper than the samples
+  // runs across a sample's square.
+  var bs = b;
+  bs.loose_px = b.loose_px * max(1.0, land.map.x * land.map.y / land.samples.x / max(e, 1e-6));
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
   let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
-  var hold = held_at(at, b);
-  hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * b.loose_px, THIN_TO_M + 0.5 * b.loose_px, b.loose));
+  var hold = held_at(at, bs);
+  hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * bs.loose_px, THIN_TO_M + 0.5 * bs.loose_px, b.loose));
   // The trees' field, read once: their crowns' share, and their layer below (plainly blended where their marks show in
   // its place: only the shade under them reads it).
   var trees = vec4f(0.0);

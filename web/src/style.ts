@@ -25,7 +25,8 @@ export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom:
 /** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (cover.wgsl `plant`), and a herb,
  * drawn only as the sward of the ground (cover_field.wgsl `sward`). */
 export const DESIGN = { tree: 0, bush: 1, herb: 2 } as const;
-/** A plant this tall or taller, m, is a tree; a lower one whose walls are this share of its cover or more is a bush. */
+/** A woody kind's plant this tall or taller, m, is a tree, a lower one a bush; a kind is woody whose grown plants hold
+ * this share of their dry mass as walls or more (`designOf`). */
 const TREE_M = 3, BUSH_WOOD = 0.6;
 
 // The palette of the greens: a kind's hue (OKLCH, degrees) from its leaves' thickness (thin leaves yellow-green, thick
@@ -123,9 +124,14 @@ export function cooling(year: number, lat: number): number {
   return smooth(COOLING_SINE, -COOLING_SINE, Math.sin(2 * Math.PI * phase));
 }
 
-/** The design of a kind whose plants stand `height` m tall and whose walls are `wood` of its cover (`DESIGN`). */
-export function designOf(height: number, wood: number): number {
-  return height >= TREE_M ? DESIGN.tree : wood >= BUSH_WOOD ? DESIGN.bush : DESIGN.herb;
+/** The design of a kind whose plants stand `height` m tall and whose walls gene is `walls` (log10 kg of walls per kg of
+ * matter, the core's `WALLS`): a kind whose grown plants hold `BUSH_WOOD` of their dry mass as walls or more is woody,
+ * drawn as trees from `TREE_M` tall and as bushes below (so a young stand of a woody kind is drawn as young woody
+ * plants, never as meadow); any other kind is a herb, the sward. A grown plant holds 10^walls kg of walls a kg of matter
+ * (laws.md 3: its share of walls nears the gene as it grows). */
+export function designOf(height: number, walls: number): number {
+  const grown = 10 ** walls / (1 + 10 ** walls);
+  return grown < BUSH_WOOD ? DESIGN.herb : height >= TREE_M ? DESIGN.tree : DESIGN.bush;
 }
 
 /** The green of kind `k` (OKLab), its lightness drawn in part from its physical leaf `phys` (linear); a herb's as the
