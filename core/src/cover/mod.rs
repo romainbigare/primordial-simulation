@@ -85,7 +85,7 @@ pub struct Cover {
     pub net: [f32; SLOTS],
     /// Per slot: its plants in the cell, a real count (`stand`): its built cover over them is a plant's mass
     pub plants: [f64; SLOTS],
-    /// Per slot: the share of the cell whose loose ground holds its plants (`stand::rooted_share`), and the loose ground
+    /// Per slot: the share of its ground (`ground`) whose loose ground holds its plants (`stand::rooted_share`), and the loose ground
     /// its roots needed when that was found, m (`stand::need`; 0: not found yet)
     pub rooted: [f32; SLOTS],
     pub need: [f32; SLOTS],
@@ -271,12 +271,29 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
     out
 }
 
-/// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid, mol, and how wet that leaves its ground as
-/// its cover feels it (`Physics::wetness`, as bodies feel it): its depth, in the pores and standing.
+/// The least ground a cover stands on, m² (one plant's): a cell whose land is gone still gives its cover a finite
+/// room, which it thins to and starves in under the liquid.
+const LEAST_GROUND_M2: f64 = 1.0;
+
+/// The ground the cover of cell `i` lives on, m²: its land (`contract::land`), at least `LEAST_GROUND_M2`. Its leaves
+/// layer over it, its plants find their room on it, its seeds lodge on it.
+pub fn ground(w: &crate::World, i: usize) -> f64 {
+    crate::contract::land(w, i).max(LEAST_GROUND_M2)
+}
+
+/// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and how wet
+/// that leaves its ground as its cover feels it (`Physics::wetness`, as bodies feel it): its depth, in the pores and
+/// standing. Of a cell of parts with land, its land part's own (`flow::parts`) over that part's area, no more than the
+/// cell holds; else the cell's over its area.
 pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
     let (t, plateau) = w.thaw_last(i);
-    let liquid = held * w.molten(p.liquid, i, t, plateau);
-    (liquid, wetness(w, p, w.mesh.cells().area()[i], liquid))
+    let molten = w.molten(p.liquid, i, t, plateau);
+    let area = w.mesh.cells().area()[i];
+    let (liquid, over) = match w.scratch.land_part(i, p.liquid) {
+        Some((mol, share)) => (mol.min(held) * molten, area * share),
+        None => (held * molten, area),
+    };
+    (liquid, wetness(w, p, over, liquid))
 }
 
 /// How wet `liquid` mol of the key liquid that is liquid leave ground of `area` m² as its cover feels it

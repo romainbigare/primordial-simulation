@@ -50,16 +50,16 @@ pub fn start_members(m: f64, area: f64) -> f64 {
 }
 
 /// Place every starting kind of takers (`TAKER_KINDS`) on the open land, each in every open land cell with its genes, its
-/// members `start_members` (whole below `N_WHOLE` by a draw keyed by the cell that keeps the mean). Returns a line per
+/// members `start_members` on the cell's land (`open_land`) (whole below `N_WHOLE` by a draw keyed by the cell that keeps the mean). Returns a line per
 /// kind.
 pub fn place_takers(w: &mut World) -> Vec<String> {
     pcore::month_start(w);
     let mut said = Vec::new();
-    let open: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| open_land(w, i)).collect();
+    let open = open_land(w);
     for (row, kind) in TAKER_KINDS.iter().enumerate() {
         let (mut cells, mut members, m) = (0, 0.0, fauna::adult(&kind.genes));
-        for &i in &open {
-            let mut n = start_members(m, w.mesh.cells().area()[i]);
+        for &(i, m2) in &open {
+            let mut n = start_members(m, m2);
             if n < N_WHOLE {
                 let id = (kind.key as u64) << KIND_BIT | i as u64;
                 n = n.floor() + (Rng::new(w.seed, w.day(), id, Purpose::Place).f64() < n.fract()) as u8 as f64;

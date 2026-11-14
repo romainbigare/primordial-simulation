@@ -242,7 +242,7 @@ fn yearly_series_names_the_gases() {
     let Recording { w, dir, .. } = recording();
     let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
     let head: Vec<&str> = csv.lines().next().unwrap().split(',').collect();
-    let gases = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0).count();
+    let gases = (0..w.chem.ns()).filter(|&k| w.chem.absorbs_heat(k)).count();
     assert!(gases > 0 && head.contains(&"absorber"));
     assert_eq!(head.iter().filter(|h| h.starts_with("air_")).count(), gases);
 }
@@ -403,10 +403,11 @@ fn yearly_series_counts_the_minerals() {
     let rows: Vec<Vec<f64>> = lines.map(|l| l.split(',').map(|v| v.parse().unwrap()).collect()).collect();
     assert_eq!(rows.len(), 4);
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
-    // The soil: 0.357 mol of the mineral (80 g) in a m2 is 28.6 g; the cells under standing liquid have none.
+    // The soil: 0.357 mol of the mineral (80 g) in a m2 of land is 28.6 g; of the cells whose mean ground lies under the
+    // level only the land of those on the shore gets it, so less per m2 of them than the land's.
     let first = &rows[0];
     assert!(col("min0_land", first) > 0.015 && col("min0_land", first) <= 0.0286 + 1e-6, "{}", col("min0_land", first));
-    assert_eq!(col("min0_sea", first), 0.0);
+    assert!(col("min0_sea", first) > 0.0 && col("min0_sea", first) < col("min0_land", first), "{}", col("min0_sea", first));
     assert!(!head.iter().any(|h| h.starts_with("min1_")), "one mineral");
     let mm = w.chem.subs[w.chem.minerals()[0].0].molar_mass;
     let all = |r: &Vec<f64>, a: [f64; 2]| {

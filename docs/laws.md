@@ -124,7 +124,8 @@ twice as coarse until it fits (`MOST_SAMPLES`). **The shelf** (`space::shelf`): 
 ground is spread along the shore by the waves, each sample of the shore taking the load that reached the shore within
 5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 10 m under the low stand
 (`TOPSET_M`, a
-delta's topset), as wide as that load in proportion, fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
+delta's topset), as wide as that load in proportion (a round lobe: a sample the open low ground joins to a shore's sample lies inside
+that one's platform by its width less the straight distance between them), fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
 rest under liquid; Gilbert 1885). So a channel that brings much load builds a fan at its mouth and a coast that gets
 little keeps its steep drop; its edge is rounded over 250 m as a clinoform's top rolls over (`ROUNDED_M`), never over
 the platform's top; the width is found so the shelf holds all the load (where the platform fills the open low ground of
@@ -217,7 +218,10 @@ leaves the cell's liquid, which the running liquid joins), given to the cell's a
 pays the vapour's latent heat less what the ground held (a solid's heat of fusion too). **Press**
 (`contract::press`): work spent on a cell breaks its cover by the share it pays for (`life::breaking` of all its slots), and what breaks
 goes to the ground as remains with its heat. **What stands on a cell** (`contract::Stand`): the cover's mass, capture
-area and the light it absorbs and keeps, at each month's start (`Cover::stand`); Flow reads it (1.3, 1.4). A cell shows
+area and the light it absorbs and keeps, at each month's start (`Cover::stand`); Flow reads it (1.3, 1.4), its capture
+area spread over the cell, or over the land part of a cell of parts (none over its liquid's top). **The land of a
+cell** (`contract::land`): its area times the share of it out of the liquid that stands over its pores
+(`flow::land_shares`), at each month's start; what the land offers life. A cell shows
 itself as the month's start left its place and what stands, and its cover as it is; takes land in the takers' month,
 and the cover feels them in its own next month.
 
@@ -484,9 +488,10 @@ explicitly, on plain arrays of its nodes (`air::daily`): each node's exchange wi
 its cells, its heat radiation to space and its rain (1.5). Each block's heat, then its vapour with its rain, are linear
 in them through the day, so the day follows them exactly, the block warming and moistening as one as the eddies even
 it, the air outside it as at the day's start; days of an hour give the same climate within 0.03 K. Then the evening of
-its block and the wind (1.6). The book takes each cell's law at the mean air of the step (`air::book`), which is what
-the days summed, so the air ends just where its days left it and no node gives more than it holds. A 15-day step
-gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_the_climate`, `tape/tests/ranges.rs`).
+its block and the wind (1.6). The book takes each cell's law at the mean air of the step (`air::book`), with what the
+step's rain added to what it evaporates (1.5), which is what the days summed, so the air ends just where its days left it and no node gives more than it holds. A 15-day step
+gives the climate of 1-day ones within 0.3 K on the land and the land's runoff within its spread from year to year
+(`the_long_step_keeps_the_climate`, `tape/tests/ranges.rs`).
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
   λ, the mean over the step's days. **On a slope** (`on_slope`), per m² of the cell's plan: by Lambert's cosine law the
   beam on ground of upward normal N = (−∂z/∂x, −∂z/∂y, 1) is S (s · N), s the unit vector to the sun, linear in the
@@ -495,24 +500,59 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
   r the cell's mean rise toward the south (section 0), the equivalent latitude of Lee (1962) and Swift (1976) in plan form. An
   hour a face turns away from the sun counts against it, as the shadow it casts on the ground beyond, so the beam is
   kept whatever the slopes; a cell whose day sums below zero takes none (the one place a square and its cells differ).
-  A cell under a body's level (1.2) lies level and takes the flat sun. All the sunlight that passes the clouds is taken as beam:
-  a cloud is one reflectance, with no share of the sky it covers, so what passes it cannot be split into beam and
-  diffuse; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
+  A cell under a body's level (1.2) lies level and takes the flat sun. **Through the air** (`radiation::Light`, read
+  by the surface's step and by the books alike): the gases of its air node absorb sunlight (`radiation::Column`) with the
+  optical depth of the amount on its path (`Chemistry::sun_depth`: `sw_abs` a mol/m², past `sw_sat` as the square root
+  of the amount, the form of their heat radiation) and their molecules scatter it (Rayleigh: `scatter` a mol/m² on the
+  path, half of it on up and half down, so the surface gets what passes and half of what is scattered, and again half
+  of what it reflects that the air scatters back), on the way down along the sun's slant, 1 / its mean height over
+  the hours it is up (`sun_height`), and of what the surface and its cover reflect on the way back up as diffuse
+  light (slant 1.66, Elsasser's diffusivity factor). What the air absorbs warms its node (booked from the sun to the
+  air, and summed into its days as a gain the air does not move); what reaches the surface, the surface's balance
+  takes; what passes back up leaves to space. The three add up to what came in, to rounding. Under the share of the
+  node's sky that its cloud covers, the cloud lies over that column (**Clouds**, below), and a cell takes the clear part
+  and the part under the cloud each by its share. All the sunlight at the top of the air is taken as on the cell's
+  slope, whatever a cloud scatters of it; diffuse light would fall on the plan as on flat ground. The cost is a product and a sum per cell a step,
   with the slope with latitude found beside the daily mean, once per latitude. The surface reflects as its cover is at the step's start (`land::reflectance`),
   over the cell's own ground: the share of it under the level of what stands over its pores (`curve::Fill::wet`) as a
   column with that liquid over the share, the rest as one whose liquid is what its pores hold, by area;
   where a soft cover lies, as it is at the step's end, so a cover that melts away darkens the ground in its step. Snow
-  reflects from the step after it falls.
-- **Heat radiation**: surfaces emit σT⁴; the air absorbs 1 − exp(−x), x the optical depth of the gases (each as the
-  square root past its own column amount) and clouds, and emits from 2 grey layers that cool with height, so more gas
+  reflects from the step after it falls. **Known limit:** a substance reflects the same share of the sun at every
+  height of the sun and in every state (its `refl`), where a smooth liquid reflects more of a low sun (Fresnel) and
+  old or wet snow less than fresh.
+- **Heat radiation** (`radiation::band_depths`, `radiation::Heat`): surfaces emit σT⁴, split in three bands of wavelength
+  (`Chemistry::heat_spans`), each body sending in a band its share at its own temperature (Planck's law,
+  `Chemistry::heat_shares`; the shares sum to 1). In each band a gas's lines have the optical depth
+  `Chemistry::depth` (in proportion to its column, past `sat` as its square root) and lie where its amount times the
+  pressure is, as the pressure broadens them: at height hk H / (hk + H), hk the height its amount fills
+  (`Scratch::hk`), H the air's. Its continuum (`cont`) goes by its amount times its own pressure, in every band; that
+  product falls by e over hk / 2, so the continuum lies at half the gas's height. Each band is a core of strong lines
+  `line_spread` times its depth and wings 1 / that times, each half its light; under a cloud (below) its drops, which
+  are grey, add their depth to every part at the air's height; each part absorbs 1 − exp(−x) and emits from 2 grey layers that cool with height, so more gas
   lifts the layer that reaches space into colder air and the ground warms. The layers are each air node's, over its
   mean ground; the air touching a cell is the air it sees (bilinearly, its four nearest nodes), colder by the drop with
   height from that air's mean height.
-- **Clouds** (`exchange::cloud`): scattering depth x = condensation rate / `cloud`, from what each air node rained in
-  the step before; they reflect x / (1 + x) of the sunlight (two-stream, Lacis and Hansen 1974) and absorb heat
-  radiation at depth `cloud_ir` × x (Stephens 1978). A globe of Earth's size without life holds about Earth's
-  climate. **Known limit:** their depth is spread like the air's mass, not set where they condense. The ground also
-  trades sensible heat with the air (`sensible`).
+- **Clouds** (`exchange::cloud`, `radiation::Cloud`): each air node's cloud covers the share b of its sky that is
+  saturated (`Seen::clouded`, 1.5), a mean over the step before. What the node rained in that step stays droplets for
+  `cloud_life` before it gathers into drops that fall (the cloud time of Smith and Barstad 2004; a falling drop is too
+  wide to take much light), under the cloud's share alone: a path of liquid of the node's condensation rate ×
+  `cloud_life` / b, in droplets of radius `drop_m`.
+  A droplet much wider than the light's wave takes twice the light that falls on its cross-section out of a beam, so
+  the cloud's optical depth to sunlight is 3 path / (2 `drop_m`) (Stephens 1978). **Its sunlight**: it reflects,
+  passes and absorbs as two streams give (Eddington's form, the forward peak of the scattering taken as light that
+  passes: Meador and Weaver 1980; Joseph, Wiscombe and Weinman 1976) under the sun's mean height (`sun_height`), its
+  droplets scattering forward by the mean cosine `drop_forward`; in the share `drop_dark[0]` of the sunlight (the
+  near-infrared, which the liquid absorbs) a droplet absorbs the share `drop_dark[1]` of what it meets (Slingo 1989),
+  and that warms the air node with what its gases absorb. The cloud lies over the node's column: what it passes
+  straight goes on as the beam, what it passes scattered as diffuse light, and its base sends back down its share of
+  what the column and the surface reflect up (`Column::under`). **Its heat radiation**: a droplet absorbs the heat
+  radiation that falls on its cross-section, half of what it takes out of a beam of sunlight, so the cloud's depth is
+  half its depth to sunlight on the slant of diffuse light, the same in every band (`radiation::drops_heat`). The
+  clear part of a node's sky and the part under its cloud are each their own column, for sunlight
+  (`radiation::Light`) and for heat radiation (`radiation::Skies`); a cell's balance and the node's own radiation to
+  space take the two by the cloud's share. **Known limit:** the cloud's droplets are spread like the air's mass, not
+  set where they condense, so a deep cloud sends its heat to space from the top of the air. The ground also trades
+  sensible heat with the air (`sensible`).
 - **The aside node** (`Class::Aside`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
   it does not claim goes back to the ground before each air step (`cover::release`).
@@ -528,27 +568,46 @@ gives the climate of 1-day ones within 0.3 K on the land (`the_long_step_keeps_t
 - **Shade**: the cover's kinds share its light by height (3).
 
 ### 1.5 Evaporation, rain and dissolved gases
-`flow::air::cells`, `daily`, `rain`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
+`flow::air::cells`, `daily`, `rain`, `soak`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
 the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), over the
 cell's own ground as its reflectance is (the share the standing liquid covers holds what its pores hold and all that
 stands, the rest what its pores hold, each a bucket by its area); and through a second film beside the air's where
 one stands over its land (`World::second_film`: the cover's open pores, 3), in series with the air's film, at its
 open rate while the share of the ground's liquid behind it lasts (no wet threshold: its roots reach that liquid),
 from what the first leaves; both inside the surface's balance, taking the heat it held at the node's temperature; a node over a substance's boiling point boils of it what its heat over that
-point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: what an air node holds of a
-gas over what saturates the air touching each of its cells (colder higher up) rains out in `rain_time`. Each node's air
+point pays, cooling to it (`land::boil_off`; gas coming out of the liquid too). **Rain**: a node's air is not evenly
+moist (`seen`). Its moisture is spread evenly from wetter to drier, over a width of 1 − `moist_min` of what saturates
+it either side of its middle, and its saturated part holds no more than saturates it. So its moistest air saturates
+when the node holds `moist_min` of what saturates it, all of it at saturation, and between them the share
+b = 1 − √((1 − r) / (1 − `moist_min`)) at the node's ratio r to that (`seen::saturated`; Sundqvist et al. 1989, whose
+critical humidity is measured from cloud cover against humidity, Quaas 2012). The air over each cell is
+`seen::MOIST_PARTS` equal parts that saturate one after another by that law (`seen::parts`), against what saturates
+the air touching the cell (colder higher up). Each saturated part rains out in `rain_time` what the node holds over
+the ratio the part saturates at: only the saturated share condenses, and the node's mean stays under saturation. That
+share is the cloud's share of the sky (`Seen::clouded`, 1.4). Evaporation reads the node's mean vapour: it is linear
+in the vapour, so the mean over the parts is what the mean vapour gives. Each node's air
 lies over the cells that see it (bilinearly), each by its share; the cells' saturation is taken as the step starts, as
-a ratio to the node's, so the day sums them in rising order. In the air's day the vapour of each block (1.6), evened
+a ratio to the node's, so the day sums the parts in rising order. In the air's day the vapour of each block (1.6), evened
 as the eddies even it, follows what its cells evaporate by their law and what its nodes rain: both are linear in the
 vapour between two of the ratios at which a cell starts or stops raining, so the day goes exactly from one such ratio
 to the next, with no smaller steps (`rain::Pool`); the air outside the block is as at the day's start. What a node
-rained in the step condenses over those cells (the sea under one air node as one place, 1.4) by what each would hold
-over its own saturation at the ratio the node rained at, so it is heaviest over high ground; it lands there by the share
+rains in a day condenses over those cells (the sea under one air node as one place, 1.4) by what the parts over
+each would hold over their own saturation at the ratio the node rains at that day, so it is heaviest over high ground; it lands there by the share
 1 - e^(-d / `rain_drift_m`) of it, d the place's width (the root of its area), and the rest drifts with the wind while
 its drops form and fall and lands over all the node's cells by the share of its air over each (the linear theory of
 orographic rain, Smith and Barstad 2004: a cloud time and a fallout time of about 1000 s each carry rain some 20 km at
-10 m/s), so no cell under raining air gets none (`seen::Seen::landing`). It lands after the step, so a cell does not
-evaporate it again within that step, and it reaches each cell at the temperature of the air touching it (`touching`),
+10 m/s), so no cell under raining air gets none (`seen::Seen::landing`). **Known limit:** on a map whose cells are
+as wide as an air node (the globe), the cells that see a node reach half a node into the next rows, so part of a
+node's rain lands a row away, toward the wetter node's neighbours; and no frozen cover moves. So the polar band of the
+lifeless globe gains snow it does not lose: its ice grows, about 40 m in 40 years (an island's cells are far smaller
+than its air's nodes, and its ice holds steady). **The rain in the bucket** (`soak`): a cell's exchange over the step
+is solved without the rain that falls in it; the rain lands day by day as the air's days make it, and each day's rain
+wets the bucket it falls on (the share of the ground the standing liquid leaves, or all of it), followed exactly
+through the day under the open rate of the step's balance, what rises over the wet bucket sinking as it falls (the
+bed's store takes it after the step, `drain::sink`). What the bucket then evaporates over what it would have without
+the rain goes into the cell's air node that day, the cell's other outputs moving with it by the slopes of its
+balance (its latent heat cools the surface), and the book takes the same; the rain itself is booked once, as it
+landed. The second film and a body's surface, which evaporate at their open rate, take no more for it. The rain reaches each cell at the temperature of the air touching it (`touching`),
 the air paying what warms it on the way down. Where the node's air at its mean ground is below the gas's melting point
 it falls as a solid (snow) and the air keeps the fusion enthalpy its freezing frees; condensing frees the vaporisation
 enthalpy in the air. **Lift**: gas going up is lifted from the ground's head to its air node's mean ground, paid by the
@@ -562,22 +621,47 @@ as well as its top (1.1), so a deep sea takes up gas in months; a real one takes
 
 ### 1.6 Wind
 `flow::air::wind`, `daily`. Eddies (`mix`) even out the air within a day over the distance sqrt(`mix` × day), about
-340 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
+300 km (Taylor 1922, `daily::BLOCK_DAY`): the air nodes lie in blocks of that side on the map, and each day every gas of
 a block is shared among its nodes by their volumes and its heat so that each has the block's warmth (its temperature
 raised to a common height by the block's drop with height), so its pressure, shares and warmth are the block's. An
 island smaller than a block (the islands of 64 and 128 cells) is one block, and has no wind: only the evening. Across the links between blocks gas moves by three pushes, each day from the air at
 its start. **Pressure** (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves, Lindzen 1990),
 explicitly: the sender's air, each link at most half of what evens it over the count of links of the busier of its
 nodes, so no node gives more than half of each gas it holds. **Known limit:** sound is faster than that, so a pressure
-difference across many links of blocks takes days to even out. **Eddies** mix the columns (`mix`, width over length),
-each mol with its node's heat. **Overturning**: the lower half flows to the warmer column and the upper half back, a
+difference across many links of blocks takes days to even out. **Eddies** mix the columns: as many mol each way, at
+`mix` × the column's mol × width over length a second, so every gas, the vapour with its latent heat, mixes by its
+share of the column. The heat a mol of them carries is its node's near-ground air's static energy, cp T + M g z at the
+column's ground (`wind::aloft`), not the column's mean heat per mol: eddies stir the lower air, where the contrast is
+the ground's, and a column's heat aloft (how fast it cools with height) is not theirs to even out. Both sides book the
+one number, so the books stay exact; the energy a mol carries over the column's mean heat goes as a fixed flux of
+the day, from the air at the step's start. So their heat goes as -(p_s / g) `mix` ∇h, h the near-ground air's energy
+per kg, the diffusion the eddies of the measured climate follow (Hwang and Frierson 2010). **Known limit:** the vapour
+goes by its share of the whole column, not the near-ground air's, so its latent heat carried is about a third of what
+that diffusion of the near-ground air's moisture would carry. **Overturning**: the lower half flows to the warmer column and the upper half back, a
 mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by the
 planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the nodes.
+Down the gradient it runs only inside the cell of the low latitudes (`wind::cell_edge`): the upper air flows poleward
+keeping its angular momentum, and past a latitude the warmth's fall can no longer balance the wind that gives it
+(Held and Hou 1980), φ = sqrt(5 g H Δ / (3 Ω² a²)), H the air's depth (`air_top_m`), a the planet's radius, Ω its spin
+(`units::SPIN` × `rotation`), Δ the fractional fall of the warmth of radiative balance from the equator to the pole,
+from the planet's own yearly sunlight by latitude, 1 - (pole's / equator's)^¼: with the default sun and tilt
+Δ = 0.198 and φ = 22.2°. The share of the flux down the gradient falls as 1 - (latitude / φ)² from the equator to
+none at φ, where the theory's cell ends, and is none beyond; the part turned across the link stays. With `rotation` 0
+the cell spans the planet. The same at a link inside the map and at an island's open edge, by the link's latitude; an
+island alone is at its own rows' latitudes (`lat_south`, `lat_north`). **Known limits:** the cell of the middle
+latitudes that turns the other way (Ferrel's), which the eddies drive, is not made; past the cell the eddies alone
+carry heat poleward. The cell is narrower than the measured one (22° against about 30°), as its edge is taken from
+the yearly sun's contrast (0.198), where the measured contrast of the air in radiative balance is nearer a third
+(Held and Hou 1980 take 1/3); and it is weaker: at half its edge its lower half carries about a fifth of the measured
+cell's 1e11 kg/s (`wind`).
 Each half carries the air of the node it leaves, vapour crowding low, each mol with its node's heat per mol, and the
 upper half holds more heat per mol than the lower by the rise of the static energy cp T + M g z over half the column's
 depth, (M g - cp gam) × depth / 2, gam the column's drop with height (none where the air cools with height as fast as
-dry air rising; Neelin and Held 1987). So the heat it carries a second is its mass flux times the difference of the
-two nodes' heat per mol, less that rise: the first part grows with the length of the link, the second does not.
+dry air rising; Neelin and Held 1987). The part of the flux down the gradient carries that rise from the warmer column
+to the colder; the part turned across the link runs along the isotherms, where what its halves carry of it warms no
+column (a flow along the isotherms crosses none; Holton 2004, 3.4), and it carries none of it. So the heat it carries a
+second is its mass flux times the difference of the two nodes' heat per mol, less the rise times its part down the
+gradient: the first part grows with the length of the link, the second does not.
 **Known limit:** as a half carries its node's air, on coarse nodes the overturning also mixes the two, as eddies of
 about its speed times half the length of the link would. The eddies and the overturning are one implicit (backward
 Euler) step a day, first along the lines the links between blocks make east and west, then along those north and south,
@@ -739,7 +823,15 @@ its walls are a frame, which pays no upkeep and does not wear, so its capacity, 
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
 1990, from memory). The cover of a cell is a node of the
 store (`Class::Life`, the life of its cell) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
-chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
+chunk of the cell is its one writer. **It lives on the cell's land** (`cover::ground`: `contract::land`, at least
+`LEAST_GROUND_M2`, 1 m²): its leaves layer over the land (its light and its shade), its plants find their room on it
+(the self-thinning law, founding, seeds that lodge), the seeds that land on the cell lie and wake on it, and it is
+placed per m² of it. How wet its ground is to it is the land part's own liquid over that part's area for a cell of
+parts (no more than the cell holds; `flow::parts` keeps each part's matter), else the cell's over its area. A cell
+whose land shrinks as its liquid rises gives its cover less room, and it thins by the self-thinning law; one whose land
+is gone gives it 1 m², so it thins to almost no plants and, under the liquid (its light times e^(−depth /
+`light_depth`)), pays more upkeep than it stores and dies by its laws, its remains to the ground. Its temperature is
+its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
 task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a real count of plants (`Cover::plants`,
 `cover/stand.rs`), so a plant's mass is its built cover over them, and its height is that of a plant of that mass whose
@@ -986,7 +1078,7 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
 ## 4. Soil and minerals
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
 and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
-on land under less than half a metre of liquid; then only fixing adds it, rotting (7) returns it, heat (11) sends it
+per m² of land, on every open land cell; then only fixing adds it, rotting (7) returns it, heat (11) sends it
 to the air. Body matter holds no rock element: the **rock salt (11)** is rock chemistry, made in wet cells from lime
 (8), turned back by 9, near balance (2.5).
 
@@ -1015,7 +1107,10 @@ read a kind.
   across a border differ by one size at most; the coasts stay in 2 km squares. A globe is one cell an air block but in a
   rectangle of air blocks in squares (`--fine`), by the same rule. A cell's height is the terrain's mean over it
   (`Terrain::inside`, on the worn samples, 0), whatever its size.
-- **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS`: kg per m² and genes, on every open land cell
+- **Open land**: a cell that holds land (`flow::land_shares`: the share of its area out of the liquid that stands over
+  its pores, as the page draws the cover on it; the land part of a cell of parts among them, also where the cell's
+  mean ground lies under the level) under no more than half a metre of standing liquid (`MAX_STANDING_M`). Life starts per m² of its land, not of the cell.
+- **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS`: kg per m² of land and genes, on every open land cell
   by its chance, each kind's draws keyed by its own key, its label its row, `Cover::root`); without `--roster` the herb
   (`ONE`), with it the six kinds in their order (`ROSTER`): a small fast herb, a herb, a big slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody
   cover of dry ground (active at a tenth of saturation, thick leaves, slow) and a tall fast cover with seeds spread
@@ -1023,6 +1118,6 @@ read a kind.
 - **Fixers**: a tenth of the cells of the starting cover carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
 - **Takers**, only where a run asks for them (`--fauna-year`; none by default, and none on the page): the five kinds of `worldgen::life::TAKER_KINDS`
   (30 g, 3 kg, 60 kg and 400 kg kinds that keep 310 to 311 K, and a 2 kg kind that keeps none) on every open land cell,
-  all adults, at a third of Damuth's line of members per area against body mass (`START_SHARE`; Damuth 1981), whole
+  all adults, at a third of Damuth's line of members per area of land against body mass (`START_SHARE`; Damuth 1981), whole
   below `N_WHOLE` by a keyed draw, each with a store of a tenth of its living mass as fuel (`START_STORE`), at its
   body's temperature, booked from the outside node (`fauna::place`, `contract::placed`).

@@ -31,12 +31,13 @@ const EXACT: f64 = 1e-12;
 const ROUNDS: usize = 50;
 
 /// A sample of the open low ground in the reach of the shelf (`shelf`): by how far it lies inside the platform's edge,
-/// m (less than 0 past it), the farthest first, then the least index.
-struct Inside(f64, usize);
+/// m (less than 0 past it), and the sample of the shore whose platform that is; the farthest first, then the least
+/// indices.
+struct Inside(f64, usize, usize);
 
 impl Ord for Inside {
     fn cmp(&self, o: &Self) -> Ordering {
-        self.0.total_cmp(&o.0).then(o.1.cmp(&self.1))
+        self.0.total_cmp(&o.0).then(o.1.cmp(&self.1)).then(o.2.cmp(&self.2))
     }
 }
 impl PartialOrd for Inside {
@@ -131,15 +132,17 @@ pub(super) fn lay(g: &Grid, h: &mut [f64], (open, stand, offshore): (&[bool], f6
 
 /// The thickness of the shelf on each sample of the open low ground `open` it reaches, m, where each sample of the
 /// shore builds a platform `wide` m per m³ of its `load` wide at the height `top`, fronted at `FORESET` down to the
-/// lowest of the heights `h`, `floor`: a sample lies inside the edge by the most, over the samples of the shore, of
-/// that one's width less the distance to it through the open low ground.
+/// lowest of the heights `h`, `floor`: a sample lies inside the edge by the most, over the samples of the shore whose
+/// platform reaches it through the open low ground, of that one's width less the straight distance to it, so a
+/// platform is a round lobe about its mouth as a delta's is (a distance summed step by step along the grid's eight
+/// ways would make it an octagon with straight sides).
 fn shelf(g: &Grid, h: &[f64], open: &[bool], (load, wide): (&[f64], f64), (top, floor): (f64, f64)) -> Vec<(usize, f64)> {
     let reach = (top - floor).max(0.0) / FORESET;
     let mut inside = vec![f64::NEG_INFINITY; g.n()];
-    let mut heap: BinaryHeap<Inside> = (0..g.n()).filter(|&k| load[k] > 0.0).map(|k| Inside(wide * load[k], k)).collect();
+    let mut heap: BinaryHeap<Inside> = (0..g.n()).filter(|&k| load[k] > 0.0).map(|k| Inside(wide * load[k], k, k)).collect();
     heap.iter().for_each(|i| inside[i.1] = i.0);
     let mut out = Vec::new();
-    while let Some(Inside(v, k)) = heap.pop() {
+    while let Some(Inside(v, k, from)) = heap.pop() {
         if v < inside[k] {
             continue;
         }
@@ -147,10 +150,11 @@ fn shelf(g: &Grid, h: &[f64], open: &[bool], (load, wide): (&[f64], f64), (top, 
         if at > h[k] {
             out.push((k, at - h[k]));
         }
-        for (j, d) in g.around(k) {
-            if open[j] && v - d > inside[j] && v - d > -reach {
-                inside[j] = v - d;
-                heap.push(Inside(v - d, j));
+        for (j, _) in g.around(k) {
+            let by = wide * load[from] - g.apart(j, from);
+            if open[j] && by > inside[j] && by > -reach {
+                inside[j] = by;
+                heap.push(Inside(by, j, from));
             }
         }
     }

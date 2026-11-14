@@ -59,7 +59,7 @@ pub(super) fn most_plants(ph: &Physics, kg: f64) -> f64 {
     (ph.thin_kg / kg.max(1e-300)).powi(2)
 }
 
-/// Slot `x` of cover `c` of a cell of `area` m² thins out: a stand denser than the self-thinning law allows for its mass
+/// Slot `x` of cover `c` on its ground of `area` m² (`cover::ground`) thins out: a stand denser than the self-thinning law allows for its mass
 /// loses plants, not mass, and the survivors take what the dead freed (Yoda and others 1963).
 pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], ph: &Physics, area: f64, x: usize) {
     c.plants[x] = c.plants[x].min(area * most_plants(ph, c.built(mm, x) / area));
@@ -99,7 +99,7 @@ pub fn loose_bins(w: &crate::World) -> Vec<[f32; BINS]> {
         std::array::from_fn(|b| w.terrain.over(w.terrain.seed, &w.map, w.map.leaves()[i], lat, |s, k| if bin(s.loose[k]) == b { 1.0 } else { 0.0 }) as f32)
     })
 }
-/// The plants that `kg` of seeds found in a cell of `area` m²: one for each `seed_kg`, as many as the self-thinning
+/// The plants that `kg` of seeds found on ground of `area` m²: one for each `seed_kg`, as many as the self-thinning
 /// law lets stand (`most_plants`).
 pub(super) fn founded(ph: &Physics, kg: f64, area: f64) -> f64 {
     (kg / ph.seed_kg).min(area * most_plants(ph, kg / area))
@@ -119,7 +119,7 @@ pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], ph: &Physics, area: f64
     }
 }
 
-/// Slot `small` joins slot `big` of the same cell of `area` m²: amounts and plants added (then thinned, `thin`), genes and
+/// Slot `small` joins slot `big` of the same cover on its ground of `area` m²: amounts and plants added (then thinned, `thin`), genes and
 /// balance the mean by built cover, its starting kind the heavier's; `small` is empty after.
 pub(super) fn join(c: &mut Cover, (mm, ph, area): (&[f64; NP], &Physics, f64), big: usize, small: usize) {
     let (wb, ws) = (c.built(mm, big), c.built(mm, small));

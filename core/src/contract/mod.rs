@@ -97,10 +97,32 @@ pub fn env_of(w: &World, i: usize) -> [f64; 4] {
 /// an unbroken one does, and the place of each cell from it (`place`).
 pub fn surroundings(w: &mut World) {
     let n = w.mesh.cells().n();
-    if w.time.is_multiple_of(w.cfg.calendar().month) || w.life.env.len() != n {
+    if w.time.is_multiple_of(w.cfg.calendar().month) || w.life.env.len() != n || w.life.land.len() != n {
         crate::flow::state(w, true);
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
+        w.life.land = lands_now(w);
     }
+}
+
+/// The land of every cell, m²: its area times the share of it out of the liquid that stands over its pores
+/// (`flow::land_shares`), by Flow's state now; before Flow first built its state, all of a cell whose mean ground
+/// stands above the level and none of the others.
+fn lands_now(w: &World) -> Vec<f64> {
+    let (all, area): (Vec<usize>, _) = ((0..w.mesh.cells().n()).collect(), w.mesh.cells().area());
+    let share = crate::flow::land_shares(w, &all).unwrap_or_else(|| all.iter().map(|&i| w.is_land(i) as u8 as f64).collect());
+    all.iter().map(|&i| area[i] * share[i]).collect()
+}
+
+/// The land of cell `i`, m², as the month's start found it (`surroundings`, `lands_now`): what the land offers life.
+/// The cover lives on it.
+pub fn land(w: &World, i: usize) -> f64 {
+    w.life.land.get(i).copied().unwrap_or(0.0)
+}
+
+/// The land of every cell, m² (`land`): as the month's start found it, or where the places are not found yet (a world
+/// just loaded), by Flow's state now.
+pub fn lands(w: &World) -> Vec<f64> {
+    if w.life.land.len() == w.mesh.cells().n() { w.life.land.clone() } else { lands_now(w) }
 }
 
 /// A layer of a cell's cover that a taker may take from.

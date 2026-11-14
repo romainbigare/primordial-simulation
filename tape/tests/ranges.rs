@@ -3,8 +3,9 @@
 //!
 //! The key numbers of a run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each,
 //! on threads. The mean of each number over the three seeds must lie in its range around its reference, the mean of the
-//! same three seeds in the reference runs: for the climate, the land worn down and the rivers, the runs of the world
-//! before the cover and the short body model; for the cover, these runs of plants themselves. The climate and the land
+//! same three seeds in the reference runs: these runs themselves, of the world whose air takes sunlight by its gases
+//! and clouds, whose eddies carry the near-ground air's energy and whose overturning ends at the cell of the low
+//! latitudes (all seven numbers measured on that world, the same three seeds). The climate and the land
 //! worn down are means over years 21 to 30. Each run also keeps its books. Three numbers are also held to wide bounds
 //! around Earth's, as the references only keep a world near itself: the rain on land, the heat-absorbing gas of the
 //! air, and the share of the cover's dry mass it holds as its stored solid.
@@ -34,20 +35,20 @@ const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
 /// Ground temperature on land, K (series `t_land`), in the reference runs.
-const T_LAND: f64 = 289.19;
+const T_LAND: f64 = 287.86;
 /// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
-const SWING: f64 = 13.60;
+const SWING: f64 = 11.82;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
-const RAIN_LAND: f64 = 3.065e-3;
+const RAIN_LAND: f64 = 2.506e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs: it keeps the world near itself;
 /// `EARTH_ABSORBER_PPM` holds it near Earth's.
-const ABSORBER_PPM: f64 = 325.8;
+const ABSORBER_PPM: f64 = 354.1;
 /// Dry land cells that are rivers (`rivers`, `tape::is_river`), in the reference runs.
-const RIVERS: f64 = 233.6;
+const RIVERS: f64 = 236.1;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.2389;
+const WORN: f64 = 0.1998;
 /// The cover (the light-eaters, `LIGHT_ROW`) at year 30, log10 kg (`root_1_cover_kg`), in the reference runs.
-const COVER_KG: f64 = 9.881;
+const COVER_KG: f64 = 9.492;
 
 /// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
 /// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
@@ -267,8 +268,8 @@ fn the_sleep_of_change_keeps_the_chemistry() {
 }
 
 /// The climate's key numbers (series columns): the ground temperature on land, the warmest and the coldest month's,
-/// the rain on land, the heat-absorbing gas and the river cells.
-const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "rivers"];
+/// the rain on land, the heat-absorbing gas and the liquid that runs off the land into the sea.
+const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "runoff_sea"];
 
 /// The long-step test's world: its side, its years, the years from which its numbers are averaged, its seeds, and how
 /// far the default step may move each temperature of the climate from a shorter one's, each seed against itself, K.
@@ -279,8 +280,6 @@ const STEP_SEEDS: [u64; 3] = [1, 2, 3];
 const STEP_K: f64 = 0.3;
 /// The shorter air steps, days: a day, the air's own step.
 const SHORT_AIR_DAYS: [u32; 1] = [1];
-/// The `CLIMATE` columns that count whole things: their mean over the years moves by no less than one over those years.
-const COUNTS: [&str; 1] = ["rivers"];
 
 /// The `CLIMATE` columns at the end of each year from `STEP_FROM` of seed `seed` with the air's steps `days` long.
 fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
@@ -297,8 +296,8 @@ fn climate(seed: u64, days: u32) -> Vec<[f64; CLIMATE.len()]> {
 /// The long step against shorter ones (the air's step is a speed setting, `pcore::AIR_STEP_DAYS`): on small worlds with life,
 /// the mean over the seeds of what the default air step moves each of the climate's key numbers (the mean of its last
 /// years) from the step of each of `SHORT_AIR_DAYS`, each seed against itself, is less than `STEP_K` for a temperature
-/// and less than its year-to-year spread at the short step for the others, or than a count's grain (`COUNTS`: one over
-/// the years averaged) where that is larger.
+/// and less than its year-to-year spread at the short step for the others (the land's water by what runs off it into
+/// the sea: the rain it keeps less what rises from it).
 #[test]
 #[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
@@ -313,10 +312,12 @@ fn the_long_step_keeps_the_climate() {
         let spread = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
         for (h, &short) in SHORT_AIR_DAYS.iter().enumerate() {
             let off = runs.iter().map(|seed| mean(&seed[0]) - mean(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64;
-            let grain = if COUNTS.contains(name) { 1.0 / (STEP_YEARS - STEP_FROM + 1) as f64 } else { 0.0 };
-            let limit = if name.starts_with("t_") { STEP_K } else { (runs.iter().map(|seed| spread(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64).max(grain) };
+            let limit = if name.starts_with("t_") { STEP_K } else { runs.iter().map(|seed| spread(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64 };
             let ok = off.abs() <= limit;
-            println!("{name}: the default step off by {off:.3e} from {short}-day steps, limit {limit:.3e}{}", if ok { "" } else { ": OUT" });
+            // As a share of the short step's mean too, for the numbers that are not temperatures.
+            let short_mean = runs.iter().map(|seed| mean(&seed[1 + h])).sum::<f64>() / STEP_SEEDS.len() as f64;
+            let share = if name.starts_with("t_") { String::new() } else { format!(" ({:+.2}% against {:.2}%)", 100.0 * off / short_mean, 100.0 * limit / short_mean) };
+            println!("{name}: the default step off by {off:.3e} from {short}-day steps, limit {limit:.3e}{share}{}", if ok { "" } else { ": OUT" });
             if !ok {
                 out.push(format!("{name} at {short} days"));
             }

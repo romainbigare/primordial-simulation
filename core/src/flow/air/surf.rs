@@ -6,7 +6,8 @@
 
 use super::super::land::{boil_off, column, layers, melts, reflectance, thaw_at, wet_share, NONE};
 use super::super::{basin::{one_surface, phases}, parts::{amounts, Piece, LAND, TOP}, scratch::Latent, Scratch};
-use super::cells::{exchange, put, rise, sunlight, Ctx, Response, Work, FIXED, LINK, SPACE, UP};
+use super::cells::{exchange, rise, sunlight, Ctx, Response, Work, FIXED, LINK, SPACE, UP};
+use super::outs::put;
 use super::radiation::on_slope;
 use super::exchange::bucket;
 use super::lerp;
@@ -120,8 +121,10 @@ impl Surf {
             heat: p.heat,
             amt,
             fusion: if p.pk != NONE { p.amt[p.pk] * cx.s.sp[p.pk].lf } else { 0.0 },
-            // The second film stands over its land: all of the cell's over its land part, none over its liquid's top.
+            // The second film stands over its land: all of the cell's over its land part, none over its liquid's top;
+            // so does its cover, whose capture area spreads over the land part's area.
             second: g.second.filter(|_| q == LAND),
+            canopy: if q == LAND { crate::contract::stand(cx.w, i).canopy(g.area * p.share) } else { 0.0 },
             part: Some(q),
             share: p.share,
             ..g
@@ -196,7 +199,7 @@ pub(super) fn groups(w: &World, member: impl Fn(usize) -> bool, key: impl Fn(usi
     by.into_values().filter(|p| p.len() > 1).collect()
 }
 
-/// The answer of one patch to the air it sees (`cells::Response`): its cells, in order; its parts (`cells::put`) at the
+/// The answer of one patch to the air it sees (`cells::Response`): its cells, in order; its parts (`outs::put`) at the
 /// air it sees at the step's start, `air`, with their slopes, what each mol of each gas carries, and its changing outputs
 /// from them; its fixed outputs; per cell its share of the heat parts (by the heat capacity of what faces the air, so
 /// they warm alike) and of each active gas (by what that holds of it; by area where none holds any), `[c * (1 + nx) +
@@ -322,6 +325,22 @@ impl Vapour {
         let films = dm_de * self.film + dm2_de2 * self.second;
         [m + m2, films * (ps * self.lv / (R_GAS * t * t) - (ps - self.pa) / t) / t, -films / t]
     }
+    /// The bucket that rain landing in the step can wet (`soak::Soak`), its surface at `t` over the step: its share of
+    /// the node, what it holds, mol, as its whole area would, and its open rate, mol/s (the share the standing liquid
+    /// leaves, or all of it). None where nothing evaporates, it boils, or it stays at its open rate through the step
+    /// without rain, so rain adds nothing to what it evaporates.
+    pub(super) fn soak(&self, s: &Scratch, t: f64, dt: f64) -> Option<[f64; 3]> {
+        if !self.up || self.boil.is_some() || self.wet <= 0.0 {
+            return None;
+        }
+        let e = self.film * (s.sat[self.k].at(t) - self.pa) / t;
+        let (share, held) = if self.share == 0.0 || self.share == 1.0 { (1.0, self.held) } else { (1.0 - self.share, self.held.min(self.pores)) };
+        (e > 0.0 && held - e * dt < self.wet).then_some([share, held, e])
+    }
+    /// What it holds wet, mol (`exchange::bucket`).
+    pub(super) fn wet(&self) -> f64 {
+        self.wet
+    }
 }
 
 /// The rows of the parts of cell `i` that face the air (`parts::Mixed::two_faces`), [land, top], as `respond` lays a
@@ -336,6 +355,7 @@ pub(super) fn parts_respond(cx: &Ctx, i: usize, air: &[f64]) -> [Vec<f64>; 2] {
         let mut row = vec![0.0; Response::width(cx.act.len())];
         let fixed = exchange(cx, &ground, air, &mut work);
         put(&work.p, &work.carry, &mut row[FIXED..]);
+        row[Response::width(cx.act.len()) - work.soak.len()..].copy_from_slice(&work.soak);
         row[..FIXED].copy_from_slice(&fixed);
         row
     })

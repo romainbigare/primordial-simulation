@@ -12,11 +12,12 @@ use std::collections::BTreeMap;
 use worldgen::life::KINDS;
 use worldgen::testkit::{self, dry_lands, small_world, Books, Taker};
 
-/// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the tropics to the cold,
-/// so its air brings every band the heat of the lower latitudes, as a real place gets.
-const FROST_WORLD_LAT: [f64; 2] = [10.0, 72.3];
-/// The warm band and the cold band of that island, between these latitudes, degrees.
-const WARM_BAND: [f64; 2] = [20.0, 30.0];
+/// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the warm latitudes to
+/// the cold, so its air brings every band the heat of the lower latitudes, as a real place gets.
+const FROST_WORLD_LAT: [f64; 2] = [20.0, 82.3];
+/// The warm band (the island's two southmost rows of cells) and the cold band of that island, between these latitudes,
+/// degrees.
+const WARM_BAND: [f64; 2] = [30.0, 40.0];
 const COLD_BAND: [f64; 2] = [50.0, 60.0];
 /// The fewest land cells a band holds.
 const BAND_CELLS: usize = 5;
@@ -533,4 +534,22 @@ fn a_takers_vapour_leaves_the_ground_for_the_air() {
     let lv = mol * w.chem.subs[k].lv;
     assert!((paid - lv).abs() <= 1e-9 * lv, "the taker paid {paid} J for vapour whose heat of vaporisation is {lv} J");
     books.assert_kept(&w, 1e-9);
+}
+
+/// The cover of a cell lives on the cell's land (`contract::land`, `cover::ground`): the same kg per m² placed on a
+/// whole land cell and on a shore cell whose land is a part of it stands as the same kg per m² of their land.
+#[test]
+fn the_cover_lives_on_its_cells_land() {
+    let mut w = small_world();
+    pcore::step(&mut w);
+    let area = w.mesh.cells().area().to_vec();
+    let land = |w: &World, i: usize| contract::land(w, i);
+    let whole = (0..area.len()).find(|&i| land(&w, i) == area[i]).expect("a whole land cell");
+    let shore = (0..area.len()).find(|&i| land(&w, i) > 0.0 && land(&w, i) < 0.9 * area[i]).expect("a shore cell with land");
+    for i in [whole, shore] {
+        assert!(cover::place(&mut w, i, genes(), 0, 0.1));
+    }
+    let kg = cover::per_m2(&w, |c, mm, x| c.kg(mm, x));
+    let [a, b] = [whole, shore].map(|i| kg[i] * area[i] / land(&w, i));
+    assert!((a / b - 1.0).abs() < 1e-9, "{a} kg per m2 of land on the whole cell, {b} on the shore cell");
 }

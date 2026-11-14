@@ -67,9 +67,9 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
 /// (`Books`) and the light it caught, J; what it lost and rounded is counted in `counts`.
 pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), counts: &mut Counters) -> (Books, f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
-    let (area, mm, t, rho) = (w.mesh.cells().area()[i], p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
+    let (area, mm, t, rho) = (super::ground(w, i), p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
     // The light since the last step: its capture areas share it by the height of their plants, tallest first, each on
-    // the share of the cell its roots hold.
+    // the share of its ground its roots hold.
     let dl = (a.light - c.mark).max(0.0);
     c.mark = a.light;
     // The seeds lying on its ground first: what wakes takes part in the month as seedlings.
@@ -85,7 +85,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         let act = super::activity(ph, &c.genes[q], a.moist);
         let sapwood = super::stand::sapwood(ph, (leaf, c.height(ph, &mm, rho, q)), c.walls(&mm, q), rho);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, sapwood, ..Default::default() };
-        // The share of the cell its plants hold: where its loose ground is as deep as their roots need (found again
+        // The share of its ground (`cover::ground`) its plants hold: where its loose ground is as deep as their roots need (found again
         // only when their need has moved by more than a bin of depth).
         let h = c.height(ph, &mm, rho, q);
         let need = super::stand::need(ph, h);
@@ -102,7 +102,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q]);
     let e = p.content(chem);
     let before = c.content(&e);
-    let stored = light(chem, ph, c, p, &mut s, (caught * a.reach / lit.max(1e-300), area, a, dt), &mut b);
+    let stored = light(chem, ph, c, p, &mut s, (caught * a.reach / lit.max(1e-300), w.mesh.cells().area()[i], a, dt), &mut b);
     b.budget[STORED] += c.content(&e) - before;
     let all: f64 = stored.iter().sum();
     c.keep = if caught > 0.0 { (all / caught) as f32 } else { 0.0 };
@@ -167,7 +167,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
 /// share of its air node holds.
 /// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
 /// energy each slot stored, J.
-fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], (per, area, a, dt): (f64, f64, &Around, f64), b: &mut Books) -> [f64; SLOTS] {
+fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot; SLOTS], (per, cell, a, dt): (f64, f64, &Around, f64), b: &mut Books) -> [f64; SLOTS] {
     let (t, liquid, gas) = (a.t, a.liquid, a.gas);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
@@ -210,7 +210,7 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     // per m² of the cell, which the ground's evaporation passes it through day by day (`World::second_film`), from the
     // share of the ground's liquid its roots reach, by each slot's gas taken in.
     let taken = all * f * gas_in / dt;
-    c.film = (a.pores * taken / area) as f32;
+    c.film = (a.pores * taken / cell) as f32;
     c.reach = (x.iter().zip(&c.rooted).map(|(xq, &r)| xq * r as f64).sum::<f64>() / all) as f32;
     x.map(|xq| xq * f * dh)
 }
