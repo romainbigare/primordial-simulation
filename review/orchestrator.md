@@ -470,7 +470,10 @@ world). No rule that says where a habitat goes.
       births are 12 to 29 times too many (1.7 to 5 against weaned mass). Our young feed themselves at 3 to 6% of
       the adult's mass; real young become independent at 17 to 40%. The step that is too easy is likely that a
       newborn feeds itself at once. What the takers achieve in a world was not measured (the run was stopped).
-  - Built, waits for the owner's pick: the first drawing of animals on the page (the design's decision 10).
+  - **Paused by the owner until the takers' numbers are final; none of the three looks is to be merged.** The
+    owner's words on them: all look terrible, grid-like, far too many animals, and too big. A next try starts
+    from the final numbers and must not place members on a grid nor draw them larger than they are.
+    Built: the first drawing of animals on the page (the design's decision 10).
     Three looks from one base (from main `be1d3d2`; on the remote as `wip/animals-look-dots`, the base and look
     A; `wip/animals-look-bodies`, a small body seen from above with a shadow; `wip/animals-look-herds`, herds of
     up to 12 and a soft mark far away). The road: `tape/src/takers.rs` gives each square 8 slots × 8 numbers,
