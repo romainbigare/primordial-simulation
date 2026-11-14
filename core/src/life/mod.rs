@@ -40,6 +40,9 @@ pub struct Life {
     /// Per cell, from the month's start (`contract::surroundings`): ground temperature, liquid depth, surface height
     /// (`contract::place`)
     pub env: Vec<[f64; 4]>,
+    /// Per cell, from the month's start (`contract::surroundings`): the area of its land, m² (`contract::land`). Not
+    /// saved: built with the places
+    pub(crate) land: Vec<f64>,
     /// Per cell, from the start of life's month (`contract::ways_to_liquid`): the way over land to the nearest cell with open
     /// liquid of at least each decade over the month, m (`contract::to_liquid`). Not saved: life's month finds it before any
     /// law reads it

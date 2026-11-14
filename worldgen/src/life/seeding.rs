@@ -65,8 +65,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
         if fixes {
             genes[cover::FIX] = FIX_GENE;
         }
-        // `kind.kg` per m² of the cell's land, as `cover::place` takes it per m² of the cell.
-        if cover::place(w, i, genes, which as u32, kind.kg * m2 / w.mesh.cells().area()[i]) {
+        if cover::place(w, i, genes, which as u32, kind.kg) {
             (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + kind.kg * m2);
         }
     }

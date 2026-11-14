@@ -178,8 +178,8 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
     pub wet: Vec<f64>,
-    /// Per ground cell: the share of its area that is land, 0..1 (`flow::land_shares`; before Flow first built its
-    /// state, all of a land cell and none of the others)
+    /// Per ground cell: the share of its area that is land, 0..1: its land (`contract::lands`, which its cover lives
+    /// on) over its area
     pub land: Vec<f64>,
 }
 
@@ -192,8 +192,7 @@ impl<'a> Ctx<'a> {
         let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
-        let all: Vec<usize> = (0..n).collect();
-        let land = pcore::flow::land_shares(w, &all).unwrap_or_else(|| all.iter().map(|&i| if w.is_land(i) { 1.0 } else { 0.0 }).collect());
+        let land = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
         let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, land };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c

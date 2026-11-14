@@ -121,8 +121,10 @@ impl Surf {
             heat: p.heat,
             amt,
             fusion: if p.pk != NONE { p.amt[p.pk] * cx.s.sp[p.pk].lf } else { 0.0 },
-            // The second film stands over its land: all of the cell's over its land part, none over its liquid's top.
+            // The second film stands over its land: all of the cell's over its land part, none over its liquid's top;
+            // so does its cover, whose capture area spreads over the land part's area.
             second: g.second.filter(|_| q == LAND),
+            canopy: if q == LAND { crate::contract::stand(cx.w, i).canopy(g.area * p.share) } else { 0.0 },
             part: Some(q),
             share: p.share,
             ..g

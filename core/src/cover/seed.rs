@@ -76,7 +76,7 @@ pub enum Landed {
     Out([f64; NP]),
 }
 
-/// Seeds `s` lodge in cover `c` of a cell of `area` m², with their heat and their store: into the most alike slot of
+/// Seeds `s` lodge in cover `c` on its ground of `area` m² (`cover::ground`), with their heat and their store: into the most alike slot of
 /// their starting kind within `APART` × `alike` steps (`distance`), the genes the mean by built cover; else they found
 /// a slot of their own: an empty one; else the one in deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots
 /// nearest each other by their genes join (`room`) and they found the slot it frees. So a cell is never closed to seeds
@@ -115,13 +115,13 @@ fn room(c: &mut Cover, mm: &[f64; NP], ph: &crate::Physics, area: f64) -> usize 
     small
 }
 
-/// Place `kg` per m² of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
+/// Place `kg` per m² of its ground (`cover::ground`, the cell's land) of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
 /// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
 /// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover (nothing is placed
 /// then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
-    let (mm, area) = (p.mm(&w.chem), w.mesh.cells().area()[i]);
+    let (mm, area) = (p.mm(&w.chem), super::ground(w, i));
     let s = sown(&w.chem, &w.cfg.phys, &p, (i, area, w.t_ground_last(i)), genes, root, kg);
     let mol = s.mol;
     let heat = s.heat;

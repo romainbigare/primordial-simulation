@@ -218,7 +218,10 @@ leaves the cell's liquid, which the running liquid joins), given to the cell's a
 pays the vapour's latent heat less what the ground held (a solid's heat of fusion too). **Press**
 (`contract::press`): work spent on a cell breaks its cover by the share it pays for (`life::breaking` of all its slots), and what breaks
 goes to the ground as remains with its heat. **What stands on a cell** (`contract::Stand`): the cover's mass, capture
-area and the light it absorbs and keeps, at each month's start (`Cover::stand`); Flow reads it (1.3, 1.4). A cell shows
+area and the light it absorbs and keeps, at each month's start (`Cover::stand`); Flow reads it (1.3, 1.4), its capture
+area spread over the cell, or over the land part of a cell of parts (none over its liquid's top). **The land of a
+cell** (`contract::land`): its area times the share of it out of the liquid that stands over its pores
+(`flow::land_shares`), at each month's start; what the land offers life. A cell shows
 itself as the month's start left its place and what stands, and its cover as it is; takes land in the takers' month,
 and the cover feels them in its own next month.
 
@@ -820,7 +823,15 @@ its walls are a frame, which pays no upkeep and does not wear, so its capacity, 
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
 1990, from memory). The cover of a cell is a node of the
 store (`Class::Life`, the life of its cell) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
-chunk of the cell is its one writer. Its temperature is its ground's: at the end of each month it trades heat with its
+chunk of the cell is its one writer. **It lives on the cell's land** (`cover::ground`: `contract::land`, at least
+`LEAST_GROUND_M2`, 1 m²): its leaves layer over the land (its light and its shade), its plants find their room on it
+(the self-thinning law, founding, seeds that lodge), the seeds that land on the cell lie and wake on it, and it is
+placed per m² of it. How wet its ground is to it is the land part's own liquid over that part's area for a cell of
+parts (no more than the cell holds; `flow::parts` keeps each part's matter), else the cell's over its area. A cell
+whose land shrinks as its liquid rises gives its cover less room, and it thins by the self-thinning law; one whose land
+is gone gives it 1 m², so it thins to almost no plants and, under the liquid (its light times e^(−depth /
+`light_depth`)), pays more upkeep than it stores and dies by its laws, its remains to the ground. Its temperature is
+its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
 task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a real count of plants (`Cover::plants`,
 `cover/stand.rs`), so a plant's mass is its built cover over them, and its height is that of a plant of that mass whose

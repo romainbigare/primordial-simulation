@@ -535,3 +535,21 @@ fn a_takers_vapour_leaves_the_ground_for_the_air() {
     assert!((paid - lv).abs() <= 1e-9 * lv, "the taker paid {paid} J for vapour whose heat of vaporisation is {lv} J");
     books.assert_kept(&w, 1e-9);
 }
+
+/// The cover of a cell lives on the cell's land (`contract::land`, `cover::ground`): the same kg per m² placed on a
+/// whole land cell and on a shore cell whose land is a part of it stands as the same kg per m² of their land.
+#[test]
+fn the_cover_lives_on_its_cells_land() {
+    let mut w = small_world();
+    pcore::step(&mut w);
+    let area = w.mesh.cells().area().to_vec();
+    let land = |w: &World, i: usize| contract::land(w, i);
+    let whole = (0..area.len()).find(|&i| land(&w, i) == area[i]).expect("a whole land cell");
+    let shore = (0..area.len()).find(|&i| land(&w, i) > 0.0 && land(&w, i) < 0.9 * area[i]).expect("a shore cell with land");
+    for i in [whole, shore] {
+        assert!(cover::place(&mut w, i, genes(), 0, 0.1));
+    }
+    let kg = cover::per_m2(&w, |c, mm, x| c.kg(mm, x));
+    let [a, b] = [whole, shore].map(|i| kg[i] * area[i] / land(&w, i));
+    assert!((a / b - 1.0).abs() < 1e-9, "{a} kg per m2 of land on the whole cell, {b} on the shore cell");
+}
