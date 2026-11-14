@@ -470,9 +470,18 @@ world). No rule that says where a habitat goes.
       births are 12 to 29 times too many (1.7 to 5 against weaned mass). Our young feed themselves at 3 to 6% of
       the adult's mass; real young become independent at 17 to 40%. The step that is too easy is likely that a
       newborn feeds itself at once. What the takers achieve in a world was not measured (the run was stopped).
-  - In work: the first drawing of animals on the page (the design's decision 10), by a page builder in its own
-    worktree: two or three looks on branches from one base, pictures in `scratchpad/animals/` (`looks.png`); the
-    owner picks, then one is merged. Then F2 (movement by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
+  - Built, waits for the owner's pick: the first drawing of animals on the page (the design's decision 10).
+    Three looks from one base (from main `be1d3d2`; on the remote as `wip/animals-look-dots`, the base and look
+    A; `wip/animals-look-bodies`, a small body seen from above with a shadow; `wip/animals-look-herds`, herds of
+    up to 12 and a soft mark far away). The road: `tape/src/takers.rs` gives each square 8 slots × 8 numbers,
+    `web/src/herds.ts` and `web/shaders/herds.wgsl` place each member at a fixed spot, the count rounded down,
+    hidden in standing liquid and under deep snow, nothing drawn where a member is under a quarter pixel.
+    Pictures in `scratchpad/animals/` (`looks.png`, `sheet_*.png`, `notes.md`). Faults of the looks: members
+    stand almost on a grid; the herds' far mark fills a cell's square to a hard edge; the angled view draws them
+    from above; the shader's cost is counted, not timed. **What the drawing shows of the takers' numbers** (for
+    the paused work): up to 75,000 per km² of the 3 kg kind and 8,000 per km² of the 60 kg kind at year 100, and
+    adults far lighter than their kind's adult mass (the 400 kg kind's adults 74 kg on average in a cell, young
+    sometimes heavier than adults). Then F2 (movement by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
     reads `scratchpad/f1/b2/notes.md` first.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
