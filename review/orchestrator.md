@@ -422,12 +422,11 @@ world). No rule that says where a habitat goes.
     all the soft part within its band, not the sward's top); no mutant founds a slot. No eaters of takers yet.
   - **The page places the takers** 50 years after the first life (`wasm/src/lib.rs` `TAKERS_YEAR`); the CLI
     places none unless asked (`--fauna-year`). The layer "Takers" shows them; no single animal is drawn yet.
-  - In work, the owner's three questions on the takers, by a third builder (scratch `scratchpad/f1/b3/`, `notes.md`
-    there), measure first: why the 30 g kind dies (its budget on three kinds of cell; real bite sizes and rates of
-    small bodies; a stretched row is mended, a lacking law is described); why large grazers pay their way on 70 kg
-    of dry matter per hectare (a leaf's cells have walls; a bite takes the top of what stands: each built only
-    from what the cover holds or one anchored row); what births our takers achieve in a world against wild ones
-    (the figures so far are at full food).
+  - **Paused by the owner** ("we'll continue that when we have sorted the habitat variety for them to live in"):
+    the takers' three open faults (why the 30 g kind dies; why large grazers pay their way on 70 kg of dry matter
+    per hectare; what births the takers achieve in a world against wild ones). A third builder had begun to
+    measure them and was stopped: what it found so far is in `scratchpad/f1/b3/notes.md`; its brief is in this
+    session's record. No work on the animals' numbers before the habitats and the sorted start.
   - In work: the first drawing of animals on the page (the design's decision 10), by a page builder in its own
     worktree: two or three looks on branches from one base, pictures in `scratchpad/animals/` (`looks.png`); the
     owner picks, then one is merged. Then F2 (movement by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
