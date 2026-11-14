@@ -9,6 +9,7 @@
 mod around;
 mod budget;
 mod build;
+mod canopy;
 mod grow;
 mod lying;
 mod month;

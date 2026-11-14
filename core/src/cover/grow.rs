@@ -31,7 +31,7 @@ pub fn step(w: &World, d: &mut Chunk) {
 
 /// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
 /// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer (its
-/// crown's base), and the capture area per unit of ground the light passes through its crown (`math::shade`); its
+/// crown's base), and the capture area per unit of ground the light passes through its crown (`canopy::shade`); its
 /// activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`).
 #[derive(Clone, Copy, Default)]
 pub(super) struct Slot {
@@ -82,7 +82,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let lying = super::lying::month(w, c, p, a, (i, area, dt), &mut flows, counts);
     super::stand::thin(c, &mm, (ph, rho, n), area);
     let mut s = [Slot::default(); SLOTS];
-    let mut layers = Vec::with_capacity(n);
+    let (mut layers, mut n_layers) = ([(0.0, 0.0, 0.0, 0.0, 0); SLOTS], 0);
     for (q, sq) in s.iter_mut().enumerate().take(n) {
         let (built, leaf) = (c.built(&mm, q), c.leaf(&mm, q));
         if c.root[q] == NO_ROOT || built <= EMPTY_KG {
@@ -100,9 +100,9 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             c.need[q] = need as f32;
         }
         let (base, top) = c.crown(ph, &mm, area, q, h);
-        layers.push((base, top, leaf / area, c.rooted[q] as f64, q));
+        (layers[n_layers], n_layers) = ((base, top, leaf / area, c.rooted[q] as f64, q), n_layers + 1);
     }
-    crate::math::shade(&layers, |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
+    super::canopy::shade(&layers[..n_layers], |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
     let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books::new(a.air, flows);
@@ -113,19 +113,29 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     b.budget[STORED] += c.content(&e) - before;
     let all: f64 = stored.iter().sum();
     c.keep = if caught > 0.0 { (all / caught) as f32 } else { 0.0 };
-    let mut order: Vec<usize> = (0..n).filter(|&q| s[q].built > 0.0).collect();
+    let (mut order, mut n_order) = ([0; SLOTS], 0);
+    for q in (0..n).filter(|&q| s[q].built > 0.0) {
+        (order[n_order], n_order) = (q, n_order + 1);
+    }
+    let order = &mut order[..n_order];
     order.sort_by(|&a, &b| s[b].shade.total_cmp(&s[a].shade));
-    let pays = pay(w, c, p, (&s, &stored), &order, (t, dt), (&mut b, counts));
+    let order = &*order;
+    let pays = pay(w, c, p, (&s, &stored), order, (t, dt), (&mut b, counts));
     // Its minerals in the ground, shared out over the slots by what each would take (`build::wants`): the slots' roots
     // share the cell's ground, and where it is short each gets its share of what it holds, whatever slots hold them.
     // Where one more kg would not pay it builds living cover no more, but walls alone while its plants lack them.
     let plans: Vec<_> = order.iter().map(|&x| (pays[x] || super::build::frame_short(w, c, p, x) <= 0.0).then(|| super::build::per_kg(w, c, p, x)).flatten()).collect();
-    let wants: Vec<_> = order.iter().zip(&plans).map(|(&x, k)| k.as_ref().map_or([0.0; MAX_SUBSTANCES], |k| super::build::wants(w, (c, k), p, x, &s[x]))).collect();
+    // (A lone slot's share is all of it.)
+    let shared = order.len() > 1;
+    let wants: Vec<_> = order.iter().zip(&plans).filter(|_| shared).map(|(&x, k)| k.as_ref().map_or([0.0; MAX_SUBSTANCES], |k| super::build::wants(w, (c, k), p, x, &s[x]))).collect();
     let ns = chem.ns();
     let asked: Vec<f64> = (0..ns).map(|k| wants.iter().map(|d| d[k]).sum()).collect();
-    for ((&x, want), plan) in order.iter().zip(&wants).zip(&plans) {
-        let mut ground = [0.0; MAX_SUBSTANCES];
-        (0..ns).filter(|&k| want[k] > 0.0 && asked[k] > 0.0).for_each(|k| ground[k] = a.ground[k] * (want[k] / asked[k]));
+    for (q, (&x, plan)) in order.iter().zip(&plans).enumerate() {
+        let mut ground = if shared { [0.0; MAX_SUBSTANCES] } else { a.ground };
+        if shared {
+            let want = &wants[q];
+            (0..ns).filter(|&k| want[k] > 0.0 && asked[k] > 0.0).for_each(|k| ground[k] = a.ground[k] * (want[k] / asked[k]));
+        }
         grow_slot(w, c, p, x, (&s[x], pays[x], plan.as_ref()), (i, a.tick, t, dt), &mut ground, (&mut b, counts));
     }
     super::stand::thin(c, &mm, (ph, rho, n), area);
@@ -218,7 +228,7 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     let gas_in: f64 = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| q.1 as f64).sum();
     let lost = a.thirst * gas_in;
     let drink = per_input(rx, p.liquid).unwrap_or(0.0) + lost;
-    drawn(c, &mut x[..s.len()], liquid / drink.max(1e-300));
+    super::canopy::drawn(c, &mut x[..s.len()], liquid / drink.max(1e-300));
     let all: f64 = x.iter().sum();
     (c.film, c.reach) = (0.0, 0.0);
     if all <= 0.0 {
@@ -245,22 +255,6 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     c.film = (a.pores * taken / cell) as f32;
     c.reach = (x.iter().zip(&c.rooted).map(|(xq, &r)| xq * r as f64).sum::<f64>() / all) as f32;
     x.map(|xq| xq * f * dh)
-}
-
-/// The units of the light reaction `x` the slots in use of cover `c` would run, cut to the key liquid their roots reach:
-/// the liquid of each ring of its ground (`math::rings`, by the shares the slots' roots hold, `Cover::rooted`) is the
-/// slots' that stand on it, `units` of the reaction a unit of the ground in all; where they would draw more there, each
-/// draws it in proportion to what it would draw there. So the slots of a cell draw on the ground they share, whatever
-/// slots hold them.
-fn drawn(c: &Cover, x: &mut [f64], units: f64) {
-    let share = |q: usize| (c.rooted[q] as f64).max(1e-300);
-    let mut got = [0.0; SLOTS];
-    for (at_least, ring) in crate::math::rings((0..x.len()).map(share)) {
-        let on = || (0..x.len()).filter(|&q| share(q) >= at_least);
-        let f = (units * ring / on().map(|q| x[q] * ring / share(q)).sum::<f64>().max(1e-300)).min(1.0);
-        on().for_each(|q| got[q] += x[q] * ring / share(q) * f);
-    }
-    x.copy_from_slice(&got[..x.len()]);
 }
 
 /// Slot `x` of cover `c`, whose lowest leaves do not pay for themselves (`Cover::full`), sheds the living cover of the

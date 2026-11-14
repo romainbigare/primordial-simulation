@@ -90,7 +90,11 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
     let (ph, n) = (&cfg.phys, cfg.variety);
     let kg = built_kg(mm, &s.mol);
     let plants = super::stand::founded(ph, kg, area);
-    let kin: Vec<usize> = kin::kins(&c.genes[..n], &c.root[..n], (&s.genes, s.root), APART * ph.alike, distance).collect();
+    let (mut kin, mut n_kin) = ([0; super::SLOTS], 0);
+    for x in kin::kins(&c.genes[..n], &c.root[..n], (&s.genes, s.root), APART * ph.alike, distance) {
+        (kin[n_kin], n_kin) = (x, n_kin + 1);
+    }
+    let kin = &kin[..n_kin];
     if !kin.is_empty() {
         // The seeds join the stand of their kind, shared over the slots that hold it by their built cover (a kind cut
         // into slots takes its seeds as the whole would), each as a slot of its own would, the genes the mean by built
