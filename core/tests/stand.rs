@@ -6,6 +6,10 @@ use pcore::World;
 use worldgen::life::{KINDS, LIGHT_ROW};
 use worldgen::testkit::{dry_lands, small_world};
 
+/// How near a cut cell stands to the uncut one, a share: the genes' 32-bit rounding (6e-8) moves the stand by about
+/// 1e-8 in a year (seen); a law that acts on a slot moves it by 1e-4 and more.
+const SAME: f64 = 1e-6;
+
 /// The row of the big slow kind of cover (a tree).
 const TREE_ROW: usize = 2;
 
@@ -34,9 +38,9 @@ fn cut(w: &mut World, i: usize, k: usize) {
 
 /// A stand of kind `row` grown a year from `kg` per m² on the dry land cell rain reaches most, the same cell with its
 /// slot cut into two and into four alike pieces, and each a year later: the cell's cover, its plants, their height and
-/// the seeds lying on its ground are the uncut cell's to 1e-9 (the pieces merge back as alike slots at their first
-/// month's end; what is left is the rounding of sums taken in another order, carried through a year of a nonlinear
-/// law: far under 1e-9).
+/// the seeds lying on its ground are the uncut cell's to `SAME` (the pieces merge back as alike slots at their first
+/// month's end; what is left is rounding: of sums taken in another order, and of the genes, kept in 32 bits, of seeds
+/// that join a lot one packet at a time, carried through a year of the cover's law).
 fn cut_stands_as_whole(row: usize, kg: f64) {
     let mut w = small_world();
     w.cfg.variety = cover::SLOTS;
@@ -55,7 +59,7 @@ fn cut_stands_as_whole(row: usize, kg: f64) {
         let cut = year(c);
         println!("kind {row}, cut in {k}: kg, plants, height m, seeds lying kg {cut:?}, uncut {whole:?}");
         for (a, b) in cut.iter().zip(&whole) {
-            assert!((a / b - 1.0).abs() < 1e-9, "cut in {k}: {cut:?}, uncut {whole:?}");
+            assert!((a / b - 1.0).abs() < SAME, "cut in {k}: {cut:?}, uncut {whole:?}");
         }
     }
 }

@@ -961,7 +961,8 @@ seeds fill it:
   tens of metres, a long tail to km, Clark et al. 1999); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
   `mut_size`), of body matter first and then walls (an embryo and its store); where its lots land and how they vary are
-  drawn by the cell and the slot's genes (`rng::Purpose::Cover`), not by its place among the cell's slots; all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
+  drawn by the cell and the slot's genes, rounded to 1/1024 of each gene's step (`rng::Purpose::Cover`, `KEY_STEPS`),
+  not by its place among the cell's slots; all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
   where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
   run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): through its crown its

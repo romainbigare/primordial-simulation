@@ -14,6 +14,10 @@ pub(super) fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
     rx.inputs.iter().find(|q| q.0 as usize == k).map(|q| q.1 as f64)
 }
 
+/// A slot's seeds draw where they land and how they vary by its genes rounded to this many parts of each gene's step
+/// (`RANGE`): far finer than a generation's mutation, far coarser than the rounding of sums.
+const KEY_STEPS: f32 = 1024.0;
+
 /// What slot `x` of cover `c` builds a kg of at its share of walls (`WALLS`; a small plant builds few walls,
 /// `stand::walled`), by the conversions of growth (`Chemistry::build`, `builds`): the units of each conversion, what
 /// they take of each substance, mol, and the fuel a kg costs with the work of building (`c_copy`), mol. None where the
@@ -121,9 +125,10 @@ pub(super) fn build(w: &World, (c, k): (&mut Cover, &PerKg), p: &Parts, x: usize
         c.mol[x][FUEL] -= mol[FUEL];
         let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp * t).sum::<f64>();
         b.heat -= heat;
-        // The draws are keyed by the cell and what the slot is, its genes, not by its place among the cell's slots: a
-        // kind's seeds land and vary alike however its stand is cut into slots.
-        let node = g.iter().fold(i as u64, |h, q| crate::rng::mix(h ^ q.to_bits() as u64));
+        // The draws are keyed by the cell and what the slot is, its genes to `KEY_STEPS` of each gene's step, not by its
+        // place among the cell's slots: a kind's seeds land and vary alike however its stand is cut into slots, and
+        // genes the rounding of sums tells apart draw alike.
+        let node = (0..super::NG).fold(i as u64, |h, q| crate::rng::mix(h ^ ((g[q] / super::RANGE[q].0) * KEY_STEPS).round() as i64 as u64));
         let mut r = Rng::new(w.seed, tick, node, Purpose::Cover);
         let mut lands: Vec<(usize, f64)> = Vec::new();
         for _ in 0..super::seed::LOTS {
