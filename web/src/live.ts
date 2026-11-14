@@ -64,8 +64,9 @@ export class Live {
   /** The samples' discharge come since it was last taken, or null. */
   takeDischarge(): Uint16Array | null { const d = this.discharge; this.discharge = null; return d; }
   /** A new island of `seed` and `size` between the latitudes `band` (south, north; NaN: the core's default band), its
-   * large shape drawn from the seed if `drawn`, else one rise in the middle. */
-  newWorld(seed: number, size: number, band: [number, number], drawn: boolean): void { this.worker.postMessage({ cmd: 'new', seed, size, band, drawn }); }
+   * large shape drawn from the seed if `drawn`, else one rise in the middle, its cells holding at most `variety` kinds
+   * of cover. */
+  newWorld(seed: number, size: number, band: [number, number], drawn: boolean, variety: number): void { this.worker.postMessage({ cmd: 'new', seed, size, band, drawn, variety }); }
   play(on: boolean): void { this.worker.postMessage({ cmd: 'play', on }); }
   /** Months of the world per second of real time. */
   rate(monthsPerSecond: number): void { this.worker.postMessage({ cmd: 'rate', rate: monthsPerSecond }); }

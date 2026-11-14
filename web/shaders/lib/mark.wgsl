@@ -3,14 +3,16 @@
 // much of it shows over the snow) is a function of its cell alone (`decide`): decided once a frame for each cell in
 // view (marks.wgsl), it is read by every pixel the mark may cover.
 
-// The kinds' table's planes (canopy.ts `KIND_PLANES`), and the designs (style.ts `DESIGN`).
-const CHANCE = 0; const WIDTH = 3; const NEED = 6; const ROOTS = 7; const FORM = 8; const FROM = 12; const TO = 16; const PETAL = 20; const SHAPE = 24;
+// The designs (style.ts `DESIGN`).
 const TREE = 0.0; const BUSH = 1.0;
+// The kinds' table lays its planes this many under each other, then in the next column (canopy.ts `PLANES_DOWN`).
+const PLANES_DOWN = 32;
 
 struct Cover {
   // The draw's corner in the world, m from the map's north-west corner; metres a device pixel; 1 when angled.
   corner: vec4f,
-  // The reflectance of the walls the cover builds: its stems (wasm `meta`).
+  // The reflectance of the walls the cover builds: its stems (wasm `meta`); and the kinds a square holds (the world's
+  // variety, wasm `meta`'s `tiles.kinds`).
   walls: vec4f,
   // Of each lattice: the row of the marks' texture its cells start at (`marks`).
   rows: vec4f,
@@ -50,12 +52,27 @@ fn place(c: vec2i, k: i32) -> vec3f {
   let x = lowbias(c, k);
   return vec3f(f32(x & 2047u) / 2048.0, f32((x >> 11u) & 2047u) / 2048.0, f32(x >> 22u) / 1024.0);
 }
-// Plane `k` of the kinds' table at the square at column and row c, the nearest on the map.
+// Plane `k` of the kinds' table at the square at column and row c, the nearest on the map (`PLANES_DOWN` planes a
+// column).
 fn kind(k: i32, c: vec2i) -> vec4f {
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let q = clamp(c, vec2i(0), n - 1);
-  return textureLoad(kinds, vec2i(q.x, k * n.y + q.y), 0);
+  return textureLoad(kinds, vec2i((k / PLANES_DOWN) * n.x + q.x, (k % PLANES_DOWN) * n.y + q.y), 0);
 }
+
+// The kinds' table's planes (canopy.ts `planesOf`) for squares of `kinds_n` kinds: of the planes of one number a kind,
+// that of group g of four (and of lattice l); of the planes of a kind's four numbers, that of kind t.
+fn kinds_n() -> i32 { return i32(cover.walls.w); }
+fn groups() -> i32 { return (kinds_n() + 3) / 4; }
+fn chance_plane(l: i32, g: i32) -> i32 { return l * groups() + g; }
+fn width_plane(l: i32, g: i32) -> i32 { return (3 + l) * groups() + g; }
+fn need_plane(g: i32) -> i32 { return 6 * groups() + g; }
+fn roots_plane(g: i32) -> i32 { return 7 * groups() + g; }
+fn form_plane(t: i32) -> i32 { return 8 * groups() + t; }
+fn from_plane(t: i32) -> i32 { return 8 * groups() + kinds_n() + t; }
+fn to_plane(t: i32) -> i32 { return 8 * groups() + 2 * kinds_n() + t; }
+fn petal_plane(t: i32) -> i32 { return 8 * groups() + 3 * kinds_n() + t; }
+fn shape_plane(t: i32) -> i32 { return 8 * groups() + 4 * kinds_n() + t; }
 
 // What the ground at `at` leaves a plant: the share free of liquid over its roots, how wet it is and how wet its cells
 // are on their mean (land.wgsl `state_at`), the share snow covers and the snow's depth, m.
@@ -83,30 +100,42 @@ fn thrive(wet: f32, mean: f32, need: vec4f) -> vec4f {
   return out;
 }
 
-// The kind of the mark whose foot is at `at` (its squares `cs`, their kinds' chances there `chance`, `thick` over the
-// patches, its ground `f`), of rank `x` among the plants that could stand there: its square (of the four) and kind, or
-// -1 where none stands. Each kind of each square counts by its share at the foot; on the lattice of stands the squares'
-// first kinds (their chances negated, canopy.ts `Paint`) are picked where `stand_pick` falls in their share, as the
-// field far away has them, the rest elsewhere.
-fn pick_kind(at: vec2f, cs: Corners, chance: array<vec4f, 4>, thick: f32, f: Foot, x: f32) -> vec2i {
-  var w: array<vec4f, 4>;
-  var first: array<vec4f, 4>;
-  var needs: array<vec4f, 4>;
+// The chances on lattice l of the kinds of group g of square s of the four about a foot (`cs`), times its share there
+// (on the lattice of stands, a square's first kind's negated: `pick_kind`).
+fn chance_at(l: i32, cs: Corners, s: i32, g: i32) -> vec4f { return cs.w[s] * kind(chance_plane(l, g), cs.at[s]); }
+
+// What the kinds of group g of square s count for at a foot of ground `f` where `loose` m of loose ground lies, their
+// chances `chance`, `thick` over the patches.
+fn weight(cs: Corners, s: i32, g: i32, chance: vec4f, thick: f32, f: Foot, loose: f32) -> vec4f {
+  return abs(chance) * thick * thrive(f.wet, f.mean, kind(need_plane(g), cs.at[s])) * holds(loose, kind(roots_plane(g), cs.at[s])) * f.stands;
+}
+
+// The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` over the patches, its ground `f`),
+// of rank `x` among the plants that could stand there: its square (of the four) and kind, or -1 where none stands. Each
+// kind of each square counts by its share at the foot; on the lattice of stands the squares' first kinds (their chances
+// negated, canopy.ts `Paint`) are picked where `stand_pick` falls in their share, as the field far away has them, the
+// rest elsewhere.
+fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, x: f32) -> vec2i {
+  let groups = groups();
   var sum = 0.0;
   var firsts = 0.0;
   // The loose ground at the foot with its patches (rock.wgsl `loose_seen`, as the bare bed is drawn), read only where a
   // kind's roots may want more than lies there.
   var deepest = 0.0;
   for (var s = 0; s < 4; s++) {
-    needs[s] = kind(ROOTS, cs.at[s]);
-    deepest = max(deepest, max(max(needs[s].x, needs[s].y), max(needs[s].z, needs[s].w)));
+    for (var g = 0; g < groups; g++) {
+      let needs = kind(roots_plane(g), cs.at[s]);
+      deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
+    }
   }
   let loose = select(0.0, loose_seen(at, 0.0), deepest > 0.0);
   for (var s = 0; s < 4; s++) {
-    w[s] = abs(chance[s]) * thick * thrive(f.wet, f.mean, kind(NEED, cs.at[s])) * holds(loose, needs[s]) * f.stands;
-    first[s] = select(vec4f(0.0), vec4f(1.0), chance[s] < vec4f(0.0));
-    sum += dot(w[s], vec4f(1.0));
-    firsts += dot(w[s], first[s]);
+    for (var g = 0; g < groups; g++) {
+      let chance = chance_at(l, cs, s, g);
+      let w = weight(cs, s, g, chance, thick, f, loose);
+      sum += dot(w, vec4f(1.0));
+      firsts += dot(w, select(vec4f(0.0), vec4f(1.0), chance < vec4f(0.0)));
+    }
   }
   if (x >= sum) { return vec2i(-1); }
   // Of the first kinds or of the rest, and its place among them.
@@ -119,10 +148,14 @@ fn pick_kind(at: vec2f, cs: Corners, chance: array<vec4f, 4>, thick: f32, f: Foo
   }
   var acc = 0.0;
   for (var s = 0; s < 4; s++) {
-    let ws = w[s] * select(vec4f(1.0) - first[s], first[s], group);
-    for (var t = 0; t < 4; t++) {
-      acc += ws[t];
-      if (v < acc) { return vec2i(s, t); }
+    for (var g = 0; g < groups; g++) {
+      let chance = chance_at(l, cs, s, g);
+      let first = select(vec4f(0.0), vec4f(1.0), chance < vec4f(0.0));
+      let ws = weight(cs, s, g, chance, thick, f, loose) * select(vec4f(1.0) - first, first, group);
+      for (var t = 0; t < 4; t++) {
+        acc += ws[t];
+        if (v < acc) { return vec2i(s, 4 * g + t); }
+      }
     }
   }
   return vec2i(-1);
@@ -132,25 +165,25 @@ fn pick_kind(at: vec2f, cs: Corners, chance: array<vec4f, 4>, thick: f32, f: Foo
 // numbers `r` (its colour's draw, its lean's direction, its lean); angled no taller than `reach` lets it stand (the
 // rows looked at, textures.ts `ROWS_MOST`).
 fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, reach: f32) -> Plant {
-  let form = kind(FORM + t, sq);
-  let first = kind(FROM + t, sq);
-  let to = kind(TO + t, sq);
+  let form = kind(form_plane(t), sq);
+  let first = kind(from_plane(t), sq);
+  let to = kind(to_plane(t), sq);
   // A tree's form, a bush's flowers.
   var shape = vec4f(0.0);
   var petal = vec4f(0.0);
   if (to.w == TREE) {
-    shape = kind(SHAPE + t, sq);
+    shape = kind(shape_plane(t), sq);
     // A mark of the trees' lattice that stands for several plants is their cluster, a crown of knots, each a plant's
     // crown (crown.wgsl `knots`): its kind's form fades into the round crown as the plants pass one, and the cluster
     // is drawn surely from two.
     let cluster = select(0.0, clamp(shape.z - 1.0, 0.0, 1.0), l == STANDS);
     if (cluster > 0.5) { shape = vec4f(f32(LOBED), 2.0 * cluster - 1.0, 0.0, 0.0); } else { shape.y *= 1.0 - 2.0 * cluster; }
   }
-  if (to.w == BUSH) { petal = kind(PETAL + t, sq); }
+  if (to.w == BUSH) { petal = kind(petal_plane(t), sq); }
   // Its own size: the plants of a stand differ, by up to `SIZES` either way of its kind's.
   let grow = 1.0 + SIZES * (2.0 * size - 1.0);
   let side = cover.grid[l].z;
-  let width = kind(WIDTH + l, sq)[t] * grow;
+  let width = kind(width_plane(l, t / 4), sq)[t % 4] * grow;
   let fine = 1.0 - clamp((form.w - LEAF_THICK) / (LEAF_THIN - LEAF_THICK), 0.0, 1.0);
   let tall = select(form.x * grow, min(form.x * grow, reach / STAND), cover.corner.w > 0.5);
   let lean = LEAN * r.z * vec2f(cos(2.0 * PI * r.y), sin(2.0 * PI * r.y));
@@ -161,7 +194,8 @@ fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, reach: f32
 }
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square and kind packed as
-// (row x squares across + column) x 4 + kind (-1: none stands there, or the snow buries it), the share of it that shows
+// (row x squares across + column) x the kinds a square holds (`kinds_n`) + kind (-1: none stands there, or the snow
+// buries it), the share of it that shows
 // over the snow, and the share of the ground snow covers at its foot. A function of the cell alone, so it is decided
 // once a frame for each cell in view (marks.wgsl) and read by every pixel the mark may cover (cover.wgsl `lattice`).
 fn decide(l: i32, k: vec2f) -> vec4f {
@@ -173,12 +207,10 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   let c = (k - g.xy) * side + h.xy * side;
   let at = cover.corner.xy + c;
   let cs = corners(at / land.map.x);
-  // The chances (on the lattice of stands, a square's first kind's negated: `pick_kind`).
-  var chance: array<vec4f, 4>;
+  // The chances (`chance_at`).
   var all = 0.0;
   for (var s = 0; s < 4; s++) {
-    chance[s] = cs.w[s] * kind(CHANCE + l, cs.at[s]);
-    all += dot(abs(chance[s]), vec4f(1.0));
+    for (var g = 0; g < groups(); g++) { all += dot(abs(chance_at(l, cs, s, g)), vec4f(1.0)); }
   }
   // The patches thicken a stand by at most `PATCH`: a rank past that needs no look at them.
   let rank = rand3(id, l);
@@ -187,13 +219,13 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   if (rank.x >= all * thick) { return none; }
   let f = foot(at);
   if (f.stands <= 0.0) { return none; }
-  let pick = pick_kind(at, cs, chance, thick, f, rank.x);
+  let pick = pick_kind(l, at, cs, thick, f, rank.x);
   if (pick.x < 0) { return none; }
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
   let shows = above_snow(f.snow_m, mark_plant(l, k, sq, pick.y).h);
   if (shows <= 0.0) { return none; }
-  return vec4f(f32((sq.y * n.x + sq.x) * 4 + pick.y), shows, f.snow, 0.0);
+  return vec4f(f32((sq.y * n.x + sq.x) * kinds_n() + pick.y), shows, f.snow, 0.0);
 }
 
 // The plant of kind `t` of the square at `sq` in cell k of lattice l (`decide`): at its place in the cell, of its size
