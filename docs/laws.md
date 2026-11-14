@@ -681,7 +681,11 @@ goes below zero, and the day keeps its rates on any grid. **Known limit:** their
 of the air step's start (15 days), so a node whose air grows or shrinks within the step moves a little more or less
 of it than its rates say. Mass that crosses is
 lifted between the nodes' mean grounds by the heat of the node it enters. A cell sees its air node and three
-neighbours bilinearly (`flow/scratch.rs`). Air moves as whole columns.
+neighbours bilinearly (`flow/scratch.rs`): everything it reads of its air, the air's temperature, vapour and drop
+with height, the share of the sunlight its air and cloud let through, the heat radiation its air sends down and how
+much of the ground's it absorbs, and the height its vapour fills, is shared so between the nodes' centres, and none
+steps at a node's border (`cells::exchange`, `World::near_ground`); what it gives its air and takes from it is booked
+with its own node. Air moves as whole columns.
 **The map's stretch** (`air::stretch`): the air over a small map behaves as the air over the band
 of latitudes its rows stand for, while the ground keeps its true metres. The air's sideways laws take every horizontal
 length `stretch` times longer: a column stands for one `stretch` times longer and wider, so it holds `stretch`² times
