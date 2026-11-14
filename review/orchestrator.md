@@ -257,11 +257,20 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   the last digit), the garden keeps that many and tries newcomers in proportion, the CLI and the page offer it.
   It gives room for kinds; how many live together in a cell stays with the laws. The cover's month costs about
   in proportion to the slots used.
-- **In work**, by a builder in its own worktree (scratch `scratchpad/sorted/spike/`, `notes.md` there): part 1,
-  the variety as a setting of a world (`cover::SLOTS` the bound, the world's setting the count; the same world at
-  4; `ew run --variety N` and a field on the page), reported and merged on its own; part 2, the spike of the
-  nursery on the same branch behind `--sorted` (no race by mass, newcomers near known kinds, the garden check,
-  bands' tables, a contact sheet): numbers and pictures, not for main as it is.
+- **The variety is a setting of a world, on main** (merge 3dea286, `SNAPSHOT_VERSION` 144): `Config::variety`,
+  4 unless asked, 1 to `cover::SLOTS` (now the bound, 12); `ew run --variety N`; a field on the page. At 4 the
+  world is the same to the last digit. Each extra slot of the bound costs 85 bytes a cell; at 8 and 12 the
+  cover's stage costs about 25 to 30% more.
+- **Found with it, a fault of the cover's laws: the world depends on how a stand is cut into slots.** The 32
+  drawn world in the band at year 60 holds 0.88e10 kg of cover at variety 2, 4.10e10 at 4, 6.69e10 at 8, 6.97e10
+  at 12, with the same six starting kinds (variants of one kind found slots of their own). The builder's guess,
+  not measured: each slot is thinned on its own, and is its own layer in the light and in the rooted share, so
+  one stand cut into more slots holds more plants and more leaf. The law that should hold: a slot cut into two
+  alike halves gives the same world. **In work before the nursery's spike**, by the same builder (scratch
+  `scratchpad/sorted/spike/`, `notes.md` there): which laws break it, a test that states it, the mend, its
+  effect at variety 4 (the references move if it moves the world).
+- Then, same builder: the spike of the nursery on its branch behind `--sorted` (no race by mass, newcomers near
+  known kinds, the garden check, bands' tables, a contact sheet): numbers and pictures, not for main as it is.
 - **Its steps**: (0) main alone to year 300 on the new air, the target: done (`scratchpad/sorted/target/`, seed
   1 at 64 squares). The cover is steady from year 100 in all three: in the band with the roster 1.33 to 1.40e11
   kg, nearly all the land covered, the gas held at 386 ppm, land 283.7 K, the low liquid down 1.2 m at year 300;
