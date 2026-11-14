@@ -364,14 +364,24 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   - Roots are not shown to a mouth (the cover does not store them). The even spread over height lets a 30 g
     mouth reach 0.05 kg/m² of a 23 m slot's soft part at the trunk's foot (none if it stood in the top third):
     kept for now, open.
+  - On main too (merge c3ddf4a, `SNAPSHOT_VERSION` 142): a body's work runs at the pace of its own temperature
+    over the pace at 310 K (`WORK_T`; the cold kind's surplus falls from 12 to 23 times its need to 2 to 4);
+    a newborn grows from nothing by the growth law (26 days to bear at 30 g, 258 at 400 kg; a mother's cap bears
+    about a third of what it builds); mutation and the slot rule (`fauna::RANGE`, `life::kin::mutate` shared with
+    the cover; slots join only when alike in every gene); the young leave by the seeds' kernel through an outbox
+    and the liquid fetched from a far cell is that cell's, carried as life carries matter; the takers live on
+    the cell's land. The 64 drawn world on the new air, takers at year 50, to year 250 (`scratchpad/f1/shots3/`,
+    `b2/me64.txt`): **all five kinds alive**, books at 4.6e-13; **the cover is eaten to 13% of its twin's** (1.12
+    against 8.50 kg per m² of land; 11% in the band), 42 to 80% of its growth eaten, by the 3 kg kind (11.8 t per
+    km²) and the cold-bodied 2 kg kind (4.8 t); births are still 3 to 10 times real ones (Hamilton and others
+    2011); no mutant founds a slot (as the design said); the slope against Damuth's is -1.0 to -1.4.
   In work, by the second builder (branch `worktree-agent-a3977242362ec202f`; scratch `scratchpad/f1/b2/`,
-  `notes.md` there), a commit each: (A) every rate of a body's work runs at the pace of its body over the pace
-  at the body temperature the rows were measured at; (B) a newborn has grown from nothing by the law every body
-  grows by, so the time of bearing follows from it (about 25 days at 30 g, 350 at 400 kg, by the integral) and
-  a mother's cap bears a fraction of what it builds; (C) mutation and the slot rule, with one table of the
-  takers' genes built as the cover's (the orchestrator's word given for that one tuned row); (D) the young leave
-  by the seeds' kernel through an outbox, and the fetched drink is booked in the far cell; (E) the 250-year run
-  again. Passed on to that builder: the takers read the cell's land (`contract::land`), not its area.
+  `notes.md` there), a commit each: (1) a member takes its food bite by bite: the ground cropped in a day is
+  bounded by the bite's area over the cropping time (Spalinger and Hobbs 1992; Shipley and others 1994), so a
+  thin sward no longer feeds it; (2) a slot's soft part and the thin axes of its frame stand in its crown, from
+  h - L/rho to h (one anchored leaf area per volume of a crown), so a grown tree is out of a ground mouth's
+  reach; (3) a mother pays the whole burning of her unborn; (4) the 250-year run again, with the cover by height
+  class. There are no eaters of takers yet: the gate's row on the cover against its twin is judged knowing that.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
   a world of 22 squares is one plain dome, so the page's first world is 32 squares, and its size field goes to 128
