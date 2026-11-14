@@ -974,7 +974,9 @@ seeds fill it:
   way is never pushed out by weight: what lives after is the light's to decide, as seedlings live on their store and on
   the light that reaches the bottom of the layers above them, and what does not pay dies (the gap models, Shugart
   1984). A variant farther than `APART` × `alike` from its kind founds a slot of its own and competes with the others
-  for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is between slots
+  for light by height. Slots of a cell within the same distance share one (`merge_alike`). A slot is the bookkeeping of a kind in a cell, not
+  a thing of the world: every law above acts on the stand, so a cell whose slot is cut into alike slots stands a year
+  later as the uncut cell does (`core/tests/stand.rs`). Selection is between slots
   and cells: what grows better sends more seeds (the frost gene falls where winters are cold, `core/tests/cover.rs`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's aside node (with theirs), as living things
