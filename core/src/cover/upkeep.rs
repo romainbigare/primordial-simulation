@@ -66,11 +66,11 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
 }
 
 /// The upkeep of a kg of living cover of genes `g` a day at full activity, at `pace` of its burning's pace at `t_cat`,
-/// J: basal (`c_basal`), its capacity (a capacity that could store `cap` W per kg costs the share `c_light` of that) and
+/// J: basal (`c_basal`), its capacity (a capacity that could store `cap` W per kg costs the share `c_capacity` of that) and
 /// its firmness (dearer the colder it stands, as a firmer catalyst costs more), each times its repair factor.
 pub(super) fn upkeep_rates(chem: &Chemistry, ph: &crate::Physics, p: &Parts, g: &[f32; NG], pace: f64) -> [f64; 3] {
     let cap = dec(g[LIGHT]) * dec(g[MOIST]) * chem.dh(p.light) * DAY;
     let firm = 1.0 + (chem.subs[p.liquid].melt - g[FROST] as f64).max(0.0) / ph.c_firm;
     let k = ph.repair(g[REPAIR] as f64) * pace;
-    [ph.c_basal, ph.c_light * cap, ph.c_light * cap * (firm - 1.0)].map(|x| x * k)
+    [ph.c_basal, ph.c_capacity * cap, ph.c_capacity * cap * (firm - 1.0)].map(|x| x * k)
 }

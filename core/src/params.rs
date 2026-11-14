@@ -132,8 +132,8 @@ pub struct Physics {
     pub alike: f32,
 
     // The cover (`cover`)
-    /// Upkeep of the cover's light capacity, as a share of what that capacity could store in the time
-    pub c_light: f64,
+    /// Upkeep of a catalyst's capacity (the light reaction, a gut), a share of what it could make in the time
+    pub c_capacity: f64,
     /// Mutation size of a living kind's genes per generation, times each gene's step
     pub mut_size: f32,
     /// Built cover of one plant a seed founds, kg
@@ -266,7 +266,7 @@ impl Default for Physics {
             rho_body: 1e3,
             c_copy: 1e7,
             alike: 4.0,
-            c_light: 0.1,
+            c_capacity: 0.1,
             mut_size: 0.063,
             seed_kg: 1e-5,
             drawdown: 0.3,
