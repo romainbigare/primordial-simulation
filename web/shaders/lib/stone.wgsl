@@ -86,26 +86,28 @@ fn stones_held(s: Stony, o: i32) -> f32 {
 struct Placed { held: bool, x: u32, r: f32, v: vec2f }
 
 // The stone of size `size` m (those of its octave `o`: `density` of the cells hold one) of lattice `l` whose cell
-// holds the point `at`, stream `k` of the world's random numbers. The second lattice lies turned and half a cell off
-// the first, so no rows of stones show; a stone lies anywhere its cell holds it whole, with its shadow.
-fn placed(at: vec2f, size: f32, density: f32, o: i32, l: i32, k: i32) -> Placed {
+// holds the pixel's place moved by `shift` m, stream `k` of the world's random numbers. The second lattice lies turned
+// and half a cell off the first, so no rows of stones show; a stone lies anywhere its cell holds it whole, with its
+// shadow.
+fn placed(size: f32, density: f32, o: i32, l: i32, k: i32, shift: vec2f) -> Placed {
   let side = STONE_GAP * size;
-  let q = select(at, vec2f(0.8 * at.x + 0.6 * at.y, 0.8 * at.y - 0.6 * at.x), l == 1) / side + f32(l) * 0.5;
-  let c = floor(q);
-  let x = lowbias(vec2i(c), k + 2 * o + l);
+  var turn = mat2x2f(1.0 / side, 0.0, 0.0, 1.0 / side);
+  if (l == 1) { turn = mat2x2f(0.8, -0.6, 0.6, 0.8) * (1.0 / side); }
+  let q = lat(turn, turn * shift + f32(l) * 0.5);
+  let x = lowbias(q.i, k + 2 * o + l);
   let draw = f32((x >> 20u) & 1023u) / 1023.0;
   let r = 0.5 * size * mix(STONE_SIZES.x, STONE_SIZES.y, draw * sqrt(draw));
   let room = 0.5 - (1.0 + STONE_SHADOW_REACH) * r / side;
-  let centre = c + 0.5 + room * (vec2f(f32((x >> 10u) & 31u), f32((x >> 15u) & 31u)) / 15.5 - 1.0);
-  let v = (q - centre) * side;
+  let centre = 0.5 + room * (vec2f(f32((x >> 10u) & 31u), f32((x >> 15u) & 31u)) / 15.5 - 1.0);
+  let v = (q.f - centre) * side;
   // The point from the centre back in the map's axes.
   return Placed(f32(x & 1023u) / 1024.0 < density, x, r, select(v, vec2f(0.8 * v.x - 0.6 * v.y, 0.6 * v.x + 0.8 * v.y), l == 1));
 }
 
-// The stones `s` at least `least` m large at `at`, seen at `e` m a pixel, of bed `bed` (linear, unlit), stream `k` of
+// The stones `s` at least `least` m large at the pixel, seen at `e` m a pixel, of bed `bed` (linear, unlit), stream `k` of
 // the world's random numbers: their colour times their coverage (with the shadow they throw as black), and that
 // coverage.
-fn stones(at: vec2f, e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
+fn stones(e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
   var out = vec4f(0.0);
   if (s.density <= STONES_LEAST || s.size <= 0.0) { return out; }
   let tone = bed * STONE_TONE;
@@ -125,7 +127,7 @@ fn stones(at: vec2f, e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f 
     out = mix(out, vec4f(tone, 1.0), mean);
     if (near > 0.0 && stands > 0.0 && density > 0.0) {
       for (var l = 0; l < 2; l++) {
-        let p = placed(at, size, density, o, l, k);
+        let p = placed(size, density, o, l, k, vec2f(0.0));
         let r = s.small * p.r;
         if (!p.held || dot(p.v, p.v) > STONE_REACH * STONE_REACH * r * r) { continue; }
         // Under snow deeper than it is tall, a stone does not show.
@@ -157,10 +159,10 @@ fn stones(at: vec2f, e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f 
 // (its eddy, `WAKE_EDDY` of its radius).
 const WAKE_LONG = 2.2; const WAKE_SPREAD = 0.35; const WAKE_EDDY = 0.8;
 
-// The white water at `at`, seen at `e` m a pixel, about the stones `s` at least `least` m large (`stones`, stream `k`)
+// The white water at the pixel, seen at `e` m a pixel, about the stones `s` at least `least` m large (`stones`, stream `k`)
 // in a flow that runs `down` (a unit vector), 0..1: each stone's the same stone `stones` draws, found from a point up
 // the flow.
-fn wake(at: vec2f, e: f32, s: Stony, least: f32, down: vec2f, k: i32) -> f32 {
+fn wake(e: f32, s: Stony, least: f32, down: vec2f, k: i32) -> f32 {
   var white = 0.0;
   if (least <= 0.0) { return white; }
   var size = s.size;
@@ -171,7 +173,7 @@ fn wake(at: vec2f, e: f32, s: Stony, least: f32, down: vec2f, k: i32) -> f32 {
       for (var l = 0; l < 2; l++) {
         // The stone whose cell holds the point half a wake up the flow.
         let back = 0.5 * WAKE_LONG * size * down;
-        let p = placed(at - back, size, density, o, l, k);
+        let p = placed(size, density, o, l, k, -back);
         if (!p.held) { continue; }
         let r = s.small * p.r;
         let v = p.v + back;

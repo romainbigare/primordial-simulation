@@ -5,7 +5,7 @@
 // draw make. No kind is a class: a plant's size, shape and colour are functions of its numbers.
 import type { Rgb } from './style';
 import { clamp, smooth } from './earth';
-import { DESIGN, KindLook, designOf, kindLook, seenFar } from './style';
+import { DESIGN, KindLook, designOf, fromScreen, kindLook, seenFar, toScreen } from './style';
 import { formOf } from './form';
 
 /** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most a cell from its
@@ -46,8 +46,8 @@ export const PLANES_DOWN = 32;
  * of loose ground their roots need, m (the core's, tape/src/stands.rs), of each lattice its marks' mean width, m, the
  * sward and the lattices under the trees' as one layer, as the field draws them far away (`lowOf`), and 1 where the
  * square's cell holds land (a square with none holds 0 in every layer: cover_field.wgsl blends over the squares with land
- * alone, `on_land`). */
-export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, low: LATTICES.length + 8, land: LATTICES.length + 9, count: LATTICES.length + 10 } as const;
+ * alone, `on_land`), and of the sward and of the lattice of stands the part the kinds but the first make. */
+export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, low: LATTICES.length + 8, land: LATTICES.length + 9, swardRest: LATTICES.length + 10, standsRest: LATTICES.length + 11, count: LATTICES.length + 12 } as const;
 /** The number of a square's row of the core's table that is the share of its cell that is land (tape/src/table.rs `row`). */
 const LAND_AT = 10;
 /** The lattice whose kinds grow in stands of their own, near and far alike (cover_field.wgsl `stand_pick`): the trees'. */
@@ -91,8 +91,9 @@ const PALE_REFL: Rgb = [0.10, 0.14, 0.04];
 const PALE_MOST = 0.4;
 /** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (cover.wgsl `SHADOW`). */
 const CROWN_SHADOW = 0.5;
-/** The sun at 45° lays a plant's shadow as long as it is tall: m of shadow per m of height. */
-const SHADOW_RUN = 1;
+/** A plant's shadow darkens this many times the square of its crown's width of ground: the marks draw it as a soft
+ * ellipse about their crown's size beside it (cover.wgsl `plant`), so the field far away is as dark as the marks near. */
+const SHADOW_WIDTHS = 0.9;
 
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => a.map((v, i) => v + (b[i] - v) * clamp(t)) as Rgb;
 
@@ -151,7 +152,8 @@ function marksOn(r: Float32Array, l: number, grow: number, rooted: number): Mark
   return { chance: share * chance, width: Math.min(held * wider, REACH * a), plants, covers: share * r[K.cover] };
 }
 
-/** What a layer of the field (`FIELD`) gathers in a square: its kinds' colours summed by the ground each covers, that
+/** What a layer of the field (`FIELD`) gathers in a square: its kinds' colours as the screen shows them (a mix of colours
+ * on a screen averages what it shows, not the light: style.ts `seenFar`) summed by the ground each covers, that
  * ground, the ground they leave, the shadow they cast (the plants a m² times their shadow's area), their heights,
  * rooted shares, roots' needs and marks' widths summed by the ground each covers, and its first kind:
  * the one of the lowest starting kind (a label fixed in the world, so neighbouring squares agree), with its colour and
@@ -172,7 +174,7 @@ class Paint {
    * their marks `width` m wide (0: none, the sward). */
   add(k: number, root: number, c: Rgb, covers: number, shadow: number, [height, rooted, need]: number[], width: number): void {
     if (covers <= 0) return;
-    this.rgb = this.rgb.map((v, q) => v + covers * c[q]) as Rgb;
+    this.rgb = this.rgb.map((v, q) => v + covers * toScreen(c[q])) as Rgb;
     this.covered += covers;
     this.tall += covers * height;
     this.held += covers * rooted;
@@ -187,14 +189,17 @@ class Paint {
    * share with the shadow it lays on the ground between (a shadow over the share 1 - e^-(the shadows' area per m²) of
    * it, Poisson-placed plants), so a tall rough canopy is darker than a low one of the same leaves; of its first kind
    * (`firstAt`, if any), its part of that. */
-  put(out: Float32Array, at: number, firstAt?: number): void {
+  put(out: Float32Array, at: number, firstAt?: number, restAt?: number): void {
     const cover = 1 - this.bare, shaded = (1 - cover) * -Math.expm1(-this.shadow) * CROWN_SHADOW, n = Math.max(this.covered, 1e-9);
-    this.rgb.forEach((v, q) => { out[at + q] = (v / n) * cover; });
+    this.rgb.forEach((v, q) => { out[at + q] = fromScreen(v / n) * cover; });
     out[at + 3] = cover + shaded;
-    if (firstAt === undefined) return;
-    const share = this.first.covers / n;
+    if (firstAt === undefined || restAt === undefined) return;
+    const share = this.first.covers / n, rest = n - this.first.covers;
     this.first.rgb.forEach((v, q) => { out[firstAt + q] = v * share * cover; });
     out[firstAt + 3] = share * (cover + shaded);
+    // The rest's colour, as the screen shows its kinds (the sum of all less the first's).
+    this.rgb.forEach((v, q) => { out[restAt + q] = rest > 1e-9 ? fromScreen(Math.max(v - this.first.covers * toScreen(this.first.rgb[q]), 0) / rest) * (1 - share) * cover : 0; });
+    out[restAt + 3] = (1 - share) * (cover + shaded);
   }
 
   /** Into `out` at each of `at` (the layers `FIELD.tall`, `rooted`, `need` and `wide`): its plants' mean height, the
@@ -256,13 +261,13 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
         held[l] = true;
         tallest[l] = Math.max(tallest[l], r[K.height]);
         // The share of the ground its plants cover, each as closed as its crown.
-        paint[l].add(k, r[K.root], c, covered * crown, (chance / (a * a)) * width * SHADOW_RUN * r[K.height], stand, width);
+        paint[l].add(k, r[K.root], c, covered * crown, (chance / (a * a)) * width * width * SHADOW_WIDTHS, stand, width);
       });
     }
-    paint.forEach((p, l) => p.put(field, layer(l, i), l === STANDS ? layer(FIELD.standsFirst, i) : undefined));
+    paint.forEach((p, l) => p.put(field, layer(l, i), l === STANDS ? layer(FIELD.standsFirst, i) : undefined, l === STANDS ? layer(FIELD.standsRest, i) : undefined));
     const first = paint[STANDS].first.k, chanceAt = texel(group(P.chance, first, STANDS), i) + (first & 3);
     if (first >= 0) table[chanceAt] = -table[chanceAt];
-    sward.put(field, layer(FIELD.sward, i), layer(FIELD.swardFirst, i));
+    sward.put(field, layer(FIELD.sward, i), layer(FIELD.swardFirst, i), layer(FIELD.swardRest, i));
     [...paint, sward].forEach((p, q) => p.putStand(field, [FIELD.tall, FIELD.rooted, FIELD.need, FIELD.wide].map(f => layer(f, i) + q)));
     lowOf(field, i, layer);
     // The flowers: their mean colour times the share of the herbs in flower times the sward's cover, and that share.

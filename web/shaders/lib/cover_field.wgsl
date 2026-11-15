@@ -33,12 +33,18 @@ const LOW_LAYER = 11; const LOW_FAR_E = 0.75; const LOW_FAR_FULL_E = 1.0;
 // cover is drawn on land only, and a square with no land is no bare ground beside it. A blend whose land weighs less
 // than `LAND_LEAST` is none (it lies out in the liquid, where no cover is drawn).
 const LAND_LAYER = 12; const LAND_LEAST = 1e-3;
+// Of the sward and of the lattice of stands, what the kinds but the first make (canopy.ts `FIELD`).
+const SWARD_REST = 13; const STANDS_REST = 14;
 const STANDS = 2;
 // A crown of the field (`crowns`), where its plants take too few pixels to be drawn as marks: a disc in a cell, present
 // in a cell as often as covers at most `GRAIN_FILL` of it, as wide as keeps the mean (at most half a cell), anywhere in
 // its cell, so no crowns stand in rows and none is cut at its cell's edge. Each is lit from the north-west, its light
 // departing from the flat ground's by up to `GRAIN_LIGHT`, and its tone its own, up to `GRAIN_TONE` either way.
 const GRAIN_FILL = 0.35; const GRAIN_LIGHT = 0.3; const GRAIN_TONE = 0.1;
+// The pixel's place in the cells is moved by up to `GRAIN_WARP` cells by smooth noise `WARP_CELLS` cells across, so rows
+// and columns of cells show no rows and columns in the crowns (a crown stays within half a cell of the place it is
+// drawn at, which the warp moves as a whole).
+const GRAIN_WARP = 0.35; const WARP_CELLS = 3.0;
 // A crown of the field is as wide as its plants' marks, and is drawn only where those span `CLUMP_PX` css pixels: where
 // a plant takes less, the field is its plants' mean, as seen from afar, and no grain coarser than the plants stands
 // for them. Its cells are a lattice's cells doubled as often as the width takes; between two doublings a wide cell
@@ -122,6 +128,10 @@ const SWATH_DETAIL_M = 1.33;
 // `REED_W` wide, `REED_L` long, `REED_TONE` deep.
 const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const REED_TINT = vec3f(0.75, 0.8, 0.45);
 const REED_W = 0.07; const REED_L = 0.9; const REED_TONE = 0.5;
+// How much reeds stand at a place: on soaked ground and in the water's edge band (`REED_WET`, `REED_BAND_M`).
+fn reeds_of(b: Beneath) -> f32 {
+  return max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
+}
 // Flowers: in clusters as large as the noise's cells, `FLOWER_M`, over as much of the sward as is in flower; in a
 // cluster the dots, of radius `DOT_R`, lie on two lattices of cells `DOT_GAP` across, each turned its own way off the
 // map's axes (`DOT_TURN`, radians) and holding a dot at a place of its own in half of `DOT_PRESENT` of its cells, so
@@ -199,47 +209,51 @@ fn stand_share(u: f32, s: f32) -> f32 {
 }
 
 // The colour at `at`, seen at `e` m a pixel, of layer l whose field is `f` (premultiplied), its kinds in stands of
-// about `m` m: its first kind's (layer `first`) where its stands are, the rest's elsewhere; their mean where a stand
-// takes less than a pixel. The first kind's share and the rest's colour are read between the texels as plainly blended,
-// both alike, so the rest's colour is its kinds' own; a rest under `REST_LEAST` of the layer is too small to tell its
-// colour from the field's rounding, and the layer is its mean there (in full from twice that share).
+// about `m` m: its first kind's (layer `first`) where its stands are, the rest's (layer `rest`) elsewhere; their mean
+// where a stand takes less than a pixel. The first kind's share and the rest's colour are read between the texels as
+// plainly blended, both alike, so the rest's colour is its kinds' own; a rest under `REST_LEAST` of the layer is too
+// small to tell its colour from the field's rounding, and the layer is its mean there (in full from twice that share).
 const REST_LEAST = 0.01;
-fn in_stands(at: vec2f, e: f32, f: vec4f, l: i32, first: i32, m: f32) -> vec3f {
+fn in_stands(at: vec2f, e: f32, f: vec4f, l: i32, first: i32, rest: i32, m: f32) -> vec3f {
   let mean = f.rgb / f.a;
   if (least_e() >= 2.0 * STAND_CALM_E) { return mean; }
   let shows = shows_at(m, e) * (1.0 - ease(STAND_CALM_E, 2.0 * STAND_CALM_E, e));
   if (shows <= 0.0) { return mean; }
   let whole = field_at(at, l, 0.0);
   let one = field_at(at, first, 0.0);
-  let part = whole.a - one.a;
-  let told = ease(REST_LEAST, 2.0 * REST_LEAST, part / max(whole.a, 1e-6));
+  let others = field_at(at, rest, 0.0);
+  let told = ease(REST_LEAST, 2.0 * REST_LEAST, others.a / max(whole.a, 1e-6));
   if (told <= 0.0) { return mean; }
   let own = one.rgb / max(one.a, 1e-6);
-  let rest = max(whole.rgb - one.rgb, vec3f(0.0)) / part;
-  return mix(mean, mix(rest, own, stand_share(stand_draw(at, m), clamp(one.a / whole.a, 0.0, 1.0))), shows * told);
+  let other = others.rgb / max(others.a, 1e-6);
+  return mix(mean, mix(other, own, stand_share(stand_draw(at, m), clamp(one.a / whole.a, 0.0, 1.0))), shows * told);
 }
 
-// The share of the ground at `at` that lattice l's plants cover, where they cover `s` of it, seen at `e` m a pixel,
+// The share of the ground at the pixel that lattice l's plants cover, where they cover `s` of it, seen at `e` m a pixel,
 // and the tone there: its crowns in the cells of side `side`, which are its cells doubled `level` times, each lit and
 // toned. Of two sizes of cells drawn together, these are the wide ones (`wide`) or the fine ones: a wide cell holds a
 // crown where `f`, the share of the way from the fine size to the wide one, passes its draw (`WIDE_FROM`), else its four
-// fine cells hold theirs. A crown reaches at most half a cell from its cell, so only the point's cell and the three
-// beside it towards the point can cover it.
-fn crowns(at: vec2f, l: i32, s: f32, e: f32, side: f32, level: i32, wide: bool, f: f32) -> vec2f {
-  let q = at / side;
-  let toward = select(vec2f(-1.0), vec2f(1.0), fract(q) > vec2f(0.5));
+// fine cells hold theirs. A crown reaches at most half a cell from its cell, so only the pixel's cell and the three
+// beside it towards the pixel can cover it. Cell and distance come from the pixel's lattice point (draw.wgsl `lat`), so
+// a crown's place is exact at any size of map.
+fn crowns(l: i32, s: f32, e: f32, side: f32, level: i32, wide: bool, f: f32) -> vec2f {
+  let warp = GRAIN_WARP * vec2f(noise_l(lat_turned(WARP_CELLS * side, vec2f(0.0)), l + 31).x, noise_l(lat_turned(WARP_CELLS * side, vec2f(17.0)), l + 32).x);
+  let at = lat_axes(side, warp);
+  let toward = vec2i(select(vec2f(-1.0), vec2f(1.0), at.f > vec2f(0.5)));
   let present = min(s / GRAIN_FILL, 1.0);
   let r = min(side * sqrt(s / (present * PI)), 0.5 * side);
   var out = vec2f(0.0, 1.0);
   for (var j = 0; j < 4; j++) {
-    let c = floor(q) + vec2f(f32(j & 1), f32(j >> 1u)) * toward;
+    let step = vec2i(j & 1, j >> 1u) * toward;
+    let c = at.i + step;
     // The draw of the wide cell: the cell itself, or the one that holds this fine cell.
-    let draw = lowbias(vec2i(select(floor(0.5 * c), c, wide)), l + 9 + 5 * (level + select(1, 0, wide)));
+    var holder = c;
+    if (!wide) { holder = vec2i(floor(0.5 * vec2f(c))); }
+    let draw = lowbias(holder, l + 9 + 5 * (level + select(1, 0, wide)));
     if ((f >= mix(WIDE_FROM, WIDE_TO, f32(draw >> 8u) / 16777216.0)) != wide) { continue; }
-    let x = lowbias(vec2i(c), l + 7 + 5 * level);
+    let x = lowbias(c, l + 7 + 5 * level);
     if (f32(x & 1023u) / 1024.0 >= present) { continue; }
-    let centre = (c + vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0) * side;
-    let d = at - centre;
+    let d = (at.f - vec2f(step) - vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0) * side;
     let a = 1.0 - smoothstep(r - 0.5 * e, r + 0.5 * e, length(d));
     if (a > out.x) {
       let lit = 1.0 - GRAIN_LIGHT * dot(d / max(r, 1e-4), normalize(LIGHT.xy));
@@ -268,8 +282,8 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> vec2f {
   let f = k - level;
   var fine = vec2f(0.0, 1.0);
   var wide = vec2f(0.0, 1.0);
-  if (f < WIDE_TO) { fine = crowns(at, l, mean.x, e, cell, i32(level), false, f); }
-  if (f >= WIDE_FROM) { wide = crowns(at, l, mean.x, e, 2.0 * cell, i32(level) + 1, true, f); }
+  if (f < WIDE_TO) { fine = crowns(l, mean.x, e, cell, i32(level), false, f); }
+  if (f >= WIDE_FROM) { wide = crowns(l, mean.x, e, 2.0 * cell, i32(level) + 1, true, f); }
   let drawn = vec2f(wide.x + fine.x * (1.0 - wide.x), mix(fine.y, wide.y, wide.x));
   // A stand that closes its ground leaves none between its crowns: the canopy fills the gaps of the field's crowns, in
   // their shade (`CLOSES`).
@@ -277,17 +291,29 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> vec2f {
   return mix(mean, vec2f(a, mix(GAP_TONE, drawn.y, drawn.x / max(a, 1e-4))), shows);
 }
 
-// Streaks of blades `w` m wide and `len` m long at `at`, turned by `turn` radians: -1..1 (value noise stretched).
-fn streaks(at: vec2f, w: f32, len: f32, turn: f32, k: i32) -> f32 {
-  let p = mat2x2f(cos(turn), -sin(turn), sin(turn), cos(turn)) * at;
-  return noise(p / vec2f(w, len), k).x;
+// Streaks of blades `w` m wide and `len` m long at the pixel, turned by `turn` radians: -1..1 (noise stretched along
+// the turn). A turn lies between the nearest two of `STREAK_TURNS` turns that stand fixed in the world, whose streaks
+// blend (kept as strong as one), so no lattice turns about the world's origin as the blades turn with the tufts.
+const STREAK_TURNS = 3.0;
+fn streaks(w: f32, len: f32, turn: f32, k: i32) -> f32 {
+  let t = turn / PI * STREAK_TURNS;
+  let x = t - STREAK_TURNS * floor(t / STREAK_TURNS);
+  let b = floor(x);
+  let u = smoothstep(0.0, 1.0, x - b);
+  var n = 0.0;
+  for (var j = 0; j < 2; j++) {
+    let a = PI * (b + f32(j)) / STREAK_TURNS;
+    let m = mat2x2f(cos(a) / w, -sin(a) / len, sin(a) / w, cos(a) / len);
+    n += select(1.0 - u, u, j == 1) * noise_l(lat(m, vec2f(0.0)), k + 100 * j).x;
+  }
+  return n / sqrt((1.0 - u) * (1.0 - u) + u * u);
 }
 
 // The flowers over the sward at `at`, seen at `e` m a pixel, of the herbs whose share `bloom` is in flower: their
 // colour and the share of the ground they cover (the sward's own share times it): clusters of dots (`FLOWER_M`, `DOT_R`).
-fn flowers_at(at: vec2f, e: f32, bloom: f32, petal: vec3f) -> vec4f {
+fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   // The clusters: where the noise, made even, falls in the share in flower; softened over a pixel.
-  let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / FLOWER_M, 71));
+  let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(FLOWER_M, vec2f(0.0)), 71).x);
   let edge = max(e / FLOWER_M, 0.05);
   let cluster = mix(bloom, ease(1.0 - bloom - edge, 1.0 - bloom + edge, n), shows_at(FLOWER_M, e));
   let mean = DOT_PRESENT * PI * DOT_R * DOT_R / (DOT_GAP * DOT_GAP);
@@ -299,10 +325,10 @@ fn flowers_at(at: vec2f, e: f32, bloom: f32, petal: vec3f) -> vec4f {
     // The nearest dot of the two lattices: how far from its centre the point lies, in its radii (past it: none).
     var d = 1.0;
     for (var l = 0; l < 2; l++) {
-      let q = mat2x2f(cos(DOT_TURN[l]), sin(DOT_TURN[l]), -sin(DOT_TURN[l]), cos(DOT_TURN[l])) * at / DOT_GAP + 13.0 * f32(l);
-      let x = lowbias(vec2i(floor(q)), 72 + l);
-      let centre = floor(q) + margin + (1.0 - 2.0 * margin) * vec2f(f32(x & 1023u), f32((x >> 10u) & 1023u)) / 1024.0;
-      if (f32(x >> 22u) / 1024.0 < 0.5 * DOT_PRESENT) { d = min(d, length(q - centre) * DOT_GAP / DOT_R); }
+      let q = lat(mat2x2f(cos(DOT_TURN[l]), sin(DOT_TURN[l]), -sin(DOT_TURN[l]), cos(DOT_TURN[l])) * (1.0 / DOT_GAP), vec2f(13.0 * f32(l)));
+      let x = lowbias(q.i, 72 + l);
+      let centre = margin + (1.0 - 2.0 * margin) * vec2f(f32(x & 1023u), f32((x >> 10u) & 1023u)) / 1024.0;
+      if (f32(x >> 22u) / 1024.0 < 0.5 * DOT_PRESENT) { d = min(d, length(q.f - centre) * DOT_GAP / DOT_R); }
     }
     cover = mix(mean, 1.0 - smoothstep(1.0 - e / DOT_R, 1.0, d), dots);
     c = petal * (1.0 + DOT_HEART * (1.0 - d) * dots);
@@ -316,24 +342,24 @@ fn flowers_at(at: vec2f, e: f32, bloom: f32, petal: vec3f) -> vec4f {
 fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> vec4f {
   let f = field_smooth(at, SWARD_LAYER);
   if (f.a <= 0.0 || hold <= 0.0) { return vec4f(0.0); }
-  var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_STAND_M);
+  var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
   var s = min(f.a * thick * hold, 1.0);
   let tufts = shows_at(SWARD_M, e);
   var tone = 1.0;
   if (tufts > 0.0) {
-    let n = tufts * noise_turned(at / SWARD_M, 54);
+    let n = tufts * noise_l(lat_turned(SWARD_M, vec2f(0.0)), 54).x;
     s = clamp(s * (1.0 + SWARD * n), 0.0, 1.0);
     tone += TUFT_TONE * n;
   }
   let swaths = shows_at(SWATH_DETAIL_M, e);
-  if (swaths > 0.0) { tone += SWATH * swaths * noise_turned(at / SWATH_M, 73); }
+  if (swaths > 0.0) { tone += SWATH * swaths * noise_l(lat_turned(SWATH_M, vec2f(0.0)), 73).x; }
   let blades = shows_at(BLADE_W, e) * swaths;
-  if (blades > 0.0) { tone += BLADES * blades * streaks(at, BLADE_W, BLADE_L, PI * noise(at / SWARD_M, 74).x, 75); }
-  let reeds = max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
+  if (blades > 0.0) { tone += BLADES * blades * streaks(BLADE_W, BLADE_L, PI * noise_l(lat_axes(SWARD_M, vec2f(0.0)), 74).x, 75); }
+  let reeds = reeds_of(b);
   if (reeds > 0.0) {
     s = mix(s, max(s, REED_FILL), reeds);
     c = mix(c, c * REED_TINT, reeds);
-    tone += REED_TONE * reeds * shows_at(REED_W, e) * streaks(at, REED_W, REED_L, 0.3 * noise(at / REED_L, 76).x, 77);
+    tone += REED_TONE * reeds * shows_at(REED_W, e) * streaks(REED_W, REED_L, 0.3 * noise_l(lat_axes(REED_L, vec2f(0.0)), 76).x, 77);
   }
   let seen = s;
   c *= max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
@@ -342,7 +368,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     let fl = field_at(at, FLOWER_LAYER, 0.0);
     let bloom = clamp(fl.a / f.a, 0.0, 1.0) * (1.0 - reeds);
     if (bloom > 0.0) {
-      let dots = flowers_at(at, e, bloom, fl.rgb / fl.a);
+      let dots = flowers_at(e, bloom, fl.rgb / fl.a);
       c = mix(c, dots.rgb, dots.a * near);
     }
   }
@@ -391,8 +417,14 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   }
   if (far > 0.0) {
     // As thick as they stand at the point (`hold`, `thick`), up to all of the ground.
+    // In the shade of the trees' crowns as the sward is near (`SWARD_SHADE`), so the far and the near tone agree.
     let low = field_smooth(at, LOW_LAYER);
-    dst = mix(dst, low * (min(low.a * hold.w * thick, 1.0) / max(low.a, 1e-6)), far);
+    var seen = low * (min(low.a * hold.w * thick, 1.0) / max(low.a, 1e-6));
+    // Reeds on soaked ground and at the water's edge stand dense and in their own tint, as near (`sward`).
+    let reeds = reeds_of(b) * step(1e-4, seen.a);
+    let filled = mix(seen.a, max(seen.a, REED_FILL), reeds);
+    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * filled, filled);
+    dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * min(trees.a, 1.0)), seen.a), far);
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
@@ -410,7 +442,7 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, ho
   var share = min(f.a * hold, 1.0);
   if (share <= 0.0) { return dst; }
   if (l == STANDS) {
-    c = in_stands(at, e, f, STANDS, STANDS_FIRST, STAND_M);
+    c = in_stands(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M);
     let groups = shows_at(CANOPY_M, e);
     if (groups > 0.0) { c *= 1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * groups; }
     c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);

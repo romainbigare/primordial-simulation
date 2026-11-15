@@ -185,7 +185,28 @@ export function kindLook(k: Leafy, phys: Rgb, falling: number): KindLook {
   };
 }
 
-/** The mean colour of a kind of look `l` as the field far away draws it: the middle of its plants' colours. */
+/** Each plant of a kind takes its own colour between the kind's two (`KindLook`) and its own tone, up to this share
+ * lighter or darker (web/shaders/lib/style.wgsl `TONE_JITTER`). */
+const TONE_SPREAD = 0.2;
+/** The colours between the kind's two and the tones that the field's mean is taken over. */
+const SEEN_COLOURS = 5, SEEN_TONES = 3;
+
+/** Linear light `x` as the screen's share of full scale (IEC 61966-2-1, as web/shaders/lib/draw.wgsl `srgb`), and back. */
+export const toScreen = (x: number) => (x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055);
+export const fromScreen = (x: number) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+
+/** The mean colour of a kind of look `l` as the field far away draws it: the middle of its plants' colours as the screen
+ * shows them. A mix of colours on a screen averages what the screen shows, not the light (the screen's curve bends), so
+ * plants of many colours look deeper from near than the mean of their light; the field is the mean of what the plants
+ * show, as the near picture comes to when its plants take a pixel each. */
 export function seenFar(l: KindLook): Rgb {
-  return lerp3(l.from, l.to, 0.5);
+  const sum: Rgb = [0, 0, 0];
+  for (let i = 0; i < SEEN_COLOURS; i++) {
+    const c = lerp3(l.from, l.to, (i + 0.5) / SEEN_COLOURS);
+    for (let j = 0; j < SEEN_TONES; j++) {
+      const tone = 1 + TONE_SPREAD * ((2 * (j + 0.5)) / SEEN_TONES - 1);
+      for (let q = 0; q < 3; q++) sum[q] += toScreen(Math.min(c[q] * tone, 1));
+    }
+  }
+  return sum.map(v => fromScreen(v / (SEEN_COLOURS * SEEN_TONES))) as Rgb;
 }

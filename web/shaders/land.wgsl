@@ -120,7 +120,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // moves the ground's height and slope: the shading's normal and the fine line of a shore.
   let loose = loose_seen(at, e);
   let bare = bed_shows(loose);
-  let fine = relief(at, e, length(g.slope), bare, loose);
+  let fine = relief(e, length(g.slope), bare, loose);
   // The relief moves the ground's height as much as the ground drawn is steep (`RELIEF_EDGE_SLOPE`): on a flat shore a
   // bump of a few decimetres would move the water's edge by tens of metres into a fringe of puddles.
   g.h += fine.x * ease(0.0, RELIEF_EDGE_SLOPE, length(g.slope));
@@ -219,9 +219,14 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
 const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
-  let at = earth.place.xy + v.uv * earth.place.zw;
+  // The pixel's place from its own pixel (not from the map's whole rectangle, whose steps a float shows at a
+  // centimetre): its distance from the draw's origin, which fine detail is hashed from (draw.wgsl `lat`), and its place
+  // in the world.
+  pix_origin = earth.frame.xy;
+  pix_local = earth.corner.xy + v.px * earth.frame.z;
+  let at = pix_origin + pix_local;
   let cs = corners(at / land.map.x);
-  let spots = land_spots(at, metres_a_pixel(v.uv));
+  let spots = land_spots(at, earth.frame.z);
   var c = Shaded(vec3f(0.0), 1.0, BARE);
   for (var k = LAYER_GROUND; k < LAYERS; k++) {
     var p = spots.dry;

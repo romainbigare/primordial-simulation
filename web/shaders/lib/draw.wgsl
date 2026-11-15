@@ -64,33 +64,83 @@ fn lowbias(c: vec2i, k: i32) -> u32 {
   return x;
 }
 
-// Value noise at p (in its grid's cells) of stream k, -1..1, and its slope along x and y (Quilez 2017).
-fn noise(p: vec2f, k: i32) -> vec3f {
-  let i = vec2i(floor(p));
-  let f = p - floor(p);
-  let u = f * f * (3.0 - 2.0 * f);
-  let du = 6.0 * f * (1.0 - f);
-  let v = vec4f(f32(lowbias(i, k)), f32(lowbias(i + vec2i(1, 0), k)), f32(lowbias(i + vec2i(0, 1), k)), f32(lowbias(i + vec2i(1, 1), k))) * (2.0 / 4294967296.0) - 1.0;
-  let a = v.y - v.x;
-  let b = v.z - v.x;
-  let c = v.x - v.y - v.z + v.w;
-  return vec3f(v.x + a * u.x + b * u.y + c * u.x * u.y, du * vec2f(a + c * u.y, b + c * u.x));
+// The place of the pixel being drawn, for detail finer than a float holds at a map's size (land.wgsl sets them): the
+// world's origin of the draw, a whole multiple of 1024 m, and the point's distance from it, m. A position held as one
+// float over tens of kilometres has steps of millimetres, which centimetre detail shows as rows and columns.
+var<private> pix_origin: vec2f = vec2f(0.0);
+var<private> pix_local: vec2f = vec2f(0.0);
+
+// A point in a lattice: its cell and its place in it (0..1).
+struct Lat { i: vec2i, f: vec2f }
+
+// `x` with its mantissa cut to 12 bits.
+fn bits12(x: f32) -> f32 { return bitcast<f32>(bitcast<u32>(x) & 0xfffff000u); }
+
+// The lattice point of the pixel's place under the map `m` (cells a metre, along the world's axes, turned or not),
+// shifted by `off` cells. The map's entries are cut to 12 bits, so `m` times the origin (a whole multiple of 1024 m, up
+// to 12 bits too) is exact in a float: the cell comes from it whole and the rest from the small distance, to the
+// float's last bit at any size of map and at any lattice, turned or not.
+fn lat(m: mat2x2f, off: vec2f) -> Lat {
+  let q = mat2x2f(vec2f(bits12(m[0].x), bits12(m[0].y)), vec2f(bits12(m[1].x), bits12(m[1].y)));
+  let c = q * pix_origin;
+  let whole = floor(c);
+  let f = (c - whole) + q * pix_local + off;
+  let k = floor(f);
+  return Lat(vec2i(whole + k), f - k);
 }
 
-// Value noise at p (in its grid's cells) of stream k turned off the grid's axes by `TURN_A` radians, so a contour of it
-// shows no square cells: -1..1, spread about 0.43 (even over 0..1 through `smoothstep(-EVEN_ONE, EVEN_ONE, n)`).
+// The lattice of cells `size` m across along the world's axes, and turned by `TURN_A` radians (so a contour of its noise
+// shows no square cells).
+fn lat_axes(size: f32, off: vec2f) -> Lat { return lat(mat2x2f(1.0 / size, 0.0, 0.0, 1.0 / size), off); }
 const TURN_A = 0.55; const EVEN_ONE = 0.95;
+fn lat_turned(size: f32, off: vec2f) -> Lat {
+  return lat(mat2x2f(cos(TURN_A), sin(TURN_A), -sin(TURN_A), cos(TURN_A)) * (1.0 / size), off);
+}
+
+// The gradient at lattice point c of stream k: two 16-bit halves of its random word, each -1..1 (no trigonometry: the
+// gradients need not be of one length for the noise to show no grid).
+fn gradient(c: vec2i, k: i32) -> vec2f {
+  let x = lowbias(c, k);
+  return vec2f(f32(x & 0xffffu), f32(x >> 16u)) * (2.0 / 65535.0) - 1.0;
+}
+
+// Gradient noise at the lattice point `l` of stream k (Perlin 2002; quintic easing; the slope as Quilez 2017): about
+// -0.7..0.7, and its slope along the lattice's x and y. It is smooth with its slope, and its contours follow no lattice
+// (value noise's do: thresholded, it draws blocks and mazes).
+fn gradient_noise(l: Lat, k: i32) -> vec3f {
+  let f = l.f;
+  let u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  let du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+  let ga = gradient(l.i, k);
+  let gb = gradient(l.i + vec2i(1, 0), k);
+  let gc = gradient(l.i + vec2i(0, 1), k);
+  let gd = gradient(l.i + vec2i(1, 1), k);
+  let va = dot(ga, f);
+  let vb = dot(gb, f - vec2f(1.0, 0.0));
+  let vc = dot(gc, f - vec2f(0.0, 1.0));
+  let vd = dot(gd, f - vec2f(1.0, 1.0));
+  let m = va - vb - vc + vd;
+  return vec3f(va + u.x * (vb - va) + u.y * (vc - va) + u.x * u.y * m, ga + u.x * (gb - ga) + u.y * (gc - ga) + u.x * u.y * (ga - gb - gc + gd) + du * (u.yx * m + vec2f(vb, vc) - va));
+}
+
+// Noise of stream k at the lattice point `l`: gradient noise made wide (a spread of about 0.45, so
+// `smoothstep(-EVEN_ONE, EVEN_ONE, n)` is even over 0..1 to within 3%), held within -1..1, and its slope.
+const NOISE_GAIN = 2.55;
+fn noise_l(l: Lat, k: i32) -> vec3f {
+  let n = NOISE_GAIN * gradient_noise(l, k);
+  return vec3f(clamp(n.x, -1.0, 1.0), n.yz);
+}
+
+// The same at p (in its grid's cells), for places seen from afar or coarse enough for a float.
+fn noise(p: vec2f, k: i32) -> vec3f {
+  let i = floor(p);
+  return noise_l(Lat(vec2i(i), p - i), k);
+}
+
+// Noise at p (in its grid's cells) of stream k turned off the grid's axes by `TURN_A` radians (`lat_turned`): -1..1,
+// spread about 0.43 (even over 0..1 through `smoothstep(-EVEN_ONE, EVEN_ONE, n)`).
 fn noise_turned(p: vec2f, k: i32) -> f32 {
   return noise(mat2x2f(cos(TURN_A), sin(TURN_A), -sin(TURN_A), cos(TURN_A)) * p, k).x;
-}
-
-// Two octaves of turned value noise at p (in the first's cells) of stream k, the second `OCTAVE` times as fine, turned
-// by `TURN_B` radians and weighing `SECOND`, so neither's cells show: -1..1, spread about 0.3 (even over 0..1 through
-// `smoothstep(-EVEN_TWO, EVEN_TWO, n)`).
-const OCTAVE = 1.93; const SECOND = 0.8; const TURN_B = 2.1; const EVEN_TWO = 0.655;
-fn noise_two(p: vec2f, k: i32) -> f32 {
-  let b = mat2x2f(cos(TURN_B), sin(TURN_B), -sin(TURN_B), cos(TURN_B)) * p;
-  return (noise_turned(p, k) + SECOND * noise(OCTAVE * b + 17.0, k).x) / (1.0 + SECOND);
 }
 
 // A cubic B-spline through the centres of the texels of a texture `size` texels wide, at `p` (texels from its corner,
@@ -151,4 +201,9 @@ const EXPOSURE = 1.0;
 fn srgb(c: vec3f) -> vec3f {
   let x = clamp(EXPOSURE * c, vec3f(0.0), vec3f(1.0));
   return select(1.055 * pow(x, vec3f(1.0 / 2.4)) - 0.055, 12.92 * x, x <= vec3f(0.0031308));
+}
+
+// The light that the screen's share `x` of full scale shows (`srgb` backwards).
+fn unsrgb(x: vec3f) -> vec3f {
+  return select(pow((x + 0.055) / 1.055, vec3f(2.4)), x / 12.92, x <= vec3f(0.04045)) / EXPOSURE;
 }

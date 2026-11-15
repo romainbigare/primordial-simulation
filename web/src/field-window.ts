@@ -7,16 +7,28 @@ import { RGB } from './earth';
 /** The stops a layer's ramp holds at most (colour.wgsl `Earth.ramp`). */
 const RAMP_STOPS = 10;
 /** Of the uniforms of colour.wgsl (`Earth`), four-wide members. */
-const EARTH_VEC4S = 3 + RAMP_STOPS;
+const EARTH_VEC4S = 5 + RAMP_STOPS;
+
+/** The step, m, that the world's origin of a draw is a whole multiple of (colour.wgsl `Earth.frame`). */
+export const ORIGIN_STEP_M = 1024;
+
+/** Where the pixels of a draw lie in the world, so no position is held in a float over a few kilometres from its origin:
+ * the world's point under the target's first pixel, in double precision, as a whole multiple of `ORIGIN_STEP_M` (its
+ * origin) and the small rest, and the metres a device pixel takes (`Earth.frame`: origin x, origin y, metres a pixel;
+ * the rest x, y). `left` and `top` are where the map's corner lies in the target, px. */
+export function frameOf(left: number, top: number, mpp: number): number[] {
+  const x = -left * mpp, y = -top * mpp, hx = Math.floor(x / ORIGIN_STEP_M) * ORIGIN_STEP_M, hy = Math.floor(y / ORIGIN_STEP_M) * ORIGIN_STEP_M;
+  return [hx, hy, mpp, 0, x - hx, y - hy, 0, 0];
+}
 
 /** What the map draws: the Earth's colours, the true colour, or a layer (its name, and its ramp). */
 export interface MapLook { mode: 'earth' | 'true' | 'layer'; layer: string; ramp: RGB[] }
 
 /** The uniforms of colour.wgsl (`Earth`) for view `look`: how the fields are read (`Fields.look`), where they lie in
- * the world (`Fields.place`), and the sea's level, m. */
-export function earthUniforms(look: MapLook, read: number[], place: number[], sea = 0): ArrayBuffer {
+ * the world (`Fields.place`), the sea's level, m, and where a pixel of the target lies in the world (`frameOf`). */
+export function earthUniforms(look: MapLook, read: number[], place: number[], sea = 0, frame: number[] = []): ArrayBuffer {
   const mode = look.mode === 'earth' ? 0 : look.mode === 'true' ? 1 : 2, u = new Uniforms(EARTH_VEC4S);
-  u.vec4(...read).vec4(mode, look.ramp.length, sea, 0).vec4(...place);
+  u.vec4(...read).vec4(mode, look.ramp.length, sea, 0).vec4(...place).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4));
   for (let k = 0; k < RAMP_STOPS; k++) u.vec4(...(look.ramp[k] ?? [0, 0, 0]));
   return u.buffer;
 }
