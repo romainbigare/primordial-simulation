@@ -15,16 +15,9 @@ pub fn landed(w: &mut World) {
 /// What each cell's cover built in the month is added to its year (`Counters::grown_year`); after the year's last
 /// month that year is the last whole one (`Counters::grown_last`), for the tape.
 fn grown(w: &mut World) {
-    let (n, year) = (w.mesh.cells().n(), w.cfg.months_per_year as u64);
-    let last = w.month() % year == year - 1;
+    let (n, closes) = (w.mesh.cells().n(), w.year_closes());
     let c = &mut w.counts;
-    c.grown_year.resize(n, 0.0);
-    for (i, kg) in std::mem::take(&mut c.grown) {
-        c.grown_year[i as usize] += kg;
-    }
-    if last {
-        c.grown_last = std::mem::take(&mut c.grown_year);
-    }
+    crate::Counters::into_year(std::mem::take(&mut c.grown), (&mut c.grown_year, &mut c.grown_last), n, closes);
 }
 
 /// Per cell, what its cover claims of its aside node, J: the light set aside for it since its last month

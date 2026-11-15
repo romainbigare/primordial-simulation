@@ -36,7 +36,7 @@ impl Chemistry {
     }
 
     /// The first reaction that burns `k` (`burning`).
-    pub(super) fn burner(&self, k: usize) -> Option<usize> {
+    pub fn burner(&self, k: usize) -> Option<usize> {
         (0..self.reactions.len()).find(|&r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
 

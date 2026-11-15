@@ -13,9 +13,9 @@ pub struct Counters {
     /// to zero: mol, and J
     #[serde(skip)]
     pub rounded: [f64; 2],
-    /// Cover that died, kg, by cause (`life::LACK` to `AGE`)
+    /// Cover that died, kg, by cause (`life::LACK` to `FLAME`)
     #[serde(skip)]
-    pub cover_lost: [f64; 6],
+    pub cover_lost: [f64; crate::life::CAUSES],
     /// The flows of the cover's budget, J, + into the cover (`cover::BUDGET`)
     #[serde(skip)]
     pub cover_budget: [f64; crate::cover::BUDGET.len()],
@@ -31,6 +31,17 @@ pub struct Counters {
     /// Per cell, what its cover built in the year so far, and in the last whole year, kg of dry matter
     pub grown_year: Vec<f64>,
     pub grown_last: Vec<f64>,
+    /// The share of a cell's land flames burnt in a month (cell, share), until the month's flames end (`flame::month`)
+    #[serde(skip)]
+    pub burnt: Vec<(u32, f64)>,
+    /// Per cell, the share of its land flames burnt in the year so far, and in the last whole year
+    pub burnt_year: Vec<f64>,
+    pub burnt_last: Vec<f64>,
+    /// What flames burnt and killed, kg (`flame::FLOWS`), and the mol of each substance they gave the air
+    #[serde(skip)]
+    pub flame: [f64; crate::flame::FLOWS.len()],
+    #[serde(skip)]
+    pub flame_air: Vec<f64>,
     /// Heat that crossed into the map at its open north, south, east and west edges since the start, J: sensible and
     /// latent
     pub edges: [f64; 4],
@@ -43,7 +54,7 @@ impl Counters {
     /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
     /// cannot be left out.
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, edges, edge_liquid } = std::mem::take(c);
+        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, burnt, burnt_year, burnt_last, flame, flame_air, edges, edge_liquid } = std::mem::take(c);
         self.clamped_heat += clamped_heat;
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
@@ -52,9 +63,26 @@ impl Counters {
         self.takers_died.iter_mut().zip(takers_died).for_each(|(a, b)| *a += b);
         self.grown.extend(grown);
         // (A chunk's counts hold no year: the world's are its own.)
-        debug_assert!(grown_year.is_empty() && grown_last.is_empty(), "a chunk counted a year");
+        debug_assert!(grown_year.is_empty() && grown_last.is_empty() && burnt_year.is_empty() && burnt_last.is_empty(), "a chunk counted a year");
+        self.burnt.extend(burnt);
+        self.flame.iter_mut().zip(flame).for_each(|(a, b)| *a += b);
+        if self.flame_air.len() < flame_air.len() {
+            self.flame_air.resize(flame_air.len(), 0.0);
+        }
+        self.flame_air.iter_mut().zip(flame_air).for_each(|(a, b)| *a += b);
         self.edges.iter_mut().zip(edges).for_each(|(a, b)| *a += b);
         self.edge_liquid.iter_mut().zip(edge_liquid).for_each(|(a, b)| *a += b);
+    }
+    /// A month's counts of cells `month` (cell, amount) are added to the year so far, `year` (one a cell of `n`); after
+    /// the year's last month (`closes`) that year is the last whole one, `last`, for the tape.
+    pub(crate) fn into_year(month: Vec<(u32, f64)>, (year, last): (&mut Vec<f64>, &mut Vec<f64>), n: usize, closes: bool) {
+        year.resize(n, 0.0);
+        for (i, x) in month {
+            year[i as usize] += x;
+        }
+        if closes {
+            *last = std::mem::take(year);
+        }
     }
     /// What a booking set from just below zero to zero is added (`Counters::rounded`): mol, and J.
     pub(crate) fn add_rounded(&mut self, [mol, heat]: [f64; 2]) {
@@ -65,9 +93,11 @@ impl Counters {
 /// The counts the shell takes once a year (`World::take_counters`).
 #[derive(Debug, Default)]
 pub struct Taken {
-    pub cover_lost: [f64; 6],
+    pub cover_lost: [f64; crate::life::CAUSES],
     pub cover_budget: [f64; crate::cover::BUDGET.len()],
     pub seeds: [f64; crate::cover::SEED_FLOWS.len()],
+    pub flame: [f64; crate::flame::FLOWS.len()],
+    pub flame_air: Vec<f64>,
 }
 
 /// The whole state of a world: what `step` advances, and what a snapshot saves.
@@ -146,10 +176,11 @@ impl World {
     pub fn drain_events(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.events)
     }
-    /// Hand the shell the yearly counts (`Counters::cover_lost`, `cover_budget`, `seeds`), and start them again.
+    /// Hand the shell the yearly counts (`Counters::cover_lost`, `cover_budget`, `seeds`, `flame`, `flame_air`), and
+    /// start them again.
     pub fn take_counters(&mut self) -> Taken {
         let c = &mut self.counts;
-        Taken { cover_lost: std::mem::take(&mut c.cover_lost), cover_budget: std::mem::take(&mut c.cover_budget), seeds: std::mem::take(&mut c.seeds) }
+        Taken { cover_lost: std::mem::take(&mut c.cover_lost), cover_budget: std::mem::take(&mut c.cover_budget), seeds: std::mem::take(&mut c.seeds), flame: std::mem::take(&mut c.flame), flame_air: std::mem::take(&mut c.flame_air) }
     }
     pub fn days_per_year(&self) -> u64 {
         self.cfg.calendar().days(self.cfg.calendar().year)
@@ -161,6 +192,11 @@ impl World {
     /// Whole months since the start
     pub fn month(&self) -> u64 {
         self.cfg.calendar().months(self.time)
+    }
+    /// Whether the month it is is the last of its year.
+    pub fn year_closes(&self) -> bool {
+        let year = self.cfg.months_per_year as u64;
+        self.month() % year == year - 1
     }
     /// Years since the start, with their fraction
     pub fn year(&self) -> f64 {

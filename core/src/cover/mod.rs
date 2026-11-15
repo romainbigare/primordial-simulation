@@ -20,6 +20,9 @@ mod upkeep;
 pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
+pub(crate) use grow::empty_spent;
+pub(crate) use build::per_input;
+pub(crate) use budget::BURNT;
 pub use lying::{Lying, FROZEN, LANDED, LOTS_LYING, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
@@ -284,13 +287,21 @@ pub fn ground(w: &crate::World, i: usize) -> f64 {
 pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
     let (t, plateau) = w.thaw_last(i);
     let molten = w.molten(p.liquid, i, t, plateau);
-    let area = w.mesh.cells().area()[i];
-    let (liquid, over) = match w.scratch.land_part(i, p.liquid) {
-        Some((mol, share)) => (mol.min(held) * molten, area * share),
-        None => (held * molten, area),
-    };
+    let (all, over) = under(w, p, i, held);
+    let liquid = all * molten;
     let depth = liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / over;
     (liquid, w.cfg.phys.available(depth / w.scratch.land_pores(i).max(1e-9)))
+}
+
+/// Of `held` mol of the key liquid in the ground of cell `i`: what the ground its cover stands on holds, liquid or
+/// frozen, mol, and the area it lies over, m² (`wet`): of a cell of parts with land, its land part's own (`flow::parts`),
+/// no more than the cell holds; else the cell's over its area.
+pub fn under(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
+    let area = w.mesh.cells().area()[i];
+    match w.scratch.land_part(i, p.liquid) {
+        Some((mol, share)) => (mol.min(held), area * share),
+        None => (held, area),
+    }
 }
 
 /// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots

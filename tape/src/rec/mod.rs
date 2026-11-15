@@ -23,8 +23,8 @@ pub use ewf::read_viewer_file;
 use tally::YearTally;
 use pcore::store::Class;
 
-/// Causes of death in the order of the core's constants (`life::LACK` .. `life::AGE`).
-const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
+/// Causes of death in the order of the core's constants (`life::LACK` .. `life::FLAME`).
+const CAUSES: [&str; pcore::life::CAUSES] = ["lack", "phase", "spent", "taken", "broken", "age", "flame"];
 
 /// The time the shell has spent in the run so far, by process: Flow, Change, the cover and the tape itself (`TIMED`). The recorder reads no clock; the shell measures and hands the totals in.
 pub type Spent = [Duration; TIMED.len()];
@@ -175,7 +175,7 @@ impl Recorder {
         );
         let Some(c) = ctx else { return };
         if let Some(t) = taken.filter(|_| yearly) {
-            (self.year.cover_lost, self.year.cover_budget, self.year.seeds) = (t.cover_lost, t.cover_budget, t.seeds);
+            (self.year.cover_lost, self.year.cover_budget, self.year.seeds, self.year.flame, self.year.flame_air) = (t.cover_lost, t.cover_budget, t.seeds, t.flame, t.flame_air);
         }
         if yearly {
             self.push_series(&c, spent);

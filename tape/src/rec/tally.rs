@@ -12,11 +12,14 @@ pub(super) struct YearTally {
     pub t_land: Vec<f64>,
     pub land: Option<Vec<u32>>,
     /// Cover that died, kg, by cause (`Counters::cover_lost`)
-    pub cover_lost: [f64; 6],
+    pub cover_lost: [f64; pcore::life::CAUSES],
     /// The flows of the cover's budget, J (`Counters::cover_budget`)
     pub cover_budget: [f64; pcore::cover::BUDGET.len()],
     /// The flows of the seeds, kg (`Counters::seeds`)
     pub seeds: [f64; pcore::cover::SEED_FLOWS.len()],
+    /// What flames burnt and killed, kg (`Counters::flame`), and the mol of each substance they gave the air
+    pub flame: [f64; pcore::flame::FLOWS.len()],
+    pub flame_air: Vec<f64>,
 }
 
 impl Recorder {

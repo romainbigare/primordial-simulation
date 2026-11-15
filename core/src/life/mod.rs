@@ -15,7 +15,7 @@ pub(crate) use chunk::run;
 pub use disperse::lot;
 pub use kin::NO_ROOT;
 pub use parts::{Parts, FUEL, MATTER, NP, WALL};
-pub use shared::{breaking, AGE, BROKEN, LACK, PHASE, SPENT, TAKEN, WET_TISSUE};
+pub use shared::{breaking, AGE, BROKEN, CAUSES, FLAME, LACK, PHASE, SPENT, TAKEN, WET_TISSUE};
 
 use crate::cover::Cover;
 use crate::fauna::Fauna;
@@ -53,9 +53,9 @@ pub struct Life {
     pub(crate) air_seen: Vec<std::sync::OnceLock<Vec<f64>>>,
 }
 
-/// Once a month, after Flow's state is built in full: the month of each cell's life, one task per chunk on the pool:
-/// cover's seeds land (`cover::landed`), and what the takers sent (`fauna::land`).
-/// cover's seeds land (`cover::landed`).
+/// Once a month, after Flow's state is built in full: the month of each cell's life, one task per chunk on the pool;
+/// then the flames in what it left on the ground (`flame::month`); the cover's seeds land (`cover::landed`), and what
+/// the takers sent (`fauna::land`).
 pub fn month(w: &mut World) {
     crate::contract::ways_to_liquid(w);
     let load = w.life.cells.iter().filter(|c| c.cover.any() || c.fauna.any()).count();
@@ -63,6 +63,7 @@ pub fn month(w: &mut World) {
         crate::cover::step(w, d);
         crate::fauna::step(w, d);
     });
+    crate::flame::month(w);
     crate::cover::landed(w);
     crate::fauna::land(w);
 }

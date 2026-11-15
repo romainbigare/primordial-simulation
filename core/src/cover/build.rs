@@ -10,7 +10,7 @@ use crate::units::MAX_SUBSTANCES;
 use crate::World;
 
 /// The units of `rx` per unit of substance `k` among its inputs (none if it takes none).
-pub(super) fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
+pub(crate) fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
     rx.inputs.iter().find(|q| q.0 as usize == k).map(|q| q.1 as f64)
 }
 

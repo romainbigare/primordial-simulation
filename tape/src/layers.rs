@@ -261,6 +261,7 @@ pub const LAYERS: &[Layer] = &[
     l("seeds", "kg/m2", "log", 1e-5, 0.1, |c, i| per_land(c.seeds[i], c.land[i])),
     l("grown", "kg/m2/yr", "log", 0.01, 10.0, |c, i| per_land(c.grown[i], c.land[i])),
     l("takers", "kg/km2", "log", 1.0, 1e4, |c, i| c.takers[i]),
+    l("burnt", "1/yr", "lin", 0.0, 1.0, |c, i| c.w.counts.burnt_last.get(i).copied().unwrap_or(0.0)),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),
