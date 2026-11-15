@@ -298,10 +298,10 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
     pay, and `grow::shed` drops all its living matter. The same fragile spot the fire builder's work replaces
     (a leaf's gain by the liquid in a straight line; shedding by what it costs to keep).
   - The long step's test passes on main and on the branch now (`runoff_sea` +0.24% against 0.35%).
-  **Order**: the fire builder's step 1 (the leaf's gain in a straight line, upkeep by temperature, shedding)
-  lands on main first, all three commits together; then a fresh builder (this one's room is used up; it reads
-  `notes.md` and the fire builder's list of functions touched) merges main into `wip/slots`, sees the three
-  tests, resets the references, and it goes to main.
+  **In work**: the leaf's year is on main, and a fresh builder (branch `slots`, scratch
+  `scratchpad/sorted/merge/`) merges main into `wip/slots`, holds every law of the leaf's year to the cut (a
+  dry season added to `core/tests/stand.rs`), sees the three tests, puts the variety's bound back to 1, resets
+  the references, measures the cost again, and hands a branch to merge. Fire v1 merges after it.
 - **On main: a world's variety is from 2** (`Config::validate`, the page's field): at 1 a full cell looked for
   two slots to join and the run stopped. The mend that lets 1 stand is on `wip/slots` (a cell of one slot held
   by a stand that pays its way refuses the seeds, `seed::Landed::Refused`); the bound goes back to 1 with it.
@@ -776,8 +776,10 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         all of the gain and the first hot wet months stay shut (the roots' breathing goes by the bare rate
         law, real roots acclimate); the cold class stays bare (near-tundra: real ground like it holds 0.5 to 1
         kg/m² of low cover); coastal forest 0.71 → 0.48 and 0.44 → 0.32 of coastal land cells; the takers'
-        tests place their cover (`FED_KG`). The builder's room is used up: fire v1 goes to a fresh builder
-        (`scratchpad/fire/handover.md`, `design.md`, snapshots in `/dev/shm/fire`).
+        tests place their cover (`FED_KG`).
+      - **Fire v1 is in work** by a fresh builder (branch `fire-v1`, scratch `scratchpad/fire/v1/`; it reads
+        `scratchpad/fire/design.md` and `handover.md`): the law in its own folder, the fast test the design
+        names, measures and pictures of both bands, the burnt share a year at 32, 64 and 128.
       - Found with it and mended on main (see the rain's item): the ground's bucket dried by evaporation below
         the wilting point, so on semi-dry land rain never became liquid a root can draw.
       - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
