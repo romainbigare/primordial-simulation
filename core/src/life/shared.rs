@@ -1,7 +1,7 @@
 //! What life shares: the causes it dies of (the cover's books count what it loses by them, `Counters::cover_lost`), the
 //! liquid share of living tissue and what it takes to break it (laws.md 3).
 
-/// Causes of death, the places of `Counters::cover_lost` and `Counters::takers_died`: a store below its safe minimum; a key liquid froze; upkeep not
+/// Causes of death, the places of `Counters::cover_lost` and (to `AGE`) `Counters::takers_died`: a store below its safe minimum; a key liquid froze; upkeep not
 /// paid; taken by a taker (`contract::take`).
 pub const LACK: u8 = 0;
 pub const PHASE: u8 = 1;
@@ -13,8 +13,10 @@ pub const BROKEN: u8 = 4;
 pub const AGE: u8 = 5;
 /// Its ground lay under the standing liquid past its roots' reach until its store was spent (`cover::upkeep`).
 pub const DROWNED: u8 = 6;
-/// How many causes of death there are (`LACK` to `DROWNED`): the size of `Counters::cover_lost` and `takers_died`.
-pub const DEATHS: usize = 7;
+/// Burnt or scorched to death by a flame (`flame`).
+pub const FLAME: u8 = 7;
+/// How many causes of death there are (`LACK` to `FLAME`): the size of `Counters::cover_lost` and `takers_died`.
+pub const DEATHS: usize = 8;
 /// The liquid share of living tissue: a kg of matter makes 1 / (1 - this) kg of living tissue (`Cover::living`).
 pub const WET_TISSUE: f64 = 0.75;
 

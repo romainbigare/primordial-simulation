@@ -200,6 +200,24 @@ impl Cover {
         all[na..na + nb].copy_from_slice(&b[..nb]);
         self.set_groups(big, &mut all[..na + nb]);
     }
+    /// The plants of slot `x` no taller than `height` m (its walls of density `rho` kg/m³) die on the share `f` of its
+    /// ground, as a flame's plume kills them (`flame::burn`): each such group loses that share of its plants and of its
+    /// built cover. Returns what they held, kg: their living cover's body matter and their walls; and how many died.
+    /// The caller takes those amounts from the slot.
+    pub fn die_under(&mut self, ph: &Physics, (mm, rho): (&[f64; NP], f64), x: usize, (f, height): (f64, f64)) -> ([f64; 2], f64) {
+        let s = self.sizes(ph, mm, x);
+        let (mut g, held) = self.groups(mm, x);
+        let (mut kg, mut died) = ([0.0; 2], 0.0);
+        for k in (0..held).filter(|&k| s.height(ph, rho, k) <= height) {
+            let dead = g[k].kg * f;
+            (kg[0], kg[1], died) = (kg[0] + dead * (1.0 - s.walls[k]), kg[1] + dead * s.walls[k], died + g[k].n * f);
+            g[k] = Group { n: g[k].n * (1.0 - f), kg: g[k].kg - dead };
+        }
+        if died > 0.0 {
+            self.set_groups(x, &mut g[..held]);
+        }
+        (kg, died)
+    }
     /// Slot `x`, whose built cover went from `made` to `now` kg in its growth, shares what it built over its groups by
     /// `growth` (`Cover::growth`; by their shares where that is none, a slot with no leaves); what it lost goes from each
     /// group by its share. Its counts stay.

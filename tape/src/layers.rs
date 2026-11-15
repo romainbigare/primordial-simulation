@@ -307,6 +307,12 @@ pub const LAYERS: &[Layer] = &[
     l("seeds", "kg/m2", "log", 1e-5, 0.1, |c, i| per_land(c.seeds[i], c.land[i])),
     l("grown", "kg/m2/yr", "log", 0.01, 10.0, |c, i| per_land(c.grown[i], c.land[i])),
     l("takers", "kg/km2", "log", 1.0, 1e4, |c, i| c.takers[i]),
+    l("flame", "1", "lin", 0.0, 1.0, |c, i| flamed(c.w, i).share as f64),
+    l("flame_len", "m", "log", 0.01, 30.0, |c, i| flamed(c.w, i).length as f64),
+    l("burnt", "1/yr", "lin", 0.0, 1.0, |c, i| pcore::flame::burnt_year(c.w, i)),
+    l("burnt_age", "months", "lin", 0.0, pcore::flame::AGE_MOST as f64, |c, i| pcore::flame::since(c.w, i)),
+    l("ash", "kg/m2", "log", 1e-5, 1.0, |c, i| flamed(c.w, i).ash as f64),
+    l("flame_air", "kg/m2", "log", 1e-3, 10.0, |c, i| flamed(c.w, i).air as f64),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),
@@ -314,6 +320,11 @@ pub const LAYERS: &[Layer] = &[
     l("ground_g", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][1]),
     l("ground_b", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][2]),
 ];
+
+/// What flames did on cell `i` of `w` in its last month (`Counters::flame_month`; nothing before the first).
+fn flamed(w: &World, i: usize) -> pcore::flame::Flamed {
+    w.counts.flame_month.get(i).copied().unwrap_or_default()
+}
 
 /// Quantise a value to a byte as the frames format defines: none (NaN) is 0, as nothing.
 pub fn quantise(l: &Layer, v: f64) -> u8 {

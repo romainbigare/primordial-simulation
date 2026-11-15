@@ -1068,7 +1068,7 @@ seeds fill it:
   the fuel their conversions take) changes only by the flows its law books where it moves them
   (`Counters::cover_budget`, `cover::BUDGET`): the light reaction's fuel, each part of the upkeep, the work of
   building, what it sheds, what dies, the fuel its roots give its ground, seeds out and landed, the seeds lying that
-  die, what takers take or break, what is placed, and rounding. The seeds' flows in kg (landed, sprouted, worn, frozen,
+  die, what takers take or break, what is placed, rounding, and what flames burn or kill (3c). The seeds' flows in kg (landed, sprouted, worn, frozen,
   taken: `Counters::seeds`) and what each cell's cover built in the last whole year (`Counters::grown_last`) are counted
   for the tape. The tape records them each year.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
@@ -1170,6 +1170,51 @@ seeds fill it:
   pressed on a cell breaks the cover by its share (`contract::press`).
 - **What it is to the rest**: its mass, capture area and the light it absorbs and keeps are what stands on its cell
   (`Cover::stand`, `contract::Stand`), so it shades (1.4) and holds the ground (1.3).
+
+## 3c. Flames in the remains on the ground
+`core/src/flame/`. Once a month, after the cover's month and before its seeds land (`life::month`), the remains of life
+lying on a land cell (its ground's body matter and walls, `contract::remains`) may burn. What burns into what, and the
+heat, come from the chemistry's own burning reactions (`Chemistry::burner` of each part); the speed comes from the heat
+balance of the bed, not from the reactions' rates, which are those of rot (real surface fires are limited by heating
+the next fuel; Rothermel 1972). Three stages, each number with one writer:
+- **The bed** (`flame::bed`, each land cell its own, in parallel): its load w, kg a m² of land; the share of its ground
+  it covers, 1 − e^(−a w), a the capture area its leaves held per kg dry (its cover's `LEAF` gene over the dry share
+  of living tissue, its slots' mean by built cover; none without cover). The air in the bed lies between the air near
+  the ground (`World::near_ground`, its vapour over saturation at the ground's temperature) and saturation by the share
+  of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the share by which the ground's
+  evaporation draws its liquid; Manabe 1969): wet ground keeps its remains wet. Their moisture, liquid
+  per kg dry, is the sorption curve `sorb_scale` (−ln(1 − h))^`sorb_power` at that relative vapour h (Nelson 2000;
+  h at most 0.99). A burning kg frees h_c (its parts' burning heats by mass); lighting a kg takes Q = c (`t_light` − T)
+  + M (c_l (T_boil − T) + L_v), all from the chemistry's substances. It **carries a flame** where its remains cover
+  more than the site-percolation threshold of the square lattice (`flame::CARRY_SHARE`, 0.5927) and the share
+  `flux_ahead` of h_c lights the next kg: M below the moisture of extinction (`flux_ahead` h_c − c (`t_light` − T)) /
+  (c_l (T_boil − T) + L_v), 0.18 for the remains of chemistry 0 at 295 K.
+- **Reach** (`flame::shares`, serial, over the cells that carry a flame, in the order of the cells): a flame lit runs
+  for `front_life` at its bed's speed R (below), so it covers a disc of radius R × `front_life`, no larger than the
+  remains joined to it: cells that share an edge join into a region of A m² of covered ground (each cell's land times
+  its cover). A point of a cell is reached by the flames lit within that disc: it expects λ = `strikes` × the disc's
+  area × the month's share of a year of them, and with no draw the cell burns the share f = (1 − e^(−λ)) × its cover.
+- **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): its remains burn on f; a flame
+  through the bed moves at R = `flux_ahead` h_c δ / (τ Q), δ = w / `litter_rho` its depth, τ = 8 minutes an inch of
+  `fine_d` its particles' flaming time (Anderson 1969); its intensity is I = h_c w R (Byram 1959), its flame
+  0.0775 I^0.46 m long (Byram 1959), and its plume kills leaves up to 0.1483 I^(2/3) m (Van Wagner 1973), I in kW a m.
+  Of each slot on f: the soft part of its crown (`contract::crown`, spread evenly over it) in the flame burns by its
+  burning reactions; each of its size groups (`Cover::sizes`) whose plants stand no taller than the scorch height loses
+  the share f of its plants and of its built cover to the ground (`Cover::die_under`: their body matter and walls, and
+  the fuel by their share of the slot's built cover), and of the plants that live the body matter between the flame and
+  the scorch height dies to the ground: a young plant must outgrow the flame between fires (Bond and Midgley 2001). Seeds lying survive. Gases go to the cell's
+  aside node and so to the air, what is not a gas (the liquid of the reactions, the nitrogen mineral of body matter, as
+  ash) to its ground, through the cell's view as the cover's books do (`life::book`, the oxidising gas within the cell's
+  share of its air, `Books::room`); the heat the burning frees goes to the air node over the cell. What it burnt and
+  killed is counted (`Counters::flame`, `flame_air`, `cover_lost` by `life::FLAME`, the budget's `burnt`), and what the
+  flames did on each cell in the month (`flame::Flamed`: the share burnt, the flame's length, the minerals left and
+  the gas given, per m² of land), the share burnt in each month of the last year and the month it last burnt, for the
+  tape (`Counters::flame_month`, `burnt_months`, `burnt_at`).
+- **Known limits:** litter and humus are one pool, burnt alike on f; all the fixed element stays in the ash; the liquid
+  the remains hold is not boiled off into the air (the heat balance counts it); a flame needs no least load (the
+  balance has no losses), so remains a few tens of g a m² carry one where they cover the ground; the scorch height has
+  no term for the air's temperature or wind; no crown fire; no bark; every year is the same, so return times come
+  from the fuel's regrowth and the strikes alone.
 
 ## 3b. Life: the takers, as a field
 

@@ -81,6 +81,17 @@ impl Recorder {
         for (flow, &x) in pcore::cover::SEED_FLOWS.iter().zip(&self.year.seeds) {
             row.push(format!("seeds_{flow}"), "kg/yr", x);
         }
+        // The flames of the year: the share of the land they burnt in the last year's months (`flame::burnt_year`), what they burnt and killed,
+        // and what they gave the air of each heat-absorbing gas.
+        let land_m2: f64 = land.iter().map(|&i| pcore::contract::land(w, i)).sum();
+        let burnt: f64 = land.iter().map(|&i| pcore::flame::burnt_year(w, i) * pcore::contract::land(w, i)).sum();
+        row.push("burnt_land", "1/yr", burnt / land_m2.max(f64::MIN_POSITIVE));
+        for (flow, &x) in pcore::flame::FLOWS.iter().zip(&self.year.flame) {
+            row.push(format!("flame_{flow}"), if *flow == "plants" { "1/yr" } else { "kg/yr" }, x);
+        }
+        for k in (0..w.chem.ns()).filter(|&k| w.chem.absorbs_heat(k)) {
+            row.push(format!("flame_air_{k}"), "kg/yr", self.year.flame_air.get(k).copied().unwrap_or(0.0) * w.chem.subs[k].molar_mass);
+        }
         // The cover's mass per m² on land: median and largest.
         let mut cover: Vec<f64> = land.iter().map(|&i| c.plants[i]).collect();
         cover.sort_by(|a, b| a.total_cmp(b));
