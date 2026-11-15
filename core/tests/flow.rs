@@ -669,7 +669,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
 /// How far below its lowest neighbour the pit of the evaporation test is dug, m.
 const PIT_M: f64 = 10.0;
 
-/// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): a thin film on warm ground in
+/// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): liquid in the pores of warm ground in
 /// dry air, in a pit dug in dry land that holds no part of a body of standing liquid, among dry land that holds none
 /// either (lower than all its neighbours, so nothing runs off it, and no pore liquid flows into it).
 #[test]
@@ -687,8 +687,10 @@ fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
         set_amount(&mut w, Node::new(Class::Bed, i), k, mol);
     }
     assert!(near(&w, i).unwrap().iter().all(|&z| z > w.surface_z(i)), "a pit");
-    // 5 cm of the liquid.
-    let film = 0.05 * area / w.chem.molar_volume(LIQUID, Phase::Liquid);
+    // The liquid fills its pores halfway between the wilting point, under which the air takes none, and field capacity,
+    // over which it sinks to the bed's store.
+    let ph = &w.cfg.phys;
+    let film = (ph.wilt + ph.field) / 2.0 * ph.porosity * ground_of(&w, i).0 * area / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, film);
     set_amount(&mut w, Node::ground(i), DISSOLVED, 1e3);
     hold_ground(&mut w, i, 330.0);

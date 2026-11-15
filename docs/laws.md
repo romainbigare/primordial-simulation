@@ -569,7 +569,11 @@ gives the climate of 1-day ones within 0.3 K on the land and the land's runoff w
 
 ### 1.5 Evaporation, rain and dissolved gases
 `flow::air::cells`, `daily`, `rain`, `soak`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
-the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), over the
+the air's): a liquid in the ground's pores by the share of it the ground holds for roots (`Physics::available`, the
+same share the plants feel, 3): at the open rate at field capacity and over, none at the wilting point, in proportion
+between (Manabe 1969's bucket, its store the liquid a ground holds for roots): the air does not dry it below the
+wilting point (below it a ground dries only slowly, from its top, stage two of its drying; Ritchie 1972); a solid in
+the pores down to none; over the
 cell's own ground as its reflectance is (the share the standing liquid covers holds what its pores hold and all that
 stands, the rest what its pores hold, each a bucket by its area); and through a second film beside the air's where
 one stands over its land (`World::second_film`: the cover's open pores, 3), in series with the air's film, at its
@@ -902,7 +906,7 @@ seeds fill it:
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, w / 10^`MOIST`)^`dormancy`. **Drought** is felt against the ground's own
-  pores (`cover::wet`, `cover::available`): w is the share of what its ground holds for roots that it holds, (θ −
+  pores (`cover::wet`, `Physics::available`): w is the share of what its ground holds for roots that it holds, (θ −
   `wilt`) / (`field` − `wilt`) within 0 and 1, θ the share of the pores of the ground it stands on that its key liquid
   that is liquid fills (Flow's pore space, `Scratch::land_pores`; standing liquid counts, so θ may pass 1): none at the
   wilting point, all at field capacity (the available water of soil physics; Saxton and Rawls 2006). The ground's
