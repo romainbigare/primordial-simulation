@@ -784,22 +784,24 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         law, real roots acclimate); the cold class stays bare (near-tundra: real ground like it holds 0.5 to 1
         kg/m² of low cover); coastal forest 0.71 → 0.48 and 0.44 → 0.32 of coastal land cells; the takers'
         tests place their cover (`FED_KG`).
-      - **Fire v1 is built, not on main** (`wip/fire-v1`, the law in `core/src/flame/`, test
-        `core/tests/flame.rs`, gate green, books exact, `SNAPSHOT_VERSION` 147, a map layer `burnt`;
-        `scratchpad/fire/v1/contact_sheet.png`). It costs 1.2% of a year, 0.4% where nothing burns. **It does
-        not behave as fire**: 0.42 and 0.71 of the land burns a year (the real planet: about 0.03), the same
-        cell 2 to 4 months of one dry season, forest every 2 years, flames of 8 to 14 cm that kill only
-        seedlings, no open belt, and the burnt share depends on the world's size. It burns in the right
-        places (the forest's dry edge; none on bare or the wettest ground). Three pieces of physics are
-        missing, in work: (1) **reach**: a fire covers what it spreads over while it lives (spread rate ×
-        the life of a fire, one anchored number, Andela et al. 2019), where the design let it take its whole
-        joined region; (2) **a least load**: the balance has no losses, so 0.03 kg/m² of dead leaf carries a
-        flame and burns again next month; a thin bed radiates its heat away; (3) **the bed**: `litter_rho`
-        (40 kg/m³) is packed litter, a grass fire's bed is the cured grass still standing (1 to 5 kg/m³): a
-        proposal first (the walls of leafless low slots as standing fuel, and a low plant burnt to the ground
-        growing again from its store). Slips of the design note mended in the build: the burning time per
-        foot, Van Wagner's plain scorch fit (no `t_kill`), `flux_ahead` 0.05 kept though Rothermel's own
-        formula gives 0.025 for 1.5 mm particles.
+      - **Fire v1 is built and parked, not on main** (`wip/fire-v1`: the law in `core/src/flame/`, test
+        `core/tests/flame.rs`, gate green, books exact, `SNAPSHOT_VERSION` 147, a map layer `burnt`; it costs 1
+        to 2% of a year; `scratchpad/fire/v1/handover.md`, `contact_sheet2.png`, the tables in `runs2/`). With
+        the reach built (a fire covers a disc of its spread rate × `front_life`, 4 days, Andela et al. 2019)
+        the land burnt a year is 0.03 and 0.05 (the real planet: about 0.03) and a fire's disc 1.1 to 1.5 km²
+        (measured mean 4.4), where the design's whole joined region gave 0.42 and 0.71. It burns in the right
+        places (the forest's dry edge; none on bare or the wettest ground). **It changes nothing one can see**:
+        what stands is the same as main, open land burns every 17 to 24 years (real moist grassland: 1 to 5),
+        forest every 20, flames of half a metre. What would make it hold a grassland open is in the plants,
+        not in the fire law, and is not built: (a) cured leaf that stays standing at the slot's height for a
+        time (today shed leaves lie at once; standing walls of leafless low slots are 0.026 kg/m², a tenth of
+        a cured grass; the bed is packed litter at `litter_rho`, so a flame runs 0.15 km a day and stays low);
+        (b) a low plant's part below the ground with its store, so it grows again from its base (today a burnt
+        low slot comes back only from seeds lying); and in the fire law (c) a least load from the bed's losses,
+        which needs one number, the flaming bed's temperature (`t_burn`, 1,000 to 1,200 K gives 0.10 to 0.20
+        kg/m²; the chemistry alone gives 2,850 K), and a shape for a fire that is long and thin (a loose bed's
+        disc is ten times the measured size). To take up with the cover's model, after the look of the
+        habitats. Open land without fire is there by drought: 0.25 to 0.32 of the land at year 100.
       - Found with it and mended on main (see the rain's item): the ground's bucket dried by evaporation below
         the wilting point, so on semi-dry land rain never became liquid a root can draw.
       - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
