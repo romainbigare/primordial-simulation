@@ -17,10 +17,10 @@ use crate::{Counters, World};
 /// a layer whose one more kg would not pay its keep at the bottom of its layer (of its slot `s`) lies in its own shade
 /// and is shed; its balance over about a year moves by what it stored (`stored`) less its upkeep. Its top and its depth
 /// are its crown's in the canopy (`Slot::layer`), whatever slots share that crown, so a stand cut into slots keeps its
-/// season and sheds as the whole. Returns whether each pays and whether each is in season.
-pub(super) fn pay(w: &World, c: &mut Cover, p: &Parts, (s, stored): (&mut [Slot; SLOTS], &[f64; SLOTS]), order: &[usize], (t, dt, net): (f64, f64, f64), (b, counts): (&mut Books, &mut Counters)) -> ([bool; SLOTS], [bool; SLOTS]) {
+/// season and sheds as the whole. Its parts `p` hold `e` J a mol. Returns whether each pays and whether each is in season.
+pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, stored): (&mut [Slot; SLOTS], &[f64; SLOTS]), order: &[usize], (t, dt, net): (f64, f64, f64), (b, counts): (&mut Books, &mut Counters)) -> ([bool; SLOTS], [bool; SLOTS]) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
-    let (mm, e, rho) = (p.mm(chem), p.content(chem), chem.subs[p.sub[WALL]].density[0]);
+    let (mm, rho) = (p.mm(chem), chem.subs[p.sub[WALL]].density[0]);
     let (year, rebuild) = (w.cfg.months_per_year as f32, p.living_cost(chem, ph));
     // The months its kinds expect without gain: those of the last year its ground held nothing for roots (`Cover::idle`).
     let months = c.idle as f64 * w.cfg.months_per_year as f64;
@@ -32,7 +32,7 @@ pub(super) fn pay(w: &World, c: &mut Cover, p: &Parts, (s, stored): (&mut [Slot;
             // What its fuel can pay: keeping a kg through the months it expects, this one at least.
             let fuel = c.mol[x][FUEL].max(0.0) * e[FUEL] / (s[x].living * keep * months.max(1.0)).max(f64::MIN_POSITIVE);
             let shed = shed(c, x, &s[x], (floor(keep, (keep, rebuild), Some(months)) / net, fuel));
-            book_shed(b, counts, (p, &mm, &e), shed);
+            book_shed(b, counts, (p, &mm, e), shed);
             s[x] = after_shed(ph, c, (&mm, rho), x, s[x]);
         }
         let (lost, cost) = upkeep(w, c, p, x, &s[x], (t, dt), b);
@@ -41,7 +41,7 @@ pub(super) fn pay(w: &World, c: &mut Cover, p: &Parts, (s, stored): (&mut [Slot;
         c.full[x] = !pays[x];
         if !pays[x] && season[x] {
             let shed = shed(c, x, &s[x], (floor(keep, (keep, rebuild), None) / net, 1.0));
-            book_shed(b, counts, (p, &mm, &e), shed);
+            book_shed(b, counts, (p, &mm, e), shed);
         }
         // Its balance over about a year: what it stored less its upkeep, per kg.
         c.net[x] += (((stored[x] - cost) / s[x].built) as f32 - c.net[x]) / year;
