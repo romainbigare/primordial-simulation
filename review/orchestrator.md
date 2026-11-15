@@ -693,14 +693,21 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         0.49/0.29): the lee sides are dry land now, a wet east and a dry west on every island
         (`scratchpad/air2/c2r/page_sheet.png`). A pale square shows on the 32 island's dry west on the page
         (seed 1, band 20 to 65, year 67): not looked at yet.
-      - **The checkerboard of the rain over the sea near the rising branch** (5 to 15 degrees, on main): the
-        overturning's flow down the gradient goes by the two nodes' own difference of warmth, so a two-node
-        wave feeds itself (a warmer node draws moist air from both sides, rains, and its latent heat keeps it
-        warm). Driven by the mean of the two ends' fitted gradients along the link it is gone, and the cell
-        changes everywhere (64 world, year 30: land rain +13%, cover 7.3e10 → 1.06e11 kg). In work: built as
-        its own commit with the globe and the key numbers.
-      - Then for the air's helper: the measure of `wind` at 2, 3 and 5 times (the dry belt, the wind's speed);
-        the long step's error on the land's runoff.
+      - **On main: the overturning answers to the warmth's fitted gradient** (the mean of the two ends' fits
+        along the link), not to one link's own difference: a wave two nodes long is the mesh's, and it fed
+        itself by the rising branch (a checkerboard of rain at 5 to 15 degrees). Closed islands and the key
+        numbers are unchanged to the last digit. What it shows: **part of the rain belt's swing was that wave**
+        (the belt swings 0.6 degrees on the strip, not 2.2), the equator's rain 2,041 → 1,597 mm, the islands'
+        dry belt wetter again (64 band 5 to 50, 15 to 25 degrees: about 1,030 mm, the driest month 0.55 of the
+        wettest; bare 0.37 → 0.17, forest 0.35 → 0.45 at year 60); the cell's low flux on the lifeless globe up
+        40% (3.8 to 4.4e10 kg/s at 22 degrees; the `wind` row's measure is to be set again).
+      - **The pale square on the 32 island's dry west** (seed 1, band 20 to 65): four air nodes of the lee never
+        rain, and rain reaches a cell only from the nodes it reads, drift landing inside its own node, so the
+        cells between those nodes' centres get none. In work: the rain a node makes drifts with the wind across
+        the nodes' borders.
+      - Then for the air's helper: the two very wet southern corner nodes of the 64 world of the band 5 to 50;
+        the measure of `wind` at 2, 3 and 5 times, which now decides the dry belt and its season; the long
+        step's error on the land's runoff.
    4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
       keeps grassland open (Bond, Woodward and Midgley 2005). A fresh builder (branch `fire`, scratch
       `scratchpad/fire/`: `design.md`, `fire_today.png`, tables).
