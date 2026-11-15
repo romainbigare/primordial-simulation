@@ -25,7 +25,10 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     // Barber 1995), breathe as living cover and are built anew `root_turnover` times a year (Gill and Jackson 2000).
     let roots = s.drunk / dt / ph.root_uptake;
     let renew = roots * ph.root_turnover * p.living_cost(chem, ph) / w.cfg.months_per_year as f64;
-    let parts: [f64; UPKEEP_PARTS] = [living[0] * s.act, living[1] * s.act, living[2] * s.act, ph.c_leaf * s.leaf * days * k * s.act, ph.c_sapwood * s.sapwood * days * pace, ph.c_basal * roots * days * pace, renew];
+    // Its living cover keeps its liquid whatever its ground holds (`WET_TISSUE`), so it breathes at its temperature's
+    // pace in a dry month too: only its gain follows the liquid it can draw (Flexas and others 2006; Atkin and Macherel
+    // 2009). A dry seed's upkeep falls with its liquid (`Physics::activity`, `lying`); a leaf's does not.
+    let parts: [f64; UPKEEP_PARTS] = [living[0], living[1], living[2], ph.c_leaf * s.leaf * days * k, ph.c_sapwood * s.sapwood * days * pace, ph.c_basal * roots * days * pace, renew];
     let cost: f64 = parts.iter().sum();
     let (units, fuel) = (cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));
     // (What it burns is worked out first: one less a share near one would lose a small fuel to rounding.) It burns no
@@ -63,6 +66,31 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
         b.budget[DIED] += budget::held(&e, &c.mol[x]) - alive;
     }
     (lost, cost)
+}
+
+/// What one kg of the living cover of slot `x` costs to keep for `dt` at `t` K in a month it draws no liquid, J: its
+/// upkeep (`upkeep_rates`), its capture area's (`c_leaf`) and that of the conducting walls that feed it (`stand::sapwood`
+/// of a kg's capture area, as tall as its plants); its fine roots draw nothing then. Defined with no living cover too.
+pub(super) fn keep_per_kg(w: &World, c: &Cover, p: &Parts, x: usize, (t, dt): (f64, f64)) -> f64 {
+    let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
+    let (mm, rho, days) = (p.mm(chem), chem.subs[p.sub[super::WALL]].density[0], dt / DAY);
+    let pace = chem.reactions[p.burn].arrhenius(t.max(1.0)) / chem.reactions[p.burn].arrhenius(ph.t_cat);
+    let leaf = dec(g[super::LEAF]);
+    let sapwood = super::stand::sapwood(ph, (leaf, c.height(ph, &mm, rho, x)), f64::INFINITY, rho);
+    let living: f64 = upkeep_rates(chem, ph, p, &g, pace).iter().sum();
+    (living + ph.c_leaf * leaf * ph.repair(g[REPAIR] as f64) * pace + ph.c_sapwood * sapwood * pace) * days
+}
+
+/// The share of what a leaf stores at `t` K over `dt` that the fine roots drawing its liquid cost, where a unit of its
+/// light reaction draws `drink` mol of the key liquid: the roots that liquid needs at `root_uptake`, breathing
+/// `c_basal` a kg a day at the burning's pace and built anew `root_turnover` times a year (`upkeep`), over what the
+/// unit stores. It goes with the air's thirst, not with the leaf: from 1 a leaf's pores lose more than they bring.
+pub(super) fn root_share(w: &World, p: &Parts, (t, dt): (f64, f64), drink: f64) -> f64 {
+    let (chem, ph) = (&w.chem, &w.cfg.phys);
+    let burn = &chem.reactions[p.burn];
+    let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
+    let per_kg = ph.c_basal * dt / DAY * pace + ph.root_turnover * p.living_cost(chem, ph) / w.cfg.months_per_year as f64;
+    drink / (dt * ph.root_uptake) * per_kg / chem.dh(p.light)
 }
 
 /// The upkeep of a kg of living cover of genes `g` a day at full activity, at `pace` of its burning's pace at `t_cat`,

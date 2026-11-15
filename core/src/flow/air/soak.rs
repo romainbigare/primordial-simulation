@@ -11,7 +11,8 @@ use super::step::Active;
 
 /// The numbers per active gas at the end of a cell's row (`cells::Response`), before its outputs per mol of what the
 /// rain adds to what evaporates of it (`cols`): the share of the cell's rain that falls on the surface that solved it,
-/// the share of that surface the bucket is, what the bucket holds and holds wet, mol, as the surface's whole area would,
+/// the share of that surface the bucket is, what the bucket holds over what its pores keep from the air and holds wet over
+/// that, mol, as the surface's whole area would,
 /// and its open rate, mol/s (`surf::Vapour::soak`). No bucket where the second is 0.
 pub(super) const SOAK: usize = 5;
 
@@ -21,7 +22,8 @@ pub(super) fn cols(nx: usize) -> usize {
 }
 
 /// A bucket the rain of a step wets as it falls: its cell, the air node its outputs go to, its active gas, the share of
-/// the cell's rain on its surface, its share of that surface, what it holds at the step's start and holds wet, mol, the
+/// the cell's rain on its surface, its share of that surface, what it holds at the step's start over what its pores keep
+/// from the air (below it where less than 0) and holds wet over that, mol, the
 /// most it holds as the rain falls (liquid over the wet bucket sinks as it falls, as the bed's store takes it after the
 /// step, `drain::sink`; no less than it holds at the start), its open rate, mol/s, where it stands in the step (`Held`),
 /// and its cell's changing outputs per mol the rain adds to what evaporates.
@@ -60,12 +62,13 @@ impl Soak {
             }
         };
         let r = r * self.rain;
-        // Both under their wet amount through the day, each falls as e^(-k t) (k the open rate over the wet amount), so
-        // what the rain adds is what it leaves of their difference, which follows the rain alone.
+        // Both under their wet amount and over what the pores keep through the day, each falls as e^(-k t) (k the open
+        // rate over the wet amount), so what the rain adds is what it leaves of their difference, which follows the rain
+        // alone.
         let k = self.e / self.wet;
         let decay = (-k * dd).exp();
         let apart = (with - without) * decay + r * (1.0 - decay) / (k * dd);
-        if with < self.wet && without * decay + apart <= self.wet {
+        if without >= 0.0 && with < self.wet && without * decay + apart <= self.wet {
             at.now = Some([without * decay + apart, without * decay]);
             return self.share * (r - (apart - (with - without)));
         }

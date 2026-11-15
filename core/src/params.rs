@@ -272,6 +272,13 @@ impl Physics {
         let f = |x: f64| ((x - self.gas_floor) / (x + 2.0 * self.gas_floor)).max(0.0);
         f(x) / f(self.gas_ref)
     }
+    /// The share of the liquid ground holds for roots that ground whose pores are the share `filled` full holds: none at
+    /// the wilting point (`wilt`), all at field capacity (`field`) and over it, in proportion between (the available
+    /// liquid of soil physics; Saxton and Rawls 2006). Roots draw it (`cover::wet`) and the air takes it up
+    /// (`air::surf::Vapour`, the bucket of Manabe 1969).
+    pub fn available(&self, filled: f64) -> f64 {
+        ((filled - self.wilt) / (self.field - self.wilt)).clamp(0.0, 1.0)
+    }
     /// How wet ground with `depth` m of liquid (in its pores and standing) is, 0..1: half at `wet_depth`.
     pub fn wetness(&self, depth: f64) -> f64 {
         depth / (depth + self.wet_depth)
@@ -282,7 +289,7 @@ impl Physics {
     pub fn frozen(&self, (limit, depth): (f64, f64), t: f64, act: f64) -> f64 {
         ((limit - depth * (1.0 - act) - t) / self.frost_k).clamp(0.0, 1.0)
     }
-    /// The activity of a living thing that holds the share `x` of the liquid it keeps: x^`dormancy`, 1 at or above it.
+    /// The activity of a dry seed that holds the share `x` of the liquid it takes in: x^`dormancy`, 1 at or above it.
     pub fn activity(&self, x: f64) -> f64 {
         if x >= 1.0 { 1.0 } else { x.max(0.0).powf(self.dormancy) }
     }
@@ -319,7 +326,7 @@ impl Default for Physics {
             drawdown: 0.3,
             huber: 2e-4,
             c_sapwood: 1600.0,
-            root_uptake: 1.1e-3,
+            root_uptake: 1.6e-3,
             root_turnover: 0.6,
             wall_kg: 0.05,
             thin_kg: 5.0,

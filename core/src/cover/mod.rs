@@ -14,6 +14,7 @@ mod grow;
 mod lying;
 mod month;
 mod seed;
+mod season;
 mod show;
 mod stand;
 mod upkeep;
@@ -92,6 +93,10 @@ pub struct Cover {
     /// cell (`around::pores`), and the share of its ground's liquid their roots reach
     pub film: f32,
     pub reach: f32,
+    /// The share of the last year's months in which its ground held nothing its roots could draw (frozen, or dry to the
+    /// wilting point), a running mean over a year's months (`grow::step`): the months its kinds expect without gain, by
+    /// which they shed their leaves (`grow::shed`). The ground's, so it outlives the slots.
+    pub idle: f32,
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its aside node sets aside for its light reaction
     pub e: f64,
@@ -107,7 +112,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
     }
 }
 
@@ -285,7 +290,7 @@ pub fn ground(w: &crate::World, i: usize) -> f64 {
 }
 
 /// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and the share
-/// of what its ground holds for roots that it holds (`available`), its pores' space read from Flow (`Scratch::land_pores`;
+/// of what its ground holds for roots that it holds (`Physics::available`), its pores' space read from Flow (`Scratch::land_pores`;
 /// one store over the depth of its loose ground). Of a cell of parts with land, its land part's own (`flow::parts`) over
 /// that part's area, no more than the cell holds; else the cell's over its area.
 pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
@@ -297,22 +302,17 @@ pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
         None => (held * molten, area),
     };
     let depth = liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / over;
-    (liquid, available(&w.cfg.phys, depth / w.scratch.land_pores(i).max(1e-9)))
-}
-
-/// The share of the liquid ground holds for roots that ground whose pores are the share `filled` full holds: none at the
-/// wilting point (`wilt`), all at field capacity (`field`) and over it, in proportion between (the available liquid of
-/// soil physics; Saxton and Rawls 2006).
-pub fn available(ph: &crate::Physics, filled: f64) -> f64 {
-    ((filled - ph.wilt) / (ph.field - ph.wilt)).clamp(0.0, 1.0)
+    (liquid, w.cfg.phys.available(depth / w.scratch.land_pores(i).max(1e-9)))
 }
 
 /// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots
-/// (`available`): full from the share its moisture gene sets (`MOIST`), less as it dries to the wilting point
-/// (`Physics::activity`). A plant transpires freely until its roots have drawn about half the liquid available to them
-/// (FAO-56's depletion fraction p of 0.3 to 0.7, 0.5 for most kinds; Allen and others 1998): a `MOIST` of log10(1 − p).
-pub fn activity(ph: &crate::Physics, genes: &[f32; NG], available: f64) -> f64 {
-    ph.activity(available / dec(genes[MOIST]))
+/// (`Physics::available`): full from the share its moisture gene sets (`MOIST`), falling in a straight line to none at the wilting
+/// point. A plant transpires freely until its roots have drawn about half the liquid available to them (FAO-56's
+/// depletion fraction p of 0.3 to 0.7, 0.5 for most kinds), a `MOIST` of log10(1 − p), and below that its transpiration
+/// falls with what is left, its stress coefficient Ks (Allen and others 1998, from memory). A dry seed's activity
+/// falls far more steeply (`Physics::activity`, `lying`).
+pub fn activity(genes: &[f32; NG], available: f64) -> f64 {
+    (available / dec(genes[MOIST])).clamp(0.0, 1.0)
 }
 
 /// The share of a kind of cover of frost gene `frost` K that freezes in a month at `t` K at activity `act`, where its key

@@ -48,6 +48,8 @@ two files: this one and the roadmap.
 - **The disk fills** (it did, twice): each helper's worktree holds a build folder of 2 to 3 GB. When a helper is
   done and its branch is merged or saved, delete its `target` (`rm -rf .claude/worktrees/agent-*/target` of the
   finished ones); tell helpers to delete scratch runs and old binaries once their numbers are in a table.
+- **Ports are shared too**: helpers serve their own page builds on port 8765. The orchestrator's smoke tests
+  serve `web/dist` on a port of their own (8791) and stop only that one; stopping 8765 stops a helper's server.
 - Worktrees and scratch files die with the container, and the container restarts without warning (three times in
   one day): tell every helper to commit its work in progress early, and push its branch to a `wip/` name as soon as
   it holds something. Anything worth keeping is merged or pushed before the session ends.
@@ -267,27 +269,43 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   not measured: each slot is thinned on its own, and is its own layer in the light and in the rooted share, so
   one stand cut into more slots holds more plants and more leaf. The law that should hold: a slot cut into two
   alike halves gives the same world.
-- **The mend of the slots is built, not on main** (the builder's worktree; scratch `scratchpad/sorted/spike/`,
-  `notes.md`, `table_m2.txt`). Five laws broke it and each has its commit: thinning by the crowns' layer
-  (`Cover::crown`), seeds keyed by the cell and the genes and waking for their kin (`kin::kins`), light and
-  liquid on the rings of nested rooted shares (`math::rings`, `grow::drawn`), minerals shared by what each slot
-  would take (`build::wants`); the lots of seeds lying follow the variety (`SNAPSHOT_VERSION` 145). The test
-  `core/tests/stand.rs`: a stand cut in two and in four gives the uncut cell's year within 1e-9. What holds it
-  back:
-  - no pictures yet (asked);
-  - the cover's stage costs about 1.7 times at variety 4, a rough number: a measure on one thread and cuts are
-    asked;
-  - **the variety is still not neutral, by the rule at the limit**: 0.85e10, 2.48e10, 4.57e10, 4.55e10 kg at
-    2, 4, 8, 12 (the limit never binds at 12). At 4, 98,000 forced joins of two slots and 15,000 young stands
-    killed in 60 years. In trial: a full cell never blends unlike stands (only kin join; a newcomer without a
-    slot stays as seeds lying);
-  - the world at 4 moves much (key world: cover 9.867 → 10.146 log10 kg, the gas 315.6 → 264.2 ppm, land worn
-    0.1847 → 0.1295 mm/yr; the 32 drawn world: cover 4.10e10 → 2.48e10 kg);
-  - **the slow test `the_long_step_keeps_the_climate` turns red with it**: the default step moves `runoff_sea`
-    by 0.45%, as on main (0.49%), but the world's year-to-year spread, the test's limit, falls from 0.50% to
-    0.27%. Not loosened. The long step's error on what runs off the land is the thing to mend (the air's helper).
-  The drought law and this mend both change the cover's growth: whichever lands second merges the other.
-- Then, same builder: the spike of the nursery on its branch behind `--sorted` (no race by mass, newcomers near
+- **The mend of the slots is built, not on main** (on the remote as `wip/slots`, merged with main 6f7dfe1b;
+  notes and tables in `scratchpad/sorted/spike/`: `notes.md`, `contact_round3.png`, `pics/`). Five laws broke
+  "a slot cut into alike pieces gives the same world" and each has its commit: thinning by the crowns' layer
+  (`Cover::crown`), seeds keyed by the cell and the genes (rounded to 1/1024 of a step) and waking for their kin
+  (`kin::kins`), light and liquid on the rings of nested rooted shares (`math::rings`, `cover/canopy.rs`,
+  `grow::drawn`), minerals shared by what each slot would take (`build::wants`); the seeds lying keep all 12
+  lots at any variety. The test `core/tests/stand.rs`: a stand cut in two and in four gives the uncut cell's
+  year within 1e-6 (the genes are 32-bit, and seeds joining one packet at a time round the mean genes in the
+  last bit, about 1e-8 a year; a law that acts on a slot moves it by 1e-4 or more). Where it stands:
+  - **The pictures are the same world** (the page and the what-stands maps, 32 and 64, both bands, years 60 and
+    100: forest a few points up in the band 20 to 65, the rest within two points). The mass moves: the key
+    world's cover 9.831 → 10.119 log10 kg, the gas 330.7 → 287.0 ppm, land worn 0.1875 → 0.1333 mm/yr; the 32
+    drawn world's cover falls by 40% (the light passes down through each crown, so the trees that hold the mass
+    grow lighter: the builder's reading, not measured).
+  - **Cost**: the cover's stage +12% for a cell of one slot, +48% per slot-month with four kinds a cell (counted
+    instructions); its share of a 30-year run 16.5% → 20.5%. The cuts that keep the results to the last digit
+    are in.
+  - **The variety is not neutral, and that is the limit itself, on main too**: cover at 2, 4, 8, 12 is 0.55e10,
+    1.52e10, 2.67e10, 2.61e10 kg on the branch (main: 0.59, 2.55, 3.81, 4.10): from about 8 the setting no
+    longer matters. Full cells of stands that pay their way shut better kinds out. Tried and dropped: a full
+    cell joining only kin and keeping the newcomer as seeds lying (worse: 1.06e10 at 4). Almost all forced
+    joins are of unlike stands (118,000 at 4 in 60 years, 2.9 steps apart on average). Open: a default of 8
+    (the cover's stage then costs about twice), or a better rule at the limit.
+  - **Three fast tests of the takers are red on the branch** since it merged the drought law
+    (`newborns_grow_by_the_law_of_growth_and_the_books_are_kept`, `the_young_leave_and_the_books_are_kept`,
+    `the_soft_part_stands_in_the_crown`): in a dry month the test cell's herb stand has a tiny gain, does not
+    pay, and `grow::shed` drops all its living matter. The same fragile spot the fire builder's work replaces
+    (a leaf's gain by the liquid in a straight line; shedding by what it costs to keep).
+  - The long step's test passes on main and on the branch now (`runoff_sea` +0.24% against 0.35%).
+  **In work**: the leaf's year is on main, and a fresh builder (branch `slots`, scratch
+  `scratchpad/sorted/merge/`) merges main into `wip/slots`, holds every law of the leaf's year to the cut (a
+  dry season added to `core/tests/stand.rs`), sees the three tests, puts the variety's bound back to 1, resets
+  the references, measures the cost again, and hands a branch to merge. Fire v1 merges after it.
+- **On main: a world's variety is from 2** (`Config::validate`, the page's field): at 1 a full cell looked for
+  two slots to join and the run stopped. The mend that lets 1 stand is on `wip/slots` (a cell of one slot held
+  by a stand that pays its way refuses the seeds, `seed::Landed::Refused`); the bound goes back to 1 with it.
+- Then, by a fresh builder and only after the look of the habitats (the owner's order): the spike of the nursery on its branch behind `--sorted` (no race by mass, newcomers near
   known kinds, the garden check, bands' tables, a contact sheet): numbers and pictures, not for main as it is.
 - **Its steps**: (0) main alone to year 300 on the new air, the target: done (`scratchpad/sorted/target/`, seed
   1 at 64 squares). The cover is steady from year 100 in all three: in the band with the roster 1.33 to 1.40e11
@@ -311,6 +329,31 @@ get the variety on a land of manageable size (asked of the habitats' explorer: t
 band, a steady wind and its rain shadow, more relief, ground that differs by its grain, years that differ and
 fire, ground that stays wet, stretching the air's distance inland as the band stretches the latitudes, a larger
 world). No rule that says where a habitat goes.
+
+**The owner's next order after the variety of habitat (their word): the look of the habitats, and everything else
+paused until it is done.** When the habitat work is complete (the air and the rain: the rain on rising ground, the
+dry belt; the orchestrator counts fire in, as what makes grassland), launch one page builder (the owner asks for a
+Sonnet agent: `model: sonnet`) to make the new variety of habitat look far better, and pause the sorted start and
+all other helpers until it is done. The owner's goal: the map as full of detail and information as possible and
+as real as possible, with features dramatised for the game: textures, details, relief, objects.
+- Faults the owner sees on the page (their pictures, on the remote as `wip/look-refs`, folder
+  `review/looks/faults/`; a copy in `scratchpad/looks/`): near views of the green cover show grid-like marks and
+  odd patterns (at the 20 m bar the crowns are a dark maze of straight strokes; at 50 m green and brown stand in
+  square blocks; at 2 m dark smears made of fine horizontal and vertical lines, and thin straight lines at tile
+  borders; at 10 m green over rock in straight lines and a grid); the new dry land is empty of detail; less and
+  less to look at; bushes look like small trees; trees are too simple; no flowers, no grass; no plant drawn
+  that fits the new habitats.
+- What the owner wants it to look like (`review/looks/want/` on that branch): a painted dry grassland with
+  flat-topped trees, tall straw grass, a dry sandy river bed, paths, mounds and herds; a forest glade with a
+  stony stream, fallen logs, mossy rocks, many tree forms; a swamp with dark standing liquid, trees with wide
+  feet, floating leaves, mud banks; high mountains with ice, scree, a milky lake; a braided river with gravel
+  bars and green islands.
+- For the brief, **the owner's rule for the drawing (their word)**: procedural detail with artistic liberty is
+  welcome to make the world look alive (a boulder, a fallen log, a tuft, a flower that no number tracks), as
+  long as the numbers still guide the general outline and the behaviour of what is drawn: where forest, grass,
+  bare ground, liquid, snow and rock are, how tall and dense the plants, how dry, the season. Detail is keyed to
+  the place so it does not move between frames or zoom levels, and nothing stands on a grid; the look differs by
+  habitat because the numbers differ. The animals' drawing stays paused (see the life track).
 
 **Where the two tracks stand** (the orchestrator keeps these lines true):
 - On main: the docs' clean-up; the plants made free (`core/src/contract.rs`, the natural world's month on its own, a
@@ -470,9 +513,21 @@ world). No rule that says where a habitat goes.
       births are 12 to 29 times too many (1.7 to 5 against weaned mass). Our young feed themselves at 3 to 6% of
       the adult's mass; real young become independent at 17 to 40%. The step that is too easy is likely that a
       newborn feeds itself at once. What the takers achieve in a world was not measured (the run was stopped).
-  - In work: the first drawing of animals on the page (the design's decision 10), by a page builder in its own
-    worktree: two or three looks on branches from one base, pictures in `scratchpad/animals/` (`looks.png`); the
-    owner picks, then one is merged. Then F2 (movement by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
+  - **Paused by the owner until the takers' numbers are final; none of the three looks is to be merged.** The
+    owner's words on them: all look terrible, grid-like, far too many animals, and too big. A next try starts
+    from the final numbers and must not place members on a grid nor draw them larger than they are.
+    Built: the first drawing of animals on the page (the design's decision 10).
+    Three looks from one base (from main `be1d3d2`; on the remote as `wip/animals-look-dots`, the base and look
+    A; `wip/animals-look-bodies`, a small body seen from above with a shadow; `wip/animals-look-herds`, herds of
+    up to 12 and a soft mark far away). The road: `tape/src/takers.rs` gives each square 8 slots × 8 numbers,
+    `web/src/herds.ts` and `web/shaders/herds.wgsl` place each member at a fixed spot, the count rounded down,
+    hidden in standing liquid and under deep snow, nothing drawn where a member is under a quarter pixel.
+    Pictures in `scratchpad/animals/` (`looks.png`, `sheet_*.png`, `notes.md`). Faults of the looks: members
+    stand almost on a grid; the herds' far mark fills a cell's square to a hard edge; the angled view draws them
+    from above; the shader's cost is counted, not timed. **What the drawing shows of the takers' numbers** (for
+    the paused work): up to 75,000 per km² of the 3 kg kind and 8,000 per km² of the 60 kg kind at year 100, and
+    adults far lighter than their kind's adult mass (the 400 kg kind's adults 74 kg on average in a cell, young
+    sometimes heavier than adults). Then F2 (movement by what is sensed) and F3 (eaters of takers). The second builder's working room is used up: a fresh builder
     reads `scratchpad/f1/b2/notes.md` first.
 - On main, the drawn worlds' third round: a unit of an island's noise is 21.3 km on every map (`ANCHOR_M`), so
   lands of 128 squares have ragged coasts, bays and outliers; worlds of 64 squares are the same to the last digit;
@@ -590,15 +645,26 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         18 → 24% and 27 → 34%; the wet-ground tree halves on ground full six months or more. The soaked kind
         holds no more of the cover on full ground than off it: channels are cheap and pay wherever the free
         liquid nears the top for some months (seasonally soaked ground). Judged honest; a weaker stem for
-        channels is not (wood carries none). Asked before the merge: the pictures, the tall cover's leader by
-        ground class, where the new open land sits, a trial of a starting herb of soaked ground, the 10th gene's
-        cost.
+        channels is not (wood carries none). **Not merged: it gives no new habitat** (on the remote as
+        `wip/soaked`, gate green on main 6f7dfe1b; contact sheets `scratchpad/water/contact_soaked.png`,
+        `contact_herb_trial.png`). Of the tall cover the soaked kind leads 36% on full ground and 41% off it;
+        the new open land lies on dry ground and on the rim with standing liquid, not on soaked ground (open
+        share of full ground 50 → 55%); a starting herb of soaked ground makes no marsh; the 10th gene costs 4
+        bytes a slot and no time that can be measured. **Shelved until the sorted start can test kinds on soaked
+        ground.** The branch's last commit (360a94e8) holds the stronger reading, also tried: a root without
+        gas does 37/484 of the work on the same fuel, so the slot's uptake falls (a 20 m tree on ground soaked
+        to the top draws 0.34, with channels 0.80). It moves the soaked kind to 45% of the tall cover on full
+        ground against 41% off it and the other trees to 36%, the open share of full ground to 56%, the low
+        plants not at all: still no marsh (`contact_uptake.png`). The branch's references belong to the first
+        reading. What a swamp may need beyond these laws, not tried: no seedling under standing liquid, ground
+        that differs by its grain.
       - Open, for the sorted start's garden check: **the moisture gene costs nothing real** (its cost is capacity
         × 10^MOIST, and one step of the light gene gives the same capacity at the same upkeep).
-      - Open, a fault of the books in Flow: **the surface pass can take a liquid from a cell that holds none**
-        (`runoff::surface` → `Crossings::book`), seen when a substance piles up on the ground; counted as rounding
-        today. Notes in `scratchpad/water/overdraw.md` (suspect: a cell's volume and its rows per liquid disagree
-        after a body's share-out). Given to the same builder after law 2, with a fast test of the law.
+      - On main, a mend of the books in Flow (`runoff::book_all`, test
+        `what_runs_off_takes_no_more_of_a_liquid_than_a_cell_holds`): a surface pass books all its moves
+        together, those between cells and those with the boundary at the open edge, so an edge cell never gives
+        of a second liquid what has come in before that is booked. A world of one liquid is the same to the last
+        digit.
    3. **Rain with a season and a direction** (the air's helper).
       - On main: the overturning cell follows the month's sun (`air::cell`, Lindzen and Hou 1988). On the strip the
         rain belt swings to 12 to 17 degrees; the driest month at 10 to 20 degrees gets 0.55 to 0.61 of the wettest
@@ -609,10 +675,120 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         the measured flux, `wind` "anchored, open", and its share falls to none where the air sinks), and no term
         of the rain law reads whether the air rises or sinks. The halves already carry their own vapour; the
         vapour's profile is tall (about 4 km against the measured 2).
-      - In work: **rain follows the air's rise**, one law: a node's rising or sinking mass flux (the divergence of
-        the overturning's low flow, plus wind against the ground's rise, Smith and Barstad 2004); rising air
-        condenses, sinking air dries the low air. The dry belt, the wet windward side and the dry lee together.
-   4. Fire, as a fast event inside a month (needs 2 and 3 first).
+      - Tried and not kept: rain following the rise and sinking of the overturning's low flow. No rain law dries
+        the belt alone: over a year a belt's rain is what rises from it less what the air carries out (the belt
+        22 to 33 degrees: 1,167 → 1,101 mm, while the rising branch went to 2,854 mm).
+      - **On main and on the page: the wind lifts the air where the ground rises** (`flow/air/rise.rs`; Smith and
+        Barstad 2004); the wind is the overturning's own low flow turned by the spin, an easterly at every
+        latitude, 0.4 to 1.6 m/s. Windward over lee at one height: 1.5 to 2.6 on the 64 island of the band 5 to
+        50, 3 to 5 on the 32 island of the band 20 to 65 (the real: 2 to 5). Closed islands are unchanged.
+        Known limits: no eddy-driven westerlies of the middle latitudes (the wet side there is the east); the
+        wind is a fifth of the measured trades, the same fault as the weak cell; rain falls on the sea beside a
+        windward coast (the rise is taken per air node).
+      - **On main with it: the air takes the ground's liquid by the share it holds for roots**
+        (`Physics::available`, one helper for the ground and the plants; Manabe 1969): the pores dry only to
+        the wilting point. The cells never wet fall from 212 to 19 on the 64 world of the band 5 to 50.
+      - **The page is barer with the two** (year 60, bare / forest: 64 band 5 to 50 0.33/0.41 → 0.37/0.35; 64
+        band 20 to 65 0.29/0.46 → 0.44/0.33; 32 band 5 to 50 0.22/0.44 → 0.24/0.40; 32 band 20 to 65 0.21/0.48 →
+        0.49/0.29): the lee sides are dry land now, a wet east and a dry west on every island
+        (`scratchpad/air2/c2r/page_sheet.png`). A pale square shows on the 32 island's dry west on the page
+        (seed 1, band 20 to 65, year 67): not looked at yet.
+      - **The checkerboard of the rain over the sea near the rising branch** (5 to 15 degrees, on main): the
+        overturning's flow down the gradient goes by the two nodes' own difference of warmth, so a two-node
+        wave feeds itself (a warmer node draws moist air from both sides, rains, and its latent heat keeps it
+        warm). Driven by the mean of the two ends' fitted gradients along the link it is gone, and the cell
+        changes everywhere (64 world, year 30: land rain +13%, cover 7.3e10 → 1.06e11 kg). In work: built as
+        its own commit with the globe and the key numbers.
+      - Then for the air's helper: the measure of `wind` at 2, 3 and 5 times (the dry belt, the wind's speed);
+        the long step's error on the land's runoff.
+   4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
+      keeps grassland open (Bond, Woodward and Midgley 2005). A fresh builder (branch `fire`, scratch
+      `scratchpad/fire/`: `design.md`, `fire_today.png`, tables).
+      - Measured on main (64 drawn, year 60): **open land cannot carry fire: herbs never cure.** Living tissue
+        keeps its liquid in every season and `grow::shed` sheds nothing in a dry month, so open land holds 0.19
+        (band 20 to 65) and 0.01 kg/m² (5 to 50) of dead fuel (a real dry grassland: 0.2 to 0.6, cured). Forest
+        holds about 5 kg/m² but stays wet. Fire could run today in a thin ring of forest edge by the dry
+        coasts, about 4 months a year. The chemistry's burning rates are those of rot (the frame's bare
+        reaction reaches 1e-6/s only at 796 K): what burns into what and the heat come from the chemistry, the
+        speed from the heat balance (Rothermel 1972).
+      - In work, step 1, mergeable alone, two law commits. Measured first: with today's costs no leaf is ever
+        worth shedding, because the living upkeep is multiplied by activity and activity falls to about zero on
+        dry or frozen ground (keeping a kg through a dry season costs 0.005 to 0.007 of building it anew). So
+        (a) **upkeep follows temperature, not the ground's dryness** (a leaf on dry ground still breathes; the
+        gain keeps following the liquid; seeds lying and wear keep Harrington's rule): keeping then costs 1.1 to
+        2.4 times rebuilding through a dry season and 0.17 through a cold one; (b) **what costs more to keep
+        through the months a slot expects without gain than to build anew is shed** (Kikuzawa 1991), one rule
+        for every season in `grow::shed`, the expected months from the slot's own last year. About half the
+        dry-season cover would become litter; in the cold season leaves are kept (leaves falling in the cold
+        would need frost to act on leaves, not on whole plants).
+      - Built on `fire` (three commits, gate green, `Cover::idle` one number per cell, `SNAPSHOT_VERSION` 146;
+        `scratchpad/fire/step1_page.png`, `step1_tables/`), **not merged: the dry lands get far too bare.**
+        Year 100, 64 drawn, main → a → a+b: forest 0.78 → 0.44 → 0.47 (band 20 to 65), 0.62 → 0.38 → 0.37
+        (5 to 50); bare 0.05 → 0.29 → 0.26 and 0.12 → 0.36 → 0.35; land at 10 to 20 degrees half bare on 1,100
+        mm of rain; no wood that stands leafless through the dry season. The good half: herbs on open land cure,
+        dead fuel there 0.3 to 0.7 kg/m². Causes found: **a leaf's gain follows the liquid by the seeds' power
+        (activity to the 5.7, Harrington), so a half-dry month gains almost nothing** (a fault of main's drought
+        law; FAO-56 gives a straight line to the wilting point); and a plant paid a full month's upkeep before
+        it shed.
+      - Second round on `fire` (c the straight line, a, b with shedding before the month's upkeep; gate green,
+        `scratchpad/fire/step1c_page.png`, `step1c_table.txt`): main → c → c+a → c+a+b, forest / open / bare,
+        band 20 to 65: 0.78/0.18/0.04 → 0.88/0.09/0.02 → 0.51/0.25/0.24 → 0.54/0.26/0.20; band 5 to 50:
+        0.62/0.26/0.12 → 0.76/0.18/0.06 → 0.41/0.27/0.32 → 0.46/0.34/0.20. Woods stand leafless in the dry
+        month on 6 to 7% of forest cells; dead fuel on open land in the driest month 0.28 to 0.54 kg/m² (real:
+        0.2 to 0.6). A leafless plant pays nothing (known limit); a kept leaf pays 2.7% of its dry mass a day at
+        295 K (real: 1 to 3%); the herb's store pays a quarter of a month of that, the tree's three months
+        (real stores: grasses 10 to 30% of dry mass, trees 5 to 10%): no change to the start's rows.
+        The three commits go to main together (c alone makes the page 88% forest); the slots' mend merges
+        after them.
+      - Third round (a fourth commit: out of season a slot keeps only the leaves its store can pay for and
+        drops the rest as leaves, so it stands leafless with its store; `step1m_table.txt`,
+        `step1m_bare_class.txt`, `trace_*.txt`): bare 0.18 in both bands (main 0.04 and 0.12). **The cells that
+        went bare get 530 to 680 mm, and main's cover there was never alive**: it sat through dry or frozen
+        months at no cost, and on ground under the wilting point all year it stood unchanged from the year it
+        was placed. Three classes: cold (7 months frozen, summer ground at 273 to 280 K, near 55 degrees: 174
+        cells of the band 20 to 65), a dry season of 6 to 7 months (79 and 130 cells), ground never wet (14 and
+        70). So the branch is the more honest world; it merges after two small mends, in work: the budget rule
+        asks the store only to pay the keeping; **a slot is in season only while its gain pays for all that gain
+        needs, the fine roots that draw its liquid too** (in the dry cells' last half-dry month the roots'
+        upkeep, 42% of the whole, emptied the store and the herbs died as whole plants): a plant whose pores
+        would lose more than they bring keeps them shut (Cowan and Farquhar 1977).
+      - Fourth round (`wip/fire`, six commits, gate green; `step1r_table.txt`, `step1r_page.png`,
+        `trace_roots_2508_1108.txt`): both mends are in (`upkeep::root_share`: from a roots' share of 1 of the
+        gain the pores stay shut). Forest / open / bare: 0.59/0.23/0.17 (band 20 to 65), 0.51/0.32/0.17 (5 to
+        50); no plant dies whole in the half-dry month any more; a tree keeps its walls and store through five
+        dry months. **Not merged: in hot air plants sit shut through wet months** (cell 2508, 1,510 mm: the
+        fine roots for the month's liquid cost 1.47, 0.92 and 1.07 of the gain at 300 to 303 K; a real plant
+        spends about a third on its roots). The season rule is right; the roots' number is off: `root_uptake`
+        is anchored on what a temperate forest's roots carry in its peak month, a typical flow, and is used as
+        what a root can carry. In work: re-anchored by a method fixed before any run (the highest biome value of
+        peak-month transpiration over live fine-root mass). Left as they are: the cold class (near-tundra, a
+        summer too short to pass the bare line), the never-wet cells (the bucket).
+      - **Step 1 is on main** (seven commits, `SNAPSHOT_VERSION` 146, `Cover::idle` one number per cell): a
+        leaf's gain falls in a straight line to the wilting point (FAO-56); its upkeep follows temperature; it
+        is in season while its gain pays its keep and the fine roots for its liquid, and keeps its pores shut
+        otherwise (`upkeep::root_share`); out of season it is shed where keeping it through the expected months
+        costs more than building it anew or more than the store can pay (Kikuzawa 1991); `root_uptake` is the
+        highest flow roots are seen to carry (1.6e-3, a transition forest's wet season). Year 100, 64 drawn,
+        main before → now, forest / open / bare: 0.78/0.18/0.04 → 0.63/0.21/0.16 (band 20 to 65),
+        0.62/0.26/0.12 → 0.54/0.30/0.16 (5 to 50); land at 10 to 20 degrees bare 0.23 → 0.17; woods leafless in
+        the dry month on 8 to 9% of forest cells; dead fuel on open land 0.29 and 0.09 kg/m² in the dry month.
+        Known limits, in `docs/laws.md` or here: a leafless plant pays nothing; at 303 K the roots still cost
+        all of the gain and the first hot wet months stay shut (the roots' breathing goes by the bare rate
+        law, real roots acclimate); the cold class stays bare (near-tundra: real ground like it holds 0.5 to 1
+        kg/m² of low cover); coastal forest 0.71 → 0.48 and 0.44 → 0.32 of coastal land cells; the takers'
+        tests place their cover (`FED_KG`).
+      - **Fire v1 is in work** by a fresh builder (branch `fire-v1`, scratch `scratchpad/fire/v1/`; it reads
+        `scratchpad/fire/design.md` and `handover.md`): the law in its own folder, the fast test the design
+        names, measures and pictures of both bands, the burnt share a year at 32, 64 and 128.
+      - Found with it and mended on main (see the rain's item): the ground's bucket dried by evaporation below
+        the wilting point, so on semi-dry land rain never became liquid a root can draw.
+      - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
+        to the ground's wetness; the moisture of extinction falls out of the heat balance (0.17 to 0.18); a
+        cell carries fire where fuel covers more than the percolation threshold of the ground; burnable cells
+        that touch join into regions, each burning the share its expected strikes give (no random draws, no
+        front solver); leaves under the scorch height die (Van Wagner 1973), young trees must outgrow the flame;
+        gases and heat to the air, ash to the ground, seeds lying survive. Five numbers and two of a sorption
+        curve, all anchored. Not in v1: a bark gene, the loss of the fixed element to the air, a reach limit.
    5. Then: the ground's water numbers by grain (heath on coarse ground, wet meadow on fine); a wider spread of
       the bed's wear rates and flat layers on a high land in some worlds (scarps); one large land in a world of
       512 for a large river and a delta (with the package of the mouths).

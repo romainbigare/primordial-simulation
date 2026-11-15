@@ -16,6 +16,9 @@ const MANY: f64 = 1000.0;
 const FEW: f64 = 0.01;
 /// The share of a month's upkeep its store holds (within the most a taker stores, `store_most`).
 const STORE_MONTHS: f64 = 0.6;
+/// The light-eaters placed on the cell of a test that feeds takers, kg per m² (`testkit::cover`): the cover of a cell
+/// of ground wet through its growing season; the test world's mildest cell is dry for months and holds far less.
+const FED_KG: f64 = 1.0;
 
 /// A small world with no life after a month, and its mildest dry land cell, a pond standing on it (a metre: liquid for
 /// any thirst) and no snow: takers there find nothing to take.
@@ -209,26 +212,27 @@ fn a_taker_takes_no_more_than_it_reaches() {
     (w.life.env[i][1], w.life.env[i][3]) = (1.0, 0.0);
     let ph = w.cfg.phys;
     // Of each layer of the cell, what it shows and the share of it within the reach of a taker of row `row`.
-    let layers = |row: usize| -> Vec<(f64, f64)> {
+    let layers = |row: usize| -> Vec<(pcore::contract::Layer, f64, f64)> {
         let (g, m) = (TAKER_KINDS[row].genes, fauna::adult(&TAKER_KINDS[row].genes));
         let len = (m / ph.rho_body).cbrt();
         let reach = 10f64.powf(g[fauna::REACH] as f64);
         let band = (reach / 10f64.powf(fauna::BAND), (reach * 10f64.powf(fauna::BAND)).min(ph.reach_len * len));
-        pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, h)| (shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect()
+        pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, h)| (l, shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect()
     };
     // The first kind of taker that reaches a layer of the cell, as many of it as weigh `TAKER_SLOT_KG`.
-    let row = (0..TAKER_KINDS.len()).find(|&r| layers(r).iter().any(|b| b.1 > 0.0)).expect("a kind of taker that reaches the cover");
+    let row = (0..TAKER_KINDS.len()).find(|&r| layers(r).iter().any(|b| b.2 > 0.0)).expect("a kind of taker that reaches the cover");
     let (before, m) = (layers(row), fauna::adult(&TAKER_KINDS[row].genes));
     let books = Books::now(&w);
     testkit::takers(&mut w, i, row, (TAKER_SLOT_KG / m, 0.1 * m));
     testkit::takers_month(&mut w, i);
-    let after: Vec<f64> = pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, _)| shown(&w, i, l)).collect();
-    assert!(before.len() == after.len() && before.iter().any(|b| b.1 > 0.0), "no layer within reach: {before:?}");
-    for ((kg, r), now) in before.iter().zip(&after) {
+    // Each layer as it stands now, by itself (their order by height changes as they are eaten).
+    let after: Vec<f64> = before.iter().map(|&(l, ..)| shown(&w, i, l)).collect();
+    assert!(before.iter().any(|b| b.2 > 0.0), "no layer within reach: {before:?}");
+    for ((_, kg, r), now) in before.iter().zip(&after) {
         println!("a layer of {kg:.3e} kg, {:.0}% within reach: {now:.3e} kg left", 100.0 * r);
         assert!(*now >= kg * (1.0 - r) * (1.0 - 1e-9), "a layer of {kg} kg, {r} of it within reach, kept {now} kg");
     }
-    assert!(after.iter().zip(&before).any(|(a, b)| *a < b.0), "nothing was taken");
+    assert!(after.iter().zip(&before).any(|(a, b)| *a < b.1), "nothing was taken");
     books.assert_kept(&w, 1e-9);
 }
 
@@ -356,6 +360,7 @@ fn bearing(child: f64) -> f64 {
 fn newborns_grow_by_the_law_of_growth_and_the_books_are_kept() {
     let mut w = testkit::living(8, 12);
     let i = testkit::mild_land(&w);
+    testkit::cover(&mut w, i, FED_KG);
     (w.life.env[i][1], w.life.env[i][3]) = (1.0, 0.0);
     let (row, ph) = (1, w.cfg.phys);
     let g = TAKER_KINDS[row].genes;
@@ -391,6 +396,7 @@ fn newborns_grow_by_the_law_of_growth_and_the_books_are_kept() {
 fn a_cold_body_takes_in_the_proportion_it_burns() {
     let mut w0 = testkit::living(8, 12);
     let i = testkit::mild_land(&w0);
+    testkit::cover(&mut w0, i, FED_KG);
     (w0.life.env[i][1], w0.life.env[i][3]) = (1.0, 0.0);
     let t = pcore::contract::place(&w0, i).t;
     let cover = |w: &World| pcore::cover::per_m2(w, pcore::cover::Cover::kg)[i] + pcore::cover::lying(w)[i];
@@ -446,12 +452,14 @@ fn kinds_keep_apart_by_the_slot_rule() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// The young leave (laws.md 3b): takers placed on one cell of a small world spread to other cells by the kernel of
-/// the seeds as their young mature, and every element and the energy are kept across the cells they leave and reach.
+/// The young leave (laws.md 3b): takers placed on one cell of a small world, its land fed (`FED_KG`), spread to other
+/// cells by the kernel of the seeds as their young mature, and every element and the energy are kept across the cells
+/// they leave and reach.
 #[test]
 fn the_young_leave_and_the_books_are_kept() {
     let mut w = testkit::living(8, 12);
     let i = testkit::mild_land(&w);
+    testkit::dry_lands(&w).into_iter().for_each(|j| testkit::cover(&mut w, j, FED_KG));
     let books = Books::now(&w);
     testkit::takers(&mut w, i, 1, (MANY, 0.1 * fauna::adult(&TAKER_KINDS[1].genes)));
     let held = |w: &World| (0..w.mesh.cells().n()).filter(|&j| of(w, j).any()).count();
@@ -505,8 +513,9 @@ fn the_soft_part_stands_in_the_crown() {
     assert!((reached((0.1, 17.5), 0.05, tree) - 0.5).abs() < 1e-12, "a mouth up to half the crown's depth");
     let young = (0.0, 1.5);
     assert!((reached((0.1, 0.9), 0.05, young) - 0.8 / 1.5).abs() < 1e-12, "a young plant is not reached over its whole height");
-    let w = testkit::living(8, 12);
+    let mut w = testkit::living(8, 12);
     let i = testkit::mild_land(&w);
+    testkit::cover(&mut w, i, FED_KG);
     let slots = pcore::contract::slots(&w, i, w.life.cell_at(i));
     slots.iter().for_each(|(layer, (base, top))| println!("{layer:?}: crown from {base:.3} to {top:.3} m"));
     assert!(slots.iter().any(|s| s.1 .0 == 0.0 && s.1 .1 > 0.0), "no herb's crown reaches the ground: {slots:?}");

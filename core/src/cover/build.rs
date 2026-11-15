@@ -18,8 +18,9 @@ pub(super) fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
 /// (`RANGE`): far finer than a generation's mutation, far coarser than the rounding of sums.
 const KEY_STEPS: f32 = 1024.0;
 
-/// What slot `x` of cover `c` builds a kg of at its share of walls (`WALLS`; a small plant builds few walls,
-/// `stand::walled`), by the conversions of growth (`Chemistry::build`, `builds`): the units of each conversion, what
+/// What slot `x` of cover `c` (its slot `s` in the month) builds a kg of at its share of walls (`WALLS`; a small plant
+/// builds few walls, `stand::walled`; a slot that shed all its leaves builds them anew on the walls it stands on, matter
+/// alone), by the conversions of growth (`Chemistry::build`, `builds`): the units of each conversion, what
 /// they take of each substance, mol, and the fuel a kg costs with the work of building (`c_copy`), mol. None where the
 /// chemistry builds no cover.
 pub(super) struct PerKg<'a> {
@@ -28,11 +29,11 @@ pub(super) struct PerKg<'a> {
     fpk: f64,
 }
 
-pub(super) fn per_kg<'a>(w: &'a World, c: &Cover, p: &Parts, x: usize) -> Option<PerKg<'a>> {
+pub(super) fn per_kg<'a>(w: &'a World, c: &Cover, p: &Parts, x: usize, s: &Slot) -> Option<PerKg<'a>> {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
     let bl = chem.build.as_ref()?;
     let wall = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL])?;
-    let walls = dec(c.genes[x][WALLS]) * super::stand::walled(ph, c.plant(&mm, x));
+    let walls = if s.living > 0.0 { dec(c.genes[x][WALLS]) * super::stand::walled(ph, c.plant(&mm, x)) } else { 0.0 };
     let fm = 1.0 / (1.0 + walls);
     let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, walls * fm / mm[WALL] / wall.outputs[0].1 as f64)];
     let mut need = [0.0; MAX_SUBSTANCES];
@@ -42,9 +43,11 @@ pub(super) fn per_kg<'a>(w: &'a World, c: &Cover, p: &Parts, x: usize) -> Option
     Some(PerKg { units, need, fpk })
 }
 
-/// The fuel slot `x` of cover `c` (its slot `s` in the month) holds over its reserve (`STORE`), mol.
+/// The fuel slot `x` of cover `c` (its slot `s` in the month) holds over its reserve (`STORE`), mol: it keeps its
+/// reserve back while it holds leaves; a slot that shed them all builds them anew of its store.
 fn surplus(c: &Cover, mm: &[f64; NP], x: usize, s: &Slot) -> f64 {
-    (c.mol[x][FUEL] - dec(c.genes[x][STORE]) * s.built / mm[FUEL]).max(0.0)
+    let reserve = if s.living > 0.0 { dec(c.genes[x][STORE]) * s.built / mm[FUEL] } else { 0.0 };
+    (c.mol[x][FUEL] - reserve).max(0.0)
 }
 
 /// What slot `x` of cover `c` (its slot `s` in the month), building a kg as `k` says (`per_kg`), would take of each

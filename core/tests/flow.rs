@@ -9,6 +9,12 @@ use worldgen::testkit::{flow_step, ground_of, hold_ground, loose_volume as loose
 
 /// One step of radiation and the air.
 const DT: f64 = 3.0 * DAY;
+/// A liquid at the ground's temperatures besides the key liquid (chemistry 0's substance 6, melting at 260 K), and the
+/// mol of it put in a cell.
+const SECOND_LIQUID: usize = 6;
+const SECOND_MOL: f64 = 1e8;
+/// The share of its liquid the open low ground is made short of.
+const LOW_SHORT: f64 = 0.01;
 /// One liquid step.
 const LIQUID_STEP: f64 = 15.0 * DAY;
 
@@ -663,7 +669,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
 /// How far below its lowest neighbour the pit of the evaporation test is dug, m.
 const PIT_M: f64 = 10.0;
 
-/// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): a thin film on warm ground in
+/// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): liquid in the pores of warm ground in
 /// dry air, in a pit dug in dry land that holds no part of a body of standing liquid, among dry land that holds none
 /// either (lower than all its neighbours, so nothing runs off it, and no pore liquid flows into it).
 #[test]
@@ -681,8 +687,10 @@ fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
         set_amount(&mut w, Node::new(Class::Bed, i), k, mol);
     }
     assert!(near(&w, i).unwrap().iter().all(|&z| z > w.surface_z(i)), "a pit");
-    // 5 cm of the liquid.
-    let film = 0.05 * area / w.chem.molar_volume(LIQUID, Phase::Liquid);
+    // The liquid fills its pores halfway between the wilting point, under which the air takes none, and field capacity,
+    // over which it sinks to the bed's store.
+    let ph = &w.cfg.phys;
+    let film = (ph.wilt + ph.field) / 2.0 * ph.porosity * ground_of(&w, i).0 * area / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, film);
     set_amount(&mut w, Node::ground(i), DISSOLVED, 1e3);
     hold_ground(&mut w, i, 330.0);
@@ -1014,6 +1022,38 @@ fn the_open_low_ground_of_an_island_in_the_planets_air_holds_the_planets_level()
         assert!((low.level - pcore::space::wear::STAND_M).abs() < 1e-6, "month {month}: the open low ground at {} m", low.level);
     }
     assert!(w.counts.edge_liquid[0] < 0.0, "{} m3 came in at the edges", w.counts.edge_liquid[0]);
+    books.assert_kept(&w, 1e-9);
+}
+
+/// What runs off and stands never takes more of a liquid from a cell than it holds: on an island in the planet's air, a
+/// second liquid (`SECOND_LIQUID`) lies in every other cell of the open low ground at the map's edge, and that ground is
+/// made short of its liquid, so what it lacks comes in at the edge, mixed of what the edge cells hold, and cells that
+/// held none of the second liquid give some on in the same pass; in a year of months no number is set to zero beyond
+/// rounding (`Counters::rounded`), and the books are kept.
+#[test]
+fn what_runs_off_takes_no_more_of_a_liquid_than_a_cell_holds() {
+    let mut w = worldgen::terrain::new_island(1, (16, 16), pcore::space::terrain::Shape::One, worldgen::terrain::banded((30.0, 55.0)));
+    worldgen::planet::stand(&mut w);
+    pcore::step(&mut w);
+    let low = w.pools().into_iter().filter(|l| l.low).max_by(|a, b| a.area.total_cmp(&b.area)).expect("open low ground");
+    // Its cells at the map's edge, where what it lacks comes in: every other one holds the second liquid.
+    let edge: Vec<usize> = low.cells.iter().map(|&i| i as usize).filter(|&i| {
+        let [west, north, east, south] = w.map.bounds(i);
+        west <= 0.0 || north <= 0.0 || east >= w.map.w as f64 || south >= w.map.h as f64
+    }).collect();
+    for &i in edge.iter().step_by(2) {
+        put(&mut w, SECOND_LIQUID, i, SECOND_MOL);
+    }
+    // The open low ground a hundredth short of its liquid: what it lacks comes in at the edge.
+    for &i in &low.cells {
+        let short = -LOW_SHORT * w.g(LIQUID, i as usize);
+        put(&mut w, LIQUID, i as usize, short);
+    }
+    let (books, rounded) = (Books::now(&w), w.counts.rounded[0]);
+    (0..w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
+    let put_all = SECOND_MOL * edge.len().div_ceil(2) as f64;
+    println!("{} cells of the open low ground at the edge; set to zero in a year: {:.3e} mol", edge.len(), w.counts.rounded[0] - rounded);
+    assert!(w.counts.rounded[0] - rounded <= 1e-12 * put_all, "{} mol set to zero", w.counts.rounded[0] - rounded);
     books.assert_kept(&w, 1e-9);
 }
 

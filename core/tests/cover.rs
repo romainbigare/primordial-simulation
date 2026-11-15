@@ -116,7 +116,7 @@ fn the_light_reaction_goes_with_its_gas() {
     assert!(half > 0.0 && half < 1.0 && p.gas_factor(2.0 * p.gas_ref) > 1.0, "{half}");
 }
 
-/// A plant feels drought against the pores of its own ground (`cover::available`, `cover::activity`): it is fully active
+/// A plant feels drought against the pores of its own ground (`Physics::available`, `cover::activity`): it is fully active
 /// while its ground holds the share of what it holds for roots its moisture gene sets, none at the wilting point
 /// (`wilt`), between the two it slows; a kind of dry ground (`MOIST` -1) is still fully active where the light-eaters
 /// have slowed.
@@ -124,7 +124,7 @@ fn the_light_reaction_goes_with_its_gas() {
 fn a_plant_slows_from_its_share_to_the_wilting_point() {
     let ph = pcore::Physics::default();
     let (herb, dry) = (genes(), KINDS[DRY_ROW].genes);
-    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(&ph, g, cover::available(&ph, filled));
+    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(g, ph.available(filled));
     let filled = |share: f64| ph.wilt + share * (ph.field - ph.wilt);
     let slows = cover::dec(herb[cover::MOIST]);
     let (wilting, full, half) = (act(&herb, ph.wilt), act(&herb, filled(slows * (1.0 + 1e-9))), act(&herb, filled(0.5 * slows)));
@@ -398,7 +398,7 @@ fn the_frost_gene_falls_where_winters_are_cold() {
     let tender = g;
     let kills = |w: &pcore::World, cells: &[usize]| {
         let at = |i: usize| {
-            let act = cover::activity(&w.cfg.phys, &tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
+            let act = cover::activity(&tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
             cover::frozen(&w.cfg.phys, w.chem.subs[parts.liquid].melt, tender[FROST] as f64, (w.t_ground_last(i), act))
         };
         cells.iter().map(|&i| at(i)).fold(0.0, f64::max)
@@ -577,4 +577,59 @@ fn the_cover_lives_on_its_cells_land() {
     let kg = cover::per_m2(&w, |c, mm, x| c.kg(mm, x));
     let [a, b] = [whole, shore].map(|i| kg[i] * area[i] / land(&w, i));
     assert!((a / b - 1.0).abs() < 1e-9, "{a} kg per m2 of land on the whole cell, {b} on the shore cell");
+}
+
+/// A stand of the tree kind (2 kg per m²) on ground that held nothing for roots half of the last year
+/// (`Cover::idle`) lives through two years of six good months and six months without gain (`cover::live` with a
+/// garden's surroundings: warm sun, its ground full; then either its ground holds nothing for roots at the same warmth,
+/// or its ground is frozen). A kg of leaf costs more to keep through six warm dry months than to build anew, and less
+/// through six frozen ones (the burning's pace is low in the cold): so in the dry years it drops all its leaves as its
+/// dry season starts, keeps its walls and its store, and grows its leaves again from its store when its ground is wet
+/// again; in the frozen years it keeps its leaves (Kikuzawa 1991, `grow::shed`).
+#[test]
+fn a_stand_drops_its_leaves_for_a_long_dry_season_but_not_for_a_frozen_one() {
+    let (mut w, i) = start();
+    assert!(cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 2.0));
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, area) = (p.mm(&w.chem), cover::ground(&w, i));
+    let (sun, month) = (200.0, w.cfg.calendar().month as f64);
+    let seasons = |frozen: bool| {
+        let mut c = w.life.cover(i).clone();
+        c.idle = 0.5;
+        let mut counts = w.counts.clone();
+        let mut held = Vec::new();
+        for m in 0..24u64 {
+            let good = m % 12 < 6;
+            let mut ground = [0.0; pcore::units::MAX_SUBSTANCES];
+            w.chem.minerals().iter().for_each(|&(k, _)| ground[k] = 1e9);
+            let a = cover::Around {
+                t: if good || !frozen { 295.0 } else { 270.0 },
+                liquid: if good { 1e9 } else { 0.0 },
+                moist: if good { 1.0 } else { 0.0 },
+                reach: 1.0,
+                light: c.mark + sun * month,
+                gas: 1.0,
+                thirst: 0.0,
+                pores: 0.0,
+                air: [f64::INFINITY; pcore::units::MAX_SUBSTANCES],
+                ground,
+                tick: m,
+            };
+            let _ = cover::live(&w, &mut c, &p, &a, (i, month), &mut counts);
+            let Some(x) = c.held().find(|&x| c.root[x] == TREE_ROW as u32) else { panic!("month {m}: the stand died; {held:?}") };
+            held.push((c.living(&mm, x) / area, c.walls(&mm, x) / area, c.mol[x][cover::FUEL] * mm[cover::FUEL] / area));
+        }
+        held
+    };
+    let (dry, cold) = (seasons(false), seasons(true));
+    for (m, (d, f)) in dry.iter().zip(&cold).enumerate() {
+        println!("month {m:2}: dry year living, walls, fuel kg/m² {:.3} {:.3} {:.3}; frozen year {:.3} {:.3} {:.3}", d.0, d.1, d.2, f.0, f.1, f.2);
+    }
+    // Its dry season: no leaves, its walls and its store kept; the wet months after: leaves again.
+    let (wet, bare) = (dry[5], dry[6..12].iter().map(|d| d.0).fold(0.0, f64::max));
+    assert!(bare < 1e-3 * wet.0, "it kept {bare} kg/m² of leaves through its dry season (had {})", wet.0);
+    assert!(dry[11].1 > 0.9 * wet.1 && dry[11].2 > 0.0, "it lost its walls or its store: {wet:?} then {:?}", dry[11]);
+    assert!(dry[12].0 > 0.0 && dry[17].0 > 0.1 * wet.0, "it grew no leaves again: {:?} then {:?}", dry[12], dry[17]);
+    // Frozen seasons: its leaves are kept.
+    assert!(cold[11].0 > 0.5 * cold[5].0, "it dropped its leaves for a frozen season: {:?} then {:?}", cold[5], cold[11]);
 }

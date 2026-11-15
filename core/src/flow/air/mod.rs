@@ -10,6 +10,7 @@ mod daily;
 mod edge;
 mod exchange;
 mod radiation;
+mod rise;
 mod planet;
 mod outs;
 mod rain;
