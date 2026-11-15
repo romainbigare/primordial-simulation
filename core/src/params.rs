@@ -232,6 +232,8 @@ pub struct Physics {
     pub strikes: f64,
     /// Width of the fine particles of the remains lying, m
     pub fine_d: f64,
+    /// How long a lit flame front runs, s
+    pub front_life: f64,
     /// The dead remains' share of liquid per dry mass in air of relative vapour h: scale (−ln(1 − h))^power, each as
     /// [its value at `flame::SORB_T`, its change per K]
     pub sorb_scale: [f64; 2],
@@ -380,6 +382,7 @@ impl Default for Physics {
             t_light: 600.0,
             strikes: 5e-8,
             fine_d: 1.5e-3,
+            front_life: 4.0 * DAY_S as f64,
             sorb_scale: [0.1238, -0.001419],
             sorb_power: [0.3702, -0.003578],
             hide: [0.2, 0.5, 0.02],
@@ -438,7 +441,7 @@ impl Config {
         require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
         // A flame sends ahead a share of its heat, lights above any ground's temperature, from particles of some width.
         require(p.flux_ahead > 0.0 && p.flux_ahead <= 1.0, || format!("flux_ahead ({}) must be above 0 and at most 1", p.flux_ahead))?;
-        require(p.t_light > 0.0 && p.strikes >= 0.0 && p.fine_d > 0.0, || format!("t_light ({}) and fine_d ({}) must be above 0, strikes ({}) not below", p.t_light, p.fine_d, p.strikes))?;
+        require(p.t_light > 0.0 && p.strikes >= 0.0 && p.fine_d > 0.0 && p.front_life >= 0.0, || format!("t_light ({}) and fine_d ({}) must be above 0, strikes ({}) and front_life ({}) not below", p.t_light, p.fine_d, p.strikes, p.front_life))?;
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;

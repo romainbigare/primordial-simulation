@@ -185,21 +185,15 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     }
     super::stand::merge_alike(c, &mm, (ph, n), area);
     remember(c, a.moist, year);
-    empty_spent(c, p, (&mm, &e), n, &mut b);
-    counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
-    (b, caught)
-}
-
-/// The slots of cover `c` among its first `n` left with no built cover empty into its remains (`b.dead`), counted as
-/// died in its budget (`DIED`, its parts at `e` J a mol; `mm` their molar masses).
-pub(crate) fn empty_spent(c: &mut Cover, p: &Parts, (mm, e): (&[f64; NP], &[f64; NP]), n: usize, b: &mut Books) {
     for x in 0..n {
-        if c.root[x] != NO_ROOT && c.built(mm, x) <= EMPTY_KG {
+        if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);
-            b.budget[DIED] -= budget::held(e, &c.mol[x]);
+            b.budget[DIED] -= budget::held(&e, &c.mol[x]);
             (c.mol[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0, 0.0);
         }
     }
+    counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
+    (b, caught)
 }
 
 /// Per unit of the light reaction a leaf at the ground's temperature of `a` takes in: the key liquid it draws, mol (what

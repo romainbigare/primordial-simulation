@@ -16,11 +16,12 @@ fn root(up: &mut [u32], mut i: u32) -> u32 {
 }
 
 /// Of the cells whose remains carry a flame (`beds`, by cell; `Bed::carries`): the share of each cell's land that
-/// burns this month of `month` s. Cells that share an edge (a link of some width) join into a region (union by the
-/// lower cell, in the order of the cells); a region of A m² covered by its remains (each cell's land times the share its
-/// remains cover) expects `strikes` × A × the month's share of a year lit flames, Λ, and with no draw each of its cells
-/// burns the share (1 − e^−Λ) of its land where its remains lie, (1 − e^−Λ) × its cover: a flame lit runs over all the
-/// joined remains in the month, which a front of a few m a minute crosses in days (Rothermel 1972).
+/// burns this month of `month` s. A flame lit runs for `front_life` at its bed's speed (`reach`), so it covers a disc of
+/// radius speed × life, no larger than the remains joined to it: cells that share an edge (a link of some width) join
+/// into a region (union by the lower cell, in the order of the cells), of A m² covered by its remains (each cell's land
+/// times the share its remains cover). A point of a cell is reached by the flames lit within that disc, so it expects
+/// λ = `strikes` × the disc's area × the month's share of a year of them, and with no draw the cell burns the share
+/// (1 − e^−λ) of its land where its remains lie, (1 − e^−λ) × its cover.
 pub fn shares(w: &World, beds: &[Option<Bed>], month: f64) -> Vec<f64> {
     let (cells, n) = (w.mesh.cells(), beds.len());
     let carries = |i: usize| beds[i].is_some_and(|b| b.carries());
@@ -39,7 +40,14 @@ pub fn shares(w: &World, beds: &[Option<Bed>], month: f64) -> Vec<f64> {
     for i in (0..n).filter(|&i| carries(i)) {
         area[root(&mut up, i as u32) as usize] += covered(i);
     }
-    let year = w.cfg.calendar().year as f64;
-    let strikes = w.cfg.phys.strikes * month / year;
-    (0..n).map(|i| if carries(i) { (1.0 - (-strikes * area[root(&mut up, i as u32) as usize]).exp()) * beds[i].map_or(0.0, |b| b.cover) } else { 0.0 }).collect()
+    let ph = &w.cfg.phys;
+    let strikes = ph.strikes * month / w.cfg.calendar().year as f64;
+    let mut share = vec![0.0; n];
+    for i in (0..n).filter(|&i| carries(i)) {
+        let b = beds[i].expect("a bed that carries");
+        let radius = super::reach(ph, &b).speed * ph.front_life;
+        let disc = (std::f64::consts::PI * radius * radius).min(area[root(&mut up, i as u32) as usize]);
+        share[i] = (1.0 - (-strikes * disc).exp()) * b.cover;
+    }
+    share
 }

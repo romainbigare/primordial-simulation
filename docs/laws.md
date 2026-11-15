@@ -1069,10 +1069,11 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   more than the site-percolation threshold of the square lattice (`flame::CARRY_SHARE`, 0.5927) and the share
   `flux_ahead` of h_c lights the next kg: M below the moisture of extinction (`flux_ahead` h_c − c (`t_light` − T)) /
   (c_l (T_boil − T) + L_v), 0.18 for the remains of chemistry 0 at 295 K.
-- **Regions** (`flame::shares`, serial, over the cells that carry a flame, in the order of the cells): cells that share
-  an edge join. A region of A m² of covered ground (each cell's land times its cover) expects Λ = `strikes` A × the
-  month's share of a year lit fires; with no draw, each of its cells burns the share f = (1 − e^(−Λ)) × its cover: a fire
-  lit runs over the whole joined region in the month, which a front of a few m a minute crosses in days.
+- **Reach** (`flame::shares`, serial, over the cells that carry a flame, in the order of the cells): a flame lit runs
+  for `front_life` at its bed's speed R (below), so it covers a disc of radius R × `front_life`, no larger than the
+  remains joined to it: cells that share an edge join into a region of A m² of covered ground (each cell's land times
+  its cover). A point of a cell is reached by the flames lit within that disc: it expects λ = `strikes` × the disc's
+  area × the month's share of a year of them, and with no draw the cell burns the share f = (1 − e^(−λ)) × its cover.
 - **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): its remains burn on f; a flame
   through the bed moves at R = `flux_ahead` h_c δ / (τ Q), δ = w / `litter_rho` its depth, τ = 8 minutes an inch of
   `fine_d` its particles' flaming time (Anderson 1969); its intensity is I = h_c w R (Byram 1959), its flame

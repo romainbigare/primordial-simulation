@@ -9,9 +9,10 @@ use crate::life::{Chunk, FLAME};
 use crate::store::{Class, Node};
 use crate::{World, AIR};
 
-/// How high a flame through a bed reaches, m, and how high its plume kills the leaves it meets, m.
+/// How fast a flame runs through a bed, m/s, how high it reaches, m, and how high its plume kills the leaves it meets, m.
 #[derive(Clone, Copy, Debug)]
 pub struct Reach {
+    pub speed: f64,
     pub flame: f64,
     pub scorch: f64,
 }
@@ -24,7 +25,7 @@ pub fn reach(ph: &crate::Physics, bed: &Bed) -> Reach {
     let depth = bed.load / ph.litter_rho;
     let speed = ph.flux_ahead * bed.heat * depth / (RESIDENCE_PER_M * ph.fine_d * bed.light.max(f64::MIN_POSITIVE));
     let kw = bed.heat * bed.load * speed / W_PER_KW;
-    Reach { flame: FLAME_K * kw.powf(FLAME_EXP), scorch: SCORCH_K * kw.powf(SCORCH_EXP) }
+    Reach { speed, flame: FLAME_K * kw.powf(FLAME_EXP), scorch: SCORCH_K * kw.powf(SCORCH_EXP) }
 }
 
 /// Burn `mol` of substance `k` in amounts `m` (of the substances `sub`; an empty `sub`: all from outside) by its burning
@@ -43,8 +44,8 @@ fn burn_up(chem: &Chemistry, b: &mut Books, (sub, m): (&[usize], &mut [f64]), k:
 /// each slot of its cover the soft part of its crown (`contract::crown`, spread evenly over it) that stands in the
 /// flame burns, what stands between the flame and the scorch height dies to its remains, and a slot whose whole crown
 /// stands under the scorch height loses its plants there (a young plant must outgrow the flame between flames; Bond and
-/// Midgley 2001); its seeds lying survive (they lie in the top of the ground, which a passing flame barely warms). Gases
-/// go to its air, what is not a gas to its ground (`life::book`), and the heat the burning frees to its air node.
+/// Midgley 2001; a slot left with no built cover is emptied in the cover's next month); its seeds lying survive (they
+/// lie in the top of the ground, which a passing flame barely warms). Gases go to its air, what is not a gas to its ground (`life::book`), and the heat the burning frees to its air node.
 pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)) {
     let (chem, mm, e) = (&w.chem, p.mm(&w.chem), p.content(&w.chem));
     let r = reach(&w.cfg.phys, bed);
@@ -80,7 +81,6 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)
         (0..NP).for_each(|q| (c.mol[x][q], b.dead[p.sub[q]]) = (c.mol[x][q] - dead[q], b.dead[p.sub[q]] + dead[q]));
     }
     b.budget[BURNT] += c.content(&e) - before;
-    crate::cover::empty_spent(c, p, (&mm, &e), w.cfg.variety, &mut b);
     counts.cover_lost[FLAME as usize] += flows[LIVING] + flows[SCORCHED] + flows[KILLED];
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, x)| *a += x);
     counts.flame.iter_mut().zip(flows).for_each(|(a, x)| *a += x);

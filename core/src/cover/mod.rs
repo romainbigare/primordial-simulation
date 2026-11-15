@@ -20,7 +20,6 @@ mod upkeep;
 pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
-pub(crate) use grow::empty_spent;
 pub(crate) use build::per_input;
 pub(crate) use budget::BURNT;
 pub use lying::{Lying, FROZEN, LANDED, LOTS_LYING, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
