@@ -675,9 +675,24 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         the measured flux, `wind` "anchored, open", and its share falls to none where the air sinks), and no term
         of the rain law reads whether the air rises or sinks. The halves already carry their own vapour; the
         vapour's profile is tall (about 4 km against the measured 2).
-      - In work: **rain follows the air's rise**, one law: a node's rising or sinking mass flux (the divergence of
-        the overturning's low flow, plus wind against the ground's rise, Smith and Barstad 2004); rising air
-        condenses, sinking air dries the low air. The dry belt, the wet windward side and the dry lee together.
+      - Tried and not kept: rain following the rise and sinking of the overturning's low flow. No rain law dries
+        the belt alone: over a year a belt's rain is what rises from it less what the air carries out (the belt
+        22 to 33 degrees: 1,167 → 1,101 mm, while the rising branch went to 2,854 mm).
+      - **Built, accepted, waits to merge with the bucket's mend** (`wip/rain-rise`, d48415ce, gate green;
+        `scratchpad/air2/c2r/c2_sheet.png`): the wind over the ground lifts the air where the ground rises
+        (Smith and Barstad 2004); the wind is the overturning's own low flow turned by the spin, an easterly at
+        every latitude, 0.4 to 1.6 m/s. Windward over lee at one height: 1.5 to 2.6 on the 64 island of the band
+        5 to 50, 3 to 5 on the 32 island of the band 20 to 65 (the real: 2 to 5). Land rain +7 to 10%, piled on
+        the windward side; the cover falls 13 to 33% (the lee, and the 32 island's iced north: 805 → 209 mm at
+        45 to 50 degrees). Closed islands and the key numbers are unchanged; no cost that can be measured.
+        Known limits: no eddy-driven westerlies of the middle latitudes (the wet side there is the east); the
+        wind is a fifth of the measured trades, the same fault as the weak cell; rain falls on the sea beside a
+        windward coast (the rise is taken per air node).
+      - Seen in its sheet, on main too: over the sea at the south edge of the 64 world of the band 5 to 50 the
+        year's rain is a checkerboard from one air node to the next. Asked of the air's helper.
+      - Next for the air's helper, in order: the bucket's evaporation by the share the ground holds for roots;
+        the measure of `wind` at 2, 3 and 5 times (the dry belt, the wind's speed); the long step's error on the
+        land's runoff.
    4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
       keeps grassland open (Bond, Woodward and Midgley 2005). A fresh builder (branch `fire`, scratch
       `scratchpad/fire/`: `design.md`, `fire_today.png`, tables).
@@ -715,10 +730,51 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         0.2 to 0.6). A leafless plant pays nothing (known limit); a kept leaf pays 2.7% of its dry mass a day at
         295 K (real: 1 to 3%); the herb's store pays a quarter of a month of that, the tree's three months
         (real stores: grasses 10 to 30% of dry mass, trees 5 to 10%): no change to the start's rows.
-        **Still not merged: a fifth of the land is bare in both bands.** In work: which cells went bare and
-        why, month by month; the orchestrator's guess: leaves kept through the cold season that the store
-        cannot pay for die as whole plants, where a plant should shed what it cannot pay for. The three commits
-        go to main together (c alone makes the page 88% forest); the slots' mend merges after them.
+        The three commits go to main together (c alone makes the page 88% forest); the slots' mend merges
+        after them.
+      - Third round (a fourth commit: out of season a slot keeps only the leaves its store can pay for and
+        drops the rest as leaves, so it stands leafless with its store; `step1m_table.txt`,
+        `step1m_bare_class.txt`, `trace_*.txt`): bare 0.18 in both bands (main 0.04 and 0.12). **The cells that
+        went bare get 530 to 680 mm, and main's cover there was never alive**: it sat through dry or frozen
+        months at no cost, and on ground under the wilting point all year it stood unchanged from the year it
+        was placed. Three classes: cold (7 months frozen, summer ground at 273 to 280 K, near 55 degrees: 174
+        cells of the band 20 to 65), a dry season of 6 to 7 months (79 and 130 cells), ground never wet (14 and
+        70). So the branch is the more honest world; it merges after two small mends, in work: the budget rule
+        asks the store only to pay the keeping; **a slot is in season only while its gain pays for all that gain
+        needs, the fine roots that draw its liquid too** (in the dry cells' last half-dry month the roots'
+        upkeep, 42% of the whole, emptied the store and the herbs died as whole plants): a plant whose pores
+        would lose more than they bring keeps them shut (Cowan and Farquhar 1977).
+      - Fourth round (`wip/fire`, six commits, gate green; `step1r_table.txt`, `step1r_page.png`,
+        `trace_roots_2508_1108.txt`): both mends are in (`upkeep::root_share`: from a roots' share of 1 of the
+        gain the pores stay shut). Forest / open / bare: 0.59/0.23/0.17 (band 20 to 65), 0.51/0.32/0.17 (5 to
+        50); no plant dies whole in the half-dry month any more; a tree keeps its walls and store through five
+        dry months. **Not merged: in hot air plants sit shut through wet months** (cell 2508, 1,510 mm: the
+        fine roots for the month's liquid cost 1.47, 0.92 and 1.07 of the gain at 300 to 303 K; a real plant
+        spends about a third on its roots). The season rule is right; the roots' number is off: `root_uptake`
+        is anchored on what a temperate forest's roots carry in its peak month, a typical flow, and is used as
+        what a root can carry. In work: re-anchored by a method fixed before any run (the highest biome value of
+        peak-month transpiration over live fine-root mass). Left as they are: the cold class (near-tundra, a
+        summer too short to pass the bare line), the never-wet cells (the bucket).
+      - **Step 1 is on main** (seven commits, `SNAPSHOT_VERSION` 146, `Cover::idle` one number per cell): a
+        leaf's gain falls in a straight line to the wilting point (FAO-56); its upkeep follows temperature; it
+        is in season while its gain pays its keep and the fine roots for its liquid, and keeps its pores shut
+        otherwise (`upkeep::root_share`); out of season it is shed where keeping it through the expected months
+        costs more than building it anew or more than the store can pay (Kikuzawa 1991); `root_uptake` is the
+        highest flow roots are seen to carry (1.6e-3, a transition forest's wet season). Year 100, 64 drawn,
+        main before → now, forest / open / bare: 0.78/0.18/0.04 → 0.63/0.21/0.16 (band 20 to 65),
+        0.62/0.26/0.12 → 0.54/0.30/0.16 (5 to 50); land at 10 to 20 degrees bare 0.23 → 0.17; woods leafless in
+        the dry month on 8 to 9% of forest cells; dead fuel on open land 0.29 and 0.09 kg/m² in the dry month.
+        Known limits, in `docs/laws.md` or here: a leafless plant pays nothing; at 303 K the roots still cost
+        all of the gain and the first hot wet months stay shut (the roots' breathing goes by the bare rate
+        law, real roots acclimate); the cold class stays bare (near-tundra: real ground like it holds 0.5 to 1
+        kg/m² of low cover); coastal forest 0.71 → 0.48 and 0.44 → 0.32 of coastal land cells; the takers'
+        tests place their cover (`FED_KG`). The builder's room is used up: fire v1 goes to a fresh builder
+        (`scratchpad/fire/handover.md`, `design.md`, snapshots in `/dev/shm/fire`).
+      - **Found with it, a fault of Flow: the ground's bucket dries by evaporation below the wilting point**
+        (rain 544 mm against 563 mm rising; 16% of the pores full in every month, `wilt` 25%), so on semi-dry
+        land rain never becomes liquid a root can draw. With the air's helper, after the rain on rising ground:
+        what rises from the pores goes by the share the ground holds for roots (Manabe 1969), one helper for
+        the ground and the plants.
       - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
         to the ground's wetness; the moisture of extinction falls out of the heat balance (0.17 to 0.18); a
         cell carries fire where fuel covers more than the percolation threshold of the ground; burnable cells

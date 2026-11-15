@@ -29,6 +29,8 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
     let Some(wall) = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL]) else { return };
     // Per kg built: the units of each conversion, and what they take; a small plant builds few walls (`stand::walled`).
     let walls = dec(g[WALLS]) * super::stand::walled(ph, c.plant(&mm, x));
+    // A slot that shed all its leaves builds them anew on the walls it stands on: matter alone.
+    let walls = if s.living > 0.0 { walls } else { 0.0 };
     let fm = 1.0 / (1.0 + walls);
     let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, walls * fm / mm[WALL] / wall.outputs[0].1 as f64)];
     let mut need = [0.0; MAX_SUBSTANCES];
@@ -36,7 +38,9 @@ pub(super) fn build(w: &World, c: &mut Cover, p: &Parts, x: usize, (s, pays): (&
     let burn = &chem.reactions[p.burn];
     let (fuel_burn, burn_e) = (per_input(burn, p.sub[FUEL]).unwrap_or(1.0), -chem.dh(p.burn));
     let fpk = need[p.sub[FUEL]] + ph.c_copy / burn_e * fuel_burn;
-    let surplus = (c.mol[x][FUEL] - dec(g[STORE]) * s.built / mm[FUEL]).max(0.0);
+    // It keeps its reserve back while it holds leaves; a slot that shed them all builds them anew of its store.
+    let reserve = if s.living > 0.0 { dec(g[STORE]) * s.built / mm[FUEL] } else { 0.0 };
+    let surplus = (c.mol[x][FUEL] - reserve).max(0.0);
     // The most each limit allows, kg: the fuel, and each mineral from the ground; a fixer then makes what the mineral it
     // fixes lacks, its fuel counted.
     let minerals = || (0..chem.ns()).filter(|&k| need[k] > 0.0 && k != p.sub[FUEL]);
