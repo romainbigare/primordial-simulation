@@ -40,7 +40,8 @@ pub(super) struct Pushes {
 }
 
 /// One end of a link as its pushes read it (`push`): its air's mol per m³, the mean height of its ground, m, its
-/// latitude, degrees, its warmth, K, and that's gradient [east, south], K per m of the map; the rise of a mol's static
+/// latitude, degrees, its warmth's gradient [east, south], K per m of the map (the warmth, K, its temperature raised to
+/// a common height by its drop with height); the rise of a mol's static
 /// energy over its column's height, J/(mol m); the energy a mol of its near-ground air holds over its column's mean heat
 /// per mol, J/mol (`aloft`); the speed of sound in it, m/s; and its pressure per mol, Pa/mol.
 pub(super) struct End {
@@ -48,7 +49,6 @@ pub(super) struct End {
     pub(super) aloft: f64,
     pub(super) za: f64,
     pub(super) lat: f64,
-    pub(super) warmth: f64,
     pub(super) grad: [f64; 2],
     pub(super) rise: f64,
     pub(super) sound: f64,
@@ -56,16 +56,16 @@ pub(super) struct End {
 }
 
 impl End {
-    /// Air node `j` as the last state left it (`Scratch::nt`, `capa`, `mass`, `ta`, `gam`), its warmth `warmth` and
-    /// that's gradient `grad`.
-    pub(super) fn of(cfg: &Config, s: &Scratch, air: &Level, j: usize, (warmth, grad): (f64, [f64; 2])) -> End {
+    /// Air node `j` as the last state left it (`Scratch::nt`, `capa`, `mass`, `ta`, `gam`) and its warmth's gradient
+    /// `grad`.
+    pub(super) fn of(cfg: &Config, s: &Scratch, air: &Level, j: usize, grad: [f64; 2]) -> End {
         // A mol's static energy, cp T + M g z, grows with height by M g - cp gam as its temperature falls by gam.
         let rise = (cfg.gravity * s.mass[j] - s.capa[j] * s.gam[j]) / s.nt[j].max(f64::MIN_POSITIVE);
         // gamma = cp / (cp - R) per mol; p = c n with c = RT/V.
         let cp = s.capa[j] / s.nt[j];
         let sound = (cp / (cp - R_GAS) * R_GAS * s.ta[j] * s.nt[j] / s.mass[j]).sqrt();
         let aloft = aloft(cp, s.mass[j] / s.nt[j] * cfg.gravity, s.gam[j], (s.zair[j], s.za[j]));
-        End { rho: s.nt[j] / s.vol[j], aloft, za: s.za[j], lat: air.lat()[j], warmth, grad, rise, sound, c: R_GAS * s.ta[j] / s.vol[j] }
+        End { rho: s.nt[j] / s.vol[j], aloft, za: s.za[j], lat: air.lat()[j], grad, rise, sound, c: R_GAS * s.ta[j] / s.vol[j] }
     }
 }
 
@@ -91,15 +91,17 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
     let (rho, depth) = ((a.rho + b.rho) / 2.0, cfg.air_top_m - (a.za + b.za) / 2.0);
     let lat = (a.lat + b.lat) / 2.0;
     let (turn, cell) = (cfg.rotation * lat.to_radians().sin(), cell.share(lat));
-    // The warmth's difference across the link, as its gradient times its offset: on the map's metres, as the stretch
-    // lengthens both alike.
+    // The warmth's differences along the link and across it, as the mean of its ends' fitted gradients times its
+    // offset: on the map's metres, as the stretch lengthens both alike. A fitted gradient reads the warmth over each
+    // end's neighbours, so a wave no longer than two nodes, the mesh's own mode and no flow of air's, drives none.
     let (ga, gb) = (a.grad, b.grad);
+    let along = ((ga[0] + gb[0]) * ab[0] + (ga[1] + gb[1]) * ab[1]) / 2.0;
     let across = ((ga[0] + gb[0]) * ab[1] - (ga[1] + gb[1]) * ab[0]) / 2.0;
     let mix = st.per_column(cfg.mix * rho * depth * wd / d);
-    // A mass flux by the gradient, the link's difference over its length `d`, through its half cross-section, so it
-    // does not depend on `d`: down the gradient inside the cell of the low latitudes (`in_cell`).
+    // A mass flux by the gradient, the difference along the link over its length `d`, through its half cross-section,
+    // so it does not depend on `d`: down the gradient inside the cell of the low latitudes (`in_cell`).
     let per_k = st.per_column(cfg.wind / d * rho * wd * depth / 2.0);
-    let (down, over) = (per_k * cell * (b.warmth - a.warmth), per_k * (cell * (b.warmth - a.warmth) + turn * across));
+    let (down, over) = (per_k * cell * along, per_k * (cell * along + turn * across));
     // The middles of a column's halves lie half its depth apart.
     let contrast = down * (a.rise + b.rise) / 2.0 * depth / 2.0;
     // Sound crosses the link in d / its speed. The stretched column holds the stretch squared times the mol at the same
@@ -135,7 +137,7 @@ pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, (link
 pub(super) fn ends(cfg: &Config, s: &Scratch, air: &Level) -> Vec<End> {
     let warmth: Vec<f64> = (0..air.n()).map(|j| s.ta[j] + s.gam[j] * s.zair[j]).collect();
     let grad = gradient(air, &warmth);
-    (0..air.n()).map(|j| End::of(cfg, s, air, j, (warmth[j], grad[j]))).collect()
+    (0..air.n()).map(|j| End::of(cfg, s, air, j, grad[j])).collect()
 }
 
 /// The gradient of `v` at each node [east, south], per m: the least-squares fit of its differences to its bordering
@@ -386,16 +388,16 @@ mod tests {
 
     /// The overturning's halves carry the static energy the upper holds over the lower from the warmer column to the colder
     /// as far as they run down the gradient, and none as far as they run along the isotherms: at 45° (past the cell),
-    /// two columns of one warmth with a gradient across their link move air along it, and no heat by their halves;
-    /// inside the cell, a warmer end draws heat from it.
+    /// two columns whose warmth falls across their link move air along it, and no heat by their halves; inside the
+    /// cell, where it rises along the link, its warmer end draws heat from it.
     #[test]
     fn the_overturning_along_the_isotherms_carries_no_heat_by_its_halves() {
         let cfg = Config::default();
-        let end = |lat: f64, warmth: f64, south: f64| End { rho: 40.0, aloft: 0.0, za: 0.0, lat, warmth, grad: [0.0, south], rise: 1.5, sound: 1e-6, c: 1e-3 };
+        let end = |lat: f64, grad: [f64; 2]| End { rho: 40.0, aloft: 0.0, za: 0.0, lat, grad, rise: 1.5, sound: 1e-6, c: 1e-3 };
         let (st, link) = (Stretch(1.0), (1e5, 1e5, [1e5, 0.0]));
-        let [_, over, contrast, _, _] = push(&cfg, st, (&end(45.0, 280.0, 1e-5), &end(45.0, 280.0, 1e-5)), link, &Cell::year(&cfg));
+        let [_, over, contrast, _, _] = push(&cfg, st, (&end(45.0, [0.0, 1e-5]), &end(45.0, [0.0, 1e-5])), link, &Cell::year(&cfg));
         assert!(over != 0.0 && contrast == 0.0, "along the isotherms: {over} mol/s, {contrast} W by the halves");
-        let [_, over, contrast, _, _] = push(&cfg, st, (&end(10.0, 290.0, 0.0), &end(10.0, 291.0, 0.0)), (1e5, 1e5, [1e5, 0.0]), &Cell::year(&cfg));
+        let [_, over, contrast, _, _] = push(&cfg, st, (&end(10.0, [1e-5, 0.0]), &end(10.0, [1e-5, 0.0])), link, &Cell::year(&cfg));
         assert!(over > 0.0 && contrast > 0.0, "down the gradient: {over} mol/s, {contrast} W from the warmer end");
     }
 }

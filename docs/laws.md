@@ -660,7 +660,10 @@ the day, from the air at the step's start. So their heat goes as -(p_s / g) `mix
 per kg, the diffusion the eddies of the measured climate follow (Hwang and Frierson 2010). **Known limit:** the vapour
 goes by its share of the whole column, not the near-ground air's, so its latent heat carried is about a third of what
 that diffusion of the near-ground air's moisture would carry. **Overturning**: the lower half flows to the warmer column and the upper half back, a
-mass flux of `wind` per K/m of the warmth gradient along the link (its difference over its length), turned by the
+mass flux of `wind` per K/m of the warmth gradient along the link (the mean of its two ends' gradients, each fitted
+to its node's neighbours, `wind::gradient`: a wave no longer than two nodes is the mesh's own mode and no flow of
+air's, and a flow that answered to a difference one node wide would feed it, moist air drawn to the warmer node
+warming it as it rains; the eddies even it), turned by the
 planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the nodes.
 Down the gradient it runs only inside the month's cell of the low latitudes (`air::cell`): the upper air flows
 poleward keeping its angular momentum, and past a latitude the warmth's fall can no longer balance the wind that gives
@@ -731,8 +734,8 @@ metres: a closed box stretched over a wide band freezes over). The table's prese
 these laws when the world is built (`worldgen::planet`): three air blocks round, rows of 5°, all of it low open ground
 (liquid over all of it), for 10 years from its starting state (an island of 32 x 32 on the band 20° to 65° feels a run of
 20 years within 0.2 K in every row), the same strip for every island (the page makes it once a session);
-its last year's air per row and month (its temperature, warmth, mol per m² and each gas's share, each row the 1-2-1
-mean of it and its neighbours, as the rows of the low latitudes alternate warmer and colder) is saved with the world.
+its last year's air per row and month (its temperature, warmth, mol per m² and each gas's share) is saved with the
+world.
 Beyond each air node of the map's edges lies a column of that air, north and south at the latitude one row of nodes
 on, east and west at the node's own, at the time of the year (between rows and months, linearly), over low open ground
 at 0 m, its warmth's gradient the strip's. It is linked to the node as two nodes are (`wind::push`, the stretch's
