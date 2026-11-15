@@ -4,6 +4,7 @@
 use super::super::Scratch;
 use super::daily::Mean;
 use super::seen::{parts, Seen};
+use super::drift::drift;
 use super::step::Active;
 use super::{at_height, over_cell, touching};
 use crate::{math::{mean_decay, mean_passed}, World, AIR};
@@ -236,7 +237,7 @@ impl Pool {
 /// the bodies' `patches` as one), by the share `a` of the node's air over it (its weight there times its area over
 /// the area it sees), past the node's saturation ratio `e` at which the air touching it saturates (colder on higher
 /// ground). The node rains what its places hold over their saturation, summed (laws.md 1.5).
-pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &[Vec<u32>]) -> Wet {
+pub(super) fn wet(w: &World, s: &Scratch, (act, wind): (&[Active], &[[f64; 2]]), t0: &[f64], patches: &[Vec<u32>]) -> Wet {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     let (n, na, nx) = (cells.n(), air.n(), act.len());
     // Per node and active gas what saturates its air at its mean ground, per K (`[q * nx + y]`); per place what saturates
@@ -269,7 +270,7 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
     // patch's at its first.
     let (at, by, rains) = (&s.corners.by_at, &s.corners.by, act.iter().map(|ac| ac.cond).collect::<Vec<bool>>());
     let parts = parts(w.cfg.moist_min);
-    let nodes = crate::par::map_n(na, crate::par::UNCOUNTED, |q| {
+    let own: Vec<(Vec<u32>, Vec<f64>)> = crate::par::map_n(na, crate::par::UNCOUNTED, |q| {
         let (mut place, mut share, mut first) = (Vec::new(), Vec::new(), Vec::<(u32, usize)>::new());
         for &(i, c) in &by[at[q]..at[q + 1]] {
             let (p, a) = (place_of[i as usize], s.wt[i as usize][c as usize] * over_cell(w, s, i as usize));
@@ -283,12 +284,19 @@ pub(super) fn wet(w: &World, s: &Scratch, act: &[Active], t0: &[f64], patches: &
             place.push(p);
             share.push(a);
         }
-        let (sat, node, places) = (&sat, &node, &place);
+        (place, share)
+    });
+    let drift = drift(w, wind, &own);
+    let nodes = crate::par::map_n(na, crate::par::UNCOUNTED, |q| {
+        let ((place, share), (beyond, drift)) = (&own[q], &drift[q]);
+        let (sat, node, places) = (&sat, &node, place);
         let ratio = (0..nx).flat_map(|y| places.iter().map(move |&p| sat[p as usize * nx + y] / air.area()[q] / node[q * nx + y])).collect();
-        // What condenses over a place lands there by the share its own width keeps of the drift (`rain_drift_m`).
+        // What condenses over a place lands there by the share its own width keeps of the drift, as long as the node's
+        // low wind carries it in `rain_drift_s` (`drift`); with no wind all of it.
         let size = |p: u32| (p as usize).checked_sub(n).map_or_else(|| cells.area()[p as usize], |b| areas[b]);
-        let kept = place.iter().map(|&p| 1.0 - (-size(p).sqrt() / w.cfg.rain_drift_m).exp()).collect();
-        Seen::new(place, share, ratio, (&rains, &parts), kept)
+        let reach = wind[q][0].hypot(wind[q][1]) * w.cfg.rain_drift_s;
+        let kept = place.iter().map(|&p| 1.0 - (-size(p).sqrt() / reach).exp()).collect();
+        Seen::new(place.iter().chain(beyond).copied().collect(), share.clone(), ratio, (&rains, &parts), (kept, drift.clone()))
     });
     Wet { nodes, patches: places, place_of }
 }
@@ -340,7 +348,7 @@ mod tests {
     #[test]
     fn a_block_follows_its_ground_and_its_rain_through_the_day() {
         let one = (&[true][..], &[1.0][..]);
-        let wet = Wet { nodes: vec![Seen::new(vec![0, 1], vec![0.3, 0.7], vec![1.1, 0.9], one, vec![1.0; 2]), Seen::new(vec![2], vec![1.0], vec![0.95], one, vec![1.0])], patches: vec![], place_of: vec![0, 1, 2] };
+        let wet = Wet { nodes: vec![Seen::new(vec![0, 1], vec![0.3, 0.7], vec![1.1, 0.9], one, (vec![1.0; 2], vec![0.3, 0.7])), Seen::new(vec![2], vec![1.0], vec![0.95], one, (vec![1.0], vec![1.0]))], patches: vec![], place_of: vec![0, 1, 2] };
         let pool = Pool { c: 3.0, s: -0.1, v: vec![0.6, 0.4], off: vec![0.0, 0.0], full: vec![1.0, 0.8] };
         let (dd, dt, tau, x0) = (1e5, 1e5, 2e4, 1.0);
         let mut room = Room::default();

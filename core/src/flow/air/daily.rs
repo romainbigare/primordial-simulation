@@ -8,7 +8,7 @@ use super::soak::{land, Soak, Soaks};
 use super::stretch::Stretch;
 use super::together::Together;
 use super::cell::Cell;
-use super::rise::{low_wind, rise, saturates};
+use super::rise::{rise, saturates};
 use super::edge::Edges;
 use super::wind::{ends, even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::UP, step::Active};
@@ -162,7 +162,7 @@ pub(in crate::flow) fn blocks(w: &World) -> Vec<Vec<u32>> {
 /// The air level over a step of `dt` seconds, in days: each node's exchange with its ground and its rain (`exchange`, by
 /// the law `ground` of its cells), then each block evened out (`even`) and the wind across the links between blocks
 /// (`wind`).
-pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f64) -> Mean {
+pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Ground, &[[f64; 2]]), dt: f64) -> Mean {
     let (air, ng, nx) = (w.mesh.level(AIR), s.state.gas.len(), act.len());
     let na = air.n();
     let days = (dt / DAY).ceil().max(1.0);
@@ -184,7 +184,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs] };
     let v = |len: usize| vec![0.0; len];
     let edges = Edges::of(w, s, &ends, &cell);
-    let rise = rise(w, s, &low_wind(w, &ends, &cell, |j| blocks[block[j]].len() == 1));
+    let rise = rise(w, s, low);
     let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), landed: vec![Vec::new(); nx * na], soaked: v(ground.soaks.len()), cloud: v(na), moved, edges };
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();

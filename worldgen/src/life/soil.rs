@@ -8,8 +8,9 @@ use pcore::World;
 /// when life starts, as an edit at each cell's temperature: placed at year 0, rain would wash it into the basins before
 /// any body. Returns one line.
 pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
-    // The standing liquid as Flow's state of the world now has it (`contract::env_of`).
-    pcore::flow::state(w, true);
+    // The standing liquid and the land as Flow's state of the world now has them (`contract::surroundings`: life starts
+    // at a month's start).
+    pcore::contract::surroundings(w);
     let land = open_land(w);
     let all: f64 = land.iter().map(|&(_, m2)| m2).sum();
     let mut said = Vec::new();

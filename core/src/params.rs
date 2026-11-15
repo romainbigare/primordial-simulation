@@ -69,8 +69,8 @@ pub struct Config {
     pub rain_time: f64,
     /// Least ratio of an air node's vapour to what saturates it at which its moistest air saturates
     pub moist_min: f64,
-    /// Distance the wind carries condensed rain before it lands, m
-    pub rain_drift_m: f64,
+    /// Time condensed rain drifts with the low wind before it lands, s
+    pub rain_drift_s: f64,
     /// Loose solid volume moving liquid carries off per J it dissipates, m³/J
     pub carry: f64,
     /// Bonded volume broken per J dissipated, times 1 / bond strength, m³/J
@@ -427,7 +427,7 @@ impl Config {
         let lit = (0.0..1.0).contains(&self.drop_forward) && self.drop_dark.iter().all(|x| (0.0..=1.0).contains(x));
         require(lit, || format!("drop_forward ({}) must be from 0 to below 1 and drop_dark ({:?}) from 0 to 1", self.drop_forward, self.drop_dark))?;
         // Rain lands over a width the drift sets (`seen::Seen::landing` divides by it).
-        require(self.rain_drift_m > 0.0, || format!("rain_drift_m ({}) must be above 0", self.rain_drift_m))?;
+        require(self.rain_drift_s > 0.0, || format!("rain_drift_s ({}) must be above 0", self.rain_drift_s))?;
         // Hardening lowers a lethal limit, never raises it.
         require(p.harden >= 0.0 && p.harden.is_finite(), || format!("harden ({}) must be at least 0", p.harden))?;
         // A taker's coat divides by its insulation (`fauna`).
@@ -480,7 +480,7 @@ impl Default for Config {
             line_spread: 4.0,
             rain_time: 86400.0,
             moist_min: 0.5,
-            rain_drift_m: 2e4,
+            rain_drift_s: 2000.0,
             carry: 2e-11,
             wear: 1.4e-11,
             creep: 6.3e-11,

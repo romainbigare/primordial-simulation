@@ -3,7 +3,7 @@
 //! link (`wind::pushes`) and across the map's open edges (`edge`), and the side of the blocks the eddies even within a
 //! day (`daily::blocks`), and with the blocks the mixing of a body's liquid under each (`basin::mix`). The exchanges up
 //! and down (ground and air, sunlight, heat radiation, rain out) are per m² and do not read it, nor does the rain's
-//! drift (`Config::rain_drift_m`) or anything on the ground.
+//! drift (`Config::rain_drift_s`) or anything on the ground.
 
 use crate::World;
 
