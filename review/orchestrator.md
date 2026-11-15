@@ -357,6 +357,25 @@ as real as possible, with features dramatised for the game: textures, details, r
   every zoom. The owner's WebGPU faults did not show in the test browser (software WebGL2 only). The
   orchestrator's lead, given to the builder: float precision on a phone's GPU (hashes on `sin` and `fract` fed
   with large world coordinates): integer hashes and tile-local coordinates. **Step (a) is in work.**
+- **Step (a) is on main and on the page** (`scratchpad/looks/work/STEP_A_warm_before_after.png`,
+  `STEP_A_wide_before_after.png`, `TABLE_before.txt`, `TABLE_after.txt`, `continuity.py`, `d3_forest.png`):
+  - The phone's faults were provoked at a pixel ratio of 3 (blocks and smears at 2 m) and mended: a pixel's
+    place came from the uv of a rectangle as large as the map, and hashes took one float of tens of km. Each
+    pixel now takes its place as a whole multiple of 1,024 m plus a remainder, and every noise and hash with
+    cells under a metre reads an exact lattice point. Noise of a metre or more is still on plain floats.
+  - The sward's blades turned their lattice about the world's origin by an angle that changed from tuft to
+    tuft (the weave); they blend three fixed turns. All noise is gradient noise; the field's crowns are
+    warped; a crown's clumps are noise, not three cosines.
+  - Near and far: reeds on soaked ground tint the far view as they did the near one; the field's shadow has
+    the size of the marks'; the field's colours are the mean of what the plants show on a screen.
+  - **Not clean yet**: 10 of 36 steps between neighbouring scale bars still move the mean colour by more than
+    5% (16 before): open land 17%, the shore 10% where single trees start to show, forest 10.5%, bare land
+    4.3%. Ground detail shows faintly through crowns (the marks keep 15% of the ground under them). The
+    maze, the thin lines a few metres apart and the lines over rock did not show in the test browser: the
+    owner's phone is the test. WebGPU could not be run in the test browser; the build's own translator reads
+    the WGSL. Frame times unchanged (software GL: 0.28 s at 2 km, 4 s at 20 m on the 64 island).
+  - The far map changed with it: the wide climate's brown western hill shows green from far in winter (as
+    zooming in showed), the warm bare land is lighter.
 - **The builder's brief is `review/look-brief.md`** (the owner asked for it in the repository; it holds their
   words): give it whole to the page builder. The owner's later words in it: textures that follow the seasons;
   dense ground as a blanket of greenery, not copies of one bush; sparse ground full of free detail; stylised
