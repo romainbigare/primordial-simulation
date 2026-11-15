@@ -675,9 +675,24 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         the measured flux, `wind` "anchored, open", and its share falls to none where the air sinks), and no term
         of the rain law reads whether the air rises or sinks. The halves already carry their own vapour; the
         vapour's profile is tall (about 4 km against the measured 2).
-      - In work: **rain follows the air's rise**, one law: a node's rising or sinking mass flux (the divergence of
-        the overturning's low flow, plus wind against the ground's rise, Smith and Barstad 2004); rising air
-        condenses, sinking air dries the low air. The dry belt, the wet windward side and the dry lee together.
+      - Tried and not kept: rain following the rise and sinking of the overturning's low flow. No rain law dries
+        the belt alone: over a year a belt's rain is what rises from it less what the air carries out (the belt
+        22 to 33 degrees: 1,167 → 1,101 mm, while the rising branch went to 2,854 mm).
+      - **Built, accepted, waits to merge with the bucket's mend** (`wip/rain-rise`, d48415ce, gate green;
+        `scratchpad/air2/c2r/c2_sheet.png`): the wind over the ground lifts the air where the ground rises
+        (Smith and Barstad 2004); the wind is the overturning's own low flow turned by the spin, an easterly at
+        every latitude, 0.4 to 1.6 m/s. Windward over lee at one height: 1.5 to 2.6 on the 64 island of the band
+        5 to 50, 3 to 5 on the 32 island of the band 20 to 65 (the real: 2 to 5). Land rain +7 to 10%, piled on
+        the windward side; the cover falls 13 to 33% (the lee, and the 32 island's iced north: 805 → 209 mm at
+        45 to 50 degrees). Closed islands and the key numbers are unchanged; no cost that can be measured.
+        Known limits: no eddy-driven westerlies of the middle latitudes (the wet side there is the east); the
+        wind is a fifth of the measured trades, the same fault as the weak cell; rain falls on the sea beside a
+        windward coast (the rise is taken per air node).
+      - Seen in its sheet, on main too: over the sea at the south edge of the 64 world of the band 5 to 50 the
+        year's rain is a checkerboard from one air node to the next. Asked of the air's helper.
+      - Next for the air's helper, in order: the bucket's evaporation by the share the ground holds for roots;
+        the measure of `wind` at 2, 3 and 5 times (the dry belt, the wind's speed); the long step's error on the
+        land's runoff.
    4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
       keeps grassland open (Bond, Woodward and Midgley 2005). A fresh builder (branch `fire`, scratch
       `scratchpad/fire/`: `design.md`, `fire_today.png`, tables).
