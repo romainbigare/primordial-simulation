@@ -347,6 +347,16 @@ as real as possible, with features dramatised for the game: textures, details, r
 - **The look is in work, and everything else is paused for it** (a Sonnet page builder, branch `look`, scratch
   `scratchpad/looks/work/`): first a plan and a "before" contact sheet, then the brief's steps (a) to (d), each
   with before and after pictures and a stop for the orchestrator's and the owner's word.
+- Its first step is done (no code; `scratchpad/looks/work/BEFORE_contact_sheet.png`, the harness beside it):
+  the mean colour of one spot drifts with zoom (open land's red +38 levels from 20 m to 2 m, the shore from
+  olive to yellow-green, bare land 25 levels lighter from 2 km to 200 m), because the far view takes the mean
+  of the kinds' colours and the near view draws marks with their own tones (banding, outline, lit 1.16, gap
+  0.65, shade 0.35) and nothing makes the two means equal; crowns show a hexagonal pattern (three cosine waves
+  in `lib/crown.wgsl`) and spoke fans (`TWIGS` 17); value noise's contours follow its lattice (`lib/draw.wgsl`,
+  the 50 m blocks and the maze); the sward's blade streaks run along the axes. Bare land and snow are empty at
+  every zoom. The owner's WebGPU faults did not show in the test browser (software WebGL2 only). The
+  orchestrator's lead, given to the builder: float precision on a phone's GPU (hashes on `sin` and `fract` fed
+  with large world coordinates): integer hashes and tile-local coordinates. **Step (a) is in work.**
 - **The builder's brief is `review/look-brief.md`** (the owner asked for it in the repository; it holds their
   words): give it whole to the page builder. The owner's later words in it: textures that follow the seasons;
   dense ground as a blanket of greenery, not copies of one bush; sparse ground full of free detail; stylised
