@@ -344,6 +344,12 @@ as real as possible, with features dramatised for the game: textures, details, r
   bare ground, liquid, snow and rock are, how tall and dense the plants, how dry, the season. Detail is keyed to
   the place so it does not move between frames or zoom levels, and nothing stands on a grid; the look differs by
   habitat because the numbers differ. The animals' drawing stays paused (see the life track).
+- **A first priority of the look, the owner's word: one look at every zoom.** Today zooming in changes a brown
+  land into a green one and olive trees into bright yellow ones. Colour, texture and style must be continuous
+  across all zoom levels: what a far view shows as one tone is the mean of what the near view draws there
+  (the same numbers, the same palette, the near detail fading in over the far tone, never replacing it with
+  another). The builder checks it with pairs of pictures of the same place and moment at each scale bar (20 km,
+  2 km, 200 m, 20 m, 2 m) and the mean colour of each, on dry land, forest, open land and shore.
 - **Variation inside a kind (the owner's word)**: with a world's variety at 8, the drawing adds small procedural
   variations among the plants of one kind (form, size, tone, lean, age) so that the map looks rich and full,
   while the numbers stay correct: the variations spread around the kind's own numbers (its height, its crown,
