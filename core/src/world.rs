@@ -73,17 +73,6 @@ impl Counters {
         self.edges.iter_mut().zip(edges).for_each(|(a, b)| *a += b);
         self.edge_liquid.iter_mut().zip(edge_liquid).for_each(|(a, b)| *a += b);
     }
-    /// A month's counts of cells `month` (cell, amount) are added to the year so far, `year` (one a cell of `n`); after
-    /// the year's last month (`closes`) that year is the last whole one, `last`, for the tape.
-    pub(crate) fn into_year(month: Vec<(u32, f64)>, (year, last): (&mut Vec<f64>, &mut Vec<f64>), n: usize, closes: bool) {
-        year.resize(n, 0.0);
-        for (i, x) in month {
-            year[i as usize] += x;
-        }
-        if closes {
-            *last = std::mem::take(year);
-        }
-    }
     /// What a booking set from just below zero to zero is added (`Counters::rounded`): mol, and J.
     pub(crate) fn add_rounded(&mut self, [mol, heat]: [f64; 2]) {
         (self.rounded[0], self.rounded[1]) = (self.rounded[0] + mol, self.rounded[1] + heat);
@@ -192,11 +181,6 @@ impl World {
     /// Whole months since the start
     pub fn month(&self) -> u64 {
         self.cfg.calendar().months(self.time)
-    }
-    /// Whether the month it is is the last of its year.
-    pub fn year_closes(&self) -> bool {
-        let year = self.cfg.months_per_year as u64;
-        self.month() % year == year - 1
     }
     /// Years since the start, with their fraction
     pub fn year(&self) -> f64 {

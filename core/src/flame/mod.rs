@@ -67,7 +67,20 @@ pub fn month(w: &mut World) {
             }
         });
     }
-    let closes = w.year_closes();
+    tally(w, n);
+}
+
+/// The share each cell burnt in the month (`Counters::burnt`) is added to its year (`Counters::burnt_year`, one a cell
+/// of `n`); after the year's last month that year is the last whole one (`Counters::burnt_last`), for the tape.
+fn tally(w: &mut World, n: usize) {
+    let year = w.cfg.months_per_year as u64;
+    let closes = w.month() % year == year - 1;
     let c = &mut w.counts;
-    crate::Counters::into_year(std::mem::take(&mut c.burnt), (&mut c.burnt_year, &mut c.burnt_last), n, closes);
+    c.burnt_year.resize(n, 0.0);
+    for (i, f) in std::mem::take(&mut c.burnt) {
+        c.burnt_year[i as usize] += f;
+    }
+    if closes {
+        c.burnt_last = std::mem::take(&mut c.burnt_year);
+    }
 }
