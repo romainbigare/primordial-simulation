@@ -615,10 +615,15 @@ vapour between two of the ratios at which a cell starts or stops raining, so the
 to the next, with no smaller steps (`rain::Pool`); the air outside the block is as at the day's start. What a node
 rains in a day condenses over those cells (the sea under one air node as one place, 1.4) by what the parts over
 each would hold over their own saturation at the ratio the node rains at that day, so it is heaviest over high ground; it lands there by the share
-1 - e^(-d / `rain_drift_m`) of it, d the place's width (the root of its area), and the rest drifts with the wind while
-its drops form and fall and lands over all the node's cells by the share of its air over each (the linear theory of
-orographic rain, Smith and Barstad 2004: a cloud time and a fallout time of about 1000 s each carry rain some 20 km at
-10 m/s), so no cell under raining air gets none (`seen::Seen::landing`). **Known limit:** on a map whose cells are
+1 - e^(-d / L) of it, d the place's width (the root of its area), L the drift's length, the node's low wind
+(`rise::low_wind`) times `rain_drift_s`, the time its drops take to form and fall (the linear theory of orographic
+rain, Smith and Barstad 2004: a cloud time and a fallout time of about 1000 s each); the rest drifts
+(`seen::Seen::landing`). It leaves the node's centre and lands along the wind by an exponential of mean L; each point of
+its path lays its share over the nodes round it as a cell reads them (bilinearly), and each node over the places that
+see it by its air's share of each (`drift`). So the drift crosses the nodes' borders, and no cell's rain is cut off
+where the lattice of the nodes ends; a share whose path leaves the map lands on the map by the rest's shares. Where a
+node has no wind (its air shares a block, or the world has no planet's air) its rain lands where it condenses.
+**Known limit:** on a map whose cells are
 as wide as an air node (the globe), the cells that see a node reach half a node into the next rows, so part of a
 node's rain lands a row away, toward the wetter node's neighbours; and no frozen cover moves. So the polar band of the
 lifeless globe gains snow it does not lose: its ice grows, about 40 m in 40 years (an island's cells are far smaller

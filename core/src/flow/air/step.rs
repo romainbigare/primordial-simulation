@@ -8,6 +8,7 @@ use super::book::{book, up_from_bodies};
 use super::air_temp;
 use super::cells::{respond, Ctx};
 use super::rain::{landed, wet};
+use super::rise::low_wind;
 use super::daily::run;
 use super::surf::patches;
 use super::radiation::{declination, sun_height, Cloud, Column, Light};
@@ -46,8 +47,10 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let light = lights(w, s, &decl);
     let cx = Ctx { w, s, act: &act, t0: &t0, x0: &x0, dt, decl: &decl, light: &light };
     let response = respond(&cx, &patches, room);
-    let ground = response.ground(&cx, wet(w, s, &act, &t0, &patches));
-    let mean = run(w, s, &act, &ground, dt);
+    // The low wind over each node, which lifts the air over the ground and carries the drifting rain (`rise::low_wind`).
+    let wind = low_wind(w, s);
+    let ground = response.ground(&cx, wet(w, s, (&act, &wind), &t0, &patches));
+    let mean = run(w, s, (&act, &ground, &wind), dt);
     let rain = landed(&act, ground.wet(), &mean);
     book(w, s, (&act, &response, &rain, &ground.soaks), &mean, dt);
     s.spare.response = response.rows();

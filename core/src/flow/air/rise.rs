@@ -7,20 +7,25 @@
 
 use super::super::Scratch;
 use super::cell::Cell;
-use super::wind::{gradient, End};
+use super::daily::blocks;
+use super::wind::{ends, gradient};
 use crate::{World, AIR};
 
 /// Each air node's low wind, m/s [east, south]: the overturning's lower half as the warmth's gradient drives it
 /// (`wind::push`), `wind` times the gradient, down it inside the month's cell (`Cell::share`) and turned by the spin
 /// across it. The gradient is the planet's at the node's latitude and time (`Planet::at`) where the map's edges are open;
-/// else the air's own (`wind::ends`; its metres are the planet's there) where a node is a block alone, as the overturning
-/// runs between blocks; a node that shares its block, whose air the eddies even each day, has no wind of its own.
-pub(super) fn low_wind(w: &World, ends: &[End], cell: &Cell, alone: impl Fn(usize) -> bool) -> Vec<[f64; 2]> {
-    let planet = w.planet.as_ref().filter(|_| w.edges_open());
-    ends.iter()
+/// else the air's own (`wind::ends`; its metres are the planet's there) where a node is a block alone (`daily::blocks`),
+/// as the overturning runs between blocks; a node that shares its block, whose air the eddies even each day, has no wind
+/// of its own. The air as the step starts.
+pub(super) fn low_wind(w: &World, s: &Scratch) -> Vec<[f64; 2]> {
+    let (planet, cell, air) = (w.planet.as_ref().filter(|_| w.edges_open()), Cell::of(w), w.mesh.level(AIR));
+    let mut alone = vec![false; air.n()];
+    blocks(w).iter().filter(|b| b.len() == 1).for_each(|b| alone[b[0] as usize] = true);
+    ends(&w.cfg, s, air)
+        .iter()
         .enumerate()
         .map(|(j, e)| {
-            let own = if alone(j) { e.grad } else { [0.0; 2] };
+            let own = if alone[j] { e.grad } else { [0.0; 2] };
             let g = planet.map_or(own, |p| [0.0, p.at(e.lat, w.season()).south]);
             let (down, turn) = (cell.share(e.lat), w.cfg.rotation * e.lat.to_radians().sin());
             [w.cfg.wind * (down * g[0] - turn * g[1]), w.cfg.wind * (down * g[1] + turn * g[0])]
