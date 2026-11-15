@@ -87,8 +87,9 @@ const CANOPY_SNOW = 0.35;
 // (rock.wgsl `loose_seen`) and that depth's change across a pixel, m; the share snow covers and the snow's depth, m.
 struct Beneath { soaked: f32, over: f32, slope: f32, loose: f32, loose_px: f32, snow: f32, snow_m: f32 }
 
-// The cover's field at a point, premultiplied, and the share the trees' crowns close over the ground there.
-struct CoverAt { cover: vec4f, canopy: f32 }
+// The cover's field at a point, premultiplied, the share the trees' crowns close over the ground there, and their
+// leaves' colour.
+struct CoverAt { cover: vec4f, canopy: f32, leaf: vec3f }
 
 // A square whose kinds' roots hold everywhere has its mean rooted share this near 1: no point of it limits them.
 const ROOTED_ALL = 0.999;
@@ -428,7 +429,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
-  return CoverAt(dst, min(closed * hold[STANDS], 1.0));
+  return CoverAt(dst, min(closed * hold[STANDS], 1.0), trees.rgb / max(trees.a, 1e-4));
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show, thicker and thinner by

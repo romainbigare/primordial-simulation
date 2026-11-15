@@ -100,6 +100,8 @@ struct Spot {
   bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32, blocks: f32, snow_m: f32, below: f32,
   // The share of the ground the tallest plants' crowns close over it (their litter lies under them).
   canopy: f32,
+  // The colour of those crowns' leaves (linear), as the season turns them.
+  leaf: vec3f,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
 }
@@ -126,16 +128,19 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   let steep = p.slope / earth.look.x;
   var bed = p.bed;
   if (styled()) {
-    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet);
+    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet, p.leaf) * mix(vec3f(1.0), soil_detail(p.e, p.wet, p.loose, p.sand), 1.0 - p.canopy);
     if (p.rock > 0.0) { bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade); }
   }
   g.rgb = mix(g.rgb, bed, p.rock);
   if (p.rock > 0.5) { g.kind = ROCK; }
   let plants = p.cover.a * above_water(p.depth);
   g.bare = 1.0 - plants;
-  g.rgb = mix(g.rgb, SNOW, snow);
+  var cover = snow;
+  var snowy = SNOW;
+  if (styled() && snow > 0.0) { cover = snow_cover(snow, p.snow_m, p.e); snowy = snow_look(p.e); }
+  g.rgb = mix(g.rgb, snowy, cover);
   // Snow is not bare soil: it takes neither the soil's warmth nor its darkening when wet (`soil`).
-  g.bare *= 1.0 - snow;
+  g.bare *= 1.0 - cover;
   if (snow > 0.5) { g.kind = ICE; }
   // Stones over it (stone.wgsl): scree, on bare bed, and in a channel; none on a beach.
   if (styled()) {

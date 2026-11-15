@@ -45,18 +45,18 @@ const BELOW_LEAST = 0.2;
 const STONES_ON_BED = 0.25; const SUNK_MOST = 0.55; const SUNK_LOOSE_M = 0.5;
 const STONE_SEEN = 2.5; const COBBLE_M = 0.65; const BED_SUNK = 0.3;
 
-// The bare ground's colour `c` (linear, unlit) at the pixel, seen at `e` m a pixel, under `canopy` of closed crowns, `wet`:
-// its clods, and under the crowns their shade, litter and moss.
-fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32) -> vec3f {
+// The bare ground's colour `c` (linear, unlit) at the pixel, seen at `e` m a pixel, under `canopy` of closed crowns whose leaves are `leaf`, `wet`:
+// its clods, and under the crowns their shade, litter (the leaves' colour), moss and carpet (floor.wgsl).
+fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32, leaf: vec3f) -> vec3f {
   let litter = LITTER * STYLE * canopy;
   let soft = mix(c, vec3f(dot(c, vec3f(1.0 / 3.0))), FLOOR_GREY * STYLE * canopy);
-  var out = soft * mix(vec3f(1.0), LITTER_TINT, litter) * (1.0 - UNDER_DARK * STYLE * canopy);
+  var out = soft * mix(vec3f(1.0), litter_tint(leaf), litter) * (1.0 - UNDER_DARK * STYLE * canopy);
   // Each grain only where it shows: its noise costs a few reads of the hash.
   let clods = shows_at(CLOD_M, e);
   if (clods > 0.0) { out *= 1.0 + CLOD * STYLE * noise_l(lat_axes(CLOD_M, vec2f(0.0)), 51).x * clods; }
   let moss = MOSS * litter * wet * shows_at(MOSS_M, e);
   if (moss > 0.0) { out *= mix(vec3f(1.0), MOSS_TINT, moss * ease(0.0, 0.4, noise_l(lat_axes(MOSS_M, vec2f(0.0)), 52).x)); }
-  return out;
+  return carpet(out, e, canopy, wet, leaf);
 }
 
 // The ground of a point of drawn slope `steep` (rise over run) that is a cliff.
