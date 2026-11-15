@@ -598,7 +598,9 @@ descends lets it sink; summed per node, a rising (or sinking) mass flux. In `rai
 condenses down to the upper half's cold, so the node saturates at what saturates it times 1 − f (1 − ρ); sinking air
 brings that much drier air down, so the node saturates only at that over 1 − f (1 − ρ) (Smith and Barstad 2004: rain
 where the wind climbs, a lee where it descends). It changes only what the rain law sees within a step: no number is
-kept, and the rain is booked as all rain is. Each saturated part rains out in `rain_time` what the node holds over
+kept, and the rain is booked as all rain is. **Known limit:** the rise is summed per node, so what it adds to a
+node's rain lands as the node's other rain does, by each place's own saturation and the drift: a node that holds a
+windward coast rains more over its sea too, which does not rise. Each saturated part rains out in `rain_time` what the node holds over
 the ratio the part saturates at: only the saturated share condenses, and the node's mean stays under saturation. That
 share is the cloud's share of the sky (`Seen::clouded`, 1.4). Evaporation reads the node's mean vapour: it is linear
 in the vapour, so the mean over the parts is what the mean vapour gives. Each node's air
