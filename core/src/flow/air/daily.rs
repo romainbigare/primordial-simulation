@@ -168,7 +168,7 @@ pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Groun
     let days = (dt / DAY).ceil().max(1.0);
     let dd = dt / days;
     let (links, blocks) = (Links::of(air), blocks(w));
-    let (ends, cell) = (ends(&w.cfg, s, air), Cell::of(w));
+    let (ends, cell) = (ends(w, s), Cell::of(w));
     let push = pushes(&w.cfg, Stretch::of(w), &ends, air, (&links, &cell));
     let mut block = vec![0; na];
     blocks.iter().enumerate().for_each(|(b, nodes)| nodes.iter().for_each(|&j| block[j as usize] = b));

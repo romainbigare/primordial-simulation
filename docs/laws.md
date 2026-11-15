@@ -666,7 +666,8 @@ per kg, the diffusion the eddies of the measured climate follow (Hwang and Frier
 goes by its share of the whole column, not the near-ground air's, so its latent heat carried is about a third of what
 that diffusion of the near-ground air's moisture would carry. **Overturning**: the lower half flows to the warmer column and the upper half back, a
 mass flux of `wind` per K/m of the warmth gradient along the link (the mean of its two ends' gradients, each fitted
-to its node's neighbours, `wind::gradient`: a wave no longer than two nodes is the mesh's own mode and no flow of
+to its node's neighbours, `wind::gradient`, an edge node's among them the columns of the planet's air beyond it,
+as a node inside has neighbours on every side: a wave no longer than two nodes is the mesh's own mode and no flow of
 air's, and a flow that answered to a difference one node wide would feed it, moist air drawn to the warmer node
 warming it as it rains; the eddies even it), turned by the
 planet's rotation (`rotation`), through half the link's cross-section, so it does not depend on the size of the nodes.

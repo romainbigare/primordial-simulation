@@ -36,31 +36,21 @@ impl Edges {
     /// the step's start; none where `w` holds no planet's air.
     pub(super) fn of(w: &World, s: &Scratch, ends: &[End], cell: &Cell) -> Edges {
         let mut x = Edges { node: Vec::new(), side: Vec::new(), push: Vec::new(), share: Vec::new(), heat_of: Vec::new(), mol: Vec::new(), heat: Vec::new() };
-        let (air, st, tree) = (w.mesh.level(AIR), Stretch::of(w), w.mesh.tree());
-        let Some(planet) = w.planet.as_ref().filter(|_| w.edges_open()) else { return x };
-        let corner = (0..air.n()).map(|j| tree.block_xy(j)).fold((0, 0), |m, (a, b)| (m.0.max(a), m.1.max(b)));
-        // Degrees of latitude from one row of air nodes to the next.
-        let row = (w.cfg.lat_north - w.cfg.lat_south) / (corner.1 + 1) as f64;
-        for (j, node) in ends.iter().enumerate() {
-            let (bx, by) = tree.block_xy(j);
-            let at_edge = [by == 0, by == corner.1, bx == corner.0, bx == 0];
-            for (side, dir) in SIDES.iter().enumerate().filter(|&(side, _)| at_edge[side]) {
-                let spacing = air.area()[j].sqrt();
-                let lat = node.lat - dir[1] * row;
-                let beyond = planet.at(lat, w.season());
-                let share: Vec<f64> = s.state.gas.iter().map(|&k| beyond.share[k]).collect();
-                let all = share.iter().sum::<f64>().max(f64::MIN_POSITIVE);
-                let share: Vec<f64> = share.iter().map(|v| v / all).collect();
-                let cp = s.state.gas.iter().zip(&share).map(|(&k, v)| v * s.sp[k].cp).sum::<f64>();
-                let end = beyond_end(w, (node, lat, &beyond, cp), st);
-                let ab = [dir[0] * spacing, dir[1] * spacing];
-                let [mix, over, contrast, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab), cell);
-                x.heat_of.push(beyond.t * cp);
-                x.node.push(j as u32);
-                x.side.push(side);
-                x.push.push([mix, over, contrast, stir]);
-                x.share.push(share);
-            }
+        let (air, st) = (w.mesh.level(AIR), Stretch::of(w));
+        for (j, side, lat, beyond) in columns(w) {
+            let (node, spacing) = (&ends[j], air.area()[j].sqrt());
+            let share: Vec<f64> = s.state.gas.iter().map(|&k| beyond.share[k]).collect();
+            let all = share.iter().sum::<f64>().max(f64::MIN_POSITIVE);
+            let share: Vec<f64> = share.iter().map(|v| v / all).collect();
+            let cp = s.state.gas.iter().zip(&share).map(|(&k, v)| v * s.sp[k].cp).sum::<f64>();
+            let end = beyond_end(w, (node, lat, &beyond, cp), st);
+            let ab = beyond_offset(side, spacing);
+            let [mix, over, contrast, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab), cell);
+            x.heat_of.push(beyond.t * cp);
+            x.node.push(j as u32);
+            x.side.push(side);
+            x.push.push([mix, over, contrast, stir]);
+            x.share.push(share);
         }
         (x.mol, x.heat) = (vec![0.0; s.state.gas.len() * x.node.len()], vec![0.0; x.node.len()]);
         x
@@ -103,6 +93,32 @@ impl Edges {
             e[j] = now - if kg > 0.0 { g * kg * s.za[j] } else { 0.0 };
         }
     }
+}
+
+/// The columns of the planet's air beyond the map's open edges (`SIDES`), the time of the year now: per column its
+/// edge node, its side, its latitude (north and south one row of nodes on, east and west the node's own) and its air
+/// (`Planet::at`); none where `w` holds no planet's air.
+pub(super) fn columns(w: &World) -> Vec<(usize, usize, f64, Beyond)> {
+    let (air, tree) = (w.mesh.level(AIR), w.mesh.tree());
+    let Some(planet) = w.planet.as_ref().filter(|_| w.edges_open()) else { return Vec::new() };
+    let corner = (0..air.n()).map(|j| tree.block_xy(j)).fold((0, 0), |m, (a, b)| (m.0.max(a), m.1.max(b)));
+    // Degrees of latitude from one row of air nodes to the next.
+    let row = (w.cfg.lat_north - w.cfg.lat_south) / (corner.1 + 1) as f64;
+    let mut out = Vec::new();
+    for j in 0..air.n() {
+        let (bx, by) = tree.block_xy(j);
+        let at_edge = [by == 0, by == corner.1, bx == corner.0, bx == 0];
+        for (side, dir) in SIDES.iter().enumerate().filter(|&(side, _)| at_edge[side]) {
+            let lat = air.lat()[j] - dir[1] * row;
+            out.push((j, side, lat, planet.at(lat, w.season())));
+        }
+    }
+    out
+}
+
+/// The offset of the column beyond an edge node of spacing `spacing` on side `side` (`SIDES`), m of the map [east, south].
+pub(super) fn beyond_offset(side: usize, spacing: f64) -> [f64; 2] {
+    [SIDES[side][0] * spacing, SIDES[side][1] * spacing]
 }
 
 /// The column of the planet's air `beyond` an edge node `node`, at latitude `lat`, a mol of it holding `cp` J/K, as an
