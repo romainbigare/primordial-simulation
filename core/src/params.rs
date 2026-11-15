@@ -457,7 +457,7 @@ impl Default for Config {
             tilt: 23.4,
             lat_south: 40.0,
             lat_north: 42.3,
-            variety: 4,
+            variety: 8,
             radius_m: 6.371e6,
             rotation: 1.0,
             gravity: 9.81,

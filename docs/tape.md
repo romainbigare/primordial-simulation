@@ -172,7 +172,7 @@ the level of the wetness index its soil's liquid departs about (`inside::soil_le
 month's start found it, the land its cover lives on). Before Flow built its state the level and
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
-cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 4 unless the
+cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 8 unless the
 start chose other) of `KIND_ROW` (20) f32 each, the heaviest first: the slots of
 its cover, each as the law holds it, per m² of the cell's land (`layers::per_land`; a cell that holds no land has no
 kinds); of each its starting kind (-1: none); its built cover, kg/m²; its plants (`stands::plants`): the stem's width, m, plants a m² (the slot's count, `Cover::plants`), height and crown's width, m, the share of the

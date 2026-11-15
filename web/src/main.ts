@@ -26,7 +26,7 @@ const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = 128;
 /** The live world's kinds of cover a cell may hold, a setting of the world (the core's `Config::variety`), and its
  * most (the core's `cover::SLOTS`). */
-const LIVE_VARIETY = 4, VARIETY_MOST = 12;
+const LIVE_VARIETY = 8, VARIETY_MOST = 12;
 /** The climates a live island may have: a name, and the band of latitudes it stands for (south, north), its air the
  * planet's air over that band. The first is the page's. */
 const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['Warm: 5° to 50°', '5,50']];

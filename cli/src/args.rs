@@ -31,7 +31,7 @@ pub const USAGE: &str = "usage:
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --variety N           kinds of cover a cell may hold, a setting of the world from 1 to 12 (cover::SLOTS) (4)
+    --variety N           kinds of cover a cell may hold, a setting of the world from 1 to 12 (cover::SLOTS) (8)
     --chunks N            a speed setting: the cells cut into N runs for the cover's parallel passes (64; any count
                           gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
