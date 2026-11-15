@@ -715,10 +715,25 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         0.2 to 0.6). A leafless plant pays nothing (known limit); a kept leaf pays 2.7% of its dry mass a day at
         295 K (real: 1 to 3%); the herb's store pays a quarter of a month of that, the tree's three months
         (real stores: grasses 10 to 30% of dry mass, trees 5 to 10%): no change to the start's rows.
-        **Still not merged: a fifth of the land is bare in both bands.** In work: which cells went bare and
-        why, month by month; the orchestrator's guess: leaves kept through the cold season that the store
-        cannot pay for die as whole plants, where a plant should shed what it cannot pay for. The three commits
-        go to main together (c alone makes the page 88% forest); the slots' mend merges after them.
+        The three commits go to main together (c alone makes the page 88% forest); the slots' mend merges
+        after them.
+      - Third round (a fourth commit: out of season a slot keeps only the leaves its store can pay for and
+        drops the rest as leaves, so it stands leafless with its store; `step1m_table.txt`,
+        `step1m_bare_class.txt`, `trace_*.txt`): bare 0.18 in both bands (main 0.04 and 0.12). **The cells that
+        went bare get 530 to 680 mm, and main's cover there was never alive**: it sat through dry or frozen
+        months at no cost, and on ground under the wilting point all year it stood unchanged from the year it
+        was placed. Three classes: cold (7 months frozen, summer ground at 273 to 280 K, near 55 degrees: 174
+        cells of the band 20 to 65), a dry season of 6 to 7 months (79 and 130 cells), ground never wet (14 and
+        70). So the branch is the more honest world; it merges after two small mends, in work: the budget rule
+        asks the store only to pay the keeping; **a slot is in season only while its gain pays for all that gain
+        needs, the fine roots that draw its liquid too** (in the dry cells' last half-dry month the roots'
+        upkeep, 42% of the whole, emptied the store and the herbs died as whole plants): a plant whose pores
+        would lose more than they bring keeps them shut (Cowan and Farquhar 1977).
+      - **Found with it, a fault of Flow: the ground's bucket dries by evaporation below the wilting point**
+        (rain 544 mm against 563 mm rising; 16% of the pores full in every month, `wilt` 25%), so on semi-dry
+        land rain never becomes liquid a root can draw. With the air's helper, after the rain on rising ground:
+        what rises from the pores goes by the share the ground holds for roots (Manabe 1969), one helper for
+        the ground and the plants.
       - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
         to the ground's wetness; the moisture of extinction falls out of the heat balance (0.17 to 0.18); a
         cell carries fire where fuel covers more than the percolation threshold of the ground; burnable cells
