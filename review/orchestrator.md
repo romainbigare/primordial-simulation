@@ -701,14 +701,16 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         dry belt wetter again (64 band 5 to 50, 15 to 25 degrees: about 1,030 mm, the driest month 0.55 of the
         wettest; bare 0.37 → 0.17, forest 0.35 → 0.45 at year 60); the cell's low flux on the lifeless globe up
         40% (3.8 to 4.4e10 kg/s at 22 degrees; the `wind` row's measure is to be set again).
-      - **The pale square on the 32 island's dry west** (seed 1, band 20 to 65): four air nodes of the lee never
-        rain, and rain reaches a cell only from the nodes it reads, drift landing inside its own node, so the
-        cells between those nodes' centres get none. In work (branch `rain-drift`): the rain a node makes
-        drifts along its low wind across the nodes' borders. A fixed 20 km (`rain_drift_m`, anchored on drops
-        carried 2,000 s at 10 m/s) wipes the rain shadow out (windward over lee 3.1 to 5.1 → 0.9 to 1.2), so
-        the number becomes the time it is anchored on, `rain_drift_s` 2,000 s, and the length the low wind
-        times it: windward over lee 2.5 to 2.8, the square a smooth dry slope of 50 to 120 mm. No wind, no
-        drift. With it a mend of `worldgen::life::soil` (the soil given by the land at the moment life starts).
+      - **On main: the rain drifts with the low wind across the nodes' borders** (`flow/air/drift.rs`,
+        `SNAPSHOT_VERSION` 148). The drift's number is the time it is anchored on, `rain_drift_s` 2,000 s (the
+        cloud time and the fallout time, Smith and Barstad 2004), its length the low wind times it; the share
+        kept where the rain condenses is 1 − e^(−width / length); with no wind all of a node's rain lands where
+        it condenses. No cell's rain is cut to none by the nodes' lattice: the pale square of the 32 island's
+        dry west (four lee nodes that never rain) is a slope of 20 to 224 mm. Windward over lee: 2.8 to 3.4 on
+        the 32 island of the band 20 to 65 (3.2 to 5.2 before), 1.5 to 2.3 on the 64 island of the band 5 to
+        50. Closed islands move a little (the key world's river cells 232 → 280, in range). With it:
+        `worldgen::life::soil` gives the soil by the land at the moment life starts. `flow/air/rain.rs` is 376
+        lines.
       - Then for the air's helper: **the open edges gather moist air** (64 world of the band 5 to 50: the two
         southern corner nodes rain 5,000 to 5,600 mm a year and the edge columns 1,100 to 1,500 against 650 to
         950 inside; lead: an edge link brings in the planet's moist low air with nothing inside to answer it);
