@@ -887,25 +887,35 @@ task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a rea
 walls (its walls' share of its built cover) make a stem of `stem_form` and `stem_solid` at the walls' density, as tall
 as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973). Seeds that found a slot are one plant per
 `seed_kg`; a stand holds at most (`thin_kg` / kg per m²)² plants a m², the self-thinning law (Yoda and others 1963): a
-denser stand loses plants, not mass, after it builds; what dies of unpaid upkeep, wear or frost is whole plants (the
+plant of m kg holds (m / `thin_kg`)^(2/3) m² of ground in a full stand. The law is the crowns of a stand filling its
+space, so plants crowd the plants whose crowns share their layer of the air (`Cover::crown`: from its top down the depth
+its capture area fills at `crown_density`), whatever slot holds them, and the layers of a stand thin apart (an
+understory under a closed canopy): after its seeds wake and after it builds (`stand::thin`), the ground the plants of
+a slot's layer hold, each other slot's counted by the share of the slot's crown its own crown shares, is set against
+the cell's ground, and where it is more the slot loses plants, not mass, as its whole layer would (by that excess
+cubed). So a stand cut into slots thins as the whole. What dies of unpaid upkeep, wear or frost is whole plants (the
 count falls with the mass); seeds that join a stand of their kind, and slots that join, add their plants (each seed
 lot one plant per `seed_kg`, as many as the thinning law lets stand). So a stand that recruits sits on the thinning
 line, its plants' mass (kg per m²)³ / `thin_kg`², and its height grows with its mass: a kind that holds much mass
 without leaf (walls, which pay no upkeep) stands tall, and a stand of few seeds is of few large plants until its own
 seeds fill it:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
-  area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), shared among its
-  kinds by the height of their plants (Beer's law, `math::shade`): the tallest take it first, and a seedling lives on
-  what reaches the bottom of the layers above it; under standing liquid times e^(−depth / `light_depth`). **Roots**: a
+  area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), passing down
+  through the crowns of its kinds (Beer's law, `canopy::shade`): each kind's capture area spread evenly through its
+  crown (`Cover::crown`), the light at each height absorbed by the capture area of all the crowns there, whatever
+  slot holds them, so the tallest take it first, crowns that share a layer share its light, and a seedling lives on
+  what reaches below the crowns above it; under standing liquid times e^(−depth / `light_depth`). **Roots**: a
   kind's plants root in `root_per_height` of their height of loose ground, at least `root_least` (rooting depth grows
   with a plant's size; Schenk and Jackson 2002), and hold a point of the cell where its loose ground reaches that need
   (none below `rooted_from` of it, all from it, smoothly between: bare bed anchors nothing and holds no liquid in
   pores). Each cell keeps the share of its area in each of 24 bins of loose depth, from its terrain's samples, found
   when the world is built (`World::loose_bins`, `cover::loose_bins`), and a kind holds the share s of the cell their
   mean gives (`Cover::rooted`, found again only when its need has moved by more than a bin). It stands on that share
-  alone: its capture area is a layer of x / s there, and those below it get 1 − s + s e^(−x / s) of its light (`math::shade`;
-  with s = 1 everywhere, Beer's law). So tall kinds compete on a cell's deep ground only, low kinds on its thin ground too,
-  and on bare bed nothing but the smallest stands.
+  alone, its capture area x / s per unit of it; the shares are nested, as ground that holds deep roots holds shallow
+  ones, so the cell's ground falls into rings (`canopy::rings`), each held by the kinds of a share at least its own, and
+  the light passes down through the crowns that stand on each ring (with s = 1 everywhere, Beer's law through the
+  canopy). So tall kinds compete on a cell's deep ground only, low kinds on its thin ground too, and on bare bed
+  nothing but the smallest stands.
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, w / 10^`MOIST`), a straight line. **Drought** is felt against the ground's own
@@ -932,8 +942,9 @@ seeds fill it:
   reach pays for at that rate, and leaves the film they make, D_v / D_g × T / (`drawdown` p_g) per mol a s of gas
   taken in (`cover::pores`), with the share of the ground's liquid its roots reach (`Cover::film`, `Cover::reach`), for
   the ground's evaporation to pass the liquid through day by day, inside the surface's energy balance (1.5). Each slot draws the liquid from
-  the pores its roots reach (its rooted share of the ground's liquid); where the ground cannot give it the pores close
-  and all slots store less together. All kinds of a cell are cut
+  the pores its roots reach: the liquid of each ring of its ground is the slots' that stand on it, and where they would
+  draw more there each draws it in proportion to what it would (`grow::drawn`); where the ground cannot give it the
+  pores close and all slots store less together. All kinds of a cell are cut
   together to the liquid share of its ground's key liquid and the carbon gas of its share of its air node; its
   burnings and fixing take their gas from what that share still offers, so the cover never takes more of the air's
   gas than its cell's share holds (`grow::Books::room`). A cover that works on drier ground works more slowly: its capacity goes with its
@@ -966,7 +977,8 @@ seeds fill it:
   taken: `Counters::seeds`) and what each cell's cover built in the last whole year (`Counters::grown_last`) are counted
   for the tape. The tape records them each year.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
-  out as kinds build, tallest first) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
+  out over the slots by what each would take, `build::wants`: where the ground holds less than they ask, each gets its
+  share of what it holds, whatever slots hold the kinds) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
   and others 2012) by the conversions of growth (`Chemistry::build`,
   `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
@@ -981,20 +993,23 @@ seeds fill it:
   kernel of two scales, a near and a far one, each an isotropic Gaussian, `kernel_near` and `kernel_far`: most within
   tens of metres, a long tail to km, Clark et al. 1999); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
-  `mut_size`), of body matter first and then walls (an embryo and its store); all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
-  its layer (`math::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
+  `mut_size`), of body matter first and then walls (an embryo and its store); where its lots land and how they vary are
+  drawn by the cell and the slot's genes, rounded to 1/1024 of each gene's step (`rng::Purpose::Cover`, `KEY_STEPS`),
+  not by its place among the cell's slots; all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
+  its layer (`canopy::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
   where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
-  run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
-  falls as e^-z with the capture area z above a leaf, so what a kg more would store at depth z is its bottom's times
-  e^(y − z), y its whole depth; its living cover below the depth where that falls to its upkeep a kg goes to its
-  remains, its walls and plants stay. **Shedding for a season** is the same rule over the months a leaf waits to gain
+  run backwards a full slot also sheds the layers of its canopy that do not pay (`season::shed`): through its crown its
+  light falls as e^-z with the capture area z above a leaf, whatever slots' leaves it passes, so what a kg more would
+  store at depth z is its crown base's times e^(y − z), y the capture area through its crown (`Slot::layer`); its
+  living cover below the depth where that falls to its upkeep a kg goes to its remains, its walls and plants stay. **Shedding for a season** is the same rule over the months a leaf waits to gain
   again (Kikuzawa 1991). A leaf does not come alone: what it gains needs the fine roots that draw its liquid, whose
   cost is a share of the gain set by the month's air (`upkeep::root_share`: the liquid a unit of the light reaction
   draws, with what its pores lose for its gas, over `root_uptake`, at the roots' breathing and renewal); from all of
   it its pores would lose more than they bring, and they stay shut that month: the cover draws nothing and gains
   nothing (Cowan and Farquhar 1977, from memory). A slot is **in season** while its top leaves gain, less their fine
   roots, what a kg of leaf and the walls that feed it cost to keep for the month (`upkeep::keep_per_kg`: its upkeep,
-  its capture area's and its conducting walls'); a layer that does not pay so in season lies in its own canopy's shade
+  its capture area's and its conducting walls'), its top leaves those at the top of its crown, whatever slots share
+  that crown (`season::pay`), so a stand cut into slots keeps its season as the whole; a layer that does not pay so in season lies in its own canopy's shade
   and pays no more, so it goes as above (the slot `full`), once it has paid its month's upkeep. Out of season none of its leaves pay until the season comes back, after the
   months its kinds expect without gain: the share of the last year's months in which its cell's ground held nothing
   for roots, frozen or dry to the wilting point (`Cover::idle`, a running mean over a year's months, kept by the
@@ -1017,7 +1032,7 @@ seeds fill it:
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,
-  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in up to `LOTS_LYING` (4) lots, each its
+  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in up to `SLOTS` (12) lots at any variety, each its
   amounts of the three parts, its genes and its starting kind, at the cover's temperature (their heat is the cover's,
   and they are matter of the cover's node: in its books, its budget and its potential energy). Seeds that land join the
   most alike lot of their kind within `APART` × `alike` steps (the genes the mean by built matter), else an empty lot,
@@ -1029,17 +1044,22 @@ seeds fill it:
   by the seeds' rule, min(1, w / 10^`MOIST`)^`dormancy` (Harrington's: dry tissue, `Physics::activity`),
   and pace its burning's pace at the ground's temperature over that at `t_cat`: at `t_cat` all that is active wakes in a
   month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
-  ground none. What wakes takes hold (`seed::lodge`): it joins the most alike slot of its starting kind in
-  the cell (every gene within `APART` (0.5) × `alike` steps, `cover::distance`; the genes the mean by built cover);
+  ground none. What wakes takes hold (`seed::lodge`): it joins the stand of its starting kind in the cell, the slots
+  of it within `APART` (0.5) × `alike` steps (in every gene, `cover::distance`), shared over them by their built cover
+  (the genes of each the mean by built cover);
   else they found a slot of their own: an empty one; else the slot **in deficit**, whose balance over about its last
   year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
   below zero, the worst first (its cover dies as remains); else the two slots nearest each other by their genes,
   of any starting kind, join (`seed::room`: the slots are a limit of the bookkeeping, and the two hold the same niche
-  to within what it resolves) and they found the slot it frees. So a cell is never closed to seeds and a holder that pays its
+  to within what it resolves) and they found the slot it frees (a world of one kind a cell, `Config::variety` 1, has
+  no two to join: the seeds stay lying). So a cell of more slots is never closed to seeds and a holder that pays its
   way is never pushed out by weight: what lives after is the light's to decide, as seedlings live on their store and on
   the light that reaches the bottom of the layers above them, and what does not pay dies (the gap models, Shugart
   1984). A variant farther than `APART` × `alike` from its kind founds a slot of its own and competes with the others
-  for light by height. Slots of a cell within the same distance share one (`merge_alike`). Selection is between slots
+  for light by height. Slots of a cell within the same distance share one (`merge_alike`). A slot is the bookkeeping of a kind in a cell, not
+  a thing of the world: every law above acts on the stand, so a cell whose slot is cut into alike slots stands at the
+  end of that month as the uncut cell does, when the pieces merge back, in every month of its year, its dry season too
+  (`core/tests/stand.rs`). Selection is between slots
   and cells: what grows better sends more seeds (the frost gene falls where winters are cold, `core/tests/cover.rs`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's aside node (with theirs), as living things

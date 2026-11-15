@@ -6,14 +6,11 @@
 
 use super::budget::{held, DIED, SEEDS_DIED};
 use super::seed::{lodge, Landed, Seed};
-use super::{built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, MOIST, NG, NO_ROOT, NP, REPAIR};
+use super::{built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, MOIST, NG, NO_ROOT, NP, REPAIR, SLOTS};
 use crate::life::kin;
 use crate::units::DAY;
 use crate::{Counters, World};
 use serde::{Deserialize, Serialize};
-
-/// Lots of seeds a cell's ground holds at most: a limit of the bookkeeping, as `Config::variety` is of its cover.
-pub const LOTS_LYING: usize = 4;
 
 /// The flows of seeds counted for the tape (`Counters::seeds`), kg: landed on a ground, sprouted (taken hold in the
 /// cover), worn out, frozen, taken by a taker.
@@ -24,26 +21,27 @@ pub const WORN: usize = 2;
 pub const FROZEN: usize = 3;
 pub const TAKEN_LYING: usize = 4;
 
-/// The seeds lying on a cell's ground, in `LOTS_LYING` lots: each its mol of each part (`Parts`), its genes and its
-/// starting kind (`NO_ROOT`: empty). Their heat is the cover's (`Cover::e`): they lie at its temperature.
+/// The seeds lying on a cell's ground, in up to `SLOTS` lots, whatever the kinds its cover may hold: each its mol of each
+/// part (`Parts`), its genes and its starting kind (`NO_ROOT`: empty). Their heat is the cover's (`Cover::e`): they lie
+/// at its temperature.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Lying {
-    pub mol: [[f64; NP]; LOTS_LYING],
-    pub genes: [[f32; NG]; LOTS_LYING],
-    pub root: [u32; LOTS_LYING],
+    pub mol: [[f64; NP]; SLOTS],
+    pub genes: [[f32; NG]; SLOTS],
+    pub root: [u32; SLOTS],
 }
 
 impl Default for Lying {
     /// No seeds.
     fn default() -> Lying {
-        Lying { mol: [[0.0; NP]; LOTS_LYING], genes: [[0.0; NG]; LOTS_LYING], root: [NO_ROOT; LOTS_LYING] }
+        Lying { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS] }
     }
 }
 
 impl Lying {
     /// Its lots that hold seeds.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
-        (0..LOTS_LYING).filter(|&x| self.root[x] != NO_ROOT)
+        (0..SLOTS).filter(|&x| self.root[x] != NO_ROOT)
     }
     /// All its seeds, kg.
     pub fn kg(&self, mm: &[f64; NP]) -> f64 {
@@ -95,7 +93,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
     let burn = &chem.reactions[p.burn];
     let pace = burn.arrhenius(a.t.max(1.0)) / burn.arrhenius(ph.t_cat);
     let melt = chem.subs[p.liquid].melt;
-    for x in 0..LOTS_LYING {
+    for x in 0..SLOTS {
         if c.lying.root[x] == NO_ROOT {
             continue;
         }
@@ -113,21 +111,25 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         let (gone, up): ([f64; NP], [f64; NP]) = (lot.map(|m| m * dies), lot.map(|m| m * wakes));
         budget[SEEDS_DIED] -= held(&e, &gone);
         (0..NP).for_each(|q| dead[q] += gone[q]);
-        c.lying.mol[x] = std::array::from_fn(|q| (lot[q] - gone[q] - up[q]).max(0.0));
+        // What wakes takes hold where the cover has room for it (`seed::lodge`); else it stays lying.
+        let woke = up.iter().any(|&m| m > 0.0) && match lodge(c, &mm, &Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 }, &w.cfg, area) {
+            Landed::In => true,
+            Landed::Out(m) => {
+                budget[DIED] -= held(&e, &m);
+                (0..NP).for_each(|q| dead[q] += m[q]);
+                true
+            }
+            Landed::Refused => false,
+        };
+        c.lying.mol[x] = std::array::from_fn(|q| (lot[q] - gone[q] - if woke { up[q] } else { 0.0 }).max(0.0));
+        if woke {
+            counts.seeds[SPROUTED] += wakes * kg;
+        }
         if built_kg(&mm, &c.lying.mol[x]) <= super::EMPTY_KG {
             let rest = std::mem::take(&mut c.lying.mol[x]);
             budget[SEEDS_DIED] -= held(&e, &rest);
             (0..NP).for_each(|q| dead[q] += rest[q]);
             c.lying.root[x] = NO_ROOT;
-        }
-        if up.iter().all(|&m| m <= 0.0) {
-            continue;
-        }
-        counts.seeds[SPROUTED] += wakes * kg;
-        let s = Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 };
-        if let Landed::Out(m) = lodge(c, &mm, &s, &w.cfg, area) {
-            budget[DIED] -= held(&e, &m);
-            (0..NP).for_each(|q| dead[q] += m[q]);
         }
     }
     dead

@@ -87,7 +87,7 @@ fn the_cover_grows_by_what_its_budget_books() {
 
 /// A cover far thicker than its light can keep (20 kg per m², a capture area 100 times its ground) does not thicken:
 /// one more kg would not pay its upkeep at the bottom of its layer, so all it builds leaves as seeds, and it sheds the
-/// layers that do not pay (`grow::shed`), so over a summer its cell holds less than it started with and its capture area
+/// layers that do not pay (`season::shed`), so over a summer its cell holds less than it started with and its capture area
 /// falls to under half; the books are kept.
 #[test]
 fn a_thick_cover_does_not_thicken() {
@@ -585,7 +585,7 @@ fn the_cover_lives_on_its_cells_land() {
 /// or its ground is frozen). A kg of leaf costs more to keep through six warm dry months than to build anew, and less
 /// through six frozen ones (the burning's pace is low in the cold): so in the dry years it drops all its leaves as its
 /// dry season starts, keeps its walls and its store, and grows its leaves again from its store when its ground is wet
-/// again; in the frozen years it keeps its leaves (Kikuzawa 1991, `grow::shed`).
+/// again; in the frozen years it keeps its leaves (Kikuzawa 1991, `season::shed`).
 #[test]
 fn a_stand_drops_its_leaves_for_a_long_dry_season_but_not_for_a_frozen_one() {
     let (mut w, i) = start();
@@ -600,21 +600,7 @@ fn a_stand_drops_its_leaves_for_a_long_dry_season_but_not_for_a_frozen_one() {
         let mut held = Vec::new();
         for m in 0..24u64 {
             let good = m % 12 < 6;
-            let mut ground = [0.0; pcore::units::MAX_SUBSTANCES];
-            w.chem.minerals().iter().for_each(|&(k, _)| ground[k] = 1e9);
-            let a = cover::Around {
-                t: if good || !frozen { 295.0 } else { 270.0 },
-                liquid: if good { 1e9 } else { 0.0 },
-                moist: if good { 1.0 } else { 0.0 },
-                reach: 1.0,
-                light: c.mark + sun * month,
-                gas: 1.0,
-                thirst: 0.0,
-                pores: 0.0,
-                air: [f64::INFINITY; pcore::units::MAX_SUBSTANCES],
-                ground,
-                tick: m,
-            };
+            let a = testkit::garden(&w, &c, (if good || !frozen { 295.0 } else { 270.0 }, if good { 1.0 } else { 0.0 }, sun, m));
             let _ = cover::live(&w, &mut c, &p, &a, (i, month), &mut counts);
             let Some(x) = c.held().find(|&x| c.root[x] == TREE_ROW as u32) else { panic!("month {m}: the stand died; {held:?}") };
             held.push((c.living(&mm, x) / area, c.walls(&mm, x) / area, c.mol[x][cover::FUEL] * mm[cover::FUEL] / area));

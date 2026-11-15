@@ -24,6 +24,12 @@ pub fn kin<G>(genes: &[G], root: &[u32], (g, r): (&G, u32), within: f32, distanc
     of_kind.map(|x| (distance(&genes[x], g), x)).filter(|e| e.0 <= within).min_by(|a, b| a.0.total_cmp(&b.0)).map(|e| e.1)
 }
 
+/// Of the entries of genes `genes` and starting kinds `root`, all of starting kind `r` within `within` of genes `g` by
+/// `distance`.
+pub fn kins<'a, G>(genes: &'a [G], root: &'a [u32], (g, r): (&'a G, u32), within: f32, distance: impl Fn(&G, &G) -> f32 + 'a) -> impl Iterator<Item = usize> + 'a {
+    (0..root.len()).filter(move |&x| root[x] == r && distance(&genes[x], g) <= within)
+}
+
 /// The first empty entry.
 pub fn empty(root: &[u32]) -> Option<usize> {
     root.iter().position(|&r| r == NO_ROOT)

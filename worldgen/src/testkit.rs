@@ -143,6 +143,32 @@ pub fn cover(w: &mut World, i: usize, kg: f64) {
     assert!(pcore::cover::place(w, i, crate::life::KINDS[crate::life::LIGHT_ROW].genes, crate::life::LIGHT_ROW as u32, kg), "no room for cover in cell {i}");
 }
 
+/// What a garden's ground holds of each mineral and of the key liquid, mol: far more than a cover takes in a month.
+const GARDEN_MOL: f64 = 1e9;
+
+/// What a garden offers the cover `c` of a cell of `w` in month `tick` (`cover::Around`, for `cover::live`): its ground
+/// at `t` K, `sun` W/m² since the cover's last step, the air all the gas the cover takes and nothing lost through its
+/// pores, the ground all minerals and the share `moist` of what it holds for roots (`Around::moist`; at none, no liquid).
+pub fn garden(w: &World, c: &pcore::cover::Cover, (t, moist, sun, tick): (f64, f64, f64, u64)) -> pcore::cover::Around {
+    let wet = moist > 0.0;
+    let mut ground = [0.0; pcore::units::MAX_SUBSTANCES];
+    w.chem.minerals().iter().for_each(|&(k, _)| ground[k] = GARDEN_MOL);
+    let month = w.cfg.calendar().month as f64;
+    pcore::cover::Around {
+        t,
+        liquid: if wet { GARDEN_MOL } else { 0.0 },
+        moist,
+        reach: 1.0,
+        light: c.mark + sun * month,
+        gas: 1.0,
+        thirst: 0.0,
+        pores: 0.0,
+        air: [f64::INFINITY; pcore::units::MAX_SUBSTANCES],
+        ground,
+        tick,
+    }
+}
+
 /// `members` takers of the starting kind of row `row` of `life::TAKER_KINDS` placed in cell `i`, each with `store` kg of
 /// fuel (`fauna::place`).
 pub fn takers(w: &mut World, i: usize, row: usize, (members, store): (f64, f64)) {

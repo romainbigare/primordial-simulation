@@ -404,9 +404,9 @@ impl Config {
         require(self.chunks > 0, || "chunks must be at least 1".to_string())?;
         let (south, north) = (self.lat_south, self.lat_north);
         require(-90.0 <= south && south < north && north <= 90.0, || format!("lat_south ({south}) must lie below lat_north ({north}), both from -90 to 90"))?;
-        // A cell's cover holds its kinds in arrays of `cover::SLOTS`; a full cell joins its two nearest slots (`cover::lodge`).
+        // A cell's cover holds its kinds in arrays of `cover::SLOTS`.
         let (v, most) = (self.variety, crate::cover::SLOTS);
-        require((2..=most).contains(&v), || format!("variety ({v}) must be from 2 to {most}"))?;
+        require((1..=most).contains(&v), || format!("variety ({v}) must be from 1 to {most}"))?;
         // The air's sideways laws divide by the stretched lengths (`flow::air::Stretch`), a globe's squares by it.
         require(self.radius_m > 0.0 && self.radius_m.is_finite(), || format!("radius_m ({}) must be above 0", self.radius_m))?;
         let wake = self.wake_share;

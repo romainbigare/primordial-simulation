@@ -9,10 +9,12 @@
 mod around;
 mod budget;
 mod build;
+mod canopy;
 mod grow;
 mod lying;
 mod month;
 mod seed;
+mod season;
 mod show;
 mod stand;
 mod upkeep;
@@ -20,7 +22,7 @@ mod upkeep;
 pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
-pub use lying::{Lying, FROZEN, LANDED, LOTS_LYING, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
+pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
 pub(crate) use show::lose;
@@ -93,7 +95,7 @@ pub struct Cover {
     pub reach: f32,
     /// The share of the last year's months in which its ground held nothing its roots could draw (frozen, or dry to the
     /// wilting point), a running mean over a year's months (`grow::step`): the months its kinds expect without gain, by
-    /// which they shed their leaves (`grow::shed`). The ground's, so it outlives the slots.
+    /// which they shed their leaves (`season::shed`). The ground's, so it outlives the slots.
     pub idle: f32,
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its aside node sets aside for its light reaction
@@ -143,6 +145,16 @@ impl Cover {
     /// The height of the plants of slot `x`, m (`stand::height`), its walls of density `rho` kg/m³.
     pub fn height(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {
         stand::height(ph, self.plant(mm, x), self.walls(mm, x) / self.built(mm, x).max(1e-300), rho)
+    }
+    /// The crown of the plants of slot `x`, `top` m tall (`Cover::height`), on ground of `land` m², from its base to its
+    /// top, m: its leaves, and the thin stems that carry them, stand where the light is, over the depth their capture
+    /// area fills at the density of a crown's leaves: its capture area over the ground its plants hold (`land` times the
+    /// share its roots hold, `Cover::rooted`), over `crown_density` m² a m³, down from its top, and no lower than the
+    /// ground: a sward is as dense as that over its whole height.
+    pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], land: f64, x: usize, top: f64) -> (f64, f64) {
+        let patch = land * self.rooted[x].max(f32::MIN_POSITIVE) as f64;
+        let depth = self.leaf(mm, x) / patch.max(1e-300) / ph.crown_density;
+        ((top - depth).max(0.0), top)
     }
     /// The width of the main stem of the plants of slot `x`, m (`stand::stem`), its walls of density `rho` kg/m³.
     pub fn width(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {

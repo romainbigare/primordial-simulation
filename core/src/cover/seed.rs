@@ -70,29 +70,45 @@ pub fn land(w: &mut World) {
     crate::store::life_sent(w, sent.into_iter().enumerate().filter(|x| x.1 != [0.0; 2]));
 }
 
-/// Where seeds went (`lodge`): into the cell's cover, or into a slot in deficit, whose amounts (mol of each part) die.
+/// Where seeds went (`lodge`): into the cell's cover; into a slot in deficit, whose amounts (mol of each part) die; or
+/// nowhere, the cell's one slot held by a stand of another kind that pays its way (they stay as seeds).
 pub enum Landed {
     In,
     Out([f64; NP]),
+    Refused,
 }
 
 /// Seeds `s` lodge in cover `c` on its ground of `area` m² (`cover::ground`) of a world of settings `cfg`, with their
 /// heat and their store: into the most alike slot of their starting kind within `APART` × `alike` steps (`distance`),
 /// the genes the mean by built cover; else they found a slot of their own among the world's first `Config::variety`: an
 /// empty one; else the one in deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots
-/// nearest each other by their genes join (`room`) and they found the slot it frees. So a cell is never closed to seeds
-/// and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
+/// nearest each other by their genes join (`room`) and they found the slot it frees; a world whose cells hold one kind
+/// (`Config::variety` 1) has no two to join, and the seeds do not take hold (`Landed::Refused`). So a cell of more slots
+/// is never closed to seeds and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
 /// the light that reaches the bottom of the layers above them and what does not pay dies (the gap models, Shugart 1984).
 pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area: f64) -> Landed {
     let (ph, n) = (&cfg.phys, cfg.variety);
     let kg = built_kg(mm, &s.mol);
     let plants = super::stand::founded(ph, kg, area);
-    if let Some(x) = kin::kin(&c.genes, &c.root, (&s.genes, s.root), APART * ph.alike, distance) {
-        c.plants[x] += plants;
-        super::stand::thin(c, mm, ph, area, x);
-        // The seeds join as a slot of their own would, the genes the mean by built cover.
-        (0..NG).for_each(|g| c.genes[x][g] += (kg / (kg + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
-        (0..NP).for_each(|q| c.mol[x][q] += s.mol[q]);
+    let (mut kin, mut n_kin) = ([0; super::SLOTS], 0);
+    for x in kin::kins(&c.genes[..n], &c.root[..n], (&s.genes, s.root), APART * ph.alike, distance) {
+        (kin[n_kin], n_kin) = (x, n_kin + 1);
+    }
+    let kin = &kin[..n_kin];
+    if !kin.is_empty() {
+        // The seeds join the stand of their kind, shared over the slots that hold it by their built cover (a kind cut
+        // into slots takes its seeds as the whole would), each as a slot of its own would, the genes the mean by built
+        // cover; the last takes what the others leave, so the amounts are kept exactly.
+        let all: f64 = kin.iter().map(|&x| c.built(mm, x)).sum();
+        let mut left = s.mol;
+        for (k, &x) in kin.iter().enumerate() {
+            let f = if all > 0.0 { c.built(mm, x) / all } else { 1.0 / kin.len() as f64 };
+            let part: [f64; NP] = std::array::from_fn(|q| if k + 1 == kin.len() { left[q] } else { (s.mol[q] * f).min(left[q]) });
+            (0..NP).for_each(|q| left[q] -= part[q]);
+            c.plants[x] += plants * f;
+            (0..NG).for_each(|g| c.genes[x][g] += (kg * f / (kg * f + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
+            (0..NP).for_each(|q| c.mol[x][q] += part[q]);
+        }
         c.e += s.heat;
         return Landed::In;
     }
@@ -100,7 +116,8 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
     let (x, out) = match (kin::empty(&c.root[..n]), poorest) {
         (Some(x), _) => (x, None),
         (None, Some(x)) => (x, Some(c.mol[x])),
-        (None, None) => (room(c, mm, (ph, n), area), None),
+        (None, None) if n > 1 => (room(c, mm, n), None),
+        (None, None) => return Landed::Refused,
     };
     (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, plants, 0.0);
     c.e += s.heat;
@@ -110,17 +127,17 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
 /// Room in cover `c` whose `n` slots in use all hold cover that pays its way: the two nearest each other by their genes
 /// (`distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the slots are a limit of the
 /// bookkeeping, and the two hold the same niche to within what it resolves. Returns the slot it leaves empty.
-fn room(c: &mut Cover, mm: &[f64; NP], (ph, n): (&crate::Physics, usize), area: f64) -> usize {
+fn room(c: &mut Cover, mm: &[f64; NP], n: usize) -> usize {
     let (a, z) = kin::nearest(&c.genes[..n], distance);
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
-    super::stand::join(c, (mm, ph, area), big, small);
+    super::stand::join(c, mm, big, small);
     small
 }
 
 /// Place `kg` per m² of its ground (`cover::ground`, the cell's land) of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
 /// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
-/// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover (nothing is placed
-/// then).
+/// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover or the cell has no
+/// room for it (nothing is placed then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, area) = (p.mm(&w.chem), super::ground(w, i));
@@ -130,6 +147,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
     match lodge(c, &mm, &s, &w.cfg, area) {
+        Landed::Refused => return false,
         Landed::In => {}
         // The slot in deficit it took goes to the ground as remains, with its heat.
         Landed::Out(m) => {
