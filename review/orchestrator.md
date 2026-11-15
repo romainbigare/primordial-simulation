@@ -290,8 +290,9 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   - **The variety is still not neutral, and that is the limit itself**: cover at 2, 4, 8, 12 on the 32 world at
     year 60 is 2.2e9, 9.9e9, 1.87e10, 1.92e10 kg (before the mend: 2.3e9, 1.75e10, 2.88e10, 3.15e10): from about
     8 the setting no longer matters. Full cells of stands that pay their way shut better kinds out. Tried and
-    dropped: a full cell joining only kin and keeping the newcomer as seeds lying (worse). Open: a default of 8
-    (the cover's stage then costs about twice), or a better rule at the limit.
+    dropped: a full cell joining only kin and keeping the newcomer as seeds lying (worse). **The owner chose a
+    default of 8** (`Config::variety`, the page, on main): a 40-year run of the 32 world on one thread takes
+    22.3 s against 19.5 s at 4 (+14%). A better rule at the limit stays open.
   - Not tested: a slot's crown depth comes from its own leaves, so another kind's crown between two cut pieces
     could make the cut differ for a month.
 - Then, by a fresh builder and only after the look of the habitats (the owner's order): the spike of the nursery on its branch behind `--sorted` (no race by mass, newcomers near
@@ -696,9 +697,15 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         40% (3.8 to 4.4e10 kg/s at 22 degrees; the `wind` row's measure is to be set again).
       - **The pale square on the 32 island's dry west** (seed 1, band 20 to 65): four air nodes of the lee never
         rain, and rain reaches a cell only from the nodes it reads, drift landing inside its own node, so the
-        cells between those nodes' centres get none. In work: the rain a node makes drifts with the wind across
-        the nodes' borders.
-      - Then for the air's helper: the two very wet southern corner nodes of the 64 world of the band 5 to 50;
+        cells between those nodes' centres get none. In work (branch `rain-drift`): the rain a node makes
+        drifts along its low wind across the nodes' borders. A fixed 20 km (`rain_drift_m`, anchored on drops
+        carried 2,000 s at 10 m/s) wipes the rain shadow out (windward over lee 3.1 to 5.1 → 0.9 to 1.2), so
+        the number becomes the time it is anchored on, `rain_drift_s` 2,000 s, and the length the low wind
+        times it: windward over lee 2.5 to 2.8, the square a smooth dry slope of 50 to 120 mm. No wind, no
+        drift. With it a mend of `worldgen::life::soil` (the soil given by the land at the moment life starts).
+      - Then for the air's helper: **the open edges gather moist air** (64 world of the band 5 to 50: the two
+        southern corner nodes rain 5,000 to 5,600 mm a year and the edge columns 1,100 to 1,500 against 650 to
+        950 inside; lead: an edge link brings in the planet's moist low air with nothing inside to answer it);
         the measure of `wind` at 2, 3 and 5 times, which now decides the dry belt and its season; the long
         step's error on the land's runoff.
    4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
