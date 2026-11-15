@@ -128,7 +128,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   let steep = p.slope / earth.look.x;
   var bed = p.bed;
   if (styled()) {
-    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet, p.leaf) * mix(vec3f(1.0), soil_detail(p.e, p.wet, p.loose, p.sand), 1.0 - p.canopy);
+    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet, p.leaf) * mix(vec3f(1.0), soil_detail(p.e, p.wet, p.loose, p.sand, p.over, p.stony), 1.0 - p.canopy);
     if (p.rock > 0.0) { bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade); }
   }
   g.rgb = mix(g.rgb, bed, p.rock);
@@ -137,7 +137,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.bare = 1.0 - plants;
   var cover = snow;
   var snowy = SNOW;
-  if (styled() && snow > 0.0) { cover = snow_cover(snow, p.snow_m, p.e); snowy = snow_look(p.e); }
+  if (styled() && snow > 0.0) { cover = snow_cover(snow, p.snow_m, p.e); snowy = snow_look(p.e, p.snow_m); }
   g.rgb = mix(g.rgb, snowy, cover);
   // Snow is not bare soil: it takes neither the soil's warmth nor its darkening when wet (`soil`).
   g.bare *= 1.0 - cover;

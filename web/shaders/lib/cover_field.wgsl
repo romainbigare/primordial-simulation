@@ -116,19 +116,21 @@ fn held_at(at: vec2f, b: Beneath) -> vec4f {
 // The herbs' sward: their plants thicker and thinner by up to `SWARD` of their mean over tufts of `SWARD_M`; they cover
 // the share of the ground their leaves close by the cover's light law (canopy.ts `Paint`, tape/src/stands.rs `plants`),
 // so a thin sward lets the ground show through. Its tone varies by up to `TUFT_TONE` over the tufts, by up to `SWATH` over
-// swathes of `SWATH_M` and by up to `BLADES` over blades `BLADE_W` wide and `BLADE_L` long, turned by tufts.
+// swathes of `SWATH_M` and and by tufts of fanned blades.
 const SWARD = 0.45; const SWARD_M = 0.35;
 // Under the trees' crowns the sward is in their shade: darker by up to `SWARD_SHADE` as they close over it.
 const SWARD_SHADE = 0.35;
-const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0; const BLADES = 0.3; const BLADE_W = 0.05; const BLADE_L = 0.25;
+const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0;
+// Tufts (floor.wgsl `fan`): cells of `TUFT_FAN_M` and `TUFT_BIG_M` m, the big ones this much (`TUFT_BIG_SHARE`) over the small
+// where they meet; of the ground they cover `TUFT_COVER` and `TUFT_TONE_MEAN` is a tuft's mean tone; between them the
+// ground lies in the shade of the blades, `GAP_SHADE` of their tone.
+const TUFT_FAN_M = 0.45; const TUFT_BIG_M = 2.6; const TUFT_BIG_SHARE = 1.0; const TUFT_COVER = 0.35; const TUFT_TONE_MEAN = 0.75; const GAP_SHADE = 0.95;
 // Swathes and blades show as detail this size, m (`shows_at`): none where a pixel takes 1 m or more, where they would
 // read only as noise.
 const SWATH_DETAIL_M = 1.33;
 // Reeds: herbs on soaked ground (from `REED_WET`) and on the shore of standing or running water, out to `REED_BAND_M`
-// m from its edge (its height over the water's level over the slope), stand dense (`REED_FILL` of the ground), their colour times `REED_TINT`, in streaks of tall blades
-// `REED_W` wide, `REED_L` long, `REED_TONE` deep.
+// m from its edge (its height over the water's level over the slope), stand dense (`REED_FILL` of the ground), their colour times `REED_TINT`, in tufts like the rest of the sward.
 const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const REED_TINT = vec3f(0.75, 0.8, 0.45);
-const REED_W = 0.07; const REED_L = 0.9; const REED_TONE = 0.5;
 // How much reeds stand at a place: on soaked ground and in the water's edge band (`REED_WET`, `REED_BAND_M`).
 fn reeds_of(b: Beneath) -> f32 {
   return max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
@@ -292,24 +294,6 @@ fn grain(at: vec2f, l: i32, share: f32, e: f32) -> vec2f {
   return mix(mean, vec2f(a, mix(GAP_TONE, drawn.y, drawn.x / max(a, 1e-4))), shows);
 }
 
-// Streaks of blades `w` m wide and `len` m long at the pixel, turned by `turn` radians: -1..1 (noise stretched along
-// the turn). A turn lies between the nearest two of `STREAK_TURNS` turns that stand fixed in the world, whose streaks
-// blend (kept as strong as one), so no lattice turns about the world's origin as the blades turn with the tufts.
-const STREAK_TURNS = 3.0;
-fn streaks(w: f32, len: f32, turn: f32, k: i32) -> f32 {
-  let t = turn / PI * STREAK_TURNS;
-  let x = t - STREAK_TURNS * floor(t / STREAK_TURNS);
-  let b = floor(x);
-  let u = smoothstep(0.0, 1.0, x - b);
-  var n = 0.0;
-  for (var j = 0; j < 2; j++) {
-    let a = PI * (b + f32(j)) / STREAK_TURNS;
-    let m = mat2x2f(cos(a) / w, -sin(a) / len, sin(a) / w, cos(a) / len);
-    n += select(1.0 - u, u, j == 1) * noise_l(lat(m, vec2f(0.0)), k + 100 * j).x;
-  }
-  return n / sqrt((1.0 - u) * (1.0 - u) + u * u);
-}
-
 // The flowers over the sward at `at`, seen at `e` m a pixel, of the herbs whose share `bloom` is in flower: their
 // colour and the share of the ground they cover (the sward's own share times it): clusters of dots (`FLOWER_M`, `DOT_R`).
 fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
@@ -354,16 +338,29 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   }
   let swaths = shows_at(SWATH_DETAIL_M, e);
   if (swaths > 0.0) { tone += SWATH * swaths * noise_l(lat_turned(SWATH_M, vec2f(0.0)), 73).x; }
-  let blades = shows_at(BLADE_W, e) * swaths;
-  if (blades > 0.0) { tone += BLADES * blades * streaks(BLADE_W, BLADE_L, PI * noise_l(lat_axes(SWARD_M, vec2f(0.0)), 74).x, 75); }
+  var gap = 1.0;
+  var tint = vec3f(1.0);
+  let fans = shows_at(TUFT_FAN_M * 0.3, e);
+  if (fans > 0.0) {
+    // Tufts of two sizes (the small on two lattices turned from each other, so no rows show), each a fan of blades in its own hue: the ground shows between them where the cover is thin.
+    let a = fan(lat_axes(TUFT_FAN_M, vec2f(0.0)), 110, 0.55, vec2f(0.22, 0.35), 9.0);
+    let b = fan(lat_turned(TUFT_FAN_M * 1.35, vec2f(0.3)), 112, 0.55, vec2f(0.22, 0.35), 10.0);
+    let small = mix(a, b, step(a.x, b.x));
+    let large = fan(lat_turned(TUFT_BIG_M, vec2f(0.6)), 111, 0.5, vec2f(0.2, 0.35), 13.0);
+    let own = mix(small, large, step(small.x, large.x * TUFT_BIG_SHARE));
+    let m = max(small.x, large.x);
+    s = mix(s, 1.0 - clamp((1.0 - s) * (1.0 - m) / (1.0 - TUFT_COVER), 0.0, 1.0), fans);
+    gap = mix(1.0, mix(GAP_SHADE, own.y / TUFT_TONE_MEAN, m), fans);
+    tint = mix(vec3f(1.0), vec3f(1.0 + 0.22 * (own.z - 0.5), 1.0 + 0.1 * (own.z - 0.5), 1.0 - 0.35 * (own.z - 0.5)), fans * m);
+  }
+  tone *= gap;
   let reeds = reeds_of(b);
   if (reeds > 0.0) {
     s = mix(s, max(s, REED_FILL), reeds);
     c = mix(c, c * REED_TINT, reeds);
-    tone += REED_TONE * reeds * shows_at(REED_W, e) * streaks(REED_W, REED_L, 0.3 * noise_l(lat_axes(REED_L, vec2f(0.0)), 76).x, 77);
   }
   let seen = s;
-  c *= max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
+  c *= max(tone, 0.0) * tint * (1.0 - SWARD_SHADE * min(canopy, 1.0));
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
     let fl = field_at(at, FLOWER_LAYER, 0.0);
