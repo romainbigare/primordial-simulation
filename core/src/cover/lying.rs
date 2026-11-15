@@ -6,7 +6,7 @@
 
 use super::budget::{held, DIED, SEEDS_DIED};
 use super::seed::{lodge, Landed, Seed};
-use super::{activity, built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, NG, NO_ROOT, NP, REPAIR};
+use super::{built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, MOIST, NG, NO_ROOT, NP, REPAIR};
 use crate::life::kin;
 use crate::units::DAY;
 use crate::{Counters, World};
@@ -108,7 +108,8 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         counts.seeds[WORN] += worn * kg;
         counts.seeds[FROZEN] += (1.0 - worn) * cold * kg;
         let dies = 1.0 - (1.0 - worn) * (1.0 - cold);
-        let wakes = (activity(ph, &g, a.moist) * pace).min(1.0) * (1.0 - dies);
+        // A seed is dry tissue: it wakes as the liquid it can take in lets it, by the seeds' rule (`Physics::activity`).
+        let wakes = (ph.activity(a.moist / dec(g[MOIST])) * pace).min(1.0) * (1.0 - dies);
         let (gone, up): ([f64; NP], [f64; NP]) = (lot.map(|m| m * dies), lot.map(|m| m * wakes));
         budget[SEEDS_DIED] -= held(&e, &gone);
         (0..NP).for_each(|q| dead[q] += gone[q]);

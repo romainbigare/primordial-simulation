@@ -70,7 +70,7 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
     let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x] as f64, c.need[x]) } else { (1.0, 0.0) };
     let on_land = |v: f64| per_land(v / g.area, g.land);
     let p = plants(ph, (on_land(built), on_land(c.leaf(mm, x)), on_land(c.plants[x])), rooted, walls, g.rho);
-    let act = cover::activity(ph, &genes, g.wet);
+    let act = cover::activity(&genes, g.wet);
     let reserve = dec(genes[STORE]) * built;
     let gene = |k: usize| genes[k] as f64;
     [

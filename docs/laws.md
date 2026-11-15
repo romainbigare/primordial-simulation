@@ -883,7 +883,7 @@ seeds fill it:
   and on bare bed nothing but the smallest stands.
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
-  `t_cat`, times its activity a = min(1, w / 10^`MOIST`)^`dormancy`. **Drought** is felt against the ground's own
+  `t_cat`, times its activity a = min(1, w / 10^`MOIST`), a straight line. **Drought** is felt against the ground's own
   pores (`cover::wet`, `cover::available`): w is the share of what its ground holds for roots that it holds, (θ −
   `wilt`) / (`field` − `wilt`) within 0 and 1, θ the share of the pores of the ground it stands on that its key liquid
   that is liquid fills (Flow's pore space, `Scratch::land_pores`; standing liquid counts, so θ may pass 1): none at the
@@ -891,8 +891,10 @@ seeds fill it:
   liquid is one store over the depth of its loose ground (Flow keeps no liquid by depth), so a deep root and a shallow
   one draw the same share. `MOIST` is where on that scale a kind is fully active: a plant transpires freely until its
   roots have drawn about half of what is available (FAO-56's depletion fraction 0.5; Allen and others 1998), `MOIST`
-  log10 0.5 = −0.3; a kind of dry ground, `MOIST` −1, stays active to a tenth, and pays for it in capacity (its
-  capacity per kg is 10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0; both the light
+  log10 0.5 = −0.3, and from there its transpiration falls in a straight line with what is left, to none at the wilting
+  point (FAO-56's water stress coefficient Ks; a leaf's pores close as its ground dries, its tissue keeps its liquid);
+  a kind of dry ground, `MOIST` −1, stays active to a tenth, and pays for it in capacity (its capacity per kg is
+  10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0; both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
   1980): nothing at or below the floor, so the cover cannot strip the air of that gas. **Liquid for gas**: its pores that
@@ -915,7 +917,9 @@ seeds fill it:
 - **Upkeep**, paid by burning its fuel (reaction 1) with the air's oxidising gas: per kg of living cover and day
   `c_basal` plus `c_capacity` × what its capacity could store in a day (dearer by 1 + (melting point of the key liquid −
   `FROST`) / `c_firm` for a cover that stands the cold), plus `c_leaf` per m² of capture area; times its repair factor
-  (`Physics::repair`), its activity and the burning's pace at T (seasons come from temperature only); and its
+  (`Physics::repair`) and the burning's pace at T, in every month: its living cover keeps its liquid whatever its ground
+  holds, so it breathes in a dry month too, and only its gain follows the liquid it can draw (Flexas and others 2006;
+  Atkin and Macherel 2009); a dry seed's upkeep falls with its liquid, a leaf's does not; and its
   conducting walls, alive in every season, `c_sapwood` per kg a day at the burning's pace: by the pipe model their
   cross-section goes with the capture area they feed, `huber` m² a m², as tall as its plants (Shinozaki and others
   1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month; and its fine roots,
@@ -945,7 +949,7 @@ seeds fill it:
   walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (`grow::frame`): walls are
   built of the fuel alone and pay no upkeep, so a plant short of minerals, or whose leaves are all its light pays for
   (it is **full** and builds no living cover then), still grows its frame and with it its height, and its stand thins
-  out. The fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
+  out. In season (below), the fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
   2004), where the open world's rot takes it.
 - **Seeds**: the share `SEED` of what it builds leaves in `seed::LOTS` (8) equal lots, each landing where the dispersal
   kernel draws it (`life::lot`: a lot starts at a point drawn evenly over its cell and moves by an offset drawn from a
@@ -958,7 +962,33 @@ seeds fill it:
   run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): in its patch its light
   falls as e^-z with the capture area z above a leaf, so what a kg more would store at depth z is its bottom's times
   e^(y − z), y its whole depth; its living cover below the depth where that falls to its upkeep a kg goes to its
-  remains, its walls and plants stay. Each seed carries its own
+  remains, its walls and plants stay. **Shedding for a season** is the same rule over the months a leaf waits to gain
+  again (Kikuzawa 1991). A leaf does not come alone: what it gains needs the fine roots that draw its liquid, whose
+  cost is a share of the gain set by the month's air (`upkeep::root_share`: the liquid a unit of the light reaction
+  draws, with what its pores lose for its gas, over `root_uptake`, at the roots' breathing and renewal); from all of
+  it its pores would lose more than they bring, and they stay shut that month: the cover draws nothing and gains
+  nothing (Cowan and Farquhar 1977, from memory). A slot is **in season** while its top leaves gain, less their fine
+  roots, what a kg of leaf and the walls that feed it cost to keep for the month (`upkeep::keep_per_kg`: its upkeep,
+  its capture area's and its conducting walls'); a layer that does not pay so in season lies in its own canopy's shade
+  and pays no more, so it goes as above (the slot `full`), once it has paid its month's upkeep. Out of season none of its leaves pay until the season comes back, after the
+  months its kinds expect without gain: the share of the last year's months in which its cell's ground held nothing
+  for roots, frozen or dry to the wilting point (`Cover::idle`, a running mean over a year's months, kept by the
+  cell's cover whether it holds slots or not, so a place's seasons outlive its plants), times the months of a year.
+  In the month its gain stops, before that month's upkeep is taken, it keeps the layers whose loss over those months,
+  `keep_per_kg` less their own gain, is less than building them anew (`Parts::living_cost`); in a month of no gain its
+  layers are alike, so it keeps all its leaves or drops all of them. Of those it would keep it keeps no more than its
+  fuel can keep through those months (this one at least; a leaf kept needs no building anew): what it cannot pay for
+  it drops as leaves and stands leafless with its store, rather than die of it as whole plants. With the costs of
+  chemistry 0 the tree kind drops its leaves for a season of four warm months (295 K) without liquid and keeps them through a frozen season of
+  any length, where the burning's pace is low. What it drops is its living cover (its leaves and the living cells that
+  serve them); its walls stand, its plants stay, and out of season it builds nothing and gives none of its fuel to its
+  ground, so its fuel is its store. A slot with no leaves pays no upkeep: its walls pay none, its conducting walls and
+  fine roots go with its leaves and the liquid they draw. **Known limit:** a resting stem and crown breathe a little
+  (their living cells), so a real leafless plant spends its store slowly through its season; here it spends none. What one more kg of leaf would gain is known with no leaves
+  too (its capture area per kg at the light that reaches its height): once that pays it is in season again and
+  builds, of its whole store while it holds no leaves, and matter alone in that month, on the walls it stands on. So
+  a tree stands bare through a long dry season and leafs out from its store; a herb keeps its stems and its store and
+  grows its leaves again, or, where its store is spent, comes back from its seeds lying. Each seed carries its own
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,
@@ -970,7 +1000,8 @@ seeds fill it:
   plant, so the cover's laws hold for it: each month, before its cover's own, of each lot the share its wear gives dies
   (the wear of dormant cover: its upkeep at full activity a kg, `upkeep_rates`, at the floor `dormant`, over `e_life` ×
   10^`REPAIR`) and the share frozen below its hardened limit (`cover::frozen` at activity 0), to the ground as remains
-  (`seeds_died` of the budget); of the rest the share min(1, a × pace) **wakes**, a its kind's activity on that ground
+  (`seeds_died` of the budget); of the rest the share min(1, a × pace) **wakes**, a a seed's activity on that ground
+  by the seeds' rule, min(1, w / 10^`MOIST`)^`dormancy` (Harrington's: dry tissue, `Physics::activity`),
   and pace its burning's pace at the ground's temperature over that at `t_cat`: at `t_cat` all that is active wakes in a
   month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
   ground none. What wakes takes hold (`seed::lodge`): it joins the most alike slot of its starting kind in
