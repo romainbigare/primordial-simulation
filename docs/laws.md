@@ -972,12 +972,15 @@ seeds fill it:
   cell's cover whether it holds slots or not, so a place's seasons outlive its plants), times the months of a year.
   In the month its gain stops, before that month's upkeep is taken, it keeps the layers whose loss over those months,
   `keep_per_kg` less their own gain, is less than building them anew (`Parts::living_cost`); in a month of no gain its
-  layers are alike, so it keeps all its leaves or drops all of them. With the costs of chemistry 0 the tree kind
+  layers are alike, so it keeps all its leaves or drops all of them. Of those it would keep it keeps no more than its
+  fuel can keep through those months (this one at least) and still build anew: what it cannot pay for it drops as
+  leaves and stands leafless with its store, rather than die of it as whole plants. With the costs of chemistry 0 the tree kind
   drops its leaves for a season of four warm months (295 K) without liquid and keeps them through a frozen season of
   any length, where the burning's pace is low. What it drops is its living cover (its leaves and the living cells that
   serve them); its walls stand, its plants stay, and out of season it builds nothing and gives none of its fuel to its
   ground, so its fuel is its store. A slot with no leaves pays no upkeep: its walls pay none, its conducting walls and
-  fine roots go with its leaves and the liquid they draw. What one more kg of leaf would gain is known with no leaves
+  fine roots go with its leaves and the liquid they draw. **Known limit:** a resting stem and crown breathe a little
+  (their living cells), so a real leafless plant spends its store slowly through its season; here it spends none. What one more kg of leaf would gain is known with no leaves
   too (its capture area per kg at the light that reaches its height): once that pays it is in season again and
   builds, of its whole store while it holds no leaves, and matter alone in that month, on the walls it stands on. So
   a tree stands bare through a long dry season and leafs out from its store; a herb keeps its stems and its store and

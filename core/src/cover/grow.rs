@@ -128,12 +128,15 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     for x in order {
         // It is in season while its top leaves gain what a kg of leaf costs to keep for the month (`keep_per_kg`). In a
         // month out of season it drops, before it pays the month's upkeep, the leaves it would cost more to keep through
-        // the months it expects without gain than to build anew.
+        // the months it expects without gain than to build anew, and those its fuel could not keep and still build anew.
         let keep = keep_per_kg(w, c, p, x, (t, dt));
         let patch = area * c.rooted[x].max(f32::MIN_POSITIVE) as f64;
         let season = s[x].gain * (s[x].leaf / patch).exp() > keep;
         if !season {
-            let shed = shed(c, x, &s[x], floor(keep, (keep, rebuild), Some(months)), patch);
+            // What its fuel can pay: keeping a kg through the months it expects (this one at least) and still building it
+            // anew, so what it keeps never leaves it unable to pay or to grow its leaves again.
+            let fuel = c.mol[x][FUEL].max(0.0) * e[FUEL] / (s[x].living * (keep * months.max(1.0) + rebuild)).max(f64::MIN_POSITIVE);
+            let shed = shed(c, x, &s[x], (floor(keep, (keep, rebuild), Some(months)), fuel), patch);
             book_shed(&mut b, counts, (p, &mm, &e), shed);
             s[x] = after_shed(ph, c, (&mm, rho), x, s[x]);
         }
@@ -145,7 +148,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         let pays = s[x].gain > per_kg;
         c.full[x] = !pays;
         if !pays && season {
-            let shed = shed(c, x, &s[x], floor(per_kg, (keep, rebuild), None), patch);
+            let shed = shed(c, x, &s[x], (floor(per_kg, (keep, rebuild), None), 1.0), patch);
             book_shed(&mut b, counts, (p, &mm, &e), shed);
         }
         // Its balance over about a year: what it stored less its upkeep, per kg.
@@ -281,15 +284,22 @@ fn floor(per_kg: f64, (keep, rebuild): (f64, f64), months: Option<f64>) -> f64 {
 /// compensation point (Monsi and Saeki 1953; Hirose 2005) and drops them all for a season it would cost more to keep
 /// them through than to build them anew (Kikuzawa 1991): its light falls as e^-z with the capture area z above a leaf
 /// in its patch of `patch` m², so what one more kg would gain at depth z is its gain at its bottom (`Slot::gain`) times
-/// e^(y - z), y its whole depth, and the layers deeper than where that falls to `floor` go. A slot that gains nothing
-/// sheds all its leaves or none, as its layers are alike. Returns the mol of body matter shed (to its remains); its
+/// e^(y - z), y its whole depth, and the layers deeper than where that falls to `floor` go; of the rest it keeps no more
+/// than the share `most` (out of season, those its fuel can keep through the months it expects and still build anew:
+/// what it cannot pay for it drops as leaves rather than die of it as whole plants). A slot that gains nothing keeps
+/// all its leaves or none by `floor`, as its layers are alike. Returns the mol of body matter shed (to its remains); its
 /// walls, its fuel and its plants stay.
-fn shed(c: &mut Cover, x: usize, s: &Slot, floor: f64, patch: f64) -> f64 {
+fn shed(c: &mut Cover, x: usize, s: &Slot, (floor, most): (f64, f64), patch: f64) -> f64 {
     let y = s.leaf / patch;
-    if floor <= 0.0 || y <= 0.0 {
+    if y <= 0.0 || (floor <= 0.0 && most >= 1.0) {
         return 0.0;
     }
-    let keep = if s.gain > 0.0 { ((y + (s.gain / floor).ln()) / y).clamp(0.0, 1.0) } else { 0.0 };
+    let paid = match floor {
+        f if f <= 0.0 => 1.0,
+        _ if s.gain <= 0.0 => 0.0,
+        f => ((y + (s.gain / f).ln()) / y).clamp(0.0, 1.0),
+    };
+    let keep = paid.min(most);
     let m = c.mol[x][MATTER].max(0.0) * (1.0 - keep);
     c.mol[x][MATTER] -= m;
     m
