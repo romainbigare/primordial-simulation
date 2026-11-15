@@ -21,7 +21,7 @@ pub(super) fn low_wind(w: &World, s: &Scratch) -> Vec<[f64; 2]> {
     let (planet, cell, air) = (w.planet.as_ref().filter(|_| w.edges_open()), Cell::of(w), w.mesh.level(AIR));
     let mut alone = vec![false; air.n()];
     blocks(w).iter().filter(|b| b.len() == 1).for_each(|b| alone[b[0] as usize] = true);
-    ends(&w.cfg, s, air)
+    ends(w, s)
         .iter()
         .enumerate()
         .map(|(j, e)| {
@@ -39,7 +39,7 @@ pub(super) fn low_wind(w: &World, s: &Scratch) -> Vec<[f64; 2]> {
 /// over its area and its scale height) over the cell's area.
 pub(super) fn rise(w: &World, s: &Scratch, wind: &[[f64; 2]]) -> Vec<f64> {
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
-    let slope = gradient(cells, &s.head);
+    let slope = gradient(cells, &s.head, &[]);
     let mut rise = vec![0.0; air.n()];
     for (i, d) in slope.iter().enumerate() {
         let j = w.mesh.up(i, 0, AIR);

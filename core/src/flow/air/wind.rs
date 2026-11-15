@@ -4,9 +4,10 @@
 
 use super::super::Scratch;
 use super::daily::{temps, Moved};
+use super::edge::{beyond_offset, columns};
 use super::cell::Cell;
 use super::stretch::Stretch;
-use crate::{solve::line::{self, Lines}, solve::sweep::HALF_WAY, space::Level, units::R_GAS, Config, World};
+use crate::{solve::line::{self, Lines}, solve::sweep::HALF_WAY, space::Level, units::R_GAS, Config, World, AIR};
 
 /// A fit of a gradient whose neighbours nearly line up (the determinant below this share of the product of its
 /// diagonal) is made along each axis alone.
@@ -134,24 +135,32 @@ pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, (link
 
 /// Each air node as an end of its links (`End`), as the last state left it: its warmth, its temperature raised to a
 /// common height by its drop with height, and that's gradient (`gradient`).
-pub(super) fn ends(cfg: &Config, s: &Scratch, air: &Level) -> Vec<End> {
+pub(super) fn ends(w: &World, s: &Scratch) -> Vec<End> {
+    let (cfg, air) = (&w.cfg, w.mesh.level(AIR));
     let warmth: Vec<f64> = (0..air.n()).map(|j| s.ta[j] + s.gam[j] * s.zair[j]).collect();
-    let grad = gradient(air, &warmth);
+    // An edge node's neighbours include the columns of the planet's air beyond it (`edge::columns`), as a node inside
+    // the map has its neighbours on every side.
+    let mut beyond = vec![Vec::new(); air.n()];
+    for (j, side, _, b) in columns(w) {
+        beyond[j].push((beyond_offset(side, air.area()[j].sqrt()), b.warmth));
+    }
+    let grad = gradient(air, &warmth, &beyond);
     (0..air.n()).map(|j| End::of(cfg, s, air, j, grad[j])).collect()
 }
 
 /// The gradient of `v` at each node [east, south], per m: the least-squares fit of its differences to its bordering
-/// nodes (0 along an axis with none).
-pub(super) fn gradient(air: &Level, v: &[f64]) -> Vec<[f64; 2]> {
+/// nodes and to the points `beyond` it (per node, each its offset, m, and value; none where it is empty), 0 along an
+/// axis with none.
+pub(super) fn gradient(air: &Level, v: &[f64], beyond: &[Vec<([f64; 2], f64)>]) -> Vec<[f64; 2]> {
     (0..air.n())
         .map(|j| {
             let (mut m, mut r) = ([0.0; 3], [0.0; 2]);
-            for (&l, &k) in air.around(j).0.iter().zip(air.around(j).1) {
-                if air.width()[l as usize] > 0.0 {
-                    let (d, dv) = (air.offset(j, k as usize), v[k as usize] - v[j]);
-                    m = [m[0] + d[0] * d[0], m[1] + d[0] * d[1], m[2] + d[1] * d[1]];
-                    r = [r[0] + d[0] * dv, r[1] + d[1] * dv];
-                }
+            let links = air.around(j).0.iter().zip(air.around(j).1).filter(|e| air.width()[*e.0 as usize] > 0.0);
+            let points = links.map(|(_, &k)| (air.offset(j, k as usize), v[k as usize])).chain(beyond.get(j).into_iter().flatten().copied());
+            for (d, value) in points {
+                let dv = value - v[j];
+                m = [m[0] + d[0] * d[0], m[1] + d[0] * d[1], m[2] + d[1] * d[1]];
+                r = [r[0] + d[0] * dv, r[1] + d[1] * dv];
             }
             let det = m[0] * m[2] - m[1] * m[1];
             if det > SINGULAR * m[0] * m[2] {
