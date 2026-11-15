@@ -344,6 +344,10 @@ as real as possible, with features dramatised for the game: textures, details, r
   bare ground, liquid, snow and rock are, how tall and dense the plants, how dry, the season. Detail is keyed to
   the place so it does not move between frames or zoom levels, and nothing stands on a grid; the look differs by
   habitat because the numbers differ. The animals' drawing stays paused (see the life track).
+- **The builder's brief is `review/look-brief.md`** (the owner asked for it in the repository; it holds their
+  words): give it whole to the page builder. The owner's later words in it: textures that follow the seasons;
+  dense ground as a blanket of greenery, not copies of one bush; sparse ground full of free detail; stylised
+  realism; the angled view first.
 - **A first priority of the look, the owner's word: one look at every zoom.** Today zooming in changes a brown
   land into a green one and olive trees into bright yellow ones. Colour, texture and style must be continuous
   across all zoom levels: what a far view shows as one tone is the mean of what the near view draws there
@@ -711,11 +715,15 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         50. Closed islands move a little (the key world's river cells 232 → 280, in range). With it:
         `worldgen::life::soil` gives the soil by the land at the moment life starts. `flow/air/rain.rs` is 376
         lines.
-      - Then for the air's helper: **the open edges gather moist air** (64 world of the band 5 to 50: the two
-        southern corner nodes rain 5,000 to 5,600 mm a year and the edge columns 1,100 to 1,500 against 650 to
-        950 inside; lead: an edge link brings in the planet's moist low air with nothing inside to answer it);
-        the measure of `wind` at 2, 3 and 5 times, which now decides the dry belt and its season; the long
-        step's error on the land's runoff.
+      - **On main: an edge node fits its warmth's gradient with the planet's air beyond it** (`edge::columns`,
+        `wind::gradient`). A one-sided fit read the step from sea to land as the large gradient, and the
+        overturning across the open edge followed it: the two southern corner nodes of the 64 world of the band
+        5 to 50 rained 5,300 to 5,900 mm a year; they rain 1,670 to 1,720 now, as their neighbours. Closed
+        islands, the globe and the key numbers are the same to the last digit.
+      - **Not done, put off until after the look (the helper's room is used up; `scratchpad/air2/HANDOVER.md`)**:
+        the measure of `wind` at 2, 3 and 5 times, which decides the dry belt, its season and the low wind's
+        speed (the `wind` row's measure in `docs/numbers.md` is stale: the cell's low flux on the lifeless
+        globe is 3.8 to 4.4e10 kg/s at 22 degrees); the long step's error on the land's runoff.
    4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
       keeps grassland open (Bond, Woodward and Midgley 2005). A fresh builder (branch `fire`, scratch
       `scratchpad/fire/`: `design.md`, `fire_today.png`, tables).
