@@ -744,6 +744,17 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         needs, the fine roots that draw its liquid too** (in the dry cells' last half-dry month the roots'
         upkeep, 42% of the whole, emptied the store and the herbs died as whole plants): a plant whose pores
         would lose more than they bring keeps them shut (Cowan and Farquhar 1977).
+      - Fourth round (`wip/fire`, six commits, gate green; `step1r_table.txt`, `step1r_page.png`,
+        `trace_roots_2508_1108.txt`): both mends are in (`upkeep::root_share`: from a roots' share of 1 of the
+        gain the pores stay shut). Forest / open / bare: 0.59/0.23/0.17 (band 20 to 65), 0.51/0.32/0.17 (5 to
+        50); no plant dies whole in the half-dry month any more; a tree keeps its walls and store through five
+        dry months. **Not merged: in hot air plants sit shut through wet months** (cell 2508, 1,510 mm: the
+        fine roots for the month's liquid cost 1.47, 0.92 and 1.07 of the gain at 300 to 303 K; a real plant
+        spends about a third on its roots). The season rule is right; the roots' number is off: `root_uptake`
+        is anchored on what a temperate forest's roots carry in its peak month, a typical flow, and is used as
+        what a root can carry. In work: re-anchored by a method fixed before any run (the highest biome value of
+        peak-month transpiration over live fine-root mass). Left as they are: the cold class (near-tundra, a
+        summer too short to pass the bare line), the never-wet cells (the bucket).
       - **Found with it, a fault of Flow: the ground's bucket dries by evaporation below the wilting point**
         (rain 544 mm against 563 mm rising; 16% of the pores full in every month, `wilt` 25%), so on semi-dry
         land rain never becomes liquid a root can draw. With the air's helper, after the rain on rising ground:
