@@ -755,6 +755,21 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         what a root can carry. In work: re-anchored by a method fixed before any run (the highest biome value of
         peak-month transpiration over live fine-root mass). Left as they are: the cold class (near-tundra, a
         summer too short to pass the bare line), the never-wet cells (the bucket).
+      - **Step 1 is on main** (seven commits, `SNAPSHOT_VERSION` 146, `Cover::idle` one number per cell): a
+        leaf's gain falls in a straight line to the wilting point (FAO-56); its upkeep follows temperature; it
+        is in season while its gain pays its keep and the fine roots for its liquid, and keeps its pores shut
+        otherwise (`upkeep::root_share`); out of season it is shed where keeping it through the expected months
+        costs more than building it anew or more than the store can pay (Kikuzawa 1991); `root_uptake` is the
+        highest flow roots are seen to carry (1.6e-3, a transition forest's wet season). Year 100, 64 drawn,
+        main before → now, forest / open / bare: 0.78/0.18/0.04 → 0.63/0.21/0.16 (band 20 to 65),
+        0.62/0.26/0.12 → 0.54/0.30/0.16 (5 to 50); land at 10 to 20 degrees bare 0.23 → 0.17; woods leafless in
+        the dry month on 8 to 9% of forest cells; dead fuel on open land 0.29 and 0.09 kg/m² in the dry month.
+        Known limits, in `docs/laws.md` or here: a leafless plant pays nothing; at 303 K the roots still cost
+        all of the gain and the first hot wet months stay shut (the roots' breathing goes by the bare rate
+        law, real roots acclimate); the cold class stays bare (near-tundra: real ground like it holds 0.5 to 1
+        kg/m² of low cover); coastal forest 0.71 → 0.48 and 0.44 → 0.32 of coastal land cells; the takers'
+        tests place their cover (`FED_KG`). The builder's room is used up: fire v1 goes to a fresh builder
+        (`scratchpad/fire/handover.md`, `design.md`, snapshots in `/dev/shm/fire`).
       - **Found with it, a fault of Flow: the ground's bucket dries by evaporation below the wilting point**
         (rain 544 mm against 563 mm rising; 16% of the pores full in every month, `wilt` 25%), so on semi-dry
         land rain never becomes liquid a root can draw. With the air's helper, after the rain on rising ground:
