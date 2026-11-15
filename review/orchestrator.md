@@ -343,6 +343,10 @@ as real as possible, with features dramatised for the game: textures, details, r
   bare ground, liquid, snow and rock are, how tall and dense the plants, how dry, the season. Detail is keyed to
   the place so it does not move between frames or zoom levels, and nothing stands on a grid; the look differs by
   habitat because the numbers differ. The animals' drawing stays paused (see the life track).
+- **Variation inside a kind (the owner's word)**: with a world's variety at 8, the drawing adds small procedural
+  variations among the plants of one kind (form, size, tone, lean, age) so that the map looks rich and full,
+  while the numbers stay correct: the variations spread around the kind's own numbers (its height, its crown,
+  its leaf, its count) and never change what a square holds in sum.
 
 **Where the two tracks stand** (the orchestrator keeps these lines true):
 - On main: the docs' clean-up; the plants made free (`core/src/contract.rs`, the natural world's month on its own, a
