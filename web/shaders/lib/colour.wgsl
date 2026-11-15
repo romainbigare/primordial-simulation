@@ -15,6 +15,10 @@ struct Earth {
   view: vec4f,
   // Where the map drawn lies in the world: its top-left corner and its size, m.
   place: vec4f,
+  // Where a pixel of the target lies in the world (land.wgsl): the origin of the draw, m (a whole multiple of 1024 m,
+  // field-window.ts `frameOf`) and the metres a pixel takes (w is not read); and the world's point under the target's
+  // first pixel, m from the origin.
+  frame: vec4f, corner: vec4f,
   // The layer's ramp, display colours 0..255.
   ramp: array<vec4f, 10>,
 }
@@ -122,7 +126,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   let steep = p.slope / earth.look.x;
   var bed = p.bed;
   if (styled()) {
-    g.rgb = floor_of(g.rgb, p.at, p.e, p.canopy, p.wet);
+    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet);
     if (p.rock > 0.0) { bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade); }
   }
   g.rgb = mix(g.rgb, bed, p.rock);
@@ -142,7 +146,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     for (var k = 0; k < 2; k++) {
       var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 1.0, 0.0, sunk, snow, p.snow_m, STONE_RARE);
       if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), p.stone, p.small, p.worn, BED_SUNK, snow, p.snow_m, 0.0); }
-      let st = stones(p.at, p.e, s, 0.0, p.bed, 61 + 8 * k);
+      let st = stones(p.e, s, 0.0, p.bed, 61 + 8 * k);
       g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
     }
   }
@@ -206,7 +210,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
   // liquid.
   if (p.depth > 0.0) {
     let bed = soil(g, 1.0, lit);
-    let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
+    let ripple = ripples(p.e) * (1.0 - p.snow);
     var water: vec3f;
     if (styled()) {
       // The style: clear water over a pale bed, deepening to the open water, the sea's foam at its edge (style.wgsl;
@@ -234,7 +238,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
   var rgb = soil(g, s, lit);
   let river = p.river * (1.0 - 0.6 * p.snow);
   if (film <= 0.0 && river <= 0.0) { return Shaded(rgb, lit, g.kind); }
-  let ripple = ripples(p.at, p.e);
+  let ripple = ripples(p.e);
   rgb += film * surface_light(ripple * film);
   var kind = g.kind;
   // A river: its water over its own bed. Running water carries the fine soil away: its bed is washed sand and gravel,

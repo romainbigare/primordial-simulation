@@ -24,10 +24,10 @@ const BANK_M = 0.4; const BANK_SHARE = 0.12; const BANK_SHADE = 0.45; const BANK
 // the way to the bed's edge (`up`); and how far outside the bed's edge it lies, m, negative inside (`bank`).
 struct Reach { share: f32, bars: f32, across: f32, steep: f32, edge: f32, up: f32, bank: f32 }
 
-// The reach at `at`, m, seen at `e` m a pixel, on ground `g` of the channel `c` (rock.wgsl `channel_at`), drawn no
+// The reach at the pixel, seen at `e` m a pixel, on ground `g` of the channel `c` (rock.wgsl `channel_at`), drawn no
 // thinner than `line` m half wide (`line_of`), `open` of its bed drawn apart from its water, whose flow moves stones
 // of `stone` m.
-fn reach_at(at: vec2f, e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32) -> Reach {
+fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32) -> Reach {
   var r: Reach;
   r.steep = ease(STEEP_STONE.x, STEEP_STONE.y, stone);
   var half = c.water;
@@ -38,11 +38,11 @@ fn reach_at(at: vec2f, e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone
     var bank_edge = 0.0;
     // Octaves each weaker than the last, each read only where it shows.
     let coarse = shows_at(RAG_M.x, e);
-    if (coarse > 0.0) { edge += coarse * noise_turned(at / RAG_M.x, 66); bank_edge += coarse * noise_turned(at / RAG_M.x + 11.0, 70); }
+    if (coarse > 0.0) { edge += coarse * noise_l(lat_turned(RAG_M.x, vec2f(0.0)), 66).x; bank_edge += coarse * noise_l(lat_turned(RAG_M.x, vec2f(11.0)), 70).x; }
     let fine = 0.5 * shows_at(RAG_M.y, e);
-    if (fine > 0.0) { edge += fine * noise_turned(at / RAG_M.y, 67); bank_edge += fine * noise_turned(at / RAG_M.y + 11.0, 71); }
+    if (fine > 0.0) { edge += fine * noise_l(lat_turned(RAG_M.y, vec2f(0.0)), 67).x; bank_edge += fine * noise_l(lat_turned(RAG_M.y, vec2f(11.0)), 71).x; }
     let finest = 0.3 * shows_at(RAG_M.z, e);
-    if (finest > 0.0) { bank_edge += finest * noise_turned(at / RAG_M.z, 72); }
+    if (finest > 0.0) { bank_edge += finest * noise_l(lat_turned(RAG_M.z, vec2f(0.0)), 72).x; }
     half += min(RAG_SHARE * half, RAG_MOST_M) * edge;
     banks += min(RAG_SHARE * banks, RAG_MOST_M) * bank_edge;
   }
@@ -61,7 +61,7 @@ fn reach_at(at: vec2f, e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone
   // The top of a bar is the plants' again, in tufts with an edge of their own: more of them the nearer the bank.
   let tufts = shows_at(BAR_TUFT_M, e);
   if (tufts > 0.0 && r.up > BAR_GROWN) {
-    let grown = noise_turned(at / BAR_TUFT_M, 79) + 1.2 * ease(BAR_GROWN, 1.0, r.up) - 0.6;
+    let grown = noise_l(lat_turned(BAR_TUFT_M, vec2f(0.0)), 79).x + 1.2 * ease(BAR_GROWN, 1.0, r.up) - 0.6;
     in_bed = max(in_bed * (1.0 - open * tufts * tent(grown * BAR_TUFT_M / e)), water);
   }
   r.share = mix(in_bed, water, open);
@@ -69,14 +69,14 @@ fn reach_at(at: vec2f, e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone
   return r;
 }
 
-// The tone of a bar at `at`, seen at `e` m a pixel, `along` m along its channel, at the reach's point `r`: its mottle
+// The tone of a bar at the pixel, seen at `e` m a pixel, `along` m along its channel, at the reach's point `r`: its mottle
 // and its drift lines (each where it shows).
-fn bar_tone(at: vec2f, e: f32, along: f32, r: Reach) -> f32 {
+fn bar_tone(e: f32, along: f32, r: Reach) -> f32 {
   var t = 1.0;
   let coarse = shows_at(BAR_PATCH_M.x, e);
-  if (coarse > 0.0) { t += BAR_MOTTLE * coarse * noise_turned(at / BAR_PATCH_M.x, 76); }
+  if (coarse > 0.0) { t += BAR_MOTTLE * coarse * noise_l(lat_turned(BAR_PATCH_M.x, vec2f(0.0)), 76).x; }
   let fine = shows_at(BAR_PATCH_M.y, e);
-  if (fine > 0.0) { t += 0.6 * BAR_MOTTLE * fine * noise_turned(at / BAR_PATCH_M.y, 77); }
+  if (fine > 0.0) { t += 0.6 * BAR_MOTTLE * fine * noise_l(lat_turned(BAR_PATCH_M.y, vec2f(0.0)), 77).x; }
   let lines = shows_at(STRAND_M * STRAND_W * 3.0, e);
   if (lines > 0.0) {
     let band = fract(r.edge / STRAND_M + 0.8 * noise_reach(along, STRAND_WAVE_M, 0.0, 80));
@@ -168,7 +168,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, grows: vec2f
   var open = 0.0;
   // (No bed takes `BED_PX` pixels in a program made for draws from this far: rock.wgsl `BED_MOST_M`.)
   if (BED_PX * least_e() < BED_MOST_M) { open = ease(BED_PX * e, 2.0 * BED_PX * e, ch.law) * (1.0 - ease(ch.law, 2.0 * ch.law, line)); }
-  let r = reach_at(at, e, g, ch, line, open, stone);
+  let r = reach_at(e, g, ch, line, open, stone);
   let runs = 1.0 - mouth;
   let seen = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * wide);
   out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line)) * cuts * seen;
@@ -177,7 +177,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, grows: vec2f
   let gravel = mix(BEACH_SAND, washed, ease(0.0, BAR_SAND_STONE, stone));
   // On its bars the ground is that gravel, bare, rising from the water's edge, as far as they cover the pixel.
   let bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth)) * seen;
-  out.dry.ground = mix(out.dry.ground, gravel * bar_tone(at, e, g.along, r), bars);
+  out.dry.ground = mix(out.dry.ground, gravel * bar_tone(e, g.along, r), bars);
   out.dry.sand *= 1.0 - bars;
   out.dry.rock *= 1.0 - bars;
   out.dry.cover *= 1.0 - bars;
@@ -238,7 +238,7 @@ const STONE_STANDS = 0.3; const WAKE = 0.7;
 fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let soaked_bed = soil(g, 1.0, lit);
-  let ripple = ripples(p.at, p.e) * (1.0 - p.snow);
+  let ripple = ripples(p.e) * (1.0 - p.snow);
   var water = seen_through(BED_FILM * soaked_bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
   // In the style a channel's water is coloured by its bed's shape (style.wgsl `river_seen`): light shallows over the
   // bed's stones, a dark deep thread, a light wash at its edge.
@@ -250,14 +250,14 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
   if (styled() && p.stony > 0.0 && !unseen(STONE_MOST_M / STONE_PX)) {
     let s = Stony(p.stony, p.stone, p.small, p.worn, BED_SUNK, 0.0, 0.0, 0.0);
     let least = p.depth / STONE_STANDS;
-    if (flow.z > 0.0) { water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.at, p.e, s, least, down, 61 + 8)); }
-    let st = stones(p.at, p.e, s, least, p.bed, 61 + 8);
+    if (flow.z > 0.0) { water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.e, s, least, down, 61 + 8)); }
+    let st = stones(p.e, s, least, p.bed, 61 + 8);
     water = mix(water, st.rgb / max(st.a, 1e-4), st.a);
     // The blocks of a steep reach: the scree's own (colour.wgsl `ground_of`), where they stand out of the water.
     if (p.blocks > 0.0) {
       let fallen = Stony(p.blocks, SCREE_STONE_M, 1.0, 0.0, BED_SUNK, 0.0, 0.0, STONE_RARE);
-      water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.at, p.e, fallen, least, down, 61));
-      let block = stones(p.at, p.e, fallen, least, p.bed, 61);
+      water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.e, fallen, least, down, 61));
+      let block = stones(p.e, fallen, least, p.bed, 61);
       water = mix(water, block.rgb / max(block.a, 1e-4), block.a);
     }
   }

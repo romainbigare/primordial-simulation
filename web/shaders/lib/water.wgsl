@@ -22,10 +22,10 @@ const RIPPLE_LONGEST_M = 2.0;
 const RIPPLE_OCTAVES = 4;
 const RIPPLE_SLOPE = 0.09;
 
-// The slope (east, south) of a liquid's surface at `at`, m in the world, seen at `e` m a pixel: octaves of ripples fixed
+// The slope (east, south) of a liquid's surface at the pixel, seen at `e` m a pixel: octaves of ripples fixed
 // in the world, each turned from the last so they stand in no grid, each fading out as it shrinks below a few pixels
 // (it would only flicker).
-fn ripples(at: vec2f, e: f32) -> vec2f {
+fn ripples(e: f32) -> vec2f {
   var g = vec2f(0.0);
   var wave = RIPPLE_LONGEST_M;
   // The octave's turn from the world's axes; a turn of about 37 degrees between octaves.
@@ -36,7 +36,7 @@ fn ripples(at: vec2f, e: f32) -> vec2f {
     // `LEAST_E`).
     if (least_e() >= 0.5 * wave) { break; }
     let shown = 1.0 - ease(wave / 8.0, wave / 2.0, e);
-    if (shown > 0.0) { g += shown * RIPPLE_SLOPE * (transpose(rot) * noise(rot * at / wave, k).yz); }
+    if (shown > 0.0) { g += shown * RIPPLE_SLOPE * (transpose(rot) * noise_l(lat(rot * (1.0 / wave), vec2f(0.0)), k).yz); }
     wave *= 0.5;
     rot = turn * rot;
   }

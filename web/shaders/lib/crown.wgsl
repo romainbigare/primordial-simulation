@@ -30,10 +30,12 @@ fn form_wide(f: i32) -> f32 { var w = array<f32, 6>(1.0, 0.85, 0.6, 1.2, 1.0, 1.
 const STAND = 0.5;
 // Seen from above a crown's edge draws in lobes, as many as `LOBES_FINE` for the smallest leaves and `LOBES_BROAD` for
 // the broadest (capture area per kg, log10 m²/kg, from `LEAF_THICK` to `LEAF_THIN`), each this share of its radius deep;
-// its leaves' clumps (three waves at 120 degrees: no rows) are as many across its width as its lobes, their light
-// departing by up to `CLUMP_TONE` either way; where it is open the ground shows between its `TWIGS` branches, curling
+// its leaves' clumps (noise over its width) are as many across it as its lobes, their light departing by up to
+// `CLUMP_TONE` either way; where it is open the ground shows between its `TWIGS` branches, curling
 // by `TWIG_CURL` radians a radius and spaced unevenly.
 const LOBES_FINE = 13.0; const LOBES_BROAD = 6.0; const LEAF_THICK = -0.5; const LEAF_THIN = 0.7; const LOBE_DEEP = 0.18;
+// The second octave of the clumps is this many times as fine as the first.
+const CLUMP_OCTAVE = 1.93;
 const CLUMP_TONE = 0.18; const TWIGS = 17.0; const TWIG_CURL = 2.0;
 // A crown is a dome (profile power 2) or a cone (1) seen from above, lit from the north-west, its slope read no steeper
 // than `STEEPEST`, and its light departs from the flat ground's by `LIGHT_SHARE` (the sky lights its far side, and light
@@ -149,9 +151,10 @@ fn crown(q: Plant, p: vec2f, e: f32) -> Body {
   var a = 1.0 - smoothstep(edge - soft, edge + soft * 0.5, rho);
   if (f == UMBRELLA) { a *= 1.0 - angled * s * smoothstep(UNDER - soft, UNDER + soft, v.y); }
   if (a <= 0.0) { return Body(0.0, 1.0, 0.0); }
-  // Its leaves' clumps: the ground shows between them as far as the crown is open; their light varies.
-  let wave = 0.5 * PI * mix(LOBES_BROAD, LOBES_FINE, q.fine);
-  let clump = (3.0 + cos(wave * v.x + 6.0 * q.r.x) + cos(wave * dot(v, vec2f(-0.5, 0.866)) + 6.0 * q.r.y) + cos(wave * dot(v, vec2f(-0.5, -0.866)) + 6.0 * q.r.z)) / 6.0;
+  // Its leaves' clumps: their light varies as noise over its width, as many cells across as its lobes (two octaves, the
+  // second turned: no rows, no lattice of bumps).
+  let cells = 0.5 * mix(LOBES_BROAD, LOBES_FINE, q.fine);
+  let clump = 0.7 * noise(v * cells + 41.0 * q.r.xy, 5).x + 0.3 * noise(mat2x2f(0.8, 0.6, -0.6, 0.8) * v * (CLUMP_OCTAVE * cells) + 7.0 * q.r.yz, 6).x;
   // Open, the ground shows between its branches, which spread from its stem and curl a little.
   let twigs = 0.5 + 0.5 * cos(TWIGS * ang + TWIG_CURL * rho + 2.0 * PI * q.r.x + 1.5 * sin(5.0 * ang + 6.0 * q.r.z));
   a *= mix(1.0, smoothstep(0.0, 0.25, twigs - (1.0 - q.closed)), smoothstep(0.0, 1.0, (1.0 - q.closed) * 4.0));
@@ -159,7 +162,7 @@ fn crown(q: Plant, p: vec2f, e: f32) -> Body {
   var lit = dome_lit(v, mix(2.0, form_power(f), s), k);
   if (f == CONE) { lit *= 1.0 - s * WHORL_DARK * (1.0 - smoothstep(0.0, 0.3, fract(rho * WHORLS + q.r.z))); }
   if (f == TIERED) { lit *= 1.0 - s * TIER_DARK * (1.0 - smoothstep(0.0, 0.25, fract(rho * TIERS + 0.5 * q.r.z))); }
-  lit = mix(lit, side_lit(v) * mix(1.0, band, s), angled) * (1.0 + CLUMP_TONE * (2.0 * clump - 1.0));
+  lit = mix(lit, side_lit(v) * mix(1.0, band, s), angled) * (1.0 + CLUMP_TONE * clump);
   return Body(a, lit, rim(rho, edge, half, e));
 }
 

@@ -5,7 +5,7 @@
 // picked, and the scale bar.
 import { Draw, Gpu, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
-import { FieldWindow, MapLook } from './field-window';
+import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
 
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
@@ -298,11 +298,17 @@ export class MapView {
     // Copies meet on whole pixels, so no thin line shows between them.
     const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
     if (this.land) this.land.drawn = k;
-    const binds = this.land?.binds(gpu, look), land = binds && this.layer ? { ...binds, ...this.layer.under(gpu, s) } : null;
     // The live map's program made for pixels as large as these (gpu.ts `seenFrom`).
-    const program = seenFrom('land', this.cellM / (s * k));
-    if (land) xs.forEach((_, c) => p.draw(program, { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: land }, false));
-    else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
+    const mpp = this.cellM / (s * k), program = seenFrom('land', mpp), under = this.layer?.under(gpu, s);
+    // Each copy is drawn over the part of the target it covers, so what a pixel reads of its place (`frameOf`) never
+    // runs over more than the target's pixels.
+    const lands = xs.map((_, c) => this.land?.binds(gpu, look, frameOf(edge(c), oy * k, mpp)));
+    if (lands[0] && under) {
+      xs.forEach((_, c) => {
+        const x0 = Math.max(edge(c), 0), x1 = Math.min(edge(c + 1), size[0]), y0 = Math.max(oy * k, 0), y1 = Math.min((oy + h * s) * k, size[1]);
+        if (x1 > x0 && y1 > y0) p.draw(program, { rect: [x0, y0, x1 - x0, y1 - y0], binds: { ...lands[c]!, ...under } }, false);
+      });
+    } else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
   }
 
   /** Time the frame just sent at `r` of the screen's pixels along each axis on the GPU (one at a time), and take the

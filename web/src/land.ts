@@ -107,14 +107,14 @@ export class Land {
     this.due = true;
   }
 
-  /** The bindings land.wgsl reads on `gpu` in view `look` (`lawBinds` and colour.wgsl's), or null before the first
-   * table. */
-  binds(gpu: Gpu, look: MapLook): Draw['binds'] | null {
+  /** The bindings land.wgsl reads on `gpu` in view `look` (`lawBinds` and colour.wgsl's), for a draw whose pixels lie as
+   * `frame` says (field-window.ts `frameOf`), or null before the first table. */
+  binds(gpu: Gpu, look: MapLook, frame: number[]): Draw['binds'] | null {
     const laws = this.lawBinds(gpu);
     if (!laws) return null;
     const m = this.tiles.map, texel = 2 ** (m.square_depth - this.tiles.depth);
     const read = [Math.max(texel ** SLOPE_POWER, SLOPE_LEAST), this.melt, BEACH_M, OVER_FADE];
-    return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m], this.sea) };
+    return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m], this.sea, frame) };
   }
 
   /** How far the flow's signs have slid along the slowest water at `now` (performance.now, ms), m: in steps of
