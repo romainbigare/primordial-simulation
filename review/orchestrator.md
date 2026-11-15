@@ -376,6 +376,10 @@ as real as possible, with features dramatised for the game: textures, details, r
     the WGSL. Frame times unchanged (software GL: 0.28 s at 2 km, 4 s at 20 m on the 64 island).
   - The far map changed with it: the wide climate's brown western hill shows green from far in winter (as
     zooming in showed), the warm bare land is lighter.
+- **Step (b) is in work** by a fresh Sonnet builder (branch `look-b`, scratch `scratchpad/looks/work-b/`; it
+  reads `scratchpad/looks/work/HANDOVER.md`): the ground by habitat and season, the dense floor as a blanket,
+  detail on sparse ground, shores and river beds, and what is left of step (a) (no step over 5% between
+  neighbouring scale bars; no ground showing through crowns). The owner tests step (a) on their phone.
 - **The builder's brief is `review/look-brief.md`** (the owner asked for it in the repository; it holds their
   words): give it whole to the page builder. The owner's later words in it: textures that follow the seasons;
   dense ground as a blanket of greenery, not copies of one bush; sparse ground full of free detail; stylised
