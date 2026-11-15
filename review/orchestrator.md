@@ -344,6 +344,9 @@ as real as possible, with features dramatised for the game: textures, details, r
   bare ground, liquid, snow and rock are, how tall and dense the plants, how dry, the season. Detail is keyed to
   the place so it does not move between frames or zoom levels, and nothing stands on a grid; the look differs by
   habitat because the numbers differ. The animals' drawing stays paused (see the life track).
+- **The look is in work, and everything else is paused for it** (a Sonnet page builder, branch `look`, scratch
+  `scratchpad/looks/work/`): first a plan and a "before" contact sheet, then the brief's steps (a) to (d), each
+  with before and after pictures and a stop for the orchestrator's and the owner's word.
 - **The builder's brief is `review/look-brief.md`** (the owner asked for it in the repository; it holds their
   words): give it whole to the page builder. The owner's later words in it: textures that follow the seasons;
   dense ground as a blanket of greenery, not copies of one bush; sparse ground full of free detail; stylised
