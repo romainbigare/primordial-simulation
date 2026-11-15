@@ -678,21 +678,29 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
       - Tried and not kept: rain following the rise and sinking of the overturning's low flow. No rain law dries
         the belt alone: over a year a belt's rain is what rises from it less what the air carries out (the belt
         22 to 33 degrees: 1,167 → 1,101 mm, while the rising branch went to 2,854 mm).
-      - **Built, accepted, waits to merge with the bucket's mend** (`wip/rain-rise`, d48415ce, gate green;
-        `scratchpad/air2/c2r/c2_sheet.png`): the wind over the ground lifts the air where the ground rises
-        (Smith and Barstad 2004); the wind is the overturning's own low flow turned by the spin, an easterly at
-        every latitude, 0.4 to 1.6 m/s. Windward over lee at one height: 1.5 to 2.6 on the 64 island of the band
-        5 to 50, 3 to 5 on the 32 island of the band 20 to 65 (the real: 2 to 5). Land rain +7 to 10%, piled on
-        the windward side; the cover falls 13 to 33% (the lee, and the 32 island's iced north: 805 → 209 mm at
-        45 to 50 degrees). Closed islands and the key numbers are unchanged; no cost that can be measured.
+      - **On main and on the page: the wind lifts the air where the ground rises** (`flow/air/rise.rs`; Smith and
+        Barstad 2004); the wind is the overturning's own low flow turned by the spin, an easterly at every
+        latitude, 0.4 to 1.6 m/s. Windward over lee at one height: 1.5 to 2.6 on the 64 island of the band 5 to
+        50, 3 to 5 on the 32 island of the band 20 to 65 (the real: 2 to 5). Closed islands are unchanged.
         Known limits: no eddy-driven westerlies of the middle latitudes (the wet side there is the east); the
         wind is a fifth of the measured trades, the same fault as the weak cell; rain falls on the sea beside a
         windward coast (the rise is taken per air node).
-      - Seen in its sheet, on main too: over the sea at the south edge of the 64 world of the band 5 to 50 the
-        year's rain is a checkerboard from one air node to the next. Asked of the air's helper.
-      - Next for the air's helper, in order: the bucket's evaporation by the share the ground holds for roots;
-        the measure of `wind` at 2, 3 and 5 times (the dry belt, the wind's speed); the long step's error on the
-        land's runoff.
+      - **On main with it: the air takes the ground's liquid by the share it holds for roots**
+        (`Physics::available`, one helper for the ground and the plants; Manabe 1969): the pores dry only to
+        the wilting point. The cells never wet fall from 212 to 19 on the 64 world of the band 5 to 50.
+      - **The page is barer with the two** (year 60, bare / forest: 64 band 5 to 50 0.33/0.41 → 0.37/0.35; 64
+        band 20 to 65 0.29/0.46 → 0.44/0.33; 32 band 5 to 50 0.22/0.44 → 0.24/0.40; 32 band 20 to 65 0.21/0.48 →
+        0.49/0.29): the lee sides are dry land now, a wet east and a dry west on every island
+        (`scratchpad/air2/c2r/page_sheet.png`). A pale square shows on the 32 island's dry west on the page
+        (seed 1, band 20 to 65, year 67): not looked at yet.
+      - **The checkerboard of the rain over the sea near the rising branch** (5 to 15 degrees, on main): the
+        overturning's flow down the gradient goes by the two nodes' own difference of warmth, so a two-node
+        wave feeds itself (a warmer node draws moist air from both sides, rains, and its latent heat keeps it
+        warm). Driven by the mean of the two ends' fitted gradients along the link it is gone, and the cell
+        changes everywhere (64 world, year 30: land rain +13%, cover 7.3e10 → 1.06e11 kg). In work: built as
+        its own commit with the globe and the key numbers.
+      - Then for the air's helper: the measure of `wind` at 2, 3 and 5 times (the dry belt, the wind's speed);
+        the long step's error on the land's runoff.
    4. Fire, as a fast event inside a month: the chemistry's own burning running away in dry fine fuel, what
       keeps grassland open (Bond, Woodward and Midgley 2005). A fresh builder (branch `fire`, scratch
       `scratchpad/fire/`: `design.md`, `fire_today.png`, tables).
@@ -770,11 +778,8 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
         kg/m² of low cover); coastal forest 0.71 → 0.48 and 0.44 → 0.32 of coastal land cells; the takers'
         tests place their cover (`FED_KG`). The builder's room is used up: fire v1 goes to a fresh builder
         (`scratchpad/fire/handover.md`, `design.md`, snapshots in `/dev/shm/fire`).
-      - **Found with it, a fault of Flow: the ground's bucket dries by evaporation below the wilting point**
-        (rain 544 mm against 563 mm rising; 16% of the pores full in every month, `wilt` 25%), so on semi-dry
-        land rain never becomes liquid a root can draw. With the air's helper, after the rain on rising ground:
-        what rises from the pores goes by the share the ground holds for roots (Manabe 1969), one helper for
-        the ground and the plants.
+      - Found with it and mended on main (see the rain's item): the ground's bucket dried by evaporation below
+        the wilting point, so on semi-dry land rain never became liquid a root can draw.
       - Then step 2, fire v1, the design accepted: the fuel is the cover's remains; the fuel bed's air is pulled
         to the ground's wetness; the moisture of extinction falls out of the heat balance (0.17 to 0.18); a
         cell carries fire where fuel covers more than the percolation threshold of the ground; burnable cells
