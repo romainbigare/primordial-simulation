@@ -16,8 +16,8 @@ const MANY: f64 = 1000.0;
 const FEW: f64 = 0.01;
 /// The share of a month's upkeep its store holds (within the most a taker stores, `store_most`).
 const STORE_MONTHS: f64 = 0.6;
-/// The light-eaters placed on the cell of a test that feeds takers, kg per m² (`testkit::cover`): a mild cell holds
-/// about this after a year of its seasons.
+/// The light-eaters placed on the cell of a test that feeds takers, kg per m² (`testkit::cover`): the cover of a cell
+/// of ground wet through its growing season; the test world's mildest cell is dry for months and holds far less.
 const FED_KG: f64 = 1.0;
 
 /// A small world with no life after a month, and its mildest dry land cell, a pond standing on it (a metre: liquid for

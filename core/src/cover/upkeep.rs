@@ -81,6 +81,18 @@ pub(super) fn keep_per_kg(w: &World, c: &Cover, p: &Parts, x: usize, (t, dt): (f
     (living + ph.c_leaf * leaf * ph.repair(g[REPAIR] as f64) * pace + ph.c_sapwood * sapwood * pace) * days
 }
 
+/// The share of what a leaf stores at `t` K over `dt` that the fine roots drawing its liquid cost, where a unit of its
+/// light reaction draws `drink` mol of the key liquid: the roots that liquid needs at `root_uptake`, breathing
+/// `c_basal` a kg a day at the burning's pace and built anew `root_turnover` times a year (`upkeep`), over what the
+/// unit stores. It goes with the air's thirst, not with the leaf: from 1 a leaf's pores lose more than they bring.
+pub(super) fn root_share(w: &World, p: &Parts, (t, dt): (f64, f64), drink: f64) -> f64 {
+    let (chem, ph) = (&w.chem, &w.cfg.phys);
+    let burn = &chem.reactions[p.burn];
+    let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
+    let per_kg = ph.c_basal * dt / DAY * pace + ph.root_turnover * p.living_cost(chem, ph) / w.cfg.months_per_year as f64;
+    drink / (dt * ph.root_uptake) * per_kg / chem.dh(p.light)
+}
+
 /// The upkeep of a kg of living cover of genes `g` a day at full activity, at `pace` of its burning's pace at `t_cat`,
 /// J: basal (`c_basal`), its capacity (a capacity that could store `cap` W per kg costs the share `c_capacity` of that) and
 /// its firmness (dearer the colder it stands, as a firmer catalyst costs more), each times its repair factor.

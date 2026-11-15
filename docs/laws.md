@@ -963,10 +963,14 @@ seeds fill it:
   falls as e^-z with the capture area z above a leaf, so what a kg more would store at depth z is its bottom's times
   e^(y − z), y its whole depth; its living cover below the depth where that falls to its upkeep a kg goes to its
   remains, its walls and plants stay. **Shedding for a season** is the same rule over the months a leaf waits to gain
-  again (Kikuzawa 1991). A slot is **in season** while its top leaves gain what a kg of leaf costs to keep for the
-  month in which it draws no liquid (`upkeep::keep_per_kg`: its upkeep, its capture area's and its conducting
-  walls'); a layer that does not pay in season lies in its own canopy's shade and pays no more, so it goes as above,
-  once it has paid its month's upkeep. Out of season none of its leaves pay until the season comes back, after the
+  again (Kikuzawa 1991). A leaf does not come alone: what it gains needs the fine roots that draw its liquid, whose
+  cost is a share of the gain set by the month's air (`upkeep::root_share`: the liquid a unit of the light reaction
+  draws, with what its pores lose for its gas, over `root_uptake`, at the roots' breathing and renewal); from all of
+  it its pores would lose more than they bring, and they stay shut that month: the cover draws nothing and gains
+  nothing (Cowan and Farquhar 1977, from memory). A slot is **in season** while its top leaves gain, less their fine
+  roots, what a kg of leaf and the walls that feed it cost to keep for the month (`upkeep::keep_per_kg`: its upkeep,
+  its capture area's and its conducting walls'); a layer that does not pay so in season lies in its own canopy's shade
+  and pays no more, so it goes as above (the slot `full`), once it has paid its month's upkeep. Out of season none of its leaves pay until the season comes back, after the
   months its kinds expect without gain: the share of the last year's months in which its cell's ground held nothing
   for roots, frozen or dry to the wilting point (`Cover::idle`, a running mean over a year's months, kept by the
   cell's cover whether it holds slots or not, so a place's seasons outlive its plants), times the months of a year.

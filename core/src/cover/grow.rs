@@ -114,7 +114,11 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let before = c.content(&e);
     // The light per unit of absorbing area at the top of its layers: with no leaves, all that reaches the ground.
     let per = if lit > 0.0 { caught * a.reach / lit } else { dl * a.reach };
-    let stored = light(chem, ph, c, p, &mut s[..n], (per, w.mesh.cells().area()[i], a, dt), &mut b);
+    // The share of what a leaf gains this month that the fine roots drawing its liquid in this air would cost: from all
+    // of it its pores lose more than they bring, and stay shut (Cowan and Farquhar 1977, from memory).
+    let roots = super::upkeep::root_share(w, p, (t, dt), drink(chem, p, a).0);
+    let net = (1.0 - roots).max(f64::MIN_POSITIVE);
+    let stored = light(chem, ph, c, p, &mut s[..n], (per, w.mesh.cells().area()[i], a, dt), roots >= 1.0, &mut b);
     b.budget[STORED] += c.content(&e) - before;
     let all: f64 = stored.iter().sum();
     c.keep = if caught > 0.0 { (all / caught) as f32 } else { 0.0 };
@@ -126,28 +130,28 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let mut order: Vec<usize> = (0..n).filter(|&q| s[q].built > 0.0).collect();
     order.sort_by(|&a, &b| s[b].shade.total_cmp(&s[a].shade));
     for x in order {
-        // It is in season while its top leaves gain what a kg of leaf costs to keep for the month (`keep_per_kg`). In a
-        // month out of season it drops, before it pays the month's upkeep, the leaves it would cost more to keep through
-        // the months it expects without gain than to build anew, and those its fuel could not keep through them.
+        // It is in season while what its top leaves gain, less the fine roots that gain needs (`roots`), pays what a kg
+        // of leaf and the walls that feed it cost to keep for the month (`keep_per_kg`). In a month out of season it
+        // drops, before it pays the month's upkeep, the leaves it would cost more to keep through the months it expects
+        // without gain than to build anew, and those its fuel could not keep through them.
         let keep = keep_per_kg(w, c, p, x, (t, dt));
         let patch = area * c.rooted[x].max(f32::MIN_POSITIVE) as f64;
-        let season = s[x].gain * (s[x].leaf / patch).exp() > keep;
+        let season = s[x].gain * net * (s[x].leaf / patch).exp() > keep;
         if !season {
             // What its fuel can pay: keeping a kg through the months it expects, this one at least.
             let fuel = c.mol[x][FUEL].max(0.0) * e[FUEL] / (s[x].living * keep * months.max(1.0)).max(f64::MIN_POSITIVE);
-            let shed = shed(c, x, &s[x], (floor(keep, (keep, rebuild), Some(months)), fuel), patch);
+            let shed = shed(c, x, &s[x], (floor(keep, (keep, rebuild), Some(months)) / net, fuel), patch);
             book_shed(&mut b, counts, (p, &mm, &e), shed);
             s[x] = after_shed(ph, c, (&mm, rho), x, s[x]);
         }
         let (lost, cost) = upkeep(w, c, p, x, &s[x], (t, dt), &mut b);
         counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
-        // What a kg of its living cover cost this month (with none left, what a kg would cost to keep), against what one
-        // more kg would gain at the bottom of its layer: in season a layer that does not pay lies in its own shade.
-        let per_kg = if s[x].living > 0.0 { cost / s[x].living } else { keep };
-        let pays = s[x].gain > per_kg;
+        // What one more kg would gain at the bottom of its layer, less its fine roots, against what it costs to keep: in
+        // season a layer that does not pay lies in its own shade.
+        let pays = s[x].gain * net > keep;
         c.full[x] = !pays;
         if !pays && season {
-            let shed = shed(c, x, &s[x], (floor(per_kg, (keep, rebuild), None), 1.0), patch);
+            let shed = shed(c, x, &s[x], (floor(keep, (keep, rebuild), None) / net, 1.0), patch);
             book_shed(&mut b, counts, (p, &mm, &e), shed);
         }
         // Its balance over about a year: what it stored less its upkeep, per kg.
@@ -192,6 +196,16 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     (b, caught)
 }
 
+/// Per unit of the light reaction a leaf at the ground's temperature of `a` takes in: the key liquid it draws, mol (what
+/// the reaction takes and what its pores lose for its gas, `Around::thirst` per mol of gas taken in), what of that its
+/// pores lose, mol, and the mol of gas it takes in.
+fn drink(chem: &Chemistry, p: &Parts, a: &Around) -> (f64, f64, f64) {
+    let rx = &chem.reactions[p.light];
+    let gas_in: f64 = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, a.t) == Phase::Gas).map(|q| q.1 as f64).sum();
+    let lost = a.thirst * gas_in;
+    (per_input(rx, p.liquid).unwrap_or(0.0) + lost, lost, gas_in)
+}
+
 /// The light reaction of each slot in use (`s`, the first of the cover's) over `dt` at the ground's temperature of `a`: what its share of the light caught
 /// (`per` of it per unit of absorbing area times shade) stores at `light_yield`, at most its capacity times its
 /// activity and the reaction's pace, both times what the air's share of the reaction's gas allows (`Around::gas`); all
@@ -199,7 +213,12 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
 /// share of its air node holds.
 /// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
 /// energy each slot stored, J.
-fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot], (per, cell, a, dt): (f64, f64, &Around, f64), b: &mut Books) -> [f64; SLOTS] {
+#[allow(clippy::too_many_arguments)]
+fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot], (per, cell, a, dt): (f64, f64, &Around, f64), shut: bool, b: &mut Books) -> [f64; SLOTS] {
+    (c.film, c.reach) = (0.0, 0.0);
+    if shut {
+        return [0.0; SLOTS];
+    }
     let (t, liquid, gas) = (a.t, a.liquid, a.gas);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
@@ -216,14 +235,11 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     }
     // Per unit of the reaction its leaves would lose the key liquid as vapour, `thirst` per mol of gas taken in; each
     // slot draws it from the pores its roots reach (`Cover::rooted`), and opens its pores no wider than that pays for.
-    let gas_in: f64 = rx.inputs.iter().filter(|q| chem.phase(q.0 as usize, t) == Phase::Gas).map(|q| q.1 as f64).sum();
-    let lost = a.thirst * gas_in;
-    let drink = per_input(rx, p.liquid).unwrap_or(0.0) + lost;
+    let (drink, lost, gas_in) = drink(chem, p, a);
     for (q, xq) in x.iter_mut().enumerate().take(s.len()) {
         *xq = xq.min(liquid * c.rooted[q] as f64 / drink.max(1e-300));
     }
     let all: f64 = x.iter().sum();
-    (c.film, c.reach) = (0.0, 0.0);
     if all <= 0.0 {
         return [0.0; SLOTS];
     }
