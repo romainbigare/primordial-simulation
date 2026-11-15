@@ -376,6 +376,36 @@ as real as possible, with features dramatised for the game: textures, details, r
     the WGSL. Frame times unchanged (software GL: 0.28 s at 2 km, 4 s at 20 m on the 64 island).
   - The far map changed with it: the wide climate's brown western hill shows green from far in winter (as
     zooming in showed), the warm bare land is lighter.
+- **Step (b) is half built, not on main** (`wip/look-b`, two commits; sheets in `scratchpad/looks/work-b/`:
+  `STEP_B2_warm_before_after.png`, `STEP_B2_wide_before_after.png`, `w7.png`). The second Sonnet builder's first
+  try was too faint to see; told to go bold it gave: snow with blue-shaded drifts and sastrugi (good at 20 m
+  and 2 m, a pattern of dashes at 200 m); herbs as tufts of fanned blades in place of the scratch lines (all
+  alike small stars so far); bare land with a pale-sand to rust mottle, stones (they read as bubbles), washes,
+  cracks; a forest floor built but never shown (the sward covers it under crowns); crowns that hide the ground
+  (`COVER_ALPHA` 1). New files `web/shaders/lib/floor.wgsl`, `fan.wgsl`. Left: a grid of dots at pixel ratio 3
+  (the old `flowers_at`), the continuity table (9 and 3 steps over 5%: open land 17% at 1,000 m; forest and
+  shore 10 to 13% at 50 m where the marks start redder than the field), dry grassland, the forest floor shown,
+  shores, river beds. **A third Sonnet builder continues** (branch `look-b2`, scratch `scratchpad/looks/work-b2/`)
+  with an ordered list. A Sonnet builder's room ends near 280 thousand tokens: give each a narrow list.
+- **Step (a) is on main and on the page** (`scratchpad/looks/work/STEP_A_warm_before_after.png`,
+  `STEP_A_wide_before_after.png`, `TABLE_before.txt`, `TABLE_after.txt`, `continuity.py`, `d3_forest.png`):
+  - The phone's faults were provoked at a pixel ratio of 3 (blocks and smears at 2 m) and mended: a pixel's
+    place came from the uv of a rectangle as large as the map, and hashes took one float of tens of km. Each
+    pixel now takes its place as a whole multiple of 1,024 m plus a remainder, and every noise and hash with
+    cells under a metre reads an exact lattice point. Noise of a metre or more is still on plain floats.
+  - The sward's blades turned their lattice about the world's origin by an angle that changed from tuft to
+    tuft (the weave); they blend three fixed turns. All noise is gradient noise; the field's crowns are
+    warped; a crown's clumps are noise, not three cosines.
+  - Near and far: reeds on soaked ground tint the far view as they did the near one; the field's shadow has
+    the size of the marks'; the field's colours are the mean of what the plants show on a screen.
+  - **Not clean yet**: 10 of 36 steps between neighbouring scale bars still move the mean colour by more than
+    5% (16 before): open land 17%, the shore 10% where single trees start to show, forest 10.5%, bare land
+    4.3%. Ground detail shows faintly through crowns (the marks keep 15% of the ground under them). The
+    maze, the thin lines a few metres apart and the lines over rock did not show in the test browser: the
+    owner's phone is the test. WebGPU could not be run in the test browser; the build's own translator reads
+    the WGSL. Frame times unchanged (software GL: 0.28 s at 2 km, 4 s at 20 m on the 64 island).
+  - The far map changed with it: the wide climate's brown western hill shows green from far in winter (as
+    zooming in showed), the warm bare land is lighter.
 - **Step (b) is in work** by a fresh Sonnet builder (branch `look-b`, scratch `scratchpad/looks/work-b/`; it
   reads `scratchpad/looks/work/HANDOVER.md`): the ground by habitat and season, the dense floor as a blanket,
   detail on sparse ground, shores and river beds, and what is left of step (a) (no step over 5% between
