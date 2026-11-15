@@ -95,7 +95,7 @@ pub struct Cover {
     pub reach: f32,
     /// The share of the last year's months in which its ground held nothing its roots could draw (frozen, or dry to the
     /// wilting point), a running mean over a year's months (`grow::step`): the months its kinds expect without gain, by
-    /// which they shed their leaves (`grow::shed`). The ground's, so it outlives the slots.
+    /// which they shed their leaves (`season::shed`). The ground's, so it outlives the slots.
     pub idle: f32,
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its aside node sets aside for its light reaction

@@ -995,7 +995,7 @@ seeds fill it:
   not by its place among the cell's slots; all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`canopy::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
   where its lowest leaves would not pay for themselves (Monsi and Saeki 1953; Hirose 2005). By the same marginal rule
-  run backwards a full slot also sheds the layers of its canopy that do not pay (`grow::shed`): through its crown its
+  run backwards a full slot also sheds the layers of its canopy that do not pay (`season::shed`): through its crown its
   light falls as e^-z with the capture area z above a leaf, whatever slots' leaves it passes, so what a kg more would
   store at depth z is its crown base's times e^(y − z), y the capture area through its crown (`Slot::layer`); its
   living cover below the depth where that falls to its upkeep a kg goes to its remains, its walls and plants stay. **Shedding for a season** is the same rule over the months a leaf waits to gain
@@ -1006,7 +1006,7 @@ seeds fill it:
   nothing (Cowan and Farquhar 1977, from memory). A slot is **in season** while its top leaves gain, less their fine
   roots, what a kg of leaf and the walls that feed it cost to keep for the month (`upkeep::keep_per_kg`: its upkeep,
   its capture area's and its conducting walls'), its top leaves those at the top of its crown, whatever slots share
-  that crown (`grow::pay`), so a stand cut into slots keeps its season as the whole; a layer that does not pay so in season lies in its own canopy's shade
+  that crown (`season::pay`), so a stand cut into slots keeps its season as the whole; a layer that does not pay so in season lies in its own canopy's shade
   and pays no more, so it goes as above (the slot `full`), once it has paid its month's upkeep. Out of season none of its leaves pay until the season comes back, after the
   months its kinds expect without gain: the share of the last year's months in which its cell's ground held nothing
   for roots, frozen or dry to the wilting point (`Cover::idle`, a running mean over a year's months, kept by the
@@ -1054,8 +1054,9 @@ seeds fill it:
   the light that reaches the bottom of the layers above them, and what does not pay dies (the gap models, Shugart
   1984). A variant farther than `APART` × `alike` from its kind founds a slot of its own and competes with the others
   for light by height. Slots of a cell within the same distance share one (`merge_alike`). A slot is the bookkeeping of a kind in a cell, not
-  a thing of the world: every law above acts on the stand, so a cell whose slot is cut into alike slots stands a year
-  later as the uncut cell does (`core/tests/stand.rs`). Selection is between slots
+  a thing of the world: every law above acts on the stand, so a cell whose slot is cut into alike slots stands at the
+  end of that month as the uncut cell does, when the pieces merge back, in every month of its year, its dry season too
+  (`core/tests/stand.rs`). Selection is between slots
   and cells: what grows better sends more seeds (the frost gene falls where winters are cold, `core/tests/cover.rs`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's aside node (with theirs), as living things

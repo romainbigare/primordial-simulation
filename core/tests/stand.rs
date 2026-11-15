@@ -1,46 +1,55 @@
 //! A slot is the bookkeeping of a kind in a cell, not a thing of the world (laws.md 3): the cover's laws act on the
 //! stand, so a cell whose slot is cut into alike pieces stands as the uncut cell does.
 
-use pcore::cover::{self, NO_ROOT, WALL};
+use pcore::cover::{self, Cover, NO_ROOT, WALL};
 use pcore::World;
 use worldgen::life::{KINDS, LIGHT_ROW};
-use worldgen::testkit::{dry_lands, small_world};
+use worldgen::testkit::{self, dry_lands, small_world};
 
-/// How near a cut cell stands to the uncut one, a share: the genes' 32-bit rounding (6e-8) moves the stand by about
-/// 1e-8 in a year (seen); a law that acts on a slot moves it by 1e-4 and more.
+/// How near a cut cell stands to the uncut one at the end of the month it is cut in, a share: the genes' 32-bit
+/// rounding (6e-8) moves the stand by about 1e-8 in a year (seen); a law that acts on a slot moves it by 1e-4 and more.
+/// The pieces merge back as alike slots at that month's end, so each month of a year is cut on its own: in the months
+/// after, the world carries the rounding of sums taken in another order as it carries any rounding, and its own edges
+/// (a seedling or a lot of seeds at the edge of being) carry a nudge of 1e-14 of the uncut stand to 6e-6 within a year
+/// (seen).
 const SAME: f64 = 1e-6;
 
 /// The row of the big slow kind of cover (a tree).
 const TREE_ROW: usize = 2;
 
-/// The cover of cell `i`: its kg, plants and height by built cover, and its seeds lying, kg.
-fn stand(w: &World, i: usize) -> [f64; 4] {
+/// The stand of cover `c` of world `w`: its kg, plants and height by built cover, and its seeds lying, kg.
+fn stand(w: &World, c: &Cover) -> [f64; 4] {
     let p = cover::Parts::of(&w.chem).expect("cover parts");
-    let (mm, rho, c) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0], w.life.cover(i));
+    let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
     let built: f64 = c.held().map(|x| c.built(&mm, x)).sum();
     let h = c.held().map(|x| c.built(&mm, x) * c.height(&w.cfg.phys, &mm, rho, x)).sum::<f64>() / built.max(1e-300);
     [c.held().map(|x| c.kg(&mm, x)).sum(), c.held().map(|x| c.plants[x]).sum(), h, c.lying.kg(&mm)]
 }
 
-/// Cut the heaviest slot of cell `i` into `k` alike pieces: the same genes and state, its amounts and plants a k-th each.
-fn cut(w: &mut World, i: usize, k: usize) {
+/// Cut the heaviest slot of cover `c` of world `w` into `k` alike pieces: the same genes and state, its amounts and
+/// plants a k-th each.
+fn cut(w: &World, c: &mut Cover, k: usize) {
     let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
-    w.in_cell(i, |_, d| {
-        let c = d.cover(i);
-        let x = c.held().max_by(|&a, &b| c.kg(&mm, a).total_cmp(&c.kg(&mm, b))).expect("a stand");
-        (c.mol[x], c.plants[x]) = (c.mol[x].map(|m| m / k as f64), c.plants[x] / k as f64);
-        for _ in 1..k {
-            let e = (0..cover::SLOTS).find(|&y| c.root[y] == NO_ROOT).expect("room");
-            (c.mol[e], c.plants[e], c.genes[e], c.root[e], c.full[e], c.net[e], c.rooted[e], c.need[e]) = (c.mol[x], c.plants[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.rooted[x], c.need[x]);
-        }
-    });
+    let x = c.held().max_by(|&a, &b| c.kg(&mm, a).total_cmp(&c.kg(&mm, b))).expect("a stand");
+    (c.mol[x], c.plants[x]) = (c.mol[x].map(|m| m / k as f64), c.plants[x] / k as f64);
+    for _ in 1..k {
+        let e = (0..cover::SLOTS).find(|&y| c.root[y] == NO_ROOT).expect("room");
+        (c.mol[e], c.plants[e], c.genes[e], c.root[e], c.full[e], c.net[e], c.rooted[e], c.need[e]) = (c.mol[x], c.plants[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.rooted[x], c.need[x]);
+    }
 }
 
-/// A stand of kind `row` grown a year from `kg` per m² on the dry land cell rain reaches most, the same cell with its
-/// slot cut into two and into four alike pieces, and each a year later: the cell's cover, its plants, their height and
-/// the seeds lying on its ground are the uncut cell's to `SAME` (the pieces merge back as alike slots at their first
-/// month's end; what is left is rounding: of sums taken in another order, and of the genes, kept in 32 bits, of seeds
-/// that join a lot one packet at a time, carried through a year of the cover's law).
+/// Each number of the cut stand `cut` is the uncut stand's `whole` to `SAME`.
+fn assert_same(what: &str, cut: &[f64], whole: &[f64]) {
+    for (a, b) in cut.iter().zip(whole) {
+        assert!((a - b).abs() <= SAME * b.abs(), "{what}: {cut:?}, uncut {whole:?}");
+    }
+}
+
+/// A stand of kind `row` grown a year from `kg` per m² on the dry land cell rain reaches most; then, at the start of
+/// each month of the next year, the same world with its slot cut into two and into four alike pieces: at that month's
+/// end the cell's cover, its plants, their height, the seeds lying on its ground and all the cover and seeds of the
+/// world are the uncut world's to `SAME` (what is left is rounding: of sums taken in another order, and of the genes,
+/// kept in 32 bits, of seeds that join a lot one packet at a time).
 fn cut_stands_as_whole(row: usize, kg: f64) {
     let mut w = small_world();
     w.cfg.variety = cover::SLOTS;
@@ -48,19 +57,23 @@ fn cut_stands_as_whole(row: usize, kg: f64) {
     let i = dry_lands(&w).into_iter().filter(|&i| w.rain[i] > 0.0).max_by(|&a, &b| w.rain[a].total_cmp(&w.rain[b])).expect("dry land with rain");
     assert!(cover::place(&mut w, i, KINDS[row].genes, row as u32, kg));
     (0..12).for_each(|_| pcore::step(&mut w));
-    let year = |mut w: World| {
-        (0..12).for_each(|_| pcore::step(&mut w));
-        stand(&w, i)
+    let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
+    let month = |mut w: World| {
+        pcore::step(&mut w);
+        let all: f64 = (0..w.mesh.cells().n()).map(|j| w.life.cover(j)).map(|c| c.held().map(|x| c.kg(&mm, x)).sum::<f64>() + c.lying.kg(&mm)).sum();
+        let s = stand(&w, w.life.cover(i));
+        (w, [s[0], s[1], s[2], s[3], all])
     };
-    let whole = year(w.clone());
-    for k in [2, 4] {
-        let mut c = w.clone();
-        cut(&mut c, i, k);
-        let cut = year(c);
-        println!("kind {row}, cut in {k}: kg, plants, height m, seeds lying kg {cut:?}, uncut {whole:?}");
-        for (a, b) in cut.iter().zip(&whole) {
-            assert!((a / b - 1.0).abs() < SAME, "cut in {k}: {cut:?}, uncut {whole:?}");
+    for m in 0..12 {
+        let (next, whole) = month(w.clone());
+        for k in [2, 4] {
+            let mut c = w.clone();
+            c.in_cell(i, |w, d| cut(w, d.cover(i), k));
+            let cut = month(c).1;
+            println!("kind {row}, month {m}, cut in {k}: kg, plants, height m, seeds lying kg, the world's kg {cut:?}, uncut {whole:?}");
+            assert_same(&format!("month {m}, cut in {k}"), &cut, &whole);
         }
+        w = next;
     }
 }
 
@@ -72,4 +85,58 @@ fn a_herb_stand_cut_into_slots_stands_as_the_whole() {
 #[test]
 fn a_tall_stand_cut_into_slots_stands_as_the_whole() {
     cut_stands_as_whole(TREE_ROW, 5.0);
+}
+
+/// The share of the last month's liquid for roots the garden's ground holds in a month it dries.
+const DRYING: f64 = 0.5;
+
+/// What the garden's ground holds for roots in month `m` of its year (`Around::moist`): all of it for four months, then
+/// `DRYING` of the month before for six months, then none for two.
+fn moist(m: u64) -> f64 {
+    match m % 12 {
+        k if k < 4 => 1.0,
+        k if k < 10 => DRYING.powi(k as i32 - 3),
+        _ => 0.0,
+    }
+}
+
+/// A tree stand (2 kg per m²) in a garden whose ground dries for eight months of each year at the same warmth
+/// (`testkit::garden`, `moist`; `Cover::idle` a half at the start): cut into two and into four alike pieces at the
+/// start of each month of two years, its month (`cover::live`) is the uncut stand's to `SAME`, the light it caught and
+/// the seeds it sent with it: the months in season, the drying months in which its top leaves stop paying and it sheds
+/// for its dry season (Kikuzawa 1991), the leafless months on its store and the month it leafs out again, whatever
+/// slots hold it. It does lose all its leaves in its first dry season and grows them again (checked), so the cut holds
+/// those laws.
+#[test]
+fn a_stand_cut_into_slots_keeps_its_seasons_as_the_whole() {
+    let (mut w, i) = testkit::start();
+    w.cfg.variety = cover::SLOTS;
+    assert!(cover::place(&mut w, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 2.0));
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, dt) = (p.mm(&w.chem), w.cfg.calendar().month as f64);
+    let mut c = w.life.cover(i).clone();
+    c.idle = 0.5;
+    let mut living = Vec::new();
+    for m in 0..24u64 {
+        let a = testkit::garden(&w, &c, (295.0, moist(m), 200.0, m));
+        let month = |mut c: Cover| {
+            let mut counts = w.counts.clone();
+            let caught = cover::live(&w, &mut c, &p, &a, (i, dt), &mut counts).1;
+            let sent: f64 = c.sent().iter().map(|s| cover::built_kg(&mm, &s.mol)).sum();
+            let s = stand(&w, &c);
+            (c, [s[0], s[1], s[2], s[3], sent, caught])
+        };
+        let (next, whole) = month(c.clone());
+        for k in [2, 4] {
+            let mut cut_c = c.clone();
+            cut(&w, &mut cut_c, k);
+            let cut = month(cut_c).1;
+            println!("month {m:2}, cut in {k}: kg, plants, height m, seeds lying kg, sent kg, light J {cut:?}, uncut {whole:?}");
+            assert_same(&format!("month {m}, cut in {k}"), &cut, &whole);
+        }
+        c = next;
+        living.push(c.held().map(|x| c.living(&mm, x)).sum::<f64>());
+    }
+    let (wet, bare) = (living[3], living[4..12].iter().copied().fold(f64::INFINITY, f64::min));
+    assert!(bare < 1e-3 * wet && living[12] > 0.5 * wet, "it kept its leaves through its dry season or grew none again: {living:?}");
 }
