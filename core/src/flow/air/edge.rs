@@ -112,5 +112,5 @@ impl Edges {
 /// the planet's: no evening across the edge).
 fn beyond_end(w: &World, (node, lat, beyond, cp): (&End, f64, &Beyond, f64), st: Stretch) -> End {
     let aloft = cp * (beyond.warmth - beyond.t);
-    End { rho: beyond.mol / w.cfg.air_top_m, aloft, za: 0.0, lat, warmth: beyond.warmth, grad: [0.0, st.per_map_m(beyond.south)], rise: node.rise, sound: node.sound, c: node.c }
+    End { rho: beyond.mol / w.cfg.air_top_m, aloft, za: 0.0, lat, grad: [0.0, st.per_map_m(beyond.south)], rise: node.rise, sound: node.sound, c: node.c }
 }

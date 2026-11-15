@@ -50,20 +50,12 @@ pub fn planet() -> Planet {
         each.push((air, shares));
     }
     let (rows, ns) = (lat.len(), each[0].1[0].len());
-    // Per month a row's value, each row the 1-2-1 mean of it and its neighbours (`smooth`).
-    let of = |v: &dyn Fn(usize, usize) -> f64| each.iter().enumerate().map(|(m, _)| smooth(&(0..rows).map(|r| v(m, r)).collect::<Vec<f64>>())).collect::<Vec<_>>();
+    // Per month each row's value.
+    let of = |v: &dyn Fn(usize, usize) -> f64| (0..months).map(|m| (0..rows).map(|r| v(m, r)).collect::<Vec<f64>>()).collect::<Vec<_>>();
     let air: Vec<Vec<Vec<f64>>> = (0..3).map(|c| of(&|m, r| each[m].0[r][c])).collect();
     let shares: Vec<Vec<Vec<f64>>> = (0..ns).map(|k| of(&|m, r| each[m].1[r][k])).collect();
     let table = |v: &[Vec<f64>]| (0..rows).flat_map(|r| (0..months).map(move |m| v[m][r])).collect::<Vec<f64>>();
     let share = (0..rows).flat_map(|r| (0..months).flat_map(move |m| (0..ns).map(move |k| (r, m, k)))).map(|(r, m, k)| shares[k][m][r]).collect();
     let of = |c: usize| table(&air[c]);
     Planet { lat, row_m: w.cfg.radius_m * (180.0 / rows as f64).to_radians(), months, t: of(0), warmth: of(1), mol: of(2), share }
-}
-
-/// The 1-2-1 mean of each row of `v` and the rows beside it (the poles' rows by themselves beyond them): the strip's
-/// rows of air alternate warmer and colder in the low latitudes (a mode two rows long of the model's air, as on a whole
-/// globe of the same rows), which the island's edges read as the planet's mean.
-fn smooth(v: &[f64]) -> Vec<f64> {
-    let n = v.len();
-    (0..n).map(|r| (v[r.saturating_sub(1)] + 2.0 * v[r] + v[(r + 1).min(n - 1)]) / 4.0).collect()
 }
