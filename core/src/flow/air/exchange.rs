@@ -36,25 +36,30 @@ impl Sat {
     }
 }
 
-/// What evaporates over `dt` seconds from ground holding `a` mol that gets `r` mol of rain evenly: `e` mol/s while it
-/// holds `wet` mol or more, in proportion below that (the bucket of Manabe 1969), integrated exactly over the step; and
-/// its slope with the open rate `e`, s.
+/// What evaporates over `dt` seconds from ground holding `a` mol over what no air takes up (below it where `a` < 0)
+/// that gets `r` mol of rain evenly: `e` mol/s while it holds `wet` mol or more over that, in proportion below, none
+/// below none (the bucket of Manabe 1969), integrated exactly over the step; and its slope with the open rate `e`, s.
 pub(super) fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f64) {
     let rate = r / dt;
     if e <= 0.0 {
         return (0.0, 0.0);
     }
-    // No more than the ground holds and gets, and no less than nothing.
+    // No more than the ground holds over none and gets, and no less than nothing.
     let held = |m: f64, dm: f64| (m.min(a + r).max(0.0), if m > 0.0 && m < a + r { dm } else { 0.0 });
     // What has evaporated and the time left when the ground comes down to `wet`, holding `now`; each with its slope.
-    let (mut m, mut left, mut now, mut dm, mut d_left) = (0.0, dt, a, 0.0, 0.0);
+    // Ground below none first fills by the rain alone, which takes a time that does not depend on `e`.
+    let fill = if a < 0.0 { (-a / rate.max(f64::MIN_POSITIVE)).min(dt) } else { 0.0 };
+    let (mut m, mut left, mut now, mut dm, mut d_left) = (0.0, dt - fill, a.max(0.0), 0.0, 0.0);
+    if left <= 0.0 {
+        return (0.0, 0.0);
+    }
     if now > wet {
-        let t1 = if e > rate { (now - wet) / (e - rate) } else { dt };
-        if t1 >= dt {
-            return held(e * dt, dt);
+        let t1 = if e > rate { (now - wet) / (e - rate) } else { left };
+        if t1 >= left {
+            return held(e * left, left);
         }
         let d_t1 = -t1 / (e - rate);
-        (m, left, now, dm, d_left) = (e * t1, dt - t1, wet, t1 + e * d_t1, -d_t1);
+        (m, left, now, dm, d_left) = (e * t1, left - t1, wet, t1 + e * d_t1, -d_t1);
     }
     if wet <= 0.0 {
         return held(m + rate.min(e) * left, dm + if e < rate { left } else { 0.0 } + rate.min(e) * d_left);
@@ -228,12 +233,25 @@ mod tests {
         // Ground that stays wet, dries to `wet`, dries further, wets again under rain, and has no bucket; with the
         // derivative by central differences.
         let dt = 1e5;
-        for (a, r, e, wet) in [(10.0, 0.0, 1e-5, 1.0), (2.0, 0.0, 1e-4, 1.0), (0.5, 0.0, 1e-5, 1.0), (0.5, 0.3, 1e-5, 1.0), (0.5, 3.0, 1e-5, 1.0), (2.0, 0.5, 1e-4, 0.0), (0.0, 3.0, 1e-5, 0.0)] {
+        for (a, r, e, wet) in [(10.0, 0.0, 1e-5, 1.0), (2.0, 0.0, 1e-4, 1.0), (0.5, 0.0, 1e-5, 1.0), (0.5, 0.3, 1e-5, 1.0), (0.5, 3.0, 1e-5, 1.0), (2.0, 0.5, 1e-4, 0.0), (0.0, 3.0, 1e-5, 0.0), (-0.1, 3.0, 1e-5, 1.0)] {
             let (m, slope) = bucket(a, r, e, wet, dt);
             let h = e * 1e-6;
             let fd = (bucket(a, r, e + h, wet, dt).0 - bucket(a, r, e - h, wet, dt).0) / (2.0 * h);
             assert!(m > 0.0 && m <= a + r, "{m}");
             assert!((slope - fd).abs() <= 1e-6 * fd.abs().max(dt * 1e-3), "a {a} r {r} e {e} wet {wet}: {slope} against {fd}");
         }
+    }
+
+    /// Ground below what the air takes up gives the air none until the rain fills it to there, and from then on is a
+    /// bucket from none.
+    #[test]
+    fn ground_below_what_the_air_takes_up_gives_none_until_the_rain_fills_it() {
+        let (dt, e, wet) = (1e5, 1e-5, 1.0);
+        assert_eq!(bucket(-0.4, 0.0, e, wet, dt), (0.0, 0.0));
+        assert_eq!(bucket(-0.4, 0.3, e, wet, dt).0, 0.0);
+        let (below, rate) = (-0.1, 3.0 / dt);
+        let fill = -below / rate;
+        let (m, from_none) = (bucket(below, 3.0, e, wet, dt).0, bucket(0.0, rate * (dt - fill), e, wet, dt - fill).0);
+        assert!((m - from_none).abs() < 1e-12 && m > 0.0, "{m} against {from_none}");
     }
 }

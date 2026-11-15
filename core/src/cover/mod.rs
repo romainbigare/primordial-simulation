@@ -278,7 +278,7 @@ pub fn ground(w: &crate::World, i: usize) -> f64 {
 }
 
 /// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and the share
-/// of what its ground holds for roots that it holds (`available`), its pores' space read from Flow (`Scratch::land_pores`;
+/// of what its ground holds for roots that it holds (`Physics::available`), its pores' space read from Flow (`Scratch::land_pores`;
 /// one store over the depth of its loose ground). Of a cell of parts with land, its land part's own (`flow::parts`) over
 /// that part's area, no more than the cell holds; else the cell's over its area.
 pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
@@ -290,18 +290,11 @@ pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
         None => (held * molten, area),
     };
     let depth = liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / over;
-    (liquid, available(&w.cfg.phys, depth / w.scratch.land_pores(i).max(1e-9)))
-}
-
-/// The share of the liquid ground holds for roots that ground whose pores are the share `filled` full holds: none at the
-/// wilting point (`wilt`), all at field capacity (`field`) and over it, in proportion between (the available liquid of
-/// soil physics; Saxton and Rawls 2006).
-pub fn available(ph: &crate::Physics, filled: f64) -> f64 {
-    ((filled - ph.wilt) / (ph.field - ph.wilt)).clamp(0.0, 1.0)
+    (liquid, w.cfg.phys.available(depth / w.scratch.land_pores(i).max(1e-9)))
 }
 
 /// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots
-/// (`available`): full from the share its moisture gene sets (`MOIST`), falling in a straight line to none at the wilting
+/// (`Physics::available`): full from the share its moisture gene sets (`MOIST`), falling in a straight line to none at the wilting
 /// point. A plant transpires freely until its roots have drawn about half the liquid available to them (FAO-56's
 /// depletion fraction p of 0.3 to 0.7, 0.5 for most kinds), a `MOIST` of log10(1 − p), and below that its transpiration
 /// falls with what is left, its stress coefficient Ks (Allen and others 1998, from memory). A dry seed's activity

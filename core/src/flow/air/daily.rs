@@ -8,6 +8,7 @@ use super::soak::{land, Soak, Soaks};
 use super::stretch::Stretch;
 use super::together::Together;
 use super::cell::Cell;
+use super::rise::{low_wind, rise, saturates};
 use super::edge::Edges;
 use super::wind::{ends, even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::UP, step::Active};
@@ -183,6 +184,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     let moved = Moved { a, b, mol: vec![0.0; ng * pairs], heat: vec![0.0; pairs] };
     let v = |len: usize| vec![0.0; len];
     let edges = Edges::of(w, s, &ends, &cell);
+    let rise = rise(w, s, &low_wind(w, &ends, &cell, |j| blocks[block[j]].len() == 1));
     let mut out = Mean { t: v(na), space: v(na), x: v(ng * na), rain: v(nx * na), rain_fusion: v(nx * na), landed: vec![Vec::new(); nx * na], soaked: v(ground.soaks.len()), cloud: v(na), moved, edges };
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();
@@ -192,7 +194,7 @@ pub(super) fn run(w: &World, s: &Scratch, act: &[Active], ground: &Ground, dt: f
     // The buckets the step's rain wets as it falls (`Soak`).
     let mut soaks = Soaks::new(ground.soaks.clone(), ground.wet(), nx);
     for _ in 0..days as usize {
-        exchange(w, s, (act, ground), (&blocks, &one), (&mut x, &mut e), (dd, dt), (&mut out, &mut rooms, &mut soaks));
+        exchange(w, s, (act, ground), (&blocks, &one, &rise), (&mut x, &mut e), (dd, dt), (&mut out, &mut rooms, &mut soaks));
         even(w, s, &blocks, (&mut x, &mut e), border.len(), &mut out.moved);
         wind(w, s, (&push, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
         out.edges.day(s, (&mut x, &mut e), dd, w.cfg.gravity);
@@ -214,7 +216,7 @@ pub(super) fn temps(s: &Scratch, x: &[f64], e: &[f64]) -> Vec<f64> {
 /// (`cells::Response::booked`), gives the air just what its days did. Rain frees its vaporisation enthalpy (and its fusion
 /// enthalpy where the air at the node's mean ground is below the gas's melting point: snow); the node's layers send
 /// heat to space (`Heat::glow`).
-fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, e): (&mut [f64], &mut [f64]), (dd, dt): (f64, f64), (out, rooms, soaks): (&mut Mean, &mut [Room], &mut Soaks)) {
+fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one, rise): (&[Vec<u32>], &Together, &[f64]), (x, e): (&mut [f64], &mut [f64]), (dd, dt): (f64, f64), (out, rooms, soaks): (&mut Mean, &mut [Room], &mut Soaks)) {
     let (air, na, nx, share) = (w.mesh.level(AIR), e.len(), act.len(), dd / dt);
     // What the ground gives at the day's start (`given`); at the day's warmth (`Together::warmed`) as the vapour reads
     // it; at the day's mean vapour too (`Together::shared`), as the day books it: the ground's law is linear in the air.
@@ -223,7 +225,7 @@ fn exchange(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks
     let (t, warm) = warmth(w, s, blocks, one, (x, &start, &got), (dd, dt));
     one.warmed(&mut got, &warm);
     let ts: Vec<f64> = (0..na).map(|j| at_height(t[j], s.gam[j], s.za[j], s.zair[j])).collect();
-    let [mean, rain, ratio, dx] = vapour(w, s, (act, ground), (blocks, one), (x, &got, &ts), (dd, dt), rooms);
+    let [mean, rain, ratio, dx] = vapour(w, s, (act, ground), (blocks, one, rise), (x, &got, &ts), (dd, dt), rooms);
     one.shared(&mut got, &dx);
     (0..s.state.gas.len() * na).for_each(|at| out.x[at] += mean[at] * share);
     // The share of each node's sky its clouds cover at the day's mean vapour (`Seen::clouded`), the most of its gases'.
@@ -311,7 +313,7 @@ fn saturating(w: &World, s: &Scratch, ac: &Active, j: usize, ts: f64) -> f64 {
 /// vapour exactly through the day (`Pool`), from what its ground gives at the day's warmth (`got`, `[j * (1 + nx) +
 /// o]`). With per active gas and node (`[y * na + j]`) what it rains over the day, mol, and that times the ratio it rains
 /// at; and per active gas and block (`[y * nb + b]`) the change of its vapour from the day's start to its mean, mol.
-fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one): (&[Vec<u32>], &Together), (x, got, ts): (&[f64], &[f64], &[f64]), (dd, dt): (f64, f64), rooms: &mut [Room]) -> [Vec<f64>; 4] {
+fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, one, rise): (&[Vec<u32>], &Together, &[f64]), (x, got, ts): (&[f64], &[f64], &[f64]), (dd, dt): (f64, f64), rooms: &mut [Room]) -> [Vec<f64>; 4] {
     let (na, nx, nb) = (ts.len(), act.len(), blocks.len());
     // Per active gas and block (`[y * nb + b]`), each on the pool: the block's vapour at the day's start and its mean
     // over the day, mol, and per node of the block what it rains and that times its ratio (`Pool::day`).
@@ -324,7 +326,10 @@ fn vapour(w: &World, s: &Scratch, (act, ground): (&[Active], &Ground), (blocks, 
     let day = |(i, sums, room): &mut (usize, [f64; 2], &mut Room)| {
         let (y, b) = (*i / nb, *i % nb);
         let (ac, nodes) = (&act[y], &blocks[b]);
-        let full = |j: usize| if ac.cond { saturating(w, s, ac, j, ts[j]) } else { 0.0 };
+        // What saturates each node as the ground lifts its air or lets it sink (`rise::saturates`), its lower half from
+        // its air now.
+        let lower = |j: usize| (0..s.state.gas.len()).map(|q| (1.0 - s.split[q * na + j]) * x[q * na + j]).sum::<f64>();
+        let full = |j: usize| if ac.cond { saturates(saturating(w, s, ac, j, ts[j]), rise[j], lower(j), s.split[ac.gi * na + j], w.cfg.rain_time) } else { 0.0 };
         let held = |j: u32| x[ac.gi * na + j as usize];
         let all: f64 = nodes.iter().map(|&j| held(j)).sum();
         let gives: f64 = nodes.iter().map(|&j| got[j as usize * (1 + nx) + 1 + y]).sum();

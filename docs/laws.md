@@ -569,7 +569,11 @@ gives the climate of 1-day ones within 0.3 K on the land and the land's runoff w
 
 ### 1.5 Evaporation, rain and dissolved gases
 `flow::air::cells`, `daily`, `rain`, `soak`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
-the air's): wet ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), over the
+the air's): a liquid in the ground's pores by the share of it the ground holds for roots (`Physics::available`, the
+same share the plants feel, 3): at the open rate at field capacity and over, none at the wilting point, in proportion
+between (Manabe 1969's bucket, its store the liquid a ground holds for roots): the air does not dry it below the
+wilting point (below it a ground dries only slowly, from its top, stage two of its drying; Ritchie 1972); a solid in
+the pores down to none; over the
 cell's own ground as its reflectance is (the share the standing liquid covers holds what its pores hold and all that
 stands, the rest what its pores hold, each a bucket by its area); and through a second film beside the air's where
 one stands over its land (`World::second_film`: the cover's open pores, 3), in series with the air's film, at its
@@ -582,7 +586,25 @@ when the node holds `moist_min` of what saturates it, all of it at saturation, a
 b = 1 − √((1 − r) / (1 − `moist_min`)) at the node's ratio r to that (`seen::saturated`; Sundqvist et al. 1989, whose
 critical humidity is measured from cloud cover against humidity, Quaas 2012). The air over each cell is
 `seen::MOIST_PARTS` equal parts that saturate one after another by that law (`seen::parts`), against what saturates
-the air touching the cell (colder higher up). Each saturated part rains out in `rain_time` what the node holds over
+the air touching the cell (colder higher up). **The ground lifts the air** (`air::rise`). The wind over the ground is
+the overturning's own low flow (1.6) turned by the spin: `wind` times the warmth's gradient, down it inside the
+month's cell and turned by the spin across it. It comes from the planet's gradient at the node's latitude and month
+where the map's edges are open, from the air's own where a node is a block alone, and is none where a node shares its
+block (its air is evened) or the world has no planet's air. The warmth falls toward the pole at every latitude, so
+this wind is an easterly at every latitude here, of 0.4 to 1.6 m/s. **Known limits:** there are no westerlies of the
+middle latitudes, which the eddies drive (Vallis 2017, 15), so there the wet side of a range is its east, where on a planet
+like ours it is its west; and the wind is some five times weaker than the measured trades (5 to 10 m/s), as the
+overturning it is part of carries about a fifth of the measured flux (1.6). Where it climbs the ground's rise along it (the surface the air touches, the
+liquid's on the liquid, fitted to the bordering cells) it lifts the air at the ground's density, and where it
+descends lets it sink; summed per node, a rising (or sinking) mass flux. In `rain_time` the share f = min(1, |that| ×
+`rain_time` / the lower half's mol) of the node's lower air changes places with its upper half's, which holds
+ρ = split / (1 − split) of the vapour per mol the lower holds (`Scratch::split`, the column's profile): rising air
+condenses down to the upper half's cold, so the node saturates at what saturates it times 1 − f (1 − ρ); sinking air
+brings that much drier air down, so the node saturates only at that over 1 − f (1 − ρ) (Smith and Barstad 2004: rain
+where the wind climbs, a lee where it descends). It changes only what the rain law sees within a step: no number is
+kept, and the rain is booked as all rain is. **Known limit:** the rise is summed per node, so what it adds to a
+node's rain lands as the node's other rain does, by each place's own saturation and the drift: a node that holds a
+windward coast rains more over its sea too, which does not rise. Each saturated part rains out in `rain_time` what the node holds over
 the ratio the part saturates at: only the saturated share condenses, and the node's mean stays under saturation. That
 share is the cloud's share of the sky (`Seen::clouded`, 1.4). Evaporation reads the node's mean vapour: it is linear
 in the vapour, so the mean over the parts is what the mean vapour gives. Each node's air
@@ -884,7 +906,7 @@ seeds fill it:
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, w / 10^`MOIST`), a straight line. **Drought** is felt against the ground's own
-  pores (`cover::wet`, `cover::available`): w is the share of what its ground holds for roots that it holds, (θ −
+  pores (`cover::wet`, `Physics::available`): w is the share of what its ground holds for roots that it holds, (θ −
   `wilt`) / (`field` − `wilt`) within 0 and 1, θ the share of the pores of the ground it stands on that its key liquid
   that is liquid fills (Flow's pore space, `Scratch::land_pores`; standing liquid counts, so θ may pass 1): none at the
   wilting point, all at field capacity (the available water of soil physics; Saxton and Rawls 2006). The ground's

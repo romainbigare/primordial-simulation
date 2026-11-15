@@ -212,26 +212,27 @@ fn a_taker_takes_no_more_than_it_reaches() {
     (w.life.env[i][1], w.life.env[i][3]) = (1.0, 0.0);
     let ph = w.cfg.phys;
     // Of each layer of the cell, what it shows and the share of it within the reach of a taker of row `row`.
-    let layers = |row: usize| -> Vec<(f64, f64)> {
+    let layers = |row: usize| -> Vec<(pcore::contract::Layer, f64, f64)> {
         let (g, m) = (TAKER_KINDS[row].genes, fauna::adult(&TAKER_KINDS[row].genes));
         let len = (m / ph.rho_body).cbrt();
         let reach = 10f64.powf(g[fauna::REACH] as f64);
         let band = (reach / 10f64.powf(fauna::BAND), (reach * 10f64.powf(fauna::BAND)).min(ph.reach_len * len));
-        pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, h)| (shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect()
+        pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, h)| (l, shown(&w, i, l), pcore::contract::reached(band, ph.bite_floor * len, h))).collect()
     };
     // The first kind of taker that reaches a layer of the cell, as many of it as weigh `TAKER_SLOT_KG`.
-    let row = (0..TAKER_KINDS.len()).find(|&r| layers(r).iter().any(|b| b.1 > 0.0)).expect("a kind of taker that reaches the cover");
+    let row = (0..TAKER_KINDS.len()).find(|&r| layers(r).iter().any(|b| b.2 > 0.0)).expect("a kind of taker that reaches the cover");
     let (before, m) = (layers(row), fauna::adult(&TAKER_KINDS[row].genes));
     let books = Books::now(&w);
     testkit::takers(&mut w, i, row, (TAKER_SLOT_KG / m, 0.1 * m));
     testkit::takers_month(&mut w, i);
-    let after: Vec<f64> = pcore::contract::slots(&w, i, w.life.cell_at(i)).iter().map(|&(l, _)| shown(&w, i, l)).collect();
-    assert!(before.len() == after.len() && before.iter().any(|b| b.1 > 0.0), "no layer within reach: {before:?}");
-    for ((kg, r), now) in before.iter().zip(&after) {
+    // Each layer as it stands now, by itself (their order by height changes as they are eaten).
+    let after: Vec<f64> = before.iter().map(|&(l, ..)| shown(&w, i, l)).collect();
+    assert!(before.iter().any(|b| b.2 > 0.0), "no layer within reach: {before:?}");
+    for ((_, kg, r), now) in before.iter().zip(&after) {
         println!("a layer of {kg:.3e} kg, {:.0}% within reach: {now:.3e} kg left", 100.0 * r);
         assert!(*now >= kg * (1.0 - r) * (1.0 - 1e-9), "a layer of {kg} kg, {r} of it within reach, kept {now} kg");
     }
-    assert!(after.iter().zip(&before).any(|(a, b)| *a < b.0), "nothing was taken");
+    assert!(after.iter().zip(&before).any(|(a, b)| *a < b.1), "nothing was taken");
     books.assert_kept(&w, 1e-9);
 }
 

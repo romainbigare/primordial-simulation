@@ -116,7 +116,7 @@ fn the_light_reaction_goes_with_its_gas() {
     assert!(half > 0.0 && half < 1.0 && p.gas_factor(2.0 * p.gas_ref) > 1.0, "{half}");
 }
 
-/// A plant feels drought against the pores of its own ground (`cover::available`, `cover::activity`): it is fully active
+/// A plant feels drought against the pores of its own ground (`Physics::available`, `cover::activity`): it is fully active
 /// while its ground holds the share of what it holds for roots its moisture gene sets, none at the wilting point
 /// (`wilt`), between the two it slows; a kind of dry ground (`MOIST` -1) is still fully active where the light-eaters
 /// have slowed.
@@ -124,7 +124,7 @@ fn the_light_reaction_goes_with_its_gas() {
 fn a_plant_slows_from_its_share_to_the_wilting_point() {
     let ph = pcore::Physics::default();
     let (herb, dry) = (genes(), KINDS[DRY_ROW].genes);
-    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(g, cover::available(&ph, filled));
+    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(g, ph.available(filled));
     let filled = |share: f64| ph.wilt + share * (ph.field - ph.wilt);
     let slows = cover::dec(herb[cover::MOIST]);
     let (wilting, full, half) = (act(&herb, ph.wilt), act(&herb, filled(slows * (1.0 + 1e-9))), act(&herb, filled(0.5 * slows)));

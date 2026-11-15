@@ -251,9 +251,11 @@ pub(super) struct Vapour {
     pub(super) up: bool,
     pub(super) pa: f64,
     pub(super) per: f64,
-    /// What the node holds, mol; what it holds wet (`exchange::bucket`), mol; what its pores hold full, mol; the share
-    /// of its area the liquid standing over them covers; the air's film, mol K/(Pa s).
+    /// What the node holds, mol; what its pores keep from the air, mol (of a liquid, the wilting point's:
+    /// `Physics::available`); what it holds wet over that (`exchange::bucket`), mol; what its pores hold full, mol; the
+    /// share of its area the liquid standing over them covers; the air's film, mol K/(Pa s).
     held: f64,
+    kept: f64,
     wet: f64,
     pores: f64,
     share: f64,
@@ -280,14 +282,18 @@ impl Vapour {
         let boil = (up && g.tg >= sp.boil).then(|| held.min(boil_off(&sp, g.cap, g.tg)));
         let melted = g.latent.molten >> ac.k & 1 == 1;
         let pores = g.pd * area / sp.v[melted as usize];
-        let (film, wet) = (w.cfg.evap / R_GAS * area, w.cfg.phys.field * pores);
+        // The air takes a liquid up from the pores by the share of it the ground holds for roots (`Physics::available`):
+        // at the open rate from field capacity, none at the wilting point (Manabe 1969); a solid down to none.
+        let ph = &w.cfg.phys;
+        let kept = if melted { ph.wilt * pores } else { 0.0 };
+        let (film, wet) = (w.cfg.evap / R_GAS * area, ph.field * pores - kept);
         // The fusion enthalpy a mol of it holds in the ground: none where it is solid or on its plateau.
         let fusion = if g.pk != ac.k && melted { sp.lf } else { 0.0 };
         let (second, behind) = match g.second {
             Some((k, f, reach)) if k == ac.k && f > 0.0 => (f * film / (f + film), reach * held),
             _ => (0.0, 0.0),
         };
-        Vapour { k: ac.k, up, pa: x * per, per, held, wet, pores, share: g.wet, film, second, behind, boil, lv: sp.lv, lf_lv: sp.lf + sp.lv, fusion }
+        Vapour { k: ac.k, up, pa: x * per, per, held, kept, wet, pores, share: g.wet, film, second, behind, boil, lv: sp.lv, lf_lv: sp.lf + sp.lv, fusion }
     }
     /// The heat `m` mol take from the node as they leave it, J: their fusion and vaporisation enthalpies, less the fusion
     /// enthalpy the node holds for them.
@@ -312,7 +318,7 @@ impl Vapour {
         if e <= 0.0 {
             return [0.0; 3];
         }
-        let one = |held: f64| bucket(held, 0.0, e, self.wet, dt);
+        let one = |held: f64| bucket(held - self.kept, 0.0, e, self.wet, dt);
         let (m, dm_de) = if self.share == 0.0 || self.share == 1.0 {
             one(self.held)
         } else {
@@ -326,7 +332,7 @@ impl Vapour {
         [m + m2, films * (ps * self.lv / (R_GAS * t * t) - (ps - self.pa) / t) / t, -films / t]
     }
     /// The bucket that rain landing in the step can wet (`soak::Soak`), its surface at `t` over the step: its share of
-    /// the node, what it holds, mol, as its whole area would, and its open rate, mol/s (the share the standing liquid
+    /// the node, what it holds over what its pores keep from the air, mol, as its whole area would, and its open rate, mol/s (the share the standing liquid
     /// leaves, or all of it). None where nothing evaporates, it boils, or it stays at its open rate through the step
     /// without rain, so rain adds nothing to what it evaporates.
     pub(super) fn soak(&self, s: &Scratch, t: f64, dt: f64) -> Option<[f64; 3]> {
@@ -335,9 +341,9 @@ impl Vapour {
         }
         let e = self.film * (s.sat[self.k].at(t) - self.pa) / t;
         let (share, held) = if self.share == 0.0 || self.share == 1.0 { (1.0, self.held) } else { (1.0 - self.share, self.held.min(self.pores)) };
-        (e > 0.0 && held - e * dt < self.wet).then_some([share, held, e])
+        (e > 0.0 && held - self.kept - e * dt < self.wet).then_some([share, held - self.kept, e])
     }
-    /// What it holds wet, mol (`exchange::bucket`).
+    /// What it holds wet over what its pores keep from the air, mol (`exchange::bucket`).
     pub(super) fn wet(&self) -> f64 {
         self.wet
     }

@@ -140,7 +140,7 @@ pub(super) fn ends(cfg: &Config, s: &Scratch, air: &Level) -> Vec<End> {
 
 /// The gradient of `v` at each node [east, south], per m: the least-squares fit of its differences to its bordering
 /// nodes (0 along an axis with none).
-fn gradient(air: &Level, v: &[f64]) -> Vec<[f64; 2]> {
+pub(super) fn gradient(air: &Level, v: &[f64]) -> Vec<[f64; 2]> {
     (0..air.n())
         .map(|j| {
             let (mut m, mut r) = ([0.0; 3], [0.0; 2]);
