@@ -21,6 +21,8 @@
 // The sun from the north-west lays a shadow this share of the height to the south-east, but no farther than `SHADOW_OFF`
 // of the crown's radius (so a tree stands on its shadow), soft over `SHADOW_SOFT` of its radius.
 const SHADOW_RUN = 0.5; const SHADOW_OFF = 0.45; const SHADOW_SOFT = 0.35;
+// A shadow's half width is at most its plant's reach over this: with its offset it stays within the reach.
+const SHADOW_REACH = 1.5;
 // A shadow lets through the sky's light and what crowns scatter, about half of the sun's (canopy.ts `CROWN_SHADOW`).
 const SHADOW = 0.42; const BUSH_SHADOW = 0.3;
 // Snow lies on a crown's upper, lit side (its light from `SNOW_LIT.x` to `SNOW_LIT.y` times flat ground's) up to this
@@ -37,8 +39,9 @@ const CROWN_SNOW = 0.8; const SNOW_LIT = vec2f(0.9, 1.15); const CROWN_SNOW_RGB 
 fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
   let angled = cover.corner.w;
   let models = angled > 0.5 && models_ready();
-  // Its shadow is as wide as its crown is drawn: a model's sprite's crown where it is drawn from one.
-  let half = select(min(0.5 * q.d, q.reach / 1.1), min(0.5 * MODEL_CROWN * model_fit(q).w, q.reach / 1.1), models);
+  // Its shadow is as wide as its crown is drawn (a model's sprite's crown where it is drawn from one), within its reach
+  // with its offset (`SHADOW_REACH`): the pixel looks no farther for it (`lattice`).
+  let half = min(select(0.5 * q.d, 0.5 * MODEL_CROWN * model_fit(q).w, models), q.reach / SHADOW_REACH);
   // The shadow: from above to the south-east of its foot by its height (`SHADOW_OFF`); angled, flat on the ground at its
   // foot.
   let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);

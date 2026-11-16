@@ -22,9 +22,10 @@ fn model_fit(q: Plant) -> ModelFit {
   if (q.design != TREE) { first = SHRUB_FROM; count = SHRUBS; } else if (i32(q.form + 0.5) == CONE || i32(q.form + 0.5) == COLUMN) { first = FIR_FROM; count = FIRS; }
   let s = first + min(i32(fract(q.r.y * 7.13) * f32(count)), count - 1);
   let aspect = model_h(s) / model_w(s);
-  // As wide as its crown, no taller than it stands (angled, `STAND` of its height), within its lattice's reach.
+  // As wide as its crown, no taller than it stands (angled, `STAND` of its height), within its lattice's reach with its
+  // lean (the pixel looks no farther for it: cover.wgsl `lattice`).
   let stands = select(BUSH_DEEP * q.d, STAND * q.h, q.design == TREE);
-  let w = min(min(q.d / MODEL_CROWN, stands / aspect), 2.0 * q.reach);
+  let w = min(min(q.d / MODEL_CROWN, stands / aspect), q.reach / (0.5 + abs(q.lean.x) * aspect));
   return ModelFit(s, w, w * aspect);
 }
 
