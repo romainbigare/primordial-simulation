@@ -425,6 +425,22 @@ as real as possible, with features dramatised for the game: textures, details, r
   while the numbers stay correct: the variations spread around the kind's own numbers (its height, its crown,
   its leaf, its count) and never change what a square holds in sum.
 
+- **The look now: the orchestrator builds it alone (the owner's word: no agents; the Sonnet builders' work was
+  dropped).** On the work branch, angled view only for now. The page reads one texture array of 512 x 512 layers
+  (`web/src/detail.ts`, `web/shaders/lib/tex.wgsl`; sources and how they were made in `web/textures/SOURCES.md`):
+  - photographs of ground (CC0, Poly Haven), read as a change around the world's colour (so far views keep it);
+  - tiles of ground cover rendered from 3D models as the angled view sees them (`web/textures/bake/`, three.js):
+    grass, straw, leaf litter with sticks, ferns, dry stony soil, cracked mud, sand, wind-rippled snow, reeds and a
+    tile of petals that the world colours. Each is laid in patches shifted by their own draw so no repeat shows.
+    A thin sward is drawn as grass tufts (rendered sprites) standing on bare ground (`sward_tufts`), not a veil;
+  - rendered model sprites (`models.png`): the trees and bushes, and things on the ground scattered by
+    `objects` in `detail.wgsl` (rocks large and small, fallen trunks and branches, dead bushes on dry ground),
+    each as many as the ground's numbers suit them. Shadows of plants are as wide as their drawn sprite.
+  - Open: closed canopy between drawn crowns is still noise (dark green blobs; a try with packed crown sprites
+    looked like flames in autumn and was dropped); grass sways not (would need the map to redraw all the time);
+    the memory of the texture array (32 layers) on a phone; WebGPU untested; the view from above keeps the
+    older drawing.
+
 **Where the two tracks stand** (the orchestrator keeps these lines true):
 - On main: the docs' clean-up; the plants made free (`core/src/contract.rs`, the natural world's month on its own, a
   test that guards the sides, `cli/tests/sides.rs`, the gate and the key numbers on worlds of plants: the cover's

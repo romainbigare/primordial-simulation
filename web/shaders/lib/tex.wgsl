@@ -29,28 +29,38 @@ fn photo_light(t: i32, uv: vec2f, g: f32) -> f32 {
 // The ground's cover (web/textures/carpets.jpg), each tile rendered from 3D models as the angled view sees it (the
 // ground from above, things standing up `STAND` of their height), repeating: green grass, straw, leaf litter with
 // sticks and bark, a shaded floor of ferns and herbs on leaves, dry stony soil with dry tufts, cracked dry mud, sand,
-// snow rippled by the wind with stones and dry stalks in it, tall wet grass and reeds.
+// snow rippled by the wind with stones and dry stalks in it, tall wet grass and reeds; and the petals of a meadow's
+// flowers alone, grey on black (their lightness: the world gives their colour).
 const CARPETS_FROM = 12;
 const GRASS_CARPET = 0; const STRAW_CARPET = 1; const LITTER_CARPET = 2; const FERN_CARPET = 3; const SCRUB_CARPET = 4;
-const CRACKED_CARPET = 5; const SAND_CARPET = 6; const SNOW_CARPET = 7; const REED_CARPET = 8;
+const CRACKED_CARPET = 5; const SAND_CARPET = 6; const SNOW_CARPET = 7; const REED_CARPET = 8; const FLOWER_CARPET = 9;
 // Each tile's side in the world, m.
-fn carpet_m(c: i32) -> f32 { var m = array<f32, 9>(1.5, 1.5, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.0); return m[c]; }
+fn carpet_m(c: i32) -> f32 { var m = array<f32, 10>(1.5, 1.5, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.0, 0.8); return m[c]; }
 
 // The rendered models (web/textures/models.png), four to a layer from `MODELS_FROM` on (models.wgsl draws the plants
-// from them, detail.wgsl the boulders).
-const MODELS_FROM = 21;
+// from them, detail.wgsl the things on the ground).
+const MODELS_FROM = 22;
 // The sprites of each kind of plant: the first and how many.
 const ROUND_FROM = 0; const ROUNDS = 9; const FIR_FROM = 9; const FIRS = 9; const SHRUB_FROM = 18; const SHRUBS = 4;
-const BOULDER_FROM = 22; const BOULDERS = 3; const LOG_FROM = 25; const LOGS = 3;
+const BOULDER_FROM = 22; const BOULDERS = 3; const LOG_FROM = 25;
+// Things on the ground: more rocks, fallen branches, dead bushes; and how many of each class there are with the above.
+const ROCKS_MORE_FROM = 28; const ROCKS = 9; const BRANCH_FROM = 34; const WOODS = 3; const DEAD_BUSH_FROM = 36;
+const DEAD_BUSHES = 4;
+// Grass tufts, and the mean lightness of their blades (linear).
+const TUFT_FROM = 40; const TUFTS = 8; const TUFT_MEAN = 0.048;
 // Each sprite's content, as a share of its quarter: its width and its height.
 fn model_w(s: i32) -> f32 {
-  var w = array<f32, 28>(0.879, 0.984, 0.984, 0.984, 0.941, 0.984, 0.984, 0.984, 0.984, 0.387, 0.402, 0.410, 0.453, 0.492,
-    0.488, 0.496, 0.441, 0.469, 0.836, 0.863, 0.984, 0.977, 0.984, 0.984, 0.984, 0.984, 0.984, 0.918);
+  var w = array<f32, 48>(0.879, 0.984, 0.984, 0.984, 0.941, 0.984, 0.984, 0.984, 0.984, 0.387, 0.402, 0.410, 0.453, 0.492,
+    0.488, 0.496, 0.441, 0.469, 0.836, 0.863, 0.984, 0.977, 0.984, 0.984, 0.984, 0.984, 0.984, 0.918,
+    0.984, 0.984, 0.898, 0.984, 0.984, 0.984, 0.984, 0.984, 0.984, 0.984, 0.984, 0.754,
+    0.984, 0.984, 0.984, 0.984, 0.984, 0.984, 0.984, 0.980);
   return w[s];
 }
 fn model_h(s: i32) -> f32 {
-  var h = array<f32, 28>(0.984, 0.941, 0.945, 0.797, 0.984, 0.820, 0.746, 0.930, 0.949, 0.984, 0.984, 0.984, 0.984, 0.984,
-    0.984, 0.984, 0.984, 0.984, 0.984, 0.984, 0.609, 0.984, 0.969, 0.883, 0.746, 0.094, 0.953, 0.984);
+  var h = array<f32, 48>(0.984, 0.941, 0.945, 0.797, 0.984, 0.820, 0.746, 0.930, 0.949, 0.984, 0.984, 0.984, 0.984, 0.984,
+    0.984, 0.984, 0.984, 0.984, 0.984, 0.984, 0.609, 0.984, 0.969, 0.883, 0.746, 0.094, 0.953, 0.984,
+    0.449, 0.426, 0.984, 0.922, 0.465, 0.488, 0.219, 0.266, 0.859, 0.957, 0.836, 0.984,
+    0.914, 0.625, 0.746, 0.746, 0.844, 0.672, 0.832, 0.984);
   return h[s];
 }
 // The texel of model sprite s at `uv` in its content (0..1, y down), at `g` of its quarter a pixel: linear, with cover.

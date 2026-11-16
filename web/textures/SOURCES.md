@@ -39,9 +39,10 @@ table below.
 | 3 | leaves_forest_ground | fern_02, periwinkle_plant, celandine_01, grass_medium_02, dry_branches_medium_01, bark_debris_01 | 3 m |
 | 4 | dry_ground_rocks | namaqualand_stones_01, stone_01, dry grass_medium_01, dead_quiver_branch_01, weed_plant_02 | 3 m |
 | 5 | mud_cracked_dry_03 | namaqualand_stones_01, dry grass_medium_01, dead_quiver_branch_01 | 3 m |
-| 6 | coast_sand_01 | namaqualand_stones_01, bark_debris_01, grass_medium_02 | 3 m |
-| 7 | white ground with wind ripples (sums of waves) | namaqualand_stones_01, stone_01, dry grass_medium_01 | 3 m |
+| 6 | coast_sand_01 | namaqualand_stones_01, stone_01, dry grass_medium_01 and _02, dead_quiver_branch_01, bark_debris_01, weed_plant_02 | 3 m |
+| 7 | white ground with wind ripples (sums of waves) | none | 3 m |
 | 8 | brown_mud | grass_medium_01 stretched twice as tall, some dried in colour, grass_medium_02 | 2 m |
+| 9 | none (black) | flower_ursinia, dandelion_01: their petals alone, grey, all else black | 1.5 m |
 
 ## models.png
 
@@ -58,3 +59,10 @@ middle of its quarter.
 | 18 to 21 | shrub_02 (its four shrubs) |
 | 22 to 24 | boulder_01 |
 | 25 to 27 | dead_tree_trunk |
+| 28, 29 | namaqualand_boulder_02 (two sides) |
+| 30, 31 | namaqualand_boulder_03 (two sides) |
+| 32, 33 | namaqualand_boulder_05 (two sides) |
+| 34, 35 | dead_tree_trunk_02 (two sides) |
+| 36 to 39 | wild_rooibos_bush (four of its bushes) |
+| 40 to 45 | grass_medium_01 (its meshes 0, 10, 1, 6, 7, 9 in file order) |
+| 46, 47 | grass_medium_02 (its meshes 2, 4 in file order) |

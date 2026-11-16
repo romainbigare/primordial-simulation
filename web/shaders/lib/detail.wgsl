@@ -4,13 +4,13 @@
 // ground: the image over its mean. From afar the mips average the image to its mean, so the ground's colour there is
 // the world's alone; near, the same colour shows its leaves, stones, cracks, grass and sticks. Each image is laid
 // twice, blended by noise, so no repeat shows: a photograph the second time turned and `DETAIL_AGAIN` times as large,
-// a tile of cover (whose things stand up the screen) shifted, the two meeting in a narrow seam (`CARPET_SEAM` of the
-// noise) so a pixel shows one tile's grass and stones, not the mean of two.
+// a tile of cover (whose things stand up the screen) in patches each shifted by its own draw (`carpet`).
 
 // Each photograph's side in the world, m (web/textures/SOURCES.md).
 fn detail_m(t: i32) -> f32 { var m = array<f32, 9>(1.26, 3.0, 2.0, 2.0, 1.5, 2.0, 15.0, 50.0, 1.3); return m[t]; }
 // The turned laying is this many times as large; the two blend over noise `DETAIL_BLEND` times the image's size.
-const DETAIL_AGAIN = 2.7; const DETAIL_BLEND = 3.0; const CARPET_SEAM = 0.12;
+const DETAIL_AGAIN = 2.7; const DETAIL_BLEND = 3.0;
+const CARPET_PATCH = 1.7; const CARPET_SEAM = 0.02; const CARPET_WAVE = 0.06;
 // An image's own hue shows this much (the rest of its change is its lightness alone): the world gives the colour; a
 // tile of cover's more (`CARPET_HUE`), its green plants on brown ground.
 const DETAIL_HUE = 0.55; const CARPET_HUE = 0.7;
@@ -30,14 +30,25 @@ fn carpet_of(t: i32) -> i32 {
   return c[t];
 }
 
-// The change tile of cover c gives the ground's colour at the pixel, at e m a pixel.
+// The change tile of cover c gives the ground's colour at the pixel, at e m a pixel. The tile is laid in patches
+// `CARPET_PATCH` tiles wide, each shifted by its own draw, in two lattices of patches half a patch apart: the pixel
+// shows the patch of the lattice whose middle it is nearer, the two meeting in a seam `CARPET_SEAM` wide (of a patch),
+// wavy by `CARPET_WAVE`, so no repeat shows and a pixel shows one patch's grass and stones, not the mean of two.
 fn carpet(c: i32, e: f32) -> vec3f {
   let s = carpet_m(c);
   let g = vec2f(e / s, 0.0);
   let t = CARPETS_FROM + c;
-  let a = photo(t, lat_axes(s, vec2f(0.0)).f, g, g.yx);
-  let b = photo(t, lat_axes(s, vec2f(0.37, 0.61)).f, g, g.yx);
-  let w = smoothstep(-CARPET_SEAM, CARPET_SEAM, noise_l(lat_turned(DETAIL_BLEND * s, vec2f(0.61)), 95 + t).x);
+  let pa = lat_axes(CARPET_PATCH * s, vec2f(0.0));
+  let pb = lat_axes(CARPET_PATCH * s, vec2f(0.5));
+  let xa = lowbias(pa.i, 96 + t);
+  let xb = lowbias(pb.i, 96 + t);
+  let a = photo(t, lat_axes(s, vec2f(f32(xa & 1023u), f32((xa >> 10u) & 1023u)) / 1024.0).f, g, g.yx);
+  let b = photo(t, lat_axes(s, vec2f(f32(xb & 1023u), f32((xb >> 10u) & 1023u)) / 1024.0).f, g, g.yx);
+  // How far the pixel lies inside its patch of each lattice (0 at its edge, 0.5 at its middle).
+  let inside_a = min(min(pa.f.x, 1.0 - pa.f.x), min(pa.f.y, 1.0 - pa.f.y));
+  let inside_b = min(min(pb.f.x, 1.0 - pb.f.x), min(pb.f.y, 1.0 - pb.f.y));
+  let wave = CARPET_WAVE * noise_l(lat_turned(0.5 * s, vec2f(0.3)), 98 + t).x;
+  let w = smoothstep(-CARPET_SEAM, CARPET_SEAM, inside_b - inside_a + wave);
   return change_of(t, a, b, w, CARPET_HUE);
 }
 
@@ -55,6 +66,9 @@ fn detail(t: i32, e: f32) -> vec3f {
   return change_of(t, a, b, w, DETAIL_HUE);
 }
 
+// Soil's images meet in patches this wide, m, over this much of their noise (`soil_detail`).
+const SOIL_IMAGE_M = 2.5; const SOIL_SEAM = 0.04;
+
 // The change the photographs give soil of spot p: under crowns its litter (a mossy floor where wet), in the open dry
 // stony soil, cracked where driest, wet mud where wet, beach sand and channels' pebbles where they lie.
 fn soil_detail(p: Spot) -> vec3f {
@@ -66,15 +80,29 @@ fn soil_detail(p: Spot) -> vec3f {
   let sand = max(p.sand, 0.0);
   for (var i = 0; i < 5; i++) { w[i] *= 1.0 - sand; }
   w[5] = sand;
-  var sum = vec3f(0.0);
   var total = 0.0;
+  for (var i = 0; i < 6; i++) { total += w[i]; }
+  if (total <= 0.0) { return vec3f(1.0); }
+  // Each image holds its share of the ground in patches (`SOIL_IMAGE_M`) where a noise, made even, falls in its part of
+  // the shares, meeting the next over `SOIL_SEAM` of the noise: a pixel shows one image, not the mean of several.
+  let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.2)), 97).x);
+  var sum = vec3f(0.0);
+  var kept = 0.0;
+  var lo = 0.0;
   for (var i = 0; i < 6; i++) {
-    if (w[i] < 0.02) { continue; }
-    sum += w[i] * detail(t[i], p.e);
-    total += w[i];
+    let hi = lo + w[i] / total;
+    let k = smoothstep(lo - SOIL_SEAM, lo + SOIL_SEAM, n) * (1.0 - smoothstep(hi - SOIL_SEAM, hi + SOIL_SEAM, n));
+    lo = hi;
+    if (k < 0.01) { continue; }
+    sum += k * detail(t[i], p.e);
+    kept += k;
   }
-  var out = select(vec3f(1.0), sum / max(total, 1e-4), total > 0.0);
-  if (p.stony > 0.02) { out = mix(out, detail(PEBBLE_TEX, p.e), min(p.stony, 1.0)); }
+  var out = sum / max(kept, 1e-4);
+  // River pebbles where the bed's stones lie, in patches of their own as many as it holds.
+  if (p.stony > 0.02) {
+    let m = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.7)), 99).x);
+    out = mix(out, detail(PEBBLE_TEX, p.e), smoothstep(-SOIL_SEAM, SOIL_SEAM, min(p.stony, 1.0) - m));
+  }
   return out;
 }
 
@@ -91,64 +119,55 @@ fn grass_detail(e: f32, straw: f32, reeds: f32) -> vec3f {
   return out;
 }
 
-// Wood lying on the ground: fallen trunks under crowns and, fewer, bleached on dry open ground, one in `LOG_FILL` of the
-// cells of a lattice `LOG_CELL_M` m wide where it may lie (as the canopy closes, or as the ground is dry and bare),
-// `LOG_LONG` m long and `LOG_R` m thick by its own draws, at its own angle; a trunk is a lying cylinder of the bark's
-// photograph, lit across it from the sun, moss on its upper side where the floor is wet (`LOG_MOSS`), its shadow beside
-// it away from the sun. (The sticks and bark on the floor are in its images.)
-const LOG_CELL_M = 9.0; const LOG_FILL = 0.55; const LOG_LONG = vec2f(2.5, 7.0); const LOG_R = vec2f(0.1, 0.32);
-const LOG_MOSS = 0.8; const LOG_SHADOW = 0.5; const LOG_DRY = 0.35;
-
-// The distance from point v to the segment from a to b, and how far along it (0..1).
-fn segment(v: vec2f, a: vec2f, b: vec2f) -> vec2f {
-  let ab = b - a;
-  let k = clamp(dot(v - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
-  return vec2f(length(v - a - ab * k), k);
-}
-
-// The wood lying on ground of colour g at spot p, where the plants leave `bare` of it bare: g with its trunks over it.
-fn wood_on(g: vec3f, p: Spot, bare: f32) -> vec3f {
-  let canopy = min(p.canopy, 1.0);
-  let dry = ease(0.4, 0.1, p.wet) * (1.0 - canopy) * bare;
-  let lies = max(canopy, LOG_DRY * dry) * (1.0 - p.sand) * (1.0 - p.snow);
-  if (lies <= 0.01) { return g; }
-  var out = g;
+// A thin sward of colour c, covering s of the ground, seen at e m a pixel: its tufts (rendered models, tex.wgsl
+// `TUFT_FROM`) standing on their foot, one in each cell of a lattice `TUFT_CELL_M` m wide that holds one (as many as
+// make the sward's cover, `TUFT_COVERS` of a tuft's box being blades), `TUFT_WIDE` cells wide by its own draw, the
+// nearer over the farther, each over its shadow (`TUFT_SHADOW` deep); a blade keeps its lightness about the tufts' mean
+// and takes the sward's colour, keeping `TUFT_HUE` of its own. Their colour (linear) and cover.
+const TUFT_CELL_M = 0.12; const TUFT_WIDE = vec2f(1.5, 3.0); const TUFT_SHADOW = 0.35;
+// A tuft's blades cover `TUFT_COVERS` of its box, which is `TUFT_ASPECT` as tall as wide (measured on the sprites).
+const TUFT_COVERS = 0.14; const TUFT_ASPECT = 0.81;
+const TUFT_HUE = 0.3;
+fn sward_tufts(c: vec3f, e: f32, s: f32) -> vec4f {
+  if (!models_ready()) { return vec4f(c, s); }
+  let l = lat_axes(TUFT_CELL_M, vec2f(0.0));
+  let wide = 0.5 * (TUFT_WIDE.x + TUFT_WIDE.y);
+  let held = s / (TUFT_COVERS * TUFT_ASPECT * wide * wide);
   let sun = normalize(LIGHT.xy);
-  if (!unseen(2.0 * LOG_R.x)) {
-    let l = lat_axes(LOG_CELL_M, vec2f(0.0));
-    for (var j = -1; j <= 1; j++) {
-      for (var i = -1; i <= 1; i++) {
-        let c = l.i + vec2i(i, j);
-        let x = lowbias(c, 120);
-        if (f32(x & 1023u) / 1024.0 >= LOG_FILL * lies) { continue; }
-        let mid = vec2f(f32(i), f32(j)) + vec2f(f32((x >> 10u) & 255u), f32((x >> 18u) & 255u)) / 256.0;
-        let turn = f32(x >> 26u) / 64.0 * PI;
-        let y = lowbias(c, 121);
-        let half = 0.5 * mix(LOG_LONG.x, LOG_LONG.y, f32(y & 255u) / 255.0) / LOG_CELL_M;
-        let r = mix(LOG_R.x, LOG_R.y, f32((y >> 8u) & 255u) / 255.0);
-        let dir = vec2f(cos(turn), sin(turn));
-        let v = l.f - mid;
-        // Its shadow, then the trunk over it.
-        let sh = segment(v + sun * (0.8 * r / LOG_CELL_M), -dir * half, dir * half);
-        out *= 1.0 - LOG_SHADOW * (1.0 - smoothstep(0.7 * r, 1.4 * r, sh.x * LOG_CELL_M));
-        let s = segment(v, -dir * half, dir * half);
-        let d = s.x * LOG_CELL_M;
-        if (d >= r) { continue; }
-        let side = sign(dot(v - dir * dot(v, dir), vec2f(-dir.y, dir.x)));
-        let across = side * d / r;
-        let nrm = normalize(vec3f(vec2f(-dir.y, dir.x) * across, sqrt(max(1.0 - across * across, 0.0))));
-        let lit = 1.0 + 0.6 * (dot(nrm, LIGHT) / LIGHT.z - 1.0);
-        let along = s.y * 2.0 * half * LOG_CELL_M;
-        var bark = photo(BARK_TEX, vec2f(across * 0.5 + f32(y >> 16u) / 65536.0, along / (6.0 * r)), vec2f(p.e / r, 0.0), vec2f(0.0, p.e / r));
-        // Moss on its upper (sunward) side on a wet floor; its cut ends paler.
-        let moss = LOG_MOSS * p.wet * canopy * smoothstep(0.0, 0.6, -dot(nrm.xy, sun));
-        bark = mix(bark, photo(MOSSY_TEX, vec2f(along, across) / 0.8, vec2f(p.e, 0.0), vec2f(0.0, p.e)) * 1.2, moss);
-        let edge = 1.0 - smoothstep(r - p.e, r, d);
-        out = mix(out, bark * lit, edge);
-      }
+  var dst = vec4f(0.0);
+  // From the nearest (south) to the farthest, each under those already drawn.
+  for (var j = 3; j >= 0; j--) {
+    for (var i = -1; i <= 1; i++) {
+      let cell = l.i + vec2i(i, j);
+      let x = lowbias(cell, 170);
+      if (f32(x & 1023u) / 1024.0 >= held) { continue; }
+      let foot = vec2f(f32(i), f32(j)) + vec2f(f32((x >> 10u) & 255u), f32((x >> 18u) & 255u)) / 256.0;
+      let k = TUFT_FROM + i32((x >> 26u) % u32(TUFTS));
+      let w = mix(TUFT_WIDE.x, TUFT_WIDE.y, f32(lowbias(cell, 171) & 255u) / 255.0);
+      let h = w * model_h(k) / model_w(k);
+      let v = l.f - foot;
+      let uv = clamp(vec2f(v.x / w + 0.5, 1.0 + v.y / h), vec2f(-1.0), vec2f(2.0));
+      let inside = all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0));
+      let t = select(vec4f(0.0), model_texel(k, uv, e / (w * TUFT_CELL_M)), inside);
+      let lit = dot(t.rgb, LUMA) / TUFT_MEAN;
+      let rgb = mix(c * lit, t.rgb * dot(c, LUMA) / TUFT_MEAN, TUFT_HUE);
+      dst += vec4f(rgb * t.a, t.a) * (1.0 - dst.a);
+      // Its shadow on the ground at its foot, away from the sun.
+      let sv = (v + sun * 0.25 * w) / vec2f(0.45 * w, 0.2 * w);
+      dst += vec4f(0.0, 0.0, 0.0, TUFT_SHADOW * (1.0 - smoothstep(0.5, 1.0, length(sv)))) * (1.0 - dst.a);
     }
   }
-  return out;
+  return vec4f(dst.rgb / max(dst.a, 1e-4), dst.a);
+}
+
+// The flowers' heads up close, angled (cover_field.wgsl `flowers_at`): the share of the pixel their petals cover and
+// their lightness, from the tile of petals, a petal's texel `PETAL_LIT` light (linear) where it is lit as a whole.
+const PETAL_LIT = 0.25;
+fn flower_heads(e: f32) -> vec2f {
+  let s = carpet_m(FLOWER_CARPET);
+  let g = vec2f(e / s, 0.0);
+  let v = dot(photo(CARPETS_FROM + FLOWER_CARPET, lat_axes(s, vec2f(0.0)).f, g, g.yx), LUMA) / PETAL_LIT;
+  return vec2f(min(v, 1.0), clamp(v, 0.5, 1.6));
 }
 
 // Snow's own texture over its colour (1 on the mean): wind drifts `DRIFT_M` m long and a quarter of that across, lying
@@ -204,38 +223,68 @@ fn dry_filler(g0: vec3f, p: Spot, bare: f32) -> vec3f {
   return g;
 }
 
-// Boulders on bare ground (rendered models, tex.wgsl `BOULDER_FROM`), angled, standing on their foot with their shadow:
-// one in `BOULDER_FILL` of the cells of a lattice `BOULDER_CELL_M` m wide, as many more as the ground is bare, rocky,
-// steep or under thin snow (a snowcap on top where it lies), `BOULDER_M` m across by their own draws.
-const BOULDER_CELL_M = 7.0; const BOULDER_FILL = 0.35; const BOULDER_M = vec2f(0.5, 2.4); const BOULDER_SHADOW = 0.45;
-fn boulders(g: vec3f, p: Spot, bare: f32) -> vec3f {
-  let stony = bare * (1.0 - p.sand) * (1.0 - min(p.canopy, 1.0)) * max(max(p.rock, ease(0.15, 0.6, p.slope)), 0.35 + 0.65 * ease(1.0, 0.1, p.loose));
-  if (stony <= 0.02 || unseen(0.3 * BOULDER_M.x) || !angled() || !models_ready()) { return g; }
-  let l = lat_axes(BOULDER_CELL_M, vec2f(0.0));
-  var out = g;
+// Things lying on the ground (rendered models, tex.wgsl), angled, standing on their foot with their shadow away from the
+// sun, each sort at its own lattice, one in `fill` of its cells, a size between its two by its own draw (more small than
+// large), as many as the ground suits them: rocks where it is bare, rocky, steep or loose (a snowcap on top where snow
+// lies), large ones in cells of `ROCK_CELL_M` m and small in cells of `PEBBLE_CELL_M` m; fallen trunks and branches
+// under crowns and, fewer, on dry open ground (`WOOD_DRY`); dead bushes on dry bare ground.
+const ROCK_CELL_M = 7.0; const ROCK_FILL = 0.35; const ROCK_M = vec2f(0.5, 2.4);
+const PEBBLE_CELL_M = 1.6; const PEBBLE_FILL = 0.3; const PEBBLE_M = vec2f(0.12, 0.45);
+// Sand holds `1 - SAND_BARE` as many rocks and dead bushes as other bare ground.
+const SAND_BARE = 0.6;
+const WOOD_CELL_M = 6.0; const WOOD_FILL = 0.2; const WOOD_M = vec2f(1.5, 5.0); const WOOD_DRY = 0.35;
+const DEAD_BUSH_CELL_M = 4.0; const DEAD_BUSH_FILL = 0.3; const DEAD_BUSH_M = vec2f(0.5, 1.3);
+// A thing's shadow: this dark at its middle, as long across as the thing and `SHADOW_DEEP` of that along the sun.
+const OBJECT_SHADOW = 0.45; const SHADOW_DEEP = 0.5;
+// Each sort's sprites: rocks, wood, dead bushes (tex.wgsl).
+const ROCK_SORT = 0; const WOOD_SORT = 1; const DEAD_BUSH_SORT = 2;
+fn sort_sprite(sort: i32, k: u32) -> i32 {
+  if (sort == ROCK_SORT) { let r = i32(k % u32(ROCKS)); return select(ROCKS_MORE_FROM + r - BOULDERS, BOULDER_FROM + r, r < BOULDERS); }
+  // Wood: the fallen trunk lying across the view (its first side) and the branches.
+  if (sort == WOOD_SORT) { let r = i32(k % u32(WOODS)); return select(BRANCH_FROM + r - 1, LOG_FROM, r == 0); }
+  return DEAD_BUSH_FROM + i32(k % u32(DEAD_BUSHES));
+}
+
+// Ground of colour g at spot p with one sort of things over it: `many` (0..1) as the ground suits them, at stream k.
+fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, many: f32, k: i32) -> vec3f {
+  if (many <= 0.02 || unseen(0.3 * size.x)) { return g; }
+  let l = lat_axes(cell_m, vec2f(0.0));
   let sun = normalize(LIGHT.xy);
-  // From the farthest (north) to the nearest; a boulder reaches up into the cell north of its foot.
+  var out = g;
+  // From the farthest (north) to the nearest; a thing reaches up into the cell north of its foot.
   for (var j = 0; j <= 1; j++) {
     for (var i = -1; i <= 1; i++) {
       let c = l.i + vec2i(i, j);
-      let x = lowbias(c, 150);
-      if (f32(x & 1023u) / 1024.0 >= BOULDER_FILL * stony) { continue; }
+      let x = lowbias(c, k);
+      if (f32(x & 1023u) / 1024.0 >= fill * many) { continue; }
       let foot = vec2f(f32(i), f32(j)) + vec2f(f32((x >> 10u) & 255u), f32((x >> 18u) & 255u)) / 256.0 * 0.8 + 0.1;
-      let s = BOULDER_FROM + i32((x >> 26u) % u32(BOULDERS));
-      let w = mix(BOULDER_M.x, BOULDER_M.y, pow(f32(lowbias(c, 151) & 255u) / 255.0, 2.0)) / BOULDER_CELL_M;
+      let s = sort_sprite(sort, x >> 26u);
+      let w = mix(size.x, size.y, pow(f32(lowbias(c, k + 1) & 255u) / 255.0, 2.0)) / cell_m;
       let h = w * model_h(s) / model_w(s);
       let v = l.f - foot;
-      // Its shadow on the ground away from the sun.
-      let sv = (v + sun * 0.35 * w) / vec2f(0.6 * w, 0.3 * w);
-      out *= 1.0 - BOULDER_SHADOW * (1.0 - smoothstep(0.6, 1.0, length(sv)));
+      let sv = (v + sun * SHADOW_DEEP * 0.7 * w) / vec2f(0.6 * w, SHADOW_DEEP * 0.6 * w);
+      out *= 1.0 - OBJECT_SHADOW * (1.0 - smoothstep(0.6, 1.0, length(sv)));
       let uv = vec2f(v.x / w + 0.5, 1.0 + v.y / h);
       if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { continue; }
-      let t = model_texel(s, uv, p.e / (w * BOULDER_CELL_M));
-      var rock = t.rgb;
+      let t = model_texel(s, uv, p.e / (w * cell_m));
       // Snow on its top where the ground holds some.
-      rock = mix(rock, SNOW, p.snow * smoothstep(0.55, 0.25, uv.y));
-      out = mix(out, rock, t.a);
+      let rgb = mix(t.rgb, SNOW, p.snow * smoothstep(0.55, 0.25, uv.y) * f32(sort != DEAD_BUSH_SORT));
+      out = mix(out, rgb, t.a);
     }
   }
   return out;
+}
+
+// The things lying on ground of colour g at spot p, where the plants leave `bare` of it bare.
+fn objects(g: vec3f, p: Spot, bare: f32) -> vec3f {
+  if (!angled() || !models_ready()) { return g; }
+  let canopy = min(p.canopy, 1.0);
+  let open = bare * (1.0 - SAND_BARE * p.sand) * (1.0 - canopy);
+  let stony = open * max(max(p.rock, ease(0.15, 0.6, p.slope)), 0.35 + 0.65 * ease(1.0, 0.1, p.loose));
+  let dry = ease(0.4, 0.1, p.wet) * open * (1.0 - p.snow);
+  let wood = max(canopy, WOOD_DRY * dry) * (1.0 - p.sand) * (1.0 - p.snow);
+  var out = scatter(g, p, WOOD_SORT, WOOD_CELL_M, WOOD_FILL, WOOD_M, wood, 120);
+  out = scatter(out, p, DEAD_BUSH_SORT, DEAD_BUSH_CELL_M, DEAD_BUSH_FILL, DEAD_BUSH_M, dry, 124);
+  out = scatter(out, p, ROCK_SORT, PEBBLE_CELL_M, PEBBLE_FILL, PEBBLE_M, stony, 152);
+  return scatter(out, p, ROCK_SORT, ROCK_CELL_M, ROCK_FILL, ROCK_M, stony, 150);
 }

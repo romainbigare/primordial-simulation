@@ -127,6 +127,8 @@ const SWARD_SHADE = 0.35;
 const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0;
 // A sward whose red over its green passes from `STRAW_HUE.x` to `.y` is straw: angled, its grass is drawn dry.
 const STRAW_HUE = vec2f(0.85, 1.1);
+// Angled, a sward that covers up to `TUFTS_THICK.x` of the ground is drawn as tufts alone, from `.y` on as its tile.
+const TUFTS_THICK = vec2f(0.4, 0.75);
 // Swathes and blades show as detail this size, m (`shows_at`): none where a pixel takes 1 m or more, where they would
 // read only as noise.
 const SWATH_DETAIL_M = 1.33;
@@ -319,7 +321,8 @@ fn streaks(w: f32, len: f32, turn: f32, k: i32) -> f32 {
 }
 
 // The flowers over the sward at `at`, seen at `e` m a pixel, of the herbs whose share `bloom` is in flower: their
-// colour and the share of the ground they cover (the sward's own share times it): clusters of dots (`FLOWER_M`, `DOT_R`).
+// colour and the share of the ground they cover (the sward's own share times it): clusters (`FLOWER_M`) of dots
+// (`DOT_R`) seen from above, of flower heads angled.
 fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   // The clusters: where the noise, made even, falls in the share in flower; softened over a pixel.
   let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(FLOWER_M, vec2f(0.0)), 71).x);
@@ -329,7 +332,12 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   let dots = shows_at(2.0 * DOT_R, e);
   var cover = mean;
   var c = petal;
-  if (dots > 0.0 && cluster > 0.0) {
+  if (dots > 0.0 && cluster > 0.0 && cover_look.look.z > 0.5) {
+    // Angled, their heads in the tile of petals (detail.wgsl `flower_heads`).
+    let h = flower_heads(e);
+    cover = mix(mean, h.x, dots);
+    c = petal * h.y;
+  } else if (dots > 0.0 && cluster > 0.0) {
     let margin = DOT_R / DOT_GAP;
     // The nearest dot of the two lattices: how far from its centre the point lies, in its radii (past it: none).
     var d = 1.0;
@@ -372,10 +380,21 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     // From above, in streaks of blades; angled, its blades stand up in their image (detail.wgsl `grass_detail`).
     if (cover_look.look.z < 0.5) { tone += REED_TONE * reeds * shows_at(REED_W, e) * streaks(REED_W, REED_L, 0.3 * noise_l(lat_axes(REED_L, vec2f(0.0)), 76).x, 77); }
   }
-  let seen = s;
   // Its grass, straw where its colour is straw's.
   let straw = smoothstep(STRAW_HUE.x, STRAW_HUE.y, c.r / max(c.g, 1e-4));
-  c *= max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0)) * grass_detail(e, straw, reeds);
+  let plain = c * max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
+  c = plain * grass_detail(e, straw, reeds);
+  // Angled and near, a thin sward is its tufts standing on bare ground (detail.wgsl `sward_tufts`), not a veil: fully
+  // where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on.
+  var seen = s;
+  if (cover_look.look.z > 0.5 && blades > 0.0) {
+    let thin = blades * (1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s));
+    if (thin > 0.0) {
+      let t = sward_tufts(plain, e, s);
+      c = mix(c, t.rgb, thin);
+      seen = mix(s, t.a, thin);
+    }
+  }
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
     let fl = field_at(at, FLOWER_LAYER, 0.0);

@@ -15,22 +15,29 @@ document.body.appendChild(renderer.domElement);
 const cache = {};
 const loader = new GLTFLoader(), texLoader = new THREE.TextureLoader();
 
-// Each mesh of a model as its own part, baked in its node's place, then set on the origin: its middle over (0, 0),
-// its foot on the ground.
-async function partsOf(name) {
-  if (cache[name]) return cache[name];
+// The parts of a model, each set on the origin (its middle over (0, 0), its foot on the ground) with its meshes baked
+// in place: each mesh its own part, or (`grouped`) each child of the model's first node with more than one child, or
+// (`grouped` 'whole') the whole model.
+async function partsOf(name, grouped) {
+  const key = `${name}|${grouped}`;
+  if (cache[key]) return cache[key];
   const g = await loader.loadAsync(`/assets/gltf/${name}/${name}.gltf`);
   g.scene.updateMatrixWorld(true);
-  const parts = [];
-  g.scene.traverse(o => {
-    if (!o.isMesh) return;
-    const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld);
-    geo.computeBoundingBox(); const b = geo.boundingBox;
-    geo.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
-    geo.computeBoundingBox();
-    parts.push({ name: o.name, geo, mat: o.material });
+  let roots = [];
+  if (grouped === 'whole') roots = [g.scene];
+  else if (grouped) {
+    roots = [g.scene];
+    while (roots.length === 1 && roots[0].children.length > 0) roots = roots[0].children;
+  } else g.scene.traverse(o => { if (o.isMesh) roots.push(o); });
+  const parts = roots.map(r => {
+    const meshes = [];
+    r.traverse(o => { if (o.isMesh) { const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld); meshes.push({ geo, mat: o.material }); } });
+    const b = new THREE.Box3();
+    meshes.forEach(m => { m.geo.computeBoundingBox(); b.union(m.geo.boundingBox); });
+    meshes.forEach(m => m.geo.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2));
+    return { name: r.name, meshes };
   });
-  return (cache[name] = parts);
+  return (cache[key] = parts);
 }
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -46,9 +53,10 @@ function materialOf(m, item) {
   out.onBeforeCompile = s => {
     s.fragmentShader = s.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
       { float l = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-        diffuseColor.rgb = mix(diffuseColor.rgb, l * vec3(${tint.map(v => v.toFixed(3)).join(',')}) * 1.6, ${dry.toFixed(3)}) * ${dark.toFixed(3)}; }`);
+        diffuseColor.rgb = mix(diffuseColor.rgb, l * vec3(${tint.map(v => v.toFixed(3)).join(',')}) * 1.6, ${dry.toFixed(3)}) * ${dark.toFixed(3)};
+        ${item.petals ? 'diffuseColor.rgb = (max(diffuseColor.r, diffuseColor.b) - diffuseColor.g > 0.1 && l > 0.15) ? vec3(0.8) : vec3(0.0);' : ''} }`);
   };
-  out.customProgramCacheKey = () => `${dry}|${tint}|${dark}`;
+  out.customProgramCacheKey = () => `${dry}|${tint}|${dark}|${!!item.petals}`;
   return out;
 }
 
@@ -87,9 +95,9 @@ window.bake = async spec => {
   }
   const plane = new THREE.Mesh(geo, gmat);
   plane.rotation.x = -Math.PI / 2; plane.position.set(L / 2, 0, L / 2); plane.receiveShadow = true; plane.castShadow = !!spec.ground.relief;
-  scene.add(plane);
+  if (!spec.ground.none) scene.add(plane);
   for (const item of spec.items) {
-    let parts = await partsOf(item.model);
+    let parts = await partsOf(item.model, item.grouped || false);
     if (item.parts) parts = parts.filter(p => new RegExp(item.parts).test(p.name));
     const per = parts.map(() => []);
     for (let k = 0; k < item.n; k++) {
@@ -105,16 +113,18 @@ window.bake = async spec => {
     }
     parts.forEach((p, i) => {
       const list = per[i]; if (!list.length) return;
-      const mesh = new THREE.InstancedMesh(p.geo, materialOf(p.mat, item), list.length * 9);
-      mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
-      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-      let n = 0;
-      for (const a of list) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
-        e.set(a.tiltX, a.turn, a.tiltZ, 'YXZ'); q.setFromEuler(e);
-        m.compose(new THREE.Vector3(a.x + dx * L, -a.sink, a.z + dz * L), q, new THREE.Vector3(a.s, a.s * (item.squash || 1), a.s));
-        mesh.setMatrixAt(n++, m);
+      for (const pm of p.meshes) {
+        const mesh = new THREE.InstancedMesh(pm.geo, materialOf(pm.mat, item), list.length * 9);
+        mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
+        const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+        let n = 0;
+        for (const a of list) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+          e.set(a.tiltX, a.turn, a.tiltZ, 'YXZ'); q.setFromEuler(e);
+          m.compose(new THREE.Vector3(a.x + dx * L, -a.sink, a.z + dz * L), q, new THREE.Vector3(a.s, a.s * (item.squash || 1), a.s));
+          mesh.setMatrixAt(n++, m);
+        }
+        scene.add(mesh);
       }
-      scene.add(mesh);
     });
   }
   scene.add(new THREE.HemisphereLight(0xd8e6ff, 0x5a5040, spec.sky ?? 1.3));

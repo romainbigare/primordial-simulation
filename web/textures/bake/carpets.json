@@ -396,20 +396,68 @@
   "items": [
    {
     "model": "namaqualand_stones_01",
-    "n": 25,
+    "n": 110,
     "scale": [
      0.4,
-     1.4
+     1.8
     ],
     "skew": 2.5,
+    "sink": 0.02
+   },
+   {
+    "model": "stone_01",
+    "n": 10,
+    "scale": [
+     0.6,
+     2.0
+    ],
+    "skew": 2,
     "sink": 0.03
    },
    {
-    "model": "bark_debris_01",
-    "n": 2,
+    "model": "grass_medium_01",
+    "n": 70,
+    "scale": [
+     0.5,
+     1.0
+    ],
+    "tilt": 0.6,
+    "dry": 1.0,
+    "tint": [
+     1.15,
+     0.95,
+     0.6
+    ],
+    "cluster": 0.75,
+    "spread": 0.25
+   },
+   {
+    "model": "grass_medium_02",
+    "n": 25,
     "scale": [
      0.6,
      1.0
+    ],
+    "tilt": 0.6,
+    "dry": 0.7,
+    "cluster": 0.8,
+    "spread": 0.2
+   },
+   {
+    "model": "dead_quiver_branch_01",
+    "n": 3,
+    "scale": [
+     0.5,
+     0.9
+    ],
+    "tilt": 1.4
+   },
+   {
+    "model": "bark_debris_01",
+    "n": 3,
+    "scale": [
+     0.5,
+     0.9
     ],
     "dry": 0.7,
     "tint": [
@@ -419,16 +467,13 @@
     ]
    },
    {
-    "model": "grass_medium_02",
-    "n": 12,
+    "model": "weed_plant_02",
+    "n": 8,
     "scale": [
      0.6,
      1.0
     ],
-    "tilt": 0.6,
-    "dry": 0.6,
-    "cluster": 0.8,
-    "spread": 0.2
+    "dry": 0.7
    }
   ]
  },
@@ -471,46 +516,7 @@
     ]
    ]
   },
-  "items": [
-   {
-    "model": "namaqualand_stones_01",
-    "n": 18,
-    "scale": [
-     0.6,
-     2.5
-    ],
-    "skew": 2,
-    "sink": 0.04
-   },
-   {
-    "model": "stone_01",
-    "n": 5,
-    "scale": [
-     1.0,
-     3.0
-    ],
-    "sink": 0.08
-   },
-   {
-    "model": "grass_medium_01",
-    "n": 40,
-    "scale": [
-     0.5,
-     0.9
-    ],
-    "tilt": 0.6,
-    "dry": 1.0,
-    "tint": [
-     1.1,
-     0.9,
-     0.6
-    ],
-    "squash": 0.5,
-    "sink": 0.05,
-    "cluster": 0.8,
-    "spread": 0.2
-   }
-  ]
+  "items": []
  },
  "reeds": {
   "L": 2.0,
@@ -564,5 +570,36 @@
   ],
   "sky": 1.6,
   "sun": 3.0
+ },
+ "flowers": {
+  "L": 1.5,
+  "px": 1024,
+  "seed": 12,
+  "sky": 1.6,
+  "sun": 2.6,
+  "ground": {
+   "none": true
+  },
+  "items": [
+   {
+    "model": "flower_ursinia",
+    "n": 170,
+    "scale": [
+     0.6,
+     1.0
+    ],
+    "petals": true
+   },
+   {
+    "model": "dandelion_01",
+    "parts": "_a_|_b_",
+    "n": 170,
+    "scale": [
+     0.7,
+     1.1
+    ],
+    "petals": true
+   }
+  ]
  }
 }

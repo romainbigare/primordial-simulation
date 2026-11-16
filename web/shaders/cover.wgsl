@@ -36,7 +36,9 @@ const CROWN_SNOW = 0.8; const SNOW_LIT = vec2f(0.9, 1.15); const CROWN_SNOW_RGB 
 // or fruit.
 fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
   let angled = cover.corner.w;
-  let half = min(0.5 * q.d, q.reach / 1.1);
+  let models = angled > 0.5 && models_ready();
+  // Its shadow is as wide as its crown is drawn: a model's sprite's crown where it is drawn from one.
+  let half = select(min(0.5 * q.d, q.reach / 1.1), min(0.5 * MODEL_CROWN * model_fit(q).w, q.reach / 1.1), models);
   // The shadow: from above to the south-east of its foot by its height (`SHADOW_OFF`); angled, flat on the ground at its
   // foot.
   let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);
@@ -44,7 +46,7 @@ fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow:
   over(dst, vec3f(0.0), SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
   let bark = BARK * cover.walls.rgb;
   // Angled, a plant is its model's sprite (models.wgsl) once the models are loaded.
-  if (angled > 0.5 && models_ready()) {
+  if (models) {
     let m = model_plant(q, p, e, snow);
     if (m.a > 0.0) { over(dst, m.rgb, m.a * fade); }
     return;
