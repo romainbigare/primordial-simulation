@@ -39,16 +39,16 @@ const CROWN_SNOW = 0.8; const SNOW_LIT = vec2f(0.9, 1.15); const CROWN_SNOW_RGB 
 fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
   let angled = cover.corner.w;
   let models = angled > 0.5 && models_ready();
-  // Its shadow is as wide as its crown is drawn (a model's sprite's crown where it is drawn from one), within its reach
-  // with its offset (`SHADOW_REACH`): the pixel looks no farther for it (`lattice`).
-  let half = min(select(0.5 * q.d, 0.5 * MODEL_CROWN * model_fit(q).w, models), q.reach / SHADOW_REACH);
-  // The shadow: from above to the south-east of its foot by its height (`SHADOW_OFF`); angled, flat on the ground at its
-  // foot.
-  let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);
-  let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
-  // A bush drawn from a model is open twigs and leaves: it lets more light through (`BUSH_SHADOW` of a tree's shadow).
-  let dark = select(SHADOW, BUSH_SHADOW * SHADOW, models && q.design != TREE);
-  over(dst, vec3f(0.0), dark * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
+  if (models) {
+    over(dst, vec3f(0.0), fade * model_shadow(q, p, e));
+  } else {
+    // The shadow: from above to the south-east of its foot by its height (`SHADOW_OFF`); angled, flat on the ground at
+    // its foot; within its reach with its offset (`SHADOW_REACH`): the pixel looks no farther for it (`lattice`).
+    let half = min(0.5 * q.d, q.reach / SHADOW_REACH);
+    let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);
+    let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
+    over(dst, vec3f(0.0), SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
+  }
   let bark = BARK * cover.walls.rgb;
   // Angled, a plant is its model's sprite (models.wgsl) once the models are loaded.
   if (models) {

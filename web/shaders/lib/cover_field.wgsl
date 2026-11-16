@@ -122,7 +122,7 @@ fn held_at(at: vec2f, b: Beneath) -> vec4f {
 const SWARD = 0.45; const SWARD_M = 0.35;
 // Under the trees' crowns the sward is in their shade: darker by up to `SWARD_SHADE` as they close over it.
 const SWARD_SHADE = 0.35;
-const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0;
+const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0; const SWARD_STANDS_NEAR = 0.5;
 // A sward whose red over its green passes from `STRAW_HUE.x` to `.y` is straw: angled, its grass is drawn dry.
 const STRAW_HUE = vec2f(0.85, 1.1);
 // Angled, a sward that covers up to `TUFTS_THICK.x` of the ground is drawn as tufts alone, from `.y` on as its tile.
@@ -163,10 +163,20 @@ var<private> land_smooth: f32 = 1.0;
 fn land_weights(at: vec2f) {
   let uv = at / (land.map.x * land.map.yz);
   land_plain = select(field_tap(uv, LAND_LAYER).x, 0.0, any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)));
-  let b = bspline(at / land.map.x - 0.5, vec2f(textureDimensions(cover_field_tex).xy));
-  let top = b.g0.x * field_tap(b.h0, LAND_LAYER).x + b.g1.x * field_tap(vec2f(b.h1.x, b.h0.y), LAND_LAYER).x;
-  let bottom = b.g0.x * field_tap(vec2f(b.h0.x, b.h1.y), LAND_LAYER).x + b.g1.x * field_tap(b.h1, LAND_LAYER).x;
-  land_smooth = b.g0.y * top + b.g1.y * bottom;
+  land_smooth = cubic_field(at, LAND_LAYER).x;
+}
+
+// The field of layer l at `at` through its texels' centres as a cubic B-spline read texel by texel (draw.wgsl `cubic`).
+fn cubic_field(at: vec2f, l: i32) -> vec4f {
+  let c = cubic(at / land.map.x - 0.5);
+  let last = vec2i(textureDimensions(cover_field_tex).xy) - 1;
+  var sum = vec4f(0.0);
+  for (var y = 0; y < 4; y++) {
+    for (var x = 0; x < 4; x++) {
+      sum += c.wx[x] * c.wy[y] * textureLoad(cover_field_tex, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), l, 0);
+    }
+  }
+  return sum;
 }
 
 // The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
@@ -183,14 +193,10 @@ fn field_at(at: vec2f, l: i32, lod: f32) -> vec4f {
 // The field of lattice l at uv, blended between its texels.
 fn field_tap(uv: vec2f, l: i32) -> vec4f { return textureSampleLevel(cover_field_tex, cover_field_sampler, uv, l, 0.0); }
 
-// The field of lattice l at `at` through its texels' centres as a cubic B-spline (draw.wgsl `bspline`) over the squares
-// with land (`on_land`, `land_smooth`): no square shows in it.
-fn field_smooth(at: vec2f, l: i32) -> vec4f {
-  let b = bspline(at / land.map.x - 0.5, vec2f(textureDimensions(cover_field_tex).xy));
-  let top = b.g0.x * field_tap(b.h0, l) + b.g1.x * field_tap(vec2f(b.h1.x, b.h0.y), l);
-  let bottom = b.g0.x * field_tap(vec2f(b.h0.x, b.h1.y), l) + b.g1.x * field_tap(b.h1, l);
-  return on_land(b.g0.y * top + b.g1.y * bottom, land_smooth);
-}
+// The field of lattice l at `at` through its texels' centres as a cubic B-spline read texel by texel (draw.wgsl
+// `cubic`) over the squares with land (`on_land`, `land_smooth`): no square shows in it, and no staircase of the GPU's
+// blend.
+fn field_smooth(at: vec2f, l: i32) -> vec4f { return on_land(cubic_field(at, l), land_smooth); }
 
 // How much thicker than their mean the plants stand at `at` (`PATCH`).
 fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
@@ -357,17 +363,23 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
 fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> vec4f {
   let f = field_smooth(at, SWARD_LAYER);
   if (f.a <= 0.0 || hold <= 0.0) { return vec4f(0.0); }
+  // Angled, near, its images give its detail (detail.wgsl `grass_detail`): the drawn tufts' and swathes' tone fades out
+  // as they show, and its kinds' stands keep `SWARD_STANDS_NEAR` of their difference from the mean, so the layers do not
+  // pile into smudges.
+  let near_images = select(0.0, shows_at(SWATH_DETAIL_M, e), cover_look.look.z > 0.5);
+  let mean = f.rgb / f.a;
   var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
+  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images);
   var s = min(f.a * thick * hold, 1.0);
   let tufts = shows_at(SWARD_M, e);
   var tone = 1.0;
   if (tufts > 0.0) {
     let n = tufts * noise_l(lat_turned(SWARD_M, vec2f(0.0)), 54).x;
     s = clamp(s * (1.0 + SWARD * n), 0.0, 1.0);
-    tone += TUFT_TONE * n;
+    tone += TUFT_TONE * n * (1.0 - near_images);
   }
   let swaths = shows_at(SWATH_DETAIL_M, e);
-  if (swaths > 0.0) { tone += SWATH * swaths * noise_l(lat_turned(SWATH_M, vec2f(0.0)), 73).x; }
+  if (swaths > 0.0) { tone += SWATH * swaths * (1.0 - near_images) * noise_l(lat_turned(SWATH_M, vec2f(0.0)), 73).x; }
   // From above, its tufts; angled, its grass stands up in its images (detail.wgsl `grass_detail`).
   let blades = shows_at(TUFT_SEEN_M, e);
   if (blades > 0.0 && cover_look.look.z < 0.5) { tone *= mix(1.0, tuft_tone(), blades); }

@@ -23,14 +23,18 @@ const PATCHY = 0.6; const PATCHY_M = 40.0; const PATCHY_OCTAVES = 4; const PATCH
 const SMOOTH_LOOSE_M = 0.5;
 
 // The depth of the loose ground at `at`, m from the map's north-west corner: through the samples' centres as a cubic
-// B-spline (draw.wgsl `bspline`), so no sample's square shows in the bed it bares.
+// B-spline read texel by texel (draw.wgsl `cubic`), so no sample's square shows in the bed it bares and its change
+// across a pixel, which eases the plants' edge (`rooted`), is smooth.
 fn loose_at(at: vec2f) -> f32 {
-  let size = land.samples.xy;
-  let b = bspline(at / (land.map.x * land.map.yz) * size - 0.5, size);
-  let tap = vec4f(
-    textureSampleLevel(rock_field, rock_sampler, rock_plane(b.h0, 0.0), 0.0).x, textureSampleLevel(rock_field, rock_sampler, rock_plane(vec2f(b.h1.x, b.h0.y), 0.0), 0.0).x,
-    textureSampleLevel(rock_field, rock_sampler, rock_plane(vec2f(b.h0.x, b.h1.y), 0.0), 0.0).x, textureSampleLevel(rock_field, rock_sampler, rock_plane(b.h1, 0.0), 0.0).x);
-  return b.g0.y * (b.g0.x * tap.x + b.g1.x * tap.y) + b.g1.y * (b.g0.x * tap.z + b.g1.x * tap.w);
+  let c = cubic(at / (land.map.x * land.map.yz) * land.samples.xy - 0.5);
+  let last = vec2i(land.samples.xy) - 1;
+  var sum = 0.0;
+  for (var y = 0; y < 4; y++) {
+    for (var x = 0; x < 4; x++) {
+      sum += c.wx[x] * c.wy[y] * textureLoad(rock_field, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), 0).x;
+    }
+  }
+  return sum;
 }
 
 // The place in the rock's texture of the point `uv` (0..1 over the samples) of its plane `plane` (0 the loose ground's,

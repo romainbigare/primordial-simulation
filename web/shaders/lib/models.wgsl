@@ -48,3 +48,25 @@ fn model_plant(q: Plant, p: vec2f, e: f32, snow: f32) -> vec4f {
   let rgb = mix(t.rgb, leaf, leafy);
   return vec4f(rgb, t.a * mix(1.0, kept, leafy));
 }
+
+// The shadow of plant q drawn from a model sprite at p, angled, e m a pixel: its sprite cast on the ground away from the
+// sun (south-east), each of its texels at a height on it laid `MODEL_SHADOW_RUN` of that height along the ground, blurred
+// (`SHADOW_BLUR` of its sprite at least a pixel); its leaves as closed as its crown (a bare crown casts its branches'),
+// a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover.wgsl
+// `lattice`). How dark it makes the ground, 0..1.
+const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.02;
+fn model_shadow(q: Plant, p: vec2f, e: f32) -> f32 {
+  let fit = model_fit(q);
+  let v = p - q.at;
+  // Its length along the ground southward, within its reach.
+  let long = min(MODEL_SHADOW_RUN * fit.h, 0.9 * q.reach);
+  let up = v.y / long;
+  if (up < 0.0 || up > 1.0) { return 0.0; }
+  let uv = vec2f((v.x - v.y) / fit.w + 0.5, 1.0 - up);
+  if (uv.x < 0.0 || uv.x > 1.0) { return 0.0; }
+  let t = model_texel(fit.s, uv, max(e / fit.w, SHADOW_BLUR));
+  let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
+  let kept = t.a * mix(1.0, q.closed, leafy);
+  let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));
+  return select(BUSH_SHADOW, 1.0, q.design == TREE) * SHADOW * kept * edge;
+}

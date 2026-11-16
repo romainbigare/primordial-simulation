@@ -128,8 +128,8 @@ fn rock_detail(e: f32) -> vec3f { return detail(ROCK_TEX, e); }
 // `DRIFT_HUE`), all about 1 so its mean stays the world's colour. The tiles' fine change is `GRASS_FAR` of itself from
 // `GRASS_FAR_E` m a pixel on, where it would read as noise.
 const GRASS_PATCH_M = 6.0; const GRASS_THIN = 0.5; const GRASS_SEAM = 0.03;
-const KIND_TONE = vec3f(1.1, 1.0, 0.88); const DRIFT_GRASS_M = 4.0; const DRIFT_TONE = 0.12;
-const DRIFT_HUE = vec3f(-0.06, 0.04, -0.08); const GRASS_FAR = 0.5; const GRASS_FAR_E = vec2f(0.01, 0.04);
+const KIND_TONE = vec3f(1.04, 1.0, 0.95); const DRIFT_GRASS_M = 6.0; const DRIFT_TONE = 0.06;
+const DRIFT_HUE = vec3f(-0.04, 0.025, -0.05); const GRASS_FAR = 0.5; const GRASS_FAR_E = vec2f(0.01, 0.04);
 fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
   if (!angled()) { return detail(GRASS_TEX, e); }
   let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(GRASS_PATCH_M, vec2f(0.4)), 102).x
@@ -163,7 +163,7 @@ fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
 // make the sward's cover, `TUFT_COVERS` of a tuft's box being blades), `TUFT_WIDE` cells wide by its own draw, the
 // nearer over the farther, each over its shadow (`TUFT_SHADOW` deep); a blade keeps its lightness about the tufts' mean
 // and takes the sward's colour, keeping `TUFT_HUE` of its own. Their colour (linear) and cover.
-const TUFT_CELL_M = 0.12; const TUFT_WIDE = vec2f(1.5, 3.0); const TUFT_SHADOW = 0.35;
+const TUFT_CELL_M = 0.08; const TUFT_WIDE = vec2f(1.0, 1.8); const TUFT_SHADOW = 0.3;
 // A tuft's blades cover `TUFT_COVERS` of its box, which is `TUFT_ASPECT` as tall as wide (measured on the sprites).
 const TUFT_COVERS = 0.14; const TUFT_ASPECT = 0.81;
 const TUFT_HUE = 0.3;
@@ -174,8 +174,9 @@ fn sward_tufts(c: vec3f, e: f32, s: f32) -> vec4f {
   let held = s / (TUFT_COVERS * TUFT_ASPECT * wide * wide);
   let sun = normalize(LIGHT.xy);
   var dst = vec4f(0.0);
-  // From the nearest (south) to the farthest, each under those already drawn.
-  for (var j = 3; j >= 0; j--) {
+  // From the nearest (south) to the farthest, each under those already drawn: a tuft no wider than two cells reaches
+  // the pixel from the cells beside its own, from up to two cells south (its height), and its shadow from the cell north.
+  for (var j = 2; j >= -1; j--) {
     for (var i = -1; i <= 1; i++) {
       let cell = l.i + vec2i(i, j);
       let x = lowbias(cell, 170);
@@ -192,7 +193,7 @@ fn sward_tufts(c: vec3f, e: f32, s: f32) -> vec4f {
       let rgb = mix(c * lit, t.rgb * dot(c, LUMA) / TUFT_MEAN, TUFT_HUE);
       dst += vec4f(rgb * t.a, t.a) * (1.0 - dst.a);
       // Its shadow on the ground at its foot, away from the sun.
-      let sv = (v + sun * 0.25 * w) / vec2f(0.45 * w, 0.2 * w);
+      let sv = (v + sun * 0.25 * w) / vec2f(0.4 * w, 0.2 * w);
       dst += vec4f(0.0, 0.0, 0.0, TUFT_SHADOW * (1.0 - smoothstep(0.5, 1.0, length(sv)))) * (1.0 - dst.a);
     }
   }
@@ -275,8 +276,12 @@ const SNOW_ROCKS = 0.6;
 const SAND_BARE = 0.6;
 const WOOD_CELL_M = 6.0; const WOOD_FILL = 0.2; const WOOD_M = vec2f(1.5, 5.0); const WOOD_DRY = 0.35;
 const DEAD_BUSH_CELL_M = 4.0; const DEAD_BUSH_FILL = 0.3; const DEAD_BUSH_M = vec2f(0.5, 1.3);
-// A thing's shadow: this dark at its middle, as long across as the thing and `SHADOW_DEEP` of that along the sun.
-const OBJECT_SHADOW = 0.45; const SHADOW_DEEP = 0.5;
+// A thing's shadow: a seam `CONTACT` of its width wide and deep (`CONTACT_UP` of it north of its foot, under it)
+// `CONTACT_DARK` dark where it sits in the ground, and the shade it casts, `OBJECT_SHADOW` dark, `CAST` of its width
+// across, its middle at `CAST_AT` of its width from its foot (east and a little north: mostly under it). Snow lies on its
+// lit upper faces, `SNOW_CAP` of their colour.
+const CONTACT = vec2f(0.5, 0.1); const CONTACT_UP = 0.04; const CONTACT_DARK = 0.55;
+const OBJECT_SHADOW = 0.4; const CAST = vec2f(0.6, 0.22); const CAST_AT = vec2f(0.22, -0.06); const SNOW_CAP = 0.85;
 // Each sort's sprites: rocks, wood, dead bushes (tex.wgsl).
 const ROCK_SORT = 0; const WOOD_SORT = 1; const DEAD_BUSH_SORT = 2;
 fn sort_sprite(sort: i32, k: u32) -> i32 {
@@ -290,10 +295,10 @@ fn sort_sprite(sort: i32, k: u32) -> i32 {
 fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, many: f32, k: i32) -> vec3f {
   if (many <= 0.02 || unseen(0.3 * size.x)) { return g; }
   let l = lat_axes(cell_m, vec2f(0.0));
-  let sun = normalize(LIGHT.xy);
   var out = g;
-  // From the farthest (north) to the nearest; a thing reaches up into the cell north of its foot.
-  for (var j = 0; j <= 1; j++) {
+  // From the farthest (north) to the nearest; a thing reaches up into the cell north of its foot, its shadow into the
+  // cell south of it.
+  for (var j = -1; j <= 1; j++) {
     for (var i = -1; i <= 1; i++) {
       let c = l.i + vec2i(i, j);
       let x = lowbias(c, k);
@@ -303,13 +308,18 @@ fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, ma
       let w = mix(size.x, size.y, pow(f32(lowbias(c, k + 1) & 255u) / 255.0, 2.0)) / cell_m;
       let h = w * model_h(s) / model_w(s);
       let v = l.f - foot;
-      let sv = (v + sun * SHADOW_DEEP * 0.7 * w) / vec2f(0.6 * w, SHADOW_DEEP * 0.6 * w);
-      out *= 1.0 - OBJECT_SHADOW * (1.0 - smoothstep(0.6, 1.0, length(sv)));
+      // Its shadow: a dark seam where it sits in the ground, and the shade it casts away from the sun from under it,
+      // most of it hidden by the thing itself.
+      let contact = length((v - vec2f(0.0, -CONTACT_UP * w)) / vec2f(CONTACT.x * w, CONTACT.y * w));
+      let shade = length((v - CAST_AT * w) / (CAST * w));
+      out *= (1.0 - CONTACT_DARK * (1.0 - smoothstep(0.5, 1.0, contact))) * (1.0 - OBJECT_SHADOW * (1.0 - smoothstep(0.4, 1.0, shade)));
       let uv = vec2f(v.x / w + 0.5, 1.0 + v.y / h);
       if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { continue; }
       let t = model_texel(s, uv, p.e / (w * cell_m));
-      // Snow on its top where the ground holds some.
-      let rgb = mix(t.rgb, SNOW, p.snow * smoothstep(0.55, 0.25, uv.y) * f32(sort != DEAD_BUSH_SORT));
+      // Snow on its faces that look up, its upper part's lit texels, keeping their light.
+      let lit = dot(t.rgb, LUMA) / max(dot(model_texel(s, uv, 1.0).rgb, LUMA), 1e-4);
+      let cap = p.snow * f32(sort != DEAD_BUSH_SORT) * smoothstep(0.7, 0.35, uv.y) * smoothstep(0.8, 1.3, lit);
+      let rgb = mix(t.rgb, SNOW * clamp(lit, 0.75, 1.1), SNOW_CAP * cap);
       out = mix(out, rgb, t.a);
     }
   }
