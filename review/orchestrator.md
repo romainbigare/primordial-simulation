@@ -436,6 +436,12 @@ as real as possible, with features dramatised for the game: textures, details, r
   - rendered model sprites (`models.png`): the trees and bushes, and things on the ground scattered by
     `objects` in `detail.wgsl` (rocks large and small, fallen trunks and branches, dead bushes on dry ground),
     each as many as the ground's numbers suit them. Shadows of plants are as wide as their drawn sprite.
+  - Fast pictures (scratch only, `scratchpad/looks/me/bench/`, driven through the eval server on 8831): `open.js`
+    grows one world to a date (year 12 in about 25 s) and keeps it open; `find.js` picks a cell for each habitat
+    from the world's layers; `shot.js` jumps the camera to each place and saves a 512 px picture (about 10 s each:
+    the machine has no GPU and the drawing uses all 4 cores). The test build's hooks are added by
+    `scratchpad/looks/me/build.sh`.
+  - The owner's page for testing and comments: https://claude.ai/artifact/RN1QQ9J1awdrSS3iJ8cmSY (republish `web/dist`).
   - Open: closed canopy between drawn crowns is still noise (dark green blobs; a try with packed crown sprites
     looked like flames in autumn and was dropped); grass sways not (would need the map to redraw all the time);
     the memory of the texture array (32 layers) on a phone; WebGPU untested; the view from above keeps the
