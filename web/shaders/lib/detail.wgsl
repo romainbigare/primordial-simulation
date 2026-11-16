@@ -30,20 +30,29 @@ fn carpet_of(t: i32) -> i32 {
   return c[t];
 }
 
+// Layer t of a tile of cover in patch `l` (of a lattice `CARPET_PATCH` tiles wide), shifted by the patch's draw x and,
+// where nothing on the tile stands up (`flat`), turned by it: a half turn or none, and up to `FLAT_TILT` radians either
+// way, so its wind ripples keep their line. `g` tiles a pixel.
+const FLAT_TILT = 0.3;
+fn carpet_patch(t: i32, l: Lat, x: u32, flat: bool, g: f32) -> vec3f {
+  let turn = select(0.0, PI * f32((x >> 20u) & 1u) + FLAT_TILT * (f32(x >> 21u) / 1024.0 - 1.0), flat);
+  let r = mat2x2f(cos(turn), sin(turn), -sin(turn), cos(turn));
+  let shift = vec2f(f32(x & 1023u), f32((x >> 10u) & 1023u)) / 1024.0;
+  return photo(t, r * (l.f * CARPET_PATCH) + shift, r * vec2f(g, 0.0), r * vec2f(0.0, g));
+}
+
 // The change tile of cover c gives the ground's colour at the pixel, at e m a pixel. The tile is laid in patches
-// `CARPET_PATCH` tiles wide, each shifted by its own draw, in two lattices of patches half a patch apart: the pixel
-// shows the patch of the lattice whose middle it is nearer, the two meeting in a seam `CARPET_SEAM` wide (of a patch),
-// wavy by `CARPET_WAVE`, so no repeat shows and a pixel shows one patch's grass and stones, not the mean of two.
+// `CARPET_PATCH` tiles wide, each shifted (and a flat tile turned) by its own draw (`carpet_patch`), in two lattices of
+// patches half a patch apart: the pixel shows the patch of the lattice whose middle it is nearer, the two meeting in a
+// seam `CARPET_SEAM` wide (of a patch), wavy by `CARPET_WAVE`, so no repeat shows and a pixel shows one patch's grass and
+// stones, not the mean of two.
 fn carpet(c: i32, e: f32) -> vec3f {
   let s = carpet_m(c);
-  let g = vec2f(e / s, 0.0);
   let t = CARPETS_FROM + c;
   let pa = lat_axes(CARPET_PATCH * s, vec2f(0.0));
   let pb = lat_axes(CARPET_PATCH * s, vec2f(0.5));
-  let xa = lowbias(pa.i, 96 + t);
-  let xb = lowbias(pb.i, 96 + t);
-  let a = photo(t, lat_axes(s, vec2f(f32(xa & 1023u), f32((xa >> 10u) & 1023u)) / 1024.0).f, g, g.yx);
-  let b = photo(t, lat_axes(s, vec2f(f32(xb & 1023u), f32((xb >> 10u) & 1023u)) / 1024.0).f, g, g.yx);
+  let a = carpet_patch(t, pa, lowbias(pa.i, 96 + t), c == SNOW_CARPET, e / s);
+  let b = carpet_patch(t, pb, lowbias(pb.i, 96 + t), c == SNOW_CARPET, e / s);
   // How far the pixel lies inside its patch of each lattice (0 at its edge, 0.5 at its middle).
   let inside_a = min(min(pa.f.x, 1.0 - pa.f.x), min(pa.f.y, 1.0 - pa.f.y));
   let inside_b = min(min(pb.f.x, 1.0 - pb.f.x), min(pb.f.y, 1.0 - pb.f.y));
@@ -230,6 +239,8 @@ fn dry_filler(g0: vec3f, p: Spot, bare: f32) -> vec3f {
 // under crowns and, fewer, on dry open ground (`WOOD_DRY`); dead bushes on dry bare ground.
 const ROCK_CELL_M = 7.0; const ROCK_FILL = 0.35; const ROCK_M = vec2f(0.5, 2.4);
 const PEBBLE_CELL_M = 1.6; const PEBBLE_FILL = 0.3; const PEBBLE_M = vec2f(0.12, 0.45);
+// Snow shows at least `SNOW_ROCKS` as many rocks through it as the barest ground holds.
+const SNOW_ROCKS = 0.6;
 // Sand holds `1 - SAND_BARE` as many rocks and dead bushes as other bare ground.
 const SAND_BARE = 0.6;
 const WOOD_CELL_M = 6.0; const WOOD_FILL = 0.2; const WOOD_M = vec2f(1.5, 5.0); const WOOD_DRY = 0.35;
@@ -280,7 +291,7 @@ fn objects(g: vec3f, p: Spot, bare: f32) -> vec3f {
   if (!angled() || !models_ready()) { return g; }
   let canopy = min(p.canopy, 1.0);
   let open = bare * (1.0 - SAND_BARE * p.sand) * (1.0 - canopy);
-  let stony = open * max(max(p.rock, ease(0.15, 0.6, p.slope)), 0.35 + 0.65 * ease(1.0, 0.1, p.loose));
+  let stony = max(open * max(max(p.rock, ease(0.15, 0.6, p.slope)), 0.35 + 0.65 * ease(1.0, 0.1, p.loose)), SNOW_ROCKS * p.snow * (1.0 - canopy));
   let dry = ease(0.4, 0.1, p.wet) * open * (1.0 - p.snow);
   let wood = max(canopy, WOOD_DRY * dry) * (1.0 - p.sand) * (1.0 - p.snow);
   var out = scatter(g, p, WOOD_SORT, WOOD_CELL_M, WOOD_FILL, WOOD_M, wood, 120);
