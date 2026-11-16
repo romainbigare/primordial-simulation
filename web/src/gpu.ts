@@ -61,8 +61,9 @@ export function bindingsOf(p: Program): { uniforms: number[]; textures: number[]
 export type Format = 'rgba8unorm' | 'rgba32float' | 'rgba16float' | 'rg16float' | 'r16float';
 /** The data a texture of each format is filled with: bytes, 32-bit floats, or 16-bit floats as their bits. */
 export type TexelData = Uint8Array | Float32Array | Uint16Array;
-/** How a sampler reads a texture: blended between its texels' centres, and also between its mip levels' nearest. */
-export type Sampler = 'smooth' | 'mip';
+/** How a sampler reads a texture: blended between its texels' centres, and also between its mip levels' nearest; or
+ * repeated across the plane and blended between its mip levels too (`tile`: a texture laid on the ground). */
+export type Sampler = 'smooth' | 'mip' | 'tile';
 /** A texture on the GPU: `w` x `h` texels, `layers` of them (more than one: an array), `mips` levels. */
 export interface Texture { readonly w: number; readonly h: number; readonly layers: number; readonly mips: number; readonly format: Format }
 

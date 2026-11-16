@@ -49,9 +49,12 @@ const CLUMPS_MORE = 2.0; const FINE_MORE = 2.0; const FINE_SMALLER = 0.25;
 // A clump's edge breaks into its leaves' lobes, `EDGE_LOBES` to twice as many for the finest leaves, each this share of
 // its radius deep, and frays into single leaves `FRAY` of its radius deep; its face carries its sprays' bumps,
 // `LEAF_CELLS` to twice as many across it, tilting its light by up to `LEAF_BUMP`, and its leaves, `LEAVES` times as
-// many: lighter where a leaf turns to the sun (`LEAF_FLECK`), dark in the gaps between them (`LEAF_GAP`).
+// many, which fray its edge.
 const EDGE_LOBES = 9.0; const EDGE_DEEP = 0.22; const FRAY = 0.12; const LEAF_CELLS = 3.0; const LEAF_BUMP = 0.6;
-const LEAVES = 3.2; const LEAF_FLECK = 0.2; const LEAF_GAP = 0.4;
+const LEAVES = 3.2;
+// A clump's face is the photograph of leaves (tex.wgsl `FOLIAGE_TEX`), `FOLIAGE_CELLS` times across its radius, its
+// lightness shown `FOLIAGE_SHOW`; the finest leaves (`NEEDLE_FINE`) are needles.
+const FOLIAGE_CELLS = 1.2; const FOLIAGE_SHOW = 0.9; const NEEDLE_FINE = 0.8;
 // The light on a clump departs from flat ground's by this share of its turn to the sun (the sky lights its far side,
 // and light passes through its leaves).
 const LIGHT_SHARE = 0.6;
@@ -82,13 +85,18 @@ const TIERS = 6.0; const TIER_NARROW = 0.5; const TIP_DEEP = 0.22; const TIER_SH
 // Each tier's width departs from the spire's line by up to `TIER_VARY`, and its edge frays into needle sprays
 // `SPRAY_DEEP` of its width deep; a conifer's green is `CONIFER_TONE` of its kind's (needles are darker than leaves).
 const TIER_VARY = 0.15; const SPRAY_DEEP = 0.12; const CONIFER_TONE = 0.85;
+// The photograph of needles over a conifer's tiers, `NEEDLE_CELLS` times across its depth.
+const NEEDLE_CELLS = 2.0;
 const CONE_BRANCHES = 8.0; const CONE_NOTCH = 0.3;
 // A flat crown (umbrella, tiered): its clumps lie in discs seen at a slant, `FLAT_SLANT` of their width deep on the map,
 // each clump squashed to `FLAT_CLUMP` of its width; a tiered crown's `FLAT_TIERS` discs narrow upwards.
 const FLAT_SLANT = 0.35; const FLAT_CLUMP = 0.6; const FLAT_TIERS = 3.0;
 // The stem, angled: from its foot (flaring `FLARE` wider over its own width) to the top of its stem, tapering to
-// `STEM_TOP` of its foot's width; its bark in streaks departing by `BARK_TONE`.
-const FLARE = 0.8; const STEM_TOP = 0.6; const BARK_TONE = 0.15;
+// `STEM_TOP` of its foot's width; its bark the photograph of bark.
+const FLARE = 0.8; const STEM_TOP = 0.6;
+// Its bark is the photograph of bark (tex.wgsl `BARK_TEX`), `BARK_ACROSS` of it across the stem and one up every
+// `BARK_LONG` of the stem's width.
+const BARK_ACROSS = 0.5; const BARK_LONG = 6.0;
 // A bush: as deep as `BUSH_DEEP` of its width, angled; `BUSH_CLUMPS` to twice as many clumps of `BUSH_CLUMP_R` of its
 // radius; its flowers or fruit, `BUSH_DOTS` to twice as many dots, each `DOT_SIZE` of its radius, on its top.
 // A bush's twigs are `BUSH_TWIG` of its radius thick at their foot; wood shows at least `WOOD_LEAST` strong, however
@@ -193,7 +201,10 @@ fn leaves(q: Plant, f: i32, u: vec2f, tall: f32, soft: f32, n: f32, r0: f32, hea
   let depth = clamp(0.5 * (front + 1.0), 0.0, 1.0);
   var tone = bc.tone * mix(DEEP_TONE, 1.0, depth) * (1.0 - UNDER_SHADE * smoothstep(-0.2, 1.0, u.y / max(tall, 1e-3)) * cover.corner.w);
   tone *= 1.0 - CREASE * behind * smoothstep(0.7, 1.0, d / edge);
-  tone *= (1.0 + LEAF_FLECK * seen * max(leafy.x, 0.0)) * (1.0 - LEAF_GAP * seen * smoothstep(0.3, 0.8, -leafy.x));
+  // Its leaves: the photograph of leaves close together over its face (needles for the finest), its lightness about its
+  // mean, `FOLIAGE_CELLS` times across a clump's radius.
+  let cells_on = FOLIAGE_CELLS * (1.0 + q.fine);
+  tone *= mix(1.0, photo_light(select(FOLIAGE_TEX, NEEDLES_TEX, q.fine > NEEDLE_FINE), bw * cells_on + 9.0 * k.xy, cs * cells_on), FOLIAGE_SHOW);
   // A flat clump's underside lies in its own shade.
   tone *= 1.0 - (1.0 - bc.flat) * smoothstep(0.0, 0.8, bw.y);
   // The outline only where nothing stands behind it (its silhouette), else the clump lies over the heart's dark.
@@ -270,7 +281,8 @@ fn conifer(q: Plant, u: vec2f, tall: f32, soft: f32) -> Body {
     let nrm = normalize(vec3f(0.9 * across, -0.5 + 0.7 * f, sqrt(max(1.0 - across * across, 0.05))));
     // Needles in streaks drooping outwards from the stem, dark between the sprays.
     let needles = noise(vec2f(abs(u.x) * 22.0 / max(tall, 0.3) - 5.0 * f, 6.0 * t * tiers) + 17.0 * q.r.xy, 11).x;
-    let tone = CONIFER_TONE * mix(TIER_SHADE, 1.0, smoothstep(0.0, 0.45, f)) * (1.0 + NEEDLE_TONE * needles) * (1.0 - 0.35 * smoothstep(0.4, 0.9, -needles)) * mix(0.75, 1.0, t);
+    let photo_uv = vec2f(abs(u.x) * NEEDLE_CELLS / max(tall, 0.3), t * tiers * 0.5);
+    let tone = CONIFER_TONE * mix(TIER_SHADE, 1.0, smoothstep(0.0, 0.45, f)) * (1.0 + NEEDLE_TONE * needles) * mix(0.75, 1.0, t) * mix(1.0, photo_light(NEEDLES_TEX, photo_uv, soft * NEEDLE_CELLS / max(tall, 0.3)), FOLIAGE_SHOW);
     let rim_at = smoothstep(edge - 2.0 * soft, edge, abs(u.x));
     return Body(a, lit_by_sun(nrm), rim_at, tone, 0.0);
   }
@@ -340,7 +352,7 @@ fn stem(q: Plant, p: vec2f, e: f32) -> Body {
   let a = (1.0 - smoothstep(1.0 - e / w, 1.0, abs(x))) * (1.0 - smoothstep(-e, e, s.y));
   if (a <= 0.0) { return nothing(); }
   let nrm = normalize(vec3f(x, 0.0, sqrt(max(1.0 - x * x, 0.0))));
-  let bark = 1.0 + BARK_TONE * noise(vec2f(3.0 * x, -s.y / max(3.0 * w0, 1e-3)) + 7.0 * q.r.xy, 14).x;
+  let bark = photo_light(BARK_TEX, vec2f(BARK_ACROSS * x + q.r.x, -s.y / max(BARK_LONG * w0, 1e-3)), e / max(w0, 1e-4));
   return Body(a, lit_by_sun(nrm), smoothstep(1.0 - 2.0 * e / w, 1.0, abs(x)), bark, 1.0);
 }
 

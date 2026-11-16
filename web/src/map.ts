@@ -7,6 +7,7 @@ import { Draw, Gpu, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
+import { groundReady } from './detail';
 
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -82,6 +83,7 @@ export class MapView {
     cv.after(this.over);
     this.ctx = this.over.getContext('2d')!;
     this.ready = openGpu(cv, () => { this.land?.tiles.lost(); this.invalidate(); }).then(g => { this.gpu = g; this.invalidate(); return g; });
+    groundReady.then(() => this.invalidate());
     new ResizeObserver(() => { this.resize(); this.invalidate(); }).observe(cv);
     const ptrs = new Map<number, { x: number; y: number }>();
     let moved = 0;

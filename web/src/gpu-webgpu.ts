@@ -11,6 +11,8 @@ declare const GPUMapMode: { READ: number };
 const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float: 16, rgba16float: 8, rg16float: 4, r16float: 2 };
 /** The size of each uniform buffer, bytes: no program's uniforms are larger. */
 const UNIFORM_BYTES = 1024;
+/** A texture laid on the ground is read along the view's slant this many texels at a time at most (anisotropic). */
+const TILE_ANISOTROPY = 4;
 /** Rows copied out of a texture start at multiples of this many bytes (WebGPU's rule). */
 const ROW_ALIGN = 256;
 
@@ -33,7 +35,8 @@ class WebGpu implements Gpu {
 
   constructor(readonly adapter: GPUAdapter, private device: GPUDevice, private ctx: GPUCanvasContext, private format: GPUTextureFormat) {
     const smooth: GPUSamplerDescriptor = { magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' };
-    this.samplers = { smooth: device.createSampler(smooth), mip: device.createSampler({ ...smooth, mipmapFilter: 'nearest' }) };
+    const tile: GPUSamplerDescriptor = { magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat', maxAnisotropy: TILE_ANISOTROPY };
+    this.samplers = { smooth: device.createSampler(smooth), mip: device.createSampler({ ...smooth, mipmapFilter: 'nearest' }), tile: device.createSampler(tile) };
     device.lost.then(info => console.error(`gpu: the WebGPU device was lost: ${info.message}`));
     device.addEventListener('uncapturederror', e => console.error(`gpu: ${(e as GPUUncapturedErrorEvent).error.message}`));
   }

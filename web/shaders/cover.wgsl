@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl crown.wgsl mark.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl tex.wgsl crown.wgsl mark.wgsl
 // The trees and bushes over the live map (web/src/textures.ts), at every frame, plant by plant where a plant takes a
 // few pixels; where it takes less, the ground draws it as a field of the same colours (lib/cover_field.wgsl), and the
 // herbs always so, as its sward. Each lattice of marks (web/src/canopy.ts `LATTICES`) lies fixed in the world, one mark

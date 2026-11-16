@@ -129,8 +129,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   let steep = p.slope / earth.look.x;
   var bed = p.bed;
   if (styled()) {
-    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet);
-    if (p.rock > 0.0) { bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade); }
+    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet) * soil_detail(p);
+    if (p.rock > 0.0) { bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade) * rock_detail(p.e); }
   }
   g.rgb = mix(g.rgb, bed, p.rock);
   if (p.rock > 0.5) { g.kind = ROCK; }

@@ -36,13 +36,13 @@ class WebGl2 implements Gpu {
   }
 
   private setUp(): void {
-    const gl = this.gl, sampler = (min: number, mag: number) => {
+    const gl = this.gl, sampler = (min: number, mag: number, wrap: number = gl.CLAMP_TO_EDGE) => {
       const s = gl.createSampler();
       gl.samplerParameteri(s, gl.TEXTURE_MIN_FILTER, min); gl.samplerParameteri(s, gl.TEXTURE_MAG_FILTER, mag);
-      gl.samplerParameteri(s, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.samplerParameteri(s, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.samplerParameteri(s, gl.TEXTURE_WRAP_S, wrap); gl.samplerParameteri(s, gl.TEXTURE_WRAP_T, wrap);
       return s;
     };
-    this.samplers = { smooth: sampler(gl.LINEAR, gl.LINEAR), mip: sampler(gl.LINEAR_MIPMAP_NEAREST, gl.LINEAR), texel: sampler(gl.NEAREST, gl.NEAREST) };
+    this.samplers = { smooth: sampler(gl.LINEAR, gl.LINEAR), mip: sampler(gl.LINEAR_MIPMAP_NEAREST, gl.LINEAR), texel: sampler(gl.NEAREST, gl.NEAREST), tile: sampler(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR, gl.REPEAT) };
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   }
 

@@ -1,8 +1,8 @@
 // Inlines the compiled modules (dist/.js), the shaders (dist/.shaders.json, written by web/shade from web/shaders) and
 // style.css into one self-contained dist/index.html.
-import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync, copyFileSync } from 'node:fs';
 
-const order = ['data', 'fields', 'earth', 'style', 'form', 'canopy', 'gpu', 'gpu-webgpu', 'gpu-webgl2', 'field-window', 'ground', 'land', 'map', 'charts', 'live', 'textures', 'vegetation', 'slots', 'main'];
+const order = ['data', 'fields', 'earth', 'style', 'form', 'canopy', 'gpu', 'gpu-webgpu', 'gpu-webgl2', 'detail', 'field-window', 'ground', 'land', 'map', 'charts', 'live', 'textures', 'vegetation', 'slots', 'main'];
 // A module as plain script: its imports and exports taken out (the modules share one scope).
 const plain = n => readFileSync(`dist/.js/${n}.js`, 'utf8').replace(/^import .*$/gm, '').replace(/^export \{\};$/gm, '').replace(/^export /gm, '');
 // The live world's two workers (the world's and the ground's tiles') run on their own: the page holds their scripts as
@@ -20,6 +20,9 @@ writeFileSync('dist/index.html', html);
 const embed = process.argv[2];
 if (embed) writeFileSync('dist/standalone.html',
   page(`<script type="application/octet-stream" id="world-data">${readFileSync(embed).toString('base64')}</script>\n`));
+// The ground's photographs and plants, beside the page (detail.ts).
+copyFileSync('textures/ground.jpg', 'dist/ground.jpg');
+copyFileSync('textures/sprites.png', 'dist/sprites.png');
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
 console.log(`dist/index.html ${(html.length / 1024).toFixed(1)} KB`);

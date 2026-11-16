@@ -8,6 +8,7 @@ import { World, plane } from './data';
 import { MapLook, earthUniforms } from './field-window';
 import { Wet, seaSquares } from './earth';
 import { half, unhalf } from './canopy';
+import { groundDetail } from './detail';
 
 /** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), the discharge
  * per metre a css pixel takes past which a channel shows as a line, m³/s per m, and that line's law (its css pixels,
@@ -114,7 +115,7 @@ export class Land {
     if (!laws) return null;
     const m = this.tiles.map, texel = 2 ** (m.square_depth - this.tiles.depth);
     const read = [Math.max(texel ** SLOPE_POWER, SLOPE_LEAST), this.melt, BEACH_M, OVER_FADE];
-    return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m], this.sea, frame) };
+    return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m], this.sea, frame), 20: groundDetail(gpu), 21: 'tile' };
   }
 
   /** How far the flow's signs have slid along the slowest water at `now` (performance.now, ms), m: in steps of

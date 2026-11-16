@@ -7,6 +7,7 @@
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './style';
 import { FIELD, Kinds, LATTICES, PLANES_DOWN, half } from './canopy';
+import { groundDetail } from './detail';
 import { clamp } from './earth';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */
@@ -120,7 +121,7 @@ export class CoverMarks {
     grids.forEach(g => u.vec4(...g.frac, g.a, g.rows));
     grids.forEach(g => u.vec4(g.near));
     grids.forEach(g => u.ivec4(...g.base));
-    const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.cssMpp, angled), 1: u.buffer, 4: this.tableTex! };
+    const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.cssMpp, angled), 1: u.buffer, 4: this.tableTex!, 20: groundDetail(gpu), 21: 'tile' };
     this.marksTex.forEach((t, word) => {
       const p = gpu.pass(t), drawn = { ...binds, 2: new Uniforms(1).ivec4(word).buffer };
       for (const g of grids) if (g.cells.rows > 0) p.draw('marks', { rect: [0, g.cells.row, g.cells.cols, g.cells.rows], binds: drawn }, false);

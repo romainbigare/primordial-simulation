@@ -125,6 +125,8 @@ const SWARD = 0.45; const SWARD_M = 0.35;
 // Under the trees' crowns the sward is in their shade: darker by up to `SWARD_SHADE` as they close over it.
 const SWARD_SHADE = 0.35;
 const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0;
+// A sward whose red over its green passes from `STRAW_HUE.x` to `.y` is straw: its clumps are drawn dry.
+const STRAW_HUE = vec2f(0.85, 1.1);
 // Swathes and blades show as detail this size, m (`shows_at`): none where a pixel takes 1 m or more, where they would
 // read only as noise.
 const SWATH_DETAIL_M = 1.33;
@@ -361,7 +363,8 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   let swaths = shows_at(SWATH_DETAIL_M, e);
   if (swaths > 0.0) { tone += SWATH * swaths * noise_l(lat_turned(SWATH_M, vec2f(0.0)), 73).x; }
   let blades = shows_at(TUFT_SEEN_M, e);
-  if (blades > 0.0) { tone *= mix(1.0, tuft_tone(cover_look.look.z), blades); }
+  let standing = cover_look.look.z > 0.5;
+  if (blades > 0.0 && !standing) { tone *= mix(1.0, tuft_tone(0.0), blades); }
   let reeds = reeds_of(b);
   if (reeds > 0.0) {
     s = mix(s, max(s, REED_FILL), reeds);
@@ -369,7 +372,13 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     tone += REED_TONE * reeds * shows_at(REED_W, e) * streaks(REED_W, REED_L, 0.3 * noise_l(lat_axes(REED_L, vec2f(0.0)), 76).x, 77);
   }
   let seen = s;
-  c *= max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
+  c *= max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0)) * grass_detail(e);
+  // Angled, the sward stands up as its clumps: dry clumps where its colour is straw's, ferns in the wet shade.
+  if (blades > 0.0 && standing) {
+    let straw = smoothstep(STRAW_HUE.x, STRAW_HUE.y, c.r / max(c.g, 1e-4));
+    let fern = smoothstep(0.3, 0.8, min(canopy, 1.0)) * smoothstep(0.3, 0.7, b.soaked);
+    c = mix(c, grass_clumps(c, e, straw, fern), blades);
+  }
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
     let fl = field_at(at, FLOWER_LAYER, 0.0);
