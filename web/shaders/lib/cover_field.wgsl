@@ -8,7 +8,7 @@ struct CoverLook {
   // Of each lattice: its cell's side, m (0: no square holds it), and how strongly its marks show (the rest is the field);
   // w is not read.
   sides: vec4f, shown: vec4f,
-  // 1 where the cover is drawn (0: none); how strongly its marks cover the map.
+  // 1 where the cover is drawn (0: none); how strongly its marks cover the map; 1 where the plants stand up (angled).
   look: vec4f,
 }
 @group(0) @binding(14) var<uniform> cover_look: CoverLook;
@@ -55,6 +55,11 @@ const CLUMP_PX = 1.5; const CLUMP_MOST_M = 10.0; const WIDE_FROM = 0.25; const W
 // Discs at random places leave gaps however closed their stand: as a layer's plants cover from `CLOSES.x` to `CLOSES.y`
 // of the ground, the gaps between its crowns fill with its canopy, `GAP_TONE` as light as a crown (their shade).
 const CLOSES = vec2f(0.6, 0.9); const GAP_TONE = 0.65;
+// The under-storey that fills a closed stand between its drawn crowns: foliage clumps `UNDER_M` m across, their tone
+// departing by `UNDER_TONE`, lit by their slope (`UNDER_LIGHT`), with gaps to the floor between them.
+const UNDER_M = 1.6; const UNDER_TONE = 0.25; const UNDER_LIGHT = 0.12;
+// Its leaves: flecks and gaps `UNDER_LEAF_M` m across.
+const UNDER_LEAF_M = 0.12;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -115,11 +120,11 @@ fn held_at(at: vec2f, b: Beneath) -> vec4f {
 // The herbs' sward: their plants thicker and thinner by up to `SWARD` of their mean over tufts of `SWARD_M`; they cover
 // the share of the ground their leaves close by the cover's light law (canopy.ts `Paint`, tape/src/stands.rs `plants`),
 // so a thin sward lets the ground show through. Its tone varies by up to `TUFT_TONE` over the tufts, by up to `SWATH` over
-// swathes of `SWATH_M` and by up to `BLADES` over blades `BLADE_W` wide and `BLADE_L` long, turned by tufts.
+// swathes of `SWATH_M`, and near it is drawn as its tufts of blades (`tuft_tone`).
 const SWARD = 0.45; const SWARD_M = 0.35;
 // Under the trees' crowns the sward is in their shade: darker by up to `SWARD_SHADE` as they close over it.
 const SWARD_SHADE = 0.35;
-const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0; const BLADES = 0.3; const BLADE_W = 0.05; const BLADE_L = 0.25;
+const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0;
 // Swathes and blades show as detail this size, m (`shows_at`): none where a pixel takes 1 m or more, where they would
 // read only as noise.
 const SWATH_DETAIL_M = 1.33;
@@ -137,8 +142,10 @@ fn reeds_of(b: Beneath) -> f32 {
 // map's axes (`DOT_TURN`, radians) and holding a dot at a place of its own in half of `DOT_PRESENT` of its cells, so
 // the dots stand in no rows and no square grid; a dot is lighter at its heart by `DOT_HEART`; where a dot takes less than a pixel, the cluster's mean; they show as detail
 // `FLOWERS_GONE_M` across (`shows_at`): none where a pixel takes a metre or more (their faint tint gone from afar).
-const FLOWERS_GONE_M = 1.33; const FLOWER_M = 1.2; const DOT_R = 0.1; const DOT_GAP = 0.38; const DOT_PRESENT = 0.8; const DOT_HEART = 0.25;
+const FLOWERS_GONE_M = 1.33; const FLOWER_M = 1.2; const DOT_R = 0.045; const DOT_GAP = 0.171; const DOT_PRESENT = 0.8; const DOT_HEART = 0.25;
 const DOT_TURN = vec2f(0.55, 2.1);
+// A flower's eye, the inner third of its dot.
+const FLOWER_EYE = vec3f(0.75, 0.55, 0.12);
 
 // A blend `v` of a layer over the squares about a point, of which the squares with land weigh `held`, as a blend over
 // those squares alone (`LAND_LAYER`).
@@ -331,7 +338,7 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
       if (f32(x >> 22u) / 1024.0 < 0.5 * DOT_PRESENT) { d = min(d, length(q.f - centre) * DOT_GAP / DOT_R); }
     }
     cover = mix(mean, 1.0 - smoothstep(1.0 - e / DOT_R, 1.0, d), dots);
-    c = petal * (1.0 + DOT_HEART * (1.0 - d) * dots);
+    c = mix(petal * (1.0 + DOT_HEART * (1.0 - d) * dots), FLOWER_EYE, smoothstep(0.4, 0.25, d) * dots);
   }
   return vec4f(c, cover * cluster);
 }
@@ -353,8 +360,8 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   }
   let swaths = shows_at(SWATH_DETAIL_M, e);
   if (swaths > 0.0) { tone += SWATH * swaths * noise_l(lat_turned(SWATH_M, vec2f(0.0)), 73).x; }
-  let blades = shows_at(BLADE_W, e) * swaths;
-  if (blades > 0.0) { tone += BLADES * blades * streaks(BLADE_W, BLADE_L, PI * noise_l(lat_axes(SWARD_M, vec2f(0.0)), 74).x, 75); }
+  let blades = shows_at(TUFT_SEEN_M, e);
+  if (blades > 0.0) { tone *= mix(1.0, tuft_tone(cover_look.look.z), blades); }
   let reeds = reeds_of(b);
   if (reeds > 0.0) {
     s = mix(s, max(s, REED_FILL), reeds);
@@ -373,6 +380,59 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     }
   }
   return vec4f(c * seen, seen);
+}
+
+// The sward's tufts: one in `TUFT_FILL` of the cells of a lattice `TUFT_M` m wide (at random places in them, so no
+// rows), each a fan of `TUFT_BLADES` blades up to `TUFT_TALL` times its cell long, spreading `TUFT_FAN` radians either
+// way: angled, standing up from its foot (the plants' `STAND`); from above, a star. A blade is dark at its foot and
+// light at its tip (`TUFT_FOOT` to `TUFT_TIP` of the sward's tone), the ground between the tufts in their shade
+// (`TUFT_GAP`), so the sward's mean stays its colour. They show from `TUFT_SEEN_M` m a pixel; angled, a tuft stands
+// up `TUFT_STAND` of its length on the map, as the plants do (crown.wgsl `STAND`).
+const TUFT_M = 0.22; const TUFT_FILL = 0.75; const TUFT_BLADES = 9.0; const TUFT_TALL = 1.2; const TUFT_FAN = 0.85;
+// Each tuft's tone departs from the sward's by up to `TUFT_OWN` either way.
+const TUFT_OWN = 0.15;
+const TUFT_FOOT = 0.62; const TUFT_TIP = 1.3; const TUFT_GAP = 0.8; const TUFT_SEEN_M = 0.1; const TUFT_STAND = 0.5;
+// The tone the tufts give the sward at the pixel, `angled` 1 where they stand up.
+fn tuft_tone(angled: f32) -> f32 {
+  let l = lat_axes(TUFT_M, vec2f(0.0));
+  var tone = TUFT_GAP;
+  var nearest = -9.0;
+  // Angled, a tuft reaches up into the pixel from its own cell or the next one south; from above, from those about it.
+  let first = select(-1, 0, angled > 0.5);
+  for (var j = first; j <= 1; j++) {
+    for (var i = -1; i <= 1; i++) {
+      let c = l.i + vec2i(i, j);
+      let x = lowbias(c, 91);
+      if (f32(x & 1023u) / 1024.0 >= TUFT_FILL) { continue; }
+      let foot = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
+      // From the tuft's foot to the pixel, in cells; its length, in cells, by its own draw.
+      let q = l.f - vec2f(f32(i), f32(j)) - foot;
+      let len = TUFT_TALL * (0.6 + 0.4 * f32(x >> 30u) / 3.0);
+      var v = 0.0;
+      var turn = 0.0;
+      if (angled > 0.5) {
+        let up = len * TUFT_STAND;
+        if (q.y > 0.1 || q.y < -up || foot.y + f32(j) <= nearest) { continue; }
+        turn = atan2(q.x, -q.y + 0.25);
+        if (abs(turn) > TUFT_FAN) { continue; }
+        v = length(q) / up;
+      } else {
+        v = length(q) / (0.5 * len);
+        turn = atan2(q.y, q.x) / PI * TUFT_FAN;
+      }
+      // Its blades, each of its own length.
+      let k = TUFT_BLADES * turn / TUFT_FAN;
+      let blade = floor(k);
+      let reach = 0.55 + 0.45 * fract(f32(x >> 3u) * 0.0137 + 0.61 * blade);
+      let w = 1.0 - smoothstep(0.18, 0.42, abs(fract(k) - 0.5));
+      if (v > reach || w <= 0.0) { continue; }
+      if (w > 0.4) {
+        nearest = foot.y + f32(j);
+        tone = mix(TUFT_FOOT, TUFT_TIP, v / reach) * (1.0 + TUFT_OWN * (f32((x >> 4u) & 63u) / 31.5 - 1.0));
+      }
+    }
+  }
+  return tone;
 }
 
 // The cover's field at `at` seen at `e` m a pixel over `b`, premultiplied, and the trees' crowns' share: the herbs'
@@ -454,8 +514,22 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, ho
   // what the marks leave, in their shade (`CLOSES`, `GAP_TONE`), as between the field's own crowns.
   var under = 0.0;
   if (l == STANDS) { under = ease(CLOSES.x, CLOSES.y, min(share * thick, 1.0)) * (1.0 - unshown); }
+  // That fill is the under-storey seen between the crowns: foliage in lit clumps over soft-edged gaps, not a flat paint.
+  var under_tone = GAP_TONE;
+  if (under > 0.0 && !unseen(UNDER_M)) {
+    let n = noise_l(lat_turned(UNDER_M, vec2f(0.0)), 81);
+    let fine = noise_l(lat_turned(0.31 * UNDER_M, vec2f(5.0)), 82);
+    under *= smoothstep(-0.55, -0.1, n.x + 0.5 * fine.x);
+    under_tone = GAP_TONE * (1.0 + UNDER_TONE * (n.x + 0.6 * fine.x) - UNDER_LIGHT * dot(normalize(LIGHT.xy), n.yz + fine.yz));
+    // Its leaves, where they take a few pixels: lit flecks and dark gaps.
+    let leaves = shows_at(UNDER_LEAF_M, e);
+    if (leaves > 0.0) {
+      let lf = noise_l(lat_turned(UNDER_LEAF_M, vec2f(9.0)), 83);
+      under_tone *= 1.0 + leaves * (0.25 * max(lf.x, 0.0) - 0.4 * smoothstep(0.3, 0.8, -lf.x) - 0.15 * dot(normalize(LIGHT.xy), lf.yz));
+    }
+  }
   let drawn = g.x * unshown;
   let a = drawn + under;
   if (a <= 0.0) { return dst; }
-  return vec4f(c * (g.y * drawn + GAP_TONE * under), a) + dst * (1.0 - a);
+  return vec4f(c * (g.y * drawn + under_tone * under), a) + dst * (1.0 - a);
 }

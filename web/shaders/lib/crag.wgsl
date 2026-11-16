@@ -8,6 +8,11 @@
 
 // Bare soil's tone varies by up to this share over clods `CLOD_M` across.
 const CLOD = 0.06; const CLOD_M = 0.5;
+// Open soil (no canopy over it) varies in tone by up to `SOIL_MOTTLE` over patches `SOIL_PATCH_M` and a quarter of that
+// across, and in grit `GRIT_M` across by up to `GRIT`; where it is dry (wetter than `CRUST_WET` none) its crust cracks
+// in lines `CRUST_M` and a third of that apart, `CRUST_W` of their spacing wide, darker by up to `CRUST_DARK`.
+const SOIL_MOTTLE = 0.14; const SOIL_PATCH_M = 22.0; const GRIT = 0.1; const GRIT_M = 0.035;
+const CRUST_WET = 0.35; const CRUST_M = 1.6; const CRUST_W = 0.035; const CRUST_DARK = 0.45;
 // Under a closed canopy the bare ground is litter: its colour times `LITTER_TINT`, up to `LITTER` of it, and in the
 // crowns' shade, darker by up to `UNDER_DARK`; moss grows on it in patches `MOSS_M` across over this share of it, the
 // more the wetter the ground.
@@ -54,6 +59,22 @@ fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32) -> vec3f {
   // Each grain only where it shows: its noise costs a few reads of the hash.
   let clods = shows_at(CLOD_M, e);
   if (clods > 0.0) { out *= 1.0 + CLOD * STYLE * noise_l(lat_axes(CLOD_M, vec2f(0.0)), 51).x * clods; }
+  // Open soil: its patches, its grit and, where dry, its cracked crust.
+  let open = 1.0 - min(canopy, 1.0);
+  let patches = shows_at(0.25 * SOIL_PATCH_M, e);
+  if (patches > 0.0) {
+    let m = noise_l(lat_turned(SOIL_PATCH_M, vec2f(0.0)), 56).x + 0.5 * noise_l(lat_turned(0.25 * SOIL_PATCH_M, vec2f(3.0)), 57).x;
+    out *= 1.0 + SOIL_MOTTLE * open * patches * m;
+  }
+  let grit = shows_at(2.0 * GRIT_M, e);
+  if (grit > 0.0) { out *= 1.0 + GRIT * open * grit * noise_l(lat_turned(GRIT_M, vec2f(1.0)), 58).x; }
+  let dry = open * ease(CRUST_WET, 0.0, wet) * shows_at(CRUST_W * CRUST_M, e);
+  if (dry > 0.0) {
+    let a = noise_l(lat_turned(CRUST_M, vec2f(7.0)), 59).x;
+    let b = noise_l(lat_turned(CRUST_M / 3.0, vec2f(11.0)), 60).x;
+    let line = max(1.0 - smoothstep(0.0, CRUST_W * 2.0, abs(a)), 0.7 * (1.0 - smoothstep(0.0, CRUST_W * 3.0, abs(b))));
+    out *= 1.0 - CRUST_DARK * dry * line;
+  }
   let moss = MOSS * litter * wet * shows_at(MOSS_M, e);
   if (moss > 0.0) { out *= mix(vec3f(1.0), MOSS_TINT, moss * ease(0.0, 0.4, noise_l(lat_axes(MOSS_M, vec2f(0.0)), 52).x)); }
   return out;

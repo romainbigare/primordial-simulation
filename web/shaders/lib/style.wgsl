@@ -126,7 +126,7 @@ fn foam(depth: f32, slope: f32, e: f32, at: vec2f) -> f32 {
 // differs a little from its kind in hue and tone, and its rim is drawn darker, as an outline.
 // The light's bands: under `BAND_LOW` the shade's tone, over `BAND_HIGH` the lit one, the middle between; each step
 // `BAND_SOFT` wide; how far the light goes to its bands.
-const BAND_LOW = 0.88; const BAND_HIGH = 1.1; const BAND_SOFT = 0.05; const BANDS = 0.7;
+const BAND_LOW = 0.88; const BAND_HIGH = 1.1; const BAND_SOFT = 0.08; const BANDS = 0.35;
 const TONE_SHADE = 0.78; const TONE_LIT = 1.16;
 // A mark's hue turns from its kind's by up to this many radians either way, and its tone by up to this share.
 const HUE_JITTER = 0.25; const TONE_JITTER = 0.2;

@@ -43,7 +43,7 @@ export class Vegetation implements GpuLayer {
 
   /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px. */
   under(gpu: Gpu, s: number): Draw['binds'] {
-    return this.marks.fieldBinds(gpu, this.cellM / s);
+    return this.marks.fieldBinds(gpu, this.cellM / s, this.style === 'angled');
   }
 
   /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` device px

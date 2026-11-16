@@ -26,6 +26,8 @@ const SHADOW = 0.42;
 // Snow lies on a crown's upper, lit side (its light from `SNOW_LIT.x` to `SNOW_LIT.y` times flat ground's) up to this
 // share of its colour, as closed as the crown is (a bare one holds little), in the colour of fresh snow (colour.wgsl
 // `SNOW`).
+// Bark in the shade of its own crown: its walls' colour times this.
+const BARK = 0.55;
 const CROWN_SNOW = 0.8; const SNOW_LIT = vec2f(0.9, 1.15); const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
 
 
@@ -40,18 +42,15 @@ fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow:
   let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);
   let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
   over(dst, vec3f(0.0), SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
+  let bark = BARK * cover.walls.rgb;
   var body: Body;
   if (q.design == TREE) {
-    // The stem: from above its top through an open crown, angled from its foot to its crown, leaning with it, as wide
-    // as it is.
-    let bark = cover.walls.rgb;
-    let w = max(0.5 * q.stem, 0.35 * e);
+    // The stem: angled from its foot to its crown (`stem`), leaning with it; from above its top through an open crown.
     if (angled > 0.5) {
-      let s = p - q.at;
-      let lean = q.lean.x * -s.y;
-      let inside = step(abs(s.x - lean), w) * step(s.y, 0.0) * step(-STAND * q.h * (1.0 - 0.5 * CROWN_SHARE), s.y);
-      over(dst, bark, q.wood * inside * fade);
+      let s = stem(q, p, e);
+      if (s.a > 0.0) { over(dst, mark_colour(bark * s.tone, s.lit, s.rim), q.wood * s.a * fade); }
     } else {
+      let w = max(0.5 * q.stem, 0.35 * e);
       over(dst, bark, q.wood * (1.0 - q.closed) * (1.0 - smoothstep(w - e, w, length(p - q.at))) * fade);
     }
     body = crown(q, p, e);
@@ -59,8 +58,9 @@ fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow:
     body = bush(q, p, e);
   }
   if (body.a > 0.0) {
-    let snowy = CROWN_SNOW * snow * q.closed * smoothstep(SNOW_LIT.x, SNOW_LIT.y, body.lit);
-    over(dst, mark_colour(mix(q.rgb, CROWN_SNOW_RGB, snowy), body.lit, body.rim), body.a * fade);
+    let snowy = CROWN_SNOW * snow * q.closed * (1.0 - body.wood) * smoothstep(SNOW_LIT.x, SNOW_LIT.y, body.lit);
+    let leaf = mix(q.rgb, CROWN_SNOW_RGB, snowy);
+    over(dst, mark_colour(mix(leaf, bark, body.wood) * body.tone, body.lit, body.rim), body.a * fade);
   }
   if (q.blooms > 0.0) { bush_dots(dst, q, p, e, fade); }
 }

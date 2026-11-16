@@ -79,11 +79,12 @@ export class CoverMarks {
     this.due = false;
   }
 
-  /** The bindings of cover_field.wgsl on `gpu` where a css pixel takes `cssMpp` m: the field and how it shows. */
-  fieldBinds(gpu: Gpu, cssMpp: number): Draw['binds'] {
+  /** The bindings of cover_field.wgsl on `gpu` where a css pixel takes `cssMpp` m, the plants standing up if `angled`:
+   * the field and how it shows. */
+  fieldBinds(gpu: Gpu, cssMpp: number, angled: boolean): Draw['binds'] {
     this.upload(gpu);
     // A lattice no square holds is sent with side 0: the field does not read it.
-    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => (this.kinds?.held[l] ? a : 0)), 0).vec4(...this.shown(cssMpp)).vec4(this.kinds ? 1 : 0, this.alpha);
+    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => (this.kinds?.held[l] ? a : 0)), 0).vec4(...this.shown(cssMpp)).vec4(this.kinds ? 1 : 0, this.alpha, angled ? 1 : 0);
     return { 14: u.buffer, 15: this.fieldTex!, 16: 'mip' };
   }
 
@@ -119,7 +120,7 @@ export class CoverMarks {
     grids.forEach(g => u.vec4(...g.frac, g.a, g.rows));
     grids.forEach(g => u.vec4(g.near));
     grids.forEach(g => u.ivec4(...g.base));
-    const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.cssMpp), 1: u.buffer, 4: this.tableTex! };
+    const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.cssMpp, angled), 1: u.buffer, 4: this.tableTex! };
     this.marksTex.forEach((t, word) => {
       const p = gpu.pass(t), drawn = { ...binds, 2: new Uniforms(1).ivec4(word).buffer };
       for (const g of grids) if (g.cells.rows > 0) p.draw('marks', { rect: [0, g.cells.row, g.cells.cols, g.cells.rows], binds: drawn }, false);
