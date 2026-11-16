@@ -9,10 +9,11 @@
 // A plant: its foot, m from the draw's corner; its crown's width, its height and its stem's width, m; how closed its
 // crown is; its leaves' fineness (0 broad .. 1 fine); its colour and its walls' share; its own random numbers; its
 // design (style.ts `DESIGN`); its form (form.ts `Form`) and how surely; its flowers' colour, and 1 if it is in flower
-// (a bush: or in fruit); its lean (a share of its height, east and south); and how far from its foot it may reach, m.
+// (a bush: or in fruit); its lean (a share of its height, east and south); how far from its foot it may reach, m; and
+// how dry its kind's ground, 0..1 (form.ts `Form`).
 struct Plant {
   at: vec2f, d: f32, h: f32, stem: f32, closed: f32, fine: f32, rgb: vec3f, wood: f32, r: vec3f, design: f32,
-  form: f32, sure: f32, petal: vec3f, blooms: f32, lean: vec2f, reach: f32,
+  form: f32, sure: f32, petal: vec3f, blooms: f32, lean: vec2f, reach: f32, dry: f32,
 }
 
 // Paint colour rgb with coverage a over dst (premultiplied).

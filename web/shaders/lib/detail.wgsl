@@ -125,7 +125,7 @@ fn rock_detail(e: f32) -> vec3f { return detail(ROCK_TEX, e); }
 const GRASS_STYLE = 0;
 
 // The change the grass gives the sward of cover s at e m a pixel; angled, its tiles laid in hexagons (`grass_hexes`),
-// green, dry as far as the sward is straw (`straw`, 0..1), tall reeds as far as they stand (`reeds`, 0..1); its fine
+// green, dry as far as the sward is straw (`straw`, 0..1), with tall reeds as far as they stand (`reeds`, 0..1); its fine
 // change `GRASS_FAR` of itself from `GRASS_FAR_E` m a pixel on, where it would read as noise; lighter and darker,
 // greener and yellower over drifts `DRIFT_GRASS_M` m across (`DRIFT_TONE`, `DRIFT_HUE`), all about 1 so its mean stays
 // the world's colour.
@@ -139,9 +139,8 @@ fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
   let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(GRASS_PATCH_M, vec2f(0.4)), 102).x
     + 0.35 * noise_l(lat_turned(0.31 * GRASS_PATCH_M, vec2f(0.9)), 103).x) + GRASS_THIN * (0.6 - s);
   var out = vec3f(1.0);
-  if (straw < 1.0) { out = grass_hexes(e, n, false); }
-  if (straw > 0.0) { out = mix(out, grass_hexes(e, n, true), straw); }
-  if (reeds > 0.0) { out = mix(out, carpet(REED_CARPET, e), reeds); }
+  if (straw < 1.0) { out = grass_hexes(e, n, false, reeds); }
+  if (straw > 0.0) { out = mix(out, grass_hexes(e, n, true, reeds), straw); }
   out = 1.0 + mix(1.0, GRASS_FAR, ease(GRASS_FAR_E.x, GRASS_FAR_E.y, e)) * (out - 1.0);
   let d = noise_l(lat_turned(DRIFT_GRASS_M, vec2f(0.2)), 104).x + 0.5 * noise_l(lat_turned(0.4 * DRIFT_GRASS_M, vec2f(0.6)), 105).x;
   let h = noise_l(lat_turned(2.3 * DRIFT_GRASS_M, vec2f(0.8)), 106).x;
@@ -150,11 +149,11 @@ fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
 
 // The grass's tiles laid in hexagons (Mikkelsen 2022, hex-tiling): over a lattice of triangles `HEX_M` m across, each
 // corner a hexagon holding one of the three tiles (by its own draw against `n`, 0..1 from turf to tussocks: kinds mix
-// at their edges hexagon by hexagon), shifted and mirrored by its own draw; a pixel blends its triangle's three corners
-// by their weights to the power `HEX_SHARP` (so a pixel shows one tile's blades, not the mean of three). Dry tiles
-// where `dry`. The change it gives a colour, about 1.
-const HEX_M = 1.6; const HEX_SHARP = 7.0; const HEX_MIX = 0.25;
-fn grass_hexes(e: f32, n: f32, dry: bool) -> vec3f {
+// at their edges hexagon by hexagon), or reeds in `reeds` of them, shifted and mirrored by its own draw; a pixel blends its triangle's three corners
+// by their weights to the power `HEX_SHARP` (so a pixel shows one tile's blades, not the mean of three), each tile's
+// detail finer than `GRASS_DETAIL_M` alone. Dry tiles where `dry`. The change it gives a colour, about 1.
+const HEX_M = 1.6; const HEX_SHARP = 7.0; const HEX_MIX = 0.25; const GRASS_DETAIL_M = 0.25;
+fn grass_hexes(e: f32, n: f32, dry: bool, reeds: f32) -> vec3f {
   var green = array<i32, 3>(TURF_CARPET, GRASS_CARPET, TUSSOCK_CARPET);
   var dried = array<i32, 3>(DRY_TURF_CARPET, STRAW_CARPET, DRY_TUSSOCK_CARPET);
   // The triangle lattice: the plane skewed so its triangles are equal-sided, 2 sqrt 3 cells a hexagon's side.
@@ -173,14 +172,21 @@ fn grass_hexes(e: f32, n: f32, dry: bool) -> vec3f {
     let x = lowbias(corner[k], 107);
     // Its kind: the noise, with `HEX_MIX` of the hexagon's own draw.
     let pick = clamp(mix(n, f32(x & 1023u) / 1024.0, HEX_MIX), 0.0, 0.999);
-    let c = select(green[i32(pick * 3.0)], dried[i32(pick * 3.0)], dry);
+    // Reeds in as many hexagons as they stand (by a draw of the hexagon's own).
+    let reed = f32(lowbias(corner[k], 109) & 1023u) / 1024.0 < reeds;
+    let c = select(select(green[i32(pick * 3.0)], dried[i32(pick * 3.0)], dry), REED_CARPET, reed);
     let t = CARPETS_FROM + c;
     let side = carpet_m(c);
     let shift = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
     var uv = lat_axes(side, shift).f;
     var gx = vec2f(e / side, 0.0);
     if ((x >> 30u) == 1u) { uv.x = 1.0 - uv.x; gx = -gx; }
-    out += w[k] * photo(t, uv, gx, vec2f(0.0, e / side)) / max(photo_mean(t), vec3f(1e-3));
+    // Its fine detail alone: the tile over itself blurred to `GRASS_DETAIL_M` (a mip as coarse), so its blades show and
+    // no clump of lighter grass larger than that repeats as a spot.
+    let fine = photo(t, uv, gx, vec2f(0.0, e / side));
+    let g_blur = max(e, GRASS_DETAIL_M) / side;
+    let blur = photo(t, uv, sign(gx) * g_blur, vec2f(0.0, g_blur));
+    out += w[k] * fine / max(blur, vec3f(1e-3));
   }
   return mix(vec3f(dot(out, LUMA)), out, CARPET_HUE);
 }

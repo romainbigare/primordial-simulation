@@ -15,12 +15,41 @@ const LEAF_GREEN = vec2f(0.345, 0.39);
 // An open crown loses its leaves in sprays, this many across its sprite.
 const SPRAYS = 30.0;
 
+// The sprites a plant of q's kind is drawn from, by its numbers (the first and how many): a tree by its crown's form
+// (form.ts `formOf`, round where it is not sure) and its height, a dry kind's broad crown a quiver tree (from `QUIVER_DRY`
+// of dryness); a cone young under `CONE_YOUNG_M` m and small under `SMALL_M` m (spruces, pines), a column or tiers a
+// young pine under `PINE_YOUNG_M` m; a bush by how dry its kind's ground (its draw mixing the sets near their borders,
+// `BUSH_DRY`): leafy, middling, or a dry land's.
+const QUIVER_DRY = 0.5; const SMALL_M = 3.0; const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
+const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
+fn model_set(q: Plant) -> vec2i {
+  if (q.design != TREE) {
+    let dry = q.dry + BUSH_MIX * (fract(q.r.x * 31.7) - 0.5);
+    if (dry > BUSH_DRY.y) { return vec2i(OTHONNA_FROM, OTHONNAS + 1); }
+    if (dry > BUSH_DRY.x) { return vec2i(SEARSIA_FROM, SEARSIAS); }
+    return vec2i(SHRUB_FROM, SHRUBS);
+  }
+  let f = select(ROUND, i32(q.form + 0.5), q.sure > 0.5);
+  if (f == CONE) {
+    if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINES_SMALL); }
+    if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCES_YOUNG); }
+    return vec2i(FIR_FROM, FIRS);
+  }
+  if (f == COLUMN || f == TIERED) {
+    if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINES_SMALL); }
+    if (q.h < PINE_YOUNG_M) { return vec2i(PINE_YOUNG_FROM, PINES_YOUNG); }
+    return vec2i(PINE_FROM, PINES);
+  }
+  if (f == UMBRELLA) { return select(vec2i(JACARANDA_FROM, JACARANDAS), vec2i(QUIVER_FROM, QUIVERS), q.dry > QUIVER_DRY); }
+  if (f == LOBED) { return vec2i(JACARANDA_FROM, JACARANDAS); }
+  return vec2i(ROUND_FROM, ROUNDS);
+}
+
 // The sprite plant q is drawn from and its width and height on the map, m.
 struct ModelFit { s: i32, w: f32, h: f32 }
 fn model_fit(q: Plant) -> ModelFit {
-  var first = ROUND_FROM; var count = ROUNDS;
-  if (q.design != TREE) { first = SHRUB_FROM; count = SHRUBS; } else if (i32(q.form + 0.5) == CONE || i32(q.form + 0.5) == COLUMN) { first = FIR_FROM; count = FIRS; }
-  let s = first + min(i32(fract(q.r.y * 7.13) * f32(count)), count - 1);
+  let pick = model_set(q);
+  let s = pick.x + min(i32(fract(q.r.y * 7.13) * f32(pick.y)), pick.y - 1);
   let aspect = model_h(s) / model_w(s);
   // As wide as its crown, no taller than it stands (angled, `STAND` of its height), within its lattice's reach with its
   // lean (the pixel looks no farther for it: cover.wgsl `lattice`).

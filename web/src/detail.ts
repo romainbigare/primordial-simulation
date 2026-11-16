@@ -9,7 +9,7 @@ import { Gpu, Texture } from './gpu';
 /** The layers of the photographs (tex.wgsl's `*_TEX`), of the ground cover after them (tex.wgsl `CARPETS_FROM`), of the
  * rendered models after those (tex.wgsl `MODELS_FROM`) and of the trees last (tex.wgsl `TREES_FROM`), and the side of
  * each, texels. */
-const PHOTO_LAYERS = 12, CARPET_LAYERS = 14, MODEL_LAYERS = 8, TREE_LAYERS = 18;
+const PHOTO_LAYERS = 12, CARPET_LAYERS = 14, MODEL_LAYERS = 11, TREE_LAYERS = 33;
 const GROUND_LAYERS = PHOTO_LAYERS + CARPET_LAYERS + MODEL_LAYERS + TREE_LAYERS;
 const PHOTO_SIDE = 512;
 /** The mip levels of a layer: from `PHOTO_SIDE` texels down to one. */

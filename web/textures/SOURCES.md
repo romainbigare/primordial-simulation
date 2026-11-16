@@ -54,7 +54,10 @@ grass_medium_01's tall stems with seed heads (its meshes named `_ta…`) are lef
 
 The trees rendered as `models.png` below, at 1,024 x 1,024 and set one to a 512 x 512 layer, foot on the bottom middle:
 island_tree_01, island_tree_02 and jacaranda_tree each from three sides with the patch of ground at their foot cut off
-(the lowest 5% of their height), then fir_tree_01's three trees each from three sides.
+(the lowest 5% of their height), then fir_tree_01's three trees each from three sides; then, each from one side,
+pine_tree_01's three pines, pine_sapling_medium's two, pine_sapling_small's three and fir_sapling_medium's three (the
+lowest 2% cut off), and quiver_tree_01 and quiver_tree_02 each from two sides. Each new tree's colours are scaled so
+its leaves are as light on average as the first trees' (their other texels by the square root of that).
 
 ## models.png
 
@@ -74,3 +77,8 @@ middle of its quarter.
 | 18 to 21 | wild_rooibos_bush (four of its bushes) |
 | 22 to 27 | grass_medium_01 (its meshes 0, 10, 1, 6, 7, 9 in file order) |
 | 28, 29 | grass_medium_02 (its meshes 2, 4 in file order) |
+| 30 to 34 | searsia_lucida (its bushes 0, 2, 3, 4, 5) |
+| 35 to 39 | othonna_cerarioides (its bushes 0, 1, 2, 4, 5) |
+| 40 | didelta_spinosa |
+
+The bushes from 30 on are rendered at 1,024 x 1,024 and their leaves made as light on average as the trees'.

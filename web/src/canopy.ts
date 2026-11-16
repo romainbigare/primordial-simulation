@@ -29,8 +29,8 @@ const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, cr
  * core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); then of each kind its form (height and stem's
  * width, m, how closed its crown is, its capture area per kg, log10 m²/kg), the colours its plants span (style.ts
  * `KindLook`: the first with its walls' share, the second with its design, `designOf`), its flowers (their colour and
- * the share of its plants in flower) and its shape (its crown's form and how surely, form.ts `formOf`, and the plants one
- * of its marks on the lattice of stands stands for). A plane holds four numbers: one for each kind of a group of four
+ * the share of its plants in flower) and its shape (its crown's form and how surely, form.ts `formOf`, the plants one
+ * of its marks on the lattice of stands stands for, and how dry its ground). A plane holds four numbers: one for each kind of a group of four
  * of a square (`groups` such planes for each of the first numbers, and of each lattice), or one kind's four. */
 export function planesOf(kinds: number) {
   const g = Math.ceil(kinds / 4), form = 8 * g;
@@ -249,6 +249,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       [...look.to, design].forEach((v, q) => put(P.to + k, i, q, v));
       [...look.petal, look.bloom].forEach((v, q) => put(P.petal + k, i, q, v));
       [shape.form, shape.sure].forEach((v, q) => put(P.shape + k, i, q, v));
+      put(P.shape + k, i, 3, shape.dry);
       if (design === DESIGN.herb) {
         // A herb is the sward: its plants cover their share of the ground, each as closed as its crown, and its stems
         // stand where its leaves are gone (cured straw), closing the ground as their walls' area does.

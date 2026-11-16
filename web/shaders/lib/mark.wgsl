@@ -180,6 +180,8 @@ fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, reach: f32
     if (cluster > 0.5) { shape = vec4f(f32(LOBED), 2.0 * cluster - 1.0, 0.0, 0.0); } else { shape.y *= 1.0 - 2.0 * cluster; }
   }
   if (to.w == BUSH) { petal = kind(petal_plane(t), sq); }
+  // How dry the kind's ground (form.ts `formOf`), for the drawing's choice of plant.
+  let dry = kind(shape_plane(t), sq).w;
   // Its own size: the plants of a stand differ, by up to `SIZES` either way of its kind's.
   let grow = 1.0 + SIZES * (2.0 * size - 1.0);
   let side = cover.grid[l].z;
@@ -190,7 +192,7 @@ fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, reach: f32
   let tint = vary(mix(first.rgb, to.rgb, r.x), fract(r.yz * 13.0));
   // A bush in flower or in fruit by a draw of its own (the next digits of its colour's), as its kind's share.
   let blooms = select(0.0, 1.0, fract(r.x * 16.0) < petal.w);
-  return Plant(c, min(width, 2.0 * side), tall, form.y, form.z, fine, tint, first.w, fract(r * 7.0), to.w, shape.x, shape.y, petal.rgb, blooms, lean, side);
+  return Plant(c, min(width, 2.0 * side), tall, form.y, form.z, fine, tint, first.w, fract(r * 7.0), to.w, shape.x, shape.y, petal.rgb, blooms, lean, side, dry);
 }
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square and kind packed as
