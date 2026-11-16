@@ -1,0 +1,141 @@
+<!doctype html><html><body style="margin:0;background:#000">
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+// Bakes a tile of ground cover: a square of ground L m wide, scattered with plant and stone models, seen as the map's
+// angled view sees it (top-down ground, things standing up STAND of their height), periodic so the tile repeats.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+const STAND = 0.5;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const cache = {};
+const loader = new GLTFLoader(), texLoader = new THREE.TextureLoader();
+
+// Each mesh of a model as its own part, baked in its node's place, then set on the origin: its middle over (0, 0),
+// its foot on the ground.
+async function partsOf(name) {
+  if (cache[name]) return cache[name];
+  const g = await loader.loadAsync(`/assets/gltf/${name}/${name}.gltf`);
+  g.scene.updateMatrixWorld(true);
+  const parts = [];
+  g.scene.traverse(o => {
+    if (!o.isMesh) return;
+    const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld);
+    geo.computeBoundingBox(); const b = geo.boundingBox;
+    geo.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+    geo.computeBoundingBox();
+    parts.push({ name: o.name, geo, mat: o.material });
+  });
+  return (cache[name] = parts);
+}
+
+function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// The material of a part: both sides, cut-out leaves, and tinted toward `tint` (straw, autumn) by `dry`.
+function materialOf(m, item) {
+  const out = m.clone();
+  out.side = THREE.DoubleSide;
+  out.metalness = 0; out.roughness = 1; out.roughnessMap = null; out.metalnessMap = null;
+  if (item.flat) out.normalMap = null;
+  if (out.transparent || out.alphaTest > 0 || out.alphaMap) { out.alphaTest = 0.5; out.transparent = false; }
+  const dry = item.dry || 0, tint = item.tint || [1.0, 0.82, 0.5], dark = item.dark || 1;
+  out.onBeforeCompile = s => {
+    s.fragmentShader = s.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      { float l = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+        diffuseColor.rgb = mix(diffuseColor.rgb, l * vec3(${tint.map(v => v.toFixed(3)).join(',')}) * 1.6, ${dry.toFixed(3)}) * ${dark.toFixed(3)}; }`);
+  };
+  out.customProgramCacheKey = () => `${dry}|${tint}|${dark}`;
+  return out;
+}
+
+window.bake = async spec => {
+  const L = spec.L, px = spec.px;
+  renderer.setSize(px, px);
+  const scene = new THREE.Scene();
+  const rand = rng(spec.seed || 1);
+  // The ground: its photograph repeated so a whole number of them spans the tile.
+  let gt = null;
+  if (spec.ground.tex) {
+    gt = await texLoader.loadAsync(`/assets/${spec.ground.tex}`);
+    gt.colorSpace = THREE.SRGBColorSpace; gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.anisotropy = 8;
+    const reps = Math.max(1, Math.round(L / spec.ground.m));
+    gt.repeat.set(3 * reps, 3 * reps);
+  }
+  const gmat = new THREE.MeshStandardMaterial({ map: gt, roughness: 1, color: new THREE.Color(...(spec.ground.tint || [1, 1, 1])) });
+  // Relief: waves periodic over the tile, each [count, wave numbers along x and z (whole), height m].
+  const segs = spec.ground.relief ? 900 : 1;
+  const geo = new THREE.PlaneGeometry(3 * L, 3 * L, segs, segs);
+  if (spec.ground.relief) {
+    const waves = [];
+    for (const [n, kx, kz, h] of spec.ground.relief) for (let i = 0; i < n; i++) {
+      const a = Math.round((rand() * 2 - 1) * kx), b = Math.round((rand() * 2 - 1) * kz) || 1;
+      waves.push([a, b, h * (0.5 + rand()), rand() * 2 * Math.PI]);
+    }
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      // The plane lies in x, y before it is turned flat: world x = x + L/2, world z = -y + L/2.
+      const x = pos.getX(i) + L / 2, z = -pos.getY(i) + L / 2;
+      let hgt = 0;
+      for (const [a, b, h, f] of waves) hgt += h * Math.sin(2 * Math.PI * (a * x + b * z) / L + f);
+      pos.setZ(i, hgt);
+    }
+    geo.computeVertexNormals();
+  }
+  const plane = new THREE.Mesh(geo, gmat);
+  plane.rotation.x = -Math.PI / 2; plane.position.set(L / 2, 0, L / 2); plane.receiveShadow = true; plane.castShadow = !!spec.ground.relief;
+  scene.add(plane);
+  for (const item of spec.items) {
+    let parts = await partsOf(item.model);
+    if (item.parts) parts = parts.filter(p => new RegExp(item.parts).test(p.name));
+    const per = parts.map(() => []);
+    for (let k = 0; k < item.n; k++) {
+      const i = Math.floor(rand() * parts.length);
+      const s = item.scale[0] + (item.scale[1] - item.scale[0]) * Math.pow(rand(), item.skew || 1);
+      let x = rand() * L, z = rand() * L;
+      // Clustered: near the last one.
+      if (item.cluster && per[i].length && rand() < item.cluster) {
+        const prev = per[i][per[i].length - 1];
+        x = (prev.x + (rand() - 0.5) * item.spread + L) % L; z = (prev.z + (rand() - 0.5) * item.spread + L) % L;
+      }
+      per[i].push({ x, z, s, turn: rand() * 2 * Math.PI, tiltX: (rand() - 0.5) * (item.tilt || 0), tiltZ: (rand() - 0.5) * (item.tilt || 0), sink: (item.sink || 0) * s });
+    }
+    parts.forEach((p, i) => {
+      const list = per[i]; if (!list.length) return;
+      const mesh = new THREE.InstancedMesh(p.geo, materialOf(p.mat, item), list.length * 9);
+      mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+      let n = 0;
+      for (const a of list) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        e.set(a.tiltX, a.turn, a.tiltZ, 'YXZ'); q.setFromEuler(e);
+        m.compose(new THREE.Vector3(a.x + dx * L, -a.sink, a.z + dz * L), q, new THREE.Vector3(a.s, a.s * (item.squash || 1), a.s));
+        mesh.setMatrixAt(n++, m);
+      }
+      scene.add(mesh);
+    });
+  }
+  scene.add(new THREE.HemisphereLight(0xd8e6ff, 0x5a5040, spec.sky ?? 1.3));
+  const sun = new THREE.DirectionalLight(0xfff2dc, spec.sun ?? 3.2);
+  sun.position.set(L / 2 - 58.8, 64.7, L / 2 - 58.8); sun.target.position.set(L / 2, 0, L / 2);
+  sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+  const c = sun.shadow.camera; c.left = c.bottom = -1.2 * L; c.right = c.top = 1.2 * L; c.near = 1; c.far = 300;
+  sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.002 * L; sun.shadow.radius = 2;
+  scene.add(sun, sun.target);
+  // The map's angled view: x east, up the screen north (-z) and up (y) at STAND; nearer is south and higher.
+  const cam = new THREE.OrthographicCamera(0, 1, 1, 0, 0.1, 10);
+  cam.matrixAutoUpdate = false; cam.matrixWorld.identity(); cam.matrixWorldInverse.identity();
+  const P = new THREE.Matrix4().set(
+    2 / L, 0, 0, -1,
+    0, 2 * STAND / L, -2 / L, 1,
+    0, -2 * STAND / (5 * L), -2 / (5 * L), 0.4,
+    0, 0, 0, 1);
+  cam.projectionMatrix.copy(P); cam.projectionMatrixInverse.copy(P).invert();
+  cam.updateProjectionMatrix = () => {};
+  renderer.render(scene, cam);
+  return renderer.domElement.toDataURL('image/png');
+};
+window.ready = true;
+</script></body></html>

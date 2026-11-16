@@ -1,8 +1,8 @@
 # Where the page's textures come from
 
 Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), resized and packed for the
-page by hand, each ground photograph with its large-scale light divided out (so its repeat does not show). `ground.jpg` is a strip of 512 x 512 layers, top first; `sprites.png` holds cut-out plants four to a layer
-(each standing on the bottom middle of its quarter), with their transparency.
+page by hand, each ground photograph with its large-scale light divided out (so its repeat does not show). Each file is
+a strip of 512 x 512 layers, top first.
 
 ## ground.jpg
 
@@ -21,16 +21,27 @@ page by hand, each ground photograph with its large-scale light divided out (so 
 | 10 | fronds cut from fern_02 (diffuse and alpha), scattered into a tile | — |
 | 11 | bark_brown_02 (diffuse) | — |
 
-## sprites.png
+## carpets.jpg
 
-| quarters | Poly Haven asset |
-|---|---|
-| 0 to 4 | grass clumps cut from grass_medium_01 (diffuse and alpha) |
-| 5 to 9 | the same clumps from its dry diffuse |
-| 10 to 12 | fronds cut from fern_02 |
-| 13, 14 | sprigs cut from moss_01 |
-| 15 | a flower head cut from dandelion_01 |
-| 16 | a flower cut from flower_gazania |
+Tiles of ground cover rendered with three.js from Poly Haven's CC0 3D models (glTF, 1k textures) scattered over a ground
+texture: the ground from straight above, each thing standing up half its height up the screen (the map's angled view),
+lit from the north-west with shadows, each thing repeated across the tile's edges so the tile repeats; rendered at
+1024 x 1024 and halved. The tool is in `bake/`: `fetch.sh assets` downloads what `carpets.json` names; with a folder
+served at localhost:8835 holding `assets/` and `render/` (`bake.html` beside three.js 0.160 in `node_modules`),
+`node bake.js carpets.json out` renders each tile to `out/<name>.png`, and the strip is the tiles in the order of the
+table below.
+
+| layer | ground | models | side |
+|---|---|---|---|
+| 0 | leafy_grass | grass_medium_01, grass_medium_02, weed_plant_02, celandine_01, dandelion_01 | 1.5 m |
+| 1 | dry_ground_01 | grass_medium_01 and grass_medium_02 dried in colour, namaqualand_stones_01 | 1.5 m |
+| 2 | forest_leaves_02 | dry_branches_medium_01, bark_debris_01, fern_02, periwinkle_plant, celandine_01, stone_01 | 3 m |
+| 3 | leaves_forest_ground | fern_02, periwinkle_plant, celandine_01, grass_medium_02, dry_branches_medium_01, bark_debris_01 | 3 m |
+| 4 | dry_ground_rocks | namaqualand_stones_01, stone_01, dry grass_medium_01, dead_quiver_branch_01, weed_plant_02 | 3 m |
+| 5 | mud_cracked_dry_03 | namaqualand_stones_01, dry grass_medium_01, dead_quiver_branch_01 | 3 m |
+| 6 | coast_sand_01 | namaqualand_stones_01, bark_debris_01, grass_medium_02 | 3 m |
+| 7 | white ground with wind ripples (sums of waves) | namaqualand_stones_01, stone_01, dry grass_medium_01 | 3 m |
+| 8 | brown_mud | grass_medium_01 stretched twice as tall, some dried in colour, grass_medium_02 | 2 m |
 
 ## models.png
 

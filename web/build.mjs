@@ -22,7 +22,7 @@ if (embed) writeFileSync('dist/standalone.html',
   page(`<script type="application/octet-stream" id="world-data">${readFileSync(embed).toString('base64')}</script>\n`));
 // The ground's photographs and plants, beside the page (detail.ts).
 copyFileSync('textures/ground.jpg', 'dist/ground.jpg');
-copyFileSync('textures/sprites.png', 'dist/sprites.png');
+copyFileSync('textures/carpets.jpg', 'dist/carpets.jpg');
 copyFileSync('textures/models.png', 'dist/models.png');
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
