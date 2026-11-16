@@ -381,8 +381,8 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   let swaths = shows_at(SWATH_DETAIL_M, e);
   if (swaths > 0.0) { tone += SWATH * swaths * (1.0 - near_images) * noise_l(lat_turned(SWATH_M, vec2f(0.0)), 73).x; }
   // From above, its tufts; angled, its grass stands up in its images (detail.wgsl `grass_detail`).
-  let blades = shows_at(TUFT_SEEN_M, e);
-  if (blades > 0.0 && cover_look.look.z < 0.5) { tone *= mix(1.0, tuft_tone(), blades); }
+  let blades_seen = blades_show(e);
+  if (blades_seen > 0.0 && cover_look.look.z < 0.5) { tone *= mix(1.0, tuft_tone(), blades_seen); }
   let reeds = reeds_of(b);
   if (reeds > 0.0) {
     s = mix(s, max(s, REED_FILL), reeds);
@@ -394,11 +394,23 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   let straw = smoothstep(STRAW_HUE.x, STRAW_HUE.y, c.r / max(c.g, 1e-4));
   let plain = c * max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
   c = plain * grass_detail(e, straw, reeds, s);
+  // Scratch styles: blades drawn near over the tiles darkened (1); clumps standing over the tiles (2).
+  if (GRASS_STYLE == 1 && cover_look.look.z > 0.5) {
+    let near = 1.0 - ease(BLADE_SEEN_E.x, BLADE_SEEN_E.y, e);
+    if (near > 0.0) {
+      let b = blades(e);
+      c = mix(c, mix(c * 0.6, plain * b.x, b.y), near);
+    }
+  }
+  if (GRASS_STYLE == 2 && cover_look.look.z > 0.5 && blades_show(e) > 0.0) {
+    let t = sward_tufts(plain, e, 0.6);
+    c = mix(c, t.rgb, t.a * blades_show(e));
+  }
   // Angled and near, a thin sward is its tufts standing on bare ground (detail.wgsl `sward_tufts`), not a veil: fully
   // where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on.
   var seen = s;
-  if (cover_look.look.z > 0.5 && blades > 0.0) {
-    let thin = blades * (1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s));
+  if (cover_look.look.z > 0.5 && blades_seen > 0.0) {
+    let thin = blades_seen * (1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s));
     if (thin > 0.0) {
       let t = sward_tufts(plain, e, s);
       c = mix(c, t.rgb, thin);
@@ -426,6 +438,9 @@ const TUFT_M = 0.22; const TUFT_FILL = 0.75; const TUFT_BLADES = 9.0; const TUFT
 // Each tuft's tone departs from the sward's by up to `TUFT_OWN` either way.
 const TUFT_OWN = 0.15;
 const TUFT_FOOT = 0.62; const TUFT_TIP = 1.3; const TUFT_GAP = 0.8; const TUFT_SEEN_M = 0.1;
+// How much the sward's tufts show at e m a pixel.
+fn blades_show(e: f32) -> f32 { return shows_at(TUFT_SEEN_M, e); }
+
 // The tone the tufts give the sward at the pixel.
 fn tuft_tone() -> f32 {
   let l = lat_axes(TUFT_M, vec2f(0.0));

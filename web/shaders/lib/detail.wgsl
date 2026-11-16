@@ -120,43 +120,109 @@ fn soil_detail(p: Spot) -> vec3f {
 // The change the photograph of mossy rock gives bare bed, at e m a pixel.
 fn rock_detail(e: f32) -> vec3f { return detail(ROCK_TEX, e); }
 
-// The change the grass gives the sward of cover s at e m a pixel; angled, its tiles: in patches of three kinds (short
-// turf, a meadow, tussocks with bare ground between), chosen where a noise over `GRASS_PATCH_M` m falls, a thinner sward
-// leaning to tussocks (`GRASS_THIN`), meeting over `GRASS_SEAM` of the noise; each green, dry as far as the sward is
-// straw (`straw`, 0..1), and tall reeds as far as they stand (`reeds`, 0..1). Each kind has its own tone (`KIND_TONE`),
-// and the sward lighter and darker, greener and yellower over drifts `DRIFT_GRASS_M` m across (`DRIFT_TONE`,
-// `DRIFT_HUE`), all about 1 so its mean stays the world's colour. The tiles' fine change is `GRASS_FAR` of itself from
-// `GRASS_FAR_E` m a pixel on, where it would read as noise.
-const GRASS_PATCH_M = 6.0; const GRASS_THIN = 0.5; const GRASS_SEAM = 0.03;
-const KIND_TONE = vec3f(1.04, 1.0, 0.95); const DRIFT_GRASS_M = 6.0; const DRIFT_TONE = 0.06;
+// Which drawing of the grass (scratch builds compare them): 0 the tiles in hexagons, 1 blades drawn near, 2 the tiles in
+// hexagons with clumps standing over them.
+const GRASS_STYLE = 0;
+
+// The change the grass gives the sward of cover s at e m a pixel; angled, its tiles laid in hexagons (`grass_hexes`),
+// green, dry as far as the sward is straw (`straw`, 0..1), tall reeds as far as they stand (`reeds`, 0..1); its fine
+// change `GRASS_FAR` of itself from `GRASS_FAR_E` m a pixel on, where it would read as noise; lighter and darker,
+// greener and yellower over drifts `DRIFT_GRASS_M` m across (`DRIFT_TONE`, `DRIFT_HUE`), all about 1 so its mean stays
+// the world's colour.
+const GRASS_PATCH_M = 6.0; const GRASS_THIN = 0.5;
+const DRIFT_GRASS_M = 6.0; const DRIFT_TONE = 0.06;
 const DRIFT_HUE = vec3f(-0.04, 0.025, -0.05); const GRASS_FAR = 0.5; const GRASS_FAR_E = vec2f(0.01, 0.04);
 fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
   if (!angled()) { return detail(GRASS_TEX, e); }
+  // Which kinds the hexagons hold: short turf, a meadow, tussocks, as a noise over `GRASS_PATCH_M` m falls, a thinner
+  // sward leaning to tussocks (`GRASS_THIN`).
   let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(GRASS_PATCH_M, vec2f(0.4)), 102).x
     + 0.35 * noise_l(lat_turned(0.31 * GRASS_PATCH_M, vec2f(0.9)), 103).x) + GRASS_THIN * (0.6 - s);
-  var green = array<i32, 3>(TURF_CARPET, GRASS_CARPET, TUSSOCK_CARPET);
-  var dry = array<i32, 3>(DRY_TURF_CARPET, STRAW_CARPET, DRY_TUSSOCK_CARPET);
-  var out = vec3f(0.0);
-  var tone = 0.0;
-  var kept = 0.0;
-  for (var k = 0; k < 3; k++) {
-    let lo = f32(k) / 3.0; let hi = f32(k + 1) / 3.0;
-    let w = select(smoothstep(lo - GRASS_SEAM, lo + GRASS_SEAM, n), 1.0, k == 0) * select(1.0 - smoothstep(hi - GRASS_SEAM, hi + GRASS_SEAM, n), 1.0, k == 2);
-    if (w < 0.01) { continue; }
-    var c = vec3f(1.0);
-    if (straw < 1.0) { c = carpet(green[k], e); }
-    if (straw > 0.0) { c = mix(c, carpet(dry[k], e), straw); }
-    out += w * c;
-    tone += w * KIND_TONE[k];
-    kept += w;
-  }
-  out /= max(kept, 1e-4);
+  var out = vec3f(1.0);
+  if (straw < 1.0) { out = grass_hexes(e, n, false); }
+  if (straw > 0.0) { out = mix(out, grass_hexes(e, n, true), straw); }
   if (reeds > 0.0) { out = mix(out, carpet(REED_CARPET, e), reeds); }
   out = 1.0 + mix(1.0, GRASS_FAR, ease(GRASS_FAR_E.x, GRASS_FAR_E.y, e)) * (out - 1.0);
   let d = noise_l(lat_turned(DRIFT_GRASS_M, vec2f(0.2)), 104).x + 0.5 * noise_l(lat_turned(0.4 * DRIFT_GRASS_M, vec2f(0.6)), 105).x;
   let h = noise_l(lat_turned(2.3 * DRIFT_GRASS_M, vec2f(0.8)), 106).x;
-  return out * (tone / max(kept, 1e-4)) * (1.0 + DRIFT_TONE * d) * (1.0 + DRIFT_HUE * h);
+  return out * (1.0 + DRIFT_TONE * d) * (1.0 + DRIFT_HUE * h);
 }
+
+// The grass's tiles laid in hexagons (Mikkelsen 2022, hex-tiling): over a lattice of triangles `HEX_M` m across, each
+// corner a hexagon holding one of the three tiles (by its own draw against `n`, 0..1 from turf to tussocks: kinds mix
+// at their edges hexagon by hexagon), shifted and mirrored by its own draw; a pixel blends its triangle's three corners
+// by their weights to the power `HEX_SHARP` (so a pixel shows one tile's blades, not the mean of three). Dry tiles
+// where `dry`. The change it gives a colour, about 1.
+const HEX_M = 1.6; const HEX_SHARP = 7.0; const HEX_MIX = 0.25;
+fn grass_hexes(e: f32, n: f32, dry: bool) -> vec3f {
+  var green = array<i32, 3>(TURF_CARPET, GRASS_CARPET, TUSSOCK_CARPET);
+  var dried = array<i32, 3>(DRY_TURF_CARPET, STRAW_CARPET, DRY_TUSSOCK_CARPET);
+  // The triangle lattice: the plane skewed so its triangles are equal-sided, 2 sqrt 3 cells a hexagon's side.
+  let skew = mat2x2f(1.0, 0.0, -0.57735027, 1.15470054) * (2.0 * 1.7320508 / HEX_M);
+  let l = lat(skew, vec2f(0.0));
+  let z = 1.0 - l.f.x - l.f.y;
+  let up = select(0.0, 1.0, z < 0.0);
+  let sg = 2.0 * up - 1.0;
+  var w = vec3f(-z * sg, up - l.f.y * sg, up - l.f.x * sg);
+  var corner = array<vec2i, 3>(l.i + vec2i(i32(up), i32(up)), l.i + vec2i(i32(up), 1 - i32(up)), l.i + vec2i(1 - i32(up), i32(up)));
+  w = pow(max(w, vec3f(0.0)), vec3f(HEX_SHARP));
+  w /= max(w.x + w.y + w.z, 1e-6);
+  var out = vec3f(0.0);
+  for (var k = 0; k < 3; k++) {
+    if (w[k] < 0.004) { continue; }
+    let x = lowbias(corner[k], 107);
+    // Its kind: the noise, with `HEX_MIX` of the hexagon's own draw.
+    let pick = clamp(mix(n, f32(x & 1023u) / 1024.0, HEX_MIX), 0.0, 0.999);
+    let c = select(green[i32(pick * 3.0)], dried[i32(pick * 3.0)], dry);
+    let t = CARPETS_FROM + c;
+    let side = carpet_m(c);
+    let shift = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
+    var uv = lat_axes(side, shift).f;
+    var gx = vec2f(e / side, 0.0);
+    if ((x >> 30u) == 1u) { uv.x = 1.0 - uv.x; gx = -gx; }
+    out += w[k] * photo(t, uv, gx, vec2f(0.0, e / side)) / max(photo_mean(t), vec3f(1e-3));
+  }
+  return mix(vec3f(dot(out, LUMA)), out, CARPET_HUE);
+}
+
+// Blades of grass drawn one by one, near (style 1): over the pixel, from the cells of a lattice `BLADE_CELL_M` m wide,
+// two blades a cell at random feet, each `BLADE_LONG` m long by its own draw standing up `STAND` of that (angled),
+// leaning and bending its own way, `BLADE_W` m wide at its foot narrowing to its tip, dark at its foot and light at its
+// tip (`BLADE_TONE`); the nearer over the farther. Its tone over the sward's colour and its cover; they show from
+// `BLADE_SEEN_E` m a pixel in.
+const BLADE_CELL_M = 0.035; const BLADE_LONG = vec2f(0.06, 0.2); const BLADE_W = 0.006; const BLADE_TONE = vec2f(0.45, 1.35);
+const BLADE_SEEN_E = vec2f(0.004, 0.012);
+fn blades(e: f32) -> vec2f {
+  let l = lat_axes(BLADE_CELL_M, vec2f(0.0));
+  var tone = 0.0;
+  var cover = 0.0;
+  var nearest = -99.0;
+  for (var j = 3; j >= 0; j--) {
+    for (var i = -1; i <= 1; i++) {
+      let cell = l.i + vec2i(i, j);
+      for (var b = 0u; b < 2u; b++) {
+        let x = lowbias(cell, 108 + i32(b));
+        let foot = vec2f(f32(i), f32(j)) + vec2f(f32(x & 1023u), f32((x >> 10u) & 1023u)) / 1024.0;
+        let long = mix(BLADE_LONG.x, BLADE_LONG.y, f32((x >> 20u) & 255u) / 255.0) * 0.5 / BLADE_CELL_M;
+        let q = l.f - foot;
+        let up = -q.y / long;
+        if (up < 0.0 || up > 1.0) { continue; }
+        let lean = (f32((x >> 28u) & 15u) / 7.5 - 1.0) * 0.6;
+        let mid = long * (lean * up + 0.5 * lean * up * up);
+        let half = 0.5 * BLADE_W / BLADE_CELL_M * (1.0 - 0.85 * up);
+        let off = abs(q.x - mid);
+        let a = 1.0 - smoothstep(half, half + e / BLADE_CELL_M, off);
+        if (a <= 0.0 || foot.y < nearest) { continue; }
+        nearest = foot.y;
+        let own = 0.85 + 0.3 * f32((x >> 4u) & 63u) / 63.0;
+        tone = mix(tone, mix(BLADE_TONE.x, BLADE_TONE.y, up) * own * (1.0 - 0.25 * sign(q.x - mid) * lean), a);
+        cover = max(cover, a);
+      }
+    }
+  }
+  return vec2f(tone, cover);
+}
+
 
 // A thin sward of colour c, covering s of the ground, seen at e m a pixel: its tufts (rendered models, tex.wgsl
 // `TUFT_FROM`) standing on their foot, one in each cell of a lattice `TUFT_CELL_M` m wide that holds one (as many as
