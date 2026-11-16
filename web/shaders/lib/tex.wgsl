@@ -41,3 +41,33 @@ fn sprite(s: i32, uv: vec2f, g: f32) -> vec4f {
   return vec4f(unsrgb(t.rgb), t.a);
 }
 
+
+// The rendered models (web/textures/models.png), four to a layer from `MODELS_FROM` on (models.wgsl draws the plants
+// from them, detail.wgsl the boulders).
+const MODELS_FROM = 17;
+// The sprites of each kind of plant: the first and how many.
+const ROUND_FROM = 0; const ROUNDS = 9; const FIR_FROM = 9; const FIRS = 9; const SHRUB_FROM = 18; const SHRUBS = 4;
+const BOULDER_FROM = 22; const BOULDERS = 3; const LOG_FROM = 25; const LOGS = 3;
+// Each sprite's content, as a share of its quarter: its width and its height.
+fn model_w(s: i32) -> f32 {
+  var w = array<f32, 28>(0.879, 0.984, 0.984, 0.984, 0.941, 0.984, 0.984, 0.984, 0.984, 0.387, 0.402, 0.410, 0.453, 0.492,
+    0.488, 0.496, 0.441, 0.469, 0.836, 0.863, 0.984, 0.977, 0.984, 0.984, 0.984, 0.984, 0.984, 0.918);
+  return w[s];
+}
+fn model_h(s: i32) -> f32 {
+  var h = array<f32, 28>(0.984, 0.941, 0.945, 0.797, 0.984, 0.820, 0.746, 0.930, 0.949, 0.984, 0.984, 0.984, 0.984, 0.984,
+    0.984, 0.984, 0.984, 0.984, 0.984, 0.984, 0.609, 0.984, 0.969, 0.883, 0.746, 0.094, 0.953, 0.984);
+  return h[s];
+}
+// The texel of model sprite s at `uv` in its content (0..1, y down), at `g` of its quarter a pixel: linear, with cover.
+fn model_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
+  let size = vec2f(model_w(s), model_h(s));
+  let q = vec2f(f32(s % 2), f32((s % 4) / 2));
+  let at = (q + vec2f(0.5 - 0.5 * size.x, 1.0 - size.y - 2.0 / 256.0) + uv * size) * 0.5;
+  let t = textureSampleGrad(detail_tex, detail_sampler, at, MODELS_FROM + s / 4, vec2f(0.5 * g * size.x, 0.0), vec2f(0.0, 0.5 * g * size.y));
+  return vec4f(unsrgb(t.rgb), t.a);
+}
+
+// Whether the models are loaded (the detail texture is more than its one blank texel).
+fn models_ready() -> bool { return textureDimensions(detail_tex).x > 1u; }
+

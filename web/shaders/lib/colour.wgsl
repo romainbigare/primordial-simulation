@@ -53,9 +53,10 @@ const WET_DARK = 0.5;
 const FILM_FROM = 0.8;
 // A bed that sends back less than this share of its light (half a display level of 255) does not show.
 const SHOWS = 0.002;
-// Dry open ground (wetter than `DRY_STONES_WET` none) holds stones up to `DRY_STONE_M` across, half worn, on up to
+// Dry open ground (wetter than `DRY_STONES_WET` as many as other bare ground) holds stones up to `DRY_STONE_M` across, half worn, on up to
 // `DRY_STONES` of its places, gathered in fields about `DRY_FIELD_M` across.
-const DRY_STONES_WET = 0.4; const DRY_STONES = 0.55; const DRY_STONE_M = 0.7; const DRY_WORN = 0.5; const DRY_FIELD_M = 9.0;
+// Bare ground that is not dry holds `BARE_STONES` as many.
+const BARE_STONES = 0.45; const DRY_STONES_WET = 0.4; const DRY_STONES = 0.55; const DRY_STONE_M = 0.7; const DRY_WORN = 0.5; const DRY_FIELD_M = 9.0;
 // The share of beach sand on ground `sea_over` m over the sea's surface and `over` m over the nearest liquid's, `sea` of
 // its shore the sea's, of slope `slope` (rise over run) on `loose` m of loose ground: sand by the sea up to `high` m
 // over it and under it (the shallows' bed), by a lake up to `LAKE_BEACH` of that over its level, on gentle loose
@@ -136,7 +137,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   if (p.rock > 0.5) { g.kind = ROCK; }
   let plants = p.cover.a * above_water(p.depth);
   g.bare = 1.0 - plants;
-  g.rgb = mix(g.rgb, SNOW, snow);
+  g.rgb = mix(g.rgb, SNOW * select(vec3f(1.0), snow_texture(p.e), styled()), snow);
   // Snow is not bare soil: it takes neither the soil's warmth nor its darkening when wet (`soil`).
   g.bare *= 1.0 - snow;
   if (snow > 0.5) { g.kind = ICE; }
@@ -147,7 +148,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     let sunk = SUNK_MOST * ease(0.0, SUNK_LOOSE_M, p.loose);
     // Dry open ground is strewn with stones in fields and strings (a desert's pavement), the drier and the thinner its
     // loose ground the more, as far as the plants leave it bare.
-    let dry = ease(DRY_STONES_WET, 0.0, p.wet) * (1.0 - p.sand) * (1.0 - plants) * (1.0 - min(p.canopy, 1.0));
+    let dry = mix(BARE_STONES, 1.0, ease(DRY_STONES_WET, 0.0, p.wet)) * (1.0 - p.sand) * (1.0 - plants) * (1.0 - min(p.canopy, 1.0));
     var field = 0.0;
     if (dry > 0.0 && !unseen(DRY_STONE_M)) { field = smoothstep(-0.2, 0.6, noise(p.at / DRY_FIELD_M, 62).x + 0.6 * thin); }
     // The scree's angular blocks, the channel's worn stones, then the dry ground's, from one place in the code.
@@ -159,6 +160,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
       g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
     }
   }
+  // Wood lying on the ground (detail.wgsl `wood_on`), under the low plants.
+  if (styled()) { g.rgb = boulders(dry_filler(wood_on(g.rgb, p, 1.0 - plants), p, 1.0 - plants), p, 1.0 - plants); }
   if (plants > 0.0) { g.rgb = mix(g.rgb, p.cover.rgb / p.cover.a, plants); }
   if (plants >= 0.5) { g.kind = PLANTS; }
   return g;

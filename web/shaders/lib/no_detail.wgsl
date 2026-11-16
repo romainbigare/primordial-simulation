@@ -2,3 +2,7 @@
 // close (the tape's view, the map's classes): the colour the world gives it alone.
 fn soil_detail(p: Spot) -> vec3f { return vec3f(1.0); }
 fn rock_detail(e: f32) -> vec3f { return vec3f(1.0); }
+fn wood_on(g: vec3f, p: Spot, bare: f32) -> vec3f { return g; }
+fn snow_texture(e: f32) -> vec3f { return vec3f(1.0); }
+fn dry_filler(g: vec3f, p: Spot, bare: f32) -> vec3f { return g; }
+fn boulders(g: vec3f, p: Spot, bare: f32) -> vec3f { return g; }

@@ -8,7 +8,7 @@ import { Gpu, Texture } from './gpu';
 
 /** The layers of the photographs (detail.wgsl's `*_TEX`, each its photograph's side in the world in `detail_m`) and of
  * the plants after them (detail.wgsl `SPRITES_FROM`), and the side of each, texels. */
-const PHOTO_LAYERS = 12, SPRITE_LAYERS = 5, GROUND_LAYERS = PHOTO_LAYERS + SPRITE_LAYERS;
+const PHOTO_LAYERS = 12, SPRITE_LAYERS = 5, MODEL_LAYERS = 7, GROUND_LAYERS = PHOTO_LAYERS + SPRITE_LAYERS + MODEL_LAYERS;
 const SIDE = 512;
 /** The mip levels of a layer: from `SIDE` texels down to one. */
 const MIPS = Math.log2(SIDE) + 1;
@@ -39,11 +39,12 @@ function image(name: string): Promise<ImageBitmap> {
 }
 
 /** Once the strips are fetched and their levels made (a failed fetch leaves the ground without its detail). */
-export const groundReady: Promise<void> = Promise.all([image('ground.jpg'), image('sprites.png')])
-  .then(([photos, plants]) => {
+export const groundReady: Promise<void> = Promise.all([image('ground.jpg'), image('sprites.png'), image('models.png')])
+  .then(([photos, plants, models]) => {
     const c = new OffscreenCanvas(SIDE, SIDE * GROUND_LAYERS), g = c.getContext('2d')!;
     g.drawImage(photos, 0, 0);
     g.drawImage(plants, 0, SIDE * PHOTO_LAYERS);
+    g.drawImage(models, 0, SIDE * (PHOTO_LAYERS + SPRITE_LAYERS));
     levels = mipsOf(new Uint8Array(g.getImageData(0, 0, SIDE, SIDE * GROUND_LAYERS).data.buffer));
   })
   .catch(() => undefined);

@@ -5,7 +5,7 @@
 // draw make. No kind is a class: a plant's size, shape and colour are functions of its numbers.
 import type { Rgb } from './style';
 import { clamp, smooth } from './earth';
-import { DESIGN, KindLook, designOf, fromScreen, kindLook, seenFar, toScreen } from './style';
+import { DESIGN, KindLook, designOf, fromScreen, kindLook, seenFar, strawSeen, toScreen } from './style';
 import { formOf } from './form';
 
 /** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most a cell from its
@@ -133,6 +133,10 @@ function shareOn(w: number, l: number): number {
  * overlaps counted once, is the stand's (c at most this, and a mark no wider than its lattice lets it reach). */
 const CLOSED_MOST = 0.95;
 
+/** The ground a kg of a herb's walls (its stems and last year's thatch) shades, standing, m² (a cured grassland of 0.1
+ * kg/m² of stems closes about two thirds of its ground). */
+const STRAW_AREA = 10;
+
 /** The marks of a kind on a lattice: the chance a cell holds one (as a share of the whole square), the width a mark is
  * drawn, m, the plants a mark stands for, and the share of the square the kind's plants on this lattice cover. */
 interface MarksOn { chance: number; width: number; plants: number; covers: number }
@@ -246,9 +250,11 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       [...look.petal, look.bloom].forEach((v, q) => put(P.petal + k, i, q, v));
       [shape.form, shape.sure].forEach((v, q) => put(P.shape + k, i, q, v));
       if (design === DESIGN.herb) {
-        // A herb is the sward: its plants cover their share of the ground, each as closed as its crown.
-        const covers = r[K.cover] * crown;
-        sward.add(k, r[K.root], c, covers, 0, stand, 0);
+        // A herb is the sward: its plants cover their share of the ground, each as closed as its crown, and its stems
+        // stand where its leaves are gone (cured straw), closing the ground as their walls' area does.
+        const straw = (1 - Math.exp(-STRAW_AREA * r[K.kg] * r[K.wood])) * (1 - crown), closes = crown + straw;
+        const covers = r[K.cover] * closes, mixed = closes > 0 ? straw / closes : 0, s = strawSeen();
+        sward.add(k, r[K.root], [0, 1, 2].map(q => c[q] + (s[q] - c[q]) * mixed) as Rgb, covers, 0, stand, 0);
         flowers.add(k, 0, look.petal, covers * look.bloom, 0, stand, 0);
         continue;
       }

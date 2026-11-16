@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl tex.wgsl crown.wgsl mark.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl tex.wgsl crown.wgsl mark.wgsl models.wgsl
 // The trees and bushes over the live map (web/src/textures.ts), at every frame, plant by plant where a plant takes a
 // few pixels; where it takes less, the ground draws it as a field of the same colours (lib/cover_field.wgsl), and the
 // herbs always so, as its sward. Each lattice of marks (web/src/canopy.ts `LATTICES`) lies fixed in the world, one mark
@@ -43,6 +43,12 @@ fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow:
   let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
   over(dst, vec3f(0.0), SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
   let bark = BARK * cover.walls.rgb;
+  // Angled, a plant is its model's sprite (models.wgsl) once the models are loaded.
+  if (angled > 0.5 && models_ready()) {
+    let m = model_plant(q, p, e, snow);
+    if (m.a > 0.0) { over(dst, m.rgb, m.a * fade); }
+    return;
+  }
   var body: Body;
   if (q.design == TREE) {
     // The stem: angled from its foot to its crown (`stem`), leaning with it; from above its top through an open crown.

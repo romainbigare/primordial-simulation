@@ -82,6 +82,8 @@ const RED_FROM = -5.32, RED_TO = -5.12, HUE_SPREAD = 0.3;
 const TO_PALE = 0.25, PALE = 0.4, TO_DEEP = 0.45, TO_BARE = 0.8;
 /** A kind dry this far into its dormancy has gone straw; past it, brown. */
 const TO_STRAW = 0.5;
+/** Weathered straw is this far from straw towards dormant brown. */
+const WEATHERED = 0.35;
 /** One plant turns at its own time: the plants of a kind span this much of the turn either way of its stage, once the
  * stage is twice this far in. */
 const TURN_SPREAD = 0.2;
@@ -199,6 +201,12 @@ export const fromScreen = (x: number) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055
  * shows them. A mix of colours on a screen averages what the screen shows, not the light (the screen's curve bends), so
  * plants of many colours look deeper from near than the mean of their light; the field is the mean of what the plants
  * show, as the near picture comes to when its plants take a pixel each. */
+/** The colour of cured straw standing (the mean of a straw and a weathered straw), as the field far away draws it. */
+export function strawSeen(): Rgb {
+  const s = linear(fromLch(STRAW));
+  return seenFar({ from: s, to: linear(lerp3(fromLch(STRAW), fromLch(BARE), WEATHERED)), left: 1, petal: s, bloom: 0 });
+}
+
 export function seenFar(l: KindLook): Rgb {
   const sum: Rgb = [0, 0, 0];
   for (let i = 0; i < SEEN_COLOURS; i++) {

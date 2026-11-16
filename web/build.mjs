@@ -23,6 +23,7 @@ if (embed) writeFileSync('dist/standalone.html',
 // The ground's photographs and plants, beside the page (detail.ts).
 copyFileSync('textures/ground.jpg', 'dist/ground.jpg');
 copyFileSync('textures/sprites.png', 'dist/sprites.png');
+copyFileSync('textures/models.png', 'dist/models.png');
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
 console.log(`dist/index.html ${(html.length / 1024).toFixed(1)} KB`);
