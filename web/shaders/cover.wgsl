@@ -22,7 +22,7 @@
 // of the crown's radius (so a tree stands on its shadow), soft over `SHADOW_SOFT` of its radius.
 const SHADOW_RUN = 0.5; const SHADOW_OFF = 0.45; const SHADOW_SOFT = 0.35;
 // A shadow lets through the sky's light and what crowns scatter, about half of the sun's (canopy.ts `CROWN_SHADOW`).
-const SHADOW = 0.42;
+const SHADOW = 0.42; const BUSH_SHADOW = 0.3;
 // Snow lies on a crown's upper, lit side (its light from `SNOW_LIT.x` to `SNOW_LIT.y` times flat ground's) up to this
 // share of its colour, as closed as the crown is (a bare one holds little), in the colour of fresh snow (colour.wgsl
 // `SNOW`).
@@ -43,7 +43,9 @@ fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow:
   // foot.
   let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);
   let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
-  over(dst, vec3f(0.0), SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
+  // A bush drawn from a model is open twigs and leaves: it lets more light through (`BUSH_SHADOW` of a tree's shadow).
+  let dark = select(SHADOW, BUSH_SHADOW * SHADOW, models && q.design != TREE);
+  over(dst, vec3f(0.0), dark * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
   let bark = BARK * cover.walls.rgb;
   // Angled, a plant is its model's sprite (models.wgsl) once the models are loaded.
   if (models) {

@@ -23,8 +23,9 @@ const SHADOW_DROP = 5, SHADOW_BLUR = 11, SHADOW_DARK = 0.28;
  * pixels along each axis it is drawn at; the share by which it comes back to the screen's pixels a frame. */
 const FRAME_BUDGET_MS = 16, LEAST_SCALE = 0.25, SCALE_UP = 1.25;
 /** The time the view rests before the map drawn at fewer pixels is drawn anew at the screen's own, ms, a tile a frame,
- * each of about `FRAME_BUDGET_MS` on the GPU and no less than `TILE_LEAST` px a side. */
-const REST_MS = 300, TILE_LEAST = 64;
+ * each of about `SHARPEN_MS` on the GPU (the view rests, so a frame may take longer) and no less than `TILE_LEAST` px a
+ * side. */
+const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
 
 /** Drawn on the GPU over the map by another module, in the map's pass, at every frame: what it works out before the
  * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` device px, and the view is
@@ -254,10 +255,10 @@ export class MapView {
     this.flowTimer = window.setTimeout(() => this.invalidate(), step - (performance.now() % step) + 1);
   }
 
-  /** Start drawing the map at the screen's own pixels, in tiles each of about `FRAME_BUDGET_MS` on the GPU. */
+  /** Start drawing the map at the screen's own pixels, in tiles each of about `SHARPEN_MS` on the GPU. */
   private sharpenSoon(xs: number[], d: number): void {
     const W = this.cv.width, H = this.cv.height, tiles: number[][] = [];
-    const side = Math.max(TILE_LEAST, Math.floor(Math.sqrt((FRAME_BUDGET_MS / Math.max(this.fullMs, FRAME_BUDGET_MS)) * W * H)));
+    const side = Math.max(TILE_LEAST, Math.floor(Math.sqrt((SHARPEN_MS / Math.max(this.fullMs, SHARPEN_MS)) * W * H)));
     for (let y = 0; y < H; y += side) for (let x = 0; x < W; x += side) tiles.push([x, y, Math.min(side, W - x), Math.min(side, H - y)]);
     const job = { tiles, xs, d };
     this.sharpening = job;

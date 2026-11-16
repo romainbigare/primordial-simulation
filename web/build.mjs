@@ -24,6 +24,7 @@ if (embed) writeFileSync('dist/standalone.html',
 copyFileSync('textures/ground.jpg', 'dist/ground.jpg');
 copyFileSync('textures/carpets.jpg', 'dist/carpets.jpg');
 copyFileSync('textures/models.png', 'dist/models.png');
+copyFileSync('textures/trees.png', 'dist/trees.png');
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
 console.log(`dist/index.html ${(html.length / 1024).toFixed(1)} KB`);

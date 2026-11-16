@@ -42,7 +42,19 @@ table below.
 | 6 | coast_sand_01 | namaqualand_stones_01, stone_01, dry grass_medium_01 and _02, dead_quiver_branch_01, bark_debris_01, weed_plant_02 | 3 m |
 | 7 | white ground with wind ripples (sums of waves) | none | 3 m |
 | 8 | brown_mud | grass_medium_01 stretched twice as tall, some dried in colour, grass_medium_02 | 2 m |
-| 9 | none (black) | flower_ursinia, dandelion_01: their petals alone, grey, all else black | 1.5 m |
+| 9 | none (black) | flower_ursinia, dandelion_01: their petals alone, grey, all else black | 0.8 m |
+| 10 | leafy_grass | short turf: grass_medium_02 and _01 small and dense, weed_plant_02, celandine_01 | 2 m |
+| 11 | forest_ground_04 | tussocks: grass_medium_01 and _02 large, in clumps, with bare ground and stones between | 2 m |
+| 12 | dry_ground_01 | layer 10 dried in colour | 2 m |
+| 13 | dry_ground_rocks | layer 11 dried in colour | 2 m |
+
+grass_medium_01's tall stems with seed heads (its meshes named `_ta…`) are left out of every tile.
+
+## trees.png
+
+The trees rendered as `models.png` below, at 1,024 x 1,024 and set one to a 512 x 512 layer, foot on the bottom middle:
+island_tree_01, island_tree_02 and jacaranda_tree each from three sides with the patch of ground at their foot cut off
+(the lowest 5% of their height), then fir_tree_01's three trees each from three sides.
 
 ## models.png
 
@@ -52,17 +64,13 @@ middle of its quarter.
 
 | quarters | Poly Haven model |
 |---|---|
-| 0 to 2 | island_tree_01 |
-| 3 to 5 | island_tree_02 |
-| 6 to 8 | jacaranda_tree |
-| 9 to 17 | fir_tree_01 (its three trees, each from three sides) |
-| 18 to 21 | shrub_02 (its four shrubs) |
-| 22 to 24 | boulder_01 |
-| 25 to 27 | dead_tree_trunk |
-| 28, 29 | namaqualand_boulder_02 (two sides) |
-| 30, 31 | namaqualand_boulder_03 (two sides) |
-| 32, 33 | namaqualand_boulder_05 (two sides) |
-| 34, 35 | dead_tree_trunk_02 (two sides) |
-| 36 to 39 | wild_rooibos_bush (four of its bushes) |
-| 40 to 45 | grass_medium_01 (its meshes 0, 10, 1, 6, 7, 9 in file order) |
-| 46, 47 | grass_medium_02 (its meshes 2, 4 in file order) |
+| 0 to 3 | shrub_02 (its four shrubs) |
+| 4 to 6 | boulder_01 |
+| 7 to 9 | dead_tree_trunk |
+| 10, 11 | namaqualand_boulder_02 (two sides) |
+| 12, 13 | namaqualand_boulder_03 (two sides) |
+| 14, 15 | namaqualand_boulder_05 (two sides) |
+| 16, 17 | dead_tree_trunk_02 (two sides) |
+| 18 to 21 | wild_rooibos_bush (four of its bushes) |
+| 22 to 27 | grass_medium_01 (its meshes 0, 10, 1, 6, 7, 9 in file order) |
+| 28, 29 | grass_medium_02 (its meshes 2, 4 in file order) |

@@ -13,7 +13,7 @@ const DETAIL_AGAIN = 2.7; const DETAIL_BLEND = 3.0;
 const CARPET_PATCH = 1.7; const CARPET_SEAM = 0.02; const CARPET_WAVE = 0.06;
 // An image's own hue shows this much (the rest of its change is its lightness alone): the world gives the colour; a
 // tile of cover's more (`CARPET_HUE`), its green plants on brown ground.
-const DETAIL_HUE = 0.55; const CARPET_HUE = 0.7;
+const DETAIL_HUE = 0.55; const CARPET_HUE = 0.95;
 
 // The change image `t` of the array gives a colour: `a` and `b` its two layings, blended by noise `w`.
 fn change_of(t: i32, a: vec3f, b: vec3f, w: f32, hue: f32) -> vec3f {
@@ -51,13 +51,15 @@ fn carpet(c: i32, e: f32) -> vec3f {
   let t = CARPETS_FROM + c;
   let pa = lat_axes(CARPET_PATCH * s, vec2f(0.0));
   let pb = lat_axes(CARPET_PATCH * s, vec2f(0.5));
-  let a = carpet_patch(t, pa, lowbias(pa.i, 96 + t), c == SNOW_CARPET, e / s);
-  let b = carpet_patch(t, pb, lowbias(pb.i, 96 + t), c == SNOW_CARPET, e / s);
-  // How far the pixel lies inside its patch of each lattice (0 at its edge, 0.5 at its middle).
+  // How far the pixel lies inside its patch of each lattice (0 at its edge, 0.5 at its middle); away from the seam a
+  // pixel reads one patch alone.
   let inside_a = min(min(pa.f.x, 1.0 - pa.f.x), min(pa.f.y, 1.0 - pa.f.y));
   let inside_b = min(min(pb.f.x, 1.0 - pb.f.x), min(pb.f.y, 1.0 - pb.f.y));
   let wave = CARPET_WAVE * noise_l(lat_turned(0.5 * s, vec2f(0.3)), 98 + t).x;
   let w = smoothstep(-CARPET_SEAM, CARPET_SEAM, inside_b - inside_a + wave);
+  var a = vec3f(0.0); var b = vec3f(0.0);
+  if (w < 1.0) { a = carpet_patch(t, pa, lowbias(pa.i, 96 + t), c == SNOW_CARPET, e / s); }
+  if (w > 0.0) { b = carpet_patch(t, pb, lowbias(pb.i, 96 + t), c == SNOW_CARPET, e / s); }
   return change_of(t, a, b, w, CARPET_HUE);
 }
 
@@ -118,14 +120,42 @@ fn soil_detail(p: Spot) -> vec3f {
 // The change the photograph of mossy rock gives bare bed, at e m a pixel.
 fn rock_detail(e: f32) -> vec3f { return detail(ROCK_TEX, e); }
 
-// The change the grass gives the sward, at e m a pixel; angled, its tile of grass, of straw as far as the sward is
-// straw (`straw`, 0..1), of reeds as far as reeds stand (`reeds`, 0..1).
-fn grass_detail(e: f32, straw: f32, reeds: f32) -> vec3f {
+// The change the grass gives the sward of cover s at e m a pixel; angled, its tiles: in patches of three kinds (short
+// turf, a meadow, tussocks with bare ground between), chosen where a noise over `GRASS_PATCH_M` m falls, a thinner sward
+// leaning to tussocks (`GRASS_THIN`), meeting over `GRASS_SEAM` of the noise; each green, dry as far as the sward is
+// straw (`straw`, 0..1), and tall reeds as far as they stand (`reeds`, 0..1). Each kind has its own tone (`KIND_TONE`),
+// and the sward lighter and darker, greener and yellower over drifts `DRIFT_GRASS_M` m across (`DRIFT_TONE`,
+// `DRIFT_HUE`), all about 1 so its mean stays the world's colour. The tiles' fine change is `GRASS_FAR` of itself from
+// `GRASS_FAR_E` m a pixel on, where it would read as noise.
+const GRASS_PATCH_M = 6.0; const GRASS_THIN = 0.5; const GRASS_SEAM = 0.03;
+const KIND_TONE = vec3f(1.1, 1.0, 0.88); const DRIFT_GRASS_M = 4.0; const DRIFT_TONE = 0.12;
+const DRIFT_HUE = vec3f(-0.06, 0.04, -0.08); const GRASS_FAR = 0.5; const GRASS_FAR_E = vec2f(0.01, 0.04);
+fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
   if (!angled()) { return detail(GRASS_TEX, e); }
-  var out = carpet(GRASS_CARPET, e);
-  if (straw > 0.0) { out = mix(out, carpet(STRAW_CARPET, e), straw); }
+  let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(GRASS_PATCH_M, vec2f(0.4)), 102).x
+    + 0.35 * noise_l(lat_turned(0.31 * GRASS_PATCH_M, vec2f(0.9)), 103).x) + GRASS_THIN * (0.6 - s);
+  var green = array<i32, 3>(TURF_CARPET, GRASS_CARPET, TUSSOCK_CARPET);
+  var dry = array<i32, 3>(DRY_TURF_CARPET, STRAW_CARPET, DRY_TUSSOCK_CARPET);
+  var out = vec3f(0.0);
+  var tone = 0.0;
+  var kept = 0.0;
+  for (var k = 0; k < 3; k++) {
+    let lo = f32(k) / 3.0; let hi = f32(k + 1) / 3.0;
+    let w = select(smoothstep(lo - GRASS_SEAM, lo + GRASS_SEAM, n), 1.0, k == 0) * select(1.0 - smoothstep(hi - GRASS_SEAM, hi + GRASS_SEAM, n), 1.0, k == 2);
+    if (w < 0.01) { continue; }
+    var c = vec3f(1.0);
+    if (straw < 1.0) { c = carpet(green[k], e); }
+    if (straw > 0.0) { c = mix(c, carpet(dry[k], e), straw); }
+    out += w * c;
+    tone += w * KIND_TONE[k];
+    kept += w;
+  }
+  out /= max(kept, 1e-4);
   if (reeds > 0.0) { out = mix(out, carpet(REED_CARPET, e), reeds); }
-  return out;
+  out = 1.0 + mix(1.0, GRASS_FAR, ease(GRASS_FAR_E.x, GRASS_FAR_E.y, e)) * (out - 1.0);
+  let d = noise_l(lat_turned(DRIFT_GRASS_M, vec2f(0.2)), 104).x + 0.5 * noise_l(lat_turned(0.4 * DRIFT_GRASS_M, vec2f(0.6)), 105).x;
+  let h = noise_l(lat_turned(2.3 * DRIFT_GRASS_M, vec2f(0.8)), 106).x;
+  return out * (tone / max(kept, 1e-4)) * (1.0 + DRIFT_TONE * d) * (1.0 + DRIFT_HUE * h);
 }
 
 // A thin sward of colour c, covering s of the ground, seen at e m a pixel: its tufts (rendered models, tex.wgsl

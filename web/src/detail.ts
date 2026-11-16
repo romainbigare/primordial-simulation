@@ -1,14 +1,16 @@
 // The ground's detail up close (web/shaders/lib/detail.wgsl): photographs of ground seen from above, tiles of ground
 // cover rendered from 3D models as the angled view sees them, and rendered plants (CC0, Poly Haven;
-// web/textures/SOURCES.md), three strip images beside the page (`ground.jpg`, `carpets.jpg`, `models.png`), each a layer
-// of one texture array with its mip levels down to one texel, which is its mean. The map draws each at its real size as
-// a change around the colour the world gives the ground (the image over its mean), so from afar, where the mips average
-// it, the colour is the world's alone.
+// web/textures/SOURCES.md), four strip images beside the page (`ground.jpg`, `carpets.jpg`, `models.png`, `trees.png`),
+// each a layer of one texture array with its mip levels down to one texel, which is its mean. The map draws each at its
+// real size as a change around the colour the world gives the ground (the image over its mean), so from afar, where the
+// mips average it, the colour is the world's alone.
 import { Gpu, Texture } from './gpu';
 
-/** The layers of the photographs (tex.wgsl's `*_TEX`), of the ground cover after them (tex.wgsl `CARPETS_FROM`) and of
- * the rendered plants after those (tex.wgsl `MODELS_FROM`), and the side of each, texels. */
-const PHOTO_LAYERS = 12, CARPET_LAYERS = 10, MODEL_LAYERS = 12, GROUND_LAYERS = PHOTO_LAYERS + CARPET_LAYERS + MODEL_LAYERS;
+/** The layers of the photographs (tex.wgsl's `*_TEX`), of the ground cover after them (tex.wgsl `CARPETS_FROM`), of the
+ * rendered models after those (tex.wgsl `MODELS_FROM`) and of the trees last (tex.wgsl `TREES_FROM`), and the side of
+ * each, texels. */
+const PHOTO_LAYERS = 12, CARPET_LAYERS = 14, MODEL_LAYERS = 8, TREE_LAYERS = 18;
+const GROUND_LAYERS = PHOTO_LAYERS + CARPET_LAYERS + MODEL_LAYERS + TREE_LAYERS;
 const PHOTO_SIDE = 512;
 /** The mip levels of a layer: from `PHOTO_SIDE` texels down to one. */
 const PHOTO_MIPS = Math.log2(PHOTO_SIDE) + 1;
@@ -46,12 +48,13 @@ function photoImage(name: string): Promise<ImageBitmap> {
 }
 
 /** Once the strips are fetched and their levels made (a failed fetch leaves the ground without its detail). */
-export const groundReady: Promise<void> = Promise.all([photoImage('ground.jpg'), photoImage('carpets.jpg'), photoImage('models.png')])
-  .then(([photos, carpets, models]) => {
+export const groundReady: Promise<void> = Promise.all([photoImage('ground.jpg'), photoImage('carpets.jpg'), photoImage('models.png'), photoImage('trees.png')])
+  .then(([photos, carpets, models, trees]) => {
     const c = new OffscreenCanvas(PHOTO_SIDE, PHOTO_SIDE * GROUND_LAYERS), g = c.getContext('2d')!;
     g.drawImage(photos, 0, 0);
     g.drawImage(carpets, 0, PHOTO_SIDE * PHOTO_LAYERS);
     g.drawImage(models, 0, PHOTO_SIDE * (PHOTO_LAYERS + CARPET_LAYERS));
+    g.drawImage(trees, 0, PHOTO_SIDE * (PHOTO_LAYERS + CARPET_LAYERS + MODEL_LAYERS));
     photoLevels = photoMips(new Uint8Array(g.getImageData(0, 0, PHOTO_SIDE, PHOTO_SIDE * GROUND_LAYERS).data.buffer));
   })
   .catch(() => undefined);
