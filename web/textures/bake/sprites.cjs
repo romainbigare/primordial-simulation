@@ -4,7 +4,9 @@
 //
 // sprites.json: for each strip (`trees`, `models`) the side of its layers, its cells a layer (`per`: 1 or 4) and its
 // sprites, each entry a model with: `parts`, lists of its nodes, each part a sprite (default: the whole model); `turns`,
-// degrees about the vertical, each a sprite of each part; `cut`, the share of its height cut off at its foot; `leaf`, the
+// degrees about the vertical, each a sprite of each part; `cut`, the share of its height cut off at its foot; `rest`,
+// set down on its resting face (sprite.html `restingTurn`) and `sink`, the share of its height sunk into the ground,
+// cut off at the ground; `leaf`, the
 // mean lightness (linear) its leaves are scaled to (its other texels by the square root of that scale), so the models'
 // leaves are about as light as each other's; `set`, the name of the set it starts (sprites.wgsl `<set>_FROM` and
 // `<set>_N`, the set running to the next entry with a set).

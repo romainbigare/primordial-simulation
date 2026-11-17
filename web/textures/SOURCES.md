@@ -59,7 +59,9 @@ shadows, on a clear background; each sprite fills its cell but for a 64th of its
 cell's bottom middle, rendered at twice the cell's side and shrunk. `trees.png` holds the trees one to a 512 x 512
 layer; `models.png` the rest four to a layer. `bake/sprites.json` names each model, its parts (its nodes), the sides it
 is seen from (turns about the vertical), how much of its foot is cut off (the patch of ground some trees stand on), and
-the mean lightness its leaves are scaled to (texels whose green stands out, as the page tells leaves: the models'
+whether it is set down on the face it rests on (the face of its convex hull nearest its centre of weight: the rocks)
+and how far it is sunk into the ground (a fifth of its height, cut off at the ground line), and the mean lightness its
+leaves are scaled to (texels whose green stands out, as the page tells leaves: the models'
 leaves differ several times in lightness as the files have them), and the sets the page draws from. With the files
 fetched (`fetch.sh assets` also downloads what `sprites.json` names) and served as for the carpets,
 `node sprites.cjs sprites.json out` writes `out/trees.png`, `out/models.png` and

@@ -166,28 +166,36 @@
      120,
      240
     ],
-    "set": "ROCK"
+    "set": "ROCK",
+    "rest": true,
+    "sink": 0.2
    },
    {
     "model": "namaqualand_boulder_02",
     "turns": [
      0,
      180
-    ]
+    ],
+    "rest": true,
+    "sink": 0.2
    },
    {
     "model": "namaqualand_boulder_03",
     "turns": [
      0,
      180
-    ]
+    ],
+    "rest": true,
+    "sink": 0.2
    },
    {
     "model": "namaqualand_boulder_05",
     "turns": [
      0,
      180
-    ]
+    ],
+    "rest": true,
+    "sink": 0.2
    },
    {
     "model": "dead_tree_trunk",

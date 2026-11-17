@@ -6,6 +6,7 @@
 // background, cut at the ground, its foot on the bottom middle of its cell; and packs sprites into strips.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { ConvexHull } from 'three/addons/math/ConvexHull.js';
 // The camera looks down this many degrees from the side.
 const DOWN = 35;
 // A sprite's content fills its cell but for `EDGE` of its side (`FOOT` texels below its foot: tex.wgsl `model_texel`),
@@ -49,16 +50,39 @@ async function meshesOf(s) {
   return out;
 }
 
-// Sprite `s` rendered at `px` texels: turned `s.turn` degrees about the vertical, its foot on the ground at 0 and the
-// ground at `s.cut` of its height (cut off below). The frame the camera sees: its middle column over the
+// The pose a body rests in on flat ground: of the faces of its convex hull, the one nearest its centre of weight (the
+// hull's, of even density). The nearest face is always one it rests on stably: the foot of the centre on its plane lies
+// inside it (Conway and Guy 1969). The turn that sets that face down.
+function restingTurn(meshes) {
+  const pts = [];
+  for (const m of meshes) { const p = m.geometry.attributes.position; for (let i = 0; i < p.count; i++) pts.push(new THREE.Vector3().fromBufferAttribute(p, i)); }
+  const hull = new ConvexHull().setFromPoints(pts);
+  // The centre of the hull's volume, from the signed tetrahedra of its faces and a point on it.
+  const o = hull.faces[0].midpoint.clone(), c = new THREE.Vector3();
+  let vol = 0;
+  for (const f of hull.faces) {
+    const a = f.edge.head().point, b = f.edge.next.head().point, d = f.edge.next.next.head().point;
+    const v = new THREE.Vector3().subVectors(a, o).dot(new THREE.Vector3().subVectors(b, o).cross(new THREE.Vector3().subVectors(d, o))) / 6;
+    vol += v; c.addScaledVector(new THREE.Vector3().add(o).add(a).add(b).add(d), v / 4);
+  }
+  c.divideScalar(vol);
+  let best = null, least = Infinity;
+  for (const f of hull.faces) { const h = f.constant - f.normal.dot(c); if (h < least) { least = h; best = f.normal; } }
+  return new THREE.Quaternion().setFromUnitVectors(best, new THREE.Vector3(0, -1, 0));
+}
+
+// Sprite `s` rendered at `px` texels: set down on its resting face (`s.rest`), turned `s.turn` degrees about the
+// vertical, its foot on the ground at 0, sunk `s.sink` of its height into it, and the ground at `s.cut` of its height
+// (what lies below the ground is cut off). The frame the camera sees: its middle column over the
 // body's middle, its bottom at the body's lowest visible point. Returns the canvas.
 async function render(s, px) {
   const meshes = await meshesOf(s);
   const body = new THREE.Group();
   meshes.forEach(m => body.add(m));
+  if (s.rest) body.quaternion.copy(restingTurn(meshes));
   body.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(body), height = box.max.y - box.min.y;
-  body.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+  body.position.set(-(box.min.x + box.max.x) / 2, -box.min.y - (s.sink || 0) * height, -(box.min.z + box.max.z) / 2);
   const turned = new THREE.Group(); turned.add(body); turned.rotation.y = THREE.MathUtils.degToRad(s.turn || 0);
   const ground = (s.cut || 0) * height;
   turned.updateMatrixWorld(true);
