@@ -5,7 +5,7 @@
 // or a new frame shows them at once. A tape's map holds only totals per square and draws the cover in its ground's
 // colours (colour.wgsl).
 import { World } from './data';
-import { kindsOf } from './canopy';
+import { kindsOf, steadyRows } from './canopy';
 import { cooling } from './style';
 import { Style } from './style';
 import { CoverMarks, Marks } from './textures';
@@ -29,6 +29,9 @@ export class Vegetation implements GpuLayer {
   land: Land | null = null;
   /** The draw of the marks `prepare` decided last (none: no cover drawn). */
   private drawn: Marks | null = null;
+  /** The kinds' plants as the drawing shows them (canopy.ts `steadyRows`), and the world's year they were set at. */
+  private steady = new Map<number, Float32Array>();
+  private steadyYear = NaN;
 
   /** The kinds of world `w` from its table `rows` (tape/src/table.rs), or none (another view than the earth's, or a
    * tape). */
@@ -38,7 +41,9 @@ export class Vegetation implements GpuLayer {
     const m = w.meta, n = m.w * m.h;
     this.cellM = m.cell_m; this.mapW = m.w; this.mapH = m.h;
     const falling = cooling(w.meta.frames[0].year, (m.lat_north + m.lat_south) / 2);
-    this.marks.set(kindsOf(m.w, m.h, rows, t.row, 1 + n * t.row, t.kinds, t.kind_row, t.walls, falling), m.cell_m);
+    const year = w.meta.frames[0].year, shown = steadyRows(rows, 1 + n * t.row, n, t.kinds, t.kind_row, this.steady, year - this.steadyYear);
+    this.steadyYear = year;
+    this.marks.set(kindsOf(m.w, m.h, shown, t.row, 1 + n * t.row, t.kinds, t.kind_row, t.walls, falling), m.cell_m);
   }
 
   /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px. */

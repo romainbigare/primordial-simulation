@@ -55,9 +55,6 @@ const CLUMP_PX = 1.5; const CLUMP_MOST_M = 10.0; const WIDE_FROM = 0.25; const W
 // Discs at random places leave gaps however closed their stand: as a layer's plants cover from `CLOSES.x` to `CLOSES.y`
 // of the ground, the gaps between its crowns fill with its canopy, `GAP_TONE` as light as a crown (their shade).
 const CLOSES = vec2f(0.6, 0.9); const GAP_TONE = 0.65;
-// The floor under a closed stand between its drawn crowns is in their shade, this much darker, with flecks of sun
-// `SUN_FLECK_M` m across where the noise passes `SUN_FLECKS`.
-const CANOPY_SHADE = 0.55; const SUN_FLECK_M = 1.8; const SUN_FLECKS = vec2f(0.45, 0.7);
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -127,6 +124,10 @@ const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0; const SWARD_STA
 const STRAW_HUE = vec2f(0.85, 1.1);
 // Angled, a sward that covers up to `TUFTS_THICK.x` of the ground is drawn as tufts alone, from `.y` on as its tile.
 const TUFTS_THICK = vec2f(0.4, 0.75);
+// Under the blades drawn near, the sward's tiles show this light (the ground between the blades in their shade).
+const BLADE_GROUND = 0.6;
+// The blades show from `BLADE_SEEN_E.y` m a pixel, fully from `.x` in.
+const BLADE_SEEN_E = vec2f(0.004, 0.012);
 // Swathes and blades show as detail this size, m (`shows_at`): none where a pixel takes 1 m or more, where they would
 // read only as noise.
 const SWATH_DETAIL_M = 1.33;
@@ -394,17 +395,14 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   let straw = smoothstep(STRAW_HUE.x, STRAW_HUE.y, c.r / max(c.g, 1e-4));
   let plain = c * max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
   c = plain * grass_detail(e, straw, reeds, s);
-  // Scratch styles: blades drawn near over the tiles darkened (1); clumps standing over the tiles (2).
-  if (GRASS_STYLE == 1 && cover_look.look.z > 0.5) {
+  // Angled and very near, its blades drawn one by one (detail.wgsl `blades`) over its tiles in their shade
+  // (`BLADE_GROUND`), coming in smoothly as a pixel passes from `BLADE_SEEN_E.y` to `.x` m.
+  if (cover_look.look.z > 0.5) {
     let near = 1.0 - ease(BLADE_SEEN_E.x, BLADE_SEEN_E.y, e);
     if (near > 0.0) {
       let b = blades(e);
-      c = mix(c, mix(c * 0.6, plain * b.x, b.y), near);
+      c = mix(c, mix(c * BLADE_GROUND, plain * b.x, b.y), near);
     }
-  }
-  if (GRASS_STYLE == 2 && cover_look.look.z > 0.5 && blades_show(e) > 0.0) {
-    let t = sward_tufts(plain, e, 0.6);
-    c = mix(c, t.rgb, t.a * blades_show(e));
   }
   // Angled and near, a thin sward is its tufts standing on bare ground (detail.wgsl `sward_tufts`), not a veil: fully
   // where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on.
@@ -543,16 +541,8 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, ho
   }
   var g = vec2f(0.0, 1.0);
   if (unshown > 0.0) { g = grain(at, l, share * thick, e); }
-  // Under their marks a stand of trees that closes its ground shades the floor between its drawn crowns (`CLOSES`):
-  // the floor shows, `CANOPY_SHADE` darker, with flecks of sun where the noise opens the canopy (`SUN_FLECK_M`, `SUN_FLECKS`).
-  var shade = 0.0;
-  if (l == STANDS) { shade = CANOPY_SHADE * ease(CLOSES.x, CLOSES.y, min(share * thick, 1.0)) * (1.0 - unshown); }
-  if (shade > 0.0 && !unseen(SUN_FLECK_M)) {
-    let n = noise_l(lat_turned(SUN_FLECK_M, vec2f(0.0)), 81).x + 0.5 * noise_l(lat_turned(0.37 * SUN_FLECK_M, vec2f(5.0)), 82).x;
-    shade *= 1.0 - shows_at(SUN_FLECK_M, e) * smoothstep(SUN_FLECKS.x, SUN_FLECKS.y, n);
-  }
-  let drawn = g.x * unshown;
-  let a = drawn + shade * (1.0 - drawn);
+  // (Where its marks are drawn, the floor between them is in their own shadows: cover.wgsl `plant`.)
+  let a = g.x * unshown;
   if (a <= 0.0) { return dst; }
-  return vec4f(c * g.y * drawn, a) + dst * (1.0 - a);
+  return vec4f(c * g.y * a, a) + dst * (1.0 - a);
 }

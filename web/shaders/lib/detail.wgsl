@@ -120,10 +120,6 @@ fn soil_detail(p: Spot) -> vec3f {
 // The change the photograph of mossy rock gives bare bed, at e m a pixel.
 fn rock_detail(e: f32) -> vec3f { return detail(ROCK_TEX, e); }
 
-// Which drawing of the grass (scratch builds compare them): 0 the tiles in hexagons, 1 blades drawn near, 2 the tiles in
-// hexagons with clumps standing over them.
-const GRASS_STYLE = 0;
-
 // The change the grass gives the sward of cover s at e m a pixel; angled, its tiles laid in hexagons (`grass_hexes`),
 // green, dry as far as the sward is straw (`straw`, 0..1), with tall reeds as far as they stand (`reeds`, 0..1); its fine
 // change `GRASS_FAR` of itself from `GRASS_FAR_E` m a pixel on, where it would read as noise; lighter and darker,
@@ -191,13 +187,12 @@ fn grass_hexes(e: f32, n: f32, dry: bool, reeds: f32) -> vec3f {
   return mix(vec3f(dot(out, LUMA)), out, CARPET_HUE);
 }
 
-// Blades of grass drawn one by one, near (style 1): over the pixel, from the cells of a lattice `BLADE_CELL_M` m wide,
+// Blades of grass drawn one by one, near (cover_field.wgsl `sward`): over the pixel, from the cells of a lattice `BLADE_CELL_M` m wide,
 // two blades a cell at random feet, each `BLADE_LONG` m long by its own draw standing up `STAND` of that (angled),
 // leaning and bending its own way, `BLADE_W` m wide at its foot narrowing to its tip, dark at its foot and light at its
-// tip (`BLADE_TONE`); the nearer over the farther. Its tone over the sward's colour and its cover; they show from
-// `BLADE_SEEN_E` m a pixel in.
+// tip (`BLADE_TONE`); the nearer over the farther. Its tone over the sward's colour and its cover (they show near:
+// cover_field.wgsl `BLADE_SEEN_E`).
 const BLADE_CELL_M = 0.035; const BLADE_LONG = vec2f(0.06, 0.2); const BLADE_W = 0.006; const BLADE_TONE = vec2f(0.45, 1.35);
-const BLADE_SEEN_E = vec2f(0.004, 0.012);
 fn blades(e: f32) -> vec2f {
   let l = lat_axes(BLADE_CELL_M, vec2f(0.0));
   var tone = 0.0;

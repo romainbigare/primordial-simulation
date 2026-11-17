@@ -17,8 +17,8 @@ const SPRAYS = 30.0;
 
 // The sprites a plant of q's kind is drawn from, by its numbers (the first and how many): a tree by its crown's form
 // (form.ts `formOf`, round where it is not sure) and its height, a dry kind's broad crown a quiver tree (from `QUIVER_DRY`
-// of dryness); a cone young under `CONE_YOUNG_M` m and small under `SMALL_M` m (spruces, pines), a column or tiers a
-// young pine under `PINE_YOUNG_M` m; a bush by how dry its kind's ground (its draw mixing the sets near their borders,
+// of dryness); a cone young under `CONE_YOUNG_M` m and small under `SMALL_M` m (spruces, pines), a column a spruce
+// (young under `CONE_YOUNG_M` m), tiers a pine (young under `PINE_YOUNG_M` m, small under `SMALL_M` m); a bush by how dry its kind's ground (its draw mixing the sets near their borders,
 // `BUSH_DRY`): leafy, middling, or a dry land's.
 const QUIVER_DRY = 0.5; const SMALL_M = 3.0; const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
 const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
@@ -35,7 +35,11 @@ fn model_set(q: Plant) -> vec2i {
     if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCES_YOUNG); }
     return vec2i(FIR_FROM, FIRS);
   }
-  if (f == COLUMN || f == TIERED) {
+  if (f == COLUMN) {
+    if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCES_YOUNG); }
+    return vec2i(FIR_FROM, FIRS);
+  }
+  if (f == TIERED) {
     if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINES_SMALL); }
     if (q.h < PINE_YOUNG_M) { return vec2i(PINE_YOUNG_FROM, PINES_YOUNG); }
     return vec2i(PINE_FROM, PINES);
@@ -83,7 +87,7 @@ fn model_plant(q: Plant, p: vec2f, e: f32, snow: f32) -> vec4f {
 // (`SHADOW_BLUR` of its sprite at least a pixel); its leaves as closed as its crown (a bare crown casts its branches'),
 // a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover.wgsl
 // `lattice`). How dark it makes the ground, 0..1.
-const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.02;
+const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.05;
 fn model_shadow(q: Plant, p: vec2f, e: f32) -> f32 {
   let fit = model_fit(q);
   let v = p - q.at;
@@ -93,7 +97,8 @@ fn model_shadow(q: Plant, p: vec2f, e: f32) -> f32 {
   if (up < 0.0 || up > 1.0) { return 0.0; }
   let uv = vec2f((v.x - v.y) / fit.w + 0.5, 1.0 - up);
   if (uv.x < 0.0 || uv.x > 1.0) { return 0.0; }
-  let t = model_texel(fit.s, uv, max(e / fit.w, SHADOW_BLUR));
+  // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
+  let t = model_texel(fit.s, uv, max(max(e / fit.w, e / long), SHADOW_BLUR));
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
   let kept = t.a * mix(1.0, q.closed, leafy);
   let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));

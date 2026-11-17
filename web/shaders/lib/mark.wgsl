@@ -114,8 +114,12 @@ fn weight(cs: Corners, s: i32, g: i32, chance: vec4f, thick: f32, f: Foot, loose
 // of rank `x` among the plants that could stand there: its square (of the four) and kind, or -1 where none stands. Each
 // kind of each square counts by its share at the foot; on the lattice of stands the squares' first kinds (their chances
 // negated, canopy.ts `Paint`) are picked where `stand_pick` falls in their share, as the field far away has them, the
-// rest elsewhere.
-fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, x: f32) -> vec2i {
+// rest elsewhere. Whether a mark stands is its rank `x` against the kinds' shares together; which kind, a race of their
+// own draws (`RACE_STREAM`) for the cell `id`.
+const RACE_STREAM = 175;
+// A kind's form and how surely it is drawn share one number: form + this x sure (canopy.ts `SURE_PACK`).
+const SURE_PACK = 0.5;
+fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, x: f32, id: vec2i) -> vec2i {
   let groups = groups();
   var sum = 0.0;
   var firsts = 0.0;
@@ -138,27 +142,29 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, x: f32) -> vec
     }
   }
   if (x >= sum) { return vec2i(-1); }
-  // Of the first kinds or of the rest, and its place among them.
-  var v = x;
+  // Of the first kinds or of the rest.
   var group = false;
-  if (firsts > 0.0) {
-    v = stand_pick(stand_draw(at, STAND_M), x / sum) * sum;
-    group = v < firsts;
-    if (!group) { v -= firsts; }
-  }
-  var acc = 0.0;
+  if (firsts > 0.0) { group = stand_pick(stand_draw(at, STAND_M), x / sum) * sum < firsts; }
+  // Of those, the kind whose own draw for the cell, by its weight, comes first (a weighted race: -ln u / weight), so each
+  // kind keeps its marks' places as the others' shares and order change (its draw keyed by its starting kind, the
+  // label it keeps, and its square).
+  var best = vec2i(-1);
+  var first_at = 1e30;
   for (var s = 0; s < 4; s++) {
     for (var g = 0; g < groups; g++) {
       let chance = chance_at(l, cs, s, g);
       let first = select(vec4f(0.0), vec4f(1.0), chance < vec4f(0.0));
       let ws = weight(cs, s, g, chance, thick, f, loose) * select(vec4f(1.0) - first, first, group);
       for (var t = 0; t < 4; t++) {
-        acc += ws[t];
-        if (v < acc) { return vec2i(s, 4 * g + t); }
+        if (ws[t] <= 0.0) { continue; }
+        let root = u32(max(kind(shape_plane(4 * g + t), cs.at[s]).y, 0.0) + 0.5);
+        let u = (f32(lowbias(id, RACE_STREAM + 4 * i32(root) + s) >> 8u) + 0.5) / 16777216.0;
+        let at_t = -log(u) / ws[t];
+        if (at_t < first_at) { first_at = at_t; best = vec2i(s, 4 * g + t); }
       }
     }
   }
-  return vec2i(-1);
+  return best;
 }
 
 // The plant of kind `t` of the square at `sq` on lattice l with its foot at `c`, its size's draw `size`, its own random
@@ -172,7 +178,9 @@ fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, reach: f32
   var shape = vec4f(0.0);
   var petal = vec4f(0.0);
   if (to.w == TREE) {
-    shape = kind(shape_plane(t), sq);
+    // Its form and how surely, packed as one number (canopy.ts `SURE_PACK`).
+    let packed = kind(shape_plane(t), sq);
+    shape = vec4f(floor(packed.x), fract(packed.x) / SURE_PACK, packed.z, packed.w);
     // A mark of the trees' lattice that stands for several plants is their cluster, a crown of knots, each a plant's
     // crown (crown.wgsl `knots`): its kind's form fades into the round crown as the plants pass one, and the cluster
     // is drawn surely from two.
@@ -221,7 +229,7 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   if (rank.x >= all * thick) { return none; }
   let f = foot(at);
   if (f.stands <= 0.0) { return none; }
-  let pick = pick_kind(l, at, cs, thick, f, rank.x);
+  let pick = pick_kind(l, at, cs, thick, f, rank.x, id);
   if (pick.x < 0) { return none; }
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
