@@ -82,7 +82,7 @@ fn detail(t: i32, e: f32) -> vec3f {
 // Soil's images lie in patches about `SOIL_IMAGE_M` m across, each on a noise of its own (streams from `SOIL_NOISE`), and
 // meet the images under them over `SOIL_EDGE` of that noise (made even, 0..1) by their heights (ragged.wgsl).
 const SOIL_IMAGE_M = 2.5; const SOIL_EDGE = 0.06; const SOIL_NOISE = 180;
-// An image that takes this much of the ground under it covers all of it (the rest is rounding).
+// An image that takes this much of what is left is the last (the rest is rounding).
 const TAKES_ALL = 0.999;
 
 // The lightness of a change, as a height (ragged.wgsl `claim`).
@@ -99,24 +99,29 @@ fn soil_detail(p: Spot) -> vec3f {
   let sand = max(p.sand, 0.0);
   for (var i = 0; i < 5; i++) { w[i] *= 1.0 - sand; }
   w[5] = sand;
-  // The images lie in a stack, each over those before it: image i covers, of the ground under it, the share its weight
-  // is of its own and theirs, where its own noise falls under that share. So each holds its share of the ground on the
-  // mean, and a small share is a few small patches of its own, not a thin band between two others. The first lies
-  // under all (no noise is read for it); an image is read only where it shows.
-  var out = vec3f(1.0);
-  var under = 0.0;
+  var left = 0.0;
+  for (var i = 0; i < 6; i++) { left += w[i]; }
+  if (left <= 0.0) { return vec3f(1.0); }
+  // The images lie in a stack, each over those after it: image i covers, of the ground the ones before leave, the share
+  // its weight is of what is left, where its own noise falls under that share. So each holds its share of the ground
+  // on the mean, and a small share is a few small patches of its own, not a thin band between two others. `d`: how far
+  // inside its part each lies, in half widths of the edge; from `last` on, one covers all.
+  var d = array<f32, 6>(-CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN);
+  var last = 5;
   for (var i = 0; i < 6; i++) {
     if (w[i] <= 0.0) { continue; }
-    under += w[i];
-    let take = w[i] / under;
-    // How far inside its part the point lies, in half widths of the edge.
-    var d = CLAIMS_WITHIN;
-    if (take < TAKES_ALL) {
-      d = (take - smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.2 + 0.31 * f32(i))), SOIL_NOISE + i).x)) / SOIL_EDGE;
-      if (d <= -CLAIMS_WITHIN) { continue; }
-    }
+    let take = w[i] / max(left, 1e-6);
+    left -= w[i];
+    if (take >= TAKES_ALL) { last = i; break; }
+    let u = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.2 + 0.31 * f32(i))), SOIL_NOISE + i).x);
+    d[i] = (take - u) / SOIL_EDGE;
+    if (d[i] >= CLAIMS_WITHIN) { last = i; break; }
+  }
+  var out = detail(t[last], p.e);
+  for (var i = last - 1; i >= 0; i--) {
+    if (d[i] <= -CLAIMS_WITHIN) { continue; }
     let c = detail(t[i], p.e);
-    out = select(mix(out, c, height_mix(d, height_of(out), height_of(c))), c, d >= CLAIMS_WITHIN);
+    out = mix(out, c, height_mix(d[i], height_of(out), height_of(c)));
   }
   // River pebbles where the bed's stones lie, in patches of their own as many as it holds.
   if (p.stony > 0.02) {
