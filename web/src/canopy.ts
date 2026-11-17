@@ -28,13 +28,16 @@ const BUSH_GROW = 2.5;
 /** The numbers of a kind in the core's row (tape/src/stands.rs `row`). */
 /** A kind's form and how surely it is drawn share one number: form + this x sure (mark.wgsl `SURE_PACK`). */
 const SURE_PACK = 0.5;
+/** How closed a kind's crown is and the share of its leaves left this season share one number: the leaves left in
+ * steps of 1 / `LEFT_STEPS` (its whole part) + how closed (its fraction, under 1) (mark.wgsl `LEFT_STEPS`). */
+const LEFT_STEPS = 100;
 const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16, rooted: 17, need: 18, walls: 19 } as const;
 /** The planes of the kinds' table (lib/mark.wgsl `kind`) for squares of `kinds` kinds (the world's variety, the core's
  * `Config::variety`): of each lattice the chance a cell holds a mark of each kind where its roots hold (over the share
  * of its square that holds it, the core's `Cover::rooted`; on the lattice of stands, `STANDS`, negated for its square's
  * first kind, `Paint`) and the mark's width, m; how wet each kind needs its ground and how deep its loose ground, m (the
  * core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); then of each kind its form (height and stem's
- * width, m, how closed its crown is, its capture area per kg, log10 m²/kg), the colours its plants span (style.ts
+ * width, m, how closed its crown is and the leaves it has left, `LEFT_STEPS`, its capture area per kg, log10 m²/kg), the colours its plants span (style.ts
  * `KindLook`: the first with its walls' share, the second with its design, `designOf`), its flowers (their colour and
  * the share of its plants in flower) and its shape (its crown's form and how surely, form.ts `formOf`, packed as one
  * number, its starting kind, the plants one of its marks on the lattice of stands stands for, and how dry its ground). A plane holds four numbers: one for each kind of a group of four
@@ -311,11 +314,13 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       // A woody kind's crowns as wide as their wood holds them through the year (`woodyCrowns`), as closed as its leaves.
       const woody = design !== DESIGN.herb ? woodyCrowns(r, mean) : null;
       if (woody) { r[K.width] = woody.width; r[K.cover] = woody.cover; r[K.crown] = woody.closed; }
+      // How closed its crown is with the leaves it bears this season: how dense times the leaves left.
       const c = seenFar(look), crown = r[K.crown] * look.left;
+      const packed = Math.round(look.left * LEFT_STEPS) + Math.min(r[K.crown], 1 - 1e-3);
       const shape = formOf({ leaf: r[K.leaf], frost: r[K.frost], moist: r[K.moist], height: r[K.height], width: r[K.width], seed: r[K.seed] });
       put(group(P.need, k), i, k & 3, 10 ** r[K.moist]);
       put(group(P.roots, k), i, k & 3, mean >= ROOTED_ALL ? 0 : r[K.need]);
-      [r[K.height], r[K.stem], crown, r[K.leaf]].forEach((v, q) => put(P.form + k, i, q, v));
+      [r[K.height], r[K.stem], packed, r[K.leaf]].forEach((v, q) => put(P.form + k, i, q, v));
       [...look.from, r[K.wood]].forEach((v, q) => put(P.from + k, i, q, v));
       [...look.to, design].forEach((v, q) => put(P.to + k, i, q, v));
       [...look.petal, look.bloom].forEach((v, q) => put(P.petal + k, i, q, v));

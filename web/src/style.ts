@@ -18,8 +18,8 @@ export type Style = 'above' | 'angled';
 export interface Leafy { leaf: number; wood: number; moist: number; frost: number; pigment: number; act: number; frozen: number; seed: number; design: number; t: number; melt: number }
 
 /** A kind's look this month: the colours its plants span (each plant takes a point between them by its own random
- * number), a reflectance each; the share of its crown left (less as it stands bare while dormant); and its flowers:
- * their colour and the share of its plants in flower (on a bush, in flower or in fruit). */
+ * number), a reflectance each; the share of its leaves left this season (less as a kind that sheds stands bare while
+ * dormant); and its flowers: their colour and the share of its plants in flower (on a bush, in flower or in fruit). */
 export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom: number }
 
 /** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (cover.wgsl `plant`), and a herb,
@@ -87,8 +87,11 @@ const WEATHERED = 0.35;
 /** One plant turns at its own time: the plants of a kind span this much of the turn either way of its stage, once the
  * stage is twice this far in. */
 const TURN_SPREAD = 0.2;
-/** A dormant crown keeps this share of its leaves. */
+/** A dormant crown of a kind that sheds keeps this share of its leaves. */
 const BARE_LEFT = 0.35;
+/** A kind that keeps its leaves keeps them green through the cold and the drought: darker by up to this share of its
+ * lightness in the cold, and duller by up to this share of its chroma in the drought. */
+const KEPT_DARK = 0.25, KEPT_DULL = 0.4;
 
 // Flowers: a herb in its active season flowers as much as it puts into seeds, a bush as much in flower or in fruit; the
 // flowers' colour turns round the hue circle with its seed share and its moisture gene.
@@ -162,22 +165,26 @@ function turned(g: Rgb, s: number, reach: number, falling: number): Rgb {
   return lerp3(spring, autumn, falling);
 }
 
-/** How much a kind of design `design` and capture area per kg `leaf` sheds its leaves in the cold, 0..1 (herbs: not). */
+/** How much a kind of design `design` and capture area per kg `leaf` sheds its leaves in the cold or the drought, 0..1
+ * (herbs: not; they die back, `kindLook`). */
 function shedOf(design: number, leaf: number): number {
   return design === DESIGN.herb ? 0 : smooth(SHED_LEAF[0], SHED_LEAF[1], leaf);
 }
 
 /** The look of kind `k` whose physical leaf reflects `phys` (linear), while the ground cools by `falling` (`cooling`):
  * its stage in the cold's turn (a shedding kind as its ground nears its frost gene; any kind on frozen ground or by its
- * frozen share) and in the drought's (dormant on unfrozen ground). */
+ * frozen share) and in the drought's (dormant on unfrozen ground). Only a kind of thin leaves turns and sheds (`shedOf`;
+ * a herb dies back to straw); one of thick leaves keeps them, darker in the cold and duller in the drought. */
 export function kindLook(k: Leafy, phys: Rgb, falling: number): KindLook {
   const g = green(k, phys), frozenGround = smooth(k.melt + FROZEN_GROUND_K, k.melt, k.t);
+  const sheds = k.design === DESIGN.herb ? 1 : shedOf(k.design, k.leaf);
   const cold = Math.max(shedOf(k.design, k.leaf) * smooth(k.frost + COLD_NEAR_K, k.frost, k.t), (1 - k.act) * frozenGround, k.frozen);
   const drought = (1 - k.act) * (1 - frozenGround);
   const dry = (c: Rgb) => lerp3(lerp3(c, fromLch(STRAW), smooth(0, TO_STRAW, drought)), fromLch(BARE), smooth(TO_STRAW, 1, drought));
   const reach = smooth(RED_FROM, RED_TO, k.pigment), spread = TURN_SPREAD * smooth(0, 2 * TURN_SPREAD, cold);
-  const at = (s: number, r: number) => linear(dry(turned(g, clamp(s), r, falling)));
-  const dormant = Math.max(smooth(TO_DEEP, TO_BARE, cold), smooth(TO_STRAW, 1, drought));
+  const kept: Rgb = [g[0] * (1 - KEPT_DARK * clamp(cold)), g[1] * (1 - KEPT_DULL * drought), g[2] * (1 - KEPT_DULL * drought)];
+  const at = (s: number, r: number) => linear(lerp3(kept, dry(turned(g, clamp(s), r, falling)), sheds));
+  const dormant = Math.max(smooth(TO_DEEP, TO_BARE, cold), smooth(TO_STRAW, 1, drought)) * sheds;
   const place = PETAL_0 + PETAL_PER_SEED * (k.seed - SEED_0) + PETAL_PER_MOIST * (k.moist - MOIST_0);
   const x = (((place % 1) + 1) % 1) * PETALS.length, i = Math.floor(x);
   return {

@@ -2,8 +2,8 @@
 // conifers and bushes seen from the angled view, lit from the north-west, four to a layer of the detail texture (tex.wgsl
 // `MODELS_FROM`), each standing on the bottom middle of its quarter. A mark of a kind draws one of its form's sprites
 // (its own draw picks which), covering as much as its crown and no taller than it stands; its leaves take its kind's colour in the
-// season (the sprite's lightness about the leaves' mean, `LEAF_MEAN`), its wood keeps the model's bark, and an open
-// crown keeps that share of its leaves.
+// season (the sprite's lightness about the leaves' mean, `LEAF_MEAN`), its wood keeps the model's bark; a thin crown is a
+// smaller sprite (covering as much as its leaves close), and only the season takes leaves off it.
 
 // A sprite is drawn so its cover (tex.wgsl `model_fill` of its box) is its crown's ground, pi/4 of its width squared, as
 // the field far away counts it (canopy.ts `marksOn`): its leaves have gaps, so it is wider than the crown, at most
@@ -60,7 +60,9 @@ fn model_fit(q: Plant) -> ModelFit {
   // Covering its crown's ground (`MODEL_WIDER`), no taller than it stands (angled, `STAND` of its height), within its
   // lattice's reach with its lean (the pixel looks no farther for it: cover.wgsl `lattice`).
   let stands = select(BUSH_DEEP * q.d, STAND * q.h, q.design == TREE);
-  let covers = q.d * min(sqrt(0.25 * PI / (model_fill(s) * aspect)), MODEL_WIDER);
+  // A thin crown (how closed over the leaves left) is a smaller one, never a half-bare one.
+  let crown_closed = q.closed / max(q.left, 1e-3);
+  let covers = q.d * min(sqrt(0.25 * PI * crown_closed / (model_fill(s) * aspect)), MODEL_WIDER);
   let w = min(min(covers, stands / aspect), q.reach / (0.5 + abs(q.lean.x) * aspect));
   return ModelFit(s, w, w * aspect, (covers * covers) / (w * w));
 }
@@ -82,8 +84,8 @@ fn model_plant(q: Plant, p: vec2f, e: f32, snow: f32) -> vec4f {
   if (t.a <= 0.0) { return vec4f(0.0); }
   let lum = dot(t.rgb, LUMA);
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
-  // An open crown keeps that share of its leaves, in sprays (`SPRAYS` across the sprite) that fall whole.
-  let kept = smoothstep(-0.12, 0.12, q.closed - (0.5 + 0.5 * noise(uv * SPRAYS + 17.0 * q.r.xz, 150).x));
+  // A crown keeps the share of its leaves left this season, in sprays (`SPRAYS` across the sprite) that fall whole.
+  let kept = smoothstep(-0.12, 0.12, q.left - (0.5 + 0.5 * noise(uv * SPRAYS + 17.0 * q.r.xz, 150).x));
   var leaf = q.rgb * lum / LEAF_MEAN;
   leaf = mix(leaf, CROWN_SNOW_RGB * lum / LEAF_MEAN, CROWN_SNOW * snow * q.closed * smoothstep(0.6, 1.4, lum / LEAF_MEAN));
   let rgb = mix(t.rgb, leaf, leafy);
@@ -92,7 +94,7 @@ fn model_plant(q: Plant, p: vec2f, e: f32, snow: f32) -> vec4f {
 
 // The shadow of plant q drawn from a model sprite at p, angled, e m a pixel: its sprite cast on the ground away from the
 // sun (south-east), each of its texels at a height on it laid `MODEL_SHADOW_RUN` of that height along the ground, blurred
-// (`SHADOW_BLUR` of its sprite at least a pixel); its leaves as closed as its crown (a bare crown casts its branches'),
+// (`SHADOW_BLUR` of its sprite at least a pixel); its leaves as many as are left (a bare crown casts its branches'),
 // a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover.wgsl
 // `lattice`). How dark it makes the ground, 0..1.
 const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.05;
@@ -108,7 +110,7 @@ fn model_shadow(q: Plant, p: vec2f, e: f32) -> f32 {
   // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
   let t = model_texel(fit.s, uv, max(max(e / fit.w, e / long), SHADOW_BLUR));
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
-  let kept = dense_cover(t.a, fit.dense) * mix(1.0, q.closed, leafy);
+  let kept = dense_cover(t.a, fit.dense) * mix(1.0, q.left, leafy);
   let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));
   return select(BUSH_SHADOW, 1.0, q.design == TREE) * SHADOW * kept * edge;
 }

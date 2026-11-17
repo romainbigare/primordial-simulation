@@ -13,7 +13,7 @@
 // how dry its kind's ground, 0..1 (form.ts `Form`).
 struct Plant {
   at: vec2f, d: f32, h: f32, stem: f32, closed: f32, fine: f32, rgb: vec3f, wood: f32, r: vec3f, design: f32,
-  form: f32, sure: f32, petal: vec3f, blooms: f32, lean: vec2f, reach: f32, dry: f32,
+  form: f32, sure: f32, petal: vec3f, blooms: f32, lean: vec2f, reach: f32, dry: f32, left: f32,
 }
 
 // Paint colour rgb with coverage a over dst (premultiplied).

@@ -124,6 +124,9 @@ fn weight(cs: Corners, s: i32, g: i32, chance: vec4f, thick: f32, f: Foot, loose
 const RACE_STREAM = 175;
 // A kind's form and how surely it is drawn share one number: form + this x sure (canopy.ts `SURE_PACK`).
 const SURE_PACK = 0.5;
+// How closed a kind's crown is and the share of its leaves left share one number: the leaves left in steps of
+// 1 / `LEFT_STEPS` + how closed (canopy.ts `LEFT_STEPS`).
+const LEFT_STEPS = 100.0;
 fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, x: f32, id: vec2i) -> vec2i {
   let groups = groups();
   var sum = 0.0;
@@ -177,6 +180,9 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, x: f32, id: ve
 // stand (the rows looked at, textures.ts `ROWS_MOST`); no wider than its lattice's reach each way.
 fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, up: f32) -> Plant {
   let form = kind(form_plane(t), sq);
+  // Its leaves left this season, and how closed its crown is with them (how dense times the leaves left).
+  let left = floor(form.z) / LEFT_STEPS;
+  let closed = fract(form.z) * left;
   let first = kind(from_plane(t), sq);
   let to = kind(to_plane(t), sq);
   // A tree's form, a bush's flowers.
@@ -206,7 +212,7 @@ fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, up: f32) -
   let tint = vary(mix(first.rgb, to.rgb, r.x), fract(r.yz * 13.0));
   // A bush in flower or in fruit by a draw of its own (the next digits of its colour's), as its kind's share.
   let blooms = select(0.0, 1.0, fract(r.x * 16.0) < petal.w);
-  return Plant(c, min(width, 2.0 * reach), tall, form.y, form.z, fine, tint, first.w, fract(r * 7.0), to.w, shape.x, shape.y, petal.rgb, blooms, lean, reach, dry);
+  return Plant(c, min(width, 2.0 * reach), tall, form.y, closed, fine, tint, first.w, fract(r * 7.0), to.w, shape.x, shape.y, petal.rgb, blooms, lean, reach, dry, left);
 }
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square and kind packed as
