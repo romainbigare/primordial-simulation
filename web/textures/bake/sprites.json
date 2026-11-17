@@ -11,7 +11,8 @@
      240
     ],
     "cut": 0.05,
-    "set": "ROUND"
+    "set": "ROUND",
+    "bare": "_leaves$"
    },
    {
     "model": "island_tree_02",
@@ -20,7 +21,8 @@
      120,
      240
     ],
-    "cut": 0.05
+    "cut": 0.05,
+    "bare": "_leaves$"
    },
    {
     "model": "jacaranda_tree",
@@ -30,7 +32,8 @@
      240
     ],
     "cut": 0.05,
-    "set": "JACARANDA"
+    "set": "JACARANDA",
+    "bare": "_leaves$"
    },
    {
     "model": "fir_tree_01",
@@ -125,7 +128,8 @@
      180
     ],
     "set": "QUIVER",
-    "leaf": 0.042
+    "leaf": 0.042,
+    "bare": "_leaf$"
    },
    {
     "model": "quiver_tree_02",

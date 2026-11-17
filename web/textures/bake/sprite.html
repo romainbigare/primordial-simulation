@@ -73,9 +73,9 @@ function restingTurn(meshes) {
 
 // Sprite `s` rendered at `px` texels: set down on its resting face (`s.rest`), turned `s.turn` degrees about the
 // vertical, its foot on the ground at 0, sunk `s.sink` of its height into it, and the ground at `s.cut` of its height
-// (what lies below the ground is cut off). The frame the camera sees: its middle column over the
+// (what lies below the ground is cut off), the meshes whose material matches `hide` left out. The frame the camera sees: its middle column over the
 // body's middle, its bottom at the body's lowest visible point. Returns the canvas.
-async function render(s, px) {
+async function render(s, px, hide) {
   const meshes = await meshesOf(s);
   const body = new THREE.Group();
   meshes.forEach(m => body.add(m));
@@ -103,6 +103,7 @@ async function render(s, px) {
   const side = 1.03 * Math.max(2 * half, top - bottom);
   const scene = new THREE.Scene();
   scene.add(turned);
+  turned.traverse(o => { if (o.isMesh) o.visible = !(hide && new RegExp(hide).test(o.material.name)); });
   // The ground: depth alone, so what lies below it is hidden and the background stays clear.
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(1e4, 1e4), new THREE.MeshBasicMaterial({ colorWrite: false }));
   plane.rotation.x = -Math.PI / 2; plane.position.y = ground; plane.renderOrder = -1;
@@ -179,25 +180,31 @@ function fillOf(cv, w, h) {
 }
 
 const sprites = [];
-// Renders sprite `s` into a cell `size` texels wide, its leaves scaled to mean lightness `s.leaf` where it is given (its
-// other texels by the square root of that scale); keeps it; returns its index.
+// Renders sprite `s` into a cell `size` texels wide (and, with `s.bare`, its bare twin: the meshes whose material matches
+// `s.bare` hidden, in the same frame, at half the side), its leaves scaled to mean lightness `s.leaf` where it is given
+// (its other texels by the square root of that scale); keeps it; returns its index.
 window.sprite = async (s, size) => {
   const px = SUPER * size, leafy = await render(s, px), b = coverBox(leafy);
   const k = (size * (1 - EDGE)) / Math.max(2 * b.half, b.bottom - b.top);
   const w = (2 * b.half * k) / size, h = ((b.bottom - b.top) * k) / size;
   const cell = placed(leafy, b, size, k), raw = leafLight(cell), light = s.leaf ? s.leaf / Math.max(raw, 1e-6) : 1;
-  sprites.push({ cell: scaled(cell, light), row: { w, h, fill: fillOf(cell, w, h), leaf: raw * light } });
+  const kept = { cell: scaled(cell, light), row: { w, h, fill: fillOf(cell, w, h), leaf: raw * light } };
+  if (s.bare) {
+    const bare = scaled(placed(await render(s, px, s.bare), b, size / 2, k / 2), light);
+    kept.bare = { cell: bare, row: { w, h, fill: fillOf(bare, w, h) } };
+  }
+  sprites.push(kept);
   return sprites.length - 1;
 };
-window.cellOf = i => sprites[i].cell.toDataURL('image/png');
-window.rowOf = i => sprites[i].row;
-// A strip of layers `side` texels wide, `per` cells a layer (1 or 4: two by two), of the sprites listed.
+window.cellOf = (i, bare) => (bare ? sprites[i].bare.cell : sprites[i].cell).toDataURL('image/png');
+window.rowOf = (i, bare) => (bare ? sprites[i].bare.row : sprites[i].row);
+// A strip of layers `side` texels wide, `per` cells a layer (1 or 4: two by two), of the sprites listed as [index, bare].
 window.strip = (list, side, per) => {
   const cells = per === 4 ? 2 : 1, cv = document.createElement('canvas');
   cv.width = side; cv.height = side * Math.ceil(list.length / per);
   const g = cv.getContext('2d'), c = side / cells;
-  list.forEach((i, k) => {
-    const s = sprites[i].cell, layer = Math.floor(k / per), q = k % per;
+  list.forEach(([i, bare], k) => {
+    const s = bare ? sprites[i].bare.cell : sprites[i].cell, layer = Math.floor(k / per), q = k % per;
     g.drawImage(s, (q % cells) * c, layer * side + Math.floor(q / cells) * c, c, c);
   });
   return cv.toDataURL('image/png');

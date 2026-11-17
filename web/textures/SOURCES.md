@@ -60,7 +60,9 @@ cell's bottom middle, rendered at twice the cell's side and shrunk. `trees.png` 
 layer; `models.png` the rest four to a layer. `bake/sprites.json` names each model, its parts (its nodes), the sides it
 is seen from (turns about the vertical), how much of its foot is cut off (the patch of ground some trees stand on), and
 whether it is set down on the face it rests on (the face of its convex hull nearest its centre of weight: the rocks)
-and how far it is sunk into the ground (a fifth of its height, cut off at the ground line), and the mean lightness its
+and how far it is sunk into the ground (a fifth of its height, cut off at the ground line), which of its materials are
+its leaves (a tree that sheds gets a bare twin: rendered again in the same frame with its leaves hidden, at half the
+side, four to a layer after the models' own sprites), and the mean lightness its
 leaves are scaled to (texels whose green stands out, as the page tells leaves: the models'
 leaves differ several times in lightness as the files have them), and the sets the page draws from. With the files
 fetched (`fetch.sh assets` also downloads what `sprites.json` names) and served as for the carpets,
@@ -71,5 +73,5 @@ alone, to compare.
 
 | strip | sprites (sets) |
 |---|---|
-| trees.png | island_tree_01, island_tree_02 (broad crowns), jacaranda_tree, each from three sides; fir_tree_01's three trees each from three sides; pine_tree_01's three pines, pine_sapling_medium's two (young pines), pine_sapling_small's three, fir_sapling_medium's three (young spruces); quiver_tree_01 and quiver_tree_02 each from two sides |
-| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest |
+| trees.png | island_tree_01, island_tree_02 (broad crowns), jacaranda_tree, each from three sides (each with a bare twin); fir_tree_01's three trees each from three sides; pine_tree_01's three pines, pine_sapling_medium's two (young pines), pine_sapling_small's three, fir_sapling_medium's three (young spruces); quiver_tree_01 (with bare twins: its trunk and branches) and quiver_tree_02 (one material: no twin) each from two sides |
+| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest; then the trees' bare twins |
