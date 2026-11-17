@@ -1,9 +1,9 @@
-// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl tex.wgsl crown.wgsl mark.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl tex.wgsl crown.wgsl cells.wgsl mark.wgsl models.wgsl
 // The marks of the plant cover's cells in view, decided once a frame (lib/mark.wgsl `decide`): a texel a cell, each
 // lattice's cells in rows of their own (`cover.rows`), drawn before the map (web/src/textures.ts `prepare`), one of its
 // words (`MarkWord`) into each of the marks' textures.
 
-// The word of the marks drawn (lib/mark.wgsl `mark_word`).
+// The word of the marks drawn (lib/cells.wgsl `mark_word`).
 struct MarkWord { word: vec4i }
 @group(0) @binding(2) var<uniform> mark_word_drawn: MarkWord;
 

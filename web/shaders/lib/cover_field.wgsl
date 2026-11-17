@@ -15,7 +15,6 @@ struct CoverLook {
 @group(0) @binding(15) var cover_field_tex: texture_2d_array<f32>;
 @group(0) @binding(16) var cover_field_sampler: sampler;
 
-const COVER_LATTICES = 3;
 // The layers of the field after the lattices' (canopy.ts `FIELD`): the herbs' sward and their flowers, and the part of
 // the sward and of the lattice of stands (`STANDS`, the trees') that is its first kind.
 const SWARD_LAYER = 3; const FLOWER_LAYER = 4; const SWARD_FIRST = 5; const STANDS_FIRST = 6;
@@ -77,16 +76,16 @@ const ROOTED_ALL = 0.999;
 // where their roots hold (land.wgsl `rooted`, over the share of their square that holds them, so the square keeps its
 // cover) and out of the snow (draw.wgsl `above_snow`). Each layer is read only where it may limit them.
 fn held_at(at: vec2f, b: Beneath) -> vec4f {
-  let mean = field_at(at, ROOTED_LAYER, 0.0);
+  let mean = field_at(at, ROOTED_LAYER);
   let roots = any(mean < vec4f(ROOTED_ALL));
   if (!roots && b.snow_m <= 0.0) { return vec4f(1.0); }
   var out = vec4f(1.0);
   if (roots) {
-    let need = field_at(at, NEED_LAYER, 0.0);
+    let need = field_at(at, NEED_LAYER);
     for (var c = 0; c < 4; c++) { out[c] = rooted(b.loose, need[c], b.loose_px) / max(mean[c], 1e-3); }
   }
   if (b.snow_m > 0.0) {
-    let tall = field_at(at, TALL_LAYER, 0.0);
+    let tall = field_at(at, TALL_LAYER);
     for (var c = 0; c < 4; c++) { out[c] *= above_snow(b.snow_m, tall[c]); }
   }
   return out;
@@ -160,15 +159,12 @@ fn cubic_field(at: vec2f, l: i32) -> vec4f {
   return sum;
 }
 
-// The field of lattice l at `at`, m from the map's north-west corner, at mip level lod: the colour its marks cover the
-// ground with (a reflectance, premultiplied) and the share they cover; at level 0 blended over the squares with land
-// (`on_land`, `land_plain`; a level below holds the most of the texels above it, which no square without land lessens).
-fn field_at(at: vec2f, l: i32, lod: f32) -> vec4f {
+// The field of lattice l at `at`, m from the map's north-west corner: the colour its marks cover the ground with (a
+// reflectance, premultiplied) and the share they cover, blended over the squares with land (`on_land`, `land_plain`).
+fn field_at(at: vec2f, l: i32) -> vec4f {
   let uv = at / (land.map.x * land.map.yz);
   if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec4f(0.0); }
-  let v = textureSampleLevel(cover_field_tex, cover_field_sampler, uv, l, lod);
-  if (lod > 0.0) { return v; }
-  return on_land(v, land_plain);
+  return on_land(field_tap(uv, l), land_plain);
 }
 
 // The field of lattice l at uv, blended between its texels.
@@ -215,9 +211,9 @@ fn in_stands(at: vec2f, e: f32, f: vec4f, l: i32, first: i32, rest: i32, m: f32)
   if (least_e() >= 2.0 * STAND_CALM_E) { return mean; }
   let shows = shows_at(m, e) * (1.0 - ease(STAND_CALM_E, 2.0 * STAND_CALM_E, e));
   if (shows <= 0.0) { return mean; }
-  let whole = field_at(at, l, 0.0);
-  let one = field_at(at, first, 0.0);
-  let others = field_at(at, rest, 0.0);
+  let whole = field_at(at, l);
+  let one = field_at(at, first);
+  let others = field_at(at, rest);
   let told = ease(REST_LEAST, 2.0 * REST_LEAST, others.a / max(whole.a, 1e-6));
   if (told <= 0.0) { return mean; }
   let own = one.rgb / max(one.a, 1e-6);
@@ -335,7 +331,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   }
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
-    let fl = field_at(at, FLOWER_LAYER, 0.0);
+    let fl = field_at(at, FLOWER_LAYER);
     let bloom = clamp(fl.a / f.a, 0.0, 1.0) * (1.0 - reeds);
     if (bloom > 0.0) {
       let dots = flowers_at(e, bloom, fl.rgb / fl.a);
@@ -445,7 +441,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
 fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, hold: f32, dst: vec4f) -> vec4f {
   if (cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
   var unshown = 1.0;
-  if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_thing(field_at(at, WIDE_LAYER, 0.0)[l], e); }
+  if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_thing(field_at(at, WIDE_LAYER)[l], e); }
   let share = min(f.a * hold * thick, 1.0) * unshown;
   if (share <= 0.0) { return dst; }
   var c = f.rgb / f.a;
@@ -455,7 +451,7 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, ho
     if (groups > 0.0) { c *= 1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * groups; }
     c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
   }
-  let dark = FIELD_SHADOW * min(field_at(at, SHADE_LAYER, 0.0)[l] * hold * thick, 1.0) * unshown;
+  let dark = FIELD_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * thick, 1.0) * unshown;
   let below = vec4f(dst.rgb * (1.0 - dark), dark + dst.a * (1.0 - dark));
   return vec4f(c * share, share) + below * (1.0 - share);
 }

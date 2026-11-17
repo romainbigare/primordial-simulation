@@ -22,8 +22,8 @@ export interface Leafy { leaf: number; wood: number; moist: number; frost: numbe
  * dormant); and its flowers: their colour and the share of its plants in flower (on a bush, in flower or in fruit). */
 export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom: number }
 
-/** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (cover.wgsl `plant`), and a herb,
- * drawn only as the sward of the ground (cover_field.wgsl `sward`). */
+/** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (crowns.wgsl and cover.wgsl
+ * `plant`), and a herb, drawn only as the sward of the ground (cover_field.wgsl `sward`). */
 export const DESIGN = { tree: 0, bush: 1, herb: 2 } as const;
 /** A plant this tall or taller, m, stands (a tree, whatever its walls); a lower one is a bush where its kind is woody
  * (its grown plants hold this share of their dry mass as walls or more), else a herb (`designOf`). */

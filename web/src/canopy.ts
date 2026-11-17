@@ -21,7 +21,7 @@ export const REACH = [1, 1, 2];
  * crown's ground (models.wgsl `MODEL_WIDER`): a crown is at most its reach over this. */
 const SPRITE_WIDER = 1.6;
 /** A kind whose mean rooted share in its square is this near 1 is held at every point of it: its root need is sent as 0
- * (cover.wgsl `holds`), so the marks read no loose ground there. */
+ * (mark.wgsl `holds`), so the marks read no loose ground there. */
 const ROOTED_ALL = 0.999;
 /** A bush's mark is a clump of its plants this many times as wide as one, so its lobes read at a 10 m scale bar. */
 const BUSH_GROW = 2.5;
@@ -65,8 +65,8 @@ const LAND_AT = 10;
 export const STANDS = 2;
 
 /** A field of the cover: `w` x `h` texels over the map, a texel a square, of each layer (`FIELD`) a reflectance times the
- * share of the ground it covers, and that share, RGBA layer by layer; and its levels below (`mipsOf`). */
-export interface CoverField { w: number; h: number; data: Float32Array; mips: Float32Array[] }
+ * share of the ground it covers, and that share, RGBA layer by layer. */
+export interface CoverField { w: number; h: number; data: Float32Array }
 /** The cover of a frame: the kinds' table (`planesOf` its `planes`, a texel a square, row by row, plane under plane,
  * `PLANES_DOWN` planes a column: `cols` columns), its field, of each lattice the tallest plant and the widest mark drawn
  * on it, m (0: no square holds its marks), and the reflectance of the walls the cover builds (its stems). */
@@ -99,7 +99,7 @@ const HARDY_REFL: Rgb = [0.03, 0.08, 0.06];
  * it turns dormant, from the cold or from drought, is the style's (style.ts). */
 const PALE_REFL: Rgb = [0.10, 0.14, 0.04];
 const PALE_MOST = 0.4;
-/** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (cover.wgsl `SHADOW`,
+/** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (crown.wgsl `SHADOW`,
  * cover_field.wgsl `FIELD_SHADOW`). */
 const CROWN_SHADOW = 0.42;
 /** A plant's shadow darkens this many times the square of its crown's width of ground: angled, the marks cast their
@@ -362,7 +362,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
     flowers.rgb.forEach((v, q) => { field[layer(FIELD.flowers, i) + q] = (v / Math.max(flowers.covered, 1e-9)) * bloom * cover; });
     field[layer(FIELD.flowers, i) + 3] = bloom * cover;
   }
-  return { w, h, planes: P, cols, table, field: { w, h, data: field, mips: mipsOf(field, w, h) }, tallest, widest, walls };
+  return { w, h, planes: P, cols, table, field: { w, h, data: field }, tallest, widest, walls };
 }
 
 /** Into the far layer of `field` at square `i` (`FIELD.low`, `layer` its place): the sward, covering the share of the
@@ -383,29 +383,6 @@ function lowOf(field: Float32Array, i: number, layer: (l: number, i: number) => 
   const out = layer(FIELD.low, i);
   dst.forEach((v, q) => { field[out + q] = v; });
   field[out + 3] = a;
-}
-
-/** The levels of field `data` (`w` x `h`) below its own, each texel the most of the four (or, at an odd edge, six or
- * nine) above it: cover.wgsl reads a level about a pixel to skip a lattice none of whose marks stands near, so a level
- * holds a lattice wherever any texel under it does. Only the lattices' layers are made (no other layer is read below
- * its own level); the others' levels stay 0. */
-function mipsOf(data: Float32Array, w: number, h: number): Float32Array[] {
-  const out: Float32Array[] = [];
-  let src = data;
-  while (w > 1 || h > 1) {
-    const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1), dst = new Float32Array(FIELD.count * 4 * nw * nh);
-    for (let l = 0; l < LATTICES.length; l++) for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
-      const ys = 2 * y, ye = y === nh - 1 ? h : Math.min(2 * y + 2, h), xs = 2 * x, xe = x === nw - 1 ? w : Math.min(2 * x + 2, w);
-      for (let c = 0; c < 4; c++) {
-        let most = 0;
-        for (let sy = ys; sy < ye; sy++) for (let sx = xs; sx < xe; sx++) most = Math.max(most, src[((l * h + sy) * w + sx) * 4 + c]);
-        dst[((l * nh + y) * nw + x) * 4 + c] = most;
-      }
-    }
-    out.push(dst);
-    w = nw; h = nh; src = dst;
-  }
-  return out;
 }
 
 /** Scratch of `half`: one float and its bits. */

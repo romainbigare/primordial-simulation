@@ -34,10 +34,16 @@ fn form_depth(f: i32) -> f32 { var d = array<f32, 6>(CROWN_SHARE, 0.8, 0.85, 0.3
 fn form_wide(f: i32) -> f32 { var w = array<f32, 6>(1.0, 0.85, 0.6, 1.2, 1.0, 1.1); return w[f]; }
 // Angled, a plant stands up this share of its height on the map (textures.ts `STAND`).
 const STAND = 0.5;
+// Snow lies on a crown's upper, lit side (its light from `SNOW_LIT.x` to `SNOW_LIT.y` times flat ground's) up to this
+// share of its colour, as closed as the crown is (a bare one holds little), in the colour of fresh snow (colour.wgsl
+// `SNOW`).
+const CROWN_SNOW = 0.8; const SNOW_LIT = vec2f(0.9, 1.15); const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
+// A shadow lets through the sky's light and what crowns scatter, about half of the sun's (canopy.ts `CROWN_SHADOW`).
+const SHADOW = 0.42; const BUSH_SHADOW = 0.3;
 // A plant's leaves' fineness runs from the broadest (capture area per kg, log10 m²/kg, `LEAF_THICK`) to the finest
 // (`LEAF_THIN`) (mark.wgsl `plant_of`).
 const LEAF_THICK = -0.5; const LEAF_THIN = 0.7;
-// A crown leans by up to its plant's lean (cover.wgsl `LEAN`); from above a lean shows as this share of it.
+// A crown leans by up to its plant's lean (mark.wgsl `LEAN`); from above a lean shows as this share of it.
 const LEAN_SEEN = 0.3;
 // Nothing of a crown reaches past this many of its radii from its middle (a clump's leafy edge stands a little out).
 const CROWN_REACH = 1.12;

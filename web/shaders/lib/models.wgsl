@@ -63,7 +63,7 @@ fn model_fit(q: Plant) -> ModelFit {
   let s = pick.x + min(i32(fract(q.r.y * 7.13) * f32(pick.y)), pick.y - 1);
   let aspect = model_h(s) / model_w(s);
   // Covering its crown's ground (`MODEL_WIDER`), no taller than it stands (angled, `STAND` of its height), within its
-  // lattice's reach with its lean (the pixel looks no farther for it: cover.wgsl `lattice`).
+  // lattice's reach with its lean (the pixel looks no farther for it: cover_marks.wgsl `lattice`).
   let stands = select(BUSH_DEEP * q.d, STAND * q.h, q.design == TREE);
   // A thin crown (how closed over the leaves left) is a smaller one, never a half-bare one.
   let crown_closed = q.closed / max(q.left, 1e-3);
@@ -110,13 +110,14 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
 // The shadow of plant q drawn from its model sprite `fit` at p, angled, e m a pixel: its sprite cast on the ground away from the
 // sun (south-east), each of its texels at a height on it laid `MODEL_SHADOW_RUN` of that height along the ground, blurred
 // (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of its sprays as are left, over its bare
-// twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover.wgsl
+// twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover_marks.wgsl
 // `lattice`). How dark it makes the ground, 0..1.
 const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.05;
+// The length of that shadow along the ground southward, m, within its reach.
+fn model_shadow_long(q: Plant, fit: ModelFit) -> f32 { return min(MODEL_SHADOW_RUN * fit.h, 0.9 * q.reach); }
 fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let v = p - q.at;
-  // Its length along the ground southward, within its reach.
-  let long = min(MODEL_SHADOW_RUN * fit.h, 0.9 * q.reach);
+  let long = model_shadow_long(q, fit);
   let up = v.y / long;
   if (up < 0.0 || up > 1.0) { return 0.0; }
   let uv = vec2f((v.x - v.y) / fit.w + 0.5, 1.0 - up);
