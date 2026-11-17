@@ -87,15 +87,18 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
   if (fade <= 0.0 || field_at(cover.corner.xy + p, l, cover.near[l].x).a <= 0.0) { return; }
   let side = g.z;
   let cell = floor(g.xy + p / side);
-  // A mark reaches no farther than a cell's side from its foot, and angled as far north as its tallest stands.
+  // A mark reaches no farther than its lattice's reach from its foot (`cover.near`), and angled as far north as its
+  // tallest stands.
+  let r = i32(cover.near[l].y);
+  let reach = f32(r) * side;
   let rise = g.w * side;
   let n = i32(land.map.y);
-  for (var j = -1; j <= 1 + i32(g.w); j++) {
-    for (var i = -1; i <= 1; i++) {
+  for (var j = -r; j <= r + i32(g.w); j++) {
+    for (var i = -r; i <= r; i++) {
       let k = cell + vec2f(f32(i), f32(j));
       let h = place(cover.base[l].xy + vec2i(k), l);
       let d = p - (k - g.xy) * side - h.xy * side;
-      if (abs(d.x) > side + e || d.y > side + e || d.y < -side - rise - e) { continue; }
+      if (abs(d.x) > reach + e || d.y > reach + e || d.y < -reach - rise - e) { continue; }
       let m = decided(l, k);
       if (m.x < 0.0) { continue; }
       let packed = i32(m.x);

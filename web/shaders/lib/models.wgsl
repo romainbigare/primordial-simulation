@@ -1,13 +1,14 @@
 // Plants drawn from rendered models (web/textures/models.png; CC0, web/textures/SOURCES.md): broad-leaved trees,
 // conifers and bushes seen from the angled view, lit from the north-west, four to a layer of the detail texture (tex.wgsl
 // `MODELS_FROM`), each standing on the bottom middle of its quarter. A mark of a kind draws one of its form's sprites
-// (its own draw picks which), as wide as its crown and no taller than it stands; its leaves take its kind's colour in the
+// (its own draw picks which), covering as much as its crown and no taller than it stands; its leaves take its kind's colour in the
 // season (the sprite's lightness about the leaves' mean, `LEAF_MEAN`), its wood keeps the model's bark, and an open
 // crown keeps that share of its leaves.
 
-// A sprite's crown is this share of its width (its leaves reach about that far): it is drawn so that share is the
-// plant's crown.
-const MODEL_CROWN = 0.85;
+// A sprite is drawn so its cover (tex.wgsl `model_fill` of its box) is its crown's ground, pi/4 of its width squared, as
+// the field far away counts it (canopy.ts `marksOn`): its leaves have gaps, so it is wider than the crown, at most
+// `MODEL_WIDER` times (canopy.ts `SPRITE_WIDER`).
+const MODEL_WIDER = 1.6;
 // The mean lightness of the models' leaves (linear), so a leaf of that lightness takes its kind's colour as it is.
 const LEAF_MEAN = 0.05;
 // A texel is leaf where its green stands this far over its red and blue (`LEAF_GREEN`: share of its sum).
@@ -49,18 +50,25 @@ fn model_set(q: Plant) -> vec2i {
   return vec2i(ROUND_FROM, ROUNDS);
 }
 
-// The sprite plant q is drawn from and its width and height on the map, m.
-struct ModelFit { s: i32, w: f32, h: f32 }
+// The sprite plant q is drawn from, its width and height on the map, m, and how many times as dense as the sprite its
+// cover is drawn (more than once where it is narrower than covers its crown's ground: `dense_cover`).
+struct ModelFit { s: i32, w: f32, h: f32, dense: f32 }
 fn model_fit(q: Plant) -> ModelFit {
   let pick = model_set(q);
   let s = pick.x + min(i32(fract(q.r.y * 7.13) * f32(pick.y)), pick.y - 1);
   let aspect = model_h(s) / model_w(s);
-  // As wide as its crown, no taller than it stands (angled, `STAND` of its height), within its lattice's reach with its
-  // lean (the pixel looks no farther for it: cover.wgsl `lattice`).
+  // Covering its crown's ground (`MODEL_WIDER`), no taller than it stands (angled, `STAND` of its height), within its
+  // lattice's reach with its lean (the pixel looks no farther for it: cover.wgsl `lattice`).
   let stands = select(BUSH_DEEP * q.d, STAND * q.h, q.design == TREE);
-  let w = min(min(q.d / MODEL_CROWN, stands / aspect), q.reach / (0.5 + abs(q.lean.x) * aspect));
-  return ModelFit(s, w, w * aspect);
+  let covers = q.d * min(sqrt(0.25 * PI / (model_fill(s) * aspect)), MODEL_WIDER);
+  let w = min(min(covers, stands / aspect), q.reach / (0.5 + abs(q.lean.x) * aspect));
+  return ModelFit(s, w, w * aspect, (covers * covers) / (w * w));
 }
+
+// A texel's cover `a` drawn `dense` times as dense: the share of `dense` layers of it that a ray meets, so a sprite
+// held narrower than its crown (by its height or its reach, `model_fit`) still covers its crown's ground, as the field
+// far away counts it (canopy.ts `marksOn`), and is not squeezed.
+fn dense_cover(a: f32, dense: f32) -> f32 { return 1.0 - pow(1.0 - min(a, 1.0), dense); }
 
 // Plant q drawn from a model sprite at p, angled, e m a pixel, where snow covers `snow` of the ground: its colour
 // (linear) and cover; none where it does not reach.
@@ -79,7 +87,7 @@ fn model_plant(q: Plant, p: vec2f, e: f32, snow: f32) -> vec4f {
   var leaf = q.rgb * lum / LEAF_MEAN;
   leaf = mix(leaf, CROWN_SNOW_RGB * lum / LEAF_MEAN, CROWN_SNOW * snow * q.closed * smoothstep(0.6, 1.4, lum / LEAF_MEAN));
   let rgb = mix(t.rgb, leaf, leafy);
-  return vec4f(rgb, t.a * mix(1.0, kept, leafy));
+  return vec4f(rgb, dense_cover(t.a, fit.dense) * mix(1.0, kept, leafy));
 }
 
 // The shadow of plant q drawn from a model sprite at p, angled, e m a pixel: its sprite cast on the ground away from the
@@ -100,7 +108,7 @@ fn model_shadow(q: Plant, p: vec2f, e: f32) -> f32 {
   // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
   let t = model_texel(fit.s, uv, max(max(e / fit.w, e / long), SHADOW_BLUR));
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
-  let kept = t.a * mix(1.0, q.closed, leafy);
+  let kept = dense_cover(t.a, fit.dense) * mix(1.0, q.closed, leafy);
   let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));
   return select(BUSH_SHADOW, 1.0, q.design == TREE) * SHADOW * kept * edge;
 }

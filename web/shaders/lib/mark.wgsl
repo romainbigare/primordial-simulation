@@ -22,7 +22,8 @@ struct Cover {
   // Of each lattice: its cell at the draw's corner (its fraction; its whole number is `base`), its cell's side, m, and
   // the rows south of a pixel an angled plant on it may stand in.
   grid: array<vec4f, COVER_LATTICES>,
-  // Of each lattice: the mip level of the field read about a pixel to see whether any of its marks stands near.
+  // Of each lattice: the mip level of the field read about a pixel to see whether any of its marks stands near, and the
+  // cells a mark reaches from its own (canopy.ts `REACH`).
   near: array<vec4f, COVER_LATTICES>,
   base: array<vec4i, COVER_LATTICES>,
 }
@@ -36,8 +37,9 @@ struct Cover {
 @group(0) @binding(6) var marks_shows: texture_2d<f32>;
 @group(0) @binding(7) var marks_snow: texture_2d<f32>;
 const MARK_WORDS = 3;
-// The cells a pixel looks at reach this many before the cell that holds the draw's corner.
-const MARK_MARGIN = 1;
+// The cells a pixel looks at reach this many before the cell that holds the draw's corner (the farthest a mark reaches,
+// canopy.ts `REACH`).
+const MARK_MARGIN = 2;
 // A plant's size differs from its kind's by up to this share; a tree leans by up to `LEAN` of its height.
 const SIZES = 0.3; const LEAN = 0.08;
 
@@ -171,9 +173,9 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, x: f32, id: ve
 }
 
 // The plant of kind `t` of the square at `sq` on lattice l with its foot at `c`, its size's draw `size`, its own random
-// numbers `r` (its colour's draw, its lean's direction, its lean); angled no taller than `reach` lets it stand (the
-// rows looked at, textures.ts `ROWS_MOST`).
-fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, reach: f32) -> Plant {
+// numbers `r` (its colour's draw, its lean's direction, its lean); angled no taller than `up` m north of its foot lets it
+// stand (the rows looked at, textures.ts `ROWS_MOST`); no wider than its lattice's reach each way.
+fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, up: f32) -> Plant {
   let form = kind(form_plane(t), sq);
   let first = kind(from_plane(t), sq);
   let to = kind(to_plane(t), sq);
@@ -196,21 +198,24 @@ fn plant_of(l: i32, sq: vec2i, t: i32, c: vec2f, size: f32, r: vec3f, reach: f32
   // Its own size: the plants of a stand differ, by up to `SIZES` either way of its kind's.
   let grow = 1.0 + SIZES * (2.0 * size - 1.0);
   let side = cover.grid[l].z;
+  let reach = cover.near[l].y * side;
   let width = kind(width_plane(l, t / 4), sq)[t % 4] * grow;
   let fine = 1.0 - clamp((form.w - LEAF_THICK) / (LEAF_THIN - LEAF_THICK), 0.0, 1.0);
-  let tall = select(form.x * grow, min(form.x * grow, reach / STAND), cover.corner.w > 0.5);
+  let tall = select(form.x * grow, min(form.x * grow, up / STAND), cover.corner.w > 0.5);
   let lean = LEAN * r.z * vec2f(cos(2.0 * PI * r.y), sin(2.0 * PI * r.y));
   let tint = vary(mix(first.rgb, to.rgb, r.x), fract(r.yz * 13.0));
   // A bush in flower or in fruit by a draw of its own (the next digits of its colour's), as its kind's share.
   let blooms = select(0.0, 1.0, fract(r.x * 16.0) < petal.w);
-  return Plant(c, min(width, 2.0 * side), tall, form.y, form.z, fine, tint, first.w, fract(r * 7.0), to.w, shape.x, shape.y, petal.rgb, blooms, lean, side, dry);
+  return Plant(c, min(width, 2.0 * reach), tall, form.y, form.z, fine, tint, first.w, fract(r * 7.0), to.w, shape.x, shape.y, petal.rgb, blooms, lean, reach, dry);
 }
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square and kind packed as
 // (row x squares across + column) x the kinds a square holds (`kinds_n`) + kind (-1: none stands there, or the snow
-// buries it), the share of it that shows
-// over the snow, and the share of the ground snow covers at its foot. A function of the cell alone, so it is decided
-// once a frame for each cell in view (marks.wgsl) and read by every pixel the mark may cover (cover.wgsl `lattice`).
+// buries it, or its lattice's marks there take too few pixels to show), the share of it that shows (over the snow, and
+// as a thing by the width of its lattice's marks at its foot, draw.wgsl `as_thing`: the field far away, cover_field.wgsl
+// `lattice_field`, is drawn by the same width where they do not), and the share of the ground snow covers at its foot.
+// A function of the cell alone, so it is decided once a frame for each cell in view (marks.wgsl) and read by every
+// pixel the mark may cover (cover.wgsl `lattice`).
 fn decide(l: i32, k: vec2f) -> vec4f {
   let none = vec4f(-1.0, 0.0, 0.0, 0.0);
   let g = cover.grid[l];
@@ -219,6 +224,8 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   let h = place(id, l);
   let c = (k - g.xy) * side + h.xy * side;
   let at = cover.corner.xy + c;
+  let thing = as_thing(field_at(at, WIDE_LAYER, 0.0)[l], cover.seen.x);
+  if (thing <= 0.0) { return none; }
   let cs = corners(at / land.map.x);
   // The chances (`chance_at`).
   var all = 0.0;
@@ -236,7 +243,7 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   if (pick.x < 0) { return none; }
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
-  let shows = above_snow(f.snow_m, mark_plant(l, k, sq, pick.y).h);
+  let shows = above_snow(f.snow_m, mark_plant(l, k, sq, pick.y).h) * thing;
   if (shows <= 0.0) { return none; }
   return vec4f(f32((sq.y * n.x + sq.x) * kinds_n() + pick.y), shows, f.snow, 0.0);
 }
@@ -248,7 +255,7 @@ fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32) -> Plant {
   let side = g.z;
   let id = cover.base[l].xy + vec2i(k);
   let h = place(id, l);
-  return plant_of(l, sq, t, (k - g.xy) * side + h.xy * side, h.z, rand3(id, l + COVER_LATTICES), g.w * side + side);
+  return plant_of(l, sq, t, (k - g.xy) * side + h.xy * side, h.z, rand3(id, l + COVER_LATTICES), (g.w + cover.near[l].y) * side);
 }
 
 // A byte is drawn this far past its own level, in levels, so it is stored as itself whether the GPU rounds a colour to

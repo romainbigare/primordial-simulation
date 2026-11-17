@@ -6,25 +6,23 @@
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './style';
-import { FIELD, Kinds, LATTICES, PLANES_DOWN, half } from './canopy';
+import { FIELD, Kinds, LATTICES, PLANES_DOWN, REACH, half } from './canopy';
 import { groundDetail } from './detail';
-import { clamp } from './earth';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */
 const COVER_VEC4S = 4 + 3 * LATTICES.length, LOOK_VEC4S = 3;
-/** The cells a pixel looks at about its own along each axis (lib/mark.wgsl `MARK_MARGIN`, one each way), and one more
- * for a pixel at the draw's far edge. */
-const MARK_MARGIN = 1, MARK_SPARE = 1;
+/** The cells a pixel looks at about its own along each axis (lib/mark.wgsl `MARK_MARGIN`: the farthest a mark reaches,
+ * canopy.ts `REACH`), and one more for a pixel at the draw's far edge. */
+const MARK_MARGIN = Math.max(...REACH), MARK_SPARE = 1;
 /** The words a mark is kept in, a texture each (lib/mark.wgsl `MARK_WORDS`), and their bindings. */
 const MARK_BINDINGS = [5, 6, 7];
-/** A lattice fainter than this is not drawn as marks: they would not show, and they cost as much as marks that do. */
-const FAINTEST = 0.02;
 /** Angled, a plant stands up this share of its height on the map (lib/crown.wgsl `STAND`): the rows south of a pixel
- * looked at reach its tallest plant, but no more than `ROWS_MOST` (each row costs a pixel three looks at marks), and a
- * taller plant is drawn as tall as they reach. */
-const STAND = 0.5, ROWS_MOST = 2;
-/** The screen's pixels a lattice's cell takes from which its marks start to show, and from which they show fully. */
-const FADE_PX = [2, 5];
+ * looked at, past those its marks reach, reach its tallest plant, but no more than `ROWS_MOST` (each row costs a pixel
+ * a look at marks for each cell across), and a taller plant is drawn as tall as they reach. */
+const STAND = 0.5, ROWS_MOST = 3;
+/** A mark narrower than this many pixels of the screen is not drawn as a thing (lib/draw.wgsl `THING_PX`): a lattice
+ * none of whose marks is as wide is not drawn as marks. */
+const THING_LEAST_PX = 4;
 
 /** A draw of the marks: its rectangle of the target, px; the metres a pixel of the target and of the screen (which the
  * detail drawn is chosen by); the world's point at its corner, m; the style; and the live map's bindings (land.ts
@@ -54,13 +52,10 @@ export class CoverMarks {
     this.due = true;
   }
 
-  /** How strongly the marks of each lattice show where a pixel of the screen takes `mpp` m: 0 for a lattice no square
-   * holds or whose marks would take too few pixels to show. */
+  /** Of each lattice, 1 where a pixel of the screen takes `mpp` m and its widest marks take enough pixels to show as
+   * things (each shows by its own width, lib/mark.wgsl `decide`), else 0: none of its marks is drawn. */
   private shown(mpp: number): number[] {
-    return LATTICES.map((a, l) => {
-      const s = clamp((a / mpp - FADE_PX[0]) / (FADE_PX[1] - FADE_PX[0])), shown = s * s * (3 - 2 * s);
-      return this.kinds?.held[l] && shown >= FAINTEST ? shown : 0;
-    });
+    return LATTICES.map((_, l) => ((this.kinds?.widest[l] ?? 0) >= THING_LEAST_PX * mpp ? 1 : 0));
   }
 
   /** Send what waits to the GPU. */
@@ -86,7 +81,7 @@ export class CoverMarks {
   fieldBinds(gpu: Gpu, mpp: number, angled: boolean): Draw['binds'] {
     this.upload(gpu);
     // A lattice no square holds is sent with side 0: the field does not read it.
-    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => (this.kinds?.held[l] ? a : 0)), 0).vec4(...this.shown(mpp)).vec4(this.kinds ? 1 : 0, this.alpha, angled ? 1 : 0);
+    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => ((this.kinds?.widest[l] ?? 0) > 0 ? a : 0)), 0).vec4(...this.shown(mpp)).vec4(this.kinds ? 1 : 0, this.alpha, angled ? 1 : 0);
     return { 14: u.buffer, 15: this.fieldTex!, 16: 'mip' };
   }
 
@@ -103,10 +98,10 @@ export class CoverMarks {
     let row = 0;
     const grids = LATTICES.map((a, l) => {
       const g = [m.at[0] / a, m.at[1] / a], frac = g.map(v => v - Math.floor(v));
-      // The mip level whose texels, read about a pixel, hold all the squares its marks' feet (at most two cells away)
-      // stand on: half a texel of it reaches two cells and a square.
-      const near = Math.min(Math.max(Math.ceil(Math.log2(2 * ((2 * a) / this.cellM + 1))), 0), top);
-      const rows = angled ? Math.min(Math.ceil((STAND * k.tallest[l]) / a), ROWS_MOST) : 0;
+      // The mip level whose texels, read about a pixel, hold all the squares its marks' feet (at most `REACH` and one
+      // cells away) stand on: half a texel of it reaches those cells and a square.
+      const near = Math.min(Math.max(Math.ceil(Math.log2(2 * (((REACH[l] + 1) * a) / this.cellM + 1))), 0), top);
+      const rows = angled ? Math.min(Math.max(Math.ceil((STAND * k.tallest[l]) / a) - REACH[l], 0), ROWS_MOST) : 0;
       // The cells about the view's: from `MARK_MARGIN` before its first to the rows an angled plant stands in past its last.
       const span = (c: number, n: number) => (shown[l] > 0 ? Math.floor(frac[c] + size[c] / a) + 1 + 2 * MARK_MARGIN + MARK_SPARE + n : 0);
       const cells = { cols: span(0, 0), rows: span(1, rows), row };
@@ -120,7 +115,7 @@ export class CoverMarks {
     }
     const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(m.seenMpp).vec4(...k.walls, k.planes.kinds).vec4(...grids.map(g => g.cells.row));
     grids.forEach(g => u.vec4(...g.frac, g.a, g.rows));
-    grids.forEach(g => u.vec4(g.near));
+    grids.forEach((g, l) => u.vec4(g.near, REACH[l]));
     grids.forEach(g => u.ivec4(...g.base));
     const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.seenMpp, angled), 1: u.buffer, 4: this.tableTex!, 20: groundDetail(gpu), 21: 'tile' };
     this.marksTex.forEach((t, word) => {

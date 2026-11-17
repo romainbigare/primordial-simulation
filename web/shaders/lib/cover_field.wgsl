@@ -1,12 +1,12 @@
 // The plant cover as a field (web/src/canopy.ts `CoverField`), drawn in the live map's ground (land.wgsl) where its
 // plants take too few pixels to be drawn as marks (cover.wgsl): of each lattice of marks the colour its plants cover
-// the ground with and the share they cover, blended between the squares' centres, as crowns no smaller than the eye
-// reads, and far away as their mean; and the herbs as a sward with their flowers, at every scale. So the far and the near pictures come from
+// the ground with and the share they cover, blended between the squares' centres, at their mean, the ground between
+// darkened by their shadows; and the herbs as a sward with their flowers, at every scale. So the far and the near pictures come from
 // the same numbers. Nothing stands where liquid stands over the roots or under snow.
 
 struct CoverLook {
-  // Of each lattice: its cell's side, m (0: no square holds it), and how strongly its marks show (the rest is the field);
-  // w is not read.
+  // Of each lattice: its cell's side, m (0: no square holds it), and 1 where any of its marks takes enough pixels to show
+  // (each by the width of its lattice's marks where it stands, the rest is the field, `lattice_field`); w is not read.
   sides: vec4f, shown: vec4f,
   // 1 where the cover is drawn (0: none); how strongly its marks cover the map; 1 where the plants stand up (angled).
   look: vec4f,
@@ -22,39 +22,21 @@ const SWARD_LAYER = 3; const FLOWER_LAYER = 4; const SWARD_FIRST = 5; const STAN
 // Of each lattice and the sward (red, green, blue, alpha): its plants' mean height, m, the mean share of the square that
 // holds them and the mean depth of loose ground their roots need, m (the core's: `Cover::rooted`, `Cover::need`).
 const TALL_LAYER = 7; const ROOTED_LAYER = 8; const NEED_LAYER = 9;
-// Of each lattice: its marks' mean width, m (canopy.ts `FIELD.wide`).
-const WIDE_LAYER = 10;
+// Of each lattice: its marks' mean width, m (canopy.ts `FIELD.wide`), and the share of the ground its shadows fall on
+// (`FIELD.shade`), which they darken by `FIELD_SHADOW` (canopy.ts `CROWN_SHADOW`).
+const WIDE_LAYER = 10; const SHADE_LAYER = 11; const FIELD_SHADOW = 0.42;
 // The sward and the low lattices as one layer (canopy.ts `lowOf`), drawn in their place where a pixel takes
 // `LOW_FAR_E` m and more (where their detail no longer shows: no swathes, blades, tufts or flowers past a metre a
 // pixel), fully from `LOW_FAR_FULL_E`; thicker and thinner over the patches as they are.
-const LOW_LAYER = 11; const LOW_FAR_E = 0.75; const LOW_FAR_FULL_E = 1.0;
+const LOW_LAYER = 12; const LOW_FAR_E = 0.75; const LOW_FAR_FULL_E = 1.0;
 // Of each square, 1 where its cell holds land (canopy.ts `FIELD.land`); a square with no land holds 0 in every layer. A
 // blend between the squares' centres is over the squares with land alone, their weights made whole (`on_land`): the
 // cover is drawn on land only, and a square with no land is no bare ground beside it. A blend whose land weighs less
 // than `LAND_LEAST` is none (it lies out in the liquid, where no cover is drawn).
-const LAND_LAYER = 12; const LAND_LEAST = 1e-3;
+const LAND_LAYER = 13; const LAND_LEAST = 1e-3;
 // Of the sward and of the lattice of stands, what the kinds but the first make (canopy.ts `FIELD`).
-const SWARD_REST = 13; const STANDS_REST = 14;
+const SWARD_REST = 14; const STANDS_REST = 15;
 const STANDS = 2;
-// A crown of the field (`crowns`), where its plants take too few pixels to be drawn as marks: a disc in a cell, present
-// in a cell as often as covers at most `GRAIN_FILL` of it, as wide as keeps the mean (at most half a cell), anywhere in
-// its cell, so no crowns stand in rows and none is cut at its cell's edge. Each is lit from the north-west, its light
-// departing from the flat ground's by up to `GRAIN_LIGHT`, and its tone its own, up to `GRAIN_TONE` either way.
-const GRAIN_FILL = 0.35; const GRAIN_LIGHT = 0.3; const GRAIN_TONE = 0.1;
-// The pixel's place in the cells is moved by up to `GRAIN_WARP` cells by smooth noise `WARP_CELLS` cells across, so rows
-// and columns of cells show no rows and columns in the crowns (a crown stays within half a cell of the place it is
-// drawn at, which the warp moves as a whole).
-const GRAIN_WARP = 0.35; const WARP_CELLS = 3.0;
-// A crown of the field is as wide as its plants' marks, and is drawn by the one rule for things (draw.wgsl `as_thing`):
-// where a plant takes too few pixels, the field is its plants' mean, as seen from afar, and no grain coarser than the
-// plants stands for them. Its cells are a lattice's cells doubled as often as the width takes; between two doublings a wide cell
-// holds one crown where the width, as a power of two, passes a draw of the cell between `WIDE_FROM` and `WIDE_TO`, else
-// its four cells hold theirs, and no line runs between two sizes. A crown wider than `CLUMP_MOST_M` m fades into its
-// plants' mean, a calm tone, by twice as wide.
-const CLUMP_MOST_M = 10.0; const WIDE_FROM = 0.25; const WIDE_TO = 0.75;
-// Discs at random places leave gaps however closed their stand: as a layer's plants cover from `CLOSES.x` to `CLOSES.y`
-// of the ground, the gaps between its crowns fill with its canopy, `GAP_TONE` as light as a crown (their shade).
-const CLOSES = vec2f(0.6, 0.9); const GAP_TONE = 0.65;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -71,10 +53,8 @@ const STAND_CALM_E = 1.5;
 // Thin ground is poor: the herbs cover from `THIN_COVER` of their share where the loose ground is `THIN_FROM_M` m deep
 // or less to all of it from `THIN_TO_M` m, so the ground's own colour shows through toward the bed's.
 const THIN_COVER = 0.25; const THIN_FROM_M = 0.05; const THIN_TO_M = 0.5;
-// Seen from above the trees' crowns with their shade cover more than their share, as the sward's: the ground they leave
-// is (1 - share)^`CANOPY_SEEN`; their canopy is lighter and darker by up to `CANOPY_TONE` over groups of crowns
-// `CANOPY_M` across.
-const CANOPY_SEEN = 2.0; const CANOPY_TONE = 0.2; const CANOPY_M = 35.0;
+// The trees' canopy is lighter and darker by up to `CANOPY_TONE` over groups of crowns `CANOPY_M` across.
+const CANOPY_TONE = 0.2; const CANOPY_M = 35.0;
 // The light the trees leave the kinds below on the mean of a square is counted no less than this, so a square its
 // trees close does not heap its low kinds on its last open ground.
 const LIT_LEAST = 0.05;
@@ -245,68 +225,6 @@ fn in_stands(at: vec2f, e: f32, f: vec4f, l: i32, first: i32, rest: i32, m: f32)
   return mix(mean, mix(other, own, stand_share(stand_draw(at, m), clamp(one.a / whole.a, 0.0, 1.0))), shows * told);
 }
 
-// The share of the ground at the pixel that lattice l's plants cover, where they cover `s` of it, seen at `e` m a pixel,
-// and the tone there: its crowns in the cells of side `side`, which are its cells doubled `level` times, each lit and
-// toned. Of two sizes of cells drawn together, these are the wide ones (`wide`) or the fine ones: a wide cell holds a
-// crown where `f`, the share of the way from the fine size to the wide one, passes its draw (`WIDE_FROM`), else its four
-// fine cells hold theirs. A crown reaches at most half a cell from its cell, so only the pixel's cell and the three
-// beside it towards the pixel can cover it. Cell and distance come from the pixel's lattice point (draw.wgsl `lat`), so
-// a crown's place is exact at any size of map.
-fn crowns(l: i32, s: f32, e: f32, side: f32, level: i32, wide: bool, f: f32) -> vec2f {
-  let warp = GRAIN_WARP * vec2f(noise_l(lat_turned(WARP_CELLS * side, vec2f(0.0)), l + 31).x, noise_l(lat_turned(WARP_CELLS * side, vec2f(17.0)), l + 32).x);
-  let at = lat_axes(side, warp);
-  let toward = vec2i(select(vec2f(-1.0), vec2f(1.0), at.f > vec2f(0.5)));
-  let present = min(s / GRAIN_FILL, 1.0);
-  let r = min(side * sqrt(s / (present * PI)), 0.5 * side);
-  var out = vec2f(0.0, 1.0);
-  for (var j = 0; j < 4; j++) {
-    let step = vec2i(j & 1, j >> 1u) * toward;
-    let c = at.i + step;
-    // The draw of the wide cell: the cell itself, or the one that holds this fine cell.
-    var holder = c;
-    if (!wide) { holder = vec2i(floor(0.5 * vec2f(c))); }
-    let draw = lowbias(holder, l + 9 + 5 * (level + select(1, 0, wide)));
-    if ((f >= mix(WIDE_FROM, WIDE_TO, f32(draw >> 8u) / 16777216.0)) != wide) { continue; }
-    let x = lowbias(c, l + 7 + 5 * level);
-    if (f32(x & 1023u) / 1024.0 >= present) { continue; }
-    let d = (at.f - vec2f(step) - vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0) * side;
-    let a = 1.0 - smoothstep(r - 0.5 * e, r + 0.5 * e, length(d));
-    if (a > out.x) {
-      let lit = 1.0 - GRAIN_LIGHT * dot(d / max(r, 1e-4), normalize(LIGHT.xy));
-      out = vec2f(a, lit * (1.0 + GRAIN_TONE * (f32(x >> 30u) / 1.5 - 1.0)));
-    }
-  }
-  return out;
-}
-
-// The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean, seen at
-// `e` m a pixel, and their tone: their crowns, as wide as their marks there, the wide ones over the fine ones, where
-// those show as things (draw.wgsl `as_thing`); their mean where they are smaller, or where a crown would be too wide
-// (`CLUMP_MOST_M`).
-fn grain(at: vec2f, l: i32, share: f32, e: f32) -> vec2f {
-  let side = cover_look.sides[l];
-  let mean = vec2f(min(share, 1.0), 1.0);
-  if (as_thing(2.0 * CLUMP_MOST_M, e) <= 0.0) { return mean; }
-  let own = field_at(at, WIDE_LAYER, 0.0)[l];
-  let across = max(own, side);
-  let shows = (1.0 - ease(CLUMP_MOST_M, 2.0 * CLUMP_MOST_M, across)) * as_thing(own, e);
-  if (shows <= 0.0) { return mean; }
-  let k = log2(across / side);
-  let level = floor(k);
-  let cell = side * exp2(level);
-  // Under `WIDE_FROM` no wide cell holds a crown, from `WIDE_TO` every one does: the other size is not read.
-  let f = k - level;
-  var fine = vec2f(0.0, 1.0);
-  var wide = vec2f(0.0, 1.0);
-  if (f < WIDE_TO) { fine = crowns(l, mean.x, e, cell, i32(level), false, f); }
-  if (f >= WIDE_FROM) { wide = crowns(l, mean.x, e, 2.0 * cell, i32(level) + 1, true, f); }
-  let drawn = vec2f(wide.x + fine.x * (1.0 - wide.x), mix(fine.y, wide.y, wide.x));
-  // A stand that closes its ground leaves none between its crowns: the canopy fills the gaps of the field's crowns, in
-  // their shade (`CLOSES`).
-  let a = max(drawn.x, ease(CLOSES.x, CLOSES.y, mean.x));
-  return mix(mean, vec2f(a, mix(GAP_TONE, drawn.y, drawn.x / max(a, 1e-4))), shows);
-}
-
 // Streaks of blades `w` m wide and `len` m long at the pixel, turned by `turn` radians: -1..1 (noise stretched along
 // the turn). A turn lies between the nearest two of `STREAK_TURNS` turns that stand fixed in the world, whose streaks
 // blend (kept as strong as one), so no lattice turns about the world's origin as the blades turn with the tufts.
@@ -472,22 +390,19 @@ fn tuft_tone() -> f32 {
 // shows, those three as their one layer (canopy.ts `FIELD.low`).
 fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   land_weights(at);
-  // The plants' roots find the loose ground's depth as the ground's samples know it: their share of the ground fades
-  // over the change of that depth across a sample, never over less (`rooted`), so no edge sharper than the samples
-  // runs across a sample's square.
-  var bs = b;
-  bs.loose_px = b.loose_px * max(1.0, land.map.x * land.map.y / land.samples.x / max(e, 1e-6));
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
   let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
+  // The plants' roots hold where the marks' do (mark.wgsl `holds`, on every patch of the loose ground), over a pixel and
+  // over the patches too small to show here (`loose_unseen`), so the field far away and the marks near stand on the
+  // same ground.
+  var bs = b;
+  bs.loose_px = max(b.loose_px, loose_unseen(at, e));
   var hold = held_at(at, bs);
   hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * bs.loose_px, THIN_TO_M + 0.5 * bs.loose_px, b.loose));
-  // The trees' field, read once: their crowns' share, and their layer below (plainly blended where their marks show in
-  // its place: only the shade under them reads it).
+  // The trees' field, read once: their crowns' share.
   var trees = vec4f(0.0);
-  if (cover_look.sides[STANDS] > 0.0) {
-    trees = select(field_smooth(at, STANDS), field_at(at, STANDS, 0.0), cover_look.shown[STANDS] >= 1.0);
-  }
+  if (cover_look.sides[STANDS] > 0.0) { trees = field_smooth(at, STANDS); }
   // The low kinds take the light the trees leave (the cover's light law, laws.md 3: a kind below gets the light of
   // the ground the taller does not hold and what passes its layer): they thin under the crowns that stand at the point
   // and stand as much thicker on the ground that holds no tree, their square keeping its cover. So ground too thin for
@@ -501,9 +416,9 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   var dst = vec4f(0.0);
   if (least_e() < LOW_FAR_FULL_E && far < 1.0) {
     dst = sward(at, e, b, trees.a, thick, hold.w);
-    // A lattice no square holds, or whose marks show in full, adds nothing: its field is not read.
+    // A lattice no square holds adds nothing: its field is not read.
     for (var l = 0; l < STANDS; l++) {
-      if (cover_look.sides[l] > 0.0 && cover_look.shown[l] < 1.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
+      if (cover_look.sides[l] > 0.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
     }
   }
   if (far > 0.0) {
@@ -522,27 +437,25 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   return CoverAt(dst, min(closed * hold[STANDS], 1.0));
 }
 
-// Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show, thicker and thinner by
-// `thick`, holding `hold` of its plants there, with its grain, over `dst` (premultiplied); the trees' in their stands,
-// their canopy seen as closer (`CANOPY_SEEN`) and snowy as the ground under it. A lattice no square holds (its side 0,
-// textures.ts) adds nothing.
+// Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_thing`
+// by the width of its marks there, as each mark shows, mark.wgsl `decide`), thicker and thinner by `thick`, holding
+// `hold` of its plants there, over `dst` (premultiplied): its shadows darken what lies below, its crowns cover their
+// share at their mean; the trees' in their stands, in groups of lighter and darker crowns, and snowy as the ground under
+// them. A lattice no square holds (its side 0, textures.ts) adds nothing.
 fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, hold: f32, dst: vec4f) -> vec4f {
-  let unshown = 1.0 - cover_look.shown[l];
-  if ((unshown <= 0.0 && l != STANDS) || cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
-  var c = f.rgb / f.a;
-  var share = min(f.a * hold, 1.0);
+  if (cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
+  var unshown = 1.0;
+  if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_thing(field_at(at, WIDE_LAYER, 0.0)[l], e); }
+  let share = min(f.a * hold * thick, 1.0) * unshown;
   if (share <= 0.0) { return dst; }
+  var c = f.rgb / f.a;
   if (l == STANDS) {
     c = in_stands(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M);
     let groups = shows_at(CANOPY_M, e);
     if (groups > 0.0) { c *= 1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * groups; }
     c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
-    share = 1.0 - pow(1.0 - share, CANOPY_SEEN);
   }
-  var g = vec2f(0.0, 1.0);
-  if (unshown > 0.0) { g = grain(at, l, share * thick, e); }
-  // (Where its marks are drawn, the floor between them is in their own shadows: cover.wgsl `plant`.)
-  let a = g.x * unshown;
-  if (a <= 0.0) { return dst; }
-  return vec4f(c * g.y * a, a) + dst * (1.0 - a);
+  let dark = FIELD_SHADOW * min(field_at(at, SHADE_LAYER, 0.0)[l] * hold * thick, 1.0) * unshown;
+  let below = vec4f(dst.rgb * (1.0 - dark), dark + dst.a * (1.0 - dark));
+  return vec4f(c * share, share) + below * (1.0 - share);
 }

@@ -87,6 +87,23 @@ fn loose_seen(at: vec2f, e: f32) -> f32 {
   return mean * (1.0 + PATCHY * clamp(2.0 * n / sum, -1.0, 1.0));
 }
 
+// How far the loose ground's depth at `at` swings, m, over the patches `loose_seen` does not show at `e` m a pixel (each
+// octave's share of `PATCHY` that fades out): a rule on the depth read there is spread over this much, so it holds on
+// the mean where the near picture's patches would make it (the cover's roots, cover_field.wgsl `cover_field`).
+fn loose_unseen(at: vec2f, e: f32) -> f32 {
+  var size = PATCHY_M;
+  var weight = 1.0;
+  var sum = 0.0;
+  var hidden = 0.0;
+  for (var o = 0; o < PATCHY_OCTAVES; o++) {
+    hidden += weight * (1.0 - shows_at(size, e));
+    sum += weight;
+    size /= PATCHY_STEP;
+    weight *= PATCHY_FALL;
+  }
+  return 2.0 * loose_at(at) * PATCHY * hidden / sum;
+}
+
 // The share of the bed that shows through `loose` m of loose ground (`loose_seen`).
 fn bed_shows(loose: f32) -> f32 { return 1.0 - ease(0.0, HIDES_BED_M, loose); }
 

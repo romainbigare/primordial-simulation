@@ -77,6 +77,16 @@ fn model_h(s: i32) -> f32 {
     0.984, 0.984, 0.984, 0.984);
   return h[s];
 }
+// Each sprite's mean cover over its content's box: its alpha's mean there in the strips.
+fn model_fill(s: i32) -> f32 {
+  var f = array<f32, 74>(0.315, 0.355, 0.344, 0.321, 0.298, 0.285, 0.500, 0.481, 0.437, 0.313, 0.319, 0.316, 0.291, 0.266,
+    0.271, 0.112, 0.118, 0.120, 0.255, 0.252, 0.239, 0.221, 0.228, 0.225, 0.203, 0.244, 0.220, 0.208,
+    0.238, 0.188, 0.202, 0.372, 0.372, 0.125, 0.129, 0.126, 0.105, 0.643, 0.608, 0.649, 0.647, 0.172,
+    0.163, 0.709, 0.716, 0.694, 0.717, 0.693, 0.707, 0.422, 0.316, 0.456, 0.406, 0.422, 0.401, 0.093,
+    0.224, 0.188, 0.118, 0.130, 0.247, 0.056, 0.075, 0.338, 0.340, 0.346, 0.302, 0.235, 0.504, 0.448,
+    0.430, 0.315, 0.391, 0.364);
+  return f[s];
+}
 // The texel of model sprite s at `uv` in its content (0..1, y down), at `g` of its content a pixel: linear, with cover.
 // Each stands on the bottom middle of its layer or quarter, two texels over its edge.
 fn model_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
