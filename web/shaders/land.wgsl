@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl flow.wgsl cover_field.wgsl sprites.wgsl tex.wgsl detail.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl flow.wgsl cover_field.wgsl sprites.wgsl tex.wgsl detail.wgsl things.wgsl
 // least metres a pixel: 0.5 1 3 30
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m, 3 m and 30 m
@@ -63,30 +63,6 @@ fn snow_at(share: f32, bares: f32, width: f32) -> f32 {
   return 1.0 - smoothstep(-1.0, 1.0, (bares - line) / max(width, SNOW_EDGE));
 }
 
-// A snow line is ragged: at its margin the snow breaks into patches (drifts in hollows behind knobs, bare knobs first)
-// at every scale from `SNOW_PATCH_M` down to the pixel, octaves each `SNOW_PATCH_STEP` times finer weighing
-// `SNOW_PATCH_FALL` of the last, `SNOW_PATCHY` of the index (lib/land.wgsl `snow_bares`) at most.
-const SNOW_PATCH_M = 320.0; const SNOW_PATCH_STEP = 2.9; const SNOW_PATCH_FALL = 0.65; const SNOW_PATCH_OCTAVES = 6;
-const SNOW_PATCHY = 2.5;
-// The patches warm or cool the ground by this many kelvin a unit of the index, where its snow melts.
-const SNOW_PATCH_K = 0.6;
-
-// The snow's patches at `at`, seen at `e` m a pixel: index units, each octave fading in as it grows past a few pixels.
-fn snow_patches(at: vec2f, e: f32) -> f32 {
-  var n = 0.0;
-  var size = SNOW_PATCH_M;
-  var weight = 1.0;
-  let sum = (1.0 - pow(SNOW_PATCH_FALL, f32(SNOW_PATCH_OCTAVES))) / (1.0 - SNOW_PATCH_FALL);
-  for (var o = 0; o < SNOW_PATCH_OCTAVES; o++) {
-    // Each octave finer than the last: none shows once one does not (nor in a draw of pixels that large).
-    if (unseen(size) || shows_at(size, e) <= 0.0) { break; }
-    n += weight * shows_at(size, e) * noise_turned(at / size + f32(o) * 5.1, 80 + o);
-    size /= SNOW_PATCH_STEP;
-    weight *= SNOW_PATCH_FALL;
-  }
-  return SNOW_PATCHY * clamp(2.0 * n / sum, -1.0, 1.0);
-}
-
 // The spot `s` with its channel's stones: on the bed of channel `ch` (of discharge `q`, on ground `g`), and beside it
 // where the reach is steep, with the walls and the fallen blocks of a steep reach. The largest drawn takes its size
 // from the point's own sample (`cobble` m, in a step where two samples meet: the size sets where the stones lie); what
@@ -142,7 +118,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   }
   let mouth = through_band(g, e);
   let ch = channel_of(g, q, banks, mouth);
-  let st = state_on(at, g, cs, depth_in(g, ch));
+  let st = state_on(at, g, cs, depth_in(g, ch), e);
   let surface = blended(SURFACE, cs);
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
@@ -151,18 +127,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.sea = surface.w;
   p.wet = st.wet;
   p.t = st.t;
-  // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
-  // Its patches move both where the share lies and where the ground is warm enough to melt it (`SNOW_PATCH_K`), so
-  // the line where the snow melts with height is as ragged as the rest.
-  var bares = snow_bares(g.slope, st.rise, fine.x);
-  var share = st.snow;
-  if (st.covered > 0.0) {
-    let patches = snow_patches(at, e);
-    bares += patches;
-    share = st.covered * unmelted(st.t + SNOW_PATCH_K * patches, land.time.z);
-  }
-  let snow_w = fwidth(bares);
-  p.snow = select(snow_at(share, bares, snow_w), st.snow, st.depth > 0.0);
+  // The cells' snow placed where the ground holds it (`snow_at`), moved by its drifts (`State.drifts`); on standing
+  // liquid, the cells' share.
+  let bares = snow_bares(g.slope, st.rise, fine.x) + st.drifts;
+  p.snow = select(snow_at(st.snow, bares, fwidth(bares)), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   p.z = g.h;
   p.slope = length(g.slope) * look.x;

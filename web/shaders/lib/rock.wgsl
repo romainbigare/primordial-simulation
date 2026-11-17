@@ -13,11 +13,9 @@
 // Loose ground hides the bed from this depth on, m, and shows all of it at none: soils thinner than a few decimetres
 // show their rock in outcrops (lithic soils are under 0.1 m deep; from memory).
 const HIDES_BED_M = 0.1;
-// The loose ground's depth departs from the samples' by up to this share over patches `PATCHY_M` across and in
-// `PATCHY_OCTAVES` octaves each `PATCHY_STEP` times finer, each weighing `PATCHY_FALL` of the last and fading out as it
-// shrinks to a few pixels (draw.wgsl `shows_at`): a mantle is thicker in hollows and thinner on knobs at every
-// scale, so the bed shows in outcrops with ragged edges, not along a smooth line.
-const PATCHY = 0.6; const PATCHY_M = 40.0; const PATCHY_OCTAVES = 4; const PATCHY_STEP = 2.9; const PATCHY_FALL = 0.6;
+// The loose ground's depth departs from the samples' by up to this share over patches from `PATCHY_M` across down, in
+// `PATCHY_OCTAVES` octaves (ragged.wgsl): so the bed shows in outcrops with ragged edges, not along a smooth line.
+const PATCHY = 0.6; const PATCHY_M = 40.0; const PATCHY_OCTAVES = 4;
 // Loose ground deeper than this, m, creeps into smooth swells; thinner, the bed's roughness shows through it
 // (relief.wgsl).
 const SMOOTH_LOOSE_M = 0.5;
@@ -65,44 +63,20 @@ fn links_of(s: vec2i) -> i32 {
   return i32(textureLoad(rock_field, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).w + 0.5);
 }
 
-// The depth of the loose ground at `at`, m, seen at `e` m a pixel, with its patches (`PATCHY`): the field every edge of
-// bare bed is drawn from, the ground's and the plants' alike.
+// The depth of the loose ground at `at`, m, seen at `e` m a pixel, with its patches (`PATCHY`, ragged.wgsl `ragged`):
+// the field every edge of bare bed is drawn from, the ground's and the plants' alike.
 fn loose_seen(at: vec2f, e: f32) -> f32 {
   let mean = loose_at(at);
   // Where the thinnest the patches make it is deeper than shows the bed or its roughness, they change nothing drawn
   // (and no noise is read).
   if (mean * (1.0 - PATCHY) >= max(HIDES_BED_M, SMOOTH_LOOSE_M)) { return mean; }
-  var n = 0.0;
-  var size = PATCHY_M;
-  var weight = 1.0;
-  var sum = 0.0;
-  for (var o = 0; o < PATCHY_OCTAVES; o++) {
-    let shown = shows_at(size, e);
-    // An octave too small to show reads no noise.
-    if (shown > 0.0) { n += weight * shown * noise_turned(at / size + f32(o) * 7.3, 55 + o); }
-    sum += weight;
-    size /= PATCHY_STEP;
-    weight *= PATCHY_FALL;
-  }
-  return mean * (1.0 + PATCHY * clamp(2.0 * n / sum, -1.0, 1.0));
+  return with_patches(mean, ragged(at, e, PATCHY_M, PATCHY_OCTAVES, 55), PATCHY);
 }
 
-// How far the loose ground's depth at `at` swings, m, over the patches `loose_seen` does not show at `e` m a pixel (each
-// octave's share of `PATCHY` that fades out): a rule on the depth read there is spread over this much, so it holds on
-// the mean where the near picture's patches would make it (the cover's roots, cover_field.wgsl `cover_field`).
-fn loose_unseen(at: vec2f, e: f32) -> f32 {
-  var size = PATCHY_M;
-  var weight = 1.0;
-  var sum = 0.0;
-  var hidden = 0.0;
-  for (var o = 0; o < PATCHY_OCTAVES; o++) {
-    hidden += weight * (1.0 - shows_at(size, e));
-    sum += weight;
-    size /= PATCHY_STEP;
-    weight *= PATCHY_FALL;
-  }
-  return 2.0 * loose_at(at) * PATCHY * hidden / sum;
-}
+// How far the loose ground's depth at `at` swings, m, over the patches `loose_seen` does not show at `e` m a pixel: a
+// rule on the depth read there is spread over this much, so it holds on the mean where the near picture's patches
+// would make it (the cover's roots, cover_field.wgsl `cover_field`).
+fn loose_unseen(at: vec2f, e: f32) -> f32 { return loose_at(at) * PATCHY * ragged_hidden(e, PATCHY_M, PATCHY_OCTAVES); }
 
 // The share of the bed that shows through `loose` m of loose ground (`loose_seen`).
 fn bed_shows(loose: f32) -> f32 { return 1.0 - ease(0.0, HIDES_BED_M, loose); }

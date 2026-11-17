@@ -116,6 +116,9 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   var g: Ground;
   g.rgb = p.ground;
   g.kind = BARE;
+  // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn.
+  let plants = p.cover.a * above_water(p.depth);
+  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
   // In the style a beach is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`).
@@ -131,7 +134,6 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   }
   g.rgb = mix(g.rgb, bed, p.rock);
   if (p.rock > 0.5) { g.kind = ROCK; }
-  let plants = p.cover.a * above_water(p.depth);
   g.bare = 1.0 - plants;
   g.rgb = mix(g.rgb, SNOW * select(vec3f(1.0), snow_texture(p.e), styled()), snow);
   // Snow is not bare soil: it takes neither the soil's warmth nor its darkening when wet (`soil`).

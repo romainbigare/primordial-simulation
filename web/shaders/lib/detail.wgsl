@@ -43,9 +43,9 @@ fn carpet_patch(t: i32, l: Lat, x: u32, flat: bool, g: f32) -> vec3f {
 
 // The change tile of cover c gives the ground's colour at the pixel, at e m a pixel. The tile is laid in patches
 // `CARPET_PATCH` tiles wide, each shifted (and a flat tile turned) by its own draw (`carpet_patch`), in two lattices of
-// patches half a patch apart: the pixel shows the patch of the lattice whose middle it is nearer, the two meeting in a
-// seam `CARPET_SEAM` wide (of a patch), wavy by `CARPET_WAVE`, so no repeat shows and a pixel shows one patch's grass and
-// stones, not the mean of two.
+// patches half a patch apart: the pixel shows the patch of the lattice whose middle it is nearer, the two meeting by
+// their heights (ragged.wgsl `height_mix`) over a seam `CARPET_SEAM` wide (of a patch), wavy by `CARPET_WAVE`, so no
+// repeat shows and a pixel shows one patch's grass and stones, not the mean of two.
 fn carpet(c: i32, e: f32) -> vec3f {
   let s = carpet_m(c);
   let t = CARPETS_FROM + c;
@@ -56,11 +56,13 @@ fn carpet(c: i32, e: f32) -> vec3f {
   let inside_a = min(min(pa.f.x, 1.0 - pa.f.x), min(pa.f.y, 1.0 - pa.f.y));
   let inside_b = min(min(pb.f.x, 1.0 - pb.f.x), min(pb.f.y, 1.0 - pb.f.y));
   let wave = CARPET_WAVE * noise_l(lat_turned(0.5 * s, vec2f(0.3)), 98 + t).x;
-  let w = smoothstep(-CARPET_SEAM, CARPET_SEAM, inside_b - inside_a + wave);
-  var a = vec3f(0.0); var b = vec3f(0.0);
-  if (w < 1.0) { a = carpet_patch(t, pa, lowbias(pa.i, 96 + t), c == SNOW_CARPET, e / s); }
-  if (w > 0.0) { b = carpet_patch(t, pb, lowbias(pb.i, 96 + t), c == SNOW_CARPET, e / s); }
-  return change_of(t, a, b, w, CARPET_HUE);
+  let d = (inside_b - inside_a + wave) / CARPET_SEAM;
+  if (d <= -CLAIMS_WITHIN) { return change_of(t, carpet_patch(t, pa, lowbias(pa.i, 96 + t), c == SNOW_CARPET, e / s), vec3f(0.0), 0.0, CARPET_HUE); }
+  let b = carpet_patch(t, pb, lowbias(pb.i, 96 + t), c == SNOW_CARPET, e / s);
+  if (d >= CLAIMS_WITHIN) { return change_of(t, b, b, 1.0, CARPET_HUE); }
+  let a = carpet_patch(t, pa, lowbias(pa.i, 96 + t), c == SNOW_CARPET, e / s);
+  let mean = max(dot(photo_mean(t), LUMA), 1e-3);
+  return change_of(t, a, b, height_mix(d, dot(a, LUMA) / mean, dot(b, LUMA) / mean), CARPET_HUE);
 }
 
 // The change photograph t gives the ground's colour at the pixel, at e m a pixel: 1 where it averages to its mean;
@@ -77,8 +79,14 @@ fn detail(t: i32, e: f32) -> vec3f {
   return change_of(t, a, b, w, DETAIL_HUE);
 }
 
-// Soil's images meet in patches this wide, m, over this much of their noise (`soil_detail`).
-const SOIL_IMAGE_M = 2.5; const SOIL_SEAM = 0.04;
+// Soil's images lie in patches about `SOIL_IMAGE_M` m across, each on a noise of its own (streams from `SOIL_NOISE`), and
+// meet the images under them over `SOIL_EDGE` of that noise (made even, 0..1) by their heights (ragged.wgsl).
+const SOIL_IMAGE_M = 2.5; const SOIL_EDGE = 0.06; const SOIL_NOISE = 180;
+// An image that takes this much of the ground under it covers all of it (the rest is rounding).
+const TAKES_ALL = 0.999;
+
+// The lightness of a change, as a height (ragged.wgsl `claim`).
+fn height_of(c: vec3f) -> f32 { return dot(c, LUMA); }
 
 // The change the photographs give soil of spot p: under crowns its litter (a mossy floor where wet), in the open dry
 // stony soil, cracked where driest, wet mud where wet, beach sand and channels' pebbles where they lie.
@@ -91,28 +99,33 @@ fn soil_detail(p: Spot) -> vec3f {
   let sand = max(p.sand, 0.0);
   for (var i = 0; i < 5; i++) { w[i] *= 1.0 - sand; }
   w[5] = sand;
-  var total = 0.0;
-  for (var i = 0; i < 6; i++) { total += w[i]; }
-  if (total <= 0.0) { return vec3f(1.0); }
-  // Each image holds its share of the ground in patches (`SOIL_IMAGE_M`) where a noise, made even, falls in its part of
-  // the shares, meeting the next over `SOIL_SEAM` of the noise: a pixel shows one image, not the mean of several.
-  let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.2)), 97).x);
-  var sum = vec3f(0.0);
-  var kept = 0.0;
-  var lo = 0.0;
+  // The images lie in a stack, each over those before it: image i covers, of the ground under it, the share its weight
+  // is of its own and theirs, where its own noise falls under that share. So each holds its share of the ground on the
+  // mean, and a small share is a few small patches of its own, not a thin band between two others. The first lies
+  // under all (no noise is read for it); an image is read only where it shows.
+  var out = vec3f(1.0);
+  var under = 0.0;
   for (var i = 0; i < 6; i++) {
-    let hi = lo + w[i] / total;
-    let k = smoothstep(lo - SOIL_SEAM, lo + SOIL_SEAM, n) * (1.0 - smoothstep(hi - SOIL_SEAM, hi + SOIL_SEAM, n));
-    lo = hi;
-    if (k < 0.01) { continue; }
-    sum += k * detail(t[i], p.e);
-    kept += k;
+    if (w[i] <= 0.0) { continue; }
+    under += w[i];
+    let take = w[i] / under;
+    // How far inside its part the point lies, in half widths of the edge.
+    var d = CLAIMS_WITHIN;
+    if (take < TAKES_ALL) {
+      d = (take - smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.2 + 0.31 * f32(i))), SOIL_NOISE + i).x)) / SOIL_EDGE;
+      if (d <= -CLAIMS_WITHIN) { continue; }
+    }
+    let c = detail(t[i], p.e);
+    out = select(mix(out, c, height_mix(d, height_of(out), height_of(c))), c, d >= CLAIMS_WITHIN);
   }
-  var out = sum / max(kept, 1e-4);
   // River pebbles where the bed's stones lie, in patches of their own as many as it holds.
   if (p.stony > 0.02) {
     let m = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.7)), 99).x);
-    out = mix(out, detail(PEBBLE_TEX, p.e), smoothstep(-SOIL_SEAM, SOIL_SEAM, min(p.stony, 1.0) - m));
+    let near = (min(p.stony, 1.0) - m) / SOIL_EDGE;
+    if (near > -CLAIMS_WITHIN) {
+      let c = detail(PEBBLE_TEX, p.e);
+      out = mix(out, c, height_mix(near, height_of(out), height_of(c)));
+    }
   }
   return out;
 }
@@ -145,46 +158,54 @@ fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
 
 // The grass's tiles laid in hexagons (Mikkelsen 2022, hex-tiling): over a lattice of triangles `HEX_M` m across, each
 // corner a hexagon holding one of the three tiles (by its own draw against `n`, 0..1 from turf to tussocks: kinds mix
-// at their edges hexagon by hexagon), or reeds in `reeds` of them, shifted and mirrored by its own draw; a pixel blends its triangle's three corners
-// by their weights to the power `HEX_SHARP` (so a pixel shows one tile's blades, not the mean of three), each tile's
-// detail finer than `GRASS_DETAIL_M` alone. Dry tiles where `dry`. The change it gives a colour, about 1.
-const HEX_M = 1.6; const HEX_SHARP = 7.0; const HEX_MIX = 0.25; const GRASS_DETAIL_M = 0.25;
+// at their edges hexagon by hexagon), or reeds in `reeds` of them, shifted and mirrored by its own draw; the three
+// corners of a pixel's triangle meet by their heights (ragged.wgsl `claim`) over `HEX_EDGE` of its weights either way
+// (so a pixel shows one tile's blades, not the mean of three), each tile's detail finer than `GRASS_DETAIL_M` alone.
+// Dry tiles where `dry`. The change it gives a colour, about 1.
+const HEX_M = 1.6; const HEX_EDGE = 0.08; const HEX_MIX = 0.25; const GRASS_DETAIL_M = 0.25;
 fn grass_hexes(e: f32, n: f32, dry: bool, reeds: f32) -> vec3f {
-  var green = array<i32, 3>(TURF_CARPET, GRASS_CARPET, TUSSOCK_CARPET);
-  var dried = array<i32, 3>(DRY_TURF_CARPET, STRAW_CARPET, DRY_TUSSOCK_CARPET);
   // The triangle lattice: the plane skewed so its triangles are equal-sided, 2 sqrt 3 cells a hexagon's side.
   let skew = mat2x2f(1.0, 0.0, -0.57735027, 1.15470054) * (2.0 * 1.7320508 / HEX_M);
   let l = lat(skew, vec2f(0.0));
   let z = 1.0 - l.f.x - l.f.y;
-  let up = select(0.0, 1.0, z < 0.0);
-  let sg = 2.0 * up - 1.0;
-  var w = vec3f(-z * sg, up - l.f.y * sg, up - l.f.x * sg);
-  var corner = array<vec2i, 3>(l.i + vec2i(i32(up), i32(up)), l.i + vec2i(i32(up), 1 - i32(up)), l.i + vec2i(1 - i32(up), i32(up)));
-  w = pow(max(w, vec3f(0.0)), vec3f(HEX_SHARP));
-  w /= max(w.x + w.y + w.z, 1e-6);
-  var out = vec3f(0.0);
-  for (var k = 0; k < 3; k++) {
-    if (w[k] < 0.004) { continue; }
-    let x = lowbias(corner[k], 107);
-    // Its kind: the noise, with `HEX_MIX` of the hexagon's own draw.
-    let pick = clamp(mix(n, f32(x & 1023u) / 1024.0, HEX_MIX), 0.0, 0.999);
-    // Reeds in as many hexagons as they stand (by a draw of the hexagon's own).
-    let reed = f32(lowbias(corner[k], 109) & 1023u) / 1024.0 < reeds;
-    let c = select(select(green[i32(pick * 3.0)], dried[i32(pick * 3.0)], dry), REED_CARPET, reed);
-    let t = CARPETS_FROM + c;
-    let side = carpet_m(c);
-    let shift = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
-    var uv = lat_axes(side, shift).f;
-    var gx = vec2f(e / side, 0.0);
-    if ((x >> 30u) == 1u) { uv.x = 1.0 - uv.x; gx = -gx; }
-    // Its fine detail alone: the tile over itself blurred to `GRASS_DETAIL_M` (a mip as coarse), so its blades show and
-    // no clump of lighter grass larger than that repeats as a spot.
-    let fine = photo(t, uv, gx, vec2f(0.0, e / side));
-    let g_blur = max(e, GRASS_DETAIL_M) / side;
-    let blur = photo(t, uv, sign(gx) * g_blur, vec2f(0.0, g_blur));
-    out += w[k] * fine / max(blur, vec3f(1e-3));
-  }
+  let up = select(0, 1, z < 0.0);
+  let sg = 2.0 * f32(up) - 1.0;
+  let w = vec3f(-z * sg, f32(up) - l.f.y * sg, f32(up) - l.f.x * sg) / HEX_EDGE;
+  // Each corner near enough the nearest to claim the pixel (the others none): its tile's change and its claim.
+  let least = max(w.x, max(w.y, w.z)) - CLAIMS_WITHIN;
+  var a = vec3f(1.0); var b = vec3f(1.0); var c = vec3f(1.0);
+  var claims = vec3f(-1e6);
+  if (w.x >= least) { a = hex_tile(l.i + vec2i(up, up), e, n, dry, reeds); claims.x = claim(w.x, height_of(a)); }
+  if (w.y >= least) { b = hex_tile(l.i + vec2i(up, 1 - up), e, n, dry, reeds); claims.y = claim(w.y, height_of(b)); }
+  if (w.z >= least) { c = hex_tile(l.i + vec2i(1 - up, up), e, n, dry, reeds); claims.z = claim(w.z, height_of(c)); }
+  let top = max(claims.x, max(claims.y, claims.z));
+  let k = vec3f(claim_weight(claims.x, top), claim_weight(claims.y, top), claim_weight(claims.z, top));
+  let out = (k.x * a + k.y * b + k.z * c) / (k.x + k.y + k.z);
   return mix(vec3f(dot(out, LUMA)), out, CARPET_HUE);
+}
+
+// The change the tile of the hexagon at `corner` gives (`grass_hexes`), at e m a pixel.
+fn hex_tile(corner: vec2i, e: f32, n: f32, dry: bool, reeds: f32) -> vec3f {
+  var green = array<i32, 3>(TURF_CARPET, GRASS_CARPET, TUSSOCK_CARPET);
+  var dried = array<i32, 3>(DRY_TURF_CARPET, STRAW_CARPET, DRY_TUSSOCK_CARPET);
+  let x = lowbias(corner, 107);
+  // Its kind: the noise, with `HEX_MIX` of the hexagon's own draw.
+  let pick = clamp(mix(n, f32(x & 1023u) / 1024.0, HEX_MIX), 0.0, 0.999);
+  // Reeds in as many hexagons as they stand (by a draw of the hexagon's own).
+  let reed = f32(lowbias(corner, 109) & 1023u) / 1024.0 < reeds;
+  let c = select(select(green[i32(pick * 3.0)], dried[i32(pick * 3.0)], dry), REED_CARPET, reed);
+  let t = CARPETS_FROM + c;
+  let side = carpet_m(c);
+  let shift = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
+  var uv = lat_axes(side, shift).f;
+  var gx = vec2f(e / side, 0.0);
+  if ((x >> 30u) == 1u) { uv.x = 1.0 - uv.x; gx = -gx; }
+  // Its fine detail alone: the tile over itself blurred to `GRASS_DETAIL_M` (a mip as coarse), so its blades show and
+  // no clump of lighter grass larger than that repeats as a spot.
+  let fine = photo(t, uv, gx, vec2f(0.0, e / side));
+  let g_blur = max(e, GRASS_DETAIL_M) / side;
+  let blur = photo(t, uv, sign(gx) * g_blur, vec2f(0.0, g_blur));
+  return fine / max(blur, vec3f(1e-3));
 }
 
 // Blades of grass drawn one by one, near (cover_field.wgsl `sward`): over the pixel, from the cells of a lattice `BLADE_CELL_M` m wide,
@@ -330,83 +351,4 @@ fn dry_filler(g0: vec3f, p: Spot, bare: f32) -> vec3f {
     g = mix(g, mat, m);
   }
   return g;
-}
-
-// Things lying on the ground (rendered models, tex.wgsl), angled, standing on their foot with their shadow away from the
-// sun, each sort at its own lattice, one in `fill` of its cells, a size between its two by its own draw (more small than
-// large), as many as the ground suits them: rocks where it is bare, rocky, steep or loose (a snowcap on top where snow
-// lies), large ones in cells of `ROCK_CELL_M` m and small in cells of `PEBBLE_CELL_M` m; fallen trunks and branches
-// under crowns and, fewer, on dry open ground (`WOOD_DRY`); dead bushes on dry bare ground.
-const ROCK_CELL_M = 7.0; const ROCK_FILL = 0.35; const ROCK_M = vec2f(0.5, 2.4);
-const PEBBLE_CELL_M = 1.6; const PEBBLE_FILL = 0.3; const PEBBLE_M = vec2f(0.12, 0.45);
-// Snow shows at least `SNOW_ROCKS` as many rocks through it as the barest ground holds.
-const SNOW_ROCKS = 0.6;
-// Sand holds `1 - SAND_BARE` as many rocks and dead bushes as other bare ground.
-const SAND_BARE = 0.6;
-const WOOD_CELL_M = 6.0; const WOOD_FILL = 0.2; const WOOD_M = vec2f(1.5, 5.0); const WOOD_DRY = 0.35;
-const DEAD_BUSH_CELL_M = 4.0; const DEAD_BUSH_FILL = 0.3; const DEAD_BUSH_M = vec2f(0.5, 1.3);
-// A thing's shadow: a seam `CONTACT` of its width wide and deep (`CONTACT_UP` of it north of its foot, under it)
-// `CONTACT_DARK` dark where it sits in the ground, and the shade it casts, `OBJECT_SHADOW` dark, `CAST` of its width
-// across, its middle at `CAST_AT` of its width from its foot (east and a little north: mostly under it). Snow lies on its
-// lit upper faces, `SNOW_CAP` of their colour.
-const CONTACT = vec2f(0.5, 0.1); const CONTACT_UP = 0.04; const CONTACT_DARK = 0.55;
-const OBJECT_SHADOW = 0.4; const CAST = vec2f(0.6, 0.22); const CAST_AT = vec2f(0.22, -0.06); const SNOW_CAP = 0.85;
-// Each sort's sprites (sprites.wgsl): rocks, wood (a fallen trunk and branches), dead bushes.
-const ROCK_SORT = 0; const WOOD_SORT = 1; const DEAD_BUSH_SORT = 2;
-fn sort_sprite(sort: i32, k: u32) -> i32 {
-  if (sort == ROCK_SORT) { return ROCK_FROM + i32(k % u32(ROCK_N)); }
-  if (sort == WOOD_SORT) { return WOOD_FROM + i32(k % u32(WOOD_N)); }
-  return DEAD_BUSH_FROM + i32(k % u32(DEAD_BUSH_N));
-}
-
-// Ground of colour g at spot p with one sort of things over it: `many` (0..1) as the ground suits them, at stream k.
-// Each shows as a thing (draw.wgsl `as_thing`): its colour and its shadow depart from the ground's by its share.
-fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, many: f32, k: i32) -> vec3f {
-  if (many <= 0.02 || unseen(size.y / THING_PX.x) || as_thing(size.y, p.e) <= 0.0) { return g; }
-  let l = lat_axes(cell_m, vec2f(0.0));
-  var out = g;
-  // From the farthest (north) to the nearest; a thing reaches up into the cell north of its foot, its shadow into the
-  // cell south of it.
-  for (var j = -1; j <= 1; j++) {
-    for (var i = -1; i <= 1; i++) {
-      let c = l.i + vec2i(i, j);
-      let x = lowbias(c, k);
-      if (f32(x & 1023u) / 1024.0 >= fill * many) { continue; }
-      let foot = vec2f(f32(i), f32(j)) + vec2f(f32((x >> 10u) & 255u), f32((x >> 18u) & 255u)) / 256.0 * 0.8 + 0.1;
-      let s = sort_sprite(sort, x >> 26u);
-      let w = mix(size.x, size.y, pow(f32(lowbias(c, k + 1) & 255u) / 255.0, 2.0)) / cell_m;
-      let h = w * model_h(s) / model_w(s);
-      let seen = as_thing(w * cell_m, p.e);
-      if (seen <= 0.0) { continue; }
-      let v = l.f - foot;
-      // Its shadow: a dark seam where it sits in the ground, and the shade it casts away from the sun from under it,
-      // most of it hidden by the thing itself.
-      let contact = length((v - vec2f(0.0, -CONTACT_UP * w)) / vec2f(CONTACT.x * w, CONTACT.y * w));
-      let shade = length((v - CAST_AT * w) / (CAST * w));
-      out *= 1.0 - seen * (1.0 - (1.0 - CONTACT_DARK * (1.0 - smoothstep(0.5, 1.0, contact))) * (1.0 - OBJECT_SHADOW * (1.0 - smoothstep(0.4, 1.0, shade))));
-      let uv = vec2f(v.x / w + 0.5, 1.0 + v.y / h);
-      if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { continue; }
-      let t = model_texel(s, uv, p.e / (w * cell_m));
-      // Snow on its faces that look up, its upper part's lit texels, keeping their light.
-      let lit = dot(t.rgb, LUMA) / max(dot(model_texel(s, uv, 1.0).rgb, LUMA), 1e-4);
-      let cap = p.snow * f32(sort != DEAD_BUSH_SORT) * smoothstep(0.7, 0.35, uv.y) * smoothstep(0.8, 1.3, lit);
-      let rgb = mix(t.rgb, SNOW * clamp(lit, 0.75, 1.1), SNOW_CAP * cap);
-      out = mix(out, rgb, t.a * seen);
-    }
-  }
-  return out;
-}
-
-// The things lying on ground of colour g at spot p, where the plants leave `bare` of it bare.
-fn objects(g: vec3f, p: Spot, bare: f32) -> vec3f {
-  if (!angled() || !models_ready()) { return g; }
-  let canopy = min(p.canopy, 1.0);
-  let open = bare * (1.0 - SAND_BARE * p.sand) * (1.0 - canopy);
-  let stony = max(open * max(max(p.rock, ease(0.15, 0.6, p.slope)), 0.35 + 0.65 * ease(1.0, 0.1, p.loose)), SNOW_ROCKS * p.snow * (1.0 - canopy));
-  let dry = ease(0.4, 0.1, p.wet) * open * (1.0 - p.snow);
-  let wood = max(canopy, WOOD_DRY * dry) * (1.0 - p.sand) * (1.0 - p.snow);
-  var out = scatter(g, p, WOOD_SORT, WOOD_CELL_M, WOOD_FILL, WOOD_M, wood, 120);
-  out = scatter(out, p, DEAD_BUSH_SORT, DEAD_BUSH_CELL_M, DEAD_BUSH_FILL, DEAD_BUSH_M, dry, 124);
-  out = scatter(out, p, ROCK_SORT, PEBBLE_CELL_M, PEBBLE_FILL, PEBBLE_M, stony, 152);
-  return scatter(out, p, ROCK_SORT, ROCK_CELL_M, ROCK_FILL, ROCK_M, stony, 150);
 }

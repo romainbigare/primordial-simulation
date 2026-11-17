@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl tex.wgsl crown.wgsl cells.wgsl mark.wgsl models.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl tex.wgsl crown.wgsl cells.wgsl mark.wgsl models.wgsl
 // The marks of the plant cover's cells in view, decided once a frame (lib/mark.wgsl `decide`): a texel a cell, each
 // lattice's cells in rows of their own (`cover.rows`), drawn before the map (web/src/textures.ts `prepare`), one of its
 // words (`MarkWord`) into each of the marks' textures.

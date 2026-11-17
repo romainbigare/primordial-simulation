@@ -265,8 +265,15 @@ fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
 // The state of the ground at a point: the depth of the liquid standing over it and its height over that liquid's
 // surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1, as its cells' share (`snow_at`
 // places it), and the snow's depth, m; how wet its cells are on their mean, 0..1; and its height over its cells' mean,
-// m, and the share of its cells' ground their frozen cover covers before it melts, 0..1.
-struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, mean: f32, rise: f32, covered: f32 }
+// m, and the share of its cells' ground their frozen cover covers before it melts, 0..1; and the snow's drifts there, in
+// units of the index where it lies (land.wgsl `snow_bares`).
+struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, mean: f32, rise: f32, covered: f32, drifts: f32 }
+
+// A snow line is ragged (ragged.wgsl): at its margin the snow breaks into drifts in hollows behind knobs, bare knobs
+// first, at every scale from `SNOW_PATCH_M` down over `SNOW_PATCH_OCTAVES` octaves, `SNOW_PATCHY` of the index at
+// most. They move both where the snow lies and where the ground is warm enough to melt it, `SNOW_PATCH_K` kelvin a
+// unit of the index: so the line where it melts with height, and the depth that buries the plants, are as ragged.
+const SNOW_PATCH_M = 320.0; const SNOW_PATCH_OCTAVES = 6; const SNOW_PATCHY = 2.5; const SNOW_PATCH_K = 0.6;
 
 // The height of ground `g`, cut `cut` m deep, over the level of the ponds about it, m (`NO_LIQUID_M`: none about it):
 // it counts the more the less of the point is theirs.
@@ -284,10 +291,10 @@ fn through_band(g: Tiled, e: f32) -> f32 {
 // The depth of the liquid of the ponds about a point that stands over its ground `g` as drawn, m.
 fn standing(g: Tiled) -> f32 { return max(g.water.x - g.h, 0.0) * g.water.y; }
 
-// The state at `at`, m from the map's north-west corner, on ground `g` whose bed a channel cuts `cut` m deep there
-// (`depth_in`): the cells' values blended between the squares' centres (`cs`), and the laws inside a cell applied at the
-// point.
-fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
+// The state at `at`, m from the map's north-west corner, seen at `e` m a pixel, on ground `g` whose bed a channel cuts
+// `cut` m deep there (`depth_in`): the cells' values blended between the squares' centres (`cs`), and the laws inside a
+// cell applied at the point.
+fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, e: f32) -> State {
   // The cells' ground, and the share of it each one's frozen cover covers, blended: the shares, not the depths, so a
   // snowy cell beside a bare one draws its share falling across the space between their centres, not at once along a
   // line where the blended depth reaches what covers all (tanh saturates within a few centimetres).
@@ -330,21 +337,23 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32) -> State {
   p.wet = (held + p.depth) / (held + p.depth + half);
   // The ground's temperature is its cell's at the cell's mean height, less the air's fall with height above it.
   p.t = ground.y - ground.z * (g.h - ground.x);
-  p.snow = covered * unmelted(p.t, land.time.z);
-  p.snow_m = snow_depth(ground.w, p.t, land.time.z);
+  p.drifts = 0.0;
+  if (covered > 0.0) { p.drifts = SNOW_PATCHY * ragged(at, e, SNOW_PATCH_M, SNOW_PATCH_OCTAVES, 80); }
+  p.snow = covered * unmelted(p.t + SNOW_PATCH_K * p.drifts, land.time.z);
+  p.snow_m = snow_depth(ground.w, p.t + SNOW_PATCH_K * p.drifts, land.time.z);
   p.mean = mean / (mean + half);
   p.rise = g.h - ground.x;
   p.covered = covered;
   return p;
 }
 
-// The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl): the water of the point's channel stands over
+// The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl), every drift shown: the water of the point's channel stands over
 // its bed too, and its floods over the whole of it (`channel_at`): no plant roots in a channel's bed, widened at its
 // mouth.
 fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   let c = channel_at(g, discharge_at(g, at));
   let cut = depth_in(g, c);
-  var p = state_on(at, g, cs, cut);
+  var p = state_on(at, g, cs, cut, 0.0);
   p.depth = max(max(p.depth, cut), select(0.0, FILM_M, g.d < c.bed));
   return p;
 }

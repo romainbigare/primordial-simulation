@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl tex.wgsl crown.wgsl cells.wgsl mark.wgsl models.wgsl cover_marks.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl tex.wgsl crown.wgsl cells.wgsl mark.wgsl models.wgsl cover_marks.wgsl
 // The plant cover's marks from above, and angled until the models are loaded, each plant a drawn crown of its kind's
 // form (lib/crown.wgsl; lib/cover_marks.wgsl draws them).
 
