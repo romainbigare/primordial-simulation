@@ -39,8 +39,8 @@ use serde::{Deserialize, Serialize};
 /// slots; the rest stay empty.
 pub const SLOTS: usize = 12;
 /// Size groups a slot keeps its plants in (`groups`): the resolution of plant sizes a slot holds, as `SLOTS` is of kinds
-/// (a seedling, a young plant, a plant of the canopy).
-pub const GROUPS: usize = 3;
+/// (seedlings, young plants, plants under the canopy and plants of the canopy).
+pub const GROUPS: usize = 4;
 // The genes of a kind of cover (laws.md 3).
 /// Capacity of the light reaction, log10 mol per kg of living cover per s at `t_cat` (at a moisture need of 1)
 pub const LIGHT: usize = 0;

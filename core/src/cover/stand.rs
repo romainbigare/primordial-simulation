@@ -80,7 +80,9 @@ fn plant_ground(ph: &Physics, mass: f64) -> f64 {
 /// plants hold (its plants at their mean mass, the law's own measure of a stand, `plant_ground`), each other slot's
 /// counted by the share of its crown's depth that slot's crown shares, is set against its ground; where it is more,
 /// the slot loses plants, not mass, as its whole layer would: by that excess cubed (a plant's ground goes as its
-/// mass^(2/3), and its mass as 1 / the count), the small first (`lose`).
+/// mass^(2/3), and its mass as 1 / the count), the small first (`lose`); its large plants lose no more than the crowd
+/// of the large plants of the slots that share their layer asks, each at their own mass (smaller plants take no room
+/// from them: the size-asymmetric competition of Weiner 1990; Purves and others 2008).
 pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, usize), area: f64) {
     let (mut held, mut ground, mut span) = ([0; SLOTS], [0.0; SLOTS], [(0.0, 0.0); SLOTS]);
     let mut k = 0;
@@ -93,10 +95,25 @@ pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, 
     if k > 1 {
         held.iter().zip(span.iter_mut()).for_each(|(&x, s)| *s = c.crown(ph, mm, area, x, c.height(ph, mm, rho, x)));
     }
+    let by = |q: usize, r: usize| if r == q { 1.0 } else { shared(span[q], span[r]) };
+    let crowd: [f64; SLOTS] = std::array::from_fn(|q| if q < k { (0..k).map(|r| by(q, r) * ground[r]).sum() } else { 0.0 });
+    if crowd.iter().all(|&f| f <= area) {
+        return;
+    }
+    // Each slot's large plants, their count and the ground they hold at their own mass.
+    let mut large = [(0.0, 0.0); SLOTS];
     for (q, &x) in held.iter().enumerate() {
-        let crowd: f64 = (0..k).map(|r| if r == q { ground[r] } else { shared(span[q], span[r]) * ground[r] }).sum();
+        let s = c.sizes(ph, mm, x);
+        large[q] = (s.count[s.large()], s.count[s.large()] * plant_ground(ph, s.mass[s.large()]));
+    }
+    for (q, &x) in held.iter().enumerate() {
+        let crowd = crowd[q];
         if crowd > area {
-            lose(c, mm, x, c.count(x) * (1.0 - (area / crowd).powi(3)));
+            // The large plants lose no more than the crowd of the large plants of the slots that share their layer
+            // asks, each at their own mass: smaller plants take no room from them.
+            let alone: f64 = (0..k).map(|r| by(q, r) * large[r].1).sum();
+            let most = if alone > area { large[q].0 * (1.0 - (area / alone).powi(3)) } else { 0.0 };
+            lose(c, mm, x, (c.count(x) * (1.0 - (area / crowd).powi(3)), most));
         }
     }
 }
@@ -104,8 +121,8 @@ pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, 
 /// Slot `x` of cover `c` loses `dead` of its plants, the small first: the suppressed plants of a crowded stand die
 /// first (Yoda and others 1963; Weiner 1990), and the survivors take what the dead freed. Its smallest group loses
 /// plants until its survivors are as large as the next group's plants, the two then fuse (their plants alike), and so
-/// on; what is left falls on its large plants.
-fn lose(c: &mut Cover, mm: &[f64; NP], x: usize, mut dead: f64) {
+/// on; what is left falls on its large plants, at most `most` of them.
+fn lose(c: &mut Cover, mm: &[f64; NP], x: usize, (mut dead, most): (f64, f64)) {
     let (mut g, held) = c.groups(mm, x);
     let mut k = 0;
     while k + 1 < held && dead > 0.0 {
@@ -118,6 +135,9 @@ fn lose(c: &mut Cover, mm: &[f64; NP], x: usize, mut dead: f64) {
         g[k + 1] = Group { n: g[k + 1].n + g[k].n * keep, kg: g[k + 1].kg + g[k].kg };
         g[k] = Group::default();
         k += 1;
+    }
+    if k + 1 == held {
+        dead = dead.min(most);
     }
     g[k].n = (g[k].n - dead.max(0.0)).max(f64::MIN_POSITIVE);
     c.set_groups(x, &mut g[..held]);

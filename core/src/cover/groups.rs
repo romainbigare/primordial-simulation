@@ -1,11 +1,12 @@
 //! The plants of a slot by size (laws.md 3): a slot keeps one pool of matter, its genes and its starting kind, and its
 //! plants in up to `GROUPS` size groups, each a real count and a share of the slot's built cover, so seedlings that
 //! join a stand leave its large plants as large as they were. A group's plant is its share of the built cover over its
-//! count. Seeds that take hold come in as a group of their own; when every group is held, the two groups whose plants
-//! are nearest in mass fuse, as cohorts fuse in the ecosystem demography model (Moorcroft, Hurtt and Pacala 2001) and
-//! as the slots of a cell join (`seed::room`). The shares hold nothing: the books are the slot's.
+//! count. Seeds that take hold come in as a group of their own, or, where every group is held, join the group of the
+//! smallest plants: nothing happens to a plant because smaller plants arrived. Where slots join and their groups are
+//! more than `GROUPS`, the two groups of smaller plants nearest in mass fuse, as cohorts fuse in the ecosystem
+//! demography model (Moorcroft, Hurtt and Pacala 2001). The shares hold nothing: the books are the slot's.
 
-use super::{stand, Cover, GROUPS, NP, NO_ROOT};
+use super::{stand, Cover, GROUPS, NO_ROOT, NP, SLOTS};
 use crate::Physics;
 
 /// A group as the bookkeeping moves it: its plants, a real count, and its built cover, kg.
@@ -105,26 +106,43 @@ impl Cover {
         let s = self.sizes(ph, mm, x);
         (0..s.held).map(|g| growth[g] * stand::walled(ph, s.mass[g])).sum()
     }
-    /// The share of what slot `x` builds in a month that goes to each of its groups: each group's capture area times the
-    /// light its leaves get, its leaves under those of its larger plants: through the slot's layer the light falls by
-    /// e^-(`layer` × the share of the capture area it passed) (Beer's law, `canopy::shade`), and a group's leaves get the
-    /// mean over their own share (`math::mean_decay`). So the large plants take the most light a leaf, the asymmetry of
-    /// the competition for light by size (Weiner 1990), and seedlings, all leaf, grow fast where light reaches them.
-    pub(super) fn growth(&self, ph: &Physics, mm: &[f64; NP], x: usize, layer: f64) -> [f64; GROUPS] {
-        let (mut out, mut above) = ([0.0; GROUPS], 0.0);
-        // (One group takes all.)
-        if self.held_groups(x) == 1 {
-            out[0] = 1.0;
+    /// The share of what each slot of cover `c` in `order` (on its ground of `area` m², its walls of density `rho`)
+    /// builds in a month that goes to each of its groups: each group's capture area times the light its leaves get under
+    /// the leaves of all the cell's plants taller than they are, whatever slot holds them: the light falls by e^-(the
+    /// capture area per unit of ground it passed, each slot's over the share its roots hold) (Beer's law, as
+    /// `canopy::shade`), and the leaves of plants as tall (to `SAME`) get the mean over theirs together
+    /// (`math::mean_decay`). So the large plants take the most light a leaf, the asymmetry of the competition for light
+    /// by size (Weiner 1990), and seedlings, all leaf, grow fast where light reaches them. A slot with no leaves gets
+    /// none (`Cover::grew`).
+    pub(super) fn growth(&self, ph: &Physics, (mm, rho): (&[f64; NP], f64), area: f64, order: &[usize]) -> [[f64; GROUPS]; SLOTS] {
+        let (mut all, mut k, mut out) = ([(0, 0, 0.0, 0.0); SLOTS * GROUPS], 0, [[0.0; GROUPS]; SLOTS]);
+        // (Slots of one group each take all they build.)
+        if order.iter().all(|&x| self.held_groups(x) <= 1) {
+            order.iter().for_each(|&x| out[x][0] = 1.0);
             return out;
         }
-        let s = self.sizes(ph, mm, x);
-        for g in (0..s.held).rev() {
-            out[g] = s.leaf[g] * (-layer * above).exp() * crate::math::mean_decay(layer * s.leaf[g]);
-            above += s.leaf[g];
+        for &x in order {
+            let s = self.sizes(ph, mm, x);
+            let per = self.leaf(mm, x) / (area * self.rooted[x].max(f32::MIN_POSITIVE) as f64).max(1e-300);
+            for g in 0..s.held {
+                (all[k], k) = ((x, g, s.height(ph, rho, g), per * s.leaf[g]), k + 1);
+            }
         }
-        let all: f64 = out.iter().sum();
-        if all > 0.0 {
-            out.iter_mut().for_each(|f| *f /= all);
+        let all = &mut all[..k];
+        all.sort_by(|a, b| b.2.total_cmp(&a.2));
+        let (mut above, mut i) = (0.0f64, 0);
+        while i < k {
+            let j = i + all[i..].iter().take_while(|e| e.2 >= all[i].2 * (1.0 - SAME)).count();
+            let y: f64 = all[i..j].iter().map(|e| e.3).sum();
+            let lit = (-above).exp() * crate::math::mean_decay(y);
+            all[i..j].iter().for_each(|&(x, g, _, leaf)| out[x][g] = leaf * lit);
+            (above, i) = (above + y, j);
+        }
+        for &x in order {
+            let sum: f64 = out[x].iter().sum();
+            if sum > 0.0 {
+                out[x].iter_mut().for_each(|f| *f /= sum);
+            }
         }
         out
     }
@@ -161,13 +179,16 @@ impl Cover {
         (self.plants[x], self.share[x]) = ([0.0; GROUPS], [0.0; GROUPS]);
     }
     /// `n` plants of `kg` of built cover take hold in slot `x` (seeds of its kind, before their amounts join it): a
-    /// group of their own.
+    /// group of their own, or, where every group is held, the group of its smallest plants.
     pub(super) fn recruit(&mut self, mm: &[f64; NP], x: usize, (n, kg): (f64, f64)) {
-        let (g, held) = self.groups(mm, x);
-        let mut all = [Group::default(); GROUPS + 1];
-        all[..held].copy_from_slice(&g[..held]);
-        all[held] = Group { n, kg };
-        self.set_groups(x, &mut all[..held + 1]);
+        let (mut g, held) = self.groups(mm, x);
+        if held < GROUPS {
+            g[held] = Group { n, kg };
+            self.set_groups(x, &mut g[..held + 1]);
+            return;
+        }
+        g[0] = Group { n: g[0].n + n, kg: g[0].kg + kg };
+        self.set_groups(x, &mut g[..held]);
     }
     /// Slot `small` joins slot `big` (`stand::join`, before their amounts join): their groups together.
     pub(super) fn join_groups(&mut self, mm: &[f64; NP], big: usize, small: usize) {
@@ -189,9 +210,13 @@ impl Cover {
     }
 }
 
-/// Groups `g` made a slot's: the empty ones (no plants) dropped, the rest in the order of their plants' mass, and while
-/// they are more than `GROUPS`, or two hold plants of one mass (one group), the two whose plants are nearest in mass
-/// (the least ratio) fuse. Returns how many.
+/// Plant masses and heights nearer than this share of each other are one: the rounding of sums taken in another order
+/// (a stand cut into alike slots holds plants as large to it).
+const SAME: f64 = 1e-9;
+
+/// Groups `g` made a slot's: the empty ones (no plants) dropped, the rest in the order of their plants' mass; two that
+/// hold plants of one mass (to `SAME`) are one group, and while they are more than `GROUPS`, the two of the smaller
+/// plants (all but the largest) nearest in mass (the least ratio) fuse. Returns how many.
 pub(super) fn fit(g: &mut [Group]) -> usize {
     let mut held = 0;
     for k in 0..g.len() {
@@ -202,10 +227,13 @@ pub(super) fn fit(g: &mut [Group]) -> usize {
     g[..held].sort_by(|a, b| a.plant().total_cmp(&b.plant()));
     while held > 1 {
         let ratio = |k: usize| g[k + 1].plant() / g[k].plant().max(f64::MIN_POSITIVE);
-        let k = (0..held - 1).min_by(|&a, &b| ratio(a).total_cmp(&ratio(b))).expect("two groups");
-        if held <= GROUPS && ratio(k) > 1.0 {
-            break;
-        }
+        // (Plants of one mass are one group; room is made among the smaller plants: the large plants fuse only with
+        // plants of their mass.)
+        let k = match (0..held - 1).find(|&k| ratio(k) <= 1.0 + SAME) {
+            Some(k) => k,
+            None if held > GROUPS => (0..held - 2).min_by(|&a, &b| ratio(a).total_cmp(&ratio(b))).expect("two groups"),
+            None => break,
+        };
         g[k] = Group { n: g[k].n + g[k + 1].n, kg: g[k].kg + g[k + 1].kg };
         g.copy_within(k + 2..held, k + 1);
         held -= 1;

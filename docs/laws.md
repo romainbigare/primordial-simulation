@@ -889,7 +889,7 @@ is gone gives it 1 m², so it thins to almost no plants and, under the liquid (i
 its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
 task per chunk), slot by slot, the tallest first. **Plants**: a slot holds one pool of matter, and its plants in up
-to `GROUPS` (3) **size groups** (`cover/groups.rs`), each a real count (`Cover::plants`) and a share of the slot's
+to `GROUPS` (4) **size groups** (`cover/groups.rs`), each a real count (`Cover::plants`) and a share of the slot's
 built cover (`Cover::share`), the smallest plants first: a group's plant's mass is its share of the built cover over
 its count. The slot's walls are shared over its groups by each group's built cover times the share of walls a plant
 of its mass builds (`wall_kg`, below), the rest of each group's built cover is its living cover and its share of the
@@ -898,10 +898,11 @@ and `stem_solid` at the walls' density, as tall as `tall` × its width^(2/3), th
 The slot's **large plants** (its last group) set its height (`Cover::height`): the top of its crown for the light, the
 loose ground its roots need, the stem a jaw meets and what the page draws; its conducting walls are each group's
 capture area as tall as its plants (`Cover::lift`). Seeds that found a slot are one group of one plant per `seed_kg`;
-seeds that join a stand of their kind come in as a group of their own, and where all its groups are held, the two
-groups whose plants are nearest in mass (the least ratio) fuse, as cohorts fuse in the ecosystem demography model
-(Moorcroft, Hurtt and Pacala 2001) and as the slots do (`seed::room`), and groups of plants of one mass are one;
-slots that join pool their groups the same way.
+seeds that join a stand of their kind come in as a group of their own, and where all its groups are held they join
+its group of the smallest plants (`Cover::recruit`): nothing happens to a plant because smaller plants arrived. Slots
+that join pool their groups: groups of plants of one mass are one, and while they are more than `GROUPS` the two
+groups of smaller plants (all but the largest) nearest in mass fuse, as cohorts fuse in the ecosystem demography model
+(Moorcroft, Hurtt and Pacala 2001).
 So seedlings that join a stand leave its large plants as they were. What a slot builds in a month goes to its groups
 by each group's capture area times the light its leaves get, its leaves under those of its larger plants: through the
 slot's layer the light falls by e^(the capture area it passes, `canopy::shade`), and a group's leaves get the mean
@@ -917,7 +918,9 @@ layer hold, each other slot's counted by the share of the slot's crown its own c
 cell's ground, and where it is more the slot loses plants, not mass, as its whole layer would (by that excess cubed),
 **the small first** (`stand::lose`; the suppressed plants of a crowded stand die first, Yoda and others 1963; Weiner
 1990), the survivors taking what the dead freed: its smallest group loses plants until its survivors are as large as
-the next group's plants, the two then fuse, and what is left falls on the large plants. So seedlings that crowd a
+the next group's plants, the two then fuse, and what is left falls on the large plants, but they lose no more than
+the crowd of the large plants of the slots that share their layer asks, each at their own mass: smaller plants take
+no room from them (the size-asymmetric competition of Weiner 1990; Purves and others 2008). So seedlings that crowd a
 closed stand die in its month, and live where it has room. So a stand cut into slots thins as the whole. What dies of unpaid upkeep, wear or frost is whole plants of every group
 alike (each count falls with the mass); what a taker bites or the slot sheds is mass of every group alike. So a stand
 that recruits sits on the thinning line, and its large plants grow with their own mass: a kind that holds much mass
@@ -1071,7 +1074,8 @@ seeds fill it:
   month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
   ground none. What wakes takes hold (`seed::lodge`): it joins the stand of its starting kind in the cell, the slots
   of it within `APART` (0.5) × `alike` steps (in every gene, `cover::distance`), shared over them by their built cover
-  (the genes of each the mean by built cover; in each a group of plants of their own, `Cover::recruit`);
+  (the genes of each the mean by built cover; in each a group of plants of their own, or the group of its smallest
+  plants where all are held, `Cover::recruit`);
   else they found a slot of their own: an empty one; else the slot **in deficit**, whose balance over about its last
   year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
   below zero, the worst first (its cover dies as remains); else the two slots nearest each other by their genes,

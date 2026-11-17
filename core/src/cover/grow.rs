@@ -159,8 +159,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
 /// groups of plants by `Cover::growth`.
 fn grow(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, pays, season): (&[Slot; SLOTS], [bool; SLOTS], [bool; SLOTS]), order: &[usize], (i, a, dt): (usize, &Around, f64), (b, counts): (&mut Books, &mut Counters)) {
     let mm = p.mm(&w.chem);
-    let growth: Vec<_> = order.iter().map(|&x| c.growth(&w.cfg.phys, &mm, x, s[x].layer)).collect();
-    let plans: Vec<_> = order.iter().zip(&growth).map(|(&x, f)| (season[x] && (pays[x] || super::build::frame_short(w, c, p, x) <= 0.0)).then(|| super::build::per_kg(w, c, p, x, (&s[x], f))).flatten()).collect();
+    let growth = c.growth(&w.cfg.phys, (&mm, w.chem.subs[p.sub[WALL]].density[0]), super::ground(w, i), order);
+    let plans: Vec<_> = order.iter().map(|&x| (season[x] && (pays[x] || super::build::frame_short(w, c, p, x) <= 0.0)).then(|| super::build::per_kg(w, c, p, x, (&s[x], &growth[x]))).flatten()).collect();
     // (A lone slot's share is all of it.)
     let shared = order.len() > 1;
     let wants: Vec<_> = order.iter().zip(&plans).filter(|_| shared).map(|(&x, k)| k.as_ref().map_or([0.0; MAX_SUBSTANCES], |k| super::build::wants(w, (c, k), p, x, &s[x]))).collect();
@@ -172,7 +172,7 @@ fn grow(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, pays, season
             let want = &wants[q];
             (0..ns).filter(|&k| want[k] > 0.0 && asked[k] > 0.0).for_each(|k| ground[k] = a.ground[k] * (want[k] / asked[k]));
         }
-        grow_slot(w, c, (p, e), x, (&s[x], pays[x], season[x], plan.as_ref(), &growth[q]), (i, a.tick, a.t, dt), &mut ground, (b, counts));
+        grow_slot(w, c, (p, e), x, (&s[x], pays[x], season[x], plan.as_ref(), &growth[x]), (i, a.tick, a.t, dt), &mut ground, (b, counts));
     }
 }
 

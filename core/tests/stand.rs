@@ -14,6 +14,15 @@ use worldgen::testkit::{self, dry_lands, small_world};
 /// (seen).
 const SAME: f64 = 1e-6;
 
+/// How near the large plants stand to as tall when seeds join their slot, a share: the seeds and the walls they bring
+/// move the large plants' share of the slot's walls (`Cover::sizes`; seen: 1e-6 to 3e-4).
+const SEEDS_WALLS: f64 = 1e-3;
+
+/// How near a stand's large plants end a month with a flush of seedlings to the month without it, a share: the
+/// seedlings take their share of the slot's growth, of its light and of its upkeep, of which more goes unpaid with
+/// their leaves (seen: up to 3.4e-3).
+const FLUSH: f64 = 5e-3;
+
 /// The row of the big slow kind of cover (a tree).
 const TREE_ROW: usize = 2;
 
@@ -157,26 +166,37 @@ fn tallest(w: &World, i: usize) -> (usize, f64, f64, cover::Sizes) {
     (x, c.height(&w.cfg.phys, &mm, rho, x), c.count(x), c.sizes(&w.cfg.phys, &mm, x))
 }
 
-/// Seeds of a tree stand's kind (0.01 kg per m²) that take hold in its slot come in as a group of their own: the slot
-/// holds many more plants, and its large plants stand as tall as before to 1e-5 (the seeds bring a few walls, which
-/// move the large plants' share of the walls by about 1e-6; laws.md 3). In the stand's next month, crowded past the
-/// self-thinning law, the small plants die first: of the seedlings at most a tenth of the share of the large plants
-/// that live through the month lives.
-#[test]
-fn seedlings_join_a_stand_beside_its_large_plants_and_die_first() {
-    let (mut w, i) = grown(TREE_ROW, 5.0);
-    let (x, tall, plants, sizes) = tallest(&w, i);
-    assert!(cover::place(&mut w, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 0.01));
-    let (y, now, joined, with) = tallest(&w, i);
-    println!("height {tall} m, then {now} m; plants {plants}, then {joined}; groups {sizes:?}, then {with:?}");
-    assert!(y == x && joined > 10.0 * plants && with.held > sizes.held.min(cover::GROUPS - 1), "the seeds did not join as a group");
-    assert!((now / tall - 1.0).abs() < 1e-5, "the large plants stood {tall} m, then {now} m");
-    let (large, seedlings) = (with.count[with.large()], joined - with.count[with.large()]);
+/// The large plants of the heaviest slot of cell `i` of world `w` after a month: their count and height, m.
+fn large_after_a_month(mut w: World, i: usize) -> (f64, f64) {
     pcore::step(&mut w);
-    let (_, _, left, after) = tallest(&w, i);
-    let (kept_large, kept_small) = ((after.count[after.large()] / large).min(1.0), (left - after.count[after.large()]) / seedlings);
-    println!("a month on: large plants kept {kept_large}, seedlings kept {kept_small}; groups {after:?}");
-    assert!(kept_small < 0.1 * kept_large, "the seedlings did not die first: {kept_small} of them lived, {kept_large} of the large plants");
+    let (_, tall, _, s) = tallest(&w, i);
+    (s.count[s.large()], tall)
+}
+
+/// Nothing happens to a plant because smaller plants arrived (laws.md 3): a flush of seedlings (0.01 kg per m²) in a
+/// tree stand's slot, or in a slot of another kind on its cell, leaves the stand's large plants as they were at the end
+/// of their month, to `FLUSH` of their count and height. The seeds of its kind join the slot beside its large plants,
+/// which stand as tall when they come, to `SEEDS_WALLS`.
+#[test]
+fn a_flush_of_seedlings_leaves_the_large_plants_as_they_were() {
+    let (w, i) = grown(TREE_ROW, 5.0);
+    let (x, tall, plants, sizes) = tallest(&w, i);
+    let mut own = w.clone();
+    assert!(cover::place(&mut own, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 0.01));
+    let (y, now, joined, with) = tallest(&own, i);
+    println!("height {tall} m, then {now} m; plants {plants}, then {joined}; groups {sizes:?}, then {with:?}");
+    assert!(y == x && joined > 2.0 * plants && with.count[with.large()] == sizes.count[sizes.large()], "the seeds did not join the slot beside its large plants");
+    assert!((now / tall - 1.0).abs() < SEEDS_WALLS, "the large plants stood {tall} m, then {now} m");
+    let mut other = w.clone();
+    let mut herb = KINDS[LIGHT_ROW].genes;
+    herb[cover::FROST] -= 30.0;
+    assert!(cover::place(&mut other, i, herb, LIGHT_ROW as u32, 0.01));
+    let alone = large_after_a_month(w, i);
+    for (what, flushed) in [("its own", own), ("another kind's", other)] {
+        let after = large_after_a_month(flushed, i);
+        println!("with {what} seedlings: large plants {after:?}, alone {alone:?}");
+        assert!((after.0 / alone.0 - 1.0).abs() < FLUSH && (after.1 / alone.1 - 1.0).abs() < FLUSH, "{what} seedlings moved the large plants: {after:?}, alone {alone:?}");
+    }
 }
 
 /// Through a year of a tree stand that seeds itself, every slot of the world keeps its groups whole at each month's
