@@ -33,21 +33,30 @@ const BARK = 0.55;
 const CROWN_SNOW = 0.8; const SNOW_LIT = vec2f(0.9, 1.15); const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
 
 
-// Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground: its shadow, its stem
-// (a tree), its body by its design (a closed crown lit from above carries the snow, `CROWN_SNOW`), and a bush's flowers
-// or fruit.
-fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
+// A shadow `a` deep over dst, where the deepest laid on this pixel so far is `shade`: shadows on one spot do not add up,
+// the ground in the shade of several plants is as dark as under the deepest one, as the field far away counts the
+// ground under any shadow once (canopy.ts `Paint.shade`).
+fn shadow(dst: ptr<function, vec4f>, shade: ptr<function, f32>, a: f32) {
+  if (a <= *shade) { return; }
+  over(dst, vec3f(0.0), (a - *shade) / (1.0 - *shade));
+  *shade = a;
+}
+
+// Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground and the deepest shadow
+// laid on the pixel is `shade`: its shadow, its stem (a tree), its body by its design (a closed crown lit from above
+// carries the snow, `CROWN_SNOW`), and a bush's flowers or fruit.
+fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
   let angled = cover.corner.w;
   let models = angled > 0.5 && models_ready();
   if (models) {
-    over(dst, vec3f(0.0), fade * model_shadow(q, p, e));
+    shadow(dst, shade, fade * model_shadow(q, p, e));
   } else {
     // The shadow: from above to the south-east of its foot by its height (`SHADOW_OFF`); angled, flat on the ground at
     // its foot; within its reach with its offset (`SHADOW_REACH`): the pixel looks no farther for it (`lattice`).
     let half = min(0.5 * q.d, q.reach / SHADOW_REACH);
     let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);
     let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
-    over(dst, vec3f(0.0), SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
+    shadow(dst, shade, SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
   }
   let bark = BARK * cover.walls.rgb;
   // Angled, a plant is its model's sprite (models.wgsl) once the models are loaded.
@@ -78,9 +87,9 @@ fn plant(dst: ptr<function, vec4f>, q: Plant, p: vec2f, e: f32, fade: f32, snow:
   if (q.blooms > 0.0) { bush_dots(dst, q, p, e, fade); }
 }
 
-// The marks of lattice l over dst at p, m from the draw's corner, e m a pixel: of the cells about the pixel, the marks
-// that stand (`decided`) and may reach it.
-fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
+// The marks of lattice l over dst at p, m from the draw's corner, e m a pixel, the deepest shadow laid on the pixel
+// `shade`: of the cells about the pixel, the marks that stand (`decided`) and may reach it.
+fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i32, e: f32) {
   let g = cover.grid[l];
   let fade = cover_look.shown[l];
   // Skip a lattice none of whose marks stands on any square this pixel's marks could stand on.
@@ -103,7 +112,7 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
       if (m.x < 0.0) { continue; }
       let packed = i32(m.x);
       let s = packed / kinds_n();
-      plant(dst, mark_plant(l, k, vec2i(s % n, s / n), packed % kinds_n()), p, e, fade * m.y, m.z);
+      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), packed % kinds_n()), p, e, fade * m.y, m.z);
     }
   }
 }
@@ -113,7 +122,8 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
   // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.
   let e = cover.seen.x;
   var dst = vec4f(0.0);
-  for (var l = 0; l < COVER_LATTICES; l++) { lattice(&dst, p, l, e); }
+  var shade = 0.0;
+  for (var l = 0; l < COVER_LATTICES; l++) { lattice(&dst, &shade, p, l, e); }
   // Linear light turned into the screen's share once (draw.wgsl `srgb`), in the style (style.wgsl `painted`),
   // premultiplied.
   if (dst.a <= 0.0) { return vec4f(0.0); }
