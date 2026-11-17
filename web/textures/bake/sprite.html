@@ -17,6 +17,8 @@ const LEAF_GREEN = [0.345, 0.39];
 // The light of the sky (a hemisphere, blue above and earth below) and of the sun from the north-west, 38 degrees up
 // (the carpets' sun, bake.html), three.js units.
 const SKY = 1.45, SUN = 3.6;
+// A built stem's colour (linear: the dark brown of a tree fern's fibrous trunk) and its top's width over its foot's.
+const STEM_RGB = [0.09, 0.06, 0.04], STEM_TOP = 0.75;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
 renderer.setPixelRatio(1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -32,7 +34,8 @@ async function load(name) {
 }
 
 // The meshes of model `s.model` (its nodes `s.nodes`, else all), baked in place with their materials: both sides,
-// cut-out leaves, matte.
+// cut-out leaves, matte; with `s.stem`, set on a stem (a trunk of tree fern fibre, `STEM_RGB`) `s.stem.up` of their
+// own height tall and `s.stem.r` of it wide at its foot, tapering to `STEM_TOP` of that.
 async function meshesOf(s) {
   const g = await load(s.model);
   g.scene.updateMatrixWorld(true);
@@ -47,6 +50,15 @@ async function meshesOf(s) {
     if (mat.transparent || mat.alphaTest > 0 || mat.alphaMap) { mat.alphaTest = 0.5; mat.transparent = false; }
     out.push(new THREE.Mesh(geo, mat));
   });
+  if (s.stem) {
+    const box = new THREE.Box3();
+    out.forEach(m => { m.geometry.computeBoundingBox(); box.union(m.geometry.boundingBox); });
+    const h = box.max.y - box.min.y, up = s.stem.up * h, mid = box.getCenter(new THREE.Vector3());
+    out.forEach(m => m.geometry.translate(-mid.x, up - box.min.y, -mid.z));
+    const stem = new THREE.CylinderGeometry(STEM_TOP * s.stem.r * h, s.stem.r * h, up * 1.05, 24, 8);
+    stem.translate(0, up * 0.525, 0);
+    out.push(new THREE.Mesh(stem, new THREE.MeshStandardMaterial({ color: new THREE.Color(...STEM_RGB), roughness: 1 })));
+  }
   return out;
 }
 

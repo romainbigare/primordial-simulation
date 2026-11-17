@@ -25,8 +25,8 @@ export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom:
 /** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (cover.wgsl `plant`), and a herb,
  * drawn only as the sward of the ground (cover_field.wgsl `sward`). */
 export const DESIGN = { tree: 0, bush: 1, herb: 2 } as const;
-/** A woody kind's plant this tall or taller, m, is a tree, a lower one a bush; a kind is woody whose grown plants hold
- * this share of their dry mass as walls or more (`designOf`). */
+/** A plant this tall or taller, m, stands (a tree, whatever its walls); a lower one is a bush where its kind is woody
+ * (its grown plants hold this share of their dry mass as walls or more), else a herb (`designOf`). */
 const TREE_M = 3, BUSH_WOOD = 0.6;
 
 // The palette of the greens: a kind's hue (OKLCH, degrees) from its leaves' thickness (thin leaves yellow-green, thick
@@ -130,13 +130,20 @@ export function cooling(year: number, lat: number): number {
 }
 
 /** The design of a kind whose plants stand `height` m tall and whose walls gene is `walls` (log10 kg of walls per kg of
- * matter, the core's `WALLS`): a kind whose grown plants hold `BUSH_WOOD` of their dry mass as walls or more is woody,
- * drawn as trees from `TREE_M` tall and as bushes below (so a young stand of a woody kind is drawn as young woody
- * plants, never as meadow); any other kind is a herb, the sward. A grown plant holds 10^walls kg of walls a kg of matter
- * (laws.md 3: its share of walls nears the gene as it grows). */
+ * matter, the core's `WALLS`): a plant `TREE_M` tall or taller stands, drawn as a tree (a soft one, with little wood,
+ * as a palm, a tree fern or a giant herb: models.wgsl `model_set`); a lower one of a kind whose grown plants hold
+ * `BUSH_WOOD` of their dry mass as walls or more is a bush (so a young stand of a woody kind is drawn as young woody
+ * plants, never as meadow), else a herb, the sward (`grownWalls`; laws.md 3: a plant's share of walls nears the gene as
+ * it grows). */
 export function designOf(height: number, walls: number): number {
-  const grown = 10 ** walls / (1 + 10 ** walls);
-  return grown < BUSH_WOOD ? DESIGN.herb : height >= TREE_M ? DESIGN.tree : DESIGN.bush;
+  if (height >= TREE_M) return DESIGN.tree;
+  return grownWalls(walls) < BUSH_WOOD ? DESIGN.herb : DESIGN.bush;
+}
+
+/** The share of a grown plant's dry mass that is walls, of a kind whose walls gene is `walls` (log10 kg of walls per kg
+ * of matter): 10^walls kg of walls a kg of matter. */
+export function grownWalls(walls: number): number {
+  return 10 ** walls / (1 + 10 ** walls);
 }
 
 /** The green of kind `k` (OKLab), its lightness drawn in part from its physical leaf `phys` (linear); a herb's as the

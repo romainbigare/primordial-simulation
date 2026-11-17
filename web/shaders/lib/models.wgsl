@@ -22,7 +22,9 @@ const SPRAYS = 30.0;
 // (form.ts `formOf`, round where it is not sure) and its height, a dry kind's broad crown a quiver tree (from `QUIVER_DRY`
 // of dryness); a cone young under `CONE_YOUNG_M` m and small under `SMALL_M` m (spruces, pines), a column a spruce
 // (young under `CONE_YOUNG_M` m), tiers a pine (young under `PINE_YOUNG_M` m, small under `SMALL_M` m); a bush by how dry its kind's ground (its draw mixing the sets near their borders,
-// `BUSH_DRY`): leafy, middling, or a dry land's.
+// `BUSH_DRY`): leafy, middling, or a dry land's. A tree whose grown plants' walls are under `SOFT_WOOD` of their dry mass
+// (style.ts `BUSH_WOOD`, `grownWalls`) is a soft one: a palm, a tree fern or a giant herb (its draw mixing the two near the border, `SOFT_MIX`).
+const SOFT_WOOD = 0.6; const SOFT_MIX = 0.1;
 const QUIVER_DRY = 0.5; const SMALL_M = 3.0; const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
 const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
 fn model_set(q: Plant) -> vec2i {
@@ -32,6 +34,7 @@ fn model_set(q: Plant) -> vec2i {
     if (dry > BUSH_DRY.x) { return vec2i(SEARSIA_FROM, SEARSIA_N); }
     return vec2i(SHRUB_FROM, SHRUB_N);
   }
+  if (q.wood + SOFT_MIX * (fract(q.r.x * 31.7) - 0.5) < SOFT_WOOD) { return vec2i(SOFT_FROM, SOFT_N); }
   let f = select(ROUND, i32(q.form + 0.5), q.sure > 0.5);
   if (f == CONE) {
     if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINE_SMALL_N); }

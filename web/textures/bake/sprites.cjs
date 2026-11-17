@@ -8,7 +8,7 @@
 // degrees about the vertical, each a sprite of each part; `cut`, the share of its height cut off at its foot; `rest`,
 // set down on its resting face (sprite.html `restingTurn`) and `sink`, the share of its height sunk into the ground,
 // cut off at the ground; `bare`, the materials (a pattern) hidden for its bare twin (the trees' twins go into the models'
-// strip after its own sprites; sprites.wgsl `bare_of`); `leaf`, the
+// strip after its own sprites; sprites.wgsl `bare_of`); `stem`, a stem it is set on (sprite.html `meshesOf`); `leaf`, the
 // mean lightness (linear) its leaves are scaled to (its other texels by the square root of that scale), so the models'
 // leaves are about as light as each other's; `set`, the name of the set it starts (sprites.wgsl `<set>_FROM` and
 // `<set>_N`, the set running to the next entry with a set).

@@ -5,7 +5,7 @@
 // draw make. No kind is a class: a plant's size, shape and colour are functions of its numbers.
 import type { Rgb } from './style';
 import { clamp, smooth } from './earth';
-import { DESIGN, KindLook, designOf, fromScreen, kindLook, seenFar, strawSeen, toScreen } from './style';
+import { DESIGN, KindLook, designOf, fromScreen, grownWalls, kindLook, seenFar, strawSeen, toScreen } from './style';
 import { formOf } from './form';
 
 /** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most `REACH` cells from its
@@ -38,7 +38,7 @@ const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, cr
  * first kind, `Paint`) and the mark's width, m; how wet each kind needs its ground and how deep its loose ground, m (the
  * core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); then of each kind its form (height and stem's
  * width, m, how closed its crown is and the leaves it has left, `LEFT_STEPS`, its capture area per kg, log10 m²/kg), the colours its plants span (style.ts
- * `KindLook`: the first with its walls' share, the second with its design, `designOf`), its flowers (their colour and
+ * `KindLook`: the first with its grown plants' walls' share, `grownWalls`, the second with its design, `designOf`), its flowers (their colour and
  * the share of its plants in flower) and its shape (its crown's form and how surely, form.ts `formOf`, packed as one
  * number, its starting kind, the plants one of its marks on the lattice of stands stands for, and how dry its ground). A plane holds four numbers: one for each kind of a group of four
  * of a square (`groups` such planes for each of the first numbers, and of each lattice), or one kind's four. */
@@ -321,7 +321,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       put(group(P.need, k), i, k & 3, 10 ** r[K.moist]);
       put(group(P.roots, k), i, k & 3, mean >= ROOTED_ALL ? 0 : r[K.need]);
       [r[K.height], r[K.stem], packed, r[K.leaf]].forEach((v, q) => put(P.form + k, i, q, v));
-      [...look.from, r[K.wood]].forEach((v, q) => put(P.from + k, i, q, v));
+      [...look.from, grownWalls(r[K.walls])].forEach((v, q) => put(P.from + k, i, q, v));
       [...look.to, design].forEach((v, q) => put(P.to + k, i, q, v));
       [...look.petal, look.bloom].forEach((v, q) => put(P.petal + k, i, q, v));
       // Its form and how surely as one number (form + `SURE_PACK` x sure), the starting kind it descends from (a label
