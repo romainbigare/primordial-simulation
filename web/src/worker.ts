@@ -43,7 +43,7 @@ let core: Core | null = null;
 let playing = false;
 /** Months of the world per second of real time (Infinity: as many as a tick holds). */
 let rate = 12;
-/** Months owed to the rate, fractions included. */
+/** Months owed to a finite rate, fractions included (at an infinite rate a tick steps as many as it holds and owes none). */
 let due = 0;
 let lastTick = 0;
 let timer = 0;
@@ -81,13 +81,14 @@ function waiting(): boolean {
 }
 
 function tick(): void {
-  const c = core!, t0 = performance.now();
-  due = Math.min(due + ((t0 - lastTick) / 1000) * rate, rate * 2);
+  const c = core!, t0 = performance.now(), bounded = Number.isFinite(rate);
+  due = bounded ? Math.min(due + ((t0 - lastTick) / 1000) * rate, rate * 2) : 0;
   lastTick = t0;
   let made = 0;
   try {
-    while (performance.now() - t0 < TICK_MS && (due >= 1 || rate === Infinity) && !waiting()) {
-      c.step_month(); due -= 1; made++;
+    while (performance.now() - t0 < TICK_MS && (!bounded || due >= 1) && !waiting()) {
+      c.step_month(); made++;
+      if (bounded) due -= 1;
     }
     stepped += made;
     owed ||= made > 0;
