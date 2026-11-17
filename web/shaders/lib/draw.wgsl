@@ -57,6 +57,12 @@ fn shows_at(size: f32, e: f32) -> f32 {
   return 1.0 - ease(0.5 * size, 1.5 * size, 2.0 * e);
 }
 
+// The one rule for a thing drawn one by one (a plant's crown in the field, a tuft, a stone, a rock or a log): it shows
+// as itself, against the mean of its ground, by this share of its contrast, from its size in pixels: none under
+// `THING_PX.x` (it would be a speck: its colour is its ground's mean), all from `THING_PX.y`.
+const THING_PX = vec2f(4.0, 8.0);
+fn as_thing(size: f32, e: f32) -> f32 { return ease(THING_PX.x * e, THING_PX.y * e, size); }
+
 // A random word of the grid cell c and the stream k, fixed in the world (lowbias32, Wellons 2018).
 fn lowbias(c: vec2i, k: i32) -> u32 {
   var x = (u32(c.x) * 0x9E3779B1u) ^ (u32(c.y) * 0x85EBCA77u) ^ (u32(k) * 0xC2B2AE3Du);

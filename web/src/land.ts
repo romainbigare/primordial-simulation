@@ -47,8 +47,8 @@ export const FLOW_FPS = 6;
 const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
 
 export class Land {
-  /** The pixels drawn a css pixel in the picture the map draws now: the screen's ratio times the scale the map is
-   * drawn at (a picture drawn small and stretched has larger pixels; what is sized in css pixels must not change). */
+  /** The screen's pixels a css pixel, which the detail drawn is chosen by (map.ts `drawMap`): a picture drawn at fewer
+   * pixels and stretched is the same picture, and what is sized in css pixels does not change. */
   drawn = devicePixelRatio;
   private data: Float32Array | null = null;
   private tex: Texture | null = null;

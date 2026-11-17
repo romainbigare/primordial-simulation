@@ -14,11 +14,12 @@ export const ORIGIN_STEP_M = 1024;
 
 /** Where the pixels of a draw lie in the world, so no position is held in a float over a few kilometres from its origin:
  * the world's point under the target's first pixel, in double precision, as a whole multiple of `ORIGIN_STEP_M` (its
- * origin) and the small rest, and the metres a device pixel takes (`Earth.frame`: origin x, origin y, metres a pixel;
- * the rest x, y). `left` and `top` are where the map's corner lies in the target, px. */
-export function frameOf(left: number, top: number, mpp: number): number[] {
+ * origin) and the small rest, the metres a pixel of the target takes, and the metres a pixel of the screen takes, which
+ * the detail drawn is chosen by (`Earth.frame`: origin x, origin y, metres a pixel, metres a screen pixel; the rest x,
+ * y). `left` and `top` are where the map's corner lies in the target, px. */
+export function frameOf(left: number, top: number, mpp: number, seen: number): number[] {
   const x = -left * mpp, y = -top * mpp, hx = Math.floor(x / ORIGIN_STEP_M) * ORIGIN_STEP_M, hy = Math.floor(y / ORIGIN_STEP_M) * ORIGIN_STEP_M;
-  return [hx, hy, mpp, 0, x - hx, y - hy, 0, 0];
+  return [hx, hy, mpp, seen, x - hx, y - hy, 0, 0];
 }
 
 /** What the map draws: the Earth's colours, the true colour, or a layer (its name, and its ramp). */

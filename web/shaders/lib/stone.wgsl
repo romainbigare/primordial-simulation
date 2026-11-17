@@ -12,7 +12,7 @@
 // turned from one another, in `STONE_OCTAVES` sizes each `STONE_STEP` times smaller than the last, the smaller the
 // more of them (debris has many small pieces and few large: the second largest cells hold `STONE_FEW` as often, the
 // largest as often as the place says, `Stony.rare`, on a scree `STONE_RARE`): fixed in the world, and each size drawn
-// as itself from `STONE_PX` pixels across, below as the tone its stones give the ground. A stone of a size is
+// as itself by the one rule for things (draw.wgsl `as_thing`), below as the tone its stones give the ground. A stone of a size is
 // `STONE_SIZES` of it across, the small ones the more often (the draw to the power 1.5), and lies anywhere in its cell that
 // holds it whole: a small one far from the cell's middle, so no rows show. A stone and its shadow lie within
 // `STONE_REACH` of its radii of its centre.
@@ -21,7 +21,7 @@ const STONE_SOFT = vec2f(0.04, 0.45); const STONE_FACE = vec2f(1.7, 1.2); const 
 const STONE_SHADOW = 0.45; const STONE_SHADOW_REACH = 0.4; const STONE_REACH = 1.6;
 const STONE_TONE = 1.15; const STONE_TONES = 0.18; const STONE_BANDS = 0.12; const STONE_BAND_M = 0.35; const STONE_BAND_LEAST = 0.6;
 const STONE_OCTAVES = 4; const STONE_STEP = 2.2; const STONE_FEW = 0.5; const STONE_RARE = 0.2;
-const STONE_GAP = 3.0; const STONE_SIZES = vec2f(0.55, 1.45); const STONE_PX = 2.0;
+const STONE_GAP = 3.0; const STONE_SIZES = vec2f(0.55, 1.45);
 // Snow buries a stone as it buries a plant, by its depth against the stone's height (draw.wgsl `above_snow`); on one
 // that stands out of it, it lies on the flat top (where its face is flatter than `SNOW_TOP`) once it is `SNOW_CAP_M`
 // deep.
@@ -121,7 +121,7 @@ fn stones(e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
     if (least > 0.0) { stands = ease(least, 1.5 * least, s.small * size); }
     // Smaller than a few pixels: the share of the ground they cover, as a tone (as far as the snow leaves them).
     var near = 0.0;
-    if (!unseen(STONE_MOST_M / STONE_PX)) { near = ease(STONE_PX * e, 2.0 * STONE_PX * e, s.small * size); }
+    if (!unseen(STONE_MOST_M / THING_PX.x)) { near = as_thing(s.small * size, e); }
     let high = STONE_TOP * (1.0 - s.sunk);
     let mean = 2.0 * density * stands * above_snow(snow_m, high * 0.5 * s.small * size) * PI * 0.25 * 0.7 * s.small * s.small / (STONE_GAP * STONE_GAP) * (1.0 - near);
     out = mix(out, vec4f(tone, 1.0), mean);
@@ -167,7 +167,7 @@ fn wake(e: f32, s: Stony, least: f32, down: vec2f, k: i32) -> f32 {
   if (least <= 0.0) { return white; }
   var size = s.size;
   for (var o = 0; o < STONE_OCTAVES; o++) {
-    let stands = ease(least, 1.5 * least, s.small * size) * ease(STONE_PX * e, 2.0 * STONE_PX * e, s.small * size);
+    let stands = ease(least, 1.5 * least, s.small * size) * as_thing(s.small * size, e);
     let density = stones_held(s, o);
     if (stands > 0.0 && density > 0.0) {
       for (var l = 0; l < 2; l++) {

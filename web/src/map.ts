@@ -19,23 +19,27 @@ const MOST_PX_PER_M = 80;
 /** The map's shadow on the page: it falls this far south and is blurred this much (a Gaussian's deviation), css px, and
  * darkens the background this much at most. */
 const SHADOW_DROP = 5, SHADOW_BLUR = 11, SHADOW_DARK = 0.28;
-/** The time a frame may take on the GPU, ms, before the map is drawn at fewer pixels; the least share of the screen's
- * pixels along each axis it is drawn at; the share by which it comes back to the screen's pixels a frame. */
-const FRAME_BUDGET_MS = 16, LEAST_SCALE = 0.25, SCALE_UP = 1.25;
+/** The time a frame may take on the GPU, ms, before the map is drawn at fewer pixels; and the shares of the screen's
+ * pixels along each axis it may be drawn at, largest first: few, so the picture does not pump, and none under a half. */
+const FRAME_BUDGET_MS = 16, SCALES = [1, 0.75, 0.5];
 /** The time the view rests before the map drawn at fewer pixels is drawn anew at the screen's own, ms, a tile a frame,
  * each of about `SHARPEN_MS` on the GPU (the view rests, so a frame may take longer) and no less than `TILE_LEAST` px a
  * side. */
 const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
 
 /** Drawn on the GPU over the map by another module, in the map's pass, at every frame: what it works out before the
- * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` device px, and the view is
- * `w` x `h` css px (`prepare`); its draw in the pass; and what the live map's ground draws of it, with a square taking
- * `s` css px (`under`, its bindings). */
+ * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` px of the target and
+ * `seen` px of the screen (its detail is chosen by the screen's), and the view is `w` x `h` css px (`prepare`); its draw in the pass; and what the live map's ground draws of it, with a square taking
+ * `s` css px and a css px `seen` px of the screen (`under`, its bindings). */
 export interface GpuLayer {
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, w: number, h: number): void;
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number): void;
   draw(p: Pass): void;
-  under(gpu: Gpu, s: number): Draw['binds'];
+  under(gpu: Gpu, s: number, seen: number): Draw['binds'];
 }
+
+/** The sharp picture being drawn once the view rests: its tiles to draw and drawn (x, y, w, h device px), the copies'
+ * places (css px) and the device pixels a css pixel. */
+interface Sharpening { tiles: number[][]; done: number[][]; xs: number[]; d: number }
 
 export class MapView {
   hover = -1;
@@ -64,6 +68,8 @@ export class MapView {
    * pixels; and the timer of the sharp picture drawn once the view rests, the tiles of it left to draw (none: it is not
    * being drawn), and the texture it is drawn into. */
   private scale = 1;
+  /** Told the share the map is drawn at whenever it changes. */
+  onScale: () => void = () => {};
   private fullMs = 0;
   private timing = false;
   private picture: Texture | null = null;
@@ -72,7 +78,7 @@ export class MapView {
   private gpuDue = false;
   /** The timer of the next frame of the flow's signs (`flowSoon`). */
   private flowTimer = 0;
-  private sharpening: { tiles: number[][]; xs: number[]; d: number } | null = null;
+  private sharpening: Sharpening | null = null;
   private sharp: Texture | null = null;
   /** Drawn by another module on the GPU over the map, and on the 2D canvas over it at each redraw: its context, where
    * the map's corner is and the pixels a square takes. */
@@ -154,6 +160,9 @@ export class MapView {
     this.fitted = true; this.invalidate();
   }
 
+  /** The share of the screen's pixels along each axis the map is drawn at now. */
+  get drawnAt(): number { return this.scale; }
+
   /** Draw the map anew at the next frame, on the GPU and over it. */
   invalidate(): void { this.gpuDue = true; this.redraw(); }
 
@@ -214,9 +223,10 @@ export class MapView {
   }
 
   /** The map on the GPU: the background and the map's shadow, the live map or the map's squares (a copy at each of
-   * `xs`, css px), the layer over them; and the map's classes if they were asked for. While frames take the GPU longer than `FRAME_BUDGET_MS` the map is drawn at fewer
-   * pixels than the screen's and stretched onto it (the same picture, softer), and once the view rests it is drawn anew
-   * at the screen's pixels (`sharpen`). */
+   * `xs`, css px), the layer over them; and the map's classes if they were asked for. While frames take the GPU longer
+   * than `FRAME_BUDGET_MS` the map is drawn at fewer pixels than the screen's and stretched onto it: the same picture,
+   * softer, as every program chooses its detail by the screen's pixel; once the view rests it is drawn anew at the
+   * screen's pixels (`sharpen`). */
   private drawGpu(gpu: Gpu, xs: number[], d: number): void {
     const { cam: { s, ox, oy } } = this, W = this.cv.width, H = this.cv.height;
     const r = this.scale, k = d * r, tw = Math.max(1, Math.round(W * r)), th = Math.max(1, Math.round(H * r));
@@ -224,19 +234,15 @@ export class MapView {
       if (this.picture) gpu.drop(this.picture);
       this.picture = gpu.texture(tw, th, 'rgba8unorm', 1, 1, true);
     }
-    this.layer?.prepare(gpu, ox, oy, s, k, this.cv.clientWidth, this.cv.clientHeight);
+    this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight);
     const target = r < 1 ? this.picture : null, p = gpu.pass(target);
     // While a tile of the ground fades in, the map is drawn again at each frame.
     const fading = this.land?.tiles.fading(performance.now()) ?? false;
     if (fading) this.invalidate();
-    this.drawMap(gpu, p, xs, k, [tw, th]);
+    this.drawMap(gpu, p, xs, k, d, [tw, th]);
     this.layer?.draw(p);
     p.end();
-    if (target) {
-      const q = gpu.pass(null);
-      q.draw('picture', { rect: [0, 0, W, H], binds: { 1: target, 2: 'smooth' } }, false);
-      q.end();
-    }
+    if (target) this.show([]);
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
     gpu.submit();
     this.time(gpu, r);
@@ -260,14 +266,22 @@ export class MapView {
     const W = this.cv.width, H = this.cv.height, tiles: number[][] = [];
     const side = Math.max(TILE_LEAST, Math.floor(Math.sqrt((SHARPEN_MS / Math.max(this.fullMs, SHARPEN_MS)) * W * H)));
     for (let y = 0; y < H; y += side) for (let x = 0; x < W; x += side) tiles.push([x, y, Math.min(side, W - x), Math.min(side, H - y)]);
-    const job = { tiles, xs, d };
+    const job = { tiles, done: [], xs, d };
     this.sharpening = job;
     this.sharpen(job);
   }
 
-  /** Draw the next tile of the sharp picture `job` once the GPU has finished the last, and show the picture once it is
-   * whole; a new frame stops it. */
-  private sharpen(job: { tiles: number[][]; xs: number[]; d: number }): void {
+  /** Show on the screen the map drawn at fewer pixels, stretched, and over it the tiles `done` of the sharp picture. */
+  private show(done: number[][]): void {
+    const gpu = this.gpu!, W = this.cv.width, H = this.cv.height, q = gpu.pass(null);
+    q.draw('picture', { rect: [0, 0, W, H], binds: { 1: this.picture!, 2: 'smooth' } }, false);
+    for (const [x, y, w, h] of done) q.draw('picture', { rect: [x, y, w, h], src: [x / W, y / H, (x + w) / W, (y + h) / H], binds: { 1: this.sharp!, 2: 'smooth' } }, false);
+    q.end();
+  }
+
+  /** Draw the next tile of the sharp picture `job` once the GPU has finished the last, and show each tile as soon as it
+   * is drawn; a new frame stops it. */
+  private sharpen(job: Sharpening): void {
     const gpu = this.gpu, tile = job.tiles.shift();
     if (this.sharpening !== job || !gpu || !tile) return;
     const W = this.cv.width, H = this.cv.height, { cam: { s, ox, oy } } = this;
@@ -275,24 +289,21 @@ export class MapView {
       if (this.sharp) gpu.drop(this.sharp);
       this.sharp = gpu.texture(W, H, 'rgba8unorm', 1, 1, true);
     }
-    this.layer?.prepare(gpu, ox, oy, s, job.d, this.cv.clientWidth, this.cv.clientHeight);
+    this.layer?.prepare(gpu, ox, oy, s, job.d, job.d, this.cv.clientWidth, this.cv.clientHeight);
     const p = gpu.pass(this.sharp, undefined, tile);
-    this.drawMap(gpu, p, job.xs, job.d, [W, H]);
+    this.drawMap(gpu, p, job.xs, job.d, job.d, [W, H]);
     this.layer?.draw(p);
     p.end();
-    if (!job.tiles.length) {
-      const q = gpu.pass(null);
-      q.draw('picture', { rect: [0, 0, W, H], binds: { 1: this.sharp, 2: 'smooth' } }, false);
-      q.end();
-      this.sharpening = null;
-    }
+    job.done.push(tile);
+    this.show(job.done);
+    if (!job.tiles.length) this.sharpening = null;
     gpu.submit();
     if (job.tiles.length) gpu.done().then(() => requestAnimationFrame(() => this.sharpen(job)));
   }
 
-  /** Draw into pass `p` (a target of `size` px, `k` px a css px) the background and the map's shadow, and the live map
-   * or the map's squares (a copy at each of `xs`, css px). */
-  private drawMap(gpu: Gpu, p: Pass, xs: number[], k: number, size: number[]): void {
+  /** Draw into pass `p` (a target of `size` px, `k` px a css px, on a screen of `d` px a css px) the background and the
+   * map's shadow, and the live map or the map's squares (a copy at each of `xs`, css px). */
+  private drawMap(gpu: Gpu, p: Pass, xs: number[], k: number, d: number, size: number[]): void {
     const { cam: { s, ox, oy }, w, h, look } = this;
     this.ctx.fillStyle = css('--map-bg');
     const bg = (this.ctx.fillStyle as string).match(/[0-9a-f]{2}/gi)?.map(c => parseInt(c, 16) / 255) ?? [1, 1, 1];
@@ -300,12 +311,12 @@ export class MapView {
     p.draw('backdrop', { rect: [0, 0, size[0], size[1]], binds: { 1: backdrop.buffer } }, false);
     // Copies meet on whole pixels, so no thin line shows between them.
     const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
-    if (this.land) this.land.drawn = k;
-    // The live map's program made for pixels as large as these (gpu.ts `seenFrom`).
-    const mpp = this.cellM / (s * k), program = seenFrom('land', mpp), under = this.layer?.under(gpu, s);
+    if (this.land) this.land.drawn = d;
+    // The live map's program made for the screen's pixels (gpu.ts `seenFrom`): its detail is chosen by them.
+    const mpp = this.cellM / (s * k), seen = this.cellM / (s * d), program = seenFrom('land', seen), under = this.layer?.under(gpu, s, d);
     // Each copy is drawn over the part of the target it covers, so what a pixel reads of its place (`frameOf`) never
     // runs over more than the target's pixels.
-    const lands = xs.map((_, c) => this.land?.binds(gpu, look, frameOf(edge(c), oy * k, mpp)));
+    const lands = xs.map((_, c) => this.land?.binds(gpu, look, frameOf(edge(c), oy * k, mpp, seen)));
     if (lands[0] && under) {
       xs.forEach((_, c) => {
         const x0 = Math.max(edge(c), 0), x1 = Math.min(edge(c + 1), size[0]), y0 = Math.max(oy * k, 0), y1 = Math.min((oy + h * s) * k, size[1]);
@@ -315,8 +326,8 @@ export class MapView {
   }
 
   /** Time the frame just sent at `r` of the screen's pixels along each axis on the GPU (one at a time), and take the
-   * share the next frames are drawn at from it: the share that would meet `FRAME_BUDGET_MS` while a frame takes longer
-   * (no less than `LEAST_SCALE`), more while it takes less than a quarter of it. */
+   * share the next frames are drawn at from it: the largest of `SCALES` at which a frame would meet `FRAME_BUDGET_MS`,
+   * else the least. */
   private time(gpu: Gpu, r: number): void {
     if (this.timing) return;
     this.timing = true;
@@ -325,8 +336,9 @@ export class MapView {
       this.timing = false;
       const ms = performance.now() - t0;
       this.fullMs = ms / (r * r);
-      if (ms > FRAME_BUDGET_MS) this.scale = Math.max(LEAST_SCALE, Math.min(this.scale, Math.sqrt(FRAME_BUDGET_MS / this.fullMs)));
-      else if (ms < FRAME_BUDGET_MS / 4) this.scale = Math.min(1, this.scale * SCALE_UP);
+      const was = this.scale;
+      this.scale = SCALES.find(k => this.fullMs * k * k <= FRAME_BUDGET_MS) ?? SCALES[SCALES.length - 1];
+      if (this.scale !== was) this.onScale();
     });
   }
 

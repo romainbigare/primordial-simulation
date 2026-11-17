@@ -229,15 +229,17 @@ fn blades(e: f32) -> vec2f {
 // `TUFT_FROM`) standing on their foot, one in each cell of a lattice `TUFT_CELL_M` m wide that holds one (as many as
 // make the sward's cover, `TUFT_COVERS` of a tuft's box being blades), `TUFT_WIDE` cells wide by its own draw, the
 // nearer over the farther, each over its shadow (`TUFT_SHADOW` deep); a blade keeps its lightness about the tufts' mean
-// and takes the sward's colour, keeping `TUFT_HUE` of its own. Their colour (linear) and cover.
+// and takes the sward's colour, keeping `TUFT_HUE` of its own. They show as things (draw.wgsl `as_thing`): smaller,
+// the sward is its veil (colour `veil` over its share). Their colour (linear) and cover.
 const TUFT_CELL_M = 0.08; const TUFT_WIDE = vec2f(1.0, 1.8); const TUFT_SHADOW = 0.3;
 // A tuft's blades cover `TUFT_COVERS` of its box, which is `TUFT_ASPECT` as tall as wide (measured on the sprites).
 const TUFT_COVERS = 0.14; const TUFT_ASPECT = 0.81;
 const TUFT_HUE = 0.3;
-fn sward_tufts(c: vec3f, e: f32, s: f32) -> vec4f {
-  if (!models_ready()) { return vec4f(c, s); }
-  let l = lat_axes(TUFT_CELL_M, vec2f(0.0));
+fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32) -> vec4f {
   let wide = 0.5 * (TUFT_WIDE.x + TUFT_WIDE.y);
+  let seen = as_thing(wide * TUFT_CELL_M, e);
+  if (!models_ready() || seen <= 0.0) { return vec4f(veil, s); }
+  let l = lat_axes(TUFT_CELL_M, vec2f(0.0));
   let held = s / (TUFT_COVERS * TUFT_ASPECT * wide * wide);
   let sun = normalize(LIGHT.xy);
   var dst = vec4f(0.0);
@@ -264,7 +266,7 @@ fn sward_tufts(c: vec3f, e: f32, s: f32) -> vec4f {
       dst += vec4f(0.0, 0.0, 0.0, TUFT_SHADOW * (1.0 - smoothstep(0.5, 1.0, length(sv)))) * (1.0 - dst.a);
     }
   }
-  return vec4f(dst.rgb / max(dst.a, 1e-4), dst.a);
+  return mix(vec4f(veil, s), vec4f(dst.rgb / max(dst.a, 1e-4), dst.a), seen);
 }
 
 // The flowers' heads up close, angled (cover_field.wgsl `flowers_at`): the share of the pixel their petals cover and
@@ -359,8 +361,9 @@ fn sort_sprite(sort: i32, k: u32) -> i32 {
 }
 
 // Ground of colour g at spot p with one sort of things over it: `many` (0..1) as the ground suits them, at stream k.
+// Each shows as a thing (draw.wgsl `as_thing`): its colour and its shadow depart from the ground's by its share.
 fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, many: f32, k: i32) -> vec3f {
-  if (many <= 0.02 || unseen(0.3 * size.x)) { return g; }
+  if (many <= 0.02 || unseen(size.y / THING_PX.x) || as_thing(size.y, p.e) <= 0.0) { return g; }
   let l = lat_axes(cell_m, vec2f(0.0));
   var out = g;
   // From the farthest (north) to the nearest; a thing reaches up into the cell north of its foot, its shadow into the
@@ -374,12 +377,14 @@ fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, ma
       let s = sort_sprite(sort, x >> 26u);
       let w = mix(size.x, size.y, pow(f32(lowbias(c, k + 1) & 255u) / 255.0, 2.0)) / cell_m;
       let h = w * model_h(s) / model_w(s);
+      let seen = as_thing(w * cell_m, p.e);
+      if (seen <= 0.0) { continue; }
       let v = l.f - foot;
       // Its shadow: a dark seam where it sits in the ground, and the shade it casts away from the sun from under it,
       // most of it hidden by the thing itself.
       let contact = length((v - vec2f(0.0, -CONTACT_UP * w)) / vec2f(CONTACT.x * w, CONTACT.y * w));
       let shade = length((v - CAST_AT * w) / (CAST * w));
-      out *= (1.0 - CONTACT_DARK * (1.0 - smoothstep(0.5, 1.0, contact))) * (1.0 - OBJECT_SHADOW * (1.0 - smoothstep(0.4, 1.0, shade)));
+      out *= 1.0 - seen * (1.0 - (1.0 - CONTACT_DARK * (1.0 - smoothstep(0.5, 1.0, contact))) * (1.0 - OBJECT_SHADOW * (1.0 - smoothstep(0.4, 1.0, shade))));
       let uv = vec2f(v.x / w + 0.5, 1.0 + v.y / h);
       if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { continue; }
       let t = model_texel(s, uv, p.e / (w * cell_m));
@@ -387,7 +392,7 @@ fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, ma
       let lit = dot(t.rgb, LUMA) / max(dot(model_texel(s, uv, 1.0).rgb, LUMA), 1e-4);
       let cap = p.snow * f32(sort != DEAD_BUSH_SORT) * smoothstep(0.7, 0.35, uv.y) * smoothstep(0.8, 1.3, lit);
       let rgb = mix(t.rgb, SNOW * clamp(lit, 0.75, 1.1), SNOW_CAP * cap);
-      out = mix(out, rgb, t.a);
+      out = mix(out, rgb, t.a * seen);
     }
   }
   return out;

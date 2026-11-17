@@ -16,8 +16,8 @@ struct Earth {
   // Where the map drawn lies in the world: its top-left corner and its size, m.
   place: vec4f,
   // Where a pixel of the target lies in the world (land.wgsl): the origin of the draw, m (a whole multiple of 1024 m,
-  // field-window.ts `frameOf`) and the metres a pixel takes (w is not read); and the world's point under the target's
-  // first pixel, m from the origin.
+  // field-window.ts `frameOf`), the metres a pixel of the target takes and the metres a pixel of the screen takes,
+  // which the detail drawn is chosen by; and the world's point under the target's first pixel, m from the origin.
   frame: vec4f, corner: vec4f,
   // The layer's ramp, display colours 0..255.
   ramp: array<vec4f, 10>,

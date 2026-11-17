@@ -46,14 +46,16 @@ export class Vegetation implements GpuLayer {
     this.marks.set(kindsOf(m.w, m.h, shown, t.row, 1 + n * t.row, t.kinds, t.kind_row, t.walls, falling), m.cell_m);
   }
 
-  /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px. */
-  under(gpu: Gpu, s: number): Draw['binds'] {
-    return this.marks.fieldBinds(gpu, this.cellM / s, this.style === 'angled');
+  /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px and a
+   * css px `seen` px of the screen. */
+  under(gpu: Gpu, s: number, seen: number): Draw['binds'] {
+    return this.marks.fieldBinds(gpu, this.cellM / (s * seen), this.style === 'angled');
   }
 
-  /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` device px
-   * a css px, in a view `W` x `H` css px, before the map's pass (textures.ts `prepare`). */
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, W: number, H: number): void {
+  /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` px of the
+   * target and `seen` px of the screen a css px, in a view `W` x `H` css px, before the map's pass (textures.ts
+   * `prepare`). */
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number): void {
     this.drawn = null;
     const land = this.land?.lawBinds(gpu);
     if (!land) return;
@@ -62,7 +64,7 @@ export class Vegetation implements GpuLayer {
     const x0 = Math.floor(Math.max(ox, 0) * d), y0 = Math.floor(Math.max(oy, 0) * d);
     const x1 = Math.ceil(Math.min(ox + this.mapW * s, W) * d), y1 = Math.ceil(Math.min(oy + this.mapH * s, H) * d);
     if (x1 <= x0 || y1 <= y0) return;
-    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, cssMpp: mpp, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], style: this.style, land };
+    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], style: this.style, land };
     this.marks.prepare(gpu, this.drawn);
   }
 

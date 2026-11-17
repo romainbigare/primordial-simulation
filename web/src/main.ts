@@ -61,6 +61,7 @@ map.layer = vegetation;
 map.overlay = (_, ox, oy, s) => slots.seen(ox, oy, s);
 /** Which GPU draws the map (none: the page cannot draw it). */
 let drawnWith = '';
+map.onScale = () => { if (live) showStats(live.stats); };
 map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
 slots.listen($<HTMLCanvasElement>('cv'), () => inspect());
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
@@ -339,7 +340,7 @@ function showStats(s: Stats): void {
   el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
     ['cells', String(s.cells)],
     ...(land ? [['ground', `${land.tiles.count()} tiles of ${fmt(m.cell_m / 2 ** (land.tiles.depth - (m.square_depth ?? 0)))} m, ${land.tiles.toCome()} to come`]] : []),
-    ...(drawnWith ? [['map', `drawn with ${drawnWith}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+    ...(drawnWith ? [['map', `drawn with ${drawnWith} at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
 /** The band of latitudes `S,N`, degrees, south first; [NaN, NaN] (the core's default band, its edges closed) for none,

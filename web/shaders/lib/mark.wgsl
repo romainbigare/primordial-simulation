@@ -11,6 +11,9 @@ const PLANES_DOWN = 32;
 struct Cover {
   // The draw's corner in the world, m from the map's north-west corner; metres a device pixel; 1 when angled.
   corner: vec4f,
+  // The metres a pixel of the screen takes, which the detail drawn is chosen by (x; the target's pixel may be larger
+  // while the map is drawn at fewer pixels, web/src/map.ts `SCALES`).
+  seen: vec4f,
   // The reflectance of the walls the cover builds: its stems (wasm `meta`); and the kinds a square holds (the world's
   // variety, wasm `meta`'s `tiles.kinds`).
   walls: vec4f,

@@ -106,8 +106,9 @@ fn lattice(dst: ptr<function, vec4f>, p: vec2f, l: i32, e: f32) {
 }
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
-  let e = cover.corner.z;
-  let p = (v.px - draw.rect.xy) * e;
+  let p = (v.px - draw.rect.xy) * cover.corner.z;
+  // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.
+  let e = cover.seen.x;
   var dst = vec4f(0.0);
   for (var l = 0; l < COVER_LATTICES; l++) { lattice(&dst, p, l, e); }
   // Linear light turned into the screen's share once (draw.wgsl `srgb`), in the style (style.wgsl `painted`),

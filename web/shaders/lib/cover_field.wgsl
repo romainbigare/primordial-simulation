@@ -45,13 +45,13 @@ const GRAIN_FILL = 0.35; const GRAIN_LIGHT = 0.3; const GRAIN_TONE = 0.1;
 // and columns of cells show no rows and columns in the crowns (a crown stays within half a cell of the place it is
 // drawn at, which the warp moves as a whole).
 const GRAIN_WARP = 0.35; const WARP_CELLS = 3.0;
-// A crown of the field is as wide as its plants' marks, and is drawn only where those span `CLUMP_PX` css pixels: where
-// a plant takes less, the field is its plants' mean, as seen from afar, and no grain coarser than the plants stands
-// for them. Its cells are a lattice's cells doubled as often as the width takes; between two doublings a wide cell
+// A crown of the field is as wide as its plants' marks, and is drawn by the one rule for things (draw.wgsl `as_thing`):
+// where a plant takes too few pixels, the field is its plants' mean, as seen from afar, and no grain coarser than the
+// plants stands for them. Its cells are a lattice's cells doubled as often as the width takes; between two doublings a wide cell
 // holds one crown where the width, as a power of two, passes a draw of the cell between `WIDE_FROM` and `WIDE_TO`, else
 // its four cells hold theirs, and no line runs between two sizes. A crown wider than `CLUMP_MOST_M` m fades into its
 // plants' mean, a calm tone, by twice as wide.
-const CLUMP_PX = 1.5; const CLUMP_MOST_M = 10.0; const WIDE_FROM = 0.25; const WIDE_TO = 0.75;
+const CLUMP_MOST_M = 10.0; const WIDE_FROM = 0.25; const WIDE_TO = 0.75;
 // Discs at random places leave gaps however closed their stand: as a layer's plants cover from `CLOSES.x` to `CLOSES.y`
 // of the ground, the gaps between its crowns fill with its canopy, `GAP_TONE` as light as a crown (their shade).
 const CLOSES = vec2f(0.6, 0.9); const GAP_TONE = 0.65;
@@ -281,15 +281,15 @@ fn crowns(l: i32, s: f32, e: f32, side: f32, level: i32, wide: bool, f: f32) -> 
 
 // The share of the ground at `at` that lattice l's plants cover, where they cover `share` of it on the mean, seen at
 // `e` m a pixel, and their tone: their crowns, as wide as their marks there, the wide ones over the fine ones, where
-// those span `CLUMP_PX` pixels; their mean where they span less, or where a crown would be too wide (`CLUMP_MOST_M`).
+// those show as things (draw.wgsl `as_thing`); their mean where they are smaller, or where a crown would be too wide
+// (`CLUMP_MOST_M`).
 fn grain(at: vec2f, l: i32, share: f32, e: f32) -> vec2f {
   let side = cover_look.sides[l];
   let mean = vec2f(min(share, 1.0), 1.0);
-  let least = CLUMP_PX * e * land.samples.w;
-  if (least >= 2.0 * CLUMP_MOST_M) { return mean; }
+  if (as_thing(2.0 * CLUMP_MOST_M, e) <= 0.0) { return mean; }
   let own = field_at(at, WIDE_LAYER, 0.0)[l];
   let across = max(own, side);
-  let shows = (1.0 - ease(CLUMP_MOST_M, 2.0 * CLUMP_MOST_M, across)) * ease(0.5 * least, least, own);
+  let shows = (1.0 - ease(CLUMP_MOST_M, 2.0 * CLUMP_MOST_M, across)) * as_thing(own, e);
   if (shows <= 0.0) { return mean; }
   let k = log2(across / side);
   let level = floor(k);
@@ -404,13 +404,13 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
       c = mix(c, mix(c * BLADE_GROUND, plain * b.x, b.y), near);
     }
   }
-  // Angled and near, a thin sward is its tufts standing on bare ground (detail.wgsl `sward_tufts`), not a veil: fully
-  // where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on.
+  // Angled, where its tufts show as things, a thin sward is its tufts standing on bare ground (detail.wgsl
+  // `sward_tufts`), not a veil: fully where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on.
   var seen = s;
-  if (cover_look.look.z > 0.5 && blades_seen > 0.0) {
-    let thin = blades_seen * (1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s));
+  if (cover_look.look.z > 0.5) {
+    let thin = 1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s);
     if (thin > 0.0) {
-      let t = sward_tufts(plain, e, s);
+      let t = sward_tufts(plain, c, e, s);
       c = mix(c, t.rgb, thin);
       seen = mix(s, t.a, thin);
     }

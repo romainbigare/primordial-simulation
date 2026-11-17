@@ -247,7 +247,7 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
   // steps.
   water = mix(water + flow.x * REFLECT_STREAK * SKY, FOAM_RGB, flow.y);
   // The stones that stand out of it, with their wakes.
-  if (styled() && p.stony > 0.0 && !unseen(STONE_MOST_M / STONE_PX)) {
+  if (styled() && p.stony > 0.0 && !unseen(STONE_MOST_M / THING_PX.x)) {
     let s = Stony(p.stony, p.stone, p.small, p.worn, BED_SUNK, 0.0, 0.0, 0.0);
     let least = p.depth / STONE_STANDS;
     if (flow.z > 0.0) { water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.e, s, least, down, 61 + 8)); }

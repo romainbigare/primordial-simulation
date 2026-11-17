@@ -186,7 +186,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
     cobble = max(STONE_SEEN * stone_of(reach), COBBLE_M);
   }
   let deepens = vec2f(dpdx(loose), dpdy(loose));
-  if (!unseen(STONE_MOST_M / STONE_PX)) {
+  if (!unseen(STONE_MOST_M / THING_PX.x)) {
     p = stony(p, g, ch, q, moved, cobble);
     p.below = mix(BELOW_LEAST, 1.0, 0.5 - 0.5 * dot(deepens, g.slope) / max(length(deepens) * length(g.slope), 1e-9));
   }
@@ -226,7 +226,8 @@ const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
   pix_local = earth.corner.xy + v.px * earth.frame.z;
   let at = pix_origin + pix_local;
   let cs = corners(at / land.map.x);
-  let spots = land_spots(at, earth.frame.z);
+  // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.
+  let spots = land_spots(at, earth.frame.w);
   var c = Shaded(vec3f(0.0), 1.0, BARE);
   for (var k = LAYER_GROUND; k < LAYERS; k++) {
     var p = spots.dry;
