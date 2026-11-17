@@ -104,20 +104,24 @@ fn thrive(wet: f32, mean: f32, need: vec4f) -> vec4f {
 }
 
 // What the four kinds from 4q of square s count for at a foot of ground `f` where `loose` m of loose ground lies,
-// `thick` over the patches: its share there, how well each thrives and how much of it its roots hold.
-fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32) -> vec4f {
+// `thick` over the patches: its share there, how well each thrives and how much of it its roots hold; or, not `exact`,
+// the most they may count for there, before the ground is read (`pick_kind`).
+fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32, exact: bool) -> vec4f {
+  if (!exact) { return vec4f(cs.w[s] * (1.0 + PATCH)); }
   return cs.w[s] * thick * thrive(f.wet, f.mean, kind(need_plane(q), cs.at[s])) * holds(loose, kind(roots_plane(q), cs.at[s])) * f.stands;
 }
 
 // Where two plants would stand in one cell, one `h` m tall stands over one `under` m tall with this chance: a race whose
 // rates go as their heights to the power `TALLER`, so the tallest plants take a lattice's cells and a much smaller
-// kind fills only what they leave (a plant 1.5 times as tall wins 5 times in 6, one 3 times as tall 80 in 81), and two kinds of one height share
-// them evenly.
+// kind fills only what they leave (a plant 1.5 times as tall wins 5 times in 6, one 3 times as tall 80 in 81), and
+// two kinds of one height share them evenly.
 const TALLER = 4.0;
 fn over_one(h: f32, under: f32) -> f32 { return 1.0 / (1.0 + pow(max(under, 1e-6) / max(h, 1e-6), TALLER)); }
-// The weights of a cell's plants are summed by height in bins `TALL_STEP` apart on a log scale from `TALL_LEAST` m.
-const TALL_BINS = 24; const TALL_LEAST = 0.02; const TALL_STEP = 1.5;
+// The weights of a cell's plants are summed by height in bins `TALL_STEP` apart on a log scale from `TALL_LEAST` m;
+// a bin d bins over another stands over it with chance `over_bins`(d) (`over_one`), all of it from `OVER_BINS` bins on.
+const TALL_BINS = 24; const TALL_LEAST = 0.02; const TALL_STEP = 1.5; const OVER_BINS = 7;
 fn tall_bin(h: f32) -> f32 { return clamp(log(max(h, 1e-6) / TALL_LEAST) / log(TALL_STEP), 0.0, f32(TALL_BINS - 1)); }
+fn over_bins(d: i32) -> f32 { return 1.0 / (1.0 + pow(TALL_STEP, -TALLER * f32(d))); }
 // Of a cell, the share a kind's taller neighbours leave it is counted at least this (all of it taken: its weight there
 // is lost).
 const FREE_LEAST = 0.05;
@@ -133,25 +137,30 @@ const RACE_STREAM = 175;
 // plants stand there, the large ones on its lowest draws, so a kind's marks keep their places as the other kinds'
 // shares change, its smaller plants come and go above its large ones, and its place among its groups is its draw over
 // its claim. Where several kinds claim one cell the taller plant stands (`over_one`), and each group claims as much more
-// than its weight as its taller neighbours take of it, so it stands as often as it weighs.
-fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: vec2i) -> vec3i {
+// than its weight as its taller neighbours take of it, so it stands as often as it weighs. Not `exact`: whether any
+// kind may claim the cell at the most its kinds count for there (`counts`), so a cell none may claim needs no look at
+// its ground (vec3i(0) or -1).
+fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: vec2i, exact: bool) -> vec3i {
   let n = kinds_n();
   // The loose ground at the foot with its patches (rock.wgsl `loose_seen`, as the bare bed is drawn), read only where a
   // kind's roots may want more than lies there.
-  var deepest = 0.0;
-  for (var s = 0; s < 4; s++) {
-    for (var q = 0; q < groups(); q++) {
-      let needs = kind(roots_plane(q), cs.at[s]);
-      deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
+  var loose = 0.0;
+  if (exact) {
+    var deepest = 0.0;
+    for (var s = 0; s < 4; s++) {
+      for (var q = 0; q < groups(); q++) {
+        let needs = kind(roots_plane(q), cs.at[s]);
+        deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
+      }
     }
+    loose = select(0.0, loose_seen(at, 0.0), deepest > 0.0);
   }
-  let loose = select(0.0, loose_seen(at, 0.0), deepest > 0.0);
-  // The weights by height.
+  // The weights by height, and of each bin the weight from it up.
   var bins: array<f32, TALL_BINS>;
   for (var s = 0; s < 4; s++) {
     if (cs.w[s] <= 0.0) { continue; }
     for (var q = 0; q < groups(); q++) {
-      let m = counts(cs, s, q, thick, f, loose);
+      let m = counts(cs, s, q, thick, f, loose, exact);
       for (var c = 0; c < 4; c++) {
         let t = 4 * q + c;
         if (t >= n || m[c] <= 0.0) { continue; }
@@ -167,22 +176,16 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
       }
     }
   }
-  // Of each bin's height, the weight of the plants that stand over it.
-  var above: array<f32, TALL_BINS>;
-  for (var b = 0; b < TALL_BINS; b++) {
-    var sum = 0.0;
-    for (var o = 0; o < TALL_BINS; o++) {
-      if (bins[o] > 0.0) { sum += bins[o] / (1.0 + pow(TALL_STEP, TALLER * f32(b - o))); }
-    }
-    above[b] = sum;
-  }
+  var up: array<f32, TALL_BINS>;
+  var sum = 0.0;
+  for (var b = TALL_BINS - 1; b >= 0; b--) { sum += bins[b]; up[b] = sum; }
   // Each kind's claim, and of those that claim the cell, the tallest plant by the race.
   var best = vec3i(-1);
   var first_at = 1e30;
   for (var s = 0; s < 4; s++) {
     if (cs.w[s] <= 0.0) { continue; }
     for (var q = 0; q < groups(); q++) {
-      let m = counts(cs, s, q, thick, f, loose);
+      let m = counts(cs, s, q, thick, f, loose, exact);
       let slots = kind(label_plane(q), cs.at[s]);
       for (var c = 0; c < 4; c++) {
         let t = 4 * q + c;
@@ -193,17 +196,22 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
         var claim = vec4f(0.0);
         for (var g = 0; g < GROUPS; g++) {
           if (w[g] <= 0.0) { continue; }
-          // The other kinds' plants that stand over it (its own groups share its draw, not its cells).
+          // The plants of the bins about its height that stand over it, all of those past them, less its own groups'
+          // (they share its draw, not its cells).
+          let b = i32(round(tall_bin(h[g])));
+          var over = select(0.0, up[min(b + OVER_BINS, TALL_BINS - 1)], b + OVER_BINS < TALL_BINS);
+          for (var d = 1 - OVER_BINS; d < OVER_BINS; d++) {
+            let o = b + d;
+            if (o >= 0 && o < TALL_BINS && bins[o] > 0.0) { over += bins[o] * over_bins(d); }
+          }
           var mine = 0.0;
           for (var o = 0; o < GROUPS; o++) { mine += w[o] * over_one(h[o], h[g]); }
-          let x = tall_bin(h[g]);
-          let b = min(i32(x), TALL_BINS - 2);
-          let taken = max(mix(above[b], above[b + 1], x - f32(b)) - mine, 0.0);
-          claim[g] = w[g] / max(1.0 - taken, FREE_LEAST);
+          claim[g] = w[g] / max(1.0 - max(over - mine, 0.0), FREE_LEAST);
         }
         let draws = vec3f(pcg3d(vec3u(vec2u(id), u32(RACE_STREAM + 4 * i32(slots[c] + 0.5) + s)))) * (1.0 / 4294967296.0);
         let key = select(draws.x, stand_pick(stand_draw(at, STAND_M), own), any(chance < vec4f(0.0)));
         if (key >= dot(claim, vec4f(1.0))) { continue; }
+        if (!exact) { return vec3i(0); }
         // Its place among its groups, the large first.
         var z = 0.0;
         var below = 0.0;
@@ -292,9 +300,13 @@ fn decide(l: i32, k: vec2f) -> vec4f {
     for (var t = 0; t < kinds_n(); t++) { all += cs.w[s] * dot(abs(kind(chance_plane(l, t), cs.at[s])), vec4f(1.0)); }
   }
   if (all <= 0.0) { return none; }
+  // Whether any kind may claim the cell, before its ground is read.
+  let own = rand3(id, l).y;
+  let most = Foot(1.0, 0.0, 0.0, 0.0, 0.0);
+  if (pick_kind(l, at, cs, 1.0 + PATCH, most, own, id, false).x < 0) { return none; }
   let f = foot(at);
   if (f.stands <= 0.0) { return none; }
-  let pick = pick_kind(l, at, cs, patchy(at), f, rand3(id, l).y, id);
+  let pick = pick_kind(l, at, cs, patchy(at), f, own, id, true);
   if (pick.x < 0) { return none; }
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
