@@ -26,28 +26,28 @@ const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
 fn model_set(q: Plant) -> vec2i {
   if (q.design != TREE) {
     let dry = q.dry + BUSH_MIX * (fract(q.r.x * 31.7) - 0.5);
-    if (dry > BUSH_DRY.y) { return vec2i(OTHONNA_FROM, OTHONNAS + 1); }
-    if (dry > BUSH_DRY.x) { return vec2i(SEARSIA_FROM, SEARSIAS); }
-    return vec2i(SHRUB_FROM, SHRUBS);
+    if (dry > BUSH_DRY.y) { return vec2i(OTHONNA_FROM, OTHONNA_N); }
+    if (dry > BUSH_DRY.x) { return vec2i(SEARSIA_FROM, SEARSIA_N); }
+    return vec2i(SHRUB_FROM, SHRUB_N);
   }
   let f = select(ROUND, i32(q.form + 0.5), q.sure > 0.5);
   if (f == CONE) {
-    if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINES_SMALL); }
-    if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCES_YOUNG); }
-    return vec2i(FIR_FROM, FIRS);
+    if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINE_SMALL_N); }
+    if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCE_YOUNG_N); }
+    return vec2i(FIR_FROM, FIR_N);
   }
   if (f == COLUMN) {
-    if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCES_YOUNG); }
-    return vec2i(FIR_FROM, FIRS);
+    if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCE_YOUNG_N); }
+    return vec2i(FIR_FROM, FIR_N);
   }
   if (f == TIERED) {
-    if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINES_SMALL); }
-    if (q.h < PINE_YOUNG_M) { return vec2i(PINE_YOUNG_FROM, PINES_YOUNG); }
-    return vec2i(PINE_FROM, PINES);
+    if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINE_SMALL_N); }
+    if (q.h < PINE_YOUNG_M) { return vec2i(PINE_YOUNG_FROM, PINE_YOUNG_N); }
+    return vec2i(PINE_FROM, PINE_N);
   }
-  if (f == UMBRELLA) { return select(vec2i(JACARANDA_FROM, JACARANDAS), vec2i(QUIVER_FROM, QUIVERS), q.dry > QUIVER_DRY); }
-  if (f == LOBED) { return vec2i(JACARANDA_FROM, JACARANDAS); }
-  return vec2i(ROUND_FROM, ROUNDS);
+  if (f == UMBRELLA) { return select(vec2i(JACARANDA_FROM, JACARANDA_N), vec2i(QUIVER_FROM, QUIVER_N), q.dry > QUIVER_DRY); }
+  if (f == LOBED) { return vec2i(JACARANDA_FROM, JACARANDA_N); }
+  return vec2i(ROUND_FROM, ROUND_N);
 }
 
 // The sprite plant q is drawn from, its width and height on the map, m, and how many times as dense as the sprite its

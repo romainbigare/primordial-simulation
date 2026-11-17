@@ -1,0 +1,182 @@
+<!doctype html><html><body style="margin:0;background:#000">
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+// Renders one model (or some of its nodes) to a sprite as the map's angled view draws plants and things (models.wgsl,
+// detail.wgsl): an orthographic camera looking north and down `DOWN` degrees, lit from the north-west, on a clear
+// background, cut at the ground, its foot on the bottom middle of its cell; and packs sprites into strips.
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+// The camera looks down this many degrees from the side.
+const DOWN = 35;
+// A sprite's content fills its cell but for `EDGE` of its side (`FOOT` texels below its foot: tex.wgsl `model_texel`),
+// and is rendered at `SUPER` times its cell's side and shrunk, so its edges are smooth.
+const EDGE = 1 / 64, FOOT = 2, SUPER = 2;
+// A texel is leaf where its green stands this far over its red and blue (share of its sum; models.wgsl `LEAF_GREEN`).
+const LEAF_GREEN = [0.345, 0.39];
+// The light of the sky (a hemisphere, blue above and earth below) and of the sun from the north-west, 38 degrees up
+// (the carpets' sun, bake.html), three.js units.
+const SKY = 1.45, SUN = 3.6;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor(0x000000, 0);
+document.body.appendChild(renderer.domElement);
+const loader = new GLTFLoader();
+// The model last loaded (one at a time: a tree's file holds up to a gigabyte).
+let loaded = { name: null, gltf: null };
+
+async function load(name) {
+  if (loaded.name !== name) loaded = { name, gltf: loader.loadAsync(`/assets/gltf/${name}/${name}.gltf`) };
+  return loaded.gltf;
+}
+
+// The meshes of model `s.model` (its nodes `s.nodes`, else all), baked in place with their materials: both sides,
+// cut-out leaves, matte.
+async function meshesOf(s) {
+  const g = await load(s.model);
+  g.scene.updateMatrixWorld(true);
+  const out = [];
+  g.scene.traverse(o => {
+    if (!o.isMesh) return;
+    let n = o; while (n && !g.parser.associations.get(n)?.hasOwnProperty('nodes')) n = n.parent;
+    if (s.nodes && !s.nodes.includes(g.parser.associations.get(n)?.nodes)) return;
+    const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld);
+    const mat = o.material.clone();
+    mat.side = THREE.DoubleSide; mat.metalness = 0; mat.roughness = 1; mat.roughnessMap = null; mat.metalnessMap = null;
+    if (mat.transparent || mat.alphaTest > 0 || mat.alphaMap) { mat.alphaTest = 0.5; mat.transparent = false; }
+    out.push(new THREE.Mesh(geo, mat));
+  });
+  return out;
+}
+
+// Sprite `s` rendered at `px` texels: turned `s.turn` degrees about the vertical, its foot on the ground at 0 and the
+// ground at `s.cut` of its height (cut off below). The frame the camera sees: its middle column over the
+// body's middle, its bottom at the body's lowest visible point. Returns the canvas.
+async function render(s, px) {
+  const meshes = await meshesOf(s);
+  const body = new THREE.Group();
+  meshes.forEach(m => body.add(m));
+  body.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(body), height = box.max.y - box.min.y;
+  body.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+  const turned = new THREE.Group(); turned.add(body); turned.rotation.y = THREE.MathUtils.degToRad(s.turn || 0);
+  const ground = (s.cut || 0) * height;
+  turned.updateMatrixWorld(true);
+  // The camera's axes: right (east), up the screen, and its view (north and down).
+  const down = THREE.MathUtils.degToRad(DOWN), up = new THREE.Vector3(0, Math.cos(down), -Math.sin(down));
+  let half = 0, top = -Infinity, bottom = Infinity;
+  const v = new THREE.Vector3();
+  turned.traverse(o => {
+    if (!o.isMesh) return;
+    const p = o.geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld);
+      if (v.y < ground) continue;
+      const y = v.dot(up);
+      half = Math.max(half, Math.abs(v.x)); top = Math.max(top, y); bottom = Math.min(bottom, y);
+    }
+  });
+  const side = 1.03 * Math.max(2 * half, top - bottom);
+  const scene = new THREE.Scene();
+  scene.add(turned);
+  // The ground: depth alone, so what lies below it is hidden and the background stays clear.
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(1e4, 1e4), new THREE.MeshBasicMaterial({ colorWrite: false }));
+  plane.rotation.x = -Math.PI / 2; plane.position.y = ground; plane.renderOrder = -1;
+  scene.add(plane);
+  scene.add(new THREE.HemisphereLight(0xd8e6ff, 0x5a5040, SKY));
+  const sun = new THREE.DirectionalLight(0xfff2dc, SUN);
+  sun.position.set(-0.643, 0.707, -0.643);
+  scene.add(sun, sun.target);
+  // Looking at the origin from the south and above; the frame's vertical runs along `up` from the origin, its bottom
+  // a little under the lowest visible point.
+  const far = 4 * side, cam = new THREE.OrthographicCamera(-side / 2, side / 2, bottom + 0.985 * side, bottom - 0.015 * side, 0.01, 2 * far);
+  cam.position.set(0, Math.sin(down) * far, Math.cos(down) * far);
+  cam.up.copy(up); cam.lookAt(0, 0, 0);
+  renderer.setSize(px, px);
+  renderer.render(scene, cam);
+  const out = document.createElement('canvas'); out.width = out.height = px;
+  out.getContext('2d').drawImage(renderer.domElement, 0, 0);
+  meshes.forEach(m => m.geometry.dispose());
+  return out;
+}
+
+// The box of a canvas's cover (alpha over 0) about its middle column: its half width and its top and bottom rows.
+function coverBox(cv) {
+  const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data, n = cv.width;
+  let half = 0, top = n, bottom = 0;
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (d[4 * (y * n + x) + 3] > 0) {
+    half = Math.max(half, Math.abs(x + 0.5 - n / 2) + 0.5); top = Math.min(top, y); bottom = Math.max(bottom, y + 1);
+  }
+  return { half, top, bottom };
+}
+
+// `cv`'s content `b` set into a cell `size` texels wide at `k` of the content's own scale: its middle column on the
+// cell's, its foot `FOOT` texels above its bottom.
+function placed(cv, b, size, k) {
+  const out = document.createElement('canvas'); out.width = out.height = size;
+  const g = out.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  const n = cv.width;
+  g.drawImage(cv, size / 2 - (n / 2) * k, size - FOOT - b.bottom * k, n * k, n * k);
+  return out;
+}
+
+const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const enc = c => 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+const leafOf = (r, g, b) => { const t = Math.min(Math.max((g / Math.max(r + g + b, 1e-4) - LEAF_GREEN[0]) / (LEAF_GREEN[1] - LEAF_GREEN[0]), 0), 1); return t * t * (3 - 2 * t); };
+
+// The mean linear lightness of a canvas's leaf texels (by cover and leafiness).
+function leafLight(cv) {
+  const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+  let sum = 0, w = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const a = d[i + 3] / 255, l = leafOf(d[i], d[i + 1], d[i + 2]) * a;
+    sum += l * (0.2126 * lin(d[i]) + 0.7152 * lin(d[i + 1]) + 0.0722 * lin(d[i + 2])); w += l;
+  }
+  return w > 0 ? sum / w : 0;
+}
+
+// A canvas's colours scaled (linear) by `k` on its leaves and by its square root elsewhere.
+function scaled(cv, k) {
+  const g = cv.getContext('2d'), img = g.getImageData(0, 0, cv.width, cv.height), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const f = Math.pow(k, 0.5 + 0.5 * leafOf(d[i], d[i + 1], d[i + 2]));
+    for (let c = 0; c < 3; c++) d[i + c] = Math.min(255, Math.round(enc(Math.min(lin(d[i + c]) * f, 1))));
+  }
+  g.putImageData(img, 0, 0);
+  return cv;
+}
+
+// The mean cover over the box of the content `w` by `h` (shares of the cell) standing on the cell's foot.
+function fillOf(cv, w, h) {
+  const n = cv.width, x0 = Math.round(n / 2 - (w * n) / 2), x1 = Math.round(n / 2 + (w * n) / 2), y1 = n - FOOT, y0 = Math.round(y1 - h * n);
+  const d = cv.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0).data;
+  let sum = 0; for (let i = 3; i < d.length; i += 4) sum += d[i];
+  return sum / 255 / (d.length / 4);
+}
+
+const sprites = [];
+// Renders sprite `s` into a cell `size` texels wide, its leaves scaled to mean lightness `s.leaf` where it is given (its
+// other texels by the square root of that scale); keeps it; returns its index.
+window.sprite = async (s, size) => {
+  const px = SUPER * size, leafy = await render(s, px), b = coverBox(leafy);
+  const k = (size * (1 - EDGE)) / Math.max(2 * b.half, b.bottom - b.top);
+  const w = (2 * b.half * k) / size, h = ((b.bottom - b.top) * k) / size;
+  const cell = placed(leafy, b, size, k), raw = leafLight(cell), light = s.leaf ? s.leaf / Math.max(raw, 1e-6) : 1;
+  sprites.push({ cell: scaled(cell, light), row: { w, h, fill: fillOf(cell, w, h), leaf: raw * light } });
+  return sprites.length - 1;
+};
+window.cellOf = i => sprites[i].cell.toDataURL('image/png');
+window.rowOf = i => sprites[i].row;
+// A strip of layers `side` texels wide, `per` cells a layer (1 or 4: two by two), of the sprites listed.
+window.strip = (list, side, per) => {
+  const cells = per === 4 ? 2 : 1, cv = document.createElement('canvas');
+  cv.width = side; cv.height = side * Math.ceil(list.length / per);
+  const g = cv.getContext('2d'), c = side / cells;
+  list.forEach((i, k) => {
+    const s = sprites[i].cell, layer = Math.floor(k / per), q = k % per;
+    g.drawImage(s, (q % cells) * c, layer * side + Math.floor(q / cells) * c, c, c);
+  });
+  return cv.toDataURL('image/png');
+};
+window.ready = true;
+</script></body></html>

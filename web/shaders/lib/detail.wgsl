@@ -251,7 +251,7 @@ fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32) -> vec4f {
       let x = lowbias(cell, 170);
       if (f32(x & 1023u) / 1024.0 >= held) { continue; }
       let foot = vec2f(f32(i), f32(j)) + vec2f(f32((x >> 10u) & 255u), f32((x >> 18u) & 255u)) / 256.0;
-      let k = TUFT_FROM + i32((x >> 26u) % u32(TUFTS));
+      let k = TUFT_FROM + i32((x >> 26u) % u32(TUFT_N));
       let w = mix(TUFT_WIDE.x, TUFT_WIDE.y, f32(lowbias(cell, 171) & 255u) / 255.0);
       let h = w * model_h(k) / model_w(k);
       let v = l.f - foot;
@@ -351,13 +351,12 @@ const DEAD_BUSH_CELL_M = 4.0; const DEAD_BUSH_FILL = 0.3; const DEAD_BUSH_M = ve
 // lit upper faces, `SNOW_CAP` of their colour.
 const CONTACT = vec2f(0.5, 0.1); const CONTACT_UP = 0.04; const CONTACT_DARK = 0.55;
 const OBJECT_SHADOW = 0.4; const CAST = vec2f(0.6, 0.22); const CAST_AT = vec2f(0.22, -0.06); const SNOW_CAP = 0.85;
-// Each sort's sprites: rocks, wood, dead bushes (tex.wgsl).
+// Each sort's sprites (sprites.wgsl): rocks, wood (a fallen trunk and branches), dead bushes.
 const ROCK_SORT = 0; const WOOD_SORT = 1; const DEAD_BUSH_SORT = 2;
 fn sort_sprite(sort: i32, k: u32) -> i32 {
-  if (sort == ROCK_SORT) { let r = i32(k % u32(ROCKS)); return select(ROCKS_MORE_FROM + r - BOULDERS, BOULDER_FROM + r, r < BOULDERS); }
-  // Wood: the fallen trunk lying across the view (its first side) and the branches.
-  if (sort == WOOD_SORT) { let r = i32(k % u32(WOODS)); return select(BRANCH_FROM + r - 1, LOG_FROM, r == 0); }
-  return DEAD_BUSH_FROM + i32(k % u32(DEAD_BUSHES));
+  if (sort == ROCK_SORT) { return ROCK_FROM + i32(k % u32(ROCK_N)); }
+  if (sort == WOOD_SORT) { return WOOD_FROM + i32(k % u32(WOOD_N)); }
+  return DEAD_BUSH_FROM + i32(k % u32(DEAD_BUSH_N));
 }
 
 // Ground of colour g at spot p with one sort of things over it: `many` (0..1) as the ground suits them, at stream k.

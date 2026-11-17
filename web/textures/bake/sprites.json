@@ -1,0 +1,311 @@
+{
+ "trees": {
+  "side": 512,
+  "per": 1,
+  "sprites": [
+   {
+    "model": "island_tree_01",
+    "turns": [
+     0,
+     120,
+     240
+    ],
+    "cut": 0.05,
+    "set": "ROUND"
+   },
+   {
+    "model": "island_tree_02",
+    "turns": [
+     0,
+     120,
+     240
+    ],
+    "cut": 0.05
+   },
+   {
+    "model": "jacaranda_tree",
+    "turns": [
+     0,
+     120,
+     240
+    ],
+    "cut": 0.05,
+    "set": "JACARANDA"
+   },
+   {
+    "model": "fir_tree_01",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ]
+    ],
+    "turns": [
+     0,
+     120,
+     240
+    ],
+    "cut": 0.05,
+    "set": "FIR"
+   },
+   {
+    "model": "pine_tree_01",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ]
+    ],
+    "cut": 0.02,
+    "set": "PINE",
+    "leaf": 0.03
+   },
+   {
+    "model": "pine_sapling_medium",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ]
+    ],
+    "cut": 0.02,
+    "set": "PINE_YOUNG",
+    "leaf": 0.03
+   },
+   {
+    "model": "pine_sapling_small",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ]
+    ],
+    "cut": 0.02,
+    "set": "PINE_SMALL",
+    "leaf": 0.035
+   },
+   {
+    "model": "fir_sapling_medium",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ]
+    ],
+    "cut": 0.02,
+    "set": "SPRUCE_YOUNG",
+    "leaf": 0.035
+   },
+   {
+    "model": "quiver_tree_01",
+    "turns": [
+     0,
+     180
+    ],
+    "set": "QUIVER",
+    "leaf": 0.042
+   },
+   {
+    "model": "quiver_tree_02",
+    "turns": [
+     0,
+     180
+    ],
+    "leaf": 0.05
+   }
+  ]
+ },
+ "models": {
+  "side": 512,
+  "per": 4,
+  "sprites": [
+   {
+    "model": "shrub_02",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ],
+     [
+      3
+     ]
+    ],
+    "set": "SHRUB"
+   },
+   {
+    "model": "boulder_01",
+    "turns": [
+     0,
+     120,
+     240
+    ],
+    "set": "ROCK"
+   },
+   {
+    "model": "namaqualand_boulder_02",
+    "turns": [
+     0,
+     180
+    ]
+   },
+   {
+    "model": "namaqualand_boulder_03",
+    "turns": [
+     0,
+     180
+    ]
+   },
+   {
+    "model": "namaqualand_boulder_05",
+    "turns": [
+     0,
+     180
+    ]
+   },
+   {
+    "model": "dead_tree_trunk",
+    "set": "WOOD"
+   },
+   {
+    "model": "dead_tree_trunk_02",
+    "turns": [
+     0,
+     180
+    ]
+   },
+   {
+    "model": "wild_rooibos_bush",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ],
+     [
+      3
+     ]
+    ],
+    "set": "DEAD_BUSH"
+   },
+   {
+    "model": "grass_medium_01",
+    "parts": [
+     [
+      0
+     ],
+     [
+      10
+     ],
+     [
+      1
+     ],
+     [
+      6
+     ],
+     [
+      7
+     ],
+     [
+      9
+     ]
+    ],
+    "set": "TUFT"
+   },
+   {
+    "model": "grass_medium_02",
+    "parts": [
+     [
+      2
+     ],
+     [
+      4
+     ]
+    ]
+   },
+   {
+    "model": "searsia_lucida",
+    "parts": [
+     [
+      0
+     ],
+     [
+      2
+     ],
+     [
+      3
+     ],
+     [
+      4
+     ],
+     [
+      5
+     ]
+    ],
+    "set": "SEARSIA",
+    "leaf": 0.053
+   },
+   {
+    "model": "othonna_cerarioides",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ],
+     [
+      4
+     ],
+     [
+      5
+     ]
+    ],
+    "set": "OTHONNA",
+    "leaf": 0.041
+   },
+   {
+    "model": "didelta_spinosa",
+    "parts": [
+     [
+      0
+     ]
+    ],
+    "leaf": 0.085
+   }
+  ]
+ }
+}

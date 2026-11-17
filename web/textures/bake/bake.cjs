@@ -1,4 +1,4 @@
-// node bake.js specs.json outdir [name...]: bakes each named tile of the specs to outdir/<name>.png.
+// node bake.cjs specs.json outdir [name...]: bakes each named tile of the specs to outdir/<name>.png.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const specs = JSON.parse(fs.readFileSync(process.argv[2])), OUT = process.argv[3], only = process.argv.slice(4);

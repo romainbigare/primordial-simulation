@@ -1,8 +1,9 @@
 # Where the page's textures come from
 
-Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), resized and packed for the
-page by hand, each ground photograph with its large-scale light divided out (so its repeat does not show). Each file is
-a strip of 512 x 512 layers, top first.
+Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com): the ground photographs
+resized and packed for the page by hand, each with its large-scale light divided out (so its repeat does not show); the
+carpets and the sprites rendered from Poly Haven's 3D models by the tool in `bake/`. Each file is a strip of 512 x 512
+layers, top first.
 
 ## ground.jpg
 
@@ -27,8 +28,8 @@ Tiles of ground cover rendered with three.js from Poly Haven's CC0 3D models (gl
 texture: the ground from straight above, each thing standing up half its height up the screen (the map's angled view),
 lit from the north-west with shadows, each thing repeated across the tile's edges so the tile repeats; rendered at
 1024 x 1024 and halved. The tool is in `bake/`: `fetch.sh assets` downloads what `carpets.json` names; with a folder
-served at localhost:8835 holding `assets/` and `render/` (`bake.html` beside three.js 0.160 in `node_modules`),
-`node bake.js carpets.json out` renders each tile to `out/<name>.png`, and the strip is the tiles in the order of the
+served at localhost:8835 holding `assets/` and `render/` (the files of `bake/` beside three.js 0.160 in `node_modules`),
+`node bake.cjs carpets.json out` (with Playwright) renders each tile to `out/<name>.png`, and the strip is the tiles in the order of the
 table below.
 
 | layer | ground | models | side |
@@ -50,35 +51,23 @@ table below.
 
 grass_medium_01's tall stems with seed heads (its meshes named `_ta…`) are left out of every tile.
 
-## trees.png
+## trees.png, models.png and the sprites' table
 
-The trees rendered as `models.png` below, at 1,024 x 1,024 and set one to a 512 x 512 layer, foot on the bottom middle:
-island_tree_01, island_tree_02 and jacaranda_tree each from three sides with the patch of ground at their foot cut off
-(the lowest 5% of their height), then fir_tree_01's three trees each from three sides; then, each from one side,
-pine_tree_01's three pines, pine_sapling_medium's two, pine_sapling_small's three and fir_sapling_medium's three (the
-lowest 2% cut off), and quiver_tree_01 and quiver_tree_02 each from two sides. Each new tree's colours are scaled so
-its leaves are as light on average as the first trees' (their other texels by the square root of that).
+Sprites rendered from Poly Haven's CC0 3D models (glTF, 1k textures) with three.js by `bake/sprite.html`: an
+orthographic camera looking north and 35 degrees down, lit by the sky and by the sun from the north-west, matte, no
+shadows, on a clear background; each sprite fills its cell but for a 64th of its side, its foot two texels above the
+cell's bottom middle, rendered at twice the cell's side and shrunk. `trees.png` holds the trees one to a 512 x 512
+layer; `models.png` the rest four to a layer. `bake/sprites.json` names each model, its parts (its nodes), the sides it
+is seen from (turns about the vertical), how much of its foot is cut off (the patch of ground some trees stand on), and
+the mean lightness its leaves are scaled to (texels whose green stands out, as the page tells leaves: the models'
+leaves differ several times in lightness as the files have them), and the sets the page draws from. With the files
+fetched (`fetch.sh assets` also downloads what `sprites.json` names) and served as for the carpets,
+`node sprites.cjs sprites.json out` writes `out/trees.png`, `out/models.png` and
+`out/sprites.wgsl`, the table the page reads (`web/shaders/lib/sprites.wgsl`: each set's first sprite and count, each
+sprite's width, height and mean cover); `node sprites.cjs sprites.json out <model>...` writes those models' sprites
+alone, to compare.
 
-## models.png
-
-Sprites rendered from Poly Haven's CC0 3D models (glTF, 1k textures) with three.js, an orthographic camera looking
-down 35 degrees, lit from the north-west; each model from three sides; four to a 512 x 512 layer, foot on the bottom
-middle of its quarter.
-
-| quarters | Poly Haven model |
+| strip | sprites (sets) |
 |---|---|
-| 0 to 3 | shrub_02 (its four shrubs) |
-| 4 to 6 | boulder_01 |
-| 7 to 9 | dead_tree_trunk |
-| 10, 11 | namaqualand_boulder_02 (two sides) |
-| 12, 13 | namaqualand_boulder_03 (two sides) |
-| 14, 15 | namaqualand_boulder_05 (two sides) |
-| 16, 17 | dead_tree_trunk_02 (two sides) |
-| 18 to 21 | wild_rooibos_bush (four of its bushes) |
-| 22 to 27 | grass_medium_01 (its meshes 0, 10, 1, 6, 7, 9 in file order) |
-| 28, 29 | grass_medium_02 (its meshes 2, 4 in file order) |
-| 30 to 34 | searsia_lucida (its bushes 0, 2, 3, 4, 5) |
-| 35 to 39 | othonna_cerarioides (its bushes 0, 1, 2, 4, 5) |
-| 40 | didelta_spinosa |
-
-The bushes from 30 on are rendered at 1,024 x 1,024 and their leaves made as light on average as the trees'.
+| trees.png | island_tree_01, island_tree_02 (broad crowns), jacaranda_tree, each from three sides; fir_tree_01's three trees each from three sides; pine_tree_01's three pines, pine_sapling_medium's two (young pines), pine_sapling_small's three, fir_sapling_medium's three (young spruces); quiver_tree_01 and quiver_tree_02 each from two sides |
+| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest |

@@ -6,26 +6,28 @@
 // mips average it, the colour is the world's alone.
 import { Gpu, Texture } from './gpu';
 
-/** The layers of the photographs (tex.wgsl's `*_TEX`), of the ground cover after them (tex.wgsl `CARPETS_FROM`), of the
- * rendered models after those (tex.wgsl `MODELS_FROM`) and of the trees last (tex.wgsl `TREES_FROM`), and the side of
- * each, texels. */
-const PHOTO_LAYERS = 12, CARPET_LAYERS = 14, MODEL_LAYERS = 11, TREE_LAYERS = 33;
-const GROUND_LAYERS = PHOTO_LAYERS + CARPET_LAYERS + MODEL_LAYERS + TREE_LAYERS;
+/** The side of each layer of the strips, texels: the photographs (tex.wgsl's `*_TEX`), the ground cover after them
+ * (tex.wgsl `CARPETS_FROM`), the rendered models after those (tex.wgsl `MODELS_FROM`) and the trees last (tex.wgsl
+ * `TREES_FROM`), as many layers as each strip holds. */
 const PHOTO_SIDE = 512;
 /** The mip levels of a layer: from `PHOTO_SIDE` texels down to one. */
 const PHOTO_MIPS = Math.log2(PHOTO_SIDE) + 1;
 
 let photoLevels: Uint8Array[] | null = null;
+/** The layers of the strips, once they are fetched. */
+let groundLayers = 0;
+/** The blank texture's layers: an array of white texels (one layer would make a plain texture, not an array). */
+const BLANK_LAYERS = 2;
 const photoMade = new WeakMap<Gpu, Texture>();
 const photoBlank = new WeakMap<Gpu, Texture>();
 
-/** The strips' levels, each layer after layer: level 0 as the image holds it, each next one the mean of four texels
- * (their colour weighted by their cover). */
-function photoMips(base: Uint8Array): Uint8Array[] {
+/** The strips' levels, each of its `layers` after the last: level 0 as the image holds it, each next one the mean of
+ * four texels (their colour weighted by their cover). */
+function photoMips(base: Uint8Array, layers: number): Uint8Array[] {
   const out = [base];
   for (let k = 1; k < PHOTO_MIPS; k++) {
-    const s = PHOTO_SIDE >> k, from = out[k - 1], next = new Uint8Array(4 * s * s * GROUND_LAYERS);
-    for (let l = 0; l < GROUND_LAYERS; l++) {
+    const s = PHOTO_SIDE >> k, from = out[k - 1], next = new Uint8Array(4 * s * s * layers);
+    for (let l = 0; l < layers; l++) {
       for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
         const at = (dx: number, dy: number, c: number) => from[4 * ((l * 2 * s + 2 * y + dy) * 2 * s + 2 * x + dx) + c];
         const o = 4 * ((l * s + y) * s + x);
@@ -49,13 +51,13 @@ function photoImage(name: string): Promise<ImageBitmap> {
 
 /** Once the strips are fetched and their levels made (a failed fetch leaves the ground without its detail). */
 export const groundReady: Promise<void> = Promise.all([photoImage('ground.jpg'), photoImage('carpets.jpg'), photoImage('models.png'), photoImage('trees.png')])
-  .then(([photos, carpets, models, trees]) => {
-    const c = new OffscreenCanvas(PHOTO_SIDE, PHOTO_SIDE * GROUND_LAYERS), g = c.getContext('2d')!;
-    g.drawImage(photos, 0, 0);
-    g.drawImage(carpets, 0, PHOTO_SIDE * PHOTO_LAYERS);
-    g.drawImage(models, 0, PHOTO_SIDE * (PHOTO_LAYERS + CARPET_LAYERS));
-    g.drawImage(trees, 0, PHOTO_SIDE * (PHOTO_LAYERS + CARPET_LAYERS + MODEL_LAYERS));
-    photoLevels = photoMips(new Uint8Array(g.getImageData(0, 0, PHOTO_SIDE, PHOTO_SIDE * GROUND_LAYERS).data.buffer));
+  .then(strips => {
+    const layers = strips.reduce((n, s) => n + s.height / PHOTO_SIDE, 0);
+    const c = new OffscreenCanvas(PHOTO_SIDE, PHOTO_SIDE * layers), g = c.getContext('2d')!;
+    let at = 0;
+    for (const s of strips) { g.drawImage(s, 0, at); at += s.height; }
+    photoLevels = photoMips(new Uint8Array(g.getImageData(0, 0, PHOTO_SIDE, PHOTO_SIDE * layers).data.buffer), layers);
+    groundLayers = layers;
   })
   .catch(() => undefined);
 
@@ -64,7 +66,7 @@ export function groundDetail(gpu: Gpu): Texture {
   if (photoLevels) {
     let t = photoMade.get(gpu);
     if (!t) {
-      t = gpu.texture(PHOTO_SIDE, PHOTO_SIDE, 'rgba8unorm', GROUND_LAYERS, PHOTO_MIPS);
+      t = gpu.texture(PHOTO_SIDE, PHOTO_SIDE, 'rgba8unorm', groundLayers, PHOTO_MIPS);
       photoLevels.forEach((d, k) => gpu.write(t!, d, k));
       photoMade.set(gpu, t);
     }
@@ -72,8 +74,8 @@ export function groundDetail(gpu: Gpu): Texture {
   }
   let t = photoBlank.get(gpu);
   if (!t) {
-    t = gpu.texture(1, 1, 'rgba8unorm', GROUND_LAYERS, 1);
-    gpu.write(t, new Uint8Array(4 * GROUND_LAYERS).fill(255));
+    t = gpu.texture(1, 1, 'rgba8unorm', BLANK_LAYERS, 1);
+    gpu.write(t, new Uint8Array(4 * BLANK_LAYERS).fill(255));
     photoBlank.set(gpu, t);
   }
   return t;
