@@ -49,15 +49,22 @@ function shareByWidth(w: number, l: number): number {
   return Math.min(below, above);
 }
 
-/** The share of plants `h` m tall that lattice `l` may stand: all up to the height it stands (`STAND`, `ROWS_MOST`),
- * none past it; the last stands all. */
+/** A lattice too small for the tallest plants hands them up over a band of heights: from this share of the height it
+ * stands on (`standsOn`). */
+const HANDS_UP_FROM = 0.6;
+
+/** The share of plants `h` m tall that lattice `l` may stand: all up to `HANDS_UP_FROM` of the height it stands
+ * (`STAND`, `ROWS_MOST`), none from that height on, between on a log scale, so the plants of a growing stand move up a
+ * share a year, the tallest first; the last stands all. */
 function standsOn(h: number, l: number): number {
-  return l === LATTICES.length - 1 || ((ROWS_MOST + REACH[l]) * LATTICES[l]) / STAND >= h ? 1 : 0;
+  if (l === LATTICES.length - 1) return 1;
+  const most = ((ROWS_MOST + REACH[l]) * LATTICES[l]) / STAND;
+  return clamp(Math.log(most / Math.max(h, 1e-9)) / -Math.log(HANDS_UP_FROM));
 }
 
 /** The share of a kind of crown width `w`, m, and height `h`, m, drawn on lattice `l`: by its width (`shareByWidth`),
  * of what the smaller lattices do not stand at its height (`standsOn`), so a tall plant of a narrow crown stands as tall
- * as it is. */
+ * as it is and a growing plant moves up over a band of heights. */
 function shareOn(w: number, h: number, l: number): number {
   let passed = 0;
   for (let m = 0; m < l; m++) passed = (passed + shareByWidth(w, m)) * (1 - standsOn(h, m));
