@@ -216,10 +216,11 @@ function marksOn(r: Float32Array, l: number, grow: number, rooted: number): Mark
   if (share <= 0 || r[K.cover] <= 0 || r[K.perM2] <= 0) return { chance: 0, width: 0, plants: 0, covers: 0 };
   const inside = r[K.perM2] / r[K.cover], plants = Math.max((inside * a * a) / (grow * grow), 1);
   const held = Math.min(r[K.width] * grow * Math.sqrt(plants), most);
-  const closed = Math.min(r[K.cover] / rooted, CLOSED_MOST), width = Math.min(held * Math.sqrt(-Math.log(1 - closed) / closed), most);
-  // The marks a cell of the rooted share holds: their crowns sum to -ln(1 - closed) of its ground, or as near as one a
-  // cell comes; the ground they cover is what is drawn, near and far.
-  const area = (Math.PI / 4) * width * width, chance = Math.min(1, (-Math.log(1 - closed) * a * a) / area);
+  // Their crowns sum to -ln(1 - closed) of the ground (taken as ln(1 + x), exact for a stand that closes almost none).
+  const closed = Math.min(r[K.cover] / rooted, CLOSED_MOST), sum = -Math.log1p(-closed), width = Math.min(held * Math.sqrt(sum / closed), most);
+  // The marks a cell of the rooted share holds: their crowns sum to that of its ground, or as near as one a cell comes;
+  // the ground they cover is what is drawn, near and far.
+  const area = (Math.PI / 4) * width * width, chance = Math.min(1, (sum * a * a) / area);
   return { chance: share * chance * rooted, width, plants, covers: share * rooted * -Math.expm1(-(chance * area) / (a * a)) };
 }
 
