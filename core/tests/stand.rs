@@ -23,18 +23,18 @@ fn stand(w: &World, c: &Cover) -> [f64; 4] {
     let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
     let built: f64 = c.held().map(|x| c.built(&mm, x)).sum();
     let h = c.held().map(|x| c.built(&mm, x) * c.height(&w.cfg.phys, &mm, rho, x)).sum::<f64>() / built.max(1e-300);
-    [c.held().map(|x| c.kg(&mm, x)).sum(), c.held().map(|x| c.plants[x]).sum(), h, c.lying.kg(&mm)]
+    [c.held().map(|x| c.kg(&mm, x)).sum(), c.held().map(|x| c.count(x)).sum(), h, c.lying.kg(&mm)]
 }
 
 /// Cut the heaviest slot of cover `c` of world `w` into `k` alike pieces: the same genes and state, its amounts and
-/// plants a k-th each.
+/// each group's plants a k-th each.
 fn cut(w: &World, c: &mut Cover, k: usize) {
     let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
     let x = c.held().max_by(|&a, &b| c.kg(&mm, a).total_cmp(&c.kg(&mm, b))).expect("a stand");
-    (c.mol[x], c.plants[x]) = (c.mol[x].map(|m| m / k as f64), c.plants[x] / k as f64);
+    (c.mol[x], c.plants[x]) = (c.mol[x].map(|m| m / k as f64), c.plants[x].map(|n| n / k as f64));
     for _ in 1..k {
         let e = (0..cover::SLOTS).find(|&y| c.root[y] == NO_ROOT).expect("room");
-        (c.mol[e], c.plants[e], c.genes[e], c.root[e], c.full[e], c.net[e], c.rooted[e], c.need[e]) = (c.mol[x], c.plants[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.rooted[x], c.need[x]);
+        (c.mol[e], c.plants[e], c.share[e], c.genes[e], c.root[e], c.full[e], c.net[e], c.rooted[e], c.need[e]) = (c.mol[x], c.plants[x], c.share[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.rooted[x], c.need[x]);
     }
 }
 
@@ -45,18 +45,25 @@ fn assert_same(what: &str, cut: &[f64], whole: &[f64]) {
     }
 }
 
-/// A stand of kind `row` grown a year from `kg` per m² on the dry land cell rain reaches most; then, at the start of
-/// each month of the next year, the same world with its slot cut into two and into four alike pieces: at that month's
-/// end the cell's cover, its plants, their height, the seeds lying on its ground and all the cover and seeds of the
-/// world are the uncut world's to `SAME` (what is left is rounding: of sums taken in another order, and of the genes,
-/// kept in 32 bits, of seeds that join a lot one packet at a time).
-fn cut_stands_as_whole(row: usize, kg: f64) {
+/// A world whose cells hold every slot, with a stand of kind `row` grown a year from `kg` per m² on the dry land cell
+/// rain reaches most, and that cell.
+fn grown(row: usize, kg: f64) -> (World, usize) {
     let mut w = small_world();
     w.cfg.variety = cover::SLOTS;
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
     let i = dry_lands(&w).into_iter().filter(|&i| w.rain[i] > 0.0).max_by(|&a, &b| w.rain[a].total_cmp(&w.rain[b])).expect("dry land with rain");
     assert!(cover::place(&mut w, i, KINDS[row].genes, row as u32, kg));
     (0..12).for_each(|_| pcore::step(&mut w));
+    (w, i)
+}
+
+/// A stand of kind `row` grown a year from `kg` per m² on the dry land cell rain reaches most; then, at the start of
+/// each month of the next year, the same world with its slot cut into two and into four alike pieces: at that month's
+/// end the cell's cover, its plants, their height, the seeds lying on its ground and all the cover and seeds of the
+/// world are the uncut world's to `SAME` (what is left is rounding: of sums taken in another order, and of the genes,
+/// kept in 32 bits, of seeds that join a lot one packet at a time).
+fn cut_stands_as_whole(row: usize, kg: f64) {
+    let (mut w, i) = grown(row, kg);
     let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
     let month = |mut w: World| {
         pcore::step(&mut w);
@@ -139,4 +146,61 @@ fn a_stand_cut_into_slots_keeps_its_seasons_as_the_whole() {
     }
     let (wet, bare) = (living[3], living[4..12].iter().copied().fold(f64::INFINITY, f64::min));
     assert!(bare < 1e-3 * wet && living[12] > 0.5 * wet, "it kept its leaves through its dry season or grew none again: {living:?}");
+}
+
+/// The heaviest slot of cell `i` of world `w`: its slot, the height of its large plants, m, its plants, and its plants
+/// by group (`Cover::sizes`).
+fn tallest(w: &World, i: usize) -> (usize, f64, f64, cover::Sizes) {
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, rho, c) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0], w.life.cover(i));
+    let x = c.held().max_by(|&a, &b| c.built(&mm, a).total_cmp(&c.built(&mm, b))).expect("a stand");
+    (x, c.height(&w.cfg.phys, &mm, rho, x), c.count(x), c.sizes(&w.cfg.phys, &mm, x))
+}
+
+/// Seeds of a tree stand's kind (0.01 kg per m²) that take hold in its slot come in as a group of their own: the slot
+/// holds many more plants, and its large plants stand as tall as before to 1e-5 (the seeds bring a few walls, which
+/// move the large plants' share of the walls by about 1e-6; laws.md 3). In the stand's next month, crowded past the
+/// self-thinning law, the small plants die first: of the seedlings at most a tenth of the share of the large plants
+/// that live through the month lives.
+#[test]
+fn seedlings_join_a_stand_beside_its_large_plants_and_die_first() {
+    let (mut w, i) = grown(TREE_ROW, 5.0);
+    let (x, tall, plants, sizes) = tallest(&w, i);
+    assert!(cover::place(&mut w, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 0.01));
+    let (y, now, joined, with) = tallest(&w, i);
+    println!("height {tall} m, then {now} m; plants {plants}, then {joined}; groups {sizes:?}, then {with:?}");
+    assert!(y == x && joined > 10.0 * plants && with.held > sizes.held.min(cover::GROUPS - 1), "the seeds did not join as a group");
+    assert!((now / tall - 1.0).abs() < 1e-5, "the large plants stood {tall} m, then {now} m");
+    let (large, seedlings) = (with.count[with.large()], joined - with.count[with.large()]);
+    pcore::step(&mut w);
+    let (_, _, left, after) = tallest(&w, i);
+    let (kept_large, kept_small) = ((after.count[after.large()] / large).min(1.0), (left - after.count[after.large()]) / seedlings);
+    println!("a month on: large plants kept {kept_large}, seedlings kept {kept_small}; groups {after:?}");
+    assert!(kept_small < 0.1 * kept_large, "the seedlings did not die first: {kept_small} of them lived, {kept_large} of the large plants");
+}
+
+/// Through a year of a tree stand that seeds itself, every slot of the world keeps its groups whole at each month's
+/// end: the held groups first, each of real plants, the smallest plants first, their shares of the built cover summing
+/// to 1 (to the 32-bit rounding of the shares); and the books are kept.
+#[test]
+fn a_slot_keeps_its_groups_whole() {
+    let (mut w, _) = grown(TREE_ROW, 5.0);
+    let books = testkit::Books::now(&w);
+    let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
+    let mut most = 0;
+    for _ in 0..12 {
+        pcore::step(&mut w);
+        for c in (0..w.mesh.cells().n()).map(|j| w.life.cover(j)) {
+            for x in c.held() {
+                let s = c.sizes(&w.cfg.phys, &mm, x);
+                let share: f64 = c.share[x].iter().sum();
+                most = most.max(s.held);
+                assert!(s.held > 0 && c.plants[x][s.held..].iter().all(|&n| n == 0.0), "{:?}", c.plants[x]);
+                assert!(s.mass[..s.held].windows(2).all(|m| m[0] <= m[1]), "the groups are out of order: {s:?}");
+                assert!((share - 1.0).abs() < 1e-12, "the shares sum to {share}: {:?}", c.share[x]);
+            }
+        }
+    }
+    assert!(most > 1, "no slot held more than one group");
+    books.assert_kept(&w, 1e-9);
 }

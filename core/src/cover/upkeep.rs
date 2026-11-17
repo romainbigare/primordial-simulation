@@ -57,7 +57,7 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
         let all = c.kg(&mm, x);
         lost.iter_mut().for_each(|l| *l *= all);
         // What dies are whole plants: each one left keeps its mass.
-        c.plants[x] *= left;
+        c.plants[x].iter_mut().for_each(|n| *n *= left);
         let alive = budget::held(&e, &c.mol[x]);
         for q in 0..NP {
             let m = c.mol[x][q].max(0.0) * dies;
@@ -76,7 +76,7 @@ pub(super) fn keep_per_kg(w: &World, c: &Cover, p: &Parts, x: usize, (t, dt): (f
     let (mm, rho, days) = (p.mm(chem), chem.subs[p.sub[super::WALL]].density[0], dt / DAY);
     let pace = chem.reactions[p.burn].arrhenius(t.max(1.0)) / chem.reactions[p.burn].arrhenius(ph.t_cat);
     let leaf = dec(g[super::LEAF]);
-    let sapwood = super::stand::sapwood(ph, (leaf, c.height(ph, &mm, rho, x)), f64::INFINITY, rho);
+    let sapwood = super::stand::sapwood(ph, (leaf, c.lift(ph, &mm, rho, x)), f64::INFINITY, rho);
     let living: f64 = upkeep_rates(chem, ph, p, &g, pace).iter().sum();
     (living + ph.c_leaf * leaf * ph.repair(g[REPAIR] as f64) * pace + ph.c_sapwood * sapwood * pace) * days
 }

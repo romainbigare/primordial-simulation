@@ -11,6 +11,7 @@ mod budget;
 mod build;
 mod canopy;
 mod grow;
+mod groups;
 mod lying;
 mod month;
 mod seed;
@@ -22,6 +23,7 @@ mod upkeep;
 pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
+pub use groups::Sizes;
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, sown, Landed, Seed};
@@ -36,6 +38,9 @@ use serde::{Deserialize, Serialize};
 /// Kinds of cover a cell's arrays hold: the most a world's `Config::variety` may be. A cell uses its first `variety`
 /// slots; the rest stay empty.
 pub const SLOTS: usize = 12;
+/// Size groups a slot keeps its plants in (`groups`): the resolution of plant sizes a slot holds, as `SLOTS` is of kinds
+/// (a seedling, a young plant, a plant of the canopy).
+pub const GROUPS: usize = 3;
 // The genes of a kind of cover (laws.md 3).
 /// Capacity of the light reaction, log10 mol per kg of living cover per s at `t_cat` (at a moisture need of 1)
 pub const LIGHT: usize = 0;
@@ -83,8 +88,11 @@ pub struct Cover {
     /// less its upkeep, a running mean over a year's months (`grow::live`); below zero it is in deficit and gives way to
     /// arriving seeds (`seed::lodge`)
     pub net: [f32; SLOTS],
-    /// Per slot: its plants in the cell, a real count (`stand`): its built cover over them is a plant's mass
-    pub plants: [f64; SLOTS],
+    /// Per slot: its plants in the cell by size group (`groups`), a real count each, the smallest plants first and the
+    /// empty groups last; and each group's share of its built cover (over its held groups they sum to 1): a group's
+    /// share of its built cover over its count is its plant's mass
+    pub plants: [[f64; GROUPS]; SLOTS],
+    pub share: [[f64; GROUPS]; SLOTS],
     /// Per slot: the share of its ground (`ground`) whose loose ground holds its plants (`stand::rooted_share`), and the loose ground
     /// its roots needed when that was found, m (`stand::need`; 0: not found yet)
     pub rooted: [f32; SLOTS],
@@ -112,7 +120,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [0.0; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
     }
 }
 
@@ -138,27 +146,15 @@ impl Cover {
     pub fn built(&self, mm: &[f64; NP], x: usize) -> f64 {
         built_kg(mm, &self.mol[x])
     }
-    /// The built cover of one plant of slot `x`, kg.
-    pub fn plant(&self, mm: &[f64; NP], x: usize) -> f64 {
-        self.built(mm, x) / self.plants[x].max(1e-300)
-    }
-    /// The height of the plants of slot `x`, m (`stand::height`), its walls of density `rho` kg/m³.
-    pub fn height(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {
-        stand::height(ph, self.plant(mm, x), self.walls(mm, x) / self.built(mm, x).max(1e-300), rho)
-    }
-    /// The crown of the plants of slot `x`, `top` m tall (`Cover::height`), on ground of `land` m², from its base to its
-    /// top, m: its leaves, and the thin stems that carry them, stand where the light is, over the depth their capture
-    /// area fills at the density of a crown's leaves: its capture area over the ground its plants hold (`land` times the
-    /// share its roots hold, `Cover::rooted`), over `crown_density` m² a m³, down from its top, and no lower than the
-    /// ground: a sward is as dense as that over its whole height.
+    /// The crown of the plants of slot `x`, `top` m tall (`Cover::height`, its large plants'), on ground of `land` m², from
+    /// its base to its top, m: its leaves, and the thin stems that carry them, stand where the light is, over the depth
+    /// their capture area fills at the density of a crown's leaves: its capture area over the ground its plants hold
+    /// (`land` times the share its roots hold, `Cover::rooted`), over `crown_density` m² a m³, down from its top, and no
+    /// lower than the ground: a sward is as dense as that over its whole height.
     pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], land: f64, x: usize, top: f64) -> (f64, f64) {
         let patch = land * self.rooted[x].max(f32::MIN_POSITIVE) as f64;
         let depth = self.leaf(mm, x) / patch.max(1e-300) / ph.crown_density;
         ((top - depth).max(0.0), top)
-    }
-    /// The width of the main stem of the plants of slot `x`, m (`stand::stem`), its walls of density `rho` kg/m³.
-    pub fn width(&self, ph: &crate::Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {
-        stand::stem(ph, self.plant(mm, x), self.walls(mm, x) / self.built(mm, x).max(1e-300), rho)
     }
     /// All the cover of slot `x`, kg.
     pub fn kg(&self, mm: &[f64; NP], x: usize) -> f64 {

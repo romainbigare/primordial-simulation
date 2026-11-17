@@ -105,7 +105,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
             let f = if all > 0.0 { c.built(mm, x) / all } else { 1.0 / kin.len() as f64 };
             let part: [f64; NP] = std::array::from_fn(|q| if k + 1 == kin.len() { left[q] } else { (s.mol[q] * f).min(left[q]) });
             (0..NP).for_each(|q| left[q] -= part[q]);
-            c.plants[x] += plants * f;
+            c.recruit(mm, x, (plants * f, built_kg(mm, &part)));
             (0..NG).for_each(|g| c.genes[x][g] += (kg * f / (kg * f + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
             (0..NP).for_each(|q| c.mol[x][q] += part[q]);
         }
@@ -119,7 +119,8 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area:
         (None, None) if n > 1 => (room(c, mm, n), None),
         (None, None) => return Landed::Refused,
     };
-    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, plants, 0.0);
+    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, 0.0);
+    c.found(x, plants);
     c.e += s.heat;
     out.map_or(Landed::In, Landed::Out)
 }

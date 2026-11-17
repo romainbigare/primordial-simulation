@@ -60,7 +60,7 @@ fn book_shed(b: &mut Books, counts: &mut Counters, (p, mm, e): (&Parts, &[f64; N
 /// of that absorbs and its conducting walls (`stand::sapwood`) by what it holds now, its walls of density `rho`.
 fn after_shed(ph: &crate::Physics, c: &Cover, (mm, rho): (&[f64; NP], f64), x: usize, s: Slot) -> Slot {
     let k = if s.living > 0.0 { c.living(mm, x) / s.living } else { 0.0 };
-    let (leaf, height) = (s.leaf * k, c.height(ph, mm, rho, x));
+    let (leaf, height) = (s.leaf * k, c.lift(ph, mm, rho, x));
     Slot { built: c.built(mm, x), living: c.living(mm, x), leaf, abs: s.abs * k, sapwood: super::stand::sapwood(ph, (leaf, height), c.walls(mm, x), rho), ..s }
 }
 

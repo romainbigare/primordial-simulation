@@ -888,21 +888,39 @@ is gone gives it 1 m², so it thins to almost no plants and, under the liquid (i
 `light_depth`)), pays more upkeep than it stores and dies by its laws, its remains to the ground. Its temperature is
 its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
-task per chunk), slot by slot, the tallest first. **Plants**: a slot holds a real count of plants (`Cover::plants`,
-`cover/stand.rs`), so a plant's mass is its built cover over them, and its height is that of a plant of that mass whose
-walls (its walls' share of its built cover) make a stem of `stem_form` and `stem_solid` at the walls' density, as tall
-as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973). Seeds that found a slot are one plant per
-`seed_kg`; a stand holds at most (`thin_kg` / kg per m²)² plants a m², the self-thinning law (Yoda and others 1963): a
-plant of m kg holds (m / `thin_kg`)^(2/3) m² of ground in a full stand. The law is the crowns of a stand filling its
-space, so plants crowd the plants whose crowns share their layer of the air (`Cover::crown`: from its top down the depth
-its capture area fills at `crown_density`), whatever slot holds them, and the layers of a stand thin apart (an
-understory under a closed canopy): after its seeds wake and after it builds (`stand::thin`), the ground the plants of
-a slot's layer hold, each other slot's counted by the share of the slot's crown its own crown shares, is set against
-the cell's ground, and where it is more the slot loses plants, not mass, as its whole layer would (by that excess
-cubed). So a stand cut into slots thins as the whole. What dies of unpaid upkeep, wear or frost is whole plants (the
-count falls with the mass); seeds that join a stand of their kind, and slots that join, add their plants (each seed
-lot one plant per `seed_kg`, as many as the thinning law lets stand). So a stand that recruits sits on the thinning
-line, its plants' mass (kg per m²)³ / `thin_kg`², and its height grows with its mass: a kind that holds much mass
+task per chunk), slot by slot, the tallest first. **Plants**: a slot holds one pool of matter, and its plants in up
+to `GROUPS` (3) **size groups** (`cover/groups.rs`), each a real count (`Cover::plants`) and a share of the slot's
+built cover (`Cover::share`), the smallest plants first: a group's plant's mass is its share of the built cover over
+its count. The slot's walls are shared over its groups by each group's built cover times the share of walls a plant
+of its mass builds (`wall_kg`, below), the rest of each group's built cover is its living cover and its share of the
+capture area (`Cover::sizes`). A plant's height is that of a plant of its mass whose walls make a stem of `stem_form`
+and `stem_solid` at the walls' density, as tall as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973).
+The slot's **large plants** (its last group) set its height (`Cover::height`): the top of its crown for the light, the
+loose ground its roots need, the stem a jaw meets and what the page draws; its conducting walls are each group's
+capture area as tall as its plants (`Cover::lift`). Seeds that found a slot are one group of one plant per `seed_kg`;
+seeds that join a stand of their kind come in as a group of their own, and where all its groups are held, the two
+groups whose plants are nearest in mass (the least ratio) fuse, as cohorts fuse in the ecosystem demography model
+(Moorcroft, Hurtt and Pacala 2001) and as the slots do (`seed::room`), and groups of plants of one mass are one;
+slots that join pool their groups the same way.
+So seedlings that join a stand leave its large plants as they were. What a slot builds in a month goes to its groups
+by each group's capture area times the light its leaves get, its leaves under those of its larger plants: through the
+slot's layer the light falls by e^(the capture area it passes, `canopy::shade`), and a group's leaves get the mean
+over their own share (`Cover::growth`): the large plants take the most light a leaf, the asymmetry of the competition
+for light by size (Weiner 1990), and seedlings, all leaf, grow fast where light reaches them and slowly in the shade;
+groups that pass each other keep the order of their plants. A stand holds at most (`thin_kg` / kg per m²)² plants a
+m², the self-thinning law (Yoda and others 1963), a law of its plants' mean mass and their count: a plant of the mean
+mass m holds (m / `thin_kg`)^(2/3) m² of ground in a full stand. The law is the crowns of a stand filling its space,
+so plants crowd the plants whose crowns share their layer of the air (`Cover::crown`: from its top down the depth its
+capture area fills at `crown_density`), whatever slot holds them, and the layers of a stand thin apart (an understory
+under a closed canopy): after its seeds wake and after it builds (`stand::thin`), the ground the plants of a slot's
+layer hold, each other slot's counted by the share of the slot's crown its own crown shares, is set against the
+cell's ground, and where it is more the slot loses plants, not mass, as its whole layer would (by that excess cubed),
+**the small first** (`stand::lose`; the suppressed plants of a crowded stand die first, Yoda and others 1963; Weiner
+1990), the survivors taking what the dead freed: its smallest group loses plants until its survivors are as large as
+the next group's plants, the two then fuse, and what is left falls on the large plants. So seedlings that crowd a
+closed stand die in its month, and live where it has room. So a stand cut into slots thins as the whole. What dies of unpaid upkeep, wear or frost is whole plants of every group
+alike (each count falls with the mass); what a taker bites or the slot sheds is mass of every group alike. So a stand
+that recruits sits on the thinning line, and its large plants grow with their own mass: a kind that holds much mass
 without leaf (walls, which pay no upkeep) stands tall, and a stand of few seeds is of few large plants until its own
 seeds fill it:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
@@ -963,8 +981,8 @@ seeds fill it:
   holds, so it breathes in a dry month too, and only its gain follows the liquid it can draw (Flexas and others 2006;
   Atkin and Macherel 2009); a dry seed's upkeep falls with its liquid, a leaf's does not; and its
   conducting walls, alive in every season, `c_sapwood` per kg a day at the burning's pace: by the pipe model their
-  cross-section goes with the capture area they feed, `huber` m² a m², as tall as its plants (Shinozaki and others
-  1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month; and its fine roots,
+  cross-section goes with the capture area they feed, `huber` m² a m², as tall as the plants of each group
+  (`Cover::lift`; Shinozaki and others 1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month; and its fine roots,
   as many kg of living cover as the key liquid it drew in the month needs at `root_uptake` mol a kg a s (the minerals
   come in that liquid by mass flow; Barber 1995), which breathe `c_basal` a kg a day at the burning's pace and are
   built anew `root_turnover` times a year at what a kg of living cover costs to build (`Parts::living_cost`; Gill and
@@ -986,10 +1004,11 @@ seeds fill it:
   out over the slots by what each would take, `build::wants`: where the ground holds less than they ask, each gets its
   share of what it holds, whatever slots hold the kinds) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
-  and others 2012) by the conversions of growth (`Chemistry::build`,
+  and others 2012; of each group of its plants by its share of what the slot builds, `Cover::walled_new`) by the conversions of growth (`Chemistry::build`,
   `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
   most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. Then it builds
-  walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (`grow::frame`): walls are
+  walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (each group's by its share,
+  `Cover::walled_held`; `grow::frame`): walls are
   built of the fuel alone and pay no upkeep, so a plant short of minerals, or whose leaves are all its light pays for
   (it is **full** and builds no living cover then), still grows its frame and with it its height, and its stand thins
   out. In season (below), the fuel past its reserve that it could not build of goes to its ground, as roots exude the sugars a plant cannot use (Jones, Hodge and Kuzyakov
@@ -1052,7 +1071,7 @@ seeds fill it:
   month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
   ground none. What wakes takes hold (`seed::lodge`): it joins the stand of its starting kind in the cell, the slots
   of it within `APART` (0.5) × `alike` steps (in every gene, `cover::distance`), shared over them by their built cover
-  (the genes of each the mean by built cover);
+  (the genes of each the mean by built cover; in each a group of plants of their own, `Cover::recruit`);
   else they found a slot of their own: an empty one; else the slot **in deficit**, whose balance over about its last
   year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
   below zero, the worst first (its cover dies as remains); else the two slots nearest each other by their genes,
