@@ -677,6 +677,13 @@ section 4, with its known faults; the lines here are the rest.
 - The light the cover catches has two laws: `flow::air` computes the light per capture area itself where
   `cover::per_capture_area` states it. One should call the other.
 - The mass of plants means two things in the two cover fields (with and without stored fuel).
+- A stand that thins keeps the matter of its dead plants: the survivors hold it (`cover::stand::thin`: a slot loses
+  plants, not mass). A dead plant should fall to the ground with its matter, as dead matter, through the helper the
+  other deaths use. The matter that passes from dead plants to survivors in a year is more than the cover builds, so
+  tall plants grow partly by it, and the large plants of a tall stand change by more than 2 m in about 3% of their
+  years. The change needs a rule for which plants are suppressed that holds for swards too (setting each size group's
+  own ground against the land lets a sward never thin), and it moves the cover's mass and the dead matter on the
+  ground: a change of the laws of its own, with new reference numbers. The owner decided: later.
 
 **The core's speed**
 - The parts of a cell are solved after each of the liquid's bookings (7 a month) and after each air step. One solve at
