@@ -21,10 +21,17 @@ const BLANK_LAYERS = 2;
 const photoMade = new WeakMap<Gpu, Texture>();
 const photoBlank = new WeakMap<Gpu, Texture>();
 
+/** A cut-out texel shows where its cover is at least this (tex.wgsl `model_texel`, of the trees). */
+const CUT = 128;
+
 /** The strips' levels, each of its `layers` after the last: level 0 as the image holds it, each next one the mean of
- * four texels (their colour weighted by their cover). */
-function photoMips(base: Uint8Array, layers: number): Uint8Array[] {
-  const out = [base];
+ * four texels (their colour weighted by their cover); of the layers from `cutFrom` on (cut-outs drawn by their cover's
+ * edge, tex.wgsl `model_texel`), each level's cover scaled so as many of its texels show as of level 0 (Castaño 2010),
+ * so a crown of fine leaves keeps its cover far away and does not fade to a haze. */
+function photoMips(base: Uint8Array, layers: number, cutFrom: number): Uint8Array[] {
+  const out = [base], side = PHOTO_SIDE * PHOTO_SIDE;
+  const showing = (level: Uint8Array, l: number, n: number) => { let k = 0; for (let i = 0; i < n; i++) k += level[4 * (l * n + i) + 3] >= CUT ? 1 : 0; return k / n; };
+  const shown = Array.from({ length: layers }, (_, l) => (l >= cutFrom ? showing(base, l, side) : 0));
   for (let k = 1; k < PHOTO_MIPS; k++) {
     const s = PHOTO_SIDE >> k, from = out[k - 1], next = new Uint8Array(4 * s * s * layers);
     for (let l = 0; l < layers; l++) {
@@ -38,10 +45,22 @@ function photoMips(base: Uint8Array, layers: number): Uint8Array[] {
         }
         next[o + 3] = (sum + 2) >> 2;
       }
+      if (l >= cutFrom && shown[l] > 0) keepShown(next, l, s * s, shown[l]);
     }
     out.push(next);
   }
   return out;
+}
+
+/** Scale the cover of layer `l` (`n` texels) of `level` so the share `shown` of its texels reach `CUT`: the least cover
+ * of that share's most covered texels is lifted (or lowered) to `CUT`. */
+function keepShown(level: Uint8Array, l: number, n: number, shown: number): void {
+  const counts = new Array(256).fill(0);
+  for (let i = 0; i < n; i++) counts[level[4 * (l * n + i) + 3]]++;
+  let above = 0, v = 255;
+  while (v > 1 && above + counts[v] <= shown * n) above += counts[v--];
+  const scale = CUT / (v + 1);
+  for (let i = 0; i < n; i++) { const o = 4 * (l * n + i) + 3; level[o] = Math.min(255, Math.round(level[o] * scale)); }
 }
 
 /** The image `name` beside the page. */
@@ -52,11 +71,11 @@ function photoImage(name: string): Promise<ImageBitmap> {
 /** Once the strips are fetched and their levels made (a failed fetch leaves the ground without its detail). */
 export const groundReady: Promise<void> = Promise.all([photoImage('ground.jpg'), photoImage('carpets.jpg'), photoImage('models.png'), photoImage('trees.png')])
   .then(strips => {
-    const layers = strips.reduce((n, s) => n + s.height / PHOTO_SIDE, 0);
+    const layers = strips.reduce((n, s) => n + s.height / PHOTO_SIDE, 0), trees = strips[strips.length - 1].height / PHOTO_SIDE;
     const c = new OffscreenCanvas(PHOTO_SIDE, PHOTO_SIDE * layers), g = c.getContext('2d')!;
     let at = 0;
     for (const s of strips) { g.drawImage(s, 0, at); at += s.height; }
-    photoLevels = photoMips(new Uint8Array(g.getImageData(0, 0, PHOTO_SIDE, PHOTO_SIDE * layers).data.buffer), layers);
+    photoLevels = photoMips(new Uint8Array(g.getImageData(0, 0, PHOTO_SIDE, PHOTO_SIDE * layers).data.buffer), layers, layers - trees);
     groundLayers = layers;
   })
   .catch(() => undefined);

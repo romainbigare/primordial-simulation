@@ -72,10 +72,16 @@ fn model_fit(q: Plant) -> ModelFit {
   return ModelFit(s, w, w * aspect, (covers * covers) / (w * w));
 }
 
-// A texel's cover `a` drawn `dense` times as dense: the share of `dense` layers of it that a ray meets, so a sprite
-// held narrower than its crown (by its height or its reach, `model_fit`) still covers its crown's ground, as the field
-// far away counts it (canopy.ts `marksOn`), and is not squeezed.
-fn dense_cover(a: f32, dense: f32) -> f32 { return 1.0 - pow(1.0 - min(a, 1.0), dense); }
+// A texel's cover `a` of sprite s drawn `dense` times as dense: the share of `dense` layers of it that a ray meets, so a
+// sprite held narrower than its crown (by its height or its reach, `model_fit`) still covers its crown's ground, as the
+// field far away counts it (lattices.ts `marksOf`), and is not squeezed. A tree's then shows where that passes a half,
+// over `TREE_EDGE` either way (its mips keep the share of its texels that show, detail.ts `keepShown`), so a crown of
+// fine leaves far away keeps its cover and its edge and does not fade into a haze of half-covered texels.
+const TREE_EDGE = 0.25;
+fn dense_cover(s: i32, a: f32, dense: f32) -> f32 {
+  let d = 1.0 - pow(1.0 - min(a, 1.0), dense);
+  return select(d, smoothstep(0.5 - TREE_EDGE, 0.5 + TREE_EDGE, d), s < TREES);
+}
 
 // The bare twin of sprite s (sprites.wgsl `bare_of`) at `uv` of its content, at `g` of it a pixel; none where it has
 // none.
@@ -96,7 +102,7 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   var bare = vec4f(0.0);
   if (kept < 1.0) { bare = bare_texel(s, uv, e / w); }
   let t = model_texel(s, uv, e / w);
-  let a = dense_cover(t.a, fit.dense) * kept;
+  let a = dense_cover(s, t.a, fit.dense) * kept;
   if (a + bare.a <= 0.0) { return vec4f(0.0); }
   let lum = dot(t.rgb, LUMA);
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
@@ -124,7 +130,7 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   if (uv.x < 0.0 || uv.x > 1.0) { return 0.0; }
   // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
   let g = max(max(e / fit.w, e / long), SHADOW_BLUR);
-  let leafy = dense_cover(model_texel(fit.s, uv, g).a, fit.dense) * q.left;
+  let leafy = dense_cover(fit.s, model_texel(fit.s, uv, g).a, fit.dense) * q.left;
   var kept = leafy;
   if (q.left < 1.0) { kept += bare_texel(fit.s, uv, g).a * (1.0 - leafy); }
   let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));
