@@ -78,15 +78,17 @@ const ROOTED_ALL = 0.999;
 fn held_at(at: vec2f, b: Beneath) -> vec4f {
   let mean = field_at(at, ROOTED_LAYER);
   let roots = any(mean < vec4f(ROOTED_ALL));
-  if (!roots && b.snow_m <= 0.0) { return vec4f(1.0); }
+  // The snow over the point: its cells' depth where it lies, none where it does not (as the stones, stone.wgsl).
+  let buried = b.snow * b.snow_m;
+  if (!roots && buried <= 0.0) { return vec4f(1.0); }
   var out = vec4f(1.0);
   if (roots) {
     let need = field_at(at, NEED_LAYER);
     for (var c = 0; c < 4; c++) { out[c] = rooted(b.loose, need[c], b.loose_px) / max(mean[c], 1e-3); }
   }
-  if (b.snow_m > 0.0) {
+  if (buried > 0.0) {
     let tall = field_at(at, TALL_LAYER);
-    for (var c = 0; c < 4; c++) { out[c] *= above_snow(b.snow_m, tall[c]); }
+    for (var c = 0; c < 4; c++) { out[c] *= above_snow(buried, tall[c]); }
   }
   return out;
 }

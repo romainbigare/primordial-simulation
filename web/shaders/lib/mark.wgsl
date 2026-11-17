@@ -78,11 +78,12 @@ fn along(v: vec4f, z: f32, held: i32) -> f32 {
 const NEAR_SIZES = 3.0;
 
 // What the ground at `at` leaves a plant: the share free of liquid over its roots, how wet it is and how wet its cells
-// are on their mean (land.wgsl `state_at`), the share snow covers and the snow's depth, m.
+// are on their mean (land.wgsl `state_at`), the snow there (lib/land.wgsl `snow_at`, 1 where it lies) and its cells'
+// snow's depth, m.
 struct Foot { stands: f32, wet: f32, mean: f32, snow: f32, snow_m: f32 }
 fn foot(at: vec2f) -> Foot {
   let st = state_at(at, ground_at(at, false), corners(at / land.map.x));
-  return Foot(above_water(st.depth), st.wet, st.mean, st.snow, st.snow_m);
+  return Foot(above_water(st.depth), st.wet, st.mean, select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
 }
 
 // The share of each kind that stands where its roots need `need` m of loose ground (0: its square's ground holds it
@@ -311,7 +312,7 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
   let q = mark_plant(l, k, sq, pick.y, place_of(pick.z));
-  let shows = above_snow(f.snow_m, q.h) * thing;
+  let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
   return vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), shows, f.snow, mark_box(l, q));
 }

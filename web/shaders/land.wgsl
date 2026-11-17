@@ -36,33 +36,6 @@ const SNOW_CELLS_ALL = 0.95;
 // unit vector east and south).
 struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, snow_cells: f32, flow: vec3f, water: vec2f, down: vec2f }
 
-// Inside a cell its snow lies first where the ground holds it (`snow_bares`): high ground before low (colder: the air's
-// fall with height; over `SNOW_RISE_M` a unit), slopes turned from the sun before those facing it (they melt first;
-// `SNOW_SUNNY` a unit of slope toward the light), hollows before knobs (drift fills them; `SNOW_HOLLOW_M` of the
-// relief's height a unit). The cell's share `s` covers where this index lies under `SNOW_SPREAD` ln(s / (1 - s)): of
-// an index spread about 1 either way (a logistic one), the share s, so as much snow is drawn as the cell holds. Its
-// edge is a line of that field, no narrower than `SNOW_EDGE` of the index.
-// The index is held softly within `SNOW_BARES_MOST` either way, so a cell's last few hundredths of snow lie nowhere,
-// and no snow ends on the straight line where the blended share reaches none (a line through the squares' centres).
-const SNOW_RISE_M = 40.0; const SNOW_SUNNY = 2.0; const SNOW_HOLLOW_M = 0.25; const SNOW_SPREAD = 1.0; const SNOW_EDGE = 0.05;
-const SNOW_BARES_MOST = 3.0;
-
-// How readily the ground of slope `slope` (east, south), `rise` m over its cells' mean and `knob` m over its relief's
-// mean (relief.wgsl), sheds its snow: the lower, the longer it keeps it.
-fn snow_bares(slope: vec2f, rise: f32, knob: f32) -> f32 {
-  let sunward = clamp(dot(-slope, LIGHT.xy) / length(LIGHT.xy), -1.0, 1.0);
-  return SNOW_BARES_MOST * tanh((SNOW_SUNNY * sunward + knob / SNOW_HOLLOW_M - rise / SNOW_RISE_M) / SNOW_BARES_MOST);
-}
-
-// The snow at a point whose cells hold `share` of their ground under snow and whose ground sheds it as `bares`
-// (`snow_bares`), that index changing by `width` across a pixel: 1 where it lies, 0 where not, the pixel's share at
-// its edge.
-fn snow_at(share: f32, bares: f32, width: f32) -> f32 {
-  if (share <= 0.0 || share >= 1.0) { return share; }
-  let line = SNOW_SPREAD * log(share / (1.0 - share));
-  return 1.0 - smoothstep(-1.0, 1.0, (bares - line) / max(width, SNOW_EDGE));
-}
-
 // The spot `s` with its channel's stones: on the bed of channel `ch` (of discharge `q`, on ground `g`), and beside it
 // where the reach is steep, with the walls and the fallen blocks of a steep reach. The largest drawn takes its size
 // from the point's own sample (`cobble` m, in a step where two samples meet: the size sets where the stones lie); what
@@ -118,7 +91,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   }
   let mouth = through_band(g, e);
   let ch = channel_of(g, q, banks, mouth);
-  let st = state_on(at, g, cs, depth_in(g, ch), e);
+  let st = state_on(at, g, cs, depth_in(g, ch), e, fine.x);
   let surface = blended(SURFACE, cs);
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
@@ -127,10 +100,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.sea = surface.w;
   p.wet = st.wet;
   p.t = st.t;
-  // The cells' snow placed where the ground holds it (`snow_at`), moved by its drifts (`State.drifts`); on standing
-  // liquid, the cells' share.
-  let bares = snow_bares(g.slope, st.rise, fine.x) + st.drifts;
-  p.snow = select(snow_at(st.snow, bares, fwidth(bares)), st.snow, st.depth > 0.0);
+  // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
+  p.snow = select(snow_at(st.snow, st.bares, fwidth(st.bares)), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
