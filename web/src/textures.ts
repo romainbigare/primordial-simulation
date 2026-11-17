@@ -7,7 +7,8 @@
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './style';
-import { FIELD, Kinds, LATTICES, PLANES_DOWN, REACH, ROWS_MOST, STAND, half } from './canopy';
+import { FIELD, Kinds, PLANES_DOWN, half } from './canopy';
+import { LATTICES, REACH, ROWS_MOST, STAND } from './lattices';
 import { groundDetail } from './detail';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */

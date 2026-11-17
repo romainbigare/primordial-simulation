@@ -188,8 +188,9 @@ while it lives (where two slots join, the heavier keeps its own), by which the p
 plants apart from another slot's of the same starting kind (web/shaders/lib/mark.wgsl `pick_kind`). Then of each of its groups of plants
 (`cover::GROUPS`, 4; laws.md 3), the large plants first and the empty groups last (all 0), four numbers: plants a m²,
 and a plant's height, stem's width and crown's width, m (`stands::plants` of that group), by which the page draws each
-group's plants at their own size, the large plants on the marks of the lowest ranks (web/src/canopy.ts `groupsOf`, web/shaders/lib/mark.wgsl
-`group_of`), so they keep their places while smaller plants come and go. The page thins a
+kind's plants along a smooth curve of sizes through its groups, the large plants on the lowest draws of the kind's own
+marks (web/src/kind_row.ts `groupsOf`, web/shaders/lib/mark.wgsl `along`, `pick_kind`), so they keep their places and
+about their size while smaller plants come and go and groups join or split. The page thins a
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /

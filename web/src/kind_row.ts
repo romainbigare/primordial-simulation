@@ -10,7 +10,7 @@ export const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover
  * large plants first, empty ones last: plants a m², height, stem's width and crown's width, m. The kinds' table holds
  * `GROUPS` of them (one number of a plane each, lib/mark.wgsl `GROUPS`; the core's `cover::GROUPS`). */
 const GROUP_AT = 21, GROUP_ROW = 4;
-export const GROUPS = 4;
+const GROUPS = 4;
 
 /** The groups of plants of the kind of row `r` (`GROUP_AT`), the held ones, the large first: each a row of its own of
  * its plants' count, height, stem and crown, and the share of the ground its crowns cover (tape/src/stands.rs `plants`:

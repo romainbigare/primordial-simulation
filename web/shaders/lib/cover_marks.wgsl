@@ -10,9 +10,9 @@
 // its plants (thicker and thinner over the field's patches, cover_field.wgsl `patchy`), less where the ground at the foot
 // is drier than its cell's mean as the kind's activity law says and where its loose ground is thinner than its roots
 // need (land.wgsl `rooted`, its chance raised where its square's ground is thin, so the square keeps its cover); a plant
-// buried by the snow's depth against its height does not show, one standing in snow carries it on its crown; on the
-// trees' lattice in stands of their kinds as the
-// field far away has them (cover_field.wgsl `stand_pick`), elsewhere by the mark's own rank. So kinds mix mark by mark
+// buried by the snow's depth against its height does not show, one standing in snow carries it on its crown; each kind
+// claims cells by its own draw (on the trees' lattice in stands of their kinds as the field far away has them,
+// cover_field.wgsl `stand_pick`), and where several claim one the tallest plant stands. So kinds mix mark by mark
 // across a square's edge and a kind that needs wet ground gathers in the hollows. None stands where liquid stands over
 // its roots or under snow. Its size, shape and colour are its kind's numbers (canopy.ts, web/src/style.ts,
 // web/src/form.ts; lib/crown.wgsl draws its body): a tree is a crown of its kind's form over its stem and its shadow,
@@ -43,11 +43,11 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       let k = cell + vec2f(f32(i), f32(j));
       let m = decided(l, k, p - mark_foot(l, k), e);
       if (m.x < 0.0) { continue; }
-      // Its square, kind and group (mark.wgsl `decide`).
+      // Its square, kind and place among the kind's groups (mark.wgsl `decide`).
       let packed = i32(m.x);
-      let kd = packed / GROUPS;
+      let kd = packed / (GROUPS * PLACE_STEPS);
       let s = kd / kinds_n();
-      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), packed % GROUPS), p, e, fade * m.y, m.z);
+      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS))), p, e, fade * m.y, m.z);
     }
   }
 }
