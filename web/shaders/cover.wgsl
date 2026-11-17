@@ -47,24 +47,21 @@ fn shadow(dst: ptr<function, vec4f>, shade: ptr<function, f32>, a: f32) {
 // carries the snow, `CROWN_SNOW`), and a bush's flowers or fruit.
 fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
   let angled = cover.corner.w;
-  let models = angled > 0.5 && models_ready();
-  if (models) {
-    shadow(dst, shade, fade * model_shadow(q, p, e));
-  } else {
-    // The shadow: from above to the south-east of its foot by its height (`SHADOW_OFF`); angled, flat on the ground at
-    // its foot; within its reach with its offset (`SHADOW_REACH`): the pixel looks no farther for it (`lattice`).
-    let half = min(0.5 * q.d, q.reach / SHADOW_REACH);
-    let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);
-    let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
-    shadow(dst, shade, SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
-  }
-  let bark = BARK * cover.walls.rgb;
-  // Angled, a plant is its model's sprite (models.wgsl) once the models are loaded.
-  if (models) {
-    let m = model_plant(q, p, e, snow);
+  // Angled, a plant is its model's sprite (models.wgsl) and its shadow once the models are loaded.
+  if (angled > 0.5 && models_ready()) {
+    let fit = model_fit(q);
+    shadow(dst, shade, fade * model_shadow(q, fit, p, e));
+    let m = model_plant(q, fit, p, e, snow);
     if (m.a > 0.0) { over(dst, m.rgb, m.a * fade); }
     return;
   }
+  // The shadow: from above to the south-east of its foot by its height (`SHADOW_OFF`); angled, flat on the ground at
+  // its foot; within its reach with its offset (`SHADOW_REACH`): the pixel looks no farther for it (`lattice`).
+  let half = min(0.5 * q.d, q.reach / SHADOW_REACH);
+  let off = mix(min(min(SHADOW_RUN * q.h, SHADOW_OFF * half), max(q.reach - half, 0.0) / 0.7071), 0.3 * half, angled);
+  let sv = (p - q.at - off * vec2f(0.7071)) / vec2f(half, half * mix(1.0, 0.5, angled));
+  shadow(dst, shade, SHADOW * fade * (1.0 - smoothstep(1.0 - SHADOW_SOFT, 1.0, length(sv))));
+  let bark = BARK * cover.walls.rgb;
   var body: Body;
   if (q.design == TREE) {
     // The stem: angled from its foot to its crown (`stem`), leaning with it; from above its top through an open crown.

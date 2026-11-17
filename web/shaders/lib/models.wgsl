@@ -84,11 +84,10 @@ fn bare_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
   return model_texel(bare_of(s), uv, g);
 }
 
-// Plant q drawn from a model sprite at p, angled, e m a pixel, where snow covers `snow` of the ground: its colour
+// Plant q drawn from its model sprite `fit` (`model_fit`) at p, angled, e m a pixel, where snow covers `snow` of the ground: its colour
 // (linear) and cover; none where it does not reach. Its leafy sprite keeps the share of its leaves left this season in
 // sprays (`SPRAYS` across the sprite) that fall whole, over its bare twin.
-fn model_plant(q: Plant, p: vec2f, e: f32, snow: f32) -> vec4f {
-  let fit = model_fit(q);
+fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   let s = fit.s; let w = fit.w; let h = fit.h;
   let lean = q.lean.x * h;
   let uv = vec2f((p.x - q.at.x) / w + 0.5 - lean * (q.at.y - p.y) / (h * w), 1.0 - (q.at.y - p.y) / h);
@@ -108,14 +107,13 @@ fn model_plant(q: Plant, p: vec2f, e: f32, snow: f32) -> vec4f {
   return vec4f((mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under), a + under);
 }
 
-// The shadow of plant q drawn from a model sprite at p, angled, e m a pixel: its sprite cast on the ground away from the
+// The shadow of plant q drawn from its model sprite `fit` at p, angled, e m a pixel: its sprite cast on the ground away from the
 // sun (south-east), each of its texels at a height on it laid `MODEL_SHADOW_RUN` of that height along the ground, blurred
 // (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of its sprays as are left, over its bare
 // twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover.wgsl
 // `lattice`). How dark it makes the ground, 0..1.
 const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.05;
-fn model_shadow(q: Plant, p: vec2f, e: f32) -> f32 {
-  let fit = model_fit(q);
+fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let v = p - q.at;
   // Its length along the ground southward, within its reach.
   let long = min(MODEL_SHADOW_RUN * fit.h, 0.9 * q.reach);
