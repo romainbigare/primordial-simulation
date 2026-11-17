@@ -6,7 +6,7 @@
 use super::around::{around, Around};
 use super::budget::{self, BUDGET, BUILDING, DIED, EXUDED, ROUNDED, SEEDS, STORED};
 use super::build::per_input;
-use super::{dec, Cover, Parts, EMPTY_KG, FUEL, LEAF, LIGHT, MOIST, NO_ROOT, NP, SLOTS, STORE, WALL};
+use super::{dec, Cover, Parts, EMPTY_KG, FUEL, GROUPS, LEAF, LIGHT, MOIST, NO_ROOT, NP, SLOTS, STORE, WALL};
 use crate::units::MAX_SUBSTANCES;
 use crate::chem::{Chemistry, Phase};
 use crate::store::{Class, Node};
@@ -38,7 +38,8 @@ fn remember(c: &mut Cover, moist: f64, year: f32) {
 /// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
 /// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer (its
 /// crown's base), and the capture area per unit of ground the light passes through its crown (`canopy::shade`); its
-/// activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`).
+/// activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`); its conducting
+/// walls, kg (`stand::sapwood`), and the key liquid it drew, mol.
 #[derive(Clone, Copy, Default)]
 pub(super) struct Slot {
     pub(super) built: f64,
@@ -95,8 +96,9 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             continue;
         }
         let act = super::activity(&c.genes[q], a.moist);
-        let h = c.height(ph, &mm, rho, q);
-        let sapwood = super::stand::sapwood(ph, (leaf, h), c.walls(&mm, q), rho);
+        let sizes = c.sizes(ph, &mm, q);
+        let h = sizes.height(ph, rho, sizes.large());
+        let sapwood = super::stand::sapwood(ph, (leaf, sizes.lift(ph, rho)), c.walls(&mm, q), rho);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, sapwood, ..Default::default() };
         // The share of its ground (`cover::ground`) its plants hold: where its loose ground is as deep as their roots need (found again
         // only when their need has moved by more than a bin of depth).
@@ -141,7 +143,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);
             b.budget[DIED] -= budget::held(&e, &c.mol[x]);
-            (c.mol[x], c.root[x], c.full[x], c.net[x], c.plants[x], c.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0, 0.0);
+            c.clear(x);
         }
     }
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
@@ -153,9 +155,12 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
 /// Its minerals in the ground are shared out over the slots by what each would take (`build::wants`): the slots' roots
 /// share the cell's ground, and where it is short each gets its share of what it holds, whatever slots hold them. Where
 /// one more kg would not pay a slot builds living cover no more, but walls alone while its plants lack them; out of
-/// season it builds nothing: its fuel is its store, kept for the leaves it builds anew.
+/// season it builds nothing: its fuel is its store, kept for the leaves it builds anew. What a slot builds goes to its
+/// groups of plants by `Cover::growth`.
 fn grow(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, pays, season): (&[Slot; SLOTS], [bool; SLOTS], [bool; SLOTS]), order: &[usize], (i, a, dt): (usize, &Around, f64), (b, counts): (&mut Books, &mut Counters)) {
-    let plans: Vec<_> = order.iter().map(|&x| (season[x] && (pays[x] || super::build::frame_short(w, c, p, x) <= 0.0)).then(|| super::build::per_kg(w, c, p, x, &s[x])).flatten()).collect();
+    let mm = p.mm(&w.chem);
+    let growth = c.growth(&w.cfg.phys, (&mm, w.chem.subs[p.sub[WALL]].density[0]), super::ground(w, i), order);
+    let plans: Vec<_> = order.iter().map(|&x| (season[x] && (pays[x] || super::build::frame_short(w, c, p, x) <= 0.0)).then(|| super::build::per_kg(w, c, p, x, (&s[x], &growth[x]))).flatten()).collect();
     // (A lone slot's share is all of it.)
     let shared = order.len() > 1;
     let wants: Vec<_> = order.iter().zip(&plans).filter(|_| shared).map(|(&x, k)| k.as_ref().map_or([0.0; MAX_SUBSTANCES], |k| super::build::wants(w, (c, k), p, x, &s[x]))).collect();
@@ -167,16 +172,16 @@ fn grow(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, pays, season
             let want = &wants[q];
             (0..ns).filter(|&k| want[k] > 0.0 && asked[k] > 0.0).for_each(|k| ground[k] = a.ground[k] * (want[k] / asked[k]));
         }
-        grow_slot(w, c, (p, e), x, (&s[x], pays[x], season[x], plan.as_ref()), (i, a.tick, a.t, dt), &mut ground, (b, counts));
+        grow_slot(w, c, (p, e), x, (&s[x], pays[x], season[x], plan.as_ref(), &growth[x]), (i, a.tick, a.t, dt), &mut ground, (b, counts));
     }
 }
 
 /// Slot `x` of cover `c` (cell `i`), its parts `p` holding `e` J a mol, in season builds from its fuel and its share
-/// `ground` of its ground's minerals where it builds (`plan`, `build`) and builds its walls (`frame`); it counts what it
-/// built (`Counters::grown`), exudes the fuel past its reserve it could not use (out of season its fuel is its store),
-/// and sets what rounding left below zero to zero.
+/// `ground` of its ground's minerals where it builds (`plan`, `build`) and builds its walls (`frame`), shared over its
+/// groups of plants by `growth` (`Cover::grew`); it counts what it built (`Counters::grown`), exudes the fuel past its
+/// reserve it could not use (out of season its fuel is its store), and sets what rounding left below zero to zero.
 #[allow(clippy::too_many_arguments)]
-fn grow_slot(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), x: usize, (s, pays, season, plan): (&Slot, bool, bool, Option<&super::build::PerKg>), (i, tick, t, dt): (usize, u64, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], (b, counts): (&mut Books, &mut Counters)) {
+fn grow_slot(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), x: usize, (s, pays, season, plan, growth): (&Slot, bool, bool, Option<&super::build::PerKg>, &[f64; GROUPS]), (i, tick, t, dt): (usize, u64, f64, f64), ground: &mut [f64; MAX_SUBSTANCES], (b, counts): (&mut Books, &mut Counters)) {
     let mm = p.mm(&w.chem);
     let (held, sent, made, out) = (budget::held(e, &c.mol[x]), b.budget[SEEDS], c.built(&mm, x), c.seeds.len());
     if let Some(k) = plan {
@@ -185,6 +190,7 @@ fn grow_slot(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), x: usize, (
     if season {
         super::build::frame(w, c, p, x, b);
     }
+    c.grew(x, (made, c.built(&mm, x)), growth);
     b.budget[BUILDING] += budget::held(e, &c.mol[x]) - held - (b.budget[SEEDS] - sent);
     // What it built, kg of dry matter: what it holds more of, and what it sent as seeds.
     let seeds: f64 = c.seeds[out..].iter().map(|s| super::built_kg(&mm, &s.mol)).sum();

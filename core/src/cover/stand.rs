@@ -1,9 +1,10 @@
-//! The plants of a slot of cover (laws.md 3): the model holds a slot's mass and its count of plants, so each plant's
-//! mass is known, and from it the plant's height by the buckling limit (McMahon 1973), how many plants a stand of that
-//! mass holds at most (the self-thinning law, Yoda and others 1963), how deep its roots reach (Schenk and Jackson
-//! 2002), and the share of its cell whose loose ground holds them. One place for these laws: the light's layers
+//! The plants of a slot of cover (laws.md 3): the model holds a slot's mass and its plants by size group (`groups`), so
+//! each group's plant's mass is known, and from it the plant's height by the buckling limit (McMahon 1973), how many
+//! plants a stand of its mean mass holds at most (the self-thinning law, Yoda and others 1963), how deep its roots reach
+//! (Schenk and Jackson 2002), and the share of its cell whose loose ground holds them. One place for these laws: the light's layers
 //! (`grow`), the seeds (`seed`) and the page's drawing (`tape::stands`) read them.
 
+use super::groups::Group;
 use super::{Cover, NG, NO_ROOT, NP, SLOTS};
 use crate::life::kin;
 use crate::Physics;
@@ -28,14 +29,21 @@ fn bin_width() -> f64 {
 
 /// The width of the stem of a plant of `mass` kg of built cover, the share `walls` of it walls of density `rho` kg/m³,
 /// m: the cylinder of `stem_form` and `stem_solid` that holds its walls, as tall as the buckling limit lets it stand
-/// (walls = form × solid × rho × π/4 × D² × `tall` × D^(2/3)).
+/// (walls = form × solid × rho × π/4 × D² × `tall` × D^(2/3), so D^(8/3) is `width_eight_thirds`).
 pub fn stem(ph: &Physics, mass: f64, walls: f64, rho: f64) -> f64 {
-    (mass * walls / (ph.stem_form * ph.stem_solid * rho * FRAC_PI_4 * ph.tall)).max(0.0).powf(3.0 / 8.0)
+    width_eight_thirds(ph, mass * walls, rho).powf(3.0 / 8.0)
 }
 
-/// The height of that plant, m: `tall` × its stem's width^(2/3), the elastic buckling limit (McMahon 1973).
+/// The height of that plant, m: `tall` × its stem's width^(2/3), the elastic buckling limit (McMahon 1973), which is
+/// `tall` × (D^(8/3))^(1/4).
 pub fn height(ph: &Physics, mass: f64, walls: f64, rho: f64) -> f64 {
-    ph.tall * stem(ph, mass, walls, rho).powf(2.0 / 3.0)
+    ph.tall * width_eight_thirds(ph, mass * walls, rho).sqrt().sqrt()
+}
+
+/// D^(8/3) of the stem that holds `kg` of walls of density `rho` kg/m³ as tall as the buckling limit lets it stand
+/// (`stem`), m^(8/3).
+fn width_eight_thirds(ph: &Physics, kg: f64, rho: f64) -> f64 {
+    (kg / (ph.stem_form * ph.stem_solid * rho * FRAC_PI_4 * ph.tall)).max(0.0)
 }
 
 /// The share of the walls its `WALLS` gene sets that a plant of `mass` kg of built cover builds: mass / (mass +
@@ -69,14 +77,17 @@ fn plant_ground(ph: &Physics, mass: f64) -> f64 {
 /// `rho` kg/m³, thin out together: plants crowd the plants whose crowns share their layer of the air (`Cover::crown`),
 /// whatever slot holds them, as the self-thinning law is the crowns of a stand filling its space (Yoda and others 1963)
 /// and the layers of a stand thin apart (an understory under a closed canopy). Of each slot the ground its layer's
-/// plants hold (`plant_ground`), each slot's counted by the share of its crown's depth that slot's crown shares, is set against
-/// its ground; where it is more, the slot loses plants, not mass, as its whole layer would: by that excess cubed (a
-/// plant's ground goes as its mass^(2/3), and its mass as 1 / the count), and the survivors take what the dead freed.
+/// plants hold (its plants at their mean mass, the law's own measure of a stand, `plant_ground`), each other slot's
+/// counted by the share of its crown's depth that slot's crown shares, is set against its ground; where it is more,
+/// the slot loses plants, not mass, as its whole layer would: by that excess cubed (a plant's ground goes as its
+/// mass^(2/3), and its mass as 1 / the count), the small first (`lose`); its large plants lose no more than the crowd
+/// of the large plants of the slots that share their layer asks, each at their own mass (smaller plants take no room
+/// from them: the size-asymmetric competition of Weiner 1990; Purves and others 2008).
 pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, usize), area: f64) {
     let (mut held, mut ground, mut span) = ([0; SLOTS], [0.0; SLOTS], [(0.0, 0.0); SLOTS]);
     let mut k = 0;
-    for x in (0..n).filter(|&x| c.root[x] != NO_ROOT && c.plants[x] > 0.0 && c.built(mm, x) > 0.0) {
-        (held[k], ground[k]) = (x, c.plants[x] * plant_ground(ph, c.built(mm, x) / c.plants[x]));
+    for x in (0..n).filter(|&x| c.root[x] != NO_ROOT && c.count(x) > 0.0 && c.built(mm, x) > 0.0) {
+        (held[k], ground[k]) = (x, c.count(x) * plant_ground(ph, c.built(mm, x) / c.count(x)));
         k += 1;
     }
     let (held, ground) = (&held[..k], &ground[..k]);
@@ -84,12 +95,52 @@ pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, 
     if k > 1 {
         held.iter().zip(span.iter_mut()).for_each(|(&x, s)| *s = c.crown(ph, mm, area, x, c.height(ph, mm, rho, x)));
     }
+    let by = |q: usize, r: usize| if r == q { 1.0 } else { shared(span[q], span[r]) };
+    let crowd: [f64; SLOTS] = std::array::from_fn(|q| if q < k { (0..k).map(|r| by(q, r) * ground[r]).sum() } else { 0.0 });
+    if crowd.iter().all(|&f| f <= area) {
+        return;
+    }
+    // Each slot's large plants, their count and the ground they hold at their own mass.
+    let mut large = [(0.0, 0.0); SLOTS];
     for (q, &x) in held.iter().enumerate() {
-        let crowd: f64 = (0..k).map(|r| if r == q { ground[r] } else { shared(span[q], span[r]) * ground[r] }).sum();
+        let s = c.sizes(ph, mm, x);
+        large[q] = (s.count[s.large()], s.count[s.large()] * plant_ground(ph, s.mass[s.large()]));
+    }
+    for (q, &x) in held.iter().enumerate() {
+        let crowd = crowd[q];
         if crowd > area {
-            c.plants[x] *= (area / crowd).powi(3);
+            // The large plants lose no more than the crowd of the large plants of the slots that share their layer
+            // asks, each at their own mass: smaller plants take no room from them.
+            let alone: f64 = (0..k).map(|r| by(q, r) * large[r].1).sum();
+            let most = if alone > area { large[q].0 * (1.0 - (area / alone).powi(3)) } else { 0.0 };
+            lose(c, mm, x, (c.count(x) * (1.0 - (area / crowd).powi(3)), most));
         }
     }
+}
+
+/// Slot `x` of cover `c` loses `dead` of its plants, the small first: the suppressed plants of a crowded stand die
+/// first (Yoda and others 1963; Weiner 1990), and the survivors take what the dead freed. Its smallest group loses
+/// plants until its survivors are as large as the next group's plants, the two then fuse (their plants alike), and so
+/// on; what is left falls on its large plants, at most `most` of them.
+fn lose(c: &mut Cover, mm: &[f64; NP], x: usize, (mut dead, most): (f64, f64)) {
+    let (mut g, held) = c.groups(mm, x);
+    let mut k = 0;
+    while k + 1 < held && dead > 0.0 {
+        // The share of its plants that, taking all its mass, are as large as the next group's (all where they are).
+        let keep = (g[k].plant() / g[k + 1].plant()).min(1.0);
+        if dead <= g[k].n * (1.0 - keep) {
+            break;
+        }
+        dead -= g[k].n * (1.0 - keep);
+        g[k + 1] = Group { n: g[k + 1].n + g[k].n * keep, kg: g[k + 1].kg + g[k].kg };
+        g[k] = Group::default();
+        k += 1;
+    }
+    if k + 1 == held {
+        dead = dead.min(most);
+    }
+    g[k].n = (g[k].n - dead.max(0.0)).max(f64::MIN_POSITIVE);
+    c.set_groups(x, &mut g[..held]);
 }
 
 /// The share of the crown from `b` to `t` m that the crown from `b2` to `t2` shares; of a crown of no depth, whether the
@@ -158,15 +209,16 @@ pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usi
     }
 }
 
-/// Slot `small` joins slot `big` of the same cover: amounts and plants added (the stand thins at its month, `thin`),
-/// genes and balance the mean by built cover, its starting kind the heavier's; `small` is empty after.
+/// Slot `small` joins slot `big` of the same cover: amounts added, and their groups of plants together
+/// (`Cover::join_groups`; the stand thins at its month, `thin`), genes and balance the mean by built cover, its starting
+/// kind the heavier's; `small` is empty after.
 pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
     let (wb, ws) = (c.built(mm, big), c.built(mm, small));
     let f = (ws / (wb + ws).max(1e-300)) as f32;
     let (gs, ms) = (c.genes[small], c.mol[small]);
     (0..NG).for_each(|g| c.genes[big][g] += f * (gs[g] - c.genes[big][g]));
     c.net[big] += f * (c.net[small] - c.net[big]);
-    c.plants[big] += c.plants[small];
+    c.join_groups(mm, big, small);
     (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
-    (c.mol[small], c.root[small], c.full[small], c.net[small], c.plants[small], c.need[small]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0, 0.0);
+    c.clear(small);
 }

@@ -103,14 +103,14 @@ impl fmt::Display for Range {
 /// The liveness check's island: its side, and the years it runs past the roster's last placement.
 const LIVE_SIDE: usize = 32;
 const LIVE_AFTER: u64 = 10;
-/// The fewest plants a starting kind of cover holds on the island to be alive: one whole plant (`Cover::plants`, a
+/// The fewest plants a starting kind of cover holds on the island to be alive: one whole plant (`Cover::count`, a
 /// real count).
 const ALIVE_PLANTS: f64 = 1.0;
 
 /// A `LIVE_SIDE` island with the roster's cover (seed 1, `--roster`), run `LIVE_AFTER` years past
 /// the last kind's placement, keeps every element and the energy (`common::run` checks the books to 1e-9), leaves no
 /// number that is not finite (`check::broken`), and ends with each of its cover kinds alive: at least `ALIVE_PLANTS`
-/// of the plants that descend from it (`Cover::root`) on the island.
+/// of the plants that descend from it (`Cover::root`, `Cover::count`) on the island.
 #[test]
 fn the_world_lives_and_keeps_its_books() {
     let years = ROSTER.iter().map(|&k| LIFE_YEAR + KINDS[k].year).max().expect("cover kinds") + LIVE_AFTER;
@@ -118,7 +118,7 @@ fn the_world_lives_and_keeps_its_books() {
     let mut held = std::collections::BTreeMap::new();
     for i in 0..w.mesh.cells().n() {
         let c = w.life.cover(i);
-        c.held().for_each(|x| *held.entry(c.root[x]).or_insert(0.0) += c.plants[x]);
+        c.held().for_each(|x| *held.entry(c.root[x]).or_insert(0.0) += c.count(x));
     }
     let plants = |k: usize| held.get(&(k as u32)).copied().unwrap_or(0.0);
     let dead: Vec<usize> = ROSTER.iter().copied().filter(|&k| plants(k) < ALIVE_PLANTS).collect();

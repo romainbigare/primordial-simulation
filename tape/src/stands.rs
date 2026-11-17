@@ -1,14 +1,18 @@
 //! The cover of a cell as a viewer draws it (laws.md 3, docs/tape.md): each of its slots, and of each its plants. The
-//! model holds each slot's mass, its count of plants, the loose ground their roots need and the share of the cell that
-//! holds them; a plant's height and its stem come from the cover's own law (`cover::height`, `cover::stem`: the buckling
-//! limit, McMahon 1973), and the crown from its share of the ground. The page only draws what they give.
+//! model holds each slot's mass, its plants by size group (`cover::Sizes`), the loose ground their roots need and the
+//! share of the cell that holds them; a plant's height and its stem come from the cover's own law (`cover::height`,
+//! `cover::stem`: the buckling limit, McMahon 1973), and the crown from its share of the ground. The page only draws what they give.
 
-use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, LEAF, LIGHT, MOIST, NP, SEED, STORE, WALLS};
+use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, GROUPS, LEAF, LIGHT, MOIST, NP, SEED, STORE, WALLS};
 use crate::layers::per_land;
 use pcore::{Physics, World};
 
-/// Numbers a kind holds in a square's row (`row`).
-pub const KIND_ROW: usize = 20;
+/// Numbers a kind holds in a square's row (`row`): `KIND_HEAD`, then `GROUP_ROW` for each of its groups of plants.
+pub const KIND_ROW: usize = KIND_HEAD + GROUPS * GROUP_ROW;
+/// The numbers of a kind's row before its groups.
+const KIND_HEAD: usize = 20;
+/// The numbers of a group of plants in a kind's row.
+const GROUP_ROW: usize = 4;
 
 /// The plants of a stand: how many a m², each one's mass, kg, height, stem's width and crown's width, m, the share of
 /// the ground the crowns cover, and how closed one crown is (the light it stops, as the cover's light law: 1 - e^-leaf
@@ -55,25 +59,30 @@ struct Ground {
 
 /// The numbers a viewer draws slot `x` of cover `c` from, `KIND_ROW` of them, on the land of its cell `g` (each per m²
 /// of that land, `layers::per_land`, as a viewer draws the cover on the land only): its starting kind; its built cover,
-/// kg/m²; its plants (`plants`): the stem's width, m, how many a m² (`Cover::plants`),
-/// height and crown's width, m, the share of the ground they cover, how closed a crown is; its walls' share; its capture
+/// kg/m²; its large plants (`plants` of its large group, `cover::Sizes::large`, with that group's built cover and capture
+/// area): the stem's width, m, how many a m², height and crown's width, m, the share of the ground they cover, how
+/// closed a crown is; its walls' share; its capture
 /// area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s (more
 /// pigment per area); its moisture gene (`MOIST`) and frost gene, K (`FROST`); its fuel over its reserve (`STORE`); its
 /// activity there (`cover::activity`); the share of it frozen this month (`cover::frozen`); the share of what it builds
 /// that goes to seeds (`SEED`); the share of the land whose loose ground holds its plants (`Cover::rooted`, a share of the
 /// ground its cover lives on) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
 /// whose need is not found yet: seeds that landed since its cell's last month); and its walls gene, log10 kg of walls
-/// per kg of matter (`WALLS`), by which a viewer knows a woody kind while its plants are young.
+/// per kg of matter (`WALLS`), by which a viewer knows a woody kind while its plants are young. Then of each of its
+/// groups, the large plants first (empty groups last, all 0): how many a m², and a plant's height, stem's width and
+/// crown's width, m (`plants` of that group).
 fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
     let (built, genes) = (c.built(mm, x), c.genes[x]);
-    let walls = c.walls(mm, x) / built.max(1e-300);
     let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x] as f64, c.need[x]) } else { (1.0, 0.0) };
     let on_land = |v: f64| per_land(v / g.area, g.land);
-    let p = plants(ph, (on_land(built), on_land(c.leaf(mm, x)), on_land(c.plants[x])), rooted, walls, g.rho);
+    let s = c.sizes(ph, mm, x);
+    let group = |k: usize| plants(ph, (on_land(s.mass[k] * s.count[k]), on_land(c.leaf(mm, x) * s.leaf[k]), on_land(s.count[k])), rooted, s.walls[k], g.rho);
+    let p = group(s.large());
     let act = cover::activity(&genes, g.wet);
     let reserve = dec(genes[STORE]) * built;
     let gene = |k: usize| genes[k] as f64;
-    [
+    let mut out = [0.0; KIND_ROW];
+    out[..KIND_HEAD].copy_from_slice(&[
         c.root[x] as f64,
         on_land(built),
         p.stem,
@@ -82,7 +91,7 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
         p.width,
         p.cover,
         p.crown,
-        walls,
+        c.walls(mm, x) / built.max(1e-300),
         gene(LEAF),
         gene(LIGHT) + gene(MOIST) - gene(LEAF),
         gene(MOIST),
@@ -94,7 +103,12 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
         rooted,
         need as f64,
         gene(WALLS),
-    ]
+    ]);
+    for (k, at) in (0..s.held).rev().zip((KIND_HEAD..KIND_ROW).step_by(GROUP_ROW)) {
+        let q = group(k);
+        out[at..at + GROUP_ROW].copy_from_slice(&[q.per_m2, q.height, q.stem, q.width]);
+    }
+    out
 }
 
 /// The kinds of cell `i` of `w`, of which the share `land` is land, a row of `KIND_ROW` numbers (`row`) for each slot
@@ -143,7 +157,7 @@ mod tests {
         let kind = |k: usize| &r[k * KIND_ROW..(k + 1) * KIND_ROW];
         assert!(kind(0)[1] > kind(1)[1] && kind(1)[1] > 0.0 && kind(2)[0] == -1.0, "two rows, the heaviest first");
         assert!(((kind(0)[1] + kind(1)[1]) / all - 1.0).abs() < 1e-12, "{} and {} against {all}", kind(0)[1], kind(1)[1]);
-        let counts: Vec<f64> = c.held().map(|x| c.plants[x] / area).collect();
+        let counts: Vec<f64> = c.held().map(|x| c.count(x) / area).collect();
         assert!((0..2).all(|k| counts.iter().any(|&n| (kind(k)[3] / n - 1.0).abs() < 1e-9)), "each row's plants are a slot's");
         let half = rows(&w, i, 0.5);
         assert!((half[1] / kind(0)[1] - 2.0).abs() < 1e-12 && (half[3] / kind(0)[3] - 2.0).abs() < 1e-12, "per m² of the land");

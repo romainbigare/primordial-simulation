@@ -3,7 +3,7 @@
 //! upkeep, up to those its plants hold (`frame`).
 
 use super::grow::{Books, Slot};
-use super::{dec, Cover, Parts, FIX, FIX_OFF, FUEL, MATTER, NP, SEED, STORE, WALL, WALLS};
+use super::{dec, Cover, Parts, FIX, FIX_OFF, FUEL, GROUPS, MATTER, NP, SEED, STORE, WALL, WALLS};
 use crate::chem::Reaction;
 use crate::rng::{Purpose, Rng};
 use crate::units::MAX_SUBSTANCES;
@@ -19,21 +19,22 @@ pub(super) fn per_input(rx: &Reaction, k: usize) -> Option<f64> {
 const KEY_STEPS: f32 = 1024.0;
 
 /// What slot `x` of cover `c` (its slot `s` in the month) builds a kg of at its share of walls (`WALLS`; a small plant
-/// builds few walls, `stand::walled`; a slot that shed all its leaves builds them anew on the walls it stands on, matter
-/// alone), by the conversions of growth (`Chemistry::build`, `builds`): the units of each conversion, what
-/// they take of each substance, mol, and the fuel a kg costs with the work of building (`c_copy`), mol. None where the
-/// chemistry builds no cover.
+/// builds few walls, `stand::walled`, each group of its plants by its share `growth` of what it builds,
+/// `Cover::walled_new`; a slot that shed all its leaves builds them anew on the walls it stands on, matter alone), by the
+/// conversions of growth (`Chemistry::build`, `builds`): the units of each conversion, what they take of each
+/// substance, mol, and the fuel a kg costs with the work of building (`c_copy`), mol. None where the chemistry builds no
+/// cover.
 pub(super) struct PerKg<'a> {
     units: [(&'a Reaction, f64); 2],
     need: [f64; MAX_SUBSTANCES],
     fpk: f64,
 }
 
-pub(super) fn per_kg<'a>(w: &'a World, c: &Cover, p: &Parts, x: usize, s: &Slot) -> Option<PerKg<'a>> {
+pub(super) fn per_kg<'a>(w: &'a World, c: &Cover, p: &Parts, x: usize, (s, growth): (&Slot, &[f64; GROUPS])) -> Option<PerKg<'a>> {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
     let bl = chem.build.as_ref()?;
     let wall = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL])?;
-    let walls = if s.living > 0.0 { dec(c.genes[x][WALLS]) * super::stand::walled(ph, c.plant(&mm, x)) } else { 0.0 };
+    let walls = if s.living > 0.0 { dec(c.genes[x][WALLS]) * c.walled_new(ph, &mm, x, growth) } else { 0.0 };
     let fm = 1.0 / (1.0 + walls);
     let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, walls * fm / mm[WALL] / wall.outputs[0].1 as f64)];
     let mut need = [0.0; MAX_SUBSTANCES];
@@ -148,10 +149,11 @@ pub(super) fn build(w: &World, (c, k): (&mut Cover, &PerKg), p: &Parts, x: usize
 }
 
 
-/// The walls slot `x` lacks of those its plants hold (`WALLS` × `stand::walled` of their mass, per kg of matter), kg.
+/// The walls slot `x` lacks of those its plants hold (`WALLS` × `stand::walled` of each group's plant by its share,
+/// `Cover::walled_held`, per kg of matter), kg.
 pub(super) fn frame_short(w: &World, c: &Cover, p: &Parts, x: usize) -> f64 {
     let mm = p.mm(&w.chem);
-    let walls = dec(c.genes[x][WALLS]) * super::stand::walled(&w.cfg.phys, c.plant(&mm, x));
+    let walls = dec(c.genes[x][WALLS]) * c.walled_held(&w.cfg.phys, &mm, x);
     (walls * c.mol[x][MATTER] * mm[MATTER] - c.walls(&mm, x)).max(0.0)
 }
 

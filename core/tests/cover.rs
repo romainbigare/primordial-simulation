@@ -297,8 +297,8 @@ fn a_new_kind_enters_a_full_cell() {
 }
 
 /// A stand of the tree kind sown on bare ground as seedlings (0.001 kg per m²) grows over two years of light: it never
-/// holds more plants than the self-thinning law allows for its mass (`thin_kg`), its plants grow taller (`cover::height`),
-/// and the books are kept.
+/// holds more plants than the self-thinning law allows for its mass (`thin_kg`), its large plants grow taller
+/// (`Cover::height`), and the books are kept.
 #[test]
 fn a_stand_never_passes_the_thinning_law_as_it_grows_tall() {
     let (mut w, i) = start();
@@ -309,7 +309,7 @@ fn a_stand_never_passes_the_thinning_law_as_it_grows_tall() {
     let stand = |w: &pcore::World| {
         let c = w.life.cover(i);
         let x = c.held().next().expect("the stand lives");
-        (c.built(&mm, x) / area, c.plants[x] / area, c.height(&w.cfg.phys, &mm, rho, x))
+        (c.built(&mm, x) / area, c.count(x) / area, c.height(&w.cfg.phys, &mm, rho, x))
     };
     let first = stand(&w);
     for _ in 0..24 {
