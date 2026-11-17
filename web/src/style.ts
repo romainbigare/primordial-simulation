@@ -140,7 +140,14 @@ export function cooling(year: number, lat: number): number {
  * meadow); a soft one stands as a tree (a palm, a tree fern or a giant herb: models.wgsl `model_set`) as far as it
  * stands (`standsOf`). */
 export function designOf(height: number, walls: number): number {
-  return height >= TREE_M || grownWalls(walls) < BUSH_WOOD ? DESIGN.tree : DESIGN.bush;
+  return height >= treeFrom(walls) ? DESIGN.tree : DESIGN.bush;
+}
+
+/** The height from which a plant of a kind whose walls gene is `walls` is drawn as a tree, m (`designOf`): a woody
+ * kind's `TREE_M`, a soft kind's 0. Each plant takes its design by its own height (lib/mark.wgsl `plant_of`), so a kind
+ * passes from bushes to trees plant by plant as it grows. */
+export function treeFrom(walls: number): number {
+  return grownWalls(walls) < BUSH_WOOD ? 0 : TREE_M;
 }
 
 /** The share of a kind whose plants stand `height` m tall and whose walls gene is `walls` that stands as plants (marks,

@@ -896,7 +896,7 @@ of its mass builds (`wall_kg`, below), the rest of each group's built cover is i
 capture area (`Cover::sizes`). A plant's height is that of a plant of its mass whose walls make a stem of `stem_form`
 and `stem_solid` at the walls' density, as tall as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973).
 The slot's **large plants** (its last group) set its height (`Cover::height`): the top of its crown for the light, the
-loose ground its roots need, the stem a jaw meets and what the page draws; its conducting walls are each group's
+loose ground its roots need and the stem a jaw meets (the page draws every group, each its own size); its conducting walls are each group's
 capture area as tall as its plants (`Cover::lift`). Seeds that found a slot are one group of one plant per `seed_kg`;
 seeds that join a stand of their kind come in as a group of their own, and where all its groups are held they join
 its group of the smallest plants (`Cover::recruit`): nothing happens to a plant because smaller plants arrived. Slots

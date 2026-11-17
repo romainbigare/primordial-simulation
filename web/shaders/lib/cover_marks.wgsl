@@ -43,9 +43,11 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       let k = cell + vec2f(f32(i), f32(j));
       let m = decided(l, k, p - mark_foot(l, k), e);
       if (m.x < 0.0) { continue; }
+      // Its square, kind and group (mark.wgsl `decide`).
       let packed = i32(m.x);
-      let s = packed / kinds_n();
-      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), packed % kinds_n()), p, e, fade * m.y, m.z);
+      let kd = packed / GROUPS;
+      let s = kd / kinds_n();
+      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), packed % GROUPS), p, e, fade * m.y, m.z);
     }
   }
 }

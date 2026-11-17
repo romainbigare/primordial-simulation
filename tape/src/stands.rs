@@ -10,7 +10,7 @@ use pcore::{Physics, World};
 /// Numbers a kind holds in a square's row (`row`): `KIND_HEAD`, then `GROUP_ROW` for each of its groups of plants.
 pub const KIND_ROW: usize = KIND_HEAD + GROUPS * GROUP_ROW;
 /// The numbers of a kind's row before its groups.
-const KIND_HEAD: usize = 20;
+const KIND_HEAD: usize = 21;
 /// The numbers of a group of plants in a kind's row.
 const GROUP_ROW: usize = 4;
 
@@ -68,7 +68,9 @@ struct Ground {
 /// that goes to seeds (`SEED`); the share of the land whose loose ground holds its plants (`Cover::rooted`, a share of the
 /// ground its cover lives on) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
 /// whose need is not found yet: seeds that landed since its cell's last month); and its walls gene, log10 kg of walls
-/// per kg of matter (`WALLS`), by which a viewer knows a woody kind while its plants are young. Then of each of its
+/// per kg of matter (`WALLS`), by which a viewer knows a woody kind while its plants are young; and its slot, which it
+/// keeps while it lives (a slot that joins another is gone, the other keeps its own), so a viewer tells two slots of
+/// one starting kind apart from month to month. Then of each of its
 /// groups, the large plants first (empty groups last, all 0): how many a m², and a plant's height, stem's width and
 /// crown's width, m (`plants` of that group).
 fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
@@ -103,6 +105,7 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
         rooted,
         need as f64,
         gene(WALLS),
+        x as f64,
     ]);
     for (k, at) in (0..s.held).rev().zip((KIND_HEAD..KIND_ROW).step_by(GROUP_ROW)) {
         let q = group(k);
@@ -159,6 +162,7 @@ mod tests {
         assert!(((kind(0)[1] + kind(1)[1]) / all - 1.0).abs() < 1e-12, "{} and {} against {all}", kind(0)[1], kind(1)[1]);
         let counts: Vec<f64> = c.held().map(|x| c.count(x) / area).collect();
         assert!((0..2).all(|k| counts.iter().any(|&n| (kind(k)[3] / n - 1.0).abs() < 1e-9)), "each row's plants are a slot's");
+        assert!(kind(0)[KIND_HEAD - 1] != kind(1)[KIND_HEAD - 1], "each row names its own slot");
         let half = rows(&w, i, 0.5);
         assert!((half[1] / kind(0)[1] - 2.0).abs() < 1e-12 && (half[3] / kind(0)[3] - 2.0).abs() < 1e-12, "per m² of the land");
         assert!(rows(&w, i, 0.0).chunks(KIND_ROW).all(|k| k[0] == -1.0), "no kinds where no land");
