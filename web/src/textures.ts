@@ -7,7 +7,7 @@
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { Style } from './style';
-import { FIELD, Kinds, LATTICES, PLANES_DOWN, REACH, half } from './canopy';
+import { FIELD, Kinds, LATTICES, PLANES_DOWN, REACH, ROWS_MOST, STAND, half } from './canopy';
 import { groundDetail } from './detail';
 
 /** Of the uniforms of cover.wgsl (`Cover`) and of cover_field.wgsl (`CoverLook`), four-wide members. */
@@ -18,10 +18,6 @@ const MARK_MARGIN = Math.max(...REACH), MARK_SPARE = 1;
 /** The words a mark is kept in, a texture each (lib/cells.wgsl `MARK_WORDS`), and their bindings; and the binding of the
  * cells whose marks reach each cell (lib/cells.wgsl `marks_reach`). */
 const MARK_BINDINGS = [5, 6, 7, 22], REACH_BINDING = 23;
-/** Angled, a plant stands up this share of its height on the map (lib/crown.wgsl `STAND`): the rows south of a pixel
- * looked at, past those its marks reach, reach its tallest plant, but no more than `ROWS_MOST` (each row costs a pixel
- * a look at marks for each cell across), and a taller plant is drawn as tall as they reach. */
-const STAND = 0.5, ROWS_MOST = 3;
 /** A mark narrower than this many pixels of the screen is not drawn as a thing (lib/draw.wgsl `THING_PX`): a lattice
  * none of whose marks is as wide is not drawn as marks. */
 const THING_LEAST_PX = 4;

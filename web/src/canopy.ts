@@ -5,7 +5,7 @@
 // draw make. No kind is a class: a plant's size, shape and colour are functions of its numbers.
 import type { Rgb } from './style';
 import { clamp, smooth } from './earth';
-import { DESIGN, KindLook, designOf, fromScreen, grownWalls, kindLook, seenFar, strawSeen, toScreen } from './style';
+import { DESIGN, KindLook, designOf, fromScreen, grownWalls, kindLook, seenFar, standsOf, strawSeen, toScreen } from './style';
 import { formOf } from './form';
 
 /** The side of a cell of each lattice of marks, m: one mark a cell at most. A mark reaches at most `REACH` cells from its
@@ -17,6 +17,11 @@ export const LATTICES = [0.1, 0.5, 2.5];
 /** Of each lattice, the cells a mark reaches from its own (cover.wgsl looks that many cells each way about a pixel): the
  * trees' two, so a crown up to four sides across stands among the small ones of its lattice. */
 export const REACH = [1, 1, 2];
+/** Angled, a plant stands up this share of its height on the map (lib/crown.wgsl `STAND`): the rows south of a pixel
+ * looked at, past those its marks reach, reach its tallest plant, but no more than `ROWS_MOST` (each row costs a pixel
+ * a look at marks for each cell across, textures.ts), so lattice l stands a plant up to (`ROWS_MOST` + `REACH`[l]) of
+ * its sides over `STAND` tall (`shareOn`). */
+export const STAND = 0.5, ROWS_MOST = 3;
 /** Angled, a mark's sprite is drawn up to this much wider than its crown, so its leaves, which have gaps, cover its
  * crown's ground (models.wgsl `MODEL_WIDER`): a crown is at most its reach over this. */
 const SPRITE_WIDER = 1.6;
@@ -127,16 +132,27 @@ function foliage(r: Float32Array, walls: Rgb): Rgb {
 /** The look of the kind of row `r` (style.ts `kindLook`), drawn with design `design`, on ground at `t` K where the
  * frozen cover melts at `melt` K, while the ground cools by `falling`, its walls reflecting `walls`. */
 function lookOfRow(r: Float32Array, design: number, walls: Rgb, t: number, melt: number, falling: number): KindLook {
-  const k = { leaf: r[K.leaf], wood: r[K.wood], moist: r[K.moist], frost: r[K.frost], pigment: r[K.pigment], act: r[K.act], frozen: r[K.frozen], seed: r[K.seed], design, t, melt };
+  const k = { leaf: r[K.leaf], wood: r[K.wood], walls: grownWalls(r[K.walls]), moist: r[K.moist], frost: r[K.frost], pigment: r[K.pigment], act: r[K.act], frozen: r[K.frozen], seed: r[K.seed], design, t, melt };
   return kindLook(k, foliage(r, walls), falling);
 }
 
-/** The share of a kind of crown width `w`, m, drawn on lattice `l`: between the two lattices whose sides lie either side
- * of it, by where it lies between them on a log scale; all on the first below it and on the last above it. */
-function shareOn(w: number, l: number): number {
+/** The share of a kind of crown width `w`, m, drawn on lattice `l` by its width: between the two lattices whose sides
+ * lie either side of it, by where it lies between them on a log scale; all on the first below it and on the last above
+ * it. */
+function shareByWidth(w: number, l: number): number {
   const x = Math.log(Math.max(w, 1e-6)), at = LATTICES.map(Math.log);
   const below = l > 0 ? clamp((x - at[l - 1]) / (at[l] - at[l - 1])) : 1, above = l < at.length - 1 ? clamp((at[l + 1] - x) / (at[l + 1] - at[l])) : 1;
   return Math.min(below, above);
+}
+
+/** The share of a kind of crown width `w`, m, and height `h`, m, drawn on lattice `l`: by its width (`shareByWidth`),
+ * but none on a lattice too small to stand it at its height (`STAND`, `ROWS_MOST`): that share is drawn on the least
+ * that does (or the last), so a tall plant of a narrow crown stands as tall as it is. */
+function shareOn(w: number, h: number, l: number): number {
+  const stands = LATTICES.findIndex((a, m) => ((ROWS_MOST + REACH[m]) * a) / STAND >= h), least = stands < 0 ? LATTICES.length - 1 : stands;
+  if (l < least) return 0;
+  if (l > least) return shareByWidth(w, l);
+  return LATTICES.slice(0, l + 1).reduce((sum, _, m) => sum + shareByWidth(w, m), 0);
 }
 
 /** A stand's crowns share its canopy and touch; the marks' places are random, so crowns each as wide as the ground it
@@ -186,12 +202,12 @@ export function steadyRows(rows: Float32Array, at: number, n: number, kinds: num
  * 20 to 25), the reach its branches hold whatever leaves they bear. */
 const CROWN_PER_STEM = 20;
 
-/** The crowns of a woody kind (row `r`) on the share `rooted` of its square: as wide as its wood holds them through the
- * year, not as its leaves cover the ground this month, so its plants keep their size and place as it sheds and leafs
- * out: `CROWN_PER_STEM` of its stem's width, no wider than its plants' share of the ground lets them stand, never
+/** The crowns of a kind that stands as plants (row `r`) on the share `rooted` of its square: as wide as its wood holds
+ * them through the year, not as its leaves cover the ground this month, so its plants keep their size and place as it
+ * sheds and leafs out: `CROWN_PER_STEM` of its stem's width, no wider than its plants' share of the ground lets them stand, never
  * narrower than its leaves cover; the share of the ground they cover then, and how closed a crown is with the leaves
  * it bears (the cover's light law over that ground, as `tape/src/stands.rs` `plants`). */
-function woodyCrowns(r: Float32Array, rooted: number): { width: number; cover: number; closed: number } {
+function standingCrowns(r: Float32Array, rooted: number): { width: number; cover: number; closed: number } {
   if (r[K.perM2] <= 0 || r[K.cover] <= 0) return { width: r[K.width], cover: r[K.cover], closed: r[K.crown] };
   const room = Math.sqrt(rooted / ((Math.PI / 4) * r[K.perM2]));
   const width = Math.max(r[K.width], Math.min(CROWN_PER_STEM * r[K.stem], room));
@@ -212,7 +228,7 @@ interface MarksOn { chance: number; width: number; plants: number; covers: numbe
  * stand's canopy at random places (`CLOSED_MOST`), at most `REACH` cells from its own, and where that is too narrow its
  * marks stand more often (at most one a cell), so the ground they cover on the rooted share is the stand's. */
 function marksOn(r: Float32Array, l: number, grow: number, rooted: number): MarksOn {
-  const share = shareOn(r[K.width] * grow, l), a = LATTICES[l], most = (2 * REACH[l] * a) / SPRITE_WIDER;
+  const share = shareOn(r[K.width] * grow, r[K.height], l), a = LATTICES[l], most = (2 * REACH[l] * a) / SPRITE_WIDER;
   if (share <= 0 || r[K.cover] <= 0 || r[K.perM2] <= 0) return { chance: 0, width: 0, plants: 0, covers: 0 };
   const inside = r[K.perM2] / r[K.cover], plants = Math.max((inside * a * a) / (grow * grow), 1);
   const held = Math.min(r[K.width] * grow * Math.sqrt(plants), most);
@@ -286,6 +302,18 @@ class Paint {
   }
 }
 
+/** Into `sward` and `flowers`: the share `part` of the kind of row `r` (its starting kind `k`) that is the sward, of look
+ * `look`, its plants `stand` (height, rooted share, roots' need): they cover their share of the ground, each as closed
+ * as its crown, and their stems stand where their leaves are gone (cured straw), closing the ground as their walls'
+ * area does. */
+function swardOf(r: Float32Array, k: number, look: KindLook, part: number, stand: number[], sward: Paint, flowers: Paint): void {
+  const c = seenFar(look), crown = r[K.crown] * look.left;
+  const straw = (1 - Math.exp(-STRAW_AREA * r[K.kg] * r[K.wood])) * (1 - crown), closes = crown + straw;
+  const covers = part * r[K.cover] * closes, mixed = closes > 0 ? straw / closes : 0, s = strawSeen();
+  sward.add(k, r[K.root], [0, 1, 2].map(q => c[q] + (s[q] - c[q]) * mixed) as Rgb, covers, 0, stand, 0);
+  flowers.add(k, 0, look.petal, covers * look.bloom, 0, stand, 0);
+}
+
 /** The kinds of the core's table `rows` for a map of `w` x `h` squares (`row` numbers a square, tape/src/table.rs):
  * `kinds` kinds a square of `kindRow` numbers, from `at` on; while the ground cools by `falling` (style.ts
  * `cooling`). */
@@ -306,15 +334,20 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
     const paint = LATTICES.map(() => new Paint()), sward = new Paint(), flowers = new Paint();
     for (let k = 0; k < kinds; k++) {
       if (rows[at + (i * kinds + k) * kindRow + K.root] < 0 || rows[at + (i * kinds + k) * kindRow + K.kg] <= 0) continue;
-      // A copy: its crowns' numbers are set below (`woodyCrowns`).
+      // A copy: its crowns' numbers are set below (`standingCrowns`).
       const r = rows.slice(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
-      // The square's ground temperature (the table's second number of a row) and the frozen cover's melting point.
-      const design = designOf(r[K.height], r[K.walls]), look = lookOfRow(r, design, walls, rows[1 + row * i + 1], rows[0], falling);
       // The share of the square that holds its plants and the loose ground their roots need, as the core found them.
       const mean = Math.max(r[K.rooted], 1e-3), stand = [r[K.height], mean, r[K.need]];
-      // A woody kind's crowns as wide as their wood holds them through the year (`woodyCrowns`), as closed as its leaves.
-      const woody = design !== DESIGN.herb ? woodyCrowns(r, mean) : null;
-      if (woody) { r[K.width] = woody.width; r[K.cover] = woody.cover; r[K.crown] = woody.closed; }
+      // The square's ground temperature (the table's second number of a row) and the frozen cover's melting point.
+      const lookAs = (design: number) => lookOfRow(r, design, walls, rows[1 + row * i + 1], rows[0], falling);
+      // What of it does not stand as plants is the sward (`standsOf`).
+      const stands = standsOf(r[K.height], r[K.walls]);
+      if (stands < 1) swardOf(r, k, lookAs(DESIGN.herb), 1 - stands, stand, sward, flowers);
+      if (stands <= 0) continue;
+      const design = designOf(r[K.height], r[K.walls]), look = lookAs(design);
+      // Its crowns as wide as their wood holds them through the year (`standingCrowns`), as closed as its leaves.
+      const crowns = standingCrowns(r, mean);
+      r[K.width] = crowns.width; r[K.cover] = crowns.cover; r[K.crown] = crowns.closed;
       // How closed its crown is with the leaves it bears this season: how dense times the leaves left.
       const c = seenFar(look), crown = r[K.crown] * look.left;
       const packed = Math.round(look.left * LEFT_STEPS) + Math.min(r[K.crown], 1 - 1e-3);
@@ -330,25 +363,16 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       put(P.shape + k, i, 0, shape.form + SURE_PACK * shape.sure);
       put(P.shape + k, i, 1, r[K.root]);
       put(P.shape + k, i, 3, shape.dry);
-      if (design === DESIGN.herb) {
-        // A herb is the sward: its plants cover their share of the ground, each as closed as its crown, and its stems
-        // stand where its leaves are gone (cured straw), closing the ground as their walls' area does.
-        const straw = (1 - Math.exp(-STRAW_AREA * r[K.kg] * r[K.wood])) * (1 - crown), closes = crown + straw;
-        const covers = r[K.cover] * closes, mixed = closes > 0 ? straw / closes : 0, s = strawSeen();
-        sward.add(k, r[K.root], [0, 1, 2].map(q => c[q] + (s[q] - c[q]) * mixed) as Rgb, covers, 0, stand, 0);
-        flowers.add(k, 0, look.petal, covers * look.bloom, 0, stand, 0);
-        continue;
-      }
       LATTICES.forEach((a, l) => {
-        const { chance, width, plants, covers: covered } = marksOn(r, l, design === DESIGN.bush ? BUSH_GROW : 1, mean);
+        const on = marksOn(r, l, design === DESIGN.bush ? BUSH_GROW : 1, mean), chance = on.chance * stands;
         if (chance <= 0) return;
-        if (l === STANDS) put(P.shape + k, i, 2, plants);
+        if (l === STANDS) put(P.shape + k, i, 2, on.plants);
         put(group(P.chance, k, l), i, k & 3, chance / mean);
-        put(group(P.width, k, l), i, k & 3, width);
+        put(group(P.width, k, l), i, k & 3, on.width);
         tallest[l] = Math.max(tallest[l], r[K.height]);
-        widest[l] = Math.max(widest[l], width);
+        widest[l] = Math.max(widest[l], on.width);
         // The share of the ground its plants cover, each as closed as its crown.
-        paint[l].add(k, r[K.root], c, covered * crown, (chance / (a * a)) * width * width * SHADOW_WIDTHS, stand, width);
+        paint[l].add(k, r[K.root], c, on.covers * stands * crown, (chance / (a * a)) * on.width * on.width * SHADOW_WIDTHS, stand, on.width);
       });
     }
     paint.forEach((p, l) => p.put(field, layer(l, i), l === STANDS ? layer(FIELD.standsFirst, i) : undefined, l === STANDS ? layer(FIELD.standsRest, i) : undefined));

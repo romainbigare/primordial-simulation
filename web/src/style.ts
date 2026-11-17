@@ -12,10 +12,10 @@ export type Rgb = [number, number, number];
 export type Style = 'above' | 'angled';
 
 /** The numbers of a kind its look reads (`Kind::row`): its capture area per kg, log10 m²/kg; its walls' share; its
- * moisture gene; its frost gene, K; its light capacity per m² of capture area, log10 mol/m²/s; its activity; the share
- * of it frozen this month; the share of what it builds that goes to seeds; its design (`DESIGN`); and its ground's
- * temperature and the melting point of the frozen cover, K. */
-export interface Leafy { leaf: number; wood: number; moist: number; frost: number; pigment: number; act: number; frozen: number; seed: number; design: number; t: number; melt: number }
+ * grown plants' walls' share (`grownWalls`); its moisture gene; its frost gene, K; its light capacity per m² of capture
+ * area, log10 mol/m²/s; its activity; the share of it frozen this month; the share of what it builds that goes to
+ * seeds; its design (`DESIGN`); and its ground's temperature and the melting point of the frozen cover, K. */
+export interface Leafy { leaf: number; wood: number; walls: number; moist: number; frost: number; pigment: number; act: number; frozen: number; seed: number; design: number; t: number; melt: number }
 
 /** A kind's look this month: the colours its plants span (each plant takes a point between them by its own random
  * number), a reflectance each; the share of its leaves left this season (less as a kind that sheds stands bare while
@@ -25,9 +25,13 @@ export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom:
 /** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (crowns.wgsl and cover.wgsl
  * `plant`), and a herb, drawn only as the sward of the ground (cover_field.wgsl `sward`). */
 export const DESIGN = { tree: 0, bush: 1, herb: 2 } as const;
-/** A plant this tall or taller, m, stands (a tree, whatever its walls); a lower one is a bush where its kind is woody
- * (its grown plants hold this share of their dry mass as walls or more), else a herb (`designOf`). */
-const TREE_M = 3, BUSH_WOOD = 0.6;
+/** A woody plant (its grown plants hold `BUSH_WOOD` of their dry mass as walls or more) this tall or taller, m, is a
+ * tree, a lower one a bush (`designOf`). A soft kind stands as plants (a palm, a tree fern, a giant herb) from
+ * `SOFT_STANDS_M`[0] m tall, all of it from [1] m, and is the sward below (`standsOf`); it is soft as far as its walls'
+ * share lies under `BUSH_WOOD`, over `SOFT_MIX` about it (lib/models.wgsl `SOFT_WOOD`, `SOFT_MIX`, which pick its
+ * sprites). */
+const TREE_M = 3, BUSH_WOOD = 0.6, SOFT_MIX = 0.1;
+const SOFT_STANDS_M = [2, 4];
 
 // The palette of the greens: a kind's hue (OKLCH, degrees) from its leaves' thickness (thin leaves yellow-green, thick
 // ones blue-green), its frost gene (tender kinds warmer) and its moisture gene (kinds of wet ground bluer); its
@@ -129,15 +133,28 @@ export function cooling(year: number, lat: number): number {
   return smooth(COOLING_SINE, -COOLING_SINE, Math.sin(2 * Math.PI * phase));
 }
 
-/** The design of a kind whose plants stand `height` m tall and whose walls gene is `walls` (log10 kg of walls per kg of
- * matter, the core's `WALLS`): a plant `TREE_M` tall or taller stands, drawn as a tree (a soft one, with little wood,
- * as a palm, a tree fern or a giant herb: models.wgsl `model_set`); a lower one of a kind whose grown plants hold
- * `BUSH_WOOD` of their dry mass as walls or more is a bush (so a young stand of a woody kind is drawn as young woody
- * plants, never as meadow), else a herb, the sward (`grownWalls`; laws.md 3: a plant's share of walls nears the gene as
- * it grows). */
+/** The design of the standing plants of a kind whose plants stand `height` m tall and whose walls gene is `walls`
+ * (log10 kg of walls per kg of matter, the core's `WALLS`): a woody one (its grown plants hold `BUSH_WOOD` of their dry
+ * mass as walls or more, `grownWalls`; laws.md 3: a plant's share of walls nears the gene as it grows) `TREE_M` tall
+ * or taller is a tree, a lower one a bush (so a young stand of a woody kind is drawn as young woody plants, never as
+ * meadow); a soft one stands as a tree (a palm, a tree fern or a giant herb: models.wgsl `model_set`) as far as it
+ * stands (`standsOf`). */
 export function designOf(height: number, walls: number): number {
-  if (height >= TREE_M) return DESIGN.tree;
-  return grownWalls(walls) < BUSH_WOOD ? DESIGN.herb : DESIGN.bush;
+  return height >= TREE_M || grownWalls(walls) < BUSH_WOOD ? DESIGN.tree : DESIGN.bush;
+}
+
+/** The share of a kind whose plants stand `height` m tall and whose walls gene is `walls` that stands as plants (marks,
+ * of design `designOf`); the rest is the sward. A woody kind stands whole; a soft one comes in over `SOFT_STANDS_M` as
+ * it grows. */
+export function standsOf(height: number, walls: number): number {
+  return grownWalls(walls) < BUSH_WOOD ? smooth(SOFT_STANDS_M[0], SOFT_STANDS_M[1], height) : 1;
+}
+
+/** The share of kind `k` that is a soft standing plant (a palm, a tree fern, a giant herb: of the tree design, whose
+ * grown plants' walls lie under `BUSH_WOOD`, over `SOFT_MIX`, as its sprites are picked): such plants keep their
+ * leaves and their colour all year (the owner's rule). */
+function softOf(k: Leafy): number {
+  return k.design === DESIGN.tree ? smooth(BUSH_WOOD + SOFT_MIX / 2, BUSH_WOOD - SOFT_MIX / 2, k.walls) : 0;
 }
 
 /** The share of a grown plant's dry mass that is walls, of a kind whose walls gene is `walls` (log10 kg of walls per kg
@@ -172,21 +189,22 @@ function turned(g: Rgb, s: number, reach: number, falling: number): Rgb {
   return lerp3(spring, autumn, falling);
 }
 
-/** How much a kind of design `design` and capture area per kg `leaf` sheds its leaves in the cold or the drought, 0..1
- * (herbs: not; they die back, `kindLook`). */
-function shedOf(design: number, leaf: number): number {
-  return design === DESIGN.herb ? 0 : smooth(SHED_LEAF[0], SHED_LEAF[1], leaf);
+/** How much kind `k` sheds its leaves in the cold or the drought, 0..1: as thin as its leaves are; herbs not (they
+ * die back, `kindLook`), nor soft standing plants (`softOf`). */
+function shedOf(k: Leafy): number {
+  return k.design === DESIGN.herb ? 0 : smooth(SHED_LEAF[0], SHED_LEAF[1], k.leaf) * (1 - softOf(k));
 }
 
 /** The look of kind `k` whose physical leaf reflects `phys` (linear), while the ground cools by `falling` (`cooling`):
  * its stage in the cold's turn (a shedding kind as its ground nears its frost gene; any kind on frozen ground or by its
  * frozen share) and in the drought's (dormant on unfrozen ground). Only a kind of thin leaves turns and sheds (`shedOf`;
- * a herb dies back to straw); one of thick leaves keeps them, darker in the cold and duller in the drought. */
+ * a herb dies back to straw); one of thick leaves keeps them, darker in the cold and duller in the drought; a soft
+ * standing plant keeps its leaves and its colour all year (`softOf`). */
 export function kindLook(k: Leafy, phys: Rgb, falling: number): KindLook {
   const g = green(k, phys), frozenGround = smooth(k.melt + FROZEN_GROUND_K, k.melt, k.t);
-  const sheds = k.design === DESIGN.herb ? 1 : shedOf(k.design, k.leaf);
-  const cold = Math.max(shedOf(k.design, k.leaf) * smooth(k.frost + COLD_NEAR_K, k.frost, k.t), (1 - k.act) * frozenGround, k.frozen);
-  const drought = (1 - k.act) * (1 - frozenGround);
+  const sheds = k.design === DESIGN.herb ? 1 : shedOf(k), seasons = 1 - softOf(k);
+  const cold = seasons * Math.max(shedOf(k) * smooth(k.frost + COLD_NEAR_K, k.frost, k.t), (1 - k.act) * frozenGround, k.frozen);
+  const drought = seasons * (1 - k.act) * (1 - frozenGround);
   const dry = (c: Rgb) => lerp3(lerp3(c, fromLch(STRAW), smooth(0, TO_STRAW, drought)), fromLch(BARE), smooth(TO_STRAW, 1, drought));
   const reach = smooth(RED_FROM, RED_TO, k.pigment), spread = TURN_SPREAD * smooth(0, 2 * TURN_SPREAD, cold);
   const kept: Rgb = [g[0] * (1 - KEPT_DARK * clamp(cold)), g[1] * (1 - KEPT_DULL * drought), g[2] * (1 - KEPT_DULL * drought)];
