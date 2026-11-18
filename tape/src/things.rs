@@ -4,7 +4,7 @@
 //!
 //! The list is little-endian: `u32` cells, then for each cell `u32` its index, `f32` its west, north, east and south
 //! edges in squares and its area in m², `u16` its slots of cover, then each slot: `u32` starting kind, `f32` built cover
-//! kg/m², capture area m²/m², its 9 genes (`cover::LIGHT` to `cover::FIX`), `u8` full (1) or not, then 3 zeros.
+//! kg/m², capture area m²/m², its `cover::NG` genes (`cover::LIGHT` to `cover::GAS`), `u8` full (1) or not, then 3 zeros.
 
 use pcore::cover::{Parts, NG};
 use pcore::World;

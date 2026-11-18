@@ -5,7 +5,7 @@ interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: 
 interface CellSlots { index: number; box: [number, number, number, number]; area: number; slots: Slot[] }
 
 /** The cover's genes in their order (pcore::cover): their names and units for the inspect panel. */
-const COVER_GENES: [string, string][] = [['light', 'log10 mol/kg/s'], ['leaf', 'log10 m²/kg'], ['walls', 'log10 kg/kg'], ['store', 'log10 kg/kg'], ['frost', 'K'], ['moist', 'log10'], ['seed', 'share'], ['repair', 'log10'], ['fix', 'log10 mol/kg/s']];
+const COVER_GENES: [string, string][] = [['light', 'log10 mol/kg/s'], ['leaf', 'log10 m²/kg'], ['walls', 'log10 kg/kg'], ['store', 'log10 kg/kg'], ['frost', 'K'], ['moist', 'log10'], ['seed', 'share'], ['repair', 'log10'], ['fix', 'log10 mol/kg/s'], ['gas', 'share']];
 /** Pixels a map square takes from which the slots of the window in view are asked for. */
 export const THINGS_PX = 64;
 
@@ -19,7 +19,7 @@ function readSlots(data: Uint8Array): CellSlots[] {
   const cells: CellSlots[] = [];
   for (let n = u32(); n > 0; n--) {
     const index = u32(), box = f32s(4) as [number, number, number, number], area = f32();
-    const slots = Array.from({ length: u16() }, (): Slot => { const root = u32(), kg = f32(), leaf = f32(), genes = f32s(9), full = u8() === 1; at += 3; return { root, kg, leaf, genes, full }; });
+    const slots = Array.from({ length: u16() }, (): Slot => { const root = u32(), kg = f32(), leaf = f32(), genes = f32s(COVER_GENES.length), full = u8() === 1; at += 3; return { root, kg, leaf, genes, full }; });
     cells.push({ index, box, area, slots });
   }
   return cells;
