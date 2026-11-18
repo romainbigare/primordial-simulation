@@ -15,6 +15,7 @@ ask the owner.
 | How to lead the work (for the orchestrator) | `review/orchestrator.md` |
 | The laws | `core/src/<law>/` (`flow`, `change`, `bond`, `copy`, `choose`), bodies in `core/src/body/`, plants in `core/src/cover/`, the ground in `core/src/space/` |
 | How the map is drawn | `tape/src/ground/` (tiles) and `web/` (the page) |
+| How the page is looked at and measured | `web/look/` |
 | Physical constants and units | `core/src/units.rs` |
 | Tuned numbers | `Physics` and `Config` in `core/src/params.rs` (each with a row in `docs/numbers.md`) |
 | Shared physics helpers | `core/src/ground.rs`, `core/src/chem/`, `core/src/math.rs` |

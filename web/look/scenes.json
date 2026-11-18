@@ -1,0 +1,28 @@
+{
+  "worlds": {
+    "seed1": {
+      "about": "the page's own world: seed 1, size 32, band 20,65, the six starting kinds, the takers in year 52",
+      "run": ["--seed", "1", "--size", "32", "--band", "20,65", "--roster", "--fauna-year", "52"],
+      "at": 42.75,
+      "years": 10
+    }
+  },
+  "sets": {
+    "seed1": {
+      "world": "seed1",
+      "views": [{ "mpp": 1.04, "style": "angled" }, { "mpp": 0.52, "style": "angled" }, { "mpp": 0.26, "style": "angled" }],
+      "scenes": [
+        { "name": "A", "about": "tall forest", "at": [21.5, 20.5] },
+        { "name": "B", "about": "open woodland", "at": [26.5, 10.5] },
+        { "name": "SA", "about": "tall soft plants", "at": [26.5, 15.5] },
+        { "name": "grass", "about": "grass", "at": [21.5, 7.5] },
+        { "name": "soil", "about": "bare soil", "at": [12.5, 9.5] },
+        { "name": "stony", "about": "stony ground", "at": [7.5, 13.5] },
+        { "name": "snow", "about": "snow", "at": [19.12, 13.1] },
+        { "name": "river", "about": "river", "at": [26.5, 14.6] }
+      ],
+      "years": ["A", "B", "SA"],
+      "years_view": { "mpp": 0.2, "style": "angled" }
+    }
+  }
+}

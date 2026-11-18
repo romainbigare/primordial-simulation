@@ -963,13 +963,10 @@ A grown world need not be grown in the page (where a pause lands some months pas
 `DIR/snap_00042_09.bin.gz`, and `index.html?world=<URL of that file>` opens it paused at its date, exactly (the owner:
 "Open a saved world"). The flags are those of the page's own new world: its plan places the takers in year 52.
 
-To look at the page before publishing: serve it (`python3 -m http.server PORT --directory <the full path of
-web/dist>`) and drive it with Playwright (`require('/opt/node22/lib/node_modules/playwright')`, `chromium.launch()`
-with no options): open
-`index.html?seed=1&size=22`, wait 6 s, click the last button of `#speeds`, wait, click `#play` to pause, wait 6 s,
-screenshot `#map`; to zoom, move the mouse over `#cv` and send wheel steps of -600, then wait 12 s for the tiles. Count
-console errors (0 expected; ignore "GPU stall" lines) and read `.stats`. Pause before every picture. The headless
-browser draws in software, so its frames per second mean nothing; the world's pace in months per second does.
+To look at the page before publishing, and for every builder of the look: the picture tool, `cd web && npm run look --
+set OUT` (`web/look/README.md`): the standard places of seed 1 on a saved world, a contact sheet and their numbers;
+`compare OUT_A OUT_B` for before and after; `years OUT` for the same places 10 years in a row. Its `numbers.json` holds
+the page's errors (0 expected). The headless browser draws in software, so its frames per second mean nothing.
 
 ## 7. Choices the owner should know of
 

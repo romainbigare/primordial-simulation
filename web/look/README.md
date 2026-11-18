@@ -1,0 +1,84 @@
+# The picture tool (`web/look/`)
+
+Pictures and numbers of the page, taken in a headless browser on saved worlds, so a builder never grows a world in
+the page. One entry, run in `web/` after `npm run wasm` and `npm run build`:
+
+    npm run look -- <command> ...
+
+It needs Playwright (found the normal way, else set `PLAYWRIGHT` to its folder, here
+`/opt/node22/lib/node_modules/playwright`). What it makes goes to `out/look/` (not in git): the page with its hooks
+(`site/`), the crowns' mask build (`site-mask/`), and the saved worlds (`worlds/`).
+
+## Commands
+
+| Command | What it does | Time here (no graphics card, shared machine) |
+|---|---|---|
+| `set OUT [--scenes NAME] [--only A,B] [--px 400] [--crowns no]` | every scene and view of a scene set: `OUT/<scene>_<mpp>_<style>.png`, the mask pictures in `OUT/mask/`, `OUT/sheet.png`, `OUT/numbers.json`; prints each scene's kinds of cover (from the cells' table) | 19 min for `seed1` (8 scenes x 3 views, 24 + 24 pictures); 14 min with 2 views; about 80 s more when the world is made first |
+| `compare OUT_A OUT_B` | the numbers of two `set`s side by side with their differences (printed, and `OUT_B/compare_<A>.txt`), and `OUT_B/compare_<A>.png`: each picture of A beside B | a few s |
+| `shot OUT.png --at X,Y --mpp M [--style angled\|above] [--world FILE]` | one picture: of the set's world, or of a snapshot you give | 1 to 2 min (the page opens first) |
+| `sheet OUT.png COLS FILE...` | a contact sheet of pictures, each labelled with its file name | a few s |
+| `years OUT [--scenes NAME]` | the set's `years` scenes at its `years_view` in each of 10 years at the same date, from 10 saved worlds a year apart: the pictures, `OUT/years.png`, `OUT/years.json` | 10.5 min for `seed1` (3 scenes x 10 years), and 30 s to make its 10 worlds |
+
+The map is `--px` css pixels a side (400 by default). A picture takes 15 to 50 s, and 2 to 3 min at 1 m a pixel over
+forest (the page draws its frames there at half the pixels first, then the sharp picture in tiles). Two `set`s of one
+build give the same numbers to the last digit.
+
+## Scenes and worlds (`scenes.json`)
+
+A world is the flags of an `ew run` and a date (`at`, years with whole months: 42.75 is late summer of year 42), and for
+`years` how many years in a row. The tool makes it with `cargo run --release -p cli -- run <flags> --snapshots-at <dates>`
+(about 25 s for 43 years, 35 s for 52) into `out/look/worlds/<name>-v<snapshot version>-<hash>/`, and makes it again
+when the snapshot's format version or the code of `core`, `worldgen`, `tape` or `cli` changes (committed or not).
+
+A scene set names its world, its views (metres a pixel, `angled` or `above`) and its scenes (a place in squares, x to
+the east, y to the south). `seed1` is the page's own world (seed 1, size 32, band 20,65, the six starting kinds, the
+takers in year 52) at 42.75, with the builders' places. The law moves what grows where: `set` prints each scene's
+kinds, so you see what stands there.
+
+## The numbers (`numbers.json`, per picture, over its middle 80 %: no button, no scale bar)
+
+| Number | Meaning |
+|---|---|
+| `mean` | mean colour, R G B (0..255) |
+| `lightness` | mean of R, G and B |
+| `dark` | % of pixels darker than 50 (mean of R, G, B) |
+| `black` | % of pixels darker than 16 |
+| `specks` | % of pixels darker by more than 40 than the mean of their 8 neighbours: single dark pixels, salt and pepper |
+| `green`, `white`, `blue` | % of pixels a colour tells: green (G over R and B by more than 4), white (all channels over 200: snow), blue (B over R by more than 8 and over G: water) |
+| `crowns` | % of the ground under the trees' crowns: the same view drawn by the mask build (the marks and the far field of the lattice of stands, the trees', magenta: `mask.mjs`), per pixel m = (R+B)/2 - G, the share (m_mask - m) / (243 - m), 0..1 |
+| `waited` | ms the picture took to settle (tiles made, frames drawn): not a measure of the page's speed |
+| `<far>_on_<near>_<style>` | far against near on the same ground: the farther picture cut to the nearer one's ground, its numbers, and `lightness_change` (% the nearer is lighter) and `crowns_change` (points the nearer has more) |
+
+`years.json`: for each scene, from each year to the next (`by_year`) and their means:
+
+| Number | Meaning |
+|---|---|
+| `stay` | % of the first year's marks whose cell holds, the next year, a mark of the same square, kind (its slot, a label a kind keeps while it lives) and size group |
+| `other` | % of the first year's marks whose cell holds another mark the next year (another kind or group) |
+| `go` | % of the first year's marks whose cell holds none the next year |
+| `appear` | % of the next year's marks whose cell held none |
+| `marks` | the marks of each year (all lattices, the view's cells and those about it) |
+| `pixels` | % of the picture whose pixels stay (each channel within 24 of 255) |
+
+The marks are read back from the GPU after the picture is drawn (`read.mjs` `marks`: the first of the marks' textures,
+laid out as `textures.ts` `prepare` lays them). A mark's size inside its group is not compared. The worlds are opened one
+after another in one page.
+
+## The hooks
+
+The tool copies the built page (`web/dist`) and puts one object, `window.__ew`, at the end of the page's script
+(`page.mjs` `HOOKS`): the map, the cover, the world, play and pause, the speed, the style of life, opening a saved
+world by URL, and the numbers the marks' textures are laid out by. The shipped page holds none of it: the hooks cost
+it no code. They name the page's own variables (`main.ts`, `lattices.ts`, `textures.ts`, `canopy.ts`, `kind_row.ts`): when one is renamed, the
+page fails to start in the tool (an error at once), and `HOOKS` is changed with it. `read.mjs` `marks` repeats the
+layout of the marks' textures (`textures.ts` `prepare`) and their code (`lib/mark.wgsl` `decide`): change it with them.
+
+The crowns' mask (`mask.mjs`) is the page's programs built again from a copy of `web/shaders` in which the marks of the
+lattice of stands (the trees') and the far field of stands are pure magenta. A change to those lines of the shaders
+stops the tool with the text it no longer finds; then `PATCHES` is changed with them.
+
+## A saved world in the page
+
+`index.html?world=<URL of a snapshot>` opens it, paused at its date, and the page draws it as it draws a world it
+played into. It is not the world the page grows from the same seed: `ew run` starts Flow's state from the ground's heat
+and the page does not, so their weather differs from the first month.
