@@ -10,6 +10,16 @@ struct Plant {
   form: f32, sure: f32, lean: vec2f, reach: f32, dry: f32, left: f32,
 }
 
+// A plant's own draw among the sets its kind's numbers choose between (models.wgsl `model_set`, mark.wgsl `plant_of`),
+// from its random numbers: one draw for all of them, so a plant drawn soft is a tree from its first height.
+fn set_draw(r: vec3f) -> f32 { return fract(r.x * 31.7); }
+// Whether a kind's number `v` lies under `edge` for its plant of set draw `u`: the edge moved by its draw up to half of
+// `spread` either way, so as `v` moves through that band the kind's plants cross it one by one, never all at once.
+fn under_edge(v: f32, edge: f32, spread: f32, u: f32) -> bool { return v + spread * (u - 0.5) < edge; }
+
+// A woody plant this tall or taller, m, is a tree, a lower one a bush (style.ts `TREE_M`).
+const TREE_M = 3.0;
+
 // The forms (form.ts `Form`).
 const ROUND = 0; const CONE = 1; const COLUMN = 2; const UMBRELLA = 3; const TIERED = 4; const LOBED = 5;
 // A plant stands up this share of its height on the map (textures.ts `STAND`); a bush is as deep as `BUSH_DEEP` of its

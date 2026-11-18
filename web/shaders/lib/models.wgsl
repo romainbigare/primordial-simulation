@@ -24,24 +24,28 @@ const CROWN_SNOW = 0.8; const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
 // bush's this share of that.
 const SHADOW = 0.42; const BUSH_SHADOW = 0.3;
 
-// The sprites a plant of q's kind is drawn from, by its numbers (the first and how many): a tree by its crown's form
-// (form.ts `formOf`, round where it is not sure) and its height, a dry kind's broad crown a quiver tree (from `QUIVER_DRY`
-// of dryness); a cone young under `CONE_YOUNG_M` m and small under `SMALL_M` m (spruces, pines), a column a spruce
-// (young under `CONE_YOUNG_M` m), tiers a pine (young under `PINE_YOUNG_M` m, small under `SMALL_M` m); a bush by how dry its kind's ground (its draw mixing the sets near their borders,
-// `BUSH_DRY`): leafy, middling, or a dry land's. A tree whose grown plants' walls are under `SOFT_WOOD` of their dry mass
-// (style.ts `BUSH_WOOD`, `grownWalls`) is a soft one: a palm, a tree fern or a giant herb (its draw mixing the two near the border, `SOFT_MIX`).
+// The sprites a plant of q's kind is drawn from, by its numbers (the first and how many). Its family comes from its
+// kind's genes alone, each plant crossing a border between families by its own draw (`set_draw`, `under_edge`), so a
+// kind whose genes drift changes plant by plant; its height picks only the stage of its family's sprites, as a young
+// tree of a family looks. A tree by its crown's form (form.ts `formOf`, as surely as it leads: the rest round), a broad
+// crown of a dry kind a quiver tree (as dry as it is made for); a cone young under `CONE_YOUNG_M` m and small under
+// `SMALL_M` m (spruces, pines), a column a spruce (young under `CONE_YOUNG_M` m), tiers a pine (young under
+// `PINE_YOUNG_M` m, small under `SMALL_M` m); a bush by how dry its kind's ground (`BUSH_DRY`, over `BUSH_MIX`): leafy,
+// middling, or a dry land's. A tree whose grown plants' walls are under `SOFT_WOOD` of their dry mass (style.ts
+// `BUSH_WOOD`, `grownWalls`, over `SOFT_MIX`) is a soft one: a palm, a tree fern or a giant herb.
 const SOFT_WOOD = 0.6; const SOFT_MIX = 0.1;
-const QUIVER_DRY = 0.5; const SMALL_M = 3.0; const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
+const SMALL_M = 3.0; const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
 const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
 fn model_set(q: Plant) -> vec2i {
+  let u = set_draw(q.r);
   if (q.design != TREE) {
-    let dry = q.dry + BUSH_MIX * (fract(q.r.x * 31.7) - 0.5);
-    if (dry > BUSH_DRY.y) { return vec2i(OTHONNA_FROM, OTHONNA_N); }
-    if (dry > BUSH_DRY.x) { return vec2i(SEARSIA_FROM, SEARSIA_N); }
+    if (!under_edge(q.dry, BUSH_DRY.y, BUSH_MIX, u)) { return vec2i(OTHONNA_FROM, OTHONNA_N); }
+    if (!under_edge(q.dry, BUSH_DRY.x, BUSH_MIX, u)) { return vec2i(SEARSIA_FROM, SEARSIA_N); }
     return vec2i(SHRUB_FROM, SHRUB_N);
   }
-  if (q.wood + SOFT_MIX * (fract(q.r.x * 31.7) - 0.5) < SOFT_WOOD) { return vec2i(SOFT_FROM, SOFT_N); }
-  let f = select(ROUND, i32(q.form + 0.5), q.sure > 0.5);
+  if (under_edge(q.wood, SOFT_WOOD, SOFT_MIX, u)) { return vec2i(SOFT_FROM, SOFT_N); }
+  // Of its trees the share `sure` stand in its form, each by its own draw, the rest round.
+  let f = select(ROUND, i32(q.form + 0.5), q.sure > 1.0 - u);
   if (f == CONE) {
     if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINE_SMALL_N); }
     if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCE_YOUNG_N); }
@@ -56,7 +60,8 @@ fn model_set(q: Plant) -> vec2i {
     if (q.h < PINE_YOUNG_M) { return vec2i(PINE_YOUNG_FROM, PINE_YOUNG_N); }
     return vec2i(PINE_FROM, PINE_N);
   }
-  if (f == UMBRELLA) { return select(vec2i(JACARANDA_FROM, JACARANDA_N), vec2i(QUIVER_FROM, QUIVER_N), q.dry > QUIVER_DRY); }
+  // Of a broad crown's trees, the share as dry as its kind is made for are quiver trees, each by its own draw.
+  if (f == UMBRELLA) { return select(vec2i(JACARANDA_FROM, JACARANDA_N), vec2i(QUIVER_FROM, QUIVER_N), q.dry > 1.0 - u); }
   if (f == LOBED) { return vec2i(JACARANDA_FROM, JACARANDA_N); }
   return vec2i(ROUND_FROM, ROUND_N);
 }

@@ -25,16 +25,15 @@ const LEFT_STEPS = 100;
  * its cell's cover (a label it keeps, so its marks keep their places as the kinds' order and shares change, mark.wgsl
  * `pick_kind`); then of each kind its form (how closed its crown is and the leaves it has left, `LEFT_STEPS`, its
  * crown's form and how surely, form.ts `formOf`, packed as one number, `SURE_PACK`, and how dry its ground), the
- * colours its plants span (style.ts `KindLook`: the first with its grown plants' walls' share, `grownWalls`, the second
- * with the height its plants are trees from, `treeFrom`); of each of its groups its plants' height, m, and the plants
- * one of its marks on the lattice of stands stands for; and of each lattice the width its groups' marks are drawn, m
+ * colours its plants span (style.ts `KindLook`: the first with its grown plants' walls' share, `grownWalls`); of each
+ * of its groups its plants' height, m; and of each lattice the width its groups' marks are drawn, m
  * (lattices.ts `marksOf`). A plane holds four numbers: one for each kind of a group of four of a square
  * (`groups` such planes for each such number), or one of each group of a kind. */
 export function planesOf(kinds: number) {
   const g = Math.ceil(kinds / 4), lat = LATTICES.length, need = lat * kinds, form = need + 3 * g;
   return {
     kinds, groups: g, chance: 0, need, roots: need + g, label: need + 2 * g, form, from: form + kinds, to: form + 2 * kinds,
-    height: form + 3 * kinds, clump: form + 4 * kinds, width: form + 5 * kinds, count: form + (5 + lat) * kinds,
+    height: form + 3 * kinds, width: form + 4 * kinds, count: form + (4 + lat) * kinds,
   };
 }
 export type Planes = ReturnType<typeof planesOf>;
@@ -199,7 +198,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       // whole frame where none are), so its marks keep their size and show their bare wood.
       const leafy = groups.find(q => q[K.crown] > 0), left = large[K.crown] > 0 ? look.left : Math.min(look.left, BARE_LEFT);
       const packed = Math.round(left * LEFT_STEPS) + Math.min(leafy ? leafy[K.crown] : 1, 1 - 1e-3);
-      const shape = formOf({ leaf: r[K.leaf], frost: r[K.frost], moist: r[K.moist], height: large[K.height], width: large[K.width], seed: r[K.seed] });
+      const shape = formOf({ leaf: r[K.leaf], frost: r[K.frost], moist: r[K.moist], seed: r[K.seed] });
       const ofGroups = (plane: number, v: (g: number) => number) => groups.forEach((_, g) => put(plane + k, i, g, v(g)));
       put(group(P.need, k), i, k & 3, 10 ** r[K.moist]);
       put(group(P.roots, k), i, k & 3, mean >= ROOTED_ALL ? 0 : r[K.need]);
@@ -208,14 +207,13 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       [packed, shape.form + SURE_PACK * shape.sure, shape.dry].forEach((v, q) => put(P.form + k, i, q, v));
       [...look.from, grownWalls(r[K.walls])].forEach((v, q) => put(P.from + k, i, q, v));
       const from = treeFrom(r[K.walls]);
-      [...look.to, from].forEach((v, q) => put(P.to + k, i, q, v));
+      look.to.forEach((v, q) => put(P.to + k, i, q, v));
       ofGroups(P.height, g => groups[g][K.height]);
       LATTICES.forEach((a, l) => {
         const on = marksOf(groups, l, from, mean), chances = on.map(o => o.chance * stands);
         if (!chances.some(x => x > 0)) return;
         ofGroups(P.chance + l * kinds, g => chances[g] / mean);
         ofGroups(P.width + l * kinds, g => on[g].width);
-        if (l === STANDS) ofGroups(P.clump, g => on[g].plants);
         on.forEach((o, g) => {
           if (chances[g] <= 0) return;
           const q = groups[g];

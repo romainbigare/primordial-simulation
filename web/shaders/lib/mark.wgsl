@@ -44,8 +44,7 @@ fn form_plane(t: i32) -> i32 { return kind_plane(0, t); }
 fn from_plane(t: i32) -> i32 { return kind_plane(1, t); }
 fn to_plane(t: i32) -> i32 { return kind_plane(2, t); }
 fn height_plane(t: i32) -> i32 { return kind_plane(3, t); }
-fn clump_plane(t: i32) -> i32 { return kind_plane(4, t); }
-fn width_plane(l: i32, t: i32) -> i32 { return kind_plane(5 + l, t); }
+fn width_plane(l: i32, t: i32) -> i32 { return kind_plane(4 + l, t); }
 // A kind's plants come in up to this many groups by size, the large first (kind_row.ts `GROUPS`); a mark's place among
 // them is kept in this many steps a group (`decide`).
 const GROUPS = 4; const PLACE_STEPS = 16;
@@ -248,17 +247,15 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
   let heights = kind(height_plane(t), sq);
   let held = held_of(heights);
   let height = along(heights, z, held) * grow;
-  // A tree from the height its kind's plants are trees from (style.ts `treeFrom`), a bush below.
-  let design = select(BUSH, TREE, height >= to.w);
+  // A tree from the height a woody plant is one (`TREE_M`), a soft plant from its first (its own draw, as models.wgsl
+  // `model_set` picks its sprites).
+  let own = fract(r * 7.0);
+  let design = select(BUSH, TREE, height >= select(TREE_M, 0.0, under_edge(first.w, SOFT_WOOD, SOFT_MIX, set_draw(own))));
   // A tree's form.
   var shape = vec4f(0.0);
   if (design == TREE) {
-    // Its form and how surely, packed as one number (canopy.ts `SURE_PACK`), and the plants a mark stands for.
-    shape = vec4f(floor(form.y), fract(form.y) / SURE_PACK, along(kind(clump_plane(t), sq), z, held), 0.0);
-    // A mark of the trees' lattice that stands for several plants is their cluster, drawn as lobed crowns: its kind's
-    // form fades into the round crown as the plants pass one, and the cluster is drawn surely from two.
-    let cluster = select(0.0, clamp(shape.z - 1.0, 0.0, 1.0), l == STANDS);
-    if (cluster > 0.5) { shape = vec4f(f32(LOBED), 2.0 * cluster - 1.0, 0.0, 0.0); } else { shape.y *= 1.0 - 2.0 * cluster; }
+    // Its form and how surely, packed as one number (canopy.ts `SURE_PACK`): its kind's, from its genes alone.
+    shape = vec4f(floor(form.y), fract(form.y) / SURE_PACK, 0.0, 0.0);
   }
   // How dry the kind's ground (form.ts `formOf`), for the drawing's choice of plant.
   let dry = form.z;
@@ -268,7 +265,7 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
   let tall = min(height, up / STAND);
   let lean = LEAN * r.z * vec2f(cos(2.0 * PI * r.y), sin(2.0 * PI * r.y));
   let tint = vary(mix(first.rgb, to.rgb, r.x), fract(r.yz * 13.0));
-  return Plant(c, min(width, 2.0 * reach), tall, closed, tint, first.w, fract(r * 7.0), design, shape.x, shape.y, lean, reach, dry, left);
+  return Plant(c, min(width, 2.0 * reach), tall, closed, tint, first.w, own, design, shape.x, shape.y, lean, reach, dry, left);
 }
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square, kind and place

@@ -23,10 +23,10 @@ export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom:
  * `plant`), and a herb, drawn only as the sward of the ground (cover_field.wgsl `sward`). */
 export const DESIGN = { tree: 0, bush: 1, herb: 2 } as const;
 /** A woody plant (its grown plants hold `BUSH_WOOD` of their dry mass as walls or more) this tall or taller, m, is a
- * tree, a lower one a bush (`designOf`). A soft kind stands as plants (a palm, a tree fern, a giant herb) from
- * `SOFT_STANDS_M`[0] m tall, all of it from [1] m, and is the sward below (`standsOf`); it is soft as far as its walls'
- * share lies under `BUSH_WOOD`, over `SOFT_MIX` about it (lib/models.wgsl `SOFT_WOOD`, `SOFT_MIX`, which pick its
- * sprites). */
+ * tree, a lower one a bush (`treeFrom`). A soft plant (a palm, a tree fern, a giant herb) stands as plants from
+ * `SOFT_STANDS_M`[0] m tall, all of it from [1] m, and is the sward below (`standsOf`); a kind's plants are soft as far
+ * as its walls' share lies under `BUSH_WOOD`, each by its own draw over `SOFT_MIX` about it (`softShare`;
+ * lib/models.wgsl `SOFT_WOOD`, `SOFT_MIX`, which pick its sprites; lib/plant.wgsl `TREE_M`). */
 const TREE_M = 3, BUSH_WOOD = 0.6, SOFT_MIX = 0.1;
 const SOFT_STANDS_M = [2, 4];
 
@@ -132,34 +132,40 @@ export function cooling(year: number, lat: number): number {
 }
 
 /** The design of the standing plants of a kind whose plants stand `height` m tall and whose walls gene is `walls`
- * (log10 kg of walls per kg of matter, the core's `WALLS`): a woody one (its grown plants hold `BUSH_WOOD` of their dry
- * mass as walls or more, `grownWalls`; laws.md 3: a plant's share of walls nears the gene as it grows) `TREE_M` tall
- * or taller is a tree, a lower one a bush (so a young stand of a woody kind is drawn as young woody plants, never as
- * meadow); a soft one stands as a tree (a palm, a tree fern or a giant herb: models.wgsl `model_set`) as far as it
- * stands (`standsOf`). */
+ * (log10 kg of walls per kg of matter, the core's `WALLS`): a tree from the height its plants are trees from
+ * (`treeFrom`), a bush below (so a young stand of a woody kind is drawn as young woody plants, never as meadow). */
 export function designOf(height: number, walls: number): number {
   return height >= treeFrom(walls) ? DESIGN.tree : DESIGN.bush;
 }
 
-/** The height from which a plant of a kind whose walls gene is `walls` is drawn as a tree, m (`designOf`): a woody
- * kind's `TREE_M`, a soft kind's 0. Each plant takes its design by its own height (lib/mark.wgsl `plant_of`), so a kind
- * passes from bushes to trees plant by plant as it grows. */
+/** The share of the plants of a kind whose grown plants' walls' share is `grown` (`grownWalls`) that are soft: each
+ * plant is soft where its kind's share lies under `BUSH_WOOD` moved by its own draw up to half of `SOFT_MIX` either
+ * way (lib/plant.wgsl `under_edge`), so the share passes from all to none over that band. */
+export function softShare(grown: number): number {
+  return clamp((BUSH_WOOD - grown) / SOFT_MIX + 0.5);
+}
+
+/** The height from which the plants of a kind whose walls gene is `walls` are drawn as trees, m, over its plants: a
+ * woody plant (its grown plants hold `BUSH_WOOD` of their dry mass as walls or more; laws.md 3: a plant's share of
+ * walls nears the gene as it grows) from `TREE_M`, a soft one (a palm, a tree fern or a giant herb: models.wgsl
+ * `model_set`) from its first height (`softShare`). Each plant takes its design by its own height and draw
+ * (lib/mark.wgsl `plant_of`), so a kind passes from bushes to trees plant by plant as it grows or its walls change. */
 export function treeFrom(walls: number): number {
-  return grownWalls(walls) < BUSH_WOOD ? 0 : TREE_M;
+  return TREE_M * (1 - softShare(grownWalls(walls)));
 }
 
 /** The share of a kind whose plants stand `height` m tall and whose walls gene is `walls` that stands as plants (marks,
- * of design `designOf`); the rest is the sward. A woody kind stands whole; a soft one comes in over `SOFT_STANDS_M` as
- * it grows. */
+ * of design `designOf`); the rest is the sward. Its woody plants stand whole; its soft ones (`softShare`) come in over
+ * `SOFT_STANDS_M` as they grow. */
 export function standsOf(height: number, walls: number): number {
-  return grownWalls(walls) < BUSH_WOOD ? smooth(SOFT_STANDS_M[0], SOFT_STANDS_M[1], height) : 1;
+  return 1 - softShare(grownWalls(walls)) * (1 - smooth(SOFT_STANDS_M[0], SOFT_STANDS_M[1], height));
 }
 
-/** The share of kind `k` that is a soft standing plant (a palm, a tree fern, a giant herb: of the tree design, whose
- * grown plants' walls lie under `BUSH_WOOD`, over `SOFT_MIX`, as its sprites are picked): such plants keep their
- * leaves and their colour all year (the owner's rule). */
+/** The share of kind `k` that is a soft standing plant (a palm, a tree fern, a giant herb: of the tree design,
+ * `softShare` of its grown plants' walls, as its sprites are picked): such plants keep their leaves and their colour all
+ * year (the owner's rule). */
 function softOf(k: Leafy): number {
-  return k.design === DESIGN.tree ? smooth(BUSH_WOOD + SOFT_MIX / 2, BUSH_WOOD - SOFT_MIX / 2, k.walls) : 0;
+  return k.design === DESIGN.tree ? softShare(k.walls) : 0;
 }
 
 /** The share of a grown plant's dry mass that is walls, of a kind whose walls gene is `walls` (log10 kg of walls per kg

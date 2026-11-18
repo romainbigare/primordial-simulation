@@ -72,8 +72,8 @@ function shareOn(w: number, h: number, l: number): number {
 }
 
 /** The marks of a group of a kind on a lattice: the chance a cell holds one (as a share of the whole square), the width
- * a mark is drawn, m, the plants a mark stands for, and the share of the square its marks on this lattice cover. */
-export interface MarksOn { chance: number; width: number; plants: number; covers: number }
+ * a mark is drawn, m, and the share of the square its marks on this lattice cover. */
+export interface MarksOn { chance: number; width: number; covers: number }
 
 /** The marks of the groups `groups` of a kind (`kind_row.ts` `groupsOf`, their crowns as they stand) on lattice `l`, its
  * plants trees from `from` m, on the share `rooted` of the square that holds it. Its plants stand in patches that
@@ -94,10 +94,10 @@ export function marksOf(groups: Float32Array[], l: number, from: number, rooted:
     const grow = clumpOf(q[K.height], from), share = shareOn(q[K.width] * grow, q[K.height], l);
     const plants = q[K.cover] > 0 ? Math.max((q[K.perM2] / q[K.cover]) * a * a / (grow * grow), 1) : 1;
     const width = Math.min(Math.min(q[K.width] * grow * Math.sqrt(plants), most) * wider, most);
-    if (share <= 0 || q[K.cover] <= 0 || q[K.perM2] <= 0 || all <= 0) return { chance: 0, width, plants, covers: 0 };
+    if (share <= 0 || q[K.cover] <= 0 || q[K.perM2] <= 0 || all <= 0) return { chance: 0, width, covers: 0 };
     // The marks a cell of the rooted share holds: their crowns sum to the group's part of the kind's, or as near as
     // one a cell comes; the ground they cover is what is drawn, near and far.
     const area = (Math.PI / 4) * width * width, chance = Math.min(1, ((q[K.cover] / all) * sum * a * a) / area);
-    return { chance: share * chance * rooted, width, plants, covers: share * rooted * -Math.expm1(-(chance * area) / (a * a)) };
+    return { chance: share * chance * rooted, width, covers: share * rooted * -Math.expm1(-(chance * area) / (a * a)) };
   });
 }
