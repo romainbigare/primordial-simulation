@@ -100,7 +100,7 @@ struct Spot {
   bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32, blocks: f32, snow_m: f32, below: f32,
   // The share of the ground the tallest plants' crowns close over it (their litter lies under them).
   canopy: f32,
-  // How soaked the waves' swash leaves it, and the share of it the swash's top line covers, 0..1 (`swash_of`).
+  // How soaked the waves' swash leaves it, and the share of it the foam of the last bore covers, 0..1 (`swash_of`).
   swash: vec2f,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
@@ -120,7 +120,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.kind = BARE;
   // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn. No plant
   // stands where the waves' swash runs (`swash_of`): its cell's plants stand above it.
-  let plants = p.cover.a * above_water(p.depth) * (1.0 - max(p.swash.x, p.swash.y));
+  let plants = p.cover.a * above_water(p.depth) * (1.0 - min(p.swash.x / SWASH_DRY, 1.0));
   if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
@@ -167,21 +167,31 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
 // surface (the capillary fringe); soaked under it.
 fn soaked(p: Spot) -> f32 { return 1.0 - (1.0 - p.wet) * (1.0 - exp(-p.over / FRINGE_M)); }
 
-// Waves run up a shore past the still level and soak it to their run-up (water.wgsl `run_up`), which varies along the
-// shore by `SWASH_VARY` of itself over `SWASH_VARY_M` (the waves' groups); soaked to half of it, wet less above. The
-// last run-up leaves a line of froth at its top `SWASH_LINE_M` wide, covering `SWASH_FROTH` of it.
-const SWASH_VARY = 0.25; const SWASH_VARY_M = 12.0; const SWASH_LINE_M = 0.4; const SWASH_FROTH = 0.25;
+// Waves run up a shore past the still level and soak it to their run-up (water.wgsl `run_up`), the run-up ragged along
+// the shore by `SWASH_VARY` of itself over `SWASH_VARY_M` (the waves' groups) and a third of that over a fifth of it:
+// the sand is soaked at the water's edge and drier up the swash, `SWASH_DRY` soaked at its top, where it dries out over
+// the last `SWASH_EDGE` of it. The last bore runs up `BORE_REACH` of the run-up as lacy foam: the veins of a noise
+// `BORE_LACE_M` across, `BORE_VEIN` of its spread wide, broken where a noise `BORE_BREAK_M` across falls, thinning up
+// the swash from the water's edge, `BORE_FOAM` of it white.
+const SWASH_VARY = 0.25; const SWASH_VARY_M = 12.0; const SWASH_DRY = 0.4; const SWASH_EDGE = 0.25;
+const BORE_REACH = 0.3; const BORE_LACE_M = 0.8; const BORE_VEIN = 0.12; const BORE_BREAK_M = 3.0; const BORE_FOAM = 0.6;
 // The swash on ground `over` m over standing liquid (`NO_LIQUID_M` far from any), `sea` of it the sea's, of slope
 // `slope` (rise over run), at `at` seen at `e` m a pixel, under snow `snow`: how soaked it leaves the ground, and the
-// share of the pixel its top line covers (the line no wider than the pixel seen as its share of it).
+// share of it the last bore's foam covers (from afar, where its veins do not show, their mean).
 fn swash_of(over: f32, sea: f32, slope: f32, at: vec2f, e: f32, snow: f32) -> vec2f {
   let reach = run_up(sea, slope);
-  if (over >= (1.0 + SWASH_VARY) * reach + max(SWASH_LINE_M, e) * slope) { return vec2f(0.0); }
-  let top = reach * (1.0 + SWASH_VARY * noise_turned(at / SWASH_VARY_M, 111));
-  let wet = 1.0 - ease(0.5 * top, top, over);
-  let across = abs(over - top) / max(slope, 1e-3);
-  let line = (1.0 - ease(0.0, max(SWASH_LINE_M, e), across)) * min(SWASH_LINE_M / e, 1.0);
-  return vec2f(wet, line) * (1.0 - snow);
+  if (over >= (1.0 + 1.4 * SWASH_VARY) * reach) { return vec2f(0.0); }
+  let ragged = noise_turned(at / SWASH_VARY_M, 111) + 0.35 * noise_turned(at / (0.2 * SWASH_VARY_M), 113);
+  let up = over / (reach * (1.0 + SWASH_VARY * ragged));
+  let wet = mix(1.0, SWASH_DRY, min(up, 1.0)) * (1.0 - ease(1.0 - SWASH_EDGE, 1.0, up));
+  var foam = 0.0;
+  let band = 1.0 - ease(0.0, BORE_REACH, up);
+  if (band > 0.0 && !unseen(BORE_LACE_M)) {
+    let vein = 1.0 - smoothstep(0.0, BORE_VEIN * band, abs(noise_turned(at / BORE_LACE_M, 112)));
+    let broken = ease(-0.2, 0.4, noise_turned(at / BORE_BREAK_M, 114) + band - 0.5);
+    foam = band * broken * mix(BORE_VEIN * band, vein, shows_at(BORE_LACE_M, e));
+  }
+  return vec2f(wet, foam) * (1.0 - snow);
 }
 
 // Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked (and in the
@@ -258,10 +268,10 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     return Shaded(rgb, 1.0 + (lit - 1.0) * through(p.depth).g, kind);
   }
   // Over it: the ground, wet by how soaked it is and by the swash, a film of liquid shining on its bare part once it is
-  // near soaked (mud), and the froth of the swash's top line.
+  // near soaked (mud, the swash by the water), and the foam of the swash's last bore.
   let s = max(soaked(p), p.swash.x);
   let film = ease(FILM_FROM, 1.0, s) * g.bare;
-  var rgb = mix(soil(g, s, lit), FOAM_RGB * lit, SWASH_FROTH * p.swash.y * g.bare);
+  var rgb = mix(soil(g, s, lit), FOAM_RGB * lit, BORE_FOAM * p.swash.y * g.bare);
   let river = p.river * (1.0 - 0.6 * p.snow);
   if (film <= 0.0 && river <= 0.0) { return Shaded(rgb, lit, g.kind); }
   let ripple = ripples(p.e);
