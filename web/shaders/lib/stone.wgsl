@@ -32,14 +32,15 @@ const STONE_MOST_M = 4.5;
 // A wet stone is darker: water fills the pores of its face, and light that would scatter back from the dry grains goes
 // into the rock (wet rock and soil send back about half to two thirds of the light dry ones do: Lekner and Dorf 1988),
 // by up to `WET_STONE_DARK`; its film of water shines where its face turns the sun's light up to the eye, by up to
-// `WET_GLOSS` of the sky's white, on faces lit from `GLOSS_LIT.x` to `.y` times flat ground. A worn stone dry in the
-// sun is pale (`DRY_PALE` of the way to white): the film of fine silt the water left on it dries light.
-const WET_STONE_DARK = 0.45; const WET_GLOSS = 0.35; const GLOSS_LIT = vec2f(1.05, 1.35); const DRY_PALE = 0.25;
+// `WET_GLOSS` of the sky's white, on faces lit from `GLOSS_LIT.x` to `.y` times flat ground. A stone dry in the sun
+// is pale (`DRY_PALE` of the way to its own grey made light, the worn ones most): the film of fine silt the water left
+// on it dries light.
+const WET_STONE_DARK = 0.55; const WET_GLOSS = 0.35; const GLOSS_LIT = vec2f(1.05, 1.35); const DRY_PALE = 0.45;
 
 // The colour of a stone's face of colour `rgb` (linear, lit), `lit` times the light on flat ground (`StoneAt.lit`),
 // `wet` wet (0..1) and `worn` worn (0..1): the one wet look of every stone and rock drawn.
 fn wet_stone(rgb: vec3f, lit: f32, wet: f32, worn: f32) -> vec3f {
-  let dry = mix(rgb, vec3f(dot(rgb, LUMA) * 1.6), DRY_PALE * worn * (1.0 - wet));
+  let dry = mix(rgb, vec3f(dot(rgb, LUMA) * 1.6), DRY_PALE * (0.5 + 0.5 * worn) * (1.0 - wet));
   return dry * (1.0 - WET_STONE_DARK * wet) + WET_GLOSS * wet * smoothstep(GLOSS_LIT.x, GLOSS_LIT.y, lit) * SKY;
 }
 
@@ -97,8 +98,10 @@ fn stones_held(s: Stony, o: i32) -> f32 {
   return s.density * ease(STONES_LEAST, 2.0 * STONES_LEAST, s.density) * select(select(1.0, STONE_FEW, o == 1), s.rare, o == 0);
 }
 
-// A stone of a lattice: whether its cell holds one, its random word, its radius, m, and the point from its centre, m.
-struct Placed { held: bool, x: u32, r: f32, v: vec2f }
+// A stone of a lattice: whether its cell holds one, its random word, its radius, m, the point from its centre, m, and
+// how far inside its cell the point lies, 0 at its edge to 1 from `CELL_INSIDE` of the cell in.
+struct Placed { held: bool, x: u32, r: f32, v: vec2f, inside: f32 }
+const CELL_INSIDE = 0.15;
 
 // The stone of size `size` m (those of its octave `o`: `density` of the cells hold one) of lattice `l` whose cell
 // holds the pixel's place moved by `shift` m, stream `k` of the world's random numbers. The second lattice lies turned
@@ -116,7 +119,8 @@ fn placed(size: f32, density: f32, o: i32, l: i32, k: i32, shift: vec2f) -> Plac
   let centre = 0.5 + room * (vec2f(f32((x >> 10u) & 31u), f32((x >> 15u) & 31u)) / 15.5 - 1.0);
   let v = (q.f - centre) * side;
   // The point from the centre back in the map's axes.
-  return Placed(f32(x & 1023u) / 1024.0 < density, x, r, select(v, vec2f(0.8 * v.x - 0.6 * v.y, 0.6 * v.x + 0.8 * v.y), l == 1));
+  let edge = min(min(q.f.x, 1.0 - q.f.x), min(q.f.y, 1.0 - q.f.y));
+  return Placed(f32(x & 1023u) / 1024.0 < density, x, r, select(v, vec2f(0.8 * v.x - 0.6 * v.y, 0.6 * v.x + 0.8 * v.y), l == 1), smoothstep(0.0, CELL_INSIDE, edge));
 }
 
 // The stones `s` at least `least` m large at the pixel, seen at `e` m a pixel, of bed `bed` (linear, unlit), stream `k` of
@@ -169,10 +173,12 @@ fn stones(e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
   return out;
 }
 
-// A stone that stands in a flow breaks it: white water piles against its face up the flow and trails down the flow
-// behind it, `WAKE_LONG` of its size long, spreading by `WAKE_SPREAD` of the way, with calm water right behind it
-// (its eddy, `WAKE_EDDY` of its radius).
-const WAKE_LONG = 2.2; const WAKE_SPREAD = 0.35; const WAKE_EDDY = 0.8;
+// A stone that stands in a flow breaks it: a thin cushion of white water piles against its face up the flow
+// (`CUSHION` of its radius out), and a short V of ripples trails down the flow behind it, `WAKE_LONG` of its size
+// long, spreading by `WAKE_SPREAD` of the way, its white in ripples `WAKE_RIPPLE` of its radius apart, with calm water
+// right behind it (its eddy, `WAKE_EDDY` of its radius). The wake is found from its stone's cell, and fades out at
+// that cell's edge (`Placed.inside`), so no wake ends on a cell's straight side.
+const WAKE_LONG = 1.1; const WAKE_SPREAD = 0.45; const WAKE_EDDY = 0.8; const CUSHION = 1.15; const WAKE_RIPPLE = 0.7;
 
 // The white water at the pixel, seen at `e` m a pixel, about the stones `s` at least `least` m large (`stones`, stream `k`)
 // in a flow that runs `down` (a unit vector), 0..1: each stone's the same stone `stones` draws, found from a point up
@@ -197,9 +203,10 @@ fn wake(e: f32, s: Stony, least: f32, down: vec2f, k: i32) -> f32 {
         // Behind it: two trails at its sides that spread and fade, calm between them at first; before it: a rim.
         let reach = 2.0 * WAKE_LONG;
         let wide = 1.0 + WAKE_SPREAD * max(along, 0.0);
-        let trail = (1.0 - smoothstep(0.5 * wide, wide, across)) * smoothstep(WAKE_EDDY * (1.0 - along / reach), wide, across + 0.6 * along) * (1.0 - smoothstep(0.0, reach, along)) * step(0.0, along);
-        let rim = (1.0 - smoothstep(1.0, 1.35, length(v) / r)) * smoothstep(-0.2, -0.9, along);
-        white = max(white, stands * max(trail, rim));
+        let ripples = 0.5 + 0.5 * cos(2.0 * PI * (along + 0.5 * across) / WAKE_RIPPLE);
+        let trail = (1.0 - smoothstep(0.5 * wide, wide, across)) * smoothstep(WAKE_EDDY * (1.0 - along / reach), wide, across + 0.6 * along) * (1.0 - smoothstep(0.0, reach, along)) * step(0.0, along) * ripples;
+        let rim = (1.0 - smoothstep(1.0, CUSHION, length(v) / r)) * smoothstep(-0.2, -0.9, along);
+        white = max(white, stands * p.inside * max(trail, rim));
       }
     }
     size /= STONE_STEP;

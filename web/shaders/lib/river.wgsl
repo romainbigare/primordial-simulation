@@ -263,7 +263,10 @@ const BED_FILM = 0.3;
 const REFLECT_STREAK = 0.25; const FAST = 0.25; const FAST_WATER = vec3f(0.06, 0.34, 0.36);
 // A stone of the bed stands out of the water where it is `STONE_STANDS` of its size taller than the water is deep;
 // fast water breaks white on it and trails `WAKE` of white water down the flow behind it (stone.wgsl `wake`).
-const STONE_STANDS = 0.3; const WAKE = 0.7;
+const STONE_STANDS = 0.3; const WAKE = 0.45;
+// A stone that stands in the water sits in its bed: its foot lies under the water and the spray and film of the flow
+// wet it, so it takes `STONE_WATERED` of the water's colour over it.
+const STONE_WATERED = 0.35;
 
 // The colour of a channel's water at spot `p` (`land_spots`) over its bed `g` (colour.wgsl `ground_for`), a reflectance
 // in linear light: its bed, soaked bare ground (washed sand and gravel: the flow takes the plants) under its film
@@ -286,13 +289,13 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
     let least = p.depth / STONE_STANDS;
     if (flow.z > 0.0) { water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.e, s, least, down, 61 + 8)); }
     let st = stones(p.e, s, least, p.bed, 61 + 8);
-    water = mix(water, st.rgb / max(st.a, 1e-4), st.a);
+    water = mix(water, mix(st.rgb / max(st.a, 1e-4), water, STONE_WATERED), st.a);
     // The blocks of a steep reach: the scree's own (colour.wgsl `ground_of`), where they stand out of the water.
     if (p.blocks > 0.0) {
       let fallen = Stony(p.blocks, SCREE_STONE_M, 1.0, 0.0, BED_SUNK, 0.0, 0.0, STONE_RARE, 1.0);
       water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.e, fallen, least, down, 61));
       let block = stones(p.e, fallen, least, p.bed, 61);
-      water = mix(water, block.rgb / max(block.a, 1e-4), block.a);
+      water = mix(water, mix(block.rgb / max(block.a, 1e-4), water, STONE_WATERED), block.a);
     }
   }
   let rgb = mix(water, SNOW, p.snow * 0.85);

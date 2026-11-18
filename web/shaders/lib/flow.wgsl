@@ -21,14 +21,14 @@ const STEP_CELL = 0.5; const STEP_JITTER = 0.4; const STEP_RUN_CELLS = 8; const 
 // A step's line crosses the channel tilted by up to `STEP_TILT` of the water's half width from its middle to its edge
 // and bowed by up to `STEP_BOW`, and wavers by `STEP_WAVE` of the spacing over noise `STEP_WAVE_M` long; it is white
 // over a part of the water's width only, from `STEP_SPAN.x` to `STEP_SPAN.y` of its half width either side of a middle
-// within `STEP_OFF` of it. Its white water begins over `STEP_EDGE_M` below the line (the place along a channel is known
-// to a few centimetres: the tiles keep it as a 16-bit float, and an edge sharper than that would draw the texels'
-// lattice) and fades down the flow over `STEP_FADE` of the spacing, each step's from half to one and a half times
+// within `STEP_OFF` of it, fading out from `STEP_SPAN_SOFT` of that. Its white water begins over `STEP_EDGE_M`
+// below the line (the place along a channel is known to a few centimetres: the tiles keep it as a 16-bit float, and
+// an edge sharper than that would draw the texels' lattice) and fades down the flow over `STEP_FADE` of the spacing, each step's from half to one and a half times
 // that, gone at `STEP_TAIL` times; past it the water lies in a small pool (`STEP_POOL` deeper, `POOL_CALM` slower)
 // over the next `STEP_CALM` of those lengths. Steps come `STEP_BACK` cells up the flow at most (and one down it, which a
 // tilted line may reach over).
 const STEP_TILT = 0.5; const STEP_BOW = 0.4; const STEP_WAVE = 0.12; const STEP_WAVE_M = 3.0;
-const STEP_SPAN = vec2f(0.6, 1.6); const STEP_OFF = 0.6;
+const STEP_SPAN = vec2f(0.6, 1.6); const STEP_OFF = 0.6; const STEP_SPAN_SOFT = 0.3;
 const STEP_EDGE_M = 0.4; const STEP_FADE = 0.2; const STEP_TAIL = 2.0; const STEP_CALM = vec2f(1.0, 3.0);
 const STEP_BACK = 4;
 const STEP_POOL = 0.6; const POOL_CALM = 0.8;
@@ -76,7 +76,7 @@ fn steps_of(a: f32, x: f32, half: f32, cell: f32, spacing: f32, e: f32) -> vec2f
     let long = STEP_FADE * spacing * (0.5 + own);
     let middle = STEP_OFF * (f32(v & 255u) / 127.5 - 1.0);
     let span = mix(STEP_SPAN.x, STEP_SPAN.y, f32((v >> 8u) & 255u) / 255.0);
-    let across = 1.0 - smoothstep(0.7 * span, span, abs(x - middle));
+    let across = 1.0 - smoothstep(STEP_SPAN_SOFT * span, span, abs(x - middle));
     let r = d / long;
     out.x = max(out.x, (0.6 + 0.4 * own) * across * exp(-r) * smoothstep(0.0, edge, d) * (1.0 - smoothstep(0.5 * STEP_TAIL, STEP_TAIL, r)));
     out.y = max(out.y, smoothstep(STEP_CALM.x - 0.5, STEP_CALM.x, r) * (1.0 - smoothstep(STEP_CALM.y - 1.0, STEP_CALM.y, r)));
