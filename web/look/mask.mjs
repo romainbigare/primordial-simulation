@@ -1,11 +1,7 @@
-// The crowns' mask: the page's programs built again (web/shade) from a copy of web/shaders in which the trees' crowns
+// The crowns' mask: the page's programs built again (variant.mjs) from a copy of web/shaders in which the trees' crowns
 // are pure magenta: the bodies of the marks of the lattice of stands (cover_marks.wgsl `lattice` names the lattice,
 // cover.wgsl and crowns.wgsl `plant` paint the body) and the far field of stands (cover_field.wgsl `lattice_field`).
-// The page itself never holds it: the tool builds it.
-import { execFileSync } from 'node:child_process';
-import { cpSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { ROOT, OUT } from './page.mjs';
+import { programs, patch } from './variant.mjs';
 
 const MAGENTA = 'vec3f(1.0, 0.0, 1.0)';
 /** The changes to the shaders' text, each [file, text, its replacement]; each text must stand once in its file. */
@@ -23,16 +19,4 @@ const PATCHES = [
 ];
 
 /** The programs of the mask build, as the JSON web/shade writes (for `page.site`). */
-export function maskShaders() {
-  const dir = join(OUT, 'mask-shaders'), json = join(OUT, 'mask-shaders.json');
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(OUT, { recursive: true });
-  cpSync(join(ROOT, 'web/shaders'), dir, { recursive: true });
-  for (const [file, text, by] of PATCHES) {
-    const f = join(dir, file), s = readFileSync(f, 'utf8');
-    if (s.split(text).length !== 2) throw new Error(`The crowns' mask no longer fits ${file} (web/look/mask.mjs): "${text}"`);
-    writeFileSync(f, s.replace(text, by));
-  }
-  execFileSync('cargo', ['run', '-q', '-p', 'ew-shade', '--', dir, json], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
-  return readFileSync(json, 'utf8');
-}
+export const maskShaders = () => programs('mask', dir => PATCHES.forEach(([file, text, by]) => patch(dir, file, text, by, 'mask.mjs')));

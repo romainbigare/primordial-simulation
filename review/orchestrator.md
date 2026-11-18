@@ -965,8 +965,10 @@ A grown world need not be grown in the page (where a pause lands some months pas
 
 To look at the page before publishing, and for every builder of the look: the picture tool, `cd web && npm run look --
 set OUT` (`web/look/README.md`): the standard places of seed 1 on a saved world, a contact sheet and their numbers;
-`compare OUT_A OUT_B` for before and after; `years OUT` for the same places 10 years in a row. Its `numbers.json` holds
-the page's errors (0 expected). The headless browser draws in software, so its frames per second mean nothing.
+`compare OUT_A OUT_B` for before and after; `years OUT` for the same places 10 years in a row; `cost OUT` for the cost of
+a pixel, counted (texture reads and noise a pixel). Its `numbers.json` holds the page's errors (0 expected). The headless
+browser draws in software, so its frames per second mean nothing: the count is the measure of cost, a time is
+information only.
 
 ## 7. Choices the owner should know of
 

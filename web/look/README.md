@@ -7,7 +7,7 @@ the page. One entry, run in `web/` after `npm run wasm` and `npm run build`:
 
 It needs Playwright (found the normal way, else set `PLAYWRIGHT` to its folder, here
 `/opt/node22/lib/node_modules/playwright`). What it makes goes to `out/look/` (not in git): the page with its hooks
-(`site/`), the crowns' mask build (`site-mask/`), and the saved worlds (`worlds/`).
+(`site/`), the crowns' mask build (`site-mask/`), the counted builds (`site-cost-*`), and the saved worlds (`worlds/`).
 
 ## Commands
 
@@ -17,6 +17,7 @@ It needs Playwright (found the normal way, else set `PLAYWRIGHT` to its folder, 
 | `compare OUT_A OUT_B` | the numbers of two `set`s side by side with their differences (printed, and `OUT_B/compare_<A>.txt`), and `OUT_B/compare_<A>.png`: each picture of A beside B | a few s |
 | `shot OUT.png --at X,Y --mpp M [--style angled\|above] [--world FILE]` | one picture: of the set's world, or of a snapshot you give | 1 to 2 min (the page opens first) |
 | `sheet OUT.png COLS FILE...` | a contact sheet of pictures, each labelled with its file name | a few s |
+| `cost OUT [--scenes NAME] [--only A,B]` | the cost of a pixel as a count: each scene drawn once at each of the set's `cost_views` by two counted builds, the ground's and the marks' (below): `OUT/cost.json`, the count pictures `OUT/<scene>_<mpp>_<style>_<build>.png`, `OUT/sheet.png`, the counts as drawn in `OUT/raw/` | 3.7 min for `seed1` (8 scenes x 2 builds, 16 pictures), the two builds made first |
 | `years OUT [--scenes NAME]` | the set's `years` scenes at its `years_view` in each of 10 years at the same date, from 10 saved worlds a year apart: the pictures, `OUT/years.png`, `OUT/years.json` | 10.5 min for `seed1` (3 scenes x 10 years), and 30 s to make its 10 worlds |
 
 The map is `--px` css pixels a side (400 by default). A picture takes 15 to 50 s, and 2 to 3 min at 1 m a pixel over
@@ -63,6 +64,25 @@ kinds, so you see what stands there.
 The marks are read back from the GPU after the picture is drawn (`read.mjs` `marks`: the first of the marks' textures,
 laid out as `textures.ts` `prepare` lays them). A mark's size inside its group is not compared. The worlds are opened one
 after another in one page.
+
+## The cost of a pixel (`cost`)
+
+The count is the measure of cost: the same on every machine and from run to run, so one run tells whether a change
+makes a pixel do more work. A wall-clock time here is information only (it swings by about 30 % and need not match a
+graphics card).
+
+The tool builds the page's programs again from a copy of `web/shaders` (`cost.mjs`, never in the page) in which each
+pixel counts what it does and draws the counts as its colour: every texture read (each `textureSample*` and
+`textureLoad`, red, two reads a level), each gradient noise (`draw.wgsl` `gradient_noise`, green) and each read of a
+photograph (`tex.wgsl` `photo`, blue; as the ninth builder's kit counted them). Two builds: `ground` counts the ground's
+program (`land.wgsl`, the far field of the plants in it) and draws no marks; `marks` counts the marks' programs
+(`cover.wgsl`, `crowns.wgsl`) over a black ground. The marks decided once a frame for each cell (`marks.wgsl`) are not
+counted: they are not a pixel's work.
+
+`cost.json`: for each scene and build, of `reads`, `noise` and `photos` a pixel over the middle 80 % of the picture: the
+mean, the 95th percentile, the most, and the % of pixels at the top of the colour (a count it cannot hold: 510 reads,
+255 noises or photographs). A texture read is known to one read (two to a level). In the pictures red is full at 510
+texture reads, green at 64 noises, blue at 32 photographs. `compare` shows the counts of two `cost` folders.
 
 ## The hooks
 

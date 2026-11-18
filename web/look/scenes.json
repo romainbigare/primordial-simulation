@@ -21,6 +21,7 @@
         { "name": "snow", "about": "snow", "at": [19.12, 13.1] },
         { "name": "river", "about": "river", "at": [26.5, 14.6] }
       ],
+      "cost_views": [{ "mpp": 0.52, "style": "angled" }],
       "years": ["A", "B", "SA"],
       "years_view": { "mpp": 0.2, "style": "angled" }
     }
