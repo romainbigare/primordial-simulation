@@ -26,7 +26,9 @@ class WebGl2 implements Gpu {
 
   constructor(private gl: WebGL2RenderingContext, private canvas: HTMLCanvasElement, restored: () => void) {
     this.setUp();
-    canvas.addEventListener('webglcontextlost', e => e.preventDefault());
+    // A lost context draws nothing and throws nothing: say so, so a page that stops drawing (a program too large for
+    // the card, which the browser drops the context for) is seen.
+    canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); console.error('gpu: the WebGL2 context was lost'); });
     canvas.addEventListener('webglcontextrestored', () => {
       this.linked.clear(); this.buffers = [];
       this.setUp();
