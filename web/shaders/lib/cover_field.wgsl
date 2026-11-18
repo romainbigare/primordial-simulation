@@ -117,10 +117,16 @@ const SWATH_DETAIL_M = 1.33;
 // times `REED_TINT`; seen from above in streaks of tall blades `REED_W` wide, `REED_L` long, `REED_TONE` deep.
 const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const REED_TINT = vec3f(0.75, 0.8, 0.45);
 const REED_W = 0.07; const REED_L = 0.9; const REED_TONE = 0.5;
-// How much reeds stand at a place: on soaked ground and in the water's edge band (`REED_WET`, `REED_BAND_M`).
-fn reeds_of(b: Beneath) -> f32 {
+// Reeds are the herbs' own plants: they stand dense as far as the herbs are there to make them, fully where the herbs
+// cover `REED_HERBS` of the ground; a trace of herbs makes a trace of reeds, not a belt.
+const REED_HERBS = 0.1;
+// How much a place holds reeds: on soaked ground and in the water's edge band (`REED_WET`, `REED_BAND_M`).
+fn reed_place(b: Beneath) -> f32 {
   return max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
 }
+// How much reeds stand at a place that holds them as `place`, where the herbs cover `herbs` of the ground (`REED_HERBS`):
+// one rule far and near.
+fn reeds_of(place: f32, herbs: f32) -> f32 { return place * ease(0.0, REED_HERBS, herbs); }
 // Flowers: in clusters as large as the noise's cells, `FLOWER_M`, over as much of the sward as is in flower; in a
 // cluster the dots, of radius `DOT_R`, lie on two lattices of cells `DOT_GAP` across, each turned its own way off the
 // map's axes (`DOT_TURN`, radians) and holding a dot at a place of its own in half of `DOT_PRESENT` of its cells, so
@@ -288,6 +294,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
   c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images);
   var s = min(f.a * thick * hold, 1.0);
+  let reeds = reeds_of(reed_place(b), s);
   let tufts = shows_at(SWARD_M, e);
   var tone = 1.0;
   if (tufts > 0.0) {
@@ -300,7 +307,6 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   // From above, its tufts; angled, its grass stands up in its images (detail.wgsl `grass_detail`).
   let blades_seen = blades_show(e);
   if (blades_seen > 0.0 && cover_look.look.z < 0.5) { tone *= mix(1.0, tuft_tone(), blades_seen); }
-  let reeds = reeds_of(b);
   if (reeds > 0.0) {
     s = mix(s, max(s, REED_FILL), reeds);
     c = mix(c, c * REED_TINT, reeds);
@@ -424,8 +430,11 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
     // In the shade of the trees' crowns as the sward is near (`SWARD_SHADE`), so the far and the near tone agree.
     let low = field_smooth(at, LOW_LAYER);
     var seen = low * (min(low.a * hold.w * thick, 1.0) / max(low.a, 1e-6));
-    // Reeds on soaked ground and at the water's edge stand dense and in their own tint, as near (`sward`).
-    let reeds = reeds_of(b) * step(1e-4, seen.a);
+    // Reeds on soaked ground and at the water's edge stand dense and in their own tint, as near (`sward`), as far as the
+    // herbs stand there.
+    let place = reed_place(b);
+    var reeds = 0.0;
+    if (place > 0.0) { reeds = reeds_of(place, min(field_smooth(at, SWARD_LAYER).a * hold.w * thick, 1.0)); }
     let filled = mix(seen.a, max(seen.a, REED_FILL), reeds);
     seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * filled, filled);
     dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * min(trees.a, 1.0)), seen.a), far);
