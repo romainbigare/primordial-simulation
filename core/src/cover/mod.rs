@@ -26,7 +26,7 @@ pub use grow::{live, step, Books};
 pub use groups::Sizes;
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
-pub use seed::{land, lodge, place, sown, Landed, Seed};
+pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use stand::{height, loose_bins, stem, BINS};
 

@@ -9,5 +9,6 @@ serde.workspace = true
 toml = "0.8"
 
 [features]
-# The shared setup of the tests (`testkit`): turned on only by the dev-dependencies of the crates that test with it.
+# The shared setup of the tests (`testkit`): turned on by the dev-dependencies of the crates that test with it, and by
+# the command line for `ew card` (the test card).
 testkit = []

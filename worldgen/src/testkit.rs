@@ -1,8 +1,10 @@
-//! What the tests of the laws share (the `testkit` feature, for dev-dependencies only): a small world, edits booked from
-//! outside (cover and takers among them), the books, the substances of chemistry 0 by number, and a plain taker on the
-//! contract (`taker`).
+//! What the tests of the laws share (the `testkit` feature): a small world, edits booked from outside (cover and takers
+//! among them), the books, the substances of chemistry 0 by number, a plain taker on the contract (`taker`), and the
+//! test card of the page's look (`card`, which `ew card` writes).
 
+mod card;
 mod taker;
+pub use card::{card, Square, Stand, COLD_K, FROM, SQUARES, WARM_K};
 pub use taker::Taker;
 
 use pcore::check::{self, Totals};

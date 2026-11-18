@@ -5,6 +5,11 @@
       "run": ["--seed", "1", "--size", "32", "--band", "20,65", "--roster", "--fauna-year", "52"],
       "at": 42.75,
       "years": 10
+    },
+    "card": {
+      "about": "the test card: an island whose squares are set by hand (worldgen::testkit::card), late summer of year 0",
+      "card": true,
+      "at": 0.75
     }
   },
   "sets": {
@@ -24,6 +29,31 @@
       "cost_views": [{ "mpp": 0.52, "style": "angled" }],
       "years": ["A", "B", "SA"],
       "years_view": { "mpp": 0.2, "style": "angled" }
+    },
+    "card": {
+      "world": "card",
+      "views": [{ "mpp": 0.26, "style": "angled" }],
+      "cost_views": [{ "mpp": 0.26, "style": "angled" }],
+      "scenes": [
+        { "name": "card", "about": "the card from far", "at": [6, 5], "views": [{ "mpp": 30, "style": "angled" }] },
+        { "name": "shore", "about": "a shore and the sea", "at": [2, 5], "views": [{ "mpp": 15, "style": "angled" }] },
+        { "name": "closed", "about": "a tall closed stand of four size groups", "at": [3.5, 3.5] },
+        { "name": "open", "about": "an open stand of tall trees over a sward", "at": [4.5, 3.5] },
+        { "name": "young", "about": "a young dense stand near 4 m", "at": [5.5, 3.5] },
+        { "name": "soft", "about": "tall soft plants", "at": [6.5, 3.5] },
+        { "name": "bushes", "about": "bushes over a sward", "at": [7.5, 3.5] },
+        { "name": "sward", "about": "a sward of two kinds", "at": [8.5, 3.5] },
+        { "name": "bare", "about": "bare loose ground", "at": [3.5, 4.5] },
+        { "name": "wet", "about": "trees of wet ground over a sward", "at": [4.5, 4.5] },
+        { "name": "snow", "about": "snow on a sward", "at": [5.5, 4.5] },
+        { "name": "leafless", "about": "a woody stand in the cold season", "at": [6.5, 4.5] },
+        { "name": "layers", "about": "tall trees over bushes", "at": [7.5, 4.5] },
+        { "name": "thin", "about": "a thin sward", "at": [8.5, 4.5] },
+        { "name": "middle", "about": "a middle-aged stand of four size groups", "at": [4.5, 5.5] },
+        { "name": "low_soft", "about": "low soft plants over a sward", "at": [6.5, 5.5] },
+        { "name": "tall_bushes", "about": "tall bushes", "at": [7.5, 5.5] },
+        { "name": "wet_closed", "about": "a tall closed stand of trees of wet ground, four size groups", "at": [5.5, 6.5] }
+      ]
     }
   }
 }

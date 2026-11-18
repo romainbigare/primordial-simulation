@@ -1,8 +1,9 @@
-// The saved worlds the scenes stand on: snapshots `ew run --snapshots-at` writes, kept in `out/look/worlds/` and made
-// again when missing or when the build that makes them changed (the snapshot's format version, or the laws' code).
+// The saved worlds the scenes stand on: snapshots `ew run --snapshots-at` (or `ew card`) writes, kept in
+// `out/look/worlds/` and made again when missing or when the build that makes them changed (the snapshot's format
+// version, or the laws' code).
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, OUT } from './page.mjs';
 
@@ -32,15 +33,17 @@ export function dates(w, years = false) {
   return Array.from({ length: years ? w.years : 1 }, (_, i) => w.at + i);
 }
 
-/** The snapshots of world `name` (`spec`, of scenes.json) at `when` (dates), made where missing: their paths under
- * `out/look`, by date. `log` hears what is made. */
+/** The snapshots of world `name` (`spec`, of scenes.json) at `when` (dates), made where missing (`ew run`, or `ew card`
+ * for the test card, set at its one date): their paths under `out/look`, by date. `log` hears what is made. */
 export function worlds(name, spec, when, log = console.log) {
   const b = build(), rel = `worlds/${name}-v${b.version}-${b.code}`, dir = join(OUT, rel);
   const missing = when.filter(d => !existsSync(join(dir, snapName(d))));
   if (missing.length) {
     rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
     const last = Math.max(...when), years = String(Math.ceil(last + 1 / (2 * MONTHS)));
-    const args = ['run', '--release', '-q', '-p', 'cli', '--', 'run', ...spec.run, '--years', years, '--frames-every', '1000', '--snapshots-at', when.join(','), '--out', dir];
+    const ew = spec.card ? ['card', '--out', join(dir, snapName(spec.at))] : ['run', ...spec.run, '--years', years, '--frames-every', '1000', '--snapshots-at', when.join(','), '--out', dir];
+    const args = ['run', '--release', '-q', '-p', 'cli', '--', ...ew];
     log(`making world ${name} at ${when.join(', ')}: cargo ${args.join(' ')}`);
     const t0 = Date.now();
     execFileSync('cargo', args, { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });

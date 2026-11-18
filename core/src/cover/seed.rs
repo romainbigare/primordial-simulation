@@ -168,6 +168,17 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     true
 }
 
+/// The plants of the slot of starting kind `root` in cell `i` become `groups`, each its plants (a real count) and its
+/// built cover, kg, as the laws order and fuse them (`Cover::set_groups`): a stand of several sizes set by hand, as the
+/// test card sets one. Its amounts stay. False where the cell holds no slot of that kind.
+pub fn set_plants(w: &mut World, i: usize, root: u32, groups: &[(f64, f64)]) -> bool {
+    let c = &mut w.life.cells[i].cover;
+    let Some(x) = c.held().find(|&x| c.root[x] == root) else { return false };
+    let mut g: Vec<super::groups::Group> = groups.iter().map(|&(n, kg)| super::groups::Group { n, kg }).collect();
+    c.set_groups(x, &mut g);
+    true
+}
+
 /// `kg` per m² of cover of genes `genes` and starting kind `root` as seeds for cell `i` of `area` m² at `t` K: its
 /// built cover at the share of walls a plant of its mass builds (the plants it founds, `super::stand::founded` and
 /// `super::stand::walled`), its fuel at its `STORE` gene, with its heat.

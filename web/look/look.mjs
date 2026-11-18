@@ -52,7 +52,7 @@ async function set(out) {
     const r = result.scenes[scene.name] = { about: scene.about, at: scene.at, kinds: await kinds(page, scene.at), views: {} };
     say(`${scene.name} (${scene.about}) at ${scene.at}: ${r.kinds}`);
     const shots = [];
-    for (const v of set.views) {
+    for (const v of scene.views ?? set.views) {
       const t = Date.now(), view = { x: scene.at[0], y: scene.at[1], mpp: v.mpp, style: v.style };
       await P.look(page, view);
       const { png, waited } = await P.shot(page, join(out, fileOf(scene, v)));

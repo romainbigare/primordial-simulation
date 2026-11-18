@@ -13,11 +13,11 @@ It needs Playwright (found the normal way, else set `PLAYWRIGHT` to its folder, 
 
 | Command | What it does | Time here (no graphics card, shared machine) |
 |---|---|---|
-| `set OUT [--scenes NAME] [--only A,B] [--px 400] [--crowns no]` | every scene and view of a scene set: `OUT/<scene>_<mpp>_<style>.png`, the mask pictures in `OUT/mask/`, `OUT/sheet.png`, `OUT/numbers.json`; prints each scene's kinds of cover (from the cells' table) | 19 min for `seed1` (8 scenes x 3 views, 24 + 24 pictures); 14 min with 2 views; about 80 s more when the world is made first |
+| `set OUT [--scenes NAME] [--only A,B] [--px 400] [--crowns no]` | every scene and view of a scene set: `OUT/<scene>_<mpp>_<style>.png`, the mask pictures in `OUT/mask/`, `OUT/sheet.png`, `OUT/numbers.json`; prints each scene's kinds of cover (from the cells' table) | 19 min for `seed1` (8 scenes x 3 views, 24 + 24 pictures); 14 min with 2 views; about 80 s more when the world is made first; 10 to 13 min for `card` (18 + 18 pictures) |
 | `compare OUT_A OUT_B` | the numbers of two `set`s side by side with their differences (printed, and `OUT_B/compare_<A>.txt`), and `OUT_B/compare_<A>.png`: each picture of A beside B | a few s |
 | `shot OUT.png --at X,Y --mpp M [--style angled\|above] [--world FILE]` | one picture: of the set's world, or of a snapshot you give | 1 to 2 min (the page opens first) |
 | `sheet OUT.png COLS FILE...` | a contact sheet of pictures, each labelled with its file name | a few s |
-| `cost OUT [--scenes NAME] [--only A,B]` | the cost of a pixel as a count: each scene drawn once at each of the set's `cost_views` by two counted builds, the ground's and the marks' (below): `OUT/cost.json`, the count pictures `OUT/<scene>_<mpp>_<style>_<build>.png`, `OUT/sheet.png`, the counts as drawn in `OUT/raw/` | 3.7 min for `seed1` (8 scenes x 2 builds, 16 pictures), the two builds made first |
+| `cost OUT [--scenes NAME] [--only A,B]` | the cost of a pixel as a count: each scene drawn once at each of the set's `cost_views` by two counted builds, the ground's and the marks' (below): `OUT/cost.json`, the count pictures `OUT/<scene>_<mpp>_<style>_<build>.png`, `OUT/sheet.png`, the counts as drawn in `OUT/raw/` | 3.7 min for `seed1` (8 scenes x 2 builds, 16 pictures), the two builds made first; 4 min for `card` (36 pictures) |
 | `years OUT [--scenes NAME]` | the set's `years` scenes at its `years_view` in each of 10 years at the same date, from 10 saved worlds a year apart: the pictures, `OUT/years.png`, `OUT/years.json` | 10.5 min for `seed1` (3 scenes x 10 years), and 30 s to make its 10 worlds |
 
 The map is `--px` css pixels a side (400 by default). A picture takes 15 to 50 s, and 2 to 3 min at 1 m a pixel over
@@ -27,14 +27,26 @@ build give the same numbers to the last digit.
 ## Scenes and worlds (`scenes.json`)
 
 A world is the flags of an `ew run` and a date (`at`, years with whole months: 42.75 is late summer of year 42), and for
-`years` how many years in a row. The tool makes it with `cargo run --release -p cli -- run <flags> --snapshots-at <dates>`
-(about 25 s for 43 years, 35 s for 52) into `out/look/worlds/<name>-v<snapshot version>-<hash>/`, and makes it again
-when the snapshot's format version or the code of `core`, `worldgen`, `tape` or `cli` changes (committed or not).
+`years` how many years in a row; or the test card (`"card": true`, made by `ew card`, at its one date). The tool makes
+it with `cargo run --release -p cli -- run <flags> --snapshots-at <dates>` (about 25 s for 43 years, 35 s for 52) into
+`out/look/worlds/<name>-v<snapshot version>-<hash>/`, and makes it again when the snapshot's format version or the code
+of `core`, `worldgen`, `tape` or `cli` changes (committed or not).
 
-A scene set names its world, its views (metres a pixel, `angled` or `above`) and its scenes (a place in squares, x to
-the east, y to the south). `seed1` is the page's own world (seed 1, size 32, band 20,65, the six starting kinds, the
-takers in year 52) at 42.75, with the builders' places. The law moves what grows where: `set` prints each scene's
-kinds, so you see what stands there.
+A scene set names its world, its views (metres a pixel, `angled` or `above`; a scene may name its own), its cost views
+(`cost`) and its scenes (a place in squares, x to the east, y to the south). `seed1` is the page's own world (seed 1,
+size 32, band 20,65, the six starting kinds, the takers in year 52) at 42.75, with the builders' places. The law moves
+what grows where: `set` prints each scene's kinds, so you see what stands there.
+
+The scene set `card` stands on the test card (`ew card`, `worldgen/src/testkit/card.rs`): an island of 12 x 10
+squares whose block of 6 x 4 squares from square 3, 3 is set by hand, each square a kind of stand or ground the map
+draws (a tall closed stand of four size groups, an open stand over a sward, a young dense stand near 4 m, tall soft
+plants, bushes, swards, bare loose ground, trees of wet ground, snow on a sward, a woody stand in the cold season, and
+more), so a picture before and after a change of the page shows the same scene whatever the laws do. It is not stepped:
+the page opens it paused, in late summer of year 0. Not set by hand: a river (what runs in a channel comes from Flow's
+steps), stony ground with thin loose cover (the ground's tiles come from the terrain's samples, not from the cells), and
+the season (one for the whole world: a square is warm or cold by its ground's temperature, which the page's leaves and
+snow follow; a warm square's soil is wetted, as the card has had no rain). The shore is the island's own (scene
+`shore`).
 
 ## The numbers (`numbers.json`, per picture, over its middle 80 %: no button, no scale bar)
 

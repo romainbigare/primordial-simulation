@@ -49,6 +49,9 @@ pub const USAGE: &str = "usage:
     --layer NAME          map, temperature, rain, depth, or land (the map with no rivers) (map)
     --edges               darken the edges between cells
     --out FILE            the PNG (view.png)
+  ew card     write the test card, a small island whose squares are set by hand (worldgen::testkit::card), as a
+              snapshot the page opens; nothing is placed later
+    --out FILE            the snapshot (card.bin.gz)
   ew chem     print chemistry 0 as a table
   ew numbers OLD NEW      the fields of Physics and Config that differ between two runs (directories or physics.json)";
 

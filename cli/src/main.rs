@@ -63,6 +63,7 @@ fn main() {
             drive(w, &args, plan, Some(kept));
         }
         "view" => view(&args),
+        "card" => card(&args),
         "chem" => chem::run(),
         "numbers" => numbers::run(&args.0),
         _ => unreachable!("`Args::check` passes only the commands of the usage"),
@@ -77,6 +78,17 @@ fn view(a: &Args) {
     let out = window.and_then(|win| render::window(&w, win, a.get("--px", 512usize), &a.get("--layer", String::from("map")), a.has("--edges"), &a.get("--out", String::from("view.png"))));
     if let Err(e) = out {
         eprintln!("ew: {e}");
+        std::process::exit(2);
+    }
+}
+
+/// `ew card`: write the test card (`worldgen::testkit::card`) as a snapshot, with a plan that places nothing.
+fn card(a: &Args) {
+    let w = worldgen::testkit::card();
+    let plan = (Schedule::new(None, &[], worldgen::life::Seeding::default()), Recorder::new(&w, FRAMES_EVERY, 0).kept());
+    let (out, mut bytes) = (a.get("--out", String::from("card.bin.gz")), Vec::new());
+    if let Err(e) = tape::snapshot_bytes(&w, &plan, &mut bytes).and_then(|_| tape::write_snapshot(&bytes, &out)) {
+        eprintln!("ew: {out}: {e}");
         std::process::exit(2);
     }
 }
