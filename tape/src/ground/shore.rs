@@ -7,7 +7,9 @@
 //! has over a few samples, nothing a sample wide (a contour of a smoothed field, the same idea as cutting a polygon's
 //! corners, Chaikin 1974); held evenly either side, it keeps the land's area of a straight coast. The ground drawn
 //! keeps its own height where it lies on the offset's side of the level, and is lifted or lowered to that side by
-//! `SIDE` of the offset where it does not; a closed pond's deep samples stay under it (`KEEP_M`). Under the level the
+//! `SIDE` of the offset where it does not; a closed pond's deep samples stay under it (`KEEP_M`). Over the level the
+//! ground leans to the level plus the offset at the shore and takes its own height from `LEAN_M` of offset on, so ground
+//! that stands high by the water rises from the shore as a slope, not a wall at the zero line. Under the level the
 //! bed leans to a smooth depth, the offset at the shore and farther out the samples' depth held within `WATER_M` and
 //! blurred alike (`depth`), all of it in the shallows and less the deeper, so the shallows' colour follows the coast as
 //! one band. Liquid may stand on a texel beside a pond where the offset drawn lies under `EDGE_M`, and the ground drawn
@@ -37,6 +39,9 @@ const NEAR_SAMPLES: i64 = 2;
 /// `SIDE_FROM` of `SHORE_M` and none at `SHORE_M`, where the ground lies on that side by itself.
 const SIDE: f64 = 0.5;
 const SIDE_FROM: f64 = 0.5;
+/// Over the level the ground drawn leans to the level plus the offset at the shore, all of it at the zero line and none
+/// from this offset on, m: the bed leans to the offset there too, so the ground is one smooth surface across the shore.
+const LEAN_M: f64 = 1.0;
 /// A sample of a closed pond deeper than this under its level keeps its liquid however small the pond, m: its offset is
 /// no more than minus `KEPT` times `SHORE_M`, so the spline through it lies under 0 at its centre even among land held
 /// at `SHORE_M` (its own weight there is 4/9), and no lake is blurred away (a sea's islet of a sample may be).
@@ -244,11 +249,12 @@ impl Shore {
         let push = SIDE * d.abs() * (1.0 - ease(SIDE_FROM * SHORE_M, SHORE_M, d.abs()));
         let sided = level + side * (side * (h - level)).max(push);
         if d >= 0.0 {
+            let leaned = level + d + (sided - level - d) * ease(0.0, LEAN_M, d);
             // Where a sample about the point has no pond near (the ground a pond spills down below its pass), the
             // share blends in ground under the level: it is lifted over the level by the push, and by as much as the
             // offset where none of the samples about it has a pond near, all of it to `EDGE_M`, so the edge of where
             // liquid may stand lies as high over the level as the offset says.
-            let blended = h + (sided - h) * share;
+            let blended = h + (leaned - h) * share;
             let least = level + push + (d - push) * (1.0 - share);
             return (blended + (blended.max(least) - blended) * (1.0 - ease(EDGE_M, SHORE_M, d)), stands(d));
         }

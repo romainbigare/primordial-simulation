@@ -72,7 +72,9 @@ the pond's level, so a channel's mouth meets its level. Then the shore is drawn 
 each sample, its height over the level of the nearest pond (the sea's 0 m), held within 4 m either side, blurred over
 the samples by a Gaussian of 0.9 samples; the zero line of that offset (a cubic B-spline through the samples' centres)
 is the shore, and the ground drawn keeps its own height where it lies on the offset's side of the level and is moved to
-that side by half the offset where not (none from 4 m on); a closed pond's samples deeper than 3 m keep their liquid;
+that side by half the offset where not (none from 4 m on); over the level it leans to the level plus the offset at the
+shore and takes its own height from 1 m of offset on, so high ground rises from the shore as a slope, with no wall at
+the zero line; a closed pond's samples deeper than 3 m keep their liquid;
 ground out of a pond and under its level (where its liquid spills below its pass) is drawn as it is.
 Beside a pond the offset lies a little lower along a channel's line (a quarter of its bed's depth at the shore, none
 from 5 of the bed's half widths across and from 4 bed widths from the shore): the liquid drowns a channel's mouth, so
