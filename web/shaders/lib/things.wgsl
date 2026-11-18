@@ -29,10 +29,15 @@ fn sort_sprite(sort: i32, k: u32) -> i32 {
   return DEAD_BUSH_FROM + i32(k % u32(DEAD_BUSH_N));
 }
 
-// Ground of colour g at spot p with one sort of things over it: `many` (0..1) as the ground suits them, at stream k,
-// a rock `wet` wet (stone.wgsl `wet_stone`). Each shows as a thing (draw.wgsl `as_thing`): its colour and its shadow
-// depart from the ground's by its share.
-fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, many: f32, wet: f32, k: i32) -> vec3f {
+// One sort of things strewn over the ground: its sort, its lattice's cell, m, the share `fill` of the cells that may
+// hold one, its size, m (the smallest and the largest), `many` (0..1) as the ground suits them, a rock `wet` wet
+// (stone.wgsl `wet_stone`), and its stream of the world's random numbers.
+struct Strewn { sort: i32, cell_m: f32, fill: f32, size: vec2f, many: f32, wet: f32, k: i32 }
+
+// Ground of colour g at spot p with the things `t` over it. Each shows as a thing (draw.wgsl `as_thing`): its colour
+// and its shadow depart from the ground's by its share.
+fn scatter(g: vec3f, p: Spot, t: Strewn) -> vec3f {
+  let sort = t.sort; let cell_m = t.cell_m; let fill = t.fill; let size = t.size; let many = t.many; let wet = t.wet; let k = t.k;
   if (many <= 0.02 || unseen(size.y / THING_PX.x) || as_thing(size.y, p.e) <= 0.0) { return g; }
   let l = lat_axes(cell_m, vec2f(0.0));
   var out = g;
@@ -76,11 +81,16 @@ fn objects(g: vec3f, p: Spot, bare: f32) -> vec3f {
   let stony = max(open * max(max(p.rock, ease(0.15, 0.6, p.slope)), 0.35 + 0.65 * ease(1.0, 0.1, p.loose)), SNOW_ROCKS * p.snow * (1.0 - canopy));
   let dry = ease(0.4, 0.1, p.wet) * open * (1.0 - p.snow);
   let wood = max(canopy, WOOD_DRY * dry) * (1.0 - p.sand) * (1.0 - p.snow);
-  var out = scatter(g, p, WOOD_SORT, WOOD_CELL_M, WOOD_FILL, WOOD_M, wood, 0.0, 120);
-  out = scatter(out, p, DEAD_BUSH_SORT, DEAD_BUSH_CELL_M, DEAD_BUSH_FILL, DEAD_BUSH_M, dry, 0.0, 124);
-  out = scatter(out, p, ROCK_SORT, PEBBLE_CELL_M, PEBBLE_FILL, PEBBLE_M, stony, 0.0, 152);
-  out = scatter(out, p, ROCK_SORT, ROCK_CELL_M, ROCK_FILL, ROCK_M, stony, 0.0, 150);
-  return bed_rocks(out, p, bare * (1.0 - p.snow), soaked(p));
+  // One loop over the sorts, so the program holds the code that draws a thing once.
+  var sorts = array<Strewn, 5>(
+    Strewn(WOOD_SORT, WOOD_CELL_M, WOOD_FILL, WOOD_M, wood, 0.0, 120),
+    Strewn(DEAD_BUSH_SORT, DEAD_BUSH_CELL_M, DEAD_BUSH_FILL, DEAD_BUSH_M, dry, 0.0, 124),
+    Strewn(ROCK_SORT, PEBBLE_CELL_M, PEBBLE_FILL, PEBBLE_M, stony, 0.0, 152),
+    Strewn(ROCK_SORT, ROCK_CELL_M, ROCK_FILL, ROCK_M, stony, 0.0, 150),
+    bed_rocks(p, bare * (1.0 - p.snow), soaked(p)));
+  var out = g;
+  for (var i = 0; i < 5; i++) { out = scatter(out, p, sorts[i]); }
+  return out;
 }
 
 // The bed's loose stones as photographs, laid where its stones lie (soil's images, detail.wgsl `soil_detail`), in
@@ -115,9 +125,8 @@ fn bed_photos(under: vec3f, p: Spot) -> vec3f {
 const BED_ROCK_STONE = vec2f(0.15, 0.4); const BED_ROCK_CELL = 6.0; const BED_ROCK_FILL = 0.6;
 const BED_ROCK_SIZE = vec2f(1.0, 2.5);
 
-// Ground of colour g at spot p with its channel's boulders over it, as far as `open` of it is open to them, `wet` wet.
-fn bed_rocks(g: vec3f, p: Spot, open: f32, wet: f32) -> vec3f {
+// The boulders of spot p's channel, as far as `open` of its ground is open to them, `wet` wet.
+fn bed_rocks(p: Spot, open: f32, wet: f32) -> Strewn {
   let many = open * min(p.stony, 1.0) * ease(BED_ROCK_STONE.x, BED_ROCK_STONE.y, p.moved);
-  if (many <= 0.02) { return g; }
-  return scatter(g, p, MOSSY_ROCK_SORT, BED_ROCK_CELL * p.moved, BED_ROCK_FILL, BED_ROCK_SIZE * p.moved, many, wet, 156);
+  return Strewn(MOSSY_ROCK_SORT, BED_ROCK_CELL * p.moved, BED_ROCK_FILL, BED_ROCK_SIZE * p.moved, many, wet, 156);
 }
