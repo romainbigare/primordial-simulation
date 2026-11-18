@@ -2,11 +2,12 @@
 //! numbers (laws.md 3). Read from the world, nothing written. A shell hands the list out where the camera looks
 //! closely.
 //!
-//! The list is little-endian: `u32` cells, then for each cell `u32` its index, `f32` its west, north, east and south
+//! The list is little-endian: `u16` genes, then each gene's name and unit (`cover::GENES`), each a `u8` length and
+//! its UTF-8 bytes; `u32` cells, then for each cell `u32` its index, `f32` its west, north, east and south
 //! edges in squares and its area in m², `u16` its slots of cover, then each slot: `u32` starting kind, `f32` built cover
-//! kg/m², capture area m²/m², its `cover::NG` genes (`cover::LIGHT` to `cover::GAS`), `u8` full (1) or not, then 3 zeros.
+//! kg/m², capture area m²/m², its genes in the order the list names them, `u8` full (1) or not, then 3 zeros.
 
-use pcore::cover::{Parts, NG};
+use pcore::cover::{Parts, GENES, NG};
 use pcore::World;
 
 /// The things of each cell that overlaps the window from column `x` and row `y` of the map, `w` squares wide and `h`
@@ -19,6 +20,8 @@ pub fn things(world: &World, [x, y, wide, high]: [f64; 4]) -> Vec<u8> {
         })
         .collect();
     let mut out = Out(Vec::new());
+    out.u16(NG as u16);
+    GENES.iter().flat_map(|&(name, unit)| [name, unit]).for_each(|t| out.text(t));
     out.u32(cells.len() as u32);
     for i in cells {
         cell(world, i, &mut out);
@@ -50,6 +53,12 @@ fn cell(w: &World, i: usize, out: &mut Out) {
 struct Out(Vec<u8>);
 
 impl Out {
+    /// `t` as a `u8` length and its UTF-8 bytes (at most 255 of them).
+    fn text(&mut self, t: &str) {
+        let b = &t.as_bytes()[..t.len().min(u8::MAX as usize)];
+        self.0.push(b.len() as u8);
+        self.0.extend(b);
+    }
     fn u16(&mut self, v: u16) {
         self.0.extend(v.to_le_bytes());
     }

@@ -7,19 +7,6 @@ use crate::layers::Ctx;
 use crate::rec::Recorder;
 use pcore::cover;
 
-/// The genes of the cover averaged per kind: gene, column name and unit.
-const COVER_GENES: [(usize, &str, &str); 9] = [
-    (cover::LIGHT, "light", "log10"),
-    (cover::LEAF, "leaf", "log10"),
-    (cover::WALLS, "walls", "log10"),
-    (cover::STORE, "store", "log10"),
-    (cover::FROST, "frost", "K"),
-    (cover::MOIST, "moist", "log10"),
-    (cover::SEED, "seed", "1"),
-    (cover::REPAIR, "repair", "log10"),
-    (cover::FIX, "fix", "log10"),
-];
-
 impl Recorder {
     pub(super) fn kind_cols(&self, c: &Ctx, row: &mut Row) {
         let w = c.w;
@@ -34,8 +21,7 @@ impl Recorder {
             row.push(n("slots"), "1", s.slots);
             row.push(n("cover_kg"), "kg", s.kg);
             row.push(n("cover_area"), "m2/m2", s.leaf / land_area);
-            for (&(g, name, unit), &x) in COVER_GENES.iter().zip(&s.genes) {
-                debug_assert!(g < cover::NG);
+            for (&(name, unit), &x) in cover::GENES.iter().zip(&s.genes) {
                 row.push(n(&format!("cover_{name}")), unit, ratio(x, s.built));
             }
         }

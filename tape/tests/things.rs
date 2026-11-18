@@ -1,7 +1,7 @@
-//! The things of a window (`tape::things`): each cell there lists its slots of cover with their numbers, read from the
-//! world.
+//! The things of a window (`tape::things`): the genes it names, then each cell there lists its slots of cover with
+//! their numbers, read from the world.
 
-use pcore::cover::{LEAF, STORE, WALLS};
+use pcore::cover::{GENES, LEAF, NG, STORE, WALLS};
 use worldgen::life::{KINDS, LIGHT_ROW};
 use worldgen::testkit;
 
@@ -26,6 +26,16 @@ impl Read<'_> {
     fn f32s<const N: usize>(&mut self) -> [f32; N] {
         std::array::from_fn(|_| self.f32())
     }
+    fn text(&mut self) -> String {
+        let [n] = self.take::<1>();
+        let (head, rest) = self.0.split_at(n as usize);
+        self.0 = rest;
+        String::from_utf8(head.to_vec()).unwrap()
+    }
+    /// The genes the list names: their count, then each one's name and unit.
+    fn genes(&mut self) -> Vec<(String, String)> {
+        (0..self.u16()).map(|_| (self.text(), self.text())).collect()
+    }
 }
 
 #[test]
@@ -37,6 +47,10 @@ fn a_window_lists_what_lies_in_its_cells() {
     // The window of the cell itself holds it alone: its neighbours only touch it.
     let bytes = tape::things(&w, [x0, y0, x1 - x0, y1 - y0]);
     let mut r = Read(&bytes);
+    // It names every gene of the cover, in their order, as the core does.
+    let named = r.genes();
+    assert_eq!(named.len(), NG);
+    assert!(named.iter().zip(GENES).all(|((n, u), (gn, gu))| n == gn && u == gu), "{named:?}");
     assert_eq!((r.u32(), r.u32()), (1, i as u32));
     assert_eq!(r.f32s::<5>(), [x0, y0, x1, y1, area].map(|v| v as f32));
     assert_eq!(r.u16(), 1, "one slot of cover");
@@ -59,5 +73,7 @@ fn a_window_lists_what_lies_in_its_cells() {
 
     // The whole map lists every cell.
     let all = tape::things(&w, [0.0, 0.0, w.map.w as f64, w.map.h as f64]);
-    assert_eq!(u32::from_le_bytes(all[..4].try_into().unwrap()) as usize, w.mesh.cells().n());
+    let mut r = Read(&all);
+    r.genes();
+    assert_eq!(r.u32() as usize, w.mesh.cells().n());
 }

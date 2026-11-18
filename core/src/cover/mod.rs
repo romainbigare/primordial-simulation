@@ -65,6 +65,19 @@ pub const FIX: usize = 8;
 /// The share of its roots' volume that is gas space (`cover::working`)
 pub const GAS: usize = 9;
 pub const NG: usize = 10;
+/// Each gene's name and unit, in the order of their indices: what the tape and a viewer call it.
+pub const GENES: [(&str, &str); NG] = [
+    ("light", "log10 mol/kg/s"),
+    ("leaf", "log10 m²/kg"),
+    ("walls", "log10 kg/kg"),
+    ("store", "log10 kg/kg"),
+    ("frost", "K"),
+    ("moist", "log10"),
+    ("seed", "share"),
+    ("repair", "log10"),
+    ("fix", "log10 mol/kg/s"),
+    ("gas", "share"),
+];
 /// A fixing gene at or below this is off.
 pub const FIX_OFF: f32 = -10.0;
 

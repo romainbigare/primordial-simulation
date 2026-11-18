@@ -225,7 +225,7 @@ over the square's width, how wet the ground is, the share of the ground the cove
 ground's colour), coloured by the same rules; with no kinds in a tape, its cover is one foliage colour as closed as its
 capture area closes the ground.
 Close up the live viewer also asks for the slots of cover of the cells in view (`tape::things`, the record layout in
-`tape/src/things.rs`: each slot's kind, built cover and capture area per m² and genes); they are drawn as plants, and
+`tape/src/things.rs`: the names and units of the genes it holds, then each slot's kind, built cover and capture area per m² and genes); they are drawn as plants, and
 are not recorded.
 
 ## `series.csv`: the world
@@ -274,5 +274,4 @@ out reads 0 (its means `NaN`). Means are by its built cover.
 | Column | Unit | Meaning |
 |---|---|---|
 | `slots`, `cover_kg`, `cover_area` | , kg, m²/m² | its slots, its mass, its capture area per m² of land |
-| `cover_light`, `cover_leaf`, `cover_walls`, `cover_store`, `cover_moist`, `cover_repair`, `cover_fix` | log10 | the means of its genes (`cover::LIGHT` ...) |
-| `cover_frost`, `cover_seed` | K, | the means of its frost and seed genes |
+| `cover_<gene>` | the gene's | the mean of each of its genes, one column a gene, named and in the unit `cover::GENES` gives (`light`, `leaf`, `walls`, `store`, `frost`, `moist`, `seed`, `repair`, `fix`, `gas`) |
