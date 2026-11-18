@@ -892,8 +892,10 @@ task per chunk), slot by slot, the tallest first. **Plants**: a slot holds one p
 to `GROUPS` (4) **size groups** (`cover/groups.rs`), each a real count (`Cover::plants`) and a share of the slot's
 built cover (`Cover::share`), the smallest plants first: a group's plant's mass is its share of the built cover over
 its count. The slot's walls are shared over its groups by each group's built cover times the share of walls a plant
-of its mass builds (`wall_kg`, below), the rest of each group's built cover is its living cover and its share of the
-capture area (`Cover::sizes`). A plant's height is that of a plant of its mass whose walls make a stem of `stem_form`
+of its mass builds (`wall_kg`, below), each at most all of its plant: what a full group cannot hold goes to the
+others by the same weights, so the groups hold all the slot's walls (a slot that has shed nearly all its living cover
+stands with its large plants bare, its leaves on its small ones); the rest of each group's built cover is its living
+cover and its share of the capture area (`Cover::sizes`). A plant's height is that of a plant of its mass whose walls make a stem of `stem_form`
 and `stem_solid` at the walls' density, as tall as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973).
 The slot's **large plants** (its last group) set its height (`Cover::height`): the top of its crown for the light, the
 loose ground its roots need and the stem a jaw meets (the page draws every group, each its own size); its conducting walls are each group's

@@ -62,7 +62,8 @@ impl Cover {
     }
     /// The plants of slot `x` by group (`Sizes`). Its walls are shared out over its groups by their built cover times the
     /// share of the walls a plant of their mass builds (`stand::walled`: a seedling is mostly leaf), each at most all of
-    /// its plant; the rest of each group's built cover is its living cover, whose share is the group's capture area.
+    /// its plant, what a full group cannot hold going to the others (`share_walls`); the rest of each group's built cover
+    /// is its living cover, whose share is the group's capture area.
     pub fn sizes(&self, ph: &Physics, mm: &[f64; NP], x: usize) -> Sizes {
         let (built, walls) = (self.built(mm, x), self.walls(mm, x));
         let mut s = Sizes { held: self.held_groups(x), ..Sizes::default() };
@@ -73,8 +74,8 @@ impl Cover {
             (s.walls[0], s.leaf[0]) = (walls / built.max(1e-300), 1.0);
             return s;
         }
-        let walled: f64 = (0..s.held).map(|g| kg[g] * stand::walled(ph, s.mass[g])).sum();
-        (0..s.held).for_each(|g| s.walls[g] = (walls * stand::walled(ph, s.mass[g]) / walled.max(1e-300)).min(1.0));
+        let by: [f64; GROUPS] = std::array::from_fn(|g| if g < s.held { stand::walled(ph, s.mass[g]) } else { 0.0 });
+        s.walls = share_walls(&kg[..s.held], &by, walls);
         let living: f64 = (0..s.held).map(|g| kg[g] * (1.0 - s.walls[g])).sum();
         (0..s.held).for_each(|g| s.leaf[g] = kg[g] * (1.0 - s.walls[g]) / living.max(1e-300));
         s
@@ -240,3 +241,25 @@ pub(super) fn fit(g: &mut [Group]) -> usize {
     }
     held
 }
+
+/// The share of walls of each of the groups of built cover `kg`, kg, that `walls` kg of walls make, shared out by each
+/// group's built cover times its weight `by`, each group at most all walls: the walls a full group cannot hold go to
+/// the others by the same weights, until none is over, so the groups hold all the walls (no more than their built
+/// cover holds: the slot's walls are part of it).
+fn share_walls(kg: &[f64], by: &[f64; GROUPS], walls: f64) -> [f64; GROUPS] {
+    let (mut full, mut left) = ([false; GROUPS], walls);
+    loop {
+        let walled: f64 = (0..kg.len()).filter(|&g| !full[g]).map(|g| kg[g] * by[g]).sum();
+        let (was, open, mut filled) = (left, full.map(|f| !f), false);
+        for g in (0..kg.len()).filter(|&g| open[g] && was * by[g] / walled.max(1e-300) > 1.0) {
+            (full[g], left, filled) = (true, left - kg[g], true);
+        }
+        if !filled {
+            debug_assert!(full[..kg.len()].contains(&false) || left <= WALLS_LEFT * walls, "{left} kg of walls left over full groups {kg:?}");
+            return std::array::from_fn(|g| if g >= kg.len() { 0.0 } else if full[g] { 1.0 } else { left * by[g] / walled.max(1e-300) });
+        }
+    }
+}
+
+/// Walls left when every group is full, as a share of the slot's: no more than the rounding of the sums.
+const WALLS_LEFT: f64 = 1e-9;

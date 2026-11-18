@@ -23,6 +23,9 @@ const SEEDS_WALLS: f64 = 1e-3;
 /// their leaves (seen: up to 3.4e-3).
 const FLUSH: f64 = 5e-3;
 
+/// A slot that has shed all but this share of its living cover, whose large plants hold no leaves.
+const SHED: f64 = 1e-3;
+
 /// The row of the big slow kind of cover (a tree).
 const TREE_ROW: usize = 2;
 
@@ -199,9 +202,17 @@ fn a_flush_of_seedlings_leaves_the_large_plants_as_they_were() {
     }
 }
 
+/// The walls the groups of slot `x` of cover `c` hold, kg, and the most share of walls of one (`Cover::sizes`).
+fn group_walls(c: &Cover, mm: &[f64; cover::NP], ph: &pcore::Physics, x: usize) -> (f64, f64) {
+    let s = c.sizes(ph, mm, x);
+    let kg = (0..s.held).map(|g| s.count[g] * s.mass[g] * s.walls[g]).sum();
+    (kg, s.walls[..s.held].iter().copied().fold(0.0, f64::max))
+}
+
 /// Through a year of a tree stand that seeds itself, every slot of the world keeps its groups whole at each month's
 /// end: the held groups first, each of real plants, the smallest plants first, their shares of the built cover summing
-/// to 1 (to the 32-bit rounding of the shares); and the books are kept.
+/// to 1 (to the 32-bit rounding of the shares), its groups holding all its walls, none more than all of its plant, also
+/// where it has shed nearly all its living cover; and the books are kept.
 #[test]
 fn a_slot_keeps_its_groups_whole() {
     let (mut w, _) = grown(TREE_ROW, 5.0);
@@ -218,6 +229,12 @@ fn a_slot_keeps_its_groups_whole() {
                 assert!(s.held > 0 && c.plants[x][s.held..].iter().all(|&n| n == 0.0), "{:?}", c.plants[x]);
                 assert!(s.mass[..s.held].windows(2).all(|m| m[0] <= m[1]), "the groups are out of order: {s:?}");
                 assert!((share - 1.0).abs() < 1e-12, "the shares sum to {share}: {:?}", c.share[x]);
+                let mut shed = c.clone();
+                shed.mol[x][cover::MATTER] *= SHED;
+                for (c, what) in [(c, "as it is"), (&shed, "shed")] {
+                    let ((held, most), walls) = (group_walls(c, &mm, &w.cfg.phys, x), c.walls(&mm, x));
+                    assert!((held - walls).abs() <= 1e-9 * walls && most <= 1.0, "{what}: its groups hold {held} kg of its {walls} kg of walls, one {most} of its plant");
+                }
             }
         }
     }
