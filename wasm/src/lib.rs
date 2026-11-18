@@ -129,7 +129,10 @@ fn saved() -> Result<Saved, String> {
 #[no_mangle]
 pub extern "C" fn open_world() -> *const u8 {
     give(match saved() {
-        Ok((world, (plan, _))) => {
+        Ok((mut world, (plan, _))) => {
+            // A snapshot holds no cache: Flow's state of its ground (its ponds' levels, what its soils hold) is found
+            // again as a month's start finds it, so the page draws the world at its date as one it played into.
+            pcore::flow::state(&mut world, true);
             let cells = tape::Table::new(&world);
             LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
             Vec::new()
