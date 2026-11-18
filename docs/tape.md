@@ -72,7 +72,8 @@ the pond's level, so a channel's mouth meets its level. Then the shore is drawn 
 each sample, its height over the level of the nearest pond (the sea's 0 m), held within 4 m either side, blurred over
 the samples by a Gaussian of 0.9 samples; the zero line of that offset (a cubic B-spline through the samples' centres)
 is the shore, and the ground drawn keeps its own height where it lies on the offset's side of the level and is moved to
-that side by half the offset where not (none from 4 m on); over the level it leans to the level plus the offset at the
+that side by half the offset where not (none from 4 m on), the two met smoothly over six times that half offset, so the
+lifted ground has no crease at its edge; over the level it leans to the level plus the offset at the
 shore and takes its own height from 1 m of offset on, so high ground rises from the shore as a slope, with no wall at
 the zero line; a closed pond's samples deeper than 3 m keep their liquid;
 ground out of a pond and under its level (where its liquid spills below its pass) is drawn as it is.
@@ -81,7 +82,8 @@ from 5 of the bed's half widths across and from 4 bed widths from the shore): th
 the shore and its shallows turn a little up the channel.
 Which of these a texel takes (in a pond: no valley; beside one: the valley held at its level and the shore drawn; else
 the valley alone) is blended between the samples' centres, by the share of the texel's weight on the samples of each
-kind, so the ground has no step along a sample's edge.
+kind (bilinear over the smooth step of its place between the centres), so the ground has no step along a sample's edge
+and no crease along the lines through their centres.
 Under the level the bed leans to the offset at the shore and farther out to the samples' depth held within 40 m and
 blurred alike, all of it in the shallows. So a coast is a smooth line with capes and bays of a few samples and the
 shallows one band, none of a sample's scallops; the shore moves by about a quarter of a sample on the mean (a blur
