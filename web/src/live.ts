@@ -67,6 +67,8 @@ export class Live {
    * large shape drawn from the seed if `drawn`, else one rise in the middle, its cells holding at most `variety` kinds
    * of cover. */
   newWorld(seed: number, size: number, band: [number, number], drawn: boolean, variety: number): void { this.worker.postMessage({ cmd: 'new', seed, size, band, drawn, variety }); }
+  /** The saved world `saved` (the gzip of a snapshot of `ew run`), which then steps on as a new world does. */
+  open(saved: ArrayBuffer): void { this.worker.postMessage({ cmd: 'open', saved }); }
   play(on: boolean): void { this.worker.postMessage({ cmd: 'play', on }); }
   /** Months of the world per second of real time. */
   rate(monthsPerSecond: number): void { this.worker.postMessage({ cmd: 'rate', rate: monthsPerSecond }); }

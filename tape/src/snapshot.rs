@@ -10,7 +10,7 @@ use std::path::Path;
 /// Start of every snapshot file, before the bincode body: a tag, then the format version (little-endian `u32`).
 const SNAPSHOT_TAG: [u8; 4] = *b"EWSN";
 /// Raise it whenever the serialized layout of `World` (or of the shell's state) changes.
-const SNAPSHOT_VERSION: u32 = 150;
+const SNAPSHOT_VERSION: u32 = 151;
 /// Buffer between bincode and the decompressor, bytes: bincode reads 8 bytes at a time, and each call into the
 /// decompressor is slow.
 const BUFFER: usize = 1 << 20;
@@ -39,9 +39,15 @@ pub fn write_snapshot(bytes: &[u8], path: impl AsRef<Path>) -> io::Result<()> {
     crate::gzfile::write_gzip(path.as_ref(), &[bytes])
 }
 
-/// Load a snapshot file of this format version (`read_snapshot`).
+/// Load a snapshot file of this format version (`open_snapshot`).
 pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<(World, P)> {
-    read_snapshot(BufReader::with_capacity(BUFFER, GzDecoder::new(std::fs::File::open(path)?)))
+    open_snapshot(std::fs::File::open(path)?)
+}
+
+/// Read a snapshot of this format version from its gzip `gz` (`write_snapshot`): a file, or the bytes the page is given
+/// (`read_snapshot`).
+pub fn open_snapshot<P: DeserializeOwned>(gz: impl Read) -> io::Result<(World, P)> {
+    read_snapshot(BufReader::with_capacity(BUFFER, GzDecoder::new(gz)))
 }
 
 /// Read the bytes of a snapshot of this format version (`snapshot_bytes`) from `z`; caches come back empty and are

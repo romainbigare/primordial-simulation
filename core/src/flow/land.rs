@@ -4,8 +4,9 @@
 use super::{on_land, parts, scratch::{Latent, Scratch, Sp}};
 use crate::{chem::Phase, ground::{heat_above_floor, melting, skin_of, Melting}, solve::sweep::{sweep, Net}, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
 
-/// No substance on a melting plateau (`Scratch::pk`).
-pub(super) const NONE: usize = usize::MAX;
+/// No substance on a melting plateau (`Scratch::pk`): the largest index a 32-bit `usize` holds, so that a snapshot reads
+/// the same in the page's WebAssembly (wasm32), and kept exactly through the f64 of a node's row (`take_row`).
+pub(super) const NONE: usize = u32::MAX as usize;
 
 /// Molten share of substance `k` in ground node `i` (liquid, or gas above boiling).
 #[inline]

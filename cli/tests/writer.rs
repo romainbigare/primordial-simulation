@@ -1,5 +1,5 @@
 //! The writer thread of `ew run`: the files of a run that was stopped at a snapshot and resumed into the same folder
-//! are those of the run that was not stopped.
+//! are those of the run that was not stopped; a snapshot inside a year.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -37,4 +37,17 @@ fn a_run_resumed_into_its_folder_leaves_the_files_of_the_unbroken_run() {
     assert_eq!(series_without_clocks(&whole), series_without_clocks(&broken));
     let parts = std::fs::read_dir(&broken).unwrap().filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().ends_with(".part")).count();
     assert_eq!(parts, 0, "files left half written");
+}
+
+/// A snapshot at a date inside a year (`--snapshots-at`) holds the world of that month, and `ew resume`, which goes on
+/// from a year's start, refuses it.
+#[test]
+fn a_snapshot_inside_a_year_holds_its_month_and_is_not_resumed() {
+    let dir = folder("inside");
+    ew("run", &["--size", "12", "--seed", "1", "--years", "1", "--frames-every", "1000", "--snapshots-at", "0.5"], &dir);
+    let snap = dir.join("snap_00000_06.bin.gz");
+    let (w, _): (pcore::World, (worldgen::schedule::Schedule, tape::Kept)) = tape::load_snapshot(&snap).expect("the snapshot at 0.5");
+    assert_eq!(w.month(), 6);
+    let resumed = Command::new(env!("CARGO_BIN_EXE_ew")).arg("resume").arg("--from").arg(&snap).arg("--out").arg(&dir).output().expect("start ew");
+    assert!(!resumed.status.success(), "resumed from inside a year");
 }

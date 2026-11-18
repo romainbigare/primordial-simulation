@@ -4,7 +4,7 @@ import { MapView, View } from './map';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats } from './live';
-import { GroundTiles } from './ground';
+import { GroundTiles, GroundOf } from './ground';
 import { Land } from './land';
 import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
@@ -45,6 +45,9 @@ const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspe
 let land: Land | null = null;
 /** The core's WebAssembly, for the worker that makes the ground's tiles of each new world. */
 let coreWasm: ArrayBuffer | null = null;
+/** The saved world the live world stands on (the gzip of a snapshot of `ew run`), kept for the ground's tiles; null for
+ * a new world. */
+let saved: ArrayBuffer | null = null;
 let viewTimer = 0;
 /** The slots of cover of the window in view, asked for when the map is close (live world only), and the window asked for. */
 const slots = new CoverSlots();
@@ -118,7 +121,8 @@ function setup(w: World): void {
   }));
   playing = false; layer = null;
   setFrame(0); setLayer(null); syncUi();
-  if (live) togglePlay();
+  // A new live world plays at once; a saved one opens paused at its date, to be looked at.
+  if (live && !saved) togglePlay();
 }
 
 function nearestFrame(year: number): number {
@@ -275,8 +279,9 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { ch
 $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"></s>${n}</li>`).join('');
 
 // ---- start
-/** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the seed, size and variety from the page. */
-async function startLive(): Promise<void> {
+/** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the saved world `from`, or a new one
+ * of the seed, size and variety from the page. */
+async function startLive(from: ArrayBuffer | null): Promise<void> {
   const wasm = await fetch('ew.wasm').then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`ew.wasm: ${r.status}`))));
   coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
@@ -295,7 +300,7 @@ async function startLive(): Promise<void> {
   live?.stop();
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
-    ready: () => newWorld(),
+    ready: () => (from ? openSaved(from) : newWorld()),
     world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) slots.set(data); },
     frame: (stats, changed) => {
@@ -315,11 +320,13 @@ function viewSoon(v: View): void {
   clearTimeout(viewTimer);
   viewTimer = window.setTimeout(() => thingsOf(v), ASK_MS);
 }
-/** The live map of world `w`: its ground's tiles, made by a worker of their own from the world's seed and size. */
+/** The live map of world `w`: its ground's tiles, made by a worker of their own from the world's seed and size, or from
+ * the saved world it stands on. */
 function landOf(w: World): Land | null {
   const m = w.meta;
   if (!coreWasm || !m.tiles || !m.laws || !m.samples || m.square_depth === undefined) return null;
-  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), m.seed, m.w, [m.lat_south, m.lat_north], m.shape === 'Drawn', { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, shown => { if (shown) map.invalidate(); if (live) showStats(live.stats); }, say);
+  const ground: GroundOf = saved ? { saved } : { seed: m.seed, size: m.w, band: [m.lat_south, m.lat_north], drawn: m.shape === 'Drawn' };
+  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), ground, { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, shown => { if (shown) map.invalidate(); if (live) showStats(live.stats); }, say);
   return new Land(tiles, m.laws, m.samples);
 }
 /** From `THINGS_PX` pixels a square on, the core is asked for the slots of cover of the window in view. */
@@ -356,20 +363,29 @@ function newWorld(): void {
   const size = Math.min(SIZE_MOST, Math.max(SIZE_LEAST, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
   const variety = Math.min(VARIETY_MOST, Math.max(1, Math.floor(+$<HTMLInputElement>('variety').value) || LIVE_VARIETY));
   const band = bandOf($<HTMLSelectElement>('band').value);
-  playing = false;
+  playing = false; saved = null;
   say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
   banded ||= band[0] < band[1];
   live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn', variety);
 }
+/** Stand the live world on the saved world `gz` (the gzip of a snapshot of `ew run`). */
+function openSaved(gz: ArrayBuffer): void {
+  playing = false; saved = gz;
+  say('Opening the saved world…');
+  live?.open(gz.slice(0));
+}
+$<HTMLInputElement>('saved').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(openSaved); };
 $('live').onsubmit = e => { e.preventDefault(); newWorld(); };
 $('band').onchange = () => newWorld();
 $('shape').onchange = () => newWorld();
 
 requestAnimationFrame(loop);
 const embedded = document.getElementById('world-data')?.textContent?.trim();
-const url = new URLSearchParams(location.search).get('f');
+// A tape (`?f=URL`), or the live world: on a saved world (`?world=URL`, a snapshot of `ew run`) or a new one.
+const asked = new URLSearchParams(location.search), url = asked.get('f'), savedUrl = asked.get('world');
 const waiting = () => say('Drop a .ewf.gz file here, or use “Open file”.');
+const fetched = (u: string) => fetch(u).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${u}: ${r.status}`))));
 if (embedded) load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer);
-else if (url) fetch(url).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${url}: ${r.status}`))))
-  .then(load, waiting);
-else startLive().catch(waiting);
+else if (url) fetched(url).then(load, waiting);
+else if (savedUrl) fetched(savedUrl).then(startLive).catch(e => say(String(e instanceof Error ? e.message : e)));
+else startLive(null).catch(waiting);

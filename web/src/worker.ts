@@ -1,4 +1,5 @@
-// The live world: the core as WebAssembly (wasm/src/lib.rs) in a Web Worker, so that the page never freezes. It runs as
+// The live world: the core as WebAssembly (wasm/src/lib.rs) in a Web Worker, so that the page never freezes. The world
+// is new, or a saved one the page hands in (a snapshot of `ew run`), and steps on the same way. It runs as
 // a separate script, built into the page as text (build.mjs), and started from a Blob. With each frame it posts the
 // cells' table (tape/src/table.rs), from which the page draws the state of the ground, and the samples' discharge when
 // it changed enough to show (wasm/src/lib.rs `discharge`); it makes no pictures. The page answers each frame once it has
@@ -9,6 +10,8 @@
 interface Core {
   memory: WebAssembly.Memory;
   new_world(seed: number, size: number, south: number, north: number, drawn: number, variety: number): number;
+  input(len: number): number;
+  open_world(): number;
   step_month(): void;
   year(): number;
   day(): number;
@@ -23,6 +26,7 @@ interface Core {
 type Command =
   | { cmd: 'init'; wasm: ArrayBuffer }
   | { cmd: 'new'; seed: number; size: number; band: [number, number]; drawn: boolean; variety: number }
+  | { cmd: 'open'; saved: ArrayBuffer }
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
   | { cmd: 'things'; at: [number, number, number, number] | null }
@@ -58,6 +62,15 @@ let posted = 0, owed = false, unshown = 0;
 /** A copy of `n` bytes of the core's memory from `at`, which the page can take over. */
 function bytes(at: number, n: number): Uint8Array {
   return new Uint8Array(core!.memory.buffer, at, n).slice();
+}
+
+/** Hand `data` to the core (`input`) and run `use`, which reads it: nothing back, or why it refused it, as text. */
+function handIn(data: ArrayBuffer, use: () => number): string {
+  const c = core!, n = data.byteLength;
+  const into = c.input(n); // (it may grow the memory: its buffer is read after)
+  new Uint8Array(c.memory.buffer, into, n).set(new Uint8Array(data));
+  const at = use();
+  return new TextDecoder().decode(bytes(at, c.out_len()));
 }
 
 function postFrame(kind: 'world' | 'frame'): void {
@@ -113,9 +126,12 @@ host.onmessage = async e => {
     if (m.cmd === 'init') {
       core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
       host.postMessage({ kind: 'ready' }, []);
-    } else if (m.cmd === 'new' && core) {
+    } else if ((m.cmd === 'new' || m.cmd === 'open') && core) {
+      // A new world, or the saved one handed in.
       start(false);
-      if (core.new_world(m.seed, m.size, m.band[0], m.band[1], m.drawn ? 1 : 0, m.variety) !== 0) throw new Error('The world was refused.');
+      const c = core, refused = m.cmd === 'open' ? handIn(m.saved, () => c.open_world())
+        : c.new_world(m.seed, m.size, m.band[0], m.band[1], m.drawn ? 1 : 0, m.variety) !== 0 ? 'The world was refused.' : '';
+      if (refused) throw new Error(refused);
       due = 0; thingsAt = null; stepped = pace = 0;
       postFrame('world');
     } else if (m.cmd === 'play') {
