@@ -420,6 +420,9 @@ what the heat holds molten, as every law and the shell then read it.
   plateaus, with no soft cover or cover of bodies and the same phases, each take the block's temperature (their heat
   apart from the fusion enthalpy each holds, over their heat capacity; their floor's top too, which is part of each
   cell's ground node); of a cell of parts (1.1), its liquid's top.
+- **The ground under the liquid by depth** (`flow::wet_bands`, `curve::Fill::bands`): of each band of depths, the
+  share of a cell's area whose samples lie that deep under their part's level and the mean depth of the liquid over
+  them; the bands from no depth on take all of the cell that is not land (`flow::land_shares`).
 - **The channel** (`flow::channel`): what a cell passes on runs in a channel whose width and depth grow as powers of
   its discharge Q, m³/s (hydraulic geometry downstream, Leopold and Maddock 1953): width `channel_width` ×
   Q^`channel_width_exp`, depth `channel_depth` × Q^`channel_depth_exp`, and its liquid runs at Q over width × depth.

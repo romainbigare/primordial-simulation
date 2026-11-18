@@ -27,7 +27,7 @@ pub use potential::total as potential;
 pub use basin::Pool;
 pub use channel::Channel;
 pub(crate) use level::level_of;
-pub use inside::{land_shares, levels, lowest, means};
+pub use inside::{land_shares, levels, lowest, means, wet_bands};
 
 pub(crate) use potential::air_head;
 pub(crate) use stack::gain;

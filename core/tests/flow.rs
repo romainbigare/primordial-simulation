@@ -1296,3 +1296,27 @@ fn a_year_of_rain_on_cells_of_parts_keeps_the_books() {
     assert!(two_faces, "no cell of parts with its land and its liquid's top facing the air");
     books.assert_kept(&w, 1e-9);
 }
+
+/// The ground of a cell under its liquid falls into bands by the depth of the liquid over it (`flow::wet_bands`): over
+/// a year of the small world, in every cell, the bands from no depth to past the deepest take all the ground that is not
+/// land (`flow::land_shares`), and each band's mean depth lies within its band.
+#[test]
+fn the_wet_bands_of_a_cell_hold_its_ground_under_the_liquid() {
+    let mut w = worldgen::testkit::small_world();
+    let all: Vec<usize> = (0..w.mesh.cells().n()).collect();
+    let edges = [0.0, 0.1, 0.3, 1.0, 3.0, f64::INFINITY];
+    let mut wet = 0;
+    for _ in 0..w.cfg.months_per_year {
+        pcore::step(&mut w);
+        let (land, bands) = (pcore::flow::land_shares(&w, &all).unwrap(), pcore::flow::wet_bands(&w, &all, &edges).unwrap());
+        for &i in &all {
+            let under: f64 = bands[i].iter().map(|b| b[0]).sum();
+            assert!((under - (1.0 - land[i])).abs() < 1e-9, "cell {i}: bands hold {under} of the cell, its land {}", land[i]);
+            for (k, b) in bands[i].iter().enumerate().filter(|(_, b)| b[0] > 0.0) {
+                assert!(b[1] >= edges[k] - 1e-9 && b[1] <= edges[k + 1] + 1e-9, "cell {i}: band {k} holds a mean depth of {} m", b[1]);
+            }
+            wet += (under > 0.0) as usize;
+        }
+    }
+    assert!(wet > 0, "no ground under the liquid");
+}

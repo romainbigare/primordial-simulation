@@ -211,6 +211,31 @@ impl Fill<'_> {
         }
         (1.0 - (self.c.apart + self.sum(v, |p, x| p.area() - p.under(x))) / self.c.area).clamp(0.0, 1.0)
     }
+    /// The ground under the liquid where `v` m³ stand, by its depth under its part's level: of each band of depths from
+    /// `edges[k]` to `edges[k + 1]`, m (`edges` rising from 0, the last may be unbounded), its area, m², and the liquid that stands over it, m³. Of
+    /// a part at level x, the ground deeper than h is its floors under x − h, and the liquid over it Σ area × (x −
+    /// floor) over them, its volume under x − h plus h times their area (`Part::volume`, `Part::under`). None for none.
+    pub(super) fn bands(&self, v: f64, edges: &[f64]) -> Vec<[f64; 2]> {
+        let mut out = vec![[0.0; 2]; edges.len().saturating_sub(1)];
+        if v <= 0.0 {
+            return out;
+        }
+        // (No ground lies deeper than an unbounded last edge.)
+        let deeper = |h: f64| if h.is_finite() { self.sum2(v, |p, x| [p.under(x - h), p.volume(x - h) + h * p.under(x - h)]) } else { [0.0; 2] };
+        for (k, band) in out.iter_mut().enumerate() {
+            let (top, bottom) = (deeper(edges[k]), deeper(edges[k + 1]));
+            *band = [top[0] - bottom[0], top[1] - bottom[1]];
+        }
+        out
+    }
+    /// `f` of each part at its level where `v` m³ stand (`levels`), two numbers each, summed.
+    fn sum2(&self, v: f64, f: impl Fn(&Part, f64) -> [f64; 2]) -> [f64; 2] {
+        let add = |a: [f64; 2], b: [f64; 2]| [a[0] + b[0], a[1] + b[1]];
+        match &self.c.parts[..] {
+            [p] => f(p, p.level(v)),
+            parts => parts.iter().zip(self.levels(v)).map(|(p, x)| f(p, x)).fold([0.0; 2], add),
+        }
+    }
     /// What stands deeper than `h` under the liquid's level where `v` m³ stand, m³.
     pub(super) fn deep(&self, v: f64, h: f64) -> f64 {
         self.sum(v, |p, x| p.volume(x - h))
