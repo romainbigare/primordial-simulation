@@ -1091,7 +1091,7 @@ seeds fill it:
   a thing of the world: every law above acts on the stand, so a cell whose slot is cut into alike slots stands at the
   end of that month as the uncut cell does, when the pieces merge back, in every month of its year, its dry season too
   (`core/tests/stand.rs`). Selection is between slots
-  and cells: what grows better sends more seeds (the frost gene falls where winters are cold, `core/tests/cover.rs`).
+  and cells: what grows better sends more seeds (frost selects the hardy where it kills the tender, `core/tests/cover.rs`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's aside node (with theirs), as living things
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,

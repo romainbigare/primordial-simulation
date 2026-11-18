@@ -13,21 +13,17 @@ use worldgen::life::KINDS;
 use worldgen::testkit::{self, dry_lands, small_world, Books, Taker};
 
 /// Latitudes of the south and north edges of the frost test's island, degrees: it reaches from the warm latitudes to
-/// the cold, so its air brings every band the heat of the lower latitudes, as a real place gets.
+/// the cold, so its air brings every latitude the heat of the lower ones, as a real place gets.
 const FROST_WORLD_LAT: [f64; 2] = [20.0, 82.3];
-/// The warm band (the island's two southmost rows of cells) and the cold band of that island, between these latitudes,
-/// degrees.
-const WARM_BAND: [f64; 2] = [30.0, 40.0];
-const COLD_BAND: [f64; 2] = [50.0, 60.0];
-/// The fewest land cells a band holds.
-const BAND_CELLS: usize = 5;
-/// A band's cells are its land whose ground lies under this height, m: the winters the test weighs are those of the
-/// latitude, and the ground's lapse with height (about 6.5 K a km) stays under a third of a step of the gene there.
-const BAND_UNDER_M: f64 = 250.0;
+/// The fewest land cells of the frost test's island its winters kill the tender variant in, and spare it in.
+const FROST_CELLS: usize = 5;
+/// A month's frost kills the tender variant in a cell where it would kill more than this share of it (`cover::frozen`).
+const KILLS: f64 = 0.5;
+/// The last years of the frost test's run, over which a cell's winters and its cover are weighed.
+const LAST_YEARS: usize = 10;
 /// The two frost genes of the selection test, K, three steps (15 K) apart: the tender one above the key liquid's melting
 /// point (273 K), so its cover is still active (its ground's liquid liquid) when a winter's ground falls below it and
-/// frost can kill it before dormancy hardens it, and below the warm band's coldest ground, so the warm band's winters
-/// spare it (the test asserts both).
+/// frost can kill it before dormancy hardens it.
 const FROST_GENES: [f32; 2] = [276.0, 261.0];
 
 /// The row of the big slow kind of cover (a tree), its label.
@@ -365,67 +361,63 @@ fn seeds_take_the_slot_in_deficit() {
     }
 }
 
-/// The frost gene of the cover moves down where winters kill (laws.md 3): two variants of the starting cover, of
-/// frost genes `FROST_GENES` (3 steps, 15 K, apart), sown on every land cell of one island from the tropics to the
-/// cold (`FROST_WORLD_LAT`), compete for 60 years. Where the ground's winter falls below a gene's lethal limit
-/// (lowered by dormancy), frost kills the cover of that gene (laws.md 3), and the lower one (dearer to keep: `c_firm`)
-/// wins; where it does not, the higher one wins. The cover's mean frost gene (by built cover) ends more than a step
-/// lower in the cold band (`COLD_BAND`) than in the warm band (`WARM_BAND`), each its land under `BAND_UNDER_M`. The
-/// scene's premises are asserted, so a later ground that breaks them says so: the frost law (dormancy's hardening
-/// included) kills some of the tender kind in the cold band's winters and none in the warm band's.
+/// Frost selects the hardy where it kills the tender (laws.md 3): two variants of the starting cover, of frost genes
+/// `FROST_GENES`, sown on every land cell of an island from the warm latitudes to the cold (`FROST_WORLD_LAT`), compete
+/// for 60 years. In each cell the frost law says each month what share of the tender variant its ground's cold would
+/// kill (`cover::frozen` at the tender gene and the cell's activity, dormancy's hardening included), whatever lives
+/// there. Where it kills most of it in some month of the last `LAST_YEARS` years, the hardy variant (the lower gene,
+/// dearer to keep: `c_firm`) holds most of the built cover over those years; where it never kills any of it, the
+/// tender variant does. The scene's premise is asserted: the island holds cells of both.
 #[test]
 #[ignore = "slow: a 60-year run of a 16 x 16 world"]
-fn the_frost_gene_falls_where_winters_are_cold() {
-    let (chem, init) = worldgen::chemistry0();
+fn frost_selects_the_hardy_where_it_kills_the_tender() {
     let cfg = pcore::Config { lat_south: FROST_WORLD_LAT[0], lat_north: FROST_WORLD_LAT[1], ..Default::default() };
-    let mut w = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, cfg);
+    let (mut w, ()) = testkit::island_in_with(1, cfg, |w| (0..w.mesh.cells().n()).any(|i| w.is_land(i)).then_some(()));
     pcore::step(&mut w);
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
-    let (mut g, mut low) = (genes(), genes());
-    (g[FROST], low[FROST]) = (FROST_GENES[0], FROST_GENES[1]);
+    let (mut tender, mut hardy) = (genes(), genes());
+    (tender[FROST], hardy[FROST]) = (FROST_GENES[0], FROST_GENES[1]);
     let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
     for &i in &land {
-        cover::place(&mut w, i, g, 0, 0.05);
-        cover::place(&mut w, i, low, 0, 0.05);
+        cover::place(&mut w, i, tender, 0, 0.05);
+        cover::place(&mut w, i, hardy, 0, 0.05);
     }
-    let band = |b: [f64; 2]| -> Vec<usize> { land.iter().copied().filter(|&i| (b[0]..b[1]).contains(&w.mesh.cells().lat()[i]) && w.surface_z(i) < BAND_UNDER_M).collect() };
-    let (warm, cold) = (band(WARM_BAND), band(COLD_BAND));
-    assert!(warm.len() >= BAND_CELLS && cold.len() >= BAND_CELLS, "land cells in the bands: {} warm, {} cold", warm.len(), cold.len());
-    let coldest = |w: &pcore::World, cells: &[usize]| cells.iter().map(|&i| w.t_ground_last(i)).fold(f64::MAX, f64::min);
-    // The most of the tender kind a month's frost would kill in a band's cells, by the frost law at each cell's ground
-    // and activity (`Physics::frozen`, dormancy's hardening included).
     let parts = cover::Parts::of(&w.chem).expect("cover parts");
-    let tender = g;
-    let kills = |w: &pcore::World, cells: &[usize]| {
-        let at = |i: usize| {
-            let act = cover::activity(&tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
-            cover::frozen(&w.cfg.phys, w.chem.subs[parts.liquid].melt, tender[FROST] as f64, (w.t_ground_last(i), act))
-        };
-        cells.iter().map(|&i| at(i)).fold(0.0, f64::max)
-    };
-    let (mut warm_winter, mut cold_winter, mut warm_kill, mut cold_kill) = (f64::MAX, f64::MAX, 0.0f64, 0.0f64);
-    for _ in 0..60 * 12 {
-        pcore::step(&mut w);
-        warm_winter = warm_winter.min(coldest(&w, &warm));
-        cold_winter = cold_winter.min(coldest(&w, &cold));
-        (warm_kill, cold_kill) = (warm_kill.max(kills(&w, &warm)), cold_kill.max(kills(&w, &cold)));
-    }
-    // The mean frost gene of a band's cells, by built cover.
     let mm = parts.mm(&w.chem);
-    let mean_frost = |cells: &[usize]| {
-        let (frost, built) = cells.iter().flat_map(|&i| {
-            let c = &w.life.cell_at(i).cover;
-            c.held().map(move |x| (c.built(&mm, x), c.genes[x][FROST] as f64)).collect::<Vec<_>>()
-        }).fold((0.0, 0.0), |a, (b, f)| (a.0 + b * f, a.1 + b));
-        frost / built
+    // The share of the tender variant a month's frost kills in cell `i`, by the frost law alone.
+    let kills = |w: &pcore::World, i: usize| {
+        let act = cover::activity(&tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
+        cover::frozen(&w.cfg.phys, w.chem.subs[parts.liquid].melt, tender[FROST] as f64, (w.t_ground_last(i), act))
     };
-    let (warm_mean, cold_mean, step) = (mean_frost(&warm), mean_frost(&cold), cover::RANGE[FROST].0 as f64);
-    println!("mean frost gene {warm_mean:.1} K in the warm band (coldest ground {warm_winter:.1} K), {cold_mean:.1} K in the cold band ({cold_winter:.1} K); sown {} and {}", FROST_GENES[0], FROST_GENES[1]);
-    // The scene's premises: the cold band's winters kill the tender kind, the warm band's spare it.
-    println!("the most of the tender kind a month's frost kills: {warm_kill:.3} in the warm band, {cold_kill:.3} in the cold band");
-    assert!(cold_kill > 0.0, "the cold band's winters do not kill the tender kind: coldest ground {cold_winter} K");
-    assert!(warm_kill == 0.0, "the warm band's winters kill the tender kind ({warm_kill} a month): coldest ground {warm_winter} K");
-    assert!(warm_mean - cold_mean > step, "no selection: mean frost gene {warm_mean} K (warm band) and {cold_mean} K (cold band)");
+    // The share of the built cover of cell `i` whose frost gene lies nearer the hardy variant's (NaN where none stands).
+    let middle = (FROST_GENES[0] + FROST_GENES[1]) / 2.0;
+    let hardy_share = |w: &pcore::World, i: usize| {
+        let c = w.life.cover(i);
+        let all: f64 = c.held().map(|x| c.built(&mm, x)).sum();
+        c.held().filter(|&x| c.genes[x][FROST] < middle).map(|x| c.built(&mm, x)).sum::<f64>() / all
+    };
+    let n = w.mesh.cells().n();
+    let (months, last) = (60 * 12, LAST_YEARS * 12);
+    let (mut killed_late, mut killed_ever, mut share) = (vec![0.0f64; n], vec![0.0f64; n], vec![0.0f64; n]);
+    for m in 0..months {
+        pcore::step(&mut w);
+        for &i in &land {
+            let k = kills(&w, i);
+            killed_ever[i] = killed_ever[i].max(k);
+            if m >= months - last {
+                killed_late[i] = killed_late[i].max(k);
+                share[i] += hardy_share(&w, i) / last as f64;
+            }
+        }
+    }
+    let mean = |cells: &[usize]| cells.iter().map(|&i| share[i]).sum::<f64>() / cells.len() as f64;
+    let killing: Vec<usize> = land.iter().copied().filter(|&i| killed_late[i] > KILLS && share[i].is_finite()).collect();
+    let sparing: Vec<usize> = land.iter().copied().filter(|&i| killed_ever[i] == 0.0 && share[i].is_finite()).collect();
+    let (where_killed, where_spared) = (mean(&killing), mean(&sparing));
+    println!("the hardy variant holds {where_killed:.2} of the cover in the {} cells whose winters kill the tender, {where_spared:.2} in the {} that spare it", killing.len(), sparing.len());
+    assert!(killing.len() >= FROST_CELLS && sparing.len() >= FROST_CELLS, "cells whose winters kill the tender: {}, that spare it: {}", killing.len(), sparing.len());
+    assert!(where_killed > 0.5, "where frost kills the tender, the hardy holds {where_killed} of the cover");
+    assert!(where_spared < 0.5, "where frost spares the tender, the hardy holds {where_spared} of the cover");
 }
 
 /// Lots drawn from a cell by the tests of the dispersal kernel.
