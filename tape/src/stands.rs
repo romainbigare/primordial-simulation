@@ -52,10 +52,12 @@ pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, wa
     Plants { per_m2, mass, height, stem, width, cover, crown: -(-leaf / cover).exp_m1() }
 }
 
-/// What a slot's row reads of its cell: the share of what its ground holds for roots that it holds (`cover::wet`), its
+/// What a slot's row reads of its cell: the share of what its ground holds for roots that it holds (`cover::wet`) and the
+/// share lifting its liquid a m takes (`cover::pull`), its
 /// temperature and the melting point of its key liquid, K, the density of its walls, kg/m³, its area, m², and the share of it that is land.
 struct Ground {
     wet: f64,
+    pull: f64,
     t: f64,
     melt: f64,
     rho: f64,
@@ -70,7 +72,7 @@ struct Ground {
 /// closed a crown is; its walls' share; its capture
 /// area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s (more
 /// pigment per area); its moisture gene (`MOIST`) and frost gene, K (`FROST`); its fuel over its reserve (`STORE`); its
-/// activity there (`cover::activity`); the share of it frozen this month (`cover::frozen`); the share of what it builds
+/// activity there, its leaves at their height (`Cover::active`); the share of it frozen this month (`cover::frozen`); the share of what it builds
 /// that goes to seeds (`SEED`); the share of the land whose loose ground holds its plants (`Cover::rooted`, a share of the
 /// ground its cover lives on) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
 /// whose need is not found yet: seeds that landed since its cell's last month); and its walls gene, log10 kg of walls
@@ -86,7 +88,7 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
     let s = c.sizes(ph, mm, x);
     let group = |k: usize| plants(ph, (on_land(s.mass[k] * s.count[k]), on_land(c.leaf(mm, x) * s.leaf[k]), on_land(s.count[k])), rooted, s.walls[k], g.rho);
     let p = group(s.large());
-    let act = cover::activity(&genes, g.wet);
+    let act = c.active(ph, mm, g.rho, x, (g.wet, g.pull));
     let reserve = dec(genes[STORE]) * built;
     let gene = |k: usize| genes[k] as f64;
     let mut out = [0.0; KIND_ROW];
@@ -130,6 +132,7 @@ pub fn rows(w: &World, i: usize, land: f64) -> Vec<f64> {
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
     let g = Ground {
         wet: cover::wet(w, &p, i, w.g(p.liquid, i)).1,
+        pull: cover::pull(&w.chem, &p, &w.cfg.phys, w.cfg.gravity),
         t: w.t_ground_last(i),
         melt: w.chem.subs[p.liquid].melt,
         rho: w.chem.subs[p.sub[cover::WALL]].density[0],

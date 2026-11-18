@@ -78,16 +78,20 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
 pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), counts: &mut Counters) -> (Books, f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (area, mm, t, rho) = (super::ground(w, i), p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
-    // The slots its world uses (`Config::variety`).
-    let n = w.cfg.variety;
+    // The slots its world uses (`Config::variety`), and the share of what its ground holds for roots that lifting its
+    // liquid a m takes (`stand::pull`).
+    let (n, pull) = (w.cfg.variety, super::stand::pull(chem, p, ph, w.cfg.gravity));
     // The light since the last step: its capture areas share it down through their crowns, each on the share of its
     // ground its roots hold.
     let dl = (a.light - c.mark).max(0.0);
     c.mark = a.light;
     // The seeds lying on its ground first: what wakes takes part in the month as seedlings.
     let mut flows = [0.0; BUDGET.len()];
-    let lying = super::lying::month(w, c, p, a, (i, area, dt), &mut flows, counts);
-    super::stand::thin(c, &mm, (ph, rho, n), area);
+    let lying = super::lying::month(w, c, p, a, (i, dt), &mut flows, counts);
+    let mut b = Books::new(a.air, flows);
+    (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q]);
+    let e = p.content(chem);
+    crowded((p, &mm, &e), super::stand::thin(c, &mm, (ph, rho, n), area), (&mut b, counts));
     let mut s = [Slot::default(); SLOTS];
     let (mut layers, mut n_layers) = ([(0.0, 0.0, 0.0, 0.0, 0); SLOTS], 0);
     for (q, sq) in s.iter_mut().enumerate().take(n) {
@@ -95,8 +99,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         if c.root[q] == NO_ROOT || built <= EMPTY_KG {
             continue;
         }
-        let act = super::activity(&c.genes[q], a.moist);
         let sizes = c.sizes(ph, &mm, q);
+        let act = sizes.activity(ph, rho, &c.genes[q], (a.moist, pull));
         let h = sizes.height(ph, rho, sizes.large());
         let sapwood = super::stand::sapwood(ph, (leaf, sizes.lift(ph, rho)), c.walls(&mm, q), rho);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, sapwood, ..Default::default() };
@@ -113,9 +117,6 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     super::canopy::shade(&layers[..n_layers], |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
     let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
-    let mut b = Books::new(a.air, flows);
-    (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q]);
-    let e = p.content(chem);
     let before = c.content(&e);
     // The light per unit of absorbing area at the top of its layers: with no leaves, all that reaches the ground.
     let per = if lit > 0.0 { caught * a.reach / lit } else { dl * a.reach };
@@ -136,7 +137,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let order = &*order;
     let (pays, season) = super::season::pay(w, c, (p, &e), (&mut s, &stored), order, (t, dt, net), (&mut b, counts));
     grow(w, c, (p, &e), (&s, pays, season), order, (i, a, dt), (&mut b, counts));
-    super::stand::thin(c, &mm, (ph, rho, n), area);
+    crowded((p, &mm, &e), super::stand::thin(c, &mm, (ph, rho, n), area), (&mut b, counts));
     super::stand::merge_alike(c, &mm, (ph, n));
     remember(c, a.moist, w.cfg.months_per_year as f32);
     for x in 0..n {
@@ -150,6 +151,15 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     (b, caught)
 }
 
+/// What the self-thinning law took of a cell's cover (`stand::thin`), `died` mol of each part (its parts `p` of molar
+/// masses `mm` holding `e` J a mol), goes to its remains: the plants a crowded stand cannot hold die of the light they
+/// lack, counted as unpaid upkeep (`SPENT`).
+fn crowded((p, mm, e): (&Parts, &[f64; NP], &[f64; NP]), died: [f64; NP], (b, counts): (&mut Books, &mut Counters)) {
+    (0..NP).for_each(|q| b.dead[p.sub[q]] += died[q]);
+    b.budget[DIED] -= budget::held(e, &died);
+    counts.cover_lost[crate::life::SPENT as usize] += (0..NP).map(|q| died[q] * mm[q]).sum::<f64>();
+}
+
 /// The slots of cover `c` in `order` (cell `i`, that reads `a`) grow over `dt` (`grow_slot`), each as its slot `s` in
 /// the month says, whether it pays (`pays`) and whether it is in season (`season`), its parts `p` holding `e` J a mol.
 /// Its minerals in the ground are shared out over the slots by what each would take (`build::wants`): the slots' roots
@@ -159,7 +169,8 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
 /// groups of plants by `Cover::growth`.
 fn grow(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, pays, season): (&[Slot; SLOTS], [bool; SLOTS], [bool; SLOTS]), order: &[usize], (i, a, dt): (usize, &Around, f64), (b, counts): (&mut Books, &mut Counters)) {
     let mm = p.mm(&w.chem);
-    let growth = c.growth(&w.cfg.phys, (&mm, w.chem.subs[p.sub[WALL]].density[0]), super::ground(w, i), order);
+    let at = (a.moist, super::stand::pull(&w.chem, p, &w.cfg.phys, w.cfg.gravity));
+    let growth = c.growth(&w.cfg.phys, (&mm, w.chem.subs[p.sub[WALL]].density[0]), (super::ground(w, i), at), order);
     let plans: Vec<_> = order.iter().map(|&x| (season[x] && (pays[x] || super::build::frame_short(w, c, p, x) <= 0.0)).then(|| super::build::per_kg(w, c, p, x, (&s[x], &growth[x]))).flatten()).collect();
     // (A lone slot's share is all of it.)
     let shared = order.len() > 1;

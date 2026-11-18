@@ -240,6 +240,8 @@ pub struct Physics {
     pub field: f64,
     /// Share of its pores the loose ground holds at the wilting point, what no root draws (`cover::wet`)
     pub wilt: f64,
+    /// The pull the ground holds its liquid with at the wilting point less that at field capacity, Pa
+    pub held_pa: f64,
     /// Depth of the store under the loose ground (the weathered zone of the bed), m
     pub bed_depth: f64,
     /// Share of that store that is pore space that drains (its specific yield)
@@ -370,6 +372,7 @@ impl Default for Physics {
             seep: 3.6e-6,
             field: 0.6,
             wilt: 0.25,
+            held_pa: 1.467e6,
             bed_depth: 30.0,
             bed_porosity: 0.02,
             bed_seep: 3e-6,

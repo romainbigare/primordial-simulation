@@ -81,9 +81,9 @@ impl Lying {
 /// activity 0); of the rest the share min(1, its activity on that ground × the pace of its burning at the ground's
 /// temperature over its pace at `t_cat`) wakes, so at `t_cat` all that is active wakes in a month (seeds of temperate
 /// plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), and takes hold in the cover
-/// (`seed::lodge`). Returns what dies, mol of each part (with a slot in deficit the waking seeds push out), for the
+/// (`seed::lodge`), a plant for each `seed_kg`. Returns what dies, mol of each part (with a slot in deficit the waking seeds push out), for the
 /// cell's remains; its budget's flows and the seeds' flows are counted in `budget` and `counts`.
-pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, dt): (usize, f64, f64), budget: &mut [f64], counts: &mut Counters) -> [f64; NP] {
+pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), budget: &mut [f64], counts: &mut Counters) -> [f64; NP] {
     let mut dead = [0.0; NP];
     if c.lying.held().next().is_none() {
         return dead;
@@ -111,8 +111,9 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         let (gone, up): ([f64; NP], [f64; NP]) = (lot.map(|m| m * dies), lot.map(|m| m * wakes));
         budget[SEEDS_DIED] -= held(&e, &gone);
         (0..NP).for_each(|q| dead[q] += gone[q]);
-        // What wakes takes hold where the cover has room for it (`seed::lodge`); else it stays lying.
-        let woke = up.iter().any(|&m| m > 0.0) && match lodge(c, &mm, &Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 }, &w.cfg, area) {
+        // What wakes takes hold where the cover has room for it (`seed::lodge`), a plant for each `seed_kg`; else it
+        // stays lying. Those the ground cannot hold die by the self-thinning law in its month (`stand::thin`).
+        let woke = up.iter().any(|&m| m > 0.0) && match lodge(c, &mm, &Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 }, &w.cfg, built_kg(&mm, &up) / ph.seed_kg) {
             Landed::In => true,
             Landed::Out(m) => {
                 budget[DIED] -= held(&e, &m);

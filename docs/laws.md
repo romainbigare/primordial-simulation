@@ -883,8 +883,8 @@ chunk of the cell is its one writer. **It lives on the cell's land** (`cover::gr
 (the self-thinning law, founding, seeds that lodge), the seeds that land on the cell lie and wake on it, and it is
 placed per m² of it. How wet its ground is to it is the land part's own liquid over that part's area for a cell of
 parts (no more than the cell holds; `flow::parts` keeps each part's matter), else the cell's over its area. A cell
-whose land shrinks as its liquid rises gives its cover less room, and it thins by the self-thinning law; one whose land
-is gone gives it 1 m², so it thins to almost no plants and, under the liquid (its light times e^(−depth /
+whose land shrinks as its liquid rises gives its cover less room, and it thins by the self-thinning law, its large
+plants dying with their own mass; one whose land is gone gives it 1 m², so it thins to the few plants 1 m² holds and, under the liquid (its light times e^(−depth /
 `light_depth`)), pays more upkeep than it stores and dies by its laws, its remains to the ground. Its temperature is
 its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
@@ -899,14 +899,16 @@ cover and its share of the capture area (`Cover::sizes`). A plant's height is th
 and `stem_solid` at the walls' density, as tall as `tall` × its width^(2/3), the elastic buckling limit (McMahon 1973).
 The slot's **large plants** (its last group) set its height (`Cover::height`): the top of its crown for the light, the
 loose ground its roots need and the stem a jaw meets (the page draws every group, each its own size); its conducting walls are each group's
-capture area as tall as its plants (`Cover::lift`). Seeds that found a slot are one group of one plant per `seed_kg`;
-seeds that join a stand of their kind come in as a group of their own, and where all its groups are held they join
+capture area as tall as its plants (`Cover::lift`). Seeds that found a slot are one group of one plant per `seed_kg`
+(those its ground cannot hold die by the self-thinning law in that month, below); seeds that join a stand of their
+kind come in as a group of their own, as many plants; and where all its groups are held they join
 its group of the smallest plants (`Cover::recruit`): nothing happens to a plant because smaller plants arrived. Slots
 that join pool their groups: groups of plants of one mass are one, and while they are more than `GROUPS` the two
 groups of smaller plants (all but the largest) nearest in mass fuse, as cohorts fuse in the ecosystem demography model
 (Moorcroft, Hurtt and Pacala 2001).
 So seedlings that join a stand leave its large plants as they were. What a slot builds in a month goes to its groups
-by each group's capture area times the light its leaves get, its leaves under those of its larger plants: through the
+by each group's capture area times the light its leaves get, times their activity at their height (`Sizes::active`,
+below: a group whose leaves its lift leaves no liquid builds nothing), its leaves under those of its larger plants: through the
 slot's layer the light falls by e^(the capture area it passes, `canopy::shade`), and a group's leaves get the mean
 over their own share (`Cover::growth`): the large plants take the most light a leaf, the asymmetry of the competition
 for light by size (Weiner 1990), and seedlings, all leaf, grow fast where light reaches them and slowly in the shade;
@@ -917,17 +919,20 @@ so plants crowd the plants whose crowns share their layer of the air (`Cover::cr
 capture area fills at `crown_density`), whatever slot holds them, and the layers of a stand thin apart (an understory
 under a closed canopy): after its seeds wake and after it builds (`stand::thin`), the ground the plants of a slot's
 layer hold, each other slot's counted by the share of the slot's crown its own crown shares, is set against the
-cell's ground, and where it is more the slot loses plants, not mass, as its whole layer would (by that excess cubed),
-**the small first** (`stand::lose`; the suppressed plants of a crowded stand die first, Yoda and others 1963; Weiner
-1990), the survivors taking what the dead freed: its smallest group loses plants until its survivors are as large as
-the next group's plants, the two then fuse, and what is left falls on the large plants, but they lose no more than
-the crowd of the large plants of the slots that share their layer asks, each at their own mass: smaller plants take
-no room from them (the size-asymmetric competition of Weiner 1990; Purves and others 2008). So seedlings that crowd a
+cell's ground, and where it is more the slot loses plants as its whole layer would (by that excess cubed), **the
+small first** (`stand::lose`; the suppressed plants of a crowded stand die first, Yoda and others 1963; Weiner 1990):
+its smallest group loses plants until its survivors are as large as the next group's plants (the small survivors take
+what the dead freed), the two then fuse, and what is left falls on the large plants, which **die with their own
+mass** (their walls at their group's share, the slot's fuel by its built cover) to the ground, counted as unpaid
+upkeep (`SPENT`: they die of the light they lack): nothing is larger for the survivors to grow into, so they keep
+their own mass and grow by what they build. They lose no more than the crowd of the large plants of the slots that
+share their layer asks, each at their own mass: smaller plants take no room from them (the size-asymmetric
+competition of Weiner 1990; Purves and others 2008). So seedlings that crowd a
 closed stand die in its month, and live where it has room. So a stand cut into slots thins as the whole. What dies of unpaid upkeep, wear or frost is whole plants of every group
 alike (each count falls with the mass); what a taker bites or the slot sheds is mass of every group alike. So a stand
-that recruits sits on the thinning line, and its large plants grow with their own mass: a kind that holds much mass
-without leaf (walls, which pay no upkeep) stands tall, and a stand of few seeds is of few large plants until its own
-seeds fill it:
+that recruits sits on the thinning line, and its large plants grow by what they build alone: a kind that holds much
+mass without leaf (walls, which pay no upkeep) stands tall, and a stand of few seeds is few plants that grow by what
+they build until its own seeds fill it (`core/tests/stand.rs`):
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
   area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), passing down
   through the crowns of its kinds (Beer's law, `canopy::shade`): each kind's capture area spread evenly through its
@@ -958,7 +963,14 @@ seeds fill it:
   log10 0.5 = −0.3, and from there its transpiration falls in a straight line with what is left, to none at the wilting
   point (FAO-56's water stress coefficient Ks; a leaf's pores close as its ground dries, its tissue keeps its liquid);
   a kind of dry ground, `MOIST` −1, stays active to a tenth, and pays for it in capacity (its capacity per kg is
-  10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0; both the light
+  10^`MOIST` times its light gene's). **Lift**: a leaf h m up draws its liquid up a column whose weight takes ρ g h of
+  the pull its ground's liquid is held with between field capacity and the wilting point (`held_pa`), so it feels its
+  ground drier by the share ρ g h / `held_pa` of what it holds for roots (`cover::pull`, ρ the key liquid's density):
+  each group's leaves at its plants' height (`Sizes::active`), the slot's activity its groups' by their capture area
+  (`Sizes::activity`; with no leaves by their built cover). On ground at field capacity no leaf draws liquid above
+  `held_pa` / (ρ g), 150 m, and a kind of `MOIST` −0.3 slows from half of that: the hydraulic limit of a plant's
+  height (Ryan and Yoder 1997; the tallest trees stop near 120 to 130 m, Koch and others 2004). The pull is taken as
+  even over what the ground holds for roots (real soils hold most of it at a low pull: a known limit). Frozen ground holds no liquid that is liquid: w = 0; both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
   1980): nothing at or below the floor, so the cover cannot strip the air of that gas. **Liquid for gas**: its pores that

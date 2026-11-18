@@ -241,3 +241,74 @@ fn a_slot_keeps_its_groups_whole() {
     assert!(most > 1, "no slot held more than one group");
     books.assert_kept(&w, 1e-9);
 }
+
+/// What the garden's ground holds for roots in the test of a few seeds' stand: a dry ground, on which the woody kind of
+/// dry ground is fully active at its foot (its `MOIST` gene, -1) and whose pull ends within the height it would reach.
+const DRY: f64 = 0.1;
+
+/// The row of the woody kind of dry ground.
+const DRY_ROW: usize = 4;
+
+/// The share of its height a stand that has stopped growing tall adds in ten years.
+const STOPPED: f64 = 1e-3;
+
+/// A plant's leaves draw no liquid above the height its ground's pull reaches (`cover::pull`, `Sizes::active`), however
+/// few its plants, and a stand founded by few seeds is few plants that grow by what they build: a seed of the woody kind
+/// of dry ground a hundred m² in a garden of steady sun whose seeds leave it and whose ground holds `DRY` of what it holds
+/// for roots (`testkit::garden`), month by month for 60 years. Its count never passes the seeds that founded it; its
+/// large plants grow past half of `DRY` / pull m (15 m), where their lift leaves their leaves no liquid, and stop below
+/// it, where their leaves, ever less active as they rise, no longer pay to grow: the last ten years add under
+/// `STOPPED` to their height.
+#[test]
+fn a_few_seed_stand_never_passes_the_height_its_pull_reaches() {
+    let (mut w, i) = testkit::start();
+    assert!(cover::place(&mut w, i, KINDS[DRY_ROW].genes, DRY_ROW as u32, 1e-7));
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, rho, dt) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0], w.cfg.calendar().month as f64);
+    let limit = DRY / cover::pull(&w.chem, &p, &w.cfg.phys, w.cfg.gravity);
+    let mut c = w.life.cover(i).clone();
+    let seeds = c.held().map(|x| c.count(x)).sum::<f64>();
+    let mut tallest = [0.0f64; 721];
+    for m in 0..720u64 {
+        let a = testkit::garden(&w, &c, (295.0, DRY, 200.0, m));
+        let mut counts = w.counts.clone();
+        cover::live(&w, &mut c, &p, &a, (i, dt), &mut counts);
+        c.sent();
+        let k = m as usize + 1;
+        for x in c.held() {
+            tallest[k] = tallest[k].max(c.height(&w.cfg.phys, &mm, rho, x));
+            assert!(c.count(x) <= seeds * (1.0 + 1e-9), "month {m}: {} plants of {seeds} seeds", c.count(x));
+        }
+        assert!(tallest[k] <= limit, "month {m}: plants {} m tall, past the {limit} m their pull reaches", tallest[k]);
+    }
+    let (then, now) = (tallest[600], tallest[720]);
+    println!("tallest {then} m at 50 years, {now} m at 60, limit {limit} m");
+    assert!(now > 0.5 * limit && now - then < STOPPED * now, "the plants stood {then} m, then {now} m, of the {limit} m their pull reaches");
+}
+
+/// The share a plant of the tree kind grows in a month at most, in mass.
+const MONTH_GROWTH: f64 = 1.0;
+
+/// The large plants that crowd their ground die with their own mass (`stand::thin`): a stand of the tree kind (2 kg
+/// per m²) set as one group of ten times the plants the self-thinning law lets its ground hold (`cover::set_plants`)
+/// thins in its month to what its ground holds, and its survivors are as large as they were, but for their month's
+/// growth (`MONTH_GROWTH`): they did not take the mass of the dead, which went to the ground (were they to take it, a
+/// survivor would hold a thousand times its mass). The books are kept.
+#[test]
+fn crowded_plants_die_with_their_own_mass() {
+    let (mut w, i) = testkit::start();
+    assert!(cover::place(&mut w, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 2.0));
+    let (ph, mm) = (w.cfg.phys, cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem));
+    let (area, c) = (cover::ground(&w, i), w.life.cover(i));
+    let built: f64 = c.held().map(|x| c.built(&mm, x)).sum();
+    // n plants of the mean mass built / n hold n (built / n / thin_kg)^(2/3) m², ten times the ground.
+    let n = (10.0 * area).powi(3) * ph.thin_kg.powi(2) / built.powi(2);
+    assert!(cover::set_plants(&mut w, i, TREE_ROW as u32, &[(n, built)]));
+    let books = testkit::Books::now(&w);
+    pcore::step(&mut w);
+    let (_, _, plants, s) = tallest(&w, i);
+    let (was, now) = (built / n, s.mass[s.large()]);
+    println!("{n} plants of {was} kg, then {plants} plants, the large of {now} kg");
+    assert!(plants < 2e-3 * n && now < (1.0 + MONTH_GROWTH) * was, "{n} plants of {was} kg became {plants} plants, the large of {now} kg");
+    books.assert_kept(&w, 1e-9);
+}

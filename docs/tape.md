@@ -180,7 +180,7 @@ its cover, each as the law holds it, per m² of the cell's land (`layers::per_la
 kinds); of each its starting kind (-1: none); its built cover, kg/m²; its large plants (`stands::plants` of the slot's group of the largest plants, `cover::Sizes::large`, with that group's built cover and share of the capture area): the stem's width, m, plants a m² (that group's count), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-their leaf area; plants with no capture area stand bare, their crowns of no width, covering none, which the page draws by their stems as a crown that has shed its leaves); its walls' share of its built cover; its
 capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s;
-its moisture gene and frost gene, K; its fuel over its reserve; its activity on its cell's ground (`cover::activity`);
+its moisture gene and frost gene, K; its fuel over its reserve; its activity on its cell's ground, its leaves at their height (`Cover::active`);
 the share of it frozen this month (`cover::frozen`); the share of what it builds that goes to seeds (`SEED`); and the
 share of the land whose loose ground holds its plants (`Cover::rooted` over the land's share, at most all of it) with
 the loose ground their roots need, m (`Cover::need`; all of the land and 0 while the need of a slot of newly landed

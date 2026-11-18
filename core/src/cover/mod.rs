@@ -28,7 +28,7 @@ pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
-pub use stand::{height, loose_bins, stem, BINS};
+pub use stand::{height, loose_bins, pull, stem, BINS};
 
 use crate::life::WET_TISSUE;
 use crate::chem::Chemistry;

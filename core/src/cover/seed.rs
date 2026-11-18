@@ -78,18 +78,17 @@ pub enum Landed {
     Refused,
 }
 
-/// Seeds `s` lodge in cover `c` on its ground of `area` m² (`cover::ground`) of a world of settings `cfg`, with their
-/// heat and their store: into the most alike slot of their starting kind within `APART` × `alike` steps (`distance`),
+/// Seeds `s` lodge in cover `c` of a world of settings `cfg` as `plants` plants, with their heat and their store: into
+/// the most alike slot of their starting kind within `APART` × `alike` steps (`distance`),
 /// the genes the mean by built cover; else they found a slot of their own among the world's first `Config::variety`: an
 /// empty one; else the one in deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots
 /// nearest each other by their genes join (`room`) and they found the slot it frees; a world whose cells hold one kind
 /// (`Config::variety` 1) has no two to join, and the seeds do not take hold (`Landed::Refused`). So a cell of more slots
 /// is never closed to seeds and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
 /// the light that reaches the bottom of the layers above them and what does not pay dies (the gap models, Shugart 1984).
-pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, area: f64) -> Landed {
+pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, plants: f64) -> Landed {
     let (ph, n) = (&cfg.phys, cfg.variety);
     let kg = built_kg(mm, &s.mol);
-    let plants = super::stand::founded(ph, kg, area);
     let (mut kin, mut n_kin) = ([0; super::SLOTS], 0);
     for x in kin::kins(&c.genes[..n], &c.root[..n], (&s.genes, s.root), APART * ph.alike, distance) {
         (kin[n_kin], n_kin) = (x, n_kin + 1);
@@ -137,8 +136,8 @@ fn room(c: &mut Cover, mm: &[f64; NP], n: usize) -> usize {
 
 /// Place `kg` per m² of its ground (`cover::ground`, the cell's land) of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
 /// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
-/// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover or the cell has no
-/// room for it (nothing is placed then).
+/// ground temperature; it lodges as seeds do (`seed::lodge`), as a stand on its thinning line (`stand::founded`). False
+/// if the chemistry has no cover or the cell has no room for it (nothing is placed then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, area) = (p.mm(&w.chem), super::ground(w, i));
@@ -147,7 +146,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let heat = s.heat;
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
-    match lodge(c, &mm, &s, &w.cfg, area) {
+    match lodge(c, &mm, &s, &w.cfg, super::stand::founded(&w.cfg.phys, built_kg(&mm, &mol), area)) {
         Landed::Refused => return false,
         Landed::In => {}
         // The slot in deficit it took goes to the ground as remains, with its heat.

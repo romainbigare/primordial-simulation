@@ -48,6 +48,22 @@ impl Sizes {
     pub fn stem(&self, ph: &Physics, rho: f64, g: usize) -> f64 {
         stand::stem(ph, self.mass[g], self.walls[g], rho)
     }
+    /// The activity of each of its groups' leaves, of genes `genes` on ground that holds the share `moist` of what it
+    /// holds for roots, where lifting the liquid a m takes `pull` of that share (`stand::pull`), its walls of density
+    /// `rho` kg/m³: a group's leaves stand at its plants' height and feel their ground drier by the lift
+    /// (`cover::activity`), so none draw liquid above moist / pull m.
+    pub fn active(&self, ph: &Physics, rho: f64, genes: &[f32; super::NG], (moist, pull): (f64, f64)) -> [f64; GROUPS] {
+        std::array::from_fn(|g| if g < self.held { super::activity(genes, moist - pull * self.height(ph, rho, g)) } else { 0.0 })
+    }
+    /// The activity of the slot (`active`): its groups' by their share of its capture area; of a slot with no leaves,
+    /// by their share of its built cover, as its leaves come back on them (`Cover::grew`).
+    pub fn activity(&self, ph: &Physics, rho: f64, genes: &[f32; super::NG], at: (f64, f64)) -> f64 {
+        let a = self.active(ph, rho, genes, at);
+        let leaf: f64 = self.leaf[..self.held].iter().sum();
+        let built: f64 = (0..self.held).map(|g| self.count[g] * self.mass[g]).sum();
+        let by = |g: usize| if leaf > 0.0 { self.leaf[g] / leaf } else { self.count[g] * self.mass[g] / built.max(1e-300) };
+        (0..self.held).map(|g| by(g) * a[g]).sum()
+    }
     /// The height its plants lift their liquid to, m: each group's height by its share of the capture area (the
     /// conducting walls of each plant are as tall as it, `stand::sapwood`), its walls of density `rho` kg/m³.
     pub fn lift(&self, ph: &Physics, rho: f64) -> f64 {
@@ -91,6 +107,11 @@ impl Cover {
         let s = self.sizes(ph, mm, x);
         s.stem(ph, rho, s.large())
     }
+    /// The activity of slot `x` on ground that holds `at` (the share of what it holds for roots, and the share lifting the
+    /// liquid a m takes, `stand::pull`), its walls of density `rho` kg/m³ (`Sizes::activity`).
+    pub fn active(&self, ph: &Physics, mm: &[f64; NP], rho: f64, x: usize, at: (f64, f64)) -> f64 {
+        self.sizes(ph, mm, x).activity(ph, rho, &self.genes[x], at)
+    }
     /// The height the plants of slot `x` lift their liquid to, m (`Sizes::lift`), its walls of density `rho` kg/m³.
     pub fn lift(&self, ph: &Physics, mm: &[f64; NP], rho: f64, x: usize) -> f64 {
         self.sizes(ph, mm, x).lift(ph, rho)
@@ -112,18 +133,22 @@ impl Cover {
     /// the leaves of all the cell's plants taller than they are, whatever slot holds them: the light falls by e^-(the
     /// capture area per unit of ground it passed, each slot's over the share its roots hold) (Beer's law, as
     /// `canopy::shade`), and the leaves of plants as tall (to `SAME`) get the mean over theirs together
-    /// (`math::mean_decay`). So the large plants take the most light a leaf, the asymmetry of the competition for light
-    /// by size (Weiner 1990), and seedlings, all leaf, grow fast where light reaches them. A slot with no leaves gets
-    /// none (`Cover::grew`).
-    pub(super) fn growth(&self, ph: &Physics, (mm, rho): (&[f64; NP], f64), area: f64, order: &[usize]) -> [[f64; GROUPS]; SLOTS] {
+    /// (`math::mean_decay`), times the activity of its leaves at their height on ground that holds `at` (the share of
+    /// what it holds for roots, and the share lifting the liquid a m takes: `Sizes::active`). So the large plants take
+    /// the most light a leaf, the asymmetry of the competition for light by size (Weiner 1990), but no more where their
+    /// lift leaves their leaves no liquid, and seedlings, all leaf, grow fast where light reaches them. A slot with no
+    /// leaves gets none (`Cover::grew`).
+    pub(super) fn growth(&self, ph: &Physics, (mm, rho): (&[f64; NP], f64), (area, at): (f64, (f64, f64)), order: &[usize]) -> [[f64; GROUPS]; SLOTS] {
         let (mut all, mut k, mut out) = ([(0, 0, 0.0, 0.0); SLOTS * GROUPS], 0, [[0.0; GROUPS]; SLOTS]);
         // (Slots of one group each take all they build.)
         if order.iter().all(|&x| self.held_groups(x) <= 1) {
             order.iter().for_each(|&x| out[x][0] = 1.0);
             return out;
         }
+        let mut act = [[0.0; GROUPS]; SLOTS];
         for &x in order {
             let s = self.sizes(ph, mm, x);
+            act[x] = s.active(ph, rho, &self.genes[x], at);
             let per = self.leaf(mm, x) / (area * self.rooted[x].max(f32::MIN_POSITIVE) as f64).max(1e-300);
             for g in 0..s.held {
                 (all[k], k) = ((x, g, s.height(ph, rho, g), per * s.leaf[g]), k + 1);
@@ -136,7 +161,7 @@ impl Cover {
             let j = i + all[i..].iter().take_while(|e| e.2 >= all[i].2 * (1.0 - SAME)).count();
             let y: f64 = all[i..j].iter().map(|e| e.3).sum();
             let lit = (-above).exp() * crate::math::mean_decay(y);
-            all[i..j].iter().for_each(|&(x, g, _, leaf)| out[x][g] = leaf * lit);
+            all[i..j].iter().for_each(|&(x, g, _, leaf)| out[x][g] = leaf * lit * act[x][g]);
             (above, i) = (above + y, j);
         }
         for &x in order {
