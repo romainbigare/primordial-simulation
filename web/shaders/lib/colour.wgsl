@@ -272,14 +272,13 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     let ripple = ripples(p.e) * (1.0 - p.snow);
     var water: vec3f;
     if (styled()) {
-      // The style: clear water over a pale bed, deepening to the open water, foam at its edge where the waves break
+      // The style: clear water over its bed, deepening to the open water (a lake's greener, `LAKE_CLEAR`), foam at its edge where the waves break
       // (style.wgsl `foam`): a lake's, of smaller waves, breaking shallower, as much less as its waves are lower.
-      // One water: standing liquid is coloured by the channel's law (style.wgsl `river_seen`), its shore the
-      // channel's shallows and its open water the channel's deep thread, so a river runs into a lake or the sea with
-      // no step of colour; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
-      let seen = river_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
+      // Standing liquid is coloured as a channel is (style.wgsl `standing_seen`), its shore the channel's shallows and
+      // its open water past the band deeper; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
+      let seen = standing_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
       let waves = waves_of(p.sea).x / SEA_WAVE.x;
-      water = mix(water_painted(BED_SHOWN * bed, seen, ripple), FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, p.slope / earth.look.x, p.e, p.at));
+      water = mix(standing_painted(BED_SHOWN * bed, seen, ripple, p.sea), FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, p.slope / earth.look.x, p.e, p.at));
     } else {
       water = water_over(bed, p.depth, ripple);
     }
