@@ -17,6 +17,7 @@ mod month;
 mod seed;
 mod season;
 mod show;
+mod soak;
 mod stand;
 mod upkeep;
 
@@ -28,6 +29,7 @@ pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
+pub use soak::{aired, breath, soak, working, Soak};
 pub use stand::{height, loose_bins, stem, BINS};
 
 use crate::life::WET_TISSUE;
@@ -60,12 +62,14 @@ pub const SEED: usize = 6;
 pub const REPAIR: usize = 7;
 /// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below `FIX_OFF`
 pub const FIX: usize = 8;
-pub const NG: usize = 9;
+/// The share of its roots' volume that is gas space (`cover::working`)
+pub const GAS: usize = 9;
+pub const NG: usize = 10;
 /// A fixing gene at or below this is off.
 pub const FIX_OFF: f32 = -10.0;
 
 /// Mutation step (times `Physics::mut_size`) and range of each gene.
-pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0)];
+pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6)];
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
 pub use crate::life::kin::APART;
@@ -282,22 +286,6 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
 /// standing liquid. Its leaves layer over it, its plants find their room on it, its seeds lodge on it.
 pub fn ground(w: &crate::World, i: usize) -> f64 {
     crate::contract::land(w, i)
-}
-
-/// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and the share
-/// of what its ground holds for roots that it holds (`Physics::available`), its pores' space read from Flow (`Scratch::land_pores`;
-/// one store over the depth of its loose ground). Of a cell of parts with land, its land part's own (`flow::parts`) over
-/// that part's area, no more than the cell holds; else the cell's over its area.
-pub fn wet(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, f64) {
-    let (t, plateau) = w.thaw_last(i);
-    let molten = w.molten(p.liquid, i, t, plateau);
-    let area = w.mesh.cells().area()[i];
-    let (liquid, over) = match w.scratch.land_part(i, p.liquid) {
-        Some((mol, share)) => (mol.min(held) * molten, area * share),
-        None => (held * molten, area),
-    };
-    let depth = liquid * w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid) / over;
-    (liquid, w.cfg.phys.available(depth / w.scratch.land_pores(i).max(1e-9)))
 }
 
 /// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots

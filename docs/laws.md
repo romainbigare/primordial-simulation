@@ -871,8 +871,8 @@ not built).
 `core/src/cover/`. Each cell holds up to its world's `Config::variety` kinds of **cover** (a setting of a world, 8
 unless a start chooses other, at most `cover::SLOTS`, 12, the size of its arrays), each the
 amounts of three substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10 and its walls
-13: `cover::Parts`, found from the chemistry's roles) and 9 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
-`STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`; ranges in `cover::RANGE`). Its **living cover** is its body
+13: `cover::Parts`, found from the chemistry's roles) and 10 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
+`STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`, `GAS`; ranges in `cover::RANGE`). Its **living cover** is its body
 matter with the liquid of living tissue (matter / (1 − `WET_TISSUE`), `Cover::living`);
 its walls are a frame, which pays no upkeep and does not wear, so its capacity, capture area,
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
@@ -961,7 +961,25 @@ seeds fill it:
   log10 0.5 = −0.3, and from there its transpiration falls in a straight line with what is left, to none at the wilting
   point (FAO-56's water stress coefficient Ks; a leaf's pores close as its ground dries, its tissue keeps its liquid);
   a kind of dry ground, `MOIST` −1, stays active to a tenth, and pays for it in capacity (its capacity per kg is
-  10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0; both the light
+  10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0. **Roots in full pores**
+  (`cover::soak`, `cover::working`): up to field capacity the ground's liquid lies in its small pores all through it
+  and its large pores hold the gas, so every root breathes; what it holds over field capacity fills the rest of its
+  pores from the bottom up (Flow's one store over the depth of its loose ground), and over its top it stands. A root
+  under that table gets the oxidising gas its burning needs only down its own gas spaces, from the air over the ground
+  or over the liquid standing on it, whose depth that gas crosses first: a kind's `GAS` gene is the share φ of its
+  roots' volume that is gas space, and its gas reaches (2 D C φ / ((1 − φ) M))^½ m down a root (`cover::aired`;
+  Armstrong 1979's longest root), D the gas's diffusivity in the air (`units::GAS_DIFFUSIVITY`, another gas's by
+  Graham's law), C its concentration in the air at the ground (`World::near_ground` over R T), M what a m³ of living
+  root burns of it a second (fine roots breathe `c_basal` a kg a day at the burning's pace, at `rho_body` kg a m³, over
+  the energy the burning frees a mol of that gas; `cover::breath`). Of its roots, as deep as it needs and no deeper
+  than its loose ground, the share above the table and within that reach below it works (Feddes, Kowalik and Zaradny
+  1978: none at saturation for a plant with no gas spaces), and only those draw the liquid its pores lose: the light
+  reaction it runs and what one more kg would gain are times that share, as a flooded plant's pores close as in a
+  drought (Kozlowski 1997); its activity, by which it wears and hardens, is its drought's alone. So wetter ground is
+  not always better: a kind of few gas spaces (φ 0.05, the 2 to 7% of plants of drained ground; Justin and Armstrong
+  1987) loses most of its roots where its pores fill, one of many (0.3, of the 20 to 55% of plants of wet ground)
+  keeps them, and a cold month, whose slow burning lets the gas reach far, costs less than a warm one (flooding in the
+  dormant season harms trees far less; Kozlowski 1997). A seed wakes as far as its first roots (`root_least`) work. Both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
   1980): nothing at or below the floor, so the cover cannot strip the air of that gas. **Liquid for gas**: its pores that
@@ -991,8 +1009,11 @@ seeds fill it:
   conducting walls, alive in every season, `c_sapwood` per kg a day at the burning's pace: by the pipe model their
   cross-section goes with the capture area they feed, `huber` m² a m², as tall as the plants of each group
   (`Cover::lift`; Shinozaki and others 1964), at most its walls (`stand::sapwood`), so a tall plant pays for its height every month; and its fine roots,
-  as many kg of living cover as the key liquid it drew in the month needs at `root_uptake` mol a kg a s (the minerals
-  come in that liquid by mass flow; Barber 1995), which breathe `c_basal` a kg a day at the burning's pace and are
+  as many kg of living cover as the key liquid it drew in the month needs at `root_uptake` × (1 − φ) mol a kg a s (the
+  minerals come in that liquid by mass flow; Barber 1995; `upkeep::uptake`): the layer that keeps the oxidising gas in a
+  root's gas spaces also keeps the liquid and its minerals out (a barrier to radial loss; Colmer 2003; Garthwaite and
+  others 2008), taken to tighten as the gas spaces grow, a choice of form with no number of its own, so gas spaces cost
+  more fine roots on any ground (a slot whose fine roots would cost all a leaf gains keeps its pores shut); which breathe `c_basal` a kg a day at the burning's pace and are
   built anew `root_turnover` times a year at what a kg of living cover costs to build (`Parts::living_cost`; Gill and
   Jackson 2000). The share unpaid
   dies (`SPENT`). **Wear**: the share 1 − e^−wear dies (`AGE`), wear its upkeep at an activity of at least `dormant`
@@ -1036,10 +1057,10 @@ seeds fill it:
   store at depth z is its crown base's times e^(y − z), y the capture area through its crown (`Slot::layer`); its
   living cover below the depth where that falls to its upkeep a kg goes to its remains, its walls and plants stay. **Shedding for a season** is the same rule over the months a leaf waits to gain
   again (Kikuzawa 1991). A leaf does not come alone: what it gains needs the fine roots that draw its liquid, whose
-  cost is a share of the gain set by the month's air (`upkeep::root_share`: the liquid a unit of the light reaction
-  draws, with what its pores lose for its gas, over `root_uptake`, at the roots' breathing and renewal); from all of
-  it its pores would lose more than they bring, and they stay shut that month: the cover draws nothing and gains
-  nothing (Cowan and Farquhar 1977, from memory). A slot is **in season** while its top leaves gain, less their fine
+  cost is a share of the gain set by the month's air and its kind's gas spaces (`upkeep::root_share`: the liquid a
+  unit of the light reaction draws, with what its pores lose for its gas, over what a kg of its fine roots carries,
+  `upkeep::uptake`, at the roots' breathing and renewal); from all of it its pores would lose more than they bring,
+  and they stay shut that month: that slot draws nothing and gains nothing (Cowan and Farquhar 1977, from memory). A slot is **in season** while its top leaves gain, less their fine
   roots, what a kg of leaf and the walls that feed it cost to keep for the month (`upkeep::keep_per_kg`: its upkeep,
   its capture area's and its conducting walls'), its top leaves those at the top of its crown, whatever slots share
   that crown (`season::pay`), so a stand cut into slots keeps its season as the whole; a layer that does not pay so in season lies in its own canopy's shade

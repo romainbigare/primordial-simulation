@@ -31,8 +31,9 @@ const fn with<const N: usize>(mut s: [f32; N], d: &[(usize, f32)]) -> [f32; N] {
 /// 2 kg living: half of it matter, at a quarter dry), walls as much as its matter (cell walls are about half a herb's
 /// dry mass), a tenth of its built cover kept as fuel, frozen below 268 K, fully active until its roots have drawn half
 /// the liquid its ground holds for them (`MOIST` -0.3: FAO-56's depletion fraction of 0.5), a tenth of what it builds
-/// to seeds, the fixing reaction off (`FIXERS` of the cells turn it on); 0.1 kg per m² on every land cell.
-const COVER_GENES: [f32; cover::NG] = [-5.0, 0.4, 0.0, -1.0, 268.0, -0.3, 0.1, -1.0, -11.0];
+/// to seeds, the fixing reaction off (`FIXERS` of the cells turn it on), a twentieth of its roots' volume gas space (`GAS`:
+/// plants of drained ground hold 2 to 7%; Justin and Armstrong 1987); 0.1 kg per m² on every land cell.
+const COVER_GENES: [f32; cover::NG] = [-5.0, 0.4, 0.0, -1.0, 268.0, -0.3, 0.1, -1.0, -11.0, 0.05];
 
 /// The genes of the big slow cover, a tree: walls ten times its matter (its matter holds 2.5% of the fixed element, so
 /// the whole about 0.23%, as a forest stand's mean of 0.2 to 0.4%; Cole and Rapp 1981, from memory), the herb's light
@@ -46,9 +47,10 @@ const TREE: [f32; cover::NG] = with(COVER_GENES, &[(cover::LEAF, 0.0), (cover::W
 /// The genes of a big slow cover of wet ground: the tree's, but fully active only while its ground holds nine tenths of
 /// what it holds for roots (`MOIST` -0.05: a light capacity per kg near twice the tree's where the ground is that wet,
 /// and dormant sooner where it dries), thinner leaves (1.4 m² of capture area per kg of living cover), and frozen below
-/// 272 K (tender: the cheapest frost limit below the key liquid's melting point, `c_firm`). Drought-avoiding trees of
-/// wet ground hold more capacity per leaf and close their pores early (Wright and others 2004, from memory).
-const WET_TREE: [f32; cover::NG] = with(TREE, &[(cover::MOIST, -0.05), (cover::LEAF, 0.15), (cover::FROST, 272.0)]);
+/// 272 K (tender: the cheapest frost limit below the key liquid's melting point, `c_firm`), and roots whose volume is
+/// three tenths gas space (`GAS`: plants of wet ground hold 20 to 55%; Justin and Armstrong 1987). Drought-avoiding
+/// trees of wet ground hold more capacity per leaf and close their pores early (Wright and others 2004, from memory).
+const WET_TREE: [f32; cover::NG] = with(TREE, &[(cover::MOIST, -0.05), (cover::LEAF, 0.15), (cover::FROST, 272.0), (cover::GAS, 0.3)]);
 
 /// The genes of a woody slow cover of dry ground: walls three times its matter, thick leaves (0.5 m² of capture area
 /// per kg of living cover), fully active down to a tenth of what its ground holds for roots (`MOIST` -1: its capacity

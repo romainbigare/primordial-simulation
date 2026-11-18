@@ -22,7 +22,7 @@ pub fn step(w: &World, d: &mut Chunk) {
             cell(w, d, &p, i, dt);
         } else {
             let land = super::ground(w, i);
-            let moist = if land > 0.0 { super::wet(w, &p, i, w.g(p.liquid, i)).1 } else { 1.0 };
+            let moist = if land > 0.0 { super::soak(w, &p, i, w.g(p.liquid, i)).1.moist } else { 1.0 };
             let c = d.cover(i);
             (c.mark, c.keep, c.film, c.reach, c.land) = (w.light[i], 0.0, 0.0, 0.0, land);
             remember(c, moist, w.cfg.months_per_year as f32);
@@ -30,7 +30,7 @@ pub fn step(w: &World, d: &mut Chunk) {
     }
 }
 
-/// The ground of cover `c` held `moist` of what it holds for roots this month (`cover::wet`): its share of months that
+/// The ground of cover `c` held `moist` of what it holds for roots this month (`cover::soak`): its share of months that
 /// held none, a running mean over a year of `year` months (`Cover::idle`).
 fn remember(c: &mut Cover, moist: f64, year: f32) {
     c.idle += ((moist <= 0.0) as u8 as f32 - c.idle) / year;
@@ -39,8 +39,10 @@ fn remember(c: &mut Cover, moist: f64, year: f32) {
 /// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
 /// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer (its
 /// crown's base), and the capture area per unit of ground the light passes through its crown (`canopy::shade`); its
-/// activity; what one more kg of it would store in the month at the bottom of its layer, J (`light`); its conducting
-/// walls, kg (`stand::sapwood`), and the key liquid it drew, mol.
+/// activity (`cover::activity`) and the share of its roots that work (`cover::working`); what one more kg of it would
+/// store in the month at the bottom of its layer, J (`light`); its conducting walls, kg (`stand::sapwood`), and the key
+/// liquid it drew, mol; and the share of what a leaf of it gains that the fine
+/// roots drawing that leaf's liquid cost (`upkeep::root_share`).
 #[derive(Clone, Copy, Default)]
 pub(super) struct Slot {
     pub(super) built: f64,
@@ -51,9 +53,11 @@ pub(super) struct Slot {
     pub(super) bottom: f64,
     pub(super) layer: f64,
     pub(super) act: f64,
+    pub(super) work: f64,
     pub(super) gain: f64,
     pub(super) sapwood: f64,
     pub(super) drunk: f64,
+    pub(super) roots: f64,
 }
 
 /// What a cell's cover changes outside itself in a month, with the flows of its budget (`budget::BUDGET`).
@@ -97,26 +101,29 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q] + drowned[q]);
         empty(c, (p, &mm, &e, n), &mut b);
         (c.keep, c.film, c.reach, c.land) = (0.0, 0.0, 0.0, 0.0);
-        remember(c, a.moist, w.cfg.months_per_year as f32);
+        remember(c, a.soak.moist, w.cfg.months_per_year as f32);
         counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
         return (b, 0.0);
     }
     super::stand::thin(c, &mm, (ph, rho, n), area);
     let mut s = [Slot::default(); SLOTS];
+    // Per unit of the light reaction, the key liquid a leaf draws in this air (`drink`).
+    let per_unit = drink(chem, p, a).0;
     let (mut layers, mut n_layers) = ([(0.0, 0.0, 0.0, 0.0, 0); SLOTS], 0);
     for (q, sq) in s.iter_mut().enumerate().take(n) {
         let (built, leaf) = (c.built(&mm, q), c.leaf(&mm, q));
         if c.root[q] == NO_ROOT || built <= EMPTY_KG {
             continue;
         }
-        let act = super::activity(&c.genes[q], a.moist);
         let sizes = c.sizes(ph, &mm, q);
         let h = sizes.height(ph, rho, sizes.large());
+        let need = super::stand::need(ph, h);
+        let (act, work) = (super::activity(&c.genes[q], a.soak.moist), super::working(c.genes[q][super::GAS] as f64, need, &a.soak, ph));
         let sapwood = super::stand::sapwood(ph, (leaf, sizes.lift(ph, rho)), c.walls(&mm, q), rho);
-        *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, sapwood, ..Default::default() };
+        let roots = super::upkeep::root_share(w, p, (t, dt), per_unit, &c.genes[q]);
+        *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, work, sapwood, roots, ..Default::default() };
         // The share of its ground (`cover::ground`) its plants hold: where its loose ground is as deep as their roots need (found again
         // only when their need has moved by more than a bin of depth).
-        let need = super::stand::need(ph, h);
         if super::stand::moved(c.need[q], need) {
             c.rooted[q] = w.loose_bins.get(i).map_or(1.0, |b| super::stand::rooted_share(ph, b, need)) as f32;
             c.need[q] = need as f32;
@@ -132,11 +139,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let before = c.content(&e);
     // The light per unit of absorbing area at the top of its layers: with no leaves, all that reaches the ground.
     let per = if lit > 0.0 { caught * a.reach / lit } else { dl * a.reach };
-    // The share of what a leaf gains this month that the fine roots drawing its liquid in this air would cost: from all
-    // of it its pores lose more than they bring, and stay shut (Cowan and Farquhar 1977, from memory).
-    let roots = super::upkeep::root_share(w, p, (t, dt), drink(chem, p, a).0);
-    let net = (1.0 - roots).max(f64::MIN_POSITIVE);
-    let stored = light(chem, ph, c, p, &mut s[..n], (per, w.mesh.cells().area()[i], a, dt), roots >= 1.0, &mut b);
+    let stored = light(chem, ph, c, p, &mut s[..n], (per, w.mesh.cells().area()[i], a, dt), &mut b);
     b.budget[STORED] += c.content(&e) - before;
     let all: f64 = stored.iter().sum();
     c.keep = if caught > 0.0 { (all / caught) as f32 } else { 0.0 };
@@ -147,11 +150,11 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let order = &mut order[..n_order];
     order.sort_by(|&a, &b| s[b].shade.total_cmp(&s[a].shade));
     let order = &*order;
-    let (pays, season) = super::season::pay(w, c, (p, &e), (&mut s, &stored), order, (t, dt, net), (&mut b, counts));
+    let (pays, season) = super::season::pay(w, c, (p, &e), (&mut s, &stored), order, (t, dt), (&mut b, counts));
     grow(w, c, (p, &e), (&s, pays, season), order, (i, a, dt), (&mut b, counts));
     super::stand::thin(c, &mm, (ph, rho, n), area);
     super::stand::merge_alike(c, &mm, (ph, n));
-    remember(c, a.moist, w.cfg.months_per_year as f32);
+    remember(c, a.soak.moist, w.cfg.months_per_year as f32);
     empty(c, (p, &mm, &e, n), &mut b);
     c.land = area;
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
@@ -269,14 +272,12 @@ fn drink(chem: &Chemistry, p: &Parts, a: &Around) -> (f64, f64, f64) {
 /// activity and the reaction's pace, both times what the air's share of the reaction's gas allows (`Around::gas`); all
 /// slots cut together to the key liquid in the ground that is liquid (`Around::liquid`, mol) and the gas the cell's
 /// share of its air node holds.
-/// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. Returns the
-/// energy each slot stored, J.
+/// Each slot's `Slot::gain` is set: what one more kg would store, its light that of the bottom of its layer. A slot whose
+/// fine roots would cost all a leaf gains (`Slot::roots`) loses more through its pores than they bring, and keeps them
+/// shut: it stores nothing (Cowan and Farquhar 1977, from memory). Returns the energy each slot stored, J.
 #[allow(clippy::too_many_arguments)]
-fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot], (per, cell, a, dt): (f64, f64, &Around, f64), shut: bool, b: &mut Books) -> [f64; SLOTS] {
+fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mut [Slot], (per, cell, a, dt): (f64, f64, &Around, f64), b: &mut Books) -> [f64; SLOTS] {
     (c.film, c.reach) = (0.0, 0.0);
-    if shut {
-        return [0.0; SLOTS];
-    }
     let (t, liquid, gas) = (a.t, a.liquid, a.gas);
     let rx = &chem.reactions[p.light];
     let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
@@ -285,11 +286,12 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
         let need = dec(c.genes[q][MOIST]);
         let cap = dec(c.genes[q][LIGHT]) * need * pace * s[q].act * dt;
         let lit = |f: f64| per * s[q].abs * f * ph.light_yield / dh;
-        x[q] = lit(s[q].shade).min(cap * s[q].living).max(0.0) * gas;
+        // Only its roots that get the oxidising gas draw the liquid its pores lose (`Slot::work`): the rest close.
+        x[q] = if s[q].roots < 1.0 { lit(s[q].shade).min(cap * s[q].living).max(0.0) * gas * s[q].work } else { 0.0 };
         // One more kg of living cover: its capture area's absorbing share (`LEAF`, its parts' colours) at the bottom of
         // its layer, so a slot that shed all its leaves still knows what a leaf would gain.
         let abs_kg = dec(c.genes[q][LEAF]) * (1.0 - c.reflectance(chem, p, q));
-        s[q].gain = if s[q].built > 0.0 { (per * abs_kg * s[q].bottom * ph.light_yield / dh).min(cap).max(0.0) * gas * dh } else { 0.0 };
+        s[q].gain = if s[q].built > 0.0 { (per * abs_kg * s[q].bottom * ph.light_yield / dh).min(cap).max(0.0) * gas * s[q].work * dh } else { 0.0 };
     }
     // Per unit of the reaction its leaves would lose the key liquid as vapour, `thirst` per mol of gas taken in; each
     // slot draws it from the pores its roots reach (`Cover::rooted`), and opens its pores no wider than that pays for.

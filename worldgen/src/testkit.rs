@@ -147,10 +147,14 @@ pub fn cover(w: &mut World, i: usize, kg: f64) {
 
 /// What a garden's ground holds of each mineral and of the key liquid, mol: far more than a cover takes in a month.
 const GARDEN_MOL: f64 = 1e9;
+/// The depth of a garden's loose ground, m: deeper than any root needs.
+const GARDEN_LOOSE_M: f64 = 100.0;
 
 /// What a garden offers the cover `c` of a cell of `w` in month `tick` (`cover::Around`, for `cover::live`): its ground
 /// at `t` K, `sun` W/m² since the cover's last step, the air all the gas the cover takes and nothing lost through its
-/// pores, the ground all minerals and the share `moist` of what it holds for roots (`Around::moist`; at none, no liquid).
+/// pores, the ground all minerals and the share `moist` of what it holds for roots (`Soak::moist`; at none, no liquid),
+/// its loose ground `GARDEN_LOOSE_M` deep and its pores filled as that share says (`Physics::available` backwards), so
+/// every root breathes.
 pub fn garden(w: &World, c: &pcore::cover::Cover, (t, moist, sun, tick): (f64, f64, f64, u64)) -> pcore::cover::Around {
     let wet = moist > 0.0;
     let mut ground = [0.0; pcore::units::MAX_SUBSTANCES];
@@ -159,7 +163,7 @@ pub fn garden(w: &World, c: &pcore::cover::Cover, (t, moist, sun, tick): (f64, f
     pcore::cover::Around {
         t,
         liquid: if wet { GARDEN_MOL } else { 0.0 },
-        moist,
+        soak: pcore::cover::Soak { moist, filled: w.cfg.phys.wilt + moist * (w.cfg.phys.field - w.cfg.phys.wilt), loose: GARDEN_LOOSE_M, breath: 0.0 },
         reach: 1.0,
         light: c.mark + sun * month,
         gas: 1.0,

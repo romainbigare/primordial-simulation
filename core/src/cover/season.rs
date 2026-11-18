@@ -9,7 +9,7 @@ use super::{Cover, Parts, FUEL, MATTER, NP, SLOTS, WALL};
 use crate::life::SPENT;
 use crate::{Counters, World};
 
-/// Each slot of cover `c` in `order` over `dt` at `t` K, where its fine roots leave `net` of what a leaf gains: it is in
+/// Each slot of cover `c` in `order` over `dt` at `t` K, its fine roots leaving it 1 − `Slot::roots` of what a leaf gains: it is in
 /// season while what its top leaves gain, less its fine roots, pays what a kg of leaf and the walls that feed it cost to
 /// keep for the month (`keep_per_kg`). Out of season it drops first, before it pays the month's upkeep, the leaves it
 /// would cost more to keep through the months it expects without gain (`Cover::idle`) than to build anew, and those its
@@ -18,7 +18,7 @@ use crate::{Counters, World};
 /// and is shed; its balance over about a year moves by what it stored (`stored`) less its upkeep. Its top and its depth
 /// are its crown's in the canopy (`Slot::layer`), whatever slots share that crown, so a stand cut into slots keeps its
 /// season and sheds as the whole. Its parts `p` hold `e` J a mol. Returns whether each pays and whether each is in season.
-pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, stored): (&mut [Slot; SLOTS], &[f64; SLOTS]), order: &[usize], (t, dt, net): (f64, f64, f64), (b, counts): (&mut Books, &mut Counters)) -> ([bool; SLOTS], [bool; SLOTS]) {
+pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, stored): (&mut [Slot; SLOTS], &[f64; SLOTS]), order: &[usize], (t, dt): (f64, f64), (b, counts): (&mut Books, &mut Counters)) -> ([bool; SLOTS], [bool; SLOTS]) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (mm, rho) = (p.mm(chem), chem.subs[p.sub[WALL]].density[0]);
     let (year, rebuild) = (w.cfg.months_per_year as f32, p.living_cost(chem, ph));
@@ -27,6 +27,7 @@ pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, st
     let (mut pays, mut season) = ([false; SLOTS], [false; SLOTS]);
     for &x in order {
         let keep = keep_per_kg(w, c, p, x, (t, dt));
+        let net = (1.0 - s[x].roots).max(f64::MIN_POSITIVE);
         season[x] = s[x].gain * net * s[x].layer.exp() > keep;
         if !season[x] {
             // What its fuel can pay: keeping a kg through the months it expects, this one at least.

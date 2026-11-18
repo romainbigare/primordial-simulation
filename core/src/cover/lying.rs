@@ -6,7 +6,7 @@
 
 use super::budget::{held, DIED, SEEDS_DIED};
 use super::seed::{lodge, Landed, Seed};
-use super::{built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, MOIST, NG, NO_ROOT, NP, REPAIR, SLOTS};
+use super::{built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, GAS, MOIST, NG, NO_ROOT, NP, REPAIR, SLOTS};
 use crate::life::kin;
 use crate::units::DAY;
 use crate::{Counters, World};
@@ -106,9 +106,11 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         counts.seeds[WORN] += worn * kg;
         counts.seeds[FROZEN] += (1.0 - worn) * cold * kg;
         let dies = 1.0 - (1.0 - worn) * (1.0 - cold);
-        // A seed is dry tissue: it wakes as the liquid it can take in lets it, by the seeds' rule (`Physics::activity`);
-        // on no ground (all under the standing liquid) it waits.
-        let wakes = if area > 0.0 { (ph.activity(a.moist / dec(g[MOIST])) * pace).min(1.0) * (1.0 - dies) } else { 0.0 };
+        // A seed is dry tissue: it wakes as the liquid it can take in lets it, by the seeds' rule (`Physics::activity`),
+        // and as far as its first roots get the oxidising gas (`working`, at the least root need); on no ground (all under
+        // the standing liquid) it waits.
+        let breathes = super::working(g[GAS] as f64, ph.root_least, &a.soak, ph);
+        let wakes = if area > 0.0 { (ph.activity(a.soak.moist / dec(g[MOIST])) * pace * breathes).min(1.0) * (1.0 - dies) } else { 0.0 };
         let (gone, up): ([f64; NP], [f64; NP]) = (lot.map(|m| m * dies), lot.map(|m| m * wakes));
         budget[SEEDS_DIED] -= held(&e, &gone);
         (0..NP).for_each(|q| dead[q] += gone[q]);

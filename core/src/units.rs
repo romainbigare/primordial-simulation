@@ -12,6 +12,14 @@ pub const SPIN: f64 = 7.292e-5;
 /// Gas constant, J/(mol K).
 pub const R_GAS: f64 = 8.314;
 
+/// A gas's diffusivity in the air, m²/s, for a gas of molar mass `GAS_DIFFUSIVITY_MM` at 293 K and `P_REF`; another
+/// gas's by Graham's law, as the root of the ratio of their molar masses (`cover::soak`). It grows as T^1.75 / p (Fuller,
+/// Schettler and Giddings 1966), left out: within about 15% over the ground's 270 to 310 K.
+pub const GAS_DIFFUSIVITY: f64 = 2.0e-5;
+
+/// The molar mass `GAS_DIFFUSIVITY` is given for, kg/mol.
+pub const GAS_DIFFUSIVITY_MM: f64 = 0.032;
+
 /// Stefan-Boltzmann constant, W/(m² K⁴): every surface emits σT⁴ (emissivity 1).
 pub const SIGMA: f64 = 5.670e-8;
 

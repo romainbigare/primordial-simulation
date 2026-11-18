@@ -9,7 +9,8 @@ use crate::{World, AIR};
 
 /// What the cover of a cell reads of its world in a month: the full world's (`around`) or a year a nursery keeps
 /// (`worldgen::life::nursery`). Its ground's temperature, K; of the key liquid in its ground, what is liquid, mol, and
-/// the share of what its ground holds for roots that it holds (`wet`); the share of the light that reaches it under
+/// how its roots meet it (`Soak`: the share of what its ground holds for roots that it holds, and the gas their burning
+/// needs); the share of the light that reaches it under
 /// standing liquid; the cell's light (`World::light`), J/m²; the air's factor for the light reaction
 /// (`Physics::gas_factor`, the least over its gas inputs); the key liquid its leaves lose as vapour per mol of gas they
 /// take in (`thirst`), and the film of its pores for that vapour per mol a s of gas they take in (`pores`, mol K/(Pa s)
@@ -19,7 +20,7 @@ use crate::{World, AIR};
 pub struct Around {
     pub t: f64,
     pub liquid: f64,
-    pub moist: f64,
+    pub soak: super::Soak,
     pub reach: f64,
     pub light: f64,
     pub gas: f64,
@@ -34,7 +35,7 @@ pub struct Around {
 pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (j, t) = (w.mesh.up(i, 0, AIR), w.thaw_last(i).0);
-    let (liquid, moist) = super::wet(w, p, i, moves.amount(w, Node::ground(i), p.liquid));
+    let (liquid, soak) = super::soak(w, p, i, moves.amount(w, Node::ground(i), p.liquid));
     let reach = (-crate::contract::place(w, i).liquid / ph.light_depth).exp();
     let seen = moves.seen(w, j);
     let all: f64 = (0..chem.ns()).map(&seen).sum();
@@ -49,7 +50,7 @@ pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
     let thirst = near.map_or(0.0, |(_, p_liquid, _)| film * (chem.p_sat(p.liquid, t) - p_liquid).max(0.0) / t);
     let air = std::array::from_fn(|kk| if kk < chem.ns() && chem.phase(kk, t) == Phase::Gas { seen(kk) } else { f64::INFINITY });
     let ground = std::array::from_fn(|x| if x < chem.ns() { moves.amount(w, Node::ground(i), x) } else { 0.0 });
-    Around { t, liquid, moist, reach, light: w.light[i], gas, thirst, pores: film, air, ground, tick: w.month() }
+    Around { t, liquid, soak, reach, light: w.light[i], gas, thirst, pores: film, air, ground, tick: w.month() }
 }
 
 /// The film of a leaf's pores at `t` K for the vapour of the key liquid `liquid`, per mol a s of the gas `gas` they take

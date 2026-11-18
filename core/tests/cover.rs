@@ -126,7 +126,6 @@ fn a_plant_slows_from_its_share_to_the_wilting_point() {
     let (wilting, full, half) = (act(&herb, ph.wilt), act(&herb, filled(slows * (1.0 + 1e-9))), act(&herb, filled(0.5 * slows)));
     println!("activity of the light-eaters at the wilting point {wilting}, at the share {slows:.2} {full}, at half that {half:.3}");
     assert!(wilting == 0.0 && full == 1.0 && half > 0.0 && half < 1.0, "{wilting} {full} {half}");
-    assert_eq!(act(&herb, 1.5), 1.0, "standing liquid is more than field capacity");
     assert_eq!(act(&dry, filled(0.5 * slows)), 1.0, "the kind of dry ground slowed where the light-eaters slow");
 }
 
@@ -386,7 +385,7 @@ fn frost_selects_the_hardy_where_it_kills_the_tender() {
     let mm = parts.mm(&w.chem);
     // The share of the tender variant a month's frost kills in cell `i`, by the frost law alone.
     let kills = |w: &pcore::World, i: usize| {
-        let act = cover::activity(&tender, cover::wet(w, &parts, i, w.g(parts.liquid, i)).1);
+        let act = cover::activity(&tender, cover::soak(w, &parts, i, w.g(parts.liquid, i)).1.moist);
         cover::frozen(&w.cfg.phys, w.chem.subs[parts.liquid].melt, tender[FROST] as f64, (w.t_ground_last(i), act))
     };
     // The share of the built cover of cell `i` whose frost gene lies nearer the hardy variant's (NaN where none stands).
