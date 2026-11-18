@@ -55,9 +55,10 @@ fn model_set(q: Plant) -> vec2i {
   return vec2i(ROUND_FROM, ROUND_N);
 }
 
-// The sprite plant q is drawn from, its width and height on the map, m, and how many times as dense as the sprite its
-// cover is drawn (more than once where it is narrower than covers its crown's ground: `dense_cover`).
-struct ModelFit { s: i32, w: f32, h: f32, dense: f32 }
+// The sprite plant q is drawn from, its width and height on the map, m, how many times as dense as the sprite its
+// cover is drawn (more than once where it is narrower than covers its crown's ground: `dense_cover`), and how many
+// plants its mark draws (`k`, `clump_one`) with their feet how far about its own, m (`spread`).
+struct ModelFit { s: i32, w: f32, h: f32, dense: f32, k: f32, spread: f32 }
 fn model_fit(q: Plant) -> ModelFit {
   let pick = model_set(q);
   let s = pick.x + min(i32(fract(q.r.y * 7.13) * f32(pick.y)), pick.y - 1);
@@ -68,8 +69,36 @@ fn model_fit(q: Plant) -> ModelFit {
   // A thin crown (how closed over the leaves left) is a smaller one, never a half-bare one.
   let crown_closed = q.closed / max(q.left, 1e-3);
   let covers = q.d * min(sqrt(0.25 * PI * crown_closed / (model_fill(s) * aspect)), MODEL_WIDER);
-  let w = min(min(covers, stands / aspect), q.reach / (0.5 + abs(q.lean.x) * aspect));
-  return ModelFit(s, w, w * aspect, (covers * covers) / (w * w));
+  let held = min(covers, q.reach / (0.5 + abs(q.lean.x) * aspect));
+  let w = min(held, stands / aspect);
+  // A mark whose crown's ground is wider than one plant of its height covers (a clump of its plants, lattices.ts
+  // `marksOf`) draws as many plants as one sprite's ground goes into it, at most `CLUMP_MOST`, so it covers the ground
+  // the field far away counts for it (canopy.ts `Paint`); their sprites stand within its crown, `d` across.
+  let sprites = (held / w) * (held / w);
+  let k = select(1.0, min(round(sprites), CLUMP_MOST), sprites >= CLUMP_FROM);
+  return ModelFit(s, w, w * aspect, (covers * covers) / (w * w), k, select(0.0, 0.5 * max(min(q.d, held) - w, 0.0), k > 1.0));
+}
+
+// A mark draws its clump (`model_fit`) where its crown's ground is at least this many sprites' ground; held by less, it
+// is one sprite drawn dense. At most `CLUMP_MOST` plants: each costs a pixel in its box a look.
+const CLUMP_FROM = 2.0; const CLUMP_MOST = 6.0;
+// The plants of a clump differ in size by up to this share, by their own draw.
+const CLUMP_SIZES = 0.3;
+
+// Plant q drawn from `fit` (`model_fit`) and its sprite's fit: the i-th plant of its clump, from the north, each on
+// its own foot at a place of its own draw inside the clump's crown (its draws north to south in as many bands as it
+// has plants, so drawn in this order the nearer stand over the farther, as the marks do, cover_marks.wgsl `lattice`),
+// of its own size; drawn whole from its foot (`model_plant`, `model_shadow`).
+struct ClumpOne { q: Plant, fit: ModelFit }
+fn clump_one(q: Plant, fit: ModelFit, i: i32) -> ClumpOne {
+  if (fit.k <= 1.0) { return ClumpOne(q, fit); }
+  let x = lowbias(vec2i(i, i32(q.r.y * 65536.0)), i32(q.r.x * 65536.0));
+  let u = vec3f(f32(x & 1023u), f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1023.0;
+  let y = fit.spread * (2.0 * (f32(i) + u.x) / fit.k - 1.0);
+  var one = q;
+  one.at += vec2f(sqrt(max(fit.spread * fit.spread - y * y, 0.0)) * (2.0 * u.y - 1.0), y);
+  let size = 1.0 - CLUMP_SIZES * u.z;
+  return ClumpOne(one, ModelFit(fit.s, fit.w * size, fit.h * size, fit.dense / fit.k, 1.0, 0.0));
 }
 
 // A texel's cover `a` of sprite s drawn `dense` times as dense: the share of `dense` layers of it that a ray meets, so a
@@ -81,6 +110,23 @@ const TREE_EDGE = 0.25;
 fn dense_cover(s: i32, a: f32, dense: f32) -> f32 {
   let d = 1.0 - pow(1.0 - min(a, 1.0), dense);
   return select(d, smoothstep(0.5 - TREE_EDGE, 0.5 + TREE_EDGE, d), s < TREES);
+}
+
+// A clump's sprites at a pixel gathered front to back are taken as covering it from this much cover on (the ones behind
+// are not read).
+const CLUMP_COVERED = 0.95;
+
+// Plant q drawn from `fit` (`model_fit`) at p, as `model_plant`: one sprite, or its clump's (`clump_one`), the nearest
+// first, each under those before it, as the marks lie over each other (cover_marks.wgsl `lattice`), to `CLUMP_COVERED`.
+fn clump_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
+  if (fit.k <= 1.0) { return model_plant(q, fit, p, e, snow); }
+  var got = vec4f(0.0);
+  for (var i = i32(fit.k) - 1; i >= 0 && got.a <= CLUMP_COVERED; i--) {
+    let one = clump_one(q, fit, i);
+    let m = model_plant(one.q, one.fit, p, e, snow);
+    got += vec4f(m.rgb * m.a, m.a) * (1.0 - got.a);
+  }
+  return vec4f(got.rgb / max(got.a, 1e-6), got.a);
 }
 
 // The bare twin of sprite s (sprites.wgsl `bare_of`) at `uv` of its content, at `g` of it a pixel; none where it has

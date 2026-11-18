@@ -329,9 +329,10 @@ fn mark_box(l: i32, q: Plant) -> f32 {
   var steps = vec4f(r, r, r + g.w, r) * BOX_STEPS;
   if (cover.corner.w > 0.5 && models_ready()) {
     let fit = model_fit(q);
-    let body = 0.5 * fit.w + abs(q.lean.x) * fit.h;
+    // Its clump's plants stand up to `spread` from its foot (models.wgsl `clump_one`).
+    let body = fit.spread + 0.5 * fit.w + abs(q.lean.x) * fit.h;
     let long = model_shadow_long(q, fit);
-    let m = vec4f(body, max(body, min(long + 0.5 * fit.w, q.reach)), fit.h, long);
+    let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, long + fit.spread);
     steps = min(ceil(m / g.z * BOX_STEPS), steps);
   }
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
