@@ -44,7 +44,8 @@ export const PLANES_DOWN = 32;
  * of the sward and of the lattice of stands the part its first kind makes (`Paint`), of each lattice and the sward
  * (red, green, blue, alpha) its plants' mean height, m, the mean share of the square that holds them and the mean depth
  * of loose ground their roots need, m (the core's, tape/src/stands.rs), of each lattice its marks' mean width, m, and the
- * share of the ground its plants leave that their shadows darken (`Paint.put`), the sward and the lattices under the
+ * share of the ground its plants leave that their shadows darken (`Paint.put`), with in the shadows' fourth number the
+ * share of the ground under crowns whose leaves fall this month (`leavesFalling`), the sward and the lattices under the
  * trees' as one layer, as the field draws them far away (`lowOf`), and 1 where the
  * square's cell holds land (a square with none holds 0 in every layer: cover_field.wgsl blends over the squares with land
  * alone, `on_land`), and of the sward and of the lattice of stands the part the kinds but the first make. */
@@ -169,6 +170,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
     if (!(rows[1 + row * i + LAND_AT] > 0)) continue;
     field.fill(1, layer(FIELD.land, i), layer(FIELD.land, i) + 4);
     const paint = LATTICES.map(() => new Paint()), sward = new Paint(), flowers = new Paint();
+    let shed = 0;
     for (let k = 0; k < kinds; k++) {
       if (rows[at + (i * kinds + k) * kindRow + K.root] < 0 || rows[at + (i * kinds + k) * kindRow + K.kg] <= 0) continue;
       // A copy: its crowns' numbers are set below (`standingCrowns`).
@@ -221,24 +223,34 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
           widest[l] = Math.max(widest[l], o.width);
           // The share of the ground its plants cover, each as closed as its crown.
           paint[l].add(k, order, c, o.covers * stands * q[K.crown] * look.left, (chances[g] / (a * a)) * o.width * o.width * SHADOW_WIDTHS, [q[K.height], mean, r[K.need]], o.width);
+          shed += leavesFalling(o.covers * stands * q[K.crown], look.left, falling);
         });
       });
     }
     // Its first kind's chances on the lattice of stands, negated (mark.wgsl `pick_kind`).
     const first = paint[STANDS].first.k;
     for (let g = 0; first >= 0 && g < 4; g++) table[texel(P.chance + STANDS * kinds + first, i) + g] *= -1;
-    putField(field, i, layer, paint, sward, flowers);
+    putField(field, i, layer, paint, sward, flowers, shed);
   }
   return { w, h, planes: P, cols, table, field: { w, h, data: field }, tallest, widest, walls };
 }
 
+/** The share of the ground whose leaves fall this month under crowns that close `closed` of it in leaf, of which
+ * `left` is left this season, while the ground cools by `falling` (style.ts `cooling`): the leaves a kind has lost
+ * fall as the season turns, and none while it warms. */
+function leavesFalling(closed: number, left: number, falling: number): number {
+  return closed * (1 - left) * falling;
+}
+
 /** Into `field` at square `i` (`layer` the place of a layer's texel): what each lattice's marks (`paint`), the sward and
- * its flowers paint, their stands' means, the shadows and the far layer (`lowOf`). */
-function putField(field: Float32Array, i: number, layer: (l: number, i: number) => number, paint: Paint[], sward: Paint, flowers: Paint): void {
+ * its flowers paint, their stands' means, the shadows with the share `shed` whose leaves fall (`leavesFalling`), and the far
+ * layer (`lowOf`). */
+function putField(field: Float32Array, i: number, layer: (l: number, i: number) => number, paint: Paint[], sward: Paint, flowers: Paint, shed: number): void {
   paint.forEach((p, l) => p.put(field, layer(l, i), l === STANDS ? layer(FIELD.standsFirst, i) : undefined, l === STANDS ? layer(FIELD.standsRest, i) : undefined));
   sward.put(field, layer(FIELD.sward, i), layer(FIELD.swardFirst, i), layer(FIELD.swardRest, i));
   [...paint, sward].forEach((p, q) => p.putStand(field, [FIELD.tall, FIELD.rooted, FIELD.need, FIELD.wide].map(f => layer(f, i) + q)));
   paint.forEach((p, l) => { field[layer(FIELD.shade, i) + l] = p.shade(); });
+  field[layer(FIELD.shade, i) + 3] = Math.min(shed, 1);
   lowOf(field, i, layer);
   // The flowers: their mean colour times the share of the herbs in flower times the sward's cover, and that share.
   const bloom = flowers.covered / Math.max(sward.covered, 1e-9), cover = 1 - sward.bare;

@@ -22,7 +22,8 @@ const SWARD_LAYER = 3; const FLOWER_LAYER = 4; const SWARD_FIRST = 5; const STAN
 // holds them and the mean depth of loose ground their roots need, m (the core's: `Cover::rooted`, `Cover::need`).
 const TALL_LAYER = 7; const ROOTED_LAYER = 8; const NEED_LAYER = 9;
 // Of each lattice: its marks' mean width, m (canopy.ts `FIELD.wide`), and the share of the ground its shadows fall on
-// (`FIELD.shade`), which they darken by `FIELD_SHADOW` (canopy.ts `CROWN_SHADOW`).
+// (`FIELD.shade`), which they darken by `FIELD_SHADOW` (canopy.ts `CROWN_SHADOW`); in its fourth number the share of
+// the ground under crowns whose leaves fall this month (canopy.ts `leavesFalling`).
 const WIDE_LAYER = 10; const SHADE_LAYER = 11; const FIELD_SHADOW = 0.42;
 // The sward and the low lattices as one layer (canopy.ts `lowOf`), drawn in their place where a pixel takes
 // `LOW_FAR_E` m and more (where their detail no longer shows: no swathes, blades, tufts or flowers past a metre a
@@ -66,8 +67,9 @@ const CANOPY_SNOW = 0.35;
 // (rock.wgsl `loose_seen`) and that depth's change across a pixel, m; the share snow covers and the snow's depth, m.
 struct Beneath { soaked: f32, over: f32, slope: f32, loose: f32, loose_px: f32, snow: f32, snow_m: f32 }
 
-// The cover's field at a point, premultiplied, and the share the trees' crowns close over the ground there.
-struct CoverAt { cover: vec4f, canopy: f32 }
+// The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; and the share
+// of the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month.
+struct CoverAt { cover: vec4f, canopy: f32, shed: f32 }
 
 // A square whose kinds' roots hold everywhere has its mean rooted share this near 1: no point of it limits them.
 const ROOTED_ALL = 0.999;
@@ -359,7 +361,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
-  return CoverAt(dst, min(closed * hold[STANDS], 1.0));
+  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w);
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_thing`
