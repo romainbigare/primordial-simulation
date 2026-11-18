@@ -79,7 +79,7 @@ export class GroundTiles {
   private last: View | null = null;
   private tilesTex: Texture | null = null;
   /** The rock of each of the terrain's samples (wasm/src/lib.rs `rock`), four 16-bit floats a sample in two planes: the
-   * depth of its loose ground and the largest stone its channel moves, m; and the reflectance of its bed's make; none
+   * depth of its loose ground and the largest stone its channel moves, m, the slope of its reach and its channel's links; and the reflectance of its bed's make; none
    * until a worker made the ground. */
   rock: Uint16Array | null = null;
   private start = performance.now();

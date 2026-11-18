@@ -116,13 +116,17 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.rock = bare;
   p.bed = vec3f(0.0);
   // Its channel's stones (`stony`), and the scree's place below the bed that sheds it: where the loose ground deepens
-  // down the slope.
+  // down the slope. The largest stone the channel moves and its reach's slope grow evenly along it.
   // (No bed takes `BED_PX` pixels and no stone shows in a program made for draws from far: neither is read there.)
   var moved = 0.0;
+  var fall = 0.0;
   var cobble = COBBLE_M;
   if (near && ch.bed > 0.0 && BED_PX * least_e() < BED_MOST_M) {
-    moved = mix(stone_of(reach), stone_of(next.s), next.share);
-    cobble = max(STONE_SEEN * stone_of(reach), COBBLE_M);
+    let own = stone_and_fall(reach);
+    let grown = mix(own, stone_and_fall(next.s), next.share);
+    moved = grown.x;
+    fall = grown.y;
+    cobble = max(STONE_SEEN * own.x, COBBLE_M);
   }
   let deepens = vec2f(dpdx(loose), dpdy(loose));
   if (!unseen(STONE_MOST_M / THING_PX.x)) {
@@ -147,7 +151,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
   if (!near) { return out; }
-  return river_spots(out, g, ch, q, moved, grows, line_of(q, e), mouth);
+  return river_spots(out, g, ch, q, moved, fall, grows, line_of(q, e), mouth);
 }
 
 // The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); where

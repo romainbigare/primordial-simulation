@@ -2,7 +2,8 @@
 //! the bed is bare) and the stones its channel moves. The largest stone a stream moves grows with the power it spends on
 //! its bed, which goes as its discharge times its slope (Bagnold 1966); the wear's stream power law takes the discharge
 //! as the square root of the area drained (`space::wear`, K √A S), so a stone's size is here `STONE_M` per unit of √A S,
-//! S the slope of the reach about the sample (`bends::Reaches::fall`: from one sample to the next the ground steps).
+//! S the slope of the reach about the sample (`bends::Reaches::fall`: from one sample to the next the ground steps),
+//! which a shell also reads alone: the form of the bed (riffles and pools, or steps) follows it.
 //! And the links of its channel (`links`), by which a shell finds the samples up and down it: what runs through a
 //! channel grows from one sample's centre to the next, not in a step at their edge. A function of the samples alone.
 
@@ -39,15 +40,16 @@ fn links(s: &Samples, k: usize) -> u32 {
 }
 
 /// Of each sample of the reaches `r`, row by row, four 16-bit floats: the depth of its loose ground, m, the largest stone
-/// its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), a zero and its channel's links
-/// (`links`); then of each sample again the reflectance of the make of its bed (red, green, blue: `colours`, one a
+/// its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), the slope of its reach (rise
+/// over run; 0 there too) and its channel's links (`links`); then of each sample again the reflectance of the make of its bed (red, green, blue: `colours`, one a
 /// make, `Samples::make`) and a zero: two planes of a texture, one under the other.
 pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]]) -> Vec<u16> {
     let s = r.s;
     let mut out = Vec::with_capacity(8 * s.h.len());
     for k in 0..s.h.len() {
-        let stone = if s.to[k] == NONE || s.pond[k] != NONE { 0.0 } else { (STONE_M * s.up[k].sqrt() * r.fall(k)[0]).min(STONE_MOST_M) };
-        out.extend([half(s.loose[k] as f32), half(stone as f32), 0, half(links(s, k) as f32)]);
+        let slope = if s.to[k] == NONE || s.pond[k] != NONE { 0.0 } else { r.fall(k)[0] };
+        let stone = (STONE_M * s.up[k].sqrt() * slope).min(STONE_MOST_M);
+        out.extend([half(s.loose[k] as f32), half(stone as f32), half(slope as f32), half(links(s, k) as f32)]);
     }
     for &m in &s.make {
         let c = colours.get(m as usize).copied().unwrap_or([0.0; 3]);

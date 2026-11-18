@@ -1,11 +1,11 @@
 // The rock and the channels of the live map (web/src/land.ts, tape/src/ground/rock.rs): of each of the terrain's
-// samples the depth of its loose ground, the largest stone its channel moves and its channel's links; how much of the
+// samples the depth of its loose ground, the largest stone its channel moves, its reach's slope and its channel's links; how much of the
 // bed shows where the loose ground thins; and a channel at a point: what runs through it and the shape of its bed and
 // of its water (`channel_at`), from the place along its line and its swing from its line without bends that the tiles
 // hold (land.wgsl `Tiled`).
 
-// Of each sample (a texel each): the depth of its loose ground, m, the largest stone its channel moves, m, and its
-// channel's links (`links_of`); and in a second plane under the first, the reflectance of its bed's make
+// Of each sample (a texel each): the depth of its loose ground, m, the largest stone its channel moves, m, the slope of
+// its channel's reach (rise over run), and its channel's links (`links_of`); and in a second plane under the first, the reflectance of its bed's make
 // (tape/src/ground/rock.rs).
 @group(0) @binding(18) var rock_field: texture_2d<f32>;
 @group(0) @binding(19) var rock_sampler: sampler;
@@ -48,10 +48,11 @@ fn bed_make_at(at: vec2f) -> vec3f {
   return textureSampleLevel(rock_field, rock_sampler, rock_plane(at / (land.map.x * land.map.yz), 1.0), 0.0).xyz;
 }
 
-// The largest stone the channel of sample `s` moves, m (0 for none, `s.x < 0`).
-fn stone_of(s: vec2i) -> f32 {
-  if (s.x < 0) { return 0.0; }
-  return textureLoad(rock_field, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).y;
+// Of the channel of sample `s`: the largest stone it moves, m, and the slope of its reach, rise over run (both 0 for
+// none, `s.x < 0`).
+fn stone_and_fall(s: vec2i) -> vec2f {
+  if (s.x < 0) { return vec2f(0.0); }
+  return textureLoad(rock_field, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).yz;
 }
 
 // A sample's channel's links are one number (tape/src/ground/rock.rs `links`): the step to the sample it runs to (1 to

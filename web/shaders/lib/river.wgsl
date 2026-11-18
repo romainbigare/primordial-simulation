@@ -150,12 +150,13 @@ const EDGE_M = 0.35; const EDGE_LIGHT = 0.25;
 // as the channel law makes its middle, gone at `MOUTH_REACH.y` times, so a rill ends at the water's edge.
 const MOUTH_BARS = 0.5; const MOUTH_MELTS = 0.5; const MOUTH_CALM = 2.0; const MOUTH_REACH = vec2f(1.0, 2.0);
 
-// The spots `s` of a point with its channel `ch` of discharge `q`, which moves stones of `stone` m, on ground `g` (the
+// The spots `s` of a point with its channel `ch` of discharge `q`, which moves stones of `stone` m down a reach of
+// slope `fall` (rise over run), on ground `g` (the
 // place along the channel growing by `grows` a pixel east and south), drawn no thinner than `line` m half wide
 // (`line_of`): the bed (rock.wgsl `banks_of`) and this month's water in it (lib/river.wgsl `reach_at`), apart where the bed
 // takes a few pixels and is wider than the line; the bars' look, the banks' light and the water's depth and signs of
 // flow; `mouth` of the way through the shallows of the liquid it runs into (`MOUTH_BARS`).
-fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, grows: vec2f, line: f32, mouth: f32) -> Spots {
+fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, grows: vec2f, line: f32, mouth: f32) -> Spots {
   var out = s;
   let at = s.dry.at;
   let e = s.dry.e;
@@ -197,7 +198,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, grows: vec2f
   out.wet.depth = mix(ch.mean, depth_across(ch, x), resolved);
   if (resolved > 0.0) {
     // (Below a step's white water a steep reach's water lies in a pool: slower, and `STEP_POOL` deeper.)
-    let signs = flow_signs(e, g.along, x, ch, r.steep);
+    let signs = flow_signs(e, g.along, x, ch, r.steep, fall, stone);
     out.wet.depth *= 1.0 + STEP_POOL * resolved * (r.steep - signs.z);
     out.flow = resolved * runs * signs;
   }
