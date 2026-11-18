@@ -112,5 +112,6 @@ aside .group { background: var(--panel); border: 1px solid var(--line); border-r
 
 .live { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .live input { width: 5em; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
-.live button { padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font-size: 13px; }
+.live button, .live .saved { padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font-size: 13px; }
+.live .saved { cursor: pointer; }
 .live[hidden], .tape-only[hidden] { display: none; }

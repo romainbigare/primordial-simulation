@@ -4,7 +4,8 @@
 //! the bytes of one tape frame and `table` the cells' table made with it (`tape::Table`), `discharge` what runs through
 //! each of the terrain's samples when it changed enough to show, `things` the list of what lies in the cells of a
 //! window (`tape::things`). The other makes
-//! the ground's tiles (`ground`, `tile`: `tape::Ground`), which need no world.
+//! the ground's tiles (`ground`, `tile`: `tape::Ground`), which need no world. Either may instead stand on a saved world
+//! the page hands in (`input`): a snapshot of `ew run` (`open_world`, `ground_of_world`).
 
 use pcore::space::terrain::Shape;
 use pcore::{Config, World};
@@ -46,7 +47,13 @@ thread_local! {
     static PLANET: RefCell<Option<pcore::flow::Planet>> = const { RefCell::new(None) };
     /// The bytes last handed to the page (it reads them until the next call that returns bytes).
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    /// The bytes the page last handed in (`input`), until a call reads them.
+    static IN: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
+
+/// What a snapshot of `ew run` holds: the world, its run's plan and what its recorder keeps (`tape::Kept`, which the
+/// page does not use).
+type Saved = (World, (Schedule, tape::Kept));
 
 /// Run `f` on the live world; panics if `new_world` has not been called.
 fn with<T>(f: impl FnOnce(&mut Live) -> T) -> T {
@@ -93,6 +100,42 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
     let cells = tape::Table::new(&world);
     LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
     0
+}
+
+/// Room for `len` bytes the page hands in (the gzip of a snapshot, for `open_world` or `ground_of_world`): their
+/// address in memory, valid until the next call.
+#[no_mangle]
+pub extern "C" fn input(len: usize) -> *mut u8 {
+    IN.with(|i| {
+        *i.borrow_mut() = vec![0; len];
+        i.borrow_mut().as_mut_ptr()
+    })
+}
+
+/// The saved world handed in (`input`; read once), or why it is refused: not a snapshot of this build's format
+/// (`tape::open_snapshot`), a globe (the page draws islands), or settings `Config::validate` refuses.
+fn saved() -> Result<Saved, String> {
+    let gz = IN.with(|i| std::mem::take(&mut *i.borrow_mut()));
+    let (world, rest): Saved = tape::open_snapshot(&gz[..]).map_err(|e| format!("Not a saved world of this build: {e}."))?;
+    if world.map.wrap {
+        return Err(String::from("A saved globe: the page draws islands only."));
+    }
+    world.cfg.validate().map_err(|e| format!("A saved world with refused settings: {e}."))?;
+    Ok((world, rest))
+}
+
+/// Stand the live world on the saved world handed in (`input`): the world, its plan, and the cells' table made anew;
+/// it steps on as a new world does. Returns nothing (`out_len` 0), or why it is refused (`saved`), as text.
+#[no_mangle]
+pub extern "C" fn open_world() -> *const u8 {
+    give(match saved() {
+        Ok((world, (plan, _))) => {
+            let cells = tape::Table::new(&world);
+            LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
+            Vec::new()
+        }
+        Err(e) => e.into_bytes(),
+    })
 }
 
 /// Step one month: at a year's start, first place what the schedule says is due.
@@ -210,6 +253,19 @@ pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64, drawn: u3
     GROUND.with(|c| *c.borrow_mut() = Some(g));
 }
 
+/// Make the ground of the saved world handed in (`input`; `tape::Ground::of`). Returns nothing (`out_len` 0), or why it
+/// is refused (`saved`), as text.
+#[no_mangle]
+pub extern "C" fn ground_of_world() -> *const u8 {
+    give(match saved() {
+        Ok((world, _)) => {
+            GROUND.with(|c| *c.borrow_mut() = Some(tape::Ground::of(&world)));
+            Vec::new()
+        }
+        Err(e) => e.into_bytes(),
+    })
+}
+
 /// The tile of `depth` at column `x` and row `y` of tiles of the ground made by `ground`, 16-bit floats little-endian
 /// (`tape::Ground::tile`).
 #[no_mangle]
@@ -236,7 +292,8 @@ pub extern "C" fn rock() -> *const u8 {
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 
-/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile` or `rock` last returned.
+/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile`, `rock`, `open_world` or
+/// `ground_of_world` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())

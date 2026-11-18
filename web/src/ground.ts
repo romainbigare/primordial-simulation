@@ -13,6 +13,10 @@ import type { View } from './map';
  * texel names its channel's sample, the length its place along its channel is kept modulo, m, numbers of a row of the
  * cells' table, and the reflectance of the walls the cover builds. */
 export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; along_wrap: number; row: number; kinds: number; kind_row: number; walls: [number, number, number] }
+/** Whose ground the tiles are of: a new island's, made from its seed, size, band of latitudes (south, north) and
+ * whether its large shape is drawn from the seed (wasm/src/lib.rs `ground`); or a saved world's, the gzip of its
+ * snapshot (`ground_of_world`). */
+export type GroundOf = { seed: number; size: number; band: [number, number]; drawn: boolean } | { saved: ArrayBuffer };
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
 export interface MapOf { w: number; h: number; cell_m: number; square_depth: number }
 
@@ -81,7 +85,7 @@ export class GroundTiles {
   private start = performance.now();
   private lastCame = -Infinity;
 
-  constructor(source: string, wasm: ArrayBuffer, seed: number, size: number, band: [number, number], drawn: boolean, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
+  constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
     this.makePage();
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
@@ -95,7 +99,7 @@ export class GroundTiles {
         if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data); }
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
-      w.worker.postMessage({ cmd: 'init', wasm: copy, seed, size, band, drawn }, [copy]);
+      w.worker.postMessage({ cmd: 'init', wasm: copy, ground }, [copy]);
       this.workers.push(w);
     }
   }

@@ -958,6 +958,11 @@ The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (
    `files: {"ew.wasm": {"from": <the copied wasm>, "contentType": "application/wasm"}}`. If it refuses because the
    published version was not read in this session, read it first (`action: read`), then publish.
 
+A grown world need not be grown in the page (where a pause lands some months past the date asked): `ew run --seed 1
+--size 32 --band 20,65 --roster --fauna-year 52 --years 43 --snapshots-at 42.75 --out DIR` (about 25 s) writes
+`DIR/snap_00042_09.bin.gz`, and `index.html?world=<URL of that file>` opens it paused at its date, exactly (the owner:
+"Open a saved world"). The flags are those of the page's own new world: its plan places the takers in year 52.
+
 To look at the page before publishing: serve it (`python3 -m http.server PORT --directory <the full path of
 web/dist>`) and drive it with Playwright (`require('/opt/node22/lib/node_modules/playwright')`, `chromium.launch()`
 with no options): open

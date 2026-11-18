@@ -16,4 +16,4 @@ pub use rec::{read_viewer_file, Kept, Recorder, Spent, TapeFiles, Written, TAPE}
 pub use things::things;
 pub use stands::KIND_ROW;
 pub use table::{Table, ROW};
-pub use snapshot::{fingerprint, load_snapshot, read_snapshot, snapshot_bytes, write_snapshot};
+pub use snapshot::{fingerprint, load_snapshot, open_snapshot, read_snapshot, snapshot_bytes, write_snapshot};

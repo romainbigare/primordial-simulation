@@ -21,9 +21,12 @@ pub const USAGE: &str = "usage:
     --out DIR             where the tape, pictures and snapshots go (out)
     --frames-every N      a viewer frame every N years (10)
     --snapshots-every N   a snapshot every N years (0: only at the end)
+    --snapshots-at Y,Y    a snapshot also at each of these dates, years since the start with whole months (42.75:
+                          9 months into year 42), as snap_YYYYY_MM.bin.gz (the page opens them; ew resume does not
+                          go on from inside a year)
     --pictures-every N    a PNG picture every N years, and at the start and the end (0: none)
     --monthly-years N     a viewer frame every month in the first N years (2)
-    --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
+    --life-year N        the year life starts: soil, then the kinds (2; -1: no life)
     --fauna-year N        the year the starting kinds of takers are placed (-1: none, the default)
     --roster              the six kinds of cover of worldgen::life::ROSTER, each at its year after the first life, not
                           the one
@@ -36,8 +39,9 @@ pub const USAGE: &str = "usage:
                           gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
-    --years N, --every N, --out DIR, --frames-every N, --snapshots-every N, --pictures-every N, --monthly-years N,
-    --chunks N            as for run
+    --years N, --every N, --out DIR, --frames-every N, --snapshots-every N, --snapshots-at Y,Y, --pictures-every N,
+    --monthly-years N, --chunks N
+                          as for run
   ew view     draw a window of a snapshot's map as a PNG, each pixel the colour of the cell that holds its centre
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --window X,Y,W,H      the window from column X and row Y, W x H squares, fractions allowed (the whole map)
@@ -56,6 +60,9 @@ pub const SNAPSHOTS_EVERY: u64 = 0;
 
 /// Years between PNG pictures when `--pictures-every` is not given (0: none).
 pub const PICTURES_EVERY: u64 = 0;
+
+/// How far a date of `--snapshots-at` may lie from a whole month, months: the rounding of a decimal year (42.75).
+const WHOLE_MONTH: f64 = 1e-6;
 
 /// The command line's words.
 pub struct Args(pub Vec<String>);
@@ -107,6 +114,17 @@ impl Args {
         let Some(text) = self.value::<String>("--window") else { return Ok(whole) };
         let v: Result<Vec<f64>, _> = text.split(',').map(str::parse).collect();
         v.ok().and_then(|v| v.try_into().ok()).filter(|v: &[f64; 4]| v[2] > 0.0 && v[3] > 0.0).ok_or(format!("--window {text}: want X,Y,W,H with W and H over 0"))
+    }
+
+    /// The dates of `--snapshots-at Y,Y,...` as months since the start, `per_year` months a year (none if it is not
+    /// there); an error if one does not parse or is not a whole month.
+    pub fn snapshot_months(&self, per_year: u64) -> Result<Vec<u64>, String> {
+        let Some(text) = self.value::<String>("--snapshots-at") else { return Ok(Vec::new()) };
+        let month = |y: &str| {
+            let m = y.parse::<f64>().ok().filter(|y| *y > 0.0).map(|y| y * per_year as f64);
+            m.filter(|m| (m - m.round()).abs() < WHOLE_MONTH).map(|m| m.round() as u64).ok_or(format!("--snapshots-at {text}: {y} is not a date after the start in whole months"))
+        };
+        text.split(',').map(month).collect()
     }
 
     /// The command (the first word after the program's name).

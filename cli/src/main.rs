@@ -55,6 +55,11 @@ fn main() {
             // recorder kept across years.
             let from = args.get("--from", String::new());
             let (w, (plan, kept)) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
+            let into = w.month() % w.cfg.months_per_year as u64;
+            if into != 0 {
+                eprintln!("ew: {from} is taken {into} months into a year (--snapshots-at); ew resume goes on from a year's start");
+                std::process::exit(2);
+            }
             drive(w, &args, plan, Some(kept));
         }
         "view" => view(&args),
@@ -108,6 +113,13 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     }
     let t0 = pcore::check::totals(&w);
     let y0 = w.cfg.calendar().years(w.time);
+    let per_year = w.cfg.months_per_year as u64;
+    let inside = |m: &u64| (w.month() + 1..=(y0 + years) * per_year).contains(m);
+    let outside = || format!("--snapshots-at: a date outside this run's years {y0} to {}", y0 + years);
+    let snapshots_at = a.snapshot_months(per_year).and_then(|at| if at.iter().all(inside) { Ok(at) } else { Err(outside()) }).unwrap_or_else(|e| {
+        eprintln!("ew: {e}");
+        std::process::exit(2);
+    });
     if pictures > 0 {
         render::save(&w, &format!("{out}/year{y0:04}.png"));
     }
@@ -131,6 +143,12 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             });
             let t = Instant::now();
             record(&mut rec, &mut w, &clock);
+            // A snapshot at a date of `--snapshots-at`, with the tape so far.
+            let m = w.month();
+            if snapshots_at.contains(&m) {
+                let at = format!("{out}/snap_{:05}_{:02}.bin.gz", m / per_year, m % per_year);
+                writer.start(&w, &(&plan, rec.kept()), Some(at), rec.tape(), out.clone());
+            }
             clock.spent[TAPE] += t.elapsed();
         }
         writer.check();
