@@ -144,7 +144,8 @@ the texel's size over 40) as far as half the widest line the shell draws it as o
 1 css pixel times its discharge over the one that shows to the power 0.5, up to 2.5 times, where a css pixel takes 3
 texels and the discharge is 10 times `TYPICAL_RUNOFF`'s, and 1.5 texels more). Of the channels within reach, a texel keeps the one whose distance over the
 larger of its reach and the texel's size is least (the one that covers it first as the flux grows, or, where all are
-narrower than a texel, the nearest), but a tributary takes no texel in the bed of the channel it joins (within half
+narrower than a texel, the nearest); a line that passes within half a texel's diagonal of a texel's centre claims it
+before any line farther away (so a rill keeps the texels it runs through beside a wide river), but a tributary takes no texel in the bed of the channel it joins (within half
 that bed's width of its line, near the join). It keeps that channel's distance, signed by
 the side (60,000 where none reaches), and its sample, as the step from the sample that holds the texel's centre
 (1 + (dx + 21) + 43 (dy + 21); 0 for none), whole numbers a 16-bit float holds exactly; and of the nearest point of
