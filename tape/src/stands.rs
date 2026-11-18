@@ -151,7 +151,7 @@ mod tests {
     /// The rows hold the cell's cover slot by slot: two slots of one starting kind, far apart in their genes, make two
     /// rows, the heaviest first, whose built cover sums to the cell's and whose plants are each slot's own count; each
     /// per m² of the cell's land, and none on a cell that holds no land. Plants with no capture area stand as plants of
-    /// a little do, bare: their crowns of no width, covering nothing.
+    /// very little capture area do, bare: their crowns of no width, covering nothing.
     #[test]
     fn rows_hold_the_cells_slots() {
         let mut w = worldgen::testkit::small_world();
