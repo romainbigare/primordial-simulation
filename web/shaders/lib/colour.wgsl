@@ -100,6 +100,8 @@ struct Spot {
   bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32, blocks: f32, snow_m: f32, below: f32,
   // The share of the ground the tallest plants' crowns close over it (their litter lies under them).
   canopy: f32,
+  // How soaked the waves' swash leaves it, and the share of it the swash's top line covers, 0..1 (`swash_of`).
+  swash: vec2f,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
 }
@@ -116,8 +118,9 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   var g: Ground;
   g.rgb = p.ground;
   g.kind = BARE;
-  // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn.
-  let plants = p.cover.a * above_water(p.depth);
+  // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn. No plant
+  // stands where the waves' swash runs (`swash_of`): its cell's plants stand above it.
+  let plants = p.cover.a * above_water(p.depth) * (1.0 - max(p.swash.x, p.swash.y));
   if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
@@ -163,6 +166,23 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
 // How soaked the ground of spot p is, 0..1: as wet as the field says, and wetter the nearer it lies over the liquid's
 // surface (the capillary fringe); soaked under it.
 fn soaked(p: Spot) -> f32 { return 1.0 - (1.0 - p.wet) * (1.0 - exp(-p.over / FRINGE_M)); }
+
+// Waves run up a shore past the still level and soak it to their run-up (water.wgsl `run_up`), which varies along the
+// shore by `SWASH_VARY` of itself over `SWASH_VARY_M` (the waves' groups); soaked to half of it, wet less above. The
+// last run-up leaves a line of froth at its top `SWASH_LINE_M` wide, covering `SWASH_FROTH` of it.
+const SWASH_VARY = 0.25; const SWASH_VARY_M = 12.0; const SWASH_LINE_M = 0.4; const SWASH_FROTH = 0.25;
+// The swash on ground `over` m over standing liquid (`NO_LIQUID_M` far from any), `sea` of it the sea's, of slope
+// `slope` (rise over run), at `at` seen at `e` m a pixel, under snow `snow`: how soaked it leaves the ground, and the
+// share of the pixel its top line covers (the line no wider than the pixel seen as its share of it).
+fn swash_of(over: f32, sea: f32, slope: f32, at: vec2f, e: f32, snow: f32) -> vec2f {
+  let reach = run_up(sea, slope);
+  if (over >= (1.0 + SWASH_VARY) * reach + max(SWASH_LINE_M, e) * slope) { return vec2f(0.0); }
+  let top = reach * (1.0 + SWASH_VARY * noise_turned(at / SWASH_VARY_M, 111));
+  let wet = 1.0 - ease(0.5 * top, top, over);
+  let across = abs(over - top) / max(slope, 1e-3);
+  let line = (1.0 - ease(0.0, max(SWASH_LINE_M, e), across)) * min(SWASH_LINE_M / e, 1.0);
+  return vec2f(wet, line) * (1.0 - snow);
+}
 
 // Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked (and in the
 // style warmer, style.wgsl `bare_tint`).
@@ -218,13 +238,14 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     let ripple = ripples(p.e) * (1.0 - p.snow);
     var water: vec3f;
     if (styled()) {
-      // The style: clear water over a pale bed, deepening to the open water, the sea's foam at its edge (style.wgsl;
-      // a lake's small waves make none, and on its fine shore it would only fleck).
+      // The style: clear water over a pale bed, deepening to the open water, foam at its edge where the waves break
+      // (style.wgsl `foam`): a lake's, of smaller waves, breaking shallower, as much less as its waves are lower.
       // One water: standing liquid is coloured by the channel's law (style.wgsl `river_seen`), its shore the
       // channel's shallows and its open water the channel's deep thread, so a river runs into a lake or the sea with
       // no step of colour; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
       let seen = river_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
-      water = mix(water_painted(BED_SHOWN * bed, seen, ripple), FOAM_RGB, p.sea * (1.0 - p.mouth) * foam(p.depth, p.slope / earth.look.x, p.e, p.at));
+      let waves = waves_of(p.sea).x / SEA_WAVE.x;
+      water = mix(water_painted(BED_SHOWN * bed, seen, ripple), FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, p.slope / earth.look.x, p.e, p.at));
     } else {
       water = water_over(bed, p.depth, ripple);
     }
@@ -236,11 +257,11 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     // The true view shades the bed's colours as far as the bed shows.
     return Shaded(rgb, 1.0 + (lit - 1.0) * through(p.depth).g, kind);
   }
-  // Over it: the ground, wet by how soaked it is, a film of liquid shining on its bare part once it is near soaked
-  // (mud).
-  let s = soaked(p);
+  // Over it: the ground, wet by how soaked it is and by the swash, a film of liquid shining on its bare part once it is
+  // near soaked (mud), and the froth of the swash's top line.
+  let s = max(soaked(p), p.swash.x);
   let film = ease(FILM_FROM, 1.0, s) * g.bare;
-  var rgb = soil(g, s, lit);
+  var rgb = mix(soil(g, s, lit), FOAM_RGB * lit, SWASH_FROTH * p.swash.y * g.bare);
   let river = p.river * (1.0 - 0.6 * p.snow);
   if (film <= 0.0 && river <= 0.0) { return Shaded(rgb, lit, g.kind); }
   let ripple = ripples(p.e);

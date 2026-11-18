@@ -70,6 +70,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let loose = loose_seen(at, e);
   let bare = bed_shows(loose);
   let fine = relief(e, length(g.slope), bare, loose);
+  // The waves' swash follows the shore as the tiles draw it: the relief's bumps would break its line into specks.
+  let tiled = g;
   // The relief moves the ground's height as much as the ground drawn is steep (`RELIEF_EDGE_SLOPE`): on a flat shore a
   // bump of a few decimetres would move the water's edge by tens of metres into a fringe of puddles.
   g.h += fine.x * ease(0.0, RELIEF_EDGE_SLOPE, length(g.slope));
@@ -137,6 +139,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z);
+  p.swash = swash_of(over_ponds(tiled, 0.0), p.sea, length(tiled.slope), at, e, p.snow);
   p.river = 0.0;
   p.river_depth = 0.0;
   p.mouth = 0.0;

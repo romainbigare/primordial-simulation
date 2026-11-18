@@ -70,3 +70,18 @@ fn seen_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f) -> vec3
   let t = exp(-2.0 * k * depth);
   return bed * t + deep * (1.0 - t) + surface_light(g);
 }
+
+// Waves at a shore, as their height and their length in deep water, m: the sea's, and a lake's, of a fetch of some
+// kilometres (Sverdrup and Munk 1947: a fresh wind over 5 km of water raises waves of about a quarter of a metre and two
+// and a half seconds; the open sea's of a metre and six seconds, L = g T² / 2π). The page knows no lake's fetch: every
+// lake has the one.
+const SEA_WAVE = vec2f(1.0, 56.0); const LAKE_WAVE = vec2f(0.25, 10.0);
+// The waves of standing liquid `sea` of it the sea's (the rest a lake's).
+fn waves_of(sea: f32) -> vec2f { return mix(LAKE_WAVE, SEA_WAVE, sea); }
+// The height over the still level the swash of those waves reaches up a shore of slope `slope` (rise over run), m:
+// the run-up that 2% of them pass, R = 1.1 (0.35 β √(H L) + √(H L (0.563 β² + 0.004)) / 2) (Stockdon and others 2006).
+fn run_up(sea: f32, slope: f32) -> f32 {
+  let w = waves_of(sea);
+  let hl = sqrt(w.x * w.y);
+  return 1.1 * (0.35 * slope * hl + 0.5 * hl * sqrt(0.563 * slope * slope + 0.004));
+}
