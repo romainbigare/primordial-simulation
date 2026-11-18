@@ -961,7 +961,9 @@ The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (
 A grown world need not be grown in the page (where a pause lands some months past the date asked): `ew run --seed 1
 --size 32 --band 20,65 --roster --fauna-year 52 --years 43 --snapshots-at 42.75 --out DIR` (about 25 s) writes
 `DIR/snap_00042_09.bin.gz`, and `index.html?world=<URL of that file>` opens it paused at its date, exactly (the owner:
-"Open a saved world"). The flags are those of the page's own new world: its plan places the takers in year 52.
+"Open a saved world"). The flags are those of the page's own new world: its plan places the takers in year 52, and
+both start Flow's state from the ground's heat, so the page grows the same world from the same seed (the same
+fingerprint at each month).
 
 To look at the page before publishing, and for every builder of the look: the picture tool, `cd web && npm run look --
 set OUT` (`web/look/README.md`): the standard places of seed 1 on a saved world, a contact sheet and their numbers;

@@ -96,6 +96,9 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
     if world.cfg.validate().is_err() {
         return 1;
     }
+    // Its ground gets Flow's state from its heat first, as `ew run` gives a new world's, so the same seed makes the
+    // same world in the page as on the command line.
+    pcore::flow::state(&mut world, true);
     let plan = Schedule { takers: Some(TAKERS_YEAR), ..Schedule::new(Some(LIFE_YEAR), &worldgen::life::ROSTER, Seeding { rounds: SPRAY_ROUNDS, fixers: FIXERS }) };
     let cells = tape::Table::new(&world);
     LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));

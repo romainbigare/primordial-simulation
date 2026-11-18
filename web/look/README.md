@@ -112,5 +112,8 @@ stops the tool with the text it no longer finds; then `PATCHES` is changed with 
 ## A saved world in the page
 
 `index.html?world=<URL of a snapshot>` opens it, paused at its date, and the page draws it as it draws a world it
-played into. It is not the world the page grows from the same seed: `ew run` starts Flow's state from the ground's heat
-and the page does not, so their weather differs from the first month.
+played into. It is the world the page grows from the same seed and flags: both start Flow's state from the ground's
+heat (wasm/src/lib.rs `new_world`, cli `ew run`), so their worlds have the same fingerprint at each month
+(`tape::fingerprint`). A saved world's cells' table is not the grown one's to the last bit: a snapshot holds no cache,
+and Flow's state found again on opening it (`open_world`) differs a little: in the air's fall with height of every
+square, the ground's temperature of most, and in fewer, their ice, water and share of land.
