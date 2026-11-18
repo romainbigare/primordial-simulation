@@ -18,6 +18,27 @@ const BAR_GROWN = 0.55; const BAR_TUFT_M = 1.1;
 // of that on the low slope inside a bend.
 const BANK_M = 0.4; const BANK_SHARE = 0.12; const BANK_SHADE = 0.45; const BANK_LOW = 0.25;
 
+// A wide shallow reach drops its load in bars in its middle too: where its water is more than `MID_BAR_WD.x` times as
+// wide as it is deep at its middle, all of them from `MID_BAR_WD.y` (gravel-bed rivers wander about bars in their
+// middle from a width over depth of about 20, and braid from about 40: Church 1983, from memory), and not in a bend's pool, where the flow runs deep
+// against the outer bank. Each is a lens along the flow where noise `MID_BAR_M` long (the second half as strong, -1..1)
+// passes `MID_BAR_FROM`, full width from `MID_BAR_FULL`: up to `MID_BAR_WIDE` of the water's half width either side
+// of its middle; its top lies `MID_BAR_UP` of the way up to the bank (washed bare, no plants).
+const MID_BAR_WD = vec2f(20.0, 45.0); const MID_BAR_M = vec2f(48.0, 16.0); const MID_BAR_FROM = 0.1; const MID_BAR_FULL = 0.45;
+const MID_BAR_WIDE = 0.45;
+const MID_BAR_UP = 0.4;
+
+// The half width of the bar in the middle of channel `c` at `along` m along it, as a share of its water's half width (0:
+// none).
+fn mid_bar(c: Channel, along: f32) -> f32 {
+  let wd = 2.0 * c.water / max(BED_MIDDLE * c.mean, 1e-3);
+  let wide = ease(MID_BAR_WD.x, MID_BAR_WD.y, wd) * (1.0 - c.bend);
+  if (wide <= 0.0) { return 0.0; }
+  let n = (noise_reach(along, MID_BAR_M.x, 0.0, 84) + 0.5 * noise_reach(along, MID_BAR_M.y, 0.0, 85)) / 1.5;
+  let lens = ease(MID_BAR_FROM, MID_BAR_FULL, n);
+  return MID_BAR_WIDE * wide * sqrt(lens);
+}
+
 // A reach at a point: the share of the pixel its water covers, and its bars (the bed out of the water); how far across
 // the water the point lies, -1 at its inner edge, 0 at its middle and 1 at its outer edge (`across`); how steep the
 // reach reads, 0..1 (`steep`); how far out of the water the point lies on the bed, m (`edge`), and that as a share of
@@ -56,8 +77,18 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32) -> R
   // nearest texel lies far from the line itself (`Tiled.ends`), and nothing is drawn (it drew small square brackets).
   let real = 1.0 - ease(reach + e, reach + 2.0 * e, g.ends.x);
   var in_bed = (tent((reach - g.d) / e) - tent((-reach - g.d) / e)) * real;
-  // The water lies in its bed: where the two edges' raggedness would put it past the bank, the bank holds it.
-  let water = min(tent((half - thread) / e) - tent((-half - thread) / e), in_bed);
+  // The water lies in its bed: where the two edges' raggedness would put it past the bank, the bank holds it; and round
+  // the bar in its middle where it has one (`mid_bar`).
+  var water = min(tent((half - thread) / e) - tent((-half - thread) / e), in_bed);
+  let bar = mid_bar(c, g.along) * half;
+  if (bar > e) {
+    let from_middle = abs(g.sd - c.middle);
+    water *= 1.0 - (tent((bar - from_middle) / e) - tent((-bar - from_middle) / e));
+    if (from_middle < bar) {
+      r.edge = bar - from_middle;
+      r.up = MID_BAR_UP * r.edge / bar;
+    }
+  }
   // The top of a bar is the plants' again, in tufts with an edge of their own: more of them the nearer the bank.
   let tufts = shows_at(BAR_TUFT_M, e);
   if (tufts > 0.0 && r.up > BAR_GROWN) {
@@ -158,6 +189,9 @@ const BED_PX = 3.0;
 // gentlest. A bar rises from the water's edge at `BAR_RISE` (rise over run), which is how far up it the water's fringe
 // wets and darkens it; past that fringe its gravel drains dry.
 const BAR_LIFT = 1.7; const BAR_PALE = 0.35; const BAR_RISE = 0.6;
+// Driftwood lies on a bar from `DRIFTWOOD_UP.x` of the way up it to the bank, most from `DRIFTWOOD_UP.y` (the floods' wrack
+// line, at the top of the bars).
+const DRIFTWOOD_UP = vec2f(0.1, 0.35);
 // Snow bridges a channel's water narrower than the snow is deep, as it buries a plant lower than that (draw.wgsl
 // `above_snow`): a rill under a snowfield does not show.
 // The water within `EDGE_M` of its edge is lighter by up to `EDGE_LIGHT`: the wash at the bank, where the bed's last
@@ -203,6 +237,9 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   // On its bars the ground is that gravel, bare, rising from the water's edge, as far as they cover the pixel.
   let bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth)) * seen;
   out.dry.ground = mix(out.dry.ground, gravel * bar_tone(e, g.along, r), bars);
+  // The floods strand dead wood high on the bars, as much as woody crowns stand about the channel (the trees' share of
+  // the ground of its cells, lib/cover_field.wgsl `STANDS`).
+  if (bars > 0.0) { out.dry.driftwood = min(field_at(at, STANDS).a, 1.0) * bars * ease(DRIFTWOOD_UP.x, DRIFTWOOD_UP.y, r.up); }
   out.dry.sand *= 1.0 - bars;
   out.dry.rock *= 1.0 - bars;
   out.dry.cover *= 1.0 - bars;
@@ -258,9 +295,9 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
 // (Legleiter and others 2004; from memory).
 const BED_FILM = 0.3;
 // A streak of the flow reflects this share of the sky's light more than the water about it (a line of small ripples
-// where the current shears). Fast shallow water is `FAST` of the way to `FAST_WATER`, the green-blue of water full of
-// air over a pale bed.
-const REFLECT_STREAK = 0.25; const FAST = 0.25; const FAST_WATER = vec3f(0.06, 0.34, 0.36);
+// where the current shears). Fast shallow water is `FAST` of the way to `FAST_WATER`, the grey green of water full of
+// air over a brown bed.
+const REFLECT_STREAK = 0.25; const FAST = 0.25; const FAST_WATER = vec3f(0.16, 0.22, 0.17);
 // A stone of the bed stands out of the water where it is `STONE_STANDS` of its size taller than the water is deep;
 // fast water breaks white on it and trails `WAKE` of white water down the flow behind it (stone.wgsl `wake`).
 const STONE_STANDS = 0.3; const WAKE = 0.45;

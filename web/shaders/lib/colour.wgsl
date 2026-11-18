@@ -122,8 +122,9 @@ struct Spot {
   canopy: f32, shed: f32,
   // How soaked the waves' swash leaves it, and the share of it the foam of the last bore covers, 0..1 (`swash_of`).
   swash: vec2f,
-  // The largest stone the point's channel moves, m (0: none).
-  moved: f32,
+  // The largest stone the point's channel moves, m (0: none), and the share of woody crowns about a channel's bar,
+  // whose dead wood the floods leave on it, 0..1.
+  moved: f32, driftwood: f32,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
 }
