@@ -128,6 +128,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
     let grown = mix(own, stone_and_fall(next.s), next.share);
     moved = grown.x;
     fall = grown.y;
+    p.moved = moved;
     cobble = max(STONE_SEEN * own.x, COBBLE_M);
   }
   let deepens = vec2f(dpdx(loose), dpdy(loose));

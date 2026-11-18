@@ -151,15 +151,8 @@ fn soil_detail(p: Spot) -> vec3f {
     let c = soil_image(i, p, wet);
     out = mix(out, c, height_mix(d[i], height_of(out), height_of(c)));
   }
-  // River pebbles where the bed's stones lie, in patches of their own as many as it holds.
-  if (p.stony > 0.02) {
-    let m = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.7)), 99).x);
-    let near = (min(p.stony, 1.0) - m) / SOIL_EDGE;
-    if (near > -CLAIMS_WITHIN) {
-      let c = detail(PEBBLE_TEX, p.e);
-      out = mix(out, c, height_mix(near, height_of(out), height_of(c)));
-    }
-  }
+  // A channel's gravel and cobbles where the bed's stones lie (things.wgsl).
+  out = bed_photos(out, p);
   return out;
 }
 

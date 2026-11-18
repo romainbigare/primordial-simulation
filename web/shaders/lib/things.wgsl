@@ -20,17 +20,19 @@ const DEAD_BUSH_CELL_M = 4.0; const DEAD_BUSH_FILL = 0.3; const DEAD_BUSH_M = ve
 // lit upper faces, `SNOW_CAP` of their colour.
 const CONTACT = vec2f(0.5, 0.1); const CONTACT_UP = 0.04; const CONTACT_DARK = 0.55;
 const OBJECT_SHADOW = 0.4; const CAST = vec2f(0.6, 0.22); const CAST_AT = vec2f(0.22, -0.06); const SNOW_CAP = 0.85;
-// Each sort's sprites (sprites.wgsl): rocks, wood (a fallen trunk and branches), dead bushes.
-const ROCK_SORT = 0; const WOOD_SORT = 1; const DEAD_BUSH_SORT = 2;
+// Each sort's sprites (sprites.wgsl): rocks, wood (a fallen trunk and branches), dead bushes, worn rocks under moss.
+const ROCK_SORT = 0; const WOOD_SORT = 1; const DEAD_BUSH_SORT = 2; const MOSSY_ROCK_SORT = 3;
 fn sort_sprite(sort: i32, k: u32) -> i32 {
   if (sort == ROCK_SORT) { return ROCK_FROM + i32(k % u32(ROCK_N)); }
+  if (sort == MOSSY_ROCK_SORT) { return SHORE_ROCK_FROM + i32(k % u32(SHORE_ROCK_N)); }
   if (sort == WOOD_SORT) { return WOOD_FROM + i32(k % u32(WOOD_N)); }
   return DEAD_BUSH_FROM + i32(k % u32(DEAD_BUSH_N));
 }
 
-// Ground of colour g at spot p with one sort of things over it: `many` (0..1) as the ground suits them, at stream k.
-// Each shows as a thing (draw.wgsl `as_thing`): its colour and its shadow depart from the ground's by its share.
-fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, many: f32, k: i32) -> vec3f {
+// Ground of colour g at spot p with one sort of things over it: `many` (0..1) as the ground suits them, at stream k,
+// a rock `wet` wet (stone.wgsl `wet_stone`). Each shows as a thing (draw.wgsl `as_thing`): its colour and its shadow
+// depart from the ground's by its share.
+fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, many: f32, wet: f32, k: i32) -> vec3f {
   if (many <= 0.02 || unseen(size.y / THING_PX.x) || as_thing(size.y, p.e) <= 0.0) { return g; }
   let l = lat_axes(cell_m, vec2f(0.0));
   var out = g;
@@ -59,7 +61,7 @@ fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, ma
       // Snow on its faces that look up, its upper part's lit texels, keeping their light.
       let lit = dot(t.rgb, LUMA) / max(dot(model_texel(s, uv, 1.0).rgb, LUMA), 1e-4);
       let cap = p.snow * f32(sort != DEAD_BUSH_SORT) * smoothstep(0.7, 0.35, uv.y) * smoothstep(0.8, 1.3, lit);
-      let rgb = mix(t.rgb, SNOW * clamp(lit, 0.75, 1.1), SNOW_CAP * cap);
+      let rgb = mix(wet_stone(t.rgb, lit, wet, 0.0), SNOW * clamp(lit, 0.75, 1.1), SNOW_CAP * cap);
       out = mix(out, rgb, t.a * seen);
     }
   }
@@ -74,8 +76,48 @@ fn objects(g: vec3f, p: Spot, bare: f32) -> vec3f {
   let stony = max(open * max(max(p.rock, ease(0.15, 0.6, p.slope)), 0.35 + 0.65 * ease(1.0, 0.1, p.loose)), SNOW_ROCKS * p.snow * (1.0 - canopy));
   let dry = ease(0.4, 0.1, p.wet) * open * (1.0 - p.snow);
   let wood = max(canopy, WOOD_DRY * dry) * (1.0 - p.sand) * (1.0 - p.snow);
-  var out = scatter(g, p, WOOD_SORT, WOOD_CELL_M, WOOD_FILL, WOOD_M, wood, 120);
-  out = scatter(out, p, DEAD_BUSH_SORT, DEAD_BUSH_CELL_M, DEAD_BUSH_FILL, DEAD_BUSH_M, dry, 124);
-  out = scatter(out, p, ROCK_SORT, PEBBLE_CELL_M, PEBBLE_FILL, PEBBLE_M, stony, 152);
-  return scatter(out, p, ROCK_SORT, ROCK_CELL_M, ROCK_FILL, ROCK_M, stony, 150);
+  var out = scatter(g, p, WOOD_SORT, WOOD_CELL_M, WOOD_FILL, WOOD_M, wood, 0.0, 120);
+  out = scatter(out, p, DEAD_BUSH_SORT, DEAD_BUSH_CELL_M, DEAD_BUSH_FILL, DEAD_BUSH_M, dry, 0.0, 124);
+  out = scatter(out, p, ROCK_SORT, PEBBLE_CELL_M, PEBBLE_FILL, PEBBLE_M, stony, 0.0, 152);
+  out = scatter(out, p, ROCK_SORT, ROCK_CELL_M, ROCK_FILL, ROCK_M, stony, 0.0, 150);
+  return bed_rocks(out, p, bare * (1.0 - p.snow), soaked(p));
+}
+
+// The bed's loose stones as photographs, laid where its stones lie (soil's images, detail.wgsl `soil_detail`), in
+// patches of their own as many as it holds: by the largest stone its channel moves there (`Spot.moved`), gravel under
+// `BED_COARSE.x` m and cobbles from `BED_COARSE.y` m, the two meeting in patches between; the gravel angular
+// where the channel has worn its stones less than `BED_ROUND` and round past it (a stream rounds its stones within a
+// few kilometres of travel: Krumbein 1941, from memory).
+const BED_COARSE = vec2f(0.06, 0.25); const BED_ROUND = 0.5;
+// The noise streams of the stones' patches and of the two sizes' patches.
+const BED_PATCHES = 99; const BED_SIZES = 197;
+
+// The change the bed's stones of spot p give the soil's colour change `under`.
+fn bed_photos(under: vec3f, p: Spot) -> vec3f {
+  if (p.stony <= 0.02) { return under; }
+  let m = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.7)), BED_PATCHES).x);
+  let near = (min(p.stony, 1.0) - m) / SOIL_EDGE;
+  if (near <= -CLAIMS_WITHIN) { return under; }
+  let coarse = ease(BED_COARSE.x, BED_COARSE.y, p.moved);
+  var c = detail(select(GRAVEL_TEX, ROUND_PEBBLE_TEX, p.worn > BED_ROUND), p.e);
+  if (coarse > 0.0) {
+    let u = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(SOIL_IMAGE_M, vec2f(0.13)), BED_SIZES).x);
+    let d = (coarse - u) / SOIL_EDGE;
+    if (d >= CLAIMS_WITHIN) { c = detail(PEBBLE_TEX, p.e); }
+    else if (d > -CLAIMS_WITHIN) { let b = detail(PEBBLE_TEX, p.e); c = mix(c, b, height_mix(d, height_of(c), height_of(b))); }
+  }
+  return mix(under, c, height_mix(near, height_of(under), height_of(c)));
+}
+
+// A channel's boulders as rocks (rendered models) where the largest stone it moves (`Spot.moved`) passes
+// `BED_ROCK_STONE.x` m, all from `.y`: in cells `BED_ROCK_CELL` of that size across, one in `BED_ROCK_FILL` of them,
+// each `BED_ROCK_SIZE` of it: worn rocks with moss on them (moss grows on rock a stream keeps wet).
+const BED_ROCK_STONE = vec2f(0.15, 0.4); const BED_ROCK_CELL = 6.0; const BED_ROCK_FILL = 0.6;
+const BED_ROCK_SIZE = vec2f(1.0, 2.5);
+
+// Ground of colour g at spot p with its channel's boulders over it, as far as `open` of it is open to them, `wet` wet.
+fn bed_rocks(g: vec3f, p: Spot, open: f32, wet: f32) -> vec3f {
+  let many = open * min(p.stony, 1.0) * ease(BED_ROCK_STONE.x, BED_ROCK_STONE.y, p.moved);
+  if (many <= 0.02) { return g; }
+  return scatter(g, p, MOSSY_ROCK_SORT, BED_ROCK_CELL * p.moved, BED_ROCK_FILL, BED_ROCK_SIZE * p.moved, many, wet, 156);
 }
