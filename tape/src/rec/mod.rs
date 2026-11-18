@@ -23,8 +23,8 @@ pub use ewf::read_viewer_file;
 use tally::YearTally;
 use pcore::store::Class;
 
-/// Causes of death in the order of the core's constants (`life::LACK` .. `life::AGE`).
-const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
+/// Causes of death in the order of the core's constants (`life::LACK` .. `life::DROWNED`).
+const CAUSES: [&str; pcore::life::DEATHS] = ["lack", "phase", "spent", "taken", "broken", "age", "drowned"];
 
 /// The time the shell has spent in the run so far, by process: Flow, Change, the cover and the tape itself (`TIMED`). The recorder reads no clock; the shell measures and hands the totals in.
 pub type Spent = [Duration; TIMED.len()];

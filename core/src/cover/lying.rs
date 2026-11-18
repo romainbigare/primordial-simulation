@@ -81,7 +81,7 @@ impl Lying {
 /// activity 0); of the rest the share min(1, its activity on that ground × the pace of its burning at the ground's
 /// temperature over its pace at `t_cat`) wakes, so at `t_cat` all that is active wakes in a month (seeds of temperate
 /// plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), and takes hold in the cover
-/// (`seed::lodge`). Returns what dies, mol of each part (with a slot in deficit the waking seeds push out), for the
+/// (`seed::lodge`); on no ground none wakes. Returns what dies, mol of each part (with a slot in deficit the waking seeds push out), for the
 /// cell's remains; its budget's flows and the seeds' flows are counted in `budget` and `counts`.
 pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, dt): (usize, f64, f64), budget: &mut [f64], counts: &mut Counters) -> [f64; NP] {
     let mut dead = [0.0; NP];
@@ -106,8 +106,9 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         counts.seeds[WORN] += worn * kg;
         counts.seeds[FROZEN] += (1.0 - worn) * cold * kg;
         let dies = 1.0 - (1.0 - worn) * (1.0 - cold);
-        // A seed is dry tissue: it wakes as the liquid it can take in lets it, by the seeds' rule (`Physics::activity`).
-        let wakes = (ph.activity(a.moist / dec(g[MOIST])) * pace).min(1.0) * (1.0 - dies);
+        // A seed is dry tissue: it wakes as the liquid it can take in lets it, by the seeds' rule (`Physics::activity`);
+        // on no ground (all under the standing liquid) it waits.
+        let wakes = if area > 0.0 { (ph.activity(a.moist / dec(g[MOIST])) * pace).min(1.0) * (1.0 - dies) } else { 0.0 };
         let (gone, up): ([f64; NP], [f64; NP]) = (lot.map(|m| m * dies), lot.map(|m| m * wakes));
         budget[SEEDS_DIED] -= held(&e, &gone);
         (0..NP).for_each(|q| dead[q] += gone[q]);

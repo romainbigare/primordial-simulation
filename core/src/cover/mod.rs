@@ -105,6 +105,9 @@ pub struct Cover {
     /// wilting point), a running mean over a year's months (`grow::step`): the months its kinds expect without gain, by
     /// which they shed their leaves (`season::shed`). The ground's, so it outlives the slots.
     pub idle: f32,
+    /// The ground it stood on at its last month, m² (`ground`): where its ground now is less, the plants that stood on
+    /// the rest went under the standing liquid with it (`grow::live`)
+    pub land: f64,
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its aside node sets aside for its light reaction
     pub e: f64,
@@ -120,7 +123,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, land: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
     }
 }
 
@@ -275,14 +278,10 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
     out
 }
 
-/// The least ground a cover stands on, m² (one plant's): a cell whose land is gone still gives its cover a finite
-/// room, which it thins to and starves in under the liquid.
-const LEAST_GROUND_M2: f64 = 1.0;
-
-/// The ground the cover of cell `i` lives on, m²: its land (`contract::land`), at least `LEAST_GROUND_M2`. Its leaves
-/// layer over it, its plants find their room on it, its seeds lodge on it.
+/// The ground the cover of cell `i` lives on, m²: its land (`contract::land`), none where all of it lies under the
+/// standing liquid. Its leaves layer over it, its plants find their room on it, its seeds lodge on it.
 pub fn ground(w: &crate::World, i: usize) -> f64 {
-    crate::contract::land(w, i).max(LEAST_GROUND_M2)
+    crate::contract::land(w, i)
 }
 
 /// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and the share

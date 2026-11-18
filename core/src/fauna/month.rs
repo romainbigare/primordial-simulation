@@ -142,8 +142,8 @@ fn plan(w: &World, p: &Parts, (i, bodies): (usize, &[Body; GROUPS]), (layers, re
 /// Group `g` of `f`, its members `b`, digests `took` (mol of each substance) for the energy it burns, `burnt` W a member
 /// (`gut::digest`, its gut splitting walls with the cell's `liquid`), and loses the members it could not keep, drawn
 /// from `r`: unpaid, worn out, frozen, and `lack` of them for the heat they could not shed even at rest. Returns the
-/// members that died by cause (`life::LACK` to `AGE`) and what it kept for growth.
-fn settle(w: &World, (p, gut): (&Parts, &Gut), (f, g, b): (&mut Fauna, usize, &Body), (took, burnt, lack): (&[f64; crate::units::MAX_SUBSTANCES], f64, f64), (liquid, r, books): (&mut f64, &mut Rng, &mut Books<0>)) -> ([f64; 6], Digested) {
+/// members that died by cause (`life::LACK` to `DROWNED`) and what it kept for growth.
+fn settle(w: &World, (p, gut): (&Parts, &Gut), (f, g, b): (&mut Fauna, usize, &Body), (took, burnt, lack): (&[f64; crate::units::MAX_SUBSTANCES], f64, f64), (liquid, r, books): (&mut f64, &mut Rng, &mut Books<0>)) -> ([f64; crate::life::DEATHS], Digested) {
     let (chem, ph, dt) = (&w.chem, &w.cfg.phys, w.cfg.calendar().month as f64);
     let sub = sub(p);
     let part: [f64; NP] = std::array::from_fn(|q| took[p.sub[q]]);
@@ -153,7 +153,7 @@ fn settle(w: &World, (p, gut): (&Parts, &Gut), (f, g, b): (&mut Fauna, usize, &B
     let causes = [(kept.unpaid, SPENT), (worn, AGE), (frozen, PHASE), (lack, LACK)];
     let dead = die(f, (g, &sub), causes.map(|c| c.0), r, books);
     // The dead shared by the causes as they combine, each on what the one before left.
-    let (mut left, mut by) = (1.0, [0.0; 6]);
+    let (mut left, mut by) = (1.0, [0.0; crate::life::DEATHS]);
     let all = 1.0 - causes.iter().map(|c| 1.0 - c.0.clamp(0.0, 1.0)).product::<f64>();
     for (share, cause) in causes {
         by[cause as usize] = if all > 0.0 { dead * share.clamp(0.0, 1.0) * left / all } else { 0.0 };

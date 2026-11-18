@@ -571,6 +571,42 @@ fn the_cover_lives_on_its_cells_land() {
     assert!((a / b - 1.0).abs() < 1e-9, "{a} kg per m2 of land on the whole cell, {b} on the shore cell");
 }
 
+/// Ground that goes under the standing liquid takes the plants on it (`cover::live`): a stand whose ground is half
+/// what it stood on at its last month loses half of every slot as whole plants (counted as drowned, `life::DROWNED`),
+/// each plant left keeping its mass; on no ground (all of a cell under the liquid) it holds no plants at all, and
+/// what it held goes to its remains, mol for mol.
+#[test]
+fn ground_under_the_liquid_takes_the_plants_on_it() {
+    let (mut w, i) = start();
+    assert!(cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 2.0));
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, area, month) = (p.mm(&w.chem), cover::ground(&w, i), w.cfg.calendar().month as f64);
+    let start = w.life.cover(i).clone();
+    let x = start.held().next().expect("the stand");
+    let (kg, plant) = (start.kg(&mm, x), start.built(&mm, x) / start.count(x));
+    let mut half = start.clone();
+    half.land = 2.0 * area;
+    let mut counts = w.counts.clone();
+    let a = testkit::garden(&w, &half, (290.0, 1.0, 0.0, 0));
+    let _ = cover::live(&w, &mut half, &p, &a, (i, month), &mut counts);
+    let drowned = counts.cover_lost[pcore::life::DROWNED as usize];
+    assert!((drowned / (0.5 * kg) - 1.0).abs() < 1e-12, "{drowned} kg drowned of {kg} kg on half its ground");
+    let left = half.built(&mm, x) / half.count(x);
+    assert!(left >= plant, "a plant left holds {left} kg, it held {plant} kg");
+    // A cell with no land: the stand placed there drowns whole, all of it to its remains.
+    let under = (0..w.mesh.cells().n()).find(|&j| contract::land(&w, j) <= 0.0).expect("a cell with no land");
+    let mut gone = start.clone();
+    let mut counts = w.counts.clone();
+    let held = gone.amounts(&p);
+    let a = testkit::garden(&w, &gone, (290.0, 1.0, 200.0, 0));
+    let (b, caught) = cover::live(&w, &mut gone, &p, &a, (under, month), &mut counts);
+    assert!(gone.held().next().is_none() && caught == 0.0, "a stand on no ground keeps {:?}", gone.held().collect::<Vec<_>>());
+    for k in p.sub {
+        assert!((b.dead[k] - held[k]).abs() <= 1e-12 * held[k], "substance {k}: {} mol to the remains of {} held", b.dead[k], held[k]);
+    }
+    assert!((counts.cover_lost[pcore::life::DROWNED as usize] / kg - 1.0).abs() < 1e-12, "not all of it drowned");
+}
+
 /// A stand of the tree kind (2 kg per m²) on ground that held nothing for roots half of the last year
 /// (`Cover::idle`) lives through two years of six good months and six months without gain (`cover::live` with a
 /// garden's surroundings: warm sun, its ground full; then either its ground holds nothing for roots at the same warmth,

@@ -13,7 +13,7 @@ use crate::World;
 /// Slot `x` pays its upkeep over `dt` at `t` K by burning its fuel, then loses the share unpaid (`SPENT`), the share
 /// its wear gives (`AGE`) and the share frozen (`PHASE`) to its cell's remains. Returns the kg lost by cause, and the
 /// upkeep, J.
-pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64, f64), b: &mut Books) -> ([f64; 6], f64) {
+pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64, f64), b: &mut Books) -> ([f64; crate::life::DEATHS], f64) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
     let (burn, days) = (&chem.reactions[p.burn], dt / DAY);
     let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
@@ -45,7 +45,7 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     // the active rate; below its frost gene, hardened by its dormancy, its frozen share dies (laws.md 3).
     let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
     let frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
-    let mut lost = [0.0; 6];
+    let mut lost = [0.0; crate::life::DEATHS];
     let mut left = 1.0;
     for (f, cause) in [(short, SPENT), (crate::math::one_minus_exp(worn), AGE), (frozen, PHASE)] {
         lost[cause as usize] = f * left;

@@ -11,6 +11,10 @@ pub const TAKEN: u8 = 3;
 pub const BROKEN: u8 = 4;
 /// Worn out by living (its wear, `cover::live`).
 pub const AGE: u8 = 5;
+/// Its ground went under the standing liquid (`cover::live`): the plants that stood there are gone with it.
+pub const DROWNED: u8 = 6;
+/// How many causes of death there are (`LACK` to `DROWNED`): the size of `Counters::cover_lost` and `takers_died`.
+pub const DEATHS: usize = 7;
 /// The liquid share of living tissue: a kg of matter makes 1 / (1 - this) kg of living tissue (`Cover::living`).
 pub const WET_TISSUE: f64 = 0.75;
 

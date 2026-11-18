@@ -13,18 +13,18 @@ pub struct Counters {
     /// to zero: mol, and J
     #[serde(skip)]
     pub rounded: [f64; 2],
-    /// Cover that died, kg, by cause (`life::LACK` to `AGE`)
+    /// Cover that died, kg, by cause (`life::LACK` to `DROWNED`)
     #[serde(skip)]
-    pub cover_lost: [f64; 6],
+    pub cover_lost: [f64; crate::life::DEATHS],
     /// The flows of the cover's budget, J, + into the cover (`cover::BUDGET`)
     #[serde(skip)]
     pub cover_budget: [f64; crate::cover::BUDGET.len()],
     /// The flows of the seeds, kg (`cover::SEED_FLOWS`)
     #[serde(skip)]
     pub seeds: [f64; crate::cover::SEED_FLOWS.len()],
-    /// Takers that died, members, by cause (`life::LACK` to `AGE`)
+    /// Takers that died, members, by cause (`life::LACK` to `DROWNED`)
     #[serde(skip)]
-    pub takers_died: [f64; 6],
+    pub takers_died: [f64; crate::life::DEATHS],
     /// What the cover of a cell built in a month, kg of dry matter (cell, kg), until its month ends (`cover::landed`)
     #[serde(skip)]
     pub grown: Vec<(u32, f64)>,
@@ -65,7 +65,7 @@ impl Counters {
 /// The counts the shell takes once a year (`World::take_counters`).
 #[derive(Debug, Default)]
 pub struct Taken {
-    pub cover_lost: [f64; 6],
+    pub cover_lost: [f64; crate::life::DEATHS],
     pub cover_budget: [f64; crate::cover::BUDGET.len()],
     pub seeds: [f64; crate::cover::SEED_FLOWS.len()],
 }

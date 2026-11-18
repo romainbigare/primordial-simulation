@@ -21,9 +21,10 @@ pub fn step(w: &World, d: &mut Chunk) {
         if d.cover(i).any() {
             cell(w, d, &p, i, dt);
         } else {
-            let moist = if crate::contract::land(w, i) > 0.0 { super::wet(w, &p, i, w.g(p.liquid, i)).1 } else { 1.0 };
+            let land = super::ground(w, i);
+            let moist = if land > 0.0 { super::wet(w, &p, i, w.g(p.liquid, i)).1 } else { 1.0 };
             let c = d.cover(i);
-            (c.mark, c.keep, c.film, c.reach) = (w.light[i], 0.0, 0.0, 0.0);
+            (c.mark, c.keep, c.film, c.reach, c.land) = (w.light[i], 0.0, 0.0, 0.0, land);
             remember(c, moist, w.cfg.months_per_year as f32);
         }
     }
@@ -72,8 +73,10 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
 }
 
 /// The month over `dt` s of the cover `c` of cell `i` (its place on the map, where its seeds go from) that reads `a`:
-/// it catches light, runs its light reaction, pays its upkeep, builds and sends seeds (into `Cover::seeds`); alike
-/// slots merge, and slots left with no built cover empty into its remains. Returns what it changed outside itself
+/// the plants on the ground it lost since its last month die with it (`drown`); it catches light, runs its light
+/// reaction, pays its upkeep, builds and sends seeds (into `Cover::seeds`); alike slots merge, and slots left with no
+/// built cover empty into its remains. With no ground it holds no plants, and its seeds lying wait on the ground under
+/// the liquid. Returns what it changed outside itself
 /// (`Books`) and the light it caught, J; what it lost and rounded is counted in `counts`.
 pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), counts: &mut Counters) -> (Books, f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
@@ -86,7 +89,18 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     c.mark = a.light;
     // The seeds lying on its ground first: what wakes takes part in the month as seedlings.
     let mut flows = [0.0; BUDGET.len()];
+    let e = p.content(chem);
+    let drowned = drown(c, (&mm, &e, n), area, &mut flows, counts);
     let lying = super::lying::month(w, c, p, a, (i, area, dt), &mut flows, counts);
+    if area <= 0.0 {
+        let mut b = Books::new(a.air, flows);
+        (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q] + drowned[q]);
+        empty(c, (p, &mm, &e, n), &mut b);
+        (c.keep, c.film, c.reach, c.land) = (0.0, 0.0, 0.0, 0.0);
+        remember(c, a.moist, w.cfg.months_per_year as f32);
+        counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
+        return (b, 0.0);
+    }
     super::stand::thin(c, &mm, (ph, rho, n), area);
     let mut s = [Slot::default(); SLOTS];
     let (mut layers, mut n_layers) = ([(0.0, 0.0, 0.0, 0.0, 0); SLOTS], 0);
@@ -114,8 +128,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books::new(a.air, flows);
-    (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q]);
-    let e = p.content(chem);
+    (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q] + drowned[q]);
     let before = c.content(&e);
     // The light per unit of absorbing area at the top of its layers: with no leaves, all that reaches the ground.
     let per = if lit > 0.0 { caught * a.reach / lit } else { dl * a.reach };
@@ -139,15 +152,47 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     super::stand::thin(c, &mm, (ph, rho, n), area);
     super::stand::merge_alike(c, &mm, (ph, n));
     remember(c, a.moist, w.cfg.months_per_year as f32);
+    empty(c, (p, &mm, &e, n), &mut b);
+    c.land = area;
+    counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
+    (b, caught)
+}
+
+/// The plants of the `n` slots in use of cover `c` that stood on the ground it lost since its last month went under the
+/// standing liquid with it (its parts of masses `mm` holding `e` J a mol): of each slot the share 1 − `area` / `Cover::land` dies (all of it where it has no ground),
+/// whole plants of every group alike (each one left keeps its mass), counted as drowned (`life::DROWNED`) and booked
+/// as died (`DIED` of `flows`). A stand is placed per m² of its ground, and ground that goes under the liquid takes
+/// the plants on it, not their room only (with their room only, the self-thinning law would heap their mass on fewer
+/// and larger plants). Returns what died, mol of each part, for its remains.
+fn drown(c: &mut Cover, (mm, e, n): (&[f64; NP], &[f64; NP], usize), area: f64, flows: &mut [f64], counts: &mut Counters) -> [f64; NP] {
+    let mut dead = [0.0; NP];
+    let f = if area <= 0.0 { 1.0 } else if c.land > area { 1.0 - area / c.land } else { 0.0 };
+    if f <= 0.0 {
+        return dead;
+    }
+    for x in (0..n).filter(|&x| c.root[x] != NO_ROOT) {
+        counts.cover_lost[crate::life::DROWNED as usize] += f * c.kg(mm, x);
+        c.plants[x].iter_mut().for_each(|k| *k *= 1.0 - f);
+        let alive = budget::held(e, &c.mol[x]);
+        for (held, d) in c.mol[x].iter_mut().zip(dead.iter_mut()) {
+            let m = if f >= 1.0 { *held } else { held.max(0.0) * f };
+            (*held, *d) = (*held - m, *d + m);
+        }
+        flows[DIED] += budget::held(e, &c.mol[x]) - alive;
+    }
+    dead
+}
+
+/// The slots of the `n` in use of cover `c` (its parts `p` of masses `mm`, holding `e` J a mol) left with no built cover
+/// empty into its remains (`Books::dead`).
+fn empty(c: &mut Cover, (p, mm, e, n): (&Parts, &[f64; NP], &[f64; NP], usize), b: &mut Books) {
     for x in 0..n {
-        if c.root[x] != NO_ROOT && c.built(&mm, x) <= EMPTY_KG {
+        if c.root[x] != NO_ROOT && c.built(mm, x) <= EMPTY_KG {
             (0..NP).for_each(|q| b.dead[p.sub[q]] += c.mol[x][q]);
-            b.budget[DIED] -= budget::held(&e, &c.mol[x]);
+            b.budget[DIED] -= budget::held(e, &c.mol[x]);
             c.clear(x);
         }
     }
-    counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
-    (b, caught)
 }
 
 /// The slots of cover `c` in `order` (cell `i`, that reads `a`) grow over `dt` (`grow_slot`), each as its slot `s` in

@@ -12,7 +12,7 @@ pub(super) struct YearTally {
     pub t_land: Vec<f64>,
     pub land: Option<Vec<u32>>,
     /// Cover that died, kg, by cause (`Counters::cover_lost`)
-    pub cover_lost: [f64; 6],
+    pub cover_lost: [f64; pcore::life::DEATHS],
     /// The flows of the cover's budget, J (`Counters::cover_budget`)
     pub cover_budget: [f64; pcore::cover::BUDGET.len()],
     /// The flows of the seeds, kg (`Counters::seeds`)

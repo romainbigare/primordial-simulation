@@ -878,14 +878,17 @@ its walls are a frame, which pays no upkeep and does not wear, so its capacity, 
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
 1990, from memory). The cover of a cell is a node of the
 store (`Class::Life`, the life of its cell) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
-chunk of the cell is its one writer. **It lives on the cell's land** (`cover::ground`: `contract::land`, at least
-`LEAST_GROUND_M2`, 1 m²): its leaves layer over the land (its light and its shade), its plants find their room on it
-(the self-thinning law, founding, seeds that lodge), the seeds that land on the cell lie and wake on it, and it is
-placed per m² of it. How wet its ground is to it is the land part's own liquid over that part's area for a cell of
-parts (no more than the cell holds; `flow::parts` keeps each part's matter), else the cell's over its area. A cell
-whose land shrinks as its liquid rises gives its cover less room, and it thins by the self-thinning law; one whose land
-is gone gives it 1 m², so it thins to almost no plants and, under the liquid (its light times e^(−depth /
-`light_depth`)), pays more upkeep than it stores and dies by its laws, its remains to the ground. Its temperature is
+chunk of the cell is its one writer. **It lives on the cell's land** (`cover::ground`: `contract::land`): its leaves layer over the land (its light
+and its shade), its plants find their room on it (the self-thinning law, founding, seeds that lodge), the seeds that
+land on the cell lie and wake on it, and it is placed per m² of it. How wet its ground is to it is the land part's own
+liquid over that part's area for a cell of parts (no more than the cell holds; `flow::parts` keeps each part's
+matter), else the cell's over its area. **Ground that goes under the liquid takes the plants on it**: each month,
+first, where its land is less than the land it stood on at its last month (`Cover::land`), the share
+1 − land now / land then of every slot dies as whole plants of every group alike, each plant left keeping its mass,
+to its remains (counted as `DROWNED`): the plants stood on that ground, and with their room only the self-thinning
+law would heap their mass on fewer and larger plants. Land that comes out of the liquid is new room. A cell whose land
+is gone holds no plants: all its cover drowns, and its seeds lying wait on the ground under the liquid, worn and
+frozen by their laws, and wake only when land comes back. Its temperature is
 its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
 task per chunk), slot by slot, the tallest first. **Plants**: a slot holds one pool of matter, and its plants in up

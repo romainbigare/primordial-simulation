@@ -138,10 +138,13 @@ fn room(c: &mut Cover, mm: &[f64; NP], n: usize) -> usize {
 /// Place `kg` per m² of its ground (`cover::ground`, the cell's land) of cover of genes `genes` and starting kind `root` in cell `i`, an edit booked from the outside
 /// node (`World::cross`): its built cover at the shares of its genes, its fuel at its `STORE` gene, at the cell's
 /// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover or the cell has no
-/// room for it (nothing is placed then).
+/// ground or no room for it (nothing is placed then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, area) = (p.mm(&w.chem), super::ground(w, i));
+    if area <= 0.0 {
+        return false;
+    }
     let s = sown(&w.chem, &w.cfg.phys, &p, (i, area, w.t_ground_last(i)), genes, root, kg);
     let mol = s.mol;
     let heat = s.heat;
