@@ -29,7 +29,7 @@ window.__ew = { map, vegetation,
   lattices: { LATTICES, REACH, STAND, ROWS_MOST, MARK_MARGIN, MARK_SPARE, PLANES_DOWN, GROUPS } };
 `;
 /** Where the hooks go: the end of the page's script (web/build.mjs). */
-const SCRIPT_END = '})();\n</script>';
+const SCRIPT_END = '}\n</script>';
 
 /** Copy the built page into `out/look/<name>` with the hooks, its programs replaced by `shaders` (the JSON of
  * web/shade) where given. Returns the folder. */
