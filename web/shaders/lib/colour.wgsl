@@ -133,16 +133,18 @@ struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 // where it shows; snow `snow` over it; its stones, as far as they stand out of the snow; and over all the plants that
 // stand out of it (its cover, as far as
 // liquid over their roots leaves them, `above_water`; the cover's field holds how the snow buries them and how the bed
-// holds them). The share of it that is bare, and its map class.
-struct Ground { rgb: vec3f, bare: f32, kind: u32 }
+// holds them). The share of it that is bare, its map class, and the share of its bare part that takes the soil's
+// warmth (`soil`: a beach's sand keeps its own colour).
+struct Ground { rgb: vec3f, bare: f32, kind: u32, warm: f32 }
 fn ground_of(p: Spot, snow: f32) -> Ground {
   var g: Ground;
   g.rgb = p.ground;
   g.kind = BARE;
+  g.warm = 1.0;
   // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn. No plant
   // stands where the waves' swash runs (`swash_of`): its cell's plants stand above it.
   let plants = p.cover.a * above_water(p.depth) * (1.0 - min(p.swash.x / SWASH_DRY, 1.0));
-  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS); }
+  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
   // In the style a beach of sand is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`); of pebbles,
@@ -151,6 +153,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     let grain = shore_grain(p);
     let sand = select(SAND, mix(BEACH_SAND, min(p.ground * BEACH_LIFT, vec3f(1.0)), BEACH_OWN), styled());
     g.rgb = mix(g.rgb, mix(sand, p.bed, grain.x), p.sand * (1.0 - grain.y));
+    g.warm = 1.0 - p.sand * (1.0 - grain.y);
   }
   // In the style the soil has its grain (crag.wgsl `floor_of`). Where the loose ground thins its bed shows, in the
   // style as slabs or, where steep, a cliff's face (`rock_face`); it holds plants only in its cracks. Slope alone
@@ -221,9 +224,9 @@ fn swash_of(over: f32, sea: f32, slope: f32, at: vec2f, e: f32, snow: f32) -> ve
 }
 
 // Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked (and in the
-// style warmer, style.wgsl `bare_tint`).
+// style warmer as far as it takes warmth, style.wgsl `bare_tint`).
 fn soil(g: Ground, s: f32, lit: f32) -> vec3f {
-  let tint = select(vec3f(1.0), bare_tint(g.bare), styled());
+  let tint = select(vec3f(1.0), bare_tint(g.bare * g.warm), styled());
   return lit_by(g.rgb * (1.0 - WET_DARK * s * g.bare) * tint, lit);
 }
 
@@ -252,7 +255,7 @@ fn reads_ground(p: Spot) -> bool {
 // snow over the liquid, without it under the liquid (frozen liquid lies on the surface); black where it is not read.
 // Each pixel's colours read it at one place in the code (land.wgsl `fs`), so its rock and stones are compiled once.
 fn ground_for(p: Spot, running: bool) -> Ground {
-  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE); }
+  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE, 1.0); }
   return ground_of(p, select(p.snow, 0.0, p.depth > 0.0 || running));
 }
 

@@ -54,7 +54,7 @@ const BED_SHOWN = 0.8;
 // Beach sand (colour.wgsl `beach`), bright and dry; a beach takes this share of its colour from its loose ground's
 // own, lifted this many times (washed and dry, a ground is lighter).
 const BEACH_SAND = vec3f(0.62, 0.53, 0.36);
-const BEACH_OWN = 0.5; const BEACH_LIFT = 1.8;
+const BEACH_OWN = 0.3; const BEACH_LIFT = 1.8;
 
 // The weights of red, green and blue in a colour's lightness (Rec. 601).
 const LUMA = vec3f(0.299, 0.587, 0.114);
