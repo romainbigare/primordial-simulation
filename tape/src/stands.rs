@@ -34,15 +34,21 @@ pub struct Plants {
 /// 3): its crowns cover of that ground the share whose light the layer stops, 1 - e^-(leaf / rooted), the cover's
 /// own light law (`math::shade`), so a stand the law holds closed to the light is drawn closed; they stand in patches
 /// where they close, each plant's crown the ground it holds there; its stem and height are the cover's law for a plant
-/// of its mass (`cover::stem`, `cover::height`).
+/// of its mass (`cover::stem`, `cover::height`). Plants with no capture area still stand, bare: their crowns cover no
+/// ground, of no width and not closed (the limit of a crown as its leaves fall to none), so a viewer draws them by their
+/// stems as it draws a crown that has shed its leaves.
 pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, walls: f64, rho: f64) -> Plants {
-    if kg <= 0.0 || leaf <= 0.0 || per_m2 <= 0.0 || rooted <= 0.0 {
+    if kg <= 0.0 || per_m2 <= 0.0 || rooted <= 0.0 {
         return Plants::default();
     }
-    let cover = -rooted * (-leaf / rooted).exp_m1();
-    let (mass, inside) = (kg / per_m2, per_m2 / cover);
-    let width = (1.0 / (std::f64::consts::FRAC_PI_4 * inside)).sqrt();
+    let mass = kg / per_m2;
     let (stem, height) = (cover::stem(ph, mass, walls, rho), cover::height(ph, mass, walls, rho));
+    if leaf <= 0.0 {
+        return Plants { per_m2, mass, height, stem, ..Plants::default() };
+    }
+    let cover = -rooted * (-leaf / rooted).exp_m1();
+    let inside = per_m2 / cover;
+    let width = (1.0 / (std::f64::consts::FRAC_PI_4 * inside)).sqrt();
     Plants { per_m2, mass, height, stem, width, cover, crown: -(-leaf / cover).exp_m1() }
 }
 
@@ -144,7 +150,8 @@ mod tests {
 
     /// The rows hold the cell's cover slot by slot: two slots of one starting kind, far apart in their genes, make two
     /// rows, the heaviest first, whose built cover sums to the cell's and whose plants are each slot's own count; each
-    /// per m² of the cell's land, and none on a cell that holds no land.
+    /// per m² of the cell's land, and none on a cell that holds no land. Plants with no capture area stand as plants of
+    /// a little do, bare: their crowns of no width, covering nothing.
     #[test]
     fn rows_hold_the_cells_slots() {
         let mut w = worldgen::testkit::small_world();
@@ -166,5 +173,9 @@ mod tests {
         let half = rows(&w, i, 0.5);
         assert!((half[1] / kind(0)[1] - 2.0).abs() < 1e-12 && (half[3] / kind(0)[3] - 2.0).abs() < 1e-12, "per m² of the land");
         assert!(rows(&w, i, 0.0).chunks(KIND_ROW).all(|k| k[0] == -1.0), "no kinds where no land");
+        let stand = |leaf: f64| plants(&w.cfg.phys, (2.0, leaf, 0.05), 0.8, 0.9, 500.0);
+        let (bare, leafy) = (stand(0.0), stand(1e-12));
+        assert!(bare.per_m2 == leafy.per_m2 && bare.mass == leafy.mass && bare.height == leafy.height && bare.stem == leafy.stem, "{bare:?} against {leafy:?}");
+        assert!(bare.height > 0.0 && bare.width == 0.0 && bare.cover == 0.0 && bare.crown == 0.0 && leafy.width < 1e-5, "bare: {bare:?}");
     }
 }

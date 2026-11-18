@@ -34,11 +34,12 @@ const CROWN_PER_STEM = 20;
 
 /** The crowns of a kind that stands as plants (row `r`) on the share `rooted` of its square: as wide as its wood holds
  * them through the year, not as its leaves cover the ground this month, so its plants keep their size and place as it
- * sheds and leafs out: `CROWN_PER_STEM` of its stem's width, no wider than its plants' share of the ground lets them stand, never
- * narrower than its leaves cover; the share of the ground they cover then, and how closed a crown is with the leaves
- * it bears (the cover's light law over that ground, as `tape/src/stands.rs` `plants`). */
+ * sheds and leafs out, bare ones too (no capture area, `tape/src/stands.rs` `plants`): `CROWN_PER_STEM` of its stem's
+ * width, no wider than its plants' share of the ground lets them stand, never narrower than its leaves cover; the share
+ * of the ground they cover then, and how closed a crown is with the leaves it bears (the cover's light law over that
+ * ground, as `tape/src/stands.rs` `plants`; 0 for a bare one). */
 export function standingCrowns(r: Float32Array, rooted: number): { width: number; cover: number; closed: number } {
-  if (r[K.perM2] <= 0 || r[K.cover] <= 0) return { width: r[K.width], cover: r[K.cover], closed: r[K.crown] };
+  if (r[K.perM2] <= 0) return { width: r[K.width], cover: r[K.cover], closed: r[K.crown] };
   const room = Math.sqrt(rooted / ((Math.PI / 4) * r[K.perM2]));
   const width = Math.max(r[K.width], Math.min(CROWN_PER_STEM * r[K.stem], room));
   const cover = Math.min((Math.PI / 4) * r[K.perM2] * width * width, rooted);

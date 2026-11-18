@@ -4,7 +4,7 @@
 // its state this month), set out on the marks' three lattices, with their colours and the field the marks too small to
 // draw make. No kind is a class: a plant's size, shape and colour are functions of its numbers.
 import type { Rgb } from './style';
-import { DESIGN, KindLook, designOf, fromScreen, grownWalls, seenFar, standsOf, strawSeen, toScreen, treeFrom } from './style';
+import { BARE_LEFT, DESIGN, KindLook, designOf, fromScreen, grownWalls, seenFar, standsOf, strawSeen, toScreen, treeFrom } from './style';
 import { formOf } from './form';
 import { K, groupsOf, lookOfRow, standingCrowns } from './kind_row';
 import { LATTICES, STANDS, marksOf } from './lattices';
@@ -93,7 +93,12 @@ class Paint {
    * plants `height` m tall, held by the share `rooted` of the square, their roots needing `need` m of loose ground,
    * their marks `width` m wide (0: none, the sward). */
   add(k: number, order: number, c: Rgb, covers: number, shadow: number, [height, rooted, need]: number[], width: number): void {
-    if (covers <= 0) return;
+    // A kind of marks that covers none of the ground here (its plants bare) is still one of the layer's kinds, in its
+    // order.
+    if (covers <= 0) {
+      if (order < this.first.order) this.first = { order, rgb: c, covers: 0, k };
+      return;
+    }
     this.rgb = this.rgb.map((v, q) => v + covers * toScreen(c[q])) as Rgb;
     this.covered += covers;
     this.tall += covers * height;
@@ -143,7 +148,7 @@ function swardOf(r: Float32Array, k: number, order: number, look: KindLook, part
   const c = seenFar(look), crown = r[K.crown] * look.left;
   const straw = (1 - Math.exp(-STRAW_AREA * r[K.kg] * r[K.wood])) * (1 - crown), closes = crown + straw;
   const covers = part * r[K.cover] * closes, mixed = closes > 0 ? straw / closes : 0, s = strawSeen();
-  sward.add(k, order, [0, 1, 2].map(q => c[q] + (s[q] - c[q]) * mixed) as Rgb, covers, 0, stand, 0);
+  if (covers > 0) sward.add(k, order, [0, 1, 2].map(q => c[q] + (s[q] - c[q]) * mixed) as Rgb, covers, 0, stand, 0);
   flowers.add(k, 0, look.petal, covers * look.bloom, 0, stand, 0);
 }
 
@@ -189,8 +194,11 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       });
       if (!groups.length) continue;
       const large = groups[0], c = seenFar(look);
-      // How closed its crown is with the leaves it bears this season: how dense times the leaves left.
-      const packed = Math.round(look.left * LEFT_STEPS) + Math.min(large[K.crown], 1 - 1e-3);
+      // Its leaves left this season and how closed its crown is in leaf: its large plants'. Where they stand bare (no
+      // capture area) it is drawn as a dormant crown (`BARE_LEFT`), as closed as that of its largest plants in leaf (its
+      // whole frame where none are), so its marks keep their size and show their bare wood.
+      const leafy = groups.find(q => q[K.crown] > 0), left = large[K.crown] > 0 ? look.left : Math.min(look.left, BARE_LEFT);
+      const packed = Math.round(left * LEFT_STEPS) + Math.min(leafy ? leafy[K.crown] : 1, 1 - 1e-3);
       const shape = formOf({ leaf: r[K.leaf], frost: r[K.frost], moist: r[K.moist], height: large[K.height], width: large[K.width], seed: r[K.seed] });
       const ofGroups = (plane: number, v: (g: number) => number) => groups.forEach((_, g) => put(plane + k, i, g, v(g)));
       put(group(P.need, k), i, k & 3, 10 ** r[K.moist]);

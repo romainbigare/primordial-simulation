@@ -88,8 +88,9 @@ const WEATHERED = 0.35;
 /** One plant turns at its own time: the plants of a kind span this much of the turn either way of its stage, once the
  * stage is twice this far in. */
 const TURN_SPREAD = 0.2;
-/** A dormant crown of a kind that sheds keeps this share of its leaves. */
-const BARE_LEFT = 0.35;
+/** A dormant crown of a kind that sheds keeps this share of its leaves (and a crown whose plants stand bare, canopy.ts
+ * `kindsOf`). */
+export const BARE_LEFT = 0.35;
 /** A kind that keeps its leaves keeps them green through the cold and the drought: darker by up to this share of its
  * lightness in the cold, and duller by up to this share of its chroma in the drought. */
 const KEPT_DARK = 0.25, KEPT_DULL = 0.4;

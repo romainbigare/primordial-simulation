@@ -72,9 +72,8 @@ fn model_fit(q: Plant) -> ModelFit {
   // Covering its crown's ground (`MODEL_WIDER`), no taller than it stands (`STAND` of its height), within its
   // lattice's reach with its lean (the pixel looks no farther for it: cover.wgsl `lattice`).
   let stands = select(BUSH_DEEP * q.d, STAND * q.h, q.design == TREE);
-  // A thin crown (how closed over the leaves left) is a smaller one, never a half-bare one.
-  let crown_closed = q.closed / max(q.left, 1e-3);
-  let covers = q.d * min(sqrt(0.25 * PI * crown_closed / (model_fill(s) * aspect)), MODEL_WIDER);
+  // A thin crown (how closed in leaf) is a smaller one, never a half-bare one.
+  let covers = q.d * min(sqrt(0.25 * PI * q.closed / (model_fill(s) * aspect)), MODEL_WIDER);
   let held = min(covers, q.reach / (0.5 + abs(q.lean.x) * aspect));
   let w = min(held, stands / aspect);
   // A mark whose crown's ground is wider than one plant of its height covers (a clump of its plants, lattices.ts
@@ -159,7 +158,7 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   let lum = dot(t.rgb, LUMA);
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
   var leaf = q.rgb * lum / LEAF_MEAN;
-  leaf = mix(leaf, CROWN_SNOW_RGB * lum / LEAF_MEAN, CROWN_SNOW * snow * q.closed * smoothstep(0.6, 1.4, lum / LEAF_MEAN));
+  leaf = mix(leaf, CROWN_SNOW_RGB * lum / LEAF_MEAN, CROWN_SNOW * snow * q.closed * q.left * smoothstep(0.6, 1.4, lum / LEAF_MEAN));
   // The leafy sprite's sprays over the bare twin.
   let under = bare.a * (1.0 - a);
   return vec4f((mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under), a + under);

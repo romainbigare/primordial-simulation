@@ -1,7 +1,7 @@
 // A plant the marks draw (mark.wgsl decides it, models.wgsl draws it): its numbers, the forms of a tree's crown its
 // kind's numbers choose (web/src/form.ts) and how it stands up on the map from its foot.
 
-// A plant: its foot, m from the draw's corner; its crown's width and its height, m; how closed its crown is; its colour
+// A plant: its foot, m from the draw's corner; its crown's width and its height, m; how closed its crown is in leaf; its colour
 // and its walls' share; its own random numbers; its design (style.ts `DESIGN`); its form (form.ts `Form`) and how
 // surely; its lean (a share of its height, east and south); how far from its foot it may reach, m; how dry its kind's
 // ground, 0..1 (form.ts `Form`); and the share of its leaves left this season.

@@ -238,9 +238,9 @@ const LEFT_STEPS = 100.0;
 // its foot lets it stand (the rows looked at, textures.ts `ROWS_MOST`); no wider than its lattice's reach each way.
 fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up: f32) -> Plant {
   let form = kind(form_plane(t), sq);
-  // Its leaves left this season, and how closed its crown is with them (how dense times the leaves left).
+  // Its leaves left this season, and how closed its crown is in leaf.
   let left = floor(form.x) / LEFT_STEPS;
-  let closed = fract(form.x) * left;
+  let closed = fract(form.x);
   let first = kind(from_plane(t), sq);
   let to = kind(to_plane(t), sq);
   // Its own size: the plants of a stand differ, by up to `SIZES` either way of their place's.
