@@ -365,6 +365,106 @@
     ],
     "cut": 0.05,
     "leaf": 0.045
+   },
+   {
+    "model": "rock_moss_set_02",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ],
+     [
+      3
+     ],
+     [
+      4
+     ],
+     [
+      6
+     ]
+    ],
+    "set": "SHORE_ROCK",
+    "rest": true,
+    "sink": 0.2
+   },
+   {
+    "model": "rock_moss_set_01",
+    "parts": [
+     [
+      0
+     ],
+     [
+      2
+     ]
+    ],
+    "rest": true,
+    "sink": 0.2
+   },
+   {
+    "model": "rock_09",
+    "rest": true,
+    "sink": 0.2
+   },
+   {
+    "model": "namaqualand_boulder_04",
+    "rest": true,
+    "sink": 0.2
+   },
+   {
+    "model": "namaqualand_boulder_06",
+    "rest": true,
+    "sink": 0.2
+   },
+   {
+    "model": "dead_quiver_branch_01",
+    "set": "DRIFTWOOD"
+   },
+   {
+    "model": "dead_quiver_branch_02"
+   },
+   {
+    "model": "dry_branches_medium_01",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ]
+    ]
+   },
+   {
+    "model": "grass_medium_01",
+    "parts": [
+     [
+      0
+     ],
+     [
+      10
+     ],
+     [
+      1
+     ],
+     [
+      6
+     ],
+     [
+      7
+     ],
+     [
+      9
+     ]
+    ],
+    "squash": 3.5,
+    "set": "REED"
    }
   ]
  }

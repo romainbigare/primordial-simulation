@@ -34,7 +34,7 @@ async function load(name) {
 }
 
 // The meshes of model `s.model` (its nodes `s.nodes`, else all), baked in place with their materials: both sides,
-// cut-out leaves, matte; with `s.stem`, set on a stem (a trunk of tree fern fibre, `STEM_RGB`) `s.stem.up` of their
+// cut-out leaves, matte; with `s.squash`, stretched that many times as tall (as the carpets' reeds, bake.html); with `s.stem`, set on a stem (a trunk of tree fern fibre, `STEM_RGB`) `s.stem.up` of their
 // own height tall and `s.stem.r` of it wide at its foot, tapering to `STEM_TOP` of that.
 async function meshesOf(s) {
   const g = await load(s.model);
@@ -45,6 +45,7 @@ async function meshesOf(s) {
     let n = o; while (n && !g.parser.associations.get(n)?.hasOwnProperty('nodes')) n = n.parent;
     if (s.nodes && !s.nodes.includes(g.parser.associations.get(n)?.nodes)) return;
     const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld);
+    if (s.squash) geo.scale(1, s.squash, 1);
     const mat = o.material.clone();
     mat.side = THREE.DoubleSide; mat.metalness = 0; mat.roughness = 1; mat.roughnessMap = null; mat.metalnessMap = null;
     if (mat.transparent || mat.alphaTest > 0 || mat.alphaMap) { mat.alphaTest = 0.5; mat.transparent = false; }

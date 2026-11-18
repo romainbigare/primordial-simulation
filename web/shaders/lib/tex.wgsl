@@ -5,9 +5,13 @@
 @group(0) @binding(20) var detail_tex: texture_2d_array<f32>;
 @group(0) @binding(21) var detail_sampler: sampler;
 
-// The photographs' layers: river pebbles, mossy rock, wet mud (laid by detail.wgsl `detail`), and a mossy floor with
-// twigs.
+// The photographs' layers: river pebbles, mossy rock, wet mud (laid by detail.wgsl `detail`), a mossy floor with
+// twigs; damp beach sand streaked by the swash, dry beach sand with shells and grit, dark wet mud with stones and
+// sticks, rounded river pebbles of many rocks, angular gravel of small stones, mud with moss and seedlings, and a
+// dense mat of fallen leaves.
 const PEBBLE_TEX = 0; const ROCK_TEX = 1; const MUD_TEX = 2; const MOSSY_TEX = 3;
+const WET_SAND_TEX = 4; const DRY_SAND_TEX = 5; const DARK_MUD_TEX = 6; const ROUND_PEBBLE_TEX = 7; const GRAVEL_TEX = 8;
+const MOSS_MUD_TEX = 9; const LEAF_MAT_TEX = 10;
 // The mip level of one texel (512 texels a side).
 const DETAIL_TOP = 9.0;
 
@@ -30,7 +34,7 @@ fn photo_light(t: i32, uv: vec2f, g: f32) -> f32 {
 // snow rippled by the wind with stones and dry stalks in it, tall wet grass and reeds; and the petals of a meadow's
 // flowers alone, grey on black (their lightness: the world gives their colour); short turf and tussocks with bare
 // ground between them, green and dry.
-const CARPETS_FROM = 4;
+const CARPETS_FROM = 11;
 const GRASS_CARPET = 0; const STRAW_CARPET = 1; const LITTER_CARPET = 2; const FERN_CARPET = 3; const SCRUB_CARPET = 4;
 const CRACKED_CARPET = 5; const SAND_CARPET = 6; const SNOW_CARPET = 7; const REED_CARPET = 8; const FLOWER_CARPET = 9;
 const TURF_CARPET = 10; const TUSSOCK_CARPET = 11; const DRY_TURF_CARPET = 12; const DRY_TUSSOCK_CARPET = 13;
@@ -40,7 +44,7 @@ fn carpet_m(c: i32) -> f32 { var m = array<f32, 14>(1.5, 1.5, 3.0, 3.0, 3.0, 3.0
 // The rendered models (web/textures/trees.png and models.png; their table, sets and counts in sprites.wgsl, which the
 // bake tool writes): the trees one to a layer from `TREES_FROM` on, the rest four to a layer from `MODELS_FROM` on
 // (models.wgsl draws the plants from them, detail.wgsl the things on the ground).
-const MODELS_FROM = 18; const TREES_FROM = MODELS_FROM + MODEL_LAYERS;
+const MODELS_FROM = 25; const TREES_FROM = MODELS_FROM + MODEL_LAYERS;
 // The mean lightness of the grass tufts' blades (linear).
 const TUFT_MEAN = 0.048;
 // The texel of model sprite s at `uv` in its content (0..1, y down), at `g` of its content a pixel: linear, with cover.

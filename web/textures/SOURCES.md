@@ -13,6 +13,16 @@ layers, top first.
 | 1 | aerial_rocks_02 (diffuse) | 50 m |
 | 2 | brown_mud (diffuse) | 1.3 m |
 | 3 | forest_leaves_02 (diffuse) | 3.0 m |
+| 4 | damp_beach_sand (diffuse) | 2.0 m |
+| 5 | coast_sand_02 (diffuse) | 15 m |
+| 6 | brown_mud_02 (diffuse) | 1.3 m |
+| 7 | ganges_river_pebbles (diffuse) | 2.2 m |
+| 8 | river_small_rocks (diffuse) | 2.9 m |
+| 9 | brown_mud_leaves_01 (diffuse) | 1.3 m |
+| 10 | forest_leaves_03 (diffuse) | 2.3 m |
+
+Each is the 2k diffuse shrunk to 512 x 512, its light divided by itself blurred (a Gaussian of 40 texels, wrapping
+round, so the layer still repeats) and scaled back to its mean.
 
 ## carpets.jpg
 
@@ -52,7 +62,8 @@ cell's bottom middle, rendered at twice the cell's side and shrunk. `trees.png` 
 layer; `models.png` the rest four to a layer. `bake/sprites.json` names each model, its parts (its nodes), the sides it
 is seen from (turns about the vertical), how much of its foot is cut off (the patch of ground some trees stand on), and
 whether it is set down on the face it rests on (the face of its convex hull nearest its centre of weight: the rocks)
-and how far it is sunk into the ground (a fifth of its height, cut off at the ground line), which of its materials are
+and how far it is sunk into the ground (a fifth of its height, cut off at the ground line), how many times as tall it
+is stretched (the reeds), which of its materials are
 its leaves (a tree that sheds gets a bare twin: rendered again in the same frame with its leaves hidden, at half the
 side, four to a layer after the models' own sprites), and the mean lightness its
 leaves are scaled to (texels whose green stands out, as the page tells leaves: the models'
@@ -66,4 +77,4 @@ alone, to compare.
 | strip | sprites (sets) |
 |---|---|
 | trees.png | island_tree_01, island_tree_02 (broad crowns), jacaranda_tree, each from three sides (each with a bare twin); fir_tree_01's three trees each from three sides; pine_tree_01's three pines, pine_sapling_medium's two (young pines), pine_sapling_small's three, fir_sapling_medium's three (young spruces); quiver_tree_01 (with bare twins: its trunk and branches) and quiver_tree_02 (one material: no twin) each from two sides |
-| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest; soft tall plants (palms, tree ferns, giant herbs), built: fern_02's clumps c, a and d and calathea_orbifolia_01's first, each set on a plain tapering stem of a tree fern's dark brown (1.2 and 0.8 times its height), and pachira_aquatica_01's first two trees (bark and leaves); then the trees' bare twins |
+| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest; soft tall plants (palms, tree ferns, giant herbs), built: fern_02's clumps c, a and d and calathea_orbifolia_01's first, each set on a plain tapering stem of a tree fern's dark brown (1.2 and 0.8 times its height), and pachira_aquatica_01's first two trees (bark and leaves); shore rocks: rock_moss_set_02's meshes 0, 1, 2, 3, 4, 6, rock_moss_set_01's 0 and 2, rock_09, namaqualand_boulder_04 and _06; driftwood: dead_quiver_branch_01 and _02, dry_branches_medium_01's three; reeds, built: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 each stretched three and a half times as tall (as the carpets' reeds, layer 8); then the trees' bare twins |
