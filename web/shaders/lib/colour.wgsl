@@ -40,7 +40,8 @@ const EXAGGERATE = 6.0;
 // deep (sand is the load the wear laid at the shore); by a lake up to `LAKE_BEACH` of the sea's height over its level
 // (smaller waves).
 // It reaches up the shore as far as its height times the share of `BEACH_DEEP_M` the loose ground is deep, so it is
-// wide where the shore's load lies deep and thin where little lies.
+// wide where the shore's load lies deep and thin where little lies, and at least as far as the storms' swash
+// (`STORM_RUN_UP`), which works it.
 const BEACH_SLOPE = 0.15; const ROCK_SLOPE = 0.35; const BEACH_LOOSE_M = 0.5; const LAKE_BEACH = 0.3; const BEACH_DEEP_M = 4.0;
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
@@ -59,9 +60,27 @@ const SHOWS = 0.002;
 // ground only. A body that holds no liquid has no level (tape/src/table.rs), so no dry basin is drawn as sand.
 fn beach(sea: f32, sea_over: f32, over: f32, slope: f32, loose: f32, high: f32) -> f32 {
   let reach = high * max(ease(0.0, BEACH_DEEP_M, loose), 1e-3);
-  let shore = max(sea * (1.0 - ease(0.0, reach, sea_over)), (1.0 - sea) * (1.0 - ease(0.0, LAKE_BEACH * reach, over)));
+  let storm = STORM_RUN_UP * run_up(sea, slope);
+  let shore = max(sea * (1.0 - ease(0.0, max(reach, storm), sea_over)), (1.0 - sea) * (1.0 - ease(0.0, max(LAKE_BEACH * reach, storm), over)));
   return shore * (1.0 - ease(BEACH_SLOPE, ROCK_SLOPE, slope)) * ease(0.0, BEACH_LOOSE_M, loose);
 }
+
+// What a shore is made of, read from what the page knows of it. A beach's slope is set by its grain: fine sand rests
+// near 0.02, coarse sand near 0.1, pebbles from about 0.15 (Bascom 1951), so a shore steeper than `GRAVEL_SLOPE.x` is of
+// pebbles by `GRAVEL_SLOPE.y`, and a channel that carries stones (`Spot.stony`, `STONY_PEBBLES` of its places holding
+// one) lays them at its mouth; a lake's flattest shores (from `MUD_SLOPE.x` down to `.y`), where its small waves do not
+// winnow the fines out, are of mud. The share of pebbles, of mud, and how soaked the shore is (by the liquid's fringe
+// and the swash; under the liquid, all).
+const GRAVEL_SLOPE = vec2f(0.07, 0.14); const STONY_PEBBLES = 0.3; const MUD_SLOPE = vec2f(0.03, 0.01);
+fn shore_grain(p: Spot) -> vec3f {
+  let slope = p.slope / earth.look.x;
+  let pebbles = max(ease(GRAVEL_SLOPE.x, GRAVEL_SLOPE.y, slope), ease(0.0, STONY_PEBBLES, p.stony));
+  let mud = (1.0 - pebbles) * (1.0 - p.sea) * ease(MUD_SLOPE.x, MUD_SLOPE.y, slope);
+  return vec3f(pebbles, mud, select(max(soaked(p), p.swash.x), 1.0, p.depth > 0.0));
+}
+// Bare sand reaches up a beach to `STORM_RUN_UP` times the waves' run-up (water.wgsl `run_up`): a storm's swash keeps
+// plants and their drift off it (its waves some three times as high).
+const STORM_RUN_UP = 3.0;
 
 // Whether the view drawn is the Earth's colours, which take the style step (style.wgsl).
 fn styled() -> bool { return earth.view.x == 0.0; }
@@ -124,8 +143,13 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
-  // In the style a beach is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`).
-  g.rgb = mix(g.rgb, select(SAND, mix(BEACH_SAND, min(p.ground * BEACH_LIFT, vec3f(1.0)), BEACH_OWN), styled()), p.sand);
+  // In the style a beach of sand is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`); of pebbles,
+  // the colour of the bed they are worn from; of mud, the loose ground's own (`shore_grain`).
+  if (p.sand > 0.0) {
+    let grain = shore_grain(p);
+    let sand = select(SAND, mix(BEACH_SAND, min(p.ground * BEACH_LIFT, vec3f(1.0)), BEACH_OWN), styled());
+    g.rgb = mix(g.rgb, mix(sand, p.bed, grain.x), p.sand * (1.0 - grain.y));
+  }
   // In the style the soil has its grain (crag.wgsl `floor_of`). Where the loose ground thins its bed shows, in the
   // style as slabs or, where steep, a cliff's face (`rock_face`); it holds plants only in its cracks. Slope alone
   // never bares the ground.

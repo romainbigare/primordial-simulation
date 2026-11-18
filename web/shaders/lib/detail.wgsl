@@ -80,35 +80,63 @@ const TAKES_ALL = 0.999;
 // The lightness of a change, as a height (ragged.wgsl `claim`).
 fn height_of(c: vec3f) -> f32 { return dot(c, LUMA); }
 
-// The change soil's image i gives (`soil_detail`), at e m a pixel: the tiles of cover of leaf litter, of a shaded floor
-// of ferns, of dry stony soil and of cracked dry mud, the photograph of wet mud, and the tile of sand.
-const SOIL_MUD = 4;
-fn soil_image(i: i32, e: f32) -> vec3f {
-  if (i == SOIL_MUD) { return detail(MUD_TEX, e); }
-  var c = array<i32, 6>(LITTER_CARPET, FERN_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, SAND_CARPET);
-  return carpet(c[i], e);
+// The change soil's image i gives (`soil_detail`) to spot p: the tiles of cover of leaf litter, of a shaded floor of
+// ferns, of dry stony soil and of cracked dry mud, the photograph of wet mud; and a shore's: its bare sand
+// (`beach_sand`), the tile of sand with its dry tufts and drift, the photographs of rounded pebbles and of dark wet mud.
+const SOIL_MUD = 4; const SOIL_BEACH = 5; const SOIL_IMAGES = 9;
+fn soil_image(i: i32, p: Spot, wet: f32) -> vec3f {
+  if (i == SOIL_MUD) { return detail(MUD_TEX, p.e); }
+  if (i == SOIL_BEACH) { return beach_sand(p, wet); }
+  if (i == 7) { return detail(ROUND_PEBBLE_TEX, p.e); }
+  if (i == 8) { return detail(DARK_MUD_TEX, p.e); }
+  var c = array<i32, 7>(LITTER_CARPET, FERN_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, -1, SAND_CARPET);
+  return carpet(c[i], p.e);
+}
+
+// A beach's bare sand, soaked to `wet` (0..1): dry sand, and damp sand streaked by the swash where it is soaked past
+// half, the two meeting by their heights over an edge ragged by `SAND_WET_RAG` of noise over `SAND_WET_RAG_M`.
+const SAND_WET_RAG = 0.15; const SAND_WET_RAG_M = 1.5;
+fn beach_sand(p: Spot, wet: f32) -> vec3f {
+  let d = (wet - 0.5 + SAND_WET_RAG * noise_l(lat_turned(SAND_WET_RAG_M, vec2f(0.45)), 189).x) / SOIL_EDGE;
+  if (d <= -CLAIMS_WITHIN) { return detail(DRY_SAND_TEX, p.e); }
+  if (d >= CLAIMS_WITHIN) { return detail(WET_SAND_TEX, p.e); }
+  let a = detail(DRY_SAND_TEX, p.e);
+  let b = detail(WET_SAND_TEX, p.e);
+  return mix(a, b, height_mix(d, height_of(a), height_of(b)));
 }
 
 // The change the images give soil of spot p: under crowns its litter (a floor of ferns where wet), in the open dry
-// stony soil, cracked where driest, wet mud where wet, beach sand and channels' pebbles where they lie.
+// stony soil, cracked where driest, wet mud where wet; on a shore its sand, pebbles or mud (colour.wgsl
+// `shore_grain`), the sand bare up to the storms' swash and with its tufts and drift above; and channels' pebbles where
+// they lie.
 fn soil_detail(p: Spot) -> vec3f {
   let canopy = min(p.canopy, 1.0);
   let dry = ease(0.45, 0.1, p.wet);
   let cracked = ease(0.25, 0.05, p.wet);
-  var w = array<f32, 6>(canopy * (1.0 - p.wet), canopy * p.wet, (1.0 - canopy) * dry * (1.0 - cracked), (1.0 - canopy) * cracked, (1.0 - canopy) * (1.0 - dry), 0.0);
+  var w = array<f32, SOIL_IMAGES>(canopy * (1.0 - p.wet), canopy * p.wet, (1.0 - canopy) * dry * (1.0 - cracked), (1.0 - canopy) * cracked, (1.0 - canopy) * (1.0 - dry), 0.0, 0.0, 0.0, 0.0);
   let sand = max(p.sand, 0.0);
-  for (var i = 0; i < 5; i++) { w[i] *= 1.0 - sand; }
-  w[5] = sand;
+  var wet = 0.0;
+  if (sand > 0.0) {
+    for (var i = 0; i < 5; i++) { w[i] *= 1.0 - sand; }
+    let grain = shore_grain(p);
+    let fine = sand * (1.0 - grain.x - grain.y);
+    let bare = 1.0 - ease(0.0, STORM_RUN_UP * run_up(p.sea, p.slope / earth.look.x), p.over);
+    w[SOIL_BEACH] = fine * bare;
+    w[6] = fine * (1.0 - bare);
+    w[7] = sand * grain.x;
+    w[8] = sand * grain.y;
+    wet = grain.z;
+  }
   var left = 0.0;
-  for (var i = 0; i < 6; i++) { left += w[i]; }
+  for (var i = 0; i < SOIL_IMAGES; i++) { left += w[i]; }
   if (left <= 0.0) { return vec3f(1.0); }
   // The images lie in a stack, each over those after it: image i covers, of the ground the ones before leave, the share
   // its weight is of what is left, where its own noise falls under that share. So each holds its share of the ground
   // on the mean, and a small share is a few small patches of its own, not a thin band between two others. `d`: how far
   // inside its part each lies, in half widths of the edge; from `last` on, one covers all.
-  var d = array<f32, 6>(-CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN);
-  var last = 5;
-  for (var i = 0; i < 6; i++) {
+  var d = array<f32, SOIL_IMAGES>(-CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN);
+  var last = SOIL_IMAGES - 1;
+  for (var i = 0; i < SOIL_IMAGES; i++) {
     if (w[i] <= 0.0) { continue; }
     let take = w[i] / max(left, 1e-6);
     left -= w[i];
@@ -117,10 +145,10 @@ fn soil_detail(p: Spot) -> vec3f {
     d[i] = (take - u) / SOIL_EDGE;
     if (d[i] >= CLAIMS_WITHIN) { last = i; break; }
   }
-  var out = soil_image(last, p.e);
+  var out = soil_image(last, p, wet);
   for (var i = last - 1; i >= 0; i--) {
     if (d[i] <= -CLAIMS_WITHIN) { continue; }
-    let c = soil_image(i, p.e);
+    let c = soil_image(i, p, wet);
     out = mix(out, c, height_mix(d[i], height_of(out), height_of(c)));
   }
   // River pebbles where the bed's stones lie, in patches of their own as many as it holds.
