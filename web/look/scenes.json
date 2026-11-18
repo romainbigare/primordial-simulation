@@ -15,7 +15,7 @@
   "sets": {
     "seed1": {
       "world": "seed1",
-      "views": [{ "mpp": 1.04, "style": "angled" }, { "mpp": 0.52, "style": "angled" }, { "mpp": 0.26, "style": "angled" }],
+      "views": [1.04, 0.52, 0.26],
       "scenes": [
         { "name": "A", "about": "tall forest", "at": [21.5, 20.5] },
         { "name": "B", "about": "open woodland", "at": [26.5, 10.5] },
@@ -26,17 +26,17 @@
         { "name": "snow", "about": "snow", "at": [19.12, 13.1] },
         { "name": "river", "about": "river", "at": [26.5, 14.6] }
       ],
-      "cost_views": [{ "mpp": 0.52, "style": "angled" }],
+      "cost_views": [0.52],
       "years": ["A", "B", "SA"],
-      "years_view": { "mpp": 0.2, "style": "angled" }
+      "years_view": 0.2
     },
     "card": {
       "world": "card",
-      "views": [{ "mpp": 0.26, "style": "angled" }],
-      "cost_views": [{ "mpp": 0.26, "style": "angled" }],
+      "views": [0.26],
+      "cost_views": [0.26],
       "scenes": [
-        { "name": "card", "about": "the card from far", "at": [6, 5], "views": [{ "mpp": 30, "style": "angled" }] },
-        { "name": "shore", "about": "a shore and the sea", "at": [2, 5], "views": [{ "mpp": 15, "style": "angled" }] },
+        { "name": "card", "about": "the card from far", "at": [6, 5], "views": [30] },
+        { "name": "shore", "about": "a shore and the sea", "at": [2, 5], "views": [15] },
         { "name": "closed", "about": "a tall closed stand of four size groups", "at": [3.5, 3.5] },
         { "name": "open", "about": "an open stand of tall trees over a sward", "at": [4.5, 3.5] },
         { "name": "young", "about": "a young dense stand near 4 m", "at": [5.5, 3.5] },

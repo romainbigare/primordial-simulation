@@ -145,12 +145,11 @@ is dark trees over white ground. A tape's map has no heights of plants: snow hid
 ground. A tree's crown takes one of six forms by its
 kind's numbers (`web/src/form.ts`, one rule for near and far): round; a cone (thick long-lived leaves on a kind hardy to
 frost); a slim column (a slender kind that puts much into seeds); a flat umbrella (dry ground, a crown wide for its
-height); tiered (thick leaves of a tender kind); or lobed, in loose knots (thin leaves on wet ground). A form drawn less
-surely lies nearer the round crown, so a kind that evolves never jumps. Its edge is in lobes as broad as its leaves,
-open where its leaf area is low, over its stem and a soft shadow to the south-east; each tree leans a little its own
-way; angled, it stands on its stem in its form's outline (a cone's stepped sides, a tier's layers, an umbrella's flat
-underside). A low woody kind is drawn as a bush, a low knot of lobes with dots of flowers or fruit. Herbs have no
-marks: they are the ground's sward (below). Its
+height); tiered (thick leaves of a tender kind); or lobed (thin leaves on wet ground). A form drawn less surely lies
+nearer the round crown, so a kind that evolves never jumps. Each plant is a rendered model of its form
+(`web/shaders/lib/models.wgsl`, `web/textures/SOURCES.md`), covering its crown's ground and standing up on its foot
+over its shadow cast to the south-east; each tree leans a little its own way. A low woody kind is drawn as a bush, of a
+wet or a dry land by its kind. Herbs have no marks: they are the ground's sward (below). Its
 physical colour is a reflectance: a green leaf's as measured (Gates and others 1965; Knipling 1970), moved by its
 numbers (darker with more light capacity per capture area, darker and duller with thicker leaves, greyer for dry
 ground, bluer for hardiness to frost, its walls showing through an open crown, yellowed short of fuel). Far away a

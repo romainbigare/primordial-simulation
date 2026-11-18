@@ -1,7 +1,7 @@
-// Things lying on the ground up close, angled (web/src/detail.ts): rocks, fallen wood and dead bushes, rendered models
+// Things lying on the ground up close (web/src/detail.ts): rocks, fallen wood and dead bushes, rendered models
 // (tex.wgsl, sprites.wgsl) standing on their foot over the ground's photographs (detail.wgsl).
 
-// Things lying on the ground (rendered models, tex.wgsl), angled, standing on their foot with their shadow away from the
+// Things lying on the ground (rendered models, tex.wgsl), standing on their foot with their shadow away from the
 // sun, each sort at its own lattice, one in `fill` of its cells, a size between its two by its own draw (more small than
 // large), as many as the ground suits them: rocks where it is bare, rocky, steep or loose (a snowcap on top where snow
 // lies), large ones in cells of `ROCK_CELL_M` m and small in cells of `PEBBLE_CELL_M` m; fallen trunks and branches
@@ -68,7 +68,7 @@ fn scatter(g: vec3f, p: Spot, sort: i32, cell_m: f32, fill: f32, size: vec2f, ma
 
 // The things lying on ground of colour g at spot p, where the plants leave `bare` of it bare.
 fn objects(g: vec3f, p: Spot, bare: f32) -> vec3f {
-  if (!angled() || !models_ready()) { return g; }
+  if (!models_ready()) { return g; }
   let canopy = min(p.canopy, 1.0);
   let open = bare * (1.0 - SAND_BARE * p.sand) * (1.0 - canopy);
   let stony = max(open * max(max(p.rock, ease(0.15, 0.6, p.slope)), 0.35 + 0.65 * ease(1.0, 0.1, p.loose)), SNOW_ROCKS * p.snow * (1.0 - canopy));

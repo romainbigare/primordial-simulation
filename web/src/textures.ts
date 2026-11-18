@@ -1,12 +1,11 @@
 // The plant cover on the GPU (vegetation.ts): the kinds' table and the field (canopy.ts `Kinds`), and how strongly each
 // lattice of marks shows at a scale. The live map's ground draws the field where the marks take too few pixels
 // (web/shaders/lib/cover_field.wgsl, `fieldBinds`); before the map, each mark in view is decided once, a texel a cell
-// in textures of four bytes a texel (web/shaders/marks.wgsl, `prepare`), and a draw of web/shaders/cover.wgsl (angled,
-// from the rendered models) or web/shaders/crowns.wgsl draws the marks over the map (`draw`).
+// in textures of four bytes a texel (web/shaders/marks.wgsl, `prepare`), and a draw of web/shaders/cover.wgsl draws the
+// marks over the map (`draw`), each plant standing up from its foot, drawn from its rendered model.
 // Each lattice lies fixed in the world, one mark a cell, so the marks hold while the camera moves, and a pan or a zoom
 // shows them at once.
 import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
-import { Style } from './style';
 import { FIELD, Kinds, PLANES_DOWN, half } from './canopy';
 import { LATTICES, REACH, ROWS_MOST, STAND } from './lattices';
 import { groundDetail } from './detail';
@@ -24,9 +23,8 @@ const MARK_BINDINGS = [5, 6, 7, 22], REACH_BINDING = 23;
 const THING_LEAST_PX = 4;
 
 /** A draw of the marks: its rectangle of the target, px; the metres a pixel of the target and of the screen (which the
- * detail drawn is chosen by); the world's point at its corner, m; the style; and the live map's bindings (land.ts
- * `lawBinds`). */
-export interface Marks { rect: number[]; mpp: number; seenMpp: number; at: [number, number]; style: Style; land: Draw['binds'] }
+ * detail drawn is chosen by); the world's point at its corner, m; and the live map's bindings (land.ts `lawBinds`). */
+export interface Marks { rect: number[]; mpp: number; seenMpp: number; at: [number, number]; land: Draw['binds'] }
 
 /** The cover on the GPU: the kinds' table and the field, sent once a frame of the world. */
 export class CoverMarks {
@@ -37,9 +35,6 @@ export class CoverMarks {
   /** The marks decided this frame (`prepare`): the bindings the cover draws with; the textures they are in, one for
    * each of their words; and the texture of the cells whose marks reach each cell. */
   private decided: Draw['binds'] | null = null;
-  /** The program the marks are drawn with: angled from the rendered models once they are loaded (web/shaders/cover.wgsl),
-   * else as drawn crowns (web/shaders/crowns.wgsl). */
-  private program = 'crowns';
   private marksTex: Texture[] = [];
   private reachTex: Texture | null = null;
 
@@ -75,29 +70,29 @@ export class CoverMarks {
     this.due = false;
   }
 
-  /** The bindings of cover_field.wgsl on `gpu` where a pixel of the screen takes `mpp` m, the plants standing up if
-   * `angled`: the field and how it shows. */
-  fieldBinds(gpu: Gpu, mpp: number, angled: boolean): Draw['binds'] {
+  /** The bindings of cover_field.wgsl on `gpu` where a pixel of the screen takes `mpp` m: the field and how it shows. */
+  fieldBinds(gpu: Gpu, mpp: number): Draw['binds'] {
     this.upload(gpu);
     // A lattice no square holds is sent with side 0: the field does not read it.
-    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => ((this.kinds?.widest[l] ?? 0) > 0 ? a : 0)), 0).vec4(...this.shown(mpp)).vec4(this.kinds ? 1 : 0, this.alpha, angled ? 1 : 0);
+    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => ((this.kinds?.widest[l] ?? 0) > 0 ? a : 0)), 0).vec4(...this.shown(mpp)).vec4(this.kinds ? 1 : 0, this.alpha);
     return { 14: u.buffer, 15: this.fieldTex!, 16: 'mip' };
   }
 
   /** Decide each mark of draw `m` on `gpu` once, before the map's pass: a texel a cell in view of each lattice that
-   * shows, its rows below the last's (web/shaders/marks.wgsl). */
+   * shows, its rows below the last's (web/shaders/marks.wgsl). None before the rendered models are loaded: the marks
+   * are drawn from them. */
   prepare(gpu: Gpu, m: Marks): void {
     this.decided = null;
-    const k = this.kinds, shown = this.shown(m.seenMpp);
-    if (!k || shown.every(s => s <= 0)) return;
-    const angled = m.style === 'angled', size = [m.rect[2] * m.mpp, m.rect[3] * m.mpp];
+    const k = this.kinds, shown = this.shown(m.seenMpp), detail = groundDetail(gpu);
+    if (!k || shown.every(s => s <= 0) || detail.w <= 1) return;
+    const size = [m.rect[2] * m.mpp, m.rect[3] * m.mpp];
     // Each lattice's cell at the draw's corner, split into its whole number and its fraction in double precision, so
     // the GPU's single precision only counts the cells across the view.
     let row = 0;
     const grids = LATTICES.map((a, l) => {
       const g = [m.at[0] / a, m.at[1] / a], frac = g.map(v => v - Math.floor(v));
-      const rows = angled ? Math.min(Math.max(Math.ceil((STAND * k.tallest[l]) / a) - REACH[l], 0), ROWS_MOST) : 0;
-      // The cells about the view's: from `MARK_MARGIN` before its first to the rows an angled plant stands in past its last.
+      const rows = Math.min(Math.max(Math.ceil((STAND * k.tallest[l]) / a) - REACH[l], 0), ROWS_MOST);
+      // The cells about the view's: from `MARK_MARGIN` before its first to the rows a plant stands in past its last.
       const span = (c: number, n: number) => (shown[l] > 0 ? Math.floor(frac[c] + size[c] / a) + 1 + 2 * MARK_MARGIN + MARK_SPARE + n : 0);
       const cells = { cols: span(0, 0), rows: span(1, rows), row };
       row += cells.rows;
@@ -110,13 +105,11 @@ export class CoverMarks {
       this.marksTex = MARK_BINDINGS.map(made);
       this.reachTex = made();
     }
-    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp, angled ? 1 : 0).vec4(m.seenMpp).vec4(...k.walls, k.planes.kinds).vec4(...grids.map(g => g.cells.row));
+    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp).vec4(m.seenMpp).vec4(...k.walls, k.planes.kinds).vec4(...grids.map(g => g.cells.row));
     grids.forEach(g => u.vec4(...g.frac, g.a, g.rows));
     grids.forEach((_, l) => u.vec4(REACH[l]));
     grids.forEach(g => u.ivec4(...g.base));
-    const detail = groundDetail(gpu);
-    const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.seenMpp, angled), 1: u.buffer, 4: this.tableTex!, 20: detail, 21: 'tile' };
-    this.program = angled && detail.w > 1 ? 'cover' : 'crowns';
+    const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.seenMpp), 1: u.buffer, 4: this.tableTex!, 20: detail, 21: 'tile' };
     // Each word of the marks, then from them the cells whose marks reach each cell (web/shaders/reach.wgsl).
     const cellsOf = (p: Pass, name: string, drawn: Draw['binds']) => {
       for (const g of grids) if (g.cells.rows > 0) p.draw(name, { rect: [0, g.cells.row, g.cells.cols, g.cells.rows], binds: drawn }, false);
@@ -130,6 +123,6 @@ export class CoverMarks {
 
   /** Draw marks `m` in pass `p` on `gpu`, as decided before the pass (`prepare`). */
   draw(p: Pass, m: Marks): void {
-    if (this.decided) p.draw(this.program, { rect: m.rect, binds: this.decided }, true);
+    if (this.decided) p.draw('cover', { rect: m.rect, binds: this.decided }, true);
   }
 }

@@ -38,8 +38,8 @@ async function start(variants = {}) {
   return { server, url, browser, lab: await lab(browser), stop: async () => { await browser.close(); server.close(); } };
 }
 
-/** The file name of a view's picture. */
-const fileOf = (scene, v) => `${scene.name}_${v.mpp}_${v.style}.png`;
+/** The file name of a view's picture (`mpp` metres a css pixel). */
+const fileOf = (scene, mpp) => `${scene.name}_${mpp}.png`;
 
 /** `set OUT`: every scene and view of the set on the current build: the pictures, a contact sheet, numbers.json. */
 async function set(out) {
@@ -52,23 +52,22 @@ async function set(out) {
     const r = result.scenes[scene.name] = { about: scene.about, at: scene.at, kinds: await kinds(page, scene.at), views: {} };
     say(`${scene.name} (${scene.about}) at ${scene.at}: ${r.kinds}`);
     const shots = [];
-    for (const v of scene.views ?? set.views) {
-      const t = Date.now(), view = { x: scene.at[0], y: scene.at[1], mpp: v.mpp, style: v.style };
+    for (const mpp of scene.views ?? set.views) {
+      const t = Date.now(), view = { x: scene.at[0], y: scene.at[1], mpp };
       await P.look(page, view);
-      const { png, waited } = await P.shot(page, join(out, fileOf(scene, v)));
+      const { png, waited } = await P.shot(page, join(out, fileOf(scene, mpp)));
       let mask = null;
-      if (maskPage) { await P.look(maskPage, view); mask = (await P.shot(maskPage, join(out, 'mask', fileOf(scene, v)))).png; }
-      r.views[`${v.mpp}_${v.style}`] = { ...(await numbers(s.lab, png, { mask })), waited };
-      shots.push({ v, png, mask });
-      items.push({ label: `${scene.name} ${v.mpp} m/px ${v.style}`, png });
-      say(`  ${v.mpp} ${v.style}: ${secs(t)} ${JSON.stringify(r.views[`${v.mpp}_${v.style}`])}`);
+      if (maskPage) { await P.look(maskPage, view); mask = (await P.shot(maskPage, join(out, 'mask', fileOf(scene, mpp)))).png; }
+      r.views[mpp] = { ...(await numbers(s.lab, png, { mask })), waited };
+      shots.push({ mpp, png, mask });
+      items.push({ label: `${scene.name} ${mpp} m/px`, png });
+      say(`  ${mpp}: ${secs(t)} ${JSON.stringify(r.views[mpp])}`);
     }
     // Far against near on the same ground: the farther picture cut to the nearer one's ground.
     for (const [far, near] of shots.map((f, k) => [f, shots[k + 1]]).slice(0, -1)) {
-      if (far.v.style !== near.v.style) continue;
-      const keep = MIDDLE * near.v.mpp / far.v.mpp, a = await numbers(s.lab, far.png, { keep, mask: far.mask });
-      const b = r.views[`${near.v.mpp}_${near.v.style}`];
-      r.views[`${far.v.mpp}_on_${near.v.mpp}_${far.v.style}`] = { ...a, lightness_change: +(100 * (b.lightness - a.lightness) / a.lightness).toFixed(1), ...(a.crowns !== undefined ? { crowns_change: +(b.crowns - a.crowns).toFixed(1) } : {}) };
+      const keep = MIDDLE * near.mpp / far.mpp, a = await numbers(s.lab, far.png, { keep, mask: far.mask });
+      const b = r.views[near.mpp];
+      r.views[`${far.mpp}_on_${near.mpp}`] = { ...a, lightness_change: +(100 * (b.lightness - a.lightness) / a.lightness).toFixed(1), ...(a.crowns !== undefined ? { crowns_change: +(b.crowns - a.crowns).toFixed(1) } : {}) };
     }
   }
   result.errors = page.errors;
@@ -112,14 +111,14 @@ async function compare(a, b) {
   }
 }
 
-/** `shot OUT.png --at X,Y --mpp M [--style angled|above] [--world FILE]`: one picture, of the set's world or a saved world. */
+/** `shot OUT.png --at X,Y --mpp M [--world FILE]`: one picture, of the set's world or a saved world. */
 async function shot(out) {
   const t0 = Date.now(), { set, world } = setOf(), [x, y] = flags.at.split(',').map(Number);
   const s = await start();
   let at = worlds(set.world, world, dates(world))[world.at];
   if (flags.world) { mkdirSync(join(P.OUT, 'given'), { recursive: true }); writeFileSync(join(P.OUT, 'given', basename(flags.world)), readFileSync(flags.world)); at = `given/${basename(flags.world)}`; }
   const page = await P.open(s.browser, s.url, 'site', at, { px });
-  await P.look(page, { x, y, mpp: +flags.mpp, style: flags.style ?? 'angled' });
+  await P.look(page, { x, y, mpp: +flags.mpp });
   await P.shot(page, resolve(out));
   say(`${resolve(out)}: year ${(await P.year(page)).toFixed(2)}, ${secs(t0)}, ${page.errors.length} page errors`);
   await s.stop();
@@ -138,7 +137,7 @@ async function sheetCmd(out, cols, ...files) {
  * of the picture that stays (`lab.same`). */
 async function years(out) {
   const t0 = Date.now(), { set, world } = setOf(), when = dates(world, true), saved = worlds(set.world, world, when);
-  const scenes = set.scenes.filter(sc => set.years.includes(sc.name)), v = set.years_view;
+  const scenes = set.scenes.filter(sc => set.years.includes(sc.name)), mpp = set.years_view;
   const s = await start();
   mkdirSync(out, { recursive: true });
   const page = await P.open(s.browser, s.url, 'site', saved[when[0]], { px });
@@ -146,7 +145,7 @@ async function years(out) {
   for (const [i, d] of when.entries()) {
     if (i > 0) await P.reopen(page, `${s.url}/${saved[d]}`);
     for (const sc of scenes) {
-      await P.look(page, { x: sc.at[0], y: sc.at[1], mpp: v.mpp, style: v.style });
+      await P.look(page, { x: sc.at[0], y: sc.at[1], mpp });
       const { png } = await P.shot(page, join(out, `${sc.name}_${d}.png`));
       seen[sc.name].push({ png, marks: await marks(page) });
       items.push({ label: `${sc.name} year ${d}`, png });
@@ -159,7 +158,7 @@ async function years(out) {
     for (let k = 1; k < ys.length; k++) pairs.push({ ...persist(ys[k - 1].marks, ys[k].marks), pixels: (await same(s.lab, ys[k - 1].png, ys[k].png)).stay });
     result[sc.name] = { by_year: pairs, ...Object.fromEntries(['stay', 'other', 'go', 'appear', 'pixels'].map(key => [key, mean(pairs, key)])) };
   }
-  writeFileSync(join(out, 'years.json'), JSON.stringify({ view: v, years: when, scenes: result, errors: page.errors }, null, 1));
+  writeFileSync(join(out, 'years.json'), JSON.stringify({ view: mpp, years: when, scenes: result, errors: page.errors }, null, 1));
   writeFileSync(join(out, 'years.png'), await sheet(s.lab, items, scenes.length));
   for (const [n, r] of Object.entries(result)) say(`${n}: marks stay ${r.stay} %, other ${r.other} %, go ${r.go} %, appear ${r.appear} %; pixels stay ${r.pixels} %`);
   await s.stop();
@@ -184,13 +183,13 @@ async function cost(out) {
   const result = { set: name, world: at, px, show: SHOW, scenes: {} }, items = [];
   for (const scene of scenes) {
     const r = result.scenes[scene.name] = { about: scene.about, at: scene.at, views: {} };
-    for (const v of set.cost_views) for (const pass of passes) {
-      const view = `${v.mpp}_${v.style}_${pass}`, file = `${scene.name}_${view}.png`;
-      await P.look(pages[pass], { x: scene.at[0], y: scene.at[1], mpp: v.mpp, style: v.style });
+    for (const mpp of set.cost_views) for (const pass of passes) {
+      const view = `${mpp}_${pass}`, file = `${scene.name}_${view}.png`;
+      await P.look(pages[pass], { x: scene.at[0], y: scene.at[1], mpp });
       const { png } = await P.shot(pages[pass], join(out, 'raw', file)), c = await counts(s.lab, png, MIDDLE, SHOW);
       writeFileSync(join(out, file), c.seen);
       r.views[view] = Object.fromEntries(Object.entries(c.numbers).map(([k, q]) => [k, [q.mean, q.p95, q.most, q.clipped]]));
-      items.push({ label: `${scene.name} ${v.mpp} m/px ${pass}`, png: c.seen });
+      items.push({ label: `${scene.name} ${mpp} m/px ${pass}`, png: c.seen });
       say(`${scene.name} ${view}: ${Object.entries(c.numbers).map(([k, q]) => `${k} ${q.mean} (p95 ${q.p95})`).join(', ')}`);
     }
   }

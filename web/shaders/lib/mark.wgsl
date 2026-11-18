@@ -43,11 +43,9 @@ fn kind_plane(at: i32, t: i32) -> i32 { return COVER_LATTICES * kinds_n() + 3 * 
 fn form_plane(t: i32) -> i32 { return kind_plane(0, t); }
 fn from_plane(t: i32) -> i32 { return kind_plane(1, t); }
 fn to_plane(t: i32) -> i32 { return kind_plane(2, t); }
-fn petal_plane(t: i32) -> i32 { return kind_plane(3, t); }
-fn height_plane(t: i32) -> i32 { return kind_plane(4, t); }
-fn stem_plane(t: i32) -> i32 { return kind_plane(5, t); }
-fn clump_plane(t: i32) -> i32 { return kind_plane(6, t); }
-fn width_plane(l: i32, t: i32) -> i32 { return kind_plane(7 + l, t); }
+fn height_plane(t: i32) -> i32 { return kind_plane(3, t); }
+fn clump_plane(t: i32) -> i32 { return kind_plane(4, t); }
+fn width_plane(l: i32, t: i32) -> i32 { return kind_plane(5 + l, t); }
 // A kind's plants come in up to this many groups by size, the large first (kind_row.ts `GROUPS`); a mark's place among
 // them is kept in this many steps a group (`decide`).
 const GROUPS = 4; const PLACE_STEPS = 16;
@@ -236,7 +234,7 @@ const SURE_PACK = 0.5;
 const LEFT_STEPS = 100.0;
 
 // The plant at place z among the groups (`along`) of kind `t` of the square at `sq` on lattice l with its foot at `c`, its size's draw `size`,
-// its own random numbers `r` (its colour's draw, its lean's direction, its lean); angled no taller than `up` m north of
+// its own random numbers `r` (its colour's draw, its lean's direction, its lean); no taller than `up` m north of
 // its foot lets it stand (the rows looked at, textures.ts `ROWS_MOST`); no wider than its lattice's reach each way.
 fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up: f32) -> Plant {
   let form = kind(form_plane(t), sq);
@@ -252,31 +250,25 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
   let height = along(heights, z, held) * grow;
   // A tree from the height its kind's plants are trees from (style.ts `treeFrom`), a bush below.
   let design = select(BUSH, TREE, height >= to.w);
-  // A tree's form, a bush's flowers.
+  // A tree's form.
   var shape = vec4f(0.0);
-  var petal = vec4f(0.0);
   if (design == TREE) {
     // Its form and how surely, packed as one number (canopy.ts `SURE_PACK`), and the plants a mark stands for.
-    shape = vec4f(floor(form.z), fract(form.z) / SURE_PACK, along(kind(clump_plane(t), sq), z, held), 0.0);
-    // A mark of the trees' lattice that stands for several plants is their cluster, a crown of knots, each a plant's
-    // crown (crown.wgsl `knots`): its kind's form fades into the round crown as the plants pass one, and the cluster
-    // is drawn surely from two.
+    shape = vec4f(floor(form.y), fract(form.y) / SURE_PACK, along(kind(clump_plane(t), sq), z, held), 0.0);
+    // A mark of the trees' lattice that stands for several plants is their cluster, drawn as lobed crowns: its kind's
+    // form fades into the round crown as the plants pass one, and the cluster is drawn surely from two.
     let cluster = select(0.0, clamp(shape.z - 1.0, 0.0, 1.0), l == STANDS);
     if (cluster > 0.5) { shape = vec4f(f32(LOBED), 2.0 * cluster - 1.0, 0.0, 0.0); } else { shape.y *= 1.0 - 2.0 * cluster; }
   }
-  if (design == BUSH) { petal = kind(petal_plane(t), sq); }
   // How dry the kind's ground (form.ts `formOf`), for the drawing's choice of plant.
-  let dry = form.w;
+  let dry = form.z;
   let side = cover.grid[l].z;
   let reach = cover.reach[l].x * side;
   let width = along(kind(width_plane(l, t), sq), z, held) * grow;
-  let fine = 1.0 - clamp((form.y - LEAF_THICK) / (LEAF_THIN - LEAF_THICK), 0.0, 1.0);
-  let tall = select(height, min(height, up / STAND), cover.corner.w > 0.5);
+  let tall = min(height, up / STAND);
   let lean = LEAN * r.z * vec2f(cos(2.0 * PI * r.y), sin(2.0 * PI * r.y));
   let tint = vary(mix(first.rgb, to.rgb, r.x), fract(r.yz * 13.0));
-  // A bush in flower or in fruit by a draw of its own (the next digits of its colour's), as its kind's share.
-  let blooms = select(0.0, 1.0, fract(r.x * 16.0) < petal.w);
-  return Plant(c, min(width, 2.0 * reach), tall, along(kind(stem_plane(t), sq), z, held), closed, fine, tint, first.w, fract(r * 7.0), design, shape.x, shape.y, petal.rgb, blooms, lean, reach, dry, left);
+  return Plant(c, min(width, 2.0 * reach), tall, closed, tint, first.w, fract(r * 7.0), design, shape.x, shape.y, lean, reach, dry, left);
 }
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square, kind and place
@@ -287,7 +279,7 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
 // field far away, cover_field.wgsl `lattice_field`, is drawn by the same width where they do not), and the share of the
 // ground snow covers at its foot.
 // A function of the cell alone, so it is decided once a frame for each cell in view (marks.wgsl) and read by every
-// pixel the mark may cover (cover_marks.wgsl `lattice`).
+// pixel the mark may cover (cover.wgsl `lattice`).
 fn decide(l: i32, k: vec2f) -> vec4f {
   let none = vec4f(-1.0, 0.0, 0.0, 0.0);
   let id = cover.base[l].xy + vec2i(k);
@@ -317,29 +309,25 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   return vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), shows, f.snow, mark_box(l, q));
 }
 
-// The box plant q of lattice l covers about its foot, so a pixel outside it does not draw it (cover_marks.wgsl `lattice`):
-// angled, its sprite with its lean and its shadow (models.wgsl `model_fit`, `model_plant`, `model_shadow`), from above
-// what a mark may reach (its lattice's reach each way, `cover.reach`; angled, north also the rows its tallest plants stand
-// in), which bounds both. Its extents west, east, north and south, each in steps of its cell's side over `BOX_STEPS`,
-// rounded up, in six bits each (a reach of 2 cells and 3 rows is 60 steps), packed as one whole number under 2^24 (a
-// 32-bit float holds it exactly).
+// The box plant q of lattice l covers about its foot, so a pixel outside it does not draw it (cover.wgsl `lattice`):
+// its sprite with its lean and its shadow (models.wgsl `model_fit`, `model_plant`, `model_shadow`), within what a mark
+// may reach (its lattice's reach each way, `cover.reach`, north also the rows its tallest plants stand in). Its extents
+// west, east, north and south, each in steps of its cell's side over `BOX_STEPS`, rounded up, in six bits each (a reach
+// of 2 cells and 3 rows is 60 steps), packed as one whole number under 2^24 (a 32-bit float holds it exactly).
 fn mark_box(l: i32, q: Plant) -> f32 {
   let g = cover.grid[l];
   let r = cover.reach[l].x;
-  var steps = vec4f(r, r, r + g.w, r) * BOX_STEPS;
-  if (cover.corner.w > 0.5 && models_ready()) {
-    let fit = model_fit(q);
-    // Its clump's plants stand up to `spread` from its foot (models.wgsl `clump_one`).
-    let body = fit.spread + 0.5 * fit.w + abs(q.lean.x) * fit.h;
-    let long = model_shadow_long(q, fit);
-    let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, long + fit.spread);
-    steps = min(ceil(m / g.z * BOX_STEPS), steps);
-  }
+  let fit = model_fit(q);
+  // Its clump's plants stand up to `spread` from its foot (models.wgsl `clump_one`).
+  let body = fit.spread + 0.5 * fit.w + abs(q.lean.x) * fit.h;
+  let long = model_shadow_long(q, fit);
+  let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, long + fit.spread);
+  let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
 
 // The plant at place z among the groups of kind `t` of the square at `sq` in cell k of lattice l (`decide`): at its
-// place in the cell, of its size and its own random numbers, angled no taller than the rows looked at let it stand.
+// place in the cell, of its size and its own random numbers, no taller than the rows looked at let it stand.
 fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32, z: f32) -> Plant {
   let g = cover.grid[l];
   let id = cover.base[l].xy + vec2i(k);

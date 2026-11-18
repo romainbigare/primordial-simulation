@@ -19,13 +19,12 @@ function playwright() {
 }
 
 /** The hooks the tool gives the page (`window.__ew`), put at the end of the page's script, inside its scope: the map,
- * the cover, the world, its worker and its ground, play and pause, the speed, the style of life and the view, opening a
- * saved world by URL, and the numbers the marks' textures are laid out by (textures.ts `prepare`, read.mjs `marks`).
+ * the cover, the world, its worker and its ground, play and pause, the speed and the view, opening a saved world by URL, and the numbers the marks' textures are laid out by (textures.ts `prepare`, read.mjs `marks`).
  * The shipped page holds none of this. */
 const HOOKS = `
 window.__ew = { map, vegetation,
   get world() { return world; }, get live() { return live; }, get land() { return land; }, get playing() { return playing; },
-  setLife, setView, togglePlay, setSpeed(s) { speed = s; live && live.rate(s); syncUi(); },
+  setView, togglePlay, setSpeed(s) { speed = s; live && live.rate(s); syncUi(); },
   open: u => fetch(u).then(r => r.arrayBuffer()).then(openSaved),
   lattices: { LATTICES, REACH, STAND, ROWS_MOST, MARK_MARGIN, MARK_SPARE, PLANES_DOWN, GROUPS } };
 `;
@@ -73,14 +72,12 @@ export async function launch() {
   return playwright().chromium.launch();
 }
 /** In `browser`, the page of `site` on the saved world `world` (both paths under `out/look`, served at `base`), its map
- * `px` css pixels a side, life drawn `style` ('angled' or 'above'), once it stands on the world. Errors of the page are
- * kept in `page.errors`. */
-export async function open(browser, base, site, world, { px = 400, style = 'angled' } = {}) {
+ * `px` css pixels a side, once it stands on the world. Errors of the page are kept in `page.errors`. */
+export async function open(browser, base, site, world, { px = 400 } = {}) {
   const page = await browser.newPage({ viewport: { width: px + 340, height: px + 200 } });
   page.errors = [];
   page.on('console', m => { if (m.type() === 'error' && !/GPU stall|adapter/i.test(m.text())) page.errors.push(m.text()); });
   page.on('pageerror', e => page.errors.push('pageerror: ' + e.message));
-  await page.addInitScript(life => { try { localStorage.setItem('ew.life', life); } catch { /* none */ } }, style);
   await page.goto(`${base}/${site}/index.html?world=${base}/${world}`);
   await page.evaluate(px => { const m = document.getElementById('map'); Object.assign(m.style, { width: `${px}px`, height: `${px}px`, flex: 'none', aspectRatio: 'auto' }); }, px);
   await opened(page);
@@ -111,9 +108,8 @@ export async function settle(page, most = 120000) {
   return -1;
 }
 
-/** Put world point (x, y in squares) at the middle of the map, a css pixel `mpp` metres, life drawn `style`. */
-export async function look(page, { x, y, mpp, style }) {
-  if (style) await page.evaluate(s => window.__ew.setLife(s), style);
+/** Put world point (x, y in squares) at the middle of the map, a css pixel `mpp` metres. */
+export async function look(page, { x, y, mpp }) {
   await page.evaluate(({ x, y, mpp }) => { const e = window.__ew, m = e.map, cv = document.getElementById('cv'), s = e.world.meta.cell_m / mpp;
     m.cam = { s, ox: cv.clientWidth / 2 - x * s, oy: cv.clientHeight / 2 - y * s }; m.fitted = false; m.invalidate(); }, { x, y, mpp });
   await sleep(400);

@@ -11,14 +11,14 @@ export const LATTICES = [0.1, 0.5, 2.5];
 /** Of each lattice, the cells a mark reaches from its own (cover.wgsl looks that many cells each way about a pixel): the
  * trees' two, so a crown up to four sides across stands among the small ones of its lattice. */
 export const REACH = [1, 1, 2];
-/** Angled, a plant stands up this share of its height on the map (lib/crown.wgsl `STAND`): the rows south of a pixel
+/** A plant stands up this share of its height on the map (lib/plant.wgsl `STAND`): the rows south of a pixel
  * looked at, past those its marks reach, reach its tallest plant, but no more than `ROWS_MOST` (each row costs a pixel
  * a look at marks for each cell across, textures.ts), so lattice l stands a plant up to (`ROWS_MOST` + `REACH`[l]) of
  * its sides over `STAND` tall (`shareOn`). */
 export const STAND = 0.5, ROWS_MOST = 3;
 /** The lattice whose kinds grow in stands of their own, near and far alike (cover_field.wgsl `stand_pick`): the trees'. */
 export const STANDS = 2;
-/** Angled, a mark's sprite is drawn up to this much wider than its crown, so its leaves, which have gaps, cover its
+/** A mark's sprite is drawn up to this much wider than its crown, so its leaves, which have gaps, cover its
  * crown's ground (models.wgsl `MODEL_WIDER`): a crown is at most its reach over this. */
 const SPRITE_WIDER = 1.6;
 /** A bush's mark is a clump of its plants this many times as wide as one, so its lobes read at a 10 m scale bar. */

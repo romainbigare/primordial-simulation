@@ -2,7 +2,7 @@
 // every texture read (each call of textureSample* and textureLoad), each gradient noise (draw.wgsl `gradient_noise`)
 // and each read of a photograph (tex.wgsl `photo`), and draws the counts as its colour (red, green, blue: a level of
 // 255 two texture reads, a noise, a photograph). One build counts the ground's program (land.wgsl) and draws no marks; the other counts the marks'
-// (cover.wgsl, crowns.wgsl) over a black ground. The count is the same on every machine and from run to run.
+// (cover.wgsl) over a black ground. The count is the same on every machine and from run to run.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { programs, patch } from './variant.mjs';
@@ -53,7 +53,7 @@ export function costShaders(pass) {
     const draw = join(dir, 'lib/draw.wgsl');
     writeFileSync(draw, COUNTERS + readFileSync(draw, 'utf8'));
     ed('land.wgsl', LAND_OUT, PASSES[pass].land);
-    for (const f of ['cover.wgsl', 'crowns.wgsl']) ed(f, MARKS_OUT, PASSES[pass].marks);
+    ed('cover.wgsl', MARKS_OUT, PASSES[pass].marks);
   });
 }
 

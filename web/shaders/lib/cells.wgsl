@@ -7,7 +7,7 @@
 const COVER_LATTICES = 3;
 
 struct Cover {
-  // The draw's corner in the world, m from the map's north-west corner; metres a device pixel; 1 when angled.
+  // The draw's corner in the world, m from the map's north-west corner; metres a device pixel; w is not read.
   corner: vec4f,
   // The metres a pixel of the screen takes, which the detail drawn is chosen by (x; the target's pixel may be larger
   // while the map is drawn at fewer pixels, web/src/map.ts `SCALES`).
@@ -18,7 +18,7 @@ struct Cover {
   // Of each lattice: the row of the marks' texture its cells start at (`marks`).
   rows: vec4f,
   // Of each lattice: its cell at the draw's corner (its fraction; its whole number is `base`), its cell's side, m, and
-  // the rows south of a pixel an angled plant on it may stand in.
+  // the rows south of a pixel a plant on it may stand in.
   grid: array<vec4f, COVER_LATTICES>,
   // Of each lattice: the cells a mark reaches from its own (x; canopy.ts `REACH`).
   reach: array<vec4f, COVER_LATTICES>,
@@ -80,7 +80,7 @@ fn mark_foot(l: i32, k: vec2f) -> vec2f {
 }
 
 // The cells about cell k of lattice l whose marks may reach a pixel in it: of the cells a pixel would look at (its
-// lattice's reach each way, `cover.reach`, and angled the rows south its tallest plants stand in), those whose mark
+// lattice's reach each way, `cover.reach`, and the rows south its tallest plants stand in), those whose mark
 // stands and whose box (`mark_box`) meets the cell, within a pixel. Their least and most offsets across and down, each
 // `REACH_BIAS` more, in four bits each over a first bit of 1; 0 where none reaches. A function of the decided marks
 // alone, so it is worked out once a frame for each cell in view (reach.wgsl) and read by each pixel (cover.wgsl

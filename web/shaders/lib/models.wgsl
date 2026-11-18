@@ -1,5 +1,5 @@
 // Plants drawn from rendered models (web/textures/models.png; CC0, web/textures/SOURCES.md): broad-leaved trees,
-// conifers and bushes seen from the angled view, lit from the north-west, four to a layer of the detail texture (tex.wgsl
+// conifers and bushes as the map sees them, lit from the north-west, four to a layer of the detail texture (tex.wgsl
 // `MODELS_FROM`), each standing on the bottom middle of its quarter. A mark of a kind draws one of its form's sprites
 // (its own draw picks which), covering as much as its crown and no taller than it stands; its leaves take its kind's colour in the
 // season (the sprite's lightness about the leaves' mean, `LEAF_MEAN`), its wood keeps the model's bark; a thin crown is a
@@ -17,6 +17,12 @@ const LEAF_MEAN = 0.05;
 const LEAF_GREEN = vec2f(0.345, 0.39);
 // An open crown loses its leaves in sprays, this many across its sprite.
 const SPRAYS = 30.0;
+// Snow lies on a crown's lit leaves up to this share of their colour, as closed as the crown is (a bare one holds
+// little), in the colour of fresh snow (colour.wgsl `SNOW`).
+const CROWN_SNOW = 0.8; const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
+// A shadow lets through the sky's light and what crowns scatter, about half of the sun's (canopy.ts `CROWN_SHADOW`); a
+// bush's this share of that.
+const SHADOW = 0.42; const BUSH_SHADOW = 0.3;
 
 // The sprites a plant of q's kind is drawn from, by its numbers (the first and how many): a tree by its crown's form
 // (form.ts `formOf`, round where it is not sure) and its height, a dry kind's broad crown a quiver tree (from `QUIVER_DRY`
@@ -63,8 +69,8 @@ fn model_fit(q: Plant) -> ModelFit {
   let pick = model_set(q);
   let s = pick.x + min(i32(fract(q.r.y * 7.13) * f32(pick.y)), pick.y - 1);
   let aspect = model_h(s) / model_w(s);
-  // Covering its crown's ground (`MODEL_WIDER`), no taller than it stands (angled, `STAND` of its height), within its
-  // lattice's reach with its lean (the pixel looks no farther for it: cover_marks.wgsl `lattice`).
+  // Covering its crown's ground (`MODEL_WIDER`), no taller than it stands (`STAND` of its height), within its
+  // lattice's reach with its lean (the pixel looks no farther for it: cover.wgsl `lattice`).
   let stands = select(BUSH_DEEP * q.d, STAND * q.h, q.design == TREE);
   // A thin crown (how closed over the leaves left) is a smaller one, never a half-bare one.
   let crown_closed = q.closed / max(q.left, 1e-3);
@@ -87,7 +93,7 @@ const CLUMP_SIZES = 0.3;
 
 // Plant q drawn from `fit` (`model_fit`) and its sprite's fit: the i-th plant of its clump, from the north, each on
 // its own foot at a place of its own draw inside the clump's crown (its draws north to south in as many bands as it
-// has plants, so drawn in this order the nearer stand over the farther, as the marks do, cover_marks.wgsl `lattice`),
+// has plants, so drawn in this order the nearer stand over the farther, as the marks do, cover.wgsl `lattice`),
 // of its own size; drawn whole from its foot (`model_plant`, `model_shadow`).
 struct ClumpOne { q: Plant, fit: ModelFit }
 fn clump_one(q: Plant, fit: ModelFit, i: i32) -> ClumpOne {
@@ -117,7 +123,7 @@ fn dense_cover(s: i32, a: f32, dense: f32) -> f32 {
 const CLUMP_COVERED = 0.95;
 
 // Plant q drawn from `fit` (`model_fit`) at p, as `model_plant`: one sprite, or its clump's (`clump_one`), the nearest
-// first, each under those before it, as the marks lie over each other (cover_marks.wgsl `lattice`), to `CLUMP_COVERED`.
+// first, each under those before it, as the marks lie over each other (cover.wgsl `lattice`), to `CLUMP_COVERED`.
 fn clump_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   if (fit.k <= 1.0) { return model_plant(q, fit, p, e, snow); }
   var got = vec4f(0.0);
@@ -136,7 +142,7 @@ fn bare_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
   return model_texel(bare_of(s), uv, g);
 }
 
-// Plant q drawn from its model sprite `fit` (`model_fit`) at p, angled, e m a pixel, where snow covers `snow` of the ground: its colour
+// Plant q drawn from its model sprite `fit` (`model_fit`) at p, e m a pixel, where snow covers `snow` of the ground: its colour
 // (linear) and cover; none where it does not reach. Its leafy sprite keeps the share of its leaves left this season in
 // sprays (`SPRAYS` across the sprite) that fall whole, over its bare twin.
 fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
@@ -159,10 +165,10 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   return vec4f((mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under), a + under);
 }
 
-// The shadow of plant q drawn from its model sprite `fit` at p, angled, e m a pixel: its sprite cast on the ground away from the
+// The shadow of plant q drawn from its model sprite `fit` at p, e m a pixel: its sprite cast on the ground away from the
 // sun (south-east), each of its texels at a height on it laid `MODEL_SHADOW_RUN` of that height along the ground, blurred
 // (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of its sprays as are left, over its bare
-// twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover_marks.wgsl
+// twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover.wgsl
 // `lattice`). How dark it makes the ground, 0..1.
 const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.05;
 // The length of that shadow along the ground southward, m, within its reach.

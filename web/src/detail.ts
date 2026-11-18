@@ -1,5 +1,5 @@
 // The ground's detail up close (web/shaders/lib/detail.wgsl): photographs of ground seen from above, tiles of ground
-// cover rendered from 3D models as the angled view sees them, and rendered plants (CC0, Poly Haven;
+// cover rendered from 3D models as the map sees them, and rendered plants (CC0, Poly Haven;
 // web/textures/SOURCES.md), four strip images beside the page (`ground.jpg`, `carpets.jpg`, `models.png`, `trees.png`),
 // each a layer of one texture array with its mip levels down to one texel, which is its mean. The map draws each at its
 // real size as a change around the colour the world gives the ground (the image over its mean), so from afar, where the

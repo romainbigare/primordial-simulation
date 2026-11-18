@@ -1,19 +1,17 @@
 // The crowns' mask: the page's programs built again (variant.mjs) from a copy of web/shaders in which the trees' crowns
-// are pure magenta: the bodies of the marks of the lattice of stands (cover_marks.wgsl `lattice` names the lattice,
-// cover.wgsl and crowns.wgsl `plant` paint the body) and the far field of stands (cover_field.wgsl `lattice_field`).
+// are pure magenta: the bodies of the marks of the lattice of stands (cover.wgsl: `lattice` names the lattice, `plant`
+// paints the body) and the far field of stands (cover_field.wgsl `lattice_field`).
 import { programs, patch } from './variant.mjs';
 
 const MAGENTA = 'vec3f(1.0, 0.0, 1.0)';
 /** The changes to the shaders' text, each [file, text, its replacement]; each text must stand once in its file. */
 const PATCHES = [
-  ['lib/cover_marks.wgsl', 'fn lattice(dst: ptr<function, vec4f>',
+  ['cover.wgsl', 'fn lattice(dst: ptr<function, vec4f>',
     'var<private> mask_stands: bool = false;\nfn lattice(dst: ptr<function, vec4f>'],
-  ['lib/cover_marks.wgsl', '      plant(dst, shade, mark_plant(',
+  ['cover.wgsl', '      plant(dst, shade, mark_plant(',
     '      mask_stands = l == STANDS;\n      plant(dst, shade, mark_plant('],
   ['cover.wgsl', 'if (m.a > 0.0) { over(dst, m.rgb, m.a * fade); }',
     `if (m.a > 0.0) { over(dst, select(m.rgb, ${MAGENTA}, mask_stands), m.a * fade); }`],
-  ['crowns.wgsl', 'over(dst, mark_colour(mix(leaf, bark, body.wood) * body.tone, body.lit, body.rim), body.a * fade);',
-    `over(dst, select(mark_colour(mix(leaf, bark, body.wood) * body.tone, body.lit, body.rim), ${MAGENTA}, mask_stands), body.a * fade);`],
   ['lib/cover_field.wgsl', '  let dark = FIELD_SHADOW',
     `  if (l == STANDS) { c = ${MAGENTA}; }\n  let dark = FIELD_SHADOW`],
 ];

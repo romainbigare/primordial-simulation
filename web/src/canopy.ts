@@ -24,18 +24,17 @@ const LEFT_STEPS = 100;
  * how deep its loose ground, m (the core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); its slot in
  * its cell's cover (a label it keeps, so its marks keep their places as the kinds' order and shares change, mark.wgsl
  * `pick_kind`); then of each kind its form (how closed its crown is and the leaves it has left, `LEFT_STEPS`, its
- * capture area per kg, log10 m²/kg, its crown's form and how surely, form.ts `formOf`, packed as one number,
- * `SURE_PACK`, and how dry its ground), the colours its plants span (style.ts `KindLook`: the first with its grown
- * plants' walls' share, `grownWalls`, the second with the height its plants are trees from, `treeFrom`), its flowers
- * (their colour and the share of its plants in flower); of each of its groups its plants' height and stem's width, m,
- * and the plants one of its marks on the lattice of stands stands for; and of each lattice the width its groups' marks
- * are drawn, m (lattices.ts `marksOf`). A plane holds four numbers: one for each kind of a group of four of a square
+ * crown's form and how surely, form.ts `formOf`, packed as one number, `SURE_PACK`, and how dry its ground), the
+ * colours its plants span (style.ts `KindLook`: the first with its grown plants' walls' share, `grownWalls`, the second
+ * with the height its plants are trees from, `treeFrom`); of each of its groups its plants' height, m, and the plants
+ * one of its marks on the lattice of stands stands for; and of each lattice the width its groups' marks are drawn, m
+ * (lattices.ts `marksOf`). A plane holds four numbers: one for each kind of a group of four of a square
  * (`groups` such planes for each such number), or one of each group of a kind. */
 export function planesOf(kinds: number) {
   const g = Math.ceil(kinds / 4), lat = LATTICES.length, need = lat * kinds, form = need + 3 * g;
   return {
-    kinds, groups: g, chance: 0, need, roots: need + g, label: need + 2 * g, form, from: form + kinds, to: form + 2 * kinds, petal: form + 3 * kinds,
-    height: form + 4 * kinds, stem: form + 5 * kinds, clump: form + 6 * kinds, width: form + 7 * kinds, count: form + (7 + lat) * kinds,
+    kinds, groups: g, chance: 0, need, roots: need + g, label: need + 2 * g, form, from: form + kinds, to: form + 2 * kinds,
+    height: form + 3 * kinds, clump: form + 4 * kinds, width: form + 5 * kinds, count: form + (5 + lat) * kinds,
   };
 }
 export type Planes = ReturnType<typeof planesOf>;
@@ -61,10 +60,10 @@ export interface CoverField { w: number; h: number; data: Float32Array }
  * on it, m (0: no square holds its marks), and the reflectance of the walls the cover builds (its stems). */
 export interface Kinds { w: number; h: number; planes: Planes; cols: number; table: Float32Array; field: CoverField; tallest: number[]; widest: number[]; walls: Rgb }
 
-/** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (crown.wgsl `SHADOW`,
+/** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (models.wgsl `SHADOW`,
  * cover_field.wgsl `FIELD_SHADOW`). */
 const CROWN_SHADOW = 0.42;
-/** A plant's shadow darkens this many times the square of its crown's width of ground: angled, the marks cast their
+/** A plant's shadow darkens this many times the square of its crown's width of ground: the marks cast their
  * sprite, which covers as much as its crown, `MODEL_SHADOW_RUN` (0.9) as long (models.wgsl `model_shadow`), so the field
  * far away is as dark as the marks near. */
 const SHADOW_WIDTHS = 0.9 * (Math.PI / 4);
@@ -198,13 +197,11 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       put(group(P.roots, k), i, k & 3, mean >= ROOTED_ALL ? 0 : r[K.need]);
       put(group(P.label, k), i, k & 3, r[K.slot]);
       // Its form and how surely as one number (form + `SURE_PACK` x sure).
-      [packed, r[K.leaf], shape.form + SURE_PACK * shape.sure, shape.dry].forEach((v, q) => put(P.form + k, i, q, v));
+      [packed, shape.form + SURE_PACK * shape.sure, shape.dry].forEach((v, q) => put(P.form + k, i, q, v));
       [...look.from, grownWalls(r[K.walls])].forEach((v, q) => put(P.from + k, i, q, v));
       const from = treeFrom(r[K.walls]);
       [...look.to, from].forEach((v, q) => put(P.to + k, i, q, v));
-      [...look.petal, look.bloom].forEach((v, q) => put(P.petal + k, i, q, v));
       ofGroups(P.height, g => groups[g][K.height]);
-      ofGroups(P.stem, g => groups[g][K.stem]);
       LATTICES.forEach((a, l) => {
         const on = marksOf(groups, l, from, mean), chances = on.map(o => o.chance * stands);
         if (!chances.some(x => x > 0)) return;

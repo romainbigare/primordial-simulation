@@ -749,8 +749,8 @@ steep slopes, soil, sand and gravel on shores, snow by slope), and plants are si
 and the inside-a-cell shares (5.2), each kind by the wetness its genes like, their crowns with form and shadow. All of
 it comes from the world's numbers and the ground's shape, seeded by place, so it holds while the camera moves.
 
-Life and objects are drawn at their true size in metres and the plant cover as textures; two styles exist for the
-shapes of individuals, seen from above (the default) or angled (10.4), and the owner will choose between them. True
+Life and objects are drawn at their true size in metres and the plant cover as textures; the shapes of individuals
+are drawn angled (10.4), each standing up on its foot (the owner's decision). True
 size is the owner's decision: far away no herd is drawn; one or two zoom steps before single animals show, a herd shows
 as a light, subtle blob; the zoom goes deep enough to see single animals.
 

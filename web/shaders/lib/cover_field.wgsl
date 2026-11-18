@@ -8,7 +8,7 @@ struct CoverLook {
   // Of each lattice: its cell's side, m (0: no square holds it), and 1 where any of its marks takes enough pixels to show
   // (each by the width of its lattice's marks where it stands, the rest is the field, `lattice_field`); w is not read.
   sides: vec4f, shown: vec4f,
-  // 1 where the cover is drawn (0: none); how strongly its marks cover the map; 1 where the plants stand up (angled).
+  // 1 where the cover is drawn (0: none); how strongly its marks cover the map; z and w are not read.
   look: vec4f,
 }
 @group(0) @binding(14) var<uniform> cover_look: CoverLook;
@@ -95,15 +95,15 @@ fn held_at(at: vec2f, b: Beneath) -> vec4f {
 
 // The herbs' sward: their plants thicker and thinner by up to `SWARD` of their mean over tufts of `SWARD_M`; they cover
 // the share of the ground their leaves close by the cover's light law (canopy.ts `Paint`, tape/src/stands.rs `plants`),
-// so a thin sward lets the ground show through. Its tone varies by up to `TUFT_TONE` over the tufts, by up to `SWATH` over
-// swathes of `SWATH_M`, and near it is drawn as its tufts of blades (`tuft_tone`).
+// so a thin sward lets the ground show through. Its tone varies by up to `TUFT_TONE` over the tufts and by up to `SWATH`
+// over swathes of `SWATH_M`, as far as its images do not show them.
 const SWARD = 0.45; const SWARD_M = 0.35;
 // Under the trees' crowns the sward is in their shade: darker by up to `SWARD_SHADE` as they close over it.
 const SWARD_SHADE = 0.35;
 const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0; const SWARD_STANDS_NEAR = 0.5;
-// A sward whose red over its green passes from `STRAW_HUE.x` to `.y` is straw: angled, its grass is drawn dry.
+// A sward whose red over its green passes from `STRAW_HUE.x` to `.y` is straw: its grass is drawn dry.
 const STRAW_HUE = vec2f(0.85, 1.1);
-// Angled, a sward that covers up to `TUFTS_THICK.x` of the ground is drawn as tufts alone, from `.y` on as its tile.
+// A sward that covers up to `TUFTS_THICK.x` of the ground is drawn as tufts alone, from `.y` on as its tile.
 const TUFTS_THICK = vec2f(0.4, 0.75);
 // Under the blades drawn near, the sward's tiles show this light (the ground between the blades in their shade).
 const BLADE_GROUND = 0.6;
@@ -114,9 +114,8 @@ const BLADE_SEEN_E = vec2f(0.004, 0.012);
 const SWATH_DETAIL_M = 1.33;
 // Reeds: herbs on soaked ground (from `REED_WET`) and on the shore of standing or running water, out to `REED_BAND_M`
 // m from its edge (its height over the water's level over the slope), stand dense (`REED_FILL` of the ground), their colour
-// times `REED_TINT`; seen from above in streaks of tall blades `REED_W` wide, `REED_L` long, `REED_TONE` deep.
+// times `REED_TINT`, their blades standing up in their tile (detail.wgsl `grass_hexes`).
 const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const REED_TINT = vec3f(0.75, 0.8, 0.45);
-const REED_W = 0.07; const REED_L = 0.9; const REED_TONE = 0.5;
 // Reeds are the herbs' own plants: they stand dense as far as the herbs are there to make them, fully where the herbs
 // cover `REED_HERBS` of the ground; a trace of herbs makes a trace of reeds, not a belt.
 const REED_HERBS = 0.1;
@@ -128,14 +127,11 @@ fn reed_place(b: Beneath) -> f32 {
 // one rule far and near.
 fn reeds_of(place: f32, herbs: f32) -> f32 { return place * ease(0.0, REED_HERBS, herbs); }
 // Flowers: in clusters as large as the noise's cells, `FLOWER_M`, over as much of the sward as is in flower; in a
-// cluster the dots, of radius `DOT_R`, lie on two lattices of cells `DOT_GAP` across, each turned its own way off the
-// map's axes (`DOT_TURN`, radians) and holding a dot at a place of its own in half of `DOT_PRESENT` of its cells, so
-// the dots stand in no rows and no square grid; a dot is lighter at its heart by `DOT_HEART`; where a dot takes less than a pixel, the cluster's mean; they show as detail
-// `FLOWERS_GONE_M` across (`shows_at`): none where a pixel takes a metre or more (their faint tint gone from afar).
-const FLOWERS_GONE_M = 1.33; const FLOWER_M = 1.2; const DOT_R = 0.045; const DOT_GAP = 0.171; const DOT_PRESENT = 0.8; const DOT_HEART = 0.25;
-const DOT_TURN = vec2f(0.55, 2.1);
-// A flower's eye, the inner third of its dot.
-const FLOWER_EYE = vec3f(0.75, 0.55, 0.12);
+// cluster their heads, of radius `DOT_R`, `DOT_PRESENT` of them to a cell `DOT_GAP` across, cover their mean share of
+// the ground where a head takes less than a pixel, and show in the tile of petals where it takes more (detail.wgsl
+// `flower_heads`); they show as detail `FLOWERS_GONE_M` across (`shows_at`): none where a pixel takes a metre or more
+// (their faint tint gone from afar).
+const FLOWERS_GONE_M = 1.33; const FLOWER_M = 1.2; const DOT_R = 0.045; const DOT_GAP = 0.171; const DOT_PRESENT = 0.8;
 
 // A blend `v` of a layer over the squares about a point, of which the squares with land weigh `held`, as a blend over
 // those squares alone (`LAND_LAYER`).
@@ -229,27 +225,9 @@ fn in_stands(at: vec2f, e: f32, f: vec4f, l: i32, first: i32, rest: i32, m: f32)
   return mix(mean, mix(other, own, stand_share(stand_draw(at, m), clamp(one.a / whole.a, 0.0, 1.0))), shows * told);
 }
 
-// Streaks of blades `w` m wide and `len` m long at the pixel, turned by `turn` radians: -1..1 (noise stretched along
-// the turn). A turn lies between the nearest two of `STREAK_TURNS` turns that stand fixed in the world, whose streaks
-// blend (kept as strong as one), so no lattice turns about the world's origin as the blades turn with the tufts.
-const STREAK_TURNS = 3.0;
-fn streaks(w: f32, len: f32, turn: f32, k: i32) -> f32 {
-  let t = turn / PI * STREAK_TURNS;
-  let x = t - STREAK_TURNS * floor(t / STREAK_TURNS);
-  let b = floor(x);
-  let u = smoothstep(0.0, 1.0, x - b);
-  var n = 0.0;
-  for (var j = 0; j < 2; j++) {
-    let a = PI * (b + f32(j)) / STREAK_TURNS;
-    let m = mat2x2f(cos(a) / w, -sin(a) / len, sin(a) / w, cos(a) / len);
-    n += select(1.0 - u, u, j == 1) * noise_l(lat(m, vec2f(0.0)), k + 100 * j).x;
-  }
-  return n / sqrt((1.0 - u) * (1.0 - u) + u * u);
-}
-
 // The flowers over the sward at `at`, seen at `e` m a pixel, of the herbs whose share `bloom` is in flower: their
-// colour and the share of the ground they cover (the sward's own share times it): clusters (`FLOWER_M`) of dots
-// (`DOT_R`) seen from above, of flower heads angled.
+// colour and the share of the ground they cover (the sward's own share times it): clusters (`FLOWER_M`) of flower heads
+// (`DOT_R`).
 fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   // The clusters: where the noise, made even, falls in the share in flower; softened over a pixel.
   let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(FLOWER_M, vec2f(0.0)), 71).x);
@@ -259,23 +237,11 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   let dots = shows_at(2.0 * DOT_R, e);
   var cover = mean;
   var c = petal;
-  if (dots > 0.0 && cluster > 0.0 && cover_look.look.z > 0.5) {
-    // Angled, their heads in the tile of petals (detail.wgsl `flower_heads`).
+  if (dots > 0.0 && cluster > 0.0) {
+    // Their heads in the tile of petals (detail.wgsl `flower_heads`).
     let h = flower_heads(e);
     cover = mix(mean, h.x, dots);
     c = petal * h.y;
-  } else if (dots > 0.0 && cluster > 0.0) {
-    let margin = DOT_R / DOT_GAP;
-    // The nearest dot of the two lattices: how far from its centre the point lies, in its radii (past it: none).
-    var d = 1.0;
-    for (var l = 0; l < 2; l++) {
-      let q = lat(mat2x2f(cos(DOT_TURN[l]), sin(DOT_TURN[l]), -sin(DOT_TURN[l]), cos(DOT_TURN[l])) * (1.0 / DOT_GAP), vec2f(13.0 * f32(l)));
-      let x = lowbias(q.i, 72 + l);
-      let centre = margin + (1.0 - 2.0 * margin) * vec2f(f32(x & 1023u), f32((x >> 10u) & 1023u)) / 1024.0;
-      if (f32(x >> 22u) / 1024.0 < 0.5 * DOT_PRESENT) { d = min(d, length(q.f - centre) * DOT_GAP / DOT_R); }
-    }
-    cover = mix(mean, 1.0 - smoothstep(1.0 - e / DOT_R, 1.0, d), dots);
-    c = mix(petal * (1.0 + DOT_HEART * (1.0 - d) * dots), FLOWER_EYE, smoothstep(0.4, 0.25, d) * dots);
   }
   return vec4f(c, cover * cluster);
 }
@@ -286,10 +252,10 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
 fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> vec4f {
   let f = field_smooth(at, SWARD_LAYER);
   if (f.a <= 0.0 || hold <= 0.0) { return vec4f(0.0); }
-  // Angled, near, its images give its detail (detail.wgsl `grass_detail`): the drawn tufts' and swathes' tone fades out
-  // as they show, and its kinds' stands keep `SWARD_STANDS_NEAR` of their difference from the mean, so the layers do not
-  // pile into smudges.
-  let near_images = select(0.0, shows_at(SWATH_DETAIL_M, e), cover_look.look.z > 0.5);
+  // Near, its images give its detail (detail.wgsl `grass_detail`): the drawn tufts' and swathes' tone fades out as they
+  // show, and its kinds' stands keep `SWARD_STANDS_NEAR` of their difference from the mean, so the layers do not pile
+  // into smudges.
+  let near_images = shows_at(SWATH_DETAIL_M, e);
   let mean = f.rgb / f.a;
   var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
   c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images);
@@ -304,38 +270,29 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   }
   let swaths = shows_at(SWATH_DETAIL_M, e);
   if (swaths > 0.0) { tone += SWATH * swaths * (1.0 - near_images) * noise_l(lat_turned(SWATH_M, vec2f(0.0)), 73).x; }
-  // From above, its tufts; angled, its grass stands up in its images (detail.wgsl `grass_detail`).
-  let blades_seen = blades_show(e);
-  if (blades_seen > 0.0 && cover_look.look.z < 0.5) { tone *= mix(1.0, tuft_tone(), blades_seen); }
   if (reeds > 0.0) {
     s = mix(s, max(s, REED_FILL), reeds);
     c = mix(c, c * REED_TINT, reeds);
-    // From above, in streaks of blades; angled, its blades stand up in their image (detail.wgsl `grass_detail`).
-    if (cover_look.look.z < 0.5) { tone += REED_TONE * reeds * shows_at(REED_W, e) * streaks(REED_W, REED_L, 0.3 * noise_l(lat_axes(REED_L, vec2f(0.0)), 76).x, 77); }
   }
   // Its grass, straw where its colour is straw's.
   let straw = smoothstep(STRAW_HUE.x, STRAW_HUE.y, c.r / max(c.g, 1e-4));
   let plain = c * max(tone, 0.0) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
   c = plain * grass_detail(e, straw, reeds, s);
-  // Angled and very near, its blades drawn one by one (detail.wgsl `blades`) over its tiles in their shade
-  // (`BLADE_GROUND`), coming in smoothly as a pixel passes from `BLADE_SEEN_E.y` to `.x` m.
-  if (cover_look.look.z > 0.5) {
-    let near = 1.0 - ease(BLADE_SEEN_E.x, BLADE_SEEN_E.y, e);
-    if (near > 0.0) {
-      let b = blades(e);
-      c = mix(c, mix(c * BLADE_GROUND, plain * b.x, b.y), near);
-    }
+  // Very near, its blades drawn one by one (detail.wgsl `blades`) over its tiles in their shade (`BLADE_GROUND`), coming
+  // in smoothly as a pixel passes from `BLADE_SEEN_E.y` to `.x` m.
+  let near_blades = 1.0 - ease(BLADE_SEEN_E.x, BLADE_SEEN_E.y, e);
+  if (near_blades > 0.0) {
+    let b = blades(e);
+    c = mix(c, mix(c * BLADE_GROUND, plain * b.x, b.y), near_blades);
   }
-  // Angled, where its tufts show as things, a thin sward is its tufts standing on bare ground (detail.wgsl
-  // `sward_tufts`), not a veil: fully where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on.
+  // Where its tufts show as things, a thin sward is its tufts standing on bare ground (detail.wgsl `sward_tufts`), not a
+  // veil: fully where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on.
   var seen = s;
-  if (cover_look.look.z > 0.5) {
-    let thin = 1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s);
-    if (thin > 0.0) {
-      let t = sward_tufts(plain, c, e, s);
-      c = mix(c, t.rgb, thin);
-      seen = mix(s, t.a, thin);
-    }
+  let thin = 1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s);
+  if (thin > 0.0) {
+    let t = sward_tufts(plain, c, e, s);
+    c = mix(c, t.rgb, thin);
+    seen = mix(s, t.a, thin);
   }
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
@@ -347,45 +304,6 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     }
   }
   return vec4f(c * seen, seen);
-}
-
-// The sward's tufts seen from above: one in `TUFT_FILL` of the cells of a lattice `TUFT_M` m wide (at random places in
-// them, so no rows), each a star of `TUFT_BLADES` blades up to `TUFT_TALL` times its cell long, each `TUFT_FAN` of a
-// half turn wide. A blade is dark at its foot and light at its tip (`TUFT_FOOT` to `TUFT_TIP` of the sward's tone), the
-// ground between the tufts in their shade (`TUFT_GAP`), so the sward's mean stays its colour. They show from
-// `TUFT_SEEN_M` m a pixel.
-const TUFT_M = 0.22; const TUFT_FILL = 0.75; const TUFT_BLADES = 9.0; const TUFT_TALL = 1.2; const TUFT_FAN = 0.85;
-// Each tuft's tone departs from the sward's by up to `TUFT_OWN` either way.
-const TUFT_OWN = 0.15;
-const TUFT_FOOT = 0.62; const TUFT_TIP = 1.3; const TUFT_GAP = 0.8; const TUFT_SEEN_M = 0.1;
-// How much the sward's tufts show at e m a pixel.
-fn blades_show(e: f32) -> f32 { return shows_at(TUFT_SEEN_M, e); }
-
-// The tone the tufts give the sward at the pixel.
-fn tuft_tone() -> f32 {
-  let l = lat_axes(TUFT_M, vec2f(0.0));
-  var tone = TUFT_GAP;
-  for (var j = -1; j <= 1; j++) {
-    for (var i = -1; i <= 1; i++) {
-      let c = l.i + vec2i(i, j);
-      let x = lowbias(c, 91);
-      if (f32(x & 1023u) / 1024.0 >= TUFT_FILL) { continue; }
-      let foot = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
-      // From the tuft's foot to the pixel, in cells; its length, in cells, by its own draw.
-      let q = l.f - vec2f(f32(i), f32(j)) - foot;
-      let len = TUFT_TALL * (0.6 + 0.4 * f32(x >> 30u) / 3.0);
-      let v = length(q) / (0.5 * len);
-      let turn = atan2(q.y, q.x) / PI * TUFT_FAN;
-      // Its blades, each of its own length.
-      let k = TUFT_BLADES * turn / TUFT_FAN;
-      let blade = floor(k);
-      let reach = 0.55 + 0.45 * fract(f32(x >> 3u) * 0.0137 + 0.61 * blade);
-      let w = 1.0 - smoothstep(0.18, 0.42, abs(fract(k) - 0.5));
-      if (v > reach || w <= 0.4) { continue; }
-      tone = mix(TUFT_FOOT, TUFT_TIP, v / reach) * (1.0 + TUFT_OWN * (f32((x >> 4u) & 63u) / 31.5 - 1.0));
-    }
-  }
-  return tone;
 }
 
 // The cover's field at `at` seen at `e` m a pixel over `b`, premultiplied, and the trees' crowns' share: the herbs'

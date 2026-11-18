@@ -7,7 +7,6 @@
 import { World } from './data';
 import { kindsOf } from './canopy';
 import { cooling } from './style';
-import { Style } from './style';
 import { CoverMarks, Marks } from './textures';
 import { Draw, Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';
@@ -23,8 +22,6 @@ export class Vegetation implements GpuLayer {
   private cellM = 1;
   private mapW = 0;
   private mapH = 0;
-  /** The style the marks are drawn in. */
-  style: Style = 'above';
   /** The live map, whose laws mask each mark at its foot (none: a tape's map, no cover drawn over it). */
   land: Land | null = null;
   /** The draw of the marks `prepare` decided last (none: no cover drawn). */
@@ -44,7 +41,7 @@ export class Vegetation implements GpuLayer {
   /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px and a
    * css px `seen` px of the screen. */
   under(gpu: Gpu, s: number, seen: number): Draw['binds'] {
-    return this.marks.fieldBinds(gpu, this.cellM / (s * seen), this.style === 'angled');
+    return this.marks.fieldBinds(gpu, this.cellM / (s * seen));
   }
 
   /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` px of the
@@ -59,7 +56,7 @@ export class Vegetation implements GpuLayer {
     const x0 = Math.floor(Math.max(ox, 0) * d), y0 = Math.floor(Math.max(oy, 0) * d);
     const x1 = Math.ceil(Math.min(ox + this.mapW * s, W) * d), y1 = Math.ceil(Math.min(oy + this.mapH * s, H) * d);
     if (x1 <= x0 || y1 <= y0) return;
-    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], style: this.style, land };
+    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land };
     this.marks.prepare(gpu, this.drawn);
   }
 

@@ -1,4 +1,4 @@
-// The form of a tree's crown in the Earth view (web/shaders/lib/crown.wgsl draws each): a rule from its kind's own
+// The form of a tree's crown in the Earth view (web/shaders/lib/models.wgsl draws each): a rule from its kind's own
 // numbers (tape/src/stands.rs), the one place the form is chosen, for the marks near (cover.wgsl) and the stands far
 // away alike. Each form scores the numbers that favour it, the departure of each from a middle over a span; the best
 // score wins, as surely as it leads the next (`FORM_SURE`), so a kind that evolves across a border passes through the
@@ -8,7 +8,7 @@ import { smooth } from './earth';
 /** The numbers of a kind its form reads: its capture area per kg, log10 m²/kg; its frost gene, K; its moisture gene;
  * its plants' height and crown's width, m; and the share of what it builds that goes to seeds. */
 export interface Shape { leaf: number; frost: number; moist: number; height: number; width: number; seed: number }
-/** A form (0 round, 1 cone, 2 column, 3 umbrella, 4 tiered, 5 lobed: crown.wgsl `crown`) and how surely it is drawn
+/** A form (0 round, 1 cone, 2 column, 3 umbrella, 4 tiered, 5 lobed: models.wgsl `model_set`) and how surely it is drawn
  * (0: as round .. 1: fully itself); and how dry the ground its kind is made for, 0..1 (its moisture gene from the middle
  * of dry ground's to a span under it): the drawing picks a dry land's plant for a dry kind (models.wgsl). */
 export interface Form { form: number; sure: number; dry: number }

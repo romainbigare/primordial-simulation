@@ -33,11 +33,11 @@ export function marks(page) {
   return page.evaluate(async PLACE_STEPS => {
     const e = window.__ew, cm = e.vegetation.marks, k = cm.kinds, d = e.vegetation.drawn, L = e.lattices;
     if (!k || !d || !cm.decided) return [];
-    const shown = cm.shown(d.seenMpp), size = [d.rect[2] * d.mpp, d.rect[3] * d.mpp], angled = d.style === 'angled';
+    const shown = cm.shown(d.seenMpp), size = [d.rect[2] * d.mpp, d.rect[3] * d.mpp];
     let row = 0;
     const grids = L.LATTICES.map((a, l) => {
       const g = [d.at[0] / a, d.at[1] / a], frac = g.map(v => v - Math.floor(v));
-      const rows = angled ? Math.min(Math.max(Math.ceil((L.STAND * k.tallest[l]) / a) - L.REACH[l], 0), L.ROWS_MOST) : 0;
+      const rows = Math.min(Math.max(Math.ceil((L.STAND * k.tallest[l]) / a) - L.REACH[l], 0), L.ROWS_MOST);
       const span = (c, n) => (shown[l] > 0 ? Math.floor(frac[c] + size[c] / a) + 1 + 2 * L.MARK_MARGIN + L.MARK_SPARE + n : 0);
       const cells = { cols: span(0, 0), rows: span(1, rows), row };
       row += cells.rows;

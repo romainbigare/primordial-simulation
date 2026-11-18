@@ -8,7 +8,6 @@ import { GroundTiles, GroundOf } from './ground';
 import { Land } from './land';
 import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
-import { Style } from './style';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
@@ -54,12 +53,6 @@ const slots = new CoverSlots();
 let thingsKey = '';
 /** The cover of the live map (earth view only). */
 const vegetation = new Vegetation();
-/** Where the player keeps the style life is drawn in (one per viewer). */
-const LIFE_KEY = 'ew.life';
-/** How life is drawn: from above or angled, as the player last chose (from above if the browser keeps nothing). */
-let life: Style = 'above';
-try { if (localStorage.getItem(LIFE_KEY) === 'angled') life = 'angled'; } catch { /* no storage: the default */ }
-vegetation.style = life;
 map.layer = vegetation;
 map.overlay = (_, ox, oy, s) => slots.seen(ox, oy, s);
 /** Which GPU draws the map (none: the page cannot draw it). */
@@ -178,18 +171,12 @@ function setLayer(n: string | null): void {
 
 function syncUi(): void {
   document.querySelectorAll<HTMLElement>('#views button').forEach(b => b.classList.toggle('on', !layer && b.dataset.view === view));
-  document.querySelectorAll<HTMLElement>('#life button').forEach(b => b.classList.toggle('on', b.dataset.life === life));
   document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
   document.querySelectorAll<HTMLElement>('#speeds button').forEach(b => b.classList.toggle('on', b.dataset.speed === String(speed)));
   $('play').classList.toggle('playing', playing);
 }
 
 function setView(v: string): void { view = v; layer = null; setLayer(null); }
-function setLife(style: Style): void {
-  life = vegetation.style = style;
-  try { localStorage.setItem(LIFE_KEY, style); } catch { /* no storage: kept for this page only */ }
-  syncUi(); map.invalidate();
-}
 
 function button(text: string, fn: () => void, layerName?: string): HTMLButtonElement {
   const b = document.createElement('button');
@@ -257,7 +244,6 @@ $('play').onclick = togglePlay;
 $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
-document.querySelectorAll<HTMLElement>('#life button').forEach(b => (b.onclick = () => setLife(b.dataset.life === 'angled' ? 'angled' : 'above')));
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
 $<HTMLInputElement>('file').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(load); };
 addEventListener('keydown', e => {

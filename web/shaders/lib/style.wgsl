@@ -122,23 +122,9 @@ fn foam(depth: f32, slope: f32, e: f32, at: vec2f) -> f32 {
   return FOAM * white * ease(FOAM_PX.x, FOAM_PX.y, FOAM_M / rise / max(e, 1e-3));
 }
 
-// The marks (cover.wgsl): a plant's light falls in soft bands (two or three tones, as a painter lays them), each mark
-// differs a little from its kind in hue and tone, and its rim is drawn darker, as an outline.
-// The light's bands: under `BAND_LOW` the shade's tone, over `BAND_HIGH` the lit one, the middle between; each step
-// `BAND_SOFT` wide; how far the light goes to its bands.
-const BAND_LOW = 0.88; const BAND_HIGH = 1.1; const BAND_SOFT = 0.08; const BANDS = 0.35;
-const TONE_SHADE = 0.78; const TONE_LIT = 1.16;
-// A mark's hue turns from its kind's by up to this many radians either way, and its tone by up to this share.
+// The marks (cover.wgsl): each mark differs a little from its kind in hue and tone. A mark's hue turns from its kind's
+// by up to this many radians either way, and its tone by up to this share.
 const HUE_JITTER = 0.25; const TONE_JITTER = 0.2;
-// The outline: as dark as this share at the rim, `OUTLINE_PX` pixels wide (no less than `OUTLINE_LEAST` of the radius).
-const OUTLINE = 0.35; const OUTLINE_PX = 1.2; const OUTLINE_LEAST = 0.06;
-
-// The light `lit` in its bands.
-fn banded(lit: f32) -> f32 {
-  let tone = mix(TONE_SHADE, 1.0, smoothstep(BAND_LOW - BAND_SOFT, BAND_LOW + BAND_SOFT, lit));
-  let bands = mix(tone, TONE_LIT, smoothstep(BAND_HIGH - BAND_SOFT, BAND_HIGH + BAND_SOFT, lit));
-  return mix(lit, bands, BANDS * STYLE);
-}
 
 // Colour `c` (linear) of a mark turned in hue and tone by its own random numbers `r` (0..1 each): a turn about the grey
 // axis keeps its lightness.
@@ -148,22 +134,4 @@ fn vary(c: vec3f, r: vec2f) -> vec3f {
   let q = sin(turn) * 0.57735;
   let m = mat3x3f(cos(turn) + k, k + q, k - q, k - q, cos(turn) + k, k + q, k + q, k - q, cos(turn) + k);
   return clamp(m * c, vec3f(0.0), vec3f(1.0)) * (1.0 + TONE_JITTER * (2.0 * r.y - 1.0));
-}
-
-// How near the rim of a shape whose edge lies at `edge` (in its radii) a point at `rho` is, 0 inside .. 1 at it, for
-// a shape `radius` m wide seen at `e` m a pixel.
-fn rim(rho: f32, edge: f32, radius: f32, e: f32) -> f32 {
-  let band = max(OUTLINE_PX * e / max(radius, 1e-4), OUTLINE_LEAST);
-  return smoothstep(edge - band, edge, rho);
-}
-
-// A mark in the sun is fuller in colour and one in the shade greyer: its colour departs from its grey by this share
-// more or less per unit of its light over or under flat ground's.
-const LIT_CHROMA = 0.8;
-
-// A mark's colour (linear) from its own `c`, lit by `lit`, at `rim_at` of its outline.
-fn mark_colour(c: vec3f, lit: f32, rim_at: f32) -> vec3f {
-  let grey = vec3f(dot(c, vec3f(0.2126, 0.7152, 0.0722)));
-  let full = max(mix(grey, c, 1.0 + LIT_CHROMA * STYLE * clamp(lit - 1.0, -1.0, 1.0)), vec3f(0.0));
-  return relief_tint(full, banded(lit)) * (1.0 - OUTLINE * STYLE * rim_at);
 }

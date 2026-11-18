@@ -9,18 +9,10 @@ layers, top first.
 
 | layer | Poly Haven asset | its side in the world |
 |---|---|---|
-| 0 | leaves_forest_ground (diffuse) | 1.26 m |
-| 1 | forest_leaves_02 (diffuse) | 3.0 m |
-| 2 | leafy_grass (diffuse) | 2.0 m |
-| 3 | rocky_trail (diffuse) | 2.0 m |
-| 4 | mud_cracked_dry_03 (diffuse) | 1.5 m |
-| 5 | dry_river_pebbles (diffuse) | 2.0 m |
-| 6 | coast_sand_01 (diffuse) | 15 m |
-| 7 | aerial_rocks_02 (diffuse) | 50 m |
-| 8 | brown_mud (diffuse) | 1.3 m |
-| 9 | leaves cut from nettle_plant (diffuse and alpha), scattered into a tile | — |
-| 10 | fronds cut from fern_02 (diffuse and alpha), scattered into a tile | — |
-| 11 | bark_brown_02 (diffuse) | — |
+| 0 | dry_river_pebbles (diffuse) | 2.0 m |
+| 1 | aerial_rocks_02 (diffuse) | 50 m |
+| 2 | brown_mud (diffuse) | 1.3 m |
+| 3 | forest_leaves_02 (diffuse) | 3.0 m |
 
 ## carpets.jpg
 

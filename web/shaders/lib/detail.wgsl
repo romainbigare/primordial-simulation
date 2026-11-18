@@ -1,13 +1,17 @@
-// The ground's detail up close (web/src/detail.ts): photographs of ground seen from above and, angled, tiles of ground
-// cover rendered from 3D models as that view sees it (tex.wgsl `CARPETS_FROM`), each a layer of `detail_tex` with its
+// The ground's detail up close (web/src/detail.ts): photographs of ground seen from above and tiles of ground cover
+// rendered from 3D models as the map sees it (tex.wgsl `CARPETS_FROM`), each a layer of `detail_tex` with its
 // mips down to its mean, laid on the map at its real size and read as a change around the colour the world gives the
 // ground: the image over its mean. From afar the mips average the image to its mean, so the ground's colour there is
 // the world's alone; near, the same colour shows its leaves, stones, cracks, grass and sticks. Each image is laid
 // twice, blended by noise, so no repeat shows: a photograph the second time turned and `DETAIL_AGAIN` times as large,
 // a tile of cover (whose things stand up the screen) in patches each shifted by its own draw (`carpet`).
 
-// Each photograph's side in the world, m (web/textures/SOURCES.md).
-fn detail_m(t: i32) -> f32 { var m = array<f32, 9>(1.26, 3.0, 2.0, 2.0, 1.5, 2.0, 15.0, 50.0, 1.3); return m[t]; }
+// Of each photograph laid as detail (`detail`): its side in the world, m (web/textures/SOURCES.md), and its own stream
+// of noise.
+fn detail_m(t: i32) -> f32 { var m = array<f32, 3>(2.0, 50.0, 1.3); return m[t]; }
+fn detail_noise(t: i32) -> i32 { var k = array<i32, 3>(100, 102, 103); return k[t]; }
+// The streams of noise of the tiles of cover: their patches' shifts and their seams' waves (`carpet`), each tile its own.
+const CARPET_SHIFTS = 108; const CARPET_WAVES = 110;
 // The turned laying is this many times as large; the two blend over noise `DETAIL_BLEND` times the image's size.
 const DETAIL_AGAIN = 2.7; const DETAIL_BLEND = 3.0;
 const CARPET_PATCH = 1.7; const CARPET_SEAM = 0.02; const CARPET_WAVE = 0.06;
@@ -19,15 +23,6 @@ const DETAIL_HUE = 0.55; const CARPET_HUE = 0.95;
 fn change_of(t: i32, a: vec3f, b: vec3f, w: f32, hue: f32) -> vec3f {
   let ratio = mix(a, b, w) / max(photo_mean(t), vec3f(1e-3));
   return mix(vec3f(dot(ratio, LUMA)), ratio, hue);
-}
-
-// Whether the map is drawn angled (the ground's cover then stands up).
-fn angled() -> bool { return cover_look.look.z > 0.5; }
-
-// The tile of cover drawn, angled, in place of photograph t: none (-1) for rock, pebbles and mud.
-fn carpet_of(t: i32) -> i32 {
-  var c = array<i32, 9>(LITTER_CARPET, FERN_CARPET, GRASS_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, SAND_CARPET, -1, -1);
-  return c[t];
 }
 
 // Layer t of a tile of cover in patch `l` (of a lattice `CARPET_PATCH` tiles wide), shifted by the patch's draw x and,
@@ -55,27 +50,24 @@ fn carpet(c: i32, e: f32) -> vec3f {
   // pixel reads one patch alone.
   let inside_a = min(min(pa.f.x, 1.0 - pa.f.x), min(pa.f.y, 1.0 - pa.f.y));
   let inside_b = min(min(pb.f.x, 1.0 - pb.f.x), min(pb.f.y, 1.0 - pb.f.y));
-  let wave = CARPET_WAVE * noise_l(lat_turned(0.5 * s, vec2f(0.3)), 98 + t).x;
+  let wave = CARPET_WAVE * noise_l(lat_turned(0.5 * s, vec2f(0.3)), CARPET_WAVES + c).x;
   let d = (inside_b - inside_a + wave) / CARPET_SEAM;
-  if (d <= -CLAIMS_WITHIN) { return change_of(t, carpet_patch(t, pa, lowbias(pa.i, 96 + t), c == SNOW_CARPET, e / s), vec3f(0.0), 0.0, CARPET_HUE); }
-  let b = carpet_patch(t, pb, lowbias(pb.i, 96 + t), c == SNOW_CARPET, e / s);
+  if (d <= -CLAIMS_WITHIN) { return change_of(t, carpet_patch(t, pa, lowbias(pa.i, CARPET_SHIFTS + c), c == SNOW_CARPET, e / s), vec3f(0.0), 0.0, CARPET_HUE); }
+  let b = carpet_patch(t, pb, lowbias(pb.i, CARPET_SHIFTS + c), c == SNOW_CARPET, e / s);
   if (d >= CLAIMS_WITHIN) { return change_of(t, b, b, 1.0, CARPET_HUE); }
-  let a = carpet_patch(t, pa, lowbias(pa.i, 96 + t), c == SNOW_CARPET, e / s);
+  let a = carpet_patch(t, pa, lowbias(pa.i, CARPET_SHIFTS + c), c == SNOW_CARPET, e / s);
   let mean = max(dot(photo_mean(t), LUMA), 1e-3);
   return change_of(t, a, b, height_mix(d, dot(a, LUMA) / mean, dot(b, LUMA) / mean), CARPET_HUE);
 }
 
-// The change photograph t gives the ground's colour at the pixel, at e m a pixel: 1 where it averages to its mean;
-// angled, its tile of cover's where it has one.
+// The change photograph t gives the ground's colour at the pixel, at e m a pixel: 1 where it averages to its mean.
 fn detail(t: i32, e: f32) -> vec3f {
-  let c = carpet_of(t);
-  if (c >= 0 && angled()) { return carpet(c, e); }
   let s = detail_m(t);
   let a = photo(t, lat_axes(s, vec2f(0.0)).f, vec2f(e / s, 0.0), vec2f(0.0, e / s));
   let k = DETAIL_AGAIN * s;
   let r = mat2x2f(cos(TURN_A), sin(TURN_A), -sin(TURN_A), cos(TURN_A));
   let b = photo(t, lat_turned(k, vec2f(0.37)).f, r * vec2f(e / k, 0.0), r * vec2f(0.0, e / k));
-  let w = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(DETAIL_BLEND * s, vec2f(0.61)), 95 + t).x);
+  let w = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(DETAIL_BLEND * s, vec2f(0.61)), detail_noise(t)).x);
   return change_of(t, a, b, w, DETAIL_HUE);
 }
 
@@ -88,14 +80,22 @@ const TAKES_ALL = 0.999;
 // The lightness of a change, as a height (ragged.wgsl `claim`).
 fn height_of(c: vec3f) -> f32 { return dot(c, LUMA); }
 
-// The change the photographs give soil of spot p: under crowns its litter (a mossy floor where wet), in the open dry
+// The change soil's image i gives (`soil_detail`), at e m a pixel: the tiles of cover of leaf litter, of a shaded floor
+// of ferns, of dry stony soil and of cracked dry mud, the photograph of wet mud, and the tile of sand.
+const SOIL_MUD = 4;
+fn soil_image(i: i32, e: f32) -> vec3f {
+  if (i == SOIL_MUD) { return detail(MUD_TEX, e); }
+  var c = array<i32, 6>(LITTER_CARPET, FERN_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, SAND_CARPET);
+  return carpet(c[i], e);
+}
+
+// The change the images give soil of spot p: under crowns its litter (a floor of ferns where wet), in the open dry
 // stony soil, cracked where driest, wet mud where wet, beach sand and channels' pebbles where they lie.
 fn soil_detail(p: Spot) -> vec3f {
   let canopy = min(p.canopy, 1.0);
   let dry = ease(0.45, 0.1, p.wet);
   let cracked = ease(0.25, 0.05, p.wet);
   var w = array<f32, 6>(canopy * (1.0 - p.wet), canopy * p.wet, (1.0 - canopy) * dry * (1.0 - cracked), (1.0 - canopy) * cracked, (1.0 - canopy) * (1.0 - dry), 0.0);
-  var t = array<i32, 6>(LITTER_TEX, MOSSY_TEX, DRY_TEX, CRACKED_TEX, MUD_TEX, SAND_TEX);
   let sand = max(p.sand, 0.0);
   for (var i = 0; i < 5; i++) { w[i] *= 1.0 - sand; }
   w[5] = sand;
@@ -117,10 +117,10 @@ fn soil_detail(p: Spot) -> vec3f {
     d[i] = (take - u) / SOIL_EDGE;
     if (d[i] >= CLAIMS_WITHIN) { last = i; break; }
   }
-  var out = detail(t[last], p.e);
+  var out = soil_image(last, p.e);
   for (var i = last - 1; i >= 0; i--) {
     if (d[i] <= -CLAIMS_WITHIN) { continue; }
-    let c = detail(t[i], p.e);
+    let c = soil_image(i, p.e);
     out = mix(out, c, height_mix(d[i], height_of(out), height_of(c)));
   }
   // River pebbles where the bed's stones lie, in patches of their own as many as it holds.
@@ -138,7 +138,7 @@ fn soil_detail(p: Spot) -> vec3f {
 // The change the photograph of mossy rock gives bare bed, at e m a pixel.
 fn rock_detail(e: f32) -> vec3f { return detail(ROCK_TEX, e); }
 
-// The change the grass gives the sward of cover s at e m a pixel; angled, its tiles laid in hexagons (`grass_hexes`),
+// The change the grass gives the sward of cover s at e m a pixel: its tiles laid in hexagons (`grass_hexes`),
 // green, dry as far as the sward is straw (`straw`, 0..1), with tall reeds as far as they stand (`reeds`, 0..1); its fine
 // change `GRASS_FAR` of itself from `GRASS_FAR_E` m a pixel on, where it would read as noise; lighter and darker,
 // greener and yellower over drifts `DRIFT_GRASS_M` m across (`DRIFT_TONE`, `DRIFT_HUE`), all about 1 so its mean stays
@@ -147,7 +147,6 @@ const GRASS_PATCH_M = 6.0; const GRASS_THIN = 0.5;
 const DRIFT_GRASS_M = 6.0; const DRIFT_TONE = 0.06;
 const DRIFT_HUE = vec3f(-0.04, 0.025, -0.05); const GRASS_FAR = 0.5; const GRASS_FAR_E = vec2f(0.01, 0.04);
 fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
-  if (!angled()) { return detail(GRASS_TEX, e); }
   // Which kinds the hexagons hold: short turf, a meadow, tussocks, as a noise over `GRASS_PATCH_M` m falls, a thinner
   // sward leaning to tussocks (`GRASS_THIN`).
   let n = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(GRASS_PATCH_M, vec2f(0.4)), 102).x
@@ -214,7 +213,7 @@ fn hex_tile(corner: vec2i, e: f32, n: f32, dry: bool, reeds: f32) -> vec3f {
 }
 
 // Blades of grass drawn one by one, near (cover_field.wgsl `sward`): over the pixel, from the cells of a lattice `BLADE_CELL_M` m wide,
-// two blades a cell at random feet, each `BLADE_LONG` m long by its own draw standing up `STAND` of that (angled),
+// two blades a cell at random feet, each `BLADE_LONG` m long by its own draw standing up `STAND` of that,
 // leaning and bending its own way, `BLADE_W` m wide at its foot narrowing to its tip, dark at its foot and light at its
 // tip (`BLADE_TONE`); the nearer over the farther. Its tone over the sward's colour and its cover (they show near:
 // cover_field.wgsl `BLADE_SEEN_E`).
@@ -295,7 +294,7 @@ fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32) -> vec4f {
   return mix(vec4f(veil, s), vec4f(dst.rgb / max(dst.a, 1e-4), dst.a), seen);
 }
 
-// The flowers' heads up close, angled (cover_field.wgsl `flowers_at`): the share of the pixel their petals cover and
+// The flowers' heads up close (cover_field.wgsl `flowers_at`): the share of the pixel their petals cover and
 // their lightness, from the tile of petals, a petal's texel `PETAL_LIT` light (linear) where it is lit as a whole.
 const PETAL_LIT = 0.25;
 fn flower_heads(e: f32) -> vec2f {
@@ -308,8 +307,8 @@ fn flower_heads(e: f32) -> vec2f {
 // Snow's own texture over its colour (1 on the mean): wind drifts `DRIFT_M` m long and a quarter of that across, lying
 // along the wind (`WIND_TURN`), lit by their slope (the sun's side warm white, the lee side in the sky's blue,
 // `SNOW_LEE`), sastrugi `SASTRUGI_M` m long carved along them, the crust's grain (`SNOW_CRUST`), and a glint here and there where a
-// crystal turns to the sun (`GLINT`, one in `GLINT_RARE` of the cells `GLINT_M` across); angled, near, its tile of
-// cover: wind ripples, stones and dry stalks.
+// crystal turns to the sun (`GLINT`, one in `GLINT_RARE` of the cells `GLINT_M` across); near, its tile of cover:
+// wind ripples, stones and dry stalks.
 const DRIFT_M = 18.0; const SASTRUGI_M = 2.5; const WIND_TURN = 0.35; const SNOW_RELIEF = 0.28; const SASTRUGI = 0.12;
 const SNOW_LEE = vec3f(0.86, 0.91, 1.02); const SNOW_SUN = vec3f(1.03, 1.02, 0.98); const SNOW_CRUST = 0.05; const SNOW_CRUST_M = 0.06;
 const GLINT = 0.5; const GLINT_RARE = 0.012; const GLINT_M = 0.04;
@@ -333,7 +332,7 @@ fn snow_texture(e: f32) -> vec3f {
     let x = lowbias(l.i, 133);
     if (f32(x & 65535u) / 65536.0 < GLINT_RARE) { out *= 1.0 + GLINT * shows_at(GLINT_M, e) * (1.0 - smoothstep(0.1, 0.35, length(l.f - 0.5))); }
   }
-  if (angled()) { out *= carpet(SNOW_CARPET, e); }
+  out *= carpet(SNOW_CARPET, e);
   return out;
 }
 

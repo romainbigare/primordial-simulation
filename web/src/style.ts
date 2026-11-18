@@ -8,9 +8,6 @@
 import { clamp, smooth } from './earth';
 
 export type Rgb = [number, number, number];
-/** How the plants are drawn: from above, or angled. */
-export type Style = 'above' | 'angled';
-
 /** The numbers of a kind its look reads (`Kind::row`): its capture area per kg, log10 m²/kg; its walls' share; its
  * grown plants' walls' share (`grownWalls`); its moisture gene; its frost gene, K; its light capacity per m² of capture
  * area, log10 mol/m²/s; its activity; the share of it frozen this month; the share of what it builds that goes to
@@ -19,10 +16,10 @@ export interface Leafy { leaf: number; wood: number; walls: number; moist: numbe
 
 /** A kind's look this month: the colours its plants span (each plant takes a point between them by its own random
  * number), a reflectance each; the share of its leaves left this season (less as a kind that sheds stands bare while
- * dormant); and its flowers: their colour and the share of its plants in flower (on a bush, in flower or in fruit). */
+ * dormant); and its flowers: their colour and the share of its plants in flower (the sward draws a herb's). */
 export interface KindLook { from: Rgb; to: Rgb; left: number; petal: Rgb; bloom: number }
 
-/** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (crowns.wgsl and cover.wgsl
+/** The designs a kind's plants are drawn with: a tree's crown on its stem and a bush (cover.wgsl
  * `plant`), and a herb, drawn only as the sward of the ground (cover_field.wgsl `sward`). */
 export const DESIGN = { tree: 0, bush: 1, herb: 2 } as const;
 /** A woody plant (its grown plants hold `BUSH_WOOD` of their dry mass as walls or more) this tall or taller, m, is a
@@ -97,8 +94,8 @@ const BARE_LEFT = 0.35;
  * lightness in the cold, and duller by up to this share of its chroma in the drought. */
 const KEPT_DARK = 0.25, KEPT_DULL = 0.4;
 
-// Flowers: a herb in its active season flowers as much as it puts into seeds, a bush as much in flower or in fruit; the
-// flowers' colour turns round the hue circle with its seed share and its moisture gene.
+// Flowers: a herb in its active season flowers as much as it puts into seeds; the flowers' colour turns round the hue
+// circle with its seed share and its moisture gene.
 /** The share of plants in flower per share of what is built that goes to seeds, at most 1. */
 const BLOOM_PER_SEED = 2.5;
 /** The flowers' place on their palette (0..1, round) at the starting cover, and its change per share of seeds and per
