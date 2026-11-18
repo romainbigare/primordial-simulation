@@ -117,8 +117,9 @@ struct Spot {
   // the share of a scree's places that hold a block fallen into a steep reach; the depth of the snow where it lies, m;
   // and how far the point lies below the bed that sheds its scree, `BELOW_LEAST`..1 (crag.wgsl).
   bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32, blocks: f32, snow_m: f32, below: f32,
-  // The share of the ground the tallest plants' crowns close over it (their litter lies under them).
-  canopy: f32,
+  // The share of the ground the tallest plants' crowns close over it (their litter lies under them), and the share of
+  // it and the ground about it under woody crowns whose leaves fall this month (cover_field.wgsl `CoverAt.shed`).
+  canopy: f32, shed: f32,
   // How soaked the waves' swash leaves it, and the share of it the foam of the last bore covers, 0..1 (`swash_of`).
   swash: vec2f,
   // The largest stone the point's channel moves, m (0: none).
@@ -294,6 +295,8 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     } else {
       water = water_over(bed, p.depth, ripple);
     }
+    // What floats on still water (afloat.wgsl).
+    water = afloat(water, p);
     // Ice where the cells' share of it lies (ice.wgsl `ice_cover`), as floes at its margin.
     let ice = ice_cover(p.snow, p.depth, p.at, p.e);
     let rgb = ice_on(water, ice, p.depth, p.at, p.e);
