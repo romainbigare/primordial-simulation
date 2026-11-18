@@ -374,7 +374,7 @@ impl Default for Physics {
             bed_porosity: 0.02,
             bed_seep: 3e-6,
             hill: 250.0,
-            channel_width: 3.0,
+            channel_width: 7.2,
             channel_width_exp: 0.5,
             channel_depth: 0.3,
             channel_depth_exp: 0.4,
