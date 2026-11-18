@@ -282,14 +282,14 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
   water = mix(water + flow.x * REFLECT_STREAK * SKY, FOAM_RGB, flow.y);
   // The stones that stand out of it, with their wakes.
   if (styled() && p.stony > 0.0 && !unseen(STONE_MOST_M / THING_PX.x)) {
-    let s = Stony(p.stony, p.stone, p.small, p.worn, BED_SUNK, 0.0, 0.0, 0.0);
+    let s = Stony(p.stony, p.stone, p.small, p.worn, BED_SUNK, 0.0, 0.0, 0.0, 1.0);
     let least = p.depth / STONE_STANDS;
     if (flow.z > 0.0) { water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.e, s, least, down, 61 + 8)); }
     let st = stones(p.e, s, least, p.bed, 61 + 8);
     water = mix(water, st.rgb / max(st.a, 1e-4), st.a);
     // The blocks of a steep reach: the scree's own (colour.wgsl `ground_of`), where they stand out of the water.
     if (p.blocks > 0.0) {
-      let fallen = Stony(p.blocks, SCREE_STONE_M, 1.0, 0.0, BED_SUNK, 0.0, 0.0, STONE_RARE);
+      let fallen = Stony(p.blocks, SCREE_STONE_M, 1.0, 0.0, BED_SUNK, 0.0, 0.0, STONE_RARE, 1.0);
       water = mix(water, FOAM_RGB, WAKE * flow.z * wake(p.e, fallen, least, down, 61));
       let block = stones(p.e, fallen, least, p.bed, 61);
       water = mix(water, block.rgb / max(block.a, 1e-4), block.a);

@@ -174,8 +174,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     // The scree's angular blocks, then the channel's worn stones, from one place in the code. (Dry open ground's
     // stones are the things on the ground, detail.wgsl `objects`.)
     for (var k = 0; k < 2; k++) {
-      var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 1.0, 0.0, sunk, snow, p.snow_m, STONE_RARE);
-      if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), p.stone, p.small, p.worn, BED_SUNK, snow, p.snow_m, 0.0); }
+      var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 1.0, 0.0, sunk, snow, p.snow_m, STONE_RARE, 0.0);
+      if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), p.stone, p.small, p.worn, BED_SUNK, snow, p.snow_m, 0.0, soaked(p)); }
       let st = stones(p.e, s, 0.0, p.bed, 61 + 8 * k);
       g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
     }

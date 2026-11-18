@@ -29,6 +29,20 @@ const SNOW_TOP = vec2f(0.8, 0.95); const SNOW_CAP_M = 0.1;
 // The largest stone drawn, m: no draw shows one from this many m a pixel on.
 const STONE_MOST_M = 4.5;
 
+// A wet stone is darker: water fills the pores of its face, and light that would scatter back from the dry grains goes
+// into the rock (wet rock and soil send back about half to two thirds of the light dry ones do: Lekner and Dorf 1988),
+// by up to `WET_STONE_DARK`; its film of water shines where its face turns the sun's light up to the eye, by up to
+// `WET_GLOSS` of the sky's white, on faces lit from `GLOSS_LIT.x` to `.y` times flat ground. A worn stone dry in the
+// sun is pale (`DRY_PALE` of the way to white): the film of fine silt the water left on it dries light.
+const WET_STONE_DARK = 0.45; const WET_GLOSS = 0.35; const GLOSS_LIT = vec2f(1.05, 1.35); const DRY_PALE = 0.25;
+
+// The colour of a stone's face of colour `rgb` (linear, lit), `lit` times the light on flat ground (`StoneAt.lit`),
+// `wet` wet (0..1) and `worn` worn (0..1): the one wet look of every stone and rock drawn.
+fn wet_stone(rgb: vec3f, lit: f32, wet: f32, worn: f32) -> vec3f {
+  let dry = mix(rgb, vec3f(dot(rgb, LUMA) * 1.6), DRY_PALE * worn * (1.0 - wet));
+  return dry * (1.0 - WET_STONE_DARK * wet) + WET_GLOSS * wet * smoothstep(GLOSS_LIT.x, GLOSS_LIT.y, lit) * SKY;
+}
+
 // A stone at a point: the share of the pixel it covers, the light on it over the light on flat ground, and how flat it
 // is there, 0 on a face .. 1 on its top.
 struct StoneAt { a: f32, lit: f32, flat: f32 }
@@ -71,8 +85,9 @@ fn stone_at(v: vec2f, px: f32, x: u32, worn: f32, sunk: f32) -> StoneAt {
 // they lie (so it changes only in steps from place to place: a size that changed smoothly would move every stone);
 // what each stone is of that size there, 0..1 (this may change smoothly: finer up a bar); how worn they are (0 angular
 // .. 1 rounded), how deep their feet are sunk (0..1 of their height), the snow on their ground, 0..1, and its depth
-// where it lies, m; and the share of the cells of the largest size that hold a block.
-struct Stony { density: f32, size: f32, small: f32, worn: f32, sunk: f32, snow: f32, snow_m: f32, rare: f32 }
+// where it lies, m; the share of the cells of the largest size that hold a block; and how wet their faces are, 0..1
+// (`wet_stone`).
+struct Stony { density: f32, size: f32, small: f32, worn: f32, sunk: f32, snow: f32, snow_m: f32, rare: f32, wet: f32 }
 
 // The share of the cells of octave `o` (0: the largest) that hold a stone of `s`: none where fewer than
 // `STONES_LEAST` of the places hold one (a stone in a hundred places is no scree, and the ground under closed plants
@@ -124,7 +139,7 @@ fn stones(e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
     if (!unseen(STONE_MOST_M / THING_PX.x)) { near = as_thing(s.small * size, e); }
     let high = STONE_TOP * (1.0 - s.sunk);
     let mean = 2.0 * density * stands * above_snow(snow_m, high * 0.5 * s.small * size) * PI * 0.25 * 0.7 * s.small * s.small / (STONE_GAP * STONE_GAP) * (1.0 - near);
-    out = mix(out, vec4f(tone, 1.0), mean);
+    out = mix(out, vec4f(wet_stone(tone, 1.0, s.wet, s.worn), 1.0), mean);
     if (near > 0.0 && stands > 0.0 && density > 0.0) {
       for (var l = 0; l < 2; l++) {
         let p = placed(size, density, o, l, k, vec2f(0.0));
@@ -145,7 +160,7 @@ fn stones(e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
         let dir = vec2f(cos(f32(w >> 24u)), sin(f32(w >> 24u)));
         let bands = 1.0 + STONE_BANDS * sin(dot(v, dir) * r / max(STONE_BAND_M, STONE_BAND_LEAST * r) * 2.0 * PI + f32((w >> 16u) & 255u));
         let cap = ease(0.0, SNOW_CAP_M, snow_m) * smoothstep(SNOW_TOP.x, SNOW_TOP.y, st.flat);
-        let rgb = mix(lit_by(tone * own * bands, 0.35 + 0.65 * st.lit), SNOW, cap);
+        let rgb = mix(wet_stone(lit_by(tone * own * bands, 0.35 + 0.65 * st.lit), st.lit, s.wet, s.worn), SNOW, cap);
         out = mix(out, vec4f(rgb, 1.0), st.a * shows);
       }
     }
