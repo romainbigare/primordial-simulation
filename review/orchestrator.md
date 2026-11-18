@@ -949,12 +949,13 @@ The slow tests of bodies that were skipped once (`core/tests/choose.rs`, `lots.r
 
 The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (private to them). It shows main
 (the version label says what it shows). To update it after a push to main:
-1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html` and `web/dist/ew.wasm`).
-2. Copy `ew.wasm` to a scratch folder, and the page with these removed (regexes, case-insensitive, with `\b` after
-   the tag names): the doctype, the `html`, `head` and `body` tags, the `meta charset` and `meta viewport` tags, the
-   `link rel=icon`.
-3. Publish with the Artifact tool to that URL, the page as `file_path` and
-   `files: {"ew.wasm": {"from": <the copied wasm>, "contentType": "application/wasm"}}`. If it refuses because the
+1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html`, `web/dist/ew.wasm` and the four pictures
+   beside the page: `ground.jpg`, `carpets.jpg`, `models.png`, `trees.png`).
+2. Copy `ew.wasm` and the four pictures to a scratch folder, and the page with these removed (regexes,
+   case-insensitive, with `\b` after the tag names): the doctype, the `html`, `head` and `body` tags, the `meta
+   charset` and `meta viewport` tags, the `link rel=icon`.
+3. Publish with the Artifact tool to that URL, the page as `file_path` and `files`: `ew.wasm` (`{"from": <the copied
+   wasm>, "contentType": "application/wasm"}`) and each picture under its own name. If it refuses because the
    published version was not read in this session, read it first (`action: read`), then publish.
 
 A grown world need not be grown in the page (where a pause lands some months past the date asked): `ew run --seed 1
