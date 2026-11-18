@@ -99,6 +99,30 @@ fn bank_light(e: f32, g: Tiled, c: Channel, r: Reach) -> f32 {
   return 1.0 + BANK_SHADE * cut * shown * facing * (1.0 - ease(0.0, wide, abs(r.bank)));
 }
 
+// A bank as the flow shapes it (Leopold and Wolman 1960): on the outside of a bend the flow cuts it into a steep face
+// of bare soil, `CUT_M` wide plus `CUT_SHARE` of the bed's half width out from the bed's edge, `CUT_STRAIGHT` of that
+// on a straight reach (none inside a bend), the soil `CUT_DARK` darker and more so under the turf's lip at its top (`LIP_DARK`), roots
+// hanging down it in strands `ROOT_M` apart (`ROOT_DARK` darker); on the inside of a bend the bed rises gently into
+// its bank, a low point bar (the bars, `reach_at`). Along the water's edge the ground is damp over the part of the
+// bed the water's level swings across: `DAMP_M` plus `DAMP_SWING` of the bed the water leaves at its mean flow.
+const CUT_M = 0.6; const CUT_SHARE = 0.25; const CUT_STRAIGHT = 0.4; const CUT_DARK = 0.12; const LIP_DARK = 0.25;
+const ROOT_M = vec2f(0.35, 1.2); const ROOT_DARK = 0.3; const DAMP_M = 0.3; const DAMP_SWING = 0.35;
+
+// The cut bank at the reach's point `r` of channel `c`, seen at `e` m a pixel on ground `g`: the share of the pixel
+// its face covers, and the colour of the ground there over the soil's own (its darkening, its lip and its roots).
+fn cut_bank(e: f32, g: Tiled, c: Channel, r: Reach) -> vec2f {
+  let outer = select(0.0, 1.0, (g.sd - c.middle) * c.outer > 0.0);
+  let wide = (CUT_M + CUT_SHARE * c.bed) * mix(CUT_STRAIGHT, outer, c.bend);
+  let shown = shows_at(wide, e);
+  if (shown <= 0.0 || r.bank < -e || r.bank > wide + e) { return vec2f(0.0, 1.0); }
+  let face = (tent((wide - r.bank) / e) - tent(-r.bank / e)) * shown;
+  let up = clamp(r.bank / wide, 0.0, 1.0);
+  var tone = (1.0 - CUT_DARK) * (1.0 - LIP_DARK * smoothstep(0.5, 1.0, up));
+  let roots = shows_at(ROOT_M.x, e);
+  if (roots > 0.0) { tone *= 1.0 - ROOT_DARK * roots * ease(0.35, 0.75, noise_reach(g.along, ROOT_M.x, r.bank / ROOT_M.y, 83)); }
+  return vec2f(face, tone);
+}
+
 // A channel shows as a line of at least `land.line.x` css pixels once its discharge passes the discharge that shows in the
 // view (`land.time.w` times the metres a css pixel takes: tape/src/ground/channels.rs `SHOW_M`), as a map draws its
 // rivers; wider as its discharge grows past that, as its discharge over that to the power `land.line.y` (more steeply
@@ -184,12 +208,21 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   out.dry.cover *= 1.0 - bars;
   out.dry.canopy *= 1.0 - bars;
   out.dry.wet *= 1.0 - bars;
-  out.dry.over = mix(out.dry.over, BAR_RISE * r.edge, bars);
+  // The water's edge is damp as far as its level swings (`DAMP_SWING`); past that its fringe wets the bar as it rises.
+  let damp = DAMP_M + DAMP_SWING * max(ch.bed - ch.water, 0.0);
+  out.dry.over = mix(out.dry.over, BAR_RISE * max(r.edge - damp, 0.0), bars);
   out.dry.small *= 1.0 - BAR_FINES * r.up;
   out.wet.ground = gravel;
   // The banks' light falls on the ground beside the bed, on its bars and on the water under the bank.
+  // A cut bank's face is bare soil (`cut_bank`).
   var banks = 1.0;
-  if (open > 0.0) { banks = mix(1.0, bank_light(e, g, ch, r), open * runs); }
+  if (open > 0.0) {
+    banks = mix(1.0, bank_light(e, g, ch, r), open * runs);
+    let cut = cut_bank(e, g, ch, r);
+    let face = cut.x * open * runs;
+    out.dry.cover *= 1.0 - face;
+    out.dry.ground = mix(out.dry.ground, out.dry.ground * cut.y, face);
+  }
   out.dry.shade *= banks;
   // Where the bed is drawn apart from the water and the water takes a few pixels, its depth shows: its pools and
   // riffles and its bed's shape across it; else its mean depth.
