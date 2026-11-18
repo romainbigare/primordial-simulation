@@ -68,6 +68,9 @@ export class Land {
    * of `NO_ROCK_YET_M` everywhere). */
   private rock: Texture | null = null;
   private rockSent = false;
+  /** The time the flow's signs stand at while one picture is drawn in tiles (performance.now, ms; null: each draw's
+   * own), so all its tiles show the signs at one place along the channels. */
+  flowAt: number | null = null;
 
   constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf) {
     this.discharge = new Uint16Array(samples.across * samples.down);
@@ -158,7 +161,7 @@ export class Land {
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)
       .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.dormancy, l.rooted_from).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
-      .vec4(s.across, s.down, s.depth, this.drawn).vec4(tm.along_wrap, l.flood, this.slid(performance.now()), l.flood ** -l.station).vec4(...l.line_law);
+      .vec4(s.across, s.down, s.depth, this.drawn).vec4(tm.along_wrap, l.flood, this.slid(this.flowAt ?? performance.now()), l.flood ** -l.station).vec4(...l.line_law);
     return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
   }
 

@@ -208,6 +208,7 @@ export class MapView {
       this.gpuDue = false;
       clearTimeout(this.sharpTimer);
       this.sharpening = null;
+      if (this.land) this.land.flowAt = null;
       this.drawGpu(this.gpu, xs, d);
     }
     this.overlay?.(ctx, ox, oy, s);
@@ -268,6 +269,8 @@ export class MapView {
     for (let y = 0; y < H; y += side) for (let x = 0; x < W; x += side) tiles.push([x, y, Math.min(side, W - x), Math.min(side, H - y)]);
     const job = { tiles, done: [], xs, d };
     this.sharpening = job;
+    // All the sharp picture's tiles show the flow's signs where they stood as it began.
+    if (this.land) this.land.flowAt = performance.now();
     this.sharpen(job);
   }
 
