@@ -178,14 +178,14 @@ month's start found it, the land its cover lives on). Before Flow built its stat
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 8 unless the
-start chose other) of `KIND_ROW` (37) f32 each, the heaviest first: the slots of
-its cover, each as the law holds it, per m² of the cell's land (`layers::per_land`; a cell that holds no land has no
-kinds); of each its starting kind (-1: none); its built cover, kg/m²; its large plants (`stands::plants` of the slot's group of the largest plants, `cover::Sizes::large`, with that group's built cover and share of the capture area): the stem's width, m, plants a m² (that group's count), height and crown's width, m, the share of the
+start chose other) of `KIND_ROW` (39) f32 each, the heaviest first: the slots of
+its cover that stand on any of its ground, each as the law holds it, per m² of the ground it stands on (its share of
+the cell, `Cover::stands`: its land, and its ground under the liquid where its roots work, `cover::footing`); of each its starting kind (-1: none); its built cover, kg/m²; its large plants (`stands::plants` of the slot's group of the largest plants, `cover::Sizes::large`, with that group's built cover and share of the capture area): the stem's width, m, plants a m² (that group's count), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-their leaf area; plants with no capture area stand bare, their crowns of no width, covering none, which the page draws by their stems as a crown that has shed its leaves); its walls' share of its built cover; its
 capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s;
 its moisture gene and frost gene, K; its fuel over its reserve; its activity on its cell's ground (`cover::activity`, its drought's);
 the share of it frozen this month (`cover::frozen`); the share of what it builds that goes to seeds (`SEED`); and the
-share of the land whose loose ground holds its plants (`Cover::rooted` over the land's share, at most all of it) with
+share of the ground it stands on whose loose ground holds its plants (`Cover::rooted`) with
 the loose ground their roots need, m (`Cover::need`; all of the land and 0 while the need of a slot of newly landed
 seeds is not found); its walls gene (`WALLS`, log10 kg of walls per kg of matter), by which the page draws a woody
 kind as woody plants while they are young (web/src/style.ts `designOf`); and its slot in its cell's cover, which it keeps
@@ -195,7 +195,10 @@ plants apart from another slot's of the same starting kind (web/shaders/lib/mark
 and a plant's height, stem's width and crown's width, m (`stands::plants` of that group), by which the page draws each
 kind's plants along a smooth curve of sizes through its groups, the large plants on the lowest draws of the kind's own
 marks (web/src/kind_row.ts `groupsOf`, web/shaders/lib/mark.wgsl `along`, `pick_kind`), so they keep their places and
-about their size while smaller plants come and go and groups join or split. The page thins a
+about their size while smaller plants come and go and groups join or split. Then two numbers of where it stands under
+the liquid: the depth of liquid standing over full pores its roots' gas spaces reach through, m (`cover::aired` at the
+cell's air and ground; past it the kind stands no more), and the share of its ground that lies under the liquid
+(`Footing::wet`). The page thins a
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /

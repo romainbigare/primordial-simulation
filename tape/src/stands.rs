@@ -3,16 +3,19 @@
 //! share of the cell that holds them; a plant's height and its stem come from the cover's own law (`cover::height`,
 //! `cover::stem`: the buckling limit, McMahon 1973), and the crown from its share of the ground. The page only draws what they give.
 
-use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, GROUPS, LEAF, LIGHT, MOIST, NP, SEED, STORE, WALLS};
+use pcore::cover::{self, dec, Cover, Parts, FROST, FUEL, GAS, GROUPS, LEAF, LIGHT, MOIST, NP, SEED, STORE, WALLS};
 use crate::layers::per_land;
 use pcore::{Physics, World};
 
-/// Numbers a kind holds in a square's row (`row`): `KIND_HEAD`, then `GROUP_ROW` for each of its groups of plants.
-pub const KIND_ROW: usize = KIND_HEAD + GROUPS * GROUP_ROW;
+/// Numbers a kind holds in a square's row (`row`): `KIND_HEAD`, then `GROUP_ROW` for each of its groups of plants, then
+/// `KIND_TAIL`.
+pub const KIND_ROW: usize = KIND_HEAD + GROUPS * GROUP_ROW + KIND_TAIL;
 /// The numbers of a kind's row before its groups.
 const KIND_HEAD: usize = 21;
 /// The numbers of a group of plants in a kind's row.
 const GROUP_ROW: usize = 4;
+/// The numbers of a kind's row after its groups: where it stands under the liquid.
+const KIND_TAIL: usize = 2;
 
 /// The plants of a stand: how many a m², each one's mass, kg, height, stem's width and crown's width, m, the share of
 /// the ground the crowns cover, and how closed one crown is (the light it stops, as the cover's light law: 1 - e^-leaf
@@ -52,19 +55,20 @@ pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, wa
     Plants { per_m2, mass, height, stem, width, cover, crown: -(-leaf / cover).exp_m1() }
 }
 
-/// What a slot's row reads of its cell: how its roots meet its ground's liquid (`cover::soak`), its
-/// temperature and the melting point of its key liquid, K, the density of its walls, kg/m³, its area, m², and the share of it that is land.
+/// What a slot's row reads of its cell `i`: how its roots meet its ground's liquid (`cover::soak`), its
+/// temperature and the melting point of its key liquid, K, the density of its walls, kg/m³, and its area, m².
 struct Ground {
+    i: usize,
     soak: cover::Soak,
     t: f64,
     melt: f64,
     rho: f64,
     area: f64,
-    land: f64,
 }
 
-/// The numbers a viewer draws slot `x` of cover `c` from, `KIND_ROW` of them, on the land of its cell `g` (each per m²
-/// of that land, `layers::per_land`, as a viewer draws the cover on the land only): its starting kind; its built cover,
+/// The numbers a viewer draws slot `x` of cover `c` of world `w` from, `KIND_ROW` of them, on the ground of its cell `g`
+/// it stands on (each per m² of that ground, its share of the cell `Cover::stands`: its land, and its ground under the
+/// liquid where its roots work, `cover::footing`): its starting kind; its built cover,
 /// kg/m²; its large plants (`plants` of its large group, `cover::Sizes::large`, with that group's built cover and capture
 /// area): the stem's width, m, how many a m², height and crown's width, m, the share of the ground they cover, how
 /// closed a crown is; its walls' share; its capture
@@ -72,20 +76,24 @@ struct Ground {
 /// pigment per area); its moisture gene (`MOIST`) and frost gene, K (`FROST`); its fuel over its reserve (`STORE`); its
 /// activity there (`cover::activity`, its drought's, by which it wears and hardens); the share of it frozen this month
 /// (`cover::frozen`); the share of what it builds
-/// that goes to seeds (`SEED`); the share of the land whose loose ground holds its plants (`Cover::rooted`, a share of the
+/// that goes to seeds (`SEED`); the share of the ground it stands on whose loose ground holds its plants (`Cover::rooted`, a share of the
 /// ground its cover lives on) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
 /// whose need is not found yet: seeds that landed since its cell's last month); and its walls gene, log10 kg of walls
 /// per kg of matter (`WALLS`), by which a viewer knows a woody kind while its plants are young; and its slot, which it
 /// keeps while it lives (a slot that joins another is gone, the other keeps its own), so a viewer tells two slots of
 /// one starting kind apart from month to month. Then of each of its
 /// groups, the large plants first (empty groups last, all 0): how many a m², and a plant's height, stem's width and
-/// crown's width, m (`plants` of that group).
-fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
+/// crown's width, m (`plants` of that group). Then where it stands under the liquid: the depth of liquid standing over
+/// full pores its roots' gas spaces reach through, m (`cover::aired`, past which it stands no more), and the share of
+/// its ground that lies under the liquid (`Footing::wet`).
+fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
+    let ph = &w.cfg.phys;
     let (built, genes) = (c.built(mm, x), c.genes[x]);
     let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x] as f64, c.need[x]) } else { (1.0, 0.0) };
-    let on_land = |v: f64| per_land(v / g.area, g.land);
+    let per_ground = |v: f64| per_land(v / g.area, c.stands[x] as f64);
+    let foot = cover::footing(w, g.i, genes[GAS] as f64, (need as f64).max(ph.root_least), &g.soak);
     let s = c.sizes(ph, mm, x);
-    let group = |k: usize| plants(ph, (on_land(s.mass[k] * s.count[k]), on_land(c.leaf(mm, x) * s.leaf[k]), on_land(s.count[k])), rooted, s.walls[k], g.rho);
+    let group = |k: usize| plants(ph, (per_ground(s.mass[k] * s.count[k]), per_ground(c.leaf(mm, x) * s.leaf[k]), per_ground(s.count[k])), rooted, s.walls[k], g.rho);
     let p = group(s.large());
     let act = cover::activity(&genes, g.soak.moist);
     let reserve = dec(genes[STORE]) * built;
@@ -93,7 +101,7 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
     let mut out = [0.0; KIND_ROW];
     out[..KIND_HEAD].copy_from_slice(&[
         c.root[x] as f64,
-        on_land(built),
+        per_ground(built),
         p.stem,
         p.per_m2,
         p.height,
@@ -118,29 +126,29 @@ fn row(ph: &Physics, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; K
         let q = group(k);
         out[at..at + GROUP_ROW].copy_from_slice(&[q.per_m2, q.height, q.stem, q.width]);
     }
+    out[KIND_ROW - KIND_TAIL..].copy_from_slice(&[cover::aired(g.soak.breath, genes[GAS] as f64), foot.wet]);
     out
 }
 
-/// The kinds of cell `i` of `w`, of which the share `land` is land, a row of `KIND_ROW` numbers (`row`) for each slot
-/// its world uses (`Config::variety`): its slots, the heaviest first; an empty kind is all 0 with its starting kind -1,
-/// and a cell that holds no land has none (no land to draw them on).
-pub fn rows(w: &World, i: usize, land: f64) -> Vec<f64> {
+/// The kinds of cell `i` of `w`, a row of `KIND_ROW` numbers (`row`) for each slot its world uses (`Config::variety`):
+/// its slots that stand on any of its ground, the heaviest first; an empty kind is all 0 with its starting kind -1.
+pub fn rows(w: &World, i: usize) -> Vec<f64> {
     let mut out = vec![0.0; w.cfg.variety * KIND_ROW];
     out.iter_mut().step_by(KIND_ROW).for_each(|r| *r = -1.0);
-    let Some(p) = Parts::of(&w.chem).filter(|_| land > 0.0) else { return out };
+    let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
     let g = Ground {
+        i,
         soak: cover::soak(w, &p, i, w.g(p.liquid, i)).1,
         t: w.t_ground_last(i),
         melt: w.chem.subs[p.liquid].melt,
         rho: w.chem.subs[p.sub[cover::WALL]].density[0],
         area: w.mesh.cells().area()[i],
-        land,
     };
-    let mut slots: Vec<usize> = c.held().collect();
+    let mut slots: Vec<usize> = c.held().filter(|&x| c.stands[x] > 0.0).collect();
     slots.sort_by(|&a, &b| c.built(&mm, b).total_cmp(&c.built(&mm, a)));
     for (k, &x) in slots.iter().enumerate() {
-        out[k * KIND_ROW..(k + 1) * KIND_ROW].copy_from_slice(&row(&w.cfg.phys, c, &mm, x, &g));
+        out[k * KIND_ROW..(k + 1) * KIND_ROW].copy_from_slice(&row(w, c, &mm, x, &g));
     }
     out
 }
@@ -150,9 +158,9 @@ mod tests {
     use super::*;
 
     /// The rows hold the cell's cover slot by slot: two slots of one starting kind, far apart in their genes, make two
-    /// rows, the heaviest first, whose built cover sums to the cell's and whose plants are each slot's own count; each
-    /// per m² of the cell's land, and none on a cell that holds no land. Plants with no capture area stand as plants of
-    /// very little capture area do, bare: their crowns of no width, covering nothing.
+    /// rows, the heaviest first, whose built cover is each slot's and whose plants are each slot's own count, per m² of
+    /// the ground it stands on (`Cover::stands`). Plants with no capture area stand
+    /// as plants of very little capture area do, bare: their crowns of no width, covering nothing.
     #[test]
     fn rows_hold_the_cells_slots() {
         let mut w = worldgen::testkit::small_world();
@@ -163,17 +171,15 @@ mod tests {
         assert!(cover::place(&mut w, i, far, worldgen::life::LIGHT_ROW as u32, 0.2), "no room for the second slot");
         let p = Parts::of(&w.chem).expect("chemistry 0 has cover");
         let (mm, area, c) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.life.cover(i));
-        let all: f64 = c.held().map(|x| c.built(&mm, x)).sum::<f64>() / area;
-        let r = rows(&w, i, 1.0);
+        let own = |x: usize| area * c.stands[x] as f64;
+        let all: f64 = c.held().map(|x| c.built(&mm, x) / own(x)).sum::<f64>();
+        let r = rows(&w, i);
         let kind = |k: usize| &r[k * KIND_ROW..(k + 1) * KIND_ROW];
         assert!(kind(0)[1] > kind(1)[1] && kind(1)[1] > 0.0 && kind(2)[0] == -1.0, "two rows, the heaviest first");
         assert!(((kind(0)[1] + kind(1)[1]) / all - 1.0).abs() < 1e-12, "{} and {} against {all}", kind(0)[1], kind(1)[1]);
-        let counts: Vec<f64> = c.held().map(|x| c.count(x) / area).collect();
+        let counts: Vec<f64> = c.held().map(|x| c.count(x) / own(x)).collect();
         assert!((0..2).all(|k| counts.iter().any(|&n| (kind(k)[3] / n - 1.0).abs() < 1e-9)), "each row's plants are a slot's");
         assert!(kind(0)[KIND_HEAD - 1] != kind(1)[KIND_HEAD - 1], "each row names its own slot");
-        let half = rows(&w, i, 0.5);
-        assert!((half[1] / kind(0)[1] - 2.0).abs() < 1e-12 && (half[3] / kind(0)[3] - 2.0).abs() < 1e-12, "per m² of the land");
-        assert!(rows(&w, i, 0.0).chunks(KIND_ROW).all(|k| k[0] == -1.0), "no kinds where no land");
         let stand = |leaf: f64| plants(&w.cfg.phys, (2.0, leaf, 0.05), 0.8, 0.9, 500.0);
         let (bare, leafy) = (stand(0.0), stand(1e-12));
         assert!(bare.per_m2 == leafy.per_m2 && bare.mass == leafy.mass && bare.height == leafy.height && bare.stem == leafy.stem, "{bare:?} against {leafy:?}");
