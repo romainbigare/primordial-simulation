@@ -24,7 +24,10 @@
       "scenes": [
         { "name": "shallows", "about": "the shore of a shallow lake (to about 1 m), herbs and trees at the water", "at": [14.5, 17.754] },
         { "name": "shallows_n", "about": "the same lake's other shore, clumps of plants standing in its shallows", "at": [14.745, 17.36] },
-        { "name": "lake_wood", "about": "a deeper lake's shore under trees, a creek's mouth", "at": [13.0675, 13.415] }
+        { "name": "lake_wood", "about": "a deeper lake's shore under trees, a creek's mouth", "at": [13.0675, 13.415] },
+        { "name": "shore_reeds", "about": "close: the shallow lake's shore of scene shallows, herbs in the water's edge band", "at": [14.49425, 17.7635], "views": [0.04] },
+        { "name": "creek_mouth", "about": "close: the creek's mouth of scene lake_wood", "at": [13.07375, 13.4275], "views": [0.04] },
+        { "name": "mangroves", "about": "close: trees standing in the lake of scene shallows_n", "at": [14.7515, 17.367], "views": [0.05] }
       ],
       "cost_views": [0.25]
     },
@@ -39,7 +42,10 @@
         { "name": "soil", "about": "bare soil", "at": [12.5, 9.5] },
         { "name": "stony", "about": "stony ground", "at": [7.5, 13.5] },
         { "name": "snow", "about": "snow", "at": [19.12, 13.1] },
-        { "name": "river", "about": "river", "at": [26.5, 14.6] }
+        { "name": "river", "about": "river", "at": [26.5, 14.6] },
+        { "name": "s1_mouth", "about": "the river's mouth at the lake", "at": [29.494, 16.374], "views": [0.25, 0.04] },
+        { "name": "river_bar", "about": "close: the gravel bar in the middle of scene river, its cobbles", "at": [26.4883, 14.6091], "views": [0.04] },
+        { "name": "scree_close", "about": "close: the stones of scene stony", "at": [7.5013, 13.5163], "views": [0.05] }
       ],
       "cost_views": [0.52],
       "years": ["A", "B", "SA"],
