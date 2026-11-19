@@ -1,10 +1,12 @@
 // The map's renderer on WebGL2 (gpu.ts): the programs' GLSL ES 3.00 as naga wrote it from their WGSL (web/shade),
 // each uniform block bound to its WGSL binding's number, each GLSL sampler on a texture unit of its own. A texture the
 // renderer draws into is drawn upside down (the draw header's `flip`), so its first row is its top, as on WebGPU.
-import { Gpu, Texture, Format, TexelData, Sampler, Pass, Draw, programs, drawHeader } from './gpu';
+import { Gpu, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, drawHeader } from './gpu';
 
 /** A linked program: where each binding of its WGSL lies. */
 interface Linked { prog: WebGLProgram; units: { unit: number; texture: number; sampler: number | null }[] }
+/** The extension that compiles and links programs without stopping the page, and asks whether they are done. */
+interface Parallel { COMPLETION_STATUS_KHR: number }
 
 class WebGl2Texture implements Texture {
   tex: WebGLTexture | null = null;
@@ -19,18 +21,23 @@ class WebGl2Texture implements Texture {
 class WebGl2 implements Gpu {
   readonly kind = 'WebGL2';
   private linked = new Map<string, Linked>();
+  /** Programs sent to compile and link and not yet looked at (`build`, `finish`). */
+  private built = new Map<string, WebGLProgram>();
+  private parallel: Parallel | null;
+  private warming = new Warming(name => this.makeAhead(name), name => this.linked.has(name));
   private samplers!: Record<Sampler | 'texel', WebGLSampler>;
   /** A uniform buffer a binding number. */
   private buffers: WebGLBuffer[] = [];
   private textures = new Set<WebGl2Texture>();
 
   constructor(private gl: WebGL2RenderingContext, private canvas: HTMLCanvasElement, restored: () => void) {
+    this.parallel = gl.getExtension('KHR_parallel_shader_compile') as Parallel | null;
     this.setUp();
     // A lost context draws nothing and throws nothing: say so, so a page that stops drawing (a program too large for
     // the card, which the browser drops the context for) is seen.
     canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); console.error('gpu: the WebGL2 context was lost'); });
     canvas.addEventListener('webglcontextrestored', () => {
-      this.linked.clear(); this.buffers = [];
+      this.linked.clear(); this.built.clear(); this.warming.clear(); this.buffers = [];
       this.setUp();
       for (const t of this.textures) { this.make(t); t.levels.forEach((d, k) => d && this.write(t, d, k)); }
       restored();
@@ -120,6 +127,16 @@ class WebGl2 implements Gpu {
     };
   }
 
+  warm(name: string, _target: Format | null, _blend: boolean, first = false): void { this.warming.ask(name, first); }
+
+  ready(name: string): boolean {
+    if (this.linked.has(name)) return true;
+    const prog = this.built.get(name);
+    if (!prog || !this.parallel || !this.gl.getProgramParameter(prog, this.parallel.COMPLETION_STATUS_KHR)) return false;
+    this.finish(name, prog);
+    return true;
+  }
+
   submit(): void { this.gl.flush(); }
 
   done(): Promise<void> {
@@ -161,21 +178,33 @@ class WebGl2 implements Gpu {
     gl.bufferData(gl.UNIFORM_BUFFER, data, gl.DYNAMIC_DRAW);
   }
 
-  /** Program `name`, compiled and linked once, its uniform blocks bound to their bindings and its samplers to units. */
+  /** Program `name`, compiled and linked once (waiting for it where it is being made), its uniform blocks bound to their
+   * bindings and its samplers to units. */
   private link(name: string): Linked {
-    let l = this.linked.get(name);
-    if (l) return l;
-    const gl = this.gl, p = programs()[name];
-    const shader = (type: number, src: string) => {
+    return this.linked.get(name) ?? this.finish(name, this.built.get(name) ?? this.build(name));
+  }
+
+  /** Send program `name` to compile and link, without asking how it went (which would wait for it). */
+  private build(name: string): WebGLProgram {
+    const gl = this.gl, p = programs()[name], prog = gl.createProgram();
+    for (const [type, src] of [[gl.VERTEX_SHADER, p.vertex], [gl.FRAGMENT_SHADER, p.fragment]] as const) {
       const s = gl.createShader(type)!;
-      gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(`gpu: ${name}: ${gl.getShaderInfoLog(s)}`);
-      return s;
-    };
-    const prog = gl.createProgram();
-    gl.attachShader(prog, shader(gl.VERTEX_SHADER, p.vertex)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, p.fragment));
+      gl.shaderSource(s, src); gl.compileShader(s); gl.attachShader(prog, s);
+    }
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`gpu: ${name}: ${gl.getProgramInfoLog(prog)}`);
+    this.built.set(name, prog);
+    return prog;
+  }
+
+  /** Program `name` sent as `prog` (`build`), checked (waiting for it where it is not done) and set up: its uniform
+   * blocks bound to their bindings and its samplers to units. */
+  private finish(name: string, prog: WebGLProgram): Linked {
+    const gl = this.gl, p = programs()[name];
+    this.built.delete(name);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      const logs = gl.getAttachedShaders(prog)?.map(s => gl.getShaderInfoLog(s)).join('\n');
+      throw new Error(`gpu: ${name}: ${gl.getProgramInfoLog(prog)}\n${logs}`);
+    }
     gl.useProgram(prog);
     const units: Linked['units'] = [];
     for (const [glName, b] of Object.entries(p.binds)) {
@@ -187,11 +216,31 @@ class WebGl2 implements Gpu {
         units.push({ unit: units.length, texture: b.texture[1], sampler: b.sampler ? b.sampler[1] : null });
       }
     }
-    l = { prog, units };
+    const l = { prog, units };
     this.linked.set(name, l);
     return l;
   }
+
+  /** Make program `name` ahead (`warm`): sent to compile and link, then looked at once the browser says it is done
+   * (`KHR_parallel_shader_compile`); where it cannot say, looked at when the page is idle (which waits for it then). */
+  private makeAhead(name: string): Promise<void> {
+    const prog = this.build(name);
+    return new Promise(done => {
+      const look = () => {
+        if (this.gl.isContextLost() || this.built.get(name) !== prog) return done();
+        if (this.parallel && !this.ready(name)) { setTimeout(look, WARM_POLL_MS); return; }
+        if (!this.parallel) this.finish(name, prog);
+        done();
+      };
+      if (this.parallel) look(); else idle(look);
+    });
+  }
 }
+
+/** How often a program made ahead is looked at for whether it is done, ms. */
+const WARM_POLL_MS = 16;
+/** Run `f` when the page is idle (at once where the browser cannot say). */
+const idle = (f: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(() => f()) : setTimeout(f, 0));
 
 /** How often a wait for the GPU looks whether it has finished, ms. */
 const FENCE_POLL_MS = 4;
