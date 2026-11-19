@@ -24,7 +24,8 @@ const LEFT_STEPS = 100;
  * how deep its loose ground, m (the core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); its slot in
  * its cell's cover (a label it keeps, so its marks keep their places as the kinds' order and shares change, mark.wgsl
  * `pick_kind`); then of each kind its form (how closed its crown is and the leaves it has left, `LEFT_STEPS`, its
- * crown's form and how surely, form.ts `formOf`, packed as one number, `SURE_PACK`, and how dry its ground), the
+ * crown's form and how surely, form.ts `formOf`, packed as one number, `SURE_PACK`, how dry its ground and how tender to
+ * frost it is), the
  * colours its plants span (style.ts `KindLook`: the first with its grown plants' walls' share, `grownWalls`); of each
  * of its groups its plants' height, m; and of each lattice the width its groups' marks are drawn, m
  * (lattices.ts `marksOf`). A plane holds four numbers: one for each kind of a group of four of a square
@@ -204,7 +205,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       put(group(P.roots, k), i, k & 3, mean >= ROOTED_ALL ? 0 : r[K.need]);
       put(group(P.label, k), i, k & 3, r[K.slot]);
       // Its form and how surely as one number (form + `SURE_PACK` x sure).
-      [packed, shape.form + SURE_PACK * shape.sure, shape.dry].forEach((v, q) => put(P.form + k, i, q, v));
+      [packed, shape.form + SURE_PACK * shape.sure, shape.dry, shape.tender].forEach((v, q) => put(P.form + k, i, q, v));
       [...look.from, grownWalls(r[K.walls])].forEach((v, q) => put(P.from + k, i, q, v));
       const from = treeFrom(r[K.walls]);
       look.to.forEach((v, q) => put(P.to + k, i, q, v));
