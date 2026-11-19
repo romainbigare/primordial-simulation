@@ -8,8 +8,10 @@ const plain = n => readFileSync(`dist/.js/${n}.js`, 'utf8').replace(/^import .*$
 // The live world's two workers (the world's and the ground's tiles') and the detail's (its strips' levels) run on
 // their own: the page holds their scripts as text and starts them from Blobs.
 const worker = plain('worker'), tiles = plain('tiles-worker'), detail = plain('detail-worker');
-// The shaders as `SHADERS` (gpu.ts), ahead of the modules.
-const js = [`const SHADERS = ${readFileSync('dist/.shaders.json', 'utf8')};`, ...order.map(plain)].join('\n');
+// The rendered models' strip files in their layers' order (textures/strips.json, written by the bake tool).
+const strips = JSON.parse(readFileSync('textures/strips.json', 'utf8'));
+// The shaders as `SHADERS` (gpu.ts) and the strips' files as `STRIPS` (detail.ts), ahead of the modules.
+const js = [`const SHADERS = ${readFileSync('dist/.shaders.json', 'utf8')};`, `const STRIPS = ${JSON.stringify(strips)};`, ...order.map(plain)].join('\n');
 // The page with `before` ahead of the modules' script (which reads what comes before it as it runs).
 const page = before => readFileSync('index.html', 'utf8')
   .replace('<!--CSS-->', () => `<style>\n${readFileSync('style.css', 'utf8')}</style>`)
@@ -23,8 +25,7 @@ if (embed) writeFileSync('dist/standalone.html',
 // The ground's photographs and plants, beside the page (detail.ts).
 copyFileSync('textures/ground.jpg', 'dist/ground.jpg');
 copyFileSync('textures/carpets.jpg', 'dist/carpets.jpg');
-copyFileSync('textures/models.png', 'dist/models.png');
-copyFileSync('textures/trees.png', 'dist/trees.png');
+for (const f of [...strips.models, ...strips.trees]) copyFileSync(`textures/${f}`, `dist/${f}`);
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
 console.log(`dist/index.html ${(html.length / 1024).toFixed(1)} KB`);

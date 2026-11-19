@@ -949,9 +949,10 @@ The slow tests of bodies that were skipped once (`core/tests/choose.rs`, `lots.r
 
 The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (private to them). It shows main
 (the version label says what it shows). To update it after a push to main:
-1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html`, `web/dist/ew.wasm` and the four pictures
-   beside the page: `ground.jpg`, `carpets.jpg`, `models.png`, `trees.png`).
-2. Copy `ew.wasm` and the four pictures to a scratch folder, and the page with these removed (regexes,
+1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html`, `web/dist/ew.wasm` and the pictures beside
+   the page: `ground.jpg`, `carpets.jpg` and the strips `web/textures/strips.json` names, today `models.png`,
+   `trees.png`, `trees2.png`; each under 12 MB, as the host takes no file over 15 MB).
+2. Copy `ew.wasm` and the pictures to a scratch folder, and the page with these removed (regexes,
    case-insensitive, with `\b` after the tag names): the doctype, the `html`, `head` and `body` tags, the `meta
    charset` and `meta viewport` tags, the `link rel=icon`.
 3. Publish with the Artifact tool to that URL, the page as `file_path` and `files`: `ew.wasm` (`{"from": <the copied

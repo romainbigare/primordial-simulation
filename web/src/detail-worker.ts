@@ -1,9 +1,10 @@
 // The ground's detail's strips (detail.ts) made into the levels of one texture array, off the page's thread: a Web
 // Worker of its own, built into the page as text (build.mjs) and started from a Blob by detail.ts. It takes the strips'
-// images, one after another down one canvas, the side of their layers and the cover a cut-out texel shows from, and
+// images, one after another down one canvas, how many of the last layers are the trees', the side of their layers and
+// the cover a cut-out texel shows from, and
 // answers with the levels (`photoMips`) and the layers.
 
-const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<{ strips: ImageBitmap[]; side: number; cut: number }>) => void) | null };
+const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<{ strips: ImageBitmap[]; trees: number; side: number; cut: number }>) => void) | null };
 
 /** The strips' levels (layers `side` texels a side), each of its `layers` after the last: level 0 as the image holds
  * it, each next one the mean of four texels (their colour weighted by their cover); of the layers from `cutFrom` on
@@ -46,8 +47,8 @@ function keepShown(level: Uint8Array, l: number, n: number, shown: number, cut: 
 }
 
 host.onmessage = e => {
-  const { strips, side, cut } = e.data;
-  const layers = strips.reduce((n, s) => n + s.height / side, 0), trees = strips[strips.length - 1].height / side;
+  const { strips, trees, side, cut } = e.data;
+  const layers = strips.reduce((n, s) => n + s.height / side, 0);
   const c = new OffscreenCanvas(side, side * layers), g = c.getContext('2d')!;
   let at = 0;
   for (const s of strips) { g.drawImage(s, 0, at); at += s.height; s.close(); }

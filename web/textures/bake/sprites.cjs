@@ -1,6 +1,8 @@
 // node sprites.cjs sprites.json outdir [model...]: renders the sprites that sprites.json names (sprite.html) and writes
-// outdir/trees.png and outdir/models.png (the strips, as web/textures/ holds them) and outdir/sprites.wgsl (the table
-// the page reads: web/shaders/lib/sprites.wgsl); with models named, each of their sprites alone to outdir/<model>_<k>.png
+// the strips, as web/textures/ holds them: outdir/models.png and outdir/trees.png, each split into more files of whole
+// layers (models2.png, trees2.png, ...) where it would be over `STRIP_BYTES`, outdir/strips.json naming them in their
+// layers' order (the page loads them so, detail.ts), and outdir/sprites.wgsl (the table the page reads:
+// web/shaders/lib/sprites.wgsl); with models named, each of their sprites alone to outdir/<model>_<k>.png
 // (and its bare twin to outdir/<model>_<k>_bare.png), and their table's rows in order to outdir/rows.json.
 //
 // sprites.json: for each strip (`trees`, `models`) the side of its layers, its cells a layer (`per`: 1 or 4) and its
@@ -17,6 +19,8 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const specs = JSON.parse(fs.readFileSync(process.argv[2])), OUT = process.argv[3], only = process.argv.slice(4);
+// A strip's file holds at most this many bytes, so it stays well under what the owner's page host takes (15 MB).
+const STRIP_BYTES = 12e6;
 // The sprites of an entry, part by part and turn by turn.
 const expand = e => (e.parts || [null]).flatMap(nodes => (e.turns || [0]).map(turn => ({ ...e, nodes, turn })));
 const list = (a, digits = 3) => a.map(v => v.toFixed(digits)).join(', ');
@@ -67,8 +71,26 @@ const wgslArray = (name, rows, doc, digits) => `${doc ? doc + '\n' : ''}fn ${nam
   strips.trees.done.forEach(d => d.set && sets.set(d.set.name, [d.set.from, d.set.n]));
   strips.models.done.forEach(d => d.set && sets.set(d.set.name, [trees + d.set.from, d.set.n]));
   const models = [...strips.models.done.map(d => [d.i, false]), ...bares.map(d => [d.i, true])];
-  save('trees.png', await p.evaluate(([l, side]) => window.strip(l, side, 1), [strips.trees.done.map(d => [d.i, false]), specs.trees.side]));
-  save('models.png', await p.evaluate(([l, side]) => window.strip(l, side, 4), [models, specs.models.side]));
+  // A strip in as few files of at most `STRIP_BYTES` as it fits, each of whole layers: `<name>.png`, `<name>2.png`, ...
+  const files = async (name, list, side, per) => {
+    const layers = Math.ceil(list.length / per);
+    for (let parts = 1; parts <= layers; parts++) {
+      const each = Math.ceil(layers / parts) * per, pngs = [];
+      for (let at = 0; at < list.length; at += each) {
+        pngs.push(Buffer.from((await p.evaluate(([l, side, per]) => window.strip(l, side, per), [list.slice(at, at + each), side, per])).split(',')[1], 'base64'));
+      }
+      if (pngs.every(b => b.length <= STRIP_BYTES)) {
+        const names = pngs.map((b, k) => `${name}${k ? k + 1 : ''}.png`);
+        names.forEach((n, k) => fs.writeFileSync(`${OUT}/${n}`, pngs[k]));
+        return names;
+      }
+    }
+    throw new Error(`${name}: a layer's file is over ${STRIP_BYTES} bytes`);
+  };
+  fs.writeFileSync(`${OUT}/strips.json`, JSON.stringify({
+    models: await files('models', models, specs.models.side, 4),
+    trees: await files('trees', strips.trees.done.map(d => [d.i, false]), specs.trees.side, 1),
+  }, null, 1) + '\n');
   const layers = Math.ceil(models.length / 4);
   fs.writeFileSync(`${OUT}/sprites.wgsl`, [
     '// The rendered models\' table, written by web/textures/bake/sprites.cjs from sprites.json (web/textures/SOURCES.md):',

@@ -1,10 +1,14 @@
 // The ground's detail up close (web/shaders/lib/detail.wgsl): photographs of ground seen from above, tiles of ground
 // cover rendered from 3D models as the map sees them, and rendered plants (CC0, Poly Haven;
-// web/textures/SOURCES.md), four strip images beside the page (`ground.jpg`, `carpets.jpg`, `models.png`, `trees.png`),
-// each a layer of one texture array with its mip levels down to one texel, which is its mean. The map draws each at its
+// web/textures/SOURCES.md), strip images beside the page (`ground.jpg`, `carpets.jpg`, then the rendered models' files
+// that `STRIPS` names: `models.png`, `trees.png`, `trees2.png`, ...), each square of them a layer of one texture array with its mip levels down to one texel, which is its mean. The map draws each at its
 // real size as a change around the colour the world gives the ground (the image over its mean), so from afar, where the
 // mips average it, the colour is the world's alone.
 import { Gpu, Texture } from './gpu';
+
+/** The rendered models' strip files, each list in its layers' order (web/textures/strips.json, written by the bake tool
+ * and put in the page by build.mjs). */
+declare const STRIPS: { models: string[]; trees: string[] };
 
 /** The side of each layer of the strips, texels: the photographs (tex.wgsl's `*_TEX`), the ground cover after them
  * (tex.wgsl `CARPETS_FROM`), the rendered models after those (tex.wgsl `MODELS_FROM`) and the trees last (tex.wgsl
@@ -32,8 +36,9 @@ function photoImage(name: string): Promise<ImageBitmap> {
 
 /** Once the strips are fetched and their levels made (a failed fetch leaves the ground without its detail): the levels
  * are made off the page's thread (detail-worker.ts), so the page does not stop for them. */
-export const groundReady: Promise<void> = Promise.all([photoImage('ground.jpg'), photoImage('carpets.jpg'), photoImage('models.png'), photoImage('trees.png')])
+export const groundReady: Promise<void> = Promise.all(['ground.jpg', 'carpets.jpg', ...STRIPS.models, ...STRIPS.trees].map(photoImage))
   .then(strips => new Promise<void>((done, failed) => {
+    const trees = strips.slice(-STRIPS.trees.length).reduce((n, s) => n + s.height / PHOTO_SIDE, 0);
     const source = document.getElementById('detail-src')?.textContent ?? '';
     const w = new Worker(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })));
     w.onerror = e => failed(new Error(e.message));
@@ -42,7 +47,7 @@ export const groundReady: Promise<void> = Promise.all([photoImage('ground.jpg'),
       w.terminate();
       done();
     };
-    w.postMessage({ strips, side: PHOTO_SIDE, cut: CUT }, strips);
+    w.postMessage({ strips, trees, side: PHOTO_SIDE, cut: CUT }, strips);
   }))
   .catch(e => console.error(`detail: ${e}`));
 
