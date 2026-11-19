@@ -66,6 +66,9 @@ pub struct Reactor {
     /// How moist the node is, 0 to 1 (`FlowView::moist`): the decomposers' catalysts of the open world work so far
     /// (`Reaction::open`); 0 until its caller sets it.
     pub moist: f64,
+    /// The share of the node whose pores hold gas (`Pores::full`): a reaction of the open world that takes a gas runs
+    /// only there, as the decomposers that run it breathe; 1 until its caller sets it.
+    pub aired: f64,
     /// Per substance, used and made, mol/s (scratch for `film`).
     flux: Vec<[f64; 2]>,
     /// Over the last `react`: how far each reaction went and those that went; per substance, what they took from the
@@ -178,6 +181,7 @@ impl Reactor {
             boil: chem.subs.iter().map(|s| s.boil).collect(),
             ph: vec![Phase::Solid; ns],
             minor: vec![false; nr],
+            aired: 1.0,
             ..Default::default()
         };
         // The scratch of each reaction and of each substance, empty; the lists of reactions fill as they run.
@@ -319,7 +323,8 @@ impl Reactor {
             }
             let (lim, q) = scarce(&rx.inputs, |k| self.av[k]);
             if lim > 0.0 {
-                self.kap[r] = self.rate(rx, lim, tot, t);
+                let breathes = rx.open > 1.0 && rx.inputs.iter().any(|p| self.ph[p.0 as usize] == Phase::Gas);
+                self.kap[r] = self.rate(rx, lim, tot, t) * if breathes { self.aired } else { 1.0 };
                 self.lim[r] = lim;
                 self.on.push(r);
                 // In a liquid or a gas the power is its order less 1, as far as it is not most of its phase.

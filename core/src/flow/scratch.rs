@@ -80,6 +80,11 @@ impl FlowView<'_> {
     pub(crate) fn standing(&self, i: usize) -> (f64, f64) {
         ((self.head[i] - self.pd[i] - self.z[i]).max(0.0), self.z[i])
     }
+    /// The share of the pores of ground node `i` its liquid fills (past 1 where liquid stands over them); 0 where it has
+    /// none.
+    pub(crate) fn filled(&self, i: usize) -> f64 {
+        if self.pd[i] > 0.0 { (self.head[i] - self.z[i]).max(0.0) / self.pd[i] } else { 0.0 }
+    }
     /// How moist ground node `i` is for what lives in it, 0 to 1: the depth of its liquid, in its pores and standing,
     /// as living things feel it (`Physics::wetness`, half at `wet_depth`).
     pub(crate) fn moist(&self, i: usize, p: &crate::Physics) -> f64 {

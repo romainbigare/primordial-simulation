@@ -62,6 +62,14 @@ impl Pores {
         ((filled - self.wilt) / (self.field - self.wilt)).clamp(0.0, 1.0)
     }
 
+    /// The share of loose ground whose pores are full of liquid when the share `filled` of its pores is: up to field
+    /// capacity its liquid lies in its small pores all through it and its large ones hold gas; what it holds over that
+    /// fills its pores from the bottom up (Flow's one store over the depth of its loose ground), so the gas reaches
+    /// only the share above that table (roots, `cover::working`; the decomposers, `change`).
+    pub fn full(&self, filled: f64) -> f64 {
+        ((filled - self.field) / (1.0 - self.field).max(1e-9)).clamp(0.0, 1.0)
+    }
+
     /// The liquid loose ground `depth` m deep holds for roots, between the wilting point and field capacity, m (its
     /// available water capacity).
     pub fn for_roots(&self, depth: f64) -> f64 {

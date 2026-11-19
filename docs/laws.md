@@ -829,6 +829,11 @@ conversion the cover runs, paid by work (3).
 Its own gas and its cell's share of the air. **Under standing liquid** only the gas dissolved there, renewed through
 the liquid's film in τ = depth / `dissolve` (`FlowView::standing`): a gas it takes is held at Henry's share × (1 +
 made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast as the film brings the oxidising gas.
+**In full pores** (on ground with no liquid standing over it): a reaction of the open world that takes a gas (the
+decomposers' rot) runs only in the share of the node whose pores hold gas, 1 − the share full of liquid
+(`Pores::full`: what the ground holds over field capacity fills its pores from the bottom up, the same rule by which
+roots in full pores get no gas, 3). So ground whose pores stay full keeps its dead matter and builds organic ground,
+as peat builds on wet flat ground (Clymo 1984).
 
 ### 2.4 Phases and the freezing law
 Solid, liquid or gas by melting and boiling points (`Chemistry::phase`). A liquid's melting point in a mixture falls by

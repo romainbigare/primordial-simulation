@@ -157,6 +157,9 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     // The time the liquid standing over it takes to renew its gas through its film, s: depth / `dissolve` (the air's
     // side is 100 times faster or more, left out).
     (rc.film, rc.moist) = (nodes.standing(i).0 / w.cfg.dissolve, nodes.moist(i, &w.cfg.phys));
+    // Ground under no standing liquid: its decomposers breathe in the share of its pores that holds gas (under standing
+    // liquid the liquid's film brings their gas).
+    rc.aired = if rc.film > 0.0 { 1.0 } else { 1.0 - w.pores(i).full(nodes.filled(i)) };
     let cap = |amt: &[f64]| nodes.skin[i] + amounts_cap(0..chem.ns(), |k| amt[k], |k| chem.subs[k].cp);
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.store.heat(Class::Ground)[i] - fused;
