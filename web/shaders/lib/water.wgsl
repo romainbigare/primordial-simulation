@@ -43,12 +43,19 @@ fn ripples(e: f32) -> vec2f {
   return g;
 }
 
+// The way to the eye of the map's angled view: from the south, 35 degrees above the horizon (the sprites' camera,
+// web/textures/SOURCES.md), east, south and up.
+const MAP_VIEW = vec3f(0.0, 0.8192, 0.5736);
+
 // What a liquid's surface of slope g (east, south) adds of the sky and the sun lit from the north-west (`LIGHT`), seen
 // from straight above.
-fn surface_light(g: vec2f) -> vec3f {
+fn surface_light(g: vec2f) -> vec3f { return surface_seen(g, vec3f(0.0, 0.0, 1.0)); }
+
+// The same seen from the way `view` (a unit vector, east, south and up).
+fn surface_seen(g: vec2f, view: vec3f) -> vec3f {
   let n = normalize(vec3f(-g, 1.0));
-  let fresnel = REFLECT_UP + (1.0 - REFLECT_UP) * pow(1.0 - n.z, 5.0);
-  let half_way = normalize(LIGHT + vec3f(0.0, 0.0, 1.0));
+  let fresnel = REFLECT_UP + (1.0 - REFLECT_UP) * pow(1.0 - dot(n, view), 5.0);
+  let half_way = normalize(LIGHT + view);
   let glint = pow(max(dot(n, half_way), 0.0), GLINT_POWER);
   return fresnel * SKY + GLINT_MOST * glint * SUN;
 }
@@ -66,9 +73,11 @@ const RUNNING_ATTENUATION = vec3f(1.6, 1.2, 1.8);
 
 // Bed `bed` (linear, lit) seen through `depth` m of water of diffuse attenuation `k`, 1/m, whose surface has slope g,
 // over the light `deep` that comes back from it where it is too deep to show its bed.
-fn seen_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f) -> vec3f {
+fn seen_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f) -> vec3f { return seen_from(bed, depth, g, k, deep, vec3f(0.0, 0.0, 1.0)); }
+// The same seen from the way `view` (`surface_seen`).
+fn seen_from(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f, view: vec3f) -> vec3f {
   let t = exp(-2.0 * k * depth);
-  return bed * t + deep * (1.0 - t) + surface_light(g);
+  return bed * t + deep * (1.0 - t) + surface_seen(g, view);
 }
 
 // Waves at a shore, as their height and their length in deep water, m (L = g T² / 2π): the open sea's, a metre and six

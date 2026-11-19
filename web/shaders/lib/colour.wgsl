@@ -133,6 +133,10 @@ struct Spot {
   moved: f32, driftwood: f32,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
+  // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
+  // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
+  // plants cover there on their mean (cover_field.wgsl `CoverAt.low`).
+  hollow: f32, hollow_d: vec2f, basin: f32, low: f32,
 }
 // A spot's shaded colour (linear light), its shade's multiplier and its map class.
 struct Shaded { rgb: vec3f, m: f32, kind: u32 }
@@ -329,16 +333,29 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     // The true view shades the bed's colours as far as the bed shows.
     return Shaded(rgb, 1.0 + (lit - 1.0) * through(p.depth).g, kind);
   }
-  // Over it: the ground, wet by how soaked it is and by the swash, a film of liquid shining on its bare part once it is
-  // near soaked (mud, the swash by the water), and the foam of the swash's last bore.
+  // Over it: the ground, wet by how soaked it is and by the swash, a film of liquid on its bare part once it is near
+  // soaked (mud, the swash by the water), puddles in its hollows (`puddles`), and the foam of the swash's last bore.
   let s = max(soaked(p), p.swash.x);
   let film = ease(FILM_FROM, 1.0, s) * g.bare;
   var rgb = mix(soil(g, s, lit), FOAM_RGB * lit, BORE_FOAM * p.swash.y * g.bare);
   let river = p.river * (1.0 - 0.6 * p.snow);
   if (film <= 0.0 && river <= 0.0) { return Shaded(rgb, lit, g.kind); }
-  let ripple = ripples(p.e);
-  // The film the swash leaves drains smooth: it mirrors the sky, with few of the sun's glints (`SWASH_CALM`).
-  rgb += film * surface_light(ripple * film * (1.0 - SWASH_CALM * p.swash.x));
+  // A film on soaked ground lies still and mirrors the sky; the swash's sheet runs, rippled `SWASH_CALM` less than
+  // standing liquid. A river's water is rippled.
+  let ripple = select(vec2f(0.0), ripples(p.e), p.swash.x > 0.0 || river > 0.0);
+  if (film > 0.0) {
+    rgb += film * surface_light(ripple * p.swash.x * (1.0 - SWASH_CALM));
+    let pud = puddles(p, film);
+    if (pud.wet > 0.0) {
+      // About a puddle the mud is soaked through, darker, and its film mirrors the sky as the map's view sees it.
+      let mud = soil(g, 1.0, lit) * (1.0 - PUDDLE_WET_DARK);
+      rgb = mix(rgb, mud + surface_seen(vec2f(0.0), MAP_VIEW), pud.wet);
+      if (pud.water > 0.0) {
+        let deep = lit_by(p.ground * (1.0 - WET_DARK) * MUDDY_WATER, lit);
+        rgb = mix(rgb, seen_from(mud, pud.depth, pud.tilt, PUDDLE_ATTENUATION, deep, MAP_VIEW), pud.water);
+      }
+    }
+  }
   var kind = g.kind;
   // A river: its water over its own bed. Running water carries the fine soil away: its bed is washed sand and gravel,
   // soaked.
@@ -346,6 +363,44 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
   if (river > 0.5) { kind = RIVER; }
   return Shaded(rgb, lit, kind);
 }
+// Puddles: on bare ground soaked past `FILM_FROM` (`film` 0..1 from there to soaked through) where the low plants leave
+// it open (a sward's puddles lie under its blades), liquid stands over up to `PUDDLES` of the ground when soaked
+// through, gathered where the ground lies low: in the lowest `BASIN_LOW` of its basins (the relief's octaves `BASIN_M`
+// long, relief.wgsl `Relief`), the more the lower, and in each basin in the lowest of its hollows (its octaves
+// `HOLLOW_M` long) up to the basin's level. So most of the ground holds none, and a basin's lowest part a few large
+// puddles of joined hollows among smaller ones. A puddle is `PUDDLE_DEPTH_M` deep for each unit of the hollows' rank
+// its point lies under its level; the mud about it is soaked through out to `PUDDLE_HALO` times its level above it in
+// the rank, softly; at its waterline its surface curves up the rim (the meniscus and the wet film over it) to a slope
+// of `MENISCUS` over the last `PUDDLE_SHORE` of its level. A puddle shows one by one where it takes `PUDDLE_PX.x`
+// pixels across, fully from `.y`; its size is about the hollows' length times the root of its level. Where it does not
+// show, it and its halo are their mean soaked ground, no water: from afar the puddled ground is a darker wet tone.
+const HOLLOW_M = vec2f(0.5, 2.0); const BASIN_M = vec2f(4.0, 20.0); const BASIN_LOW = 0.35;
+const PUDDLES = 0.06; const PUDDLE_DEPTH_M = 0.3; const PUDDLE_HALO = 1.0; const PUDDLE_SHORE = 0.5; const MENISCUS = 0.3;
+const PUDDLE_PX = vec2f(3.0, 8.0);
+// The mud about a puddle, soaked through, is `PUDDLE_WET_DARK` darker than the soaked ground. A puddle's water is
+// turbid with the mud it stands on: its light attenuates by `PUDDLE_ATTENUATION`, 1/m (turbid ponds pass 10 to 30:
+// Kirk 1994, from memory), so its bed shows at its edge and fades into the light the muddy water sends back, the
+// soaked ground's own colour times `MUDDY_WATER` (the suspended mud absorbs the blue most): darker and browner.
+const PUDDLE_WET_DARK = 0.4; const PUDDLE_ATTENUATION = vec3f(30.0, 26.0, 22.0); const MUDDY_WATER = vec3f(0.6, 0.5, 0.38);
+// What of spot p is a puddle's: the share its water covers, its depth, m, and its surface's slope (east, south); the
+// share of the soaked mud about it (and under it).
+struct Puddle { water: f32, depth: f32, tilt: vec2f, wet: f32 }
+fn puddles(p: Spot, film: f32) -> Puddle {
+  let full = PUDDLES * film * (1.0 - p.low) * (1.0 - p.sand * (1.0 - shore_grain(p).y));
+  // Its basin's level, from the mean where the basins do not show; the mean share it covers is `full`.
+  let level = mix(full, full / (0.5 * BASIN_LOW) * ease(BASIN_LOW, 0.0, p.basin), shows_at(BASIN_M.x, p.e));
+  let edge = max(0.5 * (abs(p.hollow_d.x) + abs(p.hollow_d.y)), 1e-4);
+  // (No puddle where none stands: a pixel's edge never darkens the lowest hollows' points.)
+  let any = ease(0.0, edge, level);
+  let pool = (1.0 - smoothstep(level - edge, level + edge, p.hollow)) * any;
+  let halo = (1.0 - smoothstep(level, (1.0 + PUDDLE_HALO) * level + edge, p.hollow)) * any;
+  let shown = shows_at(HOLLOW_M.y, p.e) * ease(PUDDLE_PX.x, PUDDLE_PX.y, HOLLOW_M.y * sqrt(level) / p.e);
+  let under = max(level - p.hollow, 0.0);
+  let up = normalize(p.hollow_d + vec2f(1e-9, 0.0));
+  let tilt = MENISCUS * (1.0 - ease(0.0, PUDDLE_SHORE * level, under)) * up;
+  return Puddle(pool * shown, PUDDLE_DEPTH_M * under, tilt, mix(min((1.0 + 0.5 * PUDDLE_HALO) * level, 1.0), halo, shown));
+}
+
 // Shaded colour `c` in the view drawn, as the screen's bytes (0..255), where the byte of the layer it draws is `o`
 // (0..1) and the true colour is `truth` (reflectance, 0..1): the Earth's colours; the true colour, shaded; or a layer's
 // ramp over a little of the Earth's colours (where the layer is empty, the Earth's colours faded).

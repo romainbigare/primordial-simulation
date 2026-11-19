@@ -15,18 +15,31 @@ const RELIEF_LONGEST_M = 48.0; const RELIEF_STEP = 3.0; const RELIEF_OCTAVES = 6
 // per unit of its slope (a face is rougher than a slab).
 const SWELL = 0.025; const CRAG = 0.09; const CRAG_STEEP = 0.12;
 
+// The relief at the pixel's place (`relief`): its height, m, and its slope east and south; and how low the point lies
+// among its hollows (its octaves `HOLLOW_M` long) and among its basins (its octaves `BASIN_M` long, colour.wgsl
+// `puddles`), each as far as its octaves show, 0 the lowest to 1 the highest, even over 0..1 (draw.wgsl `EVEN_ONE`;
+// 0.5 where none shows).
+struct Relief { h: f32, slope: vec2f, hollow: f32, basin: f32 }
+
+// How low the octaves' sum `n` of weights whose squares sum to `w2` lies, even over 0..1 (0.5 for none).
+fn rank_of(n: f32, w2: f32) -> f32 { return smoothstep(-EVEN_ONE, EVEN_ONE, NOISE_GAIN * n / sqrt(max(w2, 1e-12))); }
+
 // The relief at the pixel's place, seen at `e` m a pixel, on ground of slope `steep` (rise over run) whose bed shows
-// by `bare` (0..1, rock.wgsl `bed_shows`) under `loose` m of loose ground: its height, m, and its slope east and south.
-fn relief(e: f32, steep: f32, bare: f32, loose: f32) -> vec3f {
-  var out = vec3f(0.0);
+// by `bare` (0..1, rock.wgsl `bed_shows`) under `loose` m of loose ground.
+fn relief(e: f32, steep: f32, bare: f32, loose: f32) -> Relief {
   // No octave shows: none of the noise is read (the fitted view pays nothing).
-  if (shows_at(RELIEF_LONGEST_M, e) <= 0.0) { return out; }
+  if (shows_at(RELIEF_LONGEST_M, e) <= 0.0) { return Relief(0.0, vec2f(0.0), 0.5, 0.5); }
+  var out = vec3f(0.0);
   let rough = max(bare, 1.0 - ease(0.0, SMOOTH_LOOSE_M, loose));
   let k = mix(SWELL, CRAG + CRAG_STEEP * min(steep, 2.0), rough);
   var wave = RELIEF_LONGEST_M;
   var rot = mat2x2f(1.0, 0.0, 0.0, 1.0);
   let turn = mat2x2f(0.8, 0.6, -0.6, 0.8);
+  // Of the hollows' and the basins' octaves: the sum of each one's noise times its length, and of the lengths' squares.
+  var ranks = vec4f(0.0);
   for (var o = 0; o < RELIEF_OCTAVES; o++) {
+    let lengths = vec2f(select(0.0, wave, wave >= HOLLOW_M.x && wave <= HOLLOW_M.y), select(0.0, wave, wave >= BASIN_M.x && wave <= BASIN_M.y));
+    ranks = vec4f(ranks.xy, ranks.zw + lengths * lengths);
     let shown = shows_at(wave, e);
     if (shown <= 0.0) { break; }
     let n = gradient_noise(lat(rot * (1.0 / wave), vec2f(0.0)), 70 + o);
@@ -34,8 +47,9 @@ fn relief(e: f32, steep: f32, bare: f32, loose: f32) -> vec3f {
     let ridge = vec3f(0.35 - abs(n.x), -sign(n.x) * n.yz);
     let v = mix(n, ridge, rough);
     out += shown * k * wave * vec3f(v.x, transpose(rot) * v.yz / wave);
+    ranks = vec4f(ranks.xy + shown * v.x * lengths, ranks.zw);
     wave /= RELIEF_STEP;
     rot = turn * rot;
   }
-  return out;
+  return Relief(out.x, out.yz, rank_of(ranks.x, ranks.z), rank_of(ranks.y, ranks.w));
 }

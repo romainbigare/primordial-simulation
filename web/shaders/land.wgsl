@@ -77,8 +77,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let tiled = g;
   // The relief moves the ground's height as much as the ground drawn is steep (`RELIEF_EDGE_SLOPE`): on a flat shore a
   // bump of a few decimetres would move the water's edge by tens of metres into a fringe of puddles.
-  g.h += fine.x * ease(0.0, RELIEF_EDGE_SLOPE, length(g.slope));
-  g.slope += fine.yz;
+  g.h += fine.h * ease(0.0, RELIEF_EDGE_SLOPE, length(g.slope));
+  g.slope += fine.slope;
   // Its channel: what runs through it and the largest stone it moves, each grown evenly along it (rock.wgsl
   // `next_along`).
   let grows = vec2f(dpdx(g.along), dpdy(g.along));
@@ -96,7 +96,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   }
   let mouth = through_band(g, e);
   let ch = channel_of(g, q, banks, mouth);
-  let st = state_on(at, g, cs, depth_in(g, ch), e, fine.x);
+  let st = state_on(at, g, cs, depth_in(g, ch), e, fine.h);
   let surface = blended(SURFACE, cs);
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
@@ -159,6 +159,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.mouth = 0.0;
   p.at = at;
   p.e = e;
+  p.hollow = fine.hollow;
+  p.hollow_d = vec2f(dpdx(fine.hollow), dpdy(fine.hollow));
+  p.basin = fine.basin;
+  p.low = cf.low;
   // The depth less the film, signed (under the ground drawn: minus its height over the level, as the share of the point
   // that is the ponds' weighs it), over the depth's change across a pixel.
   let signed = st.depth - min(st.over, NO_LIQUID_M) * g.water.y - FILM_M;

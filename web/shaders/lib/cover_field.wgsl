@@ -73,8 +73,10 @@ struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loo
 // The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; the share of
 // the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month; and
 // of the plants there in liquid (`WET_LAYER`): the share of the cover of the kinds that stand in it, the depth they
-// stand in (down to their line), m, and the herbs' depth and height, m; and the share of the ground the herbs cover.
-struct CoverAt { cover: vec4f, canopy: f32, shed: f32, wet: vec4f, herbs: f32 }
+// stand in (down to their line), m, and the herbs' depth and height, m; the share of the ground the herbs cover; and the
+// share the low plants (the sward and the low lattices, `LOW_LAYER`) cover at the point on their mean, as thick as they
+// stand there.
+struct CoverAt { cover: vec4f, canopy: f32, shed: f32, wet: vec4f, herbs: f32, low: f32 }
 
 // A square whose kinds' roots hold everywhere has its mean rooted share this near 1: no point of it limits them.
 const ROOTED_ALL = 0.999;
@@ -437,7 +439,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
-  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0));
+  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0), min(field_at(at, LOW_LAYER).a * hold.w * thick, 1.0));
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_thing`
