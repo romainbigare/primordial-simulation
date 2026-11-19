@@ -4,8 +4,10 @@ substances = [
   "water", "nitrogen", "oxygen", "carbon dioxide", "methane", "sugar / plant matter",
   "fat / oil", "sand / quartz", "common rock", "limestone",
   "body matter (tissue)", "calcium bicarbonate (dissolved)", "nitrogen mineral (a nitrate-ammonium fertiliser salt)", "frame (cellulose)",
+  "humus (stable soil organic matter)",
 ]
 reactions = [
   "light to sugar", "burning sugar", "burning fat", "fat making", "burning methane", "rotting to methane",
   "rock weathering", "burning body matter", "limestone dissolving", "limestone settling", "nitrogen fixation", "fertiliser salt breaking down hot", "rotting of the frame", "splitting the frame (cellulase)",
+  "humus forming", "humus rotting",
 ]

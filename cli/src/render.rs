@@ -15,9 +15,9 @@ const SIDE_BY_SIDE: usize = 5;
 /// The panels `ew view` draws: those of the pictures, the land with no river drawn over it, and of the loose ground
 /// (`GROUND`): its conductivity, the liquid it holds for roots, what the year's rain leaves after what rises (its
 /// yield), the share of its pores its liquid fills, what rises from it, its texture, the cell's (soil), its organic
-/// share, the minerals it holds, how easily flowing liquid carries it off, and the terrain's sample's texture under
-/// each pixel (texture, `SAMPLED`).
-pub const PANELS: [&str; 16] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise", "soil", "organic", "minerals", "erodibility", "texture"];
+/// share, the minerals it holds, how easily flowing liquid carries it off, its slow organic matter, how fast its dead
+/// frame rots, and the terrain's sample's texture under each pixel (texture, `SAMPLED`).
+pub const PANELS: [&str; 18] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise", "soil", "organic", "minerals", "erodibility", "slow", "rot", "texture"];
 /// The panel drawn by the terrain's samples, not by the cells: the last.
 const SAMPLED: usize = PANELS.len() - 1;
 /// The first of the loose ground's panels in `PANELS`.
@@ -93,6 +93,10 @@ impl<'a> Look<'a> {
             5 => texture(&w.soil[i].texture),
             // What rises, mm a year.
             4 => ramp(&[(0.0, [240, 235, 220]), (300.0, [200, 210, 120]), (700.0, [70, 160, 90]), (1200.0, [20, 90, 70])], self.mm_a_year(w.evap[i] as f64)),
+            // Its slow organic matter, kg/m², on a log scale: 0.01 pale, 10 black-brown.
+            9 => ramp(&[(-2.0, [235, 225, 200]), (-1.0, [180, 150, 100]), (0.0, [100, 70, 40]), (1.0, [30, 20, 10])], pcore::soil::ground(w, i).slow.max(1e-9).log10()),
+            // How fast its dead frame rots, a year, on a log scale: 0.01 blue (peat), 1 orange.
+            10 => ramp(&[(-2.0, [30, 50, 120]), (-1.0, [100, 150, 170]), (-0.5, [220, 210, 150]), (0.0, [230, 120, 40])], pcore::soil::ground(w, i).rot.max(1e-9).log10()),
             // Its erodibility against a loam's, on a log scale: a thirtieth dark, a loam's yellow, four times red.
             8 => ramp(&[(-1.5, [40, 40, 80]), (-0.5, [90, 140, 170]), (0.0, [240, 220, 120]), (0.6, [200, 40, 30])], w.soil[i].texture.erodibility().max(1e-9).log10()),
             // The minerals the ground holds, mol/m², on a log scale: 1e-3 pale, 1 dark green.

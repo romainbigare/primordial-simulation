@@ -4,10 +4,12 @@
 //! (`pores`); its fine particles and organic matter hold a share of its dissolved minerals (`exchange`).
 
 mod exchange;
+mod organic;
 mod pores;
 mod texture;
 
 pub use exchange::dissolved;
+pub use organic::{ground, Ground};
 pub use pores::Pores;
 pub use texture::{samples, textures};
 
@@ -33,6 +35,9 @@ pub const LOAM: Texture = Texture { coarse: 0.4, fine: 0.2, organic: 0.0 };
 /// fine, and falls in a straight line with its organic matter, from none at the per cent `ORGANIC_SPAN` (Wischmeier
 /// and Smith 1978), read to `ORGANIC_MOST` per cent (the range of their data).
 const ERODIBLE_EXP: f64 = 1.14;
+/// The share of the decomposers' rate on what fine and middle particles hold (`Substance::bound`) that loose ground all
+/// of such particles takes away (Parton et al. 1987).
+const SHELTERED: f64 = 0.75;
 const ORGANIC_SPAN: f64 = 12.0;
 const ORGANIC_MOST: f64 = 4.0;
 
@@ -45,6 +50,12 @@ impl Texture {
     /// erodibility factor of Wischmeier and Smith (1978), M^1.14 (12 − OM), M the middle share times the share that
     /// is not fine (their two finest classes times what is not of the finest), OM the organic per cent. Middle particles
     /// are carried most easily: coarse ones are heavy, fine ones bind together, and organic matter binds them too.
+    /// The share of the decomposers' rate on what its fine and middle particles hold (`Substance::bound`) that they
+    /// take away by holding it: `SHELTERED` times their share, as the texture slows the rot of the organic matter held
+    /// on mineral faces (Parton et al. 1987; Six et al. 2002).
+    pub fn shelters(&self) -> f64 {
+        SHELTERED * (self.fine + self.middle()).clamp(0.0, 1.0)
+    }
     pub fn erodibility(&self) -> f64 {
         let k = |t: &Texture| (t.middle().max(0.0) * (1.0 - t.fine)).powf(ERODIBLE_EXP) * (ORGANIC_SPAN - (100.0 * t.organic).min(ORGANIC_MOST));
         k(self) / k(&LOAM)
@@ -84,7 +95,8 @@ pub fn of_world(w: &World) -> Vec<Soil> {
 /// Once a month, at its start.
 pub fn month(w: &mut World) {
     let Some(parts) = crate::life::Parts::of(&w.chem) else { return };
-    crate::flow::new_pores(w, |w| organic_pores(w, &parts.sub));
+    let organics: Vec<usize> = parts.sub.iter().copied().chain((0..w.chem.ns()).filter(|&k| w.chem.subs[k].bound)).collect();
+    crate::flow::new_pores(w, |w| organic_pores(w, &organics));
 }
 
 /// Each cell's organic share and exchange sites anew (`solids`, of the substances `organics`), and its pores where the
@@ -106,7 +118,8 @@ fn organic_pores(w: &mut World, organics: &[usize]) -> bool {
 }
 
 /// The loose ground of cell `i`: of the volume of the solids of its ground node that stay solid at the surface
-/// (`T_SURF`: not its frozen liquid), m³, what is of the substances life's parts are made of (`organics`), and all.
+/// (`T_SURF`: not its frozen liquid), m³, what is organic (`organics`: what life's parts are made of and what
+/// particles hold), and all.
 fn solids(w: &World, organics: &[usize], i: usize) -> [f64; 2] {
     let (mut of_life, mut all) = (0.0, 0.0);
     for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > T_SURF) {

@@ -70,5 +70,13 @@ fn middle_particles_are_carried_most_easily() {
     assert!((loam - 1.0).abs() < 1e-12 && middle > loam && coarse < loam && fine < loam && k(0.4, 0.2, 0.02) < loam);
 }
 
+/// Fine and middle particles shelter what they hold from the decomposers (Parton et al. 1987): more the more of them,
+/// none on ground of coarse particles alone, at most 0.75 of the rot.
+#[test]
+fn fine_particles_shelter_the_slow_organic_matter() {
+    let s = |coarse: f64, fine: f64| Texture { coarse, fine, organic: 0.0 }.shelters();
+    assert!(s(1.0, 0.0) == 0.0 && s(0.6, 0.1) < s(0.3, 0.2) && s(0.0, 0.5) == 0.75, "{} {} {} {}", s(1.0, 0.0), s(0.6, 0.1), s(0.3, 0.2), s(0.0, 0.5));
+}
+
 /// The dead frame laid on the ground, kg/m²: a thick litter.
 const KG_M2: f64 = 20.0;

@@ -870,10 +870,13 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substance
 | 11 | the rock salt, lives dissolved (≈ Ca(HCO3)2) |
 | 12 | the nitrogen mineral, lives dissolved |
 | 13 | the frame, a solid bodies build (≈ cellulose) |
+| 14 | the slow organic matter, held on fine and middle particles (`bound`; ≈ humus): C59H78N6O42 |
 
 Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 3 burning and making fat; 4 burning
 methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
-of the frame; 13 splitting the frame into sugar (needs an enzyme). Dead matter rots in moist open ground at a litter
+of the frame; 13 splitting the frame into sugar (needs an enzyme); 14 body matter rotting into the slow organic matter
+(beside 7, at a quarter of its rate: a fifth of what rots of it goes this way, keeping half its carbon and all its
+nitrogen); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). Dead matter rots in moist open ground at a litter
 constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
 work): matter from 118 sugar + 3 nitrogen mineral; frame from 6 sugar.
 `Chemistry::minerals` are growth's inputs no reaction burns (12), `materials` the solids bodies build (13).
@@ -1356,7 +1359,12 @@ gives its ground node (at most `skin_m` of it; by area where it holds none).
 
 **Organic matter** (`soil::month`, at each month's start): a cell's organic share is the share of the volume of its
 ground node's solids that stay solid at the surface (not its frozen liquid) that is of the substances life's parts are
-made of: the dead matter its cover and its takers leave on its ground (3, 3b), which rots there by the open world's
+made of or that its particles hold (`Substance::bound`, the slow organic matter 14). **The slow pool**: a fifth of the
+body matter that rots becomes the slow organic matter (reaction 14), which rots 25 times slower (15), slower again by
+the share `SHELTERED` (0.75) × its fine and middle particles' share (`Texture::shelters`: the texture slows the rot of
+the organic matter held on mineral faces, Parton et al. 1987; Six et al. 2002): 25 years on coarse ground, a century
+on ground of fine and middle particles alone, at 290 K moist. So it builds over decades to centuries, most where the
+ground is fine, and holds its nitrogen from the plants until it rots. The fresh dead matter is the dead matter its cover and its takers leave on its ground (3, 3b), which rots there by the open world's
 reactions (1, 7, 12; 2.1), faster where the ground is warm and moist and slower under standing liquid, where the
 oxidising gas comes only through the liquid's film (2.3). No store of its own: it is what the ground holds. So ground
 under a dense cover grows richer in organic matter and holds more liquid, and bare ground loses it: the soil and its
