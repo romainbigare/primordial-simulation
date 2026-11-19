@@ -61,6 +61,12 @@ impl Pores {
     pub fn available(&self, filled: f64) -> f64 {
         ((filled - self.wilt) / (self.field - self.wilt)).clamp(0.0, 1.0)
     }
+
+    /// The liquid loose ground `depth` m deep holds for roots, between the wilting point and field capacity, m (its
+    /// available water capacity).
+    pub fn for_roots(&self, depth: f64) -> f64 {
+        (self.field - self.wilt) * self.porosity * depth
+    }
 }
 
 /// The mineral part of loose ground of texture `t` (Saxton and Rawls 2006, its shares held inside the range their
