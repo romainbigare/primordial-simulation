@@ -23,8 +23,10 @@ const specs = JSON.parse(fs.readFileSync(process.argv[2])), OUT = process.argv[3
 const STRIP_BYTES = 12e6;
 // The sprites of an entry, part by part and turn by turn.
 const expand = e => (e.parts || [null]).flatMap(nodes => (e.turns || [0]).map(turn => ({ ...e, nodes, turn })));
-const list = (a, digits = 3) => a.map(v => v.toFixed(digits)).join(', ');
-const wgslArray = (name, rows, doc, digits) => `${doc ? doc + '\n' : ''}fn ${name}(s: i32) -> f32 {\n  var v = array<f32, ${rows.length}>(${list(rows, digits)});\n  return v[s];\n}\n`;
+// A table as one array of the program's (made once, not again at each call: a copy in each function that reads it is
+// more than a software renderer compiles) and its reader.
+const wgslTable = (name, table, type, values) => `var<private> ${table}: array<${type}, ${values.length}> = array<${type}, ${values.length}>(${values.join(', ')});\nfn ${name}(s: i32) -> ${type} { return ${table}[s]; }\n`;
+const wgslArray = (name, rows, doc, digits = 3) => `${doc ? doc + '\n' : ''}${wgslTable(name, `${name.toUpperCase()}_TABLE`, 'f32', rows.map(v => v.toFixed(digits)))}`;
 
 (async () => {
   const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -103,7 +105,7 @@ const wgslArray = (name, rows, doc, digits) => `${doc ? doc + '\n' : ''}fn ${nam
     wgslArray('model_fill', rows.map(r => r.fill), '// Each sprite\'s mean cover over its content\'s box.'),
     wgslArray('model_leaf', rows.map(r => r.leaf), '// Each sprite\'s mean leaf lightness (linear; a bare twin its tree\'s), 0 where it has no leaves.', 4),
     '// Each tree\'s bare twin (its leaves hidden, in its own frame at half the side), -1 where it has none.',
-    `fn bare_of(s: i32) -> i32 {\n  var v = array<i32, ${trees}>(${bareOf.join(', ')});\n  return v[s];\n}\n`,
+    wgslTable('bare_of', 'BARE_TABLE', 'i32', bareOf),
   ].join('\n'));
   console.log('trees', trees, 'model layers', layers);
   await b.close();
