@@ -278,10 +278,11 @@ fn blades(e: f32) -> vec2f {
 // its middle that many of its widths down the sun and as wide); a blade keeps its lightness about the tufts' mean and
 // takes the plants' colour, keeping `TUFT_HUE` of its own.
 // They show as things (draw.wgsl `as_thing`): smaller, the plants are their veil (colour `veil` over their share).
-// Their colour (linear) and cover.
+// Standing in liquid `depth` m deep (0: on land), their part under its surface is seen through it (style.wgsl
+// `seen_in_liquid`). Their colour (linear) and cover.
 const TUFT_WIDE = vec2f(1.0, 1.8);
 const TUFT_HUE = 0.3;
-fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32, t: Tufts) -> vec4f {
+fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32, t: Tufts, depth: f32) -> vec4f {
   let wide = 0.5 * (TUFT_WIDE.x + TUFT_WIDE.y);
   let seen = as_thing(wide * t.cell_m, e);
   if (!models_ready() || seen <= 0.0) { return vec4f(veil, s); }
@@ -307,11 +308,13 @@ fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32, t: Tufts) -> vec4f {
       let inside = all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0));
       let tex = select(vec4f(0.0), model_texel(k, uv, e / (w * t.cell_m)), inside);
       let lit = dot(tex.rgb, LUMA) / TUFT_MEAN;
-      let rgb = mix(c * lit, tex.rgb * dot(c, LUMA) / TUFT_MEAN, TUFT_HUE);
+      let rgb = seen_in_liquid(mix(c * lit, tex.rgb * dot(c, LUMA) / TUFT_MEAN, TUFT_HUE), depth, -v.y * t.cell_m, e);
       dst += vec4f(rgb * tex.a, tex.a) * (1.0 - dst.a);
-      // Its shadow on the ground at its foot, away from the sun.
-      let sv = (v + sun * t.shadow.y * w) / (t.shadow.z * vec2f(0.4 * w, 0.2 * w));
-      dst += vec4f(0.0, 0.0, 0.0, t.shadow.x * (1.0 - smoothstep(0.5, 1.0, length(sv)))) * (1.0 - dst.a);
+      // Its shadow away from the sun, on the ground at its foot or on the surface of the liquid it stands in (where its
+      // stem meets it, `STAND` of the depth north of its foot), as much as it stands out of it.
+      let rise = min(STAND * depth / t.cell_m, h);
+      let sv = (v + vec2f(0.0, rise) + sun * t.shadow.y * w) / (t.shadow.z * vec2f(0.4 * w, 0.2 * w));
+      dst += vec4f(0.0, 0.0, 0.0, t.shadow.x * (1.0 - rise / h) * (1.0 - smoothstep(0.5, 1.0, length(sv)))) * (1.0 - dst.a);
     }
   }
   return mix(vec4f(veil, s), vec4f(dst.rgb / max(dst.a, 1e-4), dst.a), seen);

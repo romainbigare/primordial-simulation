@@ -5,7 +5,7 @@
 // and its walls' share; its own random numbers; its design (style.ts `DESIGN`); its form (form.ts `Form`) and how
 // surely; its lean (a share of its height, east and south); how far from its foot it may reach, m; how dry its kind's
 // ground and how tender to frost it is, 0..1 each (form.ts `Form`); the share of its leaves left this season; how
-// wet its kind's ground, 0..1; and whether its foot stands in liquid, 1, or on land, 0 (mark.wgsl `decide`).
+// wet its kind's ground, 0..1; and how deep liquid stands over its foot, m (0: on land; mark.wgsl `decide`).
 struct Plant {
   at: vec2f, d: f32, h: f32, closed: f32, rgb: vec3f, wood: f32, r: vec3f, design: f32,
   form: f32, sure: f32, lean: vec2f, reach: f32, dry: f32, tender: f32, left: f32, wet: f32, wades: f32,
@@ -26,6 +26,5 @@ const TREE_M = 3.0;
 
 // The forms (form.ts `Form`).
 const ROUND = 0; const CONE = 1; const COLUMN = 2; const UMBRELLA = 3; const TIERED = 4; const LOBED = 5;
-// A plant stands up this share of its height on the map (textures.ts `STAND`); a bush is as deep as `BUSH_DEEP` of its
-// width.
-const STAND = 0.5; const BUSH_DEEP = 0.45;
+// A plant stands up `STAND` of its height on the map (draw.wgsl); a bush is as deep as `BUSH_DEEP` of its width.
+const BUSH_DEEP = 0.45;
