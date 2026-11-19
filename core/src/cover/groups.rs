@@ -110,7 +110,7 @@ impl Cover {
     /// The share of what each slot of cover `c` in `order` (on its ground of `area` m², its walls of density `rho`)
     /// builds in a month that goes to each of its groups: each group's capture area times the light its leaves get under
     /// the leaves of all the cell's plants taller than they are, whatever slot holds them: the light falls by e^-(the
-    /// capture area per unit of ground it passed, each slot's over the share its roots hold) (Beer's law, as
+    /// capture area per unit of ground it passed, each slot's over the share its plants hold, `Cover::on`) (Beer's law, as
     /// `canopy::shade`), and the leaves of plants as tall (to `SAME`) get the mean over theirs together
     /// (`math::mean_decay`). So the large plants take the most light a leaf, the asymmetry of the competition for light
     /// by size (Weiner 1990), and seedlings, all leaf, grow fast where light reaches them. A slot with no leaves gets
@@ -124,7 +124,7 @@ impl Cover {
         }
         for &x in order {
             let s = self.sizes(ph, mm, x);
-            let per = self.leaf(mm, x) / (area * self.rooted[x].max(f32::MIN_POSITIVE) as f64).max(1e-300);
+            let per = self.leaf(mm, x) / (area * self.on(x)).max(1e-300);
             for g in 0..s.held {
                 (all[k], k) = ((x, g, s.height(ph, rho, g), per * s.leaf[g]), k + 1);
             }
@@ -177,6 +177,7 @@ impl Cover {
     /// Slot `x` empties: no amounts, genes of no kind, no plants.
     pub(super) fn clear(&mut self, x: usize) {
         (self.mol[x], self.root[x], self.full[x], self.net[x], self.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
+        (self.stands[x], self.stood[x]) = (0.0, 0.0);
         (self.plants[x], self.share[x]) = ([0.0; GROUPS], [0.0; GROUPS]);
     }
     /// `n` plants of `kg` of built cover take hold in slot `x` (seeds of its kind, before their amounts join it): a

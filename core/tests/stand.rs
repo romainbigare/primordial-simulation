@@ -47,6 +47,7 @@ fn cut(w: &World, c: &mut Cover, k: usize) {
     for _ in 1..k {
         let e = (0..cover::SLOTS).find(|&y| c.root[y] == NO_ROOT).expect("room");
         (c.mol[e], c.plants[e], c.share[e], c.genes[e], c.root[e], c.full[e], c.net[e], c.rooted[e], c.need[e]) = (c.mol[x], c.plants[x], c.share[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.rooted[x], c.need[x]);
+        (c.stands[e], c.stood[e]) = (c.stands[x], c.stood[x]);
     }
 }
 

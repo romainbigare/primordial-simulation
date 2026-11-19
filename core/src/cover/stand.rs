@@ -73,8 +73,9 @@ fn plant_ground(ph: &Physics, mass: f64) -> f64 {
     (mass / ph.thin_kg).powf(2.0 / 3.0)
 }
 
-/// The plants of the `n` slots in use of cover `c` on its ground of `area` m² (`cover::ground`), its walls of density
-/// `rho` kg/m³, thin out together: plants crowd the plants whose crowns share their layer of the air (`Cover::crown`),
+/// The plants of the `n` slots in use of cover `c` on its cell's ground of `area` m² (`cover::ground`), each slot on
+/// its share of it (`Cover::stands`; the grounds nested, so of another slot's plants the share on a slot's own ground is
+/// the lesser ground over that slot's), its walls of density `rho` kg/m³, thin out together: plants crowd the plants whose crowns share their layer of the air (`Cover::crown`),
 /// whatever slot holds them, as the self-thinning law is the crowns of a stand filling its space (Yoda and others 1963)
 /// and the layers of a stand thin apart (an understory under a closed canopy). Of each slot the ground its layer's
 /// plants hold (its plants at their mean mass, the law's own measure of a stand, `plant_ground`), each other slot's
@@ -91,13 +92,16 @@ pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, 
         k += 1;
     }
     let (held, ground) = (&held[..k], &ground[..k]);
+    // The ground each slot stands on, m², and the share of each other slot's plants that stand on it.
+    let own: [f64; SLOTS] = std::array::from_fn(|q| if q < k { area * c.stands[held[q]] as f64 } else { 0.0 });
+    let on_own = |q: usize, r: usize| if r == q { 1.0 } else { own[q].min(own[r]) / own[r].max(1e-300) };
     // A crown shares all of itself: a lone slot's crowd is its own ground, and its crown is not needed.
     if k > 1 {
         held.iter().zip(span.iter_mut()).for_each(|(&x, s)| *s = c.crown(ph, mm, area, x, c.height(ph, mm, rho, x)));
     }
-    let by = |q: usize, r: usize| if r == q { 1.0 } else { shared(span[q], span[r]) };
+    let by = |q: usize, r: usize| if r == q { 1.0 } else { shared(span[q], span[r]) * on_own(q, r) };
     let crowd: [f64; SLOTS] = std::array::from_fn(|q| if q < k { (0..k).map(|r| by(q, r) * ground[r]).sum() } else { 0.0 });
-    if crowd.iter().all(|&f| f <= area) {
+    if (0..k).all(|q| crowd[q] <= own[q]) {
         return;
     }
     // Each slot's large plants, their count and the ground they hold at their own mass.
@@ -107,13 +111,13 @@ pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, 
         large[q] = (s.count[s.large()], s.count[s.large()] * plant_ground(ph, s.mass[s.large()]));
     }
     for (q, &x) in held.iter().enumerate() {
-        let crowd = crowd[q];
-        if crowd > area {
+        let (crowd, room) = (crowd[q], own[q]);
+        if crowd > room {
             // The large plants lose no more than the crowd of the large plants of the slots that share their layer
             // asks, each at their own mass: smaller plants take no room from them.
             let alone: f64 = (0..k).map(|r| by(q, r) * large[r].1).sum();
-            let most = if alone > area { large[q].0 * (1.0 - (area / alone).powi(3)) } else { 0.0 };
-            lose(c, mm, x, (c.count(x) * (1.0 - (area / crowd).powi(3)), most));
+            let most = if alone > room { large[q].0 * (1.0 - (room / alone).powi(3)) } else { 0.0 };
+            lose(c, mm, x, (c.count(x) * (1.0 - (room / crowd).powi(3)), most));
         }
     }
 }

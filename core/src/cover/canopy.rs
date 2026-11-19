@@ -106,12 +106,12 @@ pub(super) fn shade(l: &[(f64, f64, f64, f64, usize)], mut set: impl FnMut(usize
 }
 
 /// The units of the light reaction `x` the slots in use of cover `c` would run, cut to the key liquid their roots reach:
-/// the liquid of each ring of its ground (`rings`, by the shares the slots' roots hold, `Cover::rooted`) is the slots'
+/// the liquid of each ring of its ground (`rings`, by the shares the slots' plants hold, `Cover::on`) is the slots'
 /// that stand on it, `units` of the reaction a unit of the ground in all; where they would draw more there, each draws
 /// it in proportion to what it would draw there. So the slots of a cell draw on the ground they share, whatever slots
 /// hold them.
 pub(super) fn drawn(c: &Cover, x: &mut [f64], units: f64) {
-    let rooted = |q: usize| share(c.rooted[q] as f64);
+    let rooted = |q: usize| share(c.on(q));
     let mut shares = [0.0; SLOTS];
     (0..x.len()).for_each(|q| shares[q] = rooted(q));
     let mut got = [0.0; SLOTS];

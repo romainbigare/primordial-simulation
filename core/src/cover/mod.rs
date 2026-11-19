@@ -29,7 +29,7 @@ pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
-pub use soak::{aired, breath, soak, working, Soak};
+pub use soak::{aired, breath, footing, soak, working, Footing, Soak};
 pub use stand::{height, loose_bins, stem, BINS};
 
 use crate::life::WET_TISSUE;
@@ -83,6 +83,12 @@ pub const FIX_OFF: f32 = -10.0;
 
 /// Mutation step (times `Physics::mut_size`) and range of each gene.
 pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6)];
+/// The bands of depth of the liquid over a cell's ground under it, m, from none to past any reach: the depths at which a
+/// kind's roots are judged where it would stand under the liquid (`cover::footing`), as the bins of loose depth
+/// (`BINS`) resolve its roots' need.
+pub const DEPTHS: [f64; BANDS + 1] = [0.0, 0.1, 0.3, 1.0, f64::INFINITY];
+/// How many bands of depth (`DEPTHS`).
+pub const BANDS: usize = 4;
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
 pub use crate::life::kin::APART;
@@ -114,6 +120,11 @@ pub struct Cover {
     /// its roots needed when that was found, m (`stand::need`; 0: not found yet)
     pub rooted: [f32; SLOTS],
     pub need: [f32; SLOTS],
+    /// Per slot: the share of its cell's ground (`ground`) it stands on, its land and the bands under the liquid where its
+    /// roots work (`cover::footing`), and the ground it stood on at its last month, m² (where it stands on less, the
+    /// plants on the rest died with it, `grow::live`)
+    pub stands: [f32; SLOTS],
+    pub stood: [f64; SLOTS],
     /// The film its leaves' pores were open to the key liquid's vapour over its last month, mol K/(Pa s) per m² of the
     /// cell (`around::pores`), and the share of its ground's liquid their roots reach
     pub film: f32,
@@ -122,9 +133,6 @@ pub struct Cover {
     /// wilting point), a running mean over a year's months (`grow::step`): the months its kinds expect without gain, by
     /// which they shed their leaves (`season::shed`). The ground's, so it outlives the slots.
     pub idle: f32,
-    /// The ground it stood on at its last month, m² (`ground`): where its ground now is less, the plants that stood on
-    /// the rest went under the standing liquid with it (`grow::live`)
-    pub land: f64,
     /// The heat of its cover, J; the cell's light (`World::light`) at its last step, J/m²; the share of the light its
     /// cover absorbs that its aside node sets aside for its light reaction
     pub e: f64,
@@ -140,7 +148,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, land: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], stands: [0.0; SLOTS], stood: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
     }
 }
 
@@ -166,13 +174,19 @@ impl Cover {
     pub fn built(&self, mm: &[f64; NP], x: usize) -> f64 {
         built_kg(mm, &self.mol[x])
     }
-    /// The crown of the plants of slot `x`, `top` m tall (`Cover::height`, its large plants'), on ground of `land` m², from
-    /// its base to its top, m: its leaves, and the thin stems that carry them, stand where the light is, over the depth
-    /// their capture area fills at the density of a crown's leaves: its capture area over the ground its plants hold
-    /// (`land` times the share its roots hold, `Cover::rooted`), over `crown_density` m² a m³, down from its top, and no
-    /// lower than the ground: a sward is as dense as that over its whole height.
-    pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], land: f64, x: usize, top: f64) -> (f64, f64) {
-        let patch = land * self.rooted[x].max(f32::MIN_POSITIVE) as f64;
+    /// The share of its cell's ground (`ground`) the plants of slot `x` hold: of the ground it stands on (`Cover::stands`),
+    /// the share whose loose ground holds their roots (`Cover::rooted`). The two are taken as nested over the slots, as
+    /// the ground under the liquid is the cell's low ground (`canopy::rings`).
+    pub fn on(&self, x: usize) -> f64 {
+        self.rooted[x] as f64 * self.stands[x] as f64
+    }
+    /// The crown of the plants of slot `x`, `top` m tall (`Cover::height`, its large plants'), on a cell's ground of
+    /// `ground` m², from its base to its top, m: its leaves, and the thin stems that carry them, stand where the light is,
+    /// over the depth their capture area fills at the density of a crown's leaves: its capture area over the ground its
+    /// plants hold (`Cover::on`), over `crown_density` m² a m³, down from its top, and no lower than the ground: a sward is
+    /// as dense as that over its whole height.
+    pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], ground: f64, x: usize, top: f64) -> (f64, f64) {
+        let patch = ground * self.on(x).max(f32::MIN_POSITIVE as f64);
         let depth = self.leaf(mm, x) / patch.max(1e-300) / ph.crown_density;
         ((top - depth).max(0.0), top)
     }
@@ -295,10 +309,11 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
     out
 }
 
-/// The ground the cover of cell `i` lives on, m²: its land (`contract::land`), none where all of it lies under the
-/// standing liquid. Its leaves layer over it, its plants find their room on it, its seeds lodge on it.
+/// The ground the cover of cell `i` may stand on, m²: its land (`contract::land`) and its ground under the standing
+/// liquid (`contract::wet`). Each slot stands on the share of it its kind's roots work in (`footing`); its leaves layer
+/// over that, its plants find their room on it, its seeds lodge on it.
 pub fn ground(w: &crate::World, i: usize) -> f64 {
-    crate::contract::land(w, i)
+    crate::contract::land(w, i) + crate::contract::wet(w, i).iter().map(|b| b[0]).sum::<f64>()
 }
 
 /// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots

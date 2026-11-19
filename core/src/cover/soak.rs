@@ -11,13 +11,15 @@ use crate::units::{DAY, GAS_DIFFUSIVITY, GAS_DIFFUSIVITY_MM, R_GAS};
 /// for roots that it holds (`Physics::available`); the share of its pores its liquid fills (past 1 where liquid stands
 /// over them); the depth of its loose ground, m; and the oxidising gas's spread through a root's gas spaces against
 /// what the root's living tissue burns, m² (`breath`): a root of gas share φ keeps (2 breath φ / (1 − φ))^½ m of its
-/// length in that gas (`aired`).
+/// length in that gas (`aired`); and the key liquid that is liquid in the cell's ground outside its land, mol: what the
+/// roots of plants standing under the liquid reach (`footing`).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Soak {
     pub moist: f64,
     pub filled: f64,
     pub loose: f64,
     pub breath: f64,
+    pub pond: f64,
 }
 
 /// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and how its
@@ -37,7 +39,8 @@ pub fn soak(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, Soak) {
     let pores = w.scratch.land_pores(i);
     let filled = depth / pores.max(1e-9);
     let loose = if ph.porosity > 0.0 { pores / ph.porosity } else { 0.0 };
-    (liquid, Soak { moist: ph.available(filled), filled, loose, breath: breath(w, p, i, t) })
+    let pond = (held * molten - liquid).max(0.0);
+    (liquid, Soak { moist: ph.available(filled), filled, loose, breath: breath(w, p, i, t), pond })
 }
 
 /// The oxidising gas's spread through a root's gas spaces against what the root's living tissue burns, at the ground
@@ -79,4 +82,38 @@ pub fn working(phi: f64, need: f64, s: &Soak, ph: &crate::Physics) -> f64 {
     let open = (1.0 - full) * s.loose;
     let standing = (s.filled - 1.0).max(0.0) * s.loose * ph.porosity;
     ((open + aired(s.breath, phi) - standing) / roots).clamp(0.0, 1.0)
+}
+
+/// Where a kind of cover stands in a cell (`footing`): the share of the cell's ground (`cover::ground`) it stands on;
+/// the mean share of its roots that work there (`working`); and the share of that ground that lies under the liquid.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Footing {
+    pub share: f64,
+    pub work: f64,
+    pub wet: f64,
+}
+
+/// Where a kind of gas gene `phi`, rooted `need` m deep, stands in cell `i` of `w`, whose land meets its roots as `land`
+/// (`soak`): on its land, and on each band of its ground under the liquid (`contract::wet`) where its roots work, its
+/// pores full and the band's mean depth standing over them (`working`; its loose ground taken as its land's, and none
+/// where that holds none): one rule for where a plant stands, on land or in
+/// the liquid. A kind of few gas spaces stands on land alone; one of many stands out into the liquid as far as its
+/// gas reaches down its roots (Armstrong 1979), as swamp trees and emergent herbs stand in the liquid to a depth their kind
+/// tolerates (Kozlowski 1997).
+pub fn footing(w: &crate::World, i: usize, phi: f64, need: f64, land: &Soak) -> Footing {
+    let ph = &w.cfg.phys;
+    let l = crate::contract::land(w, i);
+    let (mut on, mut work, mut wet, mut all) = (l, l * working(phi, need, land, ph), 0.0, l);
+    for &[area, depth] in crate::contract::wet(w, i) {
+        all += area;
+        let under = Soak { moist: 1.0, filled: 1.0 + depth / (land.loose * ph.porosity).max(1e-9), ..*land };
+        let works = working(phi, need, &under, ph);
+        if works > 0.0 && land.loose > 0.0 {
+            (on, work, wet) = (on + area, work + area * works, wet + area);
+        }
+    }
+    if on <= 0.0 {
+        return Footing::default();
+    }
+    Footing { share: on / all, work: work / on, wet: wet / on }
 }

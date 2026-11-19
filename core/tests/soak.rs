@@ -42,7 +42,7 @@ fn roots_in_full_pores_breathe_only_through_their_gas_spaces() {
     let breath = cover::breath(&w, &p, i, ph.t_cat);
     assert!(breath > 0.0, "no oxidising gas reaches the roots");
     let (need, loose) = (1.0, 1.0);
-    let soak = |filled: f64| Soak { moist: ph.available(filled), filled, loose, breath };
+    let soak = |filled: f64| Soak { moist: ph.available(filled), filled, loose, breath, pond: 0.0 };
     // What it runs of its light reaction: its activity times the share of its roots that work (`grow::light`).
     let act = |phi: f32, filled: f64| cover::activity(&herb(phi), ph.available(filled)) * cover::working(phi as f64, need, &soak(filled), ph);
     let (few, many) = (0.05, 0.4);
@@ -88,7 +88,7 @@ fn gas_spaces_cost_on_drained_ground_and_pay_on_full_pores() {
             let mut a = testkit::garden(&w, &c, (295.0, 1.0, 200.0, m));
             a.thirst = THIRST;
             if full {
-                a.soak = Soak { moist: 1.0, filled: 1.0, loose: 1.0, breath };
+                a.soak = Soak { moist: 1.0, filled: 1.0, loose: 1.0, breath, pond: 0.0 };
             }
             let _ = cover::live(&w, &mut c, &p, &a, (i, month), &mut counts);
         }
@@ -98,4 +98,27 @@ fn gas_spaces_cost_on_drained_ground_and_pay_on_full_pores() {
     println!("stored past upkeep in half a year, J: drained {dry_few:.4e} (gas share 0.05) {dry_many:.4e} (0.4); full pores {wet_few:.4e} {wet_many:.4e}");
     assert!(dry_few > dry_many, "on drained ground the gas spaces cost nothing: {dry_few} against {dry_many}");
     assert!(wet_many > wet_few, "in full pores the gas spaces gain nothing: {wet_many} against {wet_few}");
+}
+
+/// A kind stands out into the liquid as far as its roots work there (`cover::footing`): in every cell of the small
+/// world a kind of many gas spaces stands on at least the ground a kind of few stands on, and in some cell on more,
+/// where liquid stands over ground shallower than its gas reaches down its roots; where it stands under the liquid its
+/// roots work less than on full pores at the ground's top.
+#[test]
+fn a_kind_stands_out_into_the_liquid_as_far_as_its_roots_breathe() {
+    let (w, _, p) = world();
+    let ph = &w.cfg.phys;
+    let (few, many) = (0.05, 0.6);
+    let mut further = 0;
+    for i in 0..w.mesh.cells().n() {
+        let soak = cover::soak(&w, &p, i, w.g(p.liquid, i)).1;
+        let (a, b) = (cover::footing(&w, i, few, ph.root_least, &soak), cover::footing(&w, i, many, ph.root_least, &soak));
+        assert!(b.share >= a.share, "cell {i}: the kind of many gas spaces stands on {} of the ground, of few on {}", b.share, a.share);
+        if b.share > a.share {
+            further += 1;
+            assert!(b.wet > a.wet && b.work > 0.0 && b.work <= 1.0, "cell {i}: {b:?} against {a:?}");
+        }
+    }
+    println!("{further} cells where the kind of many gas spaces stands farther into the liquid");
+    assert!(further > 0, "no cell holds ground under shallow liquid");
 }

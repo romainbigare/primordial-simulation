@@ -163,7 +163,7 @@ pub fn garden(w: &World, c: &pcore::cover::Cover, (t, moist, sun, tick): (f64, f
     pcore::cover::Around {
         t,
         liquid: if wet { GARDEN_MOL } else { 0.0 },
-        soak: pcore::cover::Soak { moist, filled: w.cfg.phys.wilt + moist * (w.cfg.phys.field - w.cfg.phys.wilt), loose: GARDEN_LOOSE_M, breath: 0.0 },
+        soak: pcore::cover::Soak { moist, filled: w.cfg.phys.wilt + moist * (w.cfg.phys.field - w.cfg.phys.wilt), loose: GARDEN_LOOSE_M, breath: 0.0, pond: 0.0 },
         reach: 1.0,
         light: c.mark + sun * month,
         gas: 1.0,

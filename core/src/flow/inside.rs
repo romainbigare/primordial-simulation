@@ -84,11 +84,11 @@ pub fn land_shares(w: &World, cells: &[usize]) -> Option<Vec<f64>> {
     Some((0..cells.len()).map(one).collect())
 }
 
-/// Of each of `cells`: its ground under the liquid that stands over its pores, by the depth of the liquid over it
-/// (`curve::Fill::bands`): of each band of depths from `edges[k]` to `edges[k + 1]`, m, its share of the cell's area,
-/// 0..1, and the mean depth of the liquid over it, m (0 where the band holds no ground). By Flow's state of the ground;
-/// None before Flow first built the state.
-pub fn wet_bands(w: &World, cells: &[usize], edges: &[f64]) -> Option<Vec<Vec<[f64; 2]>>> {
+/// Of each of `cells`: the share of its area that is land (as `land_shares`), and its ground under the liquid that
+/// stands over its pores, by the depth of the liquid over it (`curve::Fill::bands`): of each band of depths from
+/// `edges[k]` to `edges[k + 1]`, m, its share of the cell's area, 0..1, and the mean depth of the liquid over it, m (0
+/// where the band holds no ground). By Flow's state of the ground; None before Flow first built the state.
+pub fn wet_bands(w: &World, cells: &[usize], edges: &[f64]) -> Option<Vec<(f64, Vec<[f64; 2]>)>> {
     if !stated(w) {
         return None;
     }
@@ -96,8 +96,8 @@ pub fn wet_bands(w: &World, cells: &[usize], edges: &[f64]) -> Option<Vec<Vec<[f
     let area = w.mesh.cells().area();
     let one = |c: usize| {
         let stands = (x.vol[c] - x.vol[c].min(x.pores[c])).max(0.0);
-        let bands = with_fill(w, &w.scratch, cells[c], |f| f.bands(stands, edges));
-        bands.iter().map(|&[a, v]| [a / area[cells[c]], if a > 0.0 { v / a } else { 0.0 }]).collect()
+        let (land, bands) = with_fill(w, &w.scratch, cells[c], |f| (1.0 - f.wet(stands), f.bands(stands, edges)));
+        (land, bands.iter().map(|&[a, v]| [a / area[cells[c]], if a > 0.0 { v / a } else { 0.0 }]).collect())
     };
     Some((0..cells.len()).map(one).collect())
 }

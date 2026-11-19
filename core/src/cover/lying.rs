@@ -106,16 +106,17 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         counts.seeds[WORN] += worn * kg;
         counts.seeds[FROZEN] += (1.0 - worn) * cold * kg;
         let dies = 1.0 - (1.0 - worn) * (1.0 - cold);
-        // A seed is dry tissue: it wakes as the liquid it can take in lets it, by the seeds' rule (`Physics::activity`),
-        // and as far as its first roots get the oxidising gas (`working`, at the least root need); on no ground (all under
-        // the standing liquid) it waits.
-        let breathes = super::working(g[GAS] as f64, ph.root_least, &a.soak, ph);
-        let wakes = if area > 0.0 { (ph.activity(a.soak.moist / dec(g[MOIST])) * pace * breathes).min(1.0) * (1.0 - dies) } else { 0.0 };
+        // A seed is dry tissue: it wakes as the liquid it can take in lets it, by the seeds' rule (`Physics::activity`;
+        // full under the liquid), and as far as its first roots get the oxidising gas, on the ground its kind stands on
+        // at the least root need (`footing`); where that is none it waits.
+        let foot = super::footing(w, i, g[GAS] as f64, ph.root_least, &a.soak);
+        let wet = ph.activity(a.soak.moist / dec(g[MOIST])) * (1.0 - foot.wet) + foot.wet;
+        let wakes = if area * foot.share > 0.0 { (wet * pace * foot.work).min(1.0) * (1.0 - dies) } else { 0.0 };
         let (gone, up): ([f64; NP], [f64; NP]) = (lot.map(|m| m * dies), lot.map(|m| m * wakes));
         budget[SEEDS_DIED] -= held(&e, &gone);
         (0..NP).for_each(|q| dead[q] += gone[q]);
         // What wakes takes hold where the cover has room for it (`seed::lodge`); else it stays lying.
-        let woke = up.iter().any(|&m| m > 0.0) && match lodge(c, &mm, &Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 }, &w.cfg, area) {
+        let woke = up.iter().any(|&m| m > 0.0) && match lodge(c, &mm, &Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 }, &w.cfg, (area, foot.share)) {
             Landed::In => true,
             Landed::Out(m) => {
                 budget[DIED] -= held(&e, &m);

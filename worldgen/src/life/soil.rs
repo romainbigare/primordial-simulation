@@ -22,5 +22,5 @@ pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
         }
         said.push(format!("{per:.3} mol per m2 of substance {s} ({:.1} g per m2, {:.3e} kg in all)", per * w.chem.subs[s].molar_mass * 1000.0, per * all * w.chem.subs[s].molar_mass));
     }
-    format!("year {:.1}: soil on {} land cells (not under standing liquid): {}", w.year(), land.len(), said.join(", "))
+    format!("year {:.1}: soil on {} land cells: {}", w.year(), land.len(), said.join(", "))
 }

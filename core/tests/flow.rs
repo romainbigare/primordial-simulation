@@ -1310,9 +1310,10 @@ fn the_wet_bands_of_a_cell_hold_its_ground_under_the_liquid() {
         pcore::step(&mut w);
         let (land, bands) = (pcore::flow::land_shares(&w, &all).unwrap(), pcore::flow::wet_bands(&w, &all, &edges).unwrap());
         for &i in &all {
-            let under: f64 = bands[i].iter().map(|b| b[0]).sum();
+            let under: f64 = bands[i].1.iter().map(|b| b[0]).sum();
+            assert_eq!(bands[i].0, land[i], "cell {i}: two land shares");
             assert!((under - (1.0 - land[i])).abs() < 1e-9, "cell {i}: bands hold {under} of the cell, its land {}", land[i]);
-            for (k, b) in bands[i].iter().enumerate().filter(|(_, b)| b[0] > 0.0) {
+            for (k, b) in bands[i].1.iter().enumerate().filter(|(_, b)| b[0] > 0.0) {
                 assert!(b[1] >= edges[k] - 1e-9 && b[1] <= edges[k + 1] + 1e-9, "cell {i}: band {k} holds a mean depth of {} m", b[1]);
             }
             wet += (under > 0.0) as usize;

@@ -348,11 +348,11 @@ fn seeds_take_the_slot_in_deficit() {
     for k in 0..cfg.variety {
         let mut v = g;
         v[FROST] -= 3.0 * step * k as f32;
-        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &cfg, 1.0), cover::Landed::In));
+        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &cfg, (1.0, 1.0)), cover::Landed::In));
     }
     (c.net[1], c.net[2]) = (-1.0, -3.0);
     let (held, worst) = (c.clone(), c.mol[2]);
-    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &cfg, 1.0) else { panic!("the seeds took no slot in deficit") };
+    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &cfg, (1.0, 1.0)) else { panic!("the seeds took no slot in deficit") };
     assert_eq!(died, worst, "the worst in deficit gave way");
     assert_eq!(c.root[2], 9, "the new kind holds the slot");
     for x in [0, 1, 3] {
@@ -570,10 +570,10 @@ fn the_cover_lives_on_its_cells_land() {
     assert!((a / b - 1.0).abs() < 1e-9, "{a} kg per m2 of land on the whole cell, {b} on the shore cell");
 }
 
-/// Ground that goes under the standing liquid takes the plants on it (`cover::live`): a stand whose ground is half
-/// what it stood on at its last month loses half of every slot as whole plants (counted as drowned, `life::DROWNED`),
-/// each plant left keeping its mass; on no ground (all of a cell under the liquid) it holds no plants at all, and
-/// what it held goes to its remains, mol for mol.
+/// Ground a stand no longer stands on takes the plants on it (`cover::live`): a stand that stands on half the ground it
+/// stood on at its last month loses half of every slot as whole plants (counted as drowned, `life::DROWNED`), each
+/// plant left keeping its mass; in a cell where its kind stands nowhere (all under liquid deeper than its roots work in,
+/// `cover::footing`) it holds no plants at all, and what it held goes to its remains, mol for mol.
 #[test]
 fn ground_under_the_liquid_takes_the_plants_on_it() {
     let (mut w, i) = start();
@@ -584,7 +584,7 @@ fn ground_under_the_liquid_takes_the_plants_on_it() {
     let x = start.held().next().expect("the stand");
     let (kg, plant) = (start.kg(&mm, x), start.built(&mm, x) / start.count(x));
     let mut half = start.clone();
-    half.land = 2.0 * area;
+    half.stood[x] = 2.0 * area * half.stands[x] as f64;
     let mut counts = w.counts.clone();
     let a = testkit::garden(&w, &half, (290.0, 1.0, 0.0, 0));
     let _ = cover::live(&w, &mut half, &p, &a, (i, month), &mut counts);
@@ -592,8 +592,10 @@ fn ground_under_the_liquid_takes_the_plants_on_it() {
     assert!((drowned / (0.5 * kg) - 1.0).abs() < 1e-12, "{drowned} kg drowned of {kg} kg on half its ground");
     let left = half.built(&mm, x) / half.count(x);
     assert!(left >= plant, "a plant left holds {left} kg, it held {plant} kg");
-    // A cell with no land: the stand placed there drowns whole, all of it to its remains.
-    let under = (0..w.mesh.cells().n()).find(|&j| contract::land(&w, j) <= 0.0).expect("a cell with no land");
+    // A cell where the tree kind stands nowhere: the stand placed there drowns whole, all of it to its remains.
+    let soak = |j: usize| cover::soak(&w, &p, j, w.g(p.liquid, j)).1;
+    let nowhere = |j: usize| cover::footing(&w, j, TREE.genes[cover::GAS] as f64, w.cfg.phys.root_least, &soak(j)).share <= 0.0;
+    let under = (0..w.mesh.cells().n()).find(|&j| nowhere(j)).expect("a cell under deep liquid");
     let mut gone = start.clone();
     let mut counts = w.counts.clone();
     let held = gone.amounts(&p);
