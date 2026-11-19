@@ -8,7 +8,7 @@ import { World } from './data';
 import { kindsOf } from './canopy';
 import { cooling } from './style';
 import { CoverMarks, Marks } from './textures';
-import { Draw, Format, Gpu, Pass } from './gpu';
+import { Draw, Format, Gpu, Made, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
 
@@ -45,9 +45,9 @@ export class Vegetation implements GpuLayer {
   }
 
   /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` px of the
-   * target and `seen` px of the screen a css px, in a view `W` x `H` css px, before the map's pass (textures.ts
-   * `prepare`). */
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number): void {
+   * target and `seen` px of the screen a css px, in a view `W` x `H` css px, before the map's pass, adding to
+   * `waiting` the programs it goes without (textures.ts `prepare`). */
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number, waiting: Made[]): void {
     this.drawn = null;
     const land = this.land?.lawBinds(gpu);
     if (!land) return;
@@ -57,7 +57,7 @@ export class Vegetation implements GpuLayer {
     const x1 = Math.ceil(Math.min(ox + this.mapW * s, W) * d), y1 = Math.ceil(Math.min(oy + this.mapH * s, H) * d);
     if (x1 <= x0 || y1 <= y0) return;
     this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land };
-    this.marks.prepare(gpu, this.drawn);
+    this.marks.prepare(gpu, this.drawn, waiting);
   }
 
   warm(gpu: Gpu, targets: (Format | null)[]): void { this.marks.warm(gpu, targets); }

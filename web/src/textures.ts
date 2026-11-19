@@ -5,7 +5,8 @@
 // marks over the map (`draw`), each plant standing up from its foot, drawn from its rendered model.
 // Each lattice lies fixed in the world, one mark a cell, so the marks hold while the camera moves, and a pan or a zoom
 // shows them at once.
-import { Draw, Format, Gpu, Pass, Texture, Uniforms } from './gpu';
+import { Draw, Format, Gpu, Made, Pass, Texture, Uniforms, notMade } from './gpu';
+import { MAP_TARGET } from './map';
 import { FIELD, Kinds, PLANES_DOWN, half } from './canopy';
 import { LATTICES, REACH, ROWS_MOST, STAND } from './lattices';
 import { groundDetail } from './detail';
@@ -39,6 +40,9 @@ export class CoverMarks {
   private decided: Draw['binds'] | null = null;
   private marksTex: Texture[] = [];
   private reachTex: Texture | null = null;
+  /** Whether the programs that decide and draw the marks are made (`prepare`): till then no lattice shows as marks, and
+   * the ground draws all the cover as its field, as it does far away. */
+  private made = false;
 
   /** `alpha`: how strongly the cover covers the map. */
   constructor(private alpha: number) {}
@@ -52,7 +56,7 @@ export class CoverMarks {
   /** Of each lattice, 1 where a pixel of the screen takes `mpp` m and its widest marks take enough pixels to show as
    * things (each shows by its own width, lib/mark.wgsl `decide`), else 0: none of its marks is drawn. */
   private shown(mpp: number): number[] {
-    return LATTICES.map((_, l) => ((this.kinds?.widest[l] ?? 0) >= THING_LEAST_PX * mpp ? 1 : 0));
+    return LATTICES.map((_, l) => (this.made && (this.kinds?.widest[l] ?? 0) >= THING_LEAST_PX * mpp ? 1 : 0));
   }
 
   /** Send what waits to the GPU. */
@@ -81,12 +85,19 @@ export class CoverMarks {
   }
 
   /** Decide each mark of draw `m` on `gpu` once, before the map's pass: a texel a cell in view of each lattice that
-   * shows, its rows below the last's (web/shaders/marks.wgsl). None before the rendered models are loaded: the marks
-   * are drawn from them. */
-  prepare(gpu: Gpu, m: Marks): void {
+   * shows, its rows below the last's (web/shaders/marks.wgsl). None before the rendered models are loaded (the marks
+   * are drawn from them), nor before the programs that decide and draw them are made for the map's targets (those not
+   * made are added to `waiting`, and made first). */
+  prepare(gpu: Gpu, m: Marks, waiting: Made[]): void {
     this.decided = null;
-    const k = this.kinds, shown = this.shown(m.seenMpp), detail = groundDetail(gpu);
-    if (!k || shown.every(s => s <= 0) || detail.w <= 1) return;
+    this.made = true;
+    const k = this.kinds, detail = groundDetail(gpu);
+    if (!k || this.shown(m.seenMpp).every(s => s <= 0) || detail.w <= 1) return;
+    const missing = notMade(gpu, [['marks', MARKS_FORMAT, false], ['reach', MARKS_FORMAT, false], ['cover', null, true], ['cover', MAP_TARGET, true]]);
+    waiting.push(...missing);
+    this.made = !missing.length;
+    if (!this.made) return;
+    const shown = this.shown(m.seenMpp);
     const size = [m.rect[2] * m.mpp, m.rect[3] * m.mpp];
     // Each lattice's cell at the draw's corner, split into its whole number and its fraction in double precision, so
     // the GPU's single precision only counts the cells across the view.
@@ -112,12 +123,13 @@ export class CoverMarks {
     grids.forEach((_, l) => u.vec4(REACH[l]));
     grids.forEach(g => u.ivec4(...g.base));
     const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.seenMpp), 1: u.buffer, 4: this.tableTex!, 20: detail, 21: 'tile' };
-    // Each word of the marks, then from them the cells whose marks reach each cell (web/shaders/reach.wgsl).
+    // The marks' four words at once, a texture each, then from them the cells whose marks reach each cell
+    // (web/shaders/reach.wgsl).
     const cellsOf = (p: Pass, name: string, drawn: Draw['binds']) => {
       for (const g of grids) if (g.cells.rows > 0) p.draw(name, { rect: [0, g.cells.row, g.cells.cols, g.cells.rows], binds: drawn }, false);
       p.end();
     };
-    this.marksTex.forEach((t, word) => cellsOf(gpu.pass(t), 'marks', { ...binds, 2: new Uniforms(1).ivec4(word).buffer }));
+    cellsOf(gpu.pass(this.marksTex), 'marks', binds);
     const decided = { ...binds, ...Object.fromEntries(MARK_BINDINGS.map((b, word) => [b, this.marksTex[word]])) };
     cellsOf(gpu.pass(this.reachTex!), 'reach', decided);
     this.decided = { ...decided, [REACH_BINDING]: this.reachTex! };

@@ -1,17 +1,20 @@
 // uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl
 // The marks of the plant cover's cells in view, decided once a frame (lib/mark.wgsl `decide`): a texel a cell, each
-// lattice's cells in rows of their own (`cover.rows`), drawn before the map (web/src/textures.ts `prepare`), one of its
-// words (`MarkWord`) into each of the marks' textures.
+// lattice's cells in rows of their own (`cover.rows`), drawn before the map (web/src/textures.ts `prepare`), each of
+// its words (lib/cells.wgsl `mark_word`) into one of the marks' textures, all four at once.
 
-// The word of the marks drawn (lib/cells.wgsl `mark_word`).
-struct MarkWord { word: vec4i }
-@group(0) @binding(2) var<uniform> mark_word_drawn: MarkWord;
+struct MarkWords {
+  @location(0) kind: vec4f,
+  @location(1) shows: vec4f,
+  @location(2) snow: vec4f,
+  @location(3) box: vec4f,
+}
 
-@fragment fn fs(v: Varying) -> @location(0) vec4f {
+@fragment fn fs(v: Varying) -> MarkWords {
   let t = vec2i(floor(v.px));
   // The lattice whose rows hold the texel: the last that starts at or above it.
   var l = 0;
   for (var k = 1; k < COVER_LATTICES; k++) { if (f32(t.y) >= cover.rows[k]) { l = k; } }
   let m = decide(l, vec2f(f32(t.x - MARK_MARGIN), f32(t.y - i32(cover.rows[l]) - MARK_MARGIN)));
-  return mark_word(m, mark_word_drawn.word.x);
+  return MarkWords(mark_word(m, 0), mark_word(m, 1), mark_word(m, 2), mark_word(m, 3));
 }

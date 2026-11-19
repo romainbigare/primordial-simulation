@@ -1,8 +1,9 @@
 // The ground's detail's strips (detail.ts) made into the levels of one texture array, off the page's thread: a Web
 // Worker of its own, built into the page as text (build.mjs) and started from a Blob by detail.ts. It takes the strips'
-// images, one after another down one canvas, how many of the last layers are the trees', the side of their layers and
-// the cover a cut-out texel shows from, and
-// answers with the levels (`photoMips`) and the layers.
+// images, one after another, how many of the last layers are the trees', the side of their layers and the cover a
+// cut-out texel shows from, and answers layer by layer with its number and its levels (`photoMips`): one layer is read
+// from its strip at a time, so neither a canvas nor what is kept grows with the strips (a phone's browser draws no
+// canvas past a few million pixels).
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<{ strips: ImageBitmap[]; trees: number; side: number; cut: number }>) => void) | null };
 
@@ -49,11 +50,17 @@ function keepShown(level: Uint8Array, l: number, n: number, shown: number, cut: 
 host.onmessage = e => {
   const { strips, trees, side, cut } = e.data;
   const layers = strips.reduce((n, s) => n + s.height / side, 0);
-  const c = new OffscreenCanvas(side, side * layers), g = c.getContext('2d')!;
-  let at = 0;
-  for (const s of strips) { g.drawImage(s, 0, at); at += s.height; s.close(); }
-  const levels = photoMips(new Uint8Array(g.getImageData(0, 0, side, side * layers).data.buffer), layers, layers - trees, side, cut);
-  host.postMessage({ levels, layers }, levels.map(l => l.buffer));
+  const c = new OffscreenCanvas(side, side), g = c.getContext('2d')!;
+  let layer = 0;
+  for (const s of strips) {
+    for (let y = 0; y < s.height; y += side, layer++) {
+      g.clearRect(0, 0, side, side);
+      g.drawImage(s, 0, -y);
+      const levels = photoMips(new Uint8Array(g.getImageData(0, 0, side, side).data.buffer), 1, layer >= layers - trees ? 0 : 1, side, cut);
+      host.postMessage({ layer, levels }, levels.map(l => l.buffer));
+    }
+    s.close();
+  }
 };
 
 export {};
