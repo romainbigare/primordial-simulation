@@ -25,7 +25,7 @@ if (embed) writeFileSync('dist/standalone.html',
 // The ground's photographs and plants, beside the page (detail.ts).
 copyFileSync('textures/ground.jpg', 'dist/ground.jpg');
 copyFileSync('textures/carpets.jpg', 'dist/carpets.jpg');
-for (const f of [...strips.models, ...strips.trees]) copyFileSync(`textures/${f}`, `dist/${f}`);
+for (const f of [...strips.models, ...strips.heights, ...strips.trees]) copyFileSync(`textures/${f}`, `dist/${f}`);
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
 console.log(`dist/index.html ${(html.length / 1024).toFixed(1)} KB`);

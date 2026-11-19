@@ -72,13 +72,19 @@ leaves are scaled to (texels whose green stands out, as the page tells leaves: t
 leaves differ several times in lightness as the files have them), and the sets the page draws from; a model with a
 `file` is read from that file under `assets/` (the Sketchfab models, downloaded by hand from the links below into
 `assets/sketchfab/<the model's id>/`: a glTF model's `scene.gltf`, an FBX model's finest level, `source/..._LOD0.fbx`,
-each with its textures). With the files fetched (`fetch.sh assets` also downloads the Poly Haven models `sprites.json`
+each with its textures). The models that stand in water (`height`: the bald cypress, the mangrove, the reeds, cattails and
+rushes) are rendered once more in the same frame with each texel's height over the ground as a share of the sprite's
+height for its grey (held to 1), at half a tree's side, four to a 512 x 512 layer of `heights.png`; with them the
+bake writes `heights.wgsl` (`web/shaders/lib/heights.wgsl`): which sprites have heights, and of each the height of its
+stem's foot (the middle of its model's box on the ground) over its lowest point. The mangrove is cut at 0.09 of its
+height: its prop roots end in the ground there, and only a few root tips reach lower. With the files fetched (`fetch.sh assets` also downloads the Poly Haven models `sprites.json`
 names) and served as for the carpets, `node sprites.cjs sprites.json out` writes the strips, `out/models.png` and
 `out/trees.png`, each split into more files of whole layers (`trees2.png`, ...) where one would be over 12 MB (the bake
 tool's `STRIP_BYTES`: the owner's page host takes no file over 15 MB), `out/strips.json`, the strips' files in their
 layers' order (`web/textures/strips.json`, which the page is built with), and `out/sprites.wgsl`, the table the page reads (`web/shaders/lib/sprites.wgsl`: each set's first sprite and count, each
-sprite's width, height, mean cover and mean leaf lightness); `node sprites.cjs sprites.json out <model>...` writes those
-models' sprites alone, to compare.
+sprite's width, height, mean cover and mean leaf lightness) with the heights' strip and table; `node sprites.cjs
+sprites.json out <model>...` writes those models' sprites alone, to compare; `node sprites.cjs sprites.json out
+--heights` the heights alone.
 
 | strip | sprites (sets) |
 |---|---|

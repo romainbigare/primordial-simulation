@@ -5,5 +5,8 @@
  "trees": [
   "trees.png",
   "trees2.png"
+ ],
+ "heights": [
+  "heights.png"
  ]
 }
