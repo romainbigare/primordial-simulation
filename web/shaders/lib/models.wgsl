@@ -158,7 +158,8 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   var bare = vec4f(0.0);
   if (kept < 1.0) { bare = bare_texel(s, uv, e / w); }
   var t = model_texel(s, uv, e / w);
-  if (q.design == TREE && q.wet > 0.0 && s < TREES) { t = flared_foot(t, s, uv, e / w, q.wet); }
+  let feet = wide_feet(q, s);
+  if (feet > 0.0) { t = flared_foot(t, s, uv, e / w, feet); }
   let a = dense_cover(s, t.a, fit.dense) * kept;
   if (a + bare.a <= 0.0) { return vec4f(0.0); }
   let lum = dot(t.rgb, LUMA);
@@ -193,6 +194,10 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));
   return select(BUSH_SHADOW, 1.0, q.design == TREE) * SHADOW * kept * edge;
 }
+
+// How wide the feet tree q drawn from sprite s stands on, 0..1: as wet as its kind's ground (form.ts `Form.wet`); drawn as
+// a flare at the trunk's foot (`flared_foot`).
+fn wide_feet(q: Plant, s: i32) -> f32 { return select(0.0, q.wet, q.design == TREE && s < TREES); }
 
 // A tree of wet ground stands on a flared foot: buttresses and the tops of its roots spread its trunk at the ground, to
 // `FOOT_FLARE` times its width at most (the kind of wettest ground), over the lowest `FOOT_RISE` of its trunk's
