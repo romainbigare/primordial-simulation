@@ -69,6 +69,9 @@ struct S {
     /// MPa (`Substance::shear`); optional in the file (none: 0)
     #[serde(default)]
     shear: f64,
+    /// Held on the faces of fine particles (`Substance::bound`); optional in the file (none: not)
+    #[serde(default)]
+    bound: bool,
 }
 
 #[derive(Deserialize)]
@@ -139,6 +142,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             lf: s.lf.map_or(RICHARDS * s.melt, |l| l * 1000.0),
             rupture: s.rupture * 1e6,
             shear: s.shear * 1e6,
+            bound: s.bound,
         })
         .collect();
     let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, open: r.open.unwrap_or(1.0), ord: r.ord }).collect();

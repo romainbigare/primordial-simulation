@@ -77,9 +77,8 @@ pub fn aired(breath: f64, phi: f64) -> f64 {
 /// the gas (`aired`), less the depth of liquid standing over the ground, which that gas crosses first (Armstrong 1979;
 /// Feddes, Kowalik and Zaradny 1978: none at saturation for a plant with no gas spaces).
 pub fn working(phi: f64, need: f64, s: &Soak) -> f64 {
-    let (roots, field) = (need.min(s.loose).max(1e-9), s.pores.field);
-    let full = ((s.filled - field) / (1.0 - field).max(1e-9)).clamp(0.0, 1.0);
-    let open = (1.0 - full) * s.loose;
+    let roots = need.min(s.loose).max(1e-9);
+    let open = (1.0 - s.pores.full(s.filled)) * s.loose;
     let standing = (s.filled - 1.0).max(0.0) * s.loose * s.pores.porosity;
     ((open + aired(s.breath, phi) - standing) / roots).clamp(0.0, 1.0)
 }

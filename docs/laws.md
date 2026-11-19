@@ -462,7 +462,11 @@ what the heat holds molten, as every law and the shell then read it.
 The head lost by moving liquid does work where it is lost on land (`flow::runoff::erode`, `wear`; in a body and below
 0 m it wears nothing): in each land cell, g times what runs through each of its samples in no pond in the month, kg,
 times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
-**carries** up to `carry` m³ of loose solids per J of the cell's work (at most all that lies loose), which go with the
+**carries** up to `carry` m³ of loose solids per J of the cell's work times its loose ground's erodibility against a
+loam's (`Texture::erodibility`: M^1.14 (12 − OM) of Wischmeier and Smith 1978, M its middle share times its share
+that is not fine, OM its organic per cent read to 4; middle particles are carried most easily, coarse ones are heavy,
+fine ones and organic matter bind; a coarse or a fine ground carries a tenth to a third of a loam's, one of middle
+particles up to four times) (at most all that lies loose), which go with the
 cell's runoff to the cells its ways land in, where they settle, and with the work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
 bed per J over its strength into loose ground. The load is booked apart from the liquid (`runoff::Crossings`), each
 with its own heat. **Known limit:** the load goes straight from the cell to the cells its ways land in, as the liquid
@@ -825,6 +829,11 @@ conversion the cover runs, paid by work (3).
 Its own gas and its cell's share of the air. **Under standing liquid** only the gas dissolved there, renewed through
 the liquid's film in τ = depth / `dissolve` (`FlowView::standing`): a gas it takes is held at Henry's share × (1 +
 made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast as the film brings the oxidising gas.
+**In full pores** (on ground with no liquid standing over it): a reaction of the open world that takes a gas (the
+decomposers' rot) runs only in the share of the node whose pores hold gas, 1 − the share full of liquid
+(`Pores::full`: what the ground holds over field capacity fills its pores from the bottom up, the same rule by which
+roots in full pores get no gas, 3). So ground whose pores stay full keeps its dead matter and builds organic ground,
+as peat builds on wet flat ground (Clymo 1984).
 
 ### 2.4 Phases and the freezing law
 Solid, liquid or gas by melting and boiling points (`Chemistry::phase`). A liquid's melting point in a mixture falls by
@@ -861,10 +870,13 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substance
 | 11 | the rock salt, lives dissolved (≈ Ca(HCO3)2) |
 | 12 | the nitrogen mineral, lives dissolved |
 | 13 | the frame, a solid bodies build (≈ cellulose) |
+| 14 | the slow organic matter, held on fine and middle particles (`bound`; ≈ humus): C59H78N6O42 |
 
 Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 3 burning and making fat; 4 burning
 methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
-of the frame; 13 splitting the frame into sugar (needs an enzyme). Dead matter rots in moist open ground at a litter
+of the frame; 13 splitting the frame into sugar (needs an enzyme); 14 body matter rotting into the slow organic matter
+(beside 7, at a quarter of its rate: a fifth of what rots of it goes this way, keeping half its carbon and all its
+nitrogen); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). Dead matter rots in moist open ground at a litter
 constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
 work): matter from 118 sugar + 3 nitrogen mineral; frame from 6 sugar.
 `Chemistry::minerals` are growth's inputs no reaction burns (12), `materials` the solids bodies build (13).
@@ -1318,8 +1330,7 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
 
 ## 4. Soil and minerals
 **Texture** (`soil`): the loose ground of each of the terrain's samples is fine grain (under 2 µm), middle grain
-(2 to 50 µm) and coarse grain (50 µm to 2 mm), each class spread evenly over the logarithm of its sizes, and an organic
-share no law makes yet. Three laws, over what the wear at the world's start left (0), set the shares
+(2 to 50 µm) and coarse grain (50 µm to 2 mm), each class spread evenly over the logarithm of its sizes; and organic matter, of each cell (below). Three laws, over what the wear at the world's start left (0), set the shares
 (`soil::samples`); no table places a kind of soil:
 - **The bed's grains.** Each make breaks into coarse grain by its substances' hardness and into middle grain by the
   rest, means by their volume shares (`Make::coarse`, `worldgen::makes_of`): a hard grain keeps its size as it is
@@ -1346,20 +1357,45 @@ share no law makes yet. Three laws, over what the wear at the world's start left
 A cell's texture (`World::soil`, found when the world is built) is its samples' mean weighted by the loose ground each
 gives its ground node (at most `skin_m` of it; by area where it holds none).
 
+**Organic matter** (`soil::month`, at each month's start): a cell's organic share is the share of the volume of its
+ground node's solids that stay solid at the surface (not its frozen liquid) that is of the substances life's parts are
+made of or that its particles hold (`Substance::bound`, the slow organic matter 14). **The slow pool**: a fifth of the
+body matter that rots becomes the slow organic matter (reaction 14), which rots 25 times slower (15), slower again by
+the share `SHELTERED` (0.75) × its fine and middle particles' share (`Texture::shelters`: the texture slows the rot of
+the organic matter held on mineral faces, Parton et al. 1987; Six et al. 2002): 25 years on coarse ground, a century
+on ground of fine and middle particles alone, at 290 K moist. So it builds over decades to centuries, most where the
+ground is fine, and holds its nitrogen from the plants until it rots. The fresh dead matter is the dead matter its cover and its takers leave on its ground (3, 3b), which rots there by the open world's
+reactions (1, 7, 12; 2.1), faster where the ground is warm and moist and slower under standing liquid, where the
+oxidising gas comes only through the liquid's film (2.3). No store of its own: it is what the ground holds. So ground
+under a dense cover grows richer in organic matter and holds more liquid, and bare ground loses it: the soil and its
+cover shape each other. Where the share moves, the cell's pores are found again (`flow::new_pores`): the liquid they
+hold or let stand rises or falls with them, and its potential energy goes to or from the ground's heat.
+
 **Pores** (`soil::Pores`, `World::pores`): each cell's porosity θs, field capacity θ33 (the liquid held at −33 kPa)
-and wilting point θ1500 (−1500 kPa), and its conductivity when full Ks follow from its texture by the regressions of
-Saxton and Rawls (2006) on the coarse share S, the fine share C and the organic matter (per cent by weight), with S,
-C and the organic share held inside the range they hold for (C 0.05 to 0.6, S 0.05 to 0.95, organic to 0.025, past which at the most fine they put field capacity over full):
-θ1500 and θ33 each a fitted sum of S, C, OM, S·OM, C·OM, S·C and one, then a fitted second step on it; θs = θ33 + the
-fitted share between field capacity and full − 0.097 S + 0.043; Ks = 1930 (θs − θ33)^(3 − λ) mm an hour, λ = ln(θ33
-/ θ1500) / ln(1500 / 33). Flow keeps field capacity and the wilting point as shares of the pores (θ33 / θs, θ1500 /
-θs). A loam (0.4 coarse, 0.2 fine) has 0.39 of pores, 0.64 of them at field capacity, 0.31 at the wilting point,
-and passes 2.2e-6 m/s; a coarse ground passes up to 3e-5 m/s and holds a quarter of a loam's liquid for roots, a fine one under
-1e-8 m/s. So coarse ground takes the rain in fast and holds little of it; fine ground sheds what falls faster than
-it passes, and holds more, much of it past the roots' reach (1.2, 1.5, 3).
+and wilting point θ1500 (−1500 kPa), and its conductivity when full Ks. Its mineral part's follow from its texture by
+the regressions of Saxton and Rawls (2006) on the coarse share S and the fine share C with no organic matter, held
+inside the range they are fitted to (C 0.05 to 0.6, S 0.05 to 0.95): θ1500 and θ33 each a fitted sum of S, C, S·C and
+one, then a fitted second step on it; θs = θ33 + the fitted share between field capacity and full − 0.097 S + 0.043;
+Ks = 1930 (θs − θ33)^(3 − λ) mm an hour, λ = ln(θ33 / θ1500) / ln(1500 / 33). Its organic part is decomposed organic
+ground: 0.85 of pores, 0.6 of its volume held at field capacity, 0.3 at the wilting point, 1e-6 m/s (`ORGANIC`). The
+two mix by the organic share o: θs, θ33 and θ1500 by volume, Ks as (1 − o) ln Ks + o ln Ks of each (any share
+works). Flow keeps field capacity and the wilting point as shares of the pores (θ33 / θs, θ1500 / θs). A loam (0.4
+coarse, 0.2 fine) has 0.39 of pores, 0.64 of them at field capacity, 0.31 at the wilting point, and passes 2.2e-6
+m/s; a coarse ground passes up to 3e-5 m/s and holds a quarter of a loam's liquid for roots, a fine one under 1e-8
+m/s. So coarse ground takes the rain in fast and holds little of it; fine ground sheds what falls faster than it
+passes, and holds more, much of it past the roots' reach (1.2, 1.5, 3).
 
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
-and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
+and the sea and fertility differs by place. **Exchange sites** (`soil::exchange`): the charged faces of a cell's fine
+particles and its organic matter hold a share of its dissolved minerals in a linear balance with what stays
+dissolved: sites of 1,060 mol of charge a m³ of fine particles and 2,800 a m³ of organic matter (`SITES_FINE`,
+`SITES_ORGANIC`), each holding the minerals of 0.04 m³ of the liquid (`HELD_PER_SITE`), so the sites hold those of
+`Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral in V m³ of
+liquid stays dissolved (`soil::dissolved`). Only that share moves with the liquid that sinks, flows through the pores
+and runs off (`flow::liquid::mobile`, `basin::movable`); the rest stays in the ground node, where roots take from all
+of it (the sites give back to the liquid as fast as roots take from it). So coarse ground lets the rain wash its
+minerals away and fine and organic ground keeps them: a loam's 2 m of loose ground holds some 97% of its minerals
+on its sites at field capacity, a coarse ground some 90%, so the coarse loses them three to four times as fast. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
 per m² of land, on every open land cell; then only fixing adds it, rotting (7) returns it, heat (11) sends it
 to the air. Body matter holds no rock element: the **rock salt (11)** is rock chemistry, made in wet cells from lime
 (8), turned back by 9, near balance (2.5).
