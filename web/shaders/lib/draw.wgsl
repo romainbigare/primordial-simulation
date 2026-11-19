@@ -188,12 +188,12 @@ fn snow_depth(ice_m: f32, t: f32, melt: f32) -> f32 { return SNOW_PER_ICE * ice_
 
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
 // samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
-// From this depth on it is water, and no land plant stands in it (its roots need air in the soil): one rule for the
-// water drawn and for the plants.
+// From this depth on it is water, and a plant stands in it only as deep as its roots' gas spaces reach (the core's
+// `cover::aired`, a kind's reach): one rule for the water drawn and for the plants.
 const FILM_M = 0.05;
-// The share of a plant that stands where liquid stands `depth` m deep: all of it on soaked ground under a film, none
-// in water.
-fn above_water(depth: f32) -> f32 { return select(1.0, 0.0, depth >= FILM_M); }
+// The share of a plant whose roots stand in liquid `reach` m deep that stands where liquid stands `depth` m deep: all
+// of it on soaked ground under a film and in liquid shallower than its reach, none deeper.
+fn stands_in(depth: f32, reach: f32) -> f32 { return select(1.0, 0.0, depth >= max(FILM_M, reach)); }
 // Snow buries a plant `height` m tall as it reaches from `BURIED_FROM` of its height to all of it: a herb is gone under
 // a deep snow, a tree stands in it.
 const BURIED_FROM = 0.6;

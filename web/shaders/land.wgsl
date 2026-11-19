@@ -116,6 +116,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.cover = cf.cover;
   p.canopy = cf.canopy;
   p.shed = cf.shed;
+  p.reach = cf.reach;
   p.rock = bare;
   p.bed = vec3f(0.0);
   // Its channel's stones (`stony`), and the scree's place below the bed that sheds it: where the loose ground deepens

@@ -39,7 +39,8 @@ fn chance_plane(l: i32, t: i32) -> i32 { return l * kinds_n() + t; }
 fn need_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + q; }
 fn roots_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + groups() + q; }
 fn label_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 2 * groups() + q; }
-fn kind_plane(at: i32, t: i32) -> i32 { return COVER_LATTICES * kinds_n() + 3 * groups() + at * kinds_n() + t; }
+fn reach_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 3 * groups() + q; }
+fn kind_plane(at: i32, t: i32) -> i32 { return COVER_LATTICES * kinds_n() + 4 * groups() + at * kinds_n() + t; }
 fn form_plane(t: i32) -> i32 { return kind_plane(0, t); }
 fn from_plane(t: i32) -> i32 { return kind_plane(1, t); }
 fn to_plane(t: i32) -> i32 { return kind_plane(2, t); }
@@ -74,13 +75,19 @@ fn along(v: vec4f, z: f32, held: i32) -> f32 {
 // other's size (`along`).
 const NEAR_SIZES = 3.0;
 
-// What the ground at `at` leaves a plant: the share free of liquid over its roots, how wet it is and how wet its cells
+// What the ground at `at` leaves a plant: the depth of the liquid over its roots, m, how wet it is and how wet its cells
 // are on their mean (land.wgsl `state_at`), the snow there (lib/land.wgsl `snow_at`, 1 where it lies) and its cells'
 // snow's depth, m.
-struct Foot { stands: f32, wet: f32, mean: f32, snow: f32, snow_m: f32 }
+struct Foot { depth: f32, wet: f32, mean: f32, snow: f32, snow_m: f32 }
 fn foot(at: vec2f) -> Foot {
   let st = state_at(at, ground_at(at, false), corners(at / land.map.x));
-  return Foot(above_water(st.depth), st.wet, st.mean, select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
+  return Foot(st.depth, st.wet, st.mean, select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
+}
+
+// Of each of four kinds whose roots stand in liquid as deep as `reach` m (canopy.ts, the core's `cover::aired`), 1 where
+// it stands in liquid `depth` m deep (draw.wgsl `stands_in`), else 0.
+fn stand_in(depth: f32, reach: vec4f) -> vec4f {
+  return vec4f(stands_in(depth, reach.x), stands_in(depth, reach.y), stands_in(depth, reach.z), stands_in(depth, reach.w));
 }
 
 // The share of each kind that stands where its roots need `need` m of loose ground (0: its square's ground holds it
@@ -102,11 +109,12 @@ fn thrive(wet: f32, mean: f32, need: vec4f) -> vec4f {
 }
 
 // What the four kinds from 4q of square s count for at a foot of ground `f` where `loose` m of loose ground lies,
-// `thick` over the patches: its share there, how well each thrives and how much of it its roots hold; or, not `exact`,
+// `thick` over the patches: its share there, how well each thrives, how much of it its roots hold and whether they
+// reach through the liquid there (`stand_in`); or, not `exact`,
 // the most they may count for there, before the ground is read (`pick_kind`).
 fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32, exact: bool) -> vec4f {
   if (!exact) { return vec4f(cs.w[s] * (1.0 + PATCH)); }
-  return cs.w[s] * thick * thrive(f.wet, f.mean, kind(need_plane(q), cs.at[s])) * holds(loose, kind(roots_plane(q), cs.at[s])) * f.stands;
+  return cs.w[s] * thick * thrive(f.wet, f.mean, kind(need_plane(q), cs.at[s])) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
 }
 
 // Where two plants would stand in one cell, one `h` m tall stands over one `under` m tall with this chance: a race whose
@@ -293,10 +301,9 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   if (all <= 0.0) { return none; }
   // Whether any kind may claim the cell, before its ground is read.
   let own = rand3(id, l).y;
-  let most = Foot(1.0, 0.0, 0.0, 0.0, 0.0);
+  let most = Foot(0.0, 0.0, 0.0, 0.0, 0.0);
   if (pick_kind(l, at, cs, 1.0 + PATCH, most, own, id, false).x < 0) { return none; }
   let f = foot(at);
-  if (f.stands <= 0.0) { return none; }
   let pick = pick_kind(l, at, cs, patchy(at), f, own, id, true);
   if (pick.x < 0) { return none; }
   let n = vec2i(i32(land.map.y), i32(land.map.z));

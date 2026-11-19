@@ -380,13 +380,13 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, e: f32, knob: f32) -> St
 }
 
 // The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl), every drift shown, on the tiles' ground (no
-// relief finer than them): the water of the point's channel stands over
-// its bed too, and its floods over the whole of it (`channel_at`): no plant roots in a channel's bed, widened at its
-// mouth.
+// relief finer than them): the water of the point's channel stands over its bed too, and in the whole of the bed its
+// floods cut (`channel_at`, widened at its mouth) the liquid is taken as deeper than any plant's roots reach: the core
+// stands plants on its cells' land and on their ponds' ground, never in a channel's running water.
 fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   let c = channel_at(g, discharge_at(g, at));
   let cut = depth_in(g, c);
   var p = state_on(at, g, cs, cut, 0.0, 0.0);
-  p.depth = max(max(p.depth, cut), select(0.0, FILM_M, g.d < c.bed));
+  p.depth = max(max(p.depth, cut), select(0.0, NO_LIQUID_M, g.d < c.bed));
   return p;
 }

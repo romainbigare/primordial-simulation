@@ -118,9 +118,10 @@ struct Spot {
   // the share of a scree's places that hold a block fallen into a steep reach; the depth of the snow where it lies, m;
   // and how far the point lies below the bed that sheds its scree, `BELOW_LEAST`..1 (crag.wgsl).
   bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32, blocks: f32, snow_m: f32, below: f32,
-  // The share of the ground the tallest plants' crowns close over it (their litter lies under them), and the share of
-  // it and the ground about it under woody crowns whose leaves fall this month (cover_field.wgsl `CoverAt.shed`).
-  canopy: f32, shed: f32,
+  // The share of the ground the tallest plants' crowns close over it (their litter lies under them), the share of it
+  // and the ground about it under woody crowns whose leaves fall this month (cover_field.wgsl `CoverAt.shed`), and the
+  // depth of liquid its plants stand in, m (`CoverAt.reach`).
+  canopy: f32, shed: f32, reach: f32,
   // The fetch of the lake beside it, m (water.wgsl `waves_of`; 0 where none is known: no waves).
   fetch: f32,
   // How soaked the waves' swash leaves it, and the share of it the foam of the last bore covers, 0..1 (`swash_of`).
@@ -137,10 +138,14 @@ struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 // The colour of the ground of spot p, unlit: its own colour, tinted by the hand rules of cold, height and sand, and its bed
 // where it shows; snow `snow` over it; its stones, as far as they stand out of the snow; and over all the plants that
 // stand out of it (its cover, as far as
-// liquid over their roots leaves them, `above_water`; the cover's field holds how the snow buries them and how the bed
+// liquid over their roots leaves them on the bed, draw.wgsl `stands_in`; the cover's field holds how the snow buries them and how the bed
 // holds them). The share of it that is bare, its map class, and the share of its bare part that takes the soil's
 // warmth (`soil`: a beach's sand keeps its own colour).
 struct Ground { rgb: vec3f, bare: f32, kind: u32, warm: f32 }
+// The share of the plants of spot p that the waves strip where their swash soaks the ground `soak` (`swash_of`; all
+// of it under the liquid): as much as its waves are high against the sea's.
+fn waves_strip(p: Spot, soak: f32) -> f32 { return min(soak / SWASH_DRY, 1.0) * waves_of(p.sea, p.fetch).x / SEA_WAVE.x; }
+
 fn ground_of(p: Spot, snow: f32) -> Ground {
   var g: Ground;
   g.rgb = p.ground;
@@ -149,8 +154,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn. The
   // waves' swash (`swash_of`) strips the plants where it runs as far as its waves are high against the sea's: the sea's
   // swash bares its beach, a lake's small waves leave its plants standing to the water.
-  let stripped = min(p.swash.x / SWASH_DRY, 1.0) * waves_of(p.sea, p.fetch).x / SEA_WAVE.x;
-  let plants = p.cover.a * above_water(p.depth) * (1.0 - stripped);
+  let stripped = waves_strip(p, p.swash.x);
+  let plants = p.cover.a * stands_in(p.depth, 0.0) * (1.0 - stripped);
   if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
@@ -305,8 +310,11 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     } else {
       water = water_over(bed, p.depth, ripple);
     }
-    // What floats on still water (afloat.wgsl).
+    // What floats on still water (afloat.wgsl), and the plants that stand in it as deep as their roots reach
+    // (draw.wgsl `stands_in`), over it as on land, as far as its waves leave them (`waves_strip`).
     water = afloat(water, p);
+    let standing = min(p.cover.a, 1.0) * stands_in(p.depth, p.reach) * (1.0 - waves_strip(p, SWASH_DRY));
+    if (standing > 0.0) { water = mix(water, lit_by(p.cover.rgb / p.cover.a, lit), standing); }
     // Ice where the cells' share of it lies (ice.wgsl `ice_cover`), as floes at its margin.
     let ice = ice_cover(p.snow, p.depth, p.at, p.e);
     let rgb = ice_on(water, ice, p.depth, p.at, p.e);

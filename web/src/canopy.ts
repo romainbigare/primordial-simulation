@@ -23,16 +23,16 @@ const LEFT_STEPS = 100;
  * the lattice of stands, `STANDS`, negated for its square's first kind, `Paint`); how wet each kind needs its ground and
  * how deep its loose ground, m (the core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); its slot in
  * its cell's cover (a label it keeps, so its marks keep their places as the kinds' order and shares change, mark.wgsl
- * `pick_kind`); then of each kind its form (how closed its crown is and the leaves it has left, `LEFT_STEPS`, its
+ * `pick_kind`), and the depth of liquid its roots stand in, m (its reach, the core's `cover::aired`); then of each kind its form (how closed its crown is and the leaves it has left, `LEFT_STEPS`, its
  * crown's form and how surely, form.ts `formOf`, packed as one number, `SURE_PACK`, and how dry and how wet its ground), the
  * colours its plants span (style.ts `KindLook`: the first with its grown plants' walls' share, `grownWalls`); of each
  * of its groups its plants' height, m; and of each lattice the width its groups' marks are drawn, m
  * (lattices.ts `marksOf`). A plane holds four numbers: one for each kind of a group of four of a square
  * (`groups` such planes for each such number), or one of each group of a kind. */
 export function planesOf(kinds: number) {
-  const g = Math.ceil(kinds / 4), lat = LATTICES.length, need = lat * kinds, form = need + 3 * g;
+  const g = Math.ceil(kinds / 4), lat = LATTICES.length, need = lat * kinds, form = need + 4 * g;
   return {
-    kinds, groups: g, chance: 0, need, roots: need + g, label: need + 2 * g, form, from: form + kinds, to: form + 2 * kinds,
+    kinds, groups: g, chance: 0, need, roots: need + g, label: need + 2 * g, reach: need + 3 * g, form, from: form + kinds, to: form + 2 * kinds,
     height: form + 3 * kinds, width: form + 4 * kinds, count: form + (4 + lat) * kinds,
   };
 }
@@ -46,9 +46,9 @@ export const PLANES_DOWN = 32;
  * of loose ground their roots need, m (the core's, tape/src/stands.rs), of each lattice its marks' mean width, m, and the
  * share of the ground its plants leave that their shadows darken (`Paint.put`), with in the shadows' fourth number the
  * share of the ground under crowns whose leaves fall this month (`leavesFalling`), the sward and the lattices under the
- * trees' as one layer, as the field draws them far away (`lowOf`), and 1 where the
- * square's cell holds land (a square with none holds 0 in every layer: cover_field.wgsl blends over the squares with land
- * alone, `on_land`), and of the sward and of the lattice of stands the part the kinds but the first make. */
+ * trees' as one layer, as the field draws them far away (`lowOf`), 1 where the square's cell holds land or a kind
+ * stands in it (a square with neither holds 0 in every layer: cover_field.wgsl blends over the squares with cover
+ * alone, `on_land`) with the depth of liquid its kinds' roots stand in, m, on the mean by their cover (their reach), and of the sward and of the lattice of stands the part the kinds but the first make. */
 export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, shade: LATTICES.length + 8, low: LATTICES.length + 9, land: LATTICES.length + 10, swardRest: LATTICES.length + 11, standsRest: LATTICES.length + 12, count: LATTICES.length + 13 } as const;
 /** The number of a square's row of the core's table that is the share of its cell that is land (tape/src/table.rs `row`). */
 const LAND_AT = 10;
@@ -166,15 +166,22 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
   const group = (plane: number, k: number) => plane + (k >> 2);
   const layer = (l: number, i: number) => 4 * (l * n + i);
   for (let i = 0; i < n; i++) {
-    // A square whose cell holds no land holds no kinds (tape/src/stands.rs) and 0 in every layer of the field.
-    if (!(rows[1 + row * i + LAND_AT] > 0)) continue;
-    field.fill(1, layer(FIELD.land, i), layer(FIELD.land, i) + 4);
+    // A square whose cell holds no land and no kind (tape/src/stands.rs: a kind may stand on its ponds' ground) holds
+    // 0 in every layer of the field.
+    const holdsKind = (k: number) => rows[at + (i * kinds + k) * kindRow + K.root] >= 0 && rows[at + (i * kinds + k) * kindRow + K.kg] > 0;
+    if (!(rows[1 + row * i + LAND_AT] > 0) && !Array.from({ length: kinds }, (_, k) => holdsKind(k)).some(Boolean)) continue;
+    field[layer(FIELD.land, i)] = 1;
     const paint = LATTICES.map(() => new Paint()), sward = new Paint(), flowers = new Paint();
-    let shed = 0;
+    let shed = 0, reach = 0, covered = 0;
     for (let k = 0; k < kinds; k++) {
-      if (rows[at + (i * kinds + k) * kindRow + K.root] < 0 || rows[at + (i * kinds + k) * kindRow + K.kg] <= 0) continue;
+      if (!holdsKind(k)) continue;
       // A copy: its crowns' numbers are set below (`standingCrowns`).
       const r = rows.slice(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
+      // The depth of liquid it stands in here: its reach where the core stands it on its square's ground under liquid
+      // (its wet share), none where it stands on the land alone.
+      const wades = r[K.wet] > 0 ? r[K.reach] : 0;
+      reach += r[K.cover] * wades;
+      covered += r[K.cover];
       // The share of the square that holds its plants and the loose ground their roots need, as the core found them.
       const mean = Math.max(r[K.rooted], 1e-3), stand = [r[K.height], mean, r[K.need]];
       // The square's ground temperature (the table's second number of a row) and the frozen cover's melting point.
@@ -205,6 +212,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       put(group(P.need, k), i, k & 3, 10 ** r[K.moist]);
       put(group(P.roots, k), i, k & 3, mean >= ROOTED_ALL ? 0 : r[K.need]);
       put(group(P.label, k), i, k & 3, r[K.slot]);
+      put(group(P.reach, k), i, k & 3, wades);
       // Its form and how surely as one number (form + `SURE_PACK` x sure).
       [packed, shape.form + SURE_PACK * shape.sure, shape.dry, shape.wet].forEach((v, q) => put(P.form + k, i, q, v));
       [...look.from, grownWalls(r[K.walls])].forEach((v, q) => put(P.from + k, i, q, v));
@@ -231,6 +239,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
     const first = paint[STANDS].first.k;
     for (let g = 0; first >= 0 && g < 4; g++) table[texel(P.chance + STANDS * kinds + first, i) + g] *= -1;
     putField(field, i, layer, paint, sward, flowers, shed);
+    field[layer(FIELD.land, i) + 1] = covered > 0 ? reach / covered : 0;
   }
   return { w, h, planes: P, cols, table, field: { w, h, data: field }, tallest, widest, walls };
 }
