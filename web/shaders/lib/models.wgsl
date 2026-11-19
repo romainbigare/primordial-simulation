@@ -165,7 +165,10 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   let lum = dot(t.rgb, LUMA);
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
   var leaf = q.rgb * lum / LEAF_MEAN;
-  leaf = mix(leaf, CROWN_SNOW_RGB * lum / LEAF_MEAN, CROWN_SNOW * snow * q.closed * q.left * smoothstep(0.6, 1.4, lum / LEAF_MEAN));
+  // Snow on its lit leaves: how lit, against its own leaves' mean (`model_leaf`), so a dark conifer holds it as a light
+  // crown does.
+  let lit = lum / max(model_leaf(s), 1e-4);
+  leaf = mix(leaf, CROWN_SNOW_RGB * lit, CROWN_SNOW * snow * q.closed * q.left * smoothstep(0.6, 1.4, lit));
   // The leafy sprite's sprays over the bare twin.
   let under = bare.a * (1.0 - a);
   return vec4f((mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under), a + under);
