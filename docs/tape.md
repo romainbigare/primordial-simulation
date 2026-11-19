@@ -47,9 +47,15 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
 size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground,
-`wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land` of the cell's amount per m² of its area and its land's share, `contract::lands`: the cover and its seeds live and are drawn on the land alone, divided by the land once; 0 where the cell holds no land), the living mass of the takers per km² of the cell's land (`takers`, kg/km², `fauna::per_km2`; 0 where the cell holds no land; log from 1 to 10,000), true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
+`wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
+`filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
+the texture of its loose ground (`World::soil`, `soil::Texture`): `coarse` and `fine` (the shares of coarse and of fine
+particles, 0..1) and `organic` (the share of organic matter, 0 to 0.1), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land` of the cell's amount per m² of its area and its land's share, `contract::lands`: the cover and its seeds live and are drawn on the land alone, divided by the land once; 0 where the cell holds no land), the living mass of the takers per km² of the cell's land (`takers`, kg/km², `fauna::per_km2`; 0 where the cell holds no land; log from 1 to 10,000), true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
 ground) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid, under
-the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `LITTER_KG`), 0.3 kg/m²). The tape holds whole-map frames only. The live viewer draws its map from two
+the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `LITTER_KG`), 0.3 kg/m²). The page draws
+the layers of the soil (`filled`, `coarse`, `fine`, `organic`) on dry ground alone (web/src/earth.ts `GROUND_LAYERS`);
+the live map finds `filled` at each point by the laws inside a cell, and `coarse` and `fine` from the samples' texture
+(below). The tape holds whole-map frames only. The live viewer draws its map from two
 things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`), which never change, so a page
 makes each once and keeps it: a tile of a depth holds 256 x 256 texels (`TILE`), each a leaf of that depth, and 2 more
 along each edge (`GUTTER`), row by row from its north-west corner, as 16-bit floats (IEEE binary16, little-endian) in two
@@ -211,7 +217,9 @@ at most 2 m; 0 for a sink or a sample under a pond; that slope of its reach (ris
 the sample it runs to (1 to 8, its neighbours row by row; 8 more where it joins that one as a tributary; 0 for none)
 and 17 times the step to its main neighbour upstream, by which a shell lets what runs through a channel grow evenly
 from one sample's centre to the next, so its width has no step where two samples meet. Then of each sample again the
-reflectance of its bed's make and a zero. **The
+reflectance of its bed's make and a zero. Then of each sample again the shares of coarse and of fine particles and of
+organic matter of its loose ground (`pcore::soil::samples`; none known, middle particles alone, for a ground made
+without its world, `Ground::new`) and a zero. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
 sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries

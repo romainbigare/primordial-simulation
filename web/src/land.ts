@@ -26,12 +26,16 @@ const PLANES = 6;
 const SLOPE_POWER = 0.5, SLOPE_LEAST = 0.15;
 /** A sea shore is sand up to this height over the liquid's surface, m (colour.wgsl `beach`). */
 const BEACH_M = 5;
-/** The bytes of a layer view over which an empty point fades into a full one (colour.wgsl `in_view_of`). */
+/** The bytes of a layer view over which an empty point fades into a full one (colour.wgsl `in_view_of`): of a log layer,
+ * whose least bytes are next to nothing; a layer of another scale fades over its first byte alone, as its least value
+ * is a value like any other (a share of none). */
 const OVER_FADE = 64;
 /** The level a pond no body holds is drawn at, m below 0 (land.wgsl `NO_LIQUID_M`): under any ground. */
 const NO_POND_M = 1000;
 /** Before the rock of the samples came, the ground is drawn as if its loose ground were this deep, m: no bed shows. */
 const NO_ROCK_YET_M = 1;
+/** The planes of the rock of the samples, one under the other (rock.wgsl `ROCK_PLANES`). */
+const ROCK_PLANES = 3;
 /** Of the uniforms of land.wgsl (`Land`), four-wide members. */
 const LAND_VEC4S = 8;
 /** The open low ground freezes cell by cell, and its cells are blocks of squares (8 km: the core's coarse low ground), so
@@ -59,6 +63,8 @@ export class Land {
    * said. */
   private melt = 0;
   private sea = 0;
+  /** The bytes of the layer shown over which an empty point fades into a full one (`OVER_FADE`). */
+  private fade = OVER_FADE;
   /** What runs through each sample, m³/s, as 16-bit floats, a texel a sample (none before the world's worker sent it),
    * and whether it is still to be sent to the GPU. */
   private flows: Texture | null = null;
@@ -97,6 +103,7 @@ export class Land {
     const [landZ, landT, landIce] = fromLand([0, 1, 3].map(k => Float32Array.from({ length: n }, (_, i) => rows[1 + row * i + k])), wet.sea, W, H);
     const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
+    this.fade = shown && w.meta.layers[w.index.get(look.layer)!].scale !== 'log' ? 1 : OVER_FADE;
     const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
     this.melt = rows[0];
     for (let i = 0; i < n; i++) {
@@ -119,7 +126,7 @@ export class Land {
     const laws = this.lawBinds(gpu);
     if (!laws) return null;
     const m = this.tiles.map, texel = 2 ** (m.square_depth - this.tiles.depth);
-    const read = [Math.max(texel ** SLOPE_POWER, SLOPE_LEAST), this.melt, BEACH_M, OVER_FADE];
+    const read = [Math.max(texel ** SLOPE_POWER, SLOPE_LEAST), this.melt, BEACH_M, this.fade];
     return { ...laws, 1: earthUniforms(look, read, [0, 0, m.w * m.cell_m, m.h * m.cell_m], this.sea, frame), 20: groundDetail(gpu), 21: 'tile' };
   }
 
@@ -154,10 +161,10 @@ export class Land {
     const s = this.samples;
     this.flows ??= gpu.texture(s.across, s.down, 'r16float');
     if (this.flowsDue) { gpu.write(this.flows, this.discharge); this.flowsDue = false; }
-    this.rock ??= gpu.texture(s.across, 2 * s.down, 'rgba16float');
+    this.rock ??= gpu.texture(s.across, ROCK_PLANES * s.down, 'rgba16float');
     if (!this.rockSent) {
       const r = this.tiles.rock;
-      gpu.write(this.rock, r ?? Uint16Array.from({ length: 8 * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
+      gpu.write(this.rock, r ?? Uint16Array.from({ length: 4 * ROCK_PLANES * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
       this.rockSent = r !== null;
     }
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;

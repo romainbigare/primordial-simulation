@@ -9,10 +9,14 @@
 // Bare soil's tone varies by up to this share over clods `CLOD_M` across.
 const CLOD = 0.06; const CLOD_M = 0.5;
 // Open soil (no canopy over it) varies in tone by up to `SOIL_MOTTLE` over patches `SOIL_PATCH_M` and a quarter of that
-// across, and in grit `GRIT_M` across by up to `GRIT`; where it is dry (wetter than `CRUST_WET` none) its crust cracks
-// in lines `CRUST_M` and a third of that apart, `CRUST_W` of their spacing wide, darker by up to `CRUST_DARK`.
-const SOIL_MOTTLE = 0.14; const SOIL_PATCH_M = 22.0; const GRIT = 0.1; const GRIT_M = 0.035;
+// across, and in grit `GRIT_M` across by up to `GRIT`, `SAND_GRIT` times that more where all its grain is coarse (bare
+// sand glints); where it is dry (wetter than `CRUST_WET` none) its crust cracks in lines `CRUST_M` and a third of that
+// apart, `CRUST_W` of their spacing wide, darker by up to `CRUST_DARK`, as far as it shrinks when it dries: by its fine
+// grain and `SILT_SHRINK` of its middle grain, all of it from a share `SHRINK_FULL` (clay shrinks and swells, sand
+// does not; Grossman and others 1968).
+const SOIL_MOTTLE = 0.14; const SOIL_PATCH_M = 22.0; const GRIT = 0.1; const GRIT_M = 0.035; const SAND_GRIT = 1.5;
 const CRUST_WET = 0.35; const CRUST_M = 1.6; const CRUST_W = 0.035; const CRUST_DARK = 0.45;
+const SILT_SHRINK = 0.3; const SHRINK_FULL = 0.35;
 // Under a closed canopy the bare ground is litter: its colour times `LITTER_TINT`, up to `LITTER` of it, and in the
 // crowns' shade, darker by up to `UNDER_DARK`; moss grows on it in patches `MOSS_M` across over this share of it, the
 // more the wetter the ground.
@@ -50,9 +54,12 @@ const BELOW_LEAST = 0.2;
 const STONES_ON_BED = 0.25; const SUNK_MOST = 0.55; const SUNK_LOOSE_M = 0.5;
 const STONE_SEEN = 2.5; const COBBLE_M = 0.65; const BED_SUNK = 0.3;
 
-// The bare ground's colour `c` (linear, unlit) at the pixel, seen at `e` m a pixel, under `canopy` of closed crowns, `wet`:
-// its clods, and under the crowns their shade, litter and moss.
-fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32) -> vec3f {
+// How far ground of grain `grain` (`Spot.grain`) shrinks and cracks as it dries, 0..1 (`SHRINK_FULL`).
+fn shrinks(grain: vec4f) -> f32 { return ease(0.0, SHRINK_FULL, grain.y + SILT_SHRINK * max(1.0 - grain.x - grain.y, 0.0)); }
+
+// The bare ground's colour `c` (linear, unlit) at the pixel, seen at `e` m a pixel, under `canopy` of closed crowns, `wet`,
+// of grain `grain` (`Spot.grain`): its clods, and under the crowns their shade, litter and moss.
+fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32, grain: vec4f) -> vec3f {
   let litter = LITTER * STYLE * canopy;
   let soft = mix(c, vec3f(dot(c, vec3f(1.0 / 3.0))), FLOOR_GREY * STYLE * canopy);
   var out = soft * mix(vec3f(1.0), LITTER_TINT, litter) * (1.0 - UNDER_DARK * STYLE * canopy);
@@ -67,8 +74,8 @@ fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32) -> vec3f {
     out *= 1.0 + SOIL_MOTTLE * open * patches * m;
   }
   let grit = shows_at(2.0 * GRIT_M, e);
-  if (grit > 0.0) { out *= 1.0 + GRIT * open * grit * noise_l(lat_turned(GRIT_M, vec2f(1.0)), 58).x; }
-  let dry = open * ease(CRUST_WET, 0.0, wet) * shows_at(CRUST_W * CRUST_M, e);
+  if (grit > 0.0) { out *= 1.0 + GRIT * (1.0 + SAND_GRIT * grain.x) * open * grit * noise_l(lat_turned(GRIT_M, vec2f(1.0)), 58).x; }
+  let dry = open * ease(CRUST_WET, 0.0, wet) * shrinks(grain) * shows_at(CRUST_W * CRUST_M, e);
   if (dry > 0.0) {
     let a = noise_l(lat_turned(CRUST_M, vec2f(7.0)), 59).x;
     let b = noise_l(lat_turned(CRUST_M / 3.0, vec2f(11.0)), 60).x;

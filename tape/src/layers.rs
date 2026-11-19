@@ -178,6 +178,9 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
     pub wet: Vec<f64>,
+    /// Per ground cell: the share of its loose ground's pores its liquid fills, 0..1 (`flow::means`; none (NaN) where it
+    /// holds no pores or before Flow first built its state)
+    pub filled: Vec<f64>,
     /// Per ground cell: the share of its area that is land, 0..1: its land (`contract::lands`, which its cover lives
     /// on) over its area
     pub land: Vec<f64>,
@@ -190,10 +193,11 @@ impl<'a> Ctx<'a> {
         let f = fields(w);
         let means = pcore::flow::means(w, &(0..n).collect::<Vec<usize>>()).unwrap_or_else(|| vec![Default::default(); n]);
         let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
+        let filled = means.iter().map(|m| if m.pores > 0.0 { m.pore / m.pores } else { f64::NAN }).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
         let land = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, land };
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
@@ -210,6 +214,12 @@ impl<'a> Ctx<'a> {
 /// cover), as a viewer draws it on the land only; none (NaN) where the cell holds no land.
 pub(crate) fn per_land(per_m2: f64, land: f64) -> f64 {
     if land > 0.0 { per_m2 / land } else { f64::NAN }
+}
+
+/// The liquid loose ground of pores `p` holds for roots when full, m: what its pores hold between field capacity and the
+/// wilting point over its depth `loose` m (the available water capacity, Saxton and Rawls 2006).
+fn available_m(p: &pcore::soil::Pores, loose: f64) -> f64 {
+    (p.field - p.wilt) * p.porosity * loose
 }
 
 /// Air node `j`: its heat-absorbing column (the optical depth of its gases' lines, `Chemistry::depth`, summed over the
@@ -250,6 +260,12 @@ pub const LAYERS: &[Layer] = &[
     l("channel_d", "m", "log", 0.01, 30.0, |c, i| c.channel(i).depth),
     l("loose", "m", "log", 0.01, 100.0, |c, i| c.f.loose[i]),
     l("wet", "1", "lin", 0.0, 1.0, |c, i| c.wet[i]),
+    l("filled", "1", "lin", 0.0, 1.0, |c, i| c.filled[i]),
+    l("coarse", "1", "lin", 0.0, 1.0, |c, i| c.w.soil[i].texture.coarse),
+    l("fine", "1", "lin", 0.0, 1.0, |c, i| c.w.soil[i].texture.fine),
+    l("organic", "1", "lin", 0.0, 0.1, |c, i| c.w.soil[i].texture.organic),
+    l("conduct", "m/s", "log", 1e-9, 1e-4, |c, i| c.w.pores(i).seep),
+    l("avail", "m", "log", 0.01, 0.3, |c, i| available_m(c.w.pores(i), c.f.loose[i])),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.rain.get(i).copied().unwrap_or(0.0) as f64),

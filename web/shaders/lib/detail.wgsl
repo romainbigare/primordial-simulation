@@ -105,15 +105,21 @@ fn beach_sand(p: Spot, wet: f32) -> vec3f {
   return mix(a, b, height_mix(d, height_of(a), height_of(b)));
 }
 
+// Dry open ground of coarse grain is drifted sand with its tufts (the tile of a shore's sand above the swash): over the
+// share of its dry part its coarse grain is past `DRIFT_COARSE` (all of it from `DRIFT_COARSE_FULL`): wind moves bare
+// sand, not a loam that holds together (Bagnold 1941).
+const DRIFT_COARSE = 0.45; const DRIFT_COARSE_FULL = 0.8;
 // The change the images give soil of spot p: under crowns its litter (a floor of ferns where wet), in the open dry
-// stony soil, cracked where driest, wet mud where wet; on a shore its sand, pebbles or mud (colour.wgsl
-// `shore_grain`), the sand bare up to the storms' swash and with its tufts and drift above; and channels' pebbles where
-// they lie.
+// stony soil, drifted sand where its grain is coarse, cracked where driest as far as its grain shrinks (crag.wgsl
+// `shrinks`), wet mud where wet; on a shore its sand, pebbles or mud (colour.wgsl `shore_grain`), the sand bare up to
+// the storms' swash and with its tufts and drift above; and channels' pebbles where they lie.
 fn soil_detail(p: Spot) -> vec3f {
   let canopy = min(p.canopy, 1.0);
   let dry = ease(0.45, 0.1, p.wet);
-  let cracked = ease(0.25, 0.05, p.wet);
-  var w = array<f32, SOIL_IMAGES>(canopy * (1.0 - p.wet), canopy * p.wet, (1.0 - canopy) * dry * (1.0 - cracked), (1.0 - canopy) * cracked, (1.0 - canopy) * (1.0 - dry), 0.0, 0.0, 0.0, 0.0);
+  let drift = ease(DRIFT_COARSE, DRIFT_COARSE_FULL, p.grain.x);
+  let cracked = ease(0.25, 0.05, p.wet) * shrinks(p.grain) * (1.0 - drift);
+  let open = 1.0 - canopy;
+  var w = array<f32, SOIL_IMAGES>(canopy * (1.0 - p.wet), canopy * p.wet, open * dry * (1.0 - cracked) * (1.0 - drift), open * cracked, open * (1.0 - dry), 0.0, open * dry * (1.0 - cracked) * drift, 0.0, 0.0);
   let sand = max(p.sand, 0.0);
   var wet = 0.0;
   if (sand > 0.0) {
@@ -121,8 +127,9 @@ fn soil_detail(p: Spot) -> vec3f {
     let grain = shore_grain(p);
     let fine = sand * (1.0 - grain.x - grain.y);
     let bare = 1.0 - ease(0.0, STORM_RUN_UP * run_up(waves_of(p.sea, p.fetch), p.slope / earth.look.x), p.over);
+    w[6] *= 1.0 - sand;
     w[SOIL_BEACH] = fine * bare;
-    w[6] = fine * (1.0 - bare);
+    w[6] += fine * (1.0 - bare);
     w[7] = sand * grain.x;
     w[8] = sand * grain.y;
     wet = grain.z;
