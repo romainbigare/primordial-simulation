@@ -35,7 +35,9 @@ const BUSH_SHADOW = 0.3;
 // how dry its kind's ground (`BUSH_DRY`, over `BUSH_MIX`): leafy, middling, or a dry land's. A tree whose grown plants'
 // walls are under `SOFT_WOOD` of their dry mass (style.ts `BUSH_WOOD`, `grownWalls`, over `SOFT_MIX`) is a soft one: of
 // a kind as tender to frost as it is (form.ts `Form`, each plant by its own draw, `tender_draw`), a palm or a fern, as
-// such plants live where it does not freeze hard; else drawn by its crown's form, as a woody tree.
+// such plants live where it does not freeze hard (of them, the share as wet as its kind's ground is made for are ferns,
+// each by its own draw: tree ferns stand on wet shaded ground, palms on drier); else drawn by its crown's form, as a
+// woody tree.
 const SOFT_WOOD = 0.6; const SOFT_MIX = 0.1;
 const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
 const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
@@ -46,7 +48,9 @@ fn model_set(q: Plant) -> vec2i {
     if (!under_edge(q.dry, BUSH_DRY.x, BUSH_MIX, u)) { return vec2i(SEARSIA_FROM, SEARSIA_N); }
     return vec2i(SHRUB_FROM, SHRUB_N);
   }
-  if (under_edge(q.wood, SOFT_WOOD, SOFT_MIX, u) && q.tender > 1.0 - tender_draw(q.r)) { return vec2i(SOFT_FROM, SOFT_N); }
+  if (under_edge(q.wood, SOFT_WOOD, SOFT_MIX, u) && q.tender > 1.0 - tender_draw(q.r)) {
+    return select(vec2i(PALM_FROM, PALM_N), vec2i(FERN_FROM, FERN_N), q.wet > 1.0 - u);
+  }
   // Of its trees the share `sure` stand in its form, each by its own draw, the rest round.
   let f = select(ROUND, i32(q.form + 0.5), q.sure > 1.0 - u);
   if (f == CONE) { return select(vec2i(CONIFER_FROM, CONIFER_N), vec2i(SPRUCE_YOUNG_FROM, SPRUCE_YOUNG_N), q.h < CONE_YOUNG_M); }
@@ -190,9 +194,16 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   return select(BUSH_SHADOW, 1.0, q.design == TREE) * CROWN_SHADOW * kept * edge;
 }
 
-// How wide the feet tree q drawn from sprite s stands on, 0..1: as wet as its kind's ground (form.ts `Form.wet`); drawn as
-// a flare at the trunk's foot (`flared_foot`).
-fn wide_feet(q: Plant, s: i32) -> f32 { return select(0.0, q.wet, q.design == TREE && s < TREES); }
+// How wide the feet tree q drawn from sprite s stands on, 0..1: a woody tree's as wet as its kind's ground (form.ts
+// `Form.wet`), drawn as a flare at the trunk's foot (`flared_foot`); a palm's or a fern's none (soft stems grow no
+// buttresses).
+fn wide_feet(q: Plant, s: i32) -> f32 {
+  let soft = in_set(s, PALM_FROM, PALM_N) || in_set(s, FERN_FROM, FERN_N);
+  return select(0.0, q.wet, q.design == TREE && s < TREES && !soft);
+}
+
+// Whether sprite s is of the set of `n` sprites from `first`.
+fn in_set(s: i32, first: i32, n: i32) -> bool { return s >= first && s < first + n; }
 
 // A tree of wet ground stands on a flared foot: buttresses and the tops of its roots spread its trunk at the ground, to
 // `FOOT_FLARE` times its width at most (the kind of wettest ground), over the lowest `FOOT_RISE` of its trunk's

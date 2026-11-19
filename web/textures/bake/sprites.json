@@ -277,7 +277,7 @@
    {
     "model": "date_palm_16",
     "file": "sketchfab/2f34e3f54bef40eb8d94ca6507c2f822/source/Phoenix dactylifera HD_Urban no fruit mat 100_LOD0.fbx",
-    "set": "SOFT",
+    "set": "PALM",
     "leaf": 0.045
    },
    {
@@ -308,6 +308,7 @@
    {
     "model": "male_fern_20",
     "file": "sketchfab/9da5a089892d480fa3d2add186ce4f03/scene.gltf",
+    "set": "FERN",
     "leaf": 0.045
    },
    {

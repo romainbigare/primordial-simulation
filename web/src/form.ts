@@ -15,7 +15,7 @@ export interface Shape { leaf: number; frost: number; moist: number; seed: numbe
  * of dry ground's to a span under it): the drawing picks a dry land's plant for a dry kind (models.wgsl); how wet,
  * 0..1 (its moisture gene from the middle of wet ground's to a span over it): a tree of wet ground stands on a flared
  * foot (models.wgsl `flared_foot`); and how tender to frost the kind is, 0..1 (`TENDER_SPANS`): only a tender kind's
- * soft plants are drawn as palms or ferns (models.wgsl). A kind is never both dry and wet (their middles part). */
+ * soft plants are drawn as palms or ferns (models.wgsl: ferns as wet as the kind is). A kind is never both dry and wet (their middles part). */
 export interface Form { form: number; sure: number; dry: number; wet: number; tender: number }
 
 /** The middle and the span of each gene a form reads: thin leaves (capture area per kg, log10 m²/kg); tender (frost
