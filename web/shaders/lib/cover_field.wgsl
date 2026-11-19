@@ -100,6 +100,15 @@ fn held_at(at: vec2f, b: Beneath) -> vec4f {
   return out;
 }
 
+// The share of the herbs' height that stands out of liquid `depth` m deep (0: on land), of their field's wet layer `wet`
+// (`WET_LAYER`: their depth, z, and height, w, m): all on land, the less the deeper, none past their line (draw.wgsl
+// `stands_in`). A herb under the liquid shows nothing from above; the core holds a herb's plants in the liquid down to
+// its line.
+fn herbs_out(depth: f32, wet: vec4f) -> f32 {
+  if (depth <= 0.0) { return 1.0; }
+  return stands_in(depth, wet.z) * (1.0 - ease(0.0, max(wet.w, 1e-3), depth));
+}
+
 // The herbs' sward: their plants thicker and thinner by up to `SWARD` of their mean over tufts of `SWARD_M`; they cover
 // the share of the ground their leaves close by the cover's light law (canopy.ts `Paint`, tape/src/stands.rs `plants`),
 // so a thin sward lets the ground show through. Its tone varies by up to `TUFT_TONE` over the tufts and by up to `SWATH`
@@ -331,9 +340,10 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     c = mix(c, mix(c * BLADE_GROUND, plain * b.x, b.y), near_blades);
   }
   // Where its tufts show as things, a thin sward is its tufts standing on bare ground (detail.wgsl `sward_tufts`), not a
-  // veil: fully where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on.
+  // veil: fully where it covers up to `TUFTS_THICK.x` of the ground, its tile of grass from `.y` on. In liquid it is
+  // always its tufts, the liquid between them: herbs standing in water are no lawn over it.
   var seen = s;
-  let thin = 1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s);
+  let thin = select(1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s), 1.0, b.depth > 0.0);
   if (thin > 0.0) {
     let t = sward_tufts(plain, c, e, s, grass_tufts());
     c = mix(c, t.rgb, thin);
@@ -397,8 +407,10 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   // the trees shows the sward and the bushes of its cell before it shows bare.
   let closed = min(trees.a, 1.0);
   let lit = (1.0 - min(closed * hold[STANDS], 1.0)) / max(1.0 - closed, LIT_LEAST);
-  // The bushes thin in the shade but do not heap in the gaps: only the sward, which fills ground, thickens there.
-  hold = vec4f(hold.xy * min(lit, 1.0), hold.z, hold.w * lit);
+  // The bushes thin in the shade but do not heap in the gaps: only the sward, which fills ground, thickens there. In
+  // liquid the sward shows as far as its herbs stand out of it (`herbs_out`).
+  let wet = field_at(at, WET_LAYER);
+  hold = vec4f(hold.xy * min(lit, 1.0), hold.z, hold.w * lit * herbs_out(b.depth, wet));
   // Under the trees: the sward and the low lattices one by one near, as one layer far (`LOW_FAR_E`).
   let far = ease(LOW_FAR_E, LOW_FAR_FULL_E, e);
   var dst = vec4f(0.0);
@@ -425,7 +437,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
-  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, field_at(at, WET_LAYER), min(field_at(at, SWARD_LAYER).a, 1.0));
+  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0));
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_thing`
