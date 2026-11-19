@@ -6,7 +6,7 @@ mod pores;
 mod texture;
 
 pub use pores::Pores;
-pub use texture::samples;
+pub use texture::{samples, textures};
 
 use crate::space::samples::Samples;
 use crate::World;

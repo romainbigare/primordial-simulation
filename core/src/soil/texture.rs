@@ -12,8 +12,9 @@
 use super::Texture;
 use crate::space::network::NONE;
 use crate::space::samples::Samples;
+use crate::space::terrain::Make;
 use crate::units::LIQUID_VISCOSITY;
-use crate::World;
+use crate::{Physics, World};
 
 /// The particle classes, fine, middle and coarse, by their least and most diameter, m (fine under 2 µm, middle to
 /// 50 µm, coarse to 2 mm; Soil Survey Staff 1993); within a class the particles spread evenly over the logarithm of
@@ -34,21 +35,24 @@ const DRAG_FORM: f64 = 1.0;
 /// The halvings that find the least particle that settles in a flow (`settles`): its size to a few parts in a million.
 const HALVINGS: usize = 40;
 
-/// The texture of each of the terrain's samples of world `w` (`Samples`, in their order): its bed's particles
+/// The texture of each of the terrain's samples of world `w` (`Samples`, in their order, `textures`).
+pub fn samples(w: &World) -> Vec<Texture> {
+    textures(&of(w), &w.terrain.makes, &w.cfg.phys, w.cfg.gravity)
+}
+
+/// The texture of each of samples `s`, their bed of `makes`, at gravity `g`: its bed's particles
 /// (`Make::coarse`), weathered over the time its loose ground has lain, and the share of it that settled there sorted
 /// by the flow that laid it (the module's doc). A sample under standing liquid (in a pond, or the open low ground) was
 /// laid by still liquid. The flow at a sample is the flood's (`FLOOD_RUNOFF` from the area that drains through it), as
 /// deep as Flow's channels carry it (`Physics::channel_depth`), down its slope; the load that reaches it is what the
 /// flow at its main sample upstream (`Samples::main`) carried on, all particles where none runs to it.
-pub fn samples(w: &World) -> Vec<Texture> {
-    let s = of(w);
-    let (ph, g) = (&w.cfg.phys, w.cfg.gravity);
+pub fn textures(s: &Samples, makes: &[Make], ph: &Physics, g: f64) -> Vec<Texture> {
     let shear = |k: usize| {
         let depth = ph.channel_depth * (FLOOD_RUNOFF * s.up[k]).powf(ph.channel_depth_exp);
         if s.pond[k] != NONE { 0.0 } else { (g * depth * s.slope[k]).sqrt() }
     };
     crate::par::map_n(s.h.len(), crate::par::UNCOUNTED, |k| {
-        let m = w.terrain.makes.get(s.make[k] as usize).copied().unwrap_or_default();
+        let m = makes.get(s.make[k] as usize).copied().unwrap_or_default();
         let laid = if s.loose[k] > 0.0 { s.settled[k] / s.loose[k] } else { 0.0 };
         let mut x = weathered([0.0, 1.0 - m.coarse, m.coarse], m.weathers, s.age[k]);
         if laid > 0.0 {
