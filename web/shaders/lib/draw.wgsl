@@ -149,20 +149,20 @@ fn noise_turned(p: vec2f, k: i32) -> f32 {
   return noise(mat2x2f(cos(TURN_A), sin(TURN_A), -sin(TURN_A), cos(TURN_A)) * p, k).x;
 }
 
-// A cubic B-spline through the centres of a texture's texels at `p` (texels from its corner, less half a texel), read
-// texel by texel (`textureLoad`): smooth across the texels' edges, so no texel's square shows, and never past their
-// values. Not through the GPU's own blend between texels (Sigg and Hadwiger 2005): that takes its weights in 1/256
-// steps, so the field it gives is a fine staircase, and its change across a pixel, which eases edges, a grid of
-// spikes. The texel at the point's lower corner, and the weights along each axis of the four texels from one before it.
-struct Cubic { i: vec2i, wx: vec4f, wy: vec4f }
-fn cubic(p: vec2f) -> Cubic {
-  let i = floor(p);
-  let f = p - i;
-  let w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
-  let w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;
-  let w3 = f * f * f / 6.0;
-  let w2 = 1.0 - w0 - w1 - w3;
-  return Cubic(vec2i(i), vec4f(w0.x, w1.x, w2.x, w3.x), vec4f(w0.y, w1.y, w2.y, w3.y));
+// A quadratic B-spline through the centres of a texture's texels at `p` (texels from its corner, less half a texel),
+// read texel by texel (`textureLoad`), nine texels a point: smooth across the texels' edges, and so is its change, so no
+// texel's square shows, and never past their values. Not through the GPU's own blend between texels (Sigg and Hadwiger
+// 2005): that takes its weights in 1/256 steps, so the field it gives is a fine staircase, and its change across a
+// pixel, which eases edges, a grid of spikes. The texel nearest the point, and the weights along each axis of the three
+// texels from one before it.
+struct BSpline { i: vec2i, wx: vec3f, wy: vec3f }
+fn b_spline(p: vec2f) -> BSpline {
+  let i = round(p);
+  let t = p - i;
+  let w0 = 0.5 * (0.5 - t) * (0.5 - t);
+  let w2 = 0.5 * (0.5 + t) * (0.5 + t);
+  let w1 = 1.0 - w0 - w2;
+  return BSpline(vec2i(i), vec3f(w0.x, w1.x, w2.x), vec3f(w0.y, w1.y, w2.y));
 }
 
 // A frozen cover of this mean depth, m of ice, covers e^-1 less than all of the ground: about 3 cm of snow, the depth at

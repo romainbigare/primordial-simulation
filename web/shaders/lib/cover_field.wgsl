@@ -204,16 +204,16 @@ var<private> land_smooth: f32 = 1.0;
 fn land_weights(at: vec2f) {
   let uv = at / (land.map.x * land.map.yz);
   land_plain = select(field_tap(uv, LAND_LAYER).x, 0.0, any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)));
-  land_smooth = cubic_field(at, LAND_LAYER).x;
+  land_smooth = spline_field(at, LAND_LAYER).x;
 }
 
-// The field of layer l at `at` through its texels' centres as a cubic B-spline read texel by texel (draw.wgsl `cubic`).
-fn cubic_field(at: vec2f, l: i32) -> vec4f {
-  let c = cubic(at / land.map.x - 0.5);
+// The field of layer l at `at` through its texels' centres as a B-spline read texel by texel (draw.wgsl `b_spline`).
+fn spline_field(at: vec2f, l: i32) -> vec4f {
+  let c = b_spline(at / land.map.x - 0.5);
   let last = vec2i(textureDimensions(cover_field_tex).xy) - 1;
   var sum = vec4f(0.0);
-  for (var y = 0; y < 4; y++) {
-    for (var x = 0; x < 4; x++) {
+  for (var y = 0; y < 3; y++) {
+    for (var x = 0; x < 3; x++) {
       sum += c.wx[x] * c.wy[y] * textureLoad(cover_field_tex, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), l, 0);
     }
   }
@@ -231,10 +231,9 @@ fn field_at(at: vec2f, l: i32) -> vec4f {
 // The field of lattice l at uv, blended between its texels.
 fn field_tap(uv: vec2f, l: i32) -> vec4f { return textureSampleLevel(cover_field_tex, cover_field_sampler, uv, l, 0.0); }
 
-// The field of lattice l at `at` through its texels' centres as a cubic B-spline read texel by texel (draw.wgsl
-// `cubic`) over the squares with land (`on_land`, `land_smooth`): no square shows in it, and no staircase of the GPU's
-// blend.
-fn field_smooth(at: vec2f, l: i32) -> vec4f { return on_land(cubic_field(at, l), land_smooth); }
+// The field of lattice l at `at` through its texels' centres as a B-spline read texel by texel (draw.wgsl `b_spline`)
+// over the squares with land (`on_land`, `land_smooth`): no square shows in it, and no staircase of the GPU's blend.
+fn field_smooth(at: vec2f, l: i32) -> vec4f { return on_land(spline_field(at, l), land_smooth); }
 
 // How much thicker than their mean the plants stand at `at` (`PATCH`).
 fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
