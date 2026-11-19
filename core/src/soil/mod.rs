@@ -43,7 +43,7 @@ impl Texture {
     }
     /// How easily flowing liquid carries off loose ground of this texture, against a loam (`LOAM`, 1): the soil
     /// erodibility factor of Wischmeier and Smith (1978), M^1.14 (12 − OM), M the middle share times the share that
-    /// is not fine (their silt and very fine sand times what is not clay), OM the organic per cent. Middle particles
+    /// is not fine (their two finest classes times what is not of the finest), OM the organic per cent. Middle particles
     /// are carried most easily: coarse ones are heavy, fine ones bind together, and organic matter binds them too.
     pub fn erodibility(&self) -> f64 {
         let k = |t: &Texture| (t.middle().max(0.0) * (1.0 - t.fine)).powf(ERODIBLE_EXP) * (ORGANIC_SPAN - (100.0 * t.organic).min(ORGANIC_MOST));
@@ -88,8 +88,9 @@ pub fn month(w: &mut World) {
 }
 
 /// Each cell's organic share and exchange sites anew (`solids`, of the substances `organics`), and its pores where the
-/// share moved.
-fn organic_pores(w: &mut World, organics: &[usize]) {
+/// share moved. Returns whether any cell's pores changed.
+fn organic_pores(w: &mut World, organics: &[usize]) -> bool {
+    let mut moved = false;
     for i in 0..w.mesh.cells().n() {
         let [organic, all] = solids(w, organics, i);
         let share = if all > 0.0 { organic / all } else { 0.0 };
@@ -98,8 +99,10 @@ fn organic_pores(w: &mut World, organics: &[usize]) {
         if share != soil.texture.organic {
             soil.texture.organic = share;
             soil.pores = Pores::of(&soil.texture);
+            moved = true;
         }
     }
+    moved
 }
 
 /// The loose ground of cell `i`: of the volume of the solids of its ground node that stay solid at the surface

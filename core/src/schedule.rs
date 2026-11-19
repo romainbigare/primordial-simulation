@@ -26,10 +26,10 @@ pub enum Stage {
 /// A pass of a month: its stage, its name and what it runs.
 type Pass = (Stage, &'static str, fn(&mut World));
 
-/// The passes of a month's start, in order: each cell's soil from what its ground holds (`soil::month`), what stands
-/// on each cell (`contract::stands`), then the surroundings, Flow's state built in full and each cell's place from it
-/// (`contract::surroundings`).
-const START: [Pass; 3] = [(Stage::Flow, "soil", soil::month), (Stage::Cover, "stands", contract::stands), (Stage::Flow, "surroundings", contract::surroundings)];
+/// The passes of a month's start, in order: what stands on each cell (`contract::stands`), then the surroundings,
+/// Flow's state built in full and each cell's place from it (`contract::surroundings`), then each cell's soil from what
+/// its ground holds (`soil::month`), Flow's state built anew where its pores changed.
+const START: [Pass; 3] = [(Stage::Cover, "stands", contract::stands), (Stage::Flow, "surroundings", contract::surroundings), (Stage::Flow, "soil", soil::month)];
 
 /// The passes of a month's start alone (`START`): for a world placed or edited between months, which the laws read
 /// as they would at a month's start.
