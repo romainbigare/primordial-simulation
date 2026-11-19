@@ -12,8 +12,8 @@ const PATCHES = [
     '      mask_stands = l == STANDS;\n      plant(dst, shade, mark_plant('],
   ['cover.wgsl', 'if (m.a > 0.0) { over(dst, m.rgb, m.a * fade); }',
     `if (m.a > 0.0) { over(dst, select(m.rgb, ${MAGENTA}, mask_stands), m.a * fade); }`],
-  ['lib/cover_field.wgsl', '  let dark = FIELD_SHADOW',
-    `  if (l == STANDS) { c = ${MAGENTA}; }\n  let dark = FIELD_SHADOW`],
+  ['lib/cover_field.wgsl', '  let dark = CROWN_SHADOW',
+    `  if (l == STANDS) { c = ${MAGENTA}; }\n  let dark = CROWN_SHADOW`],
 ];
 
 /** The programs of the mask build, as the JSON web/shade writes (for `page.site`). */
