@@ -20,6 +20,7 @@
 use super::bends::{Bends, Reaches, BEND_MOST};
 use super::lines::{Drawn, Join};
 use super::mend::STRIP;
+use super::shore::drowned;
 use super::stems::SMOOTH_MOST;
 use super::valley::{carve, VALLEY_FROM, VALLEY_M};
 use pcore::space::network::NONE;
@@ -124,8 +125,10 @@ impl Window {
 /// The field of the channels over a window of texels (`Channels::field`): of each texel its channel's sample (`NONE`
 /// for none), the distance to that channel's line, m, signed by the side (`NO_CHANNEL_M` for none), of the line's
 /// nearest point how far along the channel it lies, m, and the signed distance to the nearest channel's line without
-/// its bends, m (`NO_CHANNEL_M` for none); and the valleys about the lines (`valley`): the sum of their weights at the
-/// texel and of their floors' heights so weighted, m.
+/// its bends, m (`NO_CHANNEL_M` for none); the valleys about the lines (`valley`): the sum of their weights at the
+/// texel and of their floors' heights so weighted, m; and the deepest mouth of the lines that reach it
+/// (`shore::drowned`): where lines of two channels lie near, the texel's ground goes under as the larger mouth's does,
+/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it.
 pub(super) struct Field {
     pub dist: Vec<f64>,
     pub sample: Vec<u32>,
@@ -133,6 +136,7 @@ pub(super) struct Field {
     pub calm: Vec<f64>,
     pub valley: Vec<f64>,
     pub weight: Vec<f64>,
+    pub mouth: Vec<[f64; 2]>,
 }
 
 impl Field {
@@ -258,19 +262,15 @@ impl<'a> Channels<'a> {
     /// Lay the piece from `a` to `b` of the line `l` into the texels of `win` within its reach that it lies nearer
     /// than `best` holds (over its scale), that `takes` it and that lie out of the bed of the channel it joins: `put`
     /// gets the texel, its distance signed by the side, m, and the share of the piece its nearest point lies along.
-    fn lay(&self, win: &Window, l: &Near, [a, b]: [[f64; 2]; 2], best: &mut [f64], takes: &dyn Fn(usize) -> bool, put: &mut dyn FnMut(usize, f64, f64)) {
+    fn lay(&self, win: &Window, l: &Near, ab: [[f64; 2]; 2], best: &mut [f64], takes: &dyn Fn(usize) -> bool, put: &mut dyn FnMut(usize, f64, f64)) {
         let claims = CLAIM_DIAGONAL * win.k;
-        for y in win.texels(a[1].min(b[1]) - l.reach, a[1].max(b[1]) + l.reach, 1) {
-            for x in win.texels(a[0].min(b[0]) - l.reach, a[0].max(b[0]) + l.reach, 0) {
-                let (at, i) = win.texel(x, y);
-                let (side, d2, t) = to_segment(at, a, b);
-                let near = (d2.sqrt() - claims).max(0.0) / l.scale + NEAREST_TIE * d2.sqrt();
-                if d2 <= l.reach * l.reach && near < best[i] && takes(i) && !l.join.is_some_and(|j| j.holds(at)) {
-                    best[i] = near;
-                    put(i, side * d2.sqrt() * self.r.metres, t);
-                }
+        about(win, l, ab, &mut |i, at, side, d2, t| {
+            let near = (d2.sqrt() - claims).max(0.0) / l.scale + NEAREST_TIE * d2.sqrt();
+            if near < best[i] && takes(i) && !l.join.is_some_and(|j| j.holds(at)) {
+                best[i] = near;
+                put(i, side * d2.sqrt() * self.r.metres, t);
             }
-        }
+        });
     }
 
     /// The field over the window `win`: the lines laid into its texels (`laid`) and its strips mended (`mend`), over
@@ -281,9 +281,11 @@ impl<'a> Channels<'a> {
         let (near, reach_valley) = self.near(&all, all.k * self.r.metres);
         let mut f = self.laid(&all, &near, reach_valley);
         self.mend(&mut f, &all, &near);
-        let cut = |v: &[f64]| (0..win.high).flat_map(|y| v[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect::<Vec<f64>>();
-        let sample = (0..win.high).flat_map(|y| f.sample[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect();
-        Field { dist: cut(&f.dist), sample, along: cut(&f.along), calm: cut(&f.calm), valley: cut(&f.valley), weight: cut(&f.weight) }
+        fn cut<T: Copy>(v: &[T], high: usize, m: usize, wide: usize) -> Vec<T> {
+            (0..high).flat_map(|y| v[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect()
+        }
+        let c = |v: &[f64]| cut(v, win.high, m, wide);
+        Field { dist: c(&f.dist), sample: cut(&f.sample, win.high, m, wide), along: c(&f.along), calm: c(&f.calm), valley: c(&f.valley), weight: c(&f.weight), mouth: cut(&f.mouth, win.high, m, wide) }
     }
 
     /// The lines `near` laid into the texels of the window `win`: each line drawn into the texels within its reach,
@@ -291,12 +293,19 @@ impl<'a> Channels<'a> {
     /// into the texels that hold its own channel's line (the line from the same head, `Bends::head`) or none.
     fn laid(&self, win: &Window, near: &[Near], reach_valley: f64) -> Field {
         let n = win.wide * win.high;
-        let mut f = Field { dist: vec![NO_CHANNEL_M; n], sample: vec![NONE; n], along: vec![0.0; n], calm: vec![NO_CHANNEL_M; n], valley: vec![0.0; n], weight: vec![0.0; n] };
+        let mut f = Field { dist: vec![NO_CHANNEL_M; n], sample: vec![NONE; n], along: vec![0.0; n], calm: vec![NO_CHANNEL_M; n], valley: vec![0.0; n], weight: vec![0.0; n], mouth: vec![[0.0; 2]; n] };
         // Of each texel, how near the line it holds lies, over the line's scale.
         let mut best = vec![f64::INFINITY; n];
         for l in near {
             for w in l.drawn.line.windows(2) {
                 self.lay(win, l, [w[0].p, w[1].p], &mut best, &|_| true, &mut |i, d, t| (f.dist[i], f.sample[i], f.along[i]) = (d, l.q as u32, w[0].s + (w[1].s - w[0].s) * t));
+                let (width, depth) = self.r.bed_of(l.q);
+                about(win, l, [w[0].p, w[1].p], &mut |i, _, _, d2, _| {
+                    let mouth = drowned(width, depth, d2.sqrt() * self.r.metres);
+                    if mouth[0] > f.mouth[i][0] {
+                        f.mouth[i] = mouth;
+                    }
+                });
             }
             if l.carves {
                 carve(&mut f, win, self.r.s, l.q, &l.drawn.line, reach_valley);
@@ -315,6 +324,21 @@ impl<'a> Channels<'a> {
             }
         }
         f
+    }
+}
+
+/// Visit the texels of `win` within the reach of line `l` from its piece from `a` to `b`: `visit` gets the texel's place
+/// in the window, its centre, samples, the side of the piece it lies on, its squared distance to it, samples², and the
+/// share of the piece its nearest point lies along.
+fn about(win: &Window, l: &Near, [a, b]: [[f64; 2]; 2], visit: &mut dyn FnMut(usize, [f64; 2], f64, f64, f64)) {
+    for y in win.texels(a[1].min(b[1]) - l.reach, a[1].max(b[1]) + l.reach, 1) {
+        for x in win.texels(a[0].min(b[0]) - l.reach, a[0].max(b[0]) + l.reach, 0) {
+            let (at, i) = win.texel(x, y);
+            let (side, d2, t) = to_segment(at, a, b);
+            if d2 <= l.reach * l.reach {
+                visit(i, at, side, d2, t);
+            }
+        }
     }
 }
 
