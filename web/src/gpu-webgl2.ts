@@ -11,6 +11,9 @@ interface Parallel { COMPLETION_STATUS_KHR: number }
 class WebGl2Texture implements Texture {
   tex: WebGLTexture | null = null;
   fb: WebGLFramebuffer | null = null;
+  /** The framebuffer that draws into this texture and `with` after it, at once (`pass` of several targets). */
+  fbWith: WebGLFramebuffer | null = null;
+  with: WebGl2Texture[] = [];
   /** What each mip level was last filled with, to fill it again after the context is lost (a layer filled alone is
    * not kept). */
   levels: TexelData[] = [];
@@ -66,6 +69,7 @@ class WebGl2 implements Gpu {
   private make(t: WebGl2Texture): void {
     const gl = this.gl, kind = t.array ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D, inner = this.formats()[t.format][0];
     t.tex = gl.createTexture();
+    t.fbWith = null;
     gl.bindTexture(kind, t.tex);
     if (t.array) gl.texStorage3D(kind, t.mips, inner, t.w, t.h, t.layers);
     else gl.texStorage2D(kind, t.mips, inner, t.w, t.h);
@@ -75,6 +79,20 @@ class WebGl2 implements Gpu {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
+  }
+
+  /** The framebuffer that draws into `all` at once, in their order: kept with the first, made anew when the others
+   * differ. */
+  private framebufferOf(all: WebGl2Texture[]): WebGLFramebuffer | null {
+    const gl = this.gl, [t, ...rest] = all;
+    if (t.fbWith && t.with.length === rest.length && t.with.every((w, k) => w === rest[k])) return t.fbWith;
+    gl.deleteFramebuffer(t.fbWith);
+    t.fbWith = gl.createFramebuffer();
+    t.with = rest;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbWith);
+    all.forEach((a, k) => gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + k, gl.TEXTURE_2D, a.tex, 0));
+    gl.drawBuffers(all.map((_, k) => gl.COLOR_ATTACHMENT0 + k));
+    return t.fbWith;
   }
 
   /** Of each format: its internal format, the format of its data and the type of its data's numbers. */
@@ -94,14 +112,14 @@ class WebGl2 implements Gpu {
 
   drop(t: Texture): void {
     const g = t as WebGl2Texture;
-    this.gl.deleteTexture(g.tex); this.gl.deleteFramebuffer(g.fb);
+    this.gl.deleteTexture(g.tex); this.gl.deleteFramebuffer(g.fb); this.gl.deleteFramebuffer(g.fbWith);
     this.textures.delete(g);
   }
 
-  pass(target: Texture | null, clear?: number[], clip?: number[]): Pass {
-    const gl = this.gl, t = target as WebGl2Texture | null;
+  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
+    const gl = this.gl, all = (Array.isArray(target) ? target : [target]) as (WebGl2Texture | null)[], t = all[0];
     const size: [number, number] = t ? [t.w, t.h] : [this.canvas.width, this.canvas.height];
-    gl.bindFramebuffer(gl.FRAMEBUFFER, t ? t.fb : null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, all.length > 1 ? this.framebufferOf(all as WebGl2Texture[]) : t ? t.fb : null);
     gl.viewport(0, 0, size[0], size[1]);
     if (clear) { gl.clearColor(clear[0], clear[1], clear[2], clear[3]); gl.clear(gl.COLOR_BUFFER_BIT); }
     // A texture's rows are kept top first (`flip`), the canvas's bottom first.

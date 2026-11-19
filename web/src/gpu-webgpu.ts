@@ -56,12 +56,13 @@ class WebGpu implements Gpu {
 
   drop(t: Texture): void { (t as WebGpuTexture).tex.destroy(); }
 
-  pass(target: Texture | null, clear?: number[], clip?: number[]): Pass {
+  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
     this.encoder ??= this.device.createCommandEncoder();
-    const t = target as WebGpuTexture | null;
+    const all = (Array.isArray(target) ? target : [target]) as (WebGpuTexture | null)[], t = all[0];
     if (!t) this.frame ??= this.ctx.getCurrentTexture();
     const tex = t ? t.tex : this.frame!, size: [number, number] = [tex.width, tex.height], format = t ? t.format : this.format;
-    const enc = this.encoder.beginRenderPass({ colorAttachments: [{ view: t ? t.view : tex.createView(), loadOp: clear ? 'clear' : 'load', clearValue: clear, storeOp: 'store' }] });
+    const views = t ? all.map(a => a!.view) : [tex.createView()];
+    const enc = this.encoder.beginRenderPass({ colorAttachments: views.map(view => ({ view, loadOp: clear ? 'clear' : 'load', clearValue: clear, storeOp: 'store' })) });
     if (clip) enc.setScissorRect(clip[0], clip[1], clip[2], clip[3]);
     return {
       draw: (name: string, d: Draw, blend: boolean) => {
@@ -135,10 +136,11 @@ class WebGpu implements Gpu {
     let module = this.modules.get(name);
     if (!module) { module = this.device.createShaderModule({ code: programs()[name].wgsl, label: name }); this.modules.set(name, module); }
     const over: GPUBlendComponent = { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' };
+    const target: GPUColorTargetState = { format, blend: blend ? { color: over, alpha: over } : undefined };
     return {
       layout: 'auto', label: name,
       vertex: { module, entryPoint: 'vs' },
-      fragment: { module, entryPoint: 'fs', targets: [{ format, blend: blend ? { color: over, alpha: over } : undefined }] },
+      fragment: { module, entryPoint: 'fs', targets: Array(programs()[name].targets).fill(target) },
       primitive: { topology: 'triangle-strip' },
     };
   }

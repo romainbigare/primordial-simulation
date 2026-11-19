@@ -9,9 +9,10 @@ import { openWebGl2 } from './gpu-webgl2';
 /** Where WebGL2 finds a binding of a program: a uniform block's binding, or a sampler's texture and sampler bindings
  * (null: the texture is read whole texels at a time, with no sampler). */
 type Bind = { uniform: [number, number] } | { texture: [number, number]; sampler: [number, number] | null };
-/** A program as web/shade writes it: its WGSL, its GLSL stages, the GLSL names of its bindings, and the least metres a
- * pixel takes for which it is made once more (as its declaration of `LEAST_E` writes them). */
-export interface Program { wgsl: string; vertex: string; fragment: string; binds: Record<string, Bind>; least: string[] }
+/** A program as web/shade writes it: its WGSL, its GLSL stages, the GLSL names of its bindings, the least metres a
+ * pixel takes for which it is made once more (as its declaration of `LEAST_E` writes them), and the targets it draws
+ * into at once (a pass of as many, `Gpu.pass`). */
+export interface Program { wgsl: string; vertex: string; fragment: string; binds: Record<string, Bind>; least: string[]; targets: number }
 declare const SHADERS: Record<string, Program>;
 /** The declaration of `LEAST_E` in a program made for no least size of a pixel (WGSL and GLSL; web/shaders/lib/draw.wgsl),
  * and its value. */
@@ -136,9 +137,10 @@ export interface Gpu {
    * which the renderer does not keep: after a lost context it is empty). */
   write(t: Texture, data: TexelData, level?: number, layer?: number): void;
   drop(t: Texture): void;
-  /** Draw into `target` (null: the canvas, sized to its pixels), first filling it with `clear` (r, g, b, a, 0..1) if given,
+  /** Draw into `target` (null: the canvas, sized to its pixels; several textures of one size and format: a program's
+   * targets, `Program.targets`, in the order of its outputs), first filling it with `clear` (r, g, b, a, 0..1) if given,
    * and only inside `clip` (x, y, w, h px from its top-left corner) if given. */
-  pass(target: Texture | null, clear?: number[], clip?: number[]): Pass;
+  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass;
   /** Make program `name` for draws into `target` (null: the canvas) over what is there or not (`blend`) in the
    * background, one program at a time in the order asked (`first`: before all others), so its first draw need not
    * wait for it. */

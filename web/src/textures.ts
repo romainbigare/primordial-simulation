@@ -123,12 +123,13 @@ export class CoverMarks {
     grids.forEach((_, l) => u.vec4(REACH[l]));
     grids.forEach(g => u.ivec4(...g.base));
     const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.seenMpp), 1: u.buffer, 4: this.tableTex!, 20: detail, 21: 'tile' };
-    // Each word of the marks, then from them the cells whose marks reach each cell (web/shaders/reach.wgsl).
+    // The marks' four words at once, a texture each, then from them the cells whose marks reach each cell
+    // (web/shaders/reach.wgsl).
     const cellsOf = (p: Pass, name: string, drawn: Draw['binds']) => {
       for (const g of grids) if (g.cells.rows > 0) p.draw(name, { rect: [0, g.cells.row, g.cells.cols, g.cells.rows], binds: drawn }, false);
       p.end();
     };
-    this.marksTex.forEach((t, word) => cellsOf(gpu.pass(t), 'marks', { ...binds, 2: new Uniforms(1).ivec4(word).buffer }));
+    cellsOf(gpu.pass(this.marksTex), 'marks', binds);
     const decided = { ...binds, ...Object.fromEntries(MARK_BINDINGS.map((b, word) => [b, this.marksTex[word]])) };
     cellsOf(gpu.pass(this.reachTex!), 'reach', decided);
     this.decided = { ...decided, [REACH_BINDING]: this.reachTex! };

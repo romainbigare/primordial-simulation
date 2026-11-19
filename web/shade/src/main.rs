@@ -8,7 +8,7 @@
 //! sets (`web/src/gpu.ts` `programs`, named `<name>:<metres>`).
 //!
 //! `ew-shade SHADERS_DIR OUT.json` writes, for each program: its WGSL; its GLSL vertex and fragment shaders; the least
-//! metres a pixel takes for which it is made once more; and where
+//! metres a pixel takes for which it is made once more; the targets its fragment stage draws into at once; and where
 //! WebGL2 finds each of its bindings (group, binding): the name of each uniform block, and of each sampler with the
 //! texture and the sampler it pairs (GLSL has no separate samplers).
 
@@ -62,6 +62,17 @@ fn glsl_of(module: &Module, info: &naga::valid::ModuleInfo, stage: ShaderStage, 
     Ok(out)
 }
 
+/// The targets the entry point `fs` of `module` draws into at once: one for a colour, or a struct's members that each
+/// name a location.
+fn targets_of(module: &Module) -> Result<usize, String> {
+    let fs = module.entry_points.iter().find(|e| e.name == "fs").ok_or("no entry point fs")?;
+    let result = fs.function.result.as_ref().ok_or("fs returns nothing")?;
+    Ok(match &module.types[result.ty].inner {
+        naga::TypeInner::Struct { members, .. } => members.iter().filter(|m| matches!(m.binding, Some(naga::Binding::Location { .. }))).count(),
+        _ => 1,
+    })
+}
+
 /// The least metres a pixel takes for which program `name` in `dir` is made once more (its line `LEAST`).
 fn leasts(dir: &Path, name: &str) -> Result<Vec<f32>, String> {
     let own = fs::read_to_string(dir.join(format!("{name}.wgsl"))).map_err(|e| format!("{name}: {e}"))?;
@@ -85,7 +96,8 @@ fn translated(dir: &Path, name: &str, least: f32) -> Result<Value, String> {
     let mut binds = Map::new();
     let vertex = glsl_of(&module, &info, ShaderStage::Vertex, "vs", &mut binds)?;
     let fragment = glsl_of(&module, &info, ShaderStage::Fragment, "fs", &mut binds)?;
-    Ok(json!({ "wgsl": wgsl, "vertex": vertex, "fragment": fragment, "binds": binds }))
+    let targets = targets_of(&module).map_err(|e| format!("{name}: {e}"))?;
+    Ok(json!({ "wgsl": wgsl, "vertex": vertex, "fragment": fragment, "binds": binds, "targets": targets }))
 }
 
 /// One program, checked and translated, with the least metres a pixel takes for which it is made once more (`least`,
@@ -145,6 +157,9 @@ mod tests {
         assert!(all.contains_key("earth") && all.contains_key("cover"));
         // The live map is made once more for each size of a pixel its line `LEAST` names.
         assert!(all["land"]["least"].as_array().is_some_and(|l| l.contains(&json!("3.0"))));
+        // The marks' program decides each mark's four words into four targets at once.
+        assert_eq!(all["marks"]["targets"], json!(4));
+        assert_eq!(all["land"]["targets"], json!(1));
         for (name, p) in &all {
             for stage in ["vertex", "fragment"] {
                 assert!(p[stage].as_str().is_some_and(|g| g.starts_with("#version 300 es")), "{name} {stage}");
