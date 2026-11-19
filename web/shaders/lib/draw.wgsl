@@ -192,11 +192,11 @@ const CROWN_SHADOW = 0.42;
 
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
 // samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
-// From this depth on it is water, and a plant stands in it only as deep as its roots' gas spaces reach (the core's
-// `cover::aired`, a kind's reach): one rule for the water drawn and for the plants.
+// From this depth on it is water, and a plant stands in it only down to its kind's line (the core's `Cover::line`, as
+// deep under the level as it lies): one rule for the water drawn and for the plants.
 const FILM_M = 0.05;
-// The share of a plant whose roots stand in liquid `reach` m deep that stands where liquid stands `depth` m deep: all
-// of it on soaked ground under a film and in liquid shallower than its reach, none deeper.
+// The share of a plant whose kind stands in liquid `reach` m deep (down to its line) that stands where liquid stands
+// `depth` m deep: all of it on soaked ground under a film and in liquid shallower than that, none deeper.
 fn stands_in(depth: f32, reach: f32) -> f32 { return select(1.0, 0.0, depth >= max(FILM_M, reach)); }
 // Snow buries a plant `height` m tall as it reaches from `BURIED_FROM` of its height to all of it: a herb is gone under
 // a deep snow, a tree stands in it.

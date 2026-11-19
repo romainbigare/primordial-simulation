@@ -55,11 +55,13 @@ pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, wa
     Plants { per_m2, mass, height, stem, width, cover, crown: -(-leaf / cover).exp_m1() }
 }
 
-/// What a slot's row reads of its cell `i`: how its roots meet its ground's liquid (`cover::soak`), its
-/// temperature and the melting point of its key liquid, K, the density of its walls, kg/m³, and its area, m².
+/// What a slot's row reads of its cell `i`: how its roots meet its ground's liquid (`cover::soak`), the height of its
+/// liquid's level over its lowest ground, m (`flow::levels`), its temperature and the melting point of its key liquid,
+/// K, the density of its walls, kg/m³, and its area, m².
 struct Ground {
     i: usize,
     soak: cover::Soak,
+    level: f64,
     t: f64,
     melt: f64,
     rho: f64,
@@ -83,9 +85,10 @@ struct Ground {
 /// keeps while it lives (a slot that joins another is gone, the other keeps its own), so a viewer tells two slots of
 /// one starting kind apart from month to month. Then of each of its
 /// groups, the large plants first (empty groups last, all 0): how many a m², and a plant's height, stem's width and
-/// crown's width, m (`plants` of that group). Then where it stands under the liquid: the depth of liquid standing over
-/// full pores its roots' gas spaces reach through, m (`cover::aired`, past which it stands no more), and the share of
-/// its ground that lies under the liquid (`Footing::wet`).
+/// crown's width, m (`plants` of that group). Then where it stands: how deep under its cell's level its line lies, m
+/// (`Cover::line`: it stands on the ground above it, on land and under the liquid as deep as that; plants do not move,
+/// so as the level rises by a metre this deepens by a metre, and a viewer draws them on the same ground), and the share
+/// of its ground that lies under the liquid (`Footing::wet`).
 fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
     let ph = &w.cfg.phys;
     let (built, genes) = (c.built(mm, x), c.genes[x]);
@@ -126,7 +129,7 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
         let q = group(k);
         out[at..at + GROUP_ROW].copy_from_slice(&[q.per_m2, q.height, q.stem, q.width]);
     }
-    out[KIND_ROW - KIND_TAIL..].copy_from_slice(&[cover::aired(g.soak.breath, genes[GAS] as f64), foot.wet]);
+    out[KIND_ROW - KIND_TAIL..].copy_from_slice(&[g.level - foot.line, foot.wet]);
     out
 }
 
@@ -140,6 +143,7 @@ pub fn rows(w: &World, i: usize) -> Vec<f64> {
     let g = Ground {
         i,
         soak: cover::soak(w, &p, i, w.g(p.liquid, i)).1,
+        level: pcore::flow::levels(w, &[i]).map_or(0.0, |l| l[0][1] - l[0][0]),
         t: w.t_ground_last(i),
         melt: w.chem.subs[p.liquid].melt,
         rho: w.chem.subs[p.sub[cover::WALL]].density[0],

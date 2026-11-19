@@ -37,7 +37,7 @@ const LAND_LAYER = 13; const LAND_LEAST = 1e-3;
 // Of the sward and of the lattice of stands, what the kinds but the first make (canopy.ts `FIELD`).
 const SWARD_REST = 14; const STANDS_REST = 15;
 // Of the plants that stand in liquid (canopy.ts `FIELD.wet`): the share of the cover that is of kinds the core stands
-// on the ground under liquid there, the depth their roots reach through, m, and the herbs' reach and height, m.
+// on the ground under liquid there, the depth they stand in (down to their line), m, and the herbs' depth and height, m.
 const WET_LAYER = 16;
 const STANDS = 2;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
@@ -73,7 +73,7 @@ struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loo
 // The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; the share of
 // the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month; and
 // of the plants there in liquid (`WET_LAYER`): the share of the cover of the kinds that stand in it, the depth they
-// stand in, m, and the herbs' reach and height, m; and the share of the ground the herbs cover.
+// stand in (down to their line), m, and the herbs' depth and height, m; and the share of the ground the herbs cover.
 struct CoverAt { cover: vec4f, canopy: f32, shed: f32, wet: vec4f, herbs: f32 }
 
 // A square whose kinds' roots hold everywhere has its mean rooted share this near 1: no point of it limits them.

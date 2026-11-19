@@ -11,9 +11,10 @@ const GROUP_AT = 21, GROUP_ROW = 4;
 const GROUPS = 4;
 /** Where the row's tail starts, after its groups. */
 const TAIL_AT = GROUP_AT + GROUPS * GROUP_ROW;
-/** The numbers of a kind in the core's row (tape/src/stands.rs `row`), and the two of its tail after its groups: the
- * depth of liquid its roots can stand in, m (its reach), and the share of its ground under liquid. */
-export const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16, rooted: 17, need: 18, walls: 19, slot: 20, reach: TAIL_AT, wet: TAIL_AT + 1 } as const;
+/** The numbers of a kind in the core's row (tape/src/stands.rs `row`), and the two of its tail after its groups: how
+ * deep under its cell's level its line lies, m (it stands on the ground above it, the core's `Cover::line`), and the
+ * share of its ground under liquid. */
+export const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover: 6, crown: 7, wood: 8, leaf: 9, pigment: 10, moist: 11, frost: 12, fuel: 13, act: 14, frozen: 15, seed: 16, rooted: 17, need: 18, walls: 19, slot: 20, deep: TAIL_AT, wet: TAIL_AT + 1 } as const;
 
 /** The groups of plants of the kind of row `r` (`GROUP_AT`), the held ones, the large first: each a row of its own of
  * its plants' count, height, stem and crown, and the share of the ground its crowns cover (tape/src/stands.rs `plants`:

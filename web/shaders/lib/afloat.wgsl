@@ -1,6 +1,6 @@
 // What floats on still standing liquid up close (colour.wgsl `colour_on`): the leaves the woody crowns about it shed
 // this month, and the round floating leaves of the herbs that stand in it deeper than they are tall (`Spot.pads`: the
-// core stands them on its ponds' ground as deep as their roots reach). A lake's sheltered liquid, not the sea's waves
+// core stands them on its ponds' ground down to their line). A lake's sheltered liquid, not the sea's waves
 // nor a channel's flow, holds them.
 
 // Fallen leaves drift on the water out to `LEAF_REACH_M` from its shore (a crown's reach and a little drift), on

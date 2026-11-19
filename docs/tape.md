@@ -196,9 +196,9 @@ and a plant's height, stem's width and crown's width, m (`stands::plants` of tha
 kind's plants along a smooth curve of sizes through its groups, the large plants on the lowest draws of the kind's own
 marks (web/src/kind_row.ts `groupsOf`, web/shaders/lib/mark.wgsl `along`, `pick_kind`), so they keep their places and
 about their size while smaller plants come and go and groups join or split. Then two numbers of where it stands under
-the liquid: the depth of liquid standing over full pores its roots' gas spaces reach through, m (`cover::aired` at the
-cell's air and ground; past it the kind stands no more), and the share of its ground that lies under the liquid
-(`Footing::wet`). The page thins a
+the liquid: how deep under the cell's level its line lies, m (`Cover::line`: it stands on the ground above it, on land
+and under the liquid as deep as that; plants do not move, so this deepens as the level rises and the page draws them
+on the same ground), and the share of its ground that lies under the liquid (`Footing::wet`). The page thins a
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /

@@ -23,7 +23,8 @@ const LEFT_STEPS = 100;
  * the lattice of stands, `STANDS`, negated for its square's first kind, `Paint`); how wet each kind needs its ground and
  * how deep its loose ground, m (the core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); its slot in
  * its cell's cover (a label it keeps, so its marks keep their places as the kinds' order and shares change, mark.wgsl
- * `pick_kind`), and the depth of liquid its roots stand in, m (its reach, the core's `cover::aired`); then of each kind its
+ * `pick_kind`), and the depth of liquid it stands in, m (how deep its line lies under the level, the core's
+ * `Cover::line`); then of each kind its
  * form (how closed its crown is and the leaves it has left, `LEFT_STEPS`, its crown's form and how surely, form.ts
  * `formOf`, packed as one number, `SURE_PACK`, how dry its ground less how wet (one number: a kind is never both) and how
  * tender to frost it is), the
@@ -52,8 +53,8 @@ export const PLANES_DOWN = 32;
  * stands in it (a square with neither holds 0 in every layer: cover_field.wgsl blends over the squares with cover
  * alone, `on_land`), and of the sward and of the lattice of stands the part the kinds but the first make; and of the
  * plants that stand in liquid (`wet`): the share of the square's cover that is of kinds the core stands on its ground
- * under liquid there (their wet share), the depth their roots reach through on their mean by cover, m, and its herbs'
- * (the sward's) reach and height on their mean by cover, m. */
+ * under liquid there (their wet share), the depth they stand in on their mean by cover, m, and its herbs' (the
+ * sward's) depth and height on their mean by cover, m. */
 export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, shade: LATTICES.length + 8, low: LATTICES.length + 9, land: LATTICES.length + 10, swardRest: LATTICES.length + 11, standsRest: LATTICES.length + 12, wet: LATTICES.length + 13, count: LATTICES.length + 14 } as const;
 /** The number of a square's row of the core's table that is the share of its cell that is land (tape/src/table.rs `row`). */
 const LAND_AT = 10;
@@ -182,9 +183,10 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       if (!holdsKind(k)) continue;
       // A copy: its crowns' numbers are set below (`standingCrowns`).
       const r = rows.slice(at + (i * kinds + k) * kindRow, at + (i * kinds + k + 1) * kindRow);
-      // The depth of liquid it stands in here: its reach where the core stands it on its square's ground under liquid
-      // (its wet share), none where it stands on the land alone.
-      const wades = r[K.wet] > 0 ? r[K.reach] : 0;
+      // The depth of liquid it stands in here: down to its line, under its square's level, where the core stands it on
+      // its square's ground under liquid (its wet share); plants do not move, so the ground above its line holds them
+      // whatever the level. None where it stands on the land alone.
+      const wades = r[K.wet] > 0 ? Math.max(r[K.deep], 0) : 0;
       covered += r[K.cover];
       if (wades > 0) { wading += r[K.cover]; reach += r[K.cover] * wades; }
       // The share of the square that holds its plants and the loose ground their roots need, as the core found them.

@@ -84,7 +84,7 @@ fn foot(at: vec2f) -> Foot {
   return Foot(st.depth, st.wet, st.mean, select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
 }
 
-// Of each of four kinds whose roots stand in liquid as deep as `reach` m (canopy.ts, the core's `cover::aired`), 1 where
+// Of each of four kinds that stand in liquid as deep as `reach` m (canopy.ts: down to the core's `Cover::line`), 1 where
 // it stands in liquid `depth` m deep (draw.wgsl `stands_in`), else 0.
 fn stand_in(depth: f32, reach: vec4f) -> vec4f {
   return vec4f(stands_in(depth, reach.x), stands_in(depth, reach.y), stands_in(depth, reach.z), stands_in(depth, reach.w));

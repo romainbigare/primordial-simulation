@@ -313,7 +313,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     } else {
       water = water_over(bed, p.depth, ripple);
     }
-    // What floats on still water (afloat.wgsl), and the plants that stand in it as deep as their roots reach
+    // What floats on still water (afloat.wgsl), and the plants that stand in it down to their line
     // (draw.wgsl `stands_in`), over it as on land, as far as its waves leave them (`waves_strip`).
     water = afloat(water, p);
     // Under the crowns of the trees that stand in it as the field draws them the water lies in their shadow, as the
