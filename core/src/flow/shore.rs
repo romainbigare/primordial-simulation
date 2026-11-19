@@ -51,10 +51,14 @@ impl Shore<'_> {
         let y = self.c.low + h;
         self.c.apart + self.c.parts.iter().map(|p| p.area() - p.under(y)).sum::<f64>()
     }
-    /// The lowest height whose ground above is no more than `area` m² (`above`), at least 0.
+    /// The height of its highest floor.
+    fn top(&self) -> f64 {
+        self.c.parts.iter().map(|p| p.floors()[p.floors().len() - 1].0).fold(self.c.low, f64::max) - self.c.low
+    }
+    /// The lowest height whose ground above is no more than `area` m² (`above`), at least 0 and at most its highest
+    /// floor's.
     pub fn line_of(&self, area: f64) -> f64 {
-        let top = self.c.parts.iter().map(|p| p.floors()[p.floors().len() - 1].0).fold(self.c.low, f64::max) - self.c.low;
-        let (mut lo, mut hi) = (0.0, top);
+        let (mut lo, mut hi) = (0.0, self.top());
         for _ in 0..LINE_HALVINGS {
             let mid = 0.5 * (lo + hi);
             if self.above(mid) > area { lo = mid } else { hi = mid }
@@ -63,10 +67,11 @@ impl Shore<'_> {
     }
     /// The line of a kind whose roots get the oxidising gas under liquid as deep as `reach`, m, that holds all the
     /// ground it may (`cover::footing`): the highest of its parts' levels that hold liquid less `reach`, so no ground
-    /// above it lies deeper; 0 (all the ground) where none holds liquid.
+    /// above it lies deeper; 0 (all the ground) where none holds liquid; and no higher than its highest floor, so seeds
+    /// that woke hold ground even where all of it lies deeper by now (and live there on their store, `cover::upkeep`).
     pub fn found(&self, reach: f64) -> f64 {
         let wet = self.c.parts.iter().enumerate().map(|(q, p)| (self.level(q, p), p)).filter(|(x, p)| *x > p.floors()[0].0);
-        (wet.map(|(x, _)| x - reach).fold(f64::NEG_INFINITY, f64::max) - self.c.low).max(0.0)
+        (wet.map(|(x, _)| x - reach).fold(f64::NEG_INFINITY, f64::max) - self.c.low).clamp(0.0, self.top())
     }
     /// What a kind finds above its line `h` (`Feet`) whose roots get the oxidising gas under liquid as deep as `reach`,
     /// m, roots `roots` m deep: where liquid stands `d` deep over its ground they work over (`reach` − d) / `roots` of

@@ -624,6 +624,30 @@ fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_
     let _ = month_of(&mut c, &aired);
     let now = c.sizes(&w.cfg.phys, &mm, x);
     assert!(c.line[x] < line && now.count[now.large()] <= large.count[large.large()], "seedlings: line {} from {line}, large plants {} from {}", c.line[x], now.count[now.large()], large.count[large.large()]);
+    // A cell all under the liquid past the kind's reach: a stand founded there still holds ground (its highest floor,
+    // `Shore::found`), all of it without the gas, and dies whole, drowned, once its store is spent.
+    let deep = |j: usize| {
+        let s = cover::Soak { breath: 0.0, ..cover::soak(&w, &p, j, w.g(p.liquid, j)).1 };
+        let f = cover::footing(&w, j, TREE.genes[cover::GAS] as f64, w.cfg.phys.root_least, &s, None);
+        f.share > 0.0 && f.airless == 1.0 && s.loose > 0.0
+    };
+    let under = (0..area.len()).find(|&j| j != shore && deep(j)).expect("a cell all under the liquid");
+    let mut c = w.life.cover(shore).clone();
+    let x = c.held().next().expect("the stand");
+    let kg = c.kg(&mm, x);
+    let mut counts = w.counts.clone();
+    let flood = testkit::garden(&w, &c, (273.0, 1.0, 200.0, 0));
+    c.line[x] = cover::UNSET;
+    for months in 0.. {
+        assert!(months < 600, "a stand all under the liquid lives {months} months");
+        let _ = cover::live(&w, &mut c, &p, &flood, (under, month), &mut counts);
+        assert!(c.mol.iter().flatten().all(|m| m.is_finite()) && c.stands.iter().all(|s| s.is_finite()), "month {months}: {:?}", c.mol[x]);
+        if c.held().next().is_none() {
+            break;
+        }
+    }
+    let drowned = counts.cover_lost[pcore::life::DROWNED as usize] - w.counts.cover_lost[pcore::life::DROWNED as usize];
+    assert!(drowned > 0.5 * kg, "{drowned} kg of {kg} drowned");
 }
 
 /// A stand of the tree kind (2 kg per m²) on ground that held nothing for roots half of the last year
