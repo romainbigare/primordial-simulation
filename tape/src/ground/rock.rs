@@ -6,7 +6,7 @@
 //! which a shell also reads alone: the form of the bed (riffles and pools, or steps) follows it.
 //! And the links of its channel (`links`), by which a shell finds the samples up and down it: what runs through a
 //! channel grows from one sample's centre to the next, not in a step at their edge. And the texture of its loose ground
-//! (`pcore::soil::samples`), which a shell draws its soil by.
+//! (`pcore::soil::textures`), which a shell draws its soil by.
 
 use super::bends::Reaches;
 use super::half;
@@ -45,8 +45,8 @@ fn links(s: &Samples, k: usize) -> u32 {
 /// its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), the slope of its reach (rise
 /// over run; 0 there too) and its channel's links (`links`); then of each sample again the reflectance of the make of
 /// its bed (red, green, blue: `colours`, one a make, `Samples::make`) and a zero; then of each sample again the shares of
-/// coarse and fine particles and of organic matter of its loose ground (`grain`, one a sample; middle particles alone
-/// where it holds none) and a zero: three planes of a texture, one under the other.
+/// coarse and fine particles and of organic matter of its loose ground (`grain`, one a sample) and a zero: three planes
+/// of a texture, one under the other.
 pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<u16> {
     let s = r.s;
     let mut out = Vec::with_capacity(12 * s.h.len());
@@ -59,8 +59,7 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<
         let c = colours.get(m as usize).copied().unwrap_or([0.0; 3]);
         out.extend([half(c[0] as f32), half(c[1] as f32), half(c[2] as f32), 0]);
     }
-    for k in 0..s.h.len() {
-        let t = grain.get(k).copied().unwrap_or_default();
+    for t in &grain[..s.h.len()] {
         out.extend([half(t.coarse as f32), half(t.fine as f32), half(t.organic as f32), 0]);
     }
     out

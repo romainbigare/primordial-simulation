@@ -32,7 +32,7 @@ use pcore::space::network::NONE;
 use pcore::space::samples::{Pond, Samples};
 use pcore::space::square::Square;
 use pcore::space::terrain::{Terrain, SAMPLE_DEPTH};
-use pcore::World;
+use pcore::{Physics, World};
 use std::sync::Arc;
 
 /// Texels along a side of a tile, inside its gutter.
@@ -61,8 +61,7 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 /// The ground of an island: its seed, map and terrain, the latitudes of its rows, the terrain's samples and the wetness
 /// index of each (`sample_index`), the channel law (`Physics::channel`), by which the channel nearest a texel is found,
 /// the point each sample's line runs through (`stems::points`), how each sample's piece of its line starts
-/// (`bends::Bends`), and the texture of each sample's loose ground (`pcore::soil::samples`; none known for a ground made
-/// without its world, `new`).
+/// (`bends::Bends`), and the texture of each sample's loose ground (`pcore::soil::textures`).
 pub struct Ground {
     seed: u64,
     map: Square,
@@ -78,23 +77,23 @@ pub struct Ground {
 }
 
 impl Ground {
-    /// The ground of `terrain` on the island `map` for `seed`, its rows between latitudes `lat`, its channels sized by
-    /// `law`.
-    pub fn new(seed: u64, map: Square, terrain: Terrain, lat: (f64, f64), law: Law) -> Ground {
+    /// The ground of `terrain` on the island `map` for `seed`, its rows between latitudes `lat`, under the laws `phys`
+    /// at gravity `gravity`: its channels sized by them (`Law`), and its samples' texture (`pcore::soil::textures`).
+    pub fn new(seed: u64, map: Square, terrain: Terrain, lat: (f64, f64), phys: &Physics, gravity: f64) -> Ground {
+        let law = Law::of(phys);
         assert!(!map.wrap, "tiles of the ground are made for an island");
         let samples = terrain.samples(seed, &map, lat);
         let twi = sample_index(&map, &samples);
         let shore = shore::Shore::new(&samples);
         let at = stems::points(&samples, &shore);
         let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
-        Ground { seed, map, terrain, lat, samples, twi, law, at, bends, shore, grain: vec![] }
+        let grain = pcore::soil::textures(&samples, &terrain.makes, phys, gravity);
+        Ground { seed, map, terrain, lat, samples, twi, law, at, bends, shore, grain }
     }
 
     /// The ground of world `w`.
     pub fn of(w: &World) -> Ground {
-        let mut g = Ground::new(w.terrain.seed, w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north), Law::of(&w.cfg.phys));
-        g.grain = pcore::soil::samples(w);
-        g
+        Ground::new(w.terrain.seed, w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north), &w.cfg.phys, w.cfg.gravity)
     }
 
     /// The tile of `depth` at column `tx` and row `ty` of tiles, `TILE` + 2 `GUTTER` texels a side row by row from its
