@@ -38,6 +38,8 @@ pub(super) struct Surf {
     pub(super) cover: [f64; 3],
     pub(super) alb: f64,
     pub(super) pd: f64,
+    /// The shares of its pores its loose ground holds at field capacity and at the wilting point (`soil::Pores`)
+    pub(super) field_wilt: [f64; 2],
     /// The share of its area the liquid standing over its pores covers (`land::wet_share`)
     pub(super) wet: f64,
     pub(super) heat: f64,
@@ -87,6 +89,7 @@ impl Surf {
             cover: s.cover[i],
             alb: s.alb[i],
             pd: s.pd[i],
+            field_wilt: [w.pores(i).field, w.pores(i).wilt],
             wet: wet_share(s, i),
             heat: w.store.heat(Class::Ground)[i],
             amt,
@@ -168,6 +171,7 @@ impl Surf {
             cover: faces[0].cover,
             alb: face_by_area(&|g| g.alb),
             pd: face_by_area(&|g| g.pd),
+            field_wilt: [0, 1].map(|h| face_by_area(&|g| g.field_wilt[h] * g.pd) / face_by_area(&|g| g.pd).max(f64::MIN_POSITIVE)),
             wet: face_by_area(&|g| g.wet),
             heat: sum_faces(&|g| g.heat),
             amt,
@@ -252,7 +256,7 @@ pub(super) struct Vapour {
     pub(super) pa: f64,
     pub(super) per: f64,
     /// What the node holds, mol; what its pores keep from the air, mol (of a liquid, the wilting point's:
-    /// `Physics::available`); what it holds wet over that (`exchange::bucket`), mol; what its pores hold full, mol; the
+    /// `Pores::available`); what it holds wet over that (`exchange::bucket`), mol; what its pores hold full, mol; the
     /// share of its area the liquid standing over them covers; the air's film, mol K/(Pa s).
     held: f64,
     kept: f64,
@@ -282,11 +286,11 @@ impl Vapour {
         let boil = (up && g.tg >= sp.boil).then(|| held.min(boil_off(&sp, g.cap, g.tg)));
         let melted = g.latent.molten >> ac.k & 1 == 1;
         let pores = g.pd * area / sp.v[melted as usize];
-        // The air takes a liquid up from the pores by the share of it the ground holds for roots (`Physics::available`):
+        // The air takes a liquid up from the pores by the share of it the ground holds for roots (`Pores::available`):
         // at the open rate from field capacity, none at the wilting point (Manabe 1969); a solid down to none.
-        let ph = &w.cfg.phys;
-        let kept = if melted { ph.wilt * pores } else { 0.0 };
-        let (film, wet) = (w.cfg.evap / R_GAS * area, ph.field * pores - kept);
+        let [field, wilt] = g.field_wilt;
+        let kept = if melted { wilt * pores } else { 0.0 };
+        let (film, wet) = (w.cfg.evap / R_GAS * area, field * pores - kept);
         // The fusion enthalpy a mol of it holds in the ground: none where it is solid or on its plateau.
         let fusion = if g.pk != ac.k && melted { sp.lf } else { 0.0 };
         let (second, behind) = match g.second {

@@ -119,8 +119,8 @@ pub struct World {
     /// The loose ground of each cell, the share of its area in each bin of depth, which its cover's roots read
     /// (`cover::loose_bins`): the terrain's samples', found when the world is built
     pub loose_bins: Vec<[f32; crate::cover::BINS]>,
-    /// The soil of each cell (`soil::Soil`): its texture, the terrain's samples', found when the world is built
-    /// (`soil::of_world`)
+    /// The soil of each cell (`soil::Soil`): its texture, the terrain's samples', and its pores, found when the world is
+    /// built (`soil::of_world`)
     pub soil: Vec<crate::soil::Soil>,
     /// The planet's air beyond the map's edges by row of latitude and month (`flow::Planet`), where they are open
     pub planet: Option<crate::flow::Planet>,
@@ -144,6 +144,11 @@ impl World {
     pub fn rise_at_build(&self) -> Vec<f64> {
         let lat = (self.cfg.lat_south, self.cfg.lat_north);
         crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain.rise_south(self.terrain.seed, &self.map, self.map.leaves()[i], lat))
+    }
+    /// The pores of the loose ground of ground node `i` (`soil::Pores`).
+    #[inline]
+    pub fn pores(&self, i: usize) -> &crate::soil::Pores {
+        &self.soil[i].pores
     }
     /// Hand the shell the raw events since it last asked, and start the list again.
     pub fn drain_events(&mut self) -> Vec<Event> {

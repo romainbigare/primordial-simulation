@@ -70,15 +70,15 @@ impl<'a> Look<'a> {
     /// The colour of the loose ground's panel `panel` (index in `PANELS`, from `GROUND`) of cell `i`: a blue grey where
     /// liquid stands over the cell.
     fn ground(&self, panel: usize, i: usize) -> Rgb {
-        let (w, f, ph) = (self.w, &self.f, &self.w.cfg.phys);
+        let (w, f, soil) = (self.w, &self.f, self.w.pores(i));
         if f.depth[i] > STANDING_M {
             return [70, 80, 95];
         }
         match panel - GROUND {
             // Saturated conductivity, m/s, on a log scale: a clay's 1e-7 dark, a sand's 1e-4 pale.
-            0 => ramp(&[(-7.0, [60, 30, 20]), (-6.0, [170, 90, 40]), (-5.0, [240, 200, 90]), (-4.0, [250, 250, 220])], ph.seep.log10()),
+            0 => ramp(&[(-7.0, [60, 30, 20]), (-6.0, [170, 90, 40]), (-5.0, [240, 200, 90]), (-4.0, [250, 250, 220])], soil.seep.log10()),
             // The liquid the loose ground holds between the wilting point and field capacity, mm.
-            1 => ramp(&[(0.0, [240, 230, 200]), (40.0, [200, 210, 140]), (120.0, [90, 170, 120]), (300.0, [30, 90, 160])], (ph.field - ph.wilt) * ph.porosity * f.loose[i] * 1e3),
+            1 => ramp(&[(0.0, [240, 230, 200]), (40.0, [200, 210, 140]), (120.0, [90, 170, 120]), (300.0, [30, 90, 160])], (soil.field - soil.wilt) * soil.porosity * f.loose[i] * 1e3),
             // Rain less what rises, mm a year: what runs off and sinks.
             2 => ramp(&[(-200.0, [190, 60, 40]), (0.0, [240, 235, 220]), (300.0, [110, 170, 220]), (1000.0, [20, 50, 150])], self.mm_a_year(w.rain[i] as f64 - w.evap[i] as f64)),
             // The share of the pores the liquid fills.

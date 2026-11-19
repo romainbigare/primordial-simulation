@@ -282,15 +282,16 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         events: Vec::new(),
         scratch: Default::default(),
     };
+    world.soil = pcore::soil::of_world(&world);
     let (amounts, heat) = (|w: &World, c: Class| w.store.amounts(c).to_vec(), |w: &World, c: Class| w.store.heat(c).to_vec());
     // The low basin's liquid at 0 m and each body of standing liquid full to its pass: each cell whose own ground dips
     // under them holds the liquid that fills its pores and stands over its ground up to them (`World::full_bodies`), as
     // Flow's pass stands it.
-    let (por, v_low) = (world.cfg.phys.porosity, world.chem.molar_volume(init.low, Phase::Liquid));
+    let v_low = world.chem.molar_volume(init.low, Phase::Liquid);
     let low = world.full_bodies(0.0);
     let mut ground = amounts(&world, Class::Ground);
     for (i, &under) in low.iter().enumerate().filter(|p| *p.1 > 0.0) {
-        ground[init.low * n + i] += (por * loose[i] * world.mesh.cells().area()[i] + under) / v_low;
+        ground[init.low * n + i] += (world.pores(i).porosity * loose[i] * world.mesh.cells().area()[i] + under) / v_low;
     }
     world.store = Store::new(n, (ground, amounts(&world, Class::Bed), vec![0.0; n]), (amounts(&world, Class::Air), vec![0.0; na]));
     // The ground and the air at their starting temperatures. (The world is made: its store is built whole at each stage,
@@ -326,7 +327,6 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
     // The way the ground of each cell faces (laws.md 0), and no liquid running yet down the terrain's samples.
     world.rise_south = world.rise_at_build();
     world.loose_bins = pcore::cover::loose_bins(&world);
-    world.soil = pcore::soil::of_world(&world);
     world.discharge = vec![0.0; world.terrain_samples().h.len()];
     world
 }

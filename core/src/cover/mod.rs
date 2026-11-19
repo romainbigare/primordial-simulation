@@ -319,7 +319,7 @@ pub fn ground(w: &crate::World, i: usize) -> f64 {
 }
 
 /// The activity of a kind of cover of genes `genes` on ground that holds the share `available` of what it holds for roots
-/// (`Physics::available`): full from the share its moisture gene sets (`MOIST`), falling in a straight line to none at the wilting
+/// (`Pores::available`): full from the share its moisture gene sets (`MOIST`), falling in a straight line to none at the wilting
 /// point. A plant transpires freely until its roots have drawn about half the liquid available to them (FAO-56's
 /// depletion fraction p of 0.3 to 0.7, 0.5 for most kinds), a `MOIST` of log10(1 − p), and below that its transpiration
 /// falls with what is left, its stress coefficient Ks (Allen and others 1998, from memory). A dry seed's activity

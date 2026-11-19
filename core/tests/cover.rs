@@ -56,10 +56,11 @@ fn start() -> (pcore::World, usize) {
 /// the soil's minerals, and spreads seeds. What the cover's parts hold as fuel (`cover::content`) changes by exactly the
 /// flows its budget books (`cover::BUDGET`): what its light reaction stored, less each part of its upkeep, the work of
 /// building, the layers it shed, what died and what its roots gave its ground; and every element and the energy of
-/// the world are kept.
+/// the world are kept. Every cell has a loam's pores.
 #[test]
 fn the_cover_grows_by_what_its_budget_books() {
     let (mut w, i) = start();
+    worldgen::testkit::set_pores(&mut w, |p| *p = worldgen::testkit::loam());
     let books = Books::now(&w);
     assert!(cover::place(&mut w, i, genes(), 0, 0.1));
     w.take_counters();
@@ -112,18 +113,18 @@ fn the_light_reaction_goes_with_its_gas() {
     assert!(half > 0.0 && half < 1.0 && p.gas_factor(2.0 * p.gas_ref) > 1.0, "{half}");
 }
 
-/// A plant feels drought against the pores of its own ground (`Physics::available`, `cover::activity`): it is fully active
+/// A plant feels drought against the pores of its own ground (`Pores::available`, `cover::activity`): it is fully active
 /// while its ground holds the share of what it holds for roots its moisture gene sets, none at the wilting point
 /// (`wilt`), between the two it slows; a kind of dry ground (`MOIST` -1) is still fully active where the light-eaters
 /// have slowed.
 #[test]
 fn a_plant_slows_from_its_share_to_the_wilting_point() {
-    let ph = pcore::Physics::default();
+    let soil = worldgen::testkit::loam();
     let (herb, dry) = (genes(), KINDS[DRY_ROW].genes);
-    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(g, ph.available(filled));
-    let filled = |share: f64| ph.wilt + share * (ph.field - ph.wilt);
+    let act = |g: &[f32; cover::NG], filled: f64| cover::activity(g, soil.available(filled));
+    let filled = |share: f64| soil.wilt + share * (soil.field - soil.wilt);
     let slows = cover::dec(herb[cover::MOIST]);
-    let (wilting, full, half) = (act(&herb, ph.wilt), act(&herb, filled(slows * (1.0 + 1e-9))), act(&herb, filled(0.5 * slows)));
+    let (wilting, full, half) = (act(&herb, soil.wilt), act(&herb, filled(slows * (1.0 + 1e-9))), act(&herb, filled(0.5 * slows)));
     println!("activity of the light-eaters at the wilting point {wilting}, at the share {slows:.2} {full}, at half that {half:.3}");
     assert!(wilting == 0.0 && full == 1.0 && half > 0.0 && half < 1.0, "{wilting} {full} {half}");
     assert_eq!(act(&dry, filled(0.5 * slows)), 1.0, "the kind of dry ground slowed where the light-eaters slow");
