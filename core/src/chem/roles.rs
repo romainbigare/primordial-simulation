@@ -63,6 +63,11 @@ impl Chemistry {
         &self.derived().minerals
     }
 
+    /// Whether substance `k` is one of the `minerals`.
+    pub fn is_mineral(&self, k: usize) -> bool {
+        self.minerals().iter().any(|m| m.0 == k)
+    }
+
     /// The roles the first life's chemistry is built on, found from the numbers: the light reaction (one that takes
     /// energy), the energy-rich solid it makes, the liquid it uses, and the reaction that burns that solid with a gas.
     pub fn life_roles(&self) -> Option<(usize, usize, usize, usize)> {

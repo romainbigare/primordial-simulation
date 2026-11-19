@@ -115,8 +115,9 @@ fn body_level(s: &Scratch, b: &Body) -> f64 {
 }
 
 /// What may move of the liquids `liq` in each cell of `cells` (`[c * (liq.len() + 1) + q]`): all of one that boils below
-/// the coldest node, `tmin` (a gas dissolved in the liquid, which takes no room), else its liquid share `wet(k, i)`,
-/// mol, then their heat as they leave, `heat(i, mol)`, J; and their volume, m³.
+/// the coldest node, `tmin` (a gas dissolved in the liquid, which takes no room), else its liquid share `wet(k, i)`, of
+/// a mineral the share of that which stays dissolved (`liquid::held_off`), mol, then their heat as they leave,
+/// `heat(i, mol)`, J; and their volume, m³.
 pub(super) fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin: f64, (wet, heat): (impl Fn(usize, usize) -> f64, impl Fn(usize, &[f64]) -> f64)) -> (Vec<f64>, Vec<f64>) {
     let (n, nl, m) = (w.mesh.cells().n(), liq.len(), cells.len());
     let width = nl + 1;
@@ -128,6 +129,9 @@ pub(super) fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin
         for (q, &k) in liq.iter().enumerate() {
             row[q] = w.store.amounts(Class::Ground)[k * n + i] * if gas[q] { 1.0 } else { wet(k, i) };
             vol[c] += if gas[q] { 0.0 } else { row[q] * s.sp[k].v[1] };
+        }
+        for (q, _) in liq.iter().enumerate().filter(|p| w.chem.is_mineral(*p.1)) {
+            row[q] *= super::liquid::held_off(w, i, vol[c]);
         }
         row[nl] = heat(i, &row[..nl]);
     }

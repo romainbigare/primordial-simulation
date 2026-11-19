@@ -1369,7 +1369,16 @@ m/s. So coarse ground takes the rain in fast and holds little of it; fine ground
 passes, and holds more, much of it past the roots' reach (1.2, 1.5, 3).
 
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
-and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
+and the sea and fertility differs by place. **Exchange sites** (`soil::exchange`): the charged faces of a cell's fine
+particles and its organic matter hold a share of its dissolved minerals in a linear balance with what stays
+dissolved: sites of 1,060 mol of charge a m³ of fine particles and 2,800 a m³ of organic matter (`SITES_FINE`,
+`SITES_ORGANIC`), each holding the minerals of 0.04 m³ of the liquid (`HELD_PER_SITE`), so the sites hold those of
+`Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral in V m³ of
+liquid stays dissolved (`soil::dissolved`). Only that share moves with the liquid that sinks, flows through the pores
+and runs off (`flow::liquid::mobile`, `basin::movable`); the rest stays in the ground node, where roots take from all
+of it (the sites give back to the liquid as fast as roots take from it). So coarse ground lets the rain wash its
+minerals away and fine and organic ground keeps them: a loam's 2 m of loose ground holds some 97% of its minerals
+on its sites at field capacity, a coarse ground some 90%, so the coarse loses them three to four times as fast. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
 per m² of land, on every open land cell; then only fixing adds it, rotting (7) returns it, heat (11) sends it
 to the air. Body matter holds no rock element: the **rock salt (11)** is rock chemistry, made in wet cells from lime
 (8), turned back by 9, near balance (2.5).

@@ -630,9 +630,11 @@ fn a_store_reaches_only_its_neighbours_in_a_step() {
 }
 
 /// A solid that dissolves in the liquid (the fixed gas's mineral) is in the liquid of the pores, and moves with the
-/// liquid that runs off the cell: the share of the mineral that leaves is the share of the liquid that leaves, down
-/// the slope, and it is deposited nowhere as sediment. Liquid that fits in the pores does not run off and the mineral
-/// stays with it; a dry cell keeps its mineral. Every cell has a loam's pores. Matter and energy are kept.
+/// liquid that runs off the cell: with no exchange sites the share of the mineral that leaves is the share of the
+/// liquid that leaves, down the slope, and it is deposited nowhere as sediment; sites that hold as much of it as the
+/// liquid does (`Soil::holds`) keep about half of what would leave (`soil::dissolved`). Liquid that fits in the pores
+/// does not run off and the mineral stays with it; a dry cell keeps its mineral. Every cell has a loam's pores. Matter
+/// and energy are kept.
 #[test]
 fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pores() {
     let mut base = worldgen::testkit::squares(3, 16, 16);
@@ -651,8 +653,9 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
     };
     // (Liquid steps alone: no air's step to evaporate, rain or freeze, which would add or take liquid and not the
     // mineral: the liquid there is all there is, and what it does is the pores' and the slope's.)
-    let run = |x: f64, steps: usize| {
+    let run = |x: f64, steps: usize, holds: f64| {
         let mut w = scene(x);
+        w.soil[top].holds = holds;
         let books = Books::now(&w);
         let liquid0 = w.store.amounts(Class::Ground)[LIQUID * n + top];
         for _ in 0..steps {
@@ -665,13 +668,17 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         (1.0 - w.store.amounts(Class::Ground)[MINERAL * n + top] / 1e6, 1.0 - w.store.amounts(Class::Ground)[LIQUID * n + top] / liquid0)
     };
     // Half the pores' worth, under their field capacity: the ground holds all of it against gravity, and the mineral.
-    let (m_in, l_in) = run(0.5, 8);
+    let (m_in, l_in) = run(0.5, 8, 0.0);
     assert!(m_in.abs() < 1e-12 && l_in.abs() < 1e-12, "liquid that fits in the pores moved: mineral {m_in}, liquid {l_in}");
     // Twice: the half over the pores runs off, and the mineral with it, in the same share.
-    let (m_out, l_out) = run(2.0, 8);
+    let (m_out, l_out) = run(2.0, 8, 0.0);
     println!("pores half full: {:.2}% of the mineral and {:.2}% of the liquid moved; twice full: {:.1}% of the mineral and {:.1}% of the liquid left the cell in 8 steps", 100.0 * m_in, 100.0 * l_in, 100.0 * m_out, 100.0 * l_out);
     assert!(l_out > 0.3 && m_out > 0.3, "only {m_out} of the mineral and {l_out} of the liquid ran off");
     assert!((m_out / l_out - 1.0).abs() < 0.05, "the mineral {m_out} and the liquid {l_out} ran off in different shares");
+    // Sites that hold the mineral of as much liquid as stands there: about half of what would leave stays.
+    let (m_held, l_held) = run(2.0, 8, 2.0 * pores * base.chem.molar_volume(LIQUID, Phase::Liquid));
+    println!("with sites: {:.1}% of the mineral and {:.1}% of the liquid left the cell", 100.0 * m_held, 100.0 * l_held);
+    assert!(m_held > 0.3 * l_held && m_held < 0.7 * l_held, "the sites kept {m_held} of the mineral against {l_held} of the liquid");
     // No liquid: nothing carries it, but for what Darcy's flow takes of the film a dry cell holds.
     let mut dry = scene(0.0);
     dry.cfg.evap = 0.0;
