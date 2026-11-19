@@ -15,8 +15,8 @@ const SIDE_BY_SIDE: usize = 5;
 /// The panels `ew view` draws: those of the pictures, the land with no river drawn over it, and of the loose ground
 /// (`GROUND`): its conductivity, the liquid it holds for roots, what the year's rain leaves after what rises (its
 /// yield), the share of its pores its liquid fills, what rises from it, its texture, the cell's (soil), its organic
-/// share, and the terrain's sample's texture under each pixel (texture, `SAMPLED`).
-pub const PANELS: [&str; 14] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise", "soil", "organic", "texture"];
+/// share, the minerals it holds, and the terrain's sample's texture under each pixel (texture, `SAMPLED`).
+pub const PANELS: [&str; 15] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise", "soil", "organic", "minerals", "texture"];
 /// The panel drawn by the terrain's samples, not by the cells: the last.
 const SAMPLED: usize = PANELS.len() - 1;
 /// The first of the loose ground's panels in `PANELS`.
@@ -62,6 +62,11 @@ impl<'a> Look<'a> {
         Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3 }
     }
 
+    /// The minerals the ground of cell `i` holds (`Chemistry::minerals`), mol/m².
+    fn minerals(&self, i: usize) -> f64 {
+        self.w.chem.minerals().iter().map(|m| self.w.g(m.0, i)).sum::<f64>() / self.w.mesh.cells().area()[i]
+    }
+
     /// The depth of liquid a year of a flux of `mol` mol/(m² s), mm.
     fn mm_a_year(&self, mol: f64) -> f64 {
         mol * self.liquid_m3 * YEAR_S * 1e3
@@ -87,6 +92,8 @@ impl<'a> Look<'a> {
             5 => texture(&w.soil[i].texture),
             // What rises, mm a year.
             4 => ramp(&[(0.0, [240, 235, 220]), (300.0, [200, 210, 120]), (700.0, [70, 160, 90]), (1200.0, [20, 90, 70])], self.mm_a_year(w.evap[i] as f64)),
+            // The minerals the ground holds, mol/m², on a log scale: 1e-3 pale, 1 dark green.
+            7 => ramp(&[(-3.0, [240, 230, 210]), (-2.0, [200, 200, 140]), (-1.0, [110, 160, 80]), (0.0, [30, 90, 40])], self.minerals(i).max(1e-9).log10()),
             // The organic share of the solids' volume, on a log scale: 1e-5 pale, 1e-2 dark.
             _ => ramp(&[(-5.0, [235, 225, 200]), (-4.0, [190, 160, 110]), (-3.0, [120, 85, 50]), (-2.0, [50, 30, 15])], w.soil[i].texture.organic.max(1e-9).log10()),
         }
