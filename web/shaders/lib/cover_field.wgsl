@@ -303,11 +303,10 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   return vec4f(c, cover * cluster);
 }
 
-// The herbs' sward at `at`, seen at `e` m a pixel, over `b`, premultiplied: their colour in stands of their kinds, the
+// The herbs' sward at `at`, seen at `e` m a pixel, over `b`, its field there `f` (`field_smooth`), premultiplied: their colour in stands of their kinds, the
 // share they cover (thicker and thinner by `thick`, `patchy`, as far as they hold there, `hold`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees' crowns,
 // reeds on soaked ground and at the water's edge, ferns on wet shaded ground, and flowers over it.
-fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> vec4f {
-  let f = field_smooth(at, SWARD_LAYER);
+fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold: f32) -> vec4f {
   if (f.a <= 0.0 || hold <= 0.0) { return vec4f(0.0); }
   // Near, its images give its detail (detail.wgsl `grass_detail`): the drawn tufts' and swathes' tone fades out as they
   // show, and its kinds' stands keep `SWARD_STANDS_NEAR` of their difference from the mean, so the layers do not pile
@@ -417,8 +416,13 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   // Under the trees: the sward and the low lattices one by one near, as one layer far (`LOW_FAR_E`).
   let far = ease(LOW_FAR_E, LOW_FAR_FULL_E, e);
   var dst = vec4f(0.0);
+  // The sward's field, read once where the near or the far picture asks for it.
+  var swarded = vec4f(0.0);
+  var sward_read = false;
   if (least_e() < LOW_FAR_FULL_E && far < 1.0) {
-    dst = sward(at, e, b, trees.a, thick, hold.w);
+    swarded = field_smooth(at, SWARD_LAYER);
+    sward_read = true;
+    dst = sward(at, e, b, swarded, trees.a, thick, hold.w);
     // A lattice no square holds adds nothing: its field is not read.
     for (var l = 0; l < STANDS; l++) {
       if (cover_look.sides[l] > 0.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
@@ -433,7 +437,10 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
     // herbs stand there.
     let place = reed_place(b);
     var reeds = 0.0;
-    if (place > 0.0) { reeds = reeds_of(place, min(field_smooth(at, SWARD_LAYER).a * hold.w * thick, 1.0)); }
+    if (place > 0.0) {
+      if (!sward_read) { swarded = field_smooth(at, SWARD_LAYER); }
+      reeds = reeds_of(place, min(swarded.a * hold.w * thick, 1.0));
+    }
     let filled = mix(seen.a, max(seen.a, REED_FILL), reeds);
     seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * filled, filled);
     dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * min(trees.a, 1.0)), seen.a), far);
