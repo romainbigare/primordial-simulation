@@ -7,7 +7,7 @@
 // large), as many as the ground suits them: rocks where it is bare, rocky, steep or loose (a snowcap on top where snow
 // lies), large ones in cells of `ROCK_CELL_M` m and small in cells of `PEBBLE_CELL_M` m; fallen trunks and branches
 // under crowns and, fewer, on dry open ground (`WOOD_DRY`); dead bushes on dry bare ground; driftwood on a channel's
-// bars; its boulders where it moves large stones (`bed_rocks`).
+// bars; its boulders where it moves large stones (`bed_rocks`); cobbles on a shore of pebbles (`COBBLE_CELL_M`).
 const ROCK_CELL_M = 7.0; const ROCK_FILL = 0.35; const ROCK_M = vec2f(0.5, 2.4);
 const PEBBLE_CELL_M = 1.6; const PEBBLE_FILL = 0.3; const PEBBLE_M = vec2f(0.12, 0.45);
 // Snow shows at least `SNOW_ROCKS` as many rocks through it as the barest ground holds.
@@ -19,16 +19,23 @@ const WOOD_CELL_M = 6.0; const WOOD_FILL = 0.2; const WOOD_M = vec2f(1.5, 5.0); 
 // `DRIFTWOOD_FILL` of them, `DRIFTWOOD_M` m long.
 const DRIFTWOOD_CELL_M = 6.0; const DRIFTWOOD_FILL = 0.5; const DRIFTWOOD_M = vec2f(1.2, 4.5);
 const DEAD_BUSH_CELL_M = 4.0; const DEAD_BUSH_FILL = 0.3; const DEAD_BUSH_M = vec2f(0.5, 1.3);
+// Cobbles worn round lie over a shore of pebbles (colour.wgsl `shore_grain`), larger than its pebbles: in cells of
+// `COBBLE_CELL_M` m, one in `COBBLE_FILL` of them, `COBBLE_SIZE_M` m across, as wet as the shore is soaked (the waves and the
+// swash leave the coarsest stones on top of a beach of pebbles: from memory).
+const COBBLE_CELL_M = 1.5; const COBBLE_FILL = 0.35; const COBBLE_SIZE_M = vec2f(0.12, 0.35);
 // A thing's shadow: a seam `CONTACT` of its width wide and deep (`CONTACT_UP` of it north of its foot, under it)
 // `CONTACT_DARK` dark where it sits in the ground, and the shade it casts, `OBJECT_SHADOW` dark, `CAST` of its width
 // across, its middle at `CAST_AT` of its width from its foot (east and a little north: mostly under it). Snow lies on its
 // lit upper faces, `SNOW_CAP` of their colour.
 const CONTACT = vec2f(0.5, 0.1); const CONTACT_UP = 0.04; const CONTACT_DARK = 0.55;
 const OBJECT_SHADOW = 0.4; const CAST = vec2f(0.6, 0.22); const CAST_AT = vec2f(0.22, -0.06); const SNOW_CAP = 0.85;
-// Each sort's sprites (sprites.wgsl): rocks, wood (a fallen trunk and branches), dead bushes, worn rocks under moss.
+// Each sort's sprites (sprites.wgsl): rocks, wood (a fallen trunk and branches), dead bushes, worn rocks under moss,
+// driftwood, stones worn round.
 const ROCK_SORT = 0; const WOOD_SORT = 1; const DEAD_BUSH_SORT = 2; const MOSSY_ROCK_SORT = 3; const DRIFTWOOD_SORT = 4;
+const COBBLE_SORT = 5;
 fn sort_sprite(sort: i32, k: u32) -> i32 {
   if (sort == ROCK_SORT) { return ROCK_FROM + i32(k % u32(ROCK_N)); }
+  if (sort == COBBLE_SORT) { return COBBLE_FROM + i32(k % u32(COBBLE_N)); }
   if (sort == MOSSY_ROCK_SORT) { return SHORE_ROCK_FROM + i32(k % u32(SHORE_ROCK_N)); }
   if (sort == DRIFTWOOD_SORT) { return DRIFTWOOD_FROM + i32(k % u32(DRIFTWOOD_N)); }
   if (sort == WOOD_SORT) { return WOOD_FROM + i32(k % u32(WOOD_N)); }
@@ -89,15 +96,17 @@ fn objects(g: vec3f, p: Spot, bare: f32) -> vec3f {
   let wood = max(canopy, WOOD_DRY * dry) * (1.0 - p.sand) * (1.0 - p.snow);
   let free = bare * (1.0 - p.snow);
   // One loop over the sorts, so the program holds the code that draws a thing once.
-  var sorts = array<Strewn, 6>(
+  let grain = shore_grain(p);
+  var sorts = array<Strewn, 7>(
     Strewn(WOOD_SORT, WOOD_CELL_M, WOOD_FILL, WOOD_M, wood, 0.0, 120),
     Strewn(DEAD_BUSH_SORT, DEAD_BUSH_CELL_M, DEAD_BUSH_FILL, DEAD_BUSH_M, dry, 0.0, 124),
     Strewn(ROCK_SORT, PEBBLE_CELL_M, PEBBLE_FILL, PEBBLE_M, stony, 0.0, 152),
     Strewn(ROCK_SORT, ROCK_CELL_M, ROCK_FILL, ROCK_M, stony, 0.0, 150),
     Strewn(DRIFTWOOD_SORT, DRIFTWOOD_CELL_M, DRIFTWOOD_FILL, DRIFTWOOD_M, p.driftwood * free, 0.0, 160),
-    bed_rocks(p, free, soaked(p)));
+    bed_rocks(p, free, soaked(p)),
+    Strewn(COBBLE_SORT, COBBLE_CELL_M, COBBLE_FILL, COBBLE_SIZE_M, max(p.sand, 0.0) * grain.x * free, grain.z, 162));
   var out = g;
-  for (var i = 0; i < 6; i++) { out = scatter(out, p, sorts[i]); }
+  for (var i = 0; i < 7; i++) { out = scatter(out, p, sorts[i]); }
   return out;
 }
 
@@ -129,12 +138,13 @@ fn bed_photos(under: vec3f, p: Spot) -> vec3f {
 
 // A channel's boulders as rocks (rendered models) where the largest stone it moves (`Spot.moved`) passes
 // `BED_ROCK_STONE.x` m, all from `.y`: in cells `BED_ROCK_CELL` of that size across, one in `BED_ROCK_FILL` of them,
-// each `BED_ROCK_SIZE` of it: worn rocks with moss on them (moss grows on rock a stream keeps wet).
+// each `BED_ROCK_SIZE` of it: worn rocks with moss on them (moss grows on rock a stream keeps wet), or where the
+// channel has worn its stones round (`BED_ROUND`, as its gravel is drawn), cobbles.
 const BED_ROCK_STONE = vec2f(0.15, 0.4); const BED_ROCK_CELL = 6.0; const BED_ROCK_FILL = 0.6;
 const BED_ROCK_SIZE = vec2f(1.0, 2.5);
 
 // The boulders of spot p's channel, as far as `open` of its ground is open to them, `wet` wet.
 fn bed_rocks(p: Spot, open: f32, wet: f32) -> Strewn {
   let many = open * min(p.stony, 1.0) * ease(BED_ROCK_STONE.x, BED_ROCK_STONE.y, p.moved);
-  return Strewn(MOSSY_ROCK_SORT, BED_ROCK_CELL * p.moved, BED_ROCK_FILL, BED_ROCK_SIZE * p.moved, many, wet, 156);
+  return Strewn(select(MOSSY_ROCK_SORT, COBBLE_SORT, p.worn > BED_ROUND), BED_ROCK_CELL * p.moved, BED_ROCK_FILL, BED_ROCK_SIZE * p.moved, many, wet, 156);
 }
