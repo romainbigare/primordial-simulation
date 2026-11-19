@@ -16,6 +16,10 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
 /** The most pixels a metre takes on screen. */
 const MOST_PX_PER_M = 80;
+/** The most pixels of the map's canvas a css pixel takes: a screen with more (a phone's, 3) is drawn at this many and
+ * stretched onto it, 2.25 times fewer pixels for a picture a little softer (what is drawn over it, the lines and the
+ * text, keeps the screen's own). */
+const MOST_DRAWN_PX = 2;
 /** The map's shadow on the page: it falls this far south and is blurred this much (a Gaussian's deviation), css px, and
  * darkens the background this much at most. */
 const SHADOW_DROP = 5, SHADOW_BLUR = 11, SHADOW_DARK = 0.28;
@@ -190,10 +194,11 @@ export class MapView {
 
   private fitScale = () => Math.min(this.cv.clientWidth / this.w, this.cv.clientHeight / this.h) * 0.94 || 1;
   private dpr = () => window.devicePixelRatio || 1;
+  /** The pixels of the map's canvas a css pixel (`MOST_DRAWN_PX`). */
+  private drawnDpr = () => Math.min(this.dpr(), MOST_DRAWN_PX);
 
   private resize(): void {
-    const d = this.dpr();
-    for (const c of [this.cv, this.over]) { c.width = Math.round(this.cv.clientWidth * d); c.height = Math.round(this.cv.clientHeight * d); }
+    for (const [c, d] of [[this.cv, this.drawnDpr()], [this.over, this.dpr()]] as const) { c.width = Math.round(this.cv.clientWidth * d); c.height = Math.round(this.cv.clientHeight * d); }
     if (this.fitted && this.w) this.fit();
   }
 
@@ -228,7 +233,7 @@ export class MapView {
       clearTimeout(this.sharpTimer);
       this.sharpening = null;
       if (this.land) this.land.flowAt = null;
-      this.drawGpu(this.gpu, xs, d);
+      this.drawGpu(this.gpu, xs, this.drawnDpr());
     }
     this.overlay?.(ctx, ox, oy, s);
     if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
@@ -292,7 +297,7 @@ export class MapView {
   private flowSoon(): void {
     clearTimeout(this.flowTimer);
     const v = this.view();
-    if (document.hidden || this.scale < 1 || !this.land?.flowing(v.x, v.y, v.w, v.h, this.cellM / (v.s * this.dpr()))) return;
+    if (document.hidden || this.scale < 1 || !this.land?.flowing(v.x, v.y, v.w, v.h, this.cellM / (v.s * this.drawnDpr()))) return;
     const step = 1000 / FLOW_FPS;
     this.flowTimer = window.setTimeout(() => this.invalidate(), step - (performance.now() % step) + 1);
   }
