@@ -126,10 +126,10 @@ fn standing_painted(bed: vec3f, depth: f32, g: vec2f, sea: f32) -> vec3f { retur
 // The point of a plant drawn `up` m north of its foot on the map, of colour `c` (linear), where liquid stands `depth` m
 // deep over its foot (0: on land): over the surface as it is; under it (`STAND` x `depth` m of the map, draw.wgsl) seen
 // as the water drawn shows its bed (`standing_painted`: a pond's, where the plants stand), through the share of the
-// water's column over the foot that lies over the point, the column seen as deep as the map draws it on the flat
-// ground the plants stand on (`standing_seen`, `shore_rim`): a shallow root shows dimly, one near the bed takes the
-// bed's look and the water's colour; where it meets the surface, within a pixel `e` m, lighter by `WATERLINE` of the
-// sky's light (the surface's ring about a stem).
+// water's column over the foot that lies over the point (all of it under the foot: the near edge of a wide foot lies on
+// the bed), the column seen as deep as the map draws it on the flat ground the plants stand on (`standing_seen`,
+// `shore_rim`): a shallow root shows dimly, one near the bed takes the bed's look and the water's colour; where it
+// meets the surface, within a pixel `e` m, lighter by `WATERLINE` of the sky's light (the surface's ring about a stem).
 const WATERLINE = 0.25;
 fn seen_in_liquid(c: vec3f, depth: f32, up: f32, e: f32) -> vec3f {
   if (depth <= 0.0) { return c; }
@@ -137,7 +137,7 @@ fn seen_in_liquid(c: vec3f, depth: f32, up: f32, e: f32) -> vec3f {
   var seen = c;
   if (below > 0.0) {
     let column = standing_seen(depth, shore_rim(depth, 0.0, e, LAKE_RIM_M));
-    seen = standing_painted(BED_SHOWN * c, column * below / (STAND * depth), vec2f(0.0), 0.0);
+    seen = standing_painted(BED_SHOWN * c, column * min(below / (STAND * depth), 1.0), vec2f(0.0), 0.0);
   }
   return seen + WATERLINE * SKY * (1.0 - smoothstep(0.0, e, abs(below)));
 }

@@ -340,7 +340,7 @@ fn mark_box(l: i32, q: Plant) -> f32 {
   // Its clump's plants stand up to `spread` from its foot (models.wgsl `clump_one`).
   let body = fit.spread + 0.5 * fit.w + abs(q.lean.x) * fit.h;
   let long = model_shadow_long(q, fit);
-  let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, long + fit.spread);
+  let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, max(long, foot_rise(fit.s) * fit.h) + fit.spread);
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
