@@ -26,18 +26,27 @@ const CLAYEY = ramps('#f3e3b4', '#d9b27a', '#b9784a', '#8e4a33', '#5a2a24');
 const HUMUS = ramps('#efe2c6', '#c7a77a', '#8c6a45', '#54392a', '#241812');
 /** How fast liquid passes through the soil: from tight (dull) to open (bright cyan). */
 const SEEPS = ramps('#3b2f2a', '#6b5a7a', '#5b7fb8', '#3fb3d0', '#a6f0f0');
+/** What the land loses or gains: more rising than falling (red) through none (pale) to much shed (deep blue). */
+const BALANCE = ramps('#8e2a1e', '#d9774a', '#f2e6cf', '#7fb2d9', '#1f4f9b');
+/** The liquid roots can draw: none (dry red-brown) to all they can (green). */
+const ROOTS = ramps('#7a3b1e', '#c9813f', '#ead48a', '#9cc66a', '#3f8f4a');
+/** What rises from the ground: little (pale) to much (deep teal). */
+const RISES = ramps('#f4f1e4', '#cfe6c8', '#86c6b0', '#3f9a9a', '#1c5c6e');
 
-/** The layers of the soil, drawn on dry ground alone (colour.wgsl `in_view_of`), as the ground under standing liquid is
+/** The layers of the soil and of the land's liquid, drawn on dry ground alone (colour.wgsl `in_view_of`), as the ground under standing liquid is
  * no soil a plant roots in and the large cells of the sea would show as squares: 1 as the cells hold it, or found by the
  * live map at each point (land.wgsl `layer_at`): 2 the share of the pores the soil's liquid fills by the laws inside a
  * cell, 3 and 4 the coarse and the fine grain's share of the terrain's samples. */
-export const GROUND_LAYERS = new Map([['filled', 2], ['coarse', 3], ['fine', 4], ['organic', 1], ['conduct', 1], ['avail', 1]]);
+export const GROUND_LAYERS = new Map([['filled', 2], ['coarse', 3], ['fine', 4], ['organic', 1], ['conduct', 1], ['avail', 1], ['roots', 1], ['rises', 1], ['sheds', 1]]);
 
 export function rampFor(name: string): RGB[] {
   if (name === 'coarse') return SANDY;
   if (name === 'fine') return CLAYEY;
   if (name === 'organic') return HUMUS;
   if (name === 'conduct') return SEEPS;
+  if (name === 'sheds') return BALANCE;
+  if (name === 'roots') return ROOTS;
+  if (name === 'rises') return RISES;
   if (/^t_|temp/.test(name)) return TURBO;
   if (/rain|vapor|depth|flux|water|avail|filled/.test(name)) return WATER;
   if (/plant|forest|grass|crop|grown/.test(name)) return GREEN;

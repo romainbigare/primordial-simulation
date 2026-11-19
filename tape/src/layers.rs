@@ -235,6 +235,13 @@ fn available_m(p: &pcore::soil::Pores, loose: f64) -> f64 {
     (p.field - p.wilt) * p.porosity * loose
 }
 
+/// What cell `i` of `w` sheds, mol/(m² s): its rain less what rises from it (`World::rain`, `World::evap`; their
+/// moving averages), the liquid its ground passes on to runoff and to the ground below over a year; less than none
+/// where more rises than falls.
+fn sheds(w: &World, i: usize) -> f64 {
+    w.rain.get(i).copied().unwrap_or(0.0) as f64 - w.evap.get(i).copied().unwrap_or(0.0) as f64
+}
+
 /// Air node `j`: its heat-absorbing column (the optical depth of its gases' lines, `Chemistry::depth`, summed over the
 /// bands of heat radiation) and the column of condensable gases, mol/m².
 fn air_column(w: &World, j: usize) -> (f64, f64) {
@@ -279,9 +286,12 @@ pub const LAYERS: &[Layer] = &[
     l("organic", "1", "lin", 0.0, 0.1, |c, i| c.w.soil[i].texture.organic),
     l("conduct", "m/s", "log", 1e-9, 1e-4, |c, i| c.w.pores(i).seep),
     l("avail", "m", "log", 0.01, 0.3, |c, i| available_m(c.w.pores(i), c.f.loose[i])),
+    l("roots", "1", "lin", 0.0, 1.0, |c, i| c.w.pores(i).available(c.filled[i])),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.rain.get(i).copied().unwrap_or(0.0) as f64),
+    l("rises", "mol/m2/s", "log", 1e-5, 1e-2, |c, i| c.w.evap.get(i).copied().unwrap_or(0.0) as f64),
+    l("sheds", "mol/m2/s", "lin", -4e-3, 4e-3, |c, i| sheds(c.w, i)),
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
     l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| per_land(c.plants[i], c.land[i])),

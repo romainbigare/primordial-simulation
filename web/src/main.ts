@@ -15,7 +15,8 @@ const LABELS: Record<string, string> = {
   t_ground: 'Ground temperature', t_air: 'Air temperature', rain: 'Rain', vapor: 'Vapor', absorber: 'Absorber',
   depth: 'Liquid depth', flux: 'River flux', catch: 'Catchment', loose: 'Loose sediment', wet: 'Ground wetness', ice: 'Ice', z: 'Elevation',
   coarse: 'Sand (coarse grain)', fine: 'Clay (fine grain)', organic: 'Organic matter', conduct: 'Soil conductivity',
-  avail: 'Available water', filled: 'Soil water (pores filled)',
+  avail: 'Available water', filled: 'Soil water (pores filled)', roots: 'Water for roots (share)',
+  rises: 'Evaporation', sheds: 'Runoff and drainage (rain less evaporation)',
   seeds: 'Seeds on the ground', grown: 'Growth last year', takers: 'Takers',
 };
 const ORDER = Object.keys(LABELS);
