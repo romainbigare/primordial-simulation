@@ -243,7 +243,7 @@ const LEFT_STEPS = 100.0;
 // The plant at place z among the groups (`along`) of kind `t` of the square at `sq` on lattice l with its foot at `c`, its size's draw `size`,
 // its own random numbers `r` (its colour's draw, its lean's direction, its lean); no taller than `up` m north of
 // its foot lets it stand (the rows looked at, textures.ts `ROWS_MOST`); no wider than its lattice's reach each way.
-fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up: f32) -> Plant {
+fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up: f32, wades: f32) -> Plant {
   let form = kind(form_plane(t), sq);
   // Its leaves left this season, and how closed its crown is in leaf.
   let left = floor(form.x) / LEFT_STEPS;
@@ -276,7 +276,6 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
   let tall = min(height, up / STAND);
   let lean = LEAN * r.z * vec2f(cos(2.0 * PI * r.y), sin(2.0 * PI * r.y));
   let tint = vary(mix(first.rgb, to.rgb, r.x), fract(r.yz * 13.0));
-  let wades = kind(reach_plane(t / 4), sq)[t % 4];
   return Plant(c, min(width, 2.0 * reach), tall, closed, tint, first.w, own, design, shape.x, shape.y, lean, reach, dry, tender, left, wet, wades);
 }
 
@@ -285,8 +284,8 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
 // `GROUPS` x `PLACE_STEPS` + its place in steps (-1:
 // none stands there, or the snow buries it, or its lattice's marks there take too few pixels to show), the share of it
 // that shows (over the snow, and as a thing by the width of its lattice's marks at its foot, draw.wgsl `as_thing`: the
-// field far away, cover_field.wgsl `lattice_field`, is drawn by the same width where they do not), and the share of the
-// ground snow covers at its foot.
+// field far away, cover_field.wgsl `lattice_field`, is drawn by the same width where they do not), negated where its
+// foot stands in liquid, and the share of the ground snow covers at its foot.
 // A function of the cell alone, so it is decided once a frame for each cell in view (marks.wgsl) and read by every
 // pixel the mark may cover (cover.wgsl `lattice`).
 fn decide(l: i32, k: vec2f) -> vec4f {
@@ -311,10 +310,11 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   if (pick.x < 0) { return none; }
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
-  let q = mark_plant(l, k, sq, pick.y, place_of(pick.z));
+  let wades = select(0.0, 1.0, f.depth > FILM_M);
+  let q = mark_plant(l, k, sq, pick.y, place_of(pick.z), wades);
   let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
-  return vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), shows, f.snow, mark_box(l, q));
+  return vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), select(shows, -shows, wades > 0.0), f.snow, mark_box(l, q));
 }
 
 // The box plant q of lattice l covers about its foot, so a pixel outside it does not draw it (cover.wgsl `lattice`):
@@ -335,10 +335,11 @@ fn mark_box(l: i32, q: Plant) -> f32 {
 }
 
 // The plant at place z among the groups of kind `t` of the square at `sq` in cell k of lattice l (`decide`): at its
-// place in the cell, of its size and its own random numbers, no taller than the rows looked at let it stand.
-fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32, z: f32) -> Plant {
+// place in the cell, of its size and its own random numbers, no taller than the rows looked at let it stand; its foot
+// in liquid where `wades` is 1.
+fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32, z: f32, wades: f32) -> Plant {
   let g = cover.grid[l];
   let id = cover.base[l].xy + vec2i(k);
-  return plant_of(l, sq, t, z, mark_foot(l, k), place(id, l).z, rand3(id, l + COVER_LATTICES), (g.w + cover.reach[l].x) * g.z);
+  return plant_of(l, sq, t, z, mark_foot(l, k), place(id, l).z, rand3(id, l + COVER_LATTICES), (g.w + cover.reach[l].x) * g.z, wades);
 }
 

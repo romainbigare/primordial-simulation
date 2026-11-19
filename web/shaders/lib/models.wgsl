@@ -37,8 +37,9 @@ const BUSH_SHADOW = 0.3;
 // a kind as tender to frost as it is (form.ts `Form`, each plant by its own draw, `tender_draw`), a palm or a fern, as
 // such plants live where it does not freeze hard (of them, the share as wet as its kind's ground is made for are ferns,
 // each by its own draw: tree ferns stand on wet shaded ground, palms on drier); else drawn by its crown's form, as a
-// woody tree. A woody tree of a kind the law stands in liquid on its square (`Plant.wades`), as wet as its kind's
-// ground is made for (each by its own draw), is a swamp tree whatever its crown's form: as tender to frost as its kind
+// woody tree. A woody tree whose foot stands in liquid (`Plant.wades`: the law stands its kind there as deep as its
+// roots reach), as wet as its kind's ground is made for (each by its own draw), is a swamp tree whatever its crown's
+// form: as tender to frost as its kind
 // is (`tender_draw`), a mangrove on its prop roots, else a bald cypress on its flared feet (trees that stand in water
 // hold themselves in its soft bed by buttresses, knees and prop roots: from memory).
 const SOFT_WOOD = 0.6; const SOFT_MIX = 0.1;

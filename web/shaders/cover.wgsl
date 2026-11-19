@@ -47,7 +47,9 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       let packed = i32(m.x);
       let kd = packed / (GROUPS * PLACE_STEPS);
       let s = kd / kinds_n();
-      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS))), p, e, fade * m.y, m.z);
+      // Its share that shows, negated where its foot stands in liquid (mark.wgsl `decide`).
+      let wades = select(0.0, 1.0, m.y < 0.0);
+      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), wades), p, e, fade * abs(m.y), m.z);
     }
   }
 }
