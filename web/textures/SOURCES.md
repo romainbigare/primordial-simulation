@@ -55,21 +55,22 @@ grass_medium_01's tall stems with seed heads (its meshes named `_ta…`) are lef
 
 ## trees.png, models.png and the sprites' table
 
-Sprites rendered from Poly Haven's CC0 3D models (glTF, 1k textures) and PlantCatalog's CC BY 4.0 models (Sketchfab:
-glTF, or FBX at its finest level of detail) with three.js by `bake/sprite.html`: an
+Sprites rendered from Poly Haven's CC0 3D models (glTF, 1k textures) and from Sketchfab's CC0 and CC BY 4.0 models
+(PlantCatalog's and the water's edge models below: glTF, or FBX at its finest level of detail) with three.js by `bake/sprite.html`: an
 orthographic camera looking north and 35 degrees down, lit by the sky and by the sun from the north-west, matte, no
 shadows, on a clear background; each sprite fills its cell but for a 64th of its side, its foot two texels above the
 cell's bottom middle, rendered at twice the cell's side and shrunk. `trees.png` holds the trees one to a 512 x 512
 layer; `models.png` the rest four to a layer. `bake/sprites.json` names each model, its parts (its nodes), the sides it
 is seen from (turns about the vertical), how much of its foot is cut off (the patch of ground some trees stand on), and
 whether it is set down on the face it rests on (the face of its convex hull nearest its centre of weight: the rocks)
-and how far it is sunk into the ground (a fifth of its height, cut off at the ground line), how many times as tall it
-is stretched (the reeds), which of its materials are
+and how far it is sunk into the ground (a fifth of its height, cut off at the ground line), whether it is stood as a
+clump (the reeds, cattails and sedges: a scanned stem stood several times about one foot, each copy turned, shrunk to
+between 0.6 and its whole size and set off from the foot, by a fixed draw), which of its materials are
 its leaves (a tree that sheds gets a bare twin: rendered again in the same frame with its leaves hidden, at half the
 side, four to a layer after the models' own sprites), and the mean lightness its
 leaves are scaled to (texels whose green stands out, as the page tells leaves: the models'
 leaves differ several times in lightness as the files have them), and the sets the page draws from; a model with a
-`file` is read from that file under `assets/` (the PlantCatalog models, downloaded by hand from the links below into
+`file` is read from that file under `assets/` (the Sketchfab models, downloaded by hand from the links below into
 `assets/sketchfab/<the model's id>/`: a glTF model's `scene.gltf`, an FBX model's finest level, `source/..._LOD0.fbx`,
 each with its textures). With the files fetched (`fetch.sh assets` also downloads the Poly Haven models `sprites.json`
 names) and served as for the carpets, `node sprites.cjs sprites.json out` writes `out/trees.png`, `out/models.png` and
@@ -79,8 +80,8 @@ models' sprites alone, to compare.
 
 | strip | sprites (sets) |
 |---|---|
-| trees.png | round: island_tree_01, island_tree_02 each from three sides, northern_red_oak_5 from two, red_horse_chestnut_16 and _24, dwarf_red_horse_chestnut_17; umbrella: jacaranda_tree from three sides, african_continental_baobab_1, _15 and _5; quiver: quiver_tree_01 and joshua_tree_19 each from two sides; lobed: black_poplar_50, common_fig_tree_11 and _30 each from two sides; column: lombardy_poplar_55 from two sides, black_poplar_25; conifers: norway_spruce_17, _18 and _23, engelmann_spruce_17 and _3, black_spruce_10, mountain_hemlock_21 and _23, fir_tree_01's first two trees; young spruces: fir_sapling_medium's three, black_spruce_16 from two sides; pines: pine_tree_01's three; young pines: pine_sapling_medium's two and pine_sapling_small's three; soft (palms and a fern): date_palm_16 and _28, california_fan_palm_22, mexican_fan_palm_3, canary_island_date_palm_21, mediterranean_fan_palm_19, male_fern_20. The broad-leaved trees, the baobabs and quiver_tree_01 have bare twins (their leaves hidden) |
-| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest; shore rocks: rock_moss_set_02's meshes 0, 1, 2, 3, 4, 6, rock_moss_set_01's 0 and 2, rock_09, namaqualand_boulder_04 and _06; driftwood: dead_quiver_branch_01 and _02, dry_branches_medium_01's three; reeds, built: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 each stretched three and a half times as tall (as the carpets' reeds, layer 8); then the trees' bare twins |
+| trees.png | round: island_tree_01, island_tree_02 each from three sides, northern_red_oak_5 from two, red_horse_chestnut_16 and _24, dwarf_red_horse_chestnut_17; umbrella: jacaranda_tree from three sides, african_continental_baobab_1, _15 and _5; quiver: quiver_tree_01 and joshua_tree_19 each from two sides; lobed: black_poplar_50, common_fig_tree_11 and _30 each from two sides; column: lombardy_poplar_55 from two sides, black_poplar_25; conifers: norway_spruce_17, _18 and _23, engelmann_spruce_17 and _3, black_spruce_10, mountain_hemlock_21 and _23, fir_tree_01's first two trees; young spruces: fir_sapling_medium's three, black_spruce_16 from two sides; pines: pine_tree_01's three; young pines: pine_sapling_medium's two and pine_sapling_small's three; soft (palms and a fern): date_palm_16 and _28, california_fan_palm_22, mexican_fan_palm_3, canary_island_date_palm_21, mediterranean_fan_palm_19, male_fern_20. The broad-leaved trees, the baobabs and quiver_tree_01 have bare twins (their leaves hidden); swamp trees (flared and propped feet): great_bald_cypress and red_mangrove each from two sides |
+| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest; shore rocks: rock_moss_set_02's meshes 0, 1, 2, 3, 4, 6, rock_moss_set_01's 0 and 2, rock_09, namaqualand_boulder_04 and _06; driftwood: dead_quiver_branch_01 and _02, dry_branches_medium_01's three, pine_fallen_trunk_02 and _01 and mossy_old_log each from two sides; reeds: reed_plants's five stems each stood as a clump of 9, 12, 7, 10 and 8; cattails: cattail's stem stood as clumps of 6 and 11, cattail_clusters from one side; rushes: cattail's two leaf tufts (meshes 11, 14) each stood 4 times, carex_dispalata's two stems each stood 8 times, carex_maximowiczii's stem stood 14 times; pads: water_lily's floating leaf (meshes 33 to 37) from three sides, cut at its stalk; a pad's flower: water_lily's flower (meshes 6 to 23) cut at its stalk; patches of pads: lily_pads's mesh 2 from two sides, cut at its stalks; cobbles: rocks_pack_5's meshes 4, 6, 8, 10, 12, 16, 18, 22, 32, 34, 40, 42, rock_scan_11 and rock_scan_12; then the trees' bare twins |
 
 The trees from PlantCatalog's models (author PlantCatalog, https://sketchfab.com/PlantCatalog), each licensed under CC
 BY 4.0 (http://creativecommons.org/licenses/by/4.0/); the sprites are rendered from them (changed: lit, cut at the
@@ -117,4 +118,27 @@ ground, shrunk, their leaves' lightness scaled):
 | `canary_island_date_palm_21` | [Realistic HD Canary Island date palm (21/40)](https://sketchfab.com/3d-models/realistic-hd-canary-island-date-palm-2140-7eac1bcdfe984bf8ba3fcd2430854a67) |
 | `mediterranean_fan_palm_19` | [Realistic HD Mediterranean fan palm (19/30)](https://sketchfab.com/3d-models/realistic-hd-mediterranean-fan-palm-1930-db1b8aa7f06b499f9de68460de1eea6b) |
 | `male_fern_20` | [Realistic HD Male fern (20/50)](https://sketchfab.com/3d-models/realistic-hd-male-fern-2050-9da5a089892d480fa3d2add186ce4f03) |
+
+The water's edge and the swamp trees from these Sketchfab models, each licensed under CC BY 4.0
+(http://creativecommons.org/licenses/by/4.0/) or given to the public domain under CC0 1.0
+(http://creativecommons.org/publicdomain/zero/1.0/); the sprites are rendered from them (changed: lit, cut at the ground,
+shrunk, stood as clumps, their leaves' lightness scaled):
+
+| sprite | model | author | licence |
+|---|---|---|---|
+| `reed_plants` | [Reed Plants Pack](https://sketchfab.com/3d-models/reed-plants-pack-bc77ea5218e44f2dbc23b2a4aef0c898) | [Nicholas-3D](https://sketchfab.com/Nicholas01) | CC BY 4.0 |
+| `cattail` | [Рогоз (Cattail)](https://sketchfab.com/3d-models/cattail-00cf5598ba274050b784b8a4beb00f03) | [Hakujin](https://sketchfab.com/hakujin) | CC BY 4.0 |
+| `cattail_clusters` | [Cattail Clusters](https://sketchfab.com/3d-models/cattail-clusters-7a37d2dafc88414a8cb22eca27b1414c) | [kirbinator505_](https://sketchfab.com/kirbinator505_) | CC BY 4.0 |
+| `carex_dispalata` | [CC0 カサスゲ Kasa-sge Sedge, Carex dispalata](https://sketchfab.com/3d-models/cc0-kasa-sge-sedge-carex-dispalata-79f4b32c824c45be8e3f668d18062cdf) | [ffish.asia / floraZia.com](https://sketchfab.com/ffishAsia-and-floraZia) | CC0 1.0 |
+| `carex_maximowiczii` | [CC0 ゴウソ Maximowicz's Sedge, Carex maximowiczii](https://sketchfab.com/3d-models/cc0-maximowiczs-sedge-carex-maximowiczii-5737d74736ab440cb5b87f1c23ff96ff) | [ffish.asia / floraZia.com](https://sketchfab.com/ffishAsia-and-floraZia) | CC0 1.0 |
+| `water_lily` | [CC0 スイレン Water Lily, Nymphaea cv.](https://sketchfab.com/3d-models/cc0-water-lily-nymphaea-cv-e7830f486a0248b6b894f3e7a63b8c16) | [ffish.asia / floraZia.com](https://sketchfab.com/ffishAsia-and-floraZia) | CC0 1.0 |
+| `lily_pads` | [Lily Pads](https://sketchfab.com/3d-models/lily-pads-a732c7e7de0d43b8bf498b53fc163831) | [kirbinator505_](https://sketchfab.com/kirbinator505_) | CC BY 4.0 |
+| `rocks_pack_5` | [Rocks - Pack 5](https://sketchfab.com/3d-models/rocks-pack-5-3b55666b3b8e41a3a72d94a1d5a76072) | [Loïc Norgeot](https://sketchfab.com/norgeotloic) | CC BY 4.0 |
+| `rock_scan_11` | [Rock Scan - 11](https://sketchfab.com/3d-models/rock-scan-11-6195afc03d5f4c539273aa24873ef808) | [Loïc Norgeot](https://sketchfab.com/norgeotloic) | CC BY 4.0 |
+| `rock_scan_12` | [Rock Scan - 12](https://sketchfab.com/3d-models/rock-scan-12-462ba9c87ce1445191899a6b74f4203c) | [Loïc Norgeot](https://sketchfab.com/norgeotloic) | CC BY 4.0 |
+| `pine_fallen_trunk_02` | [Pine Tree Fallen Trunk Scan 02](https://sketchfab.com/3d-models/pine-tree-fallen-trunk-scan-02-f5ad948275cd4d13ba3ce2040b72ed47) | [Per's Scan Collection](https://sketchfab.com/perz_scans) | CC BY 4.0 |
+| `pine_fallen_trunk_01` | [Pine Tree Fallen Trunk Scan 01](https://sketchfab.com/3d-models/pine-tree-fallen-trunk-scan-01-eca72dd7e85941eb8ecb9907df8aa560) | [Per's Scan Collection](https://sketchfab.com/perz_scans) | CC BY 4.0 |
+| `mossy_old_log` | [Mossy old tree log](https://sketchfab.com/3d-models/mossy-old-tree-log-c65a00ca4a174653beb4c59cb42b9143) | [Julian Malik](https://sketchfab.com/julianmalik) | CC BY 4.0 |
+| `great_bald_cypress` | [Great Bald Cypress](https://sketchfab.com/3d-models/great-bald-cypress-dca97787b1b24fd8a0fb6bb536e383e3) | [BaptisteBerard](https://sketchfab.com/BaptisteBerard) | CC BY 4.0 |
+| `red_mangrove` | [red-mangrove-tree](https://sketchfab.com/3d-models/red-mangrove-tree-e806105d83bc440499495e62bb010f7a) | [ingdearco](https://sketchfab.com/ingdearco), published by [SAVIA_Colombia](https://sketchfab.com/Minambiente_Col) | CC BY 4.0 |
 

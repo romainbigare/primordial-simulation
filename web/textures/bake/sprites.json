@@ -309,6 +309,25 @@
     "model": "male_fern_20",
     "file": "sketchfab/9da5a089892d480fa3d2add186ce4f03/scene.gltf",
     "leaf": 0.045
+   },
+   {
+    "model": "great_bald_cypress",
+    "file": "sketchfab/dca97787b1b24fd8a0fb6bb536e383e3/scene.gltf",
+    "turns": [
+     0,
+     180
+    ],
+    "set": "SWAMP_TREE",
+    "leaf": 0.045
+   },
+   {
+    "model": "red_mangrove",
+    "file": "sketchfab/e806105d83bc440499495e62bb010f7a/scene.gltf",
+    "turns": [
+     0,
+     180
+    ],
+    "leaf": 0.045
    }
   ]
  },
@@ -565,30 +584,312 @@
     ]
    },
    {
-    "model": "grass_medium_01",
+    "model": "pine_fallen_trunk_02",
+    "file": "sketchfab/f5ad948275cd4d13ba3ce2040b72ed47/scene.gltf",
+    "turns": [
+     0,
+     60
+    ],
+    "rest": true
+   },
+   {
+    "model": "pine_fallen_trunk_01",
+    "file": "sketchfab/eca72dd7e85941eb8ecb9907df8aa560/scene.gltf",
+    "turns": [
+     0,
+     60
+    ],
+    "rest": true
+   },
+   {
+    "model": "mossy_old_log",
+    "file": "sketchfab/c65a00ca4a174653beb4c59cb42b9143/scene.gltf",
+    "turns": [
+     0,
+     120
+    ]
+   },
+   {
+    "model": "reed_plants",
+    "file": "sketchfab/bc77ea5218e44f2dbc23b2a4aef0c898/scene.gltf",
     "parts": [
      [
-      0
+      4,
+      5
+     ]
+    ],
+    "clump": {
+     "n": 9,
+     "r": 0.12
+    },
+    "leaf": 0.048,
+    "set": "REED"
+   },
+   {
+    "model": "reed_plants",
+    "file": "sketchfab/bc77ea5218e44f2dbc23b2a4aef0c898/scene.gltf",
+    "parts": [
+     [
+      7,
+      8
+     ]
+    ],
+    "clump": {
+     "n": 12,
+     "r": 0.12
+    },
+    "leaf": 0.048
+   },
+   {
+    "model": "reed_plants",
+    "file": "sketchfab/bc77ea5218e44f2dbc23b2a4aef0c898/scene.gltf",
+    "parts": [
+     [
+      10,
+      11
+     ]
+    ],
+    "clump": {
+     "n": 7,
+     "r": 0.12
+    },
+    "leaf": 0.048
+   },
+   {
+    "model": "reed_plants",
+    "file": "sketchfab/bc77ea5218e44f2dbc23b2a4aef0c898/scene.gltf",
+    "parts": [
+     [
+      13,
+      14
+     ]
+    ],
+    "clump": {
+     "n": 10,
+     "r": 0.12
+    },
+    "leaf": 0.048
+   },
+   {
+    "model": "reed_plants",
+    "file": "sketchfab/bc77ea5218e44f2dbc23b2a4aef0c898/scene.gltf",
+    "parts": [
+     [
+      16,
+      17
+     ]
+    ],
+    "clump": {
+     "n": 8,
+     "r": 0.12
+    },
+    "leaf": 0.048
+   },
+   {
+    "model": "cattail",
+    "file": "sketchfab/00cf5598ba274050b784b8a4beb00f03/scene.gltf",
+    "parts": [
+     [
+      5
+     ]
+    ],
+    "clump": {
+     "n": 6,
+     "r": 0.15
+    },
+    "leaf": 0.048,
+    "set": "CATTAIL"
+   },
+   {
+    "model": "cattail",
+    "file": "sketchfab/00cf5598ba274050b784b8a4beb00f03/scene.gltf",
+    "parts": [
+     [
+      5
+     ]
+    ],
+    "clump": {
+     "n": 11,
+     "r": 0.22
+    },
+    "leaf": 0.048
+   },
+   {
+    "model": "cattail_clusters",
+    "file": "sketchfab/7a37d2dafc88414a8cb22eca27b1414c/scene.gltf",
+    "turns": [
+     90
+    ],
+    "leaf": 0.048
+   },
+   {
+    "model": "cattail",
+    "file": "sketchfab/00cf5598ba274050b784b8a4beb00f03/scene.gltf",
+    "parts": [
+     [
+      11
      ],
      [
-      10
-     ],
-     [
-      1
-     ],
+      14
+     ]
+    ],
+    "clump": {
+     "n": 4,
+     "r": 0.08
+    },
+    "leaf": 0.048,
+    "set": "RUSH"
+   },
+   {
+    "model": "carex_dispalata",
+    "file": "sketchfab/79f4b32c824c45be8e3f668d18062cdf/scene.gltf",
+    "parts": [
      [
       6
-     ],
-     [
-      7
      ],
      [
       9
      ]
     ],
-    "squash": 3.5,
-    "leaf": 0.048,
-    "set": "REED"
+    "clump": {
+     "n": 8,
+     "r": 0.1
+    },
+    "leaf": 0.048
+   },
+   {
+    "model": "carex_maximowiczii",
+    "file": "sketchfab/5737d74736ab440cb5b87f1c23ff96ff/scene.gltf",
+    "parts": [
+     [
+      6
+     ]
+    ],
+    "clump": {
+     "n": 14,
+     "r": 0.12
+    },
+    "leaf": 0.048
+   },
+   {
+    "model": "water_lily",
+    "file": "sketchfab/e7830f486a0248b6b894f3e7a63b8c16/scene.gltf",
+    "parts": [
+     [
+      33,
+      34,
+      35,
+      36,
+      37
+     ]
+    ],
+    "turns": [
+     0,
+     120,
+     240
+    ],
+    "cut": 0.55,
+    "set": "PAD"
+   },
+   {
+    "model": "water_lily",
+    "file": "sketchfab/e7830f486a0248b6b894f3e7a63b8c16/scene.gltf",
+    "parts": [
+     [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+     ]
+    ],
+    "cut": 0.4,
+    "set": "PAD_FLOWER"
+   },
+   {
+    "model": "lily_pads",
+    "file": "sketchfab/a732c7e7de0d43b8bf498b53fc163831/scene.gltf",
+    "parts": [
+     [
+      2
+     ]
+    ],
+    "turns": [
+     60,
+     90
+    ],
+    "cut": 0.8,
+    "set": "PAD_PATCH"
+   },
+   {
+    "model": "rocks_pack_5",
+    "file": "sketchfab/3b55666b3b8e41a3a72d94a1d5a76072/scene.gltf",
+    "parts": [
+     [
+      4
+     ],
+     [
+      6
+     ],
+     [
+      8
+     ],
+     [
+      10
+     ],
+     [
+      12
+     ],
+     [
+      16
+     ],
+     [
+      18
+     ],
+     [
+      22
+     ],
+     [
+      32
+     ],
+     [
+      34
+     ],
+     [
+      40
+     ],
+     [
+      42
+     ]
+    ],
+    "rest": true,
+    "sink": 0.2,
+    "set": "COBBLE"
+   },
+   {
+    "model": "rock_scan_11",
+    "file": "sketchfab/6195afc03d5f4c539273aa24873ef808/scene.gltf",
+    "rest": true,
+    "sink": 0.2
+   },
+   {
+    "model": "rock_scan_12",
+    "file": "sketchfab/462ba9c87ce1445191899a6b74f4203c/scene.gltf",
+    "rest": true,
+    "sink": 0.2
    }
   ]
  }

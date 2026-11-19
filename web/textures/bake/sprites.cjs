@@ -6,9 +6,10 @@
 // sprites.json: for each strip (`trees`, `models`) the side of its layers, its cells a layer (`per`: 1 or 4) and its
 // sprites, each entry a model (Poly Haven's, or with `file`, a glTF or FBX file under the assets folder) with: `parts`,
 // lists of its nodes, each part a sprite (default: the whole model); `turns`, degrees about the vertical, each a sprite
-// of each part; `cut`, the share of its height cut off at its foot; `squash`, stretched that many times as tall;
-// `rest`, set down on its resting face (sprite.html `restingTurn`) and `sink`, the share of its height sunk into the
-// ground, cut off at the ground; `bare`, the materials (a pattern) hidden for its bare twin (the trees' twins go into
+// of each part; `cut`, the share of its height cut off at its foot; `clump`, { n, r }: each part stood n times about
+// one foot, turned, shrunk and set off by up to r of its height (sprite.html `clumped`: reeds from one stem); `rest`,
+// set down on its resting face (sprite.html `restingTurn`) and `sink`, the share of its height sunk into the ground, cut
+// off at the ground; `bare`, the materials (a pattern) hidden for its bare twin (the trees' twins go into
 // the models' strip after its own sprites; sprites.wgsl `bare_of`); `leaf`, the mean lightness (linear) its leaves are
 // scaled to (its other texels by the square root of that scale), so the models' leaves are about as light as each
 // other's; `set`, the name of the set it starts (sprites.wgsl `<set>_FROM` and `<set>_N`, the set running to the next

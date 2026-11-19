@@ -57,7 +57,7 @@ function matte(m) {
 }
 
 // The meshes of model `s.model` (its nodes `s.nodes`, else all), baked in place with their materials: both sides,
-// cut-out leaves, matte; with `s.squash`, stretched that many times as tall (as the carpets' reeds, bake.html).
+// cut-out leaves, matte; with `s.clump`, stood as a clump (`clumped`).
 async function meshesOf(s) {
   const g = await load(s);
   g.scene.updateMatrixWorld(true);
@@ -67,12 +67,31 @@ async function meshesOf(s) {
     let n = o; while (n && g.node(n) === undefined) n = n.parent;
     if (s.nodes && !s.nodes.includes(n && g.node(n))) return;
     const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld);
-    if (s.squash) geo.scale(1, s.squash, 1);
     // A mesh of several materials (an FBX file's) is split into one a material.
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     if (mats.length === 1) { out.push(new THREE.Mesh(geo, matte(mats[0]))); return; }
     for (const grp of geo.groups) out.push(new THREE.Mesh(groupOf(geo, grp), matte(mats[grp.materialIndex])));
   });
+  return s.clump ? clumped(out, s.clump) : out;
+}
+
+// Meshes `one` (a stem) stood `clump.n` times about one foot: the first as it is, each other turned about the vertical,
+// shrunk to between `CLUMP_LEAST` and its whole size and set off from the foot by up to `clump.r` of its height, by a
+// fixed draw (the golden ratio's sequence: the copies spread evenly), so a clump of reeds is made of one scanned stem.
+const CLUMP_LEAST = 0.6, GOLDEN = 0.6180339887;
+function clumped(one, clump) {
+  const box = new THREE.Box3();
+  one.forEach(m => { m.geometry.computeBoundingBox(); box.union(m.geometry.boundingBox); });
+  const foot = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2), height = box.max.y - box.min.y;
+  const out = [...one];
+  for (let k = 1; k < clump.n; k++) {
+    const draw = j => (k * GOLDEN * (j + 1) + 0.5 * j) % 1, at = 2 * Math.PI * draw(1), off = clump.r * height * Math.sqrt(draw(2));
+    const pose = new THREE.Matrix4().makeTranslation(foot.x + off * Math.cos(at), foot.y, foot.z + off * Math.sin(at))
+      .multiply(new THREE.Matrix4().makeRotationY(2 * Math.PI * draw(0)))
+      .multiply(new THREE.Matrix4().makeScale(...Array(3).fill(CLUMP_LEAST + (1 - CLUMP_LEAST) * draw(3))))
+      .multiply(new THREE.Matrix4().makeTranslation(-foot.x, -foot.y, -foot.z));
+    for (const m of one) out.push(new THREE.Mesh(m.geometry.clone().applyMatrix4(pose), m.material));
+  }
   return out;
 }
 
