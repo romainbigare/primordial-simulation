@@ -13,7 +13,7 @@ export interface Shape { leaf: number; frost: number; moist: number; seed: numbe
 /** A form (0 round, 1 cone, 2 column, 3 umbrella, 4 tiered, 5 lobed: models.wgsl `model_set`) and how surely it is drawn
  * (0: as round .. 1: fully itself); how dry the ground its kind is made for, 0..1 (its moisture gene from the middle of
  * dry ground's to a span under it): the drawing picks a dry land's plant for a dry kind (models.wgsl); and how tender to
- * frost the kind is, 0..1 (`TENDER_SPANS`): only a tender kind's soft plants are drawn as palms, tree ferns or giant herbs
+ * frost the kind is, 0..1 (`TENDER_SPANS`): only a tender kind's soft plants are drawn as palms or ferns
  * (models.wgsl). */
 export interface Form { form: number; sure: number; dry: number; tender: number }
 
