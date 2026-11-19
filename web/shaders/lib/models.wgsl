@@ -19,8 +19,9 @@ const LEAF_GREEN = vec2f(0.345, 0.39);
 // An open crown loses its leaves in sprays, this many across its sprite.
 const SPRAYS = 30.0;
 // Snow lies on a crown's lit leaves up to this share of their colour, as closed as the crown is (a bare one holds
-// little), in the colour of fresh snow (colour.wgsl `SNOW`).
-const CROWN_SNOW = 0.8; const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
+// little), in the colour of fresh snow (colour.wgsl `SNOW`): on none lit under `SNOW_LIT`.x of its sprite's leaves' mean,
+// on all from .y.
+const CROWN_SNOW = 0.8; const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95); const SNOW_LIT = vec2f(0.5, 1.2);
 // A shadow lets through the sky's light and what crowns scatter, about half of the sun's (canopy.ts `CROWN_SHADOW`); a
 // bush's this share of that.
 const SHADOW = 0.42; const BUSH_SHADOW = 0.3;
@@ -158,7 +159,7 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   // Snow on its lit leaves: how lit, against its own leaves' mean (`model_leaf`), so a dark conifer holds it as a light
   // crown does.
   let lit = lum / max(model_leaf(s), 1e-4);
-  leaf = mix(leaf, CROWN_SNOW_RGB * lit, CROWN_SNOW * snow * q.closed * q.left * smoothstep(0.6, 1.4, lit));
+  leaf = mix(leaf, CROWN_SNOW_RGB * lit, CROWN_SNOW * snow * q.closed * q.left * smoothstep(SNOW_LIT.x, SNOW_LIT.y, lit));
   // The leafy sprite's sprays over the bare twin.
   let under = bare.a * (1.0 - a);
   return vec4f((mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under), a + under);
