@@ -37,6 +37,9 @@ A scene set names its world, its views (metres a pixel; a scene may name its own
 size 32, band 20,65, the six starting kinds, the takers in year 52) at 42.75, with the builders' places. The law moves
 what grows where: `set` prints each scene's kinds, so you see what stands there.
 
+The scene set `swamp` stands on a larger, wetter island (seed 1, size 48, at 42.75) where kinds stand on shallow pond
+ground (the core's footing): the shores of a shallow lake and of a deeper one under trees, at 1, 0.25 and 0.1 m a pixel.
+
 The scene set `card` stands on the test card (`ew card`, `worldgen/src/testkit/card.rs`): an island of 12 x 10
 squares whose block of 6 x 4 squares from square 3, 3 is set by hand, each square a kind of stand or ground the map
 draws (a tall closed stand of four size groups, an open stand over a sward, a young dense stand near 4 m, tall soft

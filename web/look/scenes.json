@@ -10,9 +10,24 @@
       "about": "the test card: an island whose squares are set by hand (worldgen::testkit::card), late summer of year 0",
       "card": true,
       "at": 0.75
+    },
+    "swamp": {
+      "about": "a world with plants standing in liquid: seed 1, size 48, band 20,65, the six starting kinds, the takers in year 52 (about 20 km² of shallow pond ground)",
+      "run": ["--seed", "1", "--size", "48", "--band", "20,65", "--roster", "--fauna-year", "52"],
+      "at": 42.75
     }
   },
   "sets": {
+    "swamp": {
+      "world": "swamp",
+      "views": [1.0, 0.25, 0.1],
+      "scenes": [
+        { "name": "shallows", "about": "the shore of a shallow lake (to about 1 m), herbs and trees at the water", "at": [14.5, 17.754] },
+        { "name": "shallows_n", "about": "the same lake's other shore, clumps of plants standing in its shallows", "at": [14.745, 17.36] },
+        { "name": "lake_wood", "about": "a deeper lake's shore under trees, a creek's mouth", "at": [13.0675, 13.415] }
+      ],
+      "cost_views": [0.25]
+    },
     "seed1": {
       "world": "seed1",
       "views": [1.04, 0.52, 0.26],
