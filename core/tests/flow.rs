@@ -407,7 +407,7 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
 #[test]
 fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     let (mut base, (i, _)) = worldgen::testkit::island_with(3, pair);
-    worldgen::testkit::set_pores(&mut base, |p| *p = worldgen::testkit::loam());
+    worldgen::testkit::set_loam(&mut base);
     let run = |porosity: f64, share: f64| {
         let mut w = base.clone();
         worldgen::testkit::set_pores(&mut w, |p| p.porosity = porosity);
@@ -525,7 +525,7 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
 #[test]
 fn liquid_drains_inside_a_cell_to_its_channels() {
     let (mut base, (hi, _)) = worldgen::testkit::island_with(3, pair);
-    worldgen::testkit::set_pores(&mut base, |p| *p = worldgen::testkit::loam());
+    worldgen::testkit::set_loam(&mut base);
     let mut w0 = base.clone();
     pcore::flow::state(&mut w0, true);
     let (n, area, p) = (w0.mesh.cells().n(), w0.mesh.cells().area()[0], w0.cfg.phys);
@@ -579,7 +579,7 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
 #[test]
 fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     let (mut w, (hi, lo)) = worldgen::testkit::island_with(3, pair);
-    worldgen::testkit::set_pores(&mut w, |p| *p = worldgen::testkit::loam());
+    worldgen::testkit::set_loam(&mut w);
     let (n, area, p, field) = (w.mesh.cells().n(), w.mesh.cells().area()[0], w.cfg.phys, w.pores(hi).field);
     let (pores, full, mv) = (w.pores(hi).porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(LIQUID, Phase::Liquid));
     // No rain: what sinks is only the liquid poured.
@@ -636,7 +636,7 @@ fn a_store_reaches_only_its_neighbours_in_a_step() {
 #[test]
 fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pores() {
     let mut base = worldgen::testkit::squares(3, 16, 16);
-    worldgen::testkit::set_pores(&mut base, |p| *p = worldgen::testkit::loam());
+    worldgen::testkit::set_loam(&mut base);
     let (n, top) = (base.mesh.cells().n(), top(&base));
     let pores = pore_mol(&base, top);
     // A world with `x` times the pores' worth of liquid on the highest cell, and 1e6 mol of the mineral there.

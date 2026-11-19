@@ -14,11 +14,11 @@ const PX: usize = 3;
 const SIDE_BY_SIDE: usize = 5;
 /// The panels `ew view` draws: those of the pictures, the land with no river drawn over it, and of the loose ground
 /// (`GROUND`): its conductivity, the liquid it holds for roots, what the year's rain leaves after what rises (its
-/// yield), the share of its pores its liquid fills, what rises from it, and its texture, the cell's (soil) and the
-/// terrain's sample's under each pixel (texture, `SAMPLED`).
-pub const PANELS: [&str; 13] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise", "soil", "texture"];
-/// The panel drawn by the terrain's samples, not by the cells.
-const SAMPLED: usize = 12;
+/// yield), the share of its pores its liquid fills, what rises from it, its texture, the cell's (soil), its organic
+/// share, and the terrain's sample's texture under each pixel (texture, `SAMPLED`).
+pub const PANELS: [&str; 14] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise", "soil", "organic", "texture"];
+/// The panel drawn by the terrain's samples, not by the cells: the last.
+const SAMPLED: usize = PANELS.len() - 1;
 /// The first of the loose ground's panels in `PANELS`.
 const GROUND: usize = 6;
 const GAP: usize = 4;
@@ -86,7 +86,9 @@ impl<'a> Look<'a> {
             // The texture.
             5 => texture(&w.soil[i].texture),
             // What rises, mm a year.
-            _ => ramp(&[(0.0, [240, 235, 220]), (300.0, [200, 210, 120]), (700.0, [70, 160, 90]), (1200.0, [20, 90, 70])], self.mm_a_year(w.evap[i] as f64)),
+            4 => ramp(&[(0.0, [240, 235, 220]), (300.0, [200, 210, 120]), (700.0, [70, 160, 90]), (1200.0, [20, 90, 70])], self.mm_a_year(w.evap[i] as f64)),
+            // The organic share of the solids' volume, on a log scale: 1e-5 pale, 1e-2 dark.
+            _ => ramp(&[(-5.0, [235, 225, 200]), (-4.0, [190, 160, 110]), (-3.0, [120, 85, 50]), (-2.0, [50, 30, 15])], w.soil[i].texture.organic.max(1e-9).log10()),
         }
     }
 

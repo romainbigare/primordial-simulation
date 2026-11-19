@@ -1318,8 +1318,7 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
 
 ## 4. Soil and minerals
 **Texture** (`soil`): the loose ground of each of the terrain's samples is fine grain (under 2 µm), middle grain
-(2 to 50 µm) and coarse grain (50 µm to 2 mm), each class spread evenly over the logarithm of its sizes, and an organic
-share no law makes yet. Three laws, over what the wear at the world's start left (0), set the shares
+(2 to 50 µm) and coarse grain (50 µm to 2 mm), each class spread evenly over the logarithm of its sizes; and organic matter, of each cell (below). Three laws, over what the wear at the world's start left (0), set the shares
 (`soil::samples`); no table places a kind of soil:
 - **The bed's grains.** Each make breaks into coarse grain by its substances' hardness and into middle grain by the
   rest, means by their volume shares (`Make::coarse`, `worldgen::makes_of`): a hard grain keeps its size as it is
@@ -1346,17 +1345,28 @@ share no law makes yet. Three laws, over what the wear at the world's start left
 A cell's texture (`World::soil`, found when the world is built) is its samples' mean weighted by the loose ground each
 gives its ground node (at most `skin_m` of it; by area where it holds none).
 
+**Organic matter** (`soil::month`, at each month's start): a cell's organic share is the share of the volume of its
+ground node's solids that stay solid at the surface (not its frozen liquid) that is of the substances life's parts are
+made of: the dead matter its cover and its takers leave on its ground (3, 3b), which rots there by the open world's
+reactions (1, 7, 12; 2.1), faster where the ground is warm and moist and slower under standing liquid, where the
+oxidising gas comes only through the liquid's film (2.3). No store of its own: it is what the ground holds. So ground
+under a dense cover grows richer in organic matter and holds more liquid, and bare ground loses it: the soil and its
+cover shape each other. Where the share moves, the cell's pores are found again (`flow::new_pores`): the liquid they
+hold or let stand rises or falls with them, and its potential energy goes to or from the ground's heat.
+
 **Pores** (`soil::Pores`, `World::pores`): each cell's porosity θs, field capacity θ33 (the liquid held at −33 kPa)
-and wilting point θ1500 (−1500 kPa), and its conductivity when full Ks follow from its texture by the regressions of
-Saxton and Rawls (2006) on the coarse share S, the fine share C and the organic matter (per cent by weight), with S,
-C and the organic share held inside the range they hold for (C 0.05 to 0.6, S 0.05 to 0.95, organic to 0.025, past which at the most fine they put field capacity over full):
-θ1500 and θ33 each a fitted sum of S, C, OM, S·OM, C·OM, S·C and one, then a fitted second step on it; θs = θ33 + the
-fitted share between field capacity and full − 0.097 S + 0.043; Ks = 1930 (θs − θ33)^(3 − λ) mm an hour, λ = ln(θ33
-/ θ1500) / ln(1500 / 33). Flow keeps field capacity and the wilting point as shares of the pores (θ33 / θs, θ1500 /
-θs). A loam (0.4 coarse, 0.2 fine) has 0.39 of pores, 0.64 of them at field capacity, 0.31 at the wilting point,
-and passes 2.2e-6 m/s; a coarse ground passes up to 3e-5 m/s and holds a quarter of a loam's liquid for roots, a fine one under
-1e-8 m/s. So coarse ground takes the rain in fast and holds little of it; fine ground sheds what falls faster than
-it passes, and holds more, much of it past the roots' reach (1.2, 1.5, 3).
+and wilting point θ1500 (−1500 kPa), and its conductivity when full Ks. Its mineral part's follow from its texture by
+the regressions of Saxton and Rawls (2006) on the coarse share S and the fine share C with no organic matter, held
+inside the range they are fitted to (C 0.05 to 0.6, S 0.05 to 0.95): θ1500 and θ33 each a fitted sum of S, C, S·C and
+one, then a fitted second step on it; θs = θ33 + the fitted share between field capacity and full − 0.097 S + 0.043;
+Ks = 1930 (θs − θ33)^(3 − λ) mm an hour, λ = ln(θ33 / θ1500) / ln(1500 / 33). Its organic part is decomposed organic
+ground: 0.85 of pores, 0.6 of its volume held at field capacity, 0.3 at the wilting point, 1e-6 m/s (`ORGANIC`). The
+two mix by the organic share o: θs, θ33 and θ1500 by volume, Ks as (1 − o) ln Ks + o ln Ks of each (any share
+works). Flow keeps field capacity and the wilting point as shares of the pores (θ33 / θs, θ1500 / θs). A loam (0.4
+coarse, 0.2 fine) has 0.39 of pores, 0.64 of them at field capacity, 0.31 at the wilting point, and passes 2.2e-6
+m/s; a coarse ground passes up to 3e-5 m/s and holds a quarter of a loam's liquid for roots, a fine one under 1e-8
+m/s. So coarse ground takes the rain in fast and holds little of it; fine ground sheds what falls faster than it
+passes, and holds more, much of it past the roots' reach (1.2, 1.5, 3).
 
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
 and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
