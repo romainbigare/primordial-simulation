@@ -298,7 +298,7 @@ fn discharge(w: &World, b: &Bodies, flux: &mut [[f64; 2]]) {
 
 /// The head the liquid loses down the samples' ways in each land cell does work there (laws.md 1.3): g times what runs
 /// through each of its samples in no pond, kg, times the fall to the sample it runs to. It picks up loose solids up to
-/// `carry` m³ per J (at most all that lies loose), which go with the cell's runoff to where its ways land, with their
+/// `carry` m³ per J times its loose ground's erodibility (`Texture::erodibility`; at most all that lies loose), which go with the cell's runoff to where its ways land, with their
 /// heat (what would land on its own ground stays);
 /// the work its load leaves free (the cover effect, Sklar and Dietrich 2004) breaks bonded ground into loose (`wear`).
 /// Returns the moves of the bed into loose ground.
@@ -315,7 +315,7 @@ fn erode(w: &World, s: &mut Scratch, b: &Bodies, flux: &[[f64; 2]], sol: &[usize
     }
     let mut broke = Vec::new();
     for i in (0..n).filter(|&i| work[i] > 0.0) {
-        let cap = w.cfg.carry * work[i] * bare_share(w, i);
+        let cap = w.cfg.carry * work[i] * bare_share(w, i) * w.soil[i].texture.erodibility();
         let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
         let f = if avail > 0.0 { (cap / avail).min(1.0) } else { 0.0 };
         if f > 0.0 {

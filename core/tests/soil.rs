@@ -60,5 +60,15 @@ fn dead_matter_on_the_ground_makes_it_organic_and_hold_more_liquid() {
     assert!(w.soil[i].texture.organic > was && held(&w) > before);
 }
 
+/// Flowing liquid carries loose ground of middle particles most easily (Wischmeier and Smith 1978): against a loam's
+/// (1), more for middle particles, less for coarse and for fine ones, and less with organic matter.
+#[test]
+fn middle_particles_are_carried_most_easily() {
+    let k = |coarse: f64, fine: f64, organic: f64| Texture { coarse, fine, organic }.erodibility();
+    let (loam, middle, coarse, fine) = (k(0.4, 0.2, 0.0), k(0.1, 0.1, 0.0), k(0.9, 0.05, 0.0), k(0.1, 0.6, 0.0));
+    println!("erodibility: loam {loam:.3}, middle {middle:.3}, coarse {coarse:.3}, fine {fine:.3}");
+    assert!((loam - 1.0).abs() < 1e-12 && middle > loam && coarse < loam && fine < loam && k(0.4, 0.2, 0.02) < loam);
+}
+
 /// The dead frame laid on the ground, kg/m²: a thick litter.
 const KG_M2: f64 = 20.0;

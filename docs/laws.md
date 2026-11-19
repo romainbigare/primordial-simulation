@@ -462,7 +462,11 @@ what the heat holds molten, as every law and the shell then read it.
 The head lost by moving liquid does work where it is lost on land (`flow::runoff::erode`, `wear`; in a body and below
 0 m it wears nothing): in each land cell, g times what runs through each of its samples in no pond in the month, kg,
 times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
-**carries** up to `carry` m³ of loose solids per J of the cell's work (at most all that lies loose), which go with the
+**carries** up to `carry` m³ of loose solids per J of the cell's work times its loose ground's erodibility against a
+loam's (`Texture::erodibility`: M^1.14 (12 − OM) of Wischmeier and Smith 1978, M its middle share times its share
+that is not fine, OM its organic per cent read to 4; middle particles are carried most easily, coarse ones are heavy,
+fine ones and organic matter bind; a coarse or a fine ground carries a tenth to a third of a loam's, one of middle
+particles up to four times) (at most all that lies loose), which go with the
 cell's runoff to the cells its ways land in, where they settle, and with the work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
 bed per J over its strength into loose ground. The load is booked apart from the liquid (`runoff::Crossings`), each
 with its own heat. **Known limit:** the load goes straight from the cell to the cells its ways land in, as the liquid

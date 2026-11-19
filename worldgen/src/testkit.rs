@@ -257,19 +257,16 @@ pub fn set_pores(w: &mut World, f: impl Fn(&mut pcore::soil::Pores)) {
     w.soil.iter_mut().for_each(|s| f(&mut s.pores));
 }
 
-/// A loam's particles: 0.4 coarse and 0.2 fine.
-const LOAM: [f64; 2] = [0.4, 0.2];
-
-/// The pores of a loam with no organic matter (`LOAM`, `soil::Pores::of`).
+/// The pores of a loam with no organic matter (`soil::LOAM`, `soil::Pores::of`).
 pub fn loam() -> pcore::soil::Pores {
-    pcore::soil::Pores::of(&pcore::soil::Texture { coarse: LOAM[0], fine: LOAM[1], organic: 0.0 })
+    pcore::soil::Pores::of(&pcore::soil::LOAM)
 }
 
-/// Every cell of `w` of a loam's particles (`LOAM`), its organic share as it is, and its pores of that
+/// Every cell of `w` of a loam's particles (`soil::LOAM`), its organic share as it is, and its pores of that
 /// (`soil::Pores::of`; each month's start finds them again as its organic share moves, `soil::month`).
 pub fn set_loam(w: &mut World) {
     for s in w.soil.iter_mut() {
-        (s.texture.coarse, s.texture.fine) = (LOAM[0], LOAM[1]);
+        (s.texture.coarse, s.texture.fine) = (pcore::soil::LOAM.coarse, pcore::soil::LOAM.fine);
         s.pores = pcore::soil::Pores::of(&s.texture);
     }
 }

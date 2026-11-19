@@ -27,10 +27,27 @@ pub struct Texture {
     pub organic: f64,
 }
 
+/// A loam: its particles 0.4 coarse and 0.2 fine, with no organic matter.
+pub const LOAM: Texture = Texture { coarse: 0.4, fine: 0.2, organic: 0.0 };
+/// The erodibility of loose ground grows as the power `ERODIBLE_EXP` of its middle share times its share that is not
+/// fine, and falls in a straight line with its organic matter, from none at the per cent `ORGANIC_SPAN` (Wischmeier
+/// and Smith 1978), read to `ORGANIC_MOST` per cent (the range of their data).
+const ERODIBLE_EXP: f64 = 1.14;
+const ORGANIC_SPAN: f64 = 12.0;
+const ORGANIC_MOST: f64 = 4.0;
+
 impl Texture {
     /// The share of middle particles.
     pub fn middle(&self) -> f64 {
         1.0 - self.coarse - self.fine
+    }
+    /// How easily flowing liquid carries off loose ground of this texture, against a loam (`LOAM`, 1): the soil
+    /// erodibility factor of Wischmeier and Smith (1978), M^1.14 (12 − OM), M the middle share times the share that
+    /// is not fine (their silt and very fine sand times what is not clay), OM the organic per cent. Middle particles
+    /// are carried most easily: coarse ones are heavy, fine ones bind together, and organic matter binds them too.
+    pub fn erodibility(&self) -> f64 {
+        let k = |t: &Texture| (t.middle().max(0.0) * (1.0 - t.fine)).powf(ERODIBLE_EXP) * (ORGANIC_SPAN - (100.0 * t.organic).min(ORGANIC_MOST));
+        k(self) / k(&LOAM)
     }
 }
 
