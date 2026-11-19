@@ -20,9 +20,8 @@ const SPRAYS = 30.0;
 // Snow lies on a crown's lit leaves up to this share of their colour, as closed as the crown is (a bare one holds
 // little), in the colour of fresh snow (colour.wgsl `SNOW`).
 const CROWN_SNOW = 0.8; const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
-// A shadow lets through the sky's light and what crowns scatter, about half of the sun's (canopy.ts `CROWN_SHADOW`); a
-// bush's this share of that.
-const SHADOW = 0.42; const BUSH_SHADOW = 0.3;
+// A tree's shadow darkens the ground by `CROWN_SHADOW` (draw.wgsl); a bush's by this share of that.
+const BUSH_SHADOW = 0.3;
 
 // The sprites a plant of q's kind is drawn from, by its numbers (the first and how many). Its family comes from its
 // kind's genes alone, each plant crossing a border between families by its own draw (`set_draw`, `under_edge`), so a
@@ -192,7 +191,7 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   var kept = leafy;
   if (q.left < 1.0) { kept += bare_texel(fit.s, uv, g).a * (1.0 - leafy); }
   let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));
-  return select(BUSH_SHADOW, 1.0, q.design == TREE) * SHADOW * kept * edge;
+  return select(BUSH_SHADOW, 1.0, q.design == TREE) * CROWN_SHADOW * kept * edge;
 }
 
 // How wide the feet tree q drawn from sprite s stands on, 0..1: as wet as its kind's ground (form.ts `Form.wet`); drawn as

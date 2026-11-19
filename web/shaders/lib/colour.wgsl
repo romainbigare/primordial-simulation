@@ -313,7 +313,10 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     // What floats on still water (afloat.wgsl), and the plants that stand in it as deep as their roots reach
     // (draw.wgsl `stands_in`), over it as on land, as far as its waves leave them (`waves_strip`).
     water = afloat(water, p);
+    // Under the crowns of the trees that stand in it as the field draws them the water lies in their shadow, as the
+    // ground does (draw.wgsl `CROWN_SHADOW`); near, the trees drawn one by one cast their own (models.wgsl).
     let standing = min(p.cover.a, 1.0) * stands_in(p.depth, p.reach) * (1.0 - waves_strip(p, SWASH_DRY));
+    water *= 1.0 - CROWN_SHADOW * min(p.canopy, 1.0) * standing;
     if (standing > 0.0) { water = mix(water, lit_by(p.cover.rgb / p.cover.a, lit), standing); }
     // Ice where the cells' share of it lies (ice.wgsl `ice_cover`), as floes at its margin.
     let ice = ice_cover(p.snow, p.depth, p.at, p.e);

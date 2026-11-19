@@ -186,6 +186,10 @@ const SNOW_PER_ICE = 3.0;
 // The depth of the snow on ground of `ice_m` m of frozen cover on average at `t` K (`snow_of`), m.
 fn snow_depth(ice_m: f32, t: f32, melt: f32) -> f32 { return SNOW_PER_ICE * ice_m * unmelted(t, melt); }
 
+// A crown's shadow darkens what lies under it by this share: it lets through the sky's light and what crowns scatter,
+// about half of the sun's (canopy.ts `CROWN_SHADOW`).
+const CROWN_SHADOW = 0.42;
+
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
 // samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
 // From this depth on it is water, and a plant stands in it only as deep as its roots' gas spaces reach (the core's

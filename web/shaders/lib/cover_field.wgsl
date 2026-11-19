@@ -22,9 +22,9 @@ const SWARD_LAYER = 3; const FLOWER_LAYER = 4; const SWARD_FIRST = 5; const STAN
 // holds them and the mean depth of loose ground their roots need, m (the core's: `Cover::rooted`, `Cover::need`).
 const TALL_LAYER = 7; const ROOTED_LAYER = 8; const NEED_LAYER = 9;
 // Of each lattice: its marks' mean width, m (canopy.ts `FIELD.wide`), and the share of the ground its shadows fall on
-// (`FIELD.shade`), which they darken by `FIELD_SHADOW` (canopy.ts `CROWN_SHADOW`); in its fourth number the share of
+// (`FIELD.shade`), which they darken by `CROWN_SHADOW` (draw.wgsl); in its fourth number the share of
 // the ground under crowns whose leaves fall this month (canopy.ts `leavesFalling`).
-const WIDE_LAYER = 10; const SHADE_LAYER = 11; const FIELD_SHADOW = 0.42;
+const WIDE_LAYER = 10; const SHADE_LAYER = 11;
 // The sward and the low lattices as one layer (canopy.ts `lowOf`), drawn in their place where a pixel takes
 // `LOW_FAR_E` m and more (where their detail no longer shows: no swathes, blades, tufts or flowers past a metre a
 // pixel), fully from `LOW_FAR_FULL_E`; thicker and thinner over the patches as they are.
@@ -407,7 +407,7 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, ho
     if (groups > 0.0) { c *= 1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * groups; }
     c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
   }
-  let dark = FIELD_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * thick, 1.0) * unshown;
+  let dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * thick, 1.0) * unshown;
   let below = vec4f(dst.rgb * (1.0 - dark), dark + dst.a * (1.0 - dark));
   return vec4f(c * share, share) + below * (1.0 - share);
 }
