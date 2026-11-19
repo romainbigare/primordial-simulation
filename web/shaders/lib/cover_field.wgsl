@@ -66,9 +66,9 @@ const LIT_LEAST = 0.05;
 const CANOPY_SNOW = 0.35;
 
 // What lies under and over the cover at a point (land.wgsl `land_spots`): how soaked its ground is, 0..1; its height
-// over the nearest water's level, m, and its slope (rise over run); the depth of its loose ground with its patches
+// over the nearest water's level, m, and its slope (rise over run); the depth of the liquid standing over it, m; the depth of its loose ground with its patches
 // (rock.wgsl `loose_seen`) and that depth's change across a pixel, m; the share snow covers and the snow's depth, m.
-struct Beneath { soaked: f32, over: f32, slope: f32, loose: f32, loose_px: f32, snow: f32, snow_m: f32 }
+struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loose_px: f32, snow: f32, snow_m: f32 }
 
 // The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; the share of
 // the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month; and
@@ -126,37 +126,48 @@ const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const RE
 // Reeds are the herbs' own plants: they stand dense as far as the herbs are there to make them, fully where the herbs
 // cover `REED_HERBS` of the ground; a trace of herbs makes a trace of reeds, not a belt.
 const REED_HERBS = 0.1;
-// A set of tufts drawn one by one (detail.wgsl `sward_tufts`): its first sprite and how many (sprites.wgsl), its
+// A set of tufts drawn one by one (detail.wgsl `sward_tufts`): its first sprite and how many (sprites.wgsl), and a
+// second set (its first and how many) that the share `other` of its tufts are drawn from, each by its own draw; its
 // lattice's cell, m, the share of a tuft's box its blades cover and how many times as tall as wide the box is (measured
 // on the sprites), the cells south of its own a tuft reaches up into (its height), its stream of the world's random
-// numbers (and the next), its shadow (how dark, its middle how many widths down the sun, how many times the tuft's
-// own size), and its tips' colour and the share of its tufts that carry them. The sward's tufts in cells `TUFT_CELL_M`
-// m wide; reeds near stand as tall tufts in cells `REED_CELL_M` m wide, straw-olive (`REED_STEM` of the way to
-// `REED_STRAW` from the sward's colour), `REED_HEADS` of them with brown seed heads (`REED_HEAD`), over a longer
-// shadow, `REED_STANDS` of a clump's cells holding one (so its stems stand apart), in clumps with a sharp edge over
-// noise `REED_CLUMP_M` across, about `REED_CLUMPS` of the reed ground (tall marsh grasses grow 1.5 to 3 m tall in
-// clonal clumps: from memory).
-struct Tufts { first: i32, n: i32, cell_m: f32, covers: f32, aspect: f32, south: i32, k: i32, shadow: vec3f, tip: vec4f }
+// numbers (and the next), and its shadow (how dark, its middle how many widths down the sun, how many times the tuft's
+// own size). The sward's tufts in cells `TUFT_CELL_M` m wide. The tall herbs of the wet edge (`wet_edge`) stand near
+// as clumps of their own sprites, their box's cover and shape the first sprite's (`sprite_tufts`): reeds and cattails
+// in cells `REED_CELL_M` m wide, straw-olive (`REED_STEM` of the way to `REED_STRAW` from the sward's colour), over a
+// longer shadow, the cattails as many as the liquid stands deep over their ground, to all of them from `CATTAIL_M`
+// (cattails hold the flooded shallows, reeds the margin above them: from memory); rushes and sedges in cells
+// `RUSH_CELL_M` m wide on soaked ground off the water's edge; both on `REED_STANDS` of a clump's cells (so their stems
+// stand apart), in clumps with a sharp edge over noise `REED_CLUMP_M` across, about `REED_CLUMPS` of the ground they
+// hold (tall marsh grasses grow 1.5 to 3 m tall in clonal clumps, rushes and sedges 0.5 to 1.5 m: from memory).
+struct Tufts { first: i32, n: i32, other: vec2i, others: f32, cell_m: f32, covers: f32, aspect: f32, south: i32, k: i32, shadow: vec3f }
 const TUFT_CELL_M = 0.08; const TUFT_COVERS = 0.14; const TUFT_ASPECT = 0.81; const TUFT_SOUTH = 2; const TUFT_SHADOW = vec3f(0.3, 0.25, 1.0);
-const REED_CELL_M = 0.9; const REED_COVERS = 0.18; const REED_ASPECT = 2.6; const REED_SOUTH = 6; const REED_SHADOW = vec3f(0.4, 0.5, 1.3);
-const REED_STRAW = vec3f(0.42, 0.38, 0.17); const REED_STEM = 0.8; const REED_HEAD = vec3f(0.16, 0.09, 0.05); const REED_HEADS = 0.4;
+const REED_CELL_M = 0.9; const REED_SOUTH = 6; const REED_SHADOW = vec3f(0.4, 0.5, 1.3); const CATTAIL_M = 0.3;
+const REED_STRAW = vec3f(0.42, 0.38, 0.17); const REED_STEM = 0.8;
+const RUSH_CELL_M = 0.2; const RUSH_SOUTH = 7; const RUSH_SHADOW = vec3f(0.35, 0.4, 1.2);
 const REED_CLUMP_M = 2.5; const REED_CLUMPS = 0.4; const REED_CLUMP_EDGE = 0.1; const REED_STANDS = 0.5;
-fn grass_tufts() -> Tufts { return Tufts(TUFT_FROM, TUFT_N, TUFT_CELL_M, TUFT_COVERS, TUFT_ASPECT, TUFT_SOUTH, 170, TUFT_SHADOW, vec4f(0.0)); }
-fn reed_tufts() -> Tufts { return Tufts(REED_FROM, REED_N, REED_CELL_M, REED_COVERS, REED_ASPECT, REED_SOUTH, 172, REED_SHADOW, vec4f(REED_HEAD, REED_HEADS)); }
+fn grass_tufts() -> Tufts { return Tufts(TUFT_FROM, TUFT_N, vec2i(TUFT_FROM, TUFT_N), 0.0, TUFT_CELL_M, TUFT_COVERS, TUFT_ASPECT, TUFT_SOUTH, 170, TUFT_SHADOW); }
+// The tufts of the set of `n` sprites from `first`, the share `others` of them of the set `other`, measured on its first
+// sprite (sprites.wgsl).
+fn sprite_tufts(first: i32, n: i32, other: vec2i, others: f32, cell_m: f32, south: i32, k: i32, shadow: vec3f) -> Tufts {
+  return Tufts(first, n, other, others, cell_m, model_fill(first), model_h(first) / model_w(first), south, k, shadow);
+}
+// Reeds, and cattails as deep as liquid `depth` m stands over their ground.
+fn reed_tufts(depth: f32) -> Tufts {
+  return sprite_tufts(REED_FROM, REED_N, vec2i(CATTAIL_FROM, CATTAIL_N), ease(0.0, CATTAIL_M, depth), REED_CELL_M, REED_SOUTH, 172, REED_SHADOW);
+}
+fn rush_tufts() -> Tufts { return sprite_tufts(RUSH_FROM, RUSH_N, vec2i(RUSH_FROM, RUSH_N), 0.0, RUSH_CELL_M, RUSH_SOUTH, 176, RUSH_SHADOW); }
 // Ferns: the herbs on wet ground in the crowns' shade (as soaked as the ground and as closed as the crowns over it,
 // where no reeds stand) stand near as ferns (tex.wgsl, sprites.wgsl `FERN_FROM`), as the soil's floor there is one of
 // ferns (detail.wgsl `soil_detail`): `FERN_STANDS` of the herbs' cover, in cells `FERN_CELL_M` m wide (ferns of
 // shaded wet woods stand 0.5 to 1.5 m tall in loose clumps: from memory), their box's cover and shape the sprite's.
 const FERN_STANDS = 0.6; const FERN_CELL_M = 0.8; const FERN_SOUTH = 2; const FERN_SHADOW = vec3f(0.4, 0.35, 1.2);
-fn fern_tufts() -> Tufts {
-  return Tufts(FERN_FROM, FERN_N, FERN_CELL_M, model_fill(FERN_FROM), model_h(FERN_FROM) / model_w(FERN_FROM), FERN_SOUTH, 174, FERN_SHADOW, vec4f(0.0));
-}
+fn fern_tufts() -> Tufts { return sprite_tufts(FERN_FROM, FERN_N, vec2i(FERN_FROM, FERN_N), 0.0, FERN_CELL_M, FERN_SOUTH, 174, FERN_SHADOW); }
 // How much the herbs at a place over `b` under crowns closing `canopy` of it, where reeds stand as `reeds`, are ferns.
 fn ferns_of(b: Beneath, canopy: f32, reeds: f32) -> f32 { return min(canopy, 1.0) * b.soaked * (1.0 - reeds); }
-// How much a place holds reeds: on soaked ground and in the water's edge band (`REED_WET`, `REED_BAND_M`).
-fn reed_place(b: Beneath) -> f32 {
-  return max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
-}
+// How much a place over `b` holds the tall herbs of the wet edge, on soaked ground and in the water's edge band
+// (`REED_WET`, `REED_BAND_M`): x the band's, y the soaked ground's; their larger is the place's (`reed_place`).
+fn wet_edge(b: Beneath) -> vec2f { return vec2f(ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)), ease(REED_WET, 1.0, b.soaked)); }
+fn reed_place(b: Beneath) -> f32 { let w = wet_edge(b); return max(w.x, w.y); }
 // How much reeds stand at a place that holds them as `place`, where the herbs cover `herbs` of the ground (`REED_HERBS`):
 // one rule far and near.
 fn reeds_of(place: f32, herbs: f32) -> f32 { return place * ease(0.0, REED_HERBS, herbs); }
@@ -328,11 +339,20 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     c = mix(c, t.rgb, thin);
     seen = mix(s, t.a, thin);
   }
-  // Near, its reeds stand in clumps over it as tall tufts (`reed_tufts`); far, they are its tint alone.
+  // Near, its tall herbs of the wet edge stand in clumps over it as tall tufts: reeds and cattails in the edge's band
+  // (`reed_tufts`), rushes on the soaked ground the band does not reach (`rush_tufts`); far, they are its tint alone.
   if (reeds > 0.0) {
-    let clumps = ease(1.0 - 2.0 * REED_CLUMPS - REED_CLUMP_EDGE, 1.0 - 2.0 * REED_CLUMPS + REED_CLUMP_EDGE, noise_l(lat_turned(REED_CLUMP_M, vec2f(0.3)), 86).x);
-    let r = sward_tufts(mix(plain, REED_STRAW, REED_STEM), c, e, REED_STANDS * reeds * clumps, reed_tufts());
-    c = mix(c, r.rgb, r.a);
+    let clumps = REED_STANDS * reeds * ease(1.0 - 2.0 * REED_CLUMPS - REED_CLUMP_EDGE, 1.0 - 2.0 * REED_CLUMPS + REED_CLUMP_EDGE, noise_l(lat_turned(REED_CLUMP_M, vec2f(0.3)), 86).x);
+    let w = wet_edge(b);
+    let rushes = clamp(1.0 - w.x / max(w.y, 1e-6), 0.0, 1.0);
+    if (rushes < 1.0) {
+      let r = sward_tufts(mix(plain, REED_STRAW, REED_STEM), c, e, clumps * (1.0 - rushes), reed_tufts(b.depth));
+      c = mix(c, r.rgb, r.a);
+    }
+    if (rushes > 0.0) {
+      let r = sward_tufts(plain, c, e, clumps * rushes, rush_tufts());
+      c = mix(c, r.rgb, r.a);
+    }
   }
   // Near, on wet shaded ground its herbs stand as ferns over it (`ferns_of`).
   let ferns = ferns_of(b, canopy, reeds);
