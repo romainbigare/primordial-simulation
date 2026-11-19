@@ -1,4 +1,4 @@
-// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl flow.wgsl cover_field.wgsl sprites.wgsl tex.wgsl detail.wgsl things.wgsl afloat.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl land.wgsl rock.wgsl relief.wgsl river.wgsl flow.wgsl cover_field.wgsl sprites.wgsl heights.wgsl tex.wgsl detail.wgsl things.wgsl afloat.wgsl
 // least metres a pixel: 0.5 1 3 30
 // The live map in view: at each pixel of the screen the ground from its tiles and the state from the cells' table
 // (land.wgsl), in the view's colours. Made once more for draws whose pixels take at least 0.5 m, 1 m, 3 m and 30 m
@@ -54,6 +54,18 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
   return p;
 }
 
+// The byte of the layer drawn at `at` (`cs` its squares, `dry` its spot over the ground), 0..1: the cells' blended, or
+// of a layer of the soil the live map finds at each point (colour.wgsl `Earth.view`), its share as a byte of a layer
+// from 0 to 1: the share of the pores the soil's liquid fills by the laws inside a cell (`State`), or the grain's shares
+// of the samples (rock.wgsl `samples_at`, without the patches the Earth's colours draw).
+fn layer_at(at: vec2f, cs: Corners, dry: Spot) -> f32 {
+  let k = earth.view.w;
+  if (k == 2.0) { return dry.filled; }
+  if (k == 3.0) { return samples_at(at, GRAIN_PLANE).x; }
+  if (k == 4.0) { return samples_at(at, GRAIN_PLANE).y; }
+  return blended(VIEW, cs).x;
+}
+
 // Herbs float their leaves on liquid from their height's depth on, all of them from `FLOAT_TALL` times it.
 const FLOAT_TALL = 1.5;
 
@@ -105,6 +117,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.over = st.over;
   p.sea = surface.w;
   p.wet = st.wet;
+  p.filled = st.filled;
   p.t = st.t;
   // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
   p.snow = select(snow_at(st.snow, st.bares, fwidth(st.bares)), st.snow, st.depth > 0.0);
@@ -113,6 +126,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
+  p.grain = grain_at(at, e);
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
   let fringe = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * ch.water);
   let shore_over = select(p.over, mix(p.over, min(p.over, max(abs(g.sd - ch.middle) - ch.water, 0.0) * max(length(g.slope), ch.mean / max(ch.water, 1e-6))), fringe), ch.water > 0.0);
@@ -226,7 +240,7 @@ const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
     truth = mix(truth, spots.dry.bed, spots.dry.rock);
   }
   var shown = 0.0;
-  if (earth.view.x == 2.0) { shown = blended(VIEW, cs).x; }
+  if (earth.view.x == 2.0) { shown = layer_at(at, cs, spots.dry); }
   let rgb = in_view_of(c, shown, truth);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

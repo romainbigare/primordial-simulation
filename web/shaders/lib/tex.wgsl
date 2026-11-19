@@ -43,8 +43,9 @@ fn carpet_m(c: i32) -> f32 { var m = array<f32, 14>(1.5, 1.5, 3.0, 3.0, 3.0, 3.0
 
 // The rendered models (web/textures/trees.png and models.png; their table, sets and counts in sprites.wgsl, which the
 // bake tool writes): the trees one to a layer from `TREES_FROM` on, the rest four to a layer from `MODELS_FROM` on
-// (models.wgsl draws the plants from them, detail.wgsl the things on the ground).
-const MODELS_FROM = 25; const TREES_FROM = MODELS_FROM + MODEL_LAYERS;
+// (models.wgsl draws the plants from them, detail.wgsl the things on the ground); the heights of those that stand in
+// water four to a layer from `HEIGHTS_FROM` on (heights.png, heights.wgsl).
+const MODELS_FROM = 25; const HEIGHTS_FROM = MODELS_FROM + MODEL_LAYERS; const TREES_FROM = HEIGHTS_FROM + HEIGHT_LAYERS;
 // The mean lightness of the grass tufts' blades (linear).
 const TUFT_MEAN = 0.048;
 // The texel of model sprite s at `uv` in its content (0..1, y down), at `g` of its content a pixel: linear, with cover.
@@ -62,6 +63,31 @@ fn model_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
     t = textureSampleGrad(detail_tex, detail_sampler, at, MODELS_FROM + k / 4, vec2f(0.5 * g * size.x, 0.0), vec2f(0.0, 0.5 * g * size.y));
   }
   return vec4f(unsrgb(t.rgb), t.a);
+}
+
+// The height over the ground of the point of sprite s at `uv` in its content (`g` of it a pixel), drawn `h` m tall, the
+// point `up` m north of its foot on the map, m: from its heights (heights.wgsl: each texel's as a share of its height,
+// held to 1, in the cells of their quarter two texels over its edge, as the models'); else as a point of a stem
+// standing up from its foot, which the map's view (water.wgsl `MAP_VIEW`) draws the cosine of its height north of it.
+const HEIGHT_FOOT = 2.0 / 256.0;
+fn model_height_m(s: i32, uv: vec2f, g: f32, up: f32, h: f32) -> f32 {
+  let k = heights_of(s);
+  if (k < 0) { return up / MAP_VIEW.y; }
+  let size = vec2f(model_w(s), model_h(s));
+  let q = vec2f(f32(k % 2), f32((k % 4) / 2));
+  let at = (q + vec2f(0.5 - 0.5 * size.x, 1.0 - size.y - HEIGHT_FOOT) + uv * size) * 0.5;
+  // The heights are each texel's own (not light), its texels between them taken by their cover.
+  let t = textureSampleGrad(detail_tex, detail_sampler, at, HEIGHTS_FROM + k / 4, vec2f(0.5 * g * size.x, 0.0), vec2f(0.0, 0.5 * g * size.y));
+  return min(t.r / max(t.a, 1e-3), 1.0) * h;
+}
+
+// The share of sprite s's height its stem's foot (the middle of its model's box on the ground) stands over its lowest
+// point, which the bake stands on the sprite's foot: for a plant on a wide foot (a flare, a fan of prop roots, a clump
+// of stems) the near edge of it, lower on the map's angled view than its stem. The bake's (heights.wgsl `foot_of`) for
+// the sprites with heights, the ones that stand in water; the rest stand on narrow feet.
+fn foot_rise(s: i32) -> f32 {
+  let k = heights_of(s);
+  return select(0.0, foot_of(max(k, 0)), k >= 0);
 }
 
 // Whether the models are loaded (the detail texture is more than its one blank texel).

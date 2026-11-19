@@ -5,8 +5,8 @@
 // hold (land.wgsl `Tiled`).
 
 // Of each sample (a texel each): the depth of its loose ground, m, the largest stone its channel moves, m, the slope of
-// its channel's reach (rise over run), and its channel's links (`links_of`); and in a second plane under the first, the reflectance of its bed's make
-// (tape/src/ground/rock.rs).
+// its channel's reach (rise over run), and its channel's links (`links_of`); in a second plane under the first, the
+// reflectance of its bed's make; and in a third, its loose ground's grain (`Spot.grain`) (tape/src/ground/rock.rs).
 @group(0) @binding(18) var rock_field: texture_2d<f32>;
 @group(0) @binding(19) var rock_sampler: sampler;
 
@@ -20,32 +20,55 @@ const PATCHY = 0.6; const PATCHY_M = 40.0; const PATCHY_OCTAVES = 4;
 // (relief.wgsl).
 const SMOOTH_LOOSE_M = 0.5;
 
-// The depth of the loose ground at `at`, m from the map's north-west corner: through the samples' centres as a
-// B-spline read texel by texel (draw.wgsl `b_spline`), so no sample's square shows in the bed it bares and its change
-// across a pixel, which eases the plants' edge (`rooted`), is smooth.
-fn loose_at(at: vec2f) -> f32 {
+// The rock's planes (`rock_field`): the loose ground's and its channel's, the bed's make, the loose ground's grain.
+const LOOSE_PLANE = 0; const MAKE_PLANE = 1; const GRAIN_PLANE = 2; const ROCK_PLANES = 3.0;
+
+// Plane `plane` of the samples at `at`, m from the map's north-west corner: through the samples' centres as a
+// B-spline read texel by texel (draw.wgsl `b_spline`), so no sample's square shows.
+fn samples_at(at: vec2f, plane: i32) -> vec4f {
   let c = b_spline(at / (land.map.x * land.map.yz) * land.samples.xy - 0.5);
   let last = vec2i(land.samples.xy) - 1;
-  var sum = 0.0;
+  let rows = vec2i(0, plane * i32(land.samples.y));
+  var sum = vec4f(0.0);
   for (var y = 0; y < 3; y++) {
     for (var x = 0; x < 3; x++) {
-      sum += c.wx[x] * c.wy[y] * textureLoad(rock_field, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), 0).x;
+      sum += c.wx[x] * c.wy[y] * textureLoad(rock_field, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last) + rows, 0);
     }
   }
   return sum;
 }
 
-// The place in the rock's texture of the point `uv` (0..1 over the samples) of its plane `plane` (0 the loose ground's,
-// 1 the bed's make), held within the plane's own rows so no blend reads the other plane.
-fn rock_plane(uv: vec2f, plane: f32) -> vec2f {
+// The depth of the loose ground at `at`, m (`samples_at`): no sample's square shows in the bed it bares and its change
+// across a pixel, which eases the plants' edge (`rooted`), is smooth.
+fn loose_at(at: vec2f) -> f32 { return samples_at(at, LOOSE_PLANE).x; }
+
+// The place in the rock's texture of the point `uv` (0..1 over the samples) of its plane `plane` (`MAKE_PLANE`...),
+// held within the plane's own rows so no blend reads another plane.
+fn rock_plane(uv: vec2f, plane: i32) -> vec2f {
   let down = land.samples.y;
-  return vec2f(uv.x, (clamp(uv.y * down, 0.5, down - 0.5) + plane * down) / (2.0 * down));
+  return vec2f(uv.x, (clamp(uv.y * down, 0.5, down - 0.5) + f32(plane) * down) / (ROCK_PLANES * down));
+}
+
+// The loose ground's grain shares swap coarse for fine by up to `GRAIN_PATCHY` of themselves either way over patches from
+// `GRAIN_PATCH_M` across down, in `GRAIN_OCTAVES` octaves (ragged.wgsl): what the wear lays down is sorted in lenses
+// and patches finer than a sample. Even in the patches' noise, so the patches' mean is the samples' grain. The samples'
+// grain is read `GRAIN_WARP_M` away at most, along noise `GRAIN_WARP_SIZE_M` across: a sample's grain is a mean over
+// its square, and its edges are no lines on the ground, so no square of the samples shows where the grain changes
+// fast.
+const GRAIN_PATCHY = 0.6; const GRAIN_PATCH_M = 60.0; const GRAIN_OCTAVES = 3;
+const GRAIN_WARP_M = 110.0; const GRAIN_WARP_SIZE_M = 260.0;
+// The loose ground's grain at `at`, seen at `e` m a pixel (`Spot.grain`): the samples' (`samples_at`), with its patches.
+fn grain_at(at: vec2f, e: f32) -> vec4f {
+  let warp = vec2f(noise_turned(at / GRAIN_WARP_SIZE_M, 214), noise_turned(at / GRAIN_WARP_SIZE_M + 3.7, 215));
+  let g = samples_at(at + GRAIN_WARP_M * warp, GRAIN_PLANE);
+  let n = GRAIN_PATCHY * ragged(at, e, GRAIN_PATCH_M, GRAIN_OCTAVES, 210);
+  return vec4f(g.x * (1.0 + n), g.y * (1.0 - n), g.zw);
 }
 
 // The reflectance of the bed's make at `at`, m from the map's north-west corner, blended between the samples' centres:
 // so bare rock shows the bands the folded layers make (core/src/space/strata.rs).
 fn bed_make_at(at: vec2f) -> vec3f {
-  return textureSampleLevel(rock_field, rock_sampler, rock_plane(at / (land.map.x * land.map.yz), 1.0), 0.0).xyz;
+  return textureSampleLevel(rock_field, rock_sampler, rock_plane(at / (land.map.x * land.map.yz), MAKE_PLANE), 0.0).xyz;
 }
 
 // Of the channel of sample `s`: the largest stone it moves, m, and the slope of its reach, rise over run (both 0 for

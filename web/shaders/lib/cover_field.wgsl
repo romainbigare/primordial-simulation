@@ -346,7 +346,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
   var seen = s;
   let thin = select(1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s), 1.0, b.depth > 0.0);
   if (thin > 0.0) {
-    let t = sward_tufts(plain, c, e, s, grass_tufts());
+    let t = sward_tufts(plain, c, e, s, grass_tufts(), b.depth);
     c = mix(c, t.rgb, thin);
     seen = mix(s, t.a, thin);
   }
@@ -357,18 +357,18 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
     let w = wet_edge(b);
     let rushes = clamp(1.0 - w.x / max(w.y, 1e-6), 0.0, 1.0);
     if (rushes < 1.0) {
-      let r = sward_tufts(mix(plain, REED_STRAW, REED_STEM), c, e, clumps * (1.0 - rushes), reed_tufts(b.depth));
+      let r = sward_tufts(mix(plain, REED_STRAW, REED_STEM), c, e, clumps * (1.0 - rushes), reed_tufts(b.depth), b.depth);
       c = mix(c, r.rgb, r.a);
     }
     if (rushes > 0.0) {
-      let r = sward_tufts(plain, c, e, clumps * rushes, rush_tufts());
+      let r = sward_tufts(plain, c, e, clumps * rushes, rush_tufts(), b.depth);
       c = mix(c, r.rgb, r.a);
     }
   }
   // Near, on wet shaded ground its herbs stand as ferns over it (`ferns_of`).
   let ferns = ferns_of(b, canopy, reeds);
   if (ferns > 0.0) {
-    let fern = sward_tufts(plain, c, e, FERN_STANDS * ferns * s, fern_tufts());
+    let fern = sward_tufts(plain, c, e, FERN_STANDS * ferns * s, fern_tufts(), b.depth);
     c = mix(c, fern.rgb, fern.a);
   }
   let near = shows_at(FLOWERS_GONE_M, e);
