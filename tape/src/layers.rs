@@ -55,8 +55,19 @@ pub struct Fields {
 /// surface and of the ground.
 type Cell = (f64, f64, f64, f64, f64, [f64; 3], [f64; 3]);
 
+/// Of each cell of `w`, its liquid in its pores and over them (`flow::means`; none before Flow first built its state).
+fn liquid_of(w: &World) -> Vec<pcore::inside::Means> {
+    let n = w.mesh.cells().n();
+    pcore::flow::means(w, &(0..n).collect::<Vec<usize>>()).unwrap_or_else(|| vec![Default::default(); n])
+}
+
 pub fn fields(w: &World) -> Fields {
-    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i));
+    fields_of(w, &liquid_of(w))
+}
+
+/// The fields of `w` whose cells hold the liquid `liquid` (`liquid_of`).
+fn fields_of(w: &World, liquid: &[pcore::inside::Means]) -> Fields {
+    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i, liquid[i].stands));
     let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], rgb: vec![], ground: vec![] };
     for (z, depth, ice, loose, t, rgb, ground) in cells {
         f.z.push(z);
@@ -70,8 +81,9 @@ pub fn fields(w: &World) -> Fields {
     f
 }
 
-/// The values of cell `i` (`Cell`).
-fn cell(w: &World, i: usize) -> Cell {
+/// The values of cell `i` (`Cell`), over whose pores `stands` m of liquid stands: the liquid shows as the surface only
+/// so far as it stands over the ground; the liquid in the pores is part of the ground (`flow::means`).
+fn cell(w: &World, i: usize, stands: f64) -> Cell {
     let (t, pl) = w.thaw_node_last(i);
     // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
     let mut acc = [[0.0f64; 4]; 4];
@@ -92,7 +104,8 @@ fn cell(w: &World, i: usize) -> Cell {
     }
     acc[3] = bonded(w, i);
     let area = w.mesh.cells().area()[i];
-    let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
+    let shows = |kind: usize, a: &[f64; 4]| (if kind == 1 { stands } else { a[0] / area }) >= COVER_MIN;
+    let top = acc[..3].iter().enumerate().find(|&(kind, a)| shows(kind, a)).map_or(&acc[3], |(_, a)| a);
     let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
     let colour = |a: &[f64; 4]| [1, 2, 3].map(|c| if a[0] > 0.0 { (a[c] / a[0] * glow).min(1.0) } else { 0.0 });
     let ground = colour(acc[2..].iter().find(|a| a[0] > 0.0).unwrap_or(&acc[3]));
@@ -190,8 +203,8 @@ impl<'a> Ctx<'a> {
     pub(crate) fn new(w: &'a World) -> Self {
         let n = w.mesh.cells().n();
         let t_air = (0..w.mesh.level(AIR).n()).map(|j| w.t_air(j)).collect();
-        let f = fields(w);
-        let means = pcore::flow::means(w, &(0..n).collect::<Vec<usize>>()).unwrap_or_else(|| vec![Default::default(); n]);
+        let means = liquid_of(w);
+        let f = fields_of(w, &means);
         let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
         let filled = means.iter().map(|m| if m.pores > 0.0 { m.pore / m.pores } else { f64::NAN }).collect();
         let area = w.mesh.cells().area();

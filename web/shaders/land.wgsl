@@ -223,21 +223,25 @@ const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
     let o = river_on(spots.wet, ground_for(spots.wet, true), spots.flow, spots.water, spots.down);
     c = Shaded(mix(c.rgb, o.rgb, spots.share), mix(c.m, o.m, spots.share), select(c.kind, o.kind, spots.share > 0.5));
   }
-  // The true colour is the cells', and the bed's where it shows; their snow placed as the Earth view places it: the
-  // cells' colour is taken as their ground's under their share of snow, and that ground drawn under the point's snow.
-  // On standing liquid its ice is placed so too (ice.wgsl `ice_cover`). Each is read only in the view that draws it
-  // (colour.wgsl `in_view_of`): the true colour in the true view, the layer's value in a layer's view.
+  // The true colour: of a point no liquid stands on, its ground's (the cells' `SURFACE`, the sea's squares taking the
+  // land's nearest, so the sea's colour does not run onto the land past the shore drawn) and the bed's where it shows,
+  // under the snow placed as the Earth view places it; over standing liquid, the cells' colour, taken as their
+  // ground's under their share of snow (all of it as it is where they are nearly all under snow), with their ice
+  // placed (ice.wgsl `ice_cover`). Each is read only in the view that draws it (colour.wgsl `in_view_of`): the true
+  // colour in the true view, the layer's value in a layer's view.
   var truth = vec3f(0.0);
   if (earth.view.x == 1.0) {
-    truth = blended(TRUTH, cs).xyz;
     let s = spots.snow_cells;
-    if (s > 0.0 && s < SNOW_CELLS_ALL) {
-      let under = clamp((truth - s * SNOW) / (1.0 - s), vec3f(0.0), vec3f(1.0));
-      var placed = spots.dry.snow;
-      if (spots.dry.depth > 0.0) { placed = ice_cover(s, spots.dry.depth, at, spots.dry.e); }
-      truth = mix(under, SNOW, placed);
+    if (spots.dry.depth <= 0.0) {
+      truth = mix(mix(blended(SURFACE, cs).xyz, spots.dry.bed, spots.dry.rock), SNOW, spots.dry.snow);
+    } else {
+      truth = blended(TRUTH, cs).xyz;
+      if (s > 0.0 && s < SNOW_CELLS_ALL) {
+        let under = clamp((truth - s * SNOW) / (1.0 - s), vec3f(0.0), vec3f(1.0));
+        truth = mix(under, SNOW, ice_cover(s, spots.dry.depth, at, spots.dry.e));
+      }
     }
-    truth = mix(truth, spots.dry.bed, spots.dry.rock);
+    truth = true_soaked(truth, spots.dry);
   }
   var shown = 0.0;
   if (earth.view.x == 2.0) { shown = layer_at(at, cs, spots.dry); }

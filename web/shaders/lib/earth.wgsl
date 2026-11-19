@@ -95,8 +95,8 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.e = e;
   return s;
 }
-// Shaded colour `c` at uv in the view drawn (`in_view_of`).
-fn in_view(c: Shaded, uv: vec2f) -> vec3f {
+// The colour of spot p at uv in the view drawn (`in_view_of`), its true colour soaked as the spot is (`true_soaked`).
+fn in_view(p: Spot, uv: vec2f) -> vec3f {
   let o = textureSampleLevel(view_field, smooth_sampler, uv, 0.0);
-  return in_view_of(c, o.x, textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).xyz);
+  return in_view_of(colour(p), o.x, true_soaked(textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).xyz, p));
 }

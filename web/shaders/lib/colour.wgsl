@@ -259,6 +259,13 @@ fn swash_of(over: f32, waves: vec2f, slope: f32, at: vec2f, e: f32, snow: f32) -
   return vec2f(wet, foam) * (1.0 - snow);
 }
 
+// The true colour `truth` of what covers spot p, its ground darker as far as it is soaked (`WET_DARK`), where no
+// liquid stands over it and as far as no snow lies on it: the liquid in its pores is part of the ground, not a surface.
+fn true_soaked(truth: vec3f, p: Spot) -> vec3f {
+  if (p.depth > 0.0) { return truth; }
+  return truth * (1.0 - WET_DARK * soaked(p) * (1.0 - p.snow));
+}
+
 // Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked (and in the
 // style tinted by its grain as far as it takes the tint, style.wgsl `bare_tint`).
 fn soil(g: Ground, s: f32, lit: f32) -> vec3f {
