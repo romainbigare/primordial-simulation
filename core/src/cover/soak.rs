@@ -107,8 +107,9 @@ pub struct Footing {
 /// over it (Armstrong 1979; its loose ground taken as its land's, and none where that holds none): one rule for where a
 /// plant's roots work, on land or in the liquid, as swamp trees and emergent herbs stand in the liquid to a depth their
 /// kind tolerates (Kozlowski 1997). Plants do not move: its line holds where they stand while the level moves, so a
-/// rising level stands them in deeper liquid, where its roots past their reach work no more (`Cover::airless`). Before
-/// the month's start found the cell's levels it stands on its land alone.
+/// rising level stands them in deeper liquid, where its roots past their reach work no more (`Cover::airless`); where
+/// no ground lies above its line, it holds the cell's highest ground (`Shore::holding`). Before the month's start found
+/// the cell's levels it stands on its land alone.
 pub fn footing(w: &crate::World, i: usize, phi: f64, need: f64, land: &Soak, line: Option<f64>) -> Footing {
     let ph = &w.cfg.phys;
     let on_land = working(phi, need, land, ph);
@@ -119,11 +120,8 @@ pub fn footing(w: &crate::World, i: usize, phi: f64, need: f64, land: &Soak, lin
     }
     let s = crate::flow::shore(w, i, levels);
     let reach = if land.loose > 0.0 { aired(land.breath, phi) } else { 0.0 };
-    let h = line.unwrap_or_else(|| s.found(reach));
+    let h = line.map_or_else(|| s.found(reach), |l| s.holding(l));
     let f = s.feet(h, reach, need.min(land.loose).max(1e-9));
-    if f.ground <= 0.0 {
-        return Footing { line: h, free: f.free, ..Footing::default() };
-    }
     let rest = if f.airless > 0.0 { 1.0 - s.above(f.rise) / f.ground } else { 0.0 };
     Footing { line: h, share: f.ground / s.area(), work: (f.land * on_land + f.work) / f.ground, wet: f.wet / f.ground, airless: rest.clamp(0.0, 1.0), rise: f.rise, free: f.free }
 }
