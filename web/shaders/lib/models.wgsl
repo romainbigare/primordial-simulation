@@ -1,10 +1,11 @@
-// Plants drawn from rendered models (web/textures/models.png; CC0, web/textures/SOURCES.md): broad-leaved trees,
-// conifers and bushes as the map sees them, lit from the north-west, four to a layer of the detail texture (tex.wgsl
-// `MODELS_FROM`), each standing on the bottom middle of its quarter. A mark of a kind draws one of its form's sprites
-// (its own draw picks which), covering as much as its crown and no taller than it stands; its leaves take its kind's colour in the
-// season (the sprite's lightness about the leaves' mean, `LEAF_MEAN`), its wood keeps the model's bark; a thin crown is a
-// smaller sprite (covering as much as its leaves close), and only the season takes leaves off it: its sprays fall and
-// show its bare twin (sprites.wgsl `bare_of`: the same tree rendered without its leaves) under them.
+// Plants drawn from rendered models (web/textures/trees.png, models.png; CC0 and CC BY 4.0, web/textures/SOURCES.md):
+// broad-leaved trees, conifers and bushes as the map sees them, lit from the north-west, four to a layer of the detail
+// texture (tex.wgsl `MODELS_FROM`), each standing on the bottom middle of its quarter. A mark of a kind draws one of
+// its form's sprites (its own draw picks which), covering as much as its crown and no taller than it stands; its leaves
+// take its kind's colour in the season (the sprite's lightness about the leaves' mean, `LEAF_MEAN`), its wood keeps the
+// model's bark; a thin crown is a smaller sprite (covering as much as its leaves close), and only the season takes
+// leaves off it: its sprays fall and show its bare twin (sprites.wgsl `bare_of`: the same tree rendered without its
+// leaves) under them.
 
 // A sprite is drawn so its cover (tex.wgsl `model_fill` of its box) is its crown's ground, pi/4 of its width squared, as
 // the field far away counts it (canopy.ts `marksOn`): its leaves have gaps, so it is wider than the crown, at most
@@ -18,22 +19,25 @@ const LEAF_GREEN = vec2f(0.345, 0.39);
 // An open crown loses its leaves in sprays, this many across its sprite.
 const SPRAYS = 30.0;
 // Snow lies on a crown's lit leaves up to this share of their colour, as closed as the crown is (a bare one holds
-// little), in the colour of fresh snow (colour.wgsl `SNOW`).
-const CROWN_SNOW = 0.8; const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95);
+// little), in the colour of fresh snow (colour.wgsl `SNOW`): on none lit under `SNOW_LIT`.x of its sprite's leaves' mean,
+// on all from .y.
+const CROWN_SNOW = 0.8; const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95); const SNOW_LIT = vec2f(0.5, 1.2);
 // A tree's shadow darkens the ground by `CROWN_SHADOW` (draw.wgsl); a bush's by this share of that.
 const BUSH_SHADOW = 0.3;
 
 // The sprites a plant of q's kind is drawn from, by its numbers (the first and how many). Its family comes from its
 // kind's genes alone, each plant crossing a border between families by its own draw (`set_draw`, `under_edge`), so a
 // kind whose genes drift changes plant by plant; its height picks only the stage of its family's sprites, as a young
-// tree of a family looks. A tree by its crown's form (form.ts `formOf`, as surely as it leads: the rest round), a broad
-// crown of a dry kind a quiver tree (as dry as it is made for); a cone young under `CONE_YOUNG_M` m and small under
-// `SMALL_M` m (spruces, pines), a column a spruce (young under `CONE_YOUNG_M` m), tiers a pine (young under
-// `PINE_YOUNG_M` m, small under `SMALL_M` m); a bush by how dry its kind's ground (`BUSH_DRY`, over `BUSH_MIX`): leafy,
-// middling, or a dry land's. A tree whose grown plants' walls are under `SOFT_WOOD` of their dry mass (style.ts
-// `BUSH_WOOD`, `grownWalls`, over `SOFT_MIX`) is a soft one: a palm, a tree fern or a giant herb.
+// tree of a family looks. A tree by its crown's form (form.ts `formOf`, as surely as it leads: the rest round): a round
+// crown a broad-leaved tree (island trees, oaks, horse chestnuts); a cone a spruce, hemlock or fir (young under
+// `CONE_YOUNG_M` m); a column a poplar; tiers a pine (young under `PINE_YOUNG_M` m); an umbrella a flat-topped tree or a
+// baobab, or, as dry as its kind is made for, a quiver or Joshua tree; lobes a willow, a black poplar or a fig. A bush by
+// how dry its kind's ground (`BUSH_DRY`, over `BUSH_MIX`): leafy, middling, or a dry land's. A tree whose grown plants'
+// walls are under `SOFT_WOOD` of their dry mass (style.ts `BUSH_WOOD`, `grownWalls`, over `SOFT_MIX`) is a soft one: of
+// a kind as tender to frost as it is (form.ts `Form`, each plant by its own draw, `tender_draw`), a palm or a fern, as
+// such plants live where it does not freeze hard; else drawn by its crown's form, as a woody tree.
 const SOFT_WOOD = 0.6; const SOFT_MIX = 0.1;
-const SMALL_M = 3.0; const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
+const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
 const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
 fn model_set(q: Plant) -> vec2i {
   let u = set_draw(q.r);
@@ -42,26 +46,15 @@ fn model_set(q: Plant) -> vec2i {
     if (!under_edge(q.dry, BUSH_DRY.x, BUSH_MIX, u)) { return vec2i(SEARSIA_FROM, SEARSIA_N); }
     return vec2i(SHRUB_FROM, SHRUB_N);
   }
-  if (under_edge(q.wood, SOFT_WOOD, SOFT_MIX, u)) { return vec2i(SOFT_FROM, SOFT_N); }
+  if (under_edge(q.wood, SOFT_WOOD, SOFT_MIX, u) && q.tender > 1.0 - tender_draw(q.r)) { return vec2i(SOFT_FROM, SOFT_N); }
   // Of its trees the share `sure` stand in its form, each by its own draw, the rest round.
   let f = select(ROUND, i32(q.form + 0.5), q.sure > 1.0 - u);
-  if (f == CONE) {
-    if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINE_SMALL_N); }
-    if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCE_YOUNG_N); }
-    return vec2i(FIR_FROM, FIR_N);
-  }
-  if (f == COLUMN) {
-    if (q.h < CONE_YOUNG_M) { return vec2i(SPRUCE_YOUNG_FROM, SPRUCE_YOUNG_N); }
-    return vec2i(FIR_FROM, FIR_N);
-  }
-  if (f == TIERED) {
-    if (q.h < SMALL_M) { return vec2i(PINE_SMALL_FROM, PINE_SMALL_N); }
-    if (q.h < PINE_YOUNG_M) { return vec2i(PINE_YOUNG_FROM, PINE_YOUNG_N); }
-    return vec2i(PINE_FROM, PINE_N);
-  }
+  if (f == CONE) { return select(vec2i(CONIFER_FROM, CONIFER_N), vec2i(SPRUCE_YOUNG_FROM, SPRUCE_YOUNG_N), q.h < CONE_YOUNG_M); }
+  if (f == COLUMN) { return vec2i(COLUMN_FROM, COLUMN_N); }
+  if (f == TIERED) { return select(vec2i(PINE_FROM, PINE_N), vec2i(PINE_YOUNG_FROM, PINE_YOUNG_N), q.h < PINE_YOUNG_M); }
   // Of a broad crown's trees, the share as dry as its kind is made for are quiver trees, each by its own draw.
-  if (f == UMBRELLA) { return select(vec2i(JACARANDA_FROM, JACARANDA_N), vec2i(QUIVER_FROM, QUIVER_N), q.dry > 1.0 - u); }
-  if (f == LOBED) { return vec2i(JACARANDA_FROM, JACARANDA_N); }
+  if (f == UMBRELLA) { return select(vec2i(UMBRELLA_FROM, UMBRELLA_N), vec2i(QUIVER_FROM, QUIVER_N), q.dry > 1.0 - u); }
+  if (f == LOBED) { return vec2i(LOBED_FROM, LOBED_N); }
   return vec2i(ROUND_FROM, ROUND_N);
 }
 
@@ -164,7 +157,10 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   let lum = dot(t.rgb, LUMA);
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
   var leaf = q.rgb * lum / LEAF_MEAN;
-  leaf = mix(leaf, CROWN_SNOW_RGB * lum / LEAF_MEAN, CROWN_SNOW * snow * q.closed * q.left * smoothstep(0.6, 1.4, lum / LEAF_MEAN));
+  // Snow on its lit leaves: how lit, against its own leaves' mean (`model_leaf`), so a dark conifer holds it as a light
+  // crown does.
+  let lit = lum / max(model_leaf(s), 1e-4);
+  leaf = mix(leaf, CROWN_SNOW_RGB * lit, CROWN_SNOW * snow * q.closed * q.left * smoothstep(SNOW_LIT.x, SNOW_LIT.y, lit));
   // The leafy sprite's sprays over the bare twin.
   let under = bare.a * (1.0 - a);
   return vec4f((mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under), a + under);

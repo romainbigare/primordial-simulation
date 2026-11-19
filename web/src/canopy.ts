@@ -23,8 +23,10 @@ const LEFT_STEPS = 100;
  * the lattice of stands, `STANDS`, negated for its square's first kind, `Paint`); how wet each kind needs its ground and
  * how deep its loose ground, m (the core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); its slot in
  * its cell's cover (a label it keeps, so its marks keep their places as the kinds' order and shares change, mark.wgsl
- * `pick_kind`), and the depth of liquid its roots stand in, m (its reach, the core's `cover::aired`); then of each kind its form (how closed its crown is and the leaves it has left, `LEFT_STEPS`, its
- * crown's form and how surely, form.ts `formOf`, packed as one number, `SURE_PACK`, and how dry and how wet its ground), the
+ * `pick_kind`), and the depth of liquid its roots stand in, m (its reach, the core's `cover::aired`); then of each kind its
+ * form (how closed its crown is and the leaves it has left, `LEFT_STEPS`, its crown's form and how surely, form.ts
+ * `formOf`, packed as one number, `SURE_PACK`, how dry its ground less how wet (one number: a kind is never both) and how
+ * tender to frost it is), the
  * colours its plants span (style.ts `KindLook`: the first with its grown plants' walls' share, `grownWalls`); of each
  * of its groups its plants' height, m; and of each lattice the width its groups' marks are drawn, m
  * (lattices.ts `marksOf`). A plane holds four numbers: one for each kind of a group of four of a square
@@ -63,8 +65,8 @@ export interface CoverField { w: number; h: number; data: Float32Array }
  * on it, m (0: no square holds its marks), and the reflectance of the walls the cover builds (its stems). */
 export interface Kinds { w: number; h: number; planes: Planes; cols: number; table: Float32Array; field: CoverField; tallest: number[]; widest: number[]; walls: Rgb }
 
-/** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (models.wgsl `SHADOW`,
- * cover_field.wgsl `FIELD_SHADOW`). */
+/** A shadow lets through the sky's light and what crowns scatter, about half of the sun's (draw.wgsl
+ * `CROWN_SHADOW`). */
 const CROWN_SHADOW = 0.42;
 /** A plant's shadow darkens this many times the square of its crown's width of ground: the marks cast their
  * sprite, which covers as much as its crown, `MODEL_SHADOW_RUN` (0.9) as long (models.wgsl `model_shadow`), so the field
@@ -221,7 +223,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       put(group(P.label, k), i, k & 3, r[K.slot]);
       put(group(P.reach, k), i, k & 3, wades);
       // Its form and how surely as one number (form + `SURE_PACK` x sure).
-      [packed, shape.form + SURE_PACK * shape.sure, shape.dry, shape.wet].forEach((v, q) => put(P.form + k, i, q, v));
+      [packed, shape.form + SURE_PACK * shape.sure, shape.dry - shape.wet, shape.tender].forEach((v, q) => put(P.form + k, i, q, v));
       [...look.from, grownWalls(r[K.walls])].forEach((v, q) => put(P.from + k, i, q, v));
       const from = treeFrom(r[K.walls]);
       look.to.forEach((v, q) => put(P.to + k, i, q, v));

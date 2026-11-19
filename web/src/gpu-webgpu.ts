@@ -1,6 +1,6 @@
 // The map's renderer on WebGPU (gpu.ts): the programs' WGSL as it is, a pipeline for each program, target format and
 // blend, and a bind group a draw.
-import { Gpu, Texture, Format, TexelData, Sampler, Pass, Draw, Program, programs, bindingsOf, drawHeader } from './gpu';
+import { Gpu, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, bindingsOf, drawHeader } from './gpu';
 
 // WebGPU's flags, as the browser defines them.
 declare const GPUTextureUsage: { COPY_SRC: number; COPY_DST: number; TEXTURE_BINDING: number; RENDER_ATTACHMENT: number };
@@ -25,6 +25,7 @@ class WebGpu implements Gpu {
   readonly kind = 'WebGPU';
   private modules = new Map<string, GPUShaderModule>();
   private pipelines = new Map<string, GPURenderPipeline>();
+  private warming = new Warming(key => this.makeAhead(key), key => this.pipelines.has(key));
   private samplers: Record<Sampler, GPUSampler>;
   private encoder: GPUCommandEncoder | null = null;
   /** The canvas's texture this frame (until the frame is sent). */
@@ -64,7 +65,7 @@ class WebGpu implements Gpu {
     if (clip) enc.setScissorRect(clip[0], clip[1], clip[2], clip[3]);
     return {
       draw: (name: string, d: Draw, blend: boolean) => {
-        const p = programs()[name], pipeline = this.pipeline(name, p, format, blend), b = bindingsOf(p);
+        const p = programs()[name], pipeline = this.pipeline(name, format, blend), b = bindingsOf(p);
         const entries: GPUBindGroupEntry[] = [];
         for (const n of b.uniforms) entries.push({ binding: n, resource: { buffer: this.uniform(n === 0 ? drawHeader(size, 1, d).buffer as ArrayBuffer : d.binds[n] as ArrayBuffer) } });
         for (const n of b.textures) entries.push({ binding: n, resource: (d.binds[n] as WebGpuTexture).view });
@@ -76,6 +77,12 @@ class WebGpu implements Gpu {
       end: () => enc.end(),
     };
   }
+
+  warm(name: string, target: Format | null, blend: boolean, first = false): void {
+    this.warming.ask(pipelineKey(name, target ?? this.format, blend), first);
+  }
+
+  ready(name: string, target: Format | null, blend: boolean): boolean { return this.pipelines.has(pipelineKey(name, target ?? this.format, blend)); }
 
   submit(): void {
     if (this.encoder) this.device.queue.submit([this.encoder.finish()]);
@@ -107,24 +114,38 @@ class WebGpu implements Gpu {
     return buf;
   }
 
-  /** The pipeline of program `name` drawing into `format`, over what is there or not. */
-  private pipeline(name: string, p: Program, format: GPUTextureFormat, blend: boolean): GPURenderPipeline {
-    const key = `${name} ${format} ${blend}`;
+  /** The pipeline of program `name` drawing into `format`, over what is there or not: made at once where it is not
+   * (also where it is being made ahead, `warm`, which then keeps this one). */
+  private pipeline(name: string, format: GPUTextureFormat, blend: boolean): GPURenderPipeline {
+    const key = pipelineKey(name, format, blend);
     let made = this.pipelines.get(key);
-    if (made) return made;
+    if (!made) { made = this.device.createRenderPipeline(this.describe(name, format, blend)); this.pipelines.set(key, made); }
+    return made;
+  }
+
+  /** Make the pipeline of `key` (`pipelineKey`) ahead, without the page waiting for it. */
+  private async makeAhead(key: string): Promise<void> {
+    const [name, format, blend] = key.split(' ');
+    const made = await this.device.createRenderPipelineAsync(this.describe(name, format as GPUTextureFormat, blend === 'true'));
+    if (!this.pipelines.has(key)) this.pipelines.set(key, made);
+  }
+
+  /** The pipeline of program `name` drawing into `format`, over what is there or not, as WebGPU is asked for it. */
+  private describe(name: string, format: GPUTextureFormat, blend: boolean): GPURenderPipelineDescriptor {
     let module = this.modules.get(name);
-    if (!module) { module = this.device.createShaderModule({ code: p.wgsl, label: name }); this.modules.set(name, module); }
+    if (!module) { module = this.device.createShaderModule({ code: programs()[name].wgsl, label: name }); this.modules.set(name, module); }
     const over: GPUBlendComponent = { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' };
-    made = this.device.createRenderPipeline({
+    return {
       layout: 'auto', label: name,
       vertex: { module, entryPoint: 'vs' },
       fragment: { module, entryPoint: 'fs', targets: [{ format, blend: blend ? { color: over, alpha: over } : undefined }] },
       primitive: { topology: 'triangle-strip' },
-    });
-    this.pipelines.set(key, made);
-    return made;
+    };
   }
 }
+
+/** The key of program `name`'s pipeline drawing into `format`, over what is there or not. */
+const pipelineKey = (name: string, format: GPUTextureFormat, blend: boolean) => `${name} ${format} ${blend}`;
 
 /** WebGPU on `canvas`, or null where the browser has none. */
 export async function openWebGpu(canvas: HTMLCanvasElement): Promise<Gpu | null> {

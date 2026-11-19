@@ -25,6 +25,34 @@
     "bare": "_leaves$"
    },
    {
+    "model": "northern_red_oak_5",
+    "file": "sketchfab/06474083fabe4e0f88e40848ea7aa8f9/scene.gltf",
+    "turns": [
+     0,
+     180
+    ],
+    "leaf": 0.045,
+    "bare": "leaf"
+   },
+   {
+    "model": "red_horse_chestnut_16",
+    "file": "sketchfab/bc56ed3eb15948c6b61c75eff557eac7/scene.gltf",
+    "leaf": 0.045,
+    "bare": "leaf|Leaf_stalk"
+   },
+   {
+    "model": "red_horse_chestnut_24",
+    "file": "sketchfab/578463dffe1e45cbb99c529886ca17c7/scene.gltf",
+    "leaf": 0.045,
+    "bare": "leaf|Leaf_stalk"
+   },
+   {
+    "model": "dwarf_red_horse_chestnut_17",
+    "file": "sketchfab/0f38b4d5eb934fa49829a841c68ee7a5/scene.gltf",
+    "leaf": 0.045,
+    "bare": "leaf|Leaf_stalk"
+   },
+   {
     "model": "jacaranda_tree",
     "turns": [
      0,
@@ -32,8 +60,130 @@
      240
     ],
     "cut": 0.05,
-    "set": "JACARANDA",
+    "set": "UMBRELLA",
     "bare": "_leaves$"
+   },
+   {
+    "model": "african_continental_baobab_1",
+    "file": "sketchfab/d42e970e89ce43f9b06cfef4d466eb7f/source/Adansonia digitata HD_Long mat 0/Adansonia digitata HD_Long mat 0_LOD0.fbx",
+    "leaf": 0.045,
+    "bare": "leaf"
+   },
+   {
+    "model": "african_continental_baobab_15",
+    "file": "sketchfab/f76b402dbdfb4d4b873fba9ea38f507d/source/Adansonia digitata HD_Short mat 100_LOD0.fbx",
+    "leaf": 0.045,
+    "bare": "leaf"
+   },
+   {
+    "model": "african_continental_baobab_5",
+    "file": "sketchfab/d3c3363a23704d92a4368974cad63c5a/source/Adansonia digitata HD_Standard mat 100_LOD0.fbx",
+    "leaf": 0.045,
+    "bare": "leaf"
+   },
+   {
+    "model": "quiver_tree_01",
+    "turns": [
+     0,
+     180
+    ],
+    "set": "QUIVER",
+    "leaf": 0.042,
+    "bare": "_leaf$"
+   },
+   {
+    "model": "joshua_tree_19",
+    "file": "sketchfab/7198687a6a9645e38e33108cbb4c71dc/scene.gltf",
+    "turns": [
+     0,
+     180
+    ],
+    "leaf": 0.045
+   },
+   {
+    "model": "black_poplar_50",
+    "file": "sketchfab/562a96bc020e49c68f1f001dbe585cab/scene.gltf",
+    "set": "LOBED",
+    "leaf": 0.045,
+    "bare": "leaf|lf_stk"
+   },
+   {
+    "model": "common_fig_tree_11",
+    "file": "sketchfab/bcbde4dd01264c6e82954f9acc9fe40e/scene.gltf",
+    "turns": [
+     0,
+     180
+    ],
+    "leaf": 0.045,
+    "bare": "leaf|lf_stk|fruit"
+   },
+   {
+    "model": "common_fig_tree_30",
+    "file": "sketchfab/2e6b64be3c6a466eb6b86591d9ef2ebc/scene.gltf",
+    "turns": [
+     0,
+     180
+    ],
+    "leaf": 0.045,
+    "bare": "leaf|lf_stk|fruit"
+   },
+   {
+    "model": "lombardy_poplar_55",
+    "file": "sketchfab/1884f92a179a408ca472e6a2f6469497/scene.gltf",
+    "turns": [
+     0,
+     180
+    ],
+    "set": "COLUMN",
+    "leaf": 0.045,
+    "bare": "leaf|lf_stk"
+   },
+   {
+    "model": "black_poplar_25",
+    "file": "sketchfab/a927d7f2dd6a41fa855e93dcfd6fdb96/scene.gltf",
+    "leaf": 0.045,
+    "bare": "leaf|lf_stk"
+   },
+   {
+    "model": "norway_spruce_17",
+    "file": "sketchfab/652321a0e80c4bb3a36dbe6c9542e3cb/scene.gltf",
+    "set": "CONIFER",
+    "leaf": 0.038
+   },
+   {
+    "model": "norway_spruce_18",
+    "file": "sketchfab/9391e9fda97f4efa98e075442291a17b/scene.gltf",
+    "leaf": 0.038
+   },
+   {
+    "model": "norway_spruce_23",
+    "file": "sketchfab/facebfa5baf84c4aafc1141745570714/scene.gltf",
+    "leaf": 0.038
+   },
+   {
+    "model": "engelmann_spruce_17",
+    "file": "sketchfab/e9b6fb45fb1b4227982231f62d00684e/scene.gltf",
+    "leaf": 0.038
+   },
+   {
+    "model": "engelmann_spruce_3",
+    "file": "sketchfab/70e6fc24f73146a0866a87fccd168076/scene.gltf",
+    "leaf": 0.038
+   },
+   {
+    "model": "black_spruce_10",
+    "file": "sketchfab/32e73f7c100e44768370b12bff737d34/scene.gltf",
+    "leaf": 0.038
+   },
+   {
+    "model": "mountain_hemlock_21",
+    "file": "sketchfab/225cd2dfbf7d4163bc3a062a0c0623aa/scene.gltf",
+    "leaf": 0.038
+   },
+   {
+    "model": "mountain_hemlock_23",
+    "file": "sketchfab/9b77f3c62f764602a76efae67704eb71/scene.gltf",
+    "leaf": 0.038
    },
    {
     "model": "fir_tree_01",
@@ -43,66 +193,13 @@
      ],
      [
       1
-     ],
-     [
-      2
      ]
     ],
     "turns": [
-     0,
-     120,
-     240
+     0
     ],
     "cut": 0.05,
-    "set": "FIR"
-   },
-   {
-    "model": "pine_tree_01",
-    "parts": [
-     [
-      0
-     ],
-     [
-      1
-     ],
-     [
-      2
-     ]
-    ],
-    "cut": 0.02,
-    "set": "PINE",
-    "leaf": 0.03
-   },
-   {
-    "model": "pine_sapling_medium",
-    "parts": [
-     [
-      0
-     ],
-     [
-      1
-     ]
-    ],
-    "cut": 0.02,
-    "set": "PINE_YOUNG",
-    "leaf": 0.03
-   },
-   {
-    "model": "pine_sapling_small",
-    "parts": [
-     [
-      0
-     ],
-     [
-      1
-     ],
-     [
-      2
-     ]
-    ],
-    "cut": 0.02,
-    "set": "PINE_SMALL",
-    "leaf": 0.035
+    "leaf": 0.038
    },
    {
     "model": "fir_sapling_medium",
@@ -119,25 +216,99 @@
     ],
     "cut": 0.02,
     "set": "SPRUCE_YOUNG",
-    "leaf": 0.035
+    "leaf": 0.038
    },
    {
-    "model": "quiver_tree_01",
+    "model": "black_spruce_16",
+    "file": "sketchfab/a9d79680963d44c3acf025e172c5bbec/scene.gltf",
     "turns": [
      0,
      180
     ],
-    "set": "QUIVER",
-    "leaf": 0.042,
-    "bare": "_leaf$"
+    "leaf": 0.038
    },
    {
-    "model": "quiver_tree_02",
-    "turns": [
-     0,
-     180
+    "model": "pine_tree_01",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ]
     ],
-    "leaf": 0.05
+    "cut": 0.02,
+    "set": "PINE",
+    "leaf": 0.038
+   },
+   {
+    "model": "pine_sapling_medium",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ]
+    ],
+    "cut": 0.02,
+    "set": "PINE_YOUNG",
+    "leaf": 0.038
+   },
+   {
+    "model": "pine_sapling_small",
+    "parts": [
+     [
+      0
+     ],
+     [
+      1
+     ],
+     [
+      2
+     ]
+    ],
+    "cut": 0.02,
+    "leaf": 0.038
+   },
+   {
+    "model": "date_palm_16",
+    "file": "sketchfab/2f34e3f54bef40eb8d94ca6507c2f822/source/Phoenix dactylifera HD_Urban no fruit mat 100_LOD0.fbx",
+    "set": "SOFT",
+    "leaf": 0.045
+   },
+   {
+    "model": "date_palm_28",
+    "file": "sketchfab/52c8a8dc801c4c3492992e0a3f32efc1/scene.gltf",
+    "leaf": 0.045
+   },
+   {
+    "model": "california_fan_palm_22",
+    "file": "sketchfab/5492bd27db734608bb41409efeba238c/source/Washingtonia filifera HD_Urban 2 curved mat 25_LOD0.fbx",
+    "leaf": 0.045
+   },
+   {
+    "model": "mexican_fan_palm_3",
+    "file": "sketchfab/5591dc5028ef466db828a962d4780a87/source/Washingtonia robusta HD V2_Standard mat 50_LOD0.fbx",
+    "leaf": 0.045
+   },
+   {
+    "model": "canary_island_date_palm_21",
+    "file": "sketchfab/7eac1bcdfe984bf8ba3fcd2430854a67/source/Phoenix canariensis HD_Standard no fruit mat 0_LOD0.fbx",
+    "leaf": 0.045
+   },
+   {
+    "model": "mediterranean_fan_palm_19",
+    "file": "sketchfab/db1b8aa7f06b499f9de68460de1eea6b/scene.gltf",
+    "leaf": 0.045
+   },
+   {
+    "model": "male_fern_20",
+    "file": "sketchfab/9da5a089892d480fa3d2add186ce4f03/scene.gltf",
+    "leaf": 0.045
    }
   ]
  },
@@ -317,54 +488,6 @@
      ]
     ],
     "leaf": 0.085
-   },
-   {
-    "model": "fern_02",
-    "parts": [
-     [
-      2
-     ],
-     [
-      0
-     ],
-     [
-      3
-     ]
-    ],
-    "stem": {
-     "up": 1.2,
-     "r": 0.08
-    },
-    "leaf": 0.045,
-    "set": "SOFT"
-   },
-   {
-    "model": "calathea_orbifolia_01",
-    "parts": [
-     [
-      0
-     ]
-    ],
-    "stem": {
-     "up": 0.8,
-     "r": 0.07
-    },
-    "leaf": 0.045
-   },
-   {
-    "model": "pachira_aquatica_01",
-    "parts": [
-     [
-      0,
-      4
-     ],
-     [
-      1,
-      5
-     ]
-    ],
-    "cut": 0.05,
-    "leaf": 0.045
    },
    {
     "model": "rock_moss_set_02",

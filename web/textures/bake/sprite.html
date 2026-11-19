@@ -6,6 +6,7 @@
 // background, cut at the ground, its foot on the bottom middle of its cell; and packs sprites into strips.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { ConvexHull } from 'three/addons/math/ConvexHull.js';
 // The camera looks down this many degrees from the side.
 const DOWN = 35;
@@ -17,50 +18,76 @@ const LEAF_GREEN = [0.345, 0.39];
 // The light of the sky (a hemisphere, blue above and earth below) and of the sun from the north-west, 38 degrees up
 // (the carpets' sun, bake.html), three.js units.
 const SKY = 1.45, SUN = 3.6;
-// A built stem's colour (linear: the dark brown of a tree fern's fibrous trunk) and its top's width over its foot's.
-const STEM_RGB = [0.09, 0.06, 0.04], STEM_TOP = 0.75;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
 renderer.setPixelRatio(1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setClearColor(0x000000, 0);
 document.body.appendChild(renderer.domElement);
-const loader = new GLTFLoader();
+const gltfLoader = new GLTFLoader();
 // The model last loaded (one at a time: a tree's file holds up to a gigabyte).
-let loaded = { name: null, gltf: null };
+let loaded = { name: null, model: null };
 
-async function load(name) {
-  if (loaded.name !== name) loaded = { name, gltf: loader.loadAsync(`/assets/gltf/${name}/${name}.gltf`) };
-  return loaded.gltf;
+// Model `s`: Poly Haven's `s.model` (assets/gltf/<model>/<model>.gltf), or the file `s.file` under assets/ (glTF or
+// FBX). As { scene, node }: its scene and, of each of its objects, the index of the glTF node it is (none for FBX).
+async function load(s) {
+  const url = s.file ? `/assets/${s.file}` : `/assets/gltf/${s.model}/${s.model}.gltf`;
+  if (loaded.name !== url) {
+    loaded = { name: url, model: /\.fbx$/i.test(url)
+      ? fbx(url).then(scene => ({ scene, node: () => undefined }))
+      : gltfLoader.loadAsync(url).then(g => ({ scene: g.scene, node: o => g.parser.associations.get(o)?.nodes })) };
+  }
+  return loaded.model;
+}
+
+// An FBX file's scene once its textures are loaded too (its loader hands it over before them).
+async function fbx(url) {
+  const manager = new THREE.LoadingManager(), all = new Promise(ok => { manager.onLoad = ok; });
+  const scene = await new FBXLoader(manager).loadAsync(url);
+  await all;
+  return scene;
+}
+
+// A material as the sprites draw it: matte, both sides, its cut-out leaves cut at half cover. A material that is not
+// physically based (an FBX file's Phong) is made one of its colour, colour map and cover map, so it is as matte.
+function matte(m) {
+  const mat = m.isMeshStandardMaterial ? m.clone() : new THREE.MeshStandardMaterial({ name: m.name, color: m.color, map: m.map, alphaMap: m.alphaMap, normalMap: m.normalMap, transparent: m.transparent, alphaTest: m.alphaTest });
+  mat.side = THREE.DoubleSide; mat.metalness = 0; mat.roughness = 1; mat.roughnessMap = null; mat.metalnessMap = null;
+  if (mat.transparent || mat.alphaTest > 0 || mat.alphaMap) { mat.alphaTest = 0.5; mat.transparent = false; }
+  return mat;
 }
 
 // The meshes of model `s.model` (its nodes `s.nodes`, else all), baked in place with their materials: both sides,
-// cut-out leaves, matte; with `s.squash`, stretched that many times as tall (as the carpets' reeds, bake.html); with `s.stem`, set on a stem (a trunk of tree fern fibre, `STEM_RGB`) `s.stem.up` of their
-// own height tall and `s.stem.r` of it wide at its foot, tapering to `STEM_TOP` of that.
+// cut-out leaves, matte; with `s.squash`, stretched that many times as tall (as the carpets' reeds, bake.html).
 async function meshesOf(s) {
-  const g = await load(s.model);
+  const g = await load(s);
   g.scene.updateMatrixWorld(true);
   const out = [];
   g.scene.traverse(o => {
     if (!o.isMesh) return;
-    let n = o; while (n && !g.parser.associations.get(n)?.hasOwnProperty('nodes')) n = n.parent;
-    if (s.nodes && !s.nodes.includes(g.parser.associations.get(n)?.nodes)) return;
+    let n = o; while (n && g.node(n) === undefined) n = n.parent;
+    if (s.nodes && !s.nodes.includes(n && g.node(n))) return;
     const geo = o.geometry.clone(); geo.applyMatrix4(o.matrixWorld);
     if (s.squash) geo.scale(1, s.squash, 1);
-    const mat = o.material.clone();
-    mat.side = THREE.DoubleSide; mat.metalness = 0; mat.roughness = 1; mat.roughnessMap = null; mat.metalnessMap = null;
-    if (mat.transparent || mat.alphaTest > 0 || mat.alphaMap) { mat.alphaTest = 0.5; mat.transparent = false; }
-    out.push(new THREE.Mesh(geo, mat));
+    // A mesh of several materials (an FBX file's) is split into one a material.
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    if (mats.length === 1) { out.push(new THREE.Mesh(geo, matte(mats[0]))); return; }
+    for (const grp of geo.groups) out.push(new THREE.Mesh(groupOf(geo, grp), matte(mats[grp.materialIndex])));
   });
-  if (s.stem) {
-    const box = new THREE.Box3();
-    out.forEach(m => { m.geometry.computeBoundingBox(); box.union(m.geometry.boundingBox); });
-    const h = box.max.y - box.min.y, up = s.stem.up * h, mid = box.getCenter(new THREE.Vector3());
-    out.forEach(m => m.geometry.translate(-mid.x, up - box.min.y, -mid.z));
-    const stem = new THREE.CylinderGeometry(STEM_TOP * s.stem.r * h, s.stem.r * h, up * 1.05, 24, 8);
-    stem.translate(0, up * 0.525, 0);
-    out.push(new THREE.Mesh(stem, new THREE.MeshStandardMaterial({ color: new THREE.Color(...STEM_RGB), roughness: 1 })));
-  }
   return out;
+}
+
+// The part of geometry `geo` that its group `grp` draws, as a geometry of its own.
+function groupOf(geo, grp) {
+  const part = new THREE.BufferGeometry();
+  if (geo.index) {
+    for (const [k, a] of Object.entries(geo.attributes)) part.setAttribute(k, a);
+    part.setIndex(Array.from(geo.index.array.slice(grp.start, grp.start + grp.count)));
+    return part;
+  }
+  for (const [k, a] of Object.entries(geo.attributes)) {
+    part.setAttribute(k, new THREE.BufferAttribute(a.array.slice(grp.start * a.itemSize, (grp.start + grp.count) * a.itemSize), a.itemSize, a.normalized));
+  }
+  return part;
 }
 
 // The pose a body rests in on flat ground: of the faces of its convex hull, the one nearest its centre of weight (the
@@ -204,7 +231,7 @@ window.sprite = async (s, size) => {
   const kept = { cell: scaled(cell, light), row: { w, h, fill: fillOf(cell, w, h), leaf: raw * light } };
   if (s.bare) {
     const bare = scaled(placed(await render(s, px, s.bare), b, size / 2, k / 2), light);
-    kept.bare = { cell: bare, row: { w, h, fill: fillOf(bare, w, h) } };
+    kept.bare = { cell: bare, row: { w, h, fill: fillOf(bare, w, h), leaf: kept.row.leaf } };
   }
   sprites.push(kept);
   return sprites.length - 1;

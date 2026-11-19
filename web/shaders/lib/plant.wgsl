@@ -4,15 +4,19 @@
 // A plant: its foot, m from the draw's corner; its crown's width and its height, m; how closed its crown is in leaf; its colour
 // and its walls' share; its own random numbers; its design (style.ts `DESIGN`); its form (form.ts `Form`) and how
 // surely; its lean (a share of its height, east and south); how far from its foot it may reach, m; how dry its kind's
-// ground, 0..1 (form.ts `Form`); the share of its leaves left this season; and how wet its kind's ground, 0..1.
+// ground and how tender to frost it is, 0..1 each (form.ts `Form`); the share of its leaves left this season; and how
+// wet its kind's ground, 0..1.
 struct Plant {
   at: vec2f, d: f32, h: f32, closed: f32, rgb: vec3f, wood: f32, r: vec3f, design: f32,
-  form: f32, sure: f32, lean: vec2f, reach: f32, dry: f32, left: f32, wet: f32,
+  form: f32, sure: f32, lean: vec2f, reach: f32, dry: f32, tender: f32, left: f32, wet: f32,
 }
 
 // A plant's own draw among the sets its kind's numbers choose between (models.wgsl `model_set`, mark.wgsl `plant_of`),
 // from its random numbers: one draw for all of them, so a plant drawn soft is a tree from its first height.
 fn set_draw(r: vec3f) -> f32 { return fract(r.x * 31.7); }
+// A second draw of its own, apart from that one, for whether its kind's tenderness to frost lets it be drawn soft
+// (models.wgsl `model_set`).
+fn tender_draw(r: vec3f) -> f32 { return fract(r.z * 41.3); }
 // Whether a kind's number `v` lies under `edge` for its plant of set draw `u`: the edge moved by its draw up to half of
 // `spread` either way, so as `v` moves through that band the kind's plants cross it one by one, never all at once.
 fn under_edge(v: f32, edge: f32, spread: f32, u: f32) -> bool { return v + spread * (u - 0.5) < edge; }
