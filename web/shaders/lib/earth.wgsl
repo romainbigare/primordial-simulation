@@ -18,6 +18,9 @@
 // The reflectance a tape's plants are drawn in: a green leaf's in the visible, about 0.05 red, 0.12 green and 0.04 blue
 // (Gates and others 1965; Knipling 1970).
 const TAPE_FOLIAGE = vec3f(0.05, 0.12, 0.04);
+// A tape knows no grain: its ground is drawn as middle grain alone, its pores passing liquid as a loam's do (about
+// 4 µm/s; Saxton and Rawls 2006), `Spot.grain`.
+const TAPE_GRAIN = vec4f(0.0, 0.0, 0.0, 5.4);
 // Field `t` (32-bit floats, which a sampler may not blend) at uv, blended between its texels' centres, its edge texels
 // held beyond them.
 fn blend(t: texture_2d<f32>, uv: vec2f) -> vec4f {
@@ -93,6 +96,7 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.river_depth = inside.y;
   s.at = earth.place.xy + uv * earth.place.zw;
   s.e = e;
+  s.grain = TAPE_GRAIN;
   return s;
 }
 // The colour of spot p at uv in the view drawn (`in_view_of`), its true colour soaked as the spot is (`true_soaked`).

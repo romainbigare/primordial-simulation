@@ -222,7 +222,8 @@ the sample it runs to (1 to 8, its neighbours row by row; 8 more where it joins 
 and 17 times the step to its main neighbour upstream, by which a shell lets what runs through a channel grow evenly
 from one sample's centre to the next, so its width has no step where two samples meet. Then of each sample again the
 reflectance of its bed's make and a zero. Then of each sample again the shares of coarse and of fine particles and of
-organic matter of its loose ground (`pcore::soil::textures`) and a zero. **The
+organic matter of its loose ground (`pcore::soil::textures`) and how slowly its pores pass liquid (the decimal
+logarithm of 1 m/s over their conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
 sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries

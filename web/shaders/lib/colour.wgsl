@@ -135,8 +135,9 @@ struct Spot {
   moved: f32, driftwood: f32,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
-  // Its loose ground's grain: the shares of coarse and of fine grain, of organic matter, and a zero (0: middle grain
-  // alone, as where none is known); and the share of its pores the soil's liquid fills, 0..1 (land.wgsl `State`).
+  // Its loose ground's grain: the shares of coarse and of fine grain, of organic matter, and how slowly its pores pass
+  // liquid (the decimal logarithm of 1 m/s over their conductivity; tape/src/ground/rock.rs); and the share of its
+  // pores the soil's liquid fills, 0..1 (land.wgsl `State`).
   grain: vec4f, filled: f32,
   // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
   // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
@@ -387,9 +388,13 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
 // of `MENISCUS` over the last `PUDDLE_SHORE` of its level. A puddle shows one by one where it takes `PUDDLE_PX.x`
 // pixels across, fully from `.y`; its size is about the hollows' length times the root of its level. Where it does not
 // show, it and its halo are their mean soaked ground, no water: from afar the puddled ground is a darker wet tone.
+// Liquid stands on ground whose pores pass it more slowly than rain falls (infiltration excess, Horton 1933): the
+// puddles are as many as said where the ground passes liquid as slowly as `PUDDLE_SLOW` (its `Spot.grain.w`, 6.5:
+// 0.3 µm/s, about a mm an hour), none where it passes it as fast as `PUDDLE_FAST` (4.5: 30 µm/s, about 100 mm an hour,
+// faster than nearly any rain).
 const HOLLOW_M = vec2f(0.5, 2.0); const BASIN_M = vec2f(4.0, 20.0); const BASIN_LOW = 0.35;
 const PUDDLES = 0.06; const PUDDLE_DEPTH_M = 0.3; const PUDDLE_HALO = 1.0; const PUDDLE_SHORE = 0.5; const MENISCUS = 0.3;
-const PUDDLE_PX = vec2f(3.0, 8.0);
+const PUDDLE_PX = vec2f(3.0, 8.0); const PUDDLE_FAST = 4.5; const PUDDLE_SLOW = 6.5;
 // The mud about a puddle, soaked through, is `PUDDLE_WET_DARK` darker than the soaked ground. A puddle's water is
 // turbid with the mud it stands on: its light attenuates by `PUDDLE_ATTENUATION`, 1/m (turbid ponds pass 10 to 30:
 // Kirk 1994, from memory), so its bed shows at its edge and fades into the light the muddy water sends back, the
@@ -399,7 +404,7 @@ const PUDDLE_WET_DARK = 0.4; const PUDDLE_ATTENUATION = vec3f(30.0, 26.0, 22.0);
 // share of the soaked mud about it (and under it).
 struct Puddle { water: f32, depth: f32, tilt: vec2f, wet: f32 }
 fn puddles(p: Spot, film: f32) -> Puddle {
-  let full = PUDDLES * film * (1.0 - p.low) * (1.0 - p.sand * (1.0 - shore_grain(p).y));
+  let full = PUDDLES * film * ease(PUDDLE_FAST, PUDDLE_SLOW, p.grain.w) * (1.0 - p.low) * (1.0 - p.sand * (1.0 - shore_grain(p).y));
   // Its basin's level, from the mean where the basins do not show; the mean share it covers is `full`.
   let level = mix(full, full / (0.5 * BASIN_LOW) * ease(BASIN_LOW, 0.0, p.basin), shows_at(BASIN_M.x, p.e));
   let edge = max(0.5 * (abs(p.hollow_d.x) + abs(p.hollow_d.y)), 1e-4);
