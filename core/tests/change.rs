@@ -452,13 +452,13 @@ fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
             assert!((el1[j] - el0[j]).abs() <= 1e-9 * el0[j].max(1.0), "element {j}: {} -> {}", el0[j], el1[j]);
         }
         assert!((en1 - en0).abs() <= 1e-9 * en0.abs(), "energy {en0} -> {en1}");
-        // The slow organic matter keeps the nitrogen of what rots into it: three of the mineral each (reaction 15).
+        // The slow organic matter keeps the fixed element of what rots into it: three of the mineral each (reaction 15).
         let slow: f64 = (0..chem.ns()).filter(|&k| chem.subs[k].bound).map(|k| n[k]).sum();
         (1000.0 - n[MATTER], n[MINERAL] + 3.0 * slow, gas[FIX_GAS] - gas0[FIX_GAS])
     };
     let (lost, back, gas) = run(290.0, 365.0 * DAY);
     println!("a year at 290 K: {lost:.2} mol of matter rotted, {back:.2} mol of the mineral back, {gas:.4} mol of the gas");
-    // Reactions 7 and 14 together: 0.26 a year bare. What becomes the slow organic matter keeps its nitrogen.
+    // Reactions 7 and 14 together: 0.26 a year bare. What becomes the slow organic matter keeps its fixed element.
     assert!(lost > 215.0 && lost < 255.0, "{lost}");
     assert!((back / (3.0 * lost) - 1.0).abs() < 1e-6 && gas.abs() < 1e-6 * lost, "mineral {back}, gas {gas}");
     let (lost, back, gas) = run(1000.0, 1e5);
