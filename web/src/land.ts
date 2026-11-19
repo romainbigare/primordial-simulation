@@ -71,6 +71,8 @@ export class Land {
   /** The time the flow's signs stand at while one picture is drawn in tiles (performance.now, ms; null: each draw's
    * own), so all its tiles show the signs at one place along the channels. */
   flowAt: number | null = null;
+  /** Rises each time what the laws draw changes: a new table (`set`), or the rock of the samples came. */
+  version = 0;
 
   constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf) {
     this.discharge = new Uint16Array(samples.across * samples.down);
@@ -111,6 +113,7 @@ export class Land {
     for (let i = 0; i < n; i++) if (wet.sea[i]) data[4 * i + 2] = -(data[4 * i + 2] + 1);
     this.data = data;
     this.due = true;
+    this.version++;
   }
 
   /** The bindings land.wgsl reads on `gpu` in view `look` (`lawBinds` and colour.wgsl's), for a draw whose pixels lie as
@@ -159,6 +162,7 @@ export class Land {
       const r = this.tiles.rock;
       gpu.write(this.rock, r ?? Uint16Array.from({ length: 8 * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
       this.rockSent = r !== null;
+      if (this.rockSent) this.version++;
     }
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)

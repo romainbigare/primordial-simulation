@@ -36,10 +36,14 @@ const MADE_POLL_MS = 50;
 /** Drawn on the GPU over the map by another module, in the map's pass, at every frame: what it works out before the
  * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` px of the target and
  * `seen` px of the screen (its detail is chosen by the screen's), and the view is `w` x `h` css px, adding to `waiting`
- * the programs it goes without as they are not made yet (`prepare`); its draw in the pass; and what the live map's
- * ground draws of it, with a square taking `s` css px and a css px `seen` px of the screen (`under`, its bindings). */
+ * the programs it goes without as they are not made yet, and returning when to work out ahead what later frames draw
+ * from (ms from now; -1: no need) (`prepare`); that work, between frames, returning when to do more (-1: done, the map
+ * is drawn anew) (`ahead`); its draw in the pass; what the live map's ground draws of it, with a square taking `s` css
+ * px and a css px `seen` px of the screen (`under`, its bindings); and what it does after a lost context (`lost`). */
 export interface GpuLayer {
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: Made[]): void;
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: Made[]): number;
+  ahead(gpu: Gpu): number;
+  lost(): void;
   draw(p: Pass): void;
   /** Make its programs ahead (`Gpu.warm`) for draws into the map's targets (null: the canvas; `MAP_TARGET`). */
   warm(gpu: Gpu, targets: (Format | null)[]): void;
@@ -99,6 +103,9 @@ export class MapView {
   private warmed = false;
   /** The timer that looks whether the programs the last frame went without are made (`drawWhenMade`). */
   private madeTimer = 0;
+  /** The timer of the layer's next step of work ahead, and the number of the frame that asked for it (`aheadSoon`). */
+  private aheadTimer = 0;
+  private aheadJob = 0;
   /** Drawn by another module on the GPU over the map, and on the 2D canvas over it at each redraw: its context, where
    * the map's corner is and the pixels a square takes. */
   layer: GpuLayer | null = null;
@@ -108,7 +115,7 @@ export class MapView {
     this.over.className = 'over';
     cv.after(this.over);
     this.ctx = this.over.getContext('2d')!;
-    this.ready = openGpu(cv, () => { this.land?.tiles.lost(); detailLost(); this.invalidate(); }).then(g => {
+    this.ready = openGpu(cv, () => { this.land?.tiles.lost(); this.layer?.lost(); detailLost(); this.invalidate(); }).then(g => {
       this.gpu = g;
       if (g) sendDetail(g, () => this.invalidate());
       this.invalidate();
@@ -260,7 +267,7 @@ export class MapView {
       this.picture = gpu.texture(tw, th, MAP_TARGET, 1, 1, true);
     }
     const waiting: Made[] = [];
-    this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
+    const again = this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting) ?? -1;
     const target = r < 1 ? this.picture : null, p = gpu.pass(target);
     // While a tile of the ground fades in, the map is drawn again at each frame.
     const fading = this.land?.tiles.fading(performance.now()) ?? false;
@@ -275,7 +282,29 @@ export class MapView {
     if (!this.warmed) { this.warmed = true; this.warmAhead(gpu, this.cellM / (s * d)); }
     if (r < 1 && !fading && !waiting.length) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
     this.drawWhenMade(gpu, waiting);
+    this.aheadSoon(gpu, again);
     this.flowSoon();
+  }
+
+  /** In `ms` (-1: not), let the layer work out ahead what later frames draw from (`GpuLayer.ahead`), a step at a time
+   * once the GPU has done the last and no sharp picture is being drawn (whose tiles draw from what the layer worked out
+   * for its frame), and draw the map anew when it is done; till then the map stays due. A new frame starts it anew. */
+  private aheadSoon(gpu: Gpu, ms: number): void {
+    clearTimeout(this.aheadTimer);
+    const job = ++this.aheadJob;
+    if (ms < 0) return;
+    this.gpuDue = true;
+    const step = () => {
+      if (job !== this.aheadJob || !this.layer) return;
+      if (this.sharpening) { this.aheadTimer = window.setTimeout(step, MADE_POLL_MS); return; }
+      const next = this.layer.ahead(gpu);
+      gpu.submit();
+      if (next < 0) this.redraw();
+      else gpu.done().then(() => { if (job === this.aheadJob) this.aheadTimer = window.setTimeout(step, next); });
+    };
+    // It waits for the view to rest, as the sharp picture does, and for the GPU to finish the frame: a frame of a pan or
+    // a zoom does not wait for it.
+    this.aheadTimer = window.setTimeout(() => gpu.done().then(() => { if (job === this.aheadJob) step(); }), Math.max(ms, REST_MS));
   }
 
   /** Draw the map anew once the programs `waiting` that the frame just drawn went without are made (looked at every

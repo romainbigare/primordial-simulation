@@ -20,8 +20,16 @@ const ROW_ALIGN = 256;
 const CANVAS_FORMAT: GPUTextureFormat = 'rgba8unorm';
 
 class WebGpuTexture implements Texture {
+  /** Of an array, the view of each layer drawn into (`pass` of a layer). */
+  readonly layerViews = new Map<number, GPUTextureView>();
   constructor(readonly w: number, readonly h: number, readonly layers: number, readonly mips: number, readonly format: Format,
     readonly tex: GPUTexture, readonly view: GPUTextureView) {}
+  /** The view that draws into layer `layer`. */
+  layerView(layer: number): GPUTextureView {
+    let v = this.layerViews.get(layer);
+    if (!v) { v = this.tex.createView({ dimension: '2d', baseArrayLayer: layer, arrayLayerCount: 1 }); this.layerViews.set(layer, v); }
+    return v;
+  }
 }
 
 class WebGpu implements Gpu {
@@ -57,14 +65,17 @@ class WebGpu implements Gpu {
     this.device.queue.writeTexture({ texture: (t as WebGpuTexture).tex, mipLevel: level, origin }, data as Uint8Array<ArrayBuffer>, { bytesPerRow: w * TEXEL_BYTES[t.format], rowsPerImage: h }, [w, h, layers]);
   }
 
-  drop(t: Texture): void { (t as WebGpuTexture).tex.destroy(); }
+  /** Textures dropped since the frame was last sent: destroyed once it is, as its draws may read them. */
+  private dropped: GPUTexture[] = [];
 
-  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
+  drop(t: Texture): void { this.dropped.push((t as WebGpuTexture).tex); }
+
+  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[], layer?: number): Pass {
     this.encoder ??= this.device.createCommandEncoder();
     const all = (Array.isArray(target) ? target : [target]) as (WebGpuTexture | null)[], t = all[0];
     if (!t) this.frame ??= this.ctx.getCurrentTexture();
     const tex = t ? t.tex : this.frame!, size: [number, number] = [tex.width, tex.height], format = t ? t.format : this.format;
-    const views = t ? all.map(a => a!.view) : [tex.createView()];
+    const views = t ? all.map(a => (layer !== undefined ? a!.layerView(layer) : a!.view)) : [tex.createView()];
     const enc = this.encoder.beginRenderPass({ colorAttachments: views.map(view => ({ view, loadOp: clear ? 'clear' : 'load', clearValue: clear, storeOp: 'store' })) });
     if (clip) enc.setScissorRect(clip[0], clip[1], clip[2], clip[3]);
     return {
@@ -90,6 +101,8 @@ class WebGpu implements Gpu {
 
   submit(): void {
     if (this.encoder) this.device.queue.submit([this.encoder.finish()]);
+    this.dropped.forEach(t => t.destroy());
+    this.dropped = [];
     this.encoder = this.frame = null;
     this.used = 0;
   }

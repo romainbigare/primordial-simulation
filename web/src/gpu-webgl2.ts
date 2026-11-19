@@ -11,6 +11,8 @@ interface Parallel { COMPLETION_STATUS_KHR: number }
 class WebGl2Texture implements Texture {
   tex: WebGLTexture | null = null;
   fb: WebGLFramebuffer | null = null;
+  /** Of an array, the framebuffer that draws into each layer (`pass` of a layer), made when first drawn into. */
+  layerFbs = new Map<number, WebGLFramebuffer>();
   /** The framebuffer that draws into this texture and `with` after it, at once (`pass` of several targets). */
   fbWith: WebGLFramebuffer | null = null;
   with: WebGl2Texture[] = [];
@@ -70,15 +72,29 @@ class WebGl2 implements Gpu {
     const gl = this.gl, kind = t.array ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D, inner = this.formats()[t.format][0];
     t.tex = gl.createTexture();
     t.fbWith = null;
+    t.layerFbs.clear();
     gl.bindTexture(kind, t.tex);
     if (t.array) gl.texStorage3D(kind, t.mips, inner, t.w, t.h, t.layers);
     else gl.texStorage2D(kind, t.mips, inner, t.w, t.h);
-    if (t.target) {
+    if (t.target && !t.array) {
       t.fb = gl.createFramebuffer();
       gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
+  }
+
+  /** The framebuffer that draws into layer `layer` of the array `t`. */
+  private layerFramebuffer(t: WebGl2Texture, layer: number): WebGLFramebuffer | null {
+    const gl = this.gl;
+    let fb = t.layerFbs.get(layer);
+    if (!fb) {
+      fb = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, t.tex, 0, layer);
+      t.layerFbs.set(layer, fb);
+    }
+    return fb;
   }
 
   /** The framebuffer that draws into `all` at once, in their order: kept with the first, made anew when the others
@@ -112,14 +128,15 @@ class WebGl2 implements Gpu {
 
   drop(t: Texture): void {
     const g = t as WebGl2Texture;
-    this.gl.deleteTexture(g.tex); this.gl.deleteFramebuffer(g.fb); this.gl.deleteFramebuffer(g.fbWith);
+    this.gl.deleteTexture(g.tex); this.gl.deleteFramebuffer(g.fb); this.gl.deleteFramebuffer(g.fbWith); g.layerFbs.forEach(fb => this.gl.deleteFramebuffer(fb));
     this.textures.delete(g);
   }
 
-  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
+  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[], layer?: number): Pass {
     const gl = this.gl, all = (Array.isArray(target) ? target : [target]) as (WebGl2Texture | null)[], t = all[0];
     const size: [number, number] = t ? [t.w, t.h] : [this.canvas.width, this.canvas.height];
-    gl.bindFramebuffer(gl.FRAMEBUFFER, all.length > 1 ? this.framebufferOf(all as WebGl2Texture[]) : t ? t.fb : null);
+    const fb = all.length > 1 ? this.framebufferOf(all as WebGl2Texture[]) : t && layer !== undefined ? this.layerFramebuffer(t, layer) : t ? t.fb : null;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
     gl.viewport(0, 0, size[0], size[1]);
     if (clear) { gl.clearColor(clear[0], clear[1], clear[2], clear[3]); gl.clear(gl.COLOR_BUFFER_BIT); }
     // A texture's rows are kept top first (`flip`), the canvas's bottom first.

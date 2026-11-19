@@ -10,7 +10,8 @@ struct Cover {
   // The draw's corner in the world, m from the map's north-west corner; metres a device pixel; w is not read.
   corner: vec4f,
   // The metres a pixel of the screen takes, which the detail drawn is chosen by (x; the target's pixel may be larger
-  // while the map is drawn at fewer pixels, web/src/map.ts `SCALES`).
+  // while the map is drawn at fewer pixels, web/src/map.ts `SCALES`); the target's pixel the draw's corner `corner`
+  // lies at (yz: a draw may cover a part of the marks decided, web/src/forest.ts).
   seen: vec4f,
   // The reflectance of the walls the cover builds: its stems (wasm `meta`); and the kinds a square holds (the world's
   // variety, wasm `meta`'s `tiles.kinds`).

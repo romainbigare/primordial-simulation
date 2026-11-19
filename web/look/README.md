@@ -76,8 +76,9 @@ snow follow; a warm square's soil is wetted, as the card has had no rain). The s
 | `marks` | the marks of each year (all lattices, the view's cells and those about it) |
 | `pixels` | % of the picture whose pixels stay (each channel within 24 of 255) |
 
-The marks are read back from the GPU after the picture is drawn (`read.mjs` `marks`: the first of the marks' textures,
-laid out as `textures.ts` `prepare` lays them). A mark's size inside its group is not compared. The worlds are opened one
+The marks are read back from the GPU after the picture is drawn (`read.mjs` `marks`: decided once more for the view,
+as the map draws them from the tiles they are kept in, `forest.ts`; the first of the marks' textures, laid out as
+`textures.ts` `prepare` lays them). A mark's size inside its group is not compared. The worlds are opened one
 after another in one page.
 
 ## The cost of a pixel (`cost`)
@@ -92,7 +93,9 @@ pixel counts what it does and draws the counts as its colour: every texture read
 photograph (`tex.wgsl` `photo`, blue). Two builds: `ground` counts the ground's
 program (`land.wgsl`, the far field of the plants in it) and draws no marks; `marks` counts the marks' program
 (`cover.wgsl`) over a black ground. The marks decided once a frame for each cell (`marks.wgsl`) are not
-counted: they are not a pixel's work.
+counted: they are not a pixel's work. Where the map reads the marks from the tiles they are kept in (`forest.ts`), the
+counts are the cover program's as it drew a tile's texels, read through the tile (blended between texels): the work of
+a texel drawn once, not of each frame's pixel (which reads one texel of a tile).
 
 `cost.json`: for each scene and build, of `reads`, `noise` and `photos` a pixel over the middle 80 % of the picture: the
 mean, the 95th percentile, the most, and the % of pixels at the top of the colour (a count it cannot hold: 510 reads,

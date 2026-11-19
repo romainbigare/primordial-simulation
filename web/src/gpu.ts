@@ -138,9 +138,9 @@ export interface Gpu {
   write(t: Texture, data: TexelData, level?: number, layer?: number): void;
   drop(t: Texture): void;
   /** Draw into `target` (null: the canvas, sized to its pixels; several textures of one size and format: a program's
-   * targets, `Program.targets`, in the order of its outputs), first filling it with `clear` (r, g, b, a, 0..1) if given,
-   * and only inside `clip` (x, y, w, h px from its top-left corner) if given. */
-  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass;
+   * targets, `Program.targets`, in the order of its outputs; of an array, its layer `layer`), first filling it with
+   * `clear` (r, g, b, a, 0..1) if given, and only inside `clip` (x, y, w, h px from its top-left corner) if given. */
+  pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[], layer?: number): Pass;
   /** Make program `name` for draws into `target` (null: the canvas) over what is there or not (`blend`) in the
    * background, one program at a time in the order asked (`first`: before all others), so its first draw need not
    * wait for it. */

@@ -65,6 +65,8 @@ export class GroundTiles {
   private inView = new Set<number>();
   /** The depth the view is drawn at. */
   depth: number;
+  /** Rises each time a tile that changes what the view shows comes, or the tiles are lost. */
+  version = 0;
   private free: number[] = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
   /** Tiles come, not yet on the GPU; the page and the tiles' numbers to send to it. */
   private come: { layer: number; data: Uint16Array }[] = [];
@@ -168,6 +170,7 @@ export class GroundTiles {
 
   /** After a lost context the card's tiles are empty: forget them and ask for the view's again. */
   lost(): void {
+    this.version++;
     this.kept.clear();
     this.come = [];
     this.free = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
@@ -195,7 +198,7 @@ export class GroundTiles {
       const before = this.page;
       this.makePage();
       const shown = this.showsOtherThan(before);
-      if (shown) this.lastCame = came;
+      if (shown) { this.lastCame = came; this.version++; }
       this.changed(shown);
     }
     this.next();

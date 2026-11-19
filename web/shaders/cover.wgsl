@@ -56,7 +56,7 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
 
 // The marks over the pixel `v`, premultiplied.
 fn marks_over(v: Varying) -> vec4f {
-  let p = (v.px - draw.rect.xy) * cover.corner.z;
+  let p = (v.px - cover.seen.yz) * cover.corner.z;
   // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.
   let e = cover.seen.x;
   var dst = vec4f(0.0);

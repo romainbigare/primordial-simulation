@@ -47,10 +47,20 @@ export class CoverMarks {
   /** `alpha`: how strongly the cover covers the map. */
   constructor(private alpha: number) {}
 
+  /** Rises each time the cover is read anew (`set`): what is drawn of it changes. */
+  version = 0;
+
   /** Read the cover from `k`; none: no cover is drawn. */
   set(k: Kinds | null): void {
     this.kinds = k;
     this.due = true;
+    this.version++;
+  }
+
+  /** Whether any of the marks shows as things where a pixel of the screen takes `mpp` m, once the rendered models they
+   * are drawn from are loaded on `gpu`. */
+  shows(gpu: Gpu, mpp: number): boolean {
+    return this.kinds !== null && LATTICES.some((_, l) => (this.kinds?.widest[l] ?? 0) >= THING_LEAST_PX * mpp) && groundDetail(gpu).w > 1;
   }
 
   /** Of each lattice, 1 where a pixel of the screen takes `mpp` m and its widest marks take enough pixels to show as
@@ -118,7 +128,7 @@ export class CoverMarks {
       this.marksTex = MARK_BINDINGS.map(made);
       this.reachTex = made();
     }
-    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp).vec4(m.seenMpp).vec4(...k.walls, k.planes.kinds).vec4(...grids.map(g => g.cells.row));
+    const u = new Uniforms(COVER_VEC4S).vec4(...m.at, m.mpp).vec4(m.seenMpp, m.rect[0], m.rect[1]).vec4(...k.walls, k.planes.kinds).vec4(...grids.map(g => g.cells.row));
     grids.forEach(g => u.vec4(...g.frac, g.a, g.rows));
     grids.forEach((_, l) => u.vec4(REACH[l]));
     grids.forEach(g => u.ivec4(...g.base));
@@ -142,8 +152,12 @@ export class CoverMarks {
     for (const t of targets) gpu.warm('cover', t, true);
   }
 
-  /** Draw marks `m` in pass `p` on `gpu`, as decided before the pass (`prepare`). */
-  draw(p: Pass, m: Marks): void {
-    if (this.decided) p.draw('cover', { rect: m.rect, binds: this.decided }, true);
+  /** Draw the marks decided before the pass (`prepare`) in pass `p`, over the rectangles `rects` of its target (x, y,
+   * w, h px: the draw's or parts of it). */
+  draw(p: Pass, rects: number[][]): void {
+    if (this.decided) for (const rect of rects) p.draw('cover', { rect, binds: this.decided }, true);
   }
+
+  /** Whether marks were decided for the last draw (`prepare`). */
+  get ready(): boolean { return this.decided !== null; }
 }

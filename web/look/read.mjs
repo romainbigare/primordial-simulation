@@ -32,7 +32,10 @@ const PLACE_STEPS = 16;
 export function marks(page) {
   return page.evaluate(async PLACE_STEPS => {
     const e = window.__ew, cm = e.vegetation.marks, k = cm.kinds, d = e.vegetation.drawn, L = e.lattices;
-    if (!k || !d || !cm.decided) return [];
+    if (!k || !d) return [];
+    // The marks of the view itself (the last decided may be a tile's, web/src/forest.ts).
+    cm.prepare(e.map.gpu, d, []);
+    if (!cm.decided) return [];
     const shown = cm.shown(d.seenMpp), size = [d.rect[2] * d.mpp, d.rect[3] * d.mpp];
     let row = 0;
     const grids = L.LATTICES.map((a, l) => {
