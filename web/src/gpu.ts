@@ -44,14 +44,27 @@ export function madeFor(name: string, e: number): string[] {
   return [...fit, name];
 }
 
+/** A program for draws into a target (null: the canvas) over what is there or not: its name, the target's format and
+ * whether it blends. */
+export type Made = [name: string, target: Format | null, blend: boolean];
+
 /** Of program `name`, the one a draw into `target` (null: the canvas), over what is there or not (`blend`), where a pixel
  * takes `e` metres, draws with: the best of those that may (`madeFor`) that is made, so a draw never waits for a
- * program while one that draws the same picture is made; the best is made next (`Gpu.warm`). With none made, the best,
- * made at once. */
-export function seenFrom(gpu: Gpu, name: string, e: number, target: Format | null, blend: boolean): string {
-  const may = madeFor(name, e);
-  gpu.warm(may[0], target, blend, true);
-  return may.find(key => gpu.ready(key, target, blend)) ?? may[0];
+ * program while one that draws the same picture is made; the best is made in its turn (`Gpu.warm`). With none made,
+ * none: the best is made before all others and the draw waits for it (`waiting`), and the page does not stop while it
+ * is made. */
+export function seenFrom(gpu: Gpu, name: string, e: number, target: Format | null, blend: boolean, waiting: Made[]): string | null {
+  const may = madeFor(name, e), made = may.find(key => gpu.ready(key, target, blend));
+  gpu.warm(may[0], target, blend, made === undefined);
+  if (made === undefined) waiting.push([may[0], target, blend]);
+  return made ?? null;
+}
+
+/** Of `programs`, those not made (`Gpu.ready`), each asked to be made before all others (`Gpu.warm`). */
+export function notMade(gpu: Gpu, programs: Made[]): Made[] {
+  const missing = programs.filter(([name, target, blend]) => !gpu.ready(name, target, blend));
+  missing.forEach(([name, target, blend]) => gpu.warm(name, target, blend, true));
+  return missing;
 }
 
 /** The programs a back end makes in the background (`Gpu.warm`): one at a time, in the order asked, each by `make`

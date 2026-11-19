@@ -3,7 +3,7 @@
 // texel a square), then what others draw on the GPU (the plant cover, vegetation.ts).
 // Over it a 2D canvas holds what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
 // picked, and the scale bar.
-import { Draw, Format, Gpu, Pass, Texture, Uniforms, madeFor, openGpu, seenFrom } from './gpu';
+import { Draw, Format, Gpu, Made, Pass, Texture, Uniforms, madeFor, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
@@ -26,13 +26,16 @@ const FRAME_BUDGET_MS = 16, SCALES = [1, 0.75, 0.5];
  * each of about `SHARPEN_MS` on the GPU (the view rests, so a frame may take longer) and no less than `TILE_LEAST` px a
  * side. */
 const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
+/** How often a frame drawn without a program not made yet looks whether it is made, ms (`drawWhenMade`). */
+const MADE_POLL_MS = 50;
 
 /** Drawn on the GPU over the map by another module, in the map's pass, at every frame: what it works out before the
  * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` px of the target and
- * `seen` px of the screen (its detail is chosen by the screen's), and the view is `w` x `h` css px (`prepare`); its draw in the pass; and what the live map's ground draws of it, with a square taking
- * `s` css px and a css px `seen` px of the screen (`under`, its bindings). */
+ * `seen` px of the screen (its detail is chosen by the screen's), and the view is `w` x `h` css px, adding to `waiting`
+ * the programs it goes without as they are not made yet (`prepare`); its draw in the pass; and what the live map's
+ * ground draws of it, with a square taking `s` css px and a css px `seen` px of the screen (`under`, its bindings). */
 export interface GpuLayer {
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number): void;
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: Made[]): void;
   draw(p: Pass): void;
   /** Make its programs ahead (`Gpu.warm`) for draws into the map's targets (null: the canvas; `MAP_TARGET`). */
   warm(gpu: Gpu, targets: (Format | null)[]): void;
@@ -90,6 +93,8 @@ export class MapView {
   private sharp: Texture | null = null;
   /** Whether the programs the map may draw next are being made ahead (`warmAhead`). */
   private warmed = false;
+  /** The timer that looks whether the programs the last frame went without are made (`drawWhenMade`). */
+  private madeTimer = 0;
   /** Drawn by another module on the GPU over the map, and on the 2D canvas over it at each redraw: its context, where
    * the map's corner is and the pixels a square takes. */
   layer: GpuLayer | null = null;
@@ -245,12 +250,13 @@ export class MapView {
       if (this.picture) gpu.drop(this.picture);
       this.picture = gpu.texture(tw, th, MAP_TARGET, 1, 1, true);
     }
-    this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight);
+    const waiting: Made[] = [];
+    this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
     const target = r < 1 ? this.picture : null, p = gpu.pass(target);
     // While a tile of the ground fades in, the map is drawn again at each frame.
     const fading = this.land?.tiles.fading(performance.now()) ?? false;
     if (fading) this.invalidate();
-    this.drawMap(gpu, p, target, xs, k, d, [tw, th]);
+    this.drawMap(gpu, p, target, xs, k, d, [tw, th], waiting);
     this.layer?.draw(p);
     p.end();
     if (target) this.show([]);
@@ -258,8 +264,22 @@ export class MapView {
     gpu.submit();
     this.time(gpu, r);
     if (!this.warmed) { this.warmed = true; this.warmAhead(gpu, this.cellM / (s * d)); }
-    if (r < 1 && !fading) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
+    if (r < 1 && !fading && !waiting.length) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
+    this.drawWhenMade(gpu, waiting);
     this.flowSoon();
+  }
+
+  /** Draw the map anew once the programs `waiting` that the frame just drawn went without are made (looked at every
+   * `MADE_POLL_MS`); till then it stays due. So no frame waits for a program to be made: it draws without it. */
+  private drawWhenMade(gpu: Gpu, waiting: Made[]): void {
+    clearTimeout(this.madeTimer);
+    if (!waiting.length) return;
+    this.gpuDue = true;
+    const look = () => {
+      if (waiting.every(([name, target, blend]) => gpu.ready(name, target, blend))) this.redraw();
+      else this.madeTimer = window.setTimeout(look, MADE_POLL_MS);
+    };
+    this.madeTimer = window.setTimeout(look, MADE_POLL_MS);
   }
 
   /** Draw the map again when the signs of the flow next step along the channels (land.ts `FLOW_FPS`), while a channel
@@ -303,9 +323,10 @@ export class MapView {
       if (this.sharp) gpu.drop(this.sharp);
       this.sharp = gpu.texture(W, H, MAP_TARGET, 1, 1, true);
     }
-    this.layer?.prepare(gpu, ox, oy, s, job.d, job.d, this.cv.clientWidth, this.cv.clientHeight);
+    // The frame it sharpens went without no program, so none is waited for here.
+    this.layer?.prepare(gpu, ox, oy, s, job.d, job.d, this.cv.clientWidth, this.cv.clientHeight, []);
     const p = gpu.pass(this.sharp, undefined, tile);
-    this.drawMap(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H]);
+    this.drawMap(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
     this.layer?.draw(p);
     p.end();
     job.done.push(tile);
@@ -331,8 +352,9 @@ export class MapView {
   }
 
   /** Draw into pass `p` (`target`, null: the canvas; of `size` px, `k` px a css px, on a screen of `d` px a css px) the
-   * background and the map's shadow, and the live map or the map's squares (a copy at each of `xs`, css px). */
-  private drawMap(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[]): void {
+   * background and the map's shadow, and the live map or the map's squares (a copy at each of `xs`, css px); the live
+   * map only once a program for it is made (`seenFrom`, else it adds the one it waits for to `waiting`). */
+  private drawMap(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
     const { cam: { s, ox, oy }, w, h, look } = this;
     this.ctx.fillStyle = css('--map-bg');
     const bg = (this.ctx.fillStyle as string).match(/[0-9a-f]{2}/gi)?.map(c => parseInt(c, 16) / 255) ?? [1, 1, 1];
@@ -343,12 +365,12 @@ export class MapView {
     if (this.land) this.land.drawn = d;
     // The live map's program made for the screen's pixels (gpu.ts `seenFrom`): its detail is chosen by them.
     const mpp = this.cellM / (s * k), seen = this.cellM / (s * d), under = this.layer?.under(gpu, s, d);
-    const program = seenFrom(gpu, 'land', seen, target?.format ?? null, false);
+    const program = this.land ? seenFrom(gpu, 'land', seen, target?.format ?? null, false, waiting) : null;
     // Each copy is drawn over the part of the target it covers, so what a pixel reads of its place (`frameOf`) never
     // runs over more than the target's pixels.
     const lands = xs.map((_, c) => this.land?.binds(gpu, look, frameOf(edge(c), oy * k, mpp, seen)));
     if (lands[0] && under) {
-      xs.forEach((_, c) => {
+      if (program) xs.forEach((_, c) => {
         const x0 = Math.max(edge(c), 0), x1 = Math.min(edge(c + 1), size[0]), y0 = Math.max(oy * k, 0), y1 = Math.min((oy + h * s) * k, size[1]);
         if (x1 > x0 && y1 > y0) p.draw(program, { rect: [x0, y0, x1 - x0, y1 - y0], binds: { ...lands[c]!, ...under } }, false);
       });
