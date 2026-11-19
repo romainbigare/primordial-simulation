@@ -4,10 +4,10 @@
 // A plant: its foot, m from the draw's corner; its crown's width and its height, m; how closed its crown is in leaf; its colour
 // and its walls' share; its own random numbers; its design (style.ts `DESIGN`); its form (form.ts `Form`) and how
 // surely; its lean (a share of its height, east and south); how far from its foot it may reach, m; how dry its kind's
-// ground, 0..1 (form.ts `Form`); and the share of its leaves left this season.
+// ground, 0..1 (form.ts `Form`); the share of its leaves left this season; and how wet its kind's ground, 0..1.
 struct Plant {
   at: vec2f, d: f32, h: f32, closed: f32, rgb: vec3f, wood: f32, r: vec3f, design: f32,
-  form: f32, sure: f32, lean: vec2f, reach: f32, dry: f32, left: f32,
+  form: f32, sure: f32, lean: vec2f, reach: f32, dry: f32, left: f32, wet: f32,
 }
 
 // A plant's own draw among the sets its kind's numbers choose between (models.wgsl `model_set`, mark.wgsl `plant_of`),
