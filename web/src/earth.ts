@@ -19,10 +19,27 @@ const EARTHY = ramps('#f6ecd3', '#e1c68b', '#c49a5a', '#8e6636', '#4e3418');
 const ICY = ramps('#f4f8fb', '#cfe3f2', '#9cc3e6', '#6a96d4', '#3d5fb0');
 const VIRIDIS = ramps('#440154', '#414487', '#2a788e', '#22a884', '#7ad151', '#fde725');
 const FIRE = ramps('#fcf4dd', '#f6c26b', '#e4793c', '#b0382f', '#5f1a45', '#1e0f2e');
+/** The soil's grain: none of the share to all of it, from dark loam to pale sand; from pale sand to red-brown clay. */
+const SANDY = ramps('#5a4632', '#8e7650', '#c2a66c', '#e6cf8e', '#fbf0c2');
+const CLAYEY = ramps('#f3e3b4', '#d9b27a', '#b9784a', '#8e4a33', '#5a2a24');
+/** The soil's organic matter: from pale mineral ground to black-brown humus. */
+const HUMUS = ramps('#efe2c6', '#c7a77a', '#8c6a45', '#54392a', '#241812');
+/** How fast liquid passes through the soil: from tight (dull) to open (bright cyan). */
+const SEEPS = ramps('#3b2f2a', '#6b5a7a', '#5b7fb8', '#3fb3d0', '#a6f0f0');
+
+/** The layers of the soil, drawn on dry ground alone (colour.wgsl `in_view_of`), as the ground under standing liquid is
+ * no soil a plant roots in and the large cells of the sea would show as squares: 1 as the cells hold it, or found by the
+ * live map at each point (land.wgsl `layer_at`): 2 the share of the pores the soil's liquid fills by the laws inside a
+ * cell, 3 and 4 the coarse and the fine grain's share of the terrain's samples. */
+export const GROUND_LAYERS = new Map([['filled', 2], ['coarse', 3], ['fine', 4], ['organic', 1], ['conduct', 1], ['avail', 1]]);
 
 export function rampFor(name: string): RGB[] {
+  if (name === 'coarse') return SANDY;
+  if (name === 'fine') return CLAYEY;
+  if (name === 'organic') return HUMUS;
+  if (name === 'conduct') return SEEPS;
   if (/^t_|temp/.test(name)) return TURBO;
-  if (/rain|vapor|depth|flux|water/.test(name)) return WATER;
+  if (/rain|vapor|depth|flux|water|avail|filled/.test(name)) return WATER;
   if (/plant|forest|grass|crop|grown/.test(name)) return GREEN;
   if (/loose|sediment|soil|seed/.test(name)) return EARTHY;
   if (/ice|snow/.test(name)) return ICY;

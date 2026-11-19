@@ -153,17 +153,17 @@ const GARDEN_LOOSE_M: f64 = 100.0;
 /// What a garden offers the cover `c` of a cell of `w` in month `tick` (`cover::Around`, for `cover::live`): its ground
 /// at `t` K, `sun` W/m² since the cover's last step, the air all the gas the cover takes and nothing lost through its
 /// pores, the ground all minerals and the share `moist` of what it holds for roots (`Soak::moist`; at none, no liquid),
-/// its loose ground `GARDEN_LOOSE_M` deep and its pores filled as that share says (`Physics::available` backwards), so
-/// every root breathes.
+/// its loose ground `GARDEN_LOOSE_M` deep, with the pores of the world's first cell, filled as that share says
+/// (`Pores::available` backwards), so every root breathes.
 pub fn garden(w: &World, c: &pcore::cover::Cover, (t, moist, sun, tick): (f64, f64, f64, u64)) -> pcore::cover::Around {
-    let wet = moist > 0.0;
+    let (wet, pores) = (moist > 0.0, *w.pores(0));
     let mut ground = [0.0; pcore::units::MAX_SUBSTANCES];
     w.chem.minerals().iter().for_each(|&(k, _)| ground[k] = GARDEN_MOL);
     let month = w.cfg.calendar().month as f64;
     pcore::cover::Around {
         t,
         liquid: if wet { GARDEN_MOL } else { 0.0 },
-        soak: pcore::cover::Soak { moist, filled: w.cfg.phys.wilt + moist * (w.cfg.phys.field - w.cfg.phys.wilt), loose: GARDEN_LOOSE_M, breath: 0.0, pond: 0.0 },
+        soak: pcore::cover::Soak { moist, filled: pores.wilt + moist * (pores.field - pores.wilt), loose: GARDEN_LOOSE_M, pores, breath: 0.0, pond: 0.0 },
         reach: 1.0,
         light: c.mark + sun * month,
         gas: 1.0,
@@ -250,6 +250,16 @@ pub fn set_amount(w: &mut World, x: Node, k: usize, mol: f64) {
     let at = k * w.store.amounts(x.class).len() / w.chem.ns() + x.index;
     w.cross((Boundary::Outside, x), [(k, -w.store.amounts(x.class)[at])], 0.0);
     w.cross((Boundary::Outside, x), [(k, mol)], 0.0);
+}
+
+/// The pores of every cell of `w` (`World::pores`) changed by `f`.
+pub fn set_pores(w: &mut World, f: impl Fn(&mut pcore::soil::Pores)) {
+    w.soil.iter_mut().for_each(|s| f(&mut s.pores));
+}
+
+/// The pores of a loam, its particles 0.4 coarse and 0.2 fine with no organic matter (`soil::Pores::of`).
+pub fn loam() -> pcore::soil::Pores {
+    pcore::soil::Pores::of(&pcore::soil::Texture { coarse: 0.4, fine: 0.2, organic: 0.0 })
 }
 
 /// Cell `i` flat inside: its ground level at its mean (`World::level_inside`).

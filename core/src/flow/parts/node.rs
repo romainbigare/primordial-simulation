@@ -14,7 +14,7 @@ pub(super) fn conductance(w: &World, s: &Scratch, i: usize, p: &Parts, f: &[Foun
     if !p.land() {
         return 0.0;
     }
-    let (area, shore) = (w.mesh.cells().area()[i], s.fill(i).shore(stands(f, w.cfg.phys.porosity)));
+    let (area, shore) = (w.mesh.cells().area()[i], s.fill(i).shore(stands(f, w.pores(i).porosity)));
     let half = |q: usize| {
         let share = p.share(q);
         let mut kt = s.state.bed[i].cond * w.cfg.skin_m;
@@ -40,7 +40,7 @@ const MOLTEN_SHARE: f64 = 0.5;
 /// reflectance by area (the liquid's of its top over its deep); its pores those under the liquid and what the land's
 /// hold, so what stands over them is what stands over the liquid's (what may run off, laws.md 1.2).
 pub(super) fn row(w: &World, s: &Scratch, i: usize, p: &Parts, f: &[Found; PARTS]) -> [f64; STATE_ROW] {
-    let (area, por) = (w.mesh.cells().area()[i], w.cfg.phys.porosity);
+    let (area, por) = (w.mesh.cells().area()[i], w.pores(i).porosity);
     let fused = |q: usize| f[q].th.held + f[q].th.on.map_or(0.0, |(k, phi)| phi * p.amt[k][q] * s.sp[k].lf);
     let (c, all) = (f[LAND].cap + f[TOP].cap + f[DEEP].cap, fused(LAND) + fused(TOP) + fused(DEEP));
     let tg = (p.heat[LAND] + p.heat[TOP] + p.heat[DEEP] - all) / c.max(1.0);

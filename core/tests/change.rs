@@ -502,7 +502,7 @@ fn dead_frame_rots_on_moist_land_in_a_year() {
         let mut w = worldgen::testkit::one_rise(1, 16, 16);
         let i = (0..w.mesh.cells().n()).find(|&i| w.is_land(i)).expect("land");
         assert!(pcore::cover::sums(&w).is_empty(), "a world with no life");
-        let liquid = if wet { w.cfg.phys.field * w.cfg.phys.porosity * loose_volume(&w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid) } else { 0.0 };
+        let liquid = if wet { w.pores(i).field * w.pores(i).porosity * loose_volume(&w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid) } else { 0.0 };
         let frame = 5.0 * w.mesh.cells().area()[i] / w.chem.subs[FRAME].molar_mass;
         set_amount(&mut w, Node::ground(i), FRAME, frame);
         let (dt, year) = (w.cfg.calendar().month, w.cfg.calendar().year);

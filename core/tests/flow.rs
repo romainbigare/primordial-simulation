@@ -26,7 +26,7 @@ fn top(w: &World) -> usize {
 /// What the pores of the loose ground of cell `i` hold of the liquid, mol: the porosity times the volume of its loose
 /// solids.
 fn pore_mol(w: &World, i: usize) -> f64 {
-    w.cfg.phys.porosity * loose(w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid)
+    w.pores(i).porosity * loose(w, i) / w.chem.molar_volume(LIQUID, Phase::Liquid)
 }
 
 /// Two land cells side by side, both warm, away from the low basin: their own lowest ground and that of the cells round
@@ -382,12 +382,13 @@ fn gas_dissolves_and_comes_out_when_warmed() {
 #[test]
 fn pore_space_is_the_porosity_times_the_loose_solids() {
     let (mut w, (i, _)) = worldgen::testkit::island_with(3, pair);
-    let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.mesh.cells().area()[i]);
+    let (por, area) = (w.pores(i).porosity, w.mesh.cells().area()[i]);
+    let pores = por * loose(&w, i);
     // The loose layer of the generated land is what the wear left (`Samples::loose`), the top `skin_m` of it at most,
-    // 0.4 of it pores (random packing: 0.36 to 0.44).
+    // its porosity of it pores.
     let (lat, skin) = ((w.cfg.lat_south, w.cfg.lat_north), w.cfg.skin_m);
     let start = w.terrain.over(w.terrain.seed, &w.map, w.map.leaves()[i], lat, |s, k| s.loose[k].min(skin));
-    assert!((pores / area / (0.4 * start) - 1.0).abs() < 0.05, "{} m of pore depth under {start} m of loose ground", pores / area);
+    assert!((pores / area / (por * start) - 1.0).abs() < 0.05, "{} m of pore depth under {start} m of loose ground", pores / area);
     let depth = |w: &mut World| {
         pcore::flow::state(w, true);
         pcore::flow::means(w, &[i]).expect("Flow's state")[0].stands
@@ -401,13 +402,15 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
 }
 
 /// On flat ground liquid soaks in up to the pores and stays (a sheet runs off where the ground has none), and only what
-/// is over them runs off (on uneven ground its hollows fill first, and run off sooner). Matter and energy are kept.
+/// is over them runs off (on uneven ground its hollows fill first, and run off sooner). Every cell has a loam's pores.
+/// Matter and energy are kept.
 #[test]
 fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
-    let (base, (i, _)) = worldgen::testkit::island_with(3, pair);
+    let (mut base, (i, _)) = worldgen::testkit::island_with(3, pair);
+    worldgen::testkit::set_pores(&mut base, |p| *p = worldgen::testkit::loam());
     let run = |porosity: f64, share: f64| {
         let mut w = base.clone();
-        w.cfg.phys.porosity = porosity;
+        worldgen::testkit::set_pores(&mut w, |p| p.porosity = porosity);
         worldgen::testkit::flatten(&mut w, i);
         let pores = 0.4 * loose(&w, i);
         pour(&mut w, i, share * pores);
@@ -422,9 +425,10 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     let (kept_bare, _) = run(0.0, 0.5);
     assert!(kept > 0.7, "the ground kept {kept} of its liquid");
     assert!(kept_bare < 0.1, "with no pores {kept_bare} of it stayed");
-    // Twice the pores' volume: the rest ran off, and the pores keep their field capacity (`field`, 0.6) as the rest sinks.
-    let (_, full) = run(0.4, 2.0);
-    assert!(full < 1.05 && full > 0.55, "the ground holds {full} of its pore volume after the excess ran off");
+    // Twice the pores' volume: the rest ran off, and the pores keep their field capacity (`Pores::field`) as the rest
+    // sinks.
+    let ((_, full), field) = (run(0.4, 2.0), base.pores(i).field);
+    assert!(full < 1.05 && full > field - 0.05, "the ground holds {full} of its pore volume after the excess ran off, field capacity {field}");
 }
 
 /// The liquid in the bed's store under cell `i`, m³.
@@ -446,11 +450,11 @@ fn liquid_sinks_into_the_bed_and_runs_off_once_a_month() {
     (0..SUMMER_MONTHS).for_each(|_| pcore::step(&mut w));
     pcore::day_with_month_at_start(&mut w);
     let (i, _) = pair(&w).expect("two warm land cells in the summer");
-    let p = w.cfg.phys;
-    let (pores, full) = (p.porosity * loose(&w, i), p.bed_porosity * p.bed_depth * w.mesh.cells().area()[i]);
+    let (p, soil) = (w.cfg.phys, *w.pores(i));
+    let (pores, full) = (soil.porosity * loose(&w, i), p.bed_porosity * p.bed_depth * w.mesh.cells().area()[i]);
     pour(&mut w, i, 4.0 * pores);
     let (v0, d0) = (liquid_m3(&w, i), store_m3(&w, i));
-    assert!(v0 - p.field * pores > full - d0, "more over field capacity ({}) than the store's room ({})", v0 - p.field * pores, full - d0);
+    assert!(v0 - soil.field * pores > full - d0, "more over field capacity ({}) than the store's room ({})", v0 - soil.field * pores, full - d0);
     (1..w.cfg.days_per_month).for_each(|_| pcore::day_with_month_at_start(&mut w));
     assert_eq!((liquid_m3(&w, i), store_m3(&w, i)), (v0, d0), "nothing moves inside the month");
     pcore::day_with_month_at_start(&mut w);
@@ -460,10 +464,11 @@ fn liquid_sinks_into_the_bed_and_runs_off_once_a_month() {
     assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed after the month's liquid", liquid_m3(&w, i));
 }
 
-/// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the
-/// thickness it fills x the width, in the time: what the neighbour gains against the same world with none poured in the
-/// cell (its other neighbours may hold the starting liquid). The flow goes with `seep`, with the liquid table's slope
-/// and with the thickness; pores under their field capacity (`field`, 0.6) give none; matter and energy are kept.
+/// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at the conductivity x the slope x
+/// the thickness it fills x the width, in the time: what the neighbour gains against the same world with none poured in
+/// the cell (its other neighbours may hold the starting liquid). The flow goes with the conductivity, with the liquid
+/// table's slope and with the thickness; pores under their field capacity give none; matter and energy are kept. Every
+/// cell has a loam's pores (field capacity 0.64 of them).
 #[test]
 fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     // One liquid step with the liquid of cell `i` filling the share `share` of its pores and `j` dry: what `j` gained,
@@ -471,7 +476,7 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     let (base, (i, j)) = worldgen::testkit::island_with(3, pair);
     let gained = |seep: f64, share: f64| {
         let mut w = base.clone();
-        w.cfg.phys.seep = seep;
+        worldgen::testkit::set_pores(&mut w, |p| *p = pcore::soil::Pores { seep, ..worldgen::testkit::loam() });
         // (No evaporation, which would lower the liquid table before the liquid flows, no rain, which would fill the dry
         // cell's pores, no channels inside the cell, and a full store under `i`, so none of its liquid sinks before it
         // flows.)
@@ -481,7 +486,7 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full);
         let warm = full * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
         set_heat(&mut w, Node::new(Class::Deep, i), warm);
-        let pores = w.cfg.phys.porosity * loose(&w, i);
+        let pores = w.pores(i).porosity * loose(&w, i);
         pour(&mut w, i, share * pores);
         let books = Books::now(&w);
         worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
@@ -512,18 +517,21 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     assert_eq!(held, none, "under field capacity the pores gave {} m³", held - none);
 }
 
-/// Darcy's law across a 2 km cell moves under 0.02% of its pores a year (`seep`, a metre of ground, a slope of 1 in
-/// 1,000), but the liquid drains inside the cell to its channels, `hill` from the divides: a full store of the bed on a
+/// Darcy's law across a 2 km cell moves under 0.02% of its pores a year (`Pores::seep`, a metre of ground, a slope of
+/// 1 in 1,000), but the liquid drains inside the cell to its channels, `hill` from the divides: a full store of the bed on a
 /// sloping cell loses a share 1 - exp(-`bed_seep` x slope x time / (`bed_porosity` x `hill`)) of it in a step, which runs
-/// off (it does not stay in the cell); under deep standing liquid (no slope) it loses none that way.
+/// off (it does not stay in the cell); under deep standing liquid (no slope) it loses none that way. Every cell has a
+/// loam's pores.
 #[test]
 fn liquid_drains_inside_a_cell_to_its_channels() {
-    let (base, (hi, _)) = worldgen::testkit::island_with(3, pair);
+    let (mut base, (hi, _)) = worldgen::testkit::island_with(3, pair);
+    worldgen::testkit::set_pores(&mut base, |p| *p = worldgen::testkit::loam());
     let mut w0 = base.clone();
     pcore::flow::state(&mut w0, true);
     let (n, area, p) = (w0.mesh.cells().n(), w0.mesh.cells().area()[0], w0.cfg.phys);
     let year = w0.days_per_year() as f64 * DAY;
-    assert!(p.seep * w0.map.side * 1e-3 * year / (p.porosity * area) < 2e-4);
+    let soil = w0.pores(hi);
+    assert!(soil.seep * w0.map.side * 1e-3 * year / (soil.porosity * area) < 2e-4);
     let mv = w0.chem.molar_volume(LIQUID, Phase::Liquid);
     let full = p.bed_porosity * p.bed_depth * area;
     let stands = |w: &World, i: usize| w.surface_z(i) + pcore::contract::env_of(w, i)[1];
@@ -535,10 +543,12 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
         cells.steepest(i, drop).map_or(0.0, |way| way.0)
     };
     // One liquid step with the store of `i` full and warm, with channels `hill` apart: the store and the ground liquid
-    // after. (No pore liquid sinks into the stores, `seep` 0, so the neighbours' stores do not change with `hill`.)
+    // after. (No pore liquid sinks into the stores, a conductivity of 0, so the neighbours' stores do not change with
+    // `hill`.)
     let run = |i: usize, hill: f64| {
         let mut w = base.clone();
-        (w.cfg.evap, w.cfg.phys.hill, w.cfg.phys.seep) = (0.0, hill, 0.0);
+        (w.cfg.evap, w.cfg.phys.hill) = (0.0, hill);
+        worldgen::testkit::set_pores(&mut w, |p| p.seep = 0.0);
         let e = full / mv * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
         set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full / mv);
         set_heat(&mut w, Node::new(Class::Deep, i), e);
@@ -562,23 +572,25 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
     assert!((d1 - d0).abs() <= 1e-9 * d0, "{d1} against {d0}");
 }
 
-/// Drainage (`flow::drain`): liquid over the share `field` of the pores sinks into the bed's store, no more than it
-/// holds (`bed_porosity` x `bed_depth`) nor `seep` a second; a full store on a high cell passes its liquid down the
-/// slope, and none overfills. Matter and energy are kept.
+/// Drainage (`flow::drain`): liquid over the share `Pores::field` of the pores sinks into the bed's store, no more than
+/// it holds (`bed_porosity` x `bed_depth`) nor its conductivity a second; a full store on a high cell passes its liquid
+/// down the slope, and none overfills. Every cell has a loam's pores (field capacity 0.64 of them). Matter and energy
+/// are kept.
 #[test]
 fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     let (mut w, (hi, lo)) = worldgen::testkit::island_with(3, pair);
-    let (n, area, p) = (w.mesh.cells().n(), w.mesh.cells().area()[0], w.cfg.phys);
-    let (pores, full, mv) = (p.porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(LIQUID, Phase::Liquid));
+    worldgen::testkit::set_pores(&mut w, |p| *p = worldgen::testkit::loam());
+    let (n, area, p, field) = (w.mesh.cells().n(), w.mesh.cells().area()[0], w.cfg.phys, w.pores(hi).field);
+    let (pores, full, mv) = (w.pores(hi).porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(LIQUID, Phase::Liquid));
     // No rain: what sinks is only the liquid poured.
     (w.cfg.evap, w.cfg.rain_time) = (0.0, f64::INFINITY);
     pour(&mut w, hi, 0.9 * pores);
     let books = Books::now(&w);
     worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
     let deep = |w: &World, i: usize| w.store.amounts(Class::Deep)[LIQUID * n + i] * mv;
-    // Down: what is over the field capacity, 0.3 of the pores (0.9 - 0.6), less what Darcy's flow took sideways.
-    assert!(deep(&w, hi) > 0.1 * pores && deep(&w, hi) <= (0.3 * pores).min(full) * 1.000001, "{} m³ sank of {pores} m³ of pores", deep(&w, hi));
-    assert!(liquid_m3(&w, hi) >= 0.95 * 0.6 * pores, "the loose ground kept {} of {pores} m³", liquid_m3(&w, hi));
+    // Down: what is over the field capacity, 0.26 of the pores (0.9 - 0.64), less what Darcy's flow took sideways.
+    assert!(deep(&w, hi) > 0.1 * pores && deep(&w, hi) <= ((0.9 - field) * pores).min(full) * 1.000001, "{} m³ sank of {pores} m³ of pores", deep(&w, hi));
+    assert!(liquid_m3(&w, hi) >= 0.95 * field * pores, "the loose ground kept {} of {pores} m³", liquid_m3(&w, hi));
     books.assert_kept(&w, 1e-9);
     // Across: the high cell's store, full and warm, drains to its neighbours; the low one's never holds more than it can.
     let e = full / mv * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
@@ -598,7 +610,7 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
 #[test]
 fn a_store_reaches_only_its_neighbours_in_a_step() {
     let mut w = worldgen::testkit::squares(3, 16, 16);
-    w.cfg.phys.seep = 0.0;
+    worldgen::testkit::set_pores(&mut w, |p| p.seep = 0.0);
     worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
     let (n, gw, p) = (w.mesh.cells().n(), w.map.w, w.cfg.phys);
     let (x, y) = (gw / 2, w.map.h / 2);
@@ -620,10 +632,11 @@ fn a_store_reaches_only_its_neighbours_in_a_step() {
 /// A solid that dissolves in the liquid (the fixed gas's mineral) is in the liquid of the pores, and moves with the
 /// liquid that runs off the cell: the share of the mineral that leaves is the share of the liquid that leaves, down
 /// the slope, and it is deposited nowhere as sediment. Liquid that fits in the pores does not run off and the mineral
-/// stays with it; a dry cell keeps its mineral. Matter and energy are kept.
+/// stays with it; a dry cell keeps its mineral. Every cell has a loam's pores. Matter and energy are kept.
 #[test]
 fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pores() {
-    let base = worldgen::testkit::squares(3, 16, 16);
+    let mut base = worldgen::testkit::squares(3, 16, 16);
+    worldgen::testkit::set_pores(&mut base, |p| *p = worldgen::testkit::loam());
     let (n, top) = (base.mesh.cells().n(), top(&base));
     let pores = pore_mol(&base, top);
     // A world with `x` times the pores' worth of liquid on the highest cell, and 1e6 mol of the mineral there.
@@ -689,8 +702,8 @@ fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     assert!(near(&w, i).unwrap().iter().all(|&z| z > w.surface_z(i)), "a pit");
     // The liquid fills its pores halfway between the wilting point, under which the air takes none, and field capacity,
     // over which it sinks to the bed's store.
-    let ph = &w.cfg.phys;
-    let film = (ph.wilt + ph.field) / 2.0 * ph.porosity * ground_of(&w, i).0 * area / w.chem.molar_volume(LIQUID, Phase::Liquid);
+    let soil = w.pores(i);
+    let film = (soil.wilt + soil.field) / 2.0 * soil.porosity * ground_of(&w, i).0 * area / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, film);
     set_amount(&mut w, Node::ground(i), DISSOLVED, 1e3);
     hold_ground(&mut w, i, 330.0);
@@ -749,7 +762,8 @@ fn rain_crosses_the_land_in_one_step() {
     const FAR: usize = 3;
     let low_after = |rain: f64| {
         let mut w = worldgen::testkit::squares(1, 32, 32);
-        (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap) = (0.0, 0.0, 0.0);
+        w.cfg.evap = 0.0;
+        worldgen::testkit::set_pores(&mut w, |p| (p.porosity, p.seep) = (0.0, 0.0));
         let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[0]);
         let low: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) < 0.0).collect();
         let apart = |i: usize, j: usize| (w.map.xy(i).0.abs_diff(w.map.xy(j).0)).max(w.map.xy(i).1.abs_diff(w.map.xy(j).1));
@@ -777,7 +791,8 @@ fn a_pit_over_its_rim_spills_by_its_way_out() {
     const COLUMN_M: f64 = 100.0;
     const KEPT: f64 = 0.1;
     let mut w = worldgen::testkit::squares(1, 32, 32);
-    (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap) = (0.0, 0.0, 0.0);
+    w.cfg.evap = 0.0;
+    worldgen::testkit::set_pores(&mut w, |p| (p.porosity, p.seep) = (0.0, 0.0));
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[0]);
     let around = |w: &World, i: usize| w.mesh.cells().around(i).1.iter().map(|&j| j as usize).collect::<Vec<usize>>();
     let inland: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) > 0.0 && around(&w, i).iter().all(|&j| w.surface_z(j) > 0.0)).collect();

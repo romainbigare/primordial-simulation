@@ -264,7 +264,7 @@ fn liquid(f: &[Found; PARTS], por: f64) -> f64 {
 /// parts, as the air's step reads them, and the node's row (`row`). With `moving`, none where nothing stands, or it
 /// covers the whole cell no deeper than `h_mix`: the cell is one; without it the parts stay as they are.
 pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool) -> Option<(Parts, Mixed, [f64; STATE_ROW])> {
-    let por = w.cfg.phys.porosity;
+    let por = w.pores(i).porosity;
     let mut p = kept.clone();
     moves::reconcile(w, s, i, &mut p);
     let mut f = found(w, s, i, &p);
@@ -299,7 +299,7 @@ pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool
 /// holding that and its area's share of the rest, its pores full; where it covers all of it deeper than `h_mix`, all of
 /// it the liquid's, whose deep its solve makes (`deep::layer`). None elsewhere.
 pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Parts> {
-    let (n, area, por) = (w.mesh.cells().n(), w.mesh.cells().area()[i], w.cfg.phys.porosity);
+    let (n, area, por) = (w.mesh.cells().n(), w.mesh.cells().area()[i], w.pores(i).porosity);
     let over = Some((row[11] - row[16] - row[10]).max(0.0) * area).filter(|&v| v > 0.0).unwrap_or_else(|| s.fill(i).held());
     let wet = s.fill(i).wet(over);
     if wet <= 0.0 || (wet >= 1.0 && deep::under(w, s.fill(i), over).is_none()) {
@@ -338,7 +338,7 @@ pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Pa
 /// Part `q` of `p` in cell `i`, its parts found as `f`, as the air's step reads it (`Piece`): the top's reflectance
 /// that of its column with its deep under it.
 fn piece(w: &World, s: &Scratch, i: usize, (p, q): (&Parts, usize), f: &[Found; PARTS]) -> Piece {
-    let (share, por, x) = (p.share(q), w.cfg.phys.porosity, &f[q]);
+    let (share, por, x) = (p.share(q), w.pores(i).porosity, &f[q]);
     let (th, c, area) = (&x.th, x.cap.max(1.0), w.mesh.cells().area()[i] * share);
     let (pk, phi) = th.on.unwrap_or((NONE, 0.0));
     // The span off the plateaus, as temperatures (as `land::node_state` finds it).

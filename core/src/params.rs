@@ -232,14 +232,6 @@ pub struct Physics {
     pub still: f64,
     /// Mass standing per area that halves what moving liquid carries off a cell and how fast its loose solids creep, kg/m²
     pub hold: f64,
-    /// Share of the volume of the loose ground that is pore space (`flow::liquid`)
-    pub porosity: f64,
-    /// Hydraulic conductivity of the loose ground (Darcy's law), m/s
-    pub seep: f64,
-    /// Share of its pores the loose ground holds against gravity, its field capacity (`flow::drain`, `flow::liquid`)
-    pub field: f64,
-    /// Share of its pores the loose ground holds at the wilting point, what no root draws (`cover::wet`)
-    pub wilt: f64,
     /// Depth of the store under the loose ground (the weathered zone of the bed), m
     pub bed_depth: f64,
     /// Share of that store that is pore space that drains (its specific yield)
@@ -271,13 +263,6 @@ impl Physics {
     pub fn gas_factor(&self, x: f64) -> f64 {
         let f = |x: f64| ((x - self.gas_floor) / (x + 2.0 * self.gas_floor)).max(0.0);
         f(x) / f(self.gas_ref)
-    }
-    /// The share of the liquid ground holds for roots that ground whose pores are the share `filled` full holds: none at
-    /// the wilting point (`wilt`), all at field capacity (`field`) and over it, in proportion between (the available
-    /// liquid of soil physics; Saxton and Rawls 2006). Roots draw it (`cover::wet`) and the air takes it up
-    /// (`air::surf::Vapour`, the bucket of Manabe 1969).
-    pub fn available(&self, filled: f64) -> f64 {
-        ((filled - self.wilt) / (self.field - self.wilt)).clamp(0.0, 1.0)
     }
     /// How wet ground with `depth` m of liquid (in its pores and standing) is, 0..1: half at `wet_depth`.
     pub fn wetness(&self, depth: f64) -> f64 {
@@ -366,10 +351,6 @@ impl Default for Physics {
             soft: 0.75,
             still: 0.01,
             hold: 2.0,
-            porosity: 0.4,
-            seep: 3.6e-6,
-            field: 0.6,
-            wilt: 0.25,
             bed_depth: 30.0,
             bed_porosity: 0.02,
             bed_seep: 3e-6,
@@ -432,8 +413,6 @@ impl Config {
         require(p.harden >= 0.0 && p.harden.is_finite(), || format!("harden ({}) must be at least 0", p.harden))?;
         // A taker's coat divides by its insulation (`fauna`).
         require(p.r_air > 0.0 && p.r_coat >= 0.0, || format!("r_air ({}) must be above 0 and r_coat ({}) not below", p.r_air, p.r_coat))?;
-        // A plant draws the liquid between the wilting point and field capacity (`cover::wet` divides by the span).
-        require(p.wilt >= 0.0 && p.wilt < p.field && p.field <= 1.0, || format!("wilt ({}) must be from 0 to below field ({}), field at most 1", p.wilt, p.field))?;
         // The soil's shares inside a cell (`inside`) divide by it.
         require(p.soil_m > 0.0, || format!("soil_m ({}) must be above 0", p.soil_m))?;
         // A channel's speed is its discharge over its width times its depth (`Physics::channel`).

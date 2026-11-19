@@ -277,7 +277,7 @@ fn surface_of(w: &World, s: &Scratch, i: usize, t: f64, molten: impl Fn(usize) -
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
     let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
     let (l, z, [rc, tc]) = layers(w, s, (i, 1.0, 1.0), t, amt, molten, |k| melt[k]);
-    [z, z + l[2] / area, rc, tc, l[0] / area, reflectance(w, s, i, &l), w.cfg.phys.porosity * l[4] / area]
+    [z, z + l[2] / area, rc, tc, l[0] / area, reflectance(w, s, i, &l), w.pores(i).porosity * l[4] / area]
 }
 
 /// The layers of the share `part` of the area of ground node `i` holding the share `ground` of its bed and its fixed
@@ -312,7 +312,7 @@ pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64
 /// over its pores (`curve::Curve::wet`) a column of its layers with that liquid over the share, the rest one whose liquid
 /// is what its pores hold (`column`), by area.
 pub(super) fn reflectance(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64 {
-    let pores = w.cfg.phys.porosity * l[4];
+    let pores = w.pores(i).porosity * l[4];
     let (pore, stands) = (l[2].min(pores), (l[2] - pores).max(0.0));
     let wet = super::curve::with_fill(w, s, i, |f| f.wet(stands));
     if wet == 0.0 || wet == 1.0 {

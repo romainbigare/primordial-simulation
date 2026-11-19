@@ -256,7 +256,7 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
 pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64, drawn: u32) {
     let (seed, cfg) = (seed as u64, island((south, north)));
     let (map, terrain) = worldgen::terrain::island_ground(seed, (size as usize, size as usize), shape_of(drawn));
-    let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), tape::Law::of(&cfg.phys));
+    let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), &cfg.phys, cfg.gravity);
     GROUND.with(|c| *c.borrow_mut() = Some(g));
 }
 

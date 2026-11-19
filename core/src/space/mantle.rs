@@ -38,6 +38,14 @@ pub(super) fn mantle(g: &Grid, (h, drained): (&[f64], &[f64]), (settled, lowers)
     (0..g.n()).map(|k| depth((settled[k], lowers[k]), (slope(g, h, k), drained[k] / g.dy), (settled[k] / years * g.dy, creep))).collect()
 }
 
+/// How long the loose ground of `loose` m has lain, years, where `settled` m settled on it over the last `years` and
+/// its ground lowers at `lowers`, m a year: its depth over how fast it is renewed, from below as fast as the ground
+/// lowers (the bed breaks into it as fast as it is taken away, the module's doc) or from above as fast as it settled,
+/// at least a lowering of `SLOWEST` of `BREAKS` (the mean age of a mixed store, its content over its flux).
+pub(super) fn age(loose: f64, (settled, years): (f64, f64), lowers: f64) -> f64 {
+    loose / lowers.max(settled / years).max(BREAKS * SLOWEST)
+}
+
 /// The slope of heights `h` at sample `k` of grid `g`, rise over run: from the differences across it east to west and
 /// north to south (one-sided at the map's edge).
 fn slope(g: &Grid, h: &[f64], k: usize) -> f64 {

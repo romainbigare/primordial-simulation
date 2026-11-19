@@ -14,8 +14,15 @@ const SATURATE = 0.35; const CONTRAST = 0.15; const LIFT = 0.06;
 // shade's soft ambient light and the brightest lit side; the shaded side cool, the lit side warm.
 const RELIEF = 1.6; const AMBIENT = 0.62; const LIT_TOP = 1.35;
 const SHADE_TINT = vec3f(0.80, 0.88, 1.08); const LIT_TINT = vec3f(1.06, 1.02, 0.92);
-// Bare ground is drawn warmer and lighter (a painted map's earth): its colour times this at full strength.
-const SOIL_TINT = vec3f(1.25, 1.08, 0.82);
+// Bare ground is drawn by its grain (a painted map's earth): its colour times a tint at full strength, the tints of its
+// grains by their shares. Coarse grain (sand) pale and warm: quartz grains bare of coatings; middle grain (silt) warm;
+// fine grain (clay) darker and redder, as the iron oxides that coat it stain it (Schwertmann 1993). Organic matter
+// darkens it towards black-brown, all of the way from `HUMUS_FULL` of its mass: a few per cent of humus makes a soil dark
+// (Schulze and others 1993).
+const SAND_TINT = vec3f(1.9, 1.62, 1.08);
+const SILT_TINT = vec3f(1.25, 1.08, 0.82);
+const CLAY_TINT = vec3f(1.0, 0.5, 0.36);
+const HUMUS_TINT = vec3f(0.40, 0.31, 0.24); const HUMUS_FULL = 0.06;
 
 // Water seen through: the attenuation of the clearest coastal water, its green and blue drawn stretched (Jerlov 1976,
 // type 1 and clearer), so the bed shows to tens of metres, its red half as much as water itself takes it (Pope and
@@ -80,8 +87,14 @@ fn relief_light(x: f32) -> f32 {
   return LIT_TOP - (LIT_TOP - 1.0) * exp(-(k - 1.0) / (LIT_TOP - 1.0));
 }
 
-// What the colour of ground whose share `bare` is bare is multiplied by: its bare part warmer (`SOIL_TINT`).
-fn bare_tint(bare: f32) -> vec3f { return mix(vec3f(1.0), SOIL_TINT, bare * STYLE); }
+// What the colour of ground whose share `bare` is bare is multiplied by: its bare part tinted by its grain `grain`
+// (`Spot.grain`: the shares of coarse and fine grain and of organic matter) as `SAND_TINT` to `HUMUS_TINT` say. The tint
+// is even in the shares, so the mean of patches of grain is the tint of their mean grain.
+fn bare_tint(bare: f32, grain: vec4f) -> vec3f {
+  let mineral = grain.x * SAND_TINT + grain.y * CLAY_TINT + max(1.0 - grain.x - grain.y, 0.0) * SILT_TINT;
+  let tint = mix(mineral, HUMUS_TINT, ease(0.0, HUMUS_FULL, grain.z));
+  return mix(vec3f(1.0), tint, bare * STYLE);
+}
 
 // Linear colour `c` lit by `lit` (`relief_light`), tinted cool in the shade and warm in the light.
 fn relief_tint(c: vec3f, lit: f32) -> vec3f {

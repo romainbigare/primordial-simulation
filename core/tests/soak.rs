@@ -38,20 +38,20 @@ fn world() -> (World, usize, Parts) {
 #[test]
 fn roots_in_full_pores_breathe_only_through_their_gas_spaces() {
     let (w, i, p) = world();
-    let ph = &w.cfg.phys;
+    let (ph, pores) = (&w.cfg.phys, *w.pores(i));
     let breath = cover::breath(&w, &p, i, ph.t_cat);
     assert!(breath > 0.0, "no oxidising gas reaches the roots");
     let (need, loose) = (1.0, 1.0);
-    let soak = |filled: f64| Soak { moist: ph.available(filled), filled, loose, breath, pond: 0.0 };
+    let soak = |filled: f64| Soak { moist: pores.available(filled), filled, loose, pores, breath, pond: 0.0 };
     // What it runs of its light reaction: its activity times the share of its roots that work (`grow::light`).
-    let act = |phi: f32, filled: f64| cover::activity(&herb(phi), ph.available(filled)) * cover::working(phi as f64, need, &soak(filled), ph);
+    let act = |phi: f32, filled: f64| cover::activity(&herb(phi), pores.available(filled)) * cover::working(phi as f64, need, &soak(filled));
     let (few, many) = (0.05, 0.4);
-    assert!(act(few, ph.field) == 1.0 && act(many, ph.field) == 1.0, "at field capacity: {} {}", act(few, ph.field), act(many, ph.field));
+    assert!(act(few, pores.field) == 1.0 && act(many, pores.field) == 1.0, "at field capacity: {} {}", act(few, pores.field), act(many, pores.field));
     let (low, high) = (act(few, 1.0), act(many, 1.0));
     println!("in full pores: {low:.3} with gas share {few}, {high:.3} with {many}; aired {:.3} and {:.3} m", cover::aired(breath, few as f64), cover::aired(breath, many as f64));
     assert!(low < 1.0 && low < high, "wetter ground is no worse: {low} against {high}");
     assert!((low - cover::aired(breath, few as f64) / need).abs() < 1e-12, "{low} of its roots work");
-    let drowned = 1.0 + cover::aired(breath, many as f64) / (loose * ph.porosity);
+    let drowned = 1.0 + cover::aired(breath, many as f64) / (loose * pores.porosity);
     assert_eq!(act(many, drowned * (1.0 + 1e-9)), 0.0, "roots work under liquid deeper than their gas spaces reach");
 }
 
@@ -88,7 +88,7 @@ fn gas_spaces_cost_on_drained_ground_and_pay_on_full_pores() {
             let mut a = testkit::garden(&w, &c, (295.0, 1.0, 200.0, m));
             a.thirst = THIRST;
             if full {
-                a.soak = Soak { moist: 1.0, filled: 1.0, loose: 1.0, breath, pond: 0.0 };
+                a.soak = Soak { moist: 1.0, filled: 1.0, loose: 1.0, breath, pond: 0.0, ..a.soak };
             }
             let _ = cover::live(&w, &mut c, &p, &a, (i, month), &mut counts);
         }

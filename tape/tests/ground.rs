@@ -2,7 +2,7 @@
 //! numbers in every tile that holds it.
 
 use pcore::Config;
-use tape::{unhalf, Ground, Law, GUTTER, TILE};
+use tape::{unhalf, Ground, GUTTER, TILE};
 
 /// Texels along a side of a tile with its gutter.
 const SIDE: usize = TILE + 2 * GUTTER;
@@ -17,7 +17,7 @@ fn ground() -> (Ground, std::ops::RangeInclusive<u8>) {
     let cfg = Config::default();
     let (map, terrain) = worldgen::terrain::island_ground(SEED, (SIDE_SQUARES, SIDE_SQUARES), pcore::space::terrain::Shape::One);
     let depths = tape::depths(&map);
-    (Ground::new(SEED, map, terrain, (cfg.lat_south, cfg.lat_north), Law::of(&cfg.phys)), depths)
+    (Ground::new(SEED, map, terrain, (cfg.lat_south, cfg.lat_north), &cfg.phys, cfg.gravity), depths)
 }
 
 /// The samples about a pond in which its shore is drawn smooth (`tape/src/ground/shore.rs`: the nearest pond within 2,

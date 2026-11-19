@@ -5,10 +5,12 @@
 //! S the slope of the reach about the sample (`bends::Reaches::fall`: from one sample to the next the ground steps),
 //! which a shell also reads alone: the form of the bed (riffles and pools, or steps) follows it.
 //! And the links of its channel (`links`), by which a shell finds the samples up and down it: what runs through a
-//! channel grows from one sample's centre to the next, not in a step at their edge. A function of the samples alone.
+//! channel grows from one sample's centre to the next, not in a step at their edge. And the texture of its loose ground
+//! (`pcore::soil::textures`), which a shell draws its soil by.
 
 use super::bends::Reaches;
 use super::half;
+use pcore::soil::Texture;
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 
@@ -41,11 +43,13 @@ fn links(s: &Samples, k: usize) -> u32 {
 
 /// Of each sample of the reaches `r`, row by row, four 16-bit floats: the depth of its loose ground, m, the largest stone
 /// its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), the slope of its reach (rise
-/// over run; 0 there too) and its channel's links (`links`); then of each sample again the reflectance of the make of its bed (red, green, blue: `colours`, one a
-/// make, `Samples::make`) and a zero: two planes of a texture, one under the other.
-pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]]) -> Vec<u16> {
+/// over run; 0 there too) and its channel's links (`links`); then of each sample again the reflectance of the make of
+/// its bed (red, green, blue: `colours`, one a make, `Samples::make`) and a zero; then of each sample again the shares of
+/// coarse and fine particles and of organic matter of its loose ground (`grain`, one a sample) and a zero: three planes
+/// of a texture, one under the other.
+pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<u16> {
     let s = r.s;
-    let mut out = Vec::with_capacity(8 * s.h.len());
+    let mut out = Vec::with_capacity(12 * s.h.len());
     for k in 0..s.h.len() {
         let slope = if s.to[k] == NONE || s.pond[k] != NONE { 0.0 } else { r.fall(k)[0] };
         let stone = (STONE_M * s.up[k].sqrt() * slope).min(STONE_MOST_M);
@@ -54,6 +58,9 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]]) -> Vec<u16> {
     for &m in &s.make {
         let c = colours.get(m as usize).copied().unwrap_or([0.0; 3]);
         out.extend([half(c[0] as f32), half(c[1] as f32), half(c[2] as f32), 0]);
+    }
+    for t in &grain[..s.h.len()] {
+        out.extend([half(t.coarse as f32), half(t.fine as f32), half(t.organic as f32), 0]);
     }
     out
 }

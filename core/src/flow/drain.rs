@@ -8,8 +8,8 @@
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, range, Scratch};
 use crate::{math::one_minus_exp, solve::sweep::{sweep, Net}, store::{Class, LinkFlux}, World};
 
-/// Liquid over field capacity sinks into the store, at most `seep` a second (Darcy's law under its own weight) and no
-/// more than its room, with its heat, outside the bodies of standing liquid; its fall heats the store (`potential`). It runs after each of the air's steps, which
+/// Liquid over field capacity sinks into the store, at most its conductivity a second (`Pores::seep`, Darcy's law
+/// under its own weight) and no more than its room, with its heat, outside the bodies of standing liquid; its fall heats the store (`potential`). It runs after each of the air's steps, which
 /// bring the rain: the rain would otherwise wait in the pores, darkening the ground (`land::reflectance`), until the
 /// month's liquid step.
 pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
@@ -20,8 +20,8 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
     // The cells where liquid sinks, and the share of their mobile liquid that does.
     let mut sinks = Vec::new();
     for i in (0..n).filter(|&i| !s.basin.is[i]) {
-        let room = p.bed_porosity * p.bed_depth * area[i] - held[i];
-        let sink = (mob.vol[i] - p.field * s.pd[i] * area[i]).min(room).min(p.seep * area[i] * dt);
+        let (room, pores) = (p.bed_porosity * p.bed_depth * area[i] - held[i], w.pores(i));
+        let sink = (mob.vol[i] - pores.field * s.pd[i] * area[i]).min(room).min(pores.seep * area[i] * dt);
         if sink > 0.0 {
             sinks.push((i as u32, sink / mob.vol[i]));
         }
@@ -71,33 +71,37 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
 
 /// Darcy's law through the pores of the loose ground by an explicit sweep over the links `border` (their ends `a` and
 /// `b`, `sweep::sweep`): the potential is the liquid's table,
-/// the capacity its volume per metre of head, and a link passes `seep` x the saturated thickness of its higher end x
-/// width / distance (`pore_net`); over cells of kilometres a liquid step moves a table a thousandth of the way to its
+/// the capacity its volume per metre of head, and a link passes the conductivity x the saturated thickness of its
+/// higher end x width / distance (`pore_net`); over cells of kilometres a liquid step moves a table a thousandth of the way to its
 /// neighbours'. No pores give more than they hold over field capacity. A move takes its share of the mobile liquid
 /// `mob` (of the liquids `liq`) with its heat at the node's temperature. Returns what crosses.
 fn pore_flow(w: &World, s: &Scratch, links: (&[usize], &[u32], &[u32]), (liq, mob): (&[usize], &super::liquid::Mobile), dt: f64) -> Carried {
-    let (p, cells, (_, a, b)) = (w.cfg.phys, w.mesh.cells(), links);
+    let (cells, (_, a, b)) = (w.mesh.cells(), links);
     let (n, area) = (cells.n(), cells.area());
-    let x: Vec<f64> = (0..n).map(|i| table(s, i, p.porosity)).collect();
-    let cap: Vec<f64> = (0..n).map(|i| area[i] * if filled(s, i, p.porosity) { 1.0 } else { p.porosity }).collect();
+    let por = |i: usize| w.pores(i).porosity;
+    let x: Vec<f64> = (0..n).map(|i| table(s, i, por(i))).collect();
+    let cap: Vec<f64> = (0..n).map(|i| area[i] * if filled(s, i, por(i)) { 1.0 } else { por(i) }).collect();
     let g = pore_net(w, s, links, &x, &mob.vol);
-    let free: Vec<f64> = (0..n).map(|i| mob.vol[i] - p.field * s.pd[i] * area[i]).collect();
+    let free: Vec<f64> = (0..n).map(|i| mob.vol[i] - w.pores(i).field * s.pd[i] * area[i]).collect();
     let flux = sweep(&Net { a, b, g: &g, cap: &cap }, &x, dt, &free);
     carried((a, b), &flux, (liq, |q, i| mob.mol[q * n + i]), &mob.vol, |i, _, mol| liquid_heat(w, s, liq, i, mol))
 }
 
 /// The conductance of each link of `links` through the pores, m²/s, as the tables stand at `x` and the mobile liquid
-/// is `vol` m³: `seep` × the saturated thickness of its higher end × width / distance; none for pores at field capacity
-/// (held against gravity).
+/// is `vol` m³: the conductivity of its two ends in series (their harmonic mean) × the saturated thickness of its
+/// higher end × width / distance; none for pores at field capacity (held against gravity).
 fn pore_net(w: &World, s: &Scratch, (border, a, b): (&[usize], &[u32], &[u32]), x: &[f64], vol: &[f64]) -> Vec<f64> {
-    let (p, cells) = (w.cfg.phys, w.mesh.cells());
+    let cells = w.mesh.cells();
     let area = cells.area();
-    let free = |i: usize| vol[i].min(s.pd[i] * area[i]) > p.field * s.pd[i] * area[i];
+    let free = |i: usize| vol[i].min(s.pd[i] * area[i]) > w.pores(i).field * s.pd[i] * area[i];
+    let foot = |i: usize| bottom(s, i, w.pores(i).porosity);
     (border.iter().zip(a.iter().zip(b)))
         .map(|(&l, (&i, &j))| {
             let (i, j) = (i as usize, j as usize);
             let up = if x[i] >= x[j] { i } else { j };
-            let thick = if free(up) { p.seep * (x[up].min(s.z[up] - s.cover[up][2]) - bottom(s, i, p.porosity).max(bottom(s, j, p.porosity))).max(0.0) } else { 0.0 };
+            let (ki, kj) = (w.pores(i).seep, w.pores(j).seep);
+            let seep = 2.0 * ki * kj / (ki + kj).max(f64::MIN_POSITIVE);
+            let thick = if free(up) { seep * (x[up].min(s.z[up] - s.cover[up][2]) - foot(i).max(foot(j))).max(0.0) } else { 0.0 };
             thick * cells.width()[l] / cells.dist()[l]
         })
         .collect()
@@ -192,5 +196,5 @@ fn stores(w: &World, s: &Scratch, tmin: f64) -> Vec<f64> {
 /// Height of the table of the store under ground node `i` holding `vol` m³, m: the bottom of its zone, `bed_depth`
 /// under the loose ground, plus the depth its liquid fills.
 pub(super) fn store_table(w: &World, s: &Scratch, i: usize, vol: f64) -> f64 {
-    bottom(s, i, w.cfg.phys.porosity) - w.cfg.phys.bed_depth + vol / (w.cfg.phys.bed_porosity * w.mesh.cells().area()[i])
+    bottom(s, i, w.pores(i).porosity) - w.cfg.phys.bed_depth + vol / (w.cfg.phys.bed_porosity * w.mesh.cells().area()[i])
 }

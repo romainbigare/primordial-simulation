@@ -11,7 +11,9 @@ struct Earth {
   // the liquid, m; the bytes of a layer view over which an empty spot fades into a full one.
   look: vec4f,
   // What is drawn: the view (0 the Earth's colours, 1 the true colour, 2 a layer over them); the stops of the layer's
-  // ramp; and the sea's level, m (the live map: the lowest body's); w is not read.
+  // ramp; the sea's level, m (the live map: the lowest body's); and where the layer is of the soil (drawn on dry
+  // ground alone, `in_view_of`) 1, or where the live map finds it at each point (land.wgsl `layer_at`) 2 the share of
+  // the pores the soil's liquid fills, 3 the coarse grain's share, 4 the fine grain's.
   view: vec4f,
   // Where the map drawn lies in the world: its top-left corner and its size, m.
   place: vec4f,
@@ -133,6 +135,9 @@ struct Spot {
   moved: f32, driftwood: f32,
   // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
   at: vec2f, e: f32,
+  // Its loose ground's grain: the shares of coarse and of fine grain, of organic matter, and a zero (0: middle grain
+  // alone, as where none is known); and the share of its pores the soil's liquid fills, 0..1 (land.wgsl `State`).
+  grain: vec4f, filled: f32,
   // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
   // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
   // plants cover there on their mean (cover_field.wgsl `CoverAt.low`).
@@ -145,9 +150,9 @@ struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 // where it shows; snow `snow` over it; its stones, as far as they stand out of the snow; and over all the plants that
 // stand out of it (its cover, as far as
 // liquid over their roots leaves them on the bed, draw.wgsl `stands_in`; the cover's field holds how the snow buries them and how the bed
-// holds them). The share of it that is bare, its map class, and the share of its bare part that takes the soil's
-// warmth (`soil`: a beach's sand keeps its own colour).
-struct Ground { rgb: vec3f, bare: f32, kind: u32, warm: f32 }
+// holds them). The share of it that is bare, its map class, the share of its bare part that takes the soil's tint
+// (`soil`: a beach's sand keeps its own colour), and its loose ground's grain (`Spot.grain`).
+struct Ground { rgb: vec3f, bare: f32, kind: u32, warm: f32, grain: vec4f }
 // The share of the plants of spot p that the waves strip where their swash soaks the ground `soak` (`swash_of`; all
 // of it under the liquid): as much as its waves are high against the sea's.
 fn waves_strip(p: Spot, soak: f32) -> f32 { return min(soak / SWASH_DRY, 1.0) * waves_of(p.sea, p.fetch).x / SEA_WAVE.x; }
@@ -157,12 +162,13 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.rgb = p.ground;
   g.kind = BARE;
   g.warm = 1.0;
+  g.grain = p.grain;
   // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn. The
   // waves' swash (`swash_of`) strips the plants where it runs as far as its waves are high against the sea's: the sea's
   // swash bares its beach, a lake's small waves leave its plants standing to the water.
   let stripped = waves_strip(p, p.swash.x);
   let plants = p.cover.a * stands_in(p.depth, 0.0) * (1.0 - stripped);
-  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0); }
+  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0, p.grain); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
   // In the style a beach of sand is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`); of pebbles,
@@ -179,7 +185,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   let steep = p.slope / earth.look.x;
   var bed = p.bed;
   if (styled()) {
-    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet) * soil_detail(p);
+    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet, p.grain) * soil_detail(p);
     // Bed the waves' swash wets takes the one wet look of rock (stone.wgsl `wet_stone`) as far as it is soaked.
     if (p.rock > 0.0) {
       bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade) * rock_detail(p.e);
@@ -254,9 +260,9 @@ fn swash_of(over: f32, waves: vec2f, slope: f32, at: vec2f, e: f32, snow: f32) -
 }
 
 // Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked (and in the
-// style warmer as far as it takes warmth, style.wgsl `bare_tint`).
+// style tinted by its grain as far as it takes the tint, style.wgsl `bare_tint`).
 fn soil(g: Ground, s: f32, lit: f32) -> vec3f {
-  let tint = select(vec3f(1.0), bare_tint(g.bare * g.warm), styled());
+  let tint = select(vec3f(1.0), bare_tint(g.bare * g.warm, g.grain), styled());
   return lit_by(g.rgb * (1.0 - WET_DARK * s * g.bare) * tint, lit);
 }
 
@@ -285,7 +291,7 @@ fn reads_ground(p: Spot) -> bool {
 // snow over the liquid, without it under the liquid (frozen liquid lies on the surface); black where it is not read.
 // Each pixel's colours read it at one place in the code (land.wgsl `fs`), so its rock and stones are compiled once.
 fn ground_for(p: Spot, running: bool) -> Ground {
-  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE, 1.0); }
+  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE, 1.0, p.grain); }
   return ground_of(p, select(p.snow, 0.0, p.depth > 0.0 || running));
 }
 
@@ -403,7 +409,8 @@ fn puddles(p: Spot, film: f32) -> Puddle {
 
 // Shaded colour `c` in the view drawn, as the screen's bytes (0..255), where the byte of the layer it draws is `o`
 // (0..1) and the true colour is `truth` (reflectance, 0..1): the Earth's colours; the true colour, shaded; or a layer's
-// ramp over a little of the Earth's colours (where the layer is empty, the Earth's colours faded).
+// ramp over a little of the Earth's colours (where the layer is empty, the Earth's colours faded; a layer of the soil,
+// `earth.view.w` from 1, is empty over standing liquid).
 fn in_view_of(c: Shaded, o: f32, truth: vec3f) -> vec3f {
   var rgb = 255.0 * srgb(c.rgb);
   if (styled()) {
@@ -411,7 +418,9 @@ fn in_view_of(c: Shaded, o: f32, truth: vec3f) -> vec3f {
   } else if (earth.view.x == 1.0) {
     rgb = 255.0 * srgb(truth * clamp(1.0 + (c.m - 1.0) * 0.7, 0.55, 1.4));
   } else if (earth.view.x == 2.0) {
-    let full = clamp(255.0 * o / earth.look.w, 0.0, 1.0);
+    // A layer found at each point is a share known everywhere on dry ground: none of it is a value, not an empty point.
+    var full = select(clamp(255.0 * o / earth.look.w, 0.0, 1.0), 1.0, earth.view.w >= 2.0);
+    if (earth.view.w >= 1.0 && c.kind <= LAKE) { full = 0.0; }
     let grey = dot(rgb, vec3f(0.3, 0.59, 0.11));
     let mo = 0.72 * (0.75 + 0.25 * c.m);
     rgb += ((rgb * 0.5 + grey * 0.5) * 0.6 + 100.0 - rgb) * (1.0 - full) + (ramp_layer(o) * mo - rgb * 0.72) * full;

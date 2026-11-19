@@ -1,5 +1,5 @@
 import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
-import { CLASSES, mapFields, rampFor, rampCss } from './earth';
+import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
@@ -13,6 +13,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const LABELS: Record<string, string> = {
   t_ground: 'Ground temperature', t_air: 'Air temperature', rain: 'Rain', vapor: 'Vapor', absorber: 'Absorber',
   depth: 'Liquid depth', flux: 'River flux', catch: 'Catchment', loose: 'Loose sediment', wet: 'Ground wetness', ice: 'Ice', z: 'Elevation',
+  coarse: 'Sand (coarse grain)', fine: 'Clay (fine grain)', organic: 'Organic matter', conduct: 'Soil conductivity',
+  avail: 'Available water', filled: 'Soil water (pores filled)',
   seeds: 'Seeds on the ground', grown: 'Growth last year', takers: 'Takers',
 };
 const ORDER = Object.keys(LABELS);
@@ -154,7 +156,7 @@ function repaint(): void {
 
 /** What the map draws: the view or the layer shown. */
 function mapLook(): MapLook {
-  return { mode: layer ? 'layer' : view === 'true' ? 'true' : 'earth', layer: layer ?? '', ramp: layer ? rampFor(layer) : [] };
+  return { mode: layer ? 'layer' : view === 'true' ? 'true' : 'earth', layer: layer ?? '', ramp: layer ? rampFor(layer) : [], ground: GROUND_LAYERS.get(layer ?? '') ?? 0 };
 }
 
 function setLayer(n: string | null): void {

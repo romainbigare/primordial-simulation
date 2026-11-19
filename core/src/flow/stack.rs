@@ -42,7 +42,7 @@ impl Column {
     pub(super) fn of(w: &World, s: &Scratch, x: &[f64; LAYERS], i: usize) -> Column {
         let area = w.mesh.cells().area()[i];
         let bed = w.base_z + x[3] / area;
-        Column { bed, z: bed + x[4] / area, area, por: w.cfg.phys.porosity, loose: x[PORED], dry: s.dry(i), vol: x[5] }
+        Column { bed, z: bed + x[4] / area, area, por: w.pores(i).porosity, loose: x[PORED], dry: s.dry(i), vol: x[5] }
     }
     /// What its pores hold and what stands over them, m³.
     fn parts(&self) -> [f64; 2] {

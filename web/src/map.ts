@@ -73,7 +73,7 @@ export class MapView {
   /** The map's squares (a tape's map, and the classes of the live map's squares), and the live map. */
   private map: FieldWindow | null = null;
   private land: Land | null = null;
-  private look: MapLook = { mode: 'earth', layer: '', ramp: [] };
+  private look: MapLook = { mode: 'earth', layer: '', ramp: [], ground: 0 };
   /** The map's classes asked for: what waits for them, and the texture they are drawn into. */
   private asked: ((cls: Uint8Array) => void)[] = [];
   private classes: Texture | null = null;
