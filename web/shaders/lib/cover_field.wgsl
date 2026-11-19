@@ -123,16 +123,21 @@ const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const RE
 const REED_HERBS = 0.1;
 // A set of tufts drawn one by one (detail.wgsl `sward_tufts`): its first sprite and how many (sprites.wgsl), its
 // lattice's cell, m, the share of a tuft's box its blades cover and how many times as tall as wide the box is (measured
-// on the sprites), the cells south of its own a tuft reaches up into (its height), and its stream of the world's random
-// numbers (and the next). The sward's tufts in cells `TUFT_CELL_M` m wide; reeds near stand as tall tufts in cells
-// `REED_CELL_M` m wide, in clumps over noise `REED_CLUMP_M` across, `REED_CLUMPS` of the reed ground (tall marsh grasses
-// grow in clonal clumps: from memory).
-struct Tufts { first: i32, n: i32, cell_m: f32, covers: f32, aspect: f32, south: i32, k: i32 }
-const TUFT_CELL_M = 0.08; const TUFT_COVERS = 0.14; const TUFT_ASPECT = 0.81; const TUFT_SOUTH = 2;
-const REED_CELL_M = 0.6; const REED_COVERS = 0.18; const REED_ASPECT = 2.6; const REED_SOUTH = 5;
-const REED_CLUMP_M = 2.5; const REED_CLUMPS = 0.6;
-fn grass_tufts() -> Tufts { return Tufts(TUFT_FROM, TUFT_N, TUFT_CELL_M, TUFT_COVERS, TUFT_ASPECT, TUFT_SOUTH, 170); }
-fn reed_tufts() -> Tufts { return Tufts(REED_FROM, REED_N, REED_CELL_M, REED_COVERS, REED_ASPECT, REED_SOUTH, 172); }
+// on the sprites), the cells south of its own a tuft reaches up into (its height), its stream of the world's random
+// numbers (and the next), its shadow (how dark, its middle how many widths down the sun, how many times the tuft's
+// own size), and its tips' colour and the share of its tufts that carry them. The sward's tufts in cells `TUFT_CELL_M`
+// m wide; reeds near stand as tall tufts in cells `REED_CELL_M` m wide, straw-olive (`REED_STEM` of the way to
+// `REED_STRAW` from the sward's colour), `REED_HEADS` of them with brown seed heads (`REED_HEAD`), over a longer
+// shadow, `REED_STANDS` of a clump's cells holding one (so its stems stand apart), in clumps with a sharp edge over
+// noise `REED_CLUMP_M` across, about `REED_CLUMPS` of the reed ground (tall marsh grasses grow 1.5 to 3 m tall in
+// clonal clumps: from memory).
+struct Tufts { first: i32, n: i32, cell_m: f32, covers: f32, aspect: f32, south: i32, k: i32, shadow: vec3f, tip: vec4f }
+const TUFT_CELL_M = 0.08; const TUFT_COVERS = 0.14; const TUFT_ASPECT = 0.81; const TUFT_SOUTH = 2; const TUFT_SHADOW = vec3f(0.3, 0.25, 1.0);
+const REED_CELL_M = 0.9; const REED_COVERS = 0.18; const REED_ASPECT = 2.6; const REED_SOUTH = 6; const REED_SHADOW = vec3f(0.4, 0.5, 1.3);
+const REED_STRAW = vec3f(0.42, 0.38, 0.17); const REED_STEM = 0.8; const REED_HEAD = vec3f(0.16, 0.09, 0.05); const REED_HEADS = 0.4;
+const REED_CLUMP_M = 2.5; const REED_CLUMPS = 0.4; const REED_CLUMP_EDGE = 0.1; const REED_STANDS = 0.5;
+fn grass_tufts() -> Tufts { return Tufts(TUFT_FROM, TUFT_N, TUFT_CELL_M, TUFT_COVERS, TUFT_ASPECT, TUFT_SOUTH, 170, TUFT_SHADOW, vec4f(0.0)); }
+fn reed_tufts() -> Tufts { return Tufts(REED_FROM, REED_N, REED_CELL_M, REED_COVERS, REED_ASPECT, REED_SOUTH, 172, REED_SHADOW, vec4f(REED_HEAD, REED_HEADS)); }
 // How much a place holds reeds: on soaked ground and in the water's edge band (`REED_WET`, `REED_BAND_M`).
 fn reed_place(b: Beneath) -> f32 {
   return max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
@@ -310,8 +315,8 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   }
   // Near, its reeds stand in clumps over it as tall tufts (`reed_tufts`); far, they are its tint alone.
   if (reeds > 0.0) {
-    let clumps = ease(1.0 - 2.0 * REED_CLUMPS, 1.0 - REED_CLUMPS, noise_l(lat_turned(REED_CLUMP_M, vec2f(0.3)), 86).x);
-    let r = sward_tufts(plain, c, e, reeds * clumps, reed_tufts());
+    let clumps = ease(1.0 - 2.0 * REED_CLUMPS - REED_CLUMP_EDGE, 1.0 - 2.0 * REED_CLUMPS + REED_CLUMP_EDGE, noise_l(lat_turned(REED_CLUMP_M, vec2f(0.3)), 86).x);
+    let r = sward_tufts(mix(plain, REED_STRAW, REED_STEM), c, e, REED_STANDS * reeds * clumps, reed_tufts());
     c = mix(c, r.rgb, r.a);
   }
   let near = shows_at(FLOWERS_GONE_M, e);
