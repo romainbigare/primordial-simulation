@@ -893,8 +893,8 @@ land's): one rule for where a plant's roots work, so a kind of few gas spaces ho
 liquid and one of many stands out into it as far as its gas reaches down its roots, as swamp trees and emergent herbs
 stand in water to a depth their kind tolerates (Kozlowski 1997). A slot founded by seeds takes, at its first month, the
 line of all the ground its kind may hold (`Shore::found`: the highest level of its parts that hold liquid less its
-reach, no higher than its highest ground, so a slot founded where all of it lies deeper by then holds that and lives
-there on its store; `cover::UNSET` till then). The share of the cell's ground above its line is the slot's (`Cover::stands`), and
+reach; where no ground lies above a slot's line, founded so or worn below it, the slot holds the cell's highest
+ground, `Shore::holding`, and lives there on its store where all of it lies deeper than its reach; `cover::UNSET` till then). The share of the cell's ground above its line is the slot's (`Cover::stands`), and
 of it the share whose loose ground holds its roots (`Cover::rooted`): their product (`Cover::on`) is the ground its
 plants hold, taken as nested over the slots as the loose depths are (`canopy::rings`; the ground under the liquid is
 the cell's low ground). Its leaves layer over that ground (its light and its shade), its plants find their room on it

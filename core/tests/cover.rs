@@ -632,6 +632,9 @@ fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_
         f.share > 0.0 && f.airless == 1.0 && s.loose > 0.0
     };
     let under = (0..area.len()).find(|&j| j != shore && deep(j)).expect("a cell all under the liquid");
+    // A line over all the ground (the ground worn below it) holds the cell's highest ground.
+    let over = cover::footing(&w, under, TREE.genes[cover::GAS] as f64, w.cfg.phys.root_least, &cover::soak(&w, &p, under, w.g(p.liquid, under)).1, Some(1e6));
+    assert!(over.share > 0.0 && over.work.is_finite(), "a line over all the ground: {over:?}");
     let mut c = w.life.cover(shore).clone();
     let x = c.held().next().expect("the stand");
     let kg = c.kg(&mm, x);
