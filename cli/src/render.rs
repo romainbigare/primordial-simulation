@@ -52,6 +52,8 @@ struct Look<'a> {
     green: Vec<f64>,
     wet: Vec<f64>,
     liquid_m3: f64,
+    /// What each cell's ground holds of dead matter and minerals, and how fast its frame rots (`soil::grounds`).
+    ground: Vec<pcore::soil::Ground>,
 }
 
 impl<'a> Look<'a> {
@@ -60,7 +62,8 @@ impl<'a> Look<'a> {
         let wet = pcore::flow::means(w, &cells).map_or(vec![0.0; cells.len()], |m| m.iter().map(|m| m.pore / m.pores.max(1e-9)).collect());
         let liquid = pcore::life::Parts::of(&w.chem).map_or(0, |p| p.liquid);
         let liquid_m3 = w.chem.molar_volume(liquid, pcore::chem::Phase::Liquid);
-        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3 }
+        let ground = pcore::soil::grounds(w).unwrap_or_else(|| vec![Default::default(); cells.len()]);
+        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3, ground }
     }
 
     /// The minerals the ground of cell `i` holds (`Chemistry::minerals`), mol/m².
@@ -94,9 +97,9 @@ impl<'a> Look<'a> {
             // What rises, mm a year.
             4 => ramp(&[(0.0, [240, 235, 220]), (300.0, [200, 210, 120]), (700.0, [70, 160, 90]), (1200.0, [20, 90, 70])], self.mm_a_year(w.evap[i] as f64)),
             // Its slow organic matter, kg/m², on a log scale: 0.01 pale, 10 black-brown.
-            9 => ramp(&[(-2.0, [235, 225, 200]), (-1.0, [180, 150, 100]), (0.0, [100, 70, 40]), (1.0, [30, 20, 10])], pcore::soil::ground(w, i).slow.max(1e-9).log10()),
+            9 => ramp(&[(-2.0, [235, 225, 200]), (-1.0, [180, 150, 100]), (0.0, [100, 70, 40]), (1.0, [30, 20, 10])], self.ground[i].slow.max(1e-9).log10()),
             // How fast its dead frame rots, a year, on a log scale: 0.01 blue (peat), 1 orange.
-            10 => ramp(&[(-2.0, [30, 50, 120]), (-1.0, [100, 150, 170]), (-0.5, [220, 210, 150]), (0.0, [230, 120, 40])], pcore::soil::ground(w, i).rot.max(1e-9).log10()),
+            10 => ramp(&[(-2.0, [30, 50, 120]), (-1.0, [100, 150, 170]), (-0.5, [220, 210, 150]), (0.0, [230, 120, 40])], self.ground[i].rot.max(1e-9).log10()),
             // Its erodibility against a loam's, on a log scale: a thirtieth dark, a loam's yellow, four times red.
             8 => ramp(&[(-1.5, [40, 40, 80]), (-0.5, [90, 140, 170]), (0.0, [240, 220, 120]), (0.6, [200, 40, 30])], w.soil[i].texture.erodibility().max(1e-9).log10()),
             // The minerals the ground holds, mol/m², on a log scale: 1e-3 pale, 1 dark green.

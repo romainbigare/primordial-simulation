@@ -9,7 +9,7 @@ mod pores;
 mod texture;
 
 pub use exchange::dissolved;
-pub use organic::{ground, Ground};
+pub use organic::{grounds, Ground};
 pub use pores::Pores;
 pub use texture::{samples, textures};
 
