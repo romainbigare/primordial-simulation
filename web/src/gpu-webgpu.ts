@@ -15,6 +15,9 @@ const UNIFORM_BYTES = 1024;
 const TILE_ANISOTROPY = 4;
 /** Rows copied out of a texture start at multiples of this many bytes (WebGPU's rule). */
 const ROW_ALIGN = 256;
+/** The canvas's format: that of the textures the map is drawn into below the screen's pixels (map.ts `MAP_TARGET`),
+ * which every WebGPU canvas takes, so one pipeline of a program draws into both and none is made twice. */
+const CANVAS_FORMAT: GPUTextureFormat = 'rgba8unorm';
 
 class WebGpuTexture implements Texture {
   constructor(readonly w: number, readonly h: number, readonly layers: number, readonly mips: number, readonly format: Format,
@@ -156,7 +159,6 @@ export async function openWebGpu(canvas: HTMLCanvasElement): Promise<Gpu | null>
   const device = adapter && await adapter.requestDevice().catch(() => null);
   const ctx = device && canvas.getContext('webgpu') as GPUCanvasContext | null;
   if (!device || !ctx) return null;
-  const format = navigator.gpu.getPreferredCanvasFormat();
-  ctx.configure({ device, format, alphaMode: 'opaque' });
-  return new WebGpu(adapter!, device, ctx, format);
+  ctx.configure({ device, format: CANVAS_FORMAT, alphaMode: 'opaque' });
+  return new WebGpu(adapter!, device, ctx, CANVAS_FORMAT);
 }
