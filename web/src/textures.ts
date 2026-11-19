@@ -5,7 +5,7 @@
 // marks over the map (`draw`), each plant standing up from its foot, drawn from its rendered model.
 // Each lattice lies fixed in the world, one mark a cell, so the marks hold while the camera moves, and a pan or a zoom
 // shows them at once.
-import { Draw, Gpu, Pass, Texture, Uniforms } from './gpu';
+import { Draw, Format, Gpu, Pass, Texture, Uniforms } from './gpu';
 import { FIELD, Kinds, PLANES_DOWN, half } from './canopy';
 import { LATTICES, REACH, ROWS_MOST, STAND } from './lattices';
 import { groundDetail } from './detail';
@@ -18,6 +18,8 @@ const MARK_MARGIN = Math.max(...REACH), MARK_SPARE = 1;
 /** The words a mark is kept in, a texture each (lib/cells.wgsl `MARK_WORDS`), and their bindings; and the binding of the
  * cells whose marks reach each cell (lib/cells.wgsl `marks_reach`). */
 const MARK_BINDINGS = [5, 6, 7, 22], REACH_BINDING = 23;
+/** The format of the textures the marks are decided into (a byte a channel: lib/cells.wgsl `mark_word`). */
+const MARKS_FORMAT: Format = 'rgba8unorm';
 /** A mark narrower than this many pixels of the screen is not drawn as a thing (lib/draw.wgsl `THING_PX`): a lattice
  * none of whose marks is as wide is not drawn as marks. */
 const THING_LEAST_PX = 4;
@@ -101,7 +103,7 @@ export class CoverMarks {
     const cols = Math.max(...grids.map(g => g.cells.cols)), was = this.marksTex[0];
     if (!was || was.w < cols || was.h < row) {
       [...this.marksTex, ...(this.reachTex ? [this.reachTex] : [])].forEach(t => gpu.drop(t));
-      const made = () => gpu.texture(Math.max(cols, was?.w ?? 0), Math.max(row, was?.h ?? 0), 'rgba8unorm', 1, 1, true);
+      const made = () => gpu.texture(Math.max(cols, was?.w ?? 0), Math.max(row, was?.h ?? 0), MARKS_FORMAT, 1, 1, true);
       this.marksTex = MARK_BINDINGS.map(made);
       this.reachTex = made();
     }
@@ -119,6 +121,13 @@ export class CoverMarks {
     const decided = { ...binds, ...Object.fromEntries(MARK_BINDINGS.map((b, word) => [b, this.marksTex[word]])) };
     cellsOf(gpu.pass(this.reachTex!), 'reach', decided);
     this.decided = { ...decided, [REACH_BINDING]: this.reachTex! };
+  }
+
+  /** Make ahead (`Gpu.warm`) the programs that decide the marks (into their textures) and draw them (over the map's
+   * `targets`). */
+  warm(gpu: Gpu, targets: (Format | null)[]): void {
+    for (const name of ['marks', 'reach']) gpu.warm(name, MARKS_FORMAT, false);
+    for (const t of targets) gpu.warm('cover', t, true);
   }
 
   /** Draw marks `m` in pass `p` on `gpu`, as decided before the pass (`prepare`). */

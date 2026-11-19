@@ -22,7 +22,8 @@ const SWARD_LAYER = 3; const FLOWER_LAYER = 4; const SWARD_FIRST = 5; const STAN
 // holds them and the mean depth of loose ground their roots need, m (the core's: `Cover::rooted`, `Cover::need`).
 const TALL_LAYER = 7; const ROOTED_LAYER = 8; const NEED_LAYER = 9;
 // Of each lattice: its marks' mean width, m (canopy.ts `FIELD.wide`), and the share of the ground its shadows fall on
-// (`FIELD.shade`), which they darken by `FIELD_SHADOW` (canopy.ts `CROWN_SHADOW`).
+// (`FIELD.shade`), which they darken by `FIELD_SHADOW` (canopy.ts `CROWN_SHADOW`); in its fourth number the share of
+// the ground under crowns whose leaves fall this month (canopy.ts `leavesFalling`).
 const WIDE_LAYER = 10; const SHADE_LAYER = 11; const FIELD_SHADOW = 0.42;
 // The sward and the low lattices as one layer (canopy.ts `lowOf`), drawn in their place where a pixel takes
 // `LOW_FAR_E` m and more (where their detail no longer shows: no swathes, blades, tufts or flowers past a metre a
@@ -66,8 +67,9 @@ const CANOPY_SNOW = 0.35;
 // (rock.wgsl `loose_seen`) and that depth's change across a pixel, m; the share snow covers and the snow's depth, m.
 struct Beneath { soaked: f32, over: f32, slope: f32, loose: f32, loose_px: f32, snow: f32, snow_m: f32 }
 
-// The cover's field at a point, premultiplied, and the share the trees' crowns close over the ground there.
-struct CoverAt { cover: vec4f, canopy: f32 }
+// The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; and the share
+// of the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month.
+struct CoverAt { cover: vec4f, canopy: f32, shed: f32 }
 
 // A square whose kinds' roots hold everywhere has its mean rooted share this near 1: no point of it limits them.
 const ROOTED_ALL = 0.999;
@@ -119,6 +121,23 @@ const REED_WET = 0.85; const REED_BAND_M = 5.0; const REED_FILL = 0.95; const RE
 // Reeds are the herbs' own plants: they stand dense as far as the herbs are there to make them, fully where the herbs
 // cover `REED_HERBS` of the ground; a trace of herbs makes a trace of reeds, not a belt.
 const REED_HERBS = 0.1;
+// A set of tufts drawn one by one (detail.wgsl `sward_tufts`): its first sprite and how many (sprites.wgsl), its
+// lattice's cell, m, the share of a tuft's box its blades cover and how many times as tall as wide the box is (measured
+// on the sprites), the cells south of its own a tuft reaches up into (its height), its stream of the world's random
+// numbers (and the next), its shadow (how dark, its middle how many widths down the sun, how many times the tuft's
+// own size), and its tips' colour and the share of its tufts that carry them. The sward's tufts in cells `TUFT_CELL_M`
+// m wide; reeds near stand as tall tufts in cells `REED_CELL_M` m wide, straw-olive (`REED_STEM` of the way to
+// `REED_STRAW` from the sward's colour), `REED_HEADS` of them with brown seed heads (`REED_HEAD`), over a longer
+// shadow, `REED_STANDS` of a clump's cells holding one (so its stems stand apart), in clumps with a sharp edge over
+// noise `REED_CLUMP_M` across, about `REED_CLUMPS` of the reed ground (tall marsh grasses grow 1.5 to 3 m tall in
+// clonal clumps: from memory).
+struct Tufts { first: i32, n: i32, cell_m: f32, covers: f32, aspect: f32, south: i32, k: i32, shadow: vec3f, tip: vec4f }
+const TUFT_CELL_M = 0.08; const TUFT_COVERS = 0.14; const TUFT_ASPECT = 0.81; const TUFT_SOUTH = 2; const TUFT_SHADOW = vec3f(0.3, 0.25, 1.0);
+const REED_CELL_M = 0.9; const REED_COVERS = 0.18; const REED_ASPECT = 2.6; const REED_SOUTH = 6; const REED_SHADOW = vec3f(0.4, 0.5, 1.3);
+const REED_STRAW = vec3f(0.42, 0.38, 0.17); const REED_STEM = 0.8; const REED_HEAD = vec3f(0.16, 0.09, 0.05); const REED_HEADS = 0.4;
+const REED_CLUMP_M = 2.5; const REED_CLUMPS = 0.4; const REED_CLUMP_EDGE = 0.1; const REED_STANDS = 0.5;
+fn grass_tufts() -> Tufts { return Tufts(TUFT_FROM, TUFT_N, TUFT_CELL_M, TUFT_COVERS, TUFT_ASPECT, TUFT_SOUTH, 170, TUFT_SHADOW, vec4f(0.0)); }
+fn reed_tufts() -> Tufts { return Tufts(REED_FROM, REED_N, REED_CELL_M, REED_COVERS, REED_ASPECT, REED_SOUTH, 172, REED_SHADOW, vec4f(REED_HEAD, REED_HEADS)); }
 // How much a place holds reeds: on soaked ground and in the water's edge band (`REED_WET`, `REED_BAND_M`).
 fn reed_place(b: Beneath) -> f32 {
   return max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
@@ -290,9 +309,15 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
   var seen = s;
   let thin = 1.0 - smoothstep(TUFTS_THICK.x, TUFTS_THICK.y, s);
   if (thin > 0.0) {
-    let t = sward_tufts(plain, c, e, s);
+    let t = sward_tufts(plain, c, e, s, grass_tufts());
     c = mix(c, t.rgb, thin);
     seen = mix(s, t.a, thin);
+  }
+  // Near, its reeds stand in clumps over it as tall tufts (`reed_tufts`); far, they are its tint alone.
+  if (reeds > 0.0) {
+    let clumps = ease(1.0 - 2.0 * REED_CLUMPS - REED_CLUMP_EDGE, 1.0 - 2.0 * REED_CLUMPS + REED_CLUMP_EDGE, noise_l(lat_turned(REED_CLUMP_M, vec2f(0.3)), 86).x);
+    let r = sward_tufts(mix(plain, REED_STRAW, REED_STEM), c, e, REED_STANDS * reeds * clumps, reed_tufts());
+    c = mix(c, r.rgb, r.a);
   }
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
@@ -359,7 +384,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
-  return CoverAt(dst, min(closed * hold[STANDS], 1.0));
+  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w);
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_thing`

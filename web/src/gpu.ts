@@ -34,15 +34,51 @@ export function programs(): Record<string, Program> {
 /** The share of the metres a pixel takes that a program made for draws seen from at least so many metres (web/shade)
  * is chosen within, so that every pixel of the draw takes at least that many (they differ by a pixel's rounding). */
 const LEAST_SPARE = 0.99;
-/** Of program `name`, the one made for draws whose pixels take at least the most metres no more than `e`, the metres a
- * pixel of the draw takes (`name` itself where none is). */
-export function seenFrom(name: string, e: number): string {
-  let best = name, most = 0;
-  for (const key of Object.keys(programs())) {
-    const [base, m] = key.split(':');
-    if (base === name && m !== undefined && +m <= e * LEAST_SPARE && +m > most) { best = key; most = +m; }
+/** Of program `name`, those that may draw where a pixel of the draw takes `e` metres, the best first: those made for
+ * draws whose pixels take at least no more than `e` metres (`programs`), the most first, and `name` itself last. Each
+ * draws the same picture there (draw.wgsl `LEAST_E`: what one leaves out cannot show at `e`); the first does least. */
+export function madeFor(name: string, e: number): string[] {
+  const fit = Object.keys(programs()).map(key => [key, key.split(':')] as const)
+    .filter(([, [base, m]]) => base === name && m !== undefined && +m <= e * LEAST_SPARE)
+    .sort((x, y) => +y[1][1] - +x[1][1]).map(([key]) => key);
+  return [...fit, name];
+}
+
+/** Of program `name`, the one a draw into `target` (null: the canvas), over what is there or not (`blend`), where a pixel
+ * takes `e` metres, draws with: the best of those that may (`madeFor`) that is made, so a draw never waits for a
+ * program while one that draws the same picture is made; the best is made next (`Gpu.warm`). With none made, the best,
+ * made at once. */
+export function seenFrom(gpu: Gpu, name: string, e: number, target: Format | null, blend: boolean): string {
+  const may = madeFor(name, e);
+  gpu.warm(may[0], target, blend, true);
+  return may.find(key => gpu.ready(key, target, blend)) ?? may[0];
+}
+
+/** The programs a back end makes in the background (`Gpu.warm`): one at a time, in the order asked, each by `make`
+ * (done when its promise is), none that is made already (`made`). */
+export class Warming {
+  private queue: string[] = [];
+  private making: string | null = null;
+  constructor(private make: (key: string) => Promise<void>, private made: (key: string) => boolean) {}
+  /** Make `key` after those asked before it, or before all (`first`). */
+  ask(key: string, first = false): void {
+    if (this.made(key) || this.making === key) return;
+    const at = this.queue.indexOf(key);
+    if (at >= 0 && !first) return;
+    if (at >= 0) this.queue.splice(at, 1);
+    if (first) this.queue.unshift(key); else this.queue.push(key);
+    this.next();
   }
-  return best;
+  /** Forget all asked (a lost context). */
+  clear(): void { this.queue = []; }
+  private next(): void {
+    if (this.making !== null) return;
+    let key = this.queue.shift();
+    while (key !== undefined && this.made(key)) key = this.queue.shift();
+    if (key === undefined) return;
+    this.making = key;
+    this.make(key).catch(e => console.error(`gpu: ${key}: ${e}`)).finally(() => { this.making = null; this.next(); });
+  }
 }
 
 /** The bindings a program reads, by name of its GLSL global: the numbers of those that are uniform blocks, textures
@@ -90,6 +126,12 @@ export interface Gpu {
   /** Draw into `target` (null: the canvas, sized to its pixels), first filling it with `clear` (r, g, b, a, 0..1) if given,
    * and only inside `clip` (x, y, w, h px from its top-left corner) if given. */
   pass(target: Texture | null, clear?: number[], clip?: number[]): Pass;
+  /** Make program `name` for draws into `target` (null: the canvas) over what is there or not (`blend`) in the
+   * background, one program at a time in the order asked (`first`: before all others), so its first draw need not
+   * wait for it. */
+  warm(name: string, target: Format | null, blend: boolean, first?: boolean): void;
+  /** Whether program `name` is made for such draws (a draw with one that is not waits until it is). */
+  ready(name: string, target: Format | null, blend: boolean): boolean;
   /** Send what was drawn to the GPU. */
   submit(): void;
   /** Once the GPU has finished all that was sent. */
