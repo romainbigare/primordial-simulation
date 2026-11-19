@@ -100,24 +100,23 @@ pub fn surroundings(w: &mut World) {
     if w.time.is_multiple_of(w.cfg.calendar().month) || w.life.env.len() != n || w.life.land.len() != n {
         crate::flow::state(w, true);
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
-        (w.life.land, w.life.wet) = grounds_now(w);
+        (w.life.land, w.life.levels) = grounds_now(w);
     }
 }
 
-/// The land of every cell, m², and its ground under the liquid that stands over its pores by the depth of the liquid
-/// over it (`flow::wet_bands` at the bands of `cover::DEPTHS`): of each band its area, m², and the mean depth over it,
-/// m; before Flow first built its state, the land as `lands_now` gives it and no ground under the liquid.
-fn grounds_now(w: &World) -> (Vec<f64>, Vec<[[f64; 2]; crate::cover::BANDS]>) {
+/// The land of every cell, m², and the levels of its parts (`flow::shores`), by which its ground under the liquid is
+/// found by height (`flow::Shore`); before Flow first built its state, the land as `lands_now` gives it and no levels.
+fn grounds_now(w: &World) -> (Vec<f64>, Vec<Vec<f64>>) {
     let (all, area): (Vec<usize>, _) = ((0..w.mesh.cells().n()).collect(), w.mesh.cells().area());
-    let Some(bands) = crate::flow::wet_bands(w, &all, &crate::cover::DEPTHS) else { return (lands_now(w), Vec::new()) };
-    let one = |i: usize| -> [[f64; 2]; crate::cover::BANDS] { std::array::from_fn(|k| [bands[i].1[k][0] * area[i], bands[i].1[k][1]]) };
-    (all.iter().map(|&i| area[i] * bands[i].0).collect(), all.iter().map(|&i| one(i)).collect())
+    let Some(shores) = crate::flow::shores(w, &all) else { return (lands_now(w), Vec::new()) };
+    let land = all.iter().map(|&i| area[i] * shores[i].0).collect();
+    (land, shores.into_iter().map(|s| s.1).collect())
 }
 
-/// The ground of cell `i` under its standing liquid by depth, as the month's start found it (`surroundings`, `wets_now`):
-/// of each band of `cover::DEPTHS` its area, m², and the mean depth of the liquid over it, m; none where it was not found.
-pub fn wet(w: &World, i: usize) -> &[[f64; 2]] {
-    w.life.wet.get(i).map_or(&[], |b| &b[..])
+/// The levels of the parts of cell `i` over its mean surface, m, as the month's start found them (`surroundings`,
+/// `flow::shores`); none where they were not found.
+pub fn levels(w: &World, i: usize) -> &[f64] {
+    w.life.levels.get(i).map_or(&[], |l| &l[..])
 }
 
 /// The land of every cell, m²: its area times the share of it out of the liquid that stands over its pores

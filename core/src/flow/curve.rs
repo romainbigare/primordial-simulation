@@ -39,7 +39,7 @@ impl Part {
         &self.floors
     }
     /// The sums of the floors under the level `x` over the cell's mean surface (`Part::sums`).
-    fn under_x(&self, x: f64) -> [f64; 3] {
+    pub(super) fn under_x(&self, x: f64) -> [f64; 3] {
         self.below(x).1
     }
     /// The volume that stands on it under the level `x` over the cell's mean surface, m³.
@@ -80,7 +80,7 @@ impl Part {
         (x * x * s[0] - s[2]) / 2.0
     }
     /// Its area, m².
-    fn area(&self) -> f64 {
+    pub(super) fn area(&self) -> f64 {
         self.sums[self.sums.len() - 1][0]
     }
     /// Its lowest and highest floors over a cell whose mean surface lies at `z`, m.
@@ -97,8 +97,8 @@ impl Part {
 pub(super) struct Curve {
     pub(super) parts: Vec<Part>,
     area: f64,
-    apart: f64,
-    low: f64,
+    pub(super) apart: f64,
+    pub(super) low: f64,
     sides: Sides,
     side: f64,
 }
@@ -169,7 +169,7 @@ impl Fill<'_> {
         self.held.iter().sum()
     }
     /// The level of each part over the cell's mean surface where `v` m³ stand (`shares`), m.
-    fn levels(&self, v: f64) -> Vec<f64> {
+    pub(super) fn levels(&self, v: f64) -> Vec<f64> {
         self.c.parts.iter().zip(self.shares(v)).map(|(p, u)| p.level(u)).collect()
     }
     /// What each part holds where `v` m³ stand, m³: of one part all; of more, each its share by what it held, or, where
@@ -210,31 +210,6 @@ impl Fill<'_> {
             return 0.0;
         }
         (1.0 - (self.c.apart + self.sum(v, |p, x| p.area() - p.under(x))) / self.c.area).clamp(0.0, 1.0)
-    }
-    /// The ground under the liquid where `v` m³ stand, by its depth under its part's level: of each band of depths from
-    /// `edges[k]` to `edges[k + 1]`, m (`edges` rising from 0, the last may be unbounded), its area, m², and the liquid that stands over it, m³. Of
-    /// a part at level x, the ground deeper than h is its floors under x − h, and the liquid over it Σ area × (x −
-    /// floor) over them, its volume under x − h plus h times their area (`Part::volume`, `Part::under`). None for none.
-    pub(super) fn bands(&self, v: f64, edges: &[f64]) -> Vec<[f64; 2]> {
-        let mut out = vec![[0.0; 2]; edges.len().saturating_sub(1)];
-        if v <= 0.0 {
-            return out;
-        }
-        // (No ground lies deeper than an unbounded last edge.)
-        let deeper = |h: f64| if h.is_finite() { self.sum2(v, |p, x| [p.under(x - h), p.volume(x - h) + h * p.under(x - h)]) } else { [0.0; 2] };
-        for (k, band) in out.iter_mut().enumerate() {
-            let (top, bottom) = (deeper(edges[k]), deeper(edges[k + 1]));
-            *band = [top[0] - bottom[0], top[1] - bottom[1]];
-        }
-        out
-    }
-    /// `f` of each part at its level where `v` m³ stand (`levels`), two numbers each, summed.
-    fn sum2(&self, v: f64, f: impl Fn(&Part, f64) -> [f64; 2]) -> [f64; 2] {
-        let add = |a: [f64; 2], b: [f64; 2]| [a[0] + b[0], a[1] + b[1]];
-        match &self.c.parts[..] {
-            [p] => f(p, p.level(v)),
-            parts => parts.iter().zip(self.levels(v)).map(|(p, x)| f(p, x)).fold([0.0; 2], add),
-        }
     }
     /// What stands deeper than `h` under the liquid's level where `v` m³ stand, m³.
     pub(super) fn deep(&self, v: f64, h: f64) -> f64 {
@@ -322,7 +297,7 @@ impl World {
 }
 
 /// The curve of cell `i`: that of `s` where it has them, else found (`of`).
-fn curve_of<'a>(w: &World, s: &'a Scratch, i: usize) -> Cow<'a, Curve> {
+pub(super) fn curve_of<'a>(w: &World, s: &'a Scratch, i: usize) -> Cow<'a, Curve> {
     match s.curves.get(i).filter(|_| !stale(w, s)) {
         Some(c) => Cow::Borrowed(c),
         None => Cow::Owned(of(w, i)),

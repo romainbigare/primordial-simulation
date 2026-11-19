@@ -69,7 +69,7 @@ pub(super) fn most_plants(ph: &Physics, kg: f64) -> f64 {
 
 /// The ground a plant of `mass` kg of built cover holds where its stand is as dense as the self-thinning law allows, m²:
 /// (mass / `thin_kg`)^(2/3) (`most_plants`: n plants a m² of mean mass m fill the ground at n (m / thin_kg)^(2/3) = 1).
-fn plant_ground(ph: &Physics, mass: f64) -> f64 {
+pub(super) fn plant_ground(ph: &Physics, mass: f64) -> f64 {
     (mass / ph.thin_kg).powf(2.0 / 3.0)
 }
 
@@ -214,14 +214,20 @@ pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usi
 }
 
 /// Slot `small` joins slot `big` of the same cover: amounts added, and their groups of plants together
-/// (`Cover::join_groups`; the stand thins at its month, `thin`), genes and balance the mean by built cover, its starting
-/// kind the heavier's; `small` is empty after.
+/// (`Cover::join_groups`; the stand thins at its month, `thin`), genes, balance and the store its plants under the
+/// liquid burnt the mean by built cover, its line the lower of the two (the ground of both; the one set where the other
+/// is not, `UNSET`), its starting kind the
+/// heavier's; `small` is empty after.
 pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
     let (wb, ws) = (c.built(mm, big), c.built(mm, small));
     let f = (ws / (wb + ws).max(1e-300)) as f32;
     let (gs, ms) = (c.genes[small], c.mol[small]);
     (0..NG).for_each(|g| c.genes[big][g] += f * (gs[g] - c.genes[big][g]));
     c.net[big] += f * (c.net[small] - c.net[big]);
+    c.airless[big] += f * (c.airless[small] - c.airless[big]);
+    c.drained[big] += f * (c.drained[small] - c.drained[big]);
+    let lines = (c.line[big], c.line[small]);
+    c.line[big] = if lines.0 < 0.0 || lines.1 < 0.0 { lines.0.max(lines.1) } else { lines.0.min(lines.1) };
     c.join_groups(mm, big, small);
     (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
     c.clear(small);

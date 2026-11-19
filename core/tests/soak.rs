@@ -112,7 +112,7 @@ fn a_kind_stands_out_into_the_liquid_as_far_as_its_roots_breathe() {
     let mut further = 0;
     for i in 0..w.mesh.cells().n() {
         let soak = cover::soak(&w, &p, i, w.g(p.liquid, i)).1;
-        let (a, b) = (cover::footing(&w, i, few, ph.root_least, &soak), cover::footing(&w, i, many, ph.root_least, &soak));
+        let (a, b) = (cover::footing(&w, i, few, ph.root_least, &soak, None), cover::footing(&w, i, many, ph.root_least, &soak, None));
         assert!(b.share >= a.share, "cell {i}: the kind of many gas spaces stands on {} of the ground, of few on {}", b.share, a.share);
         if b.share > a.share {
             further += 1;

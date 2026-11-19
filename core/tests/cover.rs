@@ -348,11 +348,11 @@ fn seeds_take_the_slot_in_deficit() {
     for k in 0..cfg.variety {
         let mut v = g;
         v[FROST] -= 3.0 * step * k as f32;
-        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &cfg, (1.0, 1.0)), cover::Landed::In));
+        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &cfg, (1.0, 1.0), &mut [0.0; cover::SLOTS]), cover::Landed::In));
     }
     (c.net[1], c.net[2]) = (-1.0, -3.0);
     let (held, worst) = (c.clone(), c.mol[2]);
-    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &cfg, (1.0, 1.0)) else { panic!("the seeds took no slot in deficit") };
+    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &cfg, (1.0, 1.0), &mut [0.0; cover::SLOTS]) else { panic!("the seeds took no slot in deficit") };
     assert_eq!(died, worst, "the worst in deficit gave way");
     assert_eq!(c.root[2], 9, "the new kind holds the slot");
     for x in [0, 1, 3] {
@@ -570,42 +570,59 @@ fn the_cover_lives_on_its_cells_land() {
     assert!((a / b - 1.0).abs() < 1e-9, "{a} kg per m2 of land on the whole cell, {b} on the shore cell");
 }
 
-/// Ground a stand no longer stands on takes the plants on it (`cover::live`): a stand that stands on half the ground it
-/// stood on at its last month loses half of every slot as whole plants (counted as drowned, `life::DROWNED`), each
-/// plant left keeping its mass; in a cell where its kind stands nowhere (all under liquid deeper than its roots work in,
-/// `cover::footing`) it holds no plants at all, and what it held goes to its remains, mol for mol.
+/// Plants do not move (`cover::footing`): a stand holds its cell's ground above its line (`Cover::line`). Its plants on
+/// ground under the liquid past their roots' reach gain nothing and live on their store (`cover::upkeep`): a flood
+/// shorter than their store kills none of them, and once a longer one has spent it they die, drowned, as whole plants
+/// of every group alike, and the line rises to where none stands so. Ground the liquid leaves is taken by seedlings
+/// only: a month with no seeds leaves the stand's line and its large plants as they were, and seeds of its kind that
+/// wake there lower its line.
 #[test]
-fn ground_under_the_liquid_takes_the_plants_on_it() {
-    let (mut w, i) = start();
-    assert!(cover::place(&mut w, i, TREE.genes, TREE_ROW as u32, 2.0));
+fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_leaves() {
+    let (mut w, _) = start();
+    let area = w.mesh.cells().area().to_vec();
     let p = cover::Parts::of(&w.chem).expect("cover parts");
-    let (mm, area, month) = (p.mm(&w.chem), cover::ground(&w, i), w.cfg.calendar().month as f64);
-    let start = w.life.cover(i).clone();
-    let x = start.held().next().expect("the stand");
-    let (kg, plant) = (start.kg(&mm, x), start.built(&mm, x) / start.count(x));
-    let mut half = start.clone();
-    half.stood[x] = 2.0 * area * half.stands[x] as f64;
-    let mut counts = w.counts.clone();
-    let a = testkit::garden(&w, &half, (290.0, 1.0, 0.0, 0));
-    let _ = cover::live(&w, &mut half, &p, &a, (i, month), &mut counts);
-    let drowned = counts.cover_lost[pcore::life::DROWNED as usize];
-    assert!((drowned / (0.5 * kg) - 1.0).abs() < 1e-12, "{drowned} kg drowned of {kg} kg on half its ground");
-    let left = half.built(&mm, x) / half.count(x);
-    assert!(left >= plant, "a plant left holds {left} kg, it held {plant} kg");
-    // A cell where the tree kind stands nowhere: the stand placed there drowns whole, all of it to its remains.
-    let soak = |j: usize| cover::soak(&w, &p, j, w.g(p.liquid, j)).1;
-    let nowhere = |j: usize| cover::footing(&w, j, TREE.genes[cover::GAS] as f64, w.cfg.phys.root_least, &soak(j)).share <= 0.0;
-    let under = (0..w.mesh.cells().n()).find(|&j| nowhere(j)).expect("a cell under deep liquid");
-    let mut gone = start.clone();
-    let mut counts = w.counts.clone();
-    let held = gone.amounts(&p);
-    let a = testkit::garden(&w, &gone, (290.0, 1.0, 200.0, 0));
-    let (b, caught) = cover::live(&w, &mut gone, &p, &a, (under, month), &mut counts);
-    assert!(gone.held().next().is_none() && caught == 0.0, "a stand on no ground keeps {:?}", gone.held().collect::<Vec<_>>());
-    for k in p.sub {
-        assert!((b.dead[k] - held[k]).abs() <= 1e-12 * held[k], "substance {k}: {} mol to the remains of {} held", b.dead[k], held[k]);
+    let shore = (0..area.len()).find(|&j| (0.3..0.9).contains(&(contract::land(&w, j) / area[j])) && cover::soak(&w, &p, j, w.g(p.liquid, j)).1.loose > 0.0).expect("a shore cell");
+    assert!(cover::place(&mut w, shore, TREE.genes, TREE_ROW as u32, 2.0));
+    let (mm, month, drowned) = (p.mm(&w.chem), w.cfg.calendar().month as f64, pcore::life::DROWNED as usize);
+    let mut c = w.life.cover(shore).clone();
+    let x = c.held().next().expect("the stand");
+    // The flood: its line at the cell's lowest ground, and its roots get no gas under any liquid (the garden's soak).
+    c.line[x] = 0.0;
+    let flood = testkit::garden(&w, &c, (290.0, 1.0, 200.0, 0));
+    let mut aired = flood.clone();
+    aired.soak.breath = 1e6;
+    let month_of = |c: &mut cover::Cover, a: &cover::Around| {
+        let mut counts = w.counts.clone();
+        let _ = cover::live(&w, c, &p, a, (shore, month), &mut counts);
+        counts.cover_lost[drowned]
+    };
+    assert!(month_of(&mut c, &flood) == 0.0 && c.airless[x] > 0.0 && (0.0..1.0).contains(&c.drained[x]), "a month's flood: airless {}, drained {}", c.airless[x], c.drained[x]);
+    assert!(month_of(&mut c, &aired) == 0.0 && c.airless[x] == 0.0 && c.drained[x] == 0.0, "the flood is over: none drowned, none drained");
+    let (mut months, mut died) = (0, 0.0);
+    let mut was = c.clone();
+    while died == 0.0 {
+        assert!(months < 600, "a flood of {months} months spent no store");
+        was = c.clone();
+        (months, died) = (months + 1, month_of(&mut c, &flood));
     }
-    assert!((counts.cover_lost[pcore::life::DROWNED as usize] / kg - 1.0).abs() < 1e-12, "not all of it drowned");
+    println!("a flood killed the plants under the liquid after {months} months: {died:.3e} kg, line {} m", c.line[x]);
+    assert!(months > 1 && c.line[x] > 0.0, "{months} months, line {}", c.line[x]);
+    let kept: Vec<f64> = (0..was.sizes(&w.cfg.phys, &mm, x).held).map(|g| c.plants[x][g] / was.plants[x][g]).collect();
+    assert!(kept.iter().all(|k| (k / kept[0] - 1.0).abs() < 1e-9 && *k < 1.0 - 0.5 * was.airless[x] as f64), "each group kept {kept:?} of its plants");
+    let soak = cover::soak(&w, &p, shore, w.g(p.liquid, shore)).1;
+    let foot = cover::footing(&w, shore, c.genes[x][cover::GAS] as f64, w.cfg.phys.root_least, &cover::Soak { breath: 0.0, ..soak }, Some(c.line[x] as f64));
+    assert!(foot.airless == 0.0, "after the line rose, {} of the stand is still under the liquid past its reach", foot.airless);
+    // The liquid leaves: its roots get the gas everywhere, the ground below its line is free.
+    let (line, large) = (c.line[x], c.sizes(&w.cfg.phys, &mm, x));
+    let _ = month_of(&mut c, &aired);
+    let now = c.sizes(&w.cfg.phys, &mm, x);
+    assert!(c.line[x] == line && now.count[now.large()] <= large.count[large.large()], "no seeds: line {} from {line}, large plants {} from {}", c.line[x], now.count[now.large()], large.count[large.large()]);
+    let seeds = cover::sown(&w.chem, &w.cfg.phys, &p, (shore, cover::ground(&w, shore), 290.0), TREE.genes, TREE_ROW as u32, 1e-3);
+    c.lying.lodge(&mm, &seeds, w.cfg.phys.alike);
+    let large = c.sizes(&w.cfg.phys, &mm, x);
+    let _ = month_of(&mut c, &aired);
+    let now = c.sizes(&w.cfg.phys, &mm, x);
+    assert!(c.line[x] < line && now.count[now.large()] <= large.count[large.large()], "seedlings: line {} from {line}, large plants {} from {}", c.line[x], now.count[now.large()], large.count[large.large()]);
 }
 
 /// A stand of the tree kind (2 kg per m²) on ground that held nothing for roots half of the last year

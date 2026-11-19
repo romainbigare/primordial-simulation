@@ -84,36 +84,60 @@ pub fn working(phi: f64, need: f64, s: &Soak, ph: &crate::Physics) -> f64 {
     ((open + aired(s.breath, phi) - standing) / roots).clamp(0.0, 1.0)
 }
 
-/// Where a kind of cover stands in a cell (`footing`): the share of the cell's ground (`cover::ground`) it stands on;
-/// the mean share of its roots that work there (`working`); and the share of that ground that lies under the liquid.
+/// Where a kind of cover stands in a cell (`footing`): its line, m over the cell's lowest ground (`Cover::line`), and the
+/// share of the cell's ground (`cover::ground`) above it; the mean share of its roots that work there (`working`); the
+/// share of that ground that lies under the liquid; the share of its plants on ground under the liquid past its roots'
+/// reach (`aired`), lost where its line rises to `rise`, m, over which none lies; and the ground below its line where
+/// its roots get the oxidising gas, m², which only its seedlings take (`lying`).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Footing {
+    pub line: f64,
     pub share: f64,
     pub work: f64,
     pub wet: f64,
+    pub airless: f64,
+    pub rise: f64,
+    pub free: f64,
 }
 
 /// Where a kind of gas gene `phi`, rooted `need` m deep, stands in cell `i` of `w`, whose land meets its roots as `land`
-/// (`soak`): on its land, and on each band of its ground under the liquid (`contract::wet`) where its roots work, its
-/// pores full and the band's mean depth standing over them (`working`; its loose ground taken as its land's, and none
-/// where that holds none): one rule for where a plant stands, on land or in
-/// the liquid. A kind of few gas spaces stands on land alone; one of many stands out into the liquid as far as its
-/// gas reaches down its roots (Armstrong 1979), as swamp trees and emergent herbs stand in the liquid to a depth their kind
-/// tolerates (Kozlowski 1997).
-pub fn footing(w: &crate::World, i: usize, phi: f64, need: f64, land: &Soak) -> Footing {
+/// (`soak`): on the cell's ground above its line `line` (none: the line `found` of all the ground it may hold, where
+/// its seeds found a stand). Its roots work on its land as the land's liquid lets them (`working`), and on its ground
+/// under the liquid, its pores full, as far as their gas spaces reach down them past the depth of the liquid standing
+/// over it (Armstrong 1979; its loose ground taken as its land's, and none where that holds none): one rule for where a
+/// plant's roots work, on land or in the liquid, as swamp trees and emergent herbs stand in the liquid to a depth their
+/// kind tolerates (Kozlowski 1997). Plants do not move: its line holds where they stand while the level moves, so a
+/// rising level stands them in deeper liquid, where its roots past their reach work no more (`Cover::airless`). Before
+/// the month's start found the cell's levels it stands on its land alone.
+pub fn footing(w: &crate::World, i: usize, phi: f64, need: f64, land: &Soak, line: Option<f64>) -> Footing {
     let ph = &w.cfg.phys;
-    let l = crate::contract::land(w, i);
-    let (mut on, mut work, mut wet, mut all) = (l, l * working(phi, need, land, ph), 0.0, l);
-    for &[area, depth] in crate::contract::wet(w, i) {
-        all += area;
-        let under = Soak { moist: 1.0, filled: 1.0 + depth / (land.loose * ph.porosity).max(1e-9), ..*land };
-        let works = working(phi, need, &under, ph);
-        if works > 0.0 && land.loose > 0.0 {
-            (on, work, wet) = (on + area, work + area * works, wet + area);
-        }
+    let on_land = working(phi, need, land, ph);
+    let levels = crate::contract::levels(w, i);
+    if levels.is_empty() {
+        let l = crate::contract::land(w, i);
+        return if l > 0.0 { Footing { share: 1.0, work: on_land, ..Footing::default() } } else { Footing::default() };
     }
-    if on <= 0.0 {
-        return Footing::default();
+    let s = crate::flow::shore(w, i, levels);
+    let reach = if land.loose > 0.0 { aired(land.breath, phi) } else { 0.0 };
+    let h = line.unwrap_or_else(|| s.found(reach));
+    let f = s.feet(h, reach, need.min(land.loose).max(1e-9));
+    if f.ground <= 0.0 {
+        return Footing { line: h, free: f.free, ..Footing::default() };
     }
-    Footing { share: on / all, work: work / on, wet: wet / on }
+    let rest = if f.airless > 0.0 { 1.0 - s.above(f.rise) / f.ground } else { 0.0 };
+    Footing { line: h, share: f.ground / s.area(), work: (f.land * on_land + f.work) / f.ground, wet: f.wet / f.ground, airless: rest.clamp(0.0, 1.0), rise: f.rise, free: f.free }
+}
+
+/// The line of a slot of cover `c` (`Cover::line`) whose seedlings of `n` plants of `mass` kg each took hold on the
+/// ground its kind stands on, `aired` m² of cell `i`, of which `free` lies below its line (`Footing::free`): the seeds
+/// land evenly over it, and those below its line take the ground they hold as dense as the self-thinning law lets
+/// them stand (`stand::plant_ground`), no more than lies there; the line falls to hold that ground too.
+pub(super) fn lowered(w: &crate::World, i: usize, line: f64, (n, mass): (f64, f64), (aired, free): (f64, f64)) -> f64 {
+    let levels = crate::contract::levels(w, i);
+    if levels.is_empty() || line < 0.0 || free <= 0.0 || aired <= 0.0 {
+        return line;
+    }
+    let s = crate::flow::shore(w, i, levels);
+    let taken = (n * free / aired * super::stand::plant_ground(&w.cfg.phys, mass)).min(free);
+    s.line_of(s.above(line) + taken).min(line)
 }

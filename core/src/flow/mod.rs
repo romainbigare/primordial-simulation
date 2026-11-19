@@ -17,6 +17,7 @@ mod parts;
 mod potential;
 mod runoff;
 mod scratch;
+mod shore;
 mod spare;
 mod stack;
 mod basin;
@@ -27,7 +28,8 @@ pub use potential::total as potential;
 pub use basin::Pool;
 pub use channel::Channel;
 pub(crate) use level::level_of;
-pub use inside::{land_shares, levels, lowest, means, wet_bands};
+pub use inside::{land_shares, levels, lowest, means, shores};
+pub use shore::{shore, Feet, Shore};
 
 pub(crate) use potential::air_head;
 pub(crate) use stack::gain;

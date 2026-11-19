@@ -420,9 +420,10 @@ what the heat holds molten, as every law and the shell then read it.
   plateaus, with no soft cover or cover of bodies and the same phases, each take the block's temperature (their heat
   apart from the fusion enthalpy each holds, over their heat capacity; their floor's top too, which is part of each
   cell's ground node); of a cell of parts (1.1), its liquid's top.
-- **The ground under the liquid by depth** (`flow::wet_bands`, `curve::Fill::bands`): of each band of depths, the
-  share of a cell's area whose samples lie that deep under their part's level and the mean depth of the liquid over
-  them; the bands from no depth on take all of the cell that is not land (`flow::land_shares`).
+- **The ground by height** (`flow::shores`, `flow::Shore`): the level of each of a cell's parts, by which its
+  samples are found by height: the ground above a height, the height above which an area lies, and of the ground above
+  a height its land, its ground under the liquid, and of that the ground shallower or deeper than a depth; the land and
+  the ground under the liquid together are all of the cell, the land as `flow::land_shares` finds it.
 - **The channel** (`flow::channel`): what a cell passes on runs in a channel whose width and depth grow as powers of
   its discharge Q, m³/s (hydraulic geometry downstream, Leopold and Maddock 1953): width `channel_width` ×
   Q^`channel_width_exp`, depth `channel_depth` × Q^`channel_depth_exp`, and its liquid runs at Q over width × depth.
@@ -881,29 +882,39 @@ its walls are a frame, which pays no upkeep and does not wear, so its capacity, 
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
 1990, from memory). The cover of a cell is a node of the
 store (`Class::Life`, the life of its cell) whose law books its own side; it is kept with the cell's bodies (`life::Cell::cover`), so the
-chunk of the cell is its one writer. **It stands where its roots work** (`cover::ground`, `cover::footing`): a cell's ground is its land
-(`contract::land`) and its ground under the standing liquid, in bands of the depth over it (`cover::DEPTHS`: 0.1, 0.3
-and 1 m, and deeper; `contract::wet`, from `flow::wet_bands` at the month's start). Each slot stands on its land and on
-each band where its roots work, its pores full and the band's mean depth standing over them (**Roots in full pores**,
-below; its loose ground taken as its land's): one rule for where a plant stands, so a kind of few gas spaces stands on
-land alone and one of many stands out into the liquid as far as its gas reaches down its roots, as swamp trees and
-emergent herbs stand in water to a depth their kind tolerates (Kozlowski 1997). That share of the cell's ground is the
-slot's (`Cover::stands`), and of it the share whose loose ground holds its roots (`Cover::rooted`): their product
-(`Cover::on`) is the ground its plants hold, taken as nested over the slots as the loose depths are (`canopy::rings`;
-the ground under the liquid is the cell's low ground). Its leaves layer over that ground (its light and its shade), its
-plants find their room on it (the self-thinning law, each slot against its own ground, of another slot's plants the
-share on it the lesser ground over that slot's), its seeds found and lodge on the ground their kind stands on at the
-least root need, and it is placed per m² of that ground. Under the liquid its activity is full (its pores hold all
+chunk of the cell is its one writer. **It stands on the ground above its line** (`cover::ground`, `cover::footing`): a cell's ground is all of it, its land
+(`contract::land`) and its ground under the standing liquid, found by height from the terrain's samples inside it and
+the level of each of its parts at the month's start (`flow::Shore`, `contract::levels`, from `flow::shores`). Each slot
+holds the cell's ground above its line (`Cover::line`, m over the cell's lowest ground): plants do not move, so the
+line holds where they stand while the level moves, and a rising level stands them in deeper liquid. Its roots work on
+its land as the land's liquid lets them, and on its ground under the liquid, its pores full, as far as their gas
+spaces reach down them past the depth standing over it (**Roots in full pores**, below; its loose ground taken as its
+land's): one rule for where a plant's roots work, so a kind of few gas spaces holds land and the barest edge of the
+liquid and one of many stands out into it as far as its gas reaches down its roots, as swamp trees and emergent herbs
+stand in water to a depth their kind tolerates (Kozlowski 1997). A slot founded by seeds takes, at its first month, the
+line of all the ground its kind may hold (`Shore::found`: the highest level of its parts that hold liquid less its
+reach; `cover::UNSET` till then). The share of the cell's ground above its line is the slot's (`Cover::stands`), and
+of it the share whose loose ground holds its roots (`Cover::rooted`): their product (`Cover::on`) is the ground its
+plants hold, taken as nested over the slots as the loose depths are (`canopy::rings`; the ground under the liquid is
+the cell's low ground). Its leaves layer over that ground (its light and its shade), its plants find their room on it
+(the self-thinning law, each slot against its own ground, of another slot's plants the share on it the lesser ground
+over that slot's), and it is placed per m² of that ground. Under the liquid its activity is full (its pores hold all
 they can), its roots work as far as that depth lets them, and they reach the liquid of the parts under it
 (`Soak::pond`). How wet its land is to it is the land part's own liquid over that part's area for a cell of parts (no
-more than the cell holds; `flow::parts` keeps each part's matter), else the cell's over its area. **Ground it no longer
-stands on takes the plants on it**: each month, first, where a slot stands on less ground than it stood on at its last
-month (`Cover::stood`), the share it lost of the slot dies as whole plants of every group alike, each plant left
-keeping its mass, to its remains (counted as `DROWNED`): the plants stood on that ground, and with their room only the
-self-thinning law would heap their mass on fewer and larger plants. Ground that comes out of the liquid, or that the
-liquid leaves shallow enough, is new room. A slot that stands nowhere (a cell all under liquid deeper than its roots
-work in) dies whole, and seeds lying there wait on the ground under the liquid, worn and frozen by their laws, and wake
-only where their kind can stand. Its temperature is
+more than the cell holds; `flow::parts` keeps each part's matter), else the cell's over its area. **Its plants under
+the liquid past their roots' reach live on their store** (`upkeep::airless`): their roots get no oxidising gas, so
+they gain nothing (their roots do not work) and burn their share of the slot's upkeep from their store; the share of
+it they burnt adds up month by month (`Cover::drained`; plants that came to stand there since the last month come
+with all of theirs), and when it reaches all of it they die as whole plants of every group alike, each plant left
+keeping its mass, to its remains (counted as `DROWNED`), and the line rises to where none stands so. The burning keeps
+its pace's fall with the cold, so a flood in the cold season takes far longer to kill them than one in the warm
+(Kozlowski 1997; Glenz and others 2006); a flood that leaves before their store is spent kills none. **Ground below
+its line is taken by seedlings only**: its grown plants never spread over it. Seeds lying wake on the ground their
+kind may hold at the least root need; those that join a stand of their kind land evenly over it, and those that land
+below its line where their roots get the gas take the ground they hold as dense as the self-thinning law lets them
+stand (`stand::plant_ground`, no more than lies there), and the line falls to hold it (`soak::lowered`). In a cell of
+two parts or more the one line holds over all of them. Seeds lying on ground under the liquid past their reach wait,
+worn and frozen by their laws, and wake only where their kind can stand. Its temperature is
 its ground's: at the end of each month it trades heat with its
 ground to that temperature. **One month** (`cover::step`, its own process after the air's step at a month's start, one
 task per chunk), slot by slot, the tallest first. **Plants**: a slot holds one pool of matter, and its plants in up

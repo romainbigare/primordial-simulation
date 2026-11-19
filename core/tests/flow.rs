@@ -1297,26 +1297,27 @@ fn a_year_of_rain_on_cells_of_parts_keeps_the_books() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// The ground of a cell under its liquid falls into bands by the depth of the liquid over it (`flow::wet_bands`): over
-/// a year of the small world, in every cell, the bands from no depth to past the deepest take all the ground that is not
-/// land (`flow::land_shares`), and each band's mean depth lies within its band.
+/// The ground of a cell by height under the levels of its parts (`flow::shores`, `flow::Shore`): over a year of the
+/// small world, in every cell, the ground above its lowest ground is all of it, its land and its ground under the
+/// liquid together, the land as `flow::land_shares` finds it; and the height of an area found again holds that area.
 #[test]
-fn the_wet_bands_of_a_cell_hold_its_ground_under_the_liquid() {
+fn the_shore_of_a_cell_holds_its_ground_by_height() {
     let mut w = worldgen::testkit::small_world();
     let all: Vec<usize> = (0..w.mesh.cells().n()).collect();
-    let edges = [0.0, 0.1, 0.3, 1.0, 3.0, f64::INFINITY];
     let mut wet = 0;
     for _ in 0..w.cfg.months_per_year {
         pcore::step(&mut w);
-        let (land, bands) = (pcore::flow::land_shares(&w, &all).unwrap(), pcore::flow::wet_bands(&w, &all, &edges).unwrap());
+        let (land, shores) = (pcore::flow::land_shares(&w, &all).unwrap(), pcore::flow::shores(&w, &all).unwrap());
         for &i in &all {
-            let under: f64 = bands[i].1.iter().map(|b| b[0]).sum();
-            assert_eq!(bands[i].0, land[i], "cell {i}: two land shares");
-            assert!((under - (1.0 - land[i])).abs() < 1e-9, "cell {i}: bands hold {under} of the cell, its land {}", land[i]);
-            for (k, b) in bands[i].1.iter().enumerate().filter(|(_, b)| b[0] > 0.0) {
-                assert!(b[1] >= edges[k] - 1e-9 && b[1] <= edges[k + 1] + 1e-9, "cell {i}: band {k} holds a mean depth of {} m", b[1]);
-            }
-            wet += (under > 0.0) as usize;
+            assert_eq!(shores[i].0, land[i], "cell {i}: two land shares");
+            let s = pcore::flow::shore(&w, i, &shores[i].1);
+            let (f, a) = (s.feet(0.0, 0.0, 1.0), s.area());
+            assert!((f.ground - a).abs() <= 1e-9 * a && (f.land + f.wet - a).abs() <= 1e-9 * a, "cell {i}: {f:?} of {a} m2");
+            assert!((f.land / a - land[i]).abs() < 1e-9, "cell {i}: land {} of the shore, {} of the cell", f.land / a, land[i]);
+            let half = s.above(s.line_of(0.5 * a));
+            // (No line leaves less ground than its highest floor and its samples in no part.)
+            assert!(half <= (0.5 * a).max(s.above(s.line_of(0.0))) && s.above(s.line_of(half)) == half, "cell {i}: {half} m2 above the line of half of {a}");
+            wet += (f.wet > 0.0) as usize;
         }
     }
     assert!(wet > 0, "no ground under the liquid");

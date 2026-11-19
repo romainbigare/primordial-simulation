@@ -177,7 +177,7 @@ impl Cover {
     /// Slot `x` empties: no amounts, genes of no kind, no plants.
     pub(super) fn clear(&mut self, x: usize) {
         (self.mol[x], self.root[x], self.full[x], self.net[x], self.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
-        (self.stands[x], self.stood[x]) = (0.0, 0.0);
+        (self.line[x], self.stands[x], self.airless[x], self.drained[x]) = (0.0, 0.0, 0.0, 0.0);
         (self.plants[x], self.share[x]) = ([0.0; GROUPS], [0.0; GROUPS]);
     }
     /// `n` plants of `kg` of built cover take hold in slot `x` (seeds of its kind, before their amounts join it): a

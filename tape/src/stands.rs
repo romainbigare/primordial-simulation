@@ -91,7 +91,7 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
     let (built, genes) = (c.built(mm, x), c.genes[x]);
     let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x] as f64, c.need[x]) } else { (1.0, 0.0) };
     let per_ground = |v: f64| per_land(v / g.area, c.stands[x] as f64);
-    let foot = cover::footing(w, g.i, genes[GAS] as f64, (need as f64).max(ph.root_least), &g.soak);
+    let foot = cover::footing(w, g.i, genes[GAS] as f64, (need as f64).max(ph.root_least), &g.soak, (c.line[x] >= 0.0).then_some(c.line[x] as f64));
     let s = c.sizes(ph, mm, x);
     let group = |k: usize| plants(ph, (per_ground(s.mass[k] * s.count[k]), per_ground(c.leaf(mm, x) * s.leaf[k]), per_ground(s.count[k])), rooted, s.walls[k], g.rho);
     let p = group(s.large());

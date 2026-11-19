@@ -39,8 +39,9 @@ fn remember(c: &mut Cover, moist: f64, year: f32) {
 /// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
 /// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer (its
 /// crown's base), and the capture area per unit of ground the light passes through its crown (`canopy::shade`); its
-/// activity (`cover::activity`), the share of its roots that work (`cover::working`) and the share of its ground under the
-/// liquid (`Footing`); what one more kg of it would
+/// activity (`cover::activity`), the share of its roots that work (`cover::working`), the share of its ground under the
+/// liquid, and the share of its plants on ground under the liquid past its roots' reach with the line over which none
+/// lies (`Footing`); what one more kg of it would
 /// store in the month at the bottom of its layer, J (`light`); its conducting walls, kg (`stand::sapwood`), and the key
 /// liquid it drew, mol; and the share of what a leaf of it gains that the fine
 /// roots drawing that leaf's liquid cost (`upkeep::root_share`).
@@ -56,6 +57,8 @@ pub(super) struct Slot {
     pub(super) act: f64,
     pub(super) work: f64,
     pub(super) wet: f64,
+    pub(super) airless: f64,
+    pub(super) rise: f64,
     pub(super) gain: f64,
     pub(super) sapwood: f64,
     pub(super) drunk: f64,
@@ -79,8 +82,8 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
 }
 
 /// The month over `dt` s of the cover `c` of cell `i` (its place on the map, where its seeds go from) that reads `a`:
-/// each slot stands where its roots work (`feet`), and its plants on the ground it no longer stands on die with it
-/// (`drown`); it catches light, runs its light reaction, pays its upkeep, builds and sends seeds (into
+/// each slot stands on the ground above its line, its roots working where they get the oxidising gas (`feet`); it
+/// catches light, runs its light reaction, pays its upkeep, builds and sends seeds (into
 /// `Cover::seeds`); alike slots merge, and slots left with no built cover empty into its remains. With no ground it holds
 /// no plants, and its seeds lying wait on the ground under the liquid. Returns what it changed outside itself
 /// (`Books`) and the light it caught, J; what it lost and rounded is counted in `counts`.
@@ -97,11 +100,10 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let mut flows = [0.0; BUDGET.len()];
     let e = p.content(chem);
     let feet = feet(w, c, (&mm, rho, n), i, &a.soak);
-    let drowned = drown(c, (&mm, &e, n), area, &mut flows, counts);
     let lying = super::lying::month(w, c, p, a, (i, area, dt), &mut flows, counts);
     if area <= 0.0 {
         let mut b = Books::new(a.air, flows);
-        (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q] + drowned[q]);
+        (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q]);
         empty(c, (p, &mm, &e, n), &mut b);
         (c.keep, c.film, c.reach) = (0.0, 0.0, 0.0);
         remember(c, a.soak.moist, w.cfg.months_per_year as f32);
@@ -126,7 +128,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         let (act, work) = ((1.0 - foot.wet) * super::activity(&c.genes[q], a.soak.moist) + foot.wet * super::activity(&c.genes[q], 1.0), foot.work);
         let sapwood = super::stand::sapwood(ph, (leaf, sizes.lift(ph, rho)), c.walls(&mm, q), rho);
         let roots = super::upkeep::root_share(w, p, (t, dt), per_unit, &c.genes[q]);
-        *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, work, wet: foot.wet, sapwood, roots, ..Default::default() };
+        *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, work, wet: foot.wet, airless: foot.airless, rise: foot.rise, sapwood, roots, ..Default::default() };
         // The share of its ground (`cover::ground`) its plants hold: where its loose ground is as deep as their roots need (found again
         // only when their need has moved by more than a bin of depth).
         if super::stand::moved(c.need[q], need) {
@@ -140,7 +142,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books::new(a.air, flows);
-    (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q] + drowned[q]);
+    (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q]);
     let before = c.content(&e);
     // The light per unit of absorbing area at the top of its layers: with no leaves, all that reaches the ground.
     let per = if lit > 0.0 { caught * a.reach / lit } else { dl * a.reach };
@@ -161,50 +163,23 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     super::stand::merge_alike(c, &mm, (ph, n));
     remember(c, a.soak.moist, w.cfg.months_per_year as f32);
     empty(c, (p, &mm, &e, n), &mut b);
-    (0..n).filter(|&x| c.root[x] != NO_ROOT).for_each(|x| c.stood[x] = area * c.stands[x] as f64);
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
     (b, caught)
 }
 
-/// Where each of the `n` slots in use of cover `c` of cell `i` stands this month (`cover::footing`, at the roots its
-/// large plants need), its land meeting their roots as `soak`: its share of the cell's ground is `Cover::stands`.
+/// Where each of the `n` slots in use of cover `c` of cell `i` stands this month (`cover::footing` above its line, a
+/// slot in its first month taking the line of all the ground it may hold, at the roots its large plants need), its land
+/// meeting their roots as `soak`: its share of the cell's ground is `Cover::stands`.
 fn feet(w: &World, c: &mut Cover, (mm, rho, n): (&[f64; NP], f64, usize), i: usize, soak: &super::Soak) -> [super::Footing; SLOTS] {
     let ph = &w.cfg.phys;
     let mut out = [super::Footing::default(); SLOTS];
     for x in (0..n).filter(|&x| c.root[x] != NO_ROOT) {
         let need = super::stand::need(ph, c.height(ph, mm, rho, x));
-        out[x] = super::footing(w, i, c.genes[x][super::GAS] as f64, need, soak);
-        c.stands[x] = out[x].share as f32;
+        let line = (c.line[x] >= 0.0).then_some(c.line[x] as f64);
+        out[x] = super::footing(w, i, c.genes[x][super::GAS] as f64, need, soak, line);
+        (c.line[x], c.stands[x]) = (out[x].line as f32, out[x].share as f32);
     }
     out
-}
-
-/// The plants of the `n` slots in use of cover `c` on ground they stood on at their last month and no longer stand on
-/// went with it (its parts of masses `mm` holding `e` J a mol): of each slot that stands now on `area` m² of the cell's
-/// ground times its share (`Cover::stands`) and stood on more (`Cover::stood`), the share it lost dies; all of a slot
-/// that stands nowhere. Whole plants of every group alike die (each one left keeps its mass), counted as drowned
-/// (`life::DROWNED`) and booked as died (`DIED` of `flows`): a stand is placed per m² of its ground, and ground it can no
-/// longer stand on (gone under the liquid past its roots' reach) takes the plants on it, not their room only (with
-/// their room only, the self-thinning law would heap their mass on fewer and larger plants). Returns what died, mol of
-/// each part, for its remains.
-fn drown(c: &mut Cover, (mm, e, n): (&[f64; NP], &[f64; NP], usize), area: f64, flows: &mut [f64], counts: &mut Counters) -> [f64; NP] {
-    let mut dead = [0.0; NP];
-    for x in (0..n).filter(|&x| c.root[x] != NO_ROOT) {
-        let now = area * c.stands[x] as f64;
-        let f = if now <= 0.0 { 1.0 } else if c.stood[x] > now { 1.0 - now / c.stood[x] } else { 0.0 };
-        if f <= 0.0 {
-            continue;
-        }
-        counts.cover_lost[crate::life::DROWNED as usize] += f * c.kg(mm, x);
-        c.plants[x].iter_mut().for_each(|k| *k *= 1.0 - f);
-        let alive = budget::held(e, &c.mol[x]);
-        for (held, d) in c.mol[x].iter_mut().zip(dead.iter_mut()) {
-            let m = if f >= 1.0 { *held } else { held.max(0.0) * f };
-            (*held, *d) = (*held - m, *d + m);
-        }
-        flows[DIED] += budget::held(e, &c.mol[x]) - alive;
-    }
-    dead
 }
 
 /// The slots of the `n` in use of cover `c` (its parts `p` of masses `mm`, holding `e` J a mol) left with no built cover
