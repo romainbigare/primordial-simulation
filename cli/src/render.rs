@@ -12,8 +12,12 @@ const ICE_M: f64 = 0.05;
 const PX: usize = 3;
 /// The panels of the pictures of a world, in the order they are drawn side by side.
 const SIDE_BY_SIDE: usize = 5;
-/// The panels `ew view` draws: those of the pictures and the land with no river drawn over it.
-pub const PANELS: [&str; 6] = ["map", "temperature", "rain", "life", "depth", "land"];
+/// The panels `ew view` draws: those of the pictures, the land with no river drawn over it, and of the loose ground
+/// (`GROUND`): its conductivity, the liquid it holds for roots, what the year's rain leaves after what rises (its
+/// yield), the share of its pores its liquid fills, and what rises from it.
+pub const PANELS: [&str; 11] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise"];
+/// The first of the loose ground's panels in `PANELS`.
+const GROUND: usize = 6;
 const GAP: usize = 4;
 /// Seconds of a year for the rain panel (1e4 mol/(m² year) is about 0.2 m of liquid).
 const YEAR_S: f64 = 3.15e7;
@@ -35,17 +39,50 @@ fn ramp(stops: &[(f64, Rgb)], v: f64) -> Rgb {
     stops[stops.len() - 1].1
 }
 
-/// What the panels colour: the fields of the world and the life's mass per area of each cell.
+/// What the panels colour: the fields of the world, the life's mass per area of each cell, the share of each cell's
+/// pores its liquid fills, and the volume of a mol of the key liquid, m³ (for the depths of the rain and the rise).
 struct Look<'a> {
     w: &'a World,
     f: Fields,
     /// Mass per area of the cover (green), kg/m².
     green: Vec<f64>,
+    wet: Vec<f64>,
+    liquid_m3: f64,
 }
 
 impl<'a> Look<'a> {
     fn new(w: &'a World) -> Self {
-        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg) }
+        let cells: Vec<usize> = (0..w.mesh.cells().n()).collect();
+        let wet = pcore::flow::means(w, &cells).map_or(vec![0.0; cells.len()], |m| m.iter().map(|m| m.pore / m.pores.max(1e-9)).collect());
+        let liquid = pcore::life::Parts::of(&w.chem).map_or(0, |p| p.liquid);
+        let liquid_m3 = w.chem.molar_volume(liquid, pcore::chem::Phase::Liquid);
+        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3 }
+    }
+
+    /// The depth of liquid a year of a flux of `mol` mol/(m² s), mm.
+    fn mm_a_year(&self, mol: f64) -> f64 {
+        mol * self.liquid_m3 * YEAR_S * 1e3
+    }
+
+    /// The colour of the loose ground's panel `panel` (index in `PANELS`, from `GROUND`) of cell `i`: a blue grey where
+    /// liquid stands over the cell.
+    fn ground(&self, panel: usize, i: usize) -> Rgb {
+        let (w, f, ph) = (self.w, &self.f, &self.w.cfg.phys);
+        if f.depth[i] > STANDING_M {
+            return [70, 80, 95];
+        }
+        match panel - GROUND {
+            // Saturated conductivity, m/s, on a log scale: a clay's 1e-7 dark, a sand's 1e-4 pale.
+            0 => ramp(&[(-7.0, [60, 30, 20]), (-6.0, [170, 90, 40]), (-5.0, [240, 200, 90]), (-4.0, [250, 250, 220])], ph.seep.log10()),
+            // The liquid the loose ground holds between the wilting point and field capacity, mm.
+            1 => ramp(&[(0.0, [240, 230, 200]), (40.0, [200, 210, 140]), (120.0, [90, 170, 120]), (300.0, [30, 90, 160])], (ph.field - ph.wilt) * ph.porosity * f.loose[i] * 1e3),
+            // Rain less what rises, mm a year: what runs off and sinks.
+            2 => ramp(&[(-200.0, [190, 60, 40]), (0.0, [240, 235, 220]), (300.0, [110, 170, 220]), (1000.0, [20, 50, 150])], self.mm_a_year(w.rain[i] as f64 - w.evap[i] as f64)),
+            // The share of the pores the liquid fills.
+            3 => ramp(&[(0.0, [200, 150, 90]), (0.3, [230, 220, 160]), (0.6, [110, 180, 120]), (1.0, [30, 70, 160])], self.wet[i]),
+            // What rises, mm a year.
+            _ => ramp(&[(0.0, [240, 235, 220]), (300.0, [200, 210, 120]), (700.0, [70, 160, 90]), (1200.0, [20, 90, 70])], self.mm_a_year(w.evap[i] as f64)),
+        }
     }
 
     /// The colour of panel `panel` (index in `PANELS`) for cell `i`; `beside` are the cells west and north of it, `step`
@@ -55,6 +92,7 @@ impl<'a> Look<'a> {
         match panel {
             0 => self.map(i, beside, step, true),
             5 => self.map(i, beside, step, false),
+            GROUND.. => self.ground(panel, i),
             1 => ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
             // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
             2 => ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.rain[i] as f64 * YEAR_S).max(1.0).log10()),

@@ -46,7 +46,9 @@ pub const USAGE: &str = "usage:
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --window X,Y,W,H      the window from column X and row Y, W x H squares, fractions allowed (the whole map)
     --px N                pixels across; the height follows the window (512)
-    --layer NAME          map, temperature, rain, depth, or land (the map with no rivers) (map)
+    --layer NAME          map, temperature, rain, life, depth, land (the map with no rivers), or of the loose ground:
+                          conductivity, water (what it holds for roots), yield (rain less what rises), wetness (of
+                          its pores), rise (what rises from it) (map)
     --edges               darken the edges between cells
     --out FILE            the PNG (view.png)
   ew card     write the test card, a small island whose squares are set by hand (worldgen::testkit::card), as a
