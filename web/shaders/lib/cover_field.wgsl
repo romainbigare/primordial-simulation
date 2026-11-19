@@ -29,15 +29,16 @@ const WIDE_LAYER = 10; const SHADE_LAYER = 11;
 // `LOW_FAR_E` m and more (where their detail no longer shows: no swathes, blades, tufts or flowers past a metre a
 // pixel), fully from `LOW_FAR_FULL_E`; thicker and thinner over the patches as they are.
 const LOW_LAYER = 12; const LOW_FAR_E = 0.75; const LOW_FAR_FULL_E = 1.0;
-// Of each square, 1 where its cell holds land or a kind stands in it (canopy.ts `FIELD.land`), the depth of liquid its
-// kinds' roots stand in on their mean, m (their reach), and its herbs' reach and height on their mean, m; a square with
-// neither holds 0 in every layer. A blend
-// between the squares' centres is over the squares with cover alone, their weights made whole (`on_land`): a square
-// with none is no bare ground beside them. A blend whose cover's squares weigh less than `LAND_LEAST` is none (it lies
-// out in the liquid, where no cover is drawn).
+// Of each square, 1 where its cell holds land or a kind stands in it (canopy.ts `FIELD.land`); a square with neither
+// holds 0 in every layer. A blend between the squares' centres is over the squares with cover alone, their weights
+// made whole (`on_land`): a square with none is no bare ground beside them. A blend whose cover's squares weigh less
+// than `LAND_LEAST` is none (it lies out in the liquid, where no cover is drawn).
 const LAND_LAYER = 13; const LAND_LEAST = 1e-3;
 // Of the sward and of the lattice of stands, what the kinds but the first make (canopy.ts `FIELD`).
 const SWARD_REST = 14; const STANDS_REST = 15;
+// Of the plants that stand in liquid (canopy.ts `FIELD.wet`): the share of the cover that is of kinds the core stands
+// on the ground under liquid there, the depth their roots reach through, m, and the herbs' reach and height, m.
+const WET_LAYER = 16;
 const STANDS = 2;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
@@ -71,9 +72,9 @@ struct Beneath { soaked: f32, over: f32, slope: f32, loose: f32, loose_px: f32, 
 
 // The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; the share of
 // the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month; and
-// of the plants there in liquid (`LAND_LAYER`): the depth all of them stand in on their mean, m, the herbs' reach and
-// height, m, and the share of the ground the herbs cover.
-struct CoverAt { cover: vec4f, canopy: f32, shed: f32, wet: vec4f }
+// of the plants there in liquid (`WET_LAYER`): the share of the cover of the kinds that stand in it, the depth they
+// stand in, m, and the herbs' reach and height, m; and the share of the ground the herbs cover.
+struct CoverAt { cover: vec4f, canopy: f32, shed: f32, wet: vec4f, herbs: f32 }
 
 // A square whose kinds' roots hold everywhere has its mean rooted share this near 1: no point of it limits them.
 const ROOTED_ALL = 0.999;
@@ -388,8 +389,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
-  let wet = field_at(at, LAND_LAYER);
-  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, vec4f(wet.yzw, min(field_at(at, SWARD_LAYER).a, 1.0)));
+  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, field_at(at, WET_LAYER), min(field_at(at, SWARD_LAYER).a, 1.0));
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_thing`

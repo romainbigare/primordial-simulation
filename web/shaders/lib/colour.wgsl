@@ -120,9 +120,10 @@ struct Spot {
   bed: vec3f, rock: f32, loose: f32, stone: f32, small: f32, stony: f32, worn: f32, blocks: f32, snow_m: f32, below: f32,
   // The share of the ground the tallest plants' crowns close over it (their litter lies under them), the share of it
   // and the ground about it under woody crowns whose leaves fall this month (cover_field.wgsl `CoverAt.shed`), and the
-  // depth of liquid its plants stand in, m (`CoverAt.wet`), and the share of the liquid's surface the herbs that stand
-  // in it deeper than they are tall cover with their floating leaves (land.wgsl).
-  canopy: f32, shed: f32, reach: f32, pads: f32,
+  // share of its plants' cover of kinds that stand in liquid there and the depth they stand in, m (`CoverAt.wet`), and
+  // the share of the liquid's surface the herbs that stand in it deeper than they are tall cover with their floating
+  // leaves (land.wgsl).
+  canopy: f32, shed: f32, wading: f32, reach: f32, pads: f32,
   // The fetch of the lake beside it, m (water.wgsl `waves_of`; 0 where none is known: no waves).
   fetch: f32,
   // How soaked the waves' swash leaves it, and the share of it the foam of the last bore covers, 0..1 (`swash_of`).
@@ -317,7 +318,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     water = afloat(water, p);
     // Under the crowns of the trees that stand in it as the field draws them the water lies in their shadow, as the
     // ground does (draw.wgsl `CROWN_SHADOW`); near, the trees drawn one by one cast their own (models.wgsl).
-    let standing = min(p.cover.a, 1.0) * stands_in(p.depth, p.reach) * (1.0 - waves_strip(p, SWASH_DRY));
+    let standing = min(p.cover.a, 1.0) * p.wading * stands_in(p.depth, p.reach) * (1.0 - waves_strip(p, SWASH_DRY));
     water *= 1.0 - CROWN_SHADOW * min(p.canopy, 1.0) * standing;
     if (standing > 0.0) { water = mix(water, lit_by(p.cover.rgb / p.cover.a, lit), standing); }
     // Ice where the cells' share of it lies (ice.wgsl `ice_cover`), as floes at its margin.

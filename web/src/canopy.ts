@@ -48,9 +48,11 @@ export const PLANES_DOWN = 32;
  * share of the ground under crowns whose leaves fall this month (`leavesFalling`), the sward and the lattices under the
  * trees' as one layer, as the field draws them far away (`lowOf`), 1 where the square's cell holds land or a kind
  * stands in it (a square with neither holds 0 in every layer: cover_field.wgsl blends over the squares with cover
- * alone, `on_land`) with the depth of liquid its kinds' roots stand in, m, on the mean by their cover (their reach), and
- * of its herbs (the sward) their reach and their height, m, on the mean by their cover, and of the sward and of the lattice of stands the part the kinds but the first make. */
-export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, shade: LATTICES.length + 8, low: LATTICES.length + 9, land: LATTICES.length + 10, swardRest: LATTICES.length + 11, standsRest: LATTICES.length + 12, count: LATTICES.length + 13 } as const;
+ * alone, `on_land`), and of the sward and of the lattice of stands the part the kinds but the first make; and of the
+ * plants that stand in liquid (`wet`): the share of the square's cover that is of kinds the core stands on its ground
+ * under liquid there (their wet share), the depth their roots reach through on their mean by cover, m, and its herbs'
+ * (the sward's) reach and height on their mean by cover, m. */
+export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, shade: LATTICES.length + 8, low: LATTICES.length + 9, land: LATTICES.length + 10, swardRest: LATTICES.length + 11, standsRest: LATTICES.length + 12, wet: LATTICES.length + 13, count: LATTICES.length + 14 } as const;
 /** The number of a square's row of the core's table that is the share of its cell that is land (tape/src/table.rs `row`). */
 const LAND_AT = 10;
 /** A field of the cover: `w` x `h` texels over the map, a texel a square, of each layer (`FIELD`) a reflectance times the
@@ -173,7 +175,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
     if (!(rows[1 + row * i + LAND_AT] > 0) && !Array.from({ length: kinds }, (_, k) => holdsKind(k)).some(Boolean)) continue;
     field[layer(FIELD.land, i)] = 1;
     const paint = LATTICES.map(() => new Paint()), sward = new Paint(), flowers = new Paint();
-    let shed = 0, reach = 0, covered = 0, herbReach = 0, herbTall = 0, herbs = 0;
+    let shed = 0, covered = 0, wading = 0, reach = 0, herbReach = 0, herbTall = 0, herbs = 0;
     for (let k = 0; k < kinds; k++) {
       if (!holdsKind(k)) continue;
       // A copy: its crowns' numbers are set below (`standingCrowns`).
@@ -181,8 +183,8 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       // The depth of liquid it stands in here: its reach where the core stands it on its square's ground under liquid
       // (its wet share), none where it stands on the land alone.
       const wades = r[K.wet] > 0 ? r[K.reach] : 0;
-      reach += r[K.cover] * wades;
       covered += r[K.cover];
+      if (wades > 0) { wading += r[K.cover]; reach += r[K.cover] * wades; }
       // The share of the square that holds its plants and the loose ground their roots need, as the core found them.
       const mean = Math.max(r[K.rooted], 1e-3), stand = [r[K.height], mean, r[K.need]];
       // The square's ground temperature (the table's second number of a row) and the frozen cover's melting point.
@@ -244,7 +246,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
     const first = paint[STANDS].first.k;
     for (let g = 0; first >= 0 && g < 4; g++) table[texel(P.chance + STANDS * kinds + first, i) + g] *= -1;
     putField(field, i, layer, paint, sward, flowers, shed);
-    [covered > 0 ? reach / covered : 0, herbs > 0 ? herbReach / herbs : 0, herbs > 0 ? herbTall / herbs : 0].forEach((v, q) => { field[layer(FIELD.land, i) + 1 + q] = v; });
+    [covered > 0 ? wading / covered : 0, wading > 0 ? reach / wading : 0, herbs > 0 ? herbReach / herbs : 0, herbs > 0 ? herbTall / herbs : 0].forEach((v, q) => { field[layer(FIELD.wet, i) + q] = v; });
   }
   return { w, h, planes: P, cols, table, field: { w, h, data: field }, tallest, widest, walls };
 }

@@ -119,10 +119,11 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.cover = cf.cover;
   p.canopy = cf.canopy;
   p.shed = cf.shed;
-  p.reach = cf.wet.x;
+  p.wading = cf.wet.x;
+  p.reach = cf.wet.y;
   // Herbs that stand in liquid deeper than they are tall float their leaves on it (afloat.wgsl), where their roots
   // reach (draw.wgsl `stands_in`): over the share of the ground they cover.
-  p.pads = cf.wet.w * ease(cf.wet.z, FLOAT_TALL * cf.wet.z, p.depth) * stands_in(p.depth, cf.wet.y);
+  p.pads = cf.herbs * ease(cf.wet.w, FLOAT_TALL * cf.wet.w, p.depth) * stands_in(p.depth, cf.wet.z);
   p.rock = bare;
   p.bed = vec3f(0.0);
   // Its channel's stones (`stony`), and the scree's place below the bed that sheds it: where the loose ground deepens
