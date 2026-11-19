@@ -452,11 +452,14 @@ fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
             assert!((el1[j] - el0[j]).abs() <= 1e-9 * el0[j].max(1.0), "element {j}: {} -> {}", el0[j], el1[j]);
         }
         assert!((en1 - en0).abs() <= 1e-9 * en0.abs(), "energy {en0} -> {en1}");
-        (1000.0 - n[MATTER], n[MINERAL], gas[FIX_GAS] - gas0[FIX_GAS])
+        // The slow organic matter keeps the nitrogen of what rots into it: three of the mineral each (reaction 15).
+        let slow: f64 = (0..chem.ns()).filter(|&k| chem.subs[k].bound).map(|k| n[k]).sum();
+        (1000.0 - n[MATTER], n[MINERAL] + 3.0 * slow, gas[FIX_GAS] - gas0[FIX_GAS])
     };
     let (lost, back, gas) = run(290.0, 365.0 * DAY);
     println!("a year at 290 K: {lost:.2} mol of matter rotted, {back:.2} mol of the mineral back, {gas:.4} mol of the gas");
-    assert!(lost > 170.0 && lost < 205.0, "{lost}");
+    // Reactions 7 and 14 together: 0.26 a year bare. What becomes the slow organic matter keeps its nitrogen.
+    assert!(lost > 215.0 && lost < 255.0, "{lost}");
     assert!((back / (3.0 * lost) - 1.0).abs() < 1e-6 && gas.abs() < 1e-6 * lost, "mineral {back}, gas {gas}");
     let (lost, back, gas) = run(1000.0, 1e5);
     println!("hot, 1000 K: {lost:.1} mol of matter burned, {back:.1} mol of the mineral, {gas:.1} mol of the gas");
@@ -465,27 +468,29 @@ fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
 }
 
 /// Dead matter on the ground returns its mineral to the ground: in a world with no body, a year, the matter that went
-/// is in the fixed gas's mineral three for one (the mineral dissolves and runs with the liquid: it is counted over the
-/// whole ground), more than the same world without the matter makes (the open air fixes next to nothing); elements and
-/// energy are kept.
+/// is in the fixed gas's mineral three for one, or in the slow organic matter it rots into, which holds as much (the
+/// mineral dissolves and runs with the liquid: it is counted over the whole ground), more than the same world without
+/// the matter makes (the open air fixes next to nothing); elements and energy are kept.
 #[test]
 fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     let (mut w, i) = start();
     let per = w.chem.minerals()[0].1;
+    let slow = (0..w.chem.ns()).find(|&k| w.chem.subs[k].bound).expect("the slow organic matter");
+    let held = |w: &pcore::World| in_all(w, MINERAL) + per * in_all(w, slow);
     // The same world with nothing on the ground: what the open makes of the mineral in a year.
     let mut twin = w.clone();
-    let bare = in_all(&twin, MINERAL);
+    let bare = held(&twin);
     for _ in 0..12 {
         pcore::step(&mut twin);
     }
-    let bare = in_all(&twin, MINERAL) - bare;
+    let bare = held(&twin) - bare;
     put(&mut w, MATTER, i, 1e8);
     let books = Books::now(&w);
-    let (m_before, n_before) = (in_all(&w, MATTER), in_all(&w, MINERAL));
+    let (m_before, n_before) = (in_all(&w, MATTER), held(&w));
     for _ in 0..12 {
         pcore::step(&mut w);
     }
-    let (lost, gained) = (m_before - in_all(&w, MATTER), in_all(&w, MINERAL) - n_before - bare);
+    let (lost, gained) = (m_before - in_all(&w, MATTER), held(&w) - n_before - bare);
     assert!(bare >= 0.0 && bare < 1e-3 * lost, "the open fixed {bare} mol in a year");
     println!("a year on the ground: {lost:.0} of {m_before:.0} mol of matter rotted, {gained:.0} mol of the mineral back");
     assert!(lost > 0.02 * m_before, "it did not rot: {lost}");

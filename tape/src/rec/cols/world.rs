@@ -91,8 +91,9 @@ impl Recorder {
 }
 
 /// Each mineral (`Chemistry::minerals`): its mass in the ground per m² of land and of sea, and where it is in all, in
-/// 10^9 mol of it (matter counted at its share of it): dead matter on the ground of land and of the sea, the cover, and
-/// the stores of the bed (`World::deep`).
+/// 10^9 mol of it (matter counted at its share of it, and what particles hold, `Substance::bound`, at what its rot
+/// gives back of it, `held_mineral`): dead matter on the ground of land and of the sea, the cover, and the stores of
+/// the bed (`World::deep`).
 fn minerals(c: &Ctx, row: &mut Row) {
     let w = c.w;
     let (n, area, matter, minerals) = (w.mesh.cells().n(), w.mesh.cells().area(), w.chem.matter(), w.chem.minerals());
@@ -100,11 +101,13 @@ fn minerals(c: &Ctx, row: &mut Row) {
     for (q, &(k, per)) in minerals.iter().enumerate() {
         // [ground, dead matter] x [land, sea], and the area of each
         let (mut t, mut areas) = ([[0.0f64; 2]; 2], [0.0f64; 2]);
+        let held = held_mineral(w, k);
         for (i, &a) in area.iter().enumerate() {
             let sea = (c.f.z[i] <= 0.0) as usize;
             areas[sea] += a;
             t[0][sea] += w.store.amounts(Class::Ground)[k * n + i];
             t[1][sea] += matter.map_or(0.0, |m| w.store.amounts(Class::Ground)[m * n + i]) * per;
+            t[1][sea] += held.iter().map(|&(b, per_b)| w.store.amounts(Class::Ground)[b * n + i] * per_b).sum::<f64>();
         }
         let mm = w.chem.subs[k].molar_mass;
         row.push(format!("min{q}_land"), "kg/m2", t[0][0] * mm / areas[0].max(f64::MIN_POSITIVE));
@@ -116,11 +119,24 @@ fn minerals(c: &Ctx, row: &mut Row) {
     }
 }
 
-/// Dead fuel, matter and each solid life builds on the ground of the land, kg/m².
+/// Of each substance particles hold (`Substance::bound`), the mol of mineral `k` its rot gives back per mol: the first
+/// reaction that takes it and gives the mineral.
+fn held_mineral(w: &World, k: usize) -> Vec<(usize, f64)> {
+    let bound = (0..w.chem.ns()).filter(|&b| w.chem.subs[b].bound);
+    let back = |b: usize| w.chem.reactions.iter().find_map(|r| {
+        let took = r.inputs.iter().find(|p| p.0 as usize == b)?.1 as f64;
+        Some(r.outputs.iter().find(|p| p.0 as usize == k)?.1 as f64 / took)
+    });
+    bound.filter_map(|b| back(b).map(|per| (b, per))).collect()
+}
+
+/// Dead fuel, matter, each solid life builds and what particles hold (`Substance::bound`) on the ground of the land,
+/// kg/m².
 fn dead(w: &World, land: &[usize], row: &mut Row) {
     let n = w.mesh.cells().n();
     let fuel = w.chem.build.as_ref().map(|b| b.inputs[0].0 as usize);
-    for k in fuel.into_iter().chain(w.chem.matter()).chain(w.chem.materials()) {
+    let bound = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].bound);
+    for k in fuel.into_iter().chain(w.chem.matter()).chain(w.chem.materials()).chain(bound) {
         let kg = land.iter().map(|&i| w.store.amounts(Class::Ground)[k * n + i]).sum::<f64>() * w.chem.subs[k].molar_mass;
         row.push(format!("dead_{k}"), "kg/m2", kg / land.iter().map(|&i| w.mesh.cells().area()[i]).sum::<f64>().max(f64::MIN_POSITIVE));
     }
