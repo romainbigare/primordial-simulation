@@ -1,4 +1,4 @@
-// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl
 // The plant cover's marks over the live map (web/src/textures.ts): the trees and bushes, at every frame, plant by plant
 // where a plant takes a few pixels; where it takes less, the ground draws it as a field of the same colours
 // (lib/cover_field.wgsl), and the herbs always so, as its sward. Each lattice of marks (web/src/canopy.ts `LATTICES`)
@@ -47,9 +47,9 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       let packed = i32(m.x);
       let kd = packed / (GROUPS * PLACE_STEPS);
       let s = kd / kinds_n();
-      // Its share that shows, negated where its foot stands in liquid (mark.wgsl `decide`).
-      let wades = select(0.0, 1.0, m.y < 0.0);
-      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), wades), p, e, fade * abs(m.y), m.z);
+      // Its share that shows and the depth of the liquid over its foot (mark.wgsl `wade_word`).
+      let wade = wade_of(m.y);
+      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), wade.y), p, e, fade * wade.x, m.z);
     }
   }
 }

@@ -130,11 +130,27 @@ function restingTurn(meshes) {
   return new THREE.Quaternion().setFromUnitVectors(best, new THREE.Vector3(0, -1, 0));
 }
 
+// A material as `m` cuts its leaves, but each fragment's colour its height over the ground at `ground` times `scale`, held
+// to 0..1, as its grey (the height pass of `render`); its cover as the colour pass's.
+function heightOf(m, ground, scale) {
+  const mat = m.clone();
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.heightGround = { value: ground }; sh.uniforms.heightScale = { value: scale };
+    sh.vertexShader = 'varying float vHeight;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvHeight = (modelMatrix * vec4(transformed, 1.0)).y;');
+    sh.fragmentShader = 'varying float vHeight;\nuniform float heightGround;\nuniform float heightScale;\n' + sh.fragmentShader.replace('#include <dithering_fragment>',
+      '#include <dithering_fragment>\ngl_FragColor = vec4(vec3(clamp((vHeight - heightGround) * heightScale, 0.0, 1.0)), diffuseColor.a);');
+  };
+  mat.customProgramCacheKey = () => 'height';
+  return mat;
+}
+
 // Sprite `s` rendered at `px` texels: set down on its resting face (`s.rest`), turned `s.turn` degrees about the
 // vertical, its foot on the ground at 0, sunk `s.sink` of its height into it, and the ground at `s.cut` of its height
-// (what lies below the ground is cut off), the meshes whose material matches `hide` left out. The frame the camera sees: its middle column over the
-// body's middle, its bottom at the body's lowest visible point. Returns the canvas.
-async function render(s, px, hide) {
+// (what lies below the ground is cut off), the meshes whose material matches `hide` left out; with `scale`, its height
+// pass (`heightOf`: each texel's height over the ground times `scale`). The frame the camera sees: its middle column
+// over the body's middle, its bottom at the body's lowest visible point. Returns the canvas, with the frame's side in
+// the model's units (`side`) and the height of its stem's foot over the frame's bottom in them (`foot`).
+async function render(s, px, hide, scale) {
   const meshes = await meshesOf(s);
   const body = new THREE.Group();
   meshes.forEach(m => body.add(m));
@@ -144,6 +160,7 @@ async function render(s, px, hide) {
   body.position.set(-(box.min.x + box.max.x) / 2, -box.min.y - (s.sink || 0) * height, -(box.min.z + box.max.z) / 2);
   const turned = new THREE.Group(); turned.add(body); turned.rotation.y = THREE.MathUtils.degToRad(s.turn || 0);
   const ground = (s.cut || 0) * height;
+  if (scale) meshes.forEach(m => { m.material = heightOf(m.material, ground, scale); });
   turned.updateMatrixWorld(true);
   // The camera's axes: right (east), up the screen, and its view (north and down).
   const down = THREE.MathUtils.degToRad(DOWN), up = new THREE.Vector3(0, Math.cos(down), -Math.sin(down));
@@ -181,7 +198,8 @@ async function render(s, px, hide) {
   const out = document.createElement('canvas'); out.width = out.height = px;
   out.getContext('2d').drawImage(renderer.domElement, 0, 0);
   meshes.forEach(m => m.geometry.dispose());
-  return out;
+  // The stem's foot: the middle of the body's box on the ground.
+  return Object.assign(out, { side, foot: ground * Math.cos(down) - bottom });
 }
 
 // The box of a canvas's cover (alpha over 0) about its middle column: its half width and its top and bottom rows.
@@ -240,9 +258,12 @@ function fillOf(cv, w, h) {
 
 const sprites = [];
 // Renders sprite `s` into a cell `size` texels wide (and, with `s.bare`, its bare twin: the meshes whose material matches
-// `s.bare` hidden, in the same frame, at half the side), its leaves scaled to mean lightness `s.leaf` where it is given
-// (its other texels by the square root of that scale); keeps it; returns its index.
-window.sprite = async (s, size) => {
+// `s.bare` hidden, in the same frame, at half the side; with `heightSize`, its heights: the height pass in the same
+// frame, in a cell that many texels wide, each texel's height over the ground as a share of the content's height, 0..1,
+// its grey), its leaves scaled to mean lightness `s.leaf` where it is given (its other texels by the square root of that
+// scale); keeps it; returns its index. With its heights, the height of its stem's foot over its lowest point as a share
+// of its content's height (`foot`).
+window.sprite = async (s, size, heightSize) => {
   const px = SUPER * size, leafy = await render(s, px), b = coverBox(leafy);
   const k = (size * (1 - EDGE)) / Math.max(2 * b.half, b.bottom - b.top);
   const w = (2 * b.half * k) / size, h = ((b.bottom - b.top) * k) / size;
@@ -252,18 +273,26 @@ window.sprite = async (s, size) => {
     const bare = scaled(placed(await render(s, px, s.bare), b, size / 2, k / 2), light);
     kept.bare = { cell: bare, row: { w, h, fill: fillOf(bare, w, h), leaf: kept.row.leaf } };
   }
+  if (heightSize) {
+    // The content's height in the model's units: its texels over the frame's.
+    const tall = ((b.bottom - b.top) * leafy.side) / px;
+    kept.height = { cell: placed(await render(s, px, null, 1 / tall), b, heightSize, (k * heightSize) / size), row: { foot: leafy.foot / tall } };
+  }
   sprites.push(kept);
   return sprites.length - 1;
 };
-window.cellOf = (i, bare) => (bare ? sprites[i].bare.cell : sprites[i].cell).toDataURL('image/png');
-window.rowOf = (i, bare) => (bare ? sprites[i].bare.row : sprites[i].row);
-// A strip of layers `side` texels wide, `per` cells a layer (1 or 4: two by two), of the sprites listed as [index, bare].
+// Sprite i's part: 'leafy' (itself), 'bare' (its bare twin) or 'height' (its heights).
+const partOf = (i, part) => (part === 'leafy' ? sprites[i] : sprites[i][part]);
+window.cellOf = (i, part) => partOf(i, part).cell.toDataURL('image/png');
+window.rowOf = (i, part) => partOf(i, part).row;
+// A strip of layers `side` texels wide, `per` cells a layer (1 or 4: two by two), of the sprites' parts listed as
+// [index, part].
 window.strip = (list, side, per) => {
   const cells = per === 4 ? 2 : 1, cv = document.createElement('canvas');
   cv.width = side; cv.height = side * Math.ceil(list.length / per);
   const g = cv.getContext('2d'), c = side / cells;
-  list.forEach(([i, bare], k) => {
-    const s = bare ? sprites[i].bare.cell : sprites[i].cell, layer = Math.floor(k / per), q = k % per;
+  list.forEach(([i, part], k) => {
+    const s = partOf(i, part).cell, layer = Math.floor(k / per), q = k % per;
     g.drawImage(s, (q % cells) * c, layer * side + Math.floor(q / cells) * c, c, c);
   });
   return cv.toDataURL('image/png');

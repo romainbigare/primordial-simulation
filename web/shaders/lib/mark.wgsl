@@ -284,8 +284,8 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
 // `GROUPS` x `PLACE_STEPS` + its place in steps (-1:
 // none stands there, or the snow buries it, or its lattice's marks there take too few pixels to show), the share of it
 // that shows (over the snow, and as a thing by the width of its lattice's marks at its foot, draw.wgsl `as_thing`: the
-// field far away, cover_field.wgsl `lattice_field`, is drawn by the same width where they do not), negated where its
-// foot stands in liquid, and the share of the ground snow covers at its foot.
+// field far away, cover_field.wgsl `lattice_field`, is drawn by the same width where they do not) with the depth of the
+// liquid over its foot (`wade_word`), and the share of the ground snow covers at its foot.
 // A function of the cell alone, so it is decided once a frame for each cell in view (marks.wgsl) and read by every
 // pixel the mark may cover (cover.wgsl `lattice`).
 fn decide(l: i32, k: vec2f) -> vec4f {
@@ -310,11 +310,22 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   if (pick.x < 0) { return none; }
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
-  let wades = select(0.0, 1.0, f.depth > FILM_M);
+  let wades = select(0.0, f.depth, f.depth > FILM_M);
   let q = mark_plant(l, k, sq, pick.y, place_of(pick.z), wades);
   let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
-  return vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), select(shows, -shows, wades > 0.0), f.snow, mark_box(l, q));
+  return vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), f.snow, mark_box(l, q));
+}
+
+// The share of a mark that shows (0..1, more than 0) and the depth of the liquid over its foot, m (0: on land), as one
+// number (`decide`): on land the share; in liquid, negated, the depth in steps of `WADE_STEP_M` m and half the share.
+const WADE_STEP_M = 0.01;
+fn wade_word(shows: f32, depth: f32) -> f32 { return select(shows, -(round(depth / WADE_STEP_M) + 0.5 * shows), depth > 0.0); }
+// The share and the depth of `wade_word`.
+fn wade_of(word: f32) -> vec2f {
+  if (word >= 0.0) { return vec2f(word, 0.0); }
+  let steps = floor(-word);
+  return vec2f(2.0 * (-word - steps), steps * WADE_STEP_M);
 }
 
 // The box plant q of lattice l covers about its foot, so a pixel outside it does not draw it (cover.wgsl `lattice`):
@@ -329,14 +340,14 @@ fn mark_box(l: i32, q: Plant) -> f32 {
   // Its clump's plants stand up to `spread` from its foot (models.wgsl `clump_one`).
   let body = fit.spread + 0.5 * fit.w + abs(q.lean.x) * fit.h;
   let long = model_shadow_long(q, fit);
-  let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, long + fit.spread);
+  let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, max(long, foot_rise(fit.s) * fit.h) + fit.spread);
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
 
 // The plant at place z among the groups of kind `t` of the square at `sq` in cell k of lattice l (`decide`): at its
-// place in the cell, of its size and its own random numbers, no taller than the rows looked at let it stand; its foot
-// in liquid where `wades` is 1.
+// place in the cell, of its size and its own random numbers, no taller than the rows looked at let it stand; liquid
+// `wades` m deep over its foot (0: on land).
 fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32, z: f32, wades: f32) -> Plant {
   let g = cover.grid[l];
   let id = cover.base[l].xy + vec2i(k);

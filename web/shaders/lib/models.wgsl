@@ -151,11 +151,14 @@ fn bare_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
 
 // Plant q drawn from its model sprite `fit` (`model_fit`) at p, e m a pixel, where snow covers `snow` of the ground: its colour
 // (linear) and cover; none where it does not reach. Its leafy sprite keeps the share of its leaves left this season in
-// sprays (`SPRAYS` across the sprite) that fall whole, over its bare twin.
+// sprays (`SPRAYS` across the sprite) that fall whole, over its bare twin. Its stem's foot (tex.wgsl `foot_rise`)
+// stands on its foot; standing in liquid, on the bed, and each of its texels under the surface by its own height
+// (tex.wgsl `model_height_m`) is seen through the liquid (style.wgsl `seen_in_liquid`).
 fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   let s = fit.s; let w = fit.w; let h = fit.h;
   let lean = q.lean.x * h;
-  let uv = vec2f((p.x - q.at.x) / w + 0.5 - lean * (q.at.y - p.y) / (h * w), 1.0 - (q.at.y - p.y) / h);
+  let up = q.at.y - p.y;
+  let uv = vec2f((p.x - q.at.x) / w + 0.5 - lean * up / (h * w), 1.0 - up / h - foot_rise(s));
   if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec4f(0.0); }
   let kept = smoothstep(-0.12, 0.12, q.left - (0.5 + 0.5 * noise(uv * SPRAYS + 17.0 * q.r.xz, 150).x));
   var bare = vec4f(0.0);
@@ -172,25 +175,30 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   // crown does.
   let lit = lum / max(model_leaf(s), 1e-4);
   leaf = mix(leaf, CROWN_SNOW_RGB * lit, CROWN_SNOW * snow * q.closed * q.left * smoothstep(SNOW_LIT.x, SNOW_LIT.y, lit));
-  // The leafy sprite's sprays over the bare twin.
+  // The leafy sprite's sprays over the bare twin, its part under the liquid at its foot seen through it.
   let under = bare.a * (1.0 - a);
-  return vec4f((mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under), a + under);
+  let rgb = (mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under);
+  if (q.wades <= 0.0) { return vec4f(rgb, a + under); }
+  return vec4f(seen_in_liquid(rgb, q.wades, model_height_m(s, uv, e / w, up, h), e / MAP_VIEW.y), a + under);
 }
 
 // The shadow of plant q drawn from its model sprite `fit` at p, e m a pixel: its sprite cast on the ground away from the
-// sun (south-east), each of its texels at a height on it laid `MODEL_SHADOW_RUN` of that height along the ground, blurred
-// (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of its sprays as are left, over its bare
-// twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the reach a pixel looks for it (cover.wgsl
-// `lattice`). How dark it makes the ground, 0..1.
+// sun (south-east), each of its texels over its stem's foot (tex.wgsl `foot_rise`) at a height on it laid `MODEL_SHADOW_RUN` of
+// that height along the ground, blurred (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of
+// its sprays as are left, over its bare twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the
+// reach a pixel looks for it (cover.wgsl `lattice`). How dark it makes the ground, 0..1. It is laid from where its
+// stem meets what it falls on: the ground at its foot, or the surface of the liquid it stands in, where its stem shows
+// out of it (`seen_in_liquid`): the map's view (water.wgsl `MAP_VIEW`) draws it the cosine of the depth north of the
+// foot.
 const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.05;
 // The length of that shadow along the ground southward, m, within its reach.
 fn model_shadow_long(q: Plant, fit: ModelFit) -> f32 { return min(MODEL_SHADOW_RUN * fit.h, 0.9 * q.reach); }
 fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
-  let v = p - q.at;
+  let v = p - q.at + vec2f(0.0, MAP_VIEW.y * q.wades);
   let long = model_shadow_long(q, fit);
   let up = v.y / long;
   if (up < 0.0 || up > 1.0) { return 0.0; }
-  let uv = vec2f((v.x - v.y) / fit.w + 0.5, 1.0 - up);
+  let uv = vec2f((v.x - v.y) / fit.w + 0.5, (1.0 - foot_rise(fit.s)) * (1.0 - up));
   if (uv.x < 0.0 || uv.x > 1.0) { return 0.0; }
   // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
   let g = max(max(e / fit.w, e / long), SHADOW_BLUR);
