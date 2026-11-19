@@ -33,11 +33,14 @@ const INLAND_ATTENUATION = vec3f(0.22, 0.12, 0.2); const INLAND_DEEP = vec3f(0.0
 // lines, which follow the shore (lines of the bed's depth): one at the water's edge and `FOAM_LINES` more, each
 // `FOAM_LINE_M` of depth farther out and `FOAM_LINE_FALL` as strong as the last, `FOAM_LINE_W` of that spacing wide to
 // each side, soft, and broken along the shore over `FOAM_BREAK_M` (the first at the edge thinned to `FOAM_EDGE_KEPT`
-// where it breaks, not gone). Where the lines lie under `FOAM_LINE_PX` pixels apart they are one rim, `FOAM_RIM` of
+// where it breaks, not gone). Out from the edge the broken waves' foam lies in ragged bands: each wanders across its
+// line by `FOAM_WANDER` of the spacing over `FOAM_WANDER_M`, its width varies by half over that, and it breaks where two
+// octaves of noise (`FOAM_BREAK_M` and a third of it) fall, into patches with no two alike. Where the lines lie under `FOAM_LINE_PX` pixels apart they are one rim, `FOAM_RIM` of
 // the foam.
 const FOAM = 0.55; const FOAM_M = 0.4; const FOAM_RGB = vec3f(0.85, 0.92, 0.95);
 const FOAM_LINES = 2.0; const FOAM_LINE_M = 0.05; const FOAM_LINE_FALL = 0.55; const FOAM_LINE_W = 0.25;
 const FOAM_BREAK_M = 6.0; const FOAM_LINE_PX = vec2f(1.5, 4.0); const FOAM_RIM = 0.6; const FOAM_EDGE_KEPT = 0.4;
+const FOAM_WANDER = 0.3; const FOAM_WANDER_M = 4.0;
 // The pixels across the foam's band over which it fades in.
 const FOAM_PX = vec2f(0.5, 1.5);
 // The bed under any water is drawn this far towards pale sand (`BEACH_SAND` times `BED_TONE`), so shallows read a
@@ -132,9 +135,16 @@ fn foam(depth: f32, slope: f32, e: f32, at: vec2f) -> f32 {
     // The lines, counted from the edge of the water drawn (`FILM_M`): the nearest one's share at this depth.
     let x = max(depth - FILM_M, 0.0) / FOAM_LINE_M;
     let k = min(floor(x + 0.5), FOAM_LINES);
-    var line = (1.0 - smoothstep(0.0, FOAM_LINE_W, abs(x - k))) * pow(FOAM_LINE_FALL, k);
-    let breaks = ease(-0.2, 0.3, noise_turned(at / FOAM_BREAK_M + 7.3 * k, 110));
-    line *= select(breaks, mix(FOAM_EDGE_KEPT, 1.0, breaks), k == 0.0);
+    let n = noise_turned(at / FOAM_BREAK_M + 7.3 * k, 110);
+    var line: f32;
+    if (k == 0.0) {
+      line = (1.0 - smoothstep(0.0, FOAM_LINE_W, x)) * mix(FOAM_EDGE_KEPT, 1.0, ease(-0.2, 0.3, n));
+    } else {
+      let wander = noise_turned(at / FOAM_WANDER_M + 3.1 * k, 115);
+      let across = abs(x - k + FOAM_WANDER * wander) / (FOAM_LINE_W * (1.0 + 0.5 * noise_turned(at / FOAM_WANDER_M + 5.7, 116)));
+      let breaks = smoothstep(-0.1, 0.45, n + 0.5 * noise_turned(at * (3.0 / FOAM_BREAK_M) + 1.9 * k, 117));
+      line = (1.0 - smoothstep(0.3, 1.0, across)) * breaks * pow(FOAM_LINE_FALL, k);
+    }
     white = mix(white, line, ease(FOAM_LINE_PX.x, FOAM_LINE_PX.y, FOAM_LINE_M / rise / max(e, 1e-3)));
   }
   return FOAM * white * ease(FOAM_PX.x, FOAM_PX.y, FOAM_M / rise / max(e, 1e-3));
