@@ -9,6 +9,7 @@
 use super::square::Square;
 use super::terrain::{noise, Place};
 use crate::rng::{Purpose, Rng};
+use serde::{Deserialize, Serialize};
 
 /// The layers of the stack, which repeats under them, and the least and the most thickness of one, m.
 const LAYERS: usize = 12;
@@ -28,6 +29,18 @@ const BODY_ABOVE: f64 = 0.66;
 /// A sample is of a body where most of it is (the bodies' share carried to a grid).
 const MOST: f64 = 0.5;
 
+/// What the ground reads of one make of the bed, from the chemistry's numbers of its substances (`worldgen`): how fast
+/// flowing liquid wears it against the first make; the share of the particles it breaks into that are coarse (`soil`);
+/// the share of it that weathers into fine particles; and its particles' density over the key liquid's, less one (their
+/// submerged weight, which their settling reads).
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct Make {
+    pub cut: f64,
+    pub coarse: f64,
+    pub weathers: f64,
+    pub buoyant: f64,
+}
+
 /// The makes of the bed as the seed lays them: the depth of the foot of each layer of the stack under its top, m, and
 /// its make; the make of the bodies (the hardest); and how fast flowing liquid wears each make against the first.
 pub(super) struct Strata {
@@ -38,10 +51,11 @@ pub(super) struct Strata {
 }
 
 impl Strata {
-    /// The strata of `seed` for makes worn `cut` times as fast as the first: each layer of a thickness and a make
-    /// drawn, never the make of the layer over it.
-    pub(super) fn of(seed: u64, cut: &[f64]) -> Strata {
+    /// The strata of `seed` for `makes` (`Make::cut`): each layer of a thickness and a make drawn, never the make of
+    /// the layer over it.
+    pub(super) fn of(seed: u64, makes: &[Make]) -> Strata {
         let draw = |k: usize| Rng::new(seed, FOLD_KEY, k as u64, Purpose::Terrain).f64();
+        let cut: Vec<f64> = makes.iter().map(|m| m.cut).collect();
         let n = cut.len().max(1);
         let (mut foot, mut of, mut depth) = (Vec::with_capacity(LAYERS), Vec::<u8>::with_capacity(LAYERS), 0.0);
         for l in 0..LAYERS {
@@ -54,7 +68,7 @@ impl Strata {
             of.push(make as u8);
         }
         let body = (0..n).min_by(|&a, &b| cut[a].total_cmp(&cut[b])).unwrap_or(0) as u8;
-        Strata { foot, of, body, cut: cut.to_vec() }
+        Strata { foot, of, body, cut }
     }
 
     /// The fold of the layers at `place` of `map` for `seed`, m (up is positive), and the share of a body there (0 or

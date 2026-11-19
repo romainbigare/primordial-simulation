@@ -111,7 +111,7 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
 }
 
 /// What runs off each cell, as a share of the liquid that may move in it: what came up from the store; the pores'
-/// drainage to the channels, a share 1 - exp(-`seep` × slope × time / (`porosity` × `hill`)), which what stands over
+/// drainage to the channels, a share 1 - exp(-conductivity × slope × time / (porosity × `hill`), `soil::Pores`), which what stands over
 /// them refills first (pores first); and what stands over its pores over what its parts of the bodies held at the last
 /// pass (`State::held`; they keep the rest, each by what it held, in `Held::part`).
 fn runs_off(w: &World, s: &Scratch, h: &mut Held, (slope, runs): (&[f64], &[f64]), dt: f64) -> Vec<f64> {
@@ -120,8 +120,9 @@ fn runs_off(w: &World, s: &Scratch, h: &mut Held, (slope, runs): (&[f64], &[f64]
     for i in (0..area.len()).filter(|&i| h.vol[i] > 0.0) {
         let (pores, own) = (s.pd[i] * area[i], h.vol[i] - runs[i]);
         let (lp, stands) = (own.min(pores), (own - pores).max(0.0));
-        let free = if s.head[i] > s.z[i] { lp - ph.field * pores } else { 0.0 };
-        let hill = if free > 0.0 && slope[i] > 0.0 { free.min(lp * one_minus_exp(ph.seep * slope[i] * dt / (ph.porosity * ph.hill))) } else { 0.0 };
+        let soil = w.pores(i);
+        let free = if s.head[i] > s.z[i] { lp - soil.field * pores } else { 0.0 };
+        let hill = if free > 0.0 && slope[i] > 0.0 { free.min(lp * one_minus_exp(soil.seep * slope[i] * dt / (soil.porosity * ph.hill))) } else { 0.0 };
         let held: f64 = s.state.held[i].iter().sum();
         let kept = held.min((stands - hill).max(0.0));
         h.part[i].iter_mut().zip(&s.state.held[i]).for_each(|(p, &was)| *p = if held > 0.0 { was * kept / held } else { 0.0 });

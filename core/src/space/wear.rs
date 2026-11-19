@@ -15,7 +15,7 @@
 use super::drain::{draws, flood, open_low, starts, Flood};
 use super::grid::Grid;
 use super::network::NONE;
-use super::mantle::mantle;
+use super::mantle::{age, mantle};
 use super::ponds::settle;
 use super::shelf::lay;
 use super::slopes::{creep, rebound};
@@ -68,12 +68,15 @@ pub(super) fn noise_grid(g: &Grid) -> usize {
 }
 
 /// The ground the wear leaves on grid `g`: of each sample its height, m, whether it is of the open low ground
-/// (`drain::open_low`), the depth of its loose ground, m (`space::mantle`), and the make of its bed at its surface
+/// (`drain::open_low`), the depth of its loose ground, m (`space::mantle`), how much of it settled there, m (all of
+/// it on the open low ground), how long it has lain, years (`mantle::age`), and the make of its bed at its surface
 /// (`space::strata`); and the wear's books (`Books`).
 pub(super) struct Worn {
     pub(super) h: Vec<f64>,
     pub(super) open: Vec<bool>,
     pub(super) loose: Vec<f64>,
+    pub(super) settled: Vec<f64>,
+    pub(super) age: Vec<f64>,
     pub(super) make: Vec<u8>,
     pub(super) books: Books,
 }
@@ -154,14 +157,18 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, body
     let mut h = held(&g.carried((from, &z), 1), &rise_g, &low);
     let bed = Bed { top: g.carried((from, &top), 1), fold: on(fold, 1), body: on(body, 1), strata };
     let make = (0..g.n()).map(|k| bed.make(k, h[k])).collect();
-    let soil = mantle(&g.coarser(from), (&z, &marks.drained), (&marks.settled, &marks.lowers), (CREEP, WEAR_YEARS * STAGES[STAGES.len() - 1].1));
+    let last_years = WEAR_YEARS * STAGES[STAGES.len() - 1].1;
+    let soil = mantle(&g.coarser(from), (&z, &marks.drained), (&marks.settled, &marks.lowers), (CREEP, last_years));
     let mut loose: Vec<f64> = g.carried((from, &soil), 1).iter().zip(&low).map(|(&d, &o)| if o { OOZE_M } else { d.max(0.0) }).collect();
     let offshore = g.carried((from, &offshore), 1);
     books.shelf = lay(g, &mut h, (&low, LOW_STAND_M, &offshore), &mut loose);
     books.beyond = (0..g.n()).map(|k| offshore[k] * g.area(k)).sum::<f64>() - books.shelf;
+    let (settled_g, lowers) = (g.carried((from, &marks.settled), 1), g.carried((from, &marks.lowers), 1));
+    let settled: Vec<f64> = (0..g.n()).map(|k| if low[k] { loose[k] } else { settled_g[k].clamp(0.0, loose[k]) }).collect();
+    let age = (0..g.n()).map(|k| age(loose[k], (settled[k], last_years), lowers[k])).collect();
     // The liquid rises to its stand: what lies under it and joins the open low ground is of it.
     let open = open_low(g, &h, STAND_M);
-    Worn { h, open, loose, make, books }
+    Worn { h, open, loose, settled, age, make, books }
 }
 
 /// Heights `h` with the open low ground `open` at the noise's heights `rise` and land (where the noise lies at the low

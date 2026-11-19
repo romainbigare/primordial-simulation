@@ -15,7 +15,7 @@ struct Wet {
 }
 
 fn wet(w: &World, s: &Scratch, cells: &[usize]) -> Wet {
-    let (n, por) = (w.mesh.cells().n(), w.cfg.phys.porosity);
+    let n = w.mesh.cells().n();
     let (tmin, tmax) = range(&s.state.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let at: Vec<u32> = cells.iter().map(|&i| i as u32).collect();
@@ -27,7 +27,7 @@ fn wet(w: &World, s: &Scratch, cells: &[usize]) -> Wet {
         let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
         let (l, top, _) = layers(w, s, (i, 1.0, 1.0), s.state.tg[i], amt, |k| molten(k, i), |k| w.melt(k, i));
         z.push(top);
-        pores.push((por * l[4] - s.dry(i)).max(0.0));
+        pores.push((w.pores(i).porosity * l[4] - s.dry(i)).max(0.0));
     }
     Wet { vol, z, pores }
 }

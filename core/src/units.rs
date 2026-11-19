@@ -35,6 +35,9 @@ pub const T_SOL: f64 = 298.0;
 /// A typical surface temperature, K: where catalysts' upkeep is measured and phases are judged for the start.
 pub const T_SURF: f64 = 290.0;
 
+/// The kinematic viscosity of the key liquid at `T_SURF`, m²/s: what a particle settling through it meets (`soil`).
+pub const LIQUID_VISCOSITY: f64 = 1.0e-6;
+
 /// The coldest a ground node may be taken by drawing heat from it, K.
 pub const T_FLOOR: f64 = 3.0;
 

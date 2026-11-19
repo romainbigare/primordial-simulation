@@ -9,7 +9,7 @@
 
 use super::drain::{draws, flood, starts};
 use super::grid::Grid;
-use super::network::accumulate;
+use super::network::{accumulate, NONE};
 use super::ponds::{basins, grade, open_parts};
 use super::wear::{noise_grid, wear, Books};
 use crate::math::central;
@@ -24,9 +24,11 @@ use std::sync::{Arc, Mutex};
 /// the terrain's channels on them (`space::network`): the sample its liquid runs to (`network::NONE` for a sink of the
 /// open low ground), the area that drains through it, m², and its neighbour upstream that the most drains through
 /// (`NONE` where none runs to it), and the samples in the order the flood reached them (each after the one its liquid
-/// runs to); the pond each lies in (`NONE` on ground that drains), and the ponds; the make of each sample's bed at its
-/// surface (`space::strata`, as the wear left it), and the depth of its loose ground the wear left, m;
-/// and the volumes the wear moved (`wear::Books`).
+/// runs to), and its slope to the sample its liquid runs to, rise over run (none where it runs to none or uphill); the
+/// pond each lies in (`NONE` on ground that drains), and the ponds; the make of each sample's bed at its surface
+/// (`space::strata`, as the wear left it); the depth of its loose ground the wear left, m, how much of it settled in
+/// the wear's last stage, m (all of it on the open low ground), and how long it has lain, years (`mantle::age`); and
+/// the volumes the wear moved (`wear::Books`).
 #[derive(Clone, Debug)]
 pub struct Samples {
     pub seed: u64,
@@ -37,10 +39,13 @@ pub struct Samples {
     pub order: Vec<u32>,
     pub up: Vec<f64>,
     pub main: Vec<u32>,
+    pub slope: Vec<f64>,
     pub pond: Vec<u32>,
     pub ponds: Vec<Pond>,
     pub make: Vec<u8>,
     pub loose: Vec<f64>,
+    pub settled: Vec<f64>,
+    pub age: Vec<f64>,
     pub books: Books,
 }
 
@@ -139,8 +144,8 @@ impl Terrain {
         let (place, lift) = (|k: usize| map.place_of(&block(k), south, north).1, self.lift(seed, map));
         let at: Vec<(f64, (f64, f64))> = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| (self.sample(seed, map, &lift, place(k)), Strata::at(seed, map, place(k))));
         let (rise, (fold, body)): (Vec<f64>, (Vec<f64>, Vec<f64>)) = at.into_iter().unzip();
-        let worn = wear(seed, &grid, (by, &rise), (&fold, &body, &Strata::of(seed, &self.cut)));
-        let (mut h, open, loose, books, make) = (worn.h, worn.open, worn.loose, worn.books, worn.make);
+        let worn = wear(seed, &grid, (by, &rise), (&fold, &body, &Strata::of(seed, &self.makes)));
+        let (mut h, open, books, make) = (worn.h, worn.open, worn.books, worn.make);
         let f = flood(&grid, &h, &open, (&starts(&grid, &open, false), &draws(seed, 1, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
         let shallow = basins(&grid, &h, &f).1;
@@ -148,6 +153,8 @@ impl Terrain {
         let (mut pond, members) = basins(&grid, &h, &f);
         let mut ponds: Vec<Pond> = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
         open_parts(&grid, &open, (&mut pond, &mut ponds));
-        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, pond, ponds, make, loose, books }
+        let slope = (0..grid.n()).map(|k| if f.to[k] == NONE { 0.0 } else { (h[k] - h[f.to[k] as usize]).max(0.0) / f.apart[k] }).collect();
+        let (loose, settled, age) = (worn.loose, worn.settled, worn.age);
+        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, slope, pond, ponds, make, loose, settled, age, books }
     }
 }

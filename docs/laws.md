@@ -373,7 +373,7 @@ what the heat holds molten, as every law and the shell then read it.
 ### 1.2 Liquid
 `flow::liquid`, once a month, after the air's steps; last, gases dissolve in the liquid (1.5). The sink into the bed's store ends each of the air's steps
 (`flow::air`).
-- **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
+- **Pores first**: the loose ground's pores (each cell's porosity, `World::pores`, 4) fill first, under any soft cover; only liquid above them stands
   and has a head (`flow::land::stand`), the depth bodies and Change read.
 - **Each cell's own ground** (`flow::curve`): the ground inside a cell is the terrain's samples inside it, their
   departures from their mean laid on the cell's mean surface, found once. The samples of the cell that lie in a pond
@@ -432,11 +432,12 @@ what the heat holds molten, as every law and the shell then read it.
   among it, is what a taker can drink of the running liquid), at the mol per m³ of the liquid its ground holds
   (`World::liquid_in`). Its size does not depend on the cell's: every shell reads it
   here.
-- **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, 1.7): `seep` ×
-  saturated thickness × width / distance, at most half of what would level two cells, and no cell giving more than it
-  holds over field capacity; pores at or under field capacity (`field`) give nothing. Over cells of kilometres a
+- **Pore water** flows by Darcy's law (an explicit sweep on the liquid table, the store's too, 1.7): the conductivity
+  of the two cells in series (the harmonic mean of their `Pores::seep`, 4) × saturated thickness × width / distance,
+  at most half of what would level two cells, and no cell giving more than it holds over field capacity; pores at or
+  under their field capacity (`Pores::field`) give nothing. Over cells of kilometres a
   liquid step moves a table a thousandth of the way to its neighbours', far below the explicit limit. Liquid above it sinks to the deep store
-  (`drain::sink`, at most `seep` a second and the store's room) right after each of the air's steps, which bring the
+  (`drain::sink`, at most its conductivity a second and the store's room) right after each of the air's steps, which bring the
   rain: held until the month's liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
   warm it. The store flows by `bed_seep` (`flow::deep`). Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). Pore water moves before the
@@ -573,7 +574,7 @@ gives the climate of 1-day ones within 0.3 K on the land and the land's runoff w
 
 ### 1.5 Evaporation, rain and dissolved gases
 `flow::air::cells`, `daily`, `rain`, `soak`, `exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against
-the air's): a liquid in the ground's pores by the share of it the ground holds for roots (`Physics::available`, the
+the air's): a liquid in the ground's pores by the share of it the ground holds for roots (`Pores::available`, the
 same share the plants feel, 3): at the open rate at field capacity and over, none at the wilting point, in proportion
 between (Manabe 1969's bucket, its store the liquid a ground holds for roots): the air does not dry it below the
 wilting point (below it a ground dries only slowly, from its top, stage two of its drying; Ritchie 1972); a solid in
@@ -773,7 +774,7 @@ of `dt` is safe down to Δ = √(8 D dt). On the island (month 2.59e6 s, year 3.
 
 | Process | Step | D or rate | Safe down to |
 |---|---|---|---|
-| Pore flow, Darcy (`seep`) | month | `seep` × 1 m of loose ground / `porosity`: 9e-6 m²/s | 14 m |
+| Pore flow, Darcy (`Pores::seep`) | month | conductivity × 1 m of loose ground / porosity: 9e-6 m²/s for a loam, 8e-5 for the most coarse | 14 m, 41 m |
 | The bed's store, Darcy (`bed_seep`) | month | `bed_seep` × the depth it fills / `bed_porosity`: 4.5e-3 m²/s full (30 m) | 305 m full |
 | Heat sideways (`land::conduct`) | year | k / (ρ c) of the active layer, about 1.1e-6 m²/s | 17 m |
 | Creep (`creep`) | year | `creep` × softness × 1 m: 1.3e-9 m²/s for the softest solid | 0.6 m |
@@ -980,8 +981,8 @@ seeds fill it:
 - **Light reaction** (reaction 0): the share `light_yield` of the light caught is stored, at most its capacity
   10^`LIGHT` × 10^`MOIST` mol per kg of living cover per s, times the reaction's pace k e^(−Ea/T) over its value at
   `t_cat`, times its activity a = min(1, w / 10^`MOIST`), a straight line. **Drought** is felt against the ground's own
-  pores (`cover::wet`, `Physics::available`): w is the share of what its ground holds for roots that it holds, (θ −
-  `wilt`) / (`field` − `wilt`) within 0 and 1, θ the share of the pores of the ground it stands on that its key liquid
+  pores (`cover::wet`, `Pores::available`): w is the share of what its ground holds for roots that it holds, (θ −
+  wilt) / (field − wilt) within 0 and 1 (its cell's field capacity and wilting point, `World::pores`, 4), θ the share of the pores of the ground it stands on that its key liquid
   that is liquid fills (Flow's pore space, `Scratch::land_pores`; standing liquid counts, so θ may pass 1): none at the
   wilting point, all at field capacity (the available water of soil physics; Saxton and Rawls 2006). The ground's
   liquid is one store over the depth of its loose ground (Flow keeps no liquid by depth), so a deep root and a shallow
@@ -1316,6 +1317,47 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   cell as nothing (`contract::Stand` is the cover's: takers neither shade nor hold the ground).
 
 ## 4. Soil and minerals
+**Texture** (`soil`): the loose ground of each of the terrain's samples is fine grain (under 2 µm), middle grain
+(2 to 50 µm) and coarse grain (50 µm to 2 mm), each class spread evenly over the logarithm of its sizes, and an organic
+share no law makes yet. Three laws, over what the wear at the world's start left (0), set the shares
+(`soil::samples`); no table places a kind of soil:
+- **The bed's grains.** Each make breaks into coarse grain by its substances' hardness and into middle grain by the
+  rest, means by their volume shares (`Make::coarse`, `worldgen::makes_of`): a hard grain keeps its size as it is
+  broken and carried, a soft one wears finer.
+- **Weathering.** The share of a make whose substances a reaction of the open world takes with a gas of the starting
+  air into another solid (`Make::weathers`; in chemistry 0 the dark mineral 8, by reaction 6) turns its middle and coarse
+  grain fine as 1 − exp(−t / 1e5 years) (`WEATHER_YEARS`; the lifetime of a silicate grain in the field, White and
+  Brantley 2003), t the time the loose ground has lain: its depth over how fast it is renewed, from below as fast as
+  the ground lowers or from above as fast as it settled in the wear's last stage (`Samples::age`; at least the
+  lowering of `SLOWEST`). A substance that weathers only into liquid or gas dissolves away and leaves no fine grain.
+  So thin ground on steep slopes, quickly renewed, keeps its coarse grain; old flat ground on a weathering bed is fine.
+- **Sorting.** What settled on a sample in the wear's last stage (`Samples::settled`; all of the open low ground's) is
+  sorted by the flow that laid it: grains settle where they sink faster than the flow's shear velocity u* = √(g d S)
+  stirs them (Bagnold 1966), a grain of diameter D sinking at R g D² / (18 ν + (0.75 R g D³)^½) (Ferguson and Church
+  2004; R its make's grains' density over the liquid's less one, `Make::buoyant`; ν the liquid's viscosity,
+  `units::LIQUID_VISCOSITY`). The flow is a flood of 1e-6 m/s of runoff from the area that drains through the sample
+  (`FLOOD_RUNOFF`), as deep as Flow's channels carry it (`channel_depth`), down the sample's slope to the sample its
+  liquid runs to; under standing liquid (a pond, the open low ground) it is still. What settles is the load's grain
+  between the least size that sinks there and the least that the flow at its main sample upstream carried on (all
+  sizes where none runs to it), a span at least twice as wide (`SORTING`); where that span holds none of the load,
+  its class nearest the span. So channels and fans are coarse, the floors of ponds and the sea fine (Hjulström 1935).
+  The settled share of the loose ground holds that grain, the rest the weathered bed's.
+
+A cell's texture (`World::soil`, found when the world is built) is its samples' mean weighted by the loose ground each
+gives its ground node (at most `skin_m` of it; by area where it holds none).
+
+**Pores** (`soil::Pores`, `World::pores`): each cell's porosity θs, field capacity θ33 (the liquid held at −33 kPa)
+and wilting point θ1500 (−1500 kPa), and its conductivity when full Ks follow from its texture by the regressions of
+Saxton and Rawls (2006) on the coarse share S, the fine share C and the organic matter (per cent by weight), with S,
+C and the organic share held inside the range they hold for (C 0.05 to 0.6, S 0.05 to 0.95, organic to 0.025, past which at the most fine they put field capacity over full):
+θ1500 and θ33 each a fitted sum of S, C, OM, S·OM, C·OM, S·C and one, then a fitted second step on it; θs = θ33 + the
+fitted share between field capacity and full − 0.097 S + 0.043; Ks = 1930 (θs − θ33)^(3 − λ) mm an hour, λ = ln(θ33
+/ θ1500) / ln(1500 / 33). Flow keeps field capacity and the wilting point as shares of the pores (θ33 / θs, θ1500 /
+θs). A loam (0.4 coarse, 0.2 fine) has 0.39 of pores, 0.64 of them at field capacity, 0.31 at the wilting point,
+and passes 2.2e-6 m/s; a coarse ground passes up to 3e-5 m/s and holds a quarter of a loam's liquid for roots, a fine one under
+1e-8 m/s. So coarse ground takes the rain in fast and holds little of it; fine ground sheds what falls faster than
+it passes, and holds more, much of it past the roots' reach (1.2, 1.5, 3).
+
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
 and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
 per m² of land, on every open land cell; then only fixing adds it, rotting (7) returns it, heat (11) sends it
