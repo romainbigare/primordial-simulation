@@ -150,7 +150,9 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   let kept = smoothstep(-0.12, 0.12, q.left - (0.5 + 0.5 * noise(uv * SPRAYS + 17.0 * q.r.xz, 150).x));
   var bare = vec4f(0.0);
   if (kept < 1.0) { bare = bare_texel(s, uv, e / w); }
-  let t = model_texel(s, uv, e / w);
+  var t = model_texel(s, uv, e / w);
+  let feet = wide_feet(q, s);
+  if (feet > 0.0) { t = flared_foot(t, s, uv, e / w, feet); }
   let a = dense_cover(s, t.a, fit.dense) * kept;
   if (a + bare.a <= 0.0) { return vec4f(0.0); }
   let lum = dot(t.rgb, LUMA);
@@ -187,4 +189,35 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   if (q.left < 1.0) { kept += bare_texel(fit.s, uv, g).a * (1.0 - leafy); }
   let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));
   return select(BUSH_SHADOW, 1.0, q.design == TREE) * SHADOW * kept * edge;
+}
+
+// How wide the feet tree q drawn from sprite s stands on, 0..1: as wet as its kind's ground (form.ts `Form.wet`); drawn as
+// a flare at the trunk's foot (`flared_foot`).
+fn wide_feet(q: Plant, s: i32) -> f32 { return select(0.0, q.wet, q.design == TREE && s < TREES); }
+
+// A tree of wet ground stands on a flared foot: buttresses and the tops of its roots spread its trunk at the ground, to
+// `FOOT_FLARE` times its width at most (the kind of wettest ground), over the lowest `FOOT_RISE` of its trunk's
+// height on the sprite, the more the nearer the ground (as a cube: a buttress swells at its foot); the trunk is
+// `FOOT_TRUNK` of the sprite's width across where the flare starts (measured on the sprites), and the flare takes the
+// colour of the trunk's foot in the sprite (`FOOT_BARK` where the sprite shows none there), its buttresses `FOOT_FINS`
+// fins across, each `FIN_SHADE` darker on one side (trees of swamps and floodplains grow buttresses and knees that
+// hold them in soft wet ground: from memory).
+const FOOT_FLARE = 3.0; const FOOT_RISE = 0.1; const FOOT_TRUNK = 0.06; const FOOT_FINS = 5.0; const FIN_SHADE = 0.3;
+const FOOT_BARK = vec3f(0.09, 0.07, 0.05);
+
+// The texel `t` of sprite s at `uv` (`g` of it a pixel) with the flared foot of a tree whose kind is `wet` wet: the
+// flare where the sprite shows nothing.
+fn flared_foot(t: vec4f, s: i32, uv: vec2f, g: f32, wet: f32) -> vec4f {
+  let up = (1.0 - uv.y) / FOOT_RISE;
+  if (up >= 1.0 || t.a >= 1.0) { return t; }
+  let low = (1.0 - up) * (1.0 - up) * (1.0 - up);
+  let half = 0.5 * FOOT_TRUNK * (1.0 + (FOOT_FLARE - 1.0) * wet * low);
+  let x = (uv.x - 0.5) / max(half, 1e-4);
+  let inside = 1.0 - smoothstep(1.0 - g / half, 1.0, abs(x));
+  if (inside <= 0.0) { return t; }
+  let trunk = model_texel(s, vec2f(0.5, 1.0 - 0.5 * FOOT_RISE), g);
+  let bark = mix(FOOT_BARK, trunk.rgb, trunk.a);
+  let fins = 1.0 - FIN_SHADE * (0.5 + 0.5 * sin(PI * FOOT_FINS * x));
+  let flare = vec4f(bark * fins, inside);
+  return vec4f(mix(flare.rgb, t.rgb, t.a), t.a + flare.a * (1.0 - t.a));
 }

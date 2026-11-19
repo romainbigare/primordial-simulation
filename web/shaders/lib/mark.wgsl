@@ -257,8 +257,10 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
     // Its form and how surely, packed as one number (canopy.ts `SURE_PACK`): its kind's, from its genes alone.
     shape = vec4f(floor(form.y), fract(form.y) / SURE_PACK, 0.0, 0.0);
   }
-  // How dry the kind's ground and how tender to frost it is (form.ts `formOf`), for the drawing's choice of plant.
-  let dry = form.z;
+  // How dry and how wet the kind's ground (one number, form.ts `formOf` dry less wet: a kind is never both) and how
+  // tender to frost it is, for the drawing's choice of plant and its foot.
+  let dry = max(form.z, 0.0);
+  let wet = max(-form.z, 0.0);
   let tender = form.w;
   let side = cover.grid[l].z;
   let reach = cover.reach[l].x * side;
@@ -266,7 +268,7 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
   let tall = min(height, up / STAND);
   let lean = LEAN * r.z * vec2f(cos(2.0 * PI * r.y), sin(2.0 * PI * r.y));
   let tint = vary(mix(first.rgb, to.rgb, r.x), fract(r.yz * 13.0));
-  return Plant(c, min(width, 2.0 * reach), tall, closed, tint, first.w, own, design, shape.x, shape.y, lean, reach, dry, tender, left);
+  return Plant(c, min(width, 2.0 * reach), tall, closed, tint, first.w, own, design, shape.x, shape.y, lean, reach, dry, tender, left, wet);
 }
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square, kind and place

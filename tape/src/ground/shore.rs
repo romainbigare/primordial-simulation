@@ -39,6 +39,17 @@ const NEAR_SAMPLES: i64 = 2;
 /// `SIDE_FROM` of `SHORE_M` and none at `SHORE_M`, where the ground lies on that side by itself.
 const SIDE: f64 = 0.5;
 const SIDE_FROM: f64 = 0.5;
+/// The ground lifted to that least height meets its own over this many times it (`soft_max`), so where the ground
+/// beside a pond lies deep under its level (a trench a river cut below the sea, narrower than the samples, which the
+/// core holds as land) the lifted floor rises into the trench's walls over a few metres of their height, not in a
+/// crease between a flat floor and steep walls; at the shore, where the least height is none, the two meet exactly.
+const SIDE_SOFT: f64 = 6.0;
+
+/// The larger of `a` and `b`, met smoothly over `k` (a hyperbola: `a` or `b` where they lie far apart, half `k` over
+/// both where they meet).
+fn soft_max(a: f64, b: f64, k: f64) -> f64 {
+    0.5 * (a + b + ((a - b) * (a - b) + k * k).sqrt())
+}
 /// Over the level the ground drawn leans to the level plus the offset at the shore, all of it at the zero line and none
 /// from this offset on, m: the bed leans to the offset there too, so the ground is one smooth surface across the shore.
 const LEAN_M: f64 = 1.0;
@@ -154,10 +165,12 @@ impl Shore {
     }
 
     /// The four samples between whose centres the point `p` (samples from the map's corner) lies, each with its weight
-    /// there (bilinear; off the map, the edge's).
+    /// there (bilinear over the smooth step of the point's place between them, so a blend by these weights has no kink
+    /// along the lines through the samples' centres, and its mean between two centres is the even one's; off the map,
+    /// the edge's).
     fn about(&self, p: [f64; 2]) -> [(usize, f64); 4] {
         let (u, w) = (p[0] - 0.5, p[1] - 0.5);
-        let (fx, fy) = (u - u.floor(), w - w.floor());
+        let (fx, fy) = (ease(0.0, 1.0, u - u.floor()), ease(0.0, 1.0, w - w.floor()));
         let at = |dc: i64, dr: i64| (w.floor() as i64 + dr).clamp(0, self.down as i64 - 1) as usize * self.across + (u.floor() as i64 + dc).clamp(0, self.across as i64 - 1) as usize;
         [(at(0, 0), (1.0 - fx) * (1.0 - fy)), (at(1, 0), fx * (1.0 - fy)), (at(0, 1), (1.0 - fx) * fy), (at(1, 1), fx * fy)]
     }
@@ -247,7 +260,7 @@ impl Shore {
         }
         let side = if d < 0.0 { -1.0 } else { 1.0 };
         let push = SIDE * d.abs() * (1.0 - ease(SIDE_FROM * SHORE_M, SHORE_M, d.abs()));
-        let sided = level + side * (side * (h - level)).max(push);
+        let sided = level + side * soft_max(side * (h - level), push, SIDE_SOFT * push);
         if d >= 0.0 {
             let leaned = level + d + (sided - level - d) * ease(0.0, LEAN_M, d);
             // Where a sample about the point has no pond near (the ground a pond spills down below its pass), the

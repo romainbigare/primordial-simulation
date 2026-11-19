@@ -271,45 +271,47 @@ fn blades(e: f32) -> vec2f {
 }
 
 
-// A thin sward of colour c, covering s of the ground, seen at e m a pixel: its tufts (rendered models, tex.wgsl
-// `TUFT_FROM`) standing on their foot, one in each cell of a lattice `TUFT_CELL_M` m wide that holds one (as many as
-// make the sward's cover, `TUFT_COVERS` of a tuft's box being blades), `TUFT_WIDE` cells wide by its own draw, the
-// nearer over the farther, each over its shadow (`TUFT_SHADOW` deep); a blade keeps its lightness about the tufts' mean
-// and takes the sward's colour, keeping `TUFT_HUE` of its own. They show as things (draw.wgsl `as_thing`): smaller,
-// the sward is its veil (colour `veil` over its share). Their colour (linear) and cover.
-const TUFT_CELL_M = 0.08; const TUFT_WIDE = vec2f(1.0, 1.8); const TUFT_SHADOW = 0.3;
-// A tuft's blades cover `TUFT_COVERS` of its box, which is `TUFT_ASPECT` as tall as wide (measured on the sprites).
-const TUFT_COVERS = 0.14; const TUFT_ASPECT = 0.81;
-const TUFT_HUE = 0.3;
-fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32) -> vec4f {
+// Plants of colour c, covering s of the ground, seen at e m a pixel, as the tufts `t` (cover_field.wgsl `Tufts`:
+// rendered models, tex.wgsl) standing on their foot, one in each cell of its lattice that holds one (as many as make
+// the cover, its share of a tuft's box being blades), `TUFT_WIDE` cells wide by its own draw, the nearer over the
+// farther, each over its shadow (`Tufts.shadow`: as deep, its middle that many of its widths down the sun and as wide);
+// a blade keeps its lightness about the tufts' mean and takes the plants' colour, keeping `TUFT_HUE` of its own, its
+// top `TUFT_TIP` of its height in the tufts' tip colour where they have one (`Tufts.tip`, on that share of the tufts).
+// They show as things (draw.wgsl `as_thing`): smaller, the plants are their veil (colour `veil` over their share).
+// Their colour (linear) and cover.
+const TUFT_WIDE = vec2f(1.0, 1.8);
+const TUFT_HUE = 0.3; const TUFT_TIP = 0.2;
+fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32, t: Tufts) -> vec4f {
   let wide = 0.5 * (TUFT_WIDE.x + TUFT_WIDE.y);
-  let seen = as_thing(wide * TUFT_CELL_M, e);
+  let seen = as_thing(wide * t.cell_m, e);
   if (!models_ready() || seen <= 0.0) { return vec4f(veil, s); }
-  let l = lat_axes(TUFT_CELL_M, vec2f(0.0));
-  let held = s / (TUFT_COVERS * TUFT_ASPECT * wide * wide);
+  let l = lat_axes(t.cell_m, vec2f(0.0));
+  let held = s / (t.covers * t.aspect * wide * wide);
   let sun = normalize(LIGHT.xy);
   var dst = vec4f(0.0);
   // From the nearest (south) to the farthest, each under those already drawn: a tuft no wider than two cells reaches
-  // the pixel from the cells beside its own, from up to two cells south (its height), and its shadow from the cell north.
-  for (var j = 2; j >= -1; j--) {
+  // the pixel from the cells beside its own, from up to `t.south` cells south (its height), and its shadow from the cell
+  // north.
+  for (var j = t.south; j >= -1; j--) {
     for (var i = -1; i <= 1; i++) {
       let cell = l.i + vec2i(i, j);
-      let x = lowbias(cell, 170);
+      let x = lowbias(cell, t.k);
       if (f32(x & 1023u) / 1024.0 >= held) { continue; }
       let foot = vec2f(f32(i), f32(j)) + vec2f(f32((x >> 10u) & 255u), f32((x >> 18u) & 255u)) / 256.0;
-      let k = TUFT_FROM + i32((x >> 26u) % u32(TUFT_N));
-      let w = mix(TUFT_WIDE.x, TUFT_WIDE.y, f32(lowbias(cell, 171) & 255u) / 255.0);
+      let k = t.first + i32((x >> 26u) % u32(t.n));
+      let w = mix(TUFT_WIDE.x, TUFT_WIDE.y, f32(lowbias(cell, t.k + 1) & 255u) / 255.0);
       let h = w * model_h(k) / model_w(k);
       let v = l.f - foot;
       let uv = clamp(vec2f(v.x / w + 0.5, 1.0 + v.y / h), vec2f(-1.0), vec2f(2.0));
       let inside = all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0));
-      let t = select(vec4f(0.0), model_texel(k, uv, e / (w * TUFT_CELL_M)), inside);
-      let lit = dot(t.rgb, LUMA) / TUFT_MEAN;
-      let rgb = mix(c * lit, t.rgb * dot(c, LUMA) / TUFT_MEAN, TUFT_HUE);
-      dst += vec4f(rgb * t.a, t.a) * (1.0 - dst.a);
+      let tex = select(vec4f(0.0), model_texel(k, uv, e / (w * t.cell_m)), inside);
+      let lit = dot(tex.rgb, LUMA) / TUFT_MEAN;
+      var rgb = mix(c * lit, tex.rgb * dot(c, LUMA) / TUFT_MEAN, TUFT_HUE);
+      if (t.tip.a > 0.0) { rgb = mix(rgb, t.tip.rgb * lit, select(0.0, 1.0, f32((lowbias(cell, t.k + 1) >> 8u) & 63u) / 64.0 < t.tip.a) * (1.0 - smoothstep(0.5 * TUFT_TIP, TUFT_TIP, uv.y))); }
+      dst += vec4f(rgb * tex.a, tex.a) * (1.0 - dst.a);
       // Its shadow on the ground at its foot, away from the sun.
-      let sv = (v + sun * 0.25 * w) / vec2f(0.4 * w, 0.2 * w);
-      dst += vec4f(0.0, 0.0, 0.0, TUFT_SHADOW * (1.0 - smoothstep(0.5, 1.0, length(sv)))) * (1.0 - dst.a);
+      let sv = (v + sun * t.shadow.y * w) / (t.shadow.z * vec2f(0.4 * w, 0.2 * w));
+      dst += vec4f(0.0, 0.0, 0.0, t.shadow.x * (1.0 - smoothstep(0.5, 1.0, length(sv)))) * (1.0 - dst.a);
     }
   }
   return mix(vec4f(veil, s), vec4f(dst.rgb / max(dst.a, 1e-4), dst.a), seen);

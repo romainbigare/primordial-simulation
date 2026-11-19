@@ -7,7 +7,9 @@
 //! width = w0 × discharge^b), and what a m² drained passes on never passes `MOST_RUNOFF`, so a channel of drained area
 //! a covers no point farther than w0 × (`MOST_RUNOFF` a)^b / 2 from its line (its reach). Of the channels within their
 //! reach, a texel keeps the one whose distance over the larger of its reach and the texel's size is least: the one that
-//! covers it first as the flux grows, or, where every channel is narrower than a texel, the nearest; it keeps that
+//! covers it first as the flux grows, or, where every channel is narrower than a texel, the nearest; but a line that
+//! passes within half a texel's diagonal of the texel's centre (`CLAIM_DIAGONAL`) is as near as can be, so a rill
+//! keeps the texels it runs through however wide the river whose reach they lie in; it keeps that
 //! channel's sample, its distance to its line, signed by the side the texel lies on, of the line's nearest point how
 //! far along the channel it lies, and its distance to the line without its bends (its curve and its wander alone:
 //! from afar a shell draws a channel as a line wider than its bends, about that one). A channel a shell may draw as
@@ -58,6 +60,11 @@ const CSS_TEXELS_MOST: f64 = 3.0;
 /// A line reaches this many texels past its edge: a shell blends the distance between texels and spreads the edge
 /// over a pixel.
 const LINE_MARGIN: f64 = 1.5;
+/// A line claims the texels whose centre lies within this many texels of it (half a texel's diagonal: the texels it
+/// runs through) before any line farther away; among such lines, and lines as near over their scale, the nearest wins
+/// (by `NEAREST_TIE` of its distance, samples, too small to change any other choice).
+const CLAIM_DIAGONAL: f64 = 0.71;
+const NEAREST_TIE: f64 = 1e-6;
 /// The farthest the middle of a sample's line lies from its centre, samples: its curve's middle lies within a quarter
 /// of a diagonal of it, and its bends move it by at most `bends::BEND_MOST`.
 const NEXT_OFF: f64 = 0.36 + BEND_MOST + SMOOTH_MOST;
@@ -252,12 +259,14 @@ impl<'a> Channels<'a> {
     /// than `best` holds (over its scale), that `takes` it and that lie out of the bed of the channel it joins: `put`
     /// gets the texel, its distance signed by the side, m, and the share of the piece its nearest point lies along.
     fn lay(&self, win: &Window, l: &Near, [a, b]: [[f64; 2]; 2], best: &mut [f64], takes: &dyn Fn(usize) -> bool, put: &mut dyn FnMut(usize, f64, f64)) {
+        let claims = CLAIM_DIAGONAL * win.k;
         for y in win.texels(a[1].min(b[1]) - l.reach, a[1].max(b[1]) + l.reach, 1) {
             for x in win.texels(a[0].min(b[0]) - l.reach, a[0].max(b[0]) + l.reach, 0) {
                 let (at, i) = win.texel(x, y);
                 let (side, d2, t) = to_segment(at, a, b);
-                if d2 <= l.reach * l.reach && d2.sqrt() / l.scale < best[i] && takes(i) && !l.join.is_some_and(|j| j.holds(at)) {
-                    best[i] = d2.sqrt() / l.scale;
+                let near = (d2.sqrt() - claims).max(0.0) / l.scale + NEAREST_TIE * d2.sqrt();
+                if d2 <= l.reach * l.reach && near < best[i] && takes(i) && !l.join.is_some_and(|j| j.holds(at)) {
+                    best[i] = near;
                     put(i, side * d2.sqrt() * self.r.metres, t);
                 }
             }

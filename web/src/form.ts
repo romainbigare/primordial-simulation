@@ -11,11 +11,12 @@ import { clamp, smooth } from './earth';
  * the share of what it builds that goes to seeds. */
 export interface Shape { leaf: number; frost: number; moist: number; seed: number }
 /** A form (0 round, 1 cone, 2 column, 3 umbrella, 4 tiered, 5 lobed: models.wgsl `model_set`) and how surely it is drawn
- * (0: as round .. 1: fully itself); how dry the ground its kind is made for, 0..1 (its moisture gene from the middle of
- * dry ground's to a span under it): the drawing picks a dry land's plant for a dry kind (models.wgsl); and how tender to
- * frost the kind is, 0..1 (`TENDER_SPANS`): only a tender kind's soft plants are drawn as palms or ferns
- * (models.wgsl). */
-export interface Form { form: number; sure: number; dry: number; tender: number }
+ * (0: as round .. 1: fully itself); how dry the ground its kind is made for, 0..1 (its moisture gene from the middle
+ * of dry ground's to a span under it): the drawing picks a dry land's plant for a dry kind (models.wgsl); how wet,
+ * 0..1 (its moisture gene from the middle of wet ground's to a span over it): a tree of wet ground stands on a flared
+ * foot (models.wgsl `flared_foot`); and how tender to frost the kind is, 0..1 (`TENDER_SPANS`): only a tender kind's
+ * soft plants are drawn as palms or ferns (models.wgsl). A kind is never both dry and wet (their middles part). */
+export interface Form { form: number; sure: number; dry: number; wet: number; tender: number }
 
 /** The middle and the span of each gene a form reads: thin leaves (capture area per kg, log10 m²/kg); tender (frost
  * gene, K); wet ground (moisture gene over the middle); dry ground (moisture gene under the middle); seedy (seeds'
@@ -58,5 +59,5 @@ export function formOf(k: Shape): Form {
   const x = [1, departure(k.leaf, BY_LEAF), tender, wet, dry, departure(k.seed, BY_SEED)];
   const score = FORM_SCORES.map(w => w.reduce((s, v, i) => s + v * x[i], 0));
   const best = score.indexOf(Math.max(...score)), next = Math.max(...score.filter((_, i) => i !== best));
-  return { form: best, sure: smooth(0, FORM_SURE, score[best] - next), dry: smooth(0, 1, dry), tender: smooth(-TENDER_SPANS, TENDER_SPANS, tender) };
+  return { form: best, sure: smooth(0, FORM_SURE, score[best] - next), dry: smooth(0, 1, dry), wet: smooth(0, 1, wet), tender: smooth(-TENDER_SPANS, TENDER_SPANS, tender) };
 }
