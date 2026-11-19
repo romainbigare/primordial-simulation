@@ -1,9 +1,9 @@
 # Where the page's textures come from
 
-Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com): the ground photographs
-resized and packed for the page by hand, each with its large-scale light divided out (so its repeat does not show); the
-carpets and the sprites rendered from Poly Haven's 3D models by the tool in `bake/`. Each file is a strip of 512 x 512
-layers, top first.
+Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), but for the trees
+rendered from PlantCatalog's models, which are CC BY 4.0 (credited below): the ground photographs resized and packed for
+the page by hand, each with its large-scale light divided out (so its repeat does not show); the carpets and the sprites
+rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 512 layers, top first.
 
 ## ground.jpg
 
@@ -55,7 +55,8 @@ grass_medium_01's tall stems with seed heads (its meshes named `_ta…`) are lef
 
 ## trees.png, models.png and the sprites' table
 
-Sprites rendered from Poly Haven's CC0 3D models (glTF, 1k textures) with three.js by `bake/sprite.html`: an
+Sprites rendered from Poly Haven's CC0 3D models (glTF, 1k textures) and PlantCatalog's CC BY 4.0 models (Sketchfab:
+glTF, or FBX at its finest level of detail) with three.js by `bake/sprite.html`: an
 orthographic camera looking north and 35 degrees down, lit by the sky and by the sun from the north-west, matte, no
 shadows, on a clear background; each sprite fills its cell but for a 64th of its side, its foot two texels above the
 cell's bottom middle, rendered at twice the cell's side and shrunk. `trees.png` holds the trees one to a 512 x 512
@@ -67,14 +68,53 @@ is stretched (the reeds), which of its materials are
 its leaves (a tree that sheds gets a bare twin: rendered again in the same frame with its leaves hidden, at half the
 side, four to a layer after the models' own sprites), and the mean lightness its
 leaves are scaled to (texels whose green stands out, as the page tells leaves: the models'
-leaves differ several times in lightness as the files have them), and the sets the page draws from. With the files
-fetched (`fetch.sh assets` also downloads what `sprites.json` names) and served as for the carpets,
-`node sprites.cjs sprites.json out` writes `out/trees.png`, `out/models.png` and
+leaves differ several times in lightness as the files have them), and the sets the page draws from; a model with a
+`file` is read from that file under `assets/` (the PlantCatalog models, downloaded by hand from the links below into
+`assets/sketchfab/<the model's id>/`: a glTF model's `scene.gltf`, an FBX model's finest level, `source/..._LOD0.fbx`,
+each with its textures). With the files fetched (`fetch.sh assets` also downloads the Poly Haven models `sprites.json`
+names) and served as for the carpets, `node sprites.cjs sprites.json out` writes `out/trees.png`, `out/models.png` and
 `out/sprites.wgsl`, the table the page reads (`web/shaders/lib/sprites.wgsl`: each set's first sprite and count, each
-sprite's width, height and mean cover); `node sprites.cjs sprites.json out <model>...` writes those models' sprites
-alone, to compare.
+sprite's width, height, mean cover and mean leaf lightness); `node sprites.cjs sprites.json out <model>...` writes those
+models' sprites alone, to compare.
 
 | strip | sprites (sets) |
 |---|---|
-| trees.png | island_tree_01, island_tree_02 (broad crowns), jacaranda_tree, each from three sides (each with a bare twin); fir_tree_01's three trees each from three sides; pine_tree_01's three pines, pine_sapling_medium's two (young pines), pine_sapling_small's three, fir_sapling_medium's three (young spruces); quiver_tree_01 (with bare twins: its trunk and branches) and quiver_tree_02 (one material: no twin) each from two sides |
-| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest; soft tall plants (palms, tree ferns, giant herbs), built: fern_02's clumps c, a and d and calathea_orbifolia_01's first, each set on a plain tapering stem of a tree fern's dark brown (1.2 and 0.8 times its height), and pachira_aquatica_01's first two trees (bark and leaves); shore rocks: rock_moss_set_02's meshes 0, 1, 2, 3, 4, 6, rock_moss_set_01's 0 and 2, rock_09, namaqualand_boulder_04 and _06; driftwood: dead_quiver_branch_01 and _02, dry_branches_medium_01's three; reeds, built: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 each stretched three and a half times as tall (as the carpets' reeds, layer 8); then the trees' bare twins |
+| trees.png | round: island_tree_01, island_tree_02 each from three sides, northern_red_oak_5 from two, red_horse_chestnut_16 and _24, dwarf_red_horse_chestnut_17; umbrella: jacaranda_tree from three sides, african_continental_baobab_1, _15 and _5; quiver: quiver_tree_01 and joshua_tree_19 each from two sides; lobed: black_poplar_50, common_fig_tree_11 and _30 each from two sides; column: lombardy_poplar_55 from two sides, black_poplar_25; conifers: norway_spruce_17, _18 and _23, engelmann_spruce_17 and _3, black_spruce_10, mountain_hemlock_21 and _23, fir_tree_01's first two trees; young spruces: fir_sapling_medium's three, black_spruce_16 from two sides; pines: pine_tree_01's three; young pines: pine_sapling_medium's two and pine_sapling_small's three; soft (palms and a fern): date_palm_16 and _28, california_fan_palm_22, mexican_fan_palm_3, canary_island_date_palm_21, mediterranean_fan_palm_19, male_fern_20. The broad-leaved trees, the baobabs and quiver_tree_01 have bare twins (their leaves hidden) |
+| models.png | shrub_02's four shrubs; rocks: boulder_01 from three sides, namaqualand_boulder_02, _03 and _05 each from two; wood: dead_tree_trunk, dead_tree_trunk_02 from two sides; dead bushes: wild_rooibos_bush's first four; grass tufts: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 and grass_medium_02's 2, 4; bushes: searsia_lucida's 0, 2, 3, 4, 5, othonna_cerarioides's 0, 1, 2, 4, 5 and didelta_spinosa's largest; shore rocks: rock_moss_set_02's meshes 0, 1, 2, 3, 4, 6, rock_moss_set_01's 0 and 2, rock_09, namaqualand_boulder_04 and _06; driftwood: dead_quiver_branch_01 and _02, dry_branches_medium_01's three; reeds, built: grass_medium_01's meshes 0, 10, 1, 6, 7, 9 each stretched three and a half times as tall (as the carpets' reeds, layer 8); then the trees' bare twins |
+
+The trees from PlantCatalog's models (author PlantCatalog, https://sketchfab.com/PlantCatalog), each licensed under CC
+BY 4.0 (http://creativecommons.org/licenses/by/4.0/); the sprites are rendered from them (changed: lit, cut at the
+ground, shrunk, their leaves' lightness scaled):
+
+| sprite | model |
+|---|---|
+| `northern_red_oak_5` | [Realistic HD Northern red oak (5/138)](https://sketchfab.com/3d-models/realistic-hd-northern-red-oak-5138-06474083fabe4e0f88e40848ea7aa8f9) |
+| `red_horse_chestnut_16` | [Realistic HD Red horse chestnut (16/30)](https://sketchfab.com/3d-models/realistic-hd-red-horse-chestnut-1630-bc56ed3eb15948c6b61c75eff557eac7) |
+| `red_horse_chestnut_24` | [Realistic HD Red horse chestnut (24/30)](https://sketchfab.com/3d-models/realistic-hd-red-horse-chestnut-2430-578463dffe1e45cbb99c529886ca17c7) |
+| `dwarf_red_horse_chestnut_17` | [Realistic HD Dwarf red horse chestnut (17/20)](https://sketchfab.com/3d-models/realistic-hd-dwarf-red-horse-chestnut-1720-0f38b4d5eb934fa49829a841c68ee7a5) |
+| `african_continental_baobab_1` | [Realistic HD African continental baobab (1/20)](https://sketchfab.com/3d-models/realistic-hd-african-continental-baobab-120-d42e970e89ce43f9b06cfef4d466eb7f) |
+| `african_continental_baobab_15` | [Realistic HD African continental baobab (15/20)](https://sketchfab.com/3d-models/realistic-hd-african-continental-baobab-1520-f76b402dbdfb4d4b873fba9ea38f507d) |
+| `african_continental_baobab_5` | [Realistic HD African continental baobab (5/20)](https://sketchfab.com/3d-models/realistic-hd-african-continental-baobab-520-d3c3363a23704d92a4368974cad63c5a) |
+| `joshua_tree_19` | [Realistic HD Joshua tree (19/30)](https://sketchfab.com/3d-models/realistic-hd-joshua-tree-1930-7198687a6a9645e38e33108cbb4c71dc) |
+| `black_poplar_50` | [Realistic HD Black poplar (50/105)](https://sketchfab.com/3d-models/realistic-hd-black-poplar-50105-562a96bc020e49c68f1f001dbe585cab) |
+| `common_fig_tree_11` | [Realistic HD Common fig tree (11/30)](https://sketchfab.com/3d-models/realistic-hd-common-fig-tree-1130-bcbde4dd01264c6e82954f9acc9fe40e) |
+| `common_fig_tree_30` | [Realistic HD Common fig tree (30/30)](https://sketchfab.com/3d-models/realistic-hd-common-fig-tree-3030-2e6b64be3c6a466eb6b86591d9ef2ebc) |
+| `lombardy_poplar_55` | [Realistic HD Lombardy poplar (55/75)](https://sketchfab.com/3d-models/realistic-hd-lombardy-poplar-5575-1884f92a179a408ca472e6a2f6469497) |
+| `black_poplar_25` | [Realistic HD Black poplar (25/105)](https://sketchfab.com/3d-models/realistic-hd-black-poplar-25105-a927d7f2dd6a41fa855e93dcfd6fdb96) |
+| `norway_spruce_17` | [Realistic HD Norway spruce (17/43)](https://sketchfab.com/3d-models/realistic-hd-norway-spruce-1743-652321a0e80c4bb3a36dbe6c9542e3cb) |
+| `norway_spruce_18` | [Realistic HD Norway spruce (18/43)](https://sketchfab.com/3d-models/realistic-hd-norway-spruce-1843-9391e9fda97f4efa98e075442291a17b) |
+| `norway_spruce_23` | [Realistic HD Norway spruce (23/43)](https://sketchfab.com/3d-models/realistic-hd-norway-spruce-2343-facebfa5baf84c4aafc1141745570714) |
+| `engelmann_spruce_17` | [Realistic HD Engelmann spruce (17/43)](https://sketchfab.com/3d-models/realistic-hd-engelmann-spruce-1743-e9b6fb45fb1b4227982231f62d00684e) |
+| `engelmann_spruce_3` | [Realistic HD Engelmann spruce (3/43)](https://sketchfab.com/3d-models/realistic-hd-engelmann-spruce-343-70e6fc24f73146a0866a87fccd168076) |
+| `black_spruce_10` | [Realistic HD Black spruce (10/38)](https://sketchfab.com/3d-models/realistic-hd-black-spruce-1038-32e73f7c100e44768370b12bff737d34) |
+| `mountain_hemlock_21` | [Realistic HD Mountain hemlock (21/43)](https://sketchfab.com/3d-models/realistic-hd-mountain-hemlock-2143-225cd2dfbf7d4163bc3a062a0c0623aa) |
+| `mountain_hemlock_23` | [Realistic HD Mountain hemlock (23/43)](https://sketchfab.com/3d-models/realistic-hd-mountain-hemlock-2343-9b77f3c62f764602a76efae67704eb71) |
+| `black_spruce_16` | [Realistic HD Black spruce (16/38)](https://sketchfab.com/3d-models/realistic-hd-black-spruce-1638-a9d79680963d44c3acf025e172c5bbec) |
+| `date_palm_16` | [Realistic HD Date palm (16/78)](https://sketchfab.com/3d-models/realistic-hd-date-palm-1678-2f34e3f54bef40eb8d94ca6507c2f822) |
+| `date_palm_28` | [Realistic HD Date palm (28/78)](https://sketchfab.com/3d-models/realistic-hd-date-palm-2878-52c8a8dc801c4c3492992e0a3f32efc1) |
+| `california_fan_palm_22` | [Realistic HD California fan palm (22/25)](https://sketchfab.com/3d-models/realistic-hd-california-fan-palm-2225-5492bd27db734608bb41409efeba238c) |
+| `mexican_fan_palm_3` | [Realistic HD Mexican fan palm (3/10)](https://sketchfab.com/3d-models/realistic-hd-mexican-fan-palm-310-5591dc5028ef466db828a962d4780a87) |
+| `canary_island_date_palm_21` | [Realistic HD Canary Island date palm (21/40)](https://sketchfab.com/3d-models/realistic-hd-canary-island-date-palm-2140-7eac1bcdfe984bf8ba3fcd2430854a67) |
+| `mediterranean_fan_palm_19` | [Realistic HD Mediterranean fan palm (19/30)](https://sketchfab.com/3d-models/realistic-hd-mediterranean-fan-palm-1930-db1b8aa7f06b499f9de68460de1eea6b) |
+| `male_fern_20` | [Realistic HD Male fern (20/50)](https://sketchfab.com/3d-models/realistic-hd-male-fern-2050-9da5a089892d480fa3d2add186ce4f03) |
+

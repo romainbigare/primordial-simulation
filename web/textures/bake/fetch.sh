@@ -1,12 +1,13 @@
 #!/bin/bash
 # fetch.sh DIR: downloads into DIR/gltf/<name>/ the Poly Haven CC0 models (glTF, 1k) that carpets.json and sprites.json
-# name, and into DIR/ the ground textures (diffuse, 2k) that carpets.json names.
+# name (not the models sprites.json gives a `file` of: those are downloaded by hand, SOURCES.md), and into DIR/ the
+# ground textures (diffuse, 2k) that carpets.json names.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$1"
 for n in $(python3 -c "import json
 c=json.load(open('$here/carpets.json')); s=json.load(open('$here/sprites.json'))
-print(' '.join(sorted({i['model'] for t in c.values() for i in t['items']} | {e['model'] for t in s.values() for e in t['sprites']})))"); do
+print(' '.join(sorted({i['model'] for t in c.values() for i in t['items']} | {e['model'] for t in s.values() for e in t['sprites'] if 'file' not in e})))"); do
   [ -f gltf/$n/$n.gltf ] && continue
   mkdir -p gltf/$n
   curl -sS https://api.polyhaven.com/files/$n | python3 -c "
