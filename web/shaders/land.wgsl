@@ -70,7 +70,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   var g = ground_at(at, true);
   // The loose ground with its patches, the bed it bares, and the relief finer than the tiles (relief.wgsl), which
   // moves the ground's height and slope: the shading's normal and the fine line of a shore.
-  let loose = loose_seen(at, e);
+  let loose_mean = loose_at(at);
+  let loose = loose_seen(at, loose_mean, e);
   let bare = bed_shows(loose);
   let fine = relief(e, length(g.slope), bare, loose);
   // The waves' swash follows the shore as the tiles draw it: the relief's bumps would break its line into specks.
@@ -115,7 +116,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
   let fringe = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * ch.water);
   let shore_over = select(p.over, mix(p.over, min(p.over, max(abs(g.sd - ch.middle) - ch.water, 0.0) * max(length(g.slope), ch.mean / max(ch.water, 1e-6))), fringe), ch.water > 0.0);
-  let cf = cover_field(at, e, Beneath(soaked(p), shore_over, length(g.slope), p.depth, loose, fwidth(loose), p.snow, st.snow_m));
+  let cf = cover_field(at, e, Beneath(soaked(p), shore_over, length(g.slope), p.depth, loose, loose_mean, fwidth(loose), p.snow, st.snow_m));
   p.cover = cf.cover;
   p.canopy = cf.canopy;
   p.shed = cf.shed;

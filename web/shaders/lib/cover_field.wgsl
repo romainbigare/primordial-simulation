@@ -67,8 +67,9 @@ const CANOPY_SNOW = 0.35;
 
 // What lies under and over the cover at a point (land.wgsl `land_spots`): how soaked its ground is, 0..1; its height
 // over the nearest water's level, m, and its slope (rise over run); the depth of the liquid standing over it, m; the depth of its loose ground with its patches
-// (rock.wgsl `loose_seen`) and that depth's change across a pixel, m; the share snow covers and the snow's depth, m.
-struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loose_px: f32, snow: f32, snow_m: f32 }
+// (rock.wgsl `loose_seen`), without them (`loose_at`) and that depth's change across a pixel, m; the share snow covers
+// and the snow's depth, m.
+struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loose_mean: f32, loose_px: f32, snow: f32, snow_m: f32 }
 
 // The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; the share of
 // the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month; and
@@ -397,7 +398,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   // over the patches too small to show here (`loose_unseen`), so the field far away and the marks near stand on the
   // same ground.
   var bs = b;
-  bs.loose_px = max(b.loose_px, loose_unseen(at, e));
+  bs.loose_px = max(b.loose_px, loose_unseen(b.loose_mean, e));
   var hold = held_at(at, bs);
   hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * bs.loose_px, THIN_TO_M + 0.5 * bs.loose_px, b.loose));
   // The trees' field, read once: their crowns' share.

@@ -64,20 +64,20 @@ fn links_of(s: vec2i) -> i32 {
   return i32(textureLoad(rock_field, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).w + 0.5);
 }
 
-// The depth of the loose ground at `at`, m, seen at `e` m a pixel, with its patches (`PATCHY`, ragged.wgsl `ragged`):
-// the field every edge of bare bed is drawn from, the ground's and the plants' alike.
-fn loose_seen(at: vec2f, e: f32) -> f32 {
-  let mean = loose_at(at);
+// The depth of the loose ground at `at`, m, seen at `e` m a pixel, with its patches (`PATCHY`, ragged.wgsl `ragged`)
+// about its depth there without them, `mean` (`loose_at`): the field every edge of bare bed is drawn from, the
+// ground's and the plants' alike.
+fn loose_seen(at: vec2f, mean: f32, e: f32) -> f32 {
   // Where the thinnest the patches make it is deeper than shows the bed or its roughness, they change nothing drawn
   // (and no noise is read).
   if (mean * (1.0 - PATCHY) >= max(HIDES_BED_M, SMOOTH_LOOSE_M)) { return mean; }
   return with_patches(mean, ragged(at, e, PATCHY_M, PATCHY_OCTAVES, 55), PATCHY);
 }
 
-// How far the loose ground's depth at `at` swings, m, over the patches `loose_seen` does not show at `e` m a pixel: a
-// rule on the depth read there is spread over this much, so it holds on the mean where the near picture's patches
-// would make it (the cover's roots, cover_field.wgsl `cover_field`).
-fn loose_unseen(at: vec2f, e: f32) -> f32 { return loose_at(at) * PATCHY * ragged_hidden(e, PATCHY_M, PATCHY_OCTAVES); }
+// How far the loose ground's depth swings, m, about its depth `mean` at a point (`loose_at`), over the patches
+// `loose_seen` does not show at `e` m a pixel: a rule on the depth read there is spread over this much, so it holds
+// on the mean where the near picture's patches would make it (the cover's roots, cover_field.wgsl `cover_field`).
+fn loose_unseen(mean: f32, e: f32) -> f32 { return mean * PATCHY * ragged_hidden(e, PATCHY_M, PATCHY_OCTAVES); }
 
 // The share of the bed that shows through `loose` m of loose ground (`loose_seen`).
 fn bed_shows(loose: f32) -> f32 { return 1.0 - ease(0.0, HIDES_BED_M, loose); }

@@ -159,7 +159,7 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
         deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
       }
     }
-    loose = select(0.0, loose_seen(at, 0.0), deepest > 0.0);
+    loose = select(0.0, loose_seen(at, loose_at(at), 0.0), deepest > 0.0);
   }
   // The weights by height, and of each bin the weight from it up.
   var bins: array<f32, TALL_BINS>;
