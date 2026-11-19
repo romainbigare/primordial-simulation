@@ -2,7 +2,7 @@
 // is style.wgsl). Each look means what the model holds: soil has clods, the forest floor its litter; where the loose
 // ground is thin the bed shows (rock.wgsl), drawn as slabs with cracks where it is gentle and as a cliff's face where
 // it is steep (slope alone never bares the ground); stones lie where the loose ground is thin on a steep slope (scree)
-// or bare, and in a channel as big as its power moves (rock.wgsl `stone_of`), each made by the one maker of a stone
+// or bare, and in a channel as big as its power moves (rock.wgsl `stone_of`), each drawn as a rendered stone
 // (stone.wgsl). Fixed in the world: nothing moves as the view pans or zooms, and what is smaller than a pixel fades
 // into its mean.
 

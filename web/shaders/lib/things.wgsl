@@ -42,6 +42,41 @@ fn sort_sprite(sort: i32, k: u32) -> i32 {
   return DEAD_BUSH_FROM + i32(k % u32(DEAD_BUSH_N));
 }
 
+// The stones of the ground are drawn here (stone.wgsl `stones`).
+fn stone_sprites() -> bool { return true; }
+// A stone (stone.wgsl `placed`) of the stones `s`, seen at `e` m a pixel, over `out` (its colour times its coverage,
+// and that coverage), as strongly as `shows`, of the bed's tone `tone`: a cobble where its draw falls under how worn
+// they are, else an angular rock (sprites.wgsl), `2 r` wide and standing on its foot south of its centre, sunk `sunk`
+// of its height (cut off at the ground), over its shadow; it keeps its sprite's light about the sprite's mean (its
+// coarsest level over its cover there) and `STONE_HUE` of its own colour, the rest its bed's; wet as the stones are (`wet_stone`), and snow
+// on its lit upper faces as on the things (`SNOW_CAP`).
+const STONE_HUE = 0.3;
+fn stone_sprite(out: vec4f, p: Placed, s: Stony, e: f32, shows: f32, tone: vec3f) -> vec4f {
+  let r = s.small * p.r;
+  let v = p.v / r;
+  let shade = STONE_SHADOW * (1.0 - smoothstep(0.6, 1.1, length(v + STONE_SHADOW_REACH * LIGHT.xy / length(LIGHT.xy))));
+  let w = p.x * 2654435761u;
+  let k = select(ROCK_FROM + i32((w >> 10u) % u32(ROCK_N)), COBBLE_FROM + i32((w >> 10u) % u32(COBBLE_N)), f32(w & 1023u) / 1024.0 < s.worn);
+  let wide = 2.0 * r;
+  let h = wide * model_h(k) / model_w(k);
+  let uv = vec2f(p.v.x / wide + 0.5, 0.5 - s.sunk + p.v.y / h);
+  var a = 0.0;
+  var t = vec4f(0.0);
+  if (all(uv >= vec2f(0.0)) && uv.x <= 1.0 && uv.y <= 1.0 - s.sunk) {
+    t = model_texel(k, uv, e / wide);
+    a = t.a;
+  }
+  var dst = mix(out, vec4f(0.0, 0.0, 0.0, 1.0), shade * shows * (1.0 - a));
+  if (a <= 0.0) { return dst; }
+  let whole = model_texel(k, uv, 1.0);
+  let mean = dot(whole.rgb, LUMA) / max(whole.a, 1e-3);
+  let lit = dot(t.rgb, LUMA) / max(mean, 1e-4);
+  var rgb = mix(tone * lit, t.rgb * dot(tone, LUMA) / max(mean, 1e-4), STONE_HUE);
+  let cap = s.snow * smoothstep(0.7, 0.35, uv.y) * smoothstep(0.8, 1.3, lit);
+  rgb = mix(wet_stone(rgb, lit, s.wet, s.worn), SNOW * clamp(lit, 0.75, 1.1), SNOW_CAP * cap);
+  return mix(dst, vec4f(rgb, 1.0), a * shows);
+}
+
 // One sort of things strewn over the ground: its sort, its lattice's cell, m, the share `fill` of the cells that may
 // hold one, its size, m (the smallest and the largest), `many` (0..1) as the ground suits them, a rock `wet` wet
 // (stone.wgsl `wet_stone`), and its stream of the world's random numbers.
