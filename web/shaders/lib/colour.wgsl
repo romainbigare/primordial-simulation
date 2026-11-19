@@ -169,7 +169,11 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   var bed = p.bed;
   if (styled()) {
     g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet) * soil_detail(p);
-    if (p.rock > 0.0) { bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade) * rock_detail(p.e); }
+    // Bed the waves' swash wets takes the one wet look of rock (stone.wgsl `wet_stone`) as far as it is soaked.
+    if (p.rock > 0.0) {
+      bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade) * rock_detail(p.e);
+      if (p.swash.x > 0.0) { bed = mix(bed, wet_stone(bed, p.shade, 1.0, 0.0), p.swash.x); }
+    }
   }
   g.rgb = mix(g.rgb, bed, p.rock);
   if (p.rock > 0.5) { g.kind = ROCK; }
