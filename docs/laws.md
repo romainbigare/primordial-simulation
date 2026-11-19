@@ -903,8 +903,10 @@ they can), its roots work as far as that depth lets them, and they reach the liq
 (`Soak::pond`). How wet its land is to it is the land part's own liquid over that part's area for a cell of parts (no
 more than the cell holds; `flow::parts` keeps each part's matter), else the cell's over its area. **Its plants under
 the liquid past their roots' reach live on their store** (`upkeep::airless`): their roots get no oxidising gas, so
-they gain nothing (their roots do not work) and burn their share of the slot's upkeep from their store; the share of
-it they burnt adds up month by month (`Cover::drained`; plants that came to stand there since the last month come
+they gain nothing (their roots do not work) and pay their share of the slot's upkeep from their store at the yield of
+their fuel without that gas (`units::FERMENT_YIELD`: 2 ATP a glucose fermented against about 32 burnt, so 16 times
+the fuel; what they ferment is booked burnt, its products burnt about them); the share of it they burnt adds up month
+by month (`Cover::drained`; plants that came to stand there since the last month come
 with all of theirs), and when it reaches all of it they die as whole plants of every group alike, each plant left
 keeping its mass, to its remains (counted as `DROWNED`), and the line rises to where none stands so. The burning keeps
 its pace's fall with the cold, so a flood in the cold season takes far longer to kill them than one in the warm

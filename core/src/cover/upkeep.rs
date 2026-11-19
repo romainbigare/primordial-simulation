@@ -7,10 +7,11 @@ use super::grow::{Books, Slot};
 use super::{dec, Cover, Parts, FROST, FUEL, GAS, LIGHT, MOIST, NG, NP, REPAIR};
 use crate::chem::Chemistry;
 use crate::life::{AGE, DROWNED, PHASE, SPENT};
-use crate::units::DAY;
+use crate::units::{DAY, FERMENT_YIELD};
 use crate::World;
 
-/// Slot `x` pays its upkeep over `dt` at `t` K by burning its fuel, then loses to its cell's remains the plants on its
+/// Slot `x` pays its upkeep over `dt` at `t` K by burning its fuel (its plants without the oxidising gas at the yield
+/// of their fuel without it, `FERMENT_YIELD`), then loses to its cell's remains the plants on its
 /// ground under the liquid past its roots' reach whose store is spent (`airless`, `DROWNED`), the share unpaid
 /// (`SPENT`), the share its wear gives (`AGE`) and the share frozen (`PHASE`). Returns the kg lost by cause, and the
 /// upkeep, J.
@@ -31,7 +32,11 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     // 2009). A dry seed's upkeep falls with its liquid (`Physics::activity`, `lying`); a leaf's does not.
     let parts: [f64; UPKEEP_PARTS] = [living[0], living[1], living[2], ph.c_leaf * s.leaf * days * k, ph.c_sapwood * s.sapwood * days * pace, ph.c_basal * roots * days * pace, renew];
     let cost: f64 = parts.iter().sum();
-    let (units, fuel) = (cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));
+    // Its plants under the liquid past their roots' reach (`Slot::airless`) get no oxidising gas: their tissue frees
+    // only `FERMENT_YIELD` of its fuel's energy for its upkeep, so it burns that many times more fuel for it (what it
+    // ferments is booked burnt: its products are burnt about it).
+    let dear = 1.0 + s.airless * (1.0 / FERMENT_YIELD - 1.0);
+    let (units, fuel) = (dear * cost / -chem.dh(p.burn), per_input(burn, p.sub[FUEL]).unwrap_or(1.0));
     // (What it burns is worked out first: one less a share near one would lose a small fuel to rounding.) It burns no
     // more than its fuel and the gas the cell's share of its air node still offers.
     let held_fuel = c.mol[x][FUEL].max(0.0);
@@ -47,7 +52,7 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     // the active rate; below its frost gene, hardened by its dormancy, its frozen share dies (laws.md 3).
     let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
     let frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
-    let drowned = airless(c, x, s, burnt / held_fuel.max(1e-300));
+    let drowned = airless(c, x, s, burnt / held_fuel.max(1e-300) / (FERMENT_YIELD * dear));
     let mut lost = [0.0; crate::life::DEATHS];
     let mut left = 1.0;
     for (f, cause) in [(drowned, DROWNED), (short, SPENT), (crate::math::one_minus_exp(worn), AGE), (frozen, PHASE)] {
@@ -68,14 +73,14 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
         }
         b.budget[DIED] += budget::held(&e, &c.mol[x]) - alive;
     }
-    (lost, cost)
+    (lost, dear * cost)
 }
 
 /// The share of slot `x` of cover `c` (its slot `s` in the month) that dies with its store spent on ground under the
-/// liquid past its roots' reach, its plants having burnt the share `burnt` of their fuel this month. Its plants there
-/// (the share `Slot::airless`) gain nothing, their roots getting no oxidising gas (`Slot::work`), and live on their
-/// store: each burns its share of the slot's upkeep, so of its store the share the slot burnt of its fuel
-/// (`Cover::drained`; those that came to stand there since its last month come with all of theirs). When they have
+/// liquid past its roots' reach, its plants there having burnt the share `burnt` of their fuel this month. They (the
+/// share `Slot::airless`) gain nothing, their roots getting no oxidising gas (`Slot::work`), and live on their store,
+/// paying their upkeep at the yield of their fuel without that gas (`FERMENT_YIELD`, `upkeep`): of its store each
+/// burns that share (`Cover::drained`; those that came to stand there since its last month come with all of theirs). When they have
 /// burnt all of it they die as whole plants, the line rising to where none stands so (`Slot::rise`). The burning keeps
 /// its pace's fall with the cold, so a flood in the cold season, when the plants' tissue burns slowly, takes far longer
 /// to kill them (Kozlowski 1997; Glenz and others 2006).

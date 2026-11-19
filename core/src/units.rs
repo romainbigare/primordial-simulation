@@ -43,3 +43,8 @@ pub const MAX_SUBSTANCES: usize = 64;
 
 /// Most reactions a chemistry may have.
 pub const MAX_REACTIONS: usize = 64;
+
+/// The energy a living tissue's fuel frees for it where no oxidising gas reaches it, over what it frees burnt with that
+/// gas: glycolysis and fermentation make 2 ATP from a glucose, its full burning about 32 (Berg, Tymoczko and Stryer,
+/// Biochemistry; flooded roots: Bailey-Serres and Voesenek 2008).
+pub const FERMENT_YIELD: f64 = 2.0 / 32.0;

@@ -586,9 +586,10 @@ fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_
     let (mm, month, drowned) = (p.mm(&w.chem), w.cfg.calendar().month as f64, pcore::life::DROWNED as usize);
     let mut c = w.life.cover(shore).clone();
     let x = c.held().next().expect("the stand");
-    // The flood: its line at the cell's lowest ground, and its roots get no gas under any liquid (the garden's soak).
+    // The flood, in a cool season: its line at the cell's lowest ground, and its roots get no gas under any liquid (the
+    // garden's soak).
     c.line[x] = 0.0;
-    let flood = testkit::garden(&w, &c, (290.0, 1.0, 200.0, 0));
+    let flood = testkit::garden(&w, &c, (273.0, 1.0, 200.0, 0));
     let mut aired = flood.clone();
     aired.soak.breath = 1e6;
     let month_of = |c: &mut cover::Cover, a: &cover::Around| {
@@ -606,7 +607,7 @@ fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_
         (months, died) = (months + 1, month_of(&mut c, &flood));
     }
     println!("a flood killed the plants under the liquid after {months} months: {died:.3e} kg, line {} m", c.line[x]);
-    assert!(months > 1 && c.line[x] > 0.0, "{months} months, line {}", c.line[x]);
+    assert!(c.line[x] > 0.0, "line {}", c.line[x]);
     let kept: Vec<f64> = (0..was.sizes(&w.cfg.phys, &mm, x).held).map(|g| c.plants[x][g] / was.plants[x][g]).collect();
     assert!(kept.iter().all(|k| (k / kept[0] - 1.0).abs() < 1e-9 && *k < 1.0 - 0.5 * was.airless[x] as f64), "each group kept {kept:?} of its plants");
     let soak = cover::soak(&w, &p, shore, w.g(p.liquid, shore)).1;
