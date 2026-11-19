@@ -210,16 +210,22 @@ const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
   }
   // The true colour is the cells', and the bed's where it shows; their snow placed as the Earth view places it: the
   // cells' colour is taken as their ground's under their share of snow, and that ground drawn under the point's snow.
-  // On standing liquid its ice is placed so too (ice.wgsl `ice_cover`), in the true view only.
-  var truth = blended(TRUTH, cs).xyz;
-  let s = spots.snow_cells;
-  if (s > 0.0 && s < SNOW_CELLS_ALL) {
-    let under = clamp((truth - s * SNOW) / (1.0 - s), vec3f(0.0), vec3f(1.0));
-    var placed = spots.dry.snow;
-    if (earth.view.x == 1.0 && spots.dry.depth > 0.0) { placed = ice_cover(s, spots.dry.depth, at, spots.dry.e); }
-    truth = mix(under, SNOW, placed);
+  // On standing liquid its ice is placed so too (ice.wgsl `ice_cover`). Each is read only in the view that draws it
+  // (colour.wgsl `in_view_of`): the true colour in the true view, the layer's value in a layer's view.
+  var truth = vec3f(0.0);
+  if (earth.view.x == 1.0) {
+    truth = blended(TRUTH, cs).xyz;
+    let s = spots.snow_cells;
+    if (s > 0.0 && s < SNOW_CELLS_ALL) {
+      let under = clamp((truth - s * SNOW) / (1.0 - s), vec3f(0.0), vec3f(1.0));
+      var placed = spots.dry.snow;
+      if (spots.dry.depth > 0.0) { placed = ice_cover(s, spots.dry.depth, at, spots.dry.e); }
+      truth = mix(under, SNOW, placed);
+    }
+    truth = mix(truth, spots.dry.bed, spots.dry.rock);
   }
-  truth = mix(truth, spots.dry.bed, spots.dry.rock);
-  let rgb = in_view_of(c, blended(VIEW, cs).x, truth);
+  var shown = 0.0;
+  if (earth.view.x == 2.0) { shown = blended(VIEW, cs).x; }
+  let rgb = in_view_of(c, shown, truth);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }
