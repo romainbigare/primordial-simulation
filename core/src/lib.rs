@@ -18,6 +18,7 @@ mod params;
 pub mod rng;
 mod schedule;
 pub mod solve;
+pub mod soil;
 pub mod space;
 pub mod store;
 pub mod units;

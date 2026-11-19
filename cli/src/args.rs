@@ -48,7 +48,8 @@ pub const USAGE: &str = "usage:
     --px N                pixels across; the height follows the window (512)
     --layer NAME          map, temperature, rain, life, depth, land (the map with no rivers), or of the loose ground:
                           conductivity, water (what it holds for roots), yield (rain less what rises), wetness (of
-                          its pores), rise (what rises from it) (map)
+                          its pores), rise (what rises from it), soil (the cell's texture), texture (the texture
+                          of the terrain's sample under each pixel) (map)
     --edges               darken the edges between cells
     --out FILE            the PNG (view.png)
   ew card     write the test card, a small island whose squares are set by hand (worldgen::testkit::card), as a

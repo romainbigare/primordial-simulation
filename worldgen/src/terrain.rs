@@ -8,10 +8,10 @@ use pcore::flow::scale_height;
 use pcore::life::Life;
 use pcore::space::square::Square;
 use pcore::space::samples::Samples;
-use pcore::space::terrain::{self, Lift, Place, Shape, Terrain};
+use pcore::space::terrain::{self, Lift, Make, Place, Shape, Terrain};
 use pcore::space::Level;
 use pcore::store::{Boundary, Class, Node, Store};
-use pcore::units::P_REF;
+use pcore::units::{P_REF, T_SURF};
 use pcore::{Config, Counters, World, AIR};
 use std::f64::consts::PI;
 
@@ -34,9 +34,9 @@ const MOLTEN_MARGIN: f64 = 2.0;
 
 /// The terrain of `seed` on `map` whose samples are `cells` (`space::terrain`): an island's level 0 m lies at the rise
 /// `ISLAND_LEVEL` (`Terrain::island`); a globe's leaves the share `LAND_SHARE` of the area of the samples above it.
-fn terrain_of(seed: u64, map: &Square, cells: &Level, cut: Vec<f64>) -> Terrain {
+fn terrain_of(seed: u64, map: &Square, cells: &Level, makes: Vec<Make>) -> Terrain {
     if !map.wrap {
-        return Terrain::island(seed, Shape::One, cut);
+        return Terrain::island(seed, Shape::One, makes);
     }
     let lift = Lift::one(seed, map);
     let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, &lift, Place::of(cells, i), 0.0).0).collect();
@@ -47,7 +47,7 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level, cut: Vec<f64>) -> Terrain 
         above += cells.area()[i];
         above >= LAND_SHARE * total
     });
-    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]), cut)
+    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]), makes)
 }
 
 /// The volume fractions of a bed that holds the share `shares[m]` of each make `m` of the chemistry's (`Init::makes`),
@@ -57,11 +57,33 @@ fn bed_of(init: &Init, shares: &[f64]) -> Vec<(usize, f64)> {
     init.makes.iter().zip(shares).flat_map(|(fr, &by)| whole(fr, by)).collect()
 }
 
-/// How much faster flowing liquid wears each make of the bed than the first (`Terrain::cut`): as Flow's wear breaks a
-/// bed (laws.md 1.3), by the sum of each substance's volume share over its bond strength.
-pub fn cuts_of(chem: &Chemistry, init: &Init) -> Vec<f64> {
+/// What the ground reads of each make of the bed (`Make`), from its substances' numbers, each a mean by their volume
+/// shares: how much faster flowing liquid wears it than the first, as Flow's wear breaks a bed (laws.md 1.3), by its
+/// substances' shares over their bond strengths; the share of coarse particles it breaks into, its substances' hardness
+/// (a hard particle keeps its size as it is broken and carried, a soft one wears to finer particles); the share that
+/// weathers, its substances that a reaction of the open world with a gas of the air turns into other solids
+/// (`weathers`); and its particles' density over that of the liquid of the low ground, less one.
+pub fn makes_of(chem: &Chemistry, init: &Init) -> Vec<Make> {
+    let mean = |fr: &[(usize, f64)], x: &dyn Fn(usize) -> f64| fr.iter().map(|&(k, f)| f * x(k)).sum::<f64>() / fr.iter().map(|p| p.1).sum::<f64>();
     let weak = |fr: &[(usize, f64)]| fr.iter().map(|&(k, f)| f / chem.subs[k].strength).sum::<f64>() / fr.iter().map(|p| p.1).sum::<f64>();
-    init.makes.iter().map(|m| weak(m) / weak(&init.makes[0])).collect()
+    let liquid = chem.subs[init.low].density[1];
+    let make = |fr: &Vec<(usize, f64)>| Make {
+        cut: weak(fr) / weak(&init.makes[0]),
+        coarse: mean(fr, &|k| chem.subs[k].hardness),
+        weathers: mean(fr, &|k| if weathers(chem, init, k) { 1.0 } else { 0.0 }),
+        buoyant: mean(fr, &|k| chem.subs[k].density[0]) / liquid - 1.0,
+    };
+    init.makes.iter().map(make).collect()
+}
+
+/// Whether substance `k` weathers: a reaction that light does not drive takes it with a gas of the starting air and
+/// gives a substance other than it that is solid at the surface (`T_SURF`), as the minerals of a bed weather with the
+/// gas of the air into the finest particles (Jackson and Sherman 1953); one whose products are all liquid or gas dissolves away.
+fn weathers(chem: &Chemistry, init: &Init, k: usize) -> bool {
+    let has = |list: &[(u16, u16)], f: &dyn Fn(usize) -> bool| list.iter().any(|p| f(p.0 as usize));
+    let air = |q: usize| init.air.iter().any(|a| a.0 == q);
+    let solid = |q: usize| q != k && chem.subs[q].melt > T_SURF;
+    chem.reactions.iter().any(|r| !r.light && has(&r.inputs, &|q| q == k) && has(&r.inputs, &air) && has(&r.outputs, &solid))
 }
 
 /// Height of each cell of `map` by `terrain` (its rows between the latitudes `lat`), m: the terrain's mean over it
@@ -130,7 +152,7 @@ pub fn new_island(seed: u64, (w, h): (usize, usize), shape: Shape, cfg: Config) 
 /// map of its squares and its terrain (how its cells are cut does not change the ground).
 pub fn island_ground(seed: u64, (w, h): (usize, usize), shape: Shape) -> (Square, Terrain) {
     let (chem, init) = chemistry0();
-    (island(w, h), Terrain::island(seed, shape, cuts_of(&chem, &init)))
+    (island(w, h), Terrain::island(seed, shape, makes_of(&chem, &init)))
 }
 
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
@@ -170,7 +192,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     if map.wrap {
         (cfg.lat_south, cfg.lat_north) = (-90.0, 90.0);
     }
-    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells(), cuts_of(&chem, init));
+    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells(), makes_of(&chem, init));
     build_on(seed, map, terrain, (chem, init), cfg)
 }
 
@@ -254,6 +276,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         terrain,
         rise_south: Vec::new(),
         loose_bins: Vec::new(),
+        soil: Vec::new(),
         planet: None,
         light: vec![0.0; n],
         events: Vec::new(),
@@ -303,6 +326,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
     // The way the ground of each cell faces (laws.md 0), and no liquid running yet down the terrain's samples.
     world.rise_south = world.rise_at_build();
     world.loose_bins = pcore::cover::loose_bins(&world);
+    world.soil = pcore::soil::of_world(&world);
     world.discharge = vec![0.0; world.terrain_samples().h.len()];
     world
 }

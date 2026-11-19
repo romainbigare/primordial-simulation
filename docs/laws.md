@@ -1316,6 +1316,35 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   cell as nothing (`contract::Stand` is the cover's: takers neither shade nor hold the ground).
 
 ## 4. Soil and minerals
+**Texture** (`soil`): the loose ground of each of the terrain's samples is fine grain (under 2 µm), middle grain
+(2 to 50 µm) and coarse grain (50 µm to 2 mm), each class spread evenly over the logarithm of its sizes, and an organic
+share no law makes yet. Three laws, over what the wear at the world's start left (0), set the shares
+(`soil::samples`); no table places a kind of soil:
+- **The bed's grains.** Each make breaks into coarse grain by its substances' hardness and into middle grain by the
+  rest, means by their volume shares (`Make::coarse`, `worldgen::makes_of`): a hard grain keeps its size as it is
+  broken and carried, a soft one wears finer.
+- **Weathering.** The share of a make whose substances a reaction of the open world takes with a gas of the starting
+  air into another solid (`Make::weathers`; in chemistry 0 the dark mineral 8, by reaction 6) turns its middle and coarse
+  grain fine as 1 − exp(−t / 1e5 years) (`WEATHER_YEARS`; the lifetime of a silicate grain in the field, White and
+  Brantley 2003), t the time the loose ground has lain: its depth over how fast it is renewed, from below as fast as
+  the ground lowers or from above as fast as it settled in the wear's last stage (`Samples::age`; at least the
+  lowering of `SLOWEST`). A substance that weathers only into liquid or gas dissolves away and leaves no fine grain.
+  So thin ground on steep slopes, quickly renewed, keeps its coarse grain; old flat ground on a weathering bed is fine.
+- **Sorting.** What settled on a sample in the wear's last stage (`Samples::settled`; all of the open low ground's) is
+  sorted by the flow that laid it: grains settle where they sink faster than the flow's shear velocity u* = √(g d S)
+  stirs them (Bagnold 1966), a grain of diameter D sinking at R g D² / (18 ν + (0.75 R g D³)^½) (Ferguson and Church
+  2004; R its make's grains' density over the liquid's less one, `Make::buoyant`; ν the liquid's viscosity,
+  `units::LIQUID_VISCOSITY`). The flow is a flood of 1e-6 m/s of runoff from the area that drains through the sample
+  (`FLOOD_RUNOFF`), as deep as Flow's channels carry it (`channel_depth`), down the sample's slope to the sample its
+  liquid runs to; under standing liquid (a pond, the open low ground) it is still. What settles is the load's grain
+  between the least size that sinks there and the least that the flow at its main sample upstream carried on (all
+  sizes where none runs to it), a span at least twice as wide (`SORTING`); where that span holds none of the load,
+  its class nearest the span. So channels and fans are coarse, the floors of ponds and the sea fine (Hjulström 1935).
+  The settled share of the loose ground holds that grain, the rest the weathered bed's.
+
+A cell's texture (`World::soil`, found when the world is built) is its samples' mean weighted by the loose ground each
+gives its ground node (at most `skin_m` of it; by area where it holds none).
+
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
 and the sea and fertility differs by place. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
 per m² of land, on every open land cell; then only fixing adds it, rotting (7) returns it, heat (11) sends it

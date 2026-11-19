@@ -119,6 +119,9 @@ pub struct World {
     /// The loose ground of each cell, the share of its area in each bin of depth, which its cover's roots read
     /// (`cover::loose_bins`): the terrain's samples', found when the world is built
     pub loose_bins: Vec<[f32; crate::cover::BINS]>,
+    /// The soil of each cell (`soil::Soil`): its texture, the terrain's samples', found when the world is built
+    /// (`soil::of_world`)
+    pub soil: Vec<crate::soil::Soil>,
     /// The planet's air beyond the map's edges by row of latitude and month (`flow::Planet`), where they are open
     pub planet: Option<crate::flow::Planet>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)

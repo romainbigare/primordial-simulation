@@ -14,8 +14,11 @@ const PX: usize = 3;
 const SIDE_BY_SIDE: usize = 5;
 /// The panels `ew view` draws: those of the pictures, the land with no river drawn over it, and of the loose ground
 /// (`GROUND`): its conductivity, the liquid it holds for roots, what the year's rain leaves after what rises (its
-/// yield), the share of its pores its liquid fills, and what rises from it.
-pub const PANELS: [&str; 11] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise"];
+/// yield), the share of its pores its liquid fills, what rises from it, and its texture, the cell's (soil) and the
+/// terrain's sample's under each pixel (texture, `SAMPLED`).
+pub const PANELS: [&str; 13] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise", "soil", "texture"];
+/// The panel drawn by the terrain's samples, not by the cells.
+const SAMPLED: usize = 12;
 /// The first of the loose ground's panels in `PANELS`.
 const GROUND: usize = 6;
 const GAP: usize = 4;
@@ -80,6 +83,8 @@ impl<'a> Look<'a> {
             2 => ramp(&[(-200.0, [190, 60, 40]), (0.0, [240, 235, 220]), (300.0, [110, 170, 220]), (1000.0, [20, 50, 150])], self.mm_a_year(w.rain[i] as f64 - w.evap[i] as f64)),
             // The share of the pores the liquid fills.
             3 => ramp(&[(0.0, [200, 150, 90]), (0.3, [230, 220, 160]), (0.6, [110, 180, 120]), (1.0, [30, 70, 160])], self.wet[i]),
+            // The texture.
+            5 => texture(&w.soil[i].texture),
             // What rises, mm a year.
             _ => ramp(&[(0.0, [240, 235, 220]), (300.0, [200, 210, 120]), (700.0, [70, 160, 90]), (1200.0, [20, 90, 70])], self.mm_a_year(w.evap[i] as f64)),
         }
@@ -134,6 +139,13 @@ impl<'a> Look<'a> {
     }
 }
 
+/// The colour of texture `t`: of sand, silt and clay by their shares, darker as it holds more organic matter.
+fn texture(t: &pcore::soil::Texture) -> Rgb {
+    let (sand, silt, clay) = ([235.0, 200.0, 110.0], [175.0, 175.0, 160.0], [150.0, 60.0, 55.0]);
+    let dark = (1.0 - 2.0 * t.organic).clamp(0.3, 1.0);
+    [0, 1, 2].map(|c| ((t.coarse * sand[c] + t.middle() * silt[c] + t.fine * clay[c]) * dark).clamp(0.0, 255.0) as u8)
+}
+
 fn write_png(path: &str, (across, down): (usize, usize), img: &[u8]) {
     let file = std::fs::File::create(path).expect("create png");
     let mut enc = png::Encoder::new(std::io::BufWriter::new(file), across as u32, down as u32);
@@ -176,12 +188,21 @@ pub fn window(w: &World, window: [f64; 4], px: usize, panel: &str, edges: bool, 
     let (look, cells) = (Look::new(w), raster(w, window, px, down));
     // The distance between two pixels, m.
     let step = w.map.side * window[2] / px as f64;
+    let sampled = (panel == SAMPLED).then(|| (pcore::soil::samples(w), w.terrain.samples(w.terrain.seed, &w.map, (w.cfg.lat_south, w.cfg.lat_north))));
     let mut img = Vec::with_capacity(px * down * 3);
     for p in 0..px * down {
         let (x, y) = (p % px, p / px);
         let beside = (cells[if x > 0 { p - 1 } else { p }], cells[if y > 0 { p - px } else { p }]);
         let edge = edges && ((x + 1 < px && cells[p + 1] != cells[p]) || (y + 1 < down && cells[p + px] != cells[p]));
-        let c = look.colour(panel, cells[p], beside, step);
+        let c = match &sampled {
+            // The sample under the pixel's centre, standing liquid over its cell as the cell's panels draw it.
+            Some((tex, s)) if look.f.depth[cells[p]] <= STANDING_M => {
+                let per = s.across as f64 / w.map.w as f64;
+                let at = |o: usize, along: f64, n: usize| (((window[o] + (along + 0.5) * window[o + 2] / [px, down][o] as f64) * per) as usize).min(n - 1);
+                texture(&tex[at(1, y as f64, s.down) * s.across + at(0, x as f64, s.across)])
+            }
+            _ => look.colour(panel.min(SAMPLED - 1), cells[p], beside, step),
+        };
         img.extend(if edge { c.map(|v| v / 2) } else { c });
     }
     write_png(path, (px, down), &img);
