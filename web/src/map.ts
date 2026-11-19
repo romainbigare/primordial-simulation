@@ -48,9 +48,9 @@ export const MAP_TARGET: Format = 'rgba8unorm';
  * every size counts as made for this many metres. */
 const LAND_FINEST_M = 0.25;
 
-/** The sharp picture being drawn once the view rests: its tiles to draw and drawn (x, y, w, h device px), the copies'
- * places (css px) and the device pixels a css pixel. */
-interface Sharpening { tiles: number[][]; done: number[][]; xs: number[]; d: number }
+/** The sharp picture being drawn once the view rests: its tiles to draw (x, y, w, h device px), the copies' places
+ * (css px) and the device pixels a css pixel. */
+interface Sharpening { tiles: number[][]; xs: number[]; d: number }
 
 export class MapView {
   hover = -1;
@@ -259,7 +259,7 @@ export class MapView {
     this.drawMap(gpu, p, target, xs, k, d, [tw, th], waiting);
     this.layer?.draw(p);
     p.end();
-    if (target) this.show([]);
+    if (target) this.show(target);
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
     gpu.submit();
     this.time(gpu, r);
@@ -293,44 +293,49 @@ export class MapView {
     this.flowTimer = window.setTimeout(() => this.invalidate(), step - (performance.now() % step) + 1);
   }
 
-  /** Start drawing the map at the screen's own pixels, in tiles each of about `SHARPEN_MS` on the GPU. */
+  /** Start drawing the map at the screen's own pixels, in tiles each of about `SHARPEN_MS` on the GPU, into the sharp
+   * picture's texture, which first holds the map drawn at fewer pixels, stretched: so each frame shows that one texture,
+   * the tiles drawn so far over the stretched picture. */
   private sharpenSoon(xs: number[], d: number): void {
-    const W = this.cv.width, H = this.cv.height, tiles: number[][] = [];
+    const gpu = this.gpu, W = this.cv.width, H = this.cv.height, tiles: number[][] = [];
+    if (!gpu) return;
     const side = Math.max(TILE_LEAST, Math.floor(Math.sqrt((SHARPEN_MS / Math.max(this.fullMs, SHARPEN_MS)) * W * H)));
     for (let y = 0; y < H; y += side) for (let x = 0; x < W; x += side) tiles.push([x, y, Math.min(side, W - x), Math.min(side, H - y)]);
-    const job = { tiles, done: [], xs, d };
-    this.sharpening = job;
+    if (this.sharp?.w !== W || this.sharp.h !== H) {
+      if (this.sharp) gpu.drop(this.sharp);
+      this.sharp = gpu.texture(W, H, MAP_TARGET, 1, 1, true);
+    }
+    const q = gpu.pass(this.sharp);
+    q.draw('picture', { rect: [0, 0, W, H], binds: { 1: this.picture!, 2: 'smooth' } }, false);
+    q.end();
     // All the sharp picture's tiles show the flow's signs where they stood as it began.
     if (this.land) this.land.flowAt = performance.now();
+    // What the layer works out before its draws holds for the whole view, so it is worked out once for all the tiles
+    // (a new frame stops them); the frame it sharpens went without no program, so none is waited for here.
+    const { cam: { s, ox, oy } } = this;
+    this.layer?.prepare(gpu, ox, oy, s, d, d, this.cv.clientWidth, this.cv.clientHeight, []);
+    const job = { tiles, xs, d };
+    this.sharpening = job;
     this.sharpen(job);
   }
 
-  /** Show on the screen the map drawn at fewer pixels, stretched, and over it the tiles `done` of the sharp picture. */
-  private show(done: number[][]): void {
-    const gpu = this.gpu!, W = this.cv.width, H = this.cv.height, q = gpu.pass(null);
-    q.draw('picture', { rect: [0, 0, W, H], binds: { 1: this.picture!, 2: 'smooth' } }, false);
-    for (const [x, y, w, h] of done) q.draw('picture', { rect: [x, y, w, h], src: [x / W, y / H, (x + w) / W, (y + h) / H], binds: { 1: this.sharp!, 2: 'smooth' } }, false);
+  /** Show on the screen the picture `t` drawn before, stretched over it. */
+  private show(t: Texture): void {
+    const gpu = this.gpu!, q = gpu.pass(null);
+    q.draw('picture', { rect: [0, 0, this.cv.width, this.cv.height], binds: { 1: t, 2: 'smooth' } }, false);
     q.end();
   }
 
   /** Draw the next tile of the sharp picture `job` once the GPU has finished the last, and show each tile as soon as it
    * is drawn; a new frame stops it. */
   private sharpen(job: Sharpening): void {
-    const gpu = this.gpu, tile = job.tiles.shift();
-    if (this.sharpening !== job || !gpu || !tile) return;
-    const W = this.cv.width, H = this.cv.height, { cam: { s, ox, oy } } = this;
-    if (this.sharp?.w !== W || this.sharp.h !== H) {
-      if (this.sharp) gpu.drop(this.sharp);
-      this.sharp = gpu.texture(W, H, MAP_TARGET, 1, 1, true);
-    }
-    // The frame it sharpens went without no program, so none is waited for here.
-    this.layer?.prepare(gpu, ox, oy, s, job.d, job.d, this.cv.clientWidth, this.cv.clientHeight, []);
+    const gpu = this.gpu, tile = job.tiles.shift(), W = this.cv.width, H = this.cv.height;
+    if (this.sharpening !== job || !gpu || !tile || this.sharp?.w !== W || this.sharp.h !== H) return;
     const p = gpu.pass(this.sharp, undefined, tile);
     this.drawMap(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
     this.layer?.draw(p);
     p.end();
-    job.done.push(tile);
-    this.show(job.done);
+    this.show(this.sharp!);
     if (!job.tiles.length) this.sharpening = null;
     gpu.submit();
     if (job.tiles.length) gpu.done().then(() => requestAnimationFrame(() => this.sharpen(job)));
