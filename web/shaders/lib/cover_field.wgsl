@@ -143,6 +143,16 @@ const REED_STRAW = vec3f(0.42, 0.38, 0.17); const REED_STEM = 0.8; const REED_HE
 const REED_CLUMP_M = 2.5; const REED_CLUMPS = 0.4; const REED_CLUMP_EDGE = 0.1; const REED_STANDS = 0.5;
 fn grass_tufts() -> Tufts { return Tufts(TUFT_FROM, TUFT_N, TUFT_CELL_M, TUFT_COVERS, TUFT_ASPECT, TUFT_SOUTH, 170, TUFT_SHADOW, vec4f(0.0)); }
 fn reed_tufts() -> Tufts { return Tufts(REED_FROM, REED_N, REED_CELL_M, REED_COVERS, REED_ASPECT, REED_SOUTH, 172, REED_SHADOW, vec4f(REED_HEAD, REED_HEADS)); }
+// Ferns: the herbs on wet ground in the crowns' shade (as soaked as the ground and as closed as the crowns over it,
+// where no reeds stand) stand near as ferns (tex.wgsl, sprites.wgsl `FERN_FROM`), as the soil's floor there is one of
+// ferns (detail.wgsl `soil_detail`): `FERN_STANDS` of the herbs' cover, in cells `FERN_CELL_M` m wide (ferns of
+// shaded wet woods stand 0.5 to 1.5 m tall in loose clumps: from memory), their box's cover and shape the sprite's.
+const FERN_STANDS = 0.6; const FERN_CELL_M = 0.8; const FERN_SOUTH = 2; const FERN_SHADOW = vec3f(0.4, 0.35, 1.2);
+fn fern_tufts() -> Tufts {
+  return Tufts(FERN_FROM, FERN_N, FERN_CELL_M, model_fill(FERN_FROM), model_h(FERN_FROM) / model_w(FERN_FROM), FERN_SOUTH, 174, FERN_SHADOW, vec4f(0.0));
+}
+// How much the herbs at a place over `b` under crowns closing `canopy` of it, where reeds stand as `reeds`, are ferns.
+fn ferns_of(b: Beneath, canopy: f32, reeds: f32) -> f32 { return min(canopy, 1.0) * b.soaked * (1.0 - reeds); }
 // How much a place holds reeds: on soaked ground and in the water's edge band (`REED_WET`, `REED_BAND_M`).
 fn reed_place(b: Beneath) -> f32 {
   return max(ease(REED_WET, 1.0, b.soaked), ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)));
@@ -272,7 +282,7 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
 
 // The herbs' sward at `at`, seen at `e` m a pixel, over `b`, premultiplied: their colour in stands of their kinds, the
 // share they cover (thicker and thinner by `thick`, `patchy`, as far as they hold there, `hold`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees' crowns,
-// reeds on soaked ground and at the water's edge, and flowers over it.
+// reeds on soaked ground and at the water's edge, ferns on wet shaded ground, and flowers over it.
 fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> vec4f {
   let f = field_smooth(at, SWARD_LAYER);
   if (f.a <= 0.0 || hold <= 0.0) { return vec4f(0.0); }
@@ -324,10 +334,16 @@ fn sward(at: vec2f, e: f32, b: Beneath, canopy: f32, thick: f32, hold: f32) -> v
     let r = sward_tufts(mix(plain, REED_STRAW, REED_STEM), c, e, REED_STANDS * reeds * clumps, reed_tufts());
     c = mix(c, r.rgb, r.a);
   }
+  // Near, on wet shaded ground its herbs stand as ferns over it (`ferns_of`).
+  let ferns = ferns_of(b, canopy, reeds);
+  if (ferns > 0.0) {
+    let fern = sward_tufts(plain, c, e, FERN_STANDS * ferns * s, fern_tufts());
+    c = mix(c, fern.rgb, fern.a);
+  }
   let near = shows_at(FLOWERS_GONE_M, e);
   if (near > 0.0) {
     let fl = field_at(at, FLOWER_LAYER);
-    let bloom = clamp(fl.a / f.a, 0.0, 1.0) * (1.0 - reeds);
+    let bloom = clamp(fl.a / f.a, 0.0, 1.0) * (1.0 - reeds - ferns);
     if (bloom > 0.0) {
       let dots = flowers_at(e, bloom, fl.rgb / fl.a);
       c = mix(c, dots.rgb, dots.a * near);
