@@ -46,11 +46,11 @@ fn sort_sprite(sort: i32, k: u32) -> i32 {
 fn stone_sprites() -> bool { return true; }
 // A stone (stone.wgsl `placed`) of the stones `s`, seen at `e` m a pixel, over `out` (its colour times its coverage,
 // and that coverage), as strongly as `shows`, of the bed's tone `tone`: a cobble where its draw falls under how worn
-// they are, else an angular rock (sprites.wgsl), `2 r` wide and standing on its foot south of its centre, sunk `sunk`
-// of its height (cut off at the ground), over its shadow; it keeps its sprite's light about the sprite's mean (its
+// they are, else an angular rock (sprites.wgsl), `2 r` wide, sunk `sunk` of its height (cut off at the ground), what
+// shows of it about its centre (so it stays inside the cell that holds it), over its shadow; it keeps its sprite's light about the sprite's mean (its
 // coarsest level over its cover there) and `STONE_HUE` of its own colour, the rest its bed's; wet as the stones are (`wet_stone`), and snow
 // on its lit upper faces as on the things (`SNOW_CAP`).
-const STONE_HUE = 0.3;
+const STONE_HUE = 0.3; const STONE_ROUND = vec2f(1.0, 1.2);
 fn stone_sprite(out: vec4f, p: Placed, s: Stony, e: f32, shows: f32, tone: vec3f) -> vec4f {
   let r = s.small * p.r;
   let v = p.v / r;
@@ -59,12 +59,15 @@ fn stone_sprite(out: vec4f, p: Placed, s: Stony, e: f32, shows: f32, tone: vec3f
   let k = select(ROCK_FROM + i32((w >> 10u) % u32(ROCK_N)), COBBLE_FROM + i32((w >> 10u) % u32(COBBLE_N)), f32(w & 1023u) / 1024.0 < s.worn);
   let wide = 2.0 * r;
   let h = wide * model_h(k) / model_w(k);
-  let uv = vec2f(p.v.x / wide + 0.5, 0.5 - s.sunk + p.v.y / h);
+  let uv = vec2f(p.v.x / wide + 0.5, 0.5 * (1.0 - s.sunk) + p.v.y / h);
   var a = 0.0;
   var t = vec4f(0.0);
   if (all(uv >= vec2f(0.0)) && uv.x <= 1.0 && uv.y <= 1.0 - s.sunk) {
     t = model_texel(k, uv, e / wide);
-    a = t.a;
+    // What shows of it rounded at the corners of its box (`STONE_ROUND`): the rendered stones fill their boxes, cut
+    // flat where they meet the ground.
+    let q = (uv - vec2f(0.5, 0.5 * (1.0 - s.sunk))) / vec2f(0.5, 0.5 * (1.0 - s.sunk));
+    a = t.a * (1.0 - smoothstep(STONE_ROUND.x, STONE_ROUND.y, length(q)));
   }
   var dst = mix(out, vec4f(0.0, 0.0, 0.0, 1.0), shade * shows * (1.0 - a));
   if (a <= 0.0) { return dst; }
