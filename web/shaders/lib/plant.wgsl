@@ -26,5 +26,6 @@ const TREE_M = 3.0;
 
 // The forms (form.ts `Form`).
 const ROUND = 0; const CONE = 1; const COLUMN = 2; const UMBRELLA = 3; const TIERED = 4; const LOBED = 5;
-// A plant stands up `STAND` of its height on the map (draw.wgsl); a bush is as deep as `BUSH_DEEP` of its width.
-const BUSH_DEEP = 0.45;
+// A plant stands up this share of its height on the map (textures.ts `STAND`); a bush is as deep as `BUSH_DEEP` of its
+// width.
+const STAND = 0.5; const BUSH_DEEP = 0.45;

@@ -151,9 +151,9 @@ fn bare_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
 
 // Plant q drawn from its model sprite `fit` (`model_fit`) at p, e m a pixel, where snow covers `snow` of the ground: its colour
 // (linear) and cover; none where it does not reach. Its leafy sprite keeps the share of its leaves left this season in
-// sprays (`SPRAYS` across the sprite) that fall whole, over its bare twin. Its stem's foot (`foot_rise`) stands on its
-// foot; standing in liquid, on the bed, and its part under the surface is seen through the liquid (style.wgsl
-// `seen_in_liquid`).
+// sprays (`SPRAYS` across the sprite) that fall whole, over its bare twin. Its stem's foot (tex.wgsl `foot_rise`)
+// stands on its foot; standing in liquid, on the bed, and each of its texels under the surface by its own height
+// (tex.wgsl `model_height_m`) is seen through the liquid (style.wgsl `seen_in_liquid`).
 fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   let s = fit.s; let w = fit.w; let h = fit.h;
   let lean = q.lean.x * h;
@@ -178,32 +178,23 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   // The leafy sprite's sprays over the bare twin, its part under the liquid at its foot seen through it.
   let under = bare.a * (1.0 - a);
   let rgb = (mix(t.rgb, leaf, leafy) * a + bare.rgb * under) / (a + under);
-  return vec4f(seen_in_liquid(rgb, q.wades, up, e), a + under);
-}
-
-// The share of sprite s's height its stem's foot stands over its lowest point: the bake stands a model's lowest point
-// on its sprite's foot (bake/sprite.html), which for a tree on a wide foot is the near edge of its flare or of its fan
-// of prop roots, lower on the map's angled view than its stem; measured on the models (the middle of their box on the
-// ground, over both turns): the bald cypress's `CYPRESS_FOOT`, the mangrove's `MANGROVE_FOOT`; the rest stand on
-// narrow feet.
-const CYPRESS_FOOT = 0.145; const MANGROVE_FOOT = 0.06;
-fn foot_rise(s: i32) -> f32 {
-  if (in_set(s, CYPRESS_FROM, CYPRESS_N)) { return CYPRESS_FOOT; }
-  return select(0.0, MANGROVE_FOOT, in_set(s, MANGROVE_FROM, MANGROVE_N));
+  if (q.wades <= 0.0) { return vec4f(rgb, a + under); }
+  return vec4f(seen_in_liquid(rgb, q.wades, model_height_m(s, uv, e / w, up, h), e / MAP_VIEW.y), a + under);
 }
 
 // The shadow of plant q drawn from its model sprite `fit` at p, e m a pixel: its sprite cast on the ground away from the
-// sun (south-east), each of its texels over its stem's foot (`foot_rise`) at a height on it laid `MODEL_SHADOW_RUN` of
+// sun (south-east), each of its texels over its stem's foot (tex.wgsl `foot_rise`) at a height on it laid `MODEL_SHADOW_RUN` of
 // that height along the ground, blurred (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of
 // its sprays as are left, over its bare twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the
 // reach a pixel looks for it (cover.wgsl `lattice`). How dark it makes the ground, 0..1. It is laid from where its
-// stem meets what it falls on: the ground at its foot, or the surface of the liquid it stands in, `STAND` of its depth
-// north of its foot on the map (draw.wgsl), where its stem shows out of it (`seen_in_liquid`).
+// stem meets what it falls on: the ground at its foot, or the surface of the liquid it stands in, where its stem shows
+// out of it (`seen_in_liquid`): the map's view (water.wgsl `MAP_VIEW`) draws it the cosine of the depth north of the
+// foot.
 const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.05;
 // The length of that shadow along the ground southward, m, within its reach.
 fn model_shadow_long(q: Plant, fit: ModelFit) -> f32 { return min(MODEL_SHADOW_RUN * fit.h, 0.9 * q.reach); }
 fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
-  let v = p - q.at + vec2f(0.0, STAND * q.wades);
+  let v = p - q.at + vec2f(0.0, MAP_VIEW.y * q.wades);
   let long = model_shadow_long(q, fit);
   let up = v.y / long;
   if (up < 0.0 || up > 1.0) { return 0.0; }

@@ -198,9 +198,6 @@ const FILM_M = 0.05;
 // The share of a plant whose kind stands in liquid `reach` m deep (down to its line) that stands where liquid stands
 // `depth` m deep: all of it on soaked ground under a film and in liquid shallower than that, none deeper.
 fn stands_in(depth: f32, reach: f32) -> f32 { return select(1.0, 0.0, depth >= max(FILM_M, reach)); }
-// A plant stands up this share of its height on the map (lattices.ts `STAND`), so of one standing in liquid `depth` m
-// deep the part drawn up to `STAND` x `depth` m north of its foot is under the surface.
-const STAND = 0.5;
 // Snow buries a plant `height` m tall as it reaches from `BURIED_FROM` of its height to all of it: a herb is gone under
 // a deep snow, a tree stands in it.
 const BURIED_FROM = 0.6;

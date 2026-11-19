@@ -11,7 +11,7 @@ export const LATTICES = [0.1, 0.5, 2.5];
 /** Of each lattice, the cells a mark reaches from its own (cover.wgsl looks that many cells each way about a pixel): the
  * trees' two, so a crown up to four sides across stands among the small ones of its lattice. */
 export const REACH = [1, 1, 2];
-/** A plant stands up this share of its height on the map (lib/draw.wgsl `STAND`): the rows south of a pixel
+/** A plant stands up this share of its height on the map (lib/plant.wgsl `STAND`): the rows south of a pixel
  * looked at, past those its marks reach, reach its tallest plant, but no more than `ROWS_MOST` (each row costs a pixel
  * a look at marks for each cell across, textures.ts), so lattice l stands a plant up to (`ROWS_MOST` + `REACH`[l]) of
  * its sides over `STAND` tall (`shareOn`). */
