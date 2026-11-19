@@ -32,7 +32,9 @@ const SHADOW = 0.42; const BUSH_SHADOW = 0.3;
 // `SMALL_M` m (spruces, pines), a column a spruce (young under `CONE_YOUNG_M` m), tiers a pine (young under
 // `PINE_YOUNG_M` m, small under `SMALL_M` m); a bush by how dry its kind's ground (`BUSH_DRY`, over `BUSH_MIX`): leafy,
 // middling, or a dry land's. A tree whose grown plants' walls are under `SOFT_WOOD` of their dry mass (style.ts
-// `BUSH_WOOD`, `grownWalls`, over `SOFT_MIX`) is a soft one: a palm, a tree fern or a giant herb.
+// `BUSH_WOOD`, `grownWalls`, over `SOFT_MIX`) is a soft one: of a kind as tender to frost as it is (form.ts `Form`,
+// each plant by its own draw, `tender_draw`), a palm, a tree fern or a giant herb, as such plants live where it does
+// not freeze hard; else drawn by its crown's form, as a woody tree.
 const SOFT_WOOD = 0.6; const SOFT_MIX = 0.1;
 const SMALL_M = 3.0; const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
 const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
@@ -43,7 +45,7 @@ fn model_set(q: Plant) -> vec2i {
     if (!under_edge(q.dry, BUSH_DRY.x, BUSH_MIX, u)) { return vec2i(SEARSIA_FROM, SEARSIA_N); }
     return vec2i(SHRUB_FROM, SHRUB_N);
   }
-  if (under_edge(q.wood, SOFT_WOOD, SOFT_MIX, u)) { return vec2i(SOFT_FROM, SOFT_N); }
+  if (under_edge(q.wood, SOFT_WOOD, SOFT_MIX, u) && q.tender > 1.0 - tender_draw(q.r)) { return vec2i(SOFT_FROM, SOFT_N); }
   // Of its trees the share `sure` stand in its form, each by its own draw, the rest round.
   let f = select(ROUND, i32(q.form + 0.5), q.sure > 1.0 - u);
   if (f == CONE) {
