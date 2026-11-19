@@ -87,7 +87,8 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.snow_m = 0.0;
   s.below = 1.0;
   s.canopy = 0.0;
-  s.sand = beach(s.sea, s.over, s.over, length(h.zw), s.loose, look.z);
+  // A tape knows no lake's fetch (`Spot.fetch` 0): a lake's shore has no waves there.
+  s.sand = beach(s.sea, s.over, s.over, length(h.zw), s.loose, look.z, waves_of(s.sea, 0.0));
   s.river = m.w;
   s.river_depth = inside.y;
   s.at = earth.place.xy + uv * earth.place.zw;

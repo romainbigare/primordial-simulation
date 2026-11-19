@@ -57,10 +57,11 @@ const SHOWS = 0.002;
 // The share of beach sand on ground `sea_over` m over the sea's surface and `over` m over the nearest liquid's, `sea` of
 // its shore the sea's, of slope `slope` (rise over run) on `loose` m of loose ground: sand by the sea up to `high` m
 // over it and under it (the shallows' bed), by a lake up to `LAKE_BEACH` of that over its level, on gentle loose
-// ground only. A body that holds no liquid has no level (tape/src/table.rs), so no dry basin is drawn as sand.
-fn beach(sea: f32, sea_over: f32, over: f32, slope: f32, loose: f32, high: f32) -> f32 {
+// ground only, and at least up to the storms' swash of its waves `waves` (water.wgsl `waves_of`). A body that holds
+// no liquid has no level (tape/src/table.rs), so no dry basin is drawn as sand.
+fn beach(sea: f32, sea_over: f32, over: f32, slope: f32, loose: f32, high: f32, waves: vec2f) -> f32 {
   let reach = high * max(ease(0.0, BEACH_DEEP_M, loose), 1e-3);
-  let storm = STORM_RUN_UP * run_up(sea, slope);
+  let storm = STORM_RUN_UP * run_up(waves, slope);
   let shore = max(sea * (1.0 - ease(0.0, max(reach, storm), sea_over)), (1.0 - sea) * (1.0 - ease(0.0, max(LAKE_BEACH * reach, storm), over)));
   return shore * (1.0 - ease(BEACH_SLOPE, ROCK_SLOPE, slope)) * ease(0.0, BEACH_LOOSE_M, loose);
 }
@@ -120,6 +121,8 @@ struct Spot {
   // The share of the ground the tallest plants' crowns close over it (their litter lies under them), and the share of
   // it and the ground about it under woody crowns whose leaves fall this month (cover_field.wgsl `CoverAt.shed`).
   canopy: f32, shed: f32,
+  // The fetch of the lake beside it, m (water.wgsl `waves_of`; 0 where none is known: no waves).
+  fetch: f32,
   // How soaked the waves' swash leaves it, and the share of it the foam of the last bore covers, 0..1 (`swash_of`).
   swash: vec2f,
   // The largest stone the point's channel moves, m (0: none), and the share of woody crowns about a channel's bar,
@@ -143,9 +146,11 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.rgb = p.ground;
   g.kind = BARE;
   g.warm = 1.0;
-  // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn. No plant
-  // stands where the waves' swash runs (`swash_of`): its cell's plants stand above it.
-  let plants = p.cover.a * above_water(p.depth) * (1.0 - min(p.swash.x / SWASH_DRY, 1.0));
+  // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn. The
+  // waves' swash (`swash_of`) strips the plants where it runs as far as its waves are high against the sea's: the sea's
+  // swash bares its beach, a lake's small waves leave its plants standing to the water.
+  let stripped = min(p.swash.x / SWASH_DRY, 1.0) * waves_of(p.sea, p.fetch).x / SEA_WAVE.x;
+  let plants = p.cover.a * above_water(p.depth) * (1.0 - stripped);
   if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
@@ -213,8 +218,8 @@ const BORE_SOFT = 0.3; const BORE_FOAM = 0.5; const BORE_EDGE = 0.3; const BORE_
 // The swash on ground `over` m over standing liquid (`NO_LIQUID_M` far from any), `sea` of it the sea's, of slope
 // `slope` (rise over run), at `at` seen at `e` m a pixel, under snow `snow`: how soaked it leaves the ground, and the
 // share of it the last bore's foam covers (from afar, where its clumps do not show, their mean).
-fn swash_of(over: f32, sea: f32, slope: f32, at: vec2f, e: f32, snow: f32) -> vec2f {
-  let reach = run_up(sea, slope);
+fn swash_of(over: f32, waves: vec2f, slope: f32, at: vec2f, e: f32, snow: f32) -> vec2f {
+  let reach = run_up(waves, slope);
   if (over >= (1.0 + 1.4 * SWASH_VARY) * reach) { return vec2f(0.0); }
   let ragged = noise_turned(at / SWASH_VARY_M, 111) + 0.35 * noise_turned(at / (0.2 * SWASH_VARY_M), 113);
   let up = over / (reach * (1.0 + SWASH_VARY * ragged));
@@ -291,7 +296,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
       // Standing liquid is coloured as a channel is (style.wgsl `standing_seen`), its shore the channel's shallows and
       // its open water past the band deeper; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
       let seen = standing_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
-      let waves = waves_of(p.sea).x / SEA_WAVE.x;
+      let waves = max(waves_of(p.sea, p.fetch).x / SEA_WAVE.x, 1e-3);
       water = mix(standing_painted(BED_SHOWN * bed, seen, ripple, p.sea), FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, p.slope / earth.look.x, p.e, p.at));
     } else {
       water = water_over(bed, p.depth, ripple);

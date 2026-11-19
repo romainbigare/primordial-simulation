@@ -71,17 +71,23 @@ fn seen_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f) -> vec3
   return bed * t + deep * (1.0 - t) + surface_light(g);
 }
 
-// Waves at a shore, as their height and their length in deep water, m: the sea's, and a lake's, of a fetch of some
-// kilometres (Sverdrup and Munk 1947: a fresh wind over 5 km of water raises waves of about a quarter of a metre and two
-// and a half seconds; the open sea's of a metre and six seconds, L = g T² / 2π). The page knows no lake's fetch: every
-// lake has the one.
-const SEA_WAVE = vec2f(1.0, 56.0); const LAKE_WAVE = vec2f(0.25, 10.0);
-// The waves of standing liquid `sea` of it the sea's (the rest a lake's).
-fn waves_of(sea: f32) -> vec2f { return mix(LAKE_WAVE, SEA_WAVE, sea); }
-// The height over the still level the swash of those waves reaches up a shore of slope `slope` (rise over run), m:
-// the run-up that 2% of them pass, R = 1.1 (0.35 β √(H L) + √(H L (0.563 β² + 0.004)) / 2) (Stockdon and others 2006).
-fn run_up(sea: f32, slope: f32) -> f32 {
-  let w = waves_of(sea);
+// Waves at a shore, as their height and their length in deep water, m (L = g T² / 2π): the open sea's, a metre and six
+// seconds (Sverdrup and Munk 1947); a lake's as a fresh wind of `WIND_M_S` raises them over its fetch F, the length of
+// open water it blows over (the pond's, tape/src/table.rs), fetch-limited (Shore Protection Manual 1984): H = 0.0016
+// √(g F / U²) U² / g and T = 0.2857 (g F / U²)^(1/3) U / g, no higher than the sea's.
+const SEA_WAVE = vec2f(1.0, 56.0); const WIND_M_S = 10.0; const GRAVITY = 9.81;
+// The waves of standing liquid `sea` of it the sea's (the rest a lake's of fetch `fetch` m).
+fn waves_of(sea: f32, fetch: f32) -> vec2f {
+  let u2g = WIND_M_S * WIND_M_S / GRAVITY;
+  let x = fetch / u2g;
+  let t = 0.2857 * pow(x, 1.0 / 3.0) * WIND_M_S / GRAVITY;
+  let lake = min(vec2f(0.0016 * sqrt(x) * u2g, GRAVITY * t * t / (2.0 * PI)), SEA_WAVE);
+  return mix(lake, SEA_WAVE, sea);
+}
+// The height over the still level the swash of waves `w` (`waves_of`) reaches up a shore of slope `slope` (rise over
+// run), m: the run-up that 2% of them pass, R = 1.1 (0.35 β √(H L) + √(H L (0.563 β² + 0.004)) / 2) (Stockdon and
+// others 2006).
+fn run_up(w: vec2f, slope: f32) -> f32 {
   let hl = sqrt(w.x * w.y);
   return 1.1 * (0.35 * slope * hl + 0.5 * hl * sqrt(0.563 * slope * slope + 0.004));
 }

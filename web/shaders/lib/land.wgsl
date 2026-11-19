@@ -75,15 +75,15 @@ const BED_MIDDLE = 1.5;
 // What a point's ground holds: its height, m, its slope east and south, its wetness index, and the distance to its
 // channel's line, m, its slope east and south; the samples of the channels of the texel nearest it and of the one
 // across from that (-1: none) and the least distances of those texels to their lines, m (from their nearest
-// points); and the highest level of the ponds of the four texels about it, m (`-NO_LIQUID_M`: none), and the share of
-// the point's weight on those of them in a pond: its liquid stands at that level over the ground drawn, so a shore
-// runs smooth between the texels where the ground crosses the level; the distance to the channel's line signed by
+// points); and the highest level of the ponds of the four texels about it, m (`-NO_LIQUID_M`: none), the share of
+// the point's weight on those of them in a pond, and the fetch of the highest, m (`pond_fetch`): its liquid stands at
+// that level over the ground drawn, so a shore runs smooth between the texels where the ground crosses the level; the distance to the channel's line signed by
 // the side the point lies on, m; of the line's nearest point, how far along the channel it lies, m (modulo
 // `land.reach.x`, blended across the texels of its stretch); of the channel's line without its bends (its valley's
 // line with its wander, tape/src/ground/bends.rs) and how
 // far the line has swung from the line without bends in its bend there, m, signed as the side its outer bank lies on
 // (`lean`; none where the texels do not hold both lines).
-struct Tiled { h: f32, slope: vec2f, twi: f32, d: f32, d_slope: vec2f, channels: vec4i, ends: vec2f, water: vec2f, sd: f32, along: f32, lean: f32 }
+struct Tiled { h: f32, slope: vec2f, twi: f32, d: f32, d_slope: vec2f, channels: vec4i, ends: vec2f, water: vec3f, sd: f32, along: f32, lean: f32 }
 
 // The sample texel `n` of the tile of depth `depth` at column and row `tile` names by `code` (tape/src/ground/channels.rs
 // `code`): the sample that holds the texel's centre, stepped along each axis; none (-1) for 0.
@@ -133,14 +133,18 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let corner = select(0, 1, f.x > 0.5) + select(0, 2, f.y > 0.5);
   let channels = vec4i(sample_of(at4[corner], t.x, t.yz, i32(a4[corner].x + 0.5)), sample_of(at4[3 - corner], t.x, t.yz, i32(a4[3 - corner].x + 0.5)));
   let ends = max(abs(vec2f(raw[corner], raw[3 - corner])) - HALF_DIAGONAL * texel, vec2f(0.0));
-  // The ponds the four texels lie in: their highest level, and the share of the point's weight on them.
+  // The ponds the four texels lie in: their highest level, the share of the point's weight on them, and the highest's
+  // fetch.
   let ponds = vec4i(i32(a4[0].y + 0.5), i32(a4[1].y + 0.5), i32(a4[2].y + 0.5), i32(a4[3].y + 0.5)) - 1;
   var levels = vec4f(-NO_LIQUID_M);
   if (all(ponds == vec4i(ponds.x))) { levels = vec4f(pond_level(ponds.x)); }
   else { levels = vec4f(pond_level(ponds.x), pond_level(ponds.y), pond_level(ponds.z), pond_level(ponds.w)); }
   let bilinear = vec4f((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
   let wet = select(vec4f(0.0), vec4f(1.0), ponds >= vec4i(0));
-  let water = vec2f(max(max(levels.x, levels.y), max(levels.z, levels.w)), dot(bilinear, wet));
+  let high = max(max(levels.x, levels.y), max(levels.z, levels.w));
+  var highest = ponds.x;
+  for (var n = 1; n < 4; n++) { if (levels[n] > levels[0] && levels[n] >= high) { highest = ponds[n]; } }
+  let water = vec3f(high, dot(bilinear, wet), pond_fetch(highest));
   // The place along the channel: the nearest texel's, blended with those of the others that hold the same stretch of
   // the line (their places taken the short way round the length they are kept modulo).
   // (In a program made for draws from afar, where no bed's shape shows, the nearest texel's as it is, and no swing.)
@@ -182,14 +186,17 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   return Tiled(h.x, h.yz / texel, o.z, abs(signed), d_slope, channels, ends, water, signed, along, lean);
 }
 
-// The level of pond `p` (-1: none), m: from the rows of the table under its planes, four ponds a texel; far below
-// any ground for none (no body holds it, or the texel lies in no pond).
-fn pond_level(p: i32) -> f32 {
-  if (p < 0) { return -NO_LIQUID_M; }
+// The level of pond `p` (-1: none), m, and its fetch, m: from the rows of the table under its planes, two ponds a
+// texel (its level, its fetch); the level far below any ground for none (no body holds it, or the texel lies in no
+// pond).
+fn pond_texel(p: i32) -> vec2f {
   let w = i32(land.map.y);
-  let q = p / 4;
-  return textureLoad(table, vec2i(q % w, PLANES * i32(land.map.z) + q / w), 0)[p % 4];
+  let q = p / 2;
+  let t = textureLoad(table, vec2i(q % w, PLANES * i32(land.map.z) + q / w), 0);
+  return select(t.xy, t.zw, p % 2 == 1);
 }
+fn pond_level(p: i32) -> f32 { return select(pond_texel(p).x, -NO_LIQUID_M, p < 0); }
+fn pond_fetch(p: i32) -> f32 { return select(pond_texel(p).y, 0.0, p < 0); }
 
 // Cell value `k` (a plane of the table) of the square at column and row c, the nearest on the map.
 fn cell(k: i32, c: vec2i) -> vec4f {
@@ -218,7 +225,7 @@ fn ground_at(at: vec2f, spline: bool) -> Tiled {
   let size = vec2i(textureDimensions(pages));
   let page = textureLoad(pages, clamp(vec2i(floor(at / span)), vec2i(0), size - 1), 0);
   if (page.x < 0.0) {
-    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec2f(-NO_LIQUID_M, 0.0), NO_LIQUID_M, 0.0, 0.0);
+    return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec3f(-NO_LIQUID_M, 0.0, 0.0), NO_LIQUID_M, 0.0, 0.0);
   }
   let shown = read_tile(i32(page.x), at, spline);
   let came = textureLoad(tile_of, vec2i(i32(page.x), 0), 0).w;

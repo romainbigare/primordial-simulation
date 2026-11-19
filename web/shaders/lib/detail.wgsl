@@ -120,7 +120,7 @@ fn soil_detail(p: Spot) -> vec3f {
     for (var i = 0; i < 5; i++) { w[i] *= 1.0 - sand; }
     let grain = shore_grain(p);
     let fine = sand * (1.0 - grain.x - grain.y);
-    let bare = 1.0 - ease(0.0, STORM_RUN_UP * run_up(p.sea, p.slope / earth.look.x), p.over);
+    let bare = 1.0 - ease(0.0, STORM_RUN_UP * run_up(waves_of(p.sea, p.fetch), p.slope / earth.look.x), p.over);
     w[SOIL_BEACH] = fine * bare;
     w[6] = fine * (1.0 - bare);
     w[7] = sand * grain.x;

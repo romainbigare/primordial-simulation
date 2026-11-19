@@ -53,7 +53,7 @@ export class Land {
   private data: Float32Array | null = null;
   private tex: Texture | null = null;
   private due = false;
-  /** The rows of the table's texture: its planes, then the ponds' levels. */
+  /** The rows of the table's texture: its planes, then the ponds' levels and fetches. */
   private rows = 0;
   /** The melting point of the frozen cover, K (0: none), and the sea's level, m (the lowest body's), as the table last
    * said. */
@@ -77,16 +77,18 @@ export class Land {
   }
 
   /** The table of frame 0 of world `w`: the core's rows `rows` (the melting point, then a row a square, then each
-   * square's kinds of cover, which canopy.ts reads, then the level of each pond), the samples' discharge if it came
-   * since (`discharge`, else null), its wet squares `wet`, and the layer `look` draws. The ponds' levels lie in rows
-   * under the planes, four a texel (land.wgsl `pond_level`; one no body holds far below any ground). */
+   * square's kinds of cover, which canopy.ts reads, then the level of each pond, then its fetch), the samples'
+   * discharge if it came since (`discharge`, else null), its wet squares `wet`, and the layer `look` draws. The ponds
+   * lie in rows under the planes, two a texel, each its level and its fetch (land.wgsl `pond_texel`; a level no body
+   * holds far below any ground). */
   set(w: World, rows: Float32Array, discharge: Uint16Array | null, wet: Wet, look: MapLook): void {
     if (discharge) { this.discharge = discharge; this.flowsDue = true; }
     const { w: W, h: H } = w.meta, n = W * H, { row, kinds, kind_row } = this.tiles.meta;
-    const levels = rows.subarray(1 + (row + kinds * kind_row) * n);
-    this.rows = PLANES * H + Math.ceil(levels.length / 4 / W);
+    const ponds = rows.subarray(1 + (row + kinds * kind_row) * n), count = ponds.length / 2;
+    const levels = ponds.subarray(0, count), fetches = ponds.subarray(count);
+    this.rows = PLANES * H + Math.ceil(count / 2 / W);
     const data = new Float32Array(4 * W * this.rows);
-    data.set(Array.from(levels, l => (Number.isNaN(l) ? -NO_POND_M : l)), 4 * PLANES * n);
+    data.set(Array.from(levels).flatMap((l, p) => [Number.isNaN(l) ? -NO_POND_M : l, fetches[p]]), 4 * PLANES * n);
     this.sea = levels.reduce((low, l) => (l < low ? l : low), Infinity);
     if (!Number.isFinite(this.sea)) this.sea = -NO_POND_M;
     const sea = seaSquares(wet, w.meta), ground = fromLand(['ground_r', 'ground_g', 'ground_b'].map(name => plane(w, 0, name)), wet.sea, W, H);

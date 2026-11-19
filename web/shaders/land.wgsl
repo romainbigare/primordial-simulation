@@ -140,8 +140,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
-  p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z);
-  p.swash = swash_of(over_ponds(tiled, 0.0), p.sea, length(tiled.slope), at, e, p.snow);
+  p.fetch = g.water.z;
+  let waves = waves_of(p.sea, p.fetch);
+  p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z, waves);
+  p.swash = swash_of(over_ponds(tiled, 0.0), waves, length(tiled.slope), at, e, p.snow);
   // A beach of pebbles takes their colour from the bed they are worn from (colour.wgsl `shore_grain`).
   if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.river = 0.0;
