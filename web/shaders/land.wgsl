@@ -54,6 +54,9 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
   return p;
 }
 
+// Herbs float their leaves on liquid from their height's depth on, all of them from `FLOAT_TALL` times it.
+const FLOAT_TALL = 1.5;
+
 // What is at `at`, m from the map's north-west corner, seen at `e` m a pixel: its ground and its state (`state_on`), the
 // ground's own colour and the sea blended between the squares' centres, the plants' field (lib/cover_field.wgsl); and
 // its channel (rock.wgsl `channel_at`), from its own sample's discharge. The channel's bed is cut into the ground, and
@@ -116,7 +119,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.cover = cf.cover;
   p.canopy = cf.canopy;
   p.shed = cf.shed;
-  p.reach = cf.reach;
+  p.reach = cf.wet.x;
+  // Herbs that stand in liquid deeper than they are tall float their leaves on it (afloat.wgsl), where their roots
+  // reach (draw.wgsl `stands_in`): over the share of the ground they cover.
+  p.pads = cf.wet.w * ease(cf.wet.z, FLOAT_TALL * cf.wet.z, p.depth) * stands_in(p.depth, cf.wet.y);
   p.rock = bare;
   p.bed = vec3f(0.0);
   // Its channel's stones (`stony`), and the scree's place below the bed that sheds it: where the loose ground deepens

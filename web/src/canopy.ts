@@ -48,7 +48,8 @@ export const PLANES_DOWN = 32;
  * share of the ground under crowns whose leaves fall this month (`leavesFalling`), the sward and the lattices under the
  * trees' as one layer, as the field draws them far away (`lowOf`), 1 where the square's cell holds land or a kind
  * stands in it (a square with neither holds 0 in every layer: cover_field.wgsl blends over the squares with cover
- * alone, `on_land`) with the depth of liquid its kinds' roots stand in, m, on the mean by their cover (their reach), and of the sward and of the lattice of stands the part the kinds but the first make. */
+ * alone, `on_land`) with the depth of liquid its kinds' roots stand in, m, on the mean by their cover (their reach), and
+ * of its herbs (the sward) their reach and their height, m, on the mean by their cover, and of the sward and of the lattice of stands the part the kinds but the first make. */
 export const FIELD = { sward: LATTICES.length, flowers: LATTICES.length + 1, swardFirst: LATTICES.length + 2, standsFirst: LATTICES.length + 3, tall: LATTICES.length + 4, rooted: LATTICES.length + 5, need: LATTICES.length + 6, wide: LATTICES.length + 7, shade: LATTICES.length + 8, low: LATTICES.length + 9, land: LATTICES.length + 10, swardRest: LATTICES.length + 11, standsRest: LATTICES.length + 12, count: LATTICES.length + 13 } as const;
 /** The number of a square's row of the core's table that is the share of its cell that is land (tape/src/table.rs `row`). */
 const LAND_AT = 10;
@@ -172,7 +173,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
     if (!(rows[1 + row * i + LAND_AT] > 0) && !Array.from({ length: kinds }, (_, k) => holdsKind(k)).some(Boolean)) continue;
     field[layer(FIELD.land, i)] = 1;
     const paint = LATTICES.map(() => new Paint()), sward = new Paint(), flowers = new Paint();
-    let shed = 0, reach = 0, covered = 0;
+    let shed = 0, reach = 0, covered = 0, herbReach = 0, herbTall = 0, herbs = 0;
     for (let k = 0; k < kinds; k++) {
       if (!holdsKind(k)) continue;
       // A copy: its crowns' numbers are set below (`standingCrowns`).
@@ -191,7 +192,11 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       // Its place in the order the first kind is chosen by: its starting kind (a label fixed in the world, so neighbouring
       // squares agree), then its slot (`Paint`).
       const order = r[K.root] * kinds + r[K.slot];
-      if (stands < 1) swardOf(r, k, order, lookAs(DESIGN.herb), 1 - stands, stand, sward, flowers);
+      if (stands < 1) {
+        swardOf(r, k, order, lookAs(DESIGN.herb), 1 - stands, stand, sward, flowers);
+        const share = r[K.cover] * (1 - stands);
+        herbReach += share * wades; herbTall += share * r[K.height]; herbs += share;
+      }
       if (stands <= 0) continue;
       const design = designOf(r[K.height], r[K.walls]), look = lookAs(design);
       // Each group's crowns as wide as their wood holds them through the year (`standingCrowns`), as closed as its leaves.
@@ -239,7 +244,7 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
     const first = paint[STANDS].first.k;
     for (let g = 0; first >= 0 && g < 4; g++) table[texel(P.chance + STANDS * kinds + first, i) + g] *= -1;
     putField(field, i, layer, paint, sward, flowers, shed);
-    field[layer(FIELD.land, i) + 1] = covered > 0 ? reach / covered : 0;
+    [covered > 0 ? reach / covered : 0, herbs > 0 ? herbReach / herbs : 0, herbs > 0 ? herbTall / herbs : 0].forEach((v, q) => { field[layer(FIELD.land, i) + 1 + q] = v; });
   }
   return { w, h, planes: P, cols, table, field: { w, h, data: field }, tallest, widest, walls };
 }
