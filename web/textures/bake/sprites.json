@@ -318,7 +318,7 @@
      0,
      180
     ],
-    "set": "SWAMP_TREE",
+    "set": "CYPRESS",
     "leaf": 0.045
    },
    {
@@ -328,6 +328,7 @@
      0,
      180
     ],
+    "set": "MANGROVE",
     "leaf": 0.045
    }
   ]

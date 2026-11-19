@@ -37,7 +37,10 @@ const BUSH_SHADOW = 0.3;
 // a kind as tender to frost as it is (form.ts `Form`, each plant by its own draw, `tender_draw`), a palm or a fern, as
 // such plants live where it does not freeze hard (of them, the share as wet as its kind's ground is made for are ferns,
 // each by its own draw: tree ferns stand on wet shaded ground, palms on drier); else drawn by its crown's form, as a
-// woody tree.
+// woody tree. A woody tree of a kind the law stands in liquid on its square (`Plant.wades`), as wet as its kind's
+// ground is made for (each by its own draw), is a swamp tree whatever its crown's form: as tender to frost as its kind
+// is (`tender_draw`), a mangrove on its prop roots, else a bald cypress on its flared feet (trees that stand in water
+// hold themselves in its soft bed by buttresses, knees and prop roots: from memory).
 const SOFT_WOOD = 0.6; const SOFT_MIX = 0.1;
 const CONE_YOUNG_M = 9.0; const PINE_YOUNG_M = 12.0;
 const BUSH_DRY = vec2f(0.33, 0.66); const BUSH_MIX = 0.2;
@@ -50,6 +53,9 @@ fn model_set(q: Plant) -> vec2i {
   }
   if (under_edge(q.wood, SOFT_WOOD, SOFT_MIX, u) && q.tender > 1.0 - tender_draw(q.r)) {
     return select(vec2i(PALM_FROM, PALM_N), vec2i(FERN_FROM, FERN_N), q.wet > 1.0 - u);
+  }
+  if (q.wades > 0.0 && q.wet > 1.0 - u) {
+    return select(vec2i(CYPRESS_FROM, CYPRESS_N), vec2i(MANGROVE_FROM, MANGROVE_N), q.tender > 1.0 - tender_draw(q.r));
   }
   // Of its trees the share `sure` stand in its form, each by its own draw, the rest round.
   let f = select(ROUND, i32(q.form + 0.5), q.sure > 1.0 - u);
@@ -196,10 +202,10 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
 
 // How wide the feet tree q drawn from sprite s stands on, 0..1: a woody tree's as wet as its kind's ground (form.ts
 // `Form.wet`), drawn as a flare at the trunk's foot (`flared_foot`); a palm's or a fern's none (soft stems grow no
-// buttresses).
+// buttresses), nor a swamp tree's (its sprite stands on its own feet).
 fn wide_feet(q: Plant, s: i32) -> f32 {
-  let soft = in_set(s, PALM_FROM, PALM_N) || in_set(s, FERN_FROM, FERN_N);
-  return select(0.0, q.wet, q.design == TREE && s < TREES && !soft);
+  let own = in_set(s, PALM_FROM, PALM_N) || in_set(s, FERN_FROM, FERN_N) || in_set(s, CYPRESS_FROM, CYPRESS_N) || in_set(s, MANGROVE_FROM, MANGROVE_N);
+  return select(0.0, q.wet, q.design == TREE && s < TREES && !own);
 }
 
 // Whether sprite s is of the set of `n` sprites from `first`.

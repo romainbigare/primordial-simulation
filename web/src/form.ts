@@ -14,7 +14,7 @@ export interface Shape { leaf: number; frost: number; moist: number; seed: numbe
  * (0: as round .. 1: fully itself); how dry the ground its kind is made for, 0..1 (its moisture gene from the middle
  * of dry ground's to a span under it): the drawing picks a dry land's plant for a dry kind (models.wgsl); how wet,
  * 0..1 (its moisture gene from the middle of wet ground's to a span over it): a tree of wet ground stands on a flared
- * foot (models.wgsl `flared_foot`); and how tender to frost the kind is, 0..1 (`TENDER_SPANS`): only a tender kind's
+ * foot (models.wgsl `flared_foot`), or, where its kind stands in liquid, is a swamp tree (models.wgsl `model_set`); and how tender to frost the kind is, 0..1 (`TENDER_SPANS`): only a tender kind's
  * soft plants are drawn as palms or ferns (models.wgsl: ferns as wet as the kind is). A kind is never both dry and wet (their middles part). */
 export interface Form { form: number; sure: number; dry: number; wet: number; tender: number }
 
