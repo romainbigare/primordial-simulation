@@ -197,6 +197,9 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: the share of its area that is land, 0..1: its land (`contract::lands`, which its cover lives
     /// on) over its area
     pub land: Vec<f64>,
+    /// Per ground cell: the dead matter, minerals and rot of its ground (`soil::grounds`; none before Flow first built
+    /// its state)
+    pub dead: Option<Vec<pcore::soil::Ground>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -210,9 +213,14 @@ impl<'a> Ctx<'a> {
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
         let land = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land };
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: pcore::soil::grounds(w) };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
+    }
+    /// Of the dead matter, minerals and rot of cell `i`'s ground (`dead`), the number `of`; none (NaN) before Flow
+    /// first built its state.
+    fn dead(&self, i: usize, of: fn(&pcore::soil::Ground) -> f64) -> f64 {
+        self.dead.as_ref().map_or(f64::NAN, |d| of(&d[i]))
     }
     fn air(&self, i: usize) -> usize {
         self.w.mesh.up(i, 0, AIR)
@@ -227,12 +235,6 @@ impl<'a> Ctx<'a> {
 /// cover), as a viewer draws it on the land only; none (NaN) where the cell holds no land.
 pub(crate) fn per_land(per_m2: f64, land: f64) -> f64 {
     if land > 0.0 { per_m2 / land } else { f64::NAN }
-}
-
-/// The liquid loose ground of pores `p` holds for roots when full, m: what its pores hold between field capacity and the
-/// wilting point over its depth `loose` m (the available water capacity, Saxton and Rawls 2006).
-fn available_m(p: &pcore::soil::Pores, loose: f64) -> f64 {
-    (p.field - p.wilt) * p.porosity * loose
 }
 
 /// What cell `i` of `w` sheds, mol/(m² s): its rain less what rises from it (`World::rain`, `World::evap`; their
@@ -283,9 +285,14 @@ pub const LAYERS: &[Layer] = &[
     l("filled", "1", "lin", 0.0, 1.0, |c, i| c.filled[i]),
     l("coarse", "1", "lin", 0.0, 1.0, |c, i| c.w.soil[i].texture.coarse),
     l("fine", "1", "lin", 0.0, 1.0, |c, i| c.w.soil[i].texture.fine),
-    l("organic", "1", "lin", 0.0, 0.1, |c, i| c.w.soil[i].texture.organic),
+    l("organic", "1", "lin", 0.0, 0.02, |c, i| c.w.soil[i].texture.organic),
+    l("litter", "kg/m2", "log", 0.01, 30.0, |c, i| c.dead(i, |g| g.litter)),
+    l("slow", "kg/m2", "log", 0.1, 10.0, |c, i| c.dead(i, |g| g.slow)),
+    l("mineral_free", "kg/m2", "log", 1e-5, 0.1, |c, i| c.dead(i, |g| g.minerals[0])),
+    l("mineral_held", "kg/m2", "log", 1e-5, 0.3, |c, i| c.dead(i, |g| g.minerals[1])),
+    l("rot", "1/yr", "log", 0.01, 10.0, |c, i| c.dead(i, |g| g.rot)),
     l("conduct", "m/s", "log", 1e-9, 1e-4, |c, i| c.w.pores(i).seep),
-    l("avail", "m", "log", 0.01, 0.3, |c, i| available_m(c.w.pores(i), c.f.loose[i])),
+    l("avail", "m", "log", 0.01, 0.3, |c, i| c.w.pores(i).for_roots(c.f.loose[i])),
     l("roots", "1", "lin", 0.0, 1.0, |c, i| c.w.pores(i).available(c.filled[i])),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),

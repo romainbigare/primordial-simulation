@@ -4,7 +4,7 @@
 // adds to the table what it decides itself: the ground's own colour and the sea, the true colour, and the layer drawn.
 import { Draw, Gpu, Texture, Uniforms } from './gpu';
 import { GroundTiles, TILE_FADE_MS } from './ground';
-import { World, plane } from './data';
+import { World, plane, decode } from './data';
 import { MapLook, earthUniforms } from './field-window';
 import { Wet, seaSquares } from './earth';
 import { half, unhalf } from './canopy';
@@ -102,6 +102,8 @@ export class Land {
     // coastal square of the open low ground holds is the land's, not its 8 km cell's.
     const [landZ, landT, landIce] = fromLand([0, 1, 3].map(k => Float32Array.from({ length: n }, (_, i) => rows[1 + row * i + k])), wet.sea, W, H);
     const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
+    // The share of organic matter of each square's loose ground, which the Earth view darkens it by (land.wgsl).
+    const organic = w.index.has('organic') ? decode(w, 0, 'organic') : new Float32Array(n);
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
     this.fade = shown && w.meta.layers[w.index.get(look.layer)!].scale !== 'log' ? 1 : OVER_FADE;
     const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
@@ -110,7 +112,7 @@ export class Land {
       for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
       put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, landIce[i]]);
-      put(5, i, [shown ? shown[i] / 255 : 0, 0, landT[i], landZ[i]]);
+      put(5, i, [shown ? shown[i] / 255 : 0, organic[i], landT[i], landZ[i]]);
     }
     blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
     // The sea's squares are marked by their air's fall with height as -(it + 1) (land.wgsl `state_on`): only a point

@@ -32,17 +32,24 @@ const BALANCE = ramps('#8e2a1e', '#d9774a', '#f2e6cf', '#7fb2d9', '#1f4f9b');
 const ROOTS = ramps('#7a3b1e', '#c9813f', '#ead48a', '#9cc66a', '#3f8f4a');
 /** What rises from the ground: little (pale) to much (deep teal). */
 const RISES = ramps('#f4f1e4', '#cfe6c8', '#86c6b0', '#3f9a9a', '#1c5c6e');
+/** The nitrogen mineral: little (pale) to much (deep violet). */
+const FERTILE = ramps('#f6f0e2', '#d9c6e6', '#a98bd1', '#6e52a8', '#382468');
+/** How fast dead matter rots: slow (cold blue-grey) to fast (warm orange). */
+const ROTS = ramps('#3d4a63', '#7b8aa0', '#d8cfae', '#e3a254', '#b4521c');
 
 /** The layers of the soil and of the land's liquid, drawn on dry ground alone (colour.wgsl `in_view_of`), as the ground under standing liquid is
  * no soil a plant roots in and the large cells of the sea would show as squares: 1 as the cells hold it, or found by the
  * live map at each point (land.wgsl `layer_at`): 2 the share of the pores the soil's liquid fills by the laws inside a
  * cell, 3 and 4 the coarse and the fine grain's share of the terrain's samples. */
-export const GROUND_LAYERS = new Map([['filled', 2], ['coarse', 3], ['fine', 4], ['organic', 1], ['conduct', 1], ['avail', 1], ['roots', 1], ['rises', 1], ['sheds', 1]]);
+export const GROUND_LAYERS = new Map([['filled', 2], ['coarse', 3], ['fine', 4], ['organic', 1], ['conduct', 1], ['avail', 1], ['roots', 1], ['rises', 1], ['sheds', 1],
+  ['litter', 1], ['slow', 1], ['mineral_free', 1], ['mineral_held', 1], ['rot', 1]]);
 
 export function rampFor(name: string): RGB[] {
   if (name === 'coarse') return SANDY;
   if (name === 'fine') return CLAYEY;
-  if (name === 'organic') return HUMUS;
+  if (name === 'organic' || name === 'litter' || name === 'slow') return HUMUS;
+  if (name.startsWith('mineral_')) return FERTILE;
+  if (name === 'rot') return ROTS;
   if (name === 'conduct') return SEEPS;
   if (name === 'sheds') return BALANCE;
   if (name === 'roots') return ROOTS;

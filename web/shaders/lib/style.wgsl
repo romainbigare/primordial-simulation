@@ -17,12 +17,12 @@ const SHADE_TINT = vec3f(0.80, 0.88, 1.08); const LIT_TINT = vec3f(1.06, 1.02, 0
 // Bare ground is drawn by its grain (a painted map's earth): its colour times a tint at full strength, the tints of its
 // grains by their shares. Coarse grain (sand) pale and warm: quartz grains bare of coatings; middle grain (silt) warm;
 // fine grain (clay) darker and redder, as the iron oxides that coat it stain it (Schwertmann 1993). Organic matter
-// darkens it towards black-brown, all of the way from `HUMUS_FULL` of its mass: a few per cent of humus makes a soil dark
-// (Schulze and others 1993).
+// darkens it towards black-brown, all of the way from `HUMUS_FULL` of its solid volume (about 2 % of its mass): a few
+// per cent of humus makes a soil dark (Schulze and others 1993).
 const SAND_TINT = vec3f(1.9, 1.62, 1.08);
 const SILT_TINT = vec3f(1.25, 1.08, 0.82);
 const CLAY_TINT = vec3f(1.0, 0.5, 0.36);
-const HUMUS_TINT = vec3f(0.40, 0.31, 0.24); const HUMUS_FULL = 0.06;
+const HUMUS_TINT = vec3f(0.40, 0.31, 0.24); const HUMUS_FULL = 0.04;
 
 // Water seen through: the attenuation of the clearest coastal water, its green and blue drawn stretched (Jerlov 1976,
 // type 1 and clearer), so the bed shows to tens of metres, its red half as much as water itself takes it (Pope and

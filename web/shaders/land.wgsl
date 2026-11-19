@@ -126,7 +126,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
-  p.grain = grain_at(at, e);
+  p.grain = grain_at(at, e, blended(VIEW, cs).y);
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
   let fringe = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * ch.water);
   let shore_over = select(p.over, mix(p.over, min(p.over, max(abs(g.sd - ch.middle) - ch.water, 0.0) * max(length(g.slope), ch.mean / max(ch.water, 1e-6))), fringe), ch.water > 0.0);

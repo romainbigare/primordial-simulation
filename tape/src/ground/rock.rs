@@ -45,8 +45,8 @@ fn links(s: &Samples, k: usize) -> u32 {
 /// its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), the slope of its reach (rise
 /// over run; 0 there too) and its channel's links (`links`); then of each sample again the reflectance of the make of
 /// its bed (red, green, blue: `colours`, one a make, `Samples::make`) and a zero; then of each sample again the shares of
-/// coarse and fine particles and of organic matter of its loose ground (`grain`, one a sample) and how slowly its pores
-/// pass liquid, the decimal logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s): three planes
+/// coarse and fine particles of its loose ground (`grain`, one a sample), how slowly its pores pass liquid, the decimal
+/// logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s), and a zero: three planes
 /// of a texture, one under the other.
 pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<u16> {
     let s = r.s;
@@ -62,7 +62,7 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<
     }
     for t in &grain[..s.h.len()] {
         let slow = -Pores::of(t).seep.log10();
-        out.extend([half(t.coarse as f32), half(t.fine as f32), half(t.organic as f32), half(slow as f32)]);
+        out.extend([half(t.coarse as f32), half(t.fine as f32), half(slow as f32), 0]);
     }
     out
 }

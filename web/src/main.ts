@@ -17,6 +17,8 @@ const LABELS: Record<string, string> = {
   coarse: 'Sand (coarse grain)', fine: 'Clay (fine grain)', organic: 'Organic matter', conduct: 'Soil conductivity',
   avail: 'Available water', filled: 'Soil water (pores filled)', roots: 'Water for roots (share)',
   rises: 'Evaporation', sheds: 'Runoff and drainage (rain less evaporation)',
+  litter: 'Fresh litter', slow: 'Humus (slow organic pool)', mineral_free: 'Nitrogen, dissolved', mineral_held: 'Nitrogen, held on the soil',
+  rot: 'Rot speed',
   seeds: 'Seeds on the ground', grown: 'Growth last year', takers: 'Takers',
 };
 const ORDER = Object.keys(LABELS);
