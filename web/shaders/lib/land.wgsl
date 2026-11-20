@@ -254,6 +254,26 @@ fn soil_held(pore: f32, pores: f32, c: f32, twi: f32) -> f32 {
   return clamp(pore + land.soil.x * (twi - c), 0.0, pores);
 }
 
+// How saturated the ground at `at` is, 0..1 (TOPMODEL, Beven and Kirkby 1979): a cell's soil is full where its liquid
+// by the wetness index (`soil_held`) reaches its pores, so from the index c + (pores - pore) / soil_m on; a point is
+// saturated from that level, blended over the cells about it, on (all of a cell whose pores are full, none of one whose
+// pores hold none), and its edge is spread over `SATURATED_EDGE` of the index under it.
+const SATURATED_EDGE = 0.5;
+fn saturated_at(at: vec2f) -> f32 {
+  let twi = ground_at(at, false).twi;
+  let cs = corners(at / land.map.x);
+  var over = 0.0;
+  for (var k = 0; k < 4; k++) {
+    let pore = cell(LIQUID, cs.at[k]).w;
+    let s = cell(SOIL, cs.at[k]);
+    var d = twi - s.y - (s.x - pore) / land.soil.x;
+    if (pore >= s.x) { d = SATURATED_EDGE; }
+    if (pore <= 0.0) { d = -SATURATED_EDGE; }
+    over += cs.w[k] * d;
+  }
+  return smoothstep(-SATURATED_EDGE, 0.0, over);
+}
+
 // The share of a tent of half-width 1 that lies below t (a pixel's footprint across a line).
 fn tent(x: f32) -> f32 {
   let t = clamp(x, -1.0, 1.0);
