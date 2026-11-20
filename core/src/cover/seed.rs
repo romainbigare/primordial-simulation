@@ -79,15 +79,16 @@ pub enum Landed {
 }
 
 /// Seeds `s` lodge in cover `c` on the share `share` of its cell's ground of `area` m² (`cover::ground`) their kind
-/// stands on (`cover::footing` of the ground it may hold), of a world of settings `cfg`, with their heat and their store: into the most alike slot of their starting kind within `APART` × `alike` steps
-/// (`distance`), the genes the mean by built cover, the plants each slot took in added to `recruits` (where they take
+/// stands on (`cover::footing` of the ground it may hold), the share `strip` of them in its land's saturated strips
+/// (`Footing::strip`), of a world of settings `cfg`, with their heat and their store: into the most alike slot of their starting kind within `APART` × `alike` steps
+/// (`distance`), the genes and the share in the strips the mean by built cover, the plants each slot took in added to `recruits` (where they take
 /// ground below its line, `soak::lowered`); else they found a slot of their own (its line `UNSET`) among the world's first `Config::variety`: an
 /// empty one; else the one in deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots
 /// nearest each other by their genes join (`room`) and they found the slot it frees; a world whose cells hold one kind
 /// (`Config::variety` 1) has no two to join, and the seeds do not take hold (`Landed::Refused`). So a cell of more slots
 /// is never closed to seeds and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
 /// the light that reaches the bottom of the layers above them and what does not pay dies (the gap models, Shugart 1984).
-pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area, share): (f64, f64), recruits: &mut [f64; super::SLOTS]) -> Landed {
+pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area, share, strip): (f64, f64, f64), recruits: &mut [f64; super::SLOTS]) -> Landed {
     let (ph, n) = (&cfg.phys, cfg.variety);
     let kg = built_kg(mm, &s.mol);
     let plants = super::stand::founded(ph, kg, area * share);
@@ -108,7 +109,9 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area
             (0..NP).for_each(|q| left[q] -= part[q]);
             c.recruit(mm, x, (plants * f, built_kg(mm, &part)));
             recruits[x] += plants * f;
-            (0..NG).for_each(|g| c.genes[x][g] += (kg * f / (kg * f + c.built(mm, x)).max(1e-300)) as f32 * (s.genes[g] - c.genes[x][g]));
+            let new = (kg * f / (kg * f + c.built(mm, x)).max(1e-300)) as f32;
+            (0..NG).for_each(|g| c.genes[x][g] += new * (s.genes[g] - c.genes[x][g]));
+            c.strip[x] += new * (strip as f32 - c.strip[x]);
             (0..NP).for_each(|q| c.mol[x][q] += part[q]);
         }
         c.e += s.heat;
@@ -122,7 +125,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area
         (None, None) => return Landed::Refused,
     };
     (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, 0.0);
-    (c.line[x], c.stands[x], c.airless[x], c.drained[x]) = (super::UNSET, share as f32, 0.0, 0.0);
+    (c.line[x], c.stands[x], c.airless[x], c.drained[x], c.strip[x]) = (super::UNSET, share as f32, 0.0, 0.0, strip as f32);
     c.found(x, plants);
     c.e += s.heat;
     out.map_or(Landed::In, Landed::Out)
@@ -135,7 +138,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area
 pub(super) fn lines(w: &World, c: &Cover, i: usize, soak: &super::Soak, (recruits, kg): (&[f64; super::SLOTS], f64), aired: f64) -> [f32; super::SLOTS] {
     let n: f64 = recruits.iter().sum();
     let lower = |x: usize| {
-        let free = super::footing(w, i, c.genes[x][super::GAS] as f64, w.cfg.phys.root_least, soak, Some(c.line[x] as f64)).free;
+        let free = super::footing(w, i, &c.genes[x], w.cfg.phys.root_least, soak, Some((c.line[x] as f64, c.strip[x] as f64))).free;
         super::soak::lowered(w, i, c.line[x] as f64, (recruits[x], kg / n), (aired, free)) as f32
     };
     std::array::from_fn(|x| if recruits[x] > 0.0 { lower(x) } else { c.line[x] })
@@ -160,7 +163,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, cell) = (p.mm(&w.chem), super::ground(w, i));
     let soak = super::soak(w, &p, i, w.g(p.liquid, i)).1;
-    let foot = super::footing(w, i, genes[super::GAS] as f64, w.cfg.phys.root_least, &soak, None);
+    let foot = super::footing(w, i, &genes, w.cfg.phys.root_least, &soak, None);
     let area = cell * foot.share;
     if area <= 0.0 {
         return false;
@@ -171,7 +174,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let mut recruits = [0.0; super::SLOTS];
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
-    let landed = lodge(c, &mm, &s, &w.cfg, (cell, foot.share), &mut recruits);
+    let landed = lodge(c, &mm, &s, &w.cfg, (cell, foot.share, foot.strip), &mut recruits);
     let to = lines(w, &w.life.cells[i].cover, i, &soak, (&recruits, built_kg(&mm, &mol)), area);
     let c = &mut w.life.cells[i].cover;
     c.line = to;

@@ -18,6 +18,8 @@ const ALL_STRIKES: f64 = 1.0;
 const WARMER: f64 = 15.0;
 /// The share either side of the flux at which the remains' moisture is their moisture of extinction.
 const NEAR: f64 = 1e-3;
+/// The rounding of the liquid set to field capacity: the moisture share it gives is 1 to within it.
+const ROUNDING: f64 = 1e-12;
 
 /// A small world with its soil and some cover on its first dry land cell (so its remains have a leaf area), its
 /// remains put on that cell, and strikes so dense that what can burn burns; and that cell.
@@ -66,7 +68,8 @@ fn dry_remains_burn_through_and_wet_ones_only_at_their_top() {
     let (held, filled) = (wet.g(p.liquid, i), pcore::cover::soak(&wet, &p, i, wet.g(p.liquid, i)).1.filled);
     let field = wet.pores(i).field;
     liquid_to(&mut wet, i, held * field / filled);
-    assert_eq!(pcore::cover::soak(&wet, &p, i, wet.g(p.liquid, i)).1.moist, 1.0, "the wet ground is at field capacity");
+    let moist = pcore::cover::soak(&wet, &p, i, wet.g(p.liquid, i)).1.moist;
+    assert!((moist - 1.0).abs() < ROUNDING, "the wet ground is at field capacity: {moist}");
     let mut dry = wet.clone();
     liquid_to(&mut dry, i, 0.0);
     // The gas the frame's burning gives.

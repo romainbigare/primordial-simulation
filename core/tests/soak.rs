@@ -34,8 +34,8 @@ fn world() -> (World, usize, Parts) {
 /// Up to field capacity every root breathes, whatever its gas spaces. In full pores a root works only as far down as
 /// its gas spaces keep it in the gas (`cover::aired`), so a kind of few gas spaces is less active on full pores than on
 /// ground at field capacity, a kind of many is more active there than it, and liquid standing as deep as a kind's
-/// aired length leaves none of its roots working. A saturated share of a land at field capacity is in full pores too
-/// (`inside::airless`): there only the gas spaces' reach works.
+/// aired length leaves none of its roots working. The saturated strips of a land at field capacity are in full pores
+/// too: there only the gas spaces' reach works, so a kind of many gas spaces takes more of them (`cover::strips_share`).
 #[test]
 fn roots_in_full_pores_breathe_only_through_their_gas_spaces() {
     let (w, i, p) = world();
@@ -45,7 +45,7 @@ fn roots_in_full_pores_breathe_only_through_their_gas_spaces() {
     let (need, loose) = (1.0, 1.0);
     let soak = |filled: f64| Soak { moist: pores.available(filled), filled, saturated: 0.0, loose, pores, breath, pond: 0.0 };
     // What it runs of its light reaction: its activity times the share of its roots that work (`grow::light`).
-    let act = |phi: f32, filled: f64| cover::activity(&herb(phi), pores.available(filled)) * cover::working(phi as f64, need, &soak(filled));
+    let act = |phi: f32, filled: f64| cover::activity(&herb(phi), pores.available(filled)) * cover::working(phi as f64, need, &soak(filled), false);
     let (few, many) = (0.05, 0.4);
     assert!(act(few, pores.field) == 1.0 && act(many, pores.field) == 1.0, "at field capacity: {} {}", act(few, pores.field), act(many, pores.field));
     let (low, high) = (act(few, 1.0), act(many, 1.0));
@@ -56,7 +56,11 @@ fn roots_in_full_pores_breathe_only_through_their_gas_spaces() {
     assert_eq!(act(many, drowned * (1.0 + 1e-9)), 0.0, "roots work under liquid deeper than their gas spaces reach");
     let strips = Soak { saturated: 0.3, ..soak(pores.field) };
     let reach = cover::aired(breath, few as f64);
-    assert!((cover::working(few as f64, need, &strips) - (0.7 * loose + reach).min(need) / need).abs() < 1e-12, "the saturated share's roots work as in full pores");
+    assert!((cover::working(few as f64, need, &strips, true) - reach.min(need) / need).abs() < 1e-12, "the saturated strips' roots work as in full pores");
+    assert!(cover::working(few as f64, need, &strips, false) == 1.0, "the drier rest's roots all breathe");
+    // Seedlings that land evenly take hold as they gain: a kind of many gas spaces takes more of the strips.
+    let taken = |phi: f32| cover::strips_share(strips.saturated, cover::gains(&herb(phi), need, &strips).0);
+    assert!(taken(many) > taken(few), "the strips a kind takes: {} with gas share {many}, {} with {few}", taken(many), taken(few));
 }
 
 /// Cold ground lets the gas reach farther down a root (`cover::breath`): its living tissue burns the gas at the
@@ -116,7 +120,7 @@ fn a_kind_stands_out_into_the_liquid_as_far_as_its_roots_breathe() {
     let mut further = 0;
     for i in 0..w.mesh.cells().n() {
         let soak = cover::soak(&w, &p, i, w.g(p.liquid, i)).1;
-        let (a, b) = (cover::footing(&w, i, few, ph.root_least, &soak, None), cover::footing(&w, i, many, ph.root_least, &soak, None));
+        let (a, b) = (cover::footing(&w, i, &herb(few as f32), ph.root_least, &soak, None), cover::footing(&w, i, &herb(many as f32), ph.root_least, &soak, None));
         assert!(b.share >= a.share, "cell {i}: the kind of many gas spaces stands on {} of the ground, of few on {}", b.share, a.share);
         if b.share > a.share {
             further += 1;

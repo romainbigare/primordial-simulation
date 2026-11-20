@@ -6,7 +6,8 @@
 //! which a shell also reads alone: the form of the bed (riffles and pools, or steps) follows it.
 //! And the links of its channel (`links`), by which a shell finds the samples up and down it: what runs through a
 //! channel grows from one sample's centre to the next, not in a step at their edge. And the texture of its loose ground
-//! (`pcore::soil::textures`), which a shell draws its soil by.
+//! (`pcore::soil::textures`), which a shell draws its soil by; and the load the liquid laid on it and how long its loose
+//! ground has lain, which a shell draws its deposits by.
 
 use super::bends::Reaches;
 use super::half;
@@ -21,6 +22,9 @@ use pcore::space::samples::Samples;
 const STONE_M: f64 = 0.001;
 /// The largest stone drawn, m.
 const STONE_MOST_M: f64 = 2.0;
+/// The age written where no load was laid, years: older than any a shell draws as fresh, so the edge of a deposit,
+/// blended between samples, grows no fresher toward bare ground.
+const UNLAID_YEARS: f64 = 1e6;
 
 /// The step from sample `k` of `s` to its neighbour `j`, 1 to 8: 1 + (dx + 1) + 3 (dy + 1), less one past the middle.
 fn step(s: &Samples, k: usize, j: usize) -> u32 {
@@ -42,6 +46,12 @@ fn links(s: &Samples, k: usize) -> u32 {
     down + 17 * up
 }
 
+/// How long the loose ground of a sample on which `settled` m of load was laid has lain, `age` years: at least a year,
+/// and `UNLAID_YEARS` where none was laid.
+fn laid_years(settled: f64, age: f64) -> f64 {
+    if settled > 0.0 { age.max(1.0) } else { UNLAID_YEARS }
+}
+
 /// Of each sample of the reaches `r`, row by row, four 16-bit floats: the depth of its loose ground, m, the largest stone
 /// its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), the slope of its reach (rise
 /// over run; 0 there too) and its channel's links (`links`); then of each sample again the reflectance of the make of
@@ -49,9 +59,10 @@ fn links(s: &Samples, k: usize) -> u32 {
 /// coarse and fine particles of its loose ground (`grain`, one a sample), how slowly its pores pass liquid, the decimal
 /// logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s), and the liquid it holds
 /// for roots (`Pores::for_roots` over its loose ground's depth) as the layer `avail` shows it (`layers::shown`); then of
-/// each sample again its field capacity and its wilting point as shares of its pores (`Pores::of`) and two zeros, by
-/// which a shell finds the share of the liquid for roots its pores hold at a point (`Pores::available`): four planes of
-/// a texture, one under the other.
+/// each sample again its field capacity and its wilting point as shares of its pores (`Pores::of`), by which a shell
+/// finds the share of the liquid for roots its pores hold at a point (`Pores::available`), and how deep the load the
+/// liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain
+/// (`laid_years`), by which a shell draws a deposit: four planes of a texture, one under the other.
 pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<u16> {
     let s = r.s;
     let mut out = Vec::with_capacity(16 * s.h.len());
@@ -69,8 +80,8 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<
         let roots = shown("avail", p.for_roots(loose));
         out.extend([half(t.coarse as f32), half(t.fine as f32), half(-p.seep.log10() as f32), half(roots)]);
     }
-    for p in &pores {
-        out.extend([half(p.field as f32), half(p.wilt as f32), 0, 0]);
+    for ((p, &settled), &age) in pores.iter().zip(&s.settled).zip(&s.age) {
+        out.extend([half(p.field as f32), half(p.wilt as f32), half(settled as f32), half(laid_years(settled, age).log10() as f32)]);
     }
     out
 }

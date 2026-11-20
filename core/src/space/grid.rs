@@ -5,6 +5,9 @@
 
 use super::below::{lean_quarters, limited, Near};
 
+/// The sweeps of the distance from the edge of open samples round a globe (`Grid::edge_distance`): forward and back,
+/// twice, so a distance carries across the seam both ways.
+const EDGE_SWEEPS: usize = 4;
 /// The steps to the 8 neighbours of a sample, rows and columns.
 const STEPS: [(i64, i64); 8] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)];
 
@@ -85,6 +88,57 @@ impl Grid {
         let (r, c, rj, cj) = ((k / self.across) as i64, (k % self.across) as i64, (j / self.across) as i64, (j % self.across) as i64);
         let wrapped = |c: i64| c.rem_euclid(w) as usize;
         [r as usize * self.across + wrapped(cj), rj as usize * self.across + wrapped(c)]
+    }
+
+    /// Of each sample, the mean over the ways of `STEPS` that lead onto the samples `open` (or off the grid) of the
+    /// straight run along each until a sample not open, m, each at most `most` (off the grid the run goes on to it); none
+    /// where no way leads onto them: the fetch the waves at a sample come over, over the open liquid only (an effective
+    /// fetch over 8 ways, after Håkanson 1981). One sweep over the grid for each way, each sample from the next on it.
+    pub(super) fn fetches(&self, open: &[bool], most: f64) -> Vec<f64> {
+        let n = self.n();
+        let (mut sum, mut ways) = (vec![0.0; n], vec![0u8; n]);
+        let mut run = vec![0.0; n];
+        for (s, &(a, b)) in STEPS.iter().enumerate() {
+            // Rows and columns in the order that takes the next sample on the way first; round a globe a row is swept
+            // twice, so a run across its seam is found too.
+            let rows: Vec<usize> = if a > 0 { (0..self.down).rev().collect() } else { (0..self.down).collect() };
+            let cols: Vec<usize> = if b > 0 { (0..self.across).rev().collect() } else { (0..self.across).collect() };
+            for _ in 0..if self.wrap && a == 0 { 2 } else { 1 } {
+                for &r in &rows {
+                    let d = self.far[r][s];
+                    for &c in &cols {
+                        let next = self.at(r as i64 + a, c as i64 + b);
+                        run[r * self.across + c] = match next {
+                            None => most,
+                            Some(j) if open[j] => (d + run[j]).min(most),
+                            _ => 0.0,
+                        };
+                    }
+                }
+            }
+            for k in 0..n {
+                let (r, c) = ((k / self.across) as i64, (k % self.across) as i64);
+                if self.at(r + a, c + b).is_none_or(|j| open[j]) {
+                    (sum[k], ways[k]) = (sum[k] + run[k], ways[k] + 1);
+                }
+            }
+        }
+        (0..n).map(|k| if ways[k] > 0 { sum[k] / ways[k] as f64 } else { 0.0 }).collect()
+    }
+
+    /// Of each sample of `open`, how far it lies from the nearest sample not open, m, along the grid's 8 ways: sweeps of
+    /// a chamfer distance (Borgefors 1986), forward and back, each sample from all its neighbours as they stand, so a
+    /// distance carries round a globe's seam too (`EDGE_SWEEPS`); none on the samples not open.
+    pub(super) fn edge_distance(&self, open: &[bool]) -> Vec<f64> {
+        let n = self.n();
+        let mut d: Vec<f64> = (0..n).map(|k| if open[k] { f64::INFINITY } else { 0.0 }).collect();
+        for pass in 0..if self.wrap { EDGE_SWEEPS } else { 2 } {
+            let order: Box<dyn Iterator<Item = usize>> = if pass % 2 == 0 { Box::new(0..n) } else { Box::new((0..n).rev()) };
+            for k in order.filter(|&k| open[k]) {
+                d[k] = self.around(k).map(|(j, len)| d[j] + len).fold(d[k], f64::min);
+            }
+        }
+        d
     }
 
     /// The neighbours of sample `k` across its sides and corners, each with its distance, m.

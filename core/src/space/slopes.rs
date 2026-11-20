@@ -3,9 +3,11 @@
 
 use super::grid::Grid;
 
+/// The density of the bed, kg/m³.
+pub(super) const ROCK_KG_M3: f64 = 2700.0;
 /// The share of a load taken off the ground that the ground rises back by: the density of the ground over that of the
 /// rock it floats on (Airy isostasy).
-const FLOATS: f64 = 2700.0 / 3300.0;
+const FLOATS: f64 = ROCK_KG_M3 / 3300.0;
 /// The width over which the ground bends under a load, m.
 const BENDS_M: f64 = 50e3;
 /// The samples of the grid the rebound is spread on across that width: a plate's bending is smooth at any finer scale.

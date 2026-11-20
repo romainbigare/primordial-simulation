@@ -1,13 +1,13 @@
 # Where the page's textures come from
 
-Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com) and Kenney (kenney.nl), but for the trees
+Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), ambientCG (ambientcg.com) and Kenney (kenney.nl), but for the trees
 rendered from PlantCatalog's models, which are CC BY 4.0 (credited below): the ground photographs resized and packed for
 the page by hand, each with its large-scale light divided out (so its repeat does not show); the carpets and the sprites
 rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 512 layers, top first.
 
 ## ground.jpg
 
-| layer | Poly Haven asset | its side in the world |
+| layer | asset (Poly Haven, unless named) | its side in the world |
 |---|---|---|
 | 0 | dry_river_pebbles (diffuse) | 2.0 m |
 | 1 | aerial_rocks_02 (diffuse) | 50 m |
@@ -23,9 +23,17 @@ rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 51
 | 11 | dirt_floor (diffuse), https://polyhaven.com/a/dirt_floor | 2.07 m |
 | 12 | mud_cracked_dry_riverbed_002 (diffuse), https://polyhaven.com/a/mud_cracked_dry_riverbed_002 | 2.0 m |
 | 13 | mud_forest (diffuse), https://polyhaven.com/a/mud_forest | 2.35 m |
+| 14 | ambientCG Ground094B (color), https://ambientcg.com/a/Ground094B: rippled sand with water in its troughs | 4.0 m |
+| 15 | ambientCG Ground100 (color), https://ambientcg.com/a/Ground100: rippled silt | 3.0 m |
+| 16 | ambientCG Ground083 (color), https://ambientcg.com/a/Ground083: mud under a film of algae | 2.0 m |
+| 17 | low_tide_rocks (diffuse), https://polyhaven.com/a/low_tide_rocks: wet gravelly sand | 2.17 m |
 
-Each is the 2k diffuse shrunk to 512 x 512, its light divided by itself blurred (a Gaussian of 40 texels, wrapping
-round, so the layer still repeats) and scaled back to its mean. All are CC0 (polyhaven.com/license).
+Each is the 2k diffuse (ambientCG's: its 2K-JPG colour map) shrunk to 512 x 512, its light divided by itself blurred (a
+Gaussian of 40 texels, wrapping round, so the layer still repeats) and scaled back to its mean. All are CC0
+(polyhaven.com/license, ambientcg.com/license). ambientCG gives no size for layers 14 to 16: layers 14 and 15 are
+laid with their ripples some 40 cm apart, as large as the larger ripples of a flat (current ripples lie 10 to 15 cm
+apart), so they show at the map's nearest views (the Earth view's look); layer 16 is laid 2.0 m across, as its clods
+and the stones on it are a few centimetres, as the other photographs' of mud.
 
 ## carpets.jpg
 

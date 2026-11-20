@@ -78,10 +78,10 @@ export class GroundTiles {
   /** The last view asked for, to ask again after a lost context. */
   private last: View | null = null;
   private tilesTex: Texture | null = null;
-  /** The rock of each of the terrain's samples (wasm/src/lib.rs `rock`), four 16-bit floats a sample in three planes:
+  /** The rock of each of the terrain's samples (wasm/src/lib.rs `rock`), four 16-bit floats a sample in four planes:
    * the depth of its loose ground and the largest stone its channel moves, m, the slope of its reach and its channel's
-   * links; the reflectance of its bed's make; and its loose ground's grain (tape/src/ground/rock.rs); none until a
-   * worker made the ground. */
+   * links; the reflectance of its bed's make; its loose ground's grain; its pores and the deposit on it
+   * (tape/src/ground/rock.rs); none until a worker made the ground. */
   rock: Uint16Array | null = null;
   private start = performance.now();
   private lastCame = -Infinity;

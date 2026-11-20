@@ -58,14 +58,17 @@ pub const SAMPLE_DEPTH: u8 = 6;
 /// chance anew from another seed, `World::seed`, stands on the same ground); the rise its level 0 m lies at (an
 /// island's `ISLAND_LEVEL`; a globe's the one that leaves a share of its area above it, `worldgen`); what it reads of
 /// each make of its bed (`strata::Make`: how fast flowing liquid wears it, how it breaks; the chemistry's, `worldgen`); an
-/// island's large shape (`Shape`); and its drained samples, found from those when first read (`Terrain::samples`), not
-/// saved.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+/// island's large shape (`Shape`); the channel law of the laws it was made under, the depth of a channel that carries
+/// 1 m³/s, m, and the power of the discharge it grows as (`Physics::channel_depth`, `channel_depth_exp`), which the high
+/// stand's flood reads (`space::stand`); and its drained samples, found from those when first read
+/// (`Terrain::samples`), not saved.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Terrain {
     pub seed: u64,
     pub level: f64,
     pub makes: Vec<Make>,
     pub shape: Shape,
+    pub channel: [f64; 2],
     #[serde(skip)]
     pub(super) kept: super::samples::Kept,
 }
@@ -212,13 +215,14 @@ fn height_of(above: f64) -> f64 {
 }
 
 impl Terrain {
-    /// The terrain of `seed` whose level 0 m lies at the rise `level`, its bed of `makes`.
-    pub fn new(seed: u64, level: f64, makes: Vec<Make>) -> Terrain {
-        Terrain { seed, level, makes, ..Terrain::default() }
+    /// The terrain of `seed` whose level 0 m lies at the rise `level`, its bed of `makes`, made under the laws `ph`.
+    pub fn new(seed: u64, level: f64, makes: Vec<Make>, ph: &crate::Physics) -> Terrain {
+        Terrain { seed, level, makes, shape: Shape::default(), channel: [ph.channel_depth, ph.channel_depth_exp], kept: Default::default() }
     }
-    /// The terrain of an island of `shape` for `seed` (`Lift`), its level 0 m at `ISLAND_LEVEL`, its bed of `makes`.
-    pub fn island(seed: u64, shape: Shape, makes: Vec<Make>) -> Terrain {
-        Terrain { seed, level: ISLAND_LEVEL, makes, shape, ..Terrain::default() }
+    /// The terrain of an island of `shape` for `seed` (`Lift`), its level 0 m at `ISLAND_LEVEL`, its bed of `makes`, made
+    /// under the laws `ph`.
+    pub fn island(seed: u64, shape: Shape, makes: Vec<Make>, ph: &crate::Physics) -> Terrain {
+        Terrain { seed, level: ISLAND_LEVEL, makes, shape, channel: [ph.channel_depth, ph.channel_depth_exp], kept: Default::default() }
     }
     /// The rises of this terrain's island on the flat map `map` for `seed` (`Lift`): one in the middle, or those drawn
     /// from the seed, scaled so the share of the centres of its squares above the level (`land`) is their drawn share
