@@ -26,6 +26,7 @@ if (embed) writeFileSync('dist/standalone.html',
 copyFileSync('textures/ground.jpg', 'dist/ground.jpg');
 copyFileSync('textures/carpets.jpg', 'dist/carpets.jpg');
 copyFileSync('textures/fire.jpg', 'dist/fire.jpg');
+copyFileSync('textures/snags.png', 'dist/snags.png');
 for (const f of [...strips.models, ...strips.heights, ...strips.trees]) copyFileSync(`textures/${f}`, `dist/${f}`);
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
