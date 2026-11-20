@@ -26,7 +26,7 @@ pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
 pub use groups::Sizes;
 pub(crate) use build::per_input;
-pub(crate) use budget::BURNT;
+pub(crate) use budget::{BURNT, ROUNDED};
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
@@ -143,8 +143,9 @@ pub struct Cover {
     pub keep: f32,
     /// The seeds lying on its cell's ground (`lying`), at its temperature
     pub lying: Lying,
-    /// The dead leaves its plants no taller than `surface_m` shed that still stand on them, cured, until they fall to
-    /// the ground (`season::shed_to`, `grow::fall`): mol of each part
+    /// The dead leaves its plants no taller than `surface_m` shed, and the body matter and walls of those of them that
+    /// died, that still stand, cured, until they fall to the ground (`season::shed_to`, `upkeep`, `grow::fall`): mol of
+    /// each part
     pub cured: [f64; NP],
     /// The walls of its plants flames killed whole that still stand, dead, until they fall to the ground
     /// (`flame::burn`, `grow::fall`): mol of each part

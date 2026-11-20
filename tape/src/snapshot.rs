@@ -10,7 +10,7 @@ use std::path::Path;
 /// Start of every snapshot file, before the bincode body: a tag, then the format version (little-endian `u32`).
 const SNAPSHOT_TAG: [u8; 4] = *b"EWSN";
 /// Raise it whenever the serialized layout of `World` (or of the shell's state) changes.
-const SNAPSHOT_VERSION: u32 = 162;
+const SNAPSHOT_VERSION: u32 = 163;
 /// Buffer between bincode and the decompressor, bytes: bincode reads 8 bytes at a time, and each call into the
 /// decompressor is slow.
 const BUFFER: usize = 1 << 20;

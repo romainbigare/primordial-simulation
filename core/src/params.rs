@@ -389,7 +389,7 @@ impl Default for Physics {
             cured_rho: 3.0,
             base_share: 0.5,
             snag_life: 8.0 * 365.0 * DAY_S as f64,
-            strikes: 1.5e-8,
+            strikes: 6e-9,
             fine_d: 1.5e-3,
             front_life: 4.0 * DAY_S as f64,
             sorb_scale: [0.1238, -0.001419],

@@ -1178,8 +1178,9 @@ heat, come from the chemistry's own burning reactions (`Chemistry::burner` of ea
 balance of the bed, not from the reactions' rates, which are those of rot (real surface fires are limited by heating
 the next fuel; Rothermel 1972). Three stages, each number with one writer:
 - **The cured leaves**: a slot whose plants stand no taller than `surface_m` keeps the leaves it sheds standing on its
-  plants, cured (`Cover::cured`, part of the cover's node; `season::shed_to`), as herbs keep their dead leaves on their
-  stems through a dry season; they fall to the ground's remains with a mean life of `cured_life` (`grow::fall`, booked
+  plants, cured (`Cover::cured`, part of the cover's node; `season::shed_to`), and so do the body matter and walls of
+  its plants that die (`upkeep`; their fuel goes to the ground), as the dead leaves and stems of herbs stand through a
+  dry season; they fall to the ground's remains with a mean life of `cured_life` (`grow::fall`, booked
   as shed). Taller plants drop theirs at once.
 - **The bed** (`flame::bed`, each land cell its own, in parallel): the load w of its remains, kg a m² of land, and of
   the cured leaves standing over them; the share of its ground they cover, 1 − e^(−a w), a the capture area its leaves held per kg dry (its cover's `LEAF` gene over the dry share
@@ -1213,7 +1214,14 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   the earliest first (`flame::run`). Every cell it reaches burns all of its land that its remains cover (f = its
   cover): a patch burns whole, keeps no remains to carry a flame, and burns again only once its cover's leaves have
   built them back. So the land burnt is a mosaic of patches of different ages, from that feedback alone (no rule keeps
-  a cell from burning). The wind does not stretch a run.
+  a cell from burning). The wind stretches a run downwind: along the way between two cells a bed's speed is R (1 + φ_w),
+  φ_w Rothermel's (1972) wind factor of the wind's speed along that way at mid-flame: the low wind (`World::low_wind`,
+  the air's at its last step) times Albini and Baughman's (1979) share of it that reaches the flame (`flame::sheltered`,
+  Andrews 2012): over open ground by the depth of what flames (about 0.3 for a cured bed), under a canopy by its height
+  and how its crowns fill the space under it (0.1 to 0.2 under closed tall crowns), by the share of the ground that the
+  slots taller than `surface_m` cover, 1 − e^(−their capture area a m²); the shade itself reaches the bed through the
+  ground's temperature and the air near the ground, which its layer reads (`World::near_ground`, `thaw_last`), the particles' surface to volume ratio 4 / `fine_d` and the packing of what flames (`flame::downwind`); none
+  against the wind.
 - **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the cured leaves and the
   part of its remains that flames burn, and after them the part that smoulders; a flame through what flames, its depth
   the cured leaves at `cured_rho` and the remains at `litter_rho`, moves at R = `flux_ahead` h_c δ / (τ Q), δ its depth, τ = 8 minutes an inch of
@@ -1239,7 +1247,9 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   flames did on each cell in the month (`flame::Flamed`: the share burnt, the flame's length, the minerals left and
   the gas given, per m² of land), the share burnt in each month of the last year and the months since it last
   burnt, for the tape (`Counters::flame_month`, `burnt_months`, `burnt_age`).
-- **Known limits:** the slow organic matter held on the mineral particles (14) does not burn; the smouldering part
+- **Known limits:** dead leaves keep all their nitrogen (body matter's share of it is fixed by chemistry 0, and a
+  plant has no part that could hold the mineral it would pull back; real plants pull back about half, Aerts 1996), so
+  a flame sends 2 to 5 times the real nitrogen to the air (about 20 to 30 g a m² burnt); the slow organic matter held on the mineral particles (14) does not burn; the smouldering part
   burns in the month with no depth or speed of its own; the liquid the remains hold is not boiled off into the air
   (the heat balance counts it); the plants of chemistry 0 hold no element that stays solid but the fixed one, so
   the ash is the fixed element's mineral that the flame did not break down; the scorch height has

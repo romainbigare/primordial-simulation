@@ -13,7 +13,8 @@ use crate::World;
 /// of the ground they cover; the mean liquid per kg dry of what flames (its moisture) and the most a kg could hold and
 /// still carry a flame (their moisture of extinction); what a kg of them frees burning, J, and what lighting a kg of
 /// them takes, J; the least load whose flame holds its heat (`least`), kg a m²; and the shares of the remains' load dry
-/// enough to flame and to smoulder (`layer`).
+/// enough to flame and to smoulder (`layer`); the density of its particles, kg/m³ (the frame's); and the share of the
+/// low wind that reaches the height of its flame (`sheltered`).
 #[derive(Clone, Copy, Debug)]
 pub struct Bed {
     pub load: f64,
@@ -26,6 +27,8 @@ pub struct Bed {
     pub least: f64,
     pub flaming: f64,
     pub smoulder: f64,
+    pub particle_rho: f64,
+    pub waf: f64,
 }
 
 impl Bed {
@@ -52,7 +55,8 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
     let load = crate::contract::remains_in(w, i, |k| w.g(k, i));
     let land = crate::contract::land(w, i);
-    let cured = if land > 0.0 { w.life.cover(i).cured[MATTER].max(0.0) * mm[MATTER] / land } else { 0.0 };
+    let standing_dead = w.life.cover(i).cured.map(|m| m.max(0.0));
+    let cured = if land > 0.0 { (standing_dead[MATTER] * mm[MATTER] + standing_dead[WALL] * mm[WALL]) / land } else { 0.0 };
     if load + cured <= 0.0 {
         return None;
     }
@@ -62,8 +66,7 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     }
     let t = w.thaw_last(i).0;
     // Per kg of what burns, by the mass of its parts: the heat their burning frees and their heat capacity.
-    let mut kg = [MATTER, WALL].map(|q| w.g(p.sub[q], i).max(0.0) * mm[q]);
-    kg[0] += cured * land;
+    let kg = [MATTER, WALL].map(|q| (w.g(p.sub[q], i).max(0.0) + standing_dead[q]) * mm[q]);
     let all = (kg[0] + kg[1]).max(f64::MIN_POSITIVE);
     let per_kg = |q: usize, j: usize, of: &dyn Fn(usize) -> f64| kg[j] / all * of(q);
     let burnt = |q: usize| chem.burner(p.sub[q]).map_or(0.0, |r| -chem.dh(r) / (per_input(&chem.reactions[r], p.sub[q]).unwrap_or(1.0) * mm[q]));
@@ -90,7 +93,9 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     let moist = (standing * top + lying * l.sorbed(l.h(flaming / 2.0))) / (standing + lying).max(f64::MIN_POSITIVE);
     let light = dry + moist * per_liquid;
     let smoulder = l.share(ph.smoulder_moist, ph.duff_hold).max(flaming);
-    Some(Bed { load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder })
+    let mut bed = Bed { load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder, particle_rho: chem.subs[p.sub[WALL]].density[0], waf: 0.0 };
+    bed.waf = sheltered(w, p, i, bed.depth(ph));
+    Some(bed)
 }
 
 /// The layer of remains on a cell: the relative vapour of the air in it at its top and at its bottom, the share of
@@ -141,6 +146,41 @@ impl Layer {
 fn least(ph: &crate::Physics, t: f64, net: f64) -> f64 {
     let lost = SIGMA * (ph.t_burn.powi(4) - t.powi(4)).max(0.0) * super::residence(ph);
     if net > 0.0 { lost / net } else { f64::INFINITY }
+}
+
+/// Albini and Baughman's (1979) share of the wind at 20 feet that blows at mid-flame (Andrews 2012): over a bed `depth`
+/// ft deep in the open `OPEN_K` / ln((`WAF_A` + `WAF_B` H) / (`WAF_C` H)), H its depth; under a canopy H ft tall whose
+/// crowns fill the share f of the space under it, `SHELTER_K` / (√(f H) ln((`WAF_A` + `WAF_B` H) / (`WAF_C` H))).
+const OPEN_K: f64 = 1.83;
+const SHELTER_K: f64 = 0.555;
+const WAF_A: f64 = 20.0;
+const WAF_B: f64 = 0.36;
+const WAF_C: f64 = 0.13;
+/// A crown fills a third of the volume of the cylinder it would fill, so the crowns' fill is their cover times their
+/// depth's share of the canopy's height over this (Andrews 2012).
+const CROWN_FILL: f64 = 3.0;
+/// Metres in a foot, for the fits in feet.
+const M_PER_FT: f64 = 0.3048;
+
+/// The share of the low wind that reaches the flame of a bed `depth` m deep on cell `i` (`Bed::waf`): Albini and
+/// Baughman's (1979) for open ground and for ground under a canopy, by the share of the ground the canopy covers,
+/// 1 − e^(−its capture area a m²), of the cover's slots taller than `surface_m`; the canopy's height and its crowns'
+/// depth are those of its tallest slot (`Cover::crown`).
+fn sheltered(w: &World, p: &Parts, i: usize, depth: f64) -> f64 {
+    let (ph, mm, c) = (&w.cfg.phys, p.mm(&w.chem), w.life.cover(i));
+    let (ground, rho) = (crate::cover::ground(w, i).max(f64::MIN_POSITIVE), w.chem.subs[p.sub[WALL]].density[0]);
+    let log = |h: f64| ((WAF_A + WAF_B * h) / (WAF_C * h)).ln();
+    let bed = (depth / M_PER_FT).max(f64::MIN_POSITIVE);
+    let open = (OPEN_K / log(bed)).min(1.0);
+    let tall = c.held().map(|x| (x, c.height(ph, &mm, rho, x))).filter(|&(_, h)| h > ph.surface_m);
+    let (leaf, top) = tall.fold((0.0, None), |(l, t): (f64, Option<(usize, f64)>), (x, h)| (l + c.leaf(&mm, x), if t.is_none_or(|t| h > t.1) { Some((x, h)) } else { t }));
+    let Some((x, h)) = top else { return open };
+    let cover = 1.0 - (-leaf / ground).exp();
+    let (base, h) = c.crown(ph, &mm, ground, x, h);
+    let fill = cover * (h - base) / h / CROWN_FILL;
+    let feet = h / M_PER_FT;
+    let under = (SHELTER_K / ((fill * feet).sqrt().max(f64::MIN_POSITIVE) * log(feet))).min(open);
+    (1.0 - cover) * open + cover * under
 }
 
 /// The capture area a kg of the remains of cell `i` held as leaves, m² per kg dry: its cover's `LEAF` gene over the

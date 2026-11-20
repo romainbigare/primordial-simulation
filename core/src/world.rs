@@ -45,8 +45,6 @@ pub struct Counters {
     pub flame: [f64; crate::flame::FLOWS.len()],
     #[serde(skip)]
     pub flame_air: Vec<f64>,
-    /// Each air node's low wind at the air's last step, m/s [east, south] (`flow::air`, `rise::low_wind`)
-    pub low_wind: Vec<[f32; 2]>,
     /// Heat that crossed into the map at its open north, south, east and west edges since the start, J: sensible and
     /// latent
     pub edges: [f64; 4],
@@ -59,7 +57,7 @@ impl Counters {
     /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
     /// cannot be left out.
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, flamed, flame_month, burnt_months, burnt_age, flame, flame_air, low_wind, edges, edge_liquid } = std::mem::take(c);
+        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, flamed, flame_month, burnt_months, burnt_age, flame, flame_air, edges, edge_liquid } = std::mem::take(c);
         self.clamped_heat += clamped_heat;
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
@@ -68,7 +66,7 @@ impl Counters {
         self.takers_died.iter_mut().zip(takers_died).for_each(|(a, b)| *a += b);
         self.grown.extend(grown);
         // (A chunk's counts hold no year: the world's are its own.)
-        debug_assert!(grown_year.is_empty() && grown_last.is_empty() && flame_month.is_empty() && burnt_months.is_empty() && burnt_age.is_empty() && low_wind.is_empty(), "a chunk counted a year");
+        debug_assert!(grown_year.is_empty() && grown_last.is_empty() && flame_month.is_empty() && burnt_months.is_empty() && burnt_age.is_empty(), "a chunk counted a year");
         self.flamed.extend(flamed);
         self.flame.iter_mut().zip(flame).for_each(|(a, b)| *a += b);
         if self.flame_air.len() < flame_air.len() {
@@ -131,6 +129,9 @@ pub struct World {
     pub evap: Vec<f32>,
     pub off_land: Vec<f32>,
     pub counts: Counters,
+    /// Each air node's low wind at the air's last step, m/s [east, south] (`flow::air`, `rise::low_wind`), which a
+    /// flame's run follows (`flame::run`)
+    pub low_wind: Vec<[f32; 2]>,
     /// The life of each cell: its cover (`life`)
     pub life: crate::life::Life,
     /// Light intercepted in each cell per m² of light-capture area since the start (its cover's mean), J/m²

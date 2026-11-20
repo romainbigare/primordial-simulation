@@ -54,7 +54,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let rain = landed(&act, ground.wet(), &mean);
     book(w, s, (&act, &response, &rain, &ground.soaks), &mean, dt);
     s.spare.response = response.rows();
-    w.counts.low_wind = wind.iter().map(|v| v.map(|x| x as f32)).collect();
+    w.low_wind = wind.iter().map(|v| v.map(|x| x as f32)).collect();
 }
 
 /// What the air of each node does to sunlight over the step (`Light`): its gases that absorb it (`Chemistry::sun_depth`)
