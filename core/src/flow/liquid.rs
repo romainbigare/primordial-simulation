@@ -7,17 +7,20 @@ use super::{drain::{springs, under}, land::{cells_state, wet, NONE}, potential::
 use crate::{store::{Class, LinkFlux}, World};
 
 /// The mobile liquid of every ground node: of each liquid `liq[q]`, `mol[q * n + i]` (its liquid share; all of a
-/// dissolved gas), and its volume `vol[i]`, m³ (dissolved gas adds none).
+/// dissolved gas; of a mineral, what its exchange sites do not hold), its volume `vol[i]`, m³ (dissolved gas adds none),
+/// and the volume of what of it may move, `moving[i]` (less by what the sites hold), by which a flow of liquid carries
+/// its share of each.
 pub(super) struct Mobile {
     pub(super) mol: Vec<f64>,
     pub(super) vol: Vec<f64>,
+    pub(super) moving: Vec<f64>,
 }
 
 /// The mobile liquid of the ground nodes where `on(i)` (none elsewhere), of the liquids `liq`; what boils below the
 /// coldest node, `tmin`, is gas; of a mineral, the share that stays dissolved (`held_off`).
 pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl Fn(usize) -> bool) -> Mobile {
     let n = w.mesh.cells().n();
-    let mut m = Mobile { mol: vec![0.0; liq.len() * n], vol: vec![0.0; n] };
+    let mut m = Mobile { mol: vec![0.0; liq.len() * n], vol: vec![0.0; n], moving: vec![0.0; n] };
     for (q, &k) in liq.iter().enumerate() {
         let gas = s.sp[k].boil <= tmin;
         for i in (0..n).filter(|&i| on(i)) {
@@ -28,6 +31,9 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl 
     }
     for (q, _) in liq.iter().enumerate().filter(|p| w.chem.is_mineral(*p.1)) {
         (0..n).for_each(|i| m.mol[q * n + i] *= held_off(w, i, m.vol[i]));
+    }
+    for (q, &k) in liq.iter().enumerate().filter(|&(_, &k)| s.sp[k].boil > tmin) {
+        (0..n).for_each(|i| m.moving[i] += m.mol[q * n + i] * s.sp[k].v[1]);
     }
     m
 }

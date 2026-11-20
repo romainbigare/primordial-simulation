@@ -1480,7 +1480,9 @@ dissolved: sites of 1,060 mol of charge a m³ of fine particles and 2,800 a m³ 
 `SITES_ORGANIC`), each holding the minerals of 0.04 m³ of the liquid (`HELD_PER_SITE`), so the sites hold those of
 `Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral in V m³ of
 liquid stays dissolved (`soil::dissolved`). Only that share moves with the liquid that sinks, flows through the pores
-and runs off (`flow::liquid::mobile`, `basin::movable`); the rest stays in the ground node, where roots take from all
+and runs off (`flow::liquid::mobile`, `basin::movable`); the rest stays in the ground node, and a flow of liquid
+carries its share of the volume of what may move (`Mobile::moving`, `Held::moving` in the runoff and the levelling
+of bodies), so the volume that moves is what was asked to move and a body still ends at one level; where roots take from all
 of it (the sites give back to the liquid as fast as roots take from it). So coarse ground lets the rain wash its
 minerals away and fine and organic ground keeps them: a loam's 2 m of loose ground holds some 97% of its minerals
 on its sites at field capacity, a coarse ground some 90%, so the coarse loses them three to four times as fast. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)

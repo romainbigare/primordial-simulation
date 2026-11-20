@@ -138,20 +138,21 @@ pub(super) fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin
     (held, vol)
 }
 
-/// Cells `cells`, of the liquids that may move `held` (`movable`: rows of `width - 1` liquids, then the heat) and
-/// their volumes `vol`, m³, come to hold `want` m³: each cell that holds more gives the share of its liquid over it,
+/// Cells `cells`, of the liquids that may move `held` (`movable`: rows of `width - 1` liquids, then the heat), their
+/// volumes `vol`, m³, and the volumes of those rows, `moving` (less where exchange sites hold a mineral, which stays),
+/// come to hold `want` m³: each cell that holds more gives the share of what may move that fills what it holds over,
 /// with that share of its heat; mixed, it goes to the cells that hold less, by what each lacks. Where they hold more
 /// than they want together (`over`), what the cells that hold less do not take is left over, mixed. Returns the moves
 /// from the cell that wants the most to each other one (each other's change, a row of `held`, `[c * width + q]`, + to
 /// it) with that cell, and what is left over (a row).
-pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f64], (width, over): (usize, bool)) -> (usize, Vec<f64>, Vec<f64>) {
+pub(super) fn share_out(cells: &[u32], (held, vol, moving): (&[f64], &[f64], &[f64]), want: &[f64], (width, over): (usize, bool)) -> (usize, Vec<f64>, Vec<f64>) {
     let m = cells.len();
     // What the cells over the level give, mixed (as a row of `held`), its volume, and the volume the cells under it lack, m³.
     let (mut spare, mut given, mut lack) = (vec![0.0; width], 0.0, 0.0);
     let mut change = vec![0.0; m * width];
     for c in 0..m {
         if vol[c] > want[c] {
-            let gives = (vol[c] - want[c]) / vol[c];
+            let gives = ((vol[c] - want[c]) / moving[c].max(f64::MIN_POSITIVE)).min(1.0);
             for (q, x) in spare.iter_mut().enumerate() {
                 change[c * width + q] = -held[c * width + q] * gives;
                 *x -= change[c * width + q];
