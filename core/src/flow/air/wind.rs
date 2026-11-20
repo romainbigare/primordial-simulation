@@ -39,6 +39,8 @@ pub(super) struct Pushes {
     pub(super) over: Vec<f64>,
     pub(super) contrast: Vec<f64>,
     pub(super) even: Vec<f64>,
+    /// STUDY PROBE D: the weather's wind, whole columns, mol/s from `a` to `b` (empty: none)
+    pub(super) adv: Vec<f64>,
 }
 
 /// One end of a link as its pushes read it (`push`): its air's mol per m³, the mean height of its ground, m, its
@@ -121,7 +123,7 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
 /// node as the last state left it (`ends`).
 pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, (links, cell): (&Links, &Cell)) -> Pushes {
     let v = || Vec::with_capacity(links.id.len());
-    let mut p = Pushes { mix: v(), stir: v(), over: v(), contrast: v(), even: v() };
+    let mut p = Pushes { mix: v(), stir: v(), over: v(), contrast: v(), even: v(), adv: Vec::new() };
     for &l in &links.id {
         let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, st.length(air.width()[l]), st.length(air.dist()[l]));
         let [mix, over, contrast, even, stir] = push(cfg, st, (&ends[a], &ends[b]), (wd, d, air.offset(a, b)), cell);
@@ -214,7 +216,7 @@ pub(super) fn even(w: &World, s: &Scratch, blocks: &[Vec<u32>], (x, e): (&mut [f
 
 /// `kg` of mass moves from node `a` to node `b` (back where negative): the node it enters pays its lift from its heat,
 /// from the mean ground of the node it leaves to its own (`potential`).
-fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64]) {
+pub(super) fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64]) {
     let (from, to) = if kg > 0.0 { (a, b) } else { (b, a) };
     e[to] -= g * kg.abs() * (s.za[to] - s.za[from]);
 }
@@ -355,13 +357,13 @@ fn pressure(s: &Scratch, (push, border): (&Pushes, &[usize]), (x, e): (&mut [f64
 }
 
 /// The mass of a mol of each gas of the air, kg, then 0 for the heat (as `cross` counts them).
-fn masses(s: &Scratch) -> Vec<f64> {
+pub(super) fn masses(s: &Scratch) -> Vec<f64> {
     s.state.gas.iter().map(|&k| s.sp[k].mm).chain([0.0]).collect()
 }
 
 /// What crosses links between blocks of gas `q`, or of the heat where `q` is the number of gases (each link `p` and
 /// `d`, + from its `a` to its `b`), moved and counted (`Moved`), its mass added to `kg` (`masses`, `mm`).
-fn cross((q, flows): (usize, impl Iterator<Item = (usize, f64)>), (x, e): (&mut [f64], &mut [f64]), (moved, mm, kg): (&mut Moved, &[f64], &mut [f64])) {
+pub(super) fn cross((q, flows): (usize, impl Iterator<Item = (usize, f64)>), (x, e): (&mut [f64], &mut [f64]), (moved, mm, kg): (&mut Moved, &[f64], &mut [f64])) {
     let (na, pairs) = (e.len(), moved.heat.len());
     let (v, count) = if q < mm.len() - 1 { (&mut x[q * na..(q + 1) * na], &mut moved.mol[q * pairs..(q + 1) * pairs]) } else { (&mut e[..], &mut moved.heat[..]) };
     for (p, d) in flows {

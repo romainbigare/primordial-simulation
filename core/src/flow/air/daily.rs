@@ -10,7 +10,7 @@ use super::together::Together;
 use super::cell::Cell;
 use super::rise::{rise, saturates};
 use super::edge::Edges;
-use super::weather::{day_pushes, edge_day, Weather};
+use super::weather::{day_pushes, edge_day, wind_pass, Weather};
 use super::wind::{ends, even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::UP, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
@@ -199,10 +199,13 @@ pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Groun
     for d in 0..days as usize {
         exchange(w, s, (act, ground), (&blocks, &one, &rise), (&mut x, &mut e), (dd, dt), (&mut out, &mut rooms, &mut soaks));
         even(w, s, &blocks, (&mut x, &mut e), border.len(), &mut out.moved);
-        if wx.probe.mix && !border.is_empty() {
-            let day_push = day_pushes(w, &wx, &push, (&links, &border), d);
+        if wx.probe.daily() && !border.is_empty() {
+            let day_push = day_pushes(w, s, &wx, &push, (&links, &border), d);
             let day_imp = Implicit::of(s, (&day_push, &border, &lines), (&out.moved.a, &out.moved.b), &x_start, dd);
             wind(w, s, (&day_push, &border, &lines, &day_imp), (&mut x, &mut e), dd, &mut out.moved);
+            if wx.probe.wind {
+                wind_pass(w, s, (&day_push, &border), (&mut x, &mut e), dd, &mut out.moved);
+            }
         } else {
             wind(w, s, (&push, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
         }

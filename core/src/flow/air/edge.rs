@@ -30,13 +30,14 @@ pub(super) struct Edges {
     pub(super) mol: Vec<f64>,
     pub(super) heat: Vec<f64>,
     pub(super) lat: Vec<f64>,
+    pub(super) adv: Vec<f64>,
 }
 
 impl Edges {
     /// The links of the air nodes `ends` (`wind::ends`) of `w` to the planet's air beyond its open edges, at the time of
     /// the step's start; none where `w` holds no planet's air.
     pub(super) fn of(w: &World, s: &Scratch, ends: &[End], cell: &Cell) -> Edges {
-        let mut x = Edges { node: Vec::new(), side: Vec::new(), push: Vec::new(), share: Vec::new(), heat_of: Vec::new(), mol: Vec::new(), heat: Vec::new(), lat: Vec::new() };
+        let mut x = Edges { node: Vec::new(), side: Vec::new(), push: Vec::new(), share: Vec::new(), heat_of: Vec::new(), mol: Vec::new(), heat: Vec::new(), lat: Vec::new(), adv: Vec::new() };
         for (j, side, lat, beyond) in columns(w) {
             let (push, share, heat_of) = link(w, s, (&ends[j], j, side, lat), &beyond, cell);
             x.heat_of.push(heat_of);
@@ -67,6 +68,25 @@ impl Edges {
             p[3] *= mixf[l];
             self.push[l] = p;
         }
+    }
+
+    /// STUDY PROBE D: the weather's wind across edge link `l`, `f` mol/s of whole columns outward (inward where below
+    /// zero), explicit over the day: what leaves is the node's air by its shares, at most half of it; what enters the
+    /// column beyond's, with its heat per mol. The node pays the lift of the mass that enters.
+    fn wind_day(&mut self, s: &Scratch, (x, e): (&mut [f64], &mut [f64]), (l, f): (usize, f64), dd: f64, g: f64) {
+        let (na, ng, links, j) = (e.len(), s.state.gas.len(), self.node.len(), self.node[l] as usize);
+        let nt: f64 = (0..ng).map(|q| x[q * na + j]).sum::<f64>().max(f64::MIN_POSITIVE);
+        let (gone, came) = (((f.max(0.0) * dd) / nt).min(0.5), (-f).max(0.0) * dd);
+        let mut kg = 0.0;
+        for q in 0..ng {
+            let d = came * self.share[l][q] - gone * x[q * na + j];
+            x[q * na + j] += d;
+            self.mol[q * links + l] += d;
+            kg += d * s.sp[s.state.gas[q]].mm;
+        }
+        let d = came * self.heat_of[l] - gone * e[j];
+        e[j] += d - if kg > 0.0 { g * kg * s.za[j] } else { 0.0 };
+        self.heat[l] += d;
     }
 
     /// Each link's pushes as `of` found them.
@@ -109,6 +129,9 @@ impl Edges {
             let now = (e[j] + dd * (both * self.heat_of[l] + contrast - stir)) / (1.0 + dd * both / nt);
             self.heat[l] += now - e[j];
             e[j] = now - if kg > 0.0 { g * kg * s.za[j] } else { 0.0 };
+            if let Some(&f) = self.adv.get(l) {
+                self.wind_day(s, (x, e), (l, f), dd, g);
+            }
         }
     }
 }
