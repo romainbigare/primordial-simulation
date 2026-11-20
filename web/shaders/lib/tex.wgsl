@@ -46,7 +46,7 @@ fn carpet_m(c: i32) -> f32 { var m = array<f32, 14>(1.5, 1.5, 3.0, 3.0, 3.0, 3.0
 // density alone (two flame tongues, two puffs of smoke: flames.wgsl), its second a photograph of burnt ground (burn.wgsl).
 const FIRE_FROM = CARPETS_FROM + 14;
 // The snags' strip (web/textures/snags.png, after the fire's): `SNAG_LAYERS` layers of four sprites a quarter each, with their
-// cover: charred trunks, stands of dead stems, charred stumps (snag_sprites.wgsl, snags.wgsl).
+// cover: charred trunks, stands of dead stems, charred stumps (snag_sprites.wgsl, snag.wgsl).
 const SNAGS_FROM = FIRE_FROM + 2;
 
 // The rendered models (web/textures/trees.png and models.png; their table, sets and counts in sprites.wgsl, which the
