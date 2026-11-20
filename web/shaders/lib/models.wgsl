@@ -209,22 +209,10 @@ fn cast_uv(c: Cast, v: vec2f, foot: f32) -> vec2f {
 }
 
 // Where a stem meets the ground, the sky's light is shut out on every side but one: the ground under and about its foot
-// is darker than its cast shadow (ambient occlusion), `CONTACT_SHADE` dark under the base. The base is the disc as wide
-// as the sprite's stem at its base row (`BASE_ROW`), read across at the ground point's east and at its south (`contact_uv`:
-// a stem is round); it fades out from half the stem's reach `most` m to it, so the low branches of a full crown do not
-// darken the ground as a stem does.
+// is darker than its cast shadow (ambient occlusion): `CONTACT_SHADE` dark under the stem's round base, the ground point
+// `v` m from its foot, fading out from half the stem's reach `most` m to it.
 const CONTACT_SHADE = 0.6;
-// The two points of a sprite `w` m wide (its foot `foot` of its height over its bottom) whose cover makes the contact
-// shade at ground point v: its base row at v's east, and at v's south.
-fn contact_uv(v: vec2f, w: f32, foot: f32) -> vec4f {
-  let row = 1.0 - foot - BASE_ROW;
-  return vec4f(v.x / w + 0.5, row, v.y / w + 0.5, row);
-}
-// The contact shade of a stem whose base covers `across` at the ground point's east and `along` at its south, the point
-// `v` m from its foot, the stem reaching at most `most` m from it.
-fn contact_shade(across: f32, along: f32, v: vec2f, most: f32) -> f32 {
-  return CONTACT_SHADE * across * along * (1.0 - smoothstep(0.5 * most, most, length(v)));
-}
+fn contact_shade(v: vec2f, most: f32) -> f32 { return CONTACT_SHADE * (1.0 - smoothstep(0.5 * most, most, length(v))); }
 // A tree's stem reaches at most this share of its height from its foot (a stem is about 1/40 of its height across, and
 // its root flare twice that: from memory).
 const STEM_REACH = 0.03;
@@ -253,10 +241,8 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
     dark = CROWN_SHADOW * kept;
   }
   let most = STEM_REACH * fit.h;
-  if (q.wades <= 0.0 && length(v) < most) {
-    let at = contact_uv(v, fit.w, foot);
-    let g = e / fit.w;
-    dark = max(dark, contact_shade(model_texel(fit.s, at.xy, g).a, model_texel(fit.s, at.zw, g).a, v, most));
+  if (q.wades <= 0.0) {
+    dark = max(dark, contact_shade(v, most));
   }
   return select(BUSH_SHADOW, 1.0, q.design == TREE) * dark;
 }

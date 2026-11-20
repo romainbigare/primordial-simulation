@@ -24,6 +24,9 @@ const BARE_FRESH = 0.15; const BARE_OLD = 0.5; const STUMP_OLD = 0.35; const LEA
 // Dead wood weathers grey: a bare tree's bark is drawn `GREYED` of the way to its own grey, lit to `GREY_LIGHT` times as
 // light. Each dead tree's tone is moved by up to `TINT` either way, warmer or cooler, by its own draw.
 const GREYED = 0.65; const GREY_LIGHT = 1.35; const TINT = 0.12;
+// A charred trunk's or stump's sprite is all stem, its base about `SNAG_STEM` of its width from its foot (its contact
+// shade's reach, models.wgsl `contact_shade`).
+const SNAG_STEM = 0.4;
 // The charred sprites' scans read a little blue: burnt bark in the sun is charcoal to grey-brown, so they are drawn
 // warmer by `CHAR_TONE`.
 const CHAR_TONE = vec3f(1.1, 1.0, 0.85);
@@ -109,14 +112,7 @@ fn snag_seen(q: Snag, d: vec2f, e: f32, side: f32) -> SnagSeen {
   if (all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))) {
     out.shadow = CROWN_SHADOW * snag_texel(q, vec2f(0.5 + q.mirror * (uv.x - 0.5), uv.y), vec2f(e / c.w, e / c.long)).a;
   }
-  let most = select(0.5 * w, STEM_REACH * q.h, q.kind == KIND_BARE);
-  if (length(d) < most) {
-    let at = contact_uv(d, w, 0.0);
-    let g = vec2f(e / w);
-    let m = vec4f(q.mirror, 1.0, q.mirror, 1.0);
-    let x = vec4f(0.5, 0.0, 0.5, 0.0) + m * (at - vec4f(0.5, 0.0, 0.5, 0.0));
-    out.shadow = max(out.shadow, contact_shade(snag_texel(q, x.xy, g).a, snag_texel(q, x.zw, g).a, d, most));
-  }
+  out.shadow = max(out.shadow, contact_shade(d, select(SNAG_STEM * w, STEM_REACH * q.h, q.kind == KIND_BARE)));
   let r = vec2f(cos(q.lean) * d.x + sin(q.lean) * d.y, -sin(q.lean) * d.x + cos(q.lean) * d.y);
   out.rgba = snag_texel(q, vec2f(0.5 + q.mirror * r.x / w, 1.0 + r.y / (MAP_VIEW.y * q.h)), vec2f(e / w, e / (MAP_VIEW.y * q.h)));
   return out;
