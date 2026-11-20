@@ -39,7 +39,7 @@ impl Bed {
 }
 
 /// The remains lying on land cell `i` as a flame meets them this month (`Bed`); none on a cell with no land, no
-/// remains or no air read yet.
+/// remains, remains under the least load even dry, or no air read yet.
 pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let load = crate::contract::remains_in(w, i, |k| w.g(k, i));
@@ -66,6 +66,10 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     let per_liquid = (liquid.cp * (liquid.boil - t).max(0.0) + liquid.lv) / liquid.molar_mass;
     // The most liquid a kg may hold where the share `flux_ahead` of its heat still lights the next kg.
     let extinct = (ph.flux_ahead * heat - dry) / per_liquid;
+    // (A bed under the least load of its dry remains is under it at any moisture: its layer need not be read.)
+    if load < least(ph, t, heat - dry) {
+        return None;
+    }
     let l = layer(w, p, i, t)?;
     let flaming = l.share(extinct, 0.0);
     let moist = l.sorbed(l.h(flaming / 2.0));
