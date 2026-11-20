@@ -55,8 +55,10 @@ const FLAME_FADE = 0.005; const FLAME_COVER = 0.8;
 const SMOKE_SHARE = 0.006; const FLAMING_S = 1.15e5; const SPREAD = 0.25; const PLUME_M = 8000.0; const EXTINCTION = 4.5;
 const SMOKE_RISE_M = 800.0; const SMOKE_EARTH = 2.0; const SMOKE_EARTH_MOST = 0.8; const CALM_M_S = 0.5;
 const SMOKE_NEAR_E = vec2f(0.15, 1.5);
-// The column is summed over `PLUME_STEPS` steps upwind, each read at three points across the spread.
+// The column is summed over `PLUME_STEPS` steps upwind, each read at five points across the spread, weighted as a
+// Gaussian of the spread (`PLUME_ACROSS`).
 const PLUME_STEPS = 8;
+var<private> PLUME_ACROSS: array<f32, 5> = array<f32, 5>(0.054, 0.244, 0.403, 0.244, 0.054);
 // Smoke scatters light about evenly over colours: grey to white (`SMOKE_RGB`), browner within `SMOKE_YOUNG_M` of the
 // flames (`SMOKE_YOUNG_RGB`), where unburnt tar and soot darken it.
 const SMOKE_RGB = vec3f(0.78, 0.78, 0.80); const SMOKE_YOUNG_RGB = vec3f(0.42, 0.38, 0.35); const SMOKE_YOUNG_M = 1500.0;
@@ -110,10 +112,16 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
 // `SOURCE_SPREAD` of a square's side (of the same sum), so a plume starts as a soft round cloud, not as the square.
 const SOURCE_SPREAD = 0.4;
 fn round_air(at: vec2f) -> f32 {
+  // (Of the four squares whose centres lie about the point: the rest add next to nothing.)
   let s = at / fire.map.x;
-  let c = floor(s);
-  let d = s - c - 0.5;
-  return fire_texel(1, vec2i(c)).y * exp(-0.5 * dot(d, d) / (SOURCE_SPREAD * SOURCE_SPREAD)) / (2.0 * PI * SOURCE_SPREAD * SOURCE_SPREAD);
+  let c = floor(s - 0.5);
+  var air = 0.0;
+  for (var k = 0; k < 4; k++) {
+    let sq = c + vec2f(f32(k % 2), f32(k / 2));
+    let d = s - sq - 0.5;
+    air += fire_texel(1, vec2i(sq)).y * exp(-0.5 * dot(d, d) / (SOURCE_SPREAD * SOURCE_SPREAD));
+  }
+  return air / (2.0 * PI * SOURCE_SPREAD * SOURCE_SPREAD);
 }
 
 fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
@@ -129,9 +137,11 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
     let s0 = PLUME_M * a * a;
     let s1 = PLUME_M * b * b;
     let s = 0.5 * (s0 + s1);
-    let spread = SPREAD * s;
+    // (Its spread starts at the source's own, so a plume's edge is soft from its fire on.)
+    let spread = SPREAD * s + SOURCE_SPREAD * fire.map.x;
     let src = at - wind * s;
-    let air = (round_air(src) + round_air(src + side * spread) + round_air(src - side * spread)) / 3.0;
+    var air = 0.0;
+    for (var j = -2; j <= 2; j++) { air += PLUME_ACROSS[j + 2] * round_air(src + side * spread * f32(j) * 0.5); }
     let c = air * (s1 - s0) * exp(-s / PLUME_M) * -expm1(-s / SMOKE_RISE_M);
     column += c;
     far += c * s;
