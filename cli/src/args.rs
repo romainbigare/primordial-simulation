@@ -46,14 +46,20 @@ pub const USAGE: &str = "usage:
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --window X,Y,W,H      the window from column X and row Y, W x H squares, fractions allowed (the whole map)
     --px N                pixels across; the height follows the window (512)
-    --layer NAME          map, temperature, rain, life, depth, land (the map with no rivers), or of the loose ground:
-                          conductivity, water (what it holds for roots), yield (rain less what rises), wetness (of
-                          its pores), rise (what rises from it), soil (the cell's texture), organic (its organic
-                          share), minerals (it holds), erodibility, slow (its slow
-                          organic matter), rot (how fast its dead frame rots), texture (the texture of the
-                          terrain's sample under each pixel) (map)
+    --layer NAME          map, temperature, rain, life, depth, land (the map with no rivers), kinds (the starting
+                          kind whose cover leads each cell), or of the loose ground: conductivity, water (what it
+                          holds for roots), yield (rain less what rises), wetness (of its pores), rise (what rises
+                          from it), soil (the cell's texture), organic (its organic share), minerals (it holds),
+                          erodibility, slow (its slow organic matter), rot (how fast its dead frame rots), texture
+                          (the texture of the terrain's sample under each pixel) (map)
     --edges               darken the edges between cells
     --out FILE            the PNG (view.png)
+  ew cells    write a table of a snapshot's cells as CSV, a row a cell: area, open land, height, frozen cover (m),
+              ground temperature, the year's rain and what rises (mm), cover (kg/m²) and its leading starting kind,
+              and the loose ground's texture, pores, depth, liquid for roots, wetness, slow organic matter, minerals
+              and erodibility
+    --from FILE           the snapshot (snap_NNNNN.bin.gz)
+    --out FILE            the table (cells.csv)
   ew card     write the test card, a small island whose squares are set by hand (worldgen::testkit::card), as a
               snapshot the page opens; nothing is placed later
     --out FILE            the snapshot (card.bin.gz)
