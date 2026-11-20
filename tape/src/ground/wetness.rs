@@ -3,30 +3,40 @@
 //! by (`table`) and the law saturates a cell's land by (`inside::wet_ground`). A texel coarser than the samples takes
 //! the mean of those it covers. A finer one takes it through the centres of the sixteen samples about it as a
 //! Catmull-Rom spline (it keeps each sample's own index and is smooth with its slope, so a level read on it, the
-//! saturated ground's edge, is a smooth line, not a sample's square or diamond), but a channel's sample stands there
-//! for its line: the spline takes the hillslope's index at its centre (`hill`), and its own index lies along its line
-//! as drawn (`bank_lines`, the channels' lines that carve a valley, `valley::carves`), falling to the hillslope's
-//! across `BANK` on each bank as the spline falls from one sample's centre to the next. So a channel sample's wet
-//! ground hugs its stream on both banks wherever the line bends in it, as wide as the spline drew it about the
-//! sample's centre.
-//! Each is a function of the place alone, the same in every tile.
+//! saturated ground's edge, is a smooth line, not a sample's square or diamond); but a sample that drains a channel's
+//! source (`inside::drains_source`) stands for its line: the law saturates the whole of it while its channel flows
+//! (its index infinite, `inside::flowing`), so the spline takes the hillslope's index at its centre (`hill`) and its
+//! line as drawn carries a strip a sample wide of the index `FLOWING_INDEX` (`bank_lines`), as much ground as the
+//! sample holds, which narrows to none over the last `STRIP` of the line at its channel's head. So the wet ground hugs
+//! the stream on both banks wherever its line bends. A known limit: the tiles never change, so a strip stays drawn in
+//! a year its channel runs dry (the law then has its sample's own index). Each is a function of the place alone, the
+//! same in every tile.
 
 use super::channels::{to_segment, Window};
-use super::valley::carves;
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 use pcore::space::terrain::SAMPLE_DEPTH;
+use pcore::Physics;
 
-/// A channel sample's own index falls to its hillslope's over this far from its line on each bank, samples: a sample,
-/// as the spline falls from one sample's centre to the next.
-const BANK: f64 = 1.0;
+/// A strip of wet ground reaches this far from its line on each bank, samples: half a sample, so a strip along a line
+/// a sample long holds a sample's area; and it narrows over this much of its line at its channel's head.
+pub(super) const STRIP: f64 = 0.5;
+/// The index a strip of wet ground holds: it stands for the law's infinite index of a flowing channel, over any level
+/// the law saturates a cell's land from, and a 16-bit float holds it.
+const FLOWING_INDEX: f64 = 1000.0;
 
-/// The index of each of `s` as the hillslope holds it: a channel sample's (one whose line carves a valley,
-/// `valley::carves`) the mean of its eight neighbours' that are none (its own where all are), the others' their own.
-pub(super) fn hill(s: &Samples) -> Vec<f64> {
+/// Whether each of `s` drains a channel's source under the laws `ph` (`inside::drains_source`): its line carries a
+/// strip of wet ground.
+pub(super) fn strips(s: &Samples, ph: &Physics) -> Vec<bool> {
+    (0..s.up.len()).map(|k| pcore::inside::drains_source(ph, s, k)).collect()
+}
+
+/// The index of each of `s` as the hillslope holds it: a sample of `strips` the mean of its eight neighbours' that are
+/// none (its own where all are), the others' their own.
+pub(super) fn hill(s: &Samples, strips: &[bool]) -> Vec<f64> {
     (0..s.twi.len())
         .map(|k| {
-            if !carves(s, k) {
+            if !strips[k] {
                 return s.twi[k];
             }
             let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
@@ -34,7 +44,7 @@ pub(super) fn hill(s: &Samples) -> Vec<f64> {
                 .map(|n| (c + n % 3 - 1, r + n / 3 - 1))
                 .filter(|&(x, y)| (x, y) != (c, r) && x >= 0 && y >= 0 && x < s.across as i64 && y < s.down as i64)
                 .map(|(x, y)| y as usize * s.across + x as usize)
-                .filter(|&j| !carves(s, j))
+                .filter(|&j| !strips[j])
                 .map(|j| s.twi[j])
                 .collect();
             if near.is_empty() { s.twi[k] } else { near.iter().sum::<f64>() / near.len() as f64 }
@@ -42,22 +52,28 @@ pub(super) fn hill(s: &Samples) -> Vec<f64> {
         .collect()
 }
 
-/// Of each texel of `win`, the nearest of the lines `lines` (each its sample and its points, samples) within `BANK`
-/// of it: its distance, samples, and its sample (`NONE` for none).
-pub(super) fn bank_lines<'a>(win: &Window, lines: impl Iterator<Item = (usize, Vec<[f64; 2]>)> + 'a) -> Vec<(f64, u32)> {
-    let mut out = vec![(f64::INFINITY, NONE); win.wide * win.high];
-    for (q, pts) in lines {
+/// Of each texel of `win`, whether a strip of wet ground takes it: one of the lines `lines` (each whether
+/// its channel's head lies at its start, and its points, samples) lies within `STRIP` of it, or at a head within that
+/// times the share 3t² - 2t³ of the way t its nearest point lies along the line's first `STRIP`.
+pub(super) fn bank_lines<'a>(win: &Window, lines: impl Iterator<Item = (bool, Vec<[f64; 2]>)> + 'a) -> Vec<bool> {
+    let mut out = vec![false; win.wide * win.high];
+    for (head, pts) in lines {
+        let mut from = 0.0;
         for w in pts.windows(2) {
             let (a, b) = (w[0], w[1]);
-            for y in win.texels(a[1].min(b[1]) - BANK, a[1].max(b[1]) + BANK, 1) {
-                for x in win.texels(a[0].min(b[0]) - BANK, a[0].max(b[0]) + BANK, 0) {
+            let long = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+            for y in win.texels(a[1].min(b[1]) - STRIP, a[1].max(b[1]) + STRIP, 1) {
+                for x in win.texels(a[0].min(b[0]) - STRIP, a[0].max(b[0]) + STRIP, 0) {
                     let (at, i) = win.texel(x, y);
-                    let d = to_segment(at, a, b).1.sqrt();
-                    if d < BANK && d < out[i].0 {
-                        out[i] = (d, q as u32);
+                    let (_, d2, t) = to_segment(at, a, b);
+                    let along = ((from + t * long) / STRIP).min(1.0);
+                    let wide = if head { STRIP * along * along * (3.0 - 2.0 * along) } else { STRIP };
+                    if d2 < wide * wide {
+                        out[i] = true;
                     }
                 }
             }
+            from += long;
         }
     }
     out
@@ -66,10 +82,8 @@ pub(super) fn bank_lines<'a>(win: &Window, lines: impl Iterator<Item = (usize, V
 /// The wetness index of samples `s` at the texels of `depth` from column `x0` and row `y0`, `wide` x `high` of them (on
 /// the map), row by row: coarser than the samples the mean of their own, finer a Catmull-Rom spline through the
 /// centres of the sixteen about a texel of the hillslope's (`hill`; the weights of a column and of a row found once
-/// each), or where more, the index of the nearest channel's line within `BANK` (`banks`, of each texel), falling from
-/// its sample's own on the line to its hillslope's at `BANK` as a Catmull-Rom spline between two flat ends does
-/// (3t² - 2t³).
-pub(super) fn field(s: &Samples, hill: &[f64], depth: u8, [x0, y0]: [i64; 2], [wide, high]: [usize; 2], banks: &[(f64, u32)]) -> Vec<f64> {
+/// each), or `FLOWING_INDEX` where a strip takes it (`strip`, of each texel).
+pub(super) fn field(s: &Samples, hill: &[f64], depth: u8, [x0, y0]: [i64; 2], [wide, high]: [usize; 2], strip: &[bool]) -> Vec<f64> {
     let at = |v: &[f64], c: i64, r: i64| v[r.clamp(0, s.down as i64 - 1) as usize * s.across + c.clamp(0, s.across as i64 - 1) as usize];
     if depth <= SAMPLE_DEPTH {
         let k = 1i64 << (SAMPLE_DEPTH - depth);
@@ -85,12 +99,12 @@ pub(super) fn field(s: &Samples, hill: &[f64], depth: u8, [x0, y0]: [i64; 2], [w
     let mut out = Vec::with_capacity(wide * high);
     for &(r, wv) in &rows {
         for &(c, wu) in &cols {
+            if strip[out.len()] {
+                out.push(FLOWING_INDEX);
+                continue;
+            }
             let row = |r: i64| (0..4).map(|i| wu[i] * at(hill, c + i as i64 - 1, r)).sum::<f64>();
-            let slope: f64 = (0..4).map(|j| wv[j] * row(r + j as i64 - 1)).sum();
-            let (d, q) = banks[out.len()];
-            let t = d / BANK;
-            let line = if q == NONE { f64::NEG_INFINITY } else { s.twi[q as usize] - (s.twi[q as usize] - hill[q as usize]) * t * t * (3.0 - 2.0 * t) };
-            out.push(slope.max(line));
+            out.push((0..4).map(|j| wv[j] * row(r + j as i64 - 1)).sum());
         }
     }
     out

@@ -128,8 +128,8 @@ impl Window {
 /// its bends, m (`NO_CHANNEL_M` for none); the valleys about the lines (`valley`): the sum of their weights at the
 /// texel and of their floors' heights so weighted, m; and the deepest mouth of the lines that reach it
 /// (`shore::drowned`): where lines of two channels lie near, the texel's ground goes under as the larger mouth's does,
-/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it; and the
-/// nearest line of a channel sample within a bank's reach (`wetness::bank_lines`: its distance, samples, and sample).
+/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it; and how much
+/// of it the strips of wet ground along the lines take (`wetness::bank_lines`).
 pub(super) struct Field {
     pub dist: Vec<f64>,
     pub sample: Vec<u32>,
@@ -138,7 +138,7 @@ pub(super) struct Field {
     pub valley: Vec<f64>,
     pub weight: Vec<f64>,
     pub mouth: Vec<[f64; 2]>,
-    pub bank: Vec<(f64, u32)>,
+    pub bank: Vec<bool>,
 }
 
 impl Field {
@@ -149,18 +149,21 @@ impl Field {
     }
 }
 
-/// The channels of a map (`bends::Reaches`) and how each one's piece starts (`bends::Bends`); the channel's reach per
-/// m² drained to the power b, and the largest drained area.
+/// The channels of a map (`bends::Reaches`) and how each one's piece starts (`bends::Bends`), the samples whose line
+/// carries a strip of wet ground (`wetness::strips`); the channel's reach per m² drained to the power b, and the
+/// largest drained area.
 pub(super) struct Channels<'a> {
     pub r: Reaches<'a>,
     pub bends: &'a Bends,
+    strips: &'a [bool],
     cap: f64,
     most: f64,
 }
 
 /// A line near a window of texels: its sample, the line as drawn, where it joins the next sample's, what its
 /// distances are told apart by (half its channel's widest width, no less than a texel, samples), how far it reaches,
-/// samples, and whether a valley is drawn about it.
+/// samples, whether a valley is drawn about it, and whether it is drawn on these texels at all (a line near only for
+/// its strip of wet ground is not).
 pub(super) struct Near {
     pub q: usize,
     pub drawn: Drawn,
@@ -168,6 +171,7 @@ pub(super) struct Near {
     scale: f64,
     reach: f64,
     carves: bool,
+    shown: bool,
 }
 
 fn mid(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
@@ -199,14 +203,14 @@ pub(super) fn to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> (f64, f64, f6
 }
 
 impl<'a> Channels<'a> {
-    /// The channels `r`, their pieces starting as `bends` holds.
-    pub(super) fn new(r: Reaches<'a>, bends: &'a Bends) -> Channels<'a> {
+    /// The channels `r`, their pieces starting as `bends` holds, the lines of `strips` carrying wet ground.
+    pub(super) fn new(r: Reaches<'a>, bends: &'a Bends, strips: &'a [bool]) -> Channels<'a> {
         let most = r.s.up.iter().fold(0.0f64, |m, &a| m.max(a));
-        Channels { r, bends, cap: r.widest(1.0), most }
+        Channels { r, bends, strips, cap: r.widest(1.0), most }
     }
 
-    /// The lines that reach the window `win` of texels of `texel` m, and how far a valley reaches, samples (none on
-    /// texels no finer than the samples).
+    /// The lines that reach the window `win` of texels of `texel` m, or their strip of wet ground does
+    /// (`wetness::STRIP`), and how far a valley reaches, samples (none on texels no finer than the samples).
     fn near(&self, win: &Window, texel: f64) -> (Vec<Near>, f64) {
         let (s, metres, k) = (self.r.s, self.r.metres, win.k);
         let reach_valley = if k < 1.0 { VALLEY_M / metres } else { 0.0 };
@@ -235,13 +239,15 @@ impl<'a> Channels<'a> {
         for r in lo(win.y0).max(0)..=hi(win.y0, win.high).min(s.down as i64 - 1) {
             for c in lo(win.x0).max(0)..=hi(win.x0, win.wide).min(s.across as i64 - 1) {
                 let q = r as usize * s.across + c as usize;
-                if s.up[q] < least {
+                let shown = s.up[q] >= least;
+                if !shown && !self.strips[q] {
                     continue;
                 }
                 let Some(b) = base(s, self.r.at, q) else { continue };
                 let (own, reach) = reach_of(s.up[q]);
                 let carves = reach_valley > 0.0 && super::valley::carves(s, q);
                 let widest = if carves { reach.max(reach_valley) } else { reach };
+                let widest = if self.strips[q] { widest.max(super::wetness::STRIP) } else { widest };
                 // The box the line lies in: its curve's points and, where a tributary joins, the next sample's centre,
                 // widened by its sway, by how far the next sample's line lies from its centre and by its reach: none
                 // of the window's texels in it, and the line is not drawn.
@@ -254,7 +260,7 @@ impl<'a> Channels<'a> {
                     continue;
                 }
                 if let Some((drawn, join)) = self.line(q, texel) {
-                    near.push(Near { q, drawn, join, scale: own.max(texel) / metres, reach, carves });
+                    near.push(Near { q, drawn, join, scale: own.max(texel) / metres, reach, carves, shown });
                 }
             }
         }
@@ -283,7 +289,8 @@ impl<'a> Channels<'a> {
         let (near, reach_valley) = self.near(&all, all.k * self.r.metres);
         let mut f = self.laid(&all, &near, reach_valley);
         self.mend(&mut f, &all, &near);
-        let bank = super::wetness::bank_lines(&all, near.iter().filter(|l| l.carves).map(|l| (l.q, l.drawn.line.iter().map(|v| v.p).collect())));
+        let heads = |q: usize| self.r.s.main[q] == NONE || !self.strips[self.r.s.main[q] as usize];
+        let bank = super::wetness::bank_lines(&all, near.iter().filter(|l| self.strips[l.q]).map(|l| (heads(l.q), l.drawn.line.iter().map(|v| v.p).collect())));
         fn cut<T: Copy>(v: &[T], high: usize, m: usize, wide: usize) -> Vec<T> {
             (0..high).flat_map(|y| v[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect()
         }
@@ -299,7 +306,7 @@ impl<'a> Channels<'a> {
         let mut f = Field { dist: vec![NO_CHANNEL_M; n], sample: vec![NONE; n], along: vec![0.0; n], calm: vec![NO_CHANNEL_M; n], valley: vec![0.0; n], weight: vec![0.0; n], mouth: vec![[0.0; 2]; n], bank: Vec::new() };
         // Of each texel, how near the line it holds lies, over the line's scale.
         let mut best = vec![f64::INFINITY; n];
-        for l in near {
+        for l in near.iter().filter(|l| l.shown) {
             for w in l.drawn.line.windows(2) {
                 self.lay(win, l, [w[0].p, w[1].p], &mut best, &|_| true, &mut |i, d, t| (f.dist[i], f.sample[i], f.along[i]) = (d, l.q as u32, w[0].s + (w[1].s - w[0].s) * t));
                 let (width, depth) = self.r.bed_of(l.q);
@@ -316,7 +323,7 @@ impl<'a> Channels<'a> {
         }
         let (held, head) = (f.sample.clone(), |q: u32| self.bends.head(q as usize));
         best.fill(f64::INFINITY);
-        for l in near {
+        for l in near.iter().filter(|l| l.shown) {
             for w in l.drawn.calm.windows(2) {
                 self.lay(win, l, [w[0], w[1]], &mut best, &|i| held[i] == NONE || head(held[i]) == head(l.q as u32), &mut |i, d, _| {
                     f.calm[i] = d;
