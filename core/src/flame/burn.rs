@@ -4,7 +4,7 @@
 
 use super::{Bed, FLAME_EXP, FLAME_K, KILLED, KILLED_WALLS, LIVING, PLANTS, REMAINS, SCORCHED, SMOULDERED, CURED, SCORCH_EXP, SCORCH_K, W_PER_KW};
 use crate::chem::{Chemistry, Phase};
-use crate::cover::{per_input, Books, Cover, Parts, BUDGET, BURNT, FUEL, MATTER, NP, WALL};
+use crate::cover::{per_input, Books, Cover, Parts, BUDGET, BURNT, FUEL, MATTER, NP, ROUNDED, WALL};
 use crate::life::{Chunk, FLAME};
 use crate::store::{Class, Node};
 use crate::{World, AIR};
@@ -126,6 +126,16 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)
     }
     break_down(chem, &w.cfg.phys, &mut b);
     b.budget[BURNT] += c.content(&e) - before;
+    // What rounding left below zero of a part burnt or killed is set to zero and counted (a larger overdraw is this
+    // law's fault), as the cover's month does.
+    for m in c.mol.iter_mut() {
+        let size: f64 = m.iter().map(|a| a.abs()).sum();
+        for (q, a) in m.iter_mut().enumerate().filter(|(_, a)| **a < 0.0) {
+            debug_assert!(-*a <= crate::store::ROUNDING * size, "a flame overdrew a part by {a}");
+            b.budget[ROUNDED] -= *a * e[q];
+            counts.rounded[0] -= std::mem::take(a);
+        }
+    }
     counts.cover_lost[FLAME as usize] += flows[LIVING] + flows[SCORCHED] + flows[KILLED];
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, x)| *a += x);
     counts.flame.iter_mut().zip(flows).for_each(|(a, x)| *a += x);
