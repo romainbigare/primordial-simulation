@@ -6,7 +6,8 @@
 // Olano 2020; lowbias32, draw.wgsl), so the marks hold while the camera moves and stand in no rows. A mark picks its
 // kind at its own foot: of the four squares about it, blended as the map's other fields (land.wgsl `corners`), each
 // kind's chance that a cell holds one of its plants (thicker and thinner over the field's patches, cover_field.wgsl
-// `patchy`), less where the ground at the foot is drier than its cell's mean as the kind's activity law says and where
+// `patchy`), less where the ground at the foot lies drier than its cell's mean (its wetness index, the same in every month: mark.wgsl
+// `thrive`) as the kind's activity law says and where
 // its loose ground is thinner than its roots need (land.wgsl `rooted`, its chance raised where its square's ground is
 // thin, so the square keeps its cover); a plant buried by the snow's depth against its height does not show, one
 // standing in snow carries it on its crown; each kind claims cells by its own draw (on the trees' lattice in stands of

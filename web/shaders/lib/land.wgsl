@@ -51,7 +51,7 @@ struct Land {
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
 // liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs
-// about, and the share of its area that is land; the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
+// about, the share of its area that is land and the mean wetness index of its terrain's samples; the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
 // its loose ground; and in the last numbers of the true colour's and the layer's planes, the land's ice, m, its ground
 // temperature, K, and its mean height, m. (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
 const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
@@ -282,10 +282,10 @@ fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
 
 // The state of the ground at a point: the depth of the liquid standing over it and its height over that liquid's
 // surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1, as its cells' share (`snow_at`
-// places it), and the snow's depth, m; how wet its cells are on their mean, 0..1;
+// places it), and the snow's depth, m;
 // how readily it sheds its snow, with the snow's drifts (`snow_bares`; `snow_at` reads it); and the share of its
 // pores the soil's liquid fills there, 0..1.
-struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, mean: f32, bares: f32, filled: f32 }
+struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, bares: f32, filled: f32 }
 
 // Inside a cell its snow lies first where the ground holds it (`snow_bares`): high ground before low (colder: the air's
 // fall with height; over `SNOW_RISE_M` a unit), slopes turned from the sun before those facing it (they melt first;
@@ -359,15 +359,13 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, e: f32, knob: f32) -> St
     covered += cs.w[k] * snow_of(c.w, 0.0, 0.0);
   }
   // The liquid standing over the point: its ponds', flat at their levels over the ground under it (laws.md 1.2).
-  // The soil's liquid of each cell about it at the point's wetness index, and each one's mean liquid, blended.
+  // The soil's liquid of each cell about it at the point's wetness index, blended.
   var held = 0.0;
-  var mean = 0.0;
   var pores = 0.0;
   for (var k = 0; k < 4; k++) {
     let l = cell(LIQUID, cs.at[k]);
     let s = cell(SOIL, cs.at[k]);
     held += cs.w[k] * soil_held(l.w, s.x, s.y, g.twi);
-    mean += cs.w[k] * (l.w + l.z);
     pores += cs.w[k] * s.x;
   }
   var p: State;
@@ -389,7 +387,6 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, e: f32, knob: f32) -> St
   if (covered > 0.0) { drifts = SNOW_PATCHY * ragged(at, e, SNOW_PATCH_M, SNOW_PATCH_OCTAVES, 80); }
   p.snow = covered * unmelted(p.t + SNOW_PATCH_K * drifts, land.time.z);
   p.snow_m = snow_depth(ground.w, p.t + SNOW_PATCH_K * drifts, land.time.z);
-  p.mean = mean / (mean + half);
   p.bares = snow_bares(g.slope, g.h - ground.x, knob) + drifts;
   return p;
 }
