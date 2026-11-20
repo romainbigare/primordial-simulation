@@ -4,7 +4,8 @@
 The strip is 512 x 512 layers, from the sprites `sprites.cjs snags.json RENDERED_DIR <models>` renders one by one (each
 fitted to its cell as models.png's, its foot on the cell's bottom middle), in the order `KINDS` names: charred trunks
 broken off, a whole layer each (they are thin and tall: drawn 250 px tall up close), then charred stumps four to a layer;
-each fitted to its cell, sharpened once (`SHARPEN`, after the shrinking), its light scaled so its
+each fitted to its cell, cut to its one whole piece (`whole`: the chips and the scraps of the ground the scan holds
+apart from it are left out), sharpened once (`SHARPEN`, after the shrinking), its light scaled so its
 mean (linear, over the texels it covers) is `LIGHT_MEAN` (burnt bark in the sun reads charcoal grey, about as light as
 the bare trees' bark of models.png: 0.054), its darkest lifted by `LIFT` (charred wood is no black hole). The table holds
 each sprite's width (twice its farthest texel from the cell's middle, so its middle is the cell's), its height
@@ -30,7 +31,7 @@ SHARPEN = (1.0, 60)
 # Each kind: its name in the table, its sprites a layer (1 or 4) and its rendered sprites (model, turns).
 KINDS = [
     ("TRUNK", 1, [("burned_tree_photogrammetry", 6)]),
-    ("STUMP", 4, [("burned_trunk_lassen", 6), ("old_burned_tree", 4), ("old_burnt_tree", 4)]),
+    ("STUMP", 4, [("burned_trunk_lassen", 6), ("old_burned_tree", 4)]),
 ]
 
 
@@ -52,6 +53,34 @@ def lit(im):
     rgb = LIFT + rgb * (LIGHT_MEAN - LIFT) / max(mean, 1e-6)
     out = np.concatenate([encoded(rgb), a[..., 3:]], axis=2)
     return Image.fromarray((out * 255 + 0.5).astype(np.uint8))
+
+
+# A texel joins the sprite's piece where its cover is over `COVERED`; the texels within `EDGE` of the piece keep their
+# cover (its soft rim).
+EDGE = 2
+
+
+def whole(im):
+    """Sprite `im` (RGBA) with its largest piece alone: of the parts its covered texels make (each texel joined to its
+    eight neighbours), the one with most texels, and its rim (`EDGE`); the rest cleared."""
+    a = np.asarray(im).copy()
+    covered = a[..., 3] > COVERED
+    label = np.where(covered, np.arange(covered.size).reshape(covered.shape) + 1, 0)
+    while True:
+        grown = label.copy()
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                grown = np.maximum(grown, np.roll(np.roll(label, dy, 0), dx, 1))
+        grown = np.where(covered, grown, 0)
+        if np.array_equal(grown, label):
+            break
+        label = grown
+    ids, counts = np.unique(label[covered], return_counts=True)
+    keep = label == ids[counts.argmax()]
+    for _ in range(EDGE):
+        keep = keep | np.roll(keep, 1, 0) | np.roll(keep, -1, 0) | np.roll(keep, 1, 1) | np.roll(keep, -1, 1)
+    a[..., 3] = np.where(keep, a[..., 3], 0)
+    return Image.fromarray(a)
 
 
 def measured(im, cell):
@@ -84,7 +113,7 @@ def main():
     w, h, foot = [], [], []
     for (per, name), (at, q) in zip(cells, placed):
         cell = SIDE if per == 1 else SIDE // 2
-        im = Image.open(f"{src}/{name}").convert("RGBA").resize((cell, cell), Image.LANCZOS)
+        im = whole(Image.open(f"{src}/{name}").convert("RGBA").resize((cell, cell), Image.LANCZOS))
         im = lit(im.filter(ImageFilter.UnsharpMask(radius=SHARPEN[0], percent=SHARPEN[1], threshold=0)))
         x = measured(im, cell)
         w.append(x[0]); h.append(x[1]); foot.append(x[2])

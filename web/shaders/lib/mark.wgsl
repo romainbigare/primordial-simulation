@@ -379,8 +379,7 @@ fn dead_at(l: i32, k: vec2f) -> Dead {
   if (under_share(rank, fa.burnt) <= 0.5) { return out; }
   let side = cover.grid[l].z;
   let clump = 2.0 * smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / DEAD_CLUMP_M, 97));
-  let reach = (cover.grid[l].w + cover.reach[l].x) * side;
-  out.q = snag_of(cover.base[l].xy + vec2i(k), clamp(scar_age(at, rank.x) / max(fire.air.y, 1.0), 0.0, 1.0), reach / MAP_VIEW.y);
+  out.q = snag_of(cover.base[l].xy + vec2i(k), clamp(scar_age(at, rank.x) / max(fire.air.y, 1.0), 0.0, 1.0), cover.reach[l].x * side, (cover.grid[l].w + cover.reach[l].x) * side);
   out.mean = clump * fa.snag * side * side / SNAG_KG / min(fa.burnt, 1.0);
   return out;
 }
@@ -399,21 +398,19 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32) -
   if (all > 0.0) {
     if (!ground_holds(l, at, cs, f)) { return none; }
   } else if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
-  let reach = (cover.grid[l].w + cover.reach[l].x) * cover.grid[l].z;
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_thing(dead.q.h, cover.seen.x);
   if (shows <= 0.0) { return none; }
-  return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q, reach));
+  return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q));
 }
 
 // The box dead tree q of lattice l covers about its foot, as `mark_box`: its sprite with its lean, and its shadow.
-fn dead_box(l: i32, q: Snag, reach: f32) -> f32 {
+fn dead_box(l: i32, q: Snag) -> f32 {
   let g = cover.grid[l];
   let r = cover.reach[l].x;
-  let size = snag_size(q);
-  let w = size.x * q.h / size.y;
+  let w = snag_w(q);
   let body = 0.5 * w + abs(sin(q.lean)) * q.h;
-  let long = min(MODEL_SHADOW_RUN * q.h, 0.9 * reach);
-  let m = vec4f(body, max(body, min(long + 0.5 * w, reach)), q.h, long);
+  let c = snag_cast(q, r * g.z);
+  let m = vec4f(body, max(body, c.long + 0.5 * c.w + max(c.top, 0.0)), q.h, c.long);
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
@@ -440,8 +437,8 @@ fn mark_box(l: i32, q: Plant) -> f32 {
   let fit = model_fit(q);
   // Its clump's plants stand up to `spread` from its foot (models.wgsl `clump_one`).
   let body = fit.spread + 0.5 * fit.w + abs(q.lean.x) * fit.h;
-  let long = model_shadow_long(q, fit);
-  let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, max(long, foot_rise(fit.s) * fit.h) + fit.spread);
+  let c = model_cast(q, fit);
+  let m = vec4f(body, max(body, min(c.long + 0.5 * c.w + fit.spread, q.reach)), fit.h + fit.spread, max(c.long, foot_rise(fit.s) * fit.h) + fit.spread);
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }

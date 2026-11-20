@@ -46,17 +46,6 @@
      270
     ],
     "cut": 0.35
-   },
-   {
-    "model": "old_burnt_tree",
-    "file": "sketchfab/d1ddd03e8ddc4103a3b4501fed7183fd/scene.gltf",
-    "turns": [
-     0,
-     90,
-     180,
-     270
-    ],
-    "cut": 0.22
    }
   ]
  }

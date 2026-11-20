@@ -33,8 +33,7 @@ fn shadow(dst: ptr<function, vec4f>, shade: ptr<function, f32>, a: f32) {
 // The dead tree decided for cell k of the trees' lattice l (mark.wgsl `dead_decided`, `dead_at`), over dst at p, m
 // from the draw's corner, e m a pixel, as strongly as `fade`.
 fn dead_tree(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i32, k: vec2f, e: f32, fade: f32) {
-  let reach = (cover.grid[l].w + cover.reach[l].x) * cover.grid[l].z;
-  let seen = snag_seen(dead_at(l, k).q, p - mark_foot(l, k), e, reach);
+  let seen = snag_seen(dead_at(l, k).q, p - mark_foot(l, k), e, cover.reach[l].x * cover.grid[l].z);
   shadow(dst, shade, fade * seen.shadow);
   if (seen.rgba.a > 0.0) { over(dst, seen.rgba.rgb, seen.rgba.a * fade); }
 }
