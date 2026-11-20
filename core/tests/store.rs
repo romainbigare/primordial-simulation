@@ -216,7 +216,7 @@ fn what_crosses_the_boundary_keeps_the_books() {
 fn remains_carry_their_potential_energy_into_the_ground() {
     let (mut w, i) = start();
     // (Heavy enough that its fall shows above the rounding of a sum over the world.)
-    cover(&mut w, i, 100.0);
+    cover(&mut w, i, 1000.0);
     let (books, p0, l0) = (Books::now(&w), pcore::flow::potential(&w).expect("Flow's state"), w.store.lifted());
     w.in_cell(i, |w, d| pcore::contract::press(w, d, i, f64::MAX));
     let (gained, lifted) = (pcore::flow::potential(&w).expect("Flow's state") - p0, w.store.lifted() - l0);

@@ -73,17 +73,34 @@ pub(super) fn settle(s: &Scratch, i: usize, p: &mut Parts, f: &[Found; PARTS], p
     if over <= 0.0 {
         return false;
     }
-    let (part, t) = (over / f[LAND].l[2], f[LAND].th.t);
+    land_to_top(s, i, p, (f[LAND].th.t, &|k| f[LAND].th.molten(k)), over / f[LAND].l[2]);
+    true
+}
+
+/// The share `part` of the liquid of the land of `p` in cell `i` goes to the liquid's top: of each liquid (`Sp::liquid`,
+/// at `t` K, the share `molten(k)` of it molten), with its heat at `t`.
+fn land_to_top(s: &Scratch, i: usize, p: &mut Parts, (t, molten): (f64, &dyn Fn(usize) -> f64), part: f64) {
     let mut heat = 0.0;
     for &k in s.state.vary.iter().filter(|&&k| t < s.sp[k].boil) {
-        let m = p.amt[k][LAND] * s.sp[k].liquid(t, f[LAND].th.molten(k), s.state.dissolved[i]) * part;
+        let m = p.amt[k][LAND] * s.sp[k].liquid(t, molten(k), s.state.dissolved[i]) * part;
         p.amt[k][LAND] -= m;
         p.amt[k][TOP] += m;
         heat += m * (s.sp[k].cp * t + s.sp[k].lf);
     }
     p.heat[LAND] -= heat;
     p.heat[TOP] += heat;
-    true
+}
+
+/// The share `part` of the liquid of the land of cell `i` drains to its liquid's top, at the land's temperature and
+/// phases as its last solve found them (`land_to_top`): the land's pores drain inside the cell to its liquid
+/// (`drain::land_drains`).
+pub(in crate::flow) fn drain_land(s: &mut Scratch, i: usize, part: f64) {
+    let Some(land) = s.mixed(i).map(|m| m.piece[LAND].clone()) else { return };
+    let mut parts = std::mem::take(&mut s.state.parts);
+    if let Some(Some(p)) = parts.get_mut(i) {
+        land_to_top(s, i, p, (land.tg, &|k| land.molten(k)), part);
+    }
+    s.state.parts = parts;
 }
 
 /// The liquid of `p` in cell `i` comes to cover the share `to` of the cell's area, with the ground it covers or leaves,
@@ -135,12 +152,20 @@ fn gain(p: &mut Parts, k: usize, q: usize, d: f64) {
     }
 }
 
+/// The part of a cell of parts what Flow's liquid laws take from it leaves (`to_liquid`): its liquid, what stands and
+/// runs off; or its land, what the laws under the surface move (`drain`), which do not reach the ground under a body.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::flow) enum Leaves {
+    Liquid,
+    Land,
+}
+
 /// What Flow's liquid laws moved of the cells of parts among `cells` (`liquid::book`): what came in gathers in the
-/// liquid's top; what left, of the top and the deep by their shares of their liquid, of the land only what they lack
-/// (only liquid moves), and the heat that left
-/// by the share of the mol each gave. Of each of `ks` what each cell holds now less `before` (`[q * cells.len() + c]`),
-/// mol, and of its heat now less `heat`, J.
-pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks, before): (&[usize], &[f64]), heat: &[f64]) {
+/// liquid's top; what left, as `leaves` says: of the top and the deep by their shares of their liquid and of the land
+/// only what they lack (only liquid moves), or of a land all of it; and the heat that left by the share of the mol
+/// each gave. Of each of `ks` what each cell holds now less `before` (`[q * cells.len() + c]`), mol, and of its heat
+/// now less `heat`, J.
+pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks, before): (&[usize], &[f64]), heat: &[f64], leaves: Leaves) {
     let (n, len) = (w.mesh.cells().n(), cells.len());
     for (c, &i) in cells.iter().enumerate() {
         // Each part's liquid of each substance, mol, as its last solve found it.
@@ -154,15 +179,19 @@ pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks,
                 gain(p, k, TOP, d);
                 continue;
             }
-            // Each part's share of what leaves: the liquid's top and deep give first, by their shares of the liquid
-            // they hold (what stands leaves from the liquid); the land, which keeps its own pores' liquid, gives only
-            // what they lack.
-            let shares = liquid.as_ref().map_or([0.0, 1.0, 0.0], |l| {
-                let wet = l[TOP][q] + l[DEEP][q];
-                let from_land = if wet >= -d { 0.0 } else { ((-d - wet) / -d).min(1.0) };
-                let of_wet = |x: usize| if wet > 0.0 { (1.0 - from_land) * l[x][q] / wet } else { 0.0 };
-                [from_land, 1.0 - from_land - of_wet(DEEP), of_wet(DEEP)]
-            });
+            // Each part's share of what leaves: from a land, all; else the liquid's top and deep give first, by their
+            // shares of the liquid they hold (what stands leaves from the liquid); the land, which keeps its own
+            // pores' liquid, gives only what they lack.
+            let shares = match &liquid {
+                _ if leaves == Leaves::Land && p.land() => [1.0, 0.0, 0.0],
+                None => [0.0, 1.0, 0.0],
+                Some(l) => {
+                    let wet = l[TOP][q] + l[DEEP][q];
+                    let from_land = if wet >= -d { 0.0 } else { ((-d - wet) / -d).min(1.0) };
+                    let of_wet = |x: usize| if wet > 0.0 { (1.0 - from_land) * l[x][q] / wet } else { 0.0 };
+                    [from_land, 1.0 - from_land - of_wet(DEEP), of_wet(DEEP)]
+                }
+            };
             let (by_land, by_deep, was) = (shares[LAND], shares[DEEP], [p.amt[k][LAND], p.amt[k][DEEP]]);
             gain(p, k, LAND, d * by_land);
             gain(p, k, TOP, d * (1.0 - by_land - by_deep));

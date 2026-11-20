@@ -101,6 +101,8 @@ pub fn surroundings(w: &mut World) {
         crate::flow::state(w, true);
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
         (w.life.land, w.life.levels) = grounds_now(w);
+        let p = Parts::of(&w.chem);
+        w.life.wet = crate::par::map_n(n, crate::par::UNCOUNTED, |i| p.as_ref().filter(|_| land(w, i) > 0.0).map(|p| crate::inside::wet_land(w, p, i).1));
     }
 }
 

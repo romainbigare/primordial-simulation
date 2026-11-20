@@ -2,6 +2,7 @@
 //! one explicit step of the liquid's (`flow`).
 
 use super::drain::{carried, store_table, Carried};
+use super::liquid::reached;
 use super::Scratch;
 use crate::{solve::sweep::{sweep, Net}, store::Class, World};
 
@@ -10,7 +11,8 @@ type Links<'a> = (&'a [usize], &'a [u32], &'a [u32]);
 
 /// The store's net over the links `links` for the store volumes `vol`, m³: each cell's table, m (`store_table`), and its
 /// capacity, its volume per metre of head, m², and each link's conductance, m²/s: `bed_seep` × the depth the store of
-/// its higher end fills × width / distance.
+/// its higher end fills × width / distance, between the stores under the ground the laws under the surface reach
+/// (`liquid::reached`: the store under a body is not drained).
 fn net(w: &World, s: &Scratch, (border, a, b): Links, vol: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     let (p, cells) = (w.cfg.phys, w.mesh.cells());
     let area = cells.area();
@@ -19,7 +21,7 @@ fn net(w: &World, s: &Scratch, (border, a, b): Links, vol: &[f64]) -> (Vec<f64>,
     let g = (border.iter().zip(a.iter().zip(b)))
         .map(|(&l, (&i, &j))| {
             let up = (if x[i as usize] >= x[j as usize] { i } else { j }) as usize;
-            p.bed_seep * vol[up] / (p.bed_porosity * area[up]) * cells.width()[l] / cells.dist()[l]
+            p.bed_seep * vol[up] / (p.bed_porosity * area[up]) * cells.width()[l] / cells.dist()[l] * reached(s, i as usize, j as usize)
         })
         .collect();
     (x, cap, g)

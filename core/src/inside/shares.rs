@@ -70,7 +70,8 @@ pub fn soil_level(ph: &Physics, twi: &[f64], area: &[f64], m: Means) -> Option<f
     if d <= 0.0 || d >= most || lo > hi {
         return None;
     }
-    let mean = |c: f64| twi.iter().map(|&t| deficit_at(ph, m, t, c)).zip(area).map(|(v, a)| v * a).sum::<f64>();
+    // The mean room over the level `c` (`deficit_at`, the cell's room found once).
+    let mean = |c: f64| twi.iter().map(|&t| (d - ph.soil_m * (t - c)).clamp(0.0, most)).zip(area).map(|(v, a)| v * a).sum::<f64>();
     let (mut lo, mut hi) = (lo - most / ph.soil_m, hi + most / ph.soil_m);
     for _ in 0..HALVINGS {
         let mid = 0.5 * (lo + hi);
