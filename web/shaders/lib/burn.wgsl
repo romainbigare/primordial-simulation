@@ -19,7 +19,7 @@ const CHAR_MONTHS = 3.0; const SCORCHED_MONTHS = 12.0;
 // Bodí and others 2014).
 const ASH_HIDES_KG = 0.25;
 // Cured leaves standing cover all but e^-1 of a herb layer at this much, kg/m² (a dry grass sward holds a few tenths
-// of a kg/m² of standing dead leaf, from memory); the Earth view tints the cover towards straw by that share
+// of a kg/m² of standing dead leaf, from memory); the Earth view tints the low plants' cover towards straw by that share
 // (`STRAW`, the pale yellow of dry grass in the style).
 const CURED_HIDES_KG = 0.15; const STRAW = vec3f(0.62, 0.50, 0.22);
 // The char's photograph (fire.jpg's second layer) is this many metres across.
@@ -32,7 +32,9 @@ fn burnt_spot(p: Spot) -> Spot {
   if (p.depth > 0.0) { return q; }
   let f = fire_at(p.at);
   if (styled() && f.cured > 0.0) {
-    q.cover = vec4f(mix(q.cover.rgb, STRAW * q.cover.a, -expm1(-f.cured / CURED_HIDES_KG)), q.cover.a);
+    // (The cured leaves stand in the low plants: the share of the cover that is theirs takes the tint.)
+    let low = min(p.low / max(p.cover.a, 1e-3), 1.0);
+    q.cover = vec4f(mix(q.cover.rgb, STRAW * q.cover.a, low * -expm1(-f.cured / CURED_HIDES_KG)), q.cover.a);
   }
   if (f.burnt <= 0.0) { return q; }
   let scar = under_share(burn_rank(p.at, p.e), f.burnt);

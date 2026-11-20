@@ -418,13 +418,14 @@ export class MapView {
     } else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
   }
 
-  /** Draw into pass `p` (as `drawMap`) over the plants the dead trees fire left standing, then the flames and the smoke of
-   * the fires burning in view, each over the squares it reaches, once its program is made; none in a layer's view. */
+  /** Draw into pass `p` (as `drawMap`) over the plants the flames and the smoke of the fires burning in view, then the
+   * dead trees fire left standing, each over the squares it reaches, once its program is made; none in a layer's view. */
   private drawFire(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
     if (!this.fire || this.look.mode === 'layer') return;
-    // The dead trees stand with the plants, drawn in the Earth view alone (vegetation.ts).
-    if (this.look.mode === 'earth') this.drawOver(gpu, p, 'snags', this.fire.snags, target, xs, k, d, size, waiting);
     this.drawOver(gpu, p, 'flames', this.fire.flames, target, xs, k, d, size, waiting);
+    // The dead trees stand with the plants, drawn in the Earth view alone (vegetation.ts), over the light of the burning
+    // ground behind them.
+    if (this.look.mode === 'earth') this.drawOver(gpu, p, 'snags', this.fire.snags, target, xs, k, d, size, waiting);
   }
 
   /** Draw into pass `p` (as `drawMap`) program `name` over the map's squares in `box` (null: none), once it is made. */
