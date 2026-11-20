@@ -305,8 +305,14 @@ pub fn give(w: &World, d: &mut Chunk, i: usize, amounts: impl IntoIterator<Item 
 /// What lies on the ground of cell `i` of chunk `d` (the remains of life in its ground node: its dead body matter and
 /// walls), kg a m² of the cell's land (`land`; none where it holds no land), as the cell's view holds it now.
 pub fn remains(w: &World, d: &Chunk, i: usize) -> f64 {
+    remains_in(w, i, |k| d.moves.amount(w, Node::ground(i), k))
+}
+
+/// What lies on the ground of cell `i` whose ground node holds `amount(k)` mol of substance `k` (`remains`), kg a m² of
+/// its land.
+pub fn remains_in(w: &World, i: usize, amount: impl Fn(usize) -> f64) -> f64 {
     let Some(p) = Parts::of(&w.chem).filter(|_| land(w, i) > 0.0) else { return 0.0 };
-    let kg = |q: usize| d.moves.amount(w, Node::ground(i), p.sub[q]).max(0.0) * w.chem.subs[p.sub[q]].molar_mass;
+    let kg = |q: usize| amount(p.sub[q]).max(0.0) * w.chem.subs[p.sub[q]].molar_mass;
     (kg(crate::life::MATTER) + kg(crate::life::WALL)) / land(w, i)
 }
 

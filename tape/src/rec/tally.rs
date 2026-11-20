@@ -17,6 +17,9 @@ pub(super) struct YearTally {
     pub cover_budget: [f64; pcore::cover::BUDGET.len()],
     /// The flows of the seeds, kg (`Counters::seeds`)
     pub seeds: [f64; pcore::cover::SEED_FLOWS.len()],
+    /// What flames burnt and killed, kg (`Counters::flame`), and the mol of each substance they gave the air
+    pub flame: [f64; pcore::flame::FLOWS.len()],
+    pub flame_air: Vec<f64>,
 }
 
 impl Recorder {
