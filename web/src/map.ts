@@ -3,7 +3,7 @@
 // texel a square), then what others draw on the GPU (the plant cover, vegetation.ts).
 // Over it a 2D canvas holds what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
 // picked, and the scale bar.
-import { Draw, Format, Gpu, Made, Pass, Texture, Uniforms, madeFor, openGpu, seenFrom } from './gpu';
+import { Draw, EVERY_SIZE_M, Format, Gpu, Made, Pass, Texture, Uniforms, madeFor, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
@@ -49,9 +49,6 @@ export interface GpuLayer {
 
 /** The format of the textures the map is drawn into below the screen's pixels and for its sharp picture. */
 export const MAP_TARGET: Format = 'rgba8unorm';
-/** Where the live map's programs are made ahead in order of their sizes of a pixel (`warmAhead`), the one made for
- * every size counts as made for this many metres. */
-const LAND_FINEST_M = 0.25;
 
 /** The sharp picture being drawn once the view rests: its tiles to draw (x, y, w, h device px), the copies' places
  * (css px) and the device pixels a css pixel. */
@@ -373,7 +370,7 @@ export class MapView {
    * for the canvas and for the textures the map is drawn into (`MAP_TARGET`). So zooming in or out first does not wait
    * for a program to be made. */
   private warmAhead(gpu: Gpu, seen: number): void {
-    const lands = madeFor('land', Infinity), m = (key: string) => +(key.split(':')[1] ?? 0) || LAND_FINEST_M;
+    const lands = madeFor('land', Infinity), m = (key: string) => +(key.split(':')[1] ?? 0) || EVERY_SIZE_M;
     lands.sort((a, b) => Math.abs(Math.log(m(a) / seen)) - Math.abs(Math.log(m(b) / seen)));
     const targets = [null, MAP_TARGET];
     lands.forEach((key, i) => {
