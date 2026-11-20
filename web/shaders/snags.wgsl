@@ -27,6 +27,9 @@ const BARE_FRESH = 0.15; const BARE_OLD = 0.5; const STUMP_OLD = 0.35; const STE
 // Dead wood weathers grey: a bare tree's bark is drawn `GREYED` of the way to its own grey, lit to `GREY_LIGHT` times as
 // light. Each dead tree's tone is moved by up to `TINT` either way, warmer or cooler, by its own draw.
 const GREYED = 0.65; const GREY_LIGHT = 1.35; const TINT = 0.12;
+// The charred sprites' scans read a little blue: burnt bark in the sun is charcoal to grey-brown, so they are drawn
+// warmer by `CHAR_TONE`.
+const CHAR_TONE = vec3f(1.1, 1.0, 0.85);
 // The trees with bare twins (sprites.wgsl `bare_of`): sprites 0 to `BARE_TREES_A - 1` and from `BARE_TREES_A + 2` to
 // `BARE_TREES_N + 1` (the quiver trees' second pair has none).
 const BARE_TREES_A = 19; const BARE_TREES_N = 27;
@@ -84,7 +87,7 @@ fn snag_texel(q: Snag, uv: vec2f, g: f32) -> vec4f {
   let quarter = vec2f(f32(k % 2), f32(k / 2));
   let at = (quarter + vec2f(0.5 - 0.5 * size.x, 1.0 - size.y - SNAG_FOOT) + uv * size) * 0.5;
   let t = textureSampleGrad(detail_tex, detail_sampler, at, SNAGS_FROM + q.s / 4, vec2f(0.5 * g * size.x, 0.0), vec2f(0.0, 0.5 * g * size.y));
-  return vec4f(srgb(unsrgb(t.rgb) * q.tint), t.a);
+  return vec4f(srgb(unsrgb(t.rgb) * CHAR_TONE * q.tint), t.a);
 }
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
