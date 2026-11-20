@@ -43,9 +43,10 @@ const FLAME_FADE = 0.005;
 // settling). Light passes the column by e^-(`EXTINCTION` × g/m²): biomass smoke takes 3.5 to 5 m² a gram (Reid and
 // others 2005). Smoke rises over the flames before the wind lays it over the ground the map shows: within about
 // `SMOKE_RISE_M` of them the column is thin (a plume's rise, Briggs 1975, read). The Earth view draws it `SMOKE_EARTH`
-// times as thick, so a fire's plume shows.
+// times as thick, so a fire's plume shows, and covers no more than `SMOKE_EARTH_MOST` of the map under it, so a fire
+// shows through its own smoke.
 const SMOKE_SHARE = 0.006; const FLAMING_S = 1.15e5; const SPREAD = 0.25; const PLUME_M = 8000.0; const EXTINCTION = 4.5;
-const SMOKE_RISE_M = 400.0; const SMOKE_EARTH = 15.0; const CALM_M_S = 0.5;
+const SMOKE_RISE_M = 800.0; const SMOKE_EARTH = 2.0; const SMOKE_EARTH_MOST = 0.8; const CALM_M_S = 0.5;
 // The column is summed over `PLUME_STEPS` steps upwind, each read at three points across the spread.
 const PLUME_STEPS = 8;
 // Smoke scatters light about evenly over colours: grey to white (`SMOKE_RGB`), browner within `SMOKE_YOUNG_M` of the
@@ -159,7 +160,7 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
   // The smoke over it all: its column's depth, thicker in the Earth view; its texture moves with the wind.
   let col = smoke_column(at, f.wind);
   let drift = at - f.wind * time;
-  let rough = 0.65 + 0.35 * noise(drift / SMOKE_NOISE_M, 21).x + 0.25 * noise(drift / (0.4 * SMOKE_NOISE_M), 22).x;
+  let rough = 0.55 + 0.5 * noise(drift / SMOKE_NOISE_M, 21).x + 0.3 * noise(drift / (0.4 * SMOKE_NOISE_M), 22).x;
   var tau = EXTINCTION * col.x * select(1.0, SMOKE_EARTH, earth_view) * max(rough, 0.0);
   let puffs = shows_at(PUFF_M, e) * ease(PUFF_PX.x * e, PUFF_PX.y * e, PUFF_M);
   if (puffs > 0.0 && tau > 0.0) {
@@ -178,6 +179,6 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
   let smoke = 1.0 - exp(-tau);
   let tone = mix(SMOKE_YOUNG_RGB, SMOKE_RGB, ease(0.0, SMOKE_YOUNG_M, col.y));
   // Light the flames give, covered by the smoke over them; the smoke over the map.
-  let a = max(smoke, 0.0);
+  let a = clamp(smoke, 0.0, select(1.0, SMOKE_EARTH_MOST, earth_view));
   return vec4f(tone * a + light * (1.0 - 0.7 * a), a) * draw.alpha;
 }

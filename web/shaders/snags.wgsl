@@ -1,22 +1,27 @@
 // uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl sprites.wgsl heights.wgsl tex.wgsl fire.wgsl
 // The dead trees fire left standing over the live map, over its plants (web/src/fire.ts; drawn only over the squares
 // that hold them): as many as the core's dead walls standing (`FireAt.snag`, kg/m²) make, one at most in each cell of a
-// lattice fixed in the world, each a sprite of web/textures/snags.png (a charred trunk, dead stems or, more of them the
-// longer since the burn, a stump broken off), leaning more the longer since the burn. Seen from afar, their mean dark
-// over the ground. Colours are the screen's shares, 0..1, premultiplied.
+// lattice fixed in the world, each a sprite of web/textures/snags.png: a stand of dead stems, a charred trunk broken
+// off, or a stump, more of them broken and leaning the longer since the burn. Seen from afar, their mean dark over the
+// ground. Colours are the screen's shares, 0..1, premultiplied.
 
-// One dead tree standing holds `SNAG_KG` of walls, and stands `SNAG_TALL` m tall (`SNAG_VARY` either way): a stem of
-// about 20 cm and 12 m, from memory. A cell of the lattice is `SNAG_CELL` m across and holds one with the chance its
-// share of the walls makes.
-const SNAG_KG = 100.0; const SNAG_TALL = 12.0; const SNAG_VARY = 0.3; const SNAG_CELL = 6.0;
-// The sprites (snags.png): their count, the trunks' and the stems' first, the stumps' first; each one's width and
-// height as shares of its quarter, its foot `SNAG_FOOT` of the quarter over the bottom (bake/snags.py).
-const SNAG_SPRITES = 7; const SNAG_STUMPS = 4; const SNAG_FOOT = 2.0 / 256.0;
+// One dead tree holds `SNAG_KG` of walls, from memory (a stem of about 20 cm and 10 m). A cell of the lattice is
+// `SNAG_CELL` m across and holds one with the chance its share of the walls makes.
+const SNAG_KG = 150.0; const SNAG_CELL = 8.0;
+// The sprites (snags.png), each its width and height as shares of its quarter, its foot `SNAG_FOOT` of the quarter over
+// the bottom (bake/snags.py): three charred trunks broken off (`KIND_TRUNK`), a stand of dead stems (`KIND_STEMS`), three
+// charred stumps (`KIND_STUMP`); the first sprite of each kind and how many, and each kind's height drawn, m (its tallest
+// part), `SNAG_VARY` either way.
+const SNAG_FOOT = 2.0 / 256.0; const SNAG_VARY = 0.25;
 var<private> SNAG_W: array<f32, 7> = array<f32, 7>(0.391, 0.289, 0.434, 0.984, 0.582, 0.688, 0.449);
 var<private> SNAG_H: array<f32, 7> = array<f32, 7>(0.988, 0.988, 0.988, 0.539, 0.941, 0.996, 0.996);
-// A stump stands `STUMP_TALL` of a standing snag's height. A dead tree is a stump with the chance the months since the
-// burn are of the most the core tells apart, and leans by up to `LEAN_MOST` radians as far.
-const STUMP_TALL = 0.3; const LEAN_MOST = 0.6;
+const KIND_TRUNK = 0; const KIND_STEMS = 1; const KIND_STUMP = 2;
+var<private> KIND_FROM: array<i32, 3> = array<i32, 3>(0, 3, 4);
+var<private> KIND_N: array<i32, 3> = array<i32, 3>(3, 1, 3);
+var<private> KIND_TALL: array<f32, 3> = array<f32, 3>(5.0, 9.0, 1.5);
+// A fresh snag is a stand of stems with the chance `STEMS_FRESH`; the longer since the burn (its share of the most
+// months the core tells apart) the more are stumps, and the more they lean, by up to `LEAN_MOST` radians.
+const STEMS_FRESH = 0.45; const LEAN_MOST = 0.6;
 // From afar, a snag darkens the ground it stands over by `SNAG_DARK` of its cover.
 const SNAG_DARK = 0.5;
 
@@ -44,18 +49,24 @@ fn snag_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
   let old = clamp(f.age / max(fire.air.y, 1.0), 0.0, 1.0);
   // Up close each snag in the cells whose snags reach the point (the point lies over a foot, or north of it within its
   // height as the map's angled view draws it); from afar their mean.
-  let shows = as_thing(MAP_VIEW.y * SNAG_TALL, e);
+  let shows = as_thing(MAP_VIEW.y * KIND_TALL[KIND_TRUNK], e);
   var out = vec4f(0.0);
   if (shows > 0.0) {
     let cell = vec2i(floor(at / SNAG_CELL));
-    let reach = i32(ceil(MAP_VIEW.y * SNAG_TALL * (1.0 + SNAG_VARY) / SNAG_CELL));
-    for (var dy = 0; dy <= reach; dy++) {
-      for (var dx = -1; dx <= 1; dx++) {
+    // The cells whose snags reach the point: south of it within the tallest's height, either side within half the
+    // widest's width.
+    let most = KIND_TALL[KIND_STEMS] * (1.0 + SNAG_VARY);
+    let down = i32(ceil(MAP_VIEW.y * most / SNAG_CELL));
+    let across = i32(ceil(0.5 * most * SNAG_W[KIND_FROM[KIND_STEMS]] / SNAG_H[KIND_FROM[KIND_STEMS]] / SNAG_CELL));
+    for (var dy = 0; dy <= down; dy++) {
+      for (var dx = -across; dx <= across; dx++) {
         let c = cell + vec2i(dx, dy);
         if (unit(c, 41) >= chance) { continue; }
-        let stump = unit(c, 42) < old;
-        let s = select(i32(unit(c, 43) * f32(SNAG_STUMPS)), SNAG_STUMPS + i32(unit(c, 43) * f32(SNAG_SPRITES - SNAG_STUMPS)), stump);
-        let tall = MAP_VIEW.y * SNAG_TALL * mix(1.0 - SNAG_VARY, 1.0 + SNAG_VARY, unit(c, 44)) * select(1.0, STUMP_TALL, stump);
+        let pick = unit(c, 42);
+        var kind = KIND_TRUNK;
+        if (pick < old) { kind = KIND_STUMP; } else if (pick < old + STEMS_FRESH * (1.0 - old)) { kind = KIND_STEMS; }
+        let s = KIND_FROM[kind] + min(i32(unit(c, 43) * f32(KIND_N[kind])), KIND_N[kind] - 1);
+        let tall = MAP_VIEW.y * KIND_TALL[kind] * mix(1.0 - SNAG_VARY, 1.0 + SNAG_VARY, unit(c, 44));
         let foot = (vec2f(c) + vec2f(unit(c, 45), unit(c, 46))) * SNAG_CELL;
         // The point in the sprite's frame, turned by its lean about its foot (its side the sprite's height a quarter).
         let lean = LEAN_MOST * old * (2.0 * unit(c, 47) - 1.0);
@@ -68,6 +79,7 @@ fn snag_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
       }
     }
   }
-  let mean = SNAG_DARK * chance * 0.5 * SNAG_W[0] * MAP_VIEW.y * SNAG_TALL * SNAG_TALL / (SNAG_CELL * SNAG_CELL);
+  let tall = KIND_TALL[KIND_TRUNK];
+  let mean = SNAG_DARK * chance * 0.5 * SNAG_W[0] * MAP_VIEW.y * tall * tall / (SNAG_CELL * SNAG_CELL);
   return mix(vec4f(0.0, 0.0, 0.0, min(mean, 1.0)), out, shows) * draw.alpha;
 }
