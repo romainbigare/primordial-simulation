@@ -86,7 +86,8 @@ impl Column {
 }
 
 /// How a substance stands in every ground node now, where it stands alike in all: a gas (at or over its boiling point),
-/// a liquid or a solid (under it, at or over its melting point or under it, on no node's plateau); else it varies.
+/// a liquid or a solid (under it, at or over its melting point or under it, on no node's plateau); else it varies, as a
+/// mineral of growth always does (the exchange sites of each node hold their share of it, `State::dissolved`).
 #[derive(Clone, Copy)]
 pub(super) enum Same {
     Gas,
@@ -104,6 +105,7 @@ impl Same {
         (s.sp.iter().zip(plateau))
             .map(|(sp, on)| match () {
                 _ if sp.boil <= tmin => Same::Gas,
+                _ if sp.mineral => Same::Varies,
                 _ if sp.boil > tmax && !on && sp.melt <= tmin => Same::Liquid,
                 _ if sp.boil > tmax && !on && sp.melt > tmax => Same::Solid,
                 _ => Same::Varies,
@@ -118,11 +120,13 @@ pub(super) fn bed_layer(x: &mut [f64; LAYERS], sp: &Sp, a: f64) {
     (x[0], x[3]) = (x[0] + a * sp.mm, x[3] + a * sp.v[0]);
 }
 
-/// `a` mol of substance `k` in ground node `i`, in its phase by the node's temperature and plateau (`State`).
+/// `a` mol of substance `k` in ground node `i`, in its phase by the node's temperature and plateau (`State`): its gas
+/// and its liquid (`Sp::liquid`) with the liquid, the rest with the solids.
 #[inline]
 pub(super) fn ground_layers(x: &mut [f64; LAYERS], s: &Scratch, (k, i): (usize, usize), a: f64) {
     let (sp, t) = (&s.sp[k], s.state.tg[i]);
-    let wet = if t >= sp.boil { 1.0 } else if s.state.pk[i] == k { s.state.phi[i] } else { (t >= sp.melt) as u8 as f64 };
+    let molten = if s.state.pk[i] == k { s.state.phi[i] } else { (t >= sp.melt) as u8 as f64 };
+    let wet = if t >= sp.boil { 1.0 } else { sp.liquid(t, molten, s.state.dissolved[i]) };
     let (wet_mol, dry_mol) = (a * wet, a - a * wet);
     (x[2], x[5]) = (x[2] + wet_mol * sp.mm, x[5] + if t < sp.boil { wet_mol * sp.v[1] } else { 0.0 });
     solid_layer(x, sp, t, dry_mol);
