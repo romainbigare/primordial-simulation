@@ -79,8 +79,9 @@ impl Parts {
 /// A part as the air's step reads it (`air::surf::Surf::of_part`), as the last `solve` found it: its share of the
 /// cell's area and of its ground (`Parts::ground`), its mol of each substance, its heat, J, and heat capacity, J/K; its
 /// temperature, K, plateau's substance (or `NONE`) and molten share, and fusion enthalpy held (`Latent`); its soft cover
-/// (`Scratch::cover`), reflectance, and pore space as a depth over its area, m; and the layers of the part under it,
-/// which its reflectance sees through (the top's deep, `land::layers`).
+/// (`Scratch::cover`), reflectance, and pore space as a depth over its area, m; the layers of the part under it,
+/// which its reflectance sees through (the top's deep, `land::layers`); and its cell's share of the minerals of growth
+/// that stays dissolved (`State::dissolved`).
 #[derive(Clone, Debug)]
 pub(super) struct Piece {
     pub(super) share: f64,
@@ -96,13 +97,14 @@ pub(super) struct Piece {
     pub(super) alb: f64,
     pub(super) pd: f64,
     pub(super) below: [f64; 6],
+    pub(super) free: f64,
 }
 
 impl Piece {
-    /// The mol of substance `k` (`sp`) it holds liquid, by its temperature and plateau.
+    /// The mol of substance `k` (`sp`) it holds liquid, by its temperature and plateau (`Sp::liquid`).
     pub(super) fn liquid(&self, k: usize, sp: &super::scratch::Sp) -> f64 {
         let molten = if self.pk == k { self.phi } else { (self.latent.molten >> k & 1) as f64 };
-        if self.tg < sp.boil { self.amt[k] * molten } else { 0.0 }
+        self.amt[k] * sp.liquid(self.tg, molten, self.free)
     }
 }
 
@@ -268,7 +270,7 @@ pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool
     let mut p = kept.clone();
     moves::reconcile(w, s, i, &mut p);
     let mut f = found(w, s, i, &p);
-    if moving && moves::settle(s, &mut p, &f, por) {
+    if moving && moves::settle(s, i, &mut p, &f, por) {
         f = found(w, s, i, &p);
     }
     let (to, deep) = if moving { (moves::covers(s, i, &p, &f, (stands(&f, por), por)), deep::under(w, s.fill(i), liquid(&f, por))) } else { (p.wet, None) };
@@ -322,7 +324,7 @@ pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Pa
         return None;
     }
     // Each liquid's share in the liquid, mixed, and its area's share of the rest.
-    let liquid = |k: usize| if s.state.vary.contains(&k) && th.t < s.sp[k].boil { amt(k) * th.molten(k) } else { 0.0 };
+    let liquid = |k: usize| if s.state.vary.contains(&k) { amt(k) * s.sp[k].liquid(th.t, th.molten(k), s.state.dissolved[i]) } else { 0.0 };
     let amts: Vec<[f64; PARTS]> = (0..w.chem.ns())
         .map(|k| {
             let held = liquid(k) * top / l[2] + wet * (amt(k) - liquid(k));
@@ -359,5 +361,6 @@ fn piece(w: &World, s: &Scratch, i: usize, (p, q): (&Parts, usize), f: &[Found; 
         alb: column(w, s, (i, share), &std::array::from_fn(|y| x.l[y] + below[y])),
         pd: per(por * x.l[4]),
         below,
+        free: s.state.dissolved[i],
     }
 }

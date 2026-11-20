@@ -7,8 +7,9 @@
 // Of each sample (a texel each): the depth of its loose ground, m, the largest stone its channel moves, m, the slope of
 // its channel's reach (rise over run), and its channel's links (`links_of`); in a second plane under the first, the
 // reflectance of its bed's make; and in a third, its loose ground's shares of coarse and fine grain, how slowly it
-// passes liquid (`grain_at`) and the liquid it holds for roots as the layer `avail` shows it; and in a fourth, its
-// field capacity and wilting point as shares of its pores (tape/src/ground/rock.rs).
+// passes liquid (`soil_at`) and the liquid it holds for roots as the layer `avail` shows it; and in a fourth, its
+// field capacity and wilting point as shares of its pores, how deep the load the liquid laid lies on it, m, and the
+// decimal logarithm of the years its loose ground has lain (tape/src/ground/rock.rs).
 @group(0) @binding(18) var rock_field: texture_2d<f32>;
 @group(0) @binding(19) var rock_sampler: sampler;
 
@@ -23,7 +24,7 @@ const PATCHY = 0.6; const PATCHY_M = 40.0; const PATCHY_OCTAVES = 4;
 const SMOOTH_LOOSE_M = 0.5;
 
 // The rock's planes (`rock_field`): the loose ground's and its channel's, the bed's make, the loose ground's grain, its
-// pores.
+// pores and its deposit.
 const LOOSE_PLANE = 0; const MAKE_PLANE = 1; const GRAIN_PLANE = 2; const PORES_PLANE = 3; const ROCK_PLANES = 4.0;
 
 // Plane `plane` of the samples at `at`, m from the map's north-west corner: through the samples' centres as a
@@ -60,18 +61,26 @@ fn rock_plane(uv: vec2f, plane: i32) -> vec2f {
 // fast.
 const GRAIN_PATCHY = 0.6; const GRAIN_PATCH_M = 60.0; const GRAIN_OCTAVES = 3;
 const GRAIN_WARP_M = 110.0; const GRAIN_WARP_SIZE_M = 260.0;
-// Plane `plane` of the samples' soil at `at` (`samples_at`), read up to `GRAIN_WARP_M` away.
-fn soil_samples_at(at: vec2f, plane: i32) -> vec4f {
-  let warp = vec2f(noise_turned(at / GRAIN_WARP_SIZE_M, 214), noise_turned(at / GRAIN_WARP_SIZE_M + 3.7, 215));
-  return samples_at(at + GRAIN_WARP_M * warp, plane);
+// The place the samples' soil is read for `at`: up to `GRAIN_WARP_M` away.
+fn soil_place(at: vec2f) -> vec2f {
+  return at + GRAIN_WARP_M * vec2f(noise_turned(at / GRAIN_WARP_SIZE_M, 214), noise_turned(at / GRAIN_WARP_SIZE_M + 3.7, 215));
 }
-// The loose ground's grain at `at`, seen at `e` m a pixel, as `Spot.grain` holds it with its organic matter `organic`
-// (the cells', which changes as the dead matter on the ground rots): the samples' (`samples_at`: the shares of coarse
-// and fine grain and how slowly it passes liquid), with its patches.
-fn grain_at(at: vec2f, e: f32, organic: f32) -> vec4f {
-  let g = soil_samples_at(at, GRAIN_PLANE);
+// Plane `plane` of the samples' soil at `at` (`samples_at`, at `soil_place`).
+fn soil_samples_at(at: vec2f, plane: i32) -> vec4f { return samples_at(soil_place(at), plane); }
+
+// The loose ground at a point: its grain as `Spot.grain` holds it, and its deposit as `Spot.deposit` does.
+struct SoilAt { grain: vec4f, deposit: vec2f }
+// The loose ground at `at`, seen at `e` m a pixel, with its organic matter `organic` (the cells', which changes as the
+// dead matter on the ground rots): the samples' grain (`samples_at`: the shares of coarse and fine grain and how
+// slowly it passes liquid), with its patches; and how deep the load the liquid laid lies there, m, and the decimal
+// logarithm of the years its loose ground has lain (`PORES_PLANE`, blended between the samples' centres: a deposit's
+// edge is eased where it is drawn, detail.wgsl `deposit_share`). Both read at one place (`soil_place`).
+fn soil_at(at: vec2f, e: f32, organic: f32) -> SoilAt {
+  let place = soil_place(at);
+  let g = samples_at(place, GRAIN_PLANE);
   let n = GRAIN_PATCHY * ragged(at, e, GRAIN_PATCH_M, GRAIN_OCTAVES, 210);
-  return vec4f(g.x * (1.0 + n), g.y * (1.0 - n), organic, g.z);
+  let laid = textureSampleLevel(rock_field, rock_sampler, rock_plane(place / (land.map.x * land.map.yz), PORES_PLANE), 0.0).zw;
+  return SoilAt(vec4f(g.x * (1.0 + n), g.y * (1.0 - n), organic, g.z), laid);
 }
 
 // The reflectance of the bed's make at `at`, m from the map's north-west corner, blended between the samples' centres:

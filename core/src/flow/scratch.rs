@@ -28,6 +28,32 @@ pub(super) struct Sp {
     /// The temperature over which its solid is soft cover lying on the loose ground (`Physics::soft` of its melting
     /// point), K
     pub(super) soft: f64,
+    /// Is it a mineral of growth (`Chemistry::is_mineral`), which the exchange sites of loose ground hold?
+    pub(super) mineral: bool,
+}
+
+impl Sp {
+    /// Its liquid share in ground at `t` K where the share `molten` of it is molten and the minerals of growth stay
+    /// dissolved by the share `free` (`State::dissolved`): none at or over its boiling point; of a mineral only what
+    /// stays dissolved, the rest held on the exchange sites, a solid of the ground that neither moves nor fills
+    /// (laws.md 4).
+    #[inline]
+    pub(super) fn liquid(&self, t: f64, molten: f64, free: f64) -> f64 {
+        if t >= self.boil {
+            0.0
+        } else if self.mineral {
+            molten * free
+        } else {
+            molten
+        }
+    }
+    /// The volume a mol of it takes in ground at `t` K (as `liquid`), m³: its liquid share at its liquid's molar volume,
+    /// the rest at its solid's; none as a gas.
+    #[inline]
+    pub(super) fn volume(&self, t: f64, molten: f64, free: f64) -> f64 {
+        let l = self.liquid(t, molten, free);
+        if t >= self.boil { 0.0 } else { (1.0 - l) * self.v[0] + l * self.v[1] }
+    }
 }
 
 /// The fusion enthalpy a ground node holds off a plateau, and the temperatures between which it holds it.
@@ -136,6 +162,9 @@ pub(super) struct State {
     pub(super) gas: Vec<usize>,
     /// Bonded ground of each ground node.
     pub(super) bed: Vec<Bed>,
+    /// Of each ground node, the share of the minerals of growth in it that stays dissolved in its liquid, the rest
+    /// held on the exchange sites of its loose ground, as the last build of its state found it (`land::dissolved`).
+    pub(super) dissolved: Vec<f64>,
     /// Of each ground node whose own ground lies partly under its liquid, how its matter and heat lie between its land
     /// and its liquid (`parts::Parts`); none for a node that is one.
     pub(super) parts: Vec<Option<super::parts::Parts>>,
@@ -345,8 +374,8 @@ pub(super) fn room(w: &World, s: &mut Scratch) {
 /// The numbers of each substance Flow reads often (`Sp`).
 pub(super) fn substances(chem: &Chemistry, phys: &crate::Physics) -> Vec<Sp> {
     let mean = |v: [f32; 3]| v.iter().map(|&x| x as f64).sum::<f64>() / 3.0;
-    (chem.subs.iter())
-        .map(|b| Sp {
+    (chem.subs.iter().enumerate())
+        .map(|(k, b)| Sp {
             cp: b.cp,
             mm: b.molar_mass,
             lf: b.lf,
@@ -357,6 +386,7 @@ pub(super) fn substances(chem: &Chemistry, phys: &crate::Physics) -> Vec<Sp> {
             boil: b.boil,
             refl: [mean(b.refl[0]), mean(b.refl[1])],
             soft: phys.soft * b.melt,
+            mineral: chem.is_mineral(k),
         })
         .collect()
 }

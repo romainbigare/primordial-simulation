@@ -1,4 +1,4 @@
-// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl no_grass.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl fire.wgsl snag.wgsl
 // The plant cover's marks over the live map (web/src/textures.ts): the trees and bushes, at every frame, plant by plant
 // where a plant takes a few pixels; where it takes less, the ground draws it as a field of the same colours
 // (lib/cover_field.wgsl), and the herbs always so, as its sward. Each lattice of marks (web/src/canopy.ts `LATTICES`)
@@ -29,9 +29,19 @@ fn shadow(dst: ptr<function, vec4f>, shade: ptr<function, f32>, a: f32) {
   *shade = a;
 }
 
+// The dead tree decided for cell k of the trees' lattice l (mark.wgsl `dead_decided`, `dead_at`), over dst at p, m
+// from the draw's corner, e m a pixel, as strongly as `fade`.
+fn dead_tree(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i32, k: vec2f, e: f32, fade: f32) {
+  let reach = (cover.grid[l].w + cover.reach[l].x) * cover.grid[l].z;
+  let seen = snag_seen(dead_at(l, k).q, p - mark_foot(l, k), e, reach);
+  shadow(dst, shade, fade * seen.shadow);
+  if (seen.rgba.a > 0.0) { over(dst, seen.rgba.rgb, seen.rgba.a * fade); }
+}
+
 // The marks of lattice l over dst at p, m from the draw's corner, e m a pixel, the deepest shadow laid on the pixel
 // `shade`: of the cells about the pixel's whose marks reach its cell (`reach_at`), the marks that stand and cover it
-// (`decided`).
+// (`decided`): living plants, and dead trees where fire left dead walls standing (mark.wgsl `dead_decided`), in one
+// order, row by row from the north.
 fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i32, e: f32) {
   let fade = cover_look.shown[l];
   if (fade <= 0.0) { return; }
@@ -43,6 +53,7 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       let k = cell + vec2f(f32(i), f32(j));
       let m = decided(l, k, p - mark_foot(l, k), e);
       if (m.x < 0.0) { continue; }
+      if (m.x >= dead_code()) { dead_tree(dst, shade, p, l, k, e, fade * m.y); continue; }
       // Its square, kind and place among the kind's groups (mark.wgsl `decide`).
       let packed = i32(m.x);
       let kd = packed / (GROUPS * PLACE_STEPS);

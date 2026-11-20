@@ -66,6 +66,7 @@ map.layer = vegetation;
 /** Fire on the live map: its scars, flames and smoke. */
 const fire = new Fire();
 map.fire = fire;
+vegetation.fire = fire;
 map.overlay = (_, ox, oy, s) => slots.seen(ox, oy, s);
 /** Which GPU draws the map (none: the page cannot draw it). */
 let drawnWith = '';

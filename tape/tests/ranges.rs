@@ -22,10 +22,11 @@ mod common;
 
 use common::{run, run_stepped, LIFE_YEAR};
 use pcore::chem::Phase;
+use pcore::store::Class;
 use pcore::{Config, World};
 use std::fmt;
 use worldgen::life::{KINDS, ONE, ROSTER};
-use worldgen::testkit::{ground_of, ABSORBER, LIQUID};
+use worldgen::testkit::{ABSORBER, LIQUID};
 
 const SEEDS: [u64; 3] = [1, 2, 3];
 const SIDE: usize = 64;
@@ -47,8 +48,8 @@ const RAIN_LAND: f64 = 2.536e-3;
 const ABSORBER_PPM: f64 = 306.9;
 /// Dry land cells that are rivers (`rivers`, `tape::is_river`), in the reference runs.
 const RIVERS: f64 = 275.0;
-/// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.1606;
+/// Mineral matter lost on the land of year 20, mm/yr (`rock`, loose and bonded), in the reference runs.
+const WORN: f64 = 0.02187;
 /// The cover (the light-eaters, `LIGHT_ROW`) at year 30, log10 kg (`root_1_cover_kg`), in the reference runs.
 const COVER_KG: f64 = 9.903;
 
@@ -137,9 +138,15 @@ const KEYS: [(&str, &str, f64, Range); 7] = [
     ("cover", "log10 kg", COVER_KG, Range::Plus(0.3)),
 ];
 
-/// The mean thickness of rock on the cells `land`, m.
+/// The mean thickness of mineral matter on the cells `land`, loose and bonded, m: the solids that melt above 1000 K that
+/// life does not make (not body matter, not what bodies build, not the slow organic matter on the particles), so organic
+/// matter that builds up on the land is not counted as the land rising.
 fn rock(w: &World, land: &[usize]) -> f64 {
-    land.iter().map(|&i| ground_of(w, i)).map(|g| g.0 + g.1).sum::<f64>() / land.len() as f64
+    let n = w.mesh.cells().n();
+    let organic = |k: usize| Some(k) == w.chem.matter() || w.chem.materials().any(|m| m == k) || w.chem.subs[k].bound;
+    let mineral: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > 1000.0 && !organic(k)).collect();
+    let of = |c: Class, i: usize| mineral.iter().map(|&k| w.store.amounts(c)[k * n + i] * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>() / w.mesh.cells().area()[i];
+    land.iter().map(|&i| of(Class::Ground, i) + of(Class::Bed, i)).sum::<f64>() / land.len() as f64
 }
 
 /// `YEARS` years of `ew run --seed <seed> --size 64`: the key numbers in the order of `KEYS`, then the rain on

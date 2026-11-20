@@ -6,7 +6,8 @@
 //! which a shell also reads alone: the form of the bed (riffles and pools, or steps) follows it.
 //! And the links of its channel (`links`), by which a shell finds the samples up and down it: what runs through a
 //! channel grows from one sample's centre to the next, not in a step at their edge. And the texture of its loose ground
-//! (`pcore::soil::textures`), which a shell draws its soil by.
+//! (`pcore::soil::textures`), which a shell draws its soil by; and the load the liquid laid on it and how long its loose
+//! ground has lain, which a shell draws its deposits by.
 
 use super::bends::Reaches;
 use super::half;
@@ -49,9 +50,10 @@ fn links(s: &Samples, k: usize) -> u32 {
 /// coarse and fine particles of its loose ground (`grain`, one a sample), how slowly its pores pass liquid, the decimal
 /// logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s), and the liquid it holds
 /// for roots (`Pores::for_roots` over its loose ground's depth) as the layer `avail` shows it (`layers::shown`); then of
-/// each sample again its field capacity and its wilting point as shares of its pores (`Pores::of`) and two zeros, by
-/// which a shell finds the share of the liquid for roots its pores hold at a point (`Pores::available`): four planes of
-/// a texture, one under the other.
+/// each sample again its field capacity and its wilting point as shares of its pores (`Pores::of`), by which a shell
+/// finds the share of the liquid for roots its pores hold at a point (`Pores::available`), and how deep the load the
+/// liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain
+/// (`Samples::age`, at least a year), by which a shell draws a deposit: four planes of a texture, one under the other.
 pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<u16> {
     let s = r.s;
     let mut out = Vec::with_capacity(16 * s.h.len());
@@ -69,8 +71,8 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<
         let roots = shown("avail", p.for_roots(loose));
         out.extend([half(t.coarse as f32), half(t.fine as f32), half(-p.seep.log10() as f32), half(roots)]);
     }
-    for p in &pores {
-        out.extend([half(p.field as f32), half(p.wilt as f32), 0, 0]);
+    for ((p, &settled), &age) in pores.iter().zip(&s.settled).zip(&s.age) {
+        out.extend([half(p.field as f32), half(p.wilt as f32), half(settled as f32), half(age.max(1.0).log10() as f32)]);
     }
     out
 }

@@ -745,7 +745,8 @@ The map stays a plan seen from above, but it shows matter, not symbols: water is
 its depth, the shore goes from dry ground through wet soil and mud to shallow water by the height over the liquid and
 the soil's water, rivers are channels of their true width and depth cut in the ground (hydraulic geometry, Leopold and
 Maddock 1953), small channels follow the water on the drawn ground, the ground shows its materials (rock and stones on
-steep slopes, soil, sand and gravel on shores, snow by slope), and plants are single plants placed by the plant cover
+steep slopes, soil, sand and gravel on shores, the load the water laid as flats of rippled sand and silt, mud and
+gravel where the water reaches it, snow by slope), and plants are single plants placed by the plant cover
 and the inside-a-cell shares (5.2), each kind by the wetness its genes like, their crowns with form and shadow. All of
 it comes from the world's numbers and the ground's shape, seeded by place, so it holds while the camera moves.
 

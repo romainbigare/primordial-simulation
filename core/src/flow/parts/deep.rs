@@ -35,7 +35,7 @@ pub(super) fn layer(s: &Scratch, i: usize, p: &mut Parts, f: &[Found; PARTS], (d
             }
             p.heat[TOP] -= h;
             p.heat[DEEP] += h;
-            give(s, p, (top, TOP, DEEP), ((top.pores(por).min(top.l[2]) + v) / top.l[2]).min(1.0));
+            give(s, i, p, (top, TOP, DEEP), ((top.pores(por).min(top.l[2]) + v) / top.l[2]).min(1.0));
             true
         }
         (Some(v), true) => {
@@ -44,22 +44,22 @@ pub(super) fn layer(s: &Scratch, i: usize, p: &mut Parts, f: &[Found; PARTS], (d
                 return false;
             }
             if d > 0.0 {
-                give(s, p, (&f[TOP], TOP, DEEP), (d / f[TOP].l[2]).min(1.0));
+                give(s, i, p, (&f[TOP], TOP, DEEP), (d / f[TOP].l[2]).min(1.0));
             } else {
-                give(s, p, (&f[DEEP], DEEP, TOP), (-d / f[DEEP].l[2]).min(1.0));
+                give(s, i, p, (&f[DEEP], DEEP, TOP), (-d / f[DEEP].l[2]).min(1.0));
             }
             true
         }
     }
 }
 
-/// Part `from` of `p` (found as `f`) gives part `to` the share `x` of each liquid it holds, each mol with its heat at
-/// its temperature and the fusion enthalpy it holds.
-fn give(s: &Scratch, p: &mut Parts, (f, from, to): (&Found, usize, usize), x: f64) {
+/// Part `from` of `p` in cell `i` (found as `f`) gives part `to` the share `x` of each liquid it holds (`Sp::liquid`),
+/// each mol with its heat at its temperature and the fusion enthalpy it holds.
+fn give(s: &Scratch, i: usize, p: &mut Parts, (f, from, to): (&Found, usize, usize), x: f64) {
     let t = f.th.t;
     let mut h = 0.0;
     for &k in s.state.vary.iter().filter(|&&k| t < s.sp[k].boil) {
-        let m = p.amt[k][from] * f.th.molten(k) * x;
+        let m = p.amt[k][from] * s.sp[k].liquid(t, f.th.molten(k), s.state.dissolved[i]) * x;
         (p.amt[k][from], p.amt[k][to]) = (p.amt[k][from] - m, p.amt[k][to] + m);
         h += m * (s.sp[k].cp * t + s.sp[k].lf);
     }
