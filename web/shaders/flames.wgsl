@@ -21,9 +21,9 @@ const LEAN = 1.4; const LEAN_MOST = 1.7;
 // The flame's light (the screen's shares, added): white-yellow at its foot, orange, red at its tip, as a flame of
 // burning wood glows at about 1400 K at its foot and cools to 1000 K in its tip (Drysdale 2011, read).
 const FLAME_FOOT = vec3f(1.0, 0.86, 0.48); const FLAME_MID = vec3f(1.0, 0.47, 0.10); const FLAME_TIP = vec3f(0.62, 0.10, 0.02);
-// Behind the front the burnt share of this month glows with embers: `EMBERS` of the flames' red, in specks of about
-// `EMBER_M` that flicker; seen from afar, their mean.
-const EMBERS = 0.35; const EMBER_M = 0.6; const EMBER_RGB = vec3f(0.95, 0.25, 0.04);
+// Behind the front the burnt share of this month glows with embers: `EMBERS` of the flames' red, in sparse specks of
+// about `EMBER_M` that flicker (where the noise passes `EMBER_SPARSE`); seen from afar, their mean (`EMBER_MEAN`).
+const EMBERS = 0.35; const EMBER_M = 0.6; const EMBER_SPARSE = 0.75; const EMBER_MEAN = 0.1; const EMBER_RGB = vec3f(0.95, 0.25, 0.04);
 // A burning square glows over its ground and the squares about it, seen from afar: as bright as `GLOW` times its
 // burning share over `GLOW_SHARE` (held to 1) times its flames' length over `GLOW_M` (held to 1), fading in as a pixel
 // takes from `GLOW_E.x` to `GLOW_E.y` m, where its fronts are too thin to see. In the Earth view stronger by
@@ -41,10 +41,14 @@ const SWEEP_M = 400.0; const SWEEP_OCTAVES = 6; const SWEEP_LEVELS = 3.0; const 
 // share blended between the squares' centres ends; none stands on liquid (its ponds' as the ground's tiles draw them,
 // land.wgsl `standing`, deeper than `FILM_M`).
 const FLAME_FADE = 0.005; const FLAME_COVER = 0.8;
+// The fronts inside a burning share are drawn as lines where their flaming depth takes from `INNER_PX.x` to
+// `INNER_PX.y` pixels: thinner, a share's glow is its embers' mean.
+const INNER_PX = vec2f(1.0, 3.0);
 
 // Smoke: of the gas a burning square sends to the air, `SMOKE_SHARE` is its particles (biomass burning gives about
 // 10 g of fine particles to 1600 g of carbon dioxide: Andreae and Merlet 2001), sent over the hours its fronts burn,
-// `FLAMING_S` (four days of a front's life, eight hours a day: Andela and others 2019). The wind carries them at its
+// `FLAMING_S` (ten days of its fronts' burning, eight hours a day: a square's fire lives days to weeks, Andela and others
+// 2019). The wind carries them at its
 // speed; a point's column is what the burning ground upwind sends over the time the wind takes to cross it, spread
 // sideways `SPREAD` of the way gone and lost from the column over `PLUME_M` (rising out of the layer the map shows,
 // settling). Light passes the column by e^-(`EXTINCTION` × g/m²): biomass smoke takes 3.5 to 5 m² a gram (Reid and
@@ -52,8 +56,8 @@ const FLAME_FADE = 0.005; const FLAME_COVER = 0.8;
 // `SMOKE_RISE_M` of them the column is thin (a plume's rise, Briggs 1975, read). The Earth view draws it `SMOKE_EARTH`
 // times as thick, so a fire's plume shows, and covers no more than `SMOKE_EARTH_MOST` of the map under it, so a fire
 // shows through its own smoke.
-const SMOKE_SHARE = 0.006; const FLAMING_S = 1.15e5; const SPREAD = 0.25; const PLUME_M = 8000.0; const EXTINCTION = 4.5;
-const SMOKE_RISE_M = 800.0; const SMOKE_EARTH = 2.0; const SMOKE_EARTH_MOST = 0.8; const CALM_M_S = 0.5;
+const SMOKE_SHARE = 0.006; const FLAMING_S = 2.9e5; const SPREAD = 0.5; const PLUME_M = 8000.0; const EXTINCTION = 4.5;
+const SMOKE_RISE_M = 800.0; const SMOKE_EARTH = 2.0; const SMOKE_EARTH_MOST = 0.45; const CALM_M_S = 0.5;
 const SMOKE_NEAR_E = vec2f(0.15, 1.5);
 // The column is summed over `PLUME_STEPS` steps upwind, each read at five points across the spread, weighted as a
 // Gaussian of the spread (`PLUME_ACROSS`).
@@ -182,14 +186,16 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
   var light = vec3f(0.0);
   if (f.flame > 0.0) {
     let shown = ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * f.length);
+    // The fronts inside the share show where they are a few pixels deep; from afar the share glows with its mean.
+    let resolved = ease(INNER_PX.x * e, INNER_PX.y * e, FLAME_DEPTH * f.length);
     let inner = max(band - zone, 0.0);
     let flaming = max(1.0 - ease(max(FLAME_DEPTH * f.length, FRONT_PX * e), max(FLAME_DEPTH * f.length, FRONT_PX * e) + e, behind_m), 0.0);
     light += tongues(at, t, f.length, f.wind, e, time) * shown;
-    light += inner * tongues(at, (round(sweep) - sweep) / sweep_dy, f.length, f.wind, e, time) * shown;
-    // The fronts flame where tongues do not show (from afar, their mean light); the embers flicker behind them.
-    light += (zone + inner * flaming) * FLAME_MID * (1.0 - shown);
-    let speck = ease(0.55, 0.9, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
-    let specks = mix(0.5, speck * 2.0, shows_at(EMBER_M, e));
+    light += inner * resolved * tongues(at, (round(sweep) - sweep) / sweep_dy, f.length, f.wind, e, time) * shown;
+    // The fronts flame where tongues do not show; the embers flicker behind them.
+    light += (zone + inner * resolved * flaming) * FLAME_MID * (1.0 - shown);
+    let speck = ease(EMBER_SPARSE, 1.0, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
+    let specks = mix(EMBER_MEAN, speck, shows_at(EMBER_M, e));
     light += EMBERS * inner * (1.0 - flaming) * mix(EMBER_BASE, 1.0, exp(-behind / EMBER_FADE)) * specks * EMBER_RGB;
     light *= ease(0.0, FLAME_FADE, f.flame) * select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M);
   }

@@ -17,7 +17,7 @@ const SNAG_FOOT = 2.0 / 256.0;
 const KIND_TRUNK = 0; const KIND_STEMS = 1; const KIND_STUMP = 2; const KIND_BARE = 3;
 var<private> KIND_FROM: array<i32, 3> = array<i32, 3>(TRUNK_FROM, STEMS_FROM, STUMP_FROM);
 var<private> KIND_N: array<i32, 3> = array<i32, 3>(TRUNK_N, STEMS_N, STUMP_N);
-var<private> KIND_TALL: array<f32, 4> = array<f32, 4>(5.0, 9.0, 1.4, 12.0);
+var<private> KIND_TALL: array<f32, 4> = array<f32, 4>(5.0, 9.0, 1.4, 10.0);
 const SNAG_VARY = 0.3;
 // The longer since the burn (`old`, its share of the most months the core tells apart), the more dead trees are bare
 // grey trees (`BARE_FRESH` of them at once, `BARE_OLD` more when old) and stumps (`STUMP_OLD` when old) and the more

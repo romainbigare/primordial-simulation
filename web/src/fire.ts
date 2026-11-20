@@ -26,7 +26,7 @@ const LAYERS: Record<keyof FirePlanes, string> = {
 
 /** The smoke reaches this far downwind, m, and spreads this share of the way gone to each side (flames.wgsl
  * `PLUME_M`, `SPREAD`). */
-const PLUME_M = 8000, SPREAD = 0.25;
+const PLUME_M = 8000, SPREAD = 0.5;
 /** The box of a plume reaches this many times its spread to each side, so its soft edge is not cut. */
 const SPREAD_BOX = 2.5;
 /** A square's numbers are blended into the squares about it (fire.wgsl `fire_plane`): the boxes reach one square

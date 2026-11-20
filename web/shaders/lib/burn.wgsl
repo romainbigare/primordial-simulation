@@ -22,8 +22,12 @@ const ASH_HIDES_KG = 0.25;
 // of a kg/m² of standing dead leaf, from memory); the Earth view tints the low plants' cover towards straw by that share
 // (`STRAW`, the pale yellow of dry grass in the style).
 const CURED_HIDES_KG = 0.15; const STRAW = vec3f(0.62, 0.50, 0.22);
-// The char's photograph (fire.jpg's second layer) is this many metres across.
-const CHAR_PHOTO_M = 1.0;
+// The char's photograph (fire.jpg's second layer, burnt ground: char, ash, needles and stalks left) is this many metres
+// across; up close it gives the char its own colours about the char's (its colour over its mean, squared: the photograph
+// is of a weathered burn, a fresh one's grey ash and pale stalks stand out of blacker char). A fire leaves `UNBURNT` of
+// the ground it runs over only scorched, in ragged spots from `UNBURNT_M` across (a burn's patchiness down to the
+// metre: Key and Benson 2006, read).
+const CHAR_PHOTO_M = 1.0; const UNBURNT = 0.07; const UNBURNT_M = 0.6; const UNBURNT_OCTAVES = 2;
 
 // Spot p with the marks of fire on it: where it lies dry, the share of it under a scar (`Spot.scar.x`), how much of it
 // is char, ash and scorched soil (`.yzw`); in the Earth view its cover tinted by the cured leaves standing in it.
@@ -37,28 +41,37 @@ fn burnt_spot(p: Spot) -> Spot {
     q.cover = vec4f(mix(q.cover.rgb, STRAW * q.cover.a, low * -expm1(-f.cured / CURED_HIDES_KG)), q.cover.a);
   }
   if (f.burnt <= 0.0) { return q; }
-  let scar = under_share(burn_rank(p.at, p.e), f.burnt);
-  q.scar = vec4f(scar, exp(-f.age / CHAR_MONTHS), -expm1(-f.ash / ASH_HIDES_KG), exp(-f.age / SCORCHED_MONTHS));
+  let rank = burn_rank(p.at, p.e);
+  let scar = under_share(rank, f.burnt);
+  let age = scar_age(p.at, rank.x);
+  q.scar = vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-f.ash / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
   return q;
 }
 
 // The scar's colour over ground colour `c` at spot p: its scorched soil, its char, its ash (`burnt_spot`), each over
-// the last; up close the char's photograph gives it its grain.
+// the last; up close the char in the photograph's colours and its unburnt spots scorched alone.
 fn scar_over(c: vec3f, p: Spot) -> vec3f {
   let s = p.scar;
+  if (s.x <= 0.0) { return c; }
+  let near = shows_at(CHAR_PHOTO_M, p.e);
+  var char_rgb = CHAR;
+  var char_share = s.y;
+  if (near > 0.0) {
+    let g = p.e / CHAR_PHOTO_M;
+    let photo_rgb = photo(FIRE_FROM + 1, p.at / CHAR_PHOTO_M, vec2f(g, 0.0), vec2f(0.0, g)) / max(photo_mean(FIRE_FROM + 1), vec3f(1e-3));
+    char_rgb = CHAR * mix(vec3f(1.0), photo_rgb * photo_rgb, near);
+    let spots = smoothstep(-EVEN_ONE, EVEN_ONE, ragged(p.at, p.e, UNBURNT_M, UNBURNT_OCTAVES, 93));
+    char_share *= 1.0 - near * shows_at(UNBURNT_M, p.e) * (1.0 - smoothstep(UNBURNT - 0.05, UNBURNT + 0.05, spots));
+  }
   var rgb = mix(c, SCORCHED, s.w);
-  rgb = mix(rgb, CHAR, s.y);
+  rgb = mix(rgb, char_rgb, char_share);
   rgb = mix(rgb, ASH, s.z);
   return mix(c, rgb, s.x);
 }
 
-// The Earth view's floor `c` (colour.wgsl `ground_of`) under the scar, with the char's grain; and the share of it the
-// scar takes from the soil's own tint.
-fn burnt_floor(c: vec3f, p: Spot) -> vec4f {
-  if (p.scar.x <= 0.0) { return vec4f(c, 0.0); }
-  let grain = mix(1.0, photo_light(FIRE_FROM + 1, p.at / CHAR_PHOTO_M, p.e / CHAR_PHOTO_M), shows_at(CHAR_PHOTO_M, p.e) * max(p.scar.y, p.scar.w));
-  return vec4f(scar_over(c, p) * mix(1.0, grain, p.scar.x), p.scar.x);
-}
+// The Earth view's floor `c` (colour.wgsl `ground_of`) under the scar; and the share of it the scar takes from the
+// soil's own tint.
+fn burnt_floor(c: vec3f, p: Spot) -> vec4f { return vec4f(scar_over(c, p), p.scar.x); }
 
 // The true colour `truth` of spot p's ground under its scar.
 fn burnt_truth(truth: vec3f, p: Spot) -> vec3f { return scar_over(truth, p); }
