@@ -3,37 +3,69 @@
 //! network to the bodies of standing liquid, which stand each at one level, in one pass (`runoff::surface`), doing
 //! work on its bed; and each body mixes its heat (`basin::mix`).
 
-use super::{drain::{springs, under}, land::{cells_state, wet, NONE}, potential::apply, range, runoff::surface, Scratch};
-use crate::{store::{Class, LinkFlux}, World};
+use super::{drain::{land_drains, springs, under}, land::{cells_state, t_now, wet, NONE}, parts::{Leaves, LAND}, potential::apply, range, runoff::surface, Scratch};
+use crate::{store::{Class, LinkFlux}, units::T_FLOOR, World};
 
-/// The mobile liquid of every ground node: of each liquid `liq[q]`, `mol[q * n + i]` (its liquid share, `land::wet`,
-/// which leaves what the exchange sites hold of a mineral; all of a dissolved gas), and its volume `vol[i]`, m³
-/// (dissolved gas adds none).
+/// The liquid under the surface of every ground node, as the laws under it move it (`drain`): of each liquid `liq[q]`,
+/// `mol[q * n + i]` (its liquid share, `land::wet`, which leaves what the exchange sites hold of a mineral; all of a
+/// dissolved gas), its volume `vol[i]`, m³ (dissolved gas adds none), the pore space of the ground that holds it
+/// `pd[i]`, as a depth over that ground, m, the area of that ground `area[i]`, m², and the temperature it leaves at
+/// `t[i]`, K. It lies in the ground the laws under the surface reach (`soil_share`): of a cell of parts (1.1) its
+/// land (`Piece::liquid`).
 pub(super) struct Mobile {
     pub(super) mol: Vec<f64>,
     pub(super) vol: Vec<f64>,
+    pub(super) pd: Vec<f64>,
+    pub(super) area: Vec<f64>,
+    pub(super) t: Vec<f64>,
 }
 
-/// The mobile liquid of the ground nodes where `on(i)` (none elsewhere), of the liquids `liq`; what boils below the
-/// coldest node, `tmin`, is gas.
-pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl Fn(usize) -> bool) -> Mobile {
-    let n = w.mesh.cells().n();
-    let mut m = Mobile { mol: vec![0.0; liq.len() * n], vol: vec![0.0; n] };
-    for (q, &k) in liq.iter().enumerate() {
-        let gas = s.sp[k].boil <= tmin;
-        for i in (0..n).filter(|&i| on(i)) {
-            let a = w.store.amounts(Class::Ground)[k * n + i] * if gas { 1.0 } else { wet(s, k, i) };
+/// The share of cell `i`'s area whose ground the laws under the surface reach (laws.md 1.2): of a cell of parts its
+/// land's, for the loose ground under its liquid lies with its pores full and the store under that is not drained;
+/// none of a cell under a body that is one node; else all of it.
+pub(super) fn soil_share(s: &Scratch, i: usize) -> f64 {
+    match s.mixed(i) {
+        Some(m) if super::parts::has(s, i) => m.piece[LAND].share,
+        _ if s.basin.is[i] => 0.0,
+        _ => 1.0,
+    }
+}
+
+/// The share of a link between cells `i` and `j` that the laws under the surface pass (`soil_share`): each end's share,
+/// as the ground they reach on each side meets the other's.
+pub(super) fn reached(s: &Scratch, i: usize, j: usize) -> f64 {
+    soil_share(s, i) * soil_share(s, j)
+}
+
+/// The liquid under the surface of every ground node (`Mobile`), of the liquids `liq`; what boils below the coldest
+/// node, `tmin`, is gas.
+pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64) -> Mobile {
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
+    let mut m = Mobile { mol: vec![0.0; liq.len() * n], vol: vec![0.0; n], pd: vec![0.0; n], area: vec![0.0; n], t: vec![0.0; n] };
+    for i in (0..n).filter(|&i| soil_share(s, i) > 0.0) {
+        let land = s.mixed(i).filter(|_| super::parts::has(s, i)).map(|x| &x.piece[LAND]);
+        for (q, &k) in liq.iter().enumerate() {
+            let gas = s.sp[k].boil <= tmin;
+            let a = match land {
+                Some(l) if gas => l.amt[k],
+                Some(l) => l.liquid(k, &s.sp[k]),
+                None => w.store.amounts(Class::Ground)[k * n + i] * if gas { 1.0 } else { wet(s, k, i) },
+            };
             m.mol[q * n + i] = a;
             m.vol[i] += if gas { 0.0 } else { a * s.sp[k].v[1] };
         }
+        (m.pd[i], m.area[i], m.t[i]) = match land {
+            Some(l) => (l.pd, area[i] * l.share, l.tg.max(T_FLOOR)),
+            None => (s.pd[i], area[i], t_now(w, s, i)),
+        };
     }
     m
 }
 
 /// Book `fluxes` through the store, and bring the ground nodes' state up to date for what changed (`Scratch::note`;
-/// a node of parts books it on them, `parts::to_liquid`).
+/// a node of parts books it on them, what leaves it leaving the part `leaves` names, `parts::to_liquid`).
 /// Their potential energy goes by the heights their matter leaves from (`potential::apply`).
-pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
+pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], leaves: Leaves) {
     let n = w.mesh.cells().n();
     let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
     ks.sort_unstable();
@@ -50,7 +82,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     let before: Vec<f64> = ks.iter().flat_map(|&k| cells.iter().map(move |&i| (k, i))).map(|(k, i)| amount(w, k, i)).collect();
     let heat: Vec<f64> = cells.iter().map(|&i| w.store.heat(Class::Ground)[i as usize]).collect();
     apply(w, s, fluxes, &[]);
-    super::parts::to_liquid(w, s, &cells, (&ks, &before), &heat);
+    super::parts::to_liquid(w, s, &cells, (&ks, &before), &heat, leaves);
     for (q, &k) in ks.iter().enumerate() {
         for (&i, &was) in cells.iter().zip(&before[q * cells.len()..(q + 1) * cells.len()]) {
             let now = amount(w, k, i);
@@ -75,6 +107,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let slope = slopes(w, s);
     let runs = springs(w, s, tmin, &slope, dt);
     under(w, s, &liq, tmin, dt);
+    land_drains(w, s, (&liq, tmin), &slope, dt);
     surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     let mixed = super::parts::mix(w, s, dt);
     cells_state(w, s, &mixed, false);
@@ -83,12 +116,13 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
 }
 
 /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
-/// more than `still`), 0 for none; and for a cell under a body, whose liquid stands at one level and drains to no channel.
-/// The surface is the cell's mean ground, or the liquid standing over its pores if higher: the slope its hillsides
-/// drain down to the channels inside it.
+/// more than `still`), 0 for none: the slope its hillsides drain down to the channels inside it. The surface is the
+/// cell's mean ground, or the liquid standing over its pores if higher; of a cell of parts or under a body, its solid
+/// ground and theirs: the slope its land drains down to its liquid.
 fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
     let (cells, still) = (w.mesh.cells(), w.cfg.phys.still);
     let surface = |i: usize| (s.head[i] - s.pd[i]).max(s.z[i]);
-    let drop = |i: usize, k: usize| Some(surface(i) - surface(cells.around(i).1[k] as usize)).filter(|&d| d > still);
-    crate::par::map_n(cells.n(), crate::par::UNCOUNTED, |i| if s.basin.is[i] { 0.0 } else { cells.steepest(i, |k| drop(i, k)).map_or(0.0, |way| way.0) })
+    let drop = |i: usize, k: usize, z: &dyn Fn(usize) -> f64| Some(z(i) - z(cells.around(i).1[k] as usize)).filter(|&d| d > still);
+    let at = |i: usize| if s.basin.is[i] || super::parts::has(s, i) { cells.steepest(i, |k| drop(i, k, &|j| s.z[j])) } else { cells.steepest(i, |k| drop(i, k, &surface)) };
+    crate::par::map_n(cells.n(), crate::par::UNCOUNTED, |i| at(i).map_or(0.0, |way| way.0))
 }

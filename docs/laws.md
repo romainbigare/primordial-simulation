@@ -453,13 +453,21 @@ what the heat holds molten, as every law and the shell then read it.
   rain: held until the month's liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
   warm it. The store flows by `bed_seep` (`flow::deep`). Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). Pore water moves before the
-  runoff's pass, so the bodies end the month at one level. **None of this runs under a body**: the loose ground of a
-  cell under its body's level lies under it with its pores full, and the bed's store under it is not drained, so no
-  liquid sinks there, no pore or store flow reaches or leaves it, and its store feeds no channel.
-- **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what they take leaves its
-  top and its deep by their shares of the liquid they hold (what stands leaves from the liquid), and its land only for
-  what they lack, which keeps its own pores' liquid; at the parts' temperature by the liquid each holds
-  (`parts::to_liquid`, `land::t_now`).
+  runoff's pass, so the bodies end the month at one level. **None of this runs under a body**: the loose ground under
+  a body's liquid lies with its pores full, and the bed's store under it is not drained. So in a cell of parts (1.1)
+  the sink, the pore flow and the store's drain act on its land alone (`liquid::soil_share`, `liquid::mobile`): what
+  sinks or flows away is its land's liquid over field capacity, on its land's area and pores, at its land's
+  temperature; its store drains by its land's share of the cell's area, and what comes up gathers in its liquid. Its
+  land's pores drain to its liquid, its land's lowest ground, as a cell's pores drain to its channels
+  (`drain::to_channels`, `drain::land_drains`): a move inside the cell from its land to its liquid's top, with its heat
+  at the land's temperature; in the runoff's pass the pores of a cell of parts or under a body drain to no channel.
+  Both drain down the slope of the cell's solid ground (its land drains to its liquid). A link between two cells
+  passes, in each layer, the product of their land's shares (`liquid::reached`), so no liquid sinks into, flows
+  through or comes up from the ground and the store of a cell all under a body.
+- **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what the laws under the
+  surface take leaves its land (`parts::Leaves`); what the others take leaves its top and its deep by their shares of
+  the liquid they hold (what stands leaves from the liquid), and its land only for what they lack, which keeps its
+  own pores' liquid; at the parts' temperature by the liquid each holds (`parts::to_liquid`, `land::t_now`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node

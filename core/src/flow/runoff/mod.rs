@@ -12,8 +12,8 @@ use super::bodies::Bodies;
 mod edge;
 use edge::come_in;
 use super::{curve::Part, level::{level_with, Level}};
-use super::{bare_share, drain::liquid_heat, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid}, potential::apply, year_weight, Scratch};
-use crate::{math::one_minus_exp, space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux, Move, Node}, World};
+use super::{bare_share, drain::{liquid_heat, to_channels}, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
+use crate::{space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux, Move, Node}, World};
 
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
@@ -59,7 +59,7 @@ fn book_all(w: &mut World, s: &mut Scratch, kinds: &[usize], moves: &[&Crossings
         let at = (x.width - 1) * x.a.len();
         LinkFlux { class: x.class, a: &x.a, b: &x.b, ks: &ks, mol: &col[..at], heat: &col[at..] }
     }).collect();
-    book(w, s, &fluxes);
+    book(w, s, &fluxes, Leaves::Liquid);
 }
 
 /// What each cell holds that may move as the pass goes (`basin::movable`: rows of the liquids then the heat; and the
@@ -112,7 +112,8 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
 
 /// What runs off each cell, as a share of the liquid that may move in it: what came up from the store; the pores'
 /// drainage to the channels, a share 1 - exp(-conductivity × slope × time / (porosity × `hill`), `soil::Pores`), which what stands over
-/// them refills first (pores first); and what stands over its pores over what its parts of the bodies held at the last
+/// them refills first (pores first; `drain::to_channels`; of a cell of parts its land's drain to its liquid,
+/// `drain::land_drains`, and under a body its pores lie full); and what stands over its pores over what its parts of the bodies held at the last
 /// pass (`State::held`; they keep the rest, each by what it held, in `Held::part`).
 fn runs_off(w: &World, s: &Scratch, h: &mut Held, (slope, runs): (&[f64], &[f64]), dt: f64) -> Vec<f64> {
     let (area, ph) = (w.mesh.cells().area(), w.cfg.phys);
@@ -122,7 +123,7 @@ fn runs_off(w: &World, s: &Scratch, h: &mut Held, (slope, runs): (&[f64], &[f64]
         let (lp, stands) = (own.min(pores), (own - pores).max(0.0));
         let soil = w.pores(i);
         let free = if s.head[i] > s.z[i] { lp - soil.field * pores } else { 0.0 };
-        let hill = if free > 0.0 && slope[i] > 0.0 { free.min(lp * one_minus_exp(soil.seep * slope[i] * dt / (soil.porosity * ph.hill))) } else { 0.0 };
+        let hill = if s.basin.is[i] || super::parts::has(s, i) { 0.0 } else { to_channels(&ph, soil, slope[i], dt, (free, lp)) };
         let held: f64 = s.state.held[i].iter().sum();
         let kept = held.min((stands - hill).max(0.0));
         h.part[i].iter_mut().zip(&s.state.held[i]).for_each(|(p, &was)| *p = if held > 0.0 { was * kept / held } else { 0.0 });

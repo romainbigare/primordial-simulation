@@ -930,12 +930,13 @@ fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
 }
 
 /// Under the low basin the loose ground's pores are full and the bed's store is not drained: over a year of Flow no
-/// liquid sinks into, flows through or comes up from the stores of its cells (those a metre under its level), while the
-/// stores of the land take rain and drain.
+/// liquid sinks into, flows through or comes up from the stores of its cells that hold no land (all their ground under
+/// its liquid, their mean a metre under its level), while the stores of the land take rain and drain.
 #[test]
 fn nothing_sinks_or_seeps_under_the_low_basin() {
     let mut w = worldgen::testkit::small_world();
-    let (cells, _) = basin_under(&w, |w, i| liquid_top(w, i) - 1.0);
+    let cells = wholly_under(&w, &basin_under(&w, |w, i| liquid_top(w, i) - 1.0).0);
+    assert!(!cells.is_empty(), "no cell all under the basin");
     let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
     let (under, on_land) = (cells.iter().map(|&i| store_m3(&w, i)).collect::<Vec<f64>>(), land.iter().map(|&i| store_m3(&w, i)).collect::<Vec<f64>>());
     for _ in 0..12 {
