@@ -14,6 +14,7 @@ mod carriage;
 mod load;
 mod pick;
 pub(super) use carriage::Carriage;
+pub(super) use load::Pools;
 use edge::come_in;
 use super::{curve::Part, level::{level_with, Level}};
 use super::{drain::{liquid_heat, to_channels, OffLand}, follow, land::standing, liquid::book, parts::{pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};

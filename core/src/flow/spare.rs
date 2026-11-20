@@ -12,4 +12,6 @@ pub(super) struct Spare {
     pub(super) samples: Vec<[f64; 2]>,
     /// What each cell picks up in the runoff's pass, a row of the solids then the heat (`runoff::pick_up`)
     pub(super) picked: Vec<f64>,
+    /// The pools of the load's key samples, all none between passes (`runoff::load::Pools`)
+    pub(super) pools: super::runoff::Pools,
 }

@@ -531,14 +531,18 @@ work its load leaves free (the free share of that capacity: the cover effect, Sk
 `wear` m³ of bed per J over its strength into loose ground. **The load settles on its way** (`runoff::load`), in the
 three particle classes of the texture (4), each as the cell it came from holds them: each month it goes down the samples'
 ways and is followed at the key samples, where some class settles, at each land cell's main channel and where the
-ways end. Over the run L from a sample to the next, under the shear velocity u* of the flood (`FLOOD_RUNOFF` from the
-area that drains through it, in a channel as deep and wide as the terrain's laws make it; `soil::flood_shear`), the
-share φ of a class's log-sizes that sink faster than u* (`texture::settles`, Bagnold 1966; particles as heavy as the
-sample's bed's) settles at the sinking speed
-V of their mean log-size over the length ξ = q / V, q the flood's discharge a m of width (the ξ-q model, Davy and
-Lague 2009); the rest passes: of what comes in, P = 1 − φ (1 − e^(−L/ξ)) passes, and of what is picked up on the way,
-R = 1 − φ + φ (ξ/L)(1 − e^(−L/ξ)) (`soil::passes`; a sample where each class passes to within 1e-4 is no key). What
-reaches a body, or a sample whose liquid runs to none, settles in the cell that holds it. The form is tuned: the
+ways end. Over the reach of each sample, the run L to the sample its liquid runs to, under the shear velocity u* of
+the flood (`FLOOD_RUNOFF` from the area that drains through it, in its channel, `Physics::channel`;
+`soil::flood_shear`), the share φ of a class's log-sizes that sink faster than u* (`texture::settles`, Bagnold 1966;
+particles as heavy as the sample's bed's) settles at the sinking speed V of their mean log-size over the length
+ξ = q / V, q the flood's discharge a m of width (the ξ-q model, Davy and Lague 2009); the rest passes: of what comes
+in at the top of the reach, P = 1 − φ (1 − e^(−L/ξ)) passes, and of what is picked up along it, R = 1 − φ +
+φ (ξ/L)(1 − e^(−L/ξ)) (`soil::passes`). A key sample's own reach picks up what its own fall's work picks up; what was
+picked up above it comes in at its top. A sample where each class passes to within 1e-4 is no key sample: what
+leaves a key sample reaches the next by the product of the passes of the samples between (`Carriage::skip`), and the
+rest settles in the next one's cell; the load picked up between two key samples skips that product (it loses less
+than 1e-10 of it, measured). What reaches a body, or a sample whose liquid runs to none, settles in the cell that
+holds it. The form is tuned: the
 shares are fixed by the flood, not by the month's flow. The load is booked apart from the liquid
 (`runoff::Crossings`), each with its own heat: each key sample's pool (mol of each substance and the heat) leaves by
 the share of its volume that passes, so in a pool the substances and the particle classes are independent. **Known

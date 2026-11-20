@@ -8,9 +8,10 @@ use crate::{space::network::NONE, store::{Class, Move, Node}, World};
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
 
-/// The work of the month's runoff, J: of each pair of `Carriage`, and of each cell.
+/// The work of the month's runoff, J: of each pair of `Carriage`, on the samples above its key sample and on the key
+/// sample's own reach, and of each cell.
 pub(super) struct Work {
-    pub(super) pairs: Vec<f64>,
+    pub(super) pairs: Vec<[f64; 2]>,
     pub(super) cells: Vec<f64>,
 }
 
@@ -22,16 +23,15 @@ pub(super) struct Work {
 /// cell picked up (rows of `sol`, mol, then the heat, J, into `picked`), and the moves of the bed into loose ground.
 pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64; 2]], &[usize]), picked: &mut Vec<f64>) -> (Work, Vec<Move>) {
     let (samples, n, width, c) = (w.terrain_samples(), w.mesh.cells().n(), sol.len() + 1, &b.carriage);
-    let mut work = Work { pairs: vec![0.0; c.pairs.len()], cells: vec![0.0; n] };
+    let mut work = Work { pairs: vec![[0.0; 2]; c.pairs.len()], cells: vec![0.0; n] };
     for &k in b.land.iter().filter(|&&k| flux[k as usize][1] > 0.0) {
         let (k, f) = (k as usize, flux[k as usize]);
         let (i, j) = (b.cell_of[k] as usize, samples.to[k]);
         if j != NONE && s.z[i] > 0.0 {
             let done = w.cfg.gravity * f[1] * (samples.h[k] - samples.h[j as usize]).max(0.0);
             work.cells[i] += done;
-            if c.pair_of[k] != NONE {
-                work.pairs[c.pair_of[k] as usize] += done;
-            }
+            debug_assert!(c.pair_of[k] != NONE, "a land sample whose way reaches no key sample");
+            work.pairs[c.pair_of[k] as usize][usize::from(c.place[k] != NONE)] += done;
         }
     }
     picked.clear();

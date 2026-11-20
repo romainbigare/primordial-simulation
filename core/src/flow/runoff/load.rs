@@ -1,23 +1,22 @@
 //! The load the running liquid carries (laws.md 1.3). Each month each land cell picks up loose solids from the work its
 //! runoff does there (`pick_up`), and the load goes down the samples' ways, in three particle classes (fine, middle,
 //! coarse). It is followed only at the **key samples** (`Carriage`): those where some of a class settles, each land
-//! cell's main channel, and the samples where the ways end (in a body, or on land where none runs on); between two key
-//! samples it only passes. Each key sample holds a **pool** this month: what came in from the key samples above it and
-//! what was picked up on the ways to it (mol of each solid substance and its heat). One serial pass over the key
-//! samples, each before the one its way leads to, settles its share of each class (`soil::passes`) and moves the rest
+//! cell's main channel, and the samples where the ways end (in a body, or on land where none runs on). Each key sample
+//! holds a **pool** this month (`Pools`): what came in at the top of its reach, from the key samples above and what was
+//! picked up above it, and what was picked up along its own reach (mol of each solid substance and its heat). One serial
+//! pass over the key samples, each before the next, settles its share of each class (`soil::passes`) and moves the rest
 //! on; where a way ends, all of it settles in the cell that holds that sample.
 //!
 //! The books: a move goes from the cell it leaves to the cell of the key sample it reaches; what settles stays in the
-//! node it reached. The moves between two cells are summed in the order each pair first comes and booked once. **Known
-//! limit:** in a pool the substances and the particle classes are independent: what leaves takes the pool's mixture of
-//! substances by the share of its volume that leaves.
+//! node it reached. The moves over each link between two cells (`Carriage::links`) are summed and booked once.
+//! **Known limit:** in a pool the substances and the particle classes are independent: what leaves takes the pool's
+//! mixture of substances by the share of its volume that leaves.
 
-use super::carriage::{Shares, CLASS_COUNT};
-use super::pick::pick_up;
+use super::carriage::{End, Shares, CLASS_COUNT};
+use super::pick::{pick_up, Work};
 use super::super::land::solid;
 use super::{Bodies, Crossings, Scratch};
 use crate::{space::network::NONE, store::Move, units::G_PER_KG, World};
-use std::collections::HashMap;
 
 /// What the load did in a month: the moves of the bed into loose ground (`wear`); of each cell what its main channel
 /// carried, g per m³ of its liquid, and the depth that settled on it, m; the plumes: each sample where a way entered a
@@ -49,42 +48,53 @@ impl Volumes {
     }
 }
 
-/// The moves of the month between pairs of cells (mol of each solid substance, then the heat), summed in the order each
-/// pair first comes.
-#[derive(Default)]
-struct Moves {
-    index: HashMap<(u32, u32), usize>,
-    list: Vec<((u32, u32), Vec<f64>)>,
-}
-
-impl Moves {
-    /// `row` moved from cell `from` to cell `to` (no move where they are one).
-    fn add(&mut self, (from, to): (u32, u32), row: &[f64]) {
-        if from == to {
-            return;
-        }
-        let list = &mut self.list;
-        let at = *self.index.entry((from, to)).or_insert_with(|| {
-            list.push(((from, to), vec![0.0; row.len()]));
-            list.len() - 1
-        });
-        list[at].1.iter_mut().zip(row).for_each(|(a, b)| *a += b);
-    }
-}
-
 /// The pools of the key samples this month: of each its row (mol of each solid substance, then the heat, J; `width`
-/// numbers a key), and the volume of each class that came in from above and that was picked up on the ways to it, m³.
-struct Pools {
+/// numbers a key); and of each class the volume that came in at the top of its reach (from the key samples above and
+/// what was picked up above it), that was picked up along its own reach, and that settled on the samples between it
+/// and the key sample above (`Carriage::skip`), m³. The pass takes each pool once and leaves it none, so the room is
+/// kept from month to month all none (`Spare::pools`).
+#[derive(Clone, Debug, Default)]
+pub(in crate::flow) struct Pools {
     rows: Vec<f64>,
     came: Vec<[f64; CLASS_COUNT]>,
-    picked: Vec<[f64; CLASS_COUNT]>,
+    own: Vec<[f64; CLASS_COUNT]>,
+    dropped: Vec<[f64; CLASS_COUNT]>,
     width: usize,
 }
 
 impl Pools {
+    /// Room for `keys` pools of rows `width` long, all none.
+    fn resize(&mut self, keys: usize, width: usize) {
+        if self.width != width || self.came.len() != keys {
+            *self = Pools { rows: vec![0.0; keys * width], came: vec![[0.0; CLASS_COUNT]; keys], own: vec![[0.0; CLASS_COUNT]; keys], dropped: vec![[0.0; CLASS_COUNT]; keys], width };
+        }
+    }
     /// Row `row` into key `q`'s pool.
     fn add(&mut self, q: usize, row: &[f64]) {
         self.rows[q * self.width..(q + 1) * self.width].iter_mut().zip(row).for_each(|(a, b)| *a += b);
+    }
+    /// Key `q`'s pool, taken: its row into `row`, and what came in, what its own reach picked up and what settled above.
+    fn take(&mut self, q: usize, row: &mut [f64]) -> [[f64; CLASS_COUNT]; 3] {
+        let at = &mut self.rows[q * self.width..(q + 1) * self.width];
+        row.copy_from_slice(at);
+        at.fill(0.0);
+        [std::mem::take(&mut self.came[q]), std::mem::take(&mut self.own[q]), std::mem::take(&mut self.dropped[q])]
+    }
+}
+
+/// The rows the load moves over each link of `Carriage::links` in a month, summed (`width` numbers a link).
+struct Links {
+    rows: Vec<f64>,
+    width: usize,
+}
+
+impl Links {
+    /// `row` moved over link `l` (none for `NONE`, a move within a cell).
+    fn add(&mut self, l: u32, row: &[f64]) {
+        if l != NONE {
+            let at = l as usize * self.width;
+            self.rows[at..at + self.width].iter_mut().zip(row).for_each(|(a, b)| *a += b);
+        }
     }
 }
 
@@ -100,75 +110,83 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     let mm: Vec<f64> = sol.iter().map(|&k| s.sp[k].mm).collect();
     let volume = |row: &[f64]| row.iter().zip(&sol_v).map(|(m, v)| m * v).sum::<f64>();
     let kg = |row: &[f64]| row.iter().zip(&mm).map(|(m, k)| m * k).sum::<f64>();
-    let texture = |i: usize| {
-        let t = &w.soil[i].texture;
-        [t.fine, t.middle(), t.coarse]
-    };
-    let mut pools = Pools { rows: vec![0.0; c.keys.len() * width], came: vec![[0.0; CLASS_COUNT]; c.keys.len()], picked: vec![[0.0; CLASS_COUNT]; c.keys.len()], width };
-    let mut moves = Moves::default();
-    let mut settled = vec![[0.0; CLASS_COUNT]; n];
-    // Each cell's pick-up goes to its pairs by their share of its work; what no pair takes stays on its ground.
-    let mut sent = vec![0.0; n];
-    for (p, &(i, key)) in c.pairs.iter().enumerate() {
-        let (i, q) = (i as usize, key as usize);
-        if work.pairs[p] > 0.0 {
-            let share = work.pairs[p] / work.cells[i];
-            let row: Vec<f64> = picked[i * width..(i + 1) * width].iter().map(|m| m * share).collect();
-            let v = volume(&row[..width - 1]);
-            pools.add(q, &row);
-            pools.picked[q].iter_mut().zip(texture(i)).for_each(|(e, t)| *e += v * t);
-            moves.add((i as u32, b.cell_of[c.keys[q] as usize]), &row);
-            sent[i] += share;
-        }
-    }
-    for i in (0..n).filter(|&i| work.cells[i] > 0.0 && sent[i] < 1.0) {
-        let v = volume(&picked[i * width..(i + 1) * width - 1]) * (1.0 - sent[i]);
-        settled[i].iter_mut().zip(texture(i)).for_each(|(d, t)| *d += v * t);
-        volumes.land += v;
-    }
+    let keys = c.keys.len();
+    let mut pools = std::mem::take(&mut s.spare.pools);
+    pools.resize(keys, width);
+    let mut links = Links { rows: vec![0.0; c.links.len() * width], width };
+    gather(w, (c, &work), (&picked, &sol_v), (&mut pools, &mut links));
     volumes.picked = (0..n).filter(|&i| work.cells[i] > 0.0).map(|i| volume(&picked[i * width..(i + 1) * width - 1])).sum();
-    let mut loads = vec![[0.0f32; 2]; n];
-    let mut plumes = Vec::new();
+    let (mut settled, mut loads, mut plumes) = (vec![[0.0; CLASS_COUNT]; n], vec![[0.0f32; 2]; n], Vec::new());
     // The serial pass: each key sample settles its share of each class, and its pool's rest goes on to the next; where
     // a way ends, all of it settles.
     let mut row = vec![0.0; width];
     for (q, &k) in c.keys.iter().enumerate() {
-        let i = b.cell_of[k as usize] as usize;
-        row.copy_from_slice(&pools.rows[q * width..(q + 1) * width]);
+        let i = c.cell[q] as usize;
+        let [came, own, dropped] = pools.take(q, &mut row);
         if c.main[i] == q as u32 {
             loads[i][0] = main_load(w, i, kg(&row[..width - 1]), flux[k as usize][0]);
         }
-        let (came, got, sh) = (pools.came[q], pools.picked[q], c.shares[q]);
-        let out = step(came, got, &sh);
-        let (all, on) = (came.iter().chain(&got).sum::<f64>(), out.iter().sum::<f64>());
-        (0..CLASS_COUNT).for_each(|l| settled[i][l] += came[l] + got[l] - out[l]);
-        let body = b.at[k as usize];
-        let gone = all - on;
-        match (c.next[q] == NONE, body) {
-            (true, body) if body != NONE && b.list[body as usize].pass == NONE => volumes.open += gone,
-            (true, body) if body != NONE => volumes.bodies += gone,
-            _ => volumes.land += gone,
+        if came.iter().chain(&own).chain(&dropped).all(|&v| v == 0.0) {
+            continue;
         }
-        if c.next[q] == NONE {
-            let mass = kg(&row[..width - 1]);
-            if body != NONE && mass > 0.0 {
-                plumes.push((k, (mass / dt) as f32));
-            }
-        } else if on > 0.0 {
+        let out = step(came, own, &c.shares[q]);
+        let all: f64 = came.iter().chain(&own).chain(&dropped).sum();
+        let on: f64 = out.iter().sum();
+        (0..CLASS_COUNT).for_each(|l| settled[i][l] += came[l] + own[l] + dropped[l] - out[l]);
+        let gone = all - on;
+        match c.end[q] {
+            End::Open => volumes.open += gone,
+            End::Body => volumes.bodies += gone,
+            End::On | End::Land => volumes.land += gone,
+        }
+        if matches!(c.end[q], End::Open | End::Body) {
+            plumes.push((k, (kg(&row[..width - 1]) / dt) as f32));
+        } else if c.end[q] == End::On && on > 0.0 {
+            // All that leaves goes to the next key sample's cell; what the samples between take settles there.
             let next = c.next[q] as usize;
             row.iter_mut().for_each(|m| *m *= (on / all).min(1.0));
             pools.add(next, &row);
-            pools.came[next].iter_mut().zip(out).for_each(|(a, o)| *a += o);
-            moves.add((i as u32, b.cell_of[c.keys[next] as usize]), &row);
+            for (l, &o) in out.iter().enumerate() {
+                let arrives = o * f64::from(c.skip[q][l]);
+                (pools.came[next][l], pools.dropped[next][l]) = (pools.came[next][l] + arrives, pools.dropped[next][l] + o - arrives);
+            }
+            links.add(c.link[q], &row);
         }
     }
-    for ((from, to), row) in moves.list {
-        x.push(from, to, row[..width - 1].iter().copied().enumerate(), row[width - 1]);
+    for (l, &(from, to)) in c.links.iter().enumerate() {
+        let r = &links.rows[l * width..(l + 1) * width];
+        if r.iter().any(|&m| m != 0.0) {
+            x.push(from, to, r[..width - 1].iter().copied().enumerate(), r[width - 1]);
+        }
     }
     let area = w.mesh.cells().area();
     loads.iter_mut().zip(&settled).zip(area).for_each(|((l, v), a)| l[1] = (v.iter().sum::<f64>() / a) as f32);
-    s.spare.picked = picked;
+    (s.spare.picked, s.spare.pools) = (picked, pools);
     Carried { broke, loads, plumes, volumes, settled }
+}
+
+/// Each cell's pick-up (`picked`, rows of the solids of molar volumes `sol_v`, then the heat) to its pairs by their
+/// share of its work (`Work`), each class by the cell's texture: what its key sample's own reach picked up passes it by
+/// R, what was picked up above it comes in at the top of the reach (`Pools`).
+fn gather(w: &World, (c, work): (&super::Carriage, &Work), (picked, sol_v): (&[f64], &[f64]), (pools, links): (&mut Pools, &mut Links)) {
+    let width = sol_v.len() + 1;
+    let mut row = vec![0.0; width];
+    for (p, pair) in c.pairs.iter().enumerate() {
+        let (i, q) = (pair.cell as usize, pair.key as usize);
+        let [above, own] = work.pairs[p];
+        if above + own > 0.0 {
+            let share = (above + own) / work.cells[i];
+            row.iter_mut().zip(&picked[i * width..(i + 1) * width]).for_each(|(r, m)| *r = m * share);
+            let v: f64 = row.iter().zip(sol_v).map(|(m, v)| m * v).sum();
+            let t = &w.soil[i].texture;
+            for (l, part) in [t.fine, t.middle(), t.coarse].into_iter().enumerate() {
+                pools.came[q][l] += v * part * above / (above + own);
+                pools.own[q][l] += v * part * own / (above + own);
+            }
+            pools.add(q, &row);
+            links.add(pair.link, &row);
+        }
+    }
 }
 
 /// What settled on each cell, `settled` (m³ of each class, `Carried`), mixes into its texture by volume over its loose
@@ -186,10 +204,10 @@ pub(super) fn mix(w: &mut World, s: &Scratch, settled: &[[f64; CLASS_COUNT]], so
     }
 }
 
-/// What of a pool leaves a key sample of shares `sh`, m³ of each class: of what came in from the key samples above,
-/// `came`, the share that passes, and of what was picked up on the ways to it, `got`, the share of that (`Shares`).
-fn step(came: [f64; CLASS_COUNT], got: [f64; CLASS_COUNT], sh: &Shares) -> [f64; CLASS_COUNT] {
-    std::array::from_fn(|l| came[l] * f64::from(sh[0][l]) + got[l] * f64::from(sh[1][l]))
+/// What of a pool leaves a key sample of shares `sh`, m³ of each class: of what came in at the top of its reach,
+/// `came`, the share that passes, and of what was picked up along it, `own`, the share of that (`Shares`).
+fn step(came: [f64; CLASS_COUNT], own: [f64; CLASS_COUNT], sh: &Shares) -> [f64; CLASS_COUNT] {
+    std::array::from_fn(|l| came[l] * f64::from(sh[0][l]) + own[l] * f64::from(sh[1][l]))
 }
 
 /// The load in cell `i`'s main channel, g per m³ of its liquid, from the load that passes there, `kg`, and the liquid,
