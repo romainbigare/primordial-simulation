@@ -116,8 +116,11 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)
         flows[SMOULDERED] += burn_up(chem, &mut b, (&[], &mut []), p.sub[q], held * (bed.smoulder - bed.flaming)) * mm[q];
     }
     let before = c.content(&e);
-    let cured = c.cured[MATTER] * if bed.standing > 0.0 { f } else { 0.0 };
-    flows[CURED] += burn_up(chem, &mut b, (&p.sub, &mut c.cured), p.sub[MATTER], cured) * mm[MATTER];
+    let lit = if bed.standing > 0.0 { f } else { 0.0 };
+    for q in [MATTER, WALL] {
+        let mol = c.cured[q] * lit;
+        flows[CURED] += burn_up(chem, &mut b, (&p.sub, &mut c.cured), p.sub[q], mol) * mm[q];
+    }
     for (x, crown) in crowns {
         crown_burns(w, p, (c, x, crown), (f, &r), (&mut b, &mut flows));
     }

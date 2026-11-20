@@ -1178,8 +1178,9 @@ heat, come from the chemistry's own burning reactions (`Chemistry::burner` of ea
 balance of the bed, not from the reactions' rates, which are those of rot (real surface fires are limited by heating
 the next fuel; Rothermel 1972). Three stages, each number with one writer:
 - **The cured leaves**: a slot whose plants stand no taller than `surface_m` keeps the leaves it sheds standing on its
-  plants, cured (`Cover::cured`, part of the cover's node; `season::shed_to`), as herbs keep their dead leaves on their
-  stems through a dry season; they fall to the ground's remains with a mean life of `cured_life` (`grow::fall`, booked
+  plants, cured (`Cover::cured`, part of the cover's node; `season::shed_to`), and so do the body matter and walls of
+  its plants that die (`upkeep`; their fuel goes to the ground), as the dead leaves and stems of herbs stand through a
+  dry season; they fall to the ground's remains with a mean life of `cured_life` (`grow::fall`, booked
   as shed). Taller plants drop theirs at once.
 - **The bed** (`flame::bed`, each land cell its own, in parallel): the load w of its remains, kg a m² of land, and of
   the cured leaves standing over them; the share of its ground they cover, 1 − e^(−a w), a the capture area its leaves held per kg dry (its cover's `LEAF` gene over the dry share
@@ -1213,7 +1214,10 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   the earliest first (`flame::run`). Every cell it reaches burns all of its land that its remains cover (f = its
   cover): a patch burns whole, keeps no remains to carry a flame, and burns again only once its cover's leaves have
   built them back. So the land burnt is a mosaic of patches of different ages, from that feedback alone (no rule keeps
-  a cell from burning). The wind does not stretch a run.
+  a cell from burning). The wind stretches a run downwind: along the way between two cells a bed's speed is R (1 + φ_w),
+  φ_w Rothermel's (1972) wind factor of the low wind's speed along that way (`World::low_wind`, the air's at its last
+  step), the particles' surface to volume ratio 4 / `fine_d` and the packing of what flames (`flame::downwind`); none
+  against the wind.
 - **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the cured leaves and the
   part of its remains that flames burn, and after them the part that smoulders; a flame through what flames, its depth
   the cured leaves at `cured_rho` and the remains at `litter_rho`, moves at R = `flux_ahead` h_c δ / (τ Q), δ its depth, τ = 8 minutes an inch of

@@ -33,6 +33,40 @@ pub fn residence(ph: &crate::Physics) -> f64 {
     RESIDENCE_PER_M * ph.fine_d
 }
 
+/// Rothermel's (1972) wind factor φ_w = C U^B (β / β_op)^−E, U in feet a minute and the particles' surface to volume
+/// ratio σ in 1/ft: C = `WIND_C` e^(`WIND_C_EXP` σ^`WIND_C_POW`), B = `WIND_B` σ^`WIND_B_POW`, E = `WIND_E`
+/// e^(`WIND_E_EXP` σ), β_op = `PACK_OP` σ^`PACK_OP_POW`.
+const WIND_C: f64 = 7.47;
+const WIND_C_EXP: f64 = -0.133;
+const WIND_C_POW: f64 = 0.55;
+const WIND_B: f64 = 0.02526;
+const WIND_B_POW: f64 = 0.54;
+const WIND_E: f64 = 0.715;
+const WIND_E_EXP: f64 = -3.59e-4;
+const PACK_OP: f64 = 3.348;
+const PACK_OP_POW: f64 = -0.8189;
+/// Metres in a foot, and seconds in a minute, for Rothermel's fits.
+const M_PER_FT: f64 = 0.3048;
+const S_PER_MIN: f64 = 60.0;
+
+/// How many times its speed with no wind a flame through `bed` moves along the unit way `way` [east, south] under the
+/// wind `wind`, m/s [east, south]: 1 + φ_w times the share of the wind along the way (none against it; Rothermel 1972,
+/// the factor of the wind along the way), φ_w of the wind's speed along it, the particles' σ = 4 / `fine_d` (round
+/// fine particles) and the packing of what flames, its bulk density (`Bed::flames` over `Bed::depth`) over the
+/// particles' (the frame's density).
+pub fn downwind(ph: &crate::Physics, bed: &Bed, wind: [f64; 2], way: [f64; 2]) -> f64 {
+    let along = wind[0] * way[0] + wind[1] * way[1];
+    if along <= 0.0 || bed.depth(ph) <= 0.0 {
+        return 1.0;
+    }
+    let sigma = 4.0 / ph.fine_d * M_PER_FT;
+    let packing = bed.flames() / bed.depth(ph) / bed.particle_rho;
+    let c = WIND_C * (WIND_C_EXP * sigma.powf(WIND_C_POW)).exp();
+    let (b, e) = (WIND_B * sigma.powf(WIND_B_POW), WIND_E * (WIND_E_EXP * sigma).exp());
+    let u = along / M_PER_FT * S_PER_MIN;
+    1.0 + c * u.powf(b) * (packing / (PACK_OP * sigma.powf(PACK_OP_POW))).powf(-e)
+}
+
 /// Byram's (1959) flame: L = `FLAME_K` I^`FLAME_EXP` m, I the intensity in kW a m of front.
 pub const FLAME_K: f64 = 0.0775;
 pub const FLAME_EXP: f64 = 0.46;

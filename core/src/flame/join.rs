@@ -82,11 +82,15 @@ impl PartialOrd for Reached {
 }
 
 /// The cells a flame lit in cell `from` reaches within `front_life`: it crosses half the way between two cells' centres
-/// at the speed of each one's bed (`reach`), through cells whose remains carry a flame, the earliest first (Dijkstra's
-/// way over the times). Returns them, the lit one first.
+/// at the speed of each one's bed (`reach`) along the way between them, its wind's push added (`super::downwind`), through
+/// cells whose remains carry a flame, the earliest first (Dijkstra's way over the times). Returns them, the lit one
+/// first.
 fn run(w: &World, beds: &[Option<Bed>], from: usize) -> Vec<usize> {
     let (cells, ph) = (w.mesh.cells(), &w.cfg.phys);
-    let speed = |i: usize| beds[i].filter(|b| b.carries()).map(|b| super::reach(ph, &b).speed);
+    let speed = |i: usize, way: [f64; 2]| {
+        let wind = w.low_wind.get(w.mesh.up(i, 0, crate::AIR)).map_or([0.0; 2], |v| v.map(|x| x as f64));
+        beds[i].filter(|b| b.carries()).map(|b| super::reach(ph, &b).speed * super::downwind(ph, &b, wind, way))
+    };
     let mut when: Vec<(usize, f64)> = vec![(from, 0.0)];
     let mut heap = BinaryHeap::from([Reached(0.0, from)]);
     let mut out = Vec::new();
@@ -97,10 +101,12 @@ fn run(w: &World, beds: &[Option<Bed>], from: usize) -> Vec<usize> {
         out.push(i);
         let (links, others) = cells.around(i);
         for (&l, &j) in links.iter().zip(others) {
-            let (j, Some(here)) = (j as usize, speed(i)) else { continue };
-            let Some(there) = speed(j).filter(|_| cells.width()[l as usize] > 0.0) else { continue };
+            let j = j as usize;
             let [x, y] = cells.offset(i, j);
             let half = x.hypot(y) / 2.0;
+            let way = [x / (2.0 * half).max(f64::MIN_POSITIVE), y / (2.0 * half).max(f64::MIN_POSITIVE)];
+            let Some(here) = speed(i, way) else { continue };
+            let Some(there) = speed(j, way).filter(|_| cells.width()[l as usize] > 0.0) else { continue };
             let t = t + half / here.max(f64::MIN_POSITIVE) + half / there.max(f64::MIN_POSITIVE);
             if t <= ph.front_life && !when.iter().any(|&(c, s)| c == j && s <= t) {
                 when.push((j, t));
