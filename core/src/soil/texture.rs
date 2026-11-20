@@ -11,6 +11,7 @@
 
 use super::Texture;
 use crate::space::network::NONE;
+use crate::space::shelf::FLOOD_RUNOFF;
 use crate::space::samples::Samples;
 use crate::space::terrain::Make;
 use crate::units::LIQUID_VISCOSITY;
@@ -27,8 +28,6 @@ const COARSE: usize = 2;
 const WEATHER_YEARS: f64 = 1e5;
 /// A deposit spans at least this factor of particle sizes: no flow sorts its particles to one size.
 const SORTING: f64 = 2.0;
-/// The flood that sorts what settles: its runoff from the area that drains through a sample, m/s.
-const FLOOD_RUNOFF: f64 = 1e-6;
 /// The drag constants of a natural particle's sinking (Ferguson et al. 2004).
 const DRAG_STOKES: f64 = 18.0;
 const DRAG_FORM: f64 = 1.0;

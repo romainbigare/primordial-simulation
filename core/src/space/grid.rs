@@ -87,6 +87,25 @@ impl Grid {
         [r as usize * self.across + wrapped(cj), rj as usize * self.across + wrapped(c)]
     }
 
+    /// The run over the samples `open` from sample `k` (not counted), m, the mean over the 8 ways of `STEPS` of the
+    /// straight run along each until a sample not open, each at most `most` (off the grid the run goes on to it): the
+    /// fetch the waves at `k` come over (an effective fetch over 8 ways, after Håkanson 1981).
+    pub(super) fn fetch(&self, open: &[bool], k: usize, most: f64) -> f64 {
+        let (r, c) = ((k / self.across) as i64, (k % self.across) as i64);
+        let run = |(a, b): (i64, i64), d: f64| {
+            let mut i = 1;
+            while (i as f64) * d < most {
+                match self.at(r + a * i, c + b * i) {
+                    Some(j) if !open[j] => return (i - 1) as f64 * d,
+                    None => return most,
+                    _ => i += 1,
+                }
+            }
+            most
+        };
+        STEPS.iter().zip(&self.far[r as usize]).map(|(&s, &d)| run(s, d)).sum::<f64>() / STEPS.len() as f64
+    }
+
     /// The neighbours of sample `k` across its sides and corners, each with its distance, m.
     pub(super) fn around(&self, k: usize) -> impl Iterator<Item = (usize, f64)> + '_ {
         self.ways(k).map(|(j, _, d)| (j, d))
