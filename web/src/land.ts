@@ -101,7 +101,8 @@ export class Land {
     // The land's mean height, ground temperature and ice of each square (the sea's squares' from the land nearest): the land a
     // coastal square of the open low ground holds is the land's, not its 8 km cell's.
     const [landZ, landT, landIce] = fromLand([0, 1, 3].map(k => Float32Array.from({ length: n }, (_, i) => rows[1 + row * i + k])), wet.sea, W, H);
-    const truth = ['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name));
+    // The true colour, read over standing liquid alone (land.wgsl `fs`): the dry squares' from the wet ones nearest.
+    const truth = fromLand(['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name)), Uint8Array.from(wet.wet, v => 1 - v), W, H);
     // The share of organic matter of each square's loose ground, which the Earth view darkens it by (land.wgsl).
     const organic = w.index.has('organic') ? decode(w, 0, 'organic') : new Float32Array(n);
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
@@ -202,12 +203,13 @@ function blurSea(data: Float32Array, open: ArrayLike<number>, w: number, h: numb
   }
 }
 
-/** Planes `planes` (a number a square) of the map's `w` x `h` squares with the sea's squares (`sea`, 1 where the sea's)
- * taken from the nearest squares not the sea's, ring by ring (each the mean of its neighbours already found). The open
- * low ground is cells of 8 km, whose numbers are their liquid surface's: the land a coastal square of one holds is the
- * land's, so no 8 km square of the sea's numbers shows on a coast. */
-function fromLand(planes: ArrayLike<number>[], sea: ArrayLike<number>, w: number, h: number): Float32Array[] {
-  const out = planes.map(p => Float32Array.from(p)), known = Uint8Array.from(sea, v => (v ? 0 : 1));
+/** Planes `planes` (a number a square) of the map's `w` x `h` squares with the squares marked in `other` (1 where
+ * marked) taken from the nearest squares not marked, ring by ring (each the mean of its neighbours already found). The
+ * open low ground is cells of 8 km, whose numbers are their liquid surface's: the land a coastal square of one holds is
+ * the land's, so no 8 km square of the sea's numbers shows on a coast; and the liquid's true colour, read over the
+ * liquid alone, is the wet squares', so no land's colour blurs into the water along a shore. */
+function fromLand(planes: ArrayLike<number>[], other: ArrayLike<number>, w: number, h: number): Float32Array[] {
+  const out = planes.map(p => Float32Array.from(p)), known = Uint8Array.from(other, v => (v ? 0 : 1));
   for (let left = true; left;) {
     left = false;
     const now = known.slice();
