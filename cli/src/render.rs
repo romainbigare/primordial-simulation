@@ -202,7 +202,10 @@ pub fn table(w: &World, path: &str) -> Result<(), String> {
             p.for_roots(f.loose[i]) * 1e3, look.wet[i], g.slow, g.minerals[0], g.minerals[1], t.erodibility()
         );
     }
-    std::fs::write(path, out).map_err(|e| format!("{path}: {e}"))
+    std::fs::write(path, out).map_err(|e| format!("{path}: {e}"))?;
+    // STUDY SCRATCH (wip/years-study): the cell that holds each square of the map, row by row, for maps of the table.
+    let squares: Vec<String> = pixels(w).chunks(w.map.w).map(|row| row.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")).collect();
+    std::fs::write(format!("{path}.squares"), squares.join("\n")).map_err(|e| format!("{path}: {e}"))
 }
 
 /// The colour of texture `t`: of sand, silt and clay by their shares, darker as it holds more organic matter.

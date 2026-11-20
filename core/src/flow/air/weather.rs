@@ -29,9 +29,12 @@ const FOLDS: f64 = 4.0;
 /// of variation of about 1 to 1.5, a few strong events carrying much of it (Swanson and Pierrehumbert 1997; Messori
 /// and Czaja 2013; from memory): sigma 1 gives a coefficient of variation of 1.31.
 const MIX_SIGMA: f64 = 1.0;
-/// The share of the eddies' diffusivity `mix` that the weather's wind carries as a resolved random flow (probe D),
-/// v'² tau = this × `mix` (Taylor 1922), the explicit mixing keeping the rest: the eddies are counted once.
+/// The share of the eddies' diffusivity `mix` that sets the weather's wind (probe D): v'² tau = this × `mix` (Taylor
+/// 1922).
 const WIND_SHARE: f64 = 0.5;
+/// The spread of the weather's vertical speed of the air, m/s (probe E): of the synoptic scale, about 1 cm/s (Holton
+/// 2004, 2.4, the scale analysis of the middle latitudes' weather; from memory).
+const LIFT_M_S: f64 = 0.01;
 /// Depth of the planet's sea's top layer the slow part reads, m (`Physics::h_mix`'s anchor, de Boyer Montégut 2004).
 const SEA_TOP_M: f64 = 50.0;
 /// The air-sea feedback that damps a top layer's warmth anomaly, W/m²/K (Frankignoul and Hasselmann 1977;
@@ -49,6 +52,8 @@ pub(super) enum Field {
     Mix = 1,
     /// The streamfunction of the weather's wind (probe D)
     Stream = 2,
+    /// The weather's rise of the air (probe E)
+    Lift = 3,
 }
 
 /// Which probe runs (`EW_YEARS_PROBE`).
@@ -58,6 +63,7 @@ pub(super) struct Probe {
     pub(super) shift: bool,
     pub(super) slow: bool,
     pub(super) wind: bool,
+    pub(super) lift: bool,
 }
 
 impl Probe {
@@ -67,18 +73,20 @@ impl Probe {
             return Probe::default();
         }
         let v = std::env::var("EW_YEARS_PROBE").unwrap_or_default();
-        Probe { mix: v.contains('A'), shift: v.contains('B') || v.contains('C'), slow: v.contains('C'), wind: v.contains('D') }
+        Probe { mix: v.contains('A'), shift: v.contains('B') || v.contains('C'), slow: v.contains('C'), wind: v.contains('D'), lift: v.contains('E') }
     }
     pub(super) fn any(self) -> bool {
-        self.mix || self.shift || self.wind
+        self.mix || self.shift || self.wind || self.lift
     }
     /// Whether the links between blocks change by the day.
     pub(super) fn daily(self) -> bool {
         self.mix || self.wind
     }
-    /// The share of `mix` the explicit eddies keep: in probe D the weather's wind takes the rest (`WIND_SHARE`).
+    /// The share of `mix` the explicit eddies keep: all of it. The weather's wind moves air some 400 km in its time
+    /// scale, less than a node of the stretched map (625 km), so on the nodes it adds almost no mean mixing and the
+    /// explicit eddies keep the measured diffusivity (a share of a half cooled the land by 2 K).
     pub(super) fn kept(self) -> f64 {
-        if self.wind { 1.0 - WIND_SHARE } else { 1.0 }
+        1.0
     }
 }
 
@@ -199,6 +207,16 @@ pub(super) fn day_pushes(w: &World, s: &Scratch, wx: &Weather, push: &Pushes, (l
     p
 }
 
+/// The rise of each node's air on day `d` (probe E): `rise` (the ground's, `rise::rise`) plus the weather's, its
+/// vertical speed (`LIFT_M_S` times the field at the node) lifting the air at the ground's density over the node's area,
+/// mol/s.
+pub(super) fn day_rise(w: &World, s: &Scratch, wx: &Weather, rise: &[f64], d: usize) -> Vec<f64> {
+    rise.iter()
+        .enumerate()
+        .map(|(j, r)| r + s.nt[j] / super::node_scale_height(s, j, w.cfg.gravity) * LIFT_M_S * wx.at(node_xy(w, j), Field::Lift, d))
+        .collect()
+}
+
 /// Steps of the weather's wind in a day (probe D): explicit, so a node never gives more than it holds.
 const WIND_STEPS: usize = 4;
 
@@ -244,7 +262,15 @@ fn column(w: &World, s: &Scratch) -> f64 {
 fn across(w: &World, wx: &Weather, (a, b): ([f64; 2], [f64; 2]), d: usize) -> f64 {
     let (m, u) = ([(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0], [b[0] - a[0], b[1] - a[1]]);
     let half = [-u[1] / 2.0, u[0] / 2.0];
-    let psi = |sign: f64| wx.stream([m[0] + sign * half[0], m[1] + sign * half[1]], d, w.cfg.mix);
+    // The streamfunction is none on the map's edges, rising to whole one node in: no weather's wind crosses them,
+    // where the column beyond is held and would forget the air it took (`edge`); the edges get their weather from the
+    // planet's air (probes B, C).
+    let (wide, high, node) = (w.map.w as f64 * w.map.side, w.map.h as f64 * w.map.side, w.mesh.level(AIR).area()[0].sqrt());
+    let window = |p: [f64; 2]| (p[0].min(wide - p[0]).min(p[1]).min(high - p[1]) / node).clamp(0.0, 1.0);
+    let psi = |sign: f64| {
+        let p = [m[0] + sign * half[0], m[1] + sign * half[1]];
+        window(p) * wx.stream(p, d, w.cfg.mix)
+    };
     (psi(1.0) - psi(-1.0)) / (wx.stretch * wx.stretch)
 }
 
