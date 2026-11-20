@@ -77,7 +77,7 @@ cut 0.3 of its height above its foot, two from four sides, cut 0.35 and 0.22, so
 left out), each with its light scaled to a mean of 0.06 (linear) and its darkest lifted by 0.006: burnt bark in the sun
 reads charcoal grey, as light as the bare trees' bark. Each licensed under CC BY 4.0
 (http://creativecommons.org/licenses/by/4.0/); the sprites are rendered from them (changed: lit, cut at the ground,
-shrunk, their light scaled). Drawn by `shaders/snags.wgsl`, with the bare twins of the trees of models.png.
+shrunk, their light scaled). Drawn by `shaders/lib/snag.wgsl` among the plants' marks, with the bare twins of the trees of models.png.
 
 | sprite | model | author | licence |
 |---|---|---|---|

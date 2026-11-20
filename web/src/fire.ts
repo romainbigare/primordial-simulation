@@ -1,9 +1,9 @@
 // Fire on the live map: what the core's layers say fire did on each square (tape/src/layers.rs), sent to the GPU as a
 // texture of three planes (web/shaders/lib/fire.wgsl), and the boxes of squares the map draws it in: the burn scars and
 // the cured grass in the ground's program made with them (burnt.wgsl, over the squares that hold either; land.wgsl
-// elsewhere), the dead trees standing (snags.wgsl, over the squares that hold them), the flames and the smoke over the
-// plants (flames.wgsl, over the squares that burn and the smoke's reach). Where nothing burns, has burnt or stands
-// cured, nothing of it is drawn and no pixel pays for it.
+// elsewhere), the dead trees standing among the plant cover's marks (cover.wgsl, lib/snag.wgsl, where dead walls
+// stand), the flames and the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach).
+// Where nothing burns, has burnt or stands dead or cured, nothing of it is drawn and no pixel pays for it.
 import { World, decode } from './data';
 import { Draw, Gpu, Texture, Uniforms } from './gpu';
 import { half } from './canopy';
@@ -53,11 +53,13 @@ export class Fire {
   private cellM = 1;
   /** The months since a burn that mean none (the layer's top). */
   private never = 0;
-  /** The squares the burn scars and the cured grass lie in, those the dead trees stand in, and those the flames and
-   * their smoke reach (null: none). */
+  /** The squares the burn scars and the cured grass lie in, and those the flames and their smoke reach (null: none); and
+   * whether dead walls stand on any square. */
   scars: Box | null = null;
-  snags: Box | null = null;
   flames: Box | null = null;
+  private snags = false;
+  /** The texture of the plant cover's draws where nothing of fire is known: one texel of nothing. */
+  private blank: Texture | null = null;
 
   /** What fire did on world `w`'s squares, from its layers (none on a world whose tape has no fire). */
   set(w: World | null): void {
@@ -76,7 +78,7 @@ export class Fire {
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
     const n = w * h, scar = (i: number) => (!p ? 0 : p.age[i] < never ? 1 : Math.min(p.burnt[i], 1));
     this.scars = p ? boxOf(w, h, i => scar(i) > 0 || p.ash[i] > 0 || p.cured[i] > 0, BLEND_SQUARES) : null;
-    this.snags = p ? boxOf(w, h, i => p.snag[i] > 0, BLEND_SQUARES) : null;
+    this.snags = p !== null && p.snag.some(x => x > 0);
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
     if (!p || (!this.scars && !this.flames && !this.snags)) { this.data = null; return; }
     const data = new Uint16Array(4 * FIRE_PLANES * n);
@@ -104,9 +106,22 @@ export class Fire {
     return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer };
   }
 
+  /** The bindings fire.wgsl reads on `gpu` in the plant cover's draws (cover.wgsl `lattice`): the texture and the
+   * squares, its first number 0 where no dead walls stand (then the texture is one texel of nothing). */
+  plantBinds(gpu: Gpu): Draw['binds'] {
+    const u = new Uniforms(FIRE_VEC4S);
+    if (!this.data || !this.snags) {
+      if (!this.blank) { this.blank = gpu.texture(1, 1, 'rgba16float'); gpu.write(this.blank, new Uint16Array(4)); }
+      return { 25: this.blank, 26: 'smooth', 27: u.vec4(0, 1, 1).buffer };
+    }
+    const b = this.binds(gpu, { mode: 'earth', layer: '', ramp: [], ground: 0 }, [0, 0, 0, 0, 0, 0, 0, 0], 0)!;
+    return { 25: b[25], 26: b[26], 27: b[27] };
+  }
+
   stop(gpu: Gpu | null): void {
-    if (gpu && this.tex) gpu.drop(this.tex);
+    if (gpu) for (const t of [this.tex, this.blank]) if (t) gpu.drop(t);
     this.tex = null;
+    this.blank = null;
     this.due = this.data !== null;
   }
 }

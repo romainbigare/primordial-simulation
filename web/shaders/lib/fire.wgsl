@@ -1,6 +1,6 @@
 // What fire leaves and does on each square of the live map (web/src/fire.ts), as the core's layers say it, and where it
 // lies inside a square: read by the ground's burn scars (burn.wgsl) and by the flames and smoke over the map
-// (flames.wgsl), and by the snags standing on them (snags.wgsl). Points are in metres from the map's north-west corner.
+// (flames.wgsl), and by the dead trees standing on them among the plants (snag.wgsl, cover.wgsl). Points are in metres from the map's north-west corner.
 
 struct Fire {
   // A square's side, m; the map's squares across and down; the view drawn (0 the Earth's colours, 1 the true colour).
