@@ -17,12 +17,14 @@ const SHADE_TINT = vec3f(0.80, 0.88, 1.08); const LIT_TINT = vec3f(1.06, 1.02, 0
 // Bare ground is drawn by its grain (a painted map's earth): its colour times a tint at full strength, the tints of its
 // grains by their shares. Coarse grain (sand) pale and warm: quartz grains bare of coatings; middle grain (silt) warm;
 // fine grain (clay) darker and redder, as the iron oxides that coat it stain it (Schwertmann 1993). Organic matter
-// darkens it towards black-brown, all of the way from `HUMUS_FULL` of its solid volume (about 2 % of its mass): a few
-// per cent of humus makes a soil dark (Schulze and others 1993).
+// darkens it further towards black-brown, at full strength whatever the style: none of it up to `HUMUS_FROM` of its
+// solid volume, all of it from `HUMUS_FULL` (about 1.5 % of its mass), evenly in the logarithm of the share between: a
+// soil's lightness falls about with the logarithm of its organic carbon, and a few per cent make it dark (Schulze and
+// others 1993; Konen and others 2003).
 const SAND_TINT = vec3f(1.9, 1.62, 1.08);
 const SILT_TINT = vec3f(1.25, 1.08, 0.82);
 const CLAY_TINT = vec3f(1.0, 0.5, 0.36);
-const HUMUS_TINT = vec3f(0.40, 0.31, 0.24); const HUMUS_FULL = 0.04;
+const HUMUS_TINT = vec3f(0.22, 0.16, 0.11); const HUMUS_FROM = 0.002; const HUMUS_FULL = 0.02;
 
 // Water seen through: the attenuation of the clearest coastal water, its green and blue drawn stretched (Jerlov 1976,
 // type 1 and clearer), so the bed shows to tens of metres, its red half as much as water itself takes it (Pope and
@@ -87,14 +89,18 @@ fn relief_light(x: f32) -> f32 {
   return LIT_TOP - (LIT_TOP - 1.0) * exp(-(k - 1.0) / (LIT_TOP - 1.0));
 }
 
-// What the colour of ground whose share `bare` is bare is multiplied by: its bare part tinted by its grain `grain`
-// (`Spot.grain`: the shares of coarse and fine grain and of organic matter) as `SAND_TINT` to `HUMUS_TINT` say. The tint
-// is even in the shares, so the mean of patches of grain is the tint of their mean grain.
-fn bare_tint(bare: f32, grain: vec4f) -> vec3f {
+// What the colour of ground whose share `bare` is bare, and whose share `seen` shows its soil from above
+// (`Ground.seen`), is multiplied by: its bare part tinted by its grain `grain` (`Spot.grain`: the shares of coarse and
+// fine grain and of organic matter) as `SAND_TINT` to `CLAY_TINT` say, and the soil seen darkened by its organic matter
+// (`humus`). The grain's tint is even in its shares, so the mean of patches of grain is the tint of their mean grain;
+// the organic share is the cells', with no patches.
+fn bare_tint(bare: f32, seen: f32, grain: vec4f) -> vec3f {
   let mineral = grain.x * SAND_TINT + grain.y * CLAY_TINT + max(1.0 - grain.x - grain.y, 0.0) * SILT_TINT;
-  let tint = mix(mineral, HUMUS_TINT, ease(0.0, HUMUS_FULL, grain.z));
-  return mix(vec3f(1.0), tint, bare * STYLE);
+  return mix(vec3f(1.0), mineral, bare * STYLE) * mix(vec3f(1.0), HUMUS_TINT, seen * humus(grain.z));
 }
+
+// How far organic matter of the share `organic` of the solid volume darkens bare ground, 0..1 (`HUMUS_FROM`).
+fn humus(organic: f32) -> f32 { return ease(log(HUMUS_FROM), log(HUMUS_FULL), log(max(organic, HUMUS_FROM))); }
 
 // Linear colour `c` lit by `lit` (`relief_light`), tinted cool in the shade and warm in the light.
 fn relief_tint(c: vec3f, lit: f32) -> vec3f {

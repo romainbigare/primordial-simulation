@@ -494,7 +494,7 @@ tape/       the recorder (rec/, its yearly columns in rec/cols/, the viewer file
               them (stands.rs), the things of a window (things.rs), the ground in tiles (ground/), measures, the
               fingerprint of a world; tests: tape.rs, ranges.rs, scale.rs, ground.rs, things.rs
 library/    the recognition library (data files); today the Earth names of chemistry 0
-cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`, `ew view`; flags in args.rs), pictures; tests:
+cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`, `ew view`, `ew cells`; flags in args.rs), pictures; tests:
               the word ban, sides, writer, view
 wasm/       the core as WebAssembly for the live viewer: a small shell of `extern "C"` exports (`ew-wasm`)
 web/        the 2D map viewer (TypeScript): plays a tape, or runs a live world in a worker; its shaders draw the map

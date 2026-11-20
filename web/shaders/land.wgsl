@@ -54,16 +54,24 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
   return p;
 }
 
-// The byte of the layer drawn at `at` (`cs` its squares, `dry` its spot over the ground), 0..1: the cells' blended, or
-// of a layer of the soil the live map finds at each point (colour.wgsl `Earth.view`), its share as a byte of a layer
-// from 0 to 1: the share of the pores the soil's liquid fills by the laws inside a cell (`State`), or the grain's shares
-// of the samples (rock.wgsl `samples_at`, without the patches the Earth's colours draw).
-fn layer_at(at: vec2f, cs: Corners, dry: Spot) -> f32 {
+// The byte of the layer drawn at `at` (`dry` its spot over the ground), 0..1: the cells' through their centres as a
+// B-spline (`cells_smooth`, so no square shows where the cells' values jump), or of a layer of the soil the live map
+// finds at each point (colour.wgsl `Earth.view`), its share as a byte of a layer from 0 to 1: the share of the pores
+// the soil's liquid fills by the laws inside a cell (`State`), the grain's shares of the samples (rock.wgsl
+// `soil_samples_at`, without the patches the Earth's colours draw), the liquid the samples' loose ground holds for roots as
+// its layer shows it, or the share of that its pores hold at the point: none at the wilting point, all at field
+// capacity, in proportion between (core/src/soil/pores.rs `Pores::available`).
+fn layer_at(at: vec2f, dry: Spot) -> f32 {
   let k = earth.view.w;
   if (k == 2.0) { return dry.filled; }
-  if (k == 3.0) { return samples_at(at, GRAIN_PLANE).x; }
-  if (k == 4.0) { return samples_at(at, GRAIN_PLANE).y; }
-  return blended(VIEW, cs).x;
+  if (k == 3.0) { return soil_samples_at(at, GRAIN_PLANE).x; }
+  if (k == 4.0) { return soil_samples_at(at, GRAIN_PLANE).y; }
+  if (k == 5.0) { return soil_samples_at(at, GRAIN_PLANE).w; }
+  if (k == 6.0) {
+    let p = soil_samples_at(at, PORES_PLANE);
+    return clamp((dry.filled - p.y) / max(p.x - p.y, 1e-6), 0.0, 1.0);
+  }
+  return cells_smooth(VIEW, at / land.map.x).x;
 }
 
 // Herbs float their leaves on liquid from their height's depth on, all of them from `FLOAT_TALL` times it.
@@ -244,7 +252,7 @@ const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
     truth = true_soaked(truth, spots.dry);
   }
   var shown = 0.0;
-  if (earth.view.x == 2.0) { shown = layer_at(at, cs, spots.dry); }
+  if (earth.view.x == 2.0) { shown = layer_at(at, spots.dry); }
   let rgb = in_view_of(c, shown, truth);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

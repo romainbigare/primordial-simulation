@@ -218,6 +218,17 @@ fn blended(k: i32, c: Corners) -> vec4f {
   return c.w.x * cell(k, c.at[0]) + c.w.y * cell(k, c.at[1]) + c.w.z * cell(k, c.at[2]) + c.w.w * cell(k, c.at[3]);
 }
 
+// Cell value `k` at a point `s` squares from the map's corner, through the squares' centres as a B-spline (draw.wgsl
+// `b_spline`): smooth across their edges, where `blended` creases.
+fn cells_smooth(k: i32, s: vec2f) -> vec4f {
+  let c = b_spline(s - 0.5);
+  var sum = vec4f(0.0);
+  for (var y = 0; y < 3; y++) {
+    for (var x = 0; x < 3; x++) { sum += c.wx[x] * c.wy[y] * cell(k, c.i + vec2i(x - 1, y - 1)); }
+  }
+  return sum;
+}
+
 // The ground at `at`, m from the map's north-west corner (`read_tile`, with `spline`): from the tile the page names
 // there, fading in over the one before it; before any tile came, the cells' mean heights, flat.
 fn ground_at(at: vec2f, spline: bool) -> Tiled {

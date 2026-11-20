@@ -78,9 +78,9 @@ the world stays near itself; the Earth anchors in that test are separate and fix
 and the rain, all nine references were measured again (ranges unchanged). Measure them again only with a change of the
 laws that moves the world on purpose, in a commit of its own, and tell the owner each time.
 
-**One slow test is red on main and stays so by the owner's decision**:
-`the_laws_do_not_depend_on_the_size_of_the_cells` (section 5, nature track). It does not hold a merge. It is not to
-be loosened, skipped or hunted without the owner's word.
+**`the_laws_do_not_depend_on_the_size_of_the_cells`** was red on main by the owner's decision (section 5, nature
+track). Since the soil's laws it passes; nobody hunted why. If it turns red again, it does not hold a merge, and it
+is not to be loosened, skipped or hunted without the owner's word.
 
 ## 4. Where things stand
 
@@ -309,6 +309,31 @@ runs from one placed world (`tape/tests/common`: `placed`, `go_from`); on the pa
   look. About 3 to 5 builder-days.
 - Found on main by that read: `Cover::sent()` has no caller; comments in `cover/around.rs` and `cover/mod.rs`
   speak of a nursery main does not have. To delete, or to use with the port.
+
+**The soil is on main** (`core/src/soil/`, `docs/laws.md` 4; the owner's word: soil types with texture,
+permeability, fertility, moisture and depth, and their effects on the world). No soil type is placed: each 125 m
+sample's texture (coarse, middle, fine) comes from the bed's make, the time the loose ground has weathered and the
+sorting by the flood that laid it; a cell takes its samples' mean. Its pores (porosity, field capacity, wilting point,
+conductivity) follow by Saxton and Rawls 2006, mixed with an organic part; they replace the four numbers the whole
+world used. Organic matter is the dead matter the ground holds; a fifth of rotting body matter becomes a slow pool
+(substance 14) that fine particles protect (25 to 100 years); rot needs gas in the pores, so full pores keep their
+dead matter (peat); exchange sites on fine and organic matter hold the dissolved minerals; runoff wears loose ground
+by its erodibility; a scarce mineral is shared by the slots' fine roots (Casper and Jackson 1997). `SNAPSHOT_VERSION`
+159. The page: soil layers (coarse, fine, organic, conduct, avail, filled, roots, rises, sheds, litter, slow,
+mineral_free, mineral_held, rot), a texture triangle legend, bare ground tinted by its texture, dark organic ground
+and peat, puddles by how slowly a sample drains, three CC0 ground photos laid in turned hexagons, and the True view
+shows the ground (only liquid standing over full pores is water). `ew cells` writes a table of the cells; `ew view
+--layer kinds` shows the leading kind.
+- **What it does over 300 years** (seed 1, size 32, band 20,65, against one loam everywhere): cover +20%, the
+  leading kinds differ (a tall fast kind loses the south-west to a plain one), the mineral lost to the sea ÷8, land
+  worn −22%, land +0.2 K from year 1 (texture alone), soil wetness patchier; rain, evaporation and runoff on the
+  whole island move under 0.5% (a cell's mean texture hides the samples' contrast).
+- **Left:** the slow pool has not settled at year 300 (organic share 0.58% and rising); in both worlds the cover
+  peaks near year 130 and falls by a third to year 300 (not the soil's: cause not found; a guess is minerals locked
+  in dead matter); the samples' patches do not reach Flow (one liquid store a cell); the nitrogen mineral is held at
+  one strength as a whole; the `filled` layer shows 100 m squares at the 2 km bar; dense cover hides most dark
+  ground, so the soil's look shows best in dry or open places; fire and the dead of thinning (to the ground) were
+  left for later by the owner.
 
 ## 5. What to do next, in order
 
