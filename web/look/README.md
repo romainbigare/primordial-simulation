@@ -103,7 +103,7 @@ texture reads, green at 64 noises, blue at 32 photographs. `compare` shows the c
 ## The hooks
 
 The tool copies the built page (`web/dist`) and puts one object, `window.__ew`, at the end of the page's script
-(`page.mjs` `HOOKS`): the map, the cover, the world, play and pause, the speed, opening a saved
+(`page.mjs` `HOOKS`): the map, the cover, the world, play and pause, the speed, the view and the layer shown, opening a saved
 world by URL, and the numbers the marks' textures are laid out by. The shipped page holds none of it: the hooks cost
 it no code. They name the page's own variables (`main.ts`, `lattices.ts`, `textures.ts`, `canopy.ts`, `kind_row.ts`): when one is renamed, the
 page fails to start in the tool (an error at once), and `HOOKS` is changed with it. `read.mjs` `marks` repeats the
