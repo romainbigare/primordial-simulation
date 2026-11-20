@@ -1,6 +1,6 @@
 # Where the page's textures come from
 
-Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com) and Kenney (kenney.nl), but for the trees
+Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), ambientCG (ambientcg.com) and Kenney (kenney.nl), but for the trees
 rendered from PlantCatalog's models, which are CC BY 4.0 (credited below): the ground photographs resized and packed for
 the page by hand, each with its large-scale light divided out (so its repeat does not show); the carpets and the sprites
 rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 512 layers, top first.
@@ -23,9 +23,15 @@ rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 51
 | 11 | dirt_floor (diffuse), https://polyhaven.com/a/dirt_floor | 2.07 m |
 | 12 | mud_cracked_dry_riverbed_002 (diffuse), https://polyhaven.com/a/mud_cracked_dry_riverbed_002 | 2.0 m |
 | 13 | mud_forest (diffuse), https://polyhaven.com/a/mud_forest | 2.35 m |
+| 14 | ambientCG Ground094B (color), https://ambientcg.com/a/Ground094B: rippled sand with water in its troughs | 1.2 m |
+| 15 | ambientCG Ground100 (color), https://ambientcg.com/a/Ground100: rippled silt | 1.5 m |
+| 16 | ambientCG Ground083 (color), https://ambientcg.com/a/Ground083: mud under a film of algae | 2.0 m |
+| 17 | low_tide_rocks (diffuse), https://polyhaven.com/a/low_tide_rocks: wet gravelly sand | 2.17 m |
 
-Each is the 2k diffuse shrunk to 512 x 512, its light divided by itself blurred (a Gaussian of 40 texels, wrapping
-round, so the layer still repeats) and scaled back to its mean. All are CC0 (polyhaven.com/license).
+Each is the 2k diffuse (ambientCG's: its 2K-JPG colour map) shrunk to 512 x 512, its light divided by itself blurred (a
+Gaussian of 40 texels, wrapping round, so the layer still repeats) and scaled back to its mean. All are CC0
+(polyhaven.com/license, ambientcg.com/license). ambientCG gives no size for layers 14 to 16: their side is set by
+their ripples (current ripples lie 10 to 15 cm apart).
 
 ## carpets.jpg
 

@@ -8,8 +8,8 @@
 
 // Of each photograph laid as detail (`detail`): its side in the world, m (web/textures/SOURCES.md), and its own stream
 // of noise.
-fn detail_m(t: i32) -> f32 { var m = array<f32, 14>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35); return m[t]; }
-fn detail_noise(t: i32) -> i32 { var k = array<i32, 14>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199); return k[t]; }
+fn detail_m(t: i32) -> f32 { var m = array<f32, PHOTOS>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35, 1.2, 1.5, 2.0, 2.17); return m[t]; }
+fn detail_noise(t: i32) -> i32 { var k = array<i32, PHOTOS>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 185, 186, 187, 188); return k[t]; }
 // The streams of noise of the tiles of cover: their patches' shifts and their seams' waves (`carpet`), each tile its own.
 const CARPET_SHIFTS = 108; const CARPET_WAVES = 110;
 // A photograph's hexagons are `DETAIL_HEX` times its side across, and meet over `DETAIL_EDGE` of their weights.
