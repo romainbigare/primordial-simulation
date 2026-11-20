@@ -134,6 +134,19 @@ const FREE_LEAST = 0.05;
 // The stream of a kind's draws for a cell, by its slot and square (`pick_kind`).
 const RACE_STREAM = 175;
 
+// The loose ground at the foot `at` (its squares `cs`) with its patches (rock.wgsl `loose_seen`, as the bare bed is
+// drawn), read only where a kind's roots may want more than lies there.
+fn foot_loose(at: vec2f, cs: Corners) -> f32 {
+  var deepest = 0.0;
+  for (var s = 0; s < 4; s++) {
+    for (var q = 0; q < groups(); q++) {
+      let needs = kind(roots_plane(q), cs.at[s]);
+      deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
+    }
+  }
+  return select(0.0, loose_seen(at, loose_at(at), 0.0), deepest > 0.0);
+}
+
 // The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` over the patches, its ground `f`),
 // its own draw `own`: its square (of the four), kind and place among the kind's groups in steps (`PLACE_STEPS`), or -1
 // where none stands. Each group of each kind of each square weighs its chance on the lattice by its share at the foot.
@@ -148,19 +161,8 @@ const RACE_STREAM = 175;
 // its ground (vec3i(0) or -1).
 fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: vec2i, exact: bool) -> vec3i {
   let n = kinds_n();
-  // The loose ground at the foot with its patches (rock.wgsl `loose_seen`, as the bare bed is drawn), read only where a
-  // kind's roots may want more than lies there.
   var loose = 0.0;
-  if (exact) {
-    var deepest = 0.0;
-    for (var s = 0; s < 4; s++) {
-      for (var q = 0; q < groups(); q++) {
-        let needs = kind(roots_plane(q), cs.at[s]);
-        deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
-      }
-    }
-    loose = select(0.0, loose_seen(at, loose_at(at), 0.0), deepest > 0.0);
-  }
+  if (exact) { loose = foot_loose(at, cs); }
   // The weights by height, and of each bin the weight from it up.
   var bins: array<f32, TALL_BINS>;
   for (var s = 0; s < 4; s++) {
@@ -292,22 +294,21 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   let none = vec4f(-1.0, 0.0, 0.0, 0.0);
   let id = cover.base[l].xy + vec2i(k);
   let at = cover.corner.xy + mark_foot(l, k);
-  let thing = as_thing(field_at(at, WIDE_LAYER)[l], cover.seen.x);
-  if (thing <= 0.0) { return none; }
   let cs = corners(at / land.map.x);
   // Whether any kind of the four squares has marks on the lattice.
   var all = 0.0;
   for (var s = 0; s < 4; s++) {
     for (var t = 0; t < kinds_n(); t++) { all += cs.w[s] * dot(abs(kind(chance_plane(l, t), cs.at[s])), vec4f(1.0)); }
   }
-  if (all <= 0.0) { return none; }
+  let thing = as_thing(field_at(at, WIDE_LAYER)[l], cover.seen.x);
+  if (thing <= 0.0 || all <= 0.0) { return dead_decided(l, k, id, at, cs, all); }
   // Whether any kind may claim the cell, before its ground is read.
   let own = rand3(id, l).y;
   let most = Foot(0.0, 0.0, 0.0, 0.0, 0.0);
-  if (pick_kind(l, at, cs, 1.0 + PATCH, most, own, id, false).x < 0) { return none; }
+  if (pick_kind(l, at, cs, 1.0 + PATCH, most, own, id, false).x < 0) { return dead_decided(l, k, id, at, cs, all); }
   let f = foot(at);
-  let pick = pick_kind(l, at, cs, patchy(at), f, own, id, true);
-  if (pick.x < 0) { return none; }
+  let pick = ground_pick(l, at, cs, f, own, id);
+  if (pick.x < 0) { return dead_decided(l, k, id, at, cs, all); }
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
   let wades = select(0.0, f.depth, f.depth > FILM_M);
@@ -315,6 +316,97 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
   return vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), f.snow, mark_box(l, q));
+}
+
+// Whether a plant may stand on the ground at `at`: not in a channel's water (rock.wgsl `channel_at`, its water's
+// half width about its middle), whose bed floods take; and where the ground there holds no plant at all, none.
+fn ground_open(at: vec2f) -> bool {
+  let g = ground_at(at, false);
+  let ch = channel_at(g, discharge_of(sample_at(g)));
+  return ch.water <= 0.0 || abs(g.sd - ch.middle) >= ch.water;
+}
+
+// The rule of the ground for every mark of lattice l at `at` (its squares `cs`, its foot `f`), living and dead: open
+// ground (`ground_open`), where the squares' kinds' own rules (`counts`: liquid no deeper than its line, roots in deep
+// enough loose ground, wet enough) let a kind with marks on the lattice stand. A living mark's kind is picked among
+// those there (`pick_kind`, by the draw `own`); a dead tree stands where any of them could (`ground_holds`).
+fn ground_pick(l: i32, at: vec2f, cs: Corners, f: Foot, own: f32, id: vec2i) -> vec3i {
+  if (!ground_open(at)) { return vec3i(-1); }
+  return pick_kind(l, at, cs, patchy(at), f, own, id, true);
+}
+fn ground_holds(l: i32, at: vec2f, cs: Corners, f: Foot) -> bool {
+  if (!ground_open(at)) { return false; }
+  let loose = foot_loose(at, cs);
+  let thick = patchy(at);
+  for (var s = 0; s < 4; s++) {
+    if (cs.w[s] <= 0.0) { continue; }
+    for (var q = 0; q < groups(); q++) {
+      let m = counts(cs, s, q, thick, f, loose, true);
+      for (var c = 0; c < 4; c++) {
+        let t = 4 * q + c;
+        if (t < kinds_n() && m[c] > 0.0 && any(kind(chance_plane(l, t), cs.at[s]) != vec4f(0.0))) { return true; }
+      }
+    }
+  }
+  return false;
+}
+
+// The code of a dead tree's mark (`dead_decided`): past every living mark's.
+fn dead_code() -> f32 { return f32(i32(land.map.y) * i32(land.map.z) * kinds_n() * GROUPS * PLACE_STEPS); }
+
+// The dead tree cell k of lattice l may hold (snag.wgsl; its kind -1: none) and the dead trees its cells hold on the
+// mean (0: none): on the trees' lattice where fire left dead walls standing (fire.wgsl), only in the burnt patch the
+// scar is drawn with (`burn_rank`, `under_share`; its age the scar's, `scar_age`), so as many as its walls make
+// (`SNAG_KG`) over the patch's share of the land, in clumps (`DEAD_CLUMP_M` across) inside it.
+const DEAD_CLUMP_M = 40.0;
+struct Dead { q: Snag, mean: f32 }
+fn dead_at(l: i32, k: vec2f) -> Dead {
+  var out = Dead(Snag(-1, 0, 0.0, 0.0, 1.0, vec3f(1.0)), 0.0);
+  if (l != STANDS || fire.map.x <= 0.0) { return out; }
+  let at = cover.corner.xy + mark_foot(l, k);
+  let fa = fire_at(at);
+  if (fa.snag <= 0.0 || fa.burnt <= 0.0) { return out; }
+  let rank = burn_rank(at, cover.seen.x);
+  if (under_share(rank, fa.burnt) <= 0.5) { return out; }
+  let side = cover.grid[l].z;
+  let clump = 2.0 * smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / DEAD_CLUMP_M, 97));
+  let reach = (cover.grid[l].w + cover.reach[l].x) * side;
+  out.q = snag_of(cover.base[l].xy + vec2i(k), clamp(scar_age(at, rank.x) / max(fire.air.y, 1.0), 0.0, 1.0), reach / MAP_VIEW.y);
+  out.mean = clump * fa.snag * side * side / SNAG_KG / min(fa.burnt, 1.0);
+  return out;
+}
+
+// The dead tree of cell k (`id` in the world, its foot at `at`, its squares `cs`) of lattice l where no living plant
+// claims it (`decide`), whose living kinds have the chance `all` that a cell holds one of their marks (`dead_at`: with
+// the chance of its own stream its mean makes over the share of cells no living mark takes, at least `EMPTY_LEAST`), on
+// ground the living marks' rule lets a tree of the squares' kinds stand on (`ground_holds`; where the squares hold
+// no kinds of trees, open ground with no liquid over `FILM_M` and loose ground over the bed), as deep in snow as shows
+// it: a mark of `dead_code` and its box (`dead_box`).
+fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32) -> vec4f {
+  let none = vec4f(-1.0, 0.0, 0.0, 0.0);
+  let dead = dead_at(l, k);
+  if (dead.q.kind < 0 || snag_unit(id, 41) >= dead.mean / max(1.0 - all, EMPTY_LEAST)) { return none; }
+  let f = foot(at);
+  if (all > 0.0) {
+    if (!ground_holds(l, at, cs, f)) { return none; }
+  } else if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
+  let reach = (cover.grid[l].w + cover.reach[l].x) * cover.grid[l].z;
+  let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_thing(dead.q.h, cover.seen.x);
+  if (shows <= 0.0) { return none; }
+  return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q, reach));
+}
+
+// The box dead tree q of lattice l covers about its foot, as `mark_box`: its sprite with its lean, and its shadow.
+fn dead_box(l: i32, q: Snag, reach: f32) -> f32 {
+  let g = cover.grid[l];
+  let r = cover.reach[l].x;
+  let size = snag_size(q);
+  let w = size.x * q.h / size.y;
+  let body = 0.5 * w + abs(sin(q.lean)) * q.h;
+  let long = min(MODEL_SHADOW_RUN * q.h, 0.9 * reach);
+  let m = vec4f(body, max(body, min(long + 0.5 * w, reach)), q.h, long);
+  let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
+  return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
 
 // The share of a mark that shows (0..1, more than 0) and the depth of the liquid over its foot, m (0: on land), as one
