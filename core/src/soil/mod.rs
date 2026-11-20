@@ -91,7 +91,8 @@ pub fn of_world(w: &World) -> Vec<Soil> {
 /// Each cell's organic share anew from what its ground holds now (`solids`), and its pores where the share moved
 /// (`flow::new_pores`, which books the potential energy of the liquid they hold): the dead matter its cover leaves on
 /// its ground, which rots there as the open world's reactions rot it (laws.md 2.1), so ground under a dense cover grows
-/// richer in organic matter and holds more liquid, and bare ground loses it; and its exchange sites (`exchange::holds`).
+/// richer in organic matter and holds more liquid, and bare ground loses it (found again where it moved by more than
+/// `ORGANIC_STEP`); and its exchange sites (`exchange::holds`).
 /// Once a month, at its start.
 pub fn month(w: &mut World) {
     let Some(parts) = crate::life::Parts::of(&w.chem) else { return };
@@ -99,19 +100,24 @@ pub fn month(w: &mut World) {
     crate::flow::new_pores(w, |w| organic_pores(w, &organics));
 }
 
-/// Each cell's organic share and exchange sites anew (`solids`, of the substances `organics`), and its pores where the
-/// share moved. Returns whether any cell's pores changed.
-fn organic_pores(w: &mut World, organics: &[usize]) -> bool {
-    let mut moved = false;
+/// A cell's organic share and its pores are found again once its organic matter has moved by more than this share of
+/// what it was when they were last found: its pores move by less than a twentieth of what the organic share moves
+/// them over a loam's (a speed tolerance).
+const ORGANIC_STEP: f64 = 0.05;
+
+/// Each cell's exchange sites anew (`solids`, of the substances `organics`), and its organic share and pores where the
+/// share has moved by more than `ORGANIC_STEP`. Returns the cells whose pores changed.
+fn organic_pores(w: &mut World, organics: &[usize]) -> Vec<u32> {
+    let mut moved = Vec::new();
     for i in 0..w.mesh.cells().n() {
         let [organic, all] = solids(w, organics, i);
         let share = if all > 0.0 { organic / all } else { 0.0 };
         let soil = &mut w.soil[i];
         soil.holds = exchange::holds(all - organic, soil.texture.fine, organic);
-        if share != soil.texture.organic {
+        if (share - soil.texture.organic).abs() > ORGANIC_STEP * soil.texture.organic || (share == 0.0) != (soil.texture.organic == 0.0) {
             soil.texture.organic = share;
             soil.pores = Pores::of(&soil.texture);
-            moved = true;
+            moved.push(i as u32);
         }
     }
     moved

@@ -71,7 +71,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     // plateau's substance was liquid, so the share of what stays is not the share it had; and a mixed node, from its
     // parts.
     let on: Vec<u32> = cells.into_iter().filter(|&i| s.state.pk[i as usize] != NONE || super::parts::has(s, i as usize)).collect();
-    cells_state(w, s, &on);
+    cells_state(w, s, &on, false);
 }
 
 /// One liquid step of `dt` seconds (the module's doc): after the runoff's pass the liquid's top and deep swap liquid
@@ -85,7 +85,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     under(w, s, &liq, tmin, dt);
     surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     let mixed = super::parts::mix(w, s, dt);
-    cells_state(w, s, &mixed);
+    cells_state(w, s, &mixed, false);
     super::basin::mix(w, s);
     super::air::dissolve(w, s, dt);
 }

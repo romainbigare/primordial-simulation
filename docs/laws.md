@@ -1371,7 +1371,7 @@ ground is fine, and holds its nitrogen from the plants until it rots. The fresh 
 reactions (1, 7, 12; 2.1), faster where the ground is warm and moist and slower under standing liquid, where the
 oxidising gas comes only through the liquid's film (2.3). No store of its own: it is what the ground holds. So ground
 under a dense cover grows richer in organic matter and holds more liquid, and bare ground loses it: the soil and its
-cover shape each other. Where the share moves, the cell's pores are found again (`flow::new_pores`): the liquid they
+cover shape each other. Where the share moves by more than a twentieth of itself (`ORGANIC_STEP`, a speed tolerance), the cell's pores and its node's state are found again (`flow::new_pores`): the liquid they
 hold or let stand rises or falls with them, and its potential energy goes to or from the ground's heat.
 
 **Pores** (`soil::Pores`, `World::pores`): each cell's porosity θs, field capacity θ33 (the liquid held at −33 kPa)

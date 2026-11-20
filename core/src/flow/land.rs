@@ -116,17 +116,21 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, (full, moving): (bool, bo
     }
 }
 
-/// The state of the ground nodes `cells` alone brought up to date, as `ground_state` does it.
-pub(super) fn cells_state(w: &World, s: &mut Scratch, cells: &[u32]) {
+/// The state of the ground nodes `cells` alone brought up to date, as `ground_state` does it; with `all`, each of them,
+/// as a node whose pores changed (`flow::new_pores`), and the bodies found again over them.
+pub(super) fn cells_state(w: &World, s: &mut Scratch, cells: &[u32], all: bool) {
     let caps = capacities(w, s, cells.iter().map(|&i| i as usize));
     let mut anew = Vec::new();
     for (&i, &cap) in cells.iter().zip(&caps) {
         let thaw = !steady(w, s, i as usize, cap);
-        if thaw || moved(w, s, i as usize) {
+        if all || thaw || moved(w, s, i as usize) {
             anew.push((i, thaw));
         }
     }
     parts::solve_nodes(w, s, &anew, (false, true));
+    if all {
+        super::basin::find(w, s);
+    }
 }
 
 /// A ground node's surface is found again once its solid surface and its head have moved since it was last found
