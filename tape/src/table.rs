@@ -11,7 +11,7 @@ use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::World;
 
 /// Numbers a square's row holds (`Table::frame`).
-pub const ROW: usize = 11;
+pub const ROW: usize = 12;
 /// A body that holds less liquid than this on its mean over its surface, m, is drawn dry: a film over a flat basin,
 /// soaked ground rather than water.
 const DRY_M: f64 = 0.1;
@@ -113,16 +113,19 @@ impl Table {
     /// depth of its liquid): the terrain's mean height over it, m; its ground's temperature, K, and how fast the air
     /// cools with height there, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest
     /// ground, m, and the depth that stands, m; the liquid in its pores and what they hold full, m, the level of the
-    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly), and the share of its
-    /// area that is land (`Ctx::land`), on which a shell draws its cover.
+    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly), the share of its
+    /// area that is land (`Ctx::land`), on which a shell draws its cover, and the mean wetness index of its samples (the
+    /// level the liquid departs about where none of them is dry or full: a number of the terrain alone).
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
         let m = m.unwrap_or(Means { pore: 0.0, pores: 0.0, stands: depth, ..Default::default() });
         let [low, top] = level.unwrap_or([z, z + depth]);
-        let (twi, area) = pcore::inside::parts_now(w, &w.terrain_samples(), i, &self.inside[i]);
+        let s = w.terrain_samples();
+        let (twi, area) = pcore::inside::parts_now(w, &s, i, &self.inside[i]);
         let soil = soil_level(&w.cfg.phys, &twi, &area, m).unwrap_or(0.0);
         let cools = w.air_drop(i).unwrap_or(0.0);
-        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, c.land[i]]
+        let twi_mean = self.inside[i].iter().map(|&k| s.twi[k]).sum::<f64>() / self.inside[i].len().max(1) as f64;
+        [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, c.land[i], twi_mean]
     }
 }
