@@ -38,6 +38,19 @@
       "years": ["A", "B", "SA"],
       "years_view": 0.2
     },
+    "deltas": {
+      "world": "seed1",
+      "views": [100.0, 25.0, 5.0],
+      "cost_views": [25.0],
+      "scenes": [
+        { "name": "delta_e", "about": "the east delta, a fan with lagoons", "at": [29.44, 16.19] },
+        { "name": "delta_e_lagoon", "about": "close: a lagoon's shore on the east delta", "at": [29.47, 16.16], "views": [1.0] },
+        { "name": "delta_e_top", "about": "the middle of the east delta's top", "at": [30.2, 16.25], "views": [5.0, 1.0] },
+        { "name": "delta_e_front", "about": "the east delta's front at the sea", "at": [30.92, 16.25], "views": [5.0, 1.0] },
+        { "name": "mouth_sw", "about": "the south-west river's mouth", "at": [14.06, 25.19] },
+        { "name": "mouth_w", "about": "the west river's mouth", "at": [6.0, 22.38] }
+      ]
+    },
     "sediment": {
       "world": "seed1",
       "views": [8.0, 2.0, 0.5],
