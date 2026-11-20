@@ -31,7 +31,7 @@ const PLUME_M = 8000, SPREAD = 0.25;
  * farther. */
 const BLEND_SQUARES = 1;
 /** The texture's planes (fire.wgsl `FIRE_PLANES`). */
-const PLANES = 3;
+const FIRE_PLANES = 3;
 /** Frames a second while a fire in view burns and the world plays. */
 export const FIRE_FPS = 8;
 /** The time the flames are drawn at, s, wraps round after this many seconds (a float keeps its steps fine). */
@@ -77,7 +77,7 @@ export class Fire {
     this.snags = p ? boxOf(w, h, i => p.snag[i] > 0, BLEND_SQUARES) : null;
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
     if (!p || (!this.scars && !this.flames && !this.snags)) { this.data = null; return; }
-    const data = new Uint16Array(4 * PLANES * n);
+    const data = new Uint16Array(4 * FIRE_PLANES * n);
     for (let i = 0; i < n; i++) {
       const s = scar(i), f = p.flame[i];
       data.set([s, s * Math.min(p.age[i], never), f, f * p.length[i]].map(half), 4 * i);
@@ -93,8 +93,8 @@ export class Fire {
    * fire is known. */
   binds(gpu: Gpu, look: MapLook, frame: number[], now: number): Draw['binds'] | null {
     if (!this.data) return null;
-    if (this.tex && (this.tex.w !== this.w || this.tex.h !== PLANES * this.h)) { gpu.drop(this.tex); this.tex = null; }
-    this.tex ??= gpu.texture(this.w, PLANES * this.h, 'rgba16float');
+    if (this.tex && (this.tex.w !== this.w || this.tex.h !== FIRE_PLANES * this.h)) { gpu.drop(this.tex); this.tex = null; }
+    this.tex ??= gpu.texture(this.w, FIRE_PLANES * this.h, 'rgba16float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const mode = look.mode === 'earth' ? 0 : 1;
     const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h, mode).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
