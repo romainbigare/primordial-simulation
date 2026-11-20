@@ -92,8 +92,8 @@ pixel counts what it does and draws the counts as its colour: every texture read
 photograph (`tex.wgsl` `photo`, blue). Two builds: `ground` counts the ground's
 programs (`land.wgsl`, and `burnt.wgsl` over burn scars: `lib/live_map.wgsl`, the far field of the plants in it) and
 draws no marks; `marks` counts the marks' program (`cover.wgsl`) over a black ground. The marks decided once a frame
-for each cell (`marks.wgsl`) are not counted: they are not a pixel's work, nor are the flames and smoke over the map
-(`flames.wgsl`, drawn only where a fire burns).
+for each cell (`marks.wgsl`) are not counted: they are not a pixel's work, nor are the dead trees, flames and smoke over the
+map (`snags.wgsl`, `flames.wgsl`, drawn only where they stand or a fire burns).
 
 `cost.json`: for each scene and build, of `reads`, `noise` and `photos` a pixel over the middle 80 % of the picture: the
 mean, the 95th percentile, the most, and the % of pixels at the top of the colour (a count it cannot hold: 510 reads,

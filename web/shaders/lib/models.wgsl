@@ -183,14 +183,14 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
 }
 
 // The shadow of plant q drawn from its model sprite `fit` at p, e m a pixel: its sprite cast on the ground away from the
-// sun (south-east), each of its texels over its stem's foot (tex.wgsl `foot_rise`) at a height on it laid `MODEL_SHADOW_RUN` of
+// sun (south-east), each of its texels over its stem's foot (tex.wgsl `foot_rise`) at a height on it laid `MODEL_SHADOW_RUN` (draw.wgsl) of
 // that height along the ground, blurred (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of
 // its sprays as are left, over its bare twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the
 // reach a pixel looks for it (cover.wgsl `lattice`). How dark it makes the ground, 0..1. It is laid from where its
 // stem meets what it falls on: the ground at its foot, or the surface of the liquid it stands in, where its stem shows
 // out of it (`seen_in_liquid`): the map's view (water.wgsl `MAP_VIEW`) draws it the cosine of the depth north of the
 // foot.
-const MODEL_SHADOW_RUN = 0.9; const SHADOW_BLUR = 0.05;
+const SHADOW_BLUR = 0.05;
 // The length of that shadow along the ground southward, m, within its reach.
 fn model_shadow_long(q: Plant, fit: ModelFit) -> f32 { return min(MODEL_SHADOW_RUN * fit.h, 0.9 * q.reach); }
 fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
