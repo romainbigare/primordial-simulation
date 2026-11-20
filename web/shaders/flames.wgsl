@@ -31,15 +31,16 @@ const EMBERS = 0.35; const EMBER_M = 0.6; const EMBER_RGB = vec3f(0.95, 0.25, 0.
 const GLOW = 0.3; const GLOW_SHARE = 0.05; const GLOW_M = 3.0; const GLOW_E = vec2f(10.0, 60.0); const GLOW_EARTH = 1.6;
 const GLOW_RGB = vec3f(1.0, 0.36, 0.06);
 // Inside a square's burning share its fire runs as fronts across it, each point swept once by a front as `SWEEP` runs
-// down through a whole number: `SWEEP` is a smooth field of the place (noise `SWEEP_M` across, `SWEEP_LEVELS` whole
-// numbers deep, so fronts lie a few hundred metres apart and run along no line) less the time over `SWEEP_S` s, so the
-// fronts move while the world plays. A front flames `FLAME_DEPTH` lengths deep (as the outer front, tongues on it as
-// tall); behind it the embers fade over `EMBER_FADE` of the way to the next front.
-const SWEEP_M = 600.0; const SWEEP_LEVELS = 4.0; const SWEEP_S = 6.0; const EMBER_FADE = 0.35;
+// down through a whole number: `SWEEP` is a ragged field of the place (ragged.wgsl, its patches from `SWEEP_M` across
+// down to the pixel, `SWEEP_LEVELS` whole numbers deep, so fronts lie some hundred metres apart and run ragged, as a
+// fire's front does along its fuel) less the time over `SWEEP_S` s, so the fronts move while the world plays. A front flames `FLAME_DEPTH` lengths deep (as the outer front, tongues on it as
+// tall); behind it the embers fade over `EMBER_FADE` of the way to the next front, to `EMBER_BASE` of their glow: the
+// burning share smoulders all month.
+const SWEEP_M = 400.0; const SWEEP_OCTAVES = 6; const SWEEP_LEVELS = 3.0; const SWEEP_S = 6.0; const EMBER_FADE = 0.35; const EMBER_BASE = 0.4;
 // A point's flames fade in over the first `FLAME_FADE` of a square's burning share, so they end smoothly where the
 // share blended between the squares' centres ends; none stands on liquid (its ponds' as the ground's tiles draw them,
 // land.wgsl `standing`, deeper than `FILM_M`).
-const FLAME_FADE = 0.005;
+const FLAME_FADE = 0.005; const FLAME_COVER = 0.8;
 
 // Smoke: of the gas a burning square sends to the air, `SMOKE_SHARE` is its particles (biomass burning gives about
 // 10 g of fine particles to 1600 g of carbon dioxide: Andreae and Merlet 2001), sent over the hours its fronts burn,
@@ -53,6 +54,7 @@ const FLAME_FADE = 0.005;
 // shows through its own smoke.
 const SMOKE_SHARE = 0.006; const FLAMING_S = 1.15e5; const SPREAD = 0.25; const PLUME_M = 8000.0; const EXTINCTION = 4.5;
 const SMOKE_RISE_M = 800.0; const SMOKE_EARTH = 2.0; const SMOKE_EARTH_MOST = 0.8; const CALM_M_S = 0.5;
+const SMOKE_NEAR_E = vec2f(0.15, 1.5);
 // The column is summed over `PLUME_STEPS` steps upwind, each read at three points across the spread.
 const PLUME_STEPS = 8;
 // Smoke scatters light about evenly over colours: grey to white (`SMOKE_RGB`), browner within `SMOKE_YOUNG_M` of the
@@ -162,7 +164,7 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
   let t = (f.burnt - r.x) / dy;
   // The fronts inside the burning share (`SWEEP`): how far behind the last front the point lies, as a share of the way
   // between two, and in metres; the tongues on the front south of it, as on the outer front.
-  let sweep = (0.5 + 0.5 * noise(at / SWEEP_M, 17).x) * SWEEP_LEVELS - time / SWEEP_S;
+  let sweep = (0.5 + 0.5 * ragged(at, max(e, FRONT_SMOOTH * f.length), SWEEP_M, SWEEP_OCTAVES, 17)) * SWEEP_LEVELS - time / SWEEP_S;
   let sweep_slope = vec2f(dpdx(sweep), dpdy(sweep)) / e;
   let sweep_dy = sign(sweep_slope.y + 1e-12) * max(abs(sweep_slope.y), 0.5 * length(sweep_slope));
   let behind = 1.0 - fract(sweep);
@@ -178,7 +180,7 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
     light += (zone + inner * flaming) * FLAME_MID * (1.0 - shown);
     let speck = ease(0.55, 0.9, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
     let specks = mix(0.5, speck * 2.0, shows_at(EMBER_M, e));
-    light += EMBERS * inner * (1.0 - flaming) * exp(-behind / EMBER_FADE) * specks * EMBER_RGB;
+    light += EMBERS * inner * (1.0 - flaming) * mix(EMBER_BASE, 1.0, exp(-behind / EMBER_FADE)) * specks * EMBER_RGB;
     light *= ease(0.0, FLAME_FADE, f.flame) * select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M);
   }
   // The glow of the burning squares, seen from afar.
@@ -199,13 +201,19 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
       let size = mix(PUFF_SIZE.x, PUFF_SIZE.y, unit(l.i, 32 + k));
       let off = vec2f(unit(l.i, 34 + k), unit(l.i, 36 + k)) - 0.5;
       let uv = (l.f - 0.5 - (1.0 - size) * off) / size + 0.5;
-      if (all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))) { d += fire_sprite(2 + i32(lowbias(l.i, 31 + k) & 1u), uv, e / (size * PUFF_M)); }
+      // (Each puff fades out before its quarter's edge, so no square shows.)
+      if (all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))) { d += fire_sprite(2 + i32(lowbias(l.i, 31 + k) & 1u), uv, e / (size * PUFF_M)) * (1.0 - smoothstep(0.35, 0.5, length(uv - 0.5))); }
     }
     tau *= mix(1.0, 0.4 + 0.9 * d, puffs);
   }
   let smoke = 1.0 - exp(-tau);
   let tone = mix(SMOKE_YOUNG_RGB, SMOKE_RGB, ease(0.0, SMOKE_YOUNG_M, col.y));
-  // Light the flames give, covered by the smoke over them; the smoke over the map.
-  let a = clamp(smoke, 0.0, select(1.0, SMOKE_EARTH_MOST, earth_view));
-  return vec4f(tone * a + light * (1.0 - 0.7 * a), a) * draw.alpha;
+  // Light the flames give, covered by the smoke over them, over the map as far as it outshines it (`FLAME_COVER` of its
+  // brightest channel: a flame hides what is behind it); the smoke over the map.
+  // The smoke stands some hundreds of metres up: close to the ground the map draws what is under it, the smoke fading
+  // out as a pixel takes from `SMOKE_NEAR_E.y` down to `SMOKE_NEAR_E.x` m.
+  let a = clamp(smoke, 0.0, select(1.0, SMOKE_EARTH_MOST, earth_view)) * ease(SMOKE_NEAR_E.x, SMOKE_NEAR_E.y, e);
+  let lit = light * (1.0 - 0.7 * a);
+  let shine = min(FLAME_COVER * max(lit.r, max(lit.g, lit.b)), 1.0);
+  return vec4f(tone * a + lit, a + shine * (1.0 - a)) * draw.alpha;
 }

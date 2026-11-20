@@ -18,7 +18,7 @@ const COLOUR = `vec4f(vec3f(n_reads / ${READ_STEP}.0, n_noise, n_photo) / 255.0,
 /** A texture read of WGSL (every texture of the page holds floats: each read is a vec4f). */
 const READ = /\btexture(?:Sample\w*|Load)\(/g;
 const LAND_OUT = '  return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);';
-const FLAMES_OUT = '  return vec4f(tone * a + light * (1.0 - 0.7 * a), a) * draw.alpha;';
+const FLAMES_OUT = '  return vec4f(tone * a + lit, a + shine * (1.0 - a)) * draw.alpha;';
 const SNAGS_OUT = '  return mix(vec4f(0.0, 0.0, 0.0, min(mean, 1.0)), out, shows) * draw.alpha;';
 const MARKS_OUT = '@fragment fn fs(v: Varying) -> @location(0) vec4f { return marks_over(v); }';
 
