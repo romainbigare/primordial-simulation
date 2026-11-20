@@ -130,7 +130,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.grain = grain_at(at, e, blended(VIEW, cs).y);
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
   let fringe = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * ch.water);
-  let shore_over = select(p.over, mix(p.over, min(p.over, max(abs(g.sd - ch.middle) - ch.water, 0.0) * max(length(g.slope), ch.mean / max(ch.water, 1e-6))), fringe), ch.water > 0.0);
+  let shore_over = over_water(g, ch, p.over, fringe);
   let cf = cover_field(at, e, Beneath(soaked(p), shore_over, length(g.slope), p.depth, loose, loose_mean, fwidth(loose), p.snow, st.snow_m));
   p.cover = cf.cover;
   p.canopy = cf.canopy;

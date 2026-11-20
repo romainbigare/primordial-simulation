@@ -198,6 +198,9 @@ const MODEL_SHADOW_RUN = 0.9;
 // From this depth on it is water, and a plant stands in it only down to its kind's line (the core's `Cover::line`, as
 // deep under the level as it lies): one rule for the water drawn and for the plants.
 const FILM_M = 0.05;
+// Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
+// height, m (about half a metre in a loam; Bear 1972).
+const FRINGE_M = 0.5;
 // The share of a plant whose kind stands in liquid `reach` m deep (down to its line) that stands where liquid stands
 // `depth` m deep: all of it on soaked ground under a film and in liquid shallower than that, none deeper.
 fn stands_in(depth: f32, reach: f32) -> f32 { return select(1.0, 0.0, depth >= max(FILM_M, reach)); }
