@@ -153,13 +153,22 @@ struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 // liquid over their roots leaves them on the bed, draw.wgsl `stands_in`; the cover's field holds how the snow buries them and how the bed
 // holds them). The share of it that is bare, its map class, the share of its bare part that takes the soil's tint
 // (`soil`: a beach's sand keeps its own colour), its loose ground's grain (`Spot.grain`), and the share of it whose
-// soil is seen from above: its bare part, and `SWARD_GAP` of its low plants, the gaps between their leaves.
-struct Ground { rgb: vec3f, bare: f32, kind: u32, warm: f32, grain: vec4f, seen: f32 }
+// soil is seen from above: its bare part, and `SWARD_GAP` of its low plants, the gaps between their leaves; and how far
+// it is peat (`peat_of`).
+struct Ground { rgb: vec3f, bare: f32, kind: u32, warm: f32, grain: vec4f, seen: f32, peat: f32 }
 // The share of the ground under low plants seen from above through the gaps between their leaves: exp(-0.5 LAI) for a
 // sward of leaf area index 2 (Monsi and Saeki 1953). Crowns of trees hide their floor (`Spot.canopy`).
 const SWARD_GAP = 0.35;
 // The share of the ground of spot p, whose share `plants` is plants, seen from above (`Ground.seen`).
 fn seen_of(p: Spot, plants: f32) -> f32 { return 1.0 - plants + SWARD_GAP * max(plants - min(p.canopy, 1.0), 0.0); }
+// Ground whose pores stay full and whose soil is rich in organic matter is peat: its liquid stands at its surface, among
+// its low plants as in its open ground, so its soil seen is soaked and its film and pools lie between the plants
+// (`puddles`). How far spot p is peat, 0..1: as its pores are full from `PEAT_FILLED` to all, times how dark its organic
+// matter makes its soil (style.wgsl `humus`).
+const PEAT_FILLED = 0.9;
+fn peat_of(p: Spot) -> f32 { return ease(PEAT_FILLED, 1.0, p.filled) * humus(p.grain.z); }
+// The share of ground g whose soil shows soaked: its bare part, on peat its soil seen.
+fn wets(g: Ground) -> f32 { return mix(g.bare, g.seen, g.peat); }
 // The share of the plants of spot p that the waves strip where their swash soaks the ground `soak` (`swash_of`; all
 // of it under the liquid): as much as its waves are high against the sea's.
 fn waves_strip(p: Spot, soak: f32) -> f32 { return min(soak / SWASH_DRY, 1.0) * waves_of(p.sea, p.fetch).x / SEA_WAVE.x; }
@@ -175,7 +184,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // swash bares its beach, a lake's small waves leave its plants standing to the water.
   let stripped = waves_strip(p, p.swash.x);
   let plants = p.cover.a * stands_in(p.depth, 0.0) * (1.0 - stripped);
-  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0, p.grain, seen_of(p, 1.0)); }
+  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0, p.grain, seen_of(p, 1.0), peat_of(p)); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
   // In the style a beach of sand is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`); of pebbles,
@@ -206,6 +215,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // Snow is not bare soil: it takes neither the soil's warmth nor its darkening when wet (`soil`).
   g.bare *= 1.0 - snow;
   g.seen = seen_of(p, plants) * (1.0 - snow);
+  g.peat = peat_of(p) * (1.0 - snow);
   if (snow > 0.5) { g.kind = ICE; }
   // Stones over it (stone.wgsl): scree, on bare bed, and in a channel; none on a beach.
   if (styled()) {
@@ -274,12 +284,12 @@ fn true_soaked(truth: vec3f, p: Spot) -> vec3f {
   return truth * (1.0 - WET_DARK * soaked(p) * (1.0 - p.snow));
 }
 
-// Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked (and in the
+// Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part (on peat its soil seen, `wets`) the darker the more soaked (and in the
 // style tinted by its grain as far as it takes the tint, and darkened by its organic matter as far as its soil is seen,
 // style.wgsl `bare_tint`).
 fn soil(g: Ground, s: f32, lit: f32) -> vec3f {
   let tint = select(vec3f(1.0), bare_tint(g.bare * g.warm, g.seen * g.warm, g.grain), styled());
-  return lit_by(g.rgb * (1.0 - WET_DARK * s * g.bare) * tint, lit);
+  return lit_by(g.rgb * (1.0 - WET_DARK * s * wets(g)) * tint, lit);
 }
 
 // Colour `c` (linear) lit by `lit`; in the style, with its cool shade and warm light (style.wgsl `relief_tint`).
@@ -307,7 +317,7 @@ fn reads_ground(p: Spot) -> bool {
 // snow over the liquid, without it under the liquid (frozen liquid lies on the surface); black where it is not read.
 // Each pixel's colours read it at one place in the code (land.wgsl `fs`), so its rock and stones are compiled once.
 fn ground_for(p: Spot, running: bool) -> Ground {
-  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE, 1.0, p.grain, 1.0); }
+  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE, 1.0, p.grain, 1.0, 0.0); }
   return ground_of(p, select(p.snow, 0.0, p.depth > 0.0 || running));
 }
 
@@ -355,10 +365,11 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     // The true view shades the bed's colours as far as the bed shows.
     return Shaded(rgb, 1.0 + (lit - 1.0) * through(p.depth).g, kind);
   }
-  // Over it: the ground, wet by how soaked it is and by the swash, a film of liquid on its bare part once it is near
-  // soaked (mud, the swash by the water), puddles in its hollows (`puddles`), and the foam of the swash's last bore.
-  let s = max(soaked(p), p.swash.x);
-  let film = ease(FILM_FROM, 1.0, s) * g.bare;
+  // Over it: the ground, wet by how soaked it is and by the swash (peat soaked through as far as it is peat,
+  // `peat_of`), a film of liquid on its bare part once it is near soaked (mud, the swash by the water; on peat among
+  // its plants too), puddles in its hollows (`puddles`), and the foam of the swash's last bore.
+  let s = mix(max(soaked(p), p.swash.x), 1.0, g.peat);
+  let film = ease(FILM_FROM, 1.0, s) * mix(g.bare, 1.0, g.peat);
   var rgb = mix(soil(g, s, lit), FOAM_RGB * lit, BORE_FOAM * p.swash.y * g.bare);
   let river = p.river * (1.0 - 0.6 * p.snow);
   if (film <= 0.0 && river <= 0.0) { return Shaded(rgb, lit, g.kind); }
@@ -367,13 +378,13 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
   let ripple = select(vec2f(0.0), ripples(p.e), p.swash.x > 0.0 || river > 0.0);
   if (film > 0.0) {
     rgb += film * surface_light(ripple * p.swash.x * (1.0 - SWASH_CALM));
-    let pud = puddles(p, film);
+    let pud = puddles(p, film, g.peat);
     if (pud.wet > 0.0) {
       // About a puddle the mud is soaked through, darker, and its film mirrors the sky as the map's view sees it.
       let mud = soil(g, 1.0, lit) * (1.0 - PUDDLE_WET_DARK);
       rgb = mix(rgb, mud + surface_seen(vec2f(0.0), MAP_VIEW), pud.wet);
       if (pud.water > 0.0) {
-        let deep = lit_by(p.ground * (1.0 - WET_DARK) * MUDDY_WATER, lit);
+        let deep = lit_by(p.ground * (1.0 - WET_DARK) * MUDDY_WATER * mix(vec3f(1.0), BOG_WATER, g.peat), lit);
         rgb = mix(rgb, seen_from(mud, pud.depth, pud.tilt, PUDDLE_ATTENUATION, deep, MAP_VIEW), pud.water);
       }
     }
@@ -399,7 +410,13 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
 // Liquid stands on ground whose pores pass it more slowly than rain falls (infiltration excess, Horton 1933): the
 // puddles are as many as said where the ground passes liquid as slowly as `PUDDLE_SLOW` (its `Spot.grain.w`, 6.5:
 // 0.3 µm/s, about a mm an hour), none where it passes it as fast as `PUDDLE_FAST` (4.5: 30 µm/s, about 100 mm an hour,
-// faster than nearly any rain).
+// faster than nearly any rain). On peat (`peat`, `peat_of`) the pools stand among the low plants whatever its pores
+// pass, over up to `BOG_POOLS` of it: the liquid stands at its surface, and the hollows between a bog's hummocks hold
+// its pools (Belyea and Clymo 2001, from memory: hollows take a third to a half of a bog's surface).
+const BOG_POOLS = 0.3;
+// A bog's pools are dark with the dissolved organic matter of the peat, which takes most of the light, the blue most:
+// their light is `BOG_WATER` of a muddy puddle's (humic waters; Kirk 1994, from memory).
+const BOG_WATER = vec3f(0.35, 0.25, 0.15);
 const HOLLOW_M = vec2f(0.5, 2.0); const BASIN_M = vec2f(4.0, 20.0); const BASIN_LOW = 0.35;
 const PUDDLES = 0.06; const PUDDLE_DEPTH_M = 0.3; const PUDDLE_HALO = 1.0; const PUDDLE_SHORE = 0.5; const MENISCUS = 0.3;
 const PUDDLE_PX = vec2f(3.0, 8.0); const PUDDLE_FAST = 4.5; const PUDDLE_SLOW = 6.5;
@@ -411,8 +428,9 @@ const PUDDLE_WET_DARK = 0.4; const PUDDLE_ATTENUATION = vec3f(30.0, 26.0, 22.0);
 // What of spot p is a puddle's: the share its water covers, its depth, m, and its surface's slope (east, south); the
 // share of the soaked mud about it (and under it).
 struct Puddle { water: f32, depth: f32, tilt: vec2f, wet: f32 }
-fn puddles(p: Spot, film: f32) -> Puddle {
-  let full = PUDDLES * film * ease(PUDDLE_FAST, PUDDLE_SLOW, p.grain.w) * (1.0 - p.low) * (1.0 - p.sand * (1.0 - shore_grain(p).y));
+fn puddles(p: Spot, film: f32, peat: f32) -> Puddle {
+  let stands = mix(ease(PUDDLE_FAST, PUDDLE_SLOW, p.grain.w) * (1.0 - p.low), 1.0, peat);
+  let full = mix(PUDDLES, BOG_POOLS, peat) * film * stands * (1.0 - p.sand * (1.0 - shore_grain(p).y));
   // Its basin's level, from the mean where the basins do not show; the mean share it covers is `full`.
   let level = mix(full, full / (0.5 * BASIN_LOW) * ease(BASIN_LOW, 0.0, p.basin), shows_at(BASIN_M.x, p.e));
   let edge = max(0.5 * (abs(p.hollow_d.x) + abs(p.hollow_d.y)), 1e-4);
