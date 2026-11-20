@@ -34,7 +34,8 @@ fn a_texel_names_the_channel_it_measures() {
     let at = points(&s, &super::super::shore::Shore::new(&s));
     let r = reaches(&s, &at, metres, law);
     let bends = Bends::new(&r);
-    let ch = Channels::new(r, &bends);
+    let none = vec![false; s.up.len()];
+    let ch = Channels::new(r, &bends, &none);
     let k = TEXEL_SAMPLES;
     // A window about the sample the most drains through, its outlet's river.
     let most = (0..s.up.len()).filter(|&q| s.to[q] != NONE).max_by(|&a, &b| s.up[a].total_cmp(&s.up[b])).expect("a river");
@@ -65,7 +66,8 @@ fn a_channels_line_runs_on_from_sample_to_sample() {
     let at = points(&s, &super::super::shore::Shore::new(&s));
     let r = reaches(&s, &at, metres, law);
     let bends = Bends::new(&r);
-    let ch = Channels::new(r, &bends);
+    let none = vec![false; s.up.len()];
+    let ch = Channels::new(r, &bends, &none);
     let texel = TEXEL_SAMPLES * metres;
     let (mut joints, mut bent) = (0, 0);
     for k in (0..s.up.len()).filter(|&k| s.to[k] != NONE && s.main[s.to[k] as usize] == k as u32) {

@@ -61,7 +61,7 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 /// wetness index of each, `space::samples::sample_index`), the channel law (`Physics::channel`), by which the channel nearest a texel is found,
 /// the point each sample's line runs through (`stems::points`), how each sample's piece of its line starts
 /// (`bends::Bends`), the texture of each sample's loose ground (`pcore::soil::textures`), the samples whose line
-/// carries a strip of wet ground (`wetness::strips`) and the wetness index of each as the hillslope holds it
+/// carries their wetness index (`wetness::strips`) and the wetness index of each as the hillslope holds it
 /// (`wetness::hill`).
 pub struct Ground {
     seed: u64,

@@ -128,8 +128,8 @@ impl Window {
 /// its bends, m (`NO_CHANNEL_M` for none); the valleys about the lines (`valley`): the sum of their weights at the
 /// texel and of their floors' heights so weighted, m; and the deepest mouth of the lines that reach it
 /// (`shore::drowned`): where lines of two channels lie near, the texel's ground goes under as the larger mouth's does,
-/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it; and how much
-/// of it the strips of wet ground along the lines take (`wetness::bank_lines`).
+/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it; and the
+/// nearest line of a sample that drains a channel's source, across its bank (`wetness::bank_lines`).
 pub(super) struct Field {
     pub dist: Vec<f64>,
     pub sample: Vec<u32>,
@@ -138,7 +138,7 @@ pub(super) struct Field {
     pub valley: Vec<f64>,
     pub weight: Vec<f64>,
     pub mouth: Vec<[f64; 2]>,
-    pub bank: Vec<bool>,
+    pub bank: Vec<(f64, u32)>,
 }
 
 impl Field {
@@ -150,7 +150,7 @@ impl Field {
 }
 
 /// The channels of a map (`bends::Reaches`) and how each one's piece starts (`bends::Bends`), the samples whose line
-/// carries a strip of wet ground (`wetness::strips`); the channel's reach per m² drained to the power b, and the
+/// carries its wetness index (`wetness::strips`); the channel's reach per m² drained to the power b, and the
 /// largest drained area.
 pub(super) struct Channels<'a> {
     pub r: Reaches<'a>,
@@ -163,7 +163,7 @@ pub(super) struct Channels<'a> {
 /// A line near a window of texels: its sample, the line as drawn, where it joins the next sample's, what its
 /// distances are told apart by (half its channel's widest width, no less than a texel, samples), how far it reaches,
 /// samples, whether a valley is drawn about it, and whether it is drawn on these texels at all (a line near only for
-/// its strip of wet ground is not).
+/// its wetness index is not).
 pub(super) struct Near {
     pub q: usize,
     pub drawn: Drawn,
@@ -203,14 +203,14 @@ pub(super) fn to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> (f64, f64, f6
 }
 
 impl<'a> Channels<'a> {
-    /// The channels `r`, their pieces starting as `bends` holds, the lines of `strips` carrying wet ground.
+    /// The channels `r`, their pieces starting as `bends` holds, the lines of `strips` carrying their wetness index.
     pub(super) fn new(r: Reaches<'a>, bends: &'a Bends, strips: &'a [bool]) -> Channels<'a> {
         let most = r.s.up.iter().fold(0.0f64, |m, &a| m.max(a));
         Channels { r, bends, strips, cap: r.widest(1.0), most }
     }
 
-    /// The lines that reach the window `win` of texels of `texel` m, or their strip of wet ground does
-    /// (`wetness::STRIP`), and how far a valley reaches, samples (none on texels no finer than the samples).
+    /// The lines that reach the window `win` of texels of `texel` m, or whose wetness index does
+    /// (`wetness::BANK`), and how far a valley reaches, samples (none on texels no finer than the samples).
     fn near(&self, win: &Window, texel: f64) -> (Vec<Near>, f64) {
         let (s, metres, k) = (self.r.s, self.r.metres, win.k);
         let reach_valley = if k < 1.0 { VALLEY_M / metres } else { 0.0 };
@@ -247,7 +247,7 @@ impl<'a> Channels<'a> {
                 let (own, reach) = reach_of(s.up[q]);
                 let carves = reach_valley > 0.0 && super::valley::carves(s, q);
                 let widest = if carves { reach.max(reach_valley) } else { reach };
-                let widest = if self.strips[q] { widest.max(super::wetness::STRIP) } else { widest };
+                let widest = if self.strips[q] { widest.max(super::wetness::BANK) } else { widest };
                 // The box the line lies in: its curve's points and, where a tributary joins, the next sample's centre,
                 // widened by its sway, by how far the next sample's line lies from its centre and by its reach: none
                 // of the window's texels in it, and the line is not drawn.
@@ -290,7 +290,7 @@ impl<'a> Channels<'a> {
         let mut f = self.laid(&all, &near, reach_valley);
         self.mend(&mut f, &all, &near);
         let heads = |q: usize| self.r.s.main[q] == NONE || !self.strips[self.r.s.main[q] as usize];
-        let bank = super::wetness::bank_lines(&all, near.iter().filter(|l| self.strips[l.q]).map(|l| (heads(l.q), l.drawn.line.iter().map(|v| v.p).collect())));
+        let bank = super::wetness::bank_lines(&all, near.iter().filter(|l| self.strips[l.q]).map(|l| (l.q, heads(l.q), l.drawn.line.iter().map(|v| v.p).collect())));
         fn cut<T: Copy>(v: &[T], high: usize, m: usize, wide: usize) -> Vec<T> {
             (0..high).flat_map(|y| v[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect()
         }
