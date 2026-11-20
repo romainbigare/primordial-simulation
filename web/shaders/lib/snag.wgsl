@@ -6,17 +6,16 @@
 // leaves gone (its bare twin, models.png) weathered grey: a fresh burn's are mostly charred, older ones more often grey,
 // bare or broken to stumps, and leaning. Each is mirrored, sized, leaned and tinted by its own draw. Colours linear.
 
-// One dead tree holds `SNAG_KG` of walls, from memory (a stem of about 20 cm and 10 m). A square's dead trees stand in
-// its empty cells, each with the chance its walls make over the share of cells its living kinds leave empty, so their
-// number is the walls' however full the living stand is (none more than one a cell).
-const SNAG_KG = 150.0;
+// One dead tree holds `SNAG_KG` of walls (fire.wgsl). A square's dead trees stand in its empty cells, each with the
+// chance its walls make over the share of cells its living kinds leave empty, so their number is the walls' however
+// full the living stand is (none more than one a cell).
 // The kinds: charred trunks, charred stumps (snags.png, snag_sprites.wgsl: each stands on its foot, the row where its
 // trunk meets the ground) and bare trees; each one's height drawn, m (its tallest part), `SNAG_VARY` either way, no
 // taller and no wider than its lattice lets a mark reach (`snag_of`).
 const KIND_TRUNK = 0; const KIND_STUMP = 1; const KIND_BARE = 2;
 var<private> KIND_FROM: array<i32, 2> = array<i32, 2>(TRUNK_FROM, STUMP_FROM);
 var<private> KIND_N: array<i32, 2> = array<i32, 2>(TRUNK_N, STUMP_N);
-var<private> KIND_TALL: array<f32, 3> = array<f32, 3>(5.0, 1.4, 10.0);
+var<private> KIND_TALL: array<f32, 3> = array<f32, 3>(TRUNK_TALL_M, 1.4, 10.0);
 const SNAG_VARY = 0.3;
 // The longer since the burn (`old`, its share of the most months the core tells apart), the more dead trees are bare
 // grey trees (`BARE_FRESH` of them at once, `BARE_OLD` more when old) and stumps (`STUMP_OLD` when old) and the more

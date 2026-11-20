@@ -24,6 +24,10 @@ fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 
 // air this month, kg/m²; the low wind, m/s east and south; the dead walls standing and the cured leaves standing, kg/m².
 struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32, wind: vec2f, snag: f32, cured: f32 }
 
+// One dead tree holds `SNAG_KG` of walls, from memory (a stem of about 20 cm and 10 m); a charred trunk broken off stands
+// `TRUNK_TALL_M` m (snag.wgsl, burn.wgsl).
+const SNAG_KG = 150.0; const TRUNK_TALL_M = 5.0;
+
 // The planes of the fire's texture (fire.ts), one under the other.
 const FIRE_PLANES = 3.0;
 
