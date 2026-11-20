@@ -74,13 +74,39 @@ fn beach(sea: f32, sea_over: f32, over: f32, slope: f32, loose: f32, high: f32, 
 // one) lays them at its mouth; a lake's flattest shores (from `MUD_SLOPE.x` down to `.y`), where its small waves do not
 // winnow the fines out, are of mud. The share of pebbles, of mud, and how soaked the shore is (by the liquid's fringe
 // and the swash; under the liquid, all).
-const GRAVEL_SLOPE = vec2f(0.07, 0.14); const STONY_PEBBLES = 0.3; const MUD_SLOPE = vec2f(0.03, 0.01);
+// A shore of a fine deposit (`laid_share`) is mud too, as far as its waves are lower than `WINNOW_M`: a wave stirs the
+// fines off its bed and the backwash carries them out, so mud flats lie where the waves are small (from memory).
+const GRAVEL_SLOPE = vec2f(0.07, 0.14); const STONY_PEBBLES = 0.3; const MUD_SLOPE = vec2f(0.03, 0.01); const WINNOW_M = 0.5;
 fn shore_grain(p: Spot) -> vec3f {
   let slope = p.slope / earth.look.x;
   let pebbles = max(ease(GRAVEL_SLOPE.x, GRAVEL_SLOPE.y, slope), ease(0.0, STONY_PEBBLES, p.stony));
-  let mud = (1.0 - pebbles) * (1.0 - p.sea) * ease(MUD_SLOPE.x, MUD_SLOPE.y, slope);
+  let fine_laid = laid_share(p) * (1.0 - sandy_of(p.grain)) * (1.0 - ease(0.0, WINNOW_M, waves_of(p.sea, p.fetch).x));
+  let mud = (1.0 - pebbles) * max((1.0 - p.sea) * ease(MUD_SLOPE.x, MUD_SLOPE.y, slope), fine_laid);
   return vec3f(pebbles, mud, select(max(soaked(p), p.swash.x), 1.0, p.depth > 0.0));
 }
+// Loose ground of coarse grain is sand: the grain's share from `DRIFT_COARSE`, all of it from `DRIFT_COARSE_FULL`. How
+// far loose ground of grain `grain` (`Spot.grain`) is sand, 0..1.
+const DRIFT_COARSE = 0.45; const DRIFT_COARSE_FULL = 0.8;
+fn sandy_of(grain: vec4f) -> f32 { return ease(DRIFT_COARSE, DRIFT_COARSE_FULL, grain.x); }
+
+// The load the liquid laid (`Spot.deposit`) shows as a deposit from `LAID_M.x` deep, all of it from `.y` (thinner, the
+// ground's own soil is worked into it), as far as the water reaches it: to `FLOOD_M` over the nearest water, standing
+// or running (`Spot.over`; a river's floods rise a metre or two over its banks, from memory). Higher, the load laid
+// long ago is soil.
+const LAID_M = vec2f(0.1, 0.5); const FLOOD_M = 1.5;
+// The share of spot p's ground that is a deposit, 0..1.
+fn laid_share(p: Spot) -> f32 { return ease(LAID_M.x, LAID_M.y, p.deposit.x) * ease(FLOOD_M, 0.0, p.over); }
+// A deposit is fresh (bare, its ripples sharp) where the water still works it, within `REWORK_M` of its surface, and
+// where its loose ground has lain no more than 10^`FRESH_LOG_YEARS.x` years, old from 10^`.y` (plants and a soil take
+// a bare deposit in decades to centuries; from memory). How fresh spot p's deposit is, 0..1.
+const REWORK_M = 0.3; const FRESH_LOG_YEARS = vec2f(1.5, 3.5);
+fn laid_fresh(p: Spot) -> f32 {
+  return max(ease(REWORK_M, 0.0, p.over), ease(FRESH_LOG_YEARS.y, FRESH_LOG_YEARS.x, p.deposit.y));
+}
+// The grain of spot p's soil as it is seen (`Spot.grain`): a fresh deposit holds next to no organic matter yet, so
+// it is not darkened by it (style.wgsl `humus`).
+fn grain_seen(p: Spot) -> vec4f { return vec4f(p.grain.xy, p.grain.z * (1.0 - laid_share(p) * laid_fresh(p)), p.grain.w); }
+
 // Bare sand reaches up a beach to `STORM_RUN_UP` times the waves' run-up (water.wgsl `run_up`): a storm's swash keeps
 // plants and their drift off it (its waves some three times as high).
 const STORM_RUN_UP = 3.0;
@@ -182,7 +208,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.rgb = p.ground;
   g.kind = BARE;
   g.warm = 1.0;
-  g.grain = p.grain;
+  g.grain = grain_seen(p);
   // Ground the plants cover whole shows none of its soil, bed, snow, stones or things: none of them is drawn. The
   // waves' swash (`swash_of`) strips the plants where it runs as far as its waves are high against the sea's: the sea's
   // swash bares its beach, a lake's small waves leave its plants standing to the water.
@@ -206,7 +232,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   var bed = p.bed;
   if (styled()) {
     // A burn scar takes the floor (burn.wgsl `burnt_floor`) and as much of the soil's own tint.
-    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, p.grain) * soil_detail(p), p);
+    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, g.grain) * soil_detail(p), p);
     g.rgb = burnt.rgb;
     g.warm *= 1.0 - burnt.a;
     // Bed the waves' swash wets takes the one wet look of rock (stone.wgsl `wet_stone`) as far as it is soaked.
