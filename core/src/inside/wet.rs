@@ -56,13 +56,18 @@ pub fn wet_land(w: &World, p: &crate::cover::Parts, i: usize) -> (crate::cover::
     (soak, wet_ground(w, i, m))
 }
 
-/// Whether liquid flows in the channel of terrain sample `k` of `s` (`World::terrain_samples`): its liquid runs (its
-/// discharge over a year, `World::discharge`) and it drains a channel's source, the square of the spacing of the
-/// channels inside a cell (2 `hill` a side, the hillslopes on both sides of a channel; Horton 1945). Flowing liquid is
-/// its table at the surface: it has no room (`index_now`).
+/// Whether terrain sample `k` of `s` (`World::terrain_samples`) drains a channel's source: the square of the spacing of
+/// the channels inside a cell (2 `hill` a side, the hillslopes on both sides of a channel; Horton 1945). A function
+/// of the place alone, by which the page draws the channels' wet strips.
+pub fn drains_source(ph: &crate::Physics, s: &crate::space::samples::Samples, k: usize) -> bool {
+    s.up[k] >= (2.0 * ph.hill).powi(2)
+}
+
+/// Whether liquid flows in the channel of terrain sample `k` of `s`: it drains a channel's source (`drains_source`) and
+/// its liquid runs (its discharge over a year, `World::discharge`). Flowing liquid is its table at the surface: it has
+/// no room (`index_now`).
 pub fn flowing(w: &World, s: &crate::space::samples::Samples, k: usize) -> bool {
-    let spacing = 2.0 * w.cfg.phys.hill;
-    s.up[k] >= spacing * spacing && w.discharge.get(k).is_some_and(|&q| q > 0.0)
+    drains_source(&w.cfg.phys, s, k) && w.discharge.get(k).is_some_and(|&q| q > 0.0)
 }
 
 /// The wetness index of terrain sample `k` of `s` as the table reads it now: its own (`Samples::twi`), infinite where
