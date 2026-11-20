@@ -23,7 +23,7 @@ pub(super) fn sink(w: &mut World, s: &mut Scratch, dt: f64) {
         let (room, pores) = (p.bed_porosity * p.bed_depth * area[i] - held[i], w.pores(i));
         let sink = (mob.vol[i] - pores.field * s.pd[i] * area[i]).min(room).min(pores.seep * area[i] * dt);
         if sink > 0.0 {
-            sinks.push((i as u32, sink / mob.vol[i]));
+            sinks.push((i as u32, (sink / mob.moving[i]).min(1.0)));
         }
     }
     let down: Vec<u32> = sinks.iter().map(|c| c.0).collect();
@@ -84,7 +84,7 @@ fn pore_flow(w: &World, s: &Scratch, links: (&[usize], &[u32], &[u32]), (liq, mo
     let g = pore_net(w, s, links, &x, &mob.vol);
     let free: Vec<f64> = (0..n).map(|i| mob.vol[i] - w.pores(i).field * s.pd[i] * area[i]).collect();
     let flux = sweep(&Net { a, b, g: &g, cap: &cap }, &x, dt, &free);
-    carried((a, b), &flux, (liq, |q, i| mob.mol[q * n + i]), &mob.vol, |i, _, mol| liquid_heat(w, s, liq, i, mol))
+    carried((a, b), &flux, (liq, |q, i| mob.mol[q * n + i]), &mob.moving, |i, _, mol| liquid_heat(w, s, liq, i, mol))
 }
 
 /// The conductance of each link of `links` through the pores, m²/s, as the tables stand at `x` and the mobile liquid

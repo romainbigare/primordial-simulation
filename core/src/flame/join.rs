@@ -82,14 +82,15 @@ impl PartialOrd for Reached {
 }
 
 /// The cells a flame lit in cell `from` reaches within `front_life`: it crosses half the way between two cells' centres
-/// at the speed of each one's bed (`reach`) along the way between them, its wind's push added (`super::downwind`), through
+/// at the speed of each one's bed (`reach`) along the way between them, the push of its wind at mid-flame added
+/// (`Bed::waf`, `super::downwind`), through
 /// cells whose remains carry a flame, the earliest first (Dijkstra's way over the times). Returns them, the lit one
 /// first.
 fn run(w: &World, beds: &[Option<Bed>], from: usize) -> Vec<usize> {
     let (cells, ph) = (w.mesh.cells(), &w.cfg.phys);
     let speed = |i: usize, way: [f64; 2]| {
         let wind = w.low_wind.get(w.mesh.up(i, 0, crate::AIR)).map_or([0.0; 2], |v| v.map(|x| x as f64));
-        beds[i].filter(|b| b.carries()).map(|b| super::reach(ph, &b).speed * super::downwind(ph, &b, wind, way))
+        beds[i].filter(|b| b.carries()).map(|b| super::reach(ph, &b).speed * super::downwind(ph, &b, wind.map(|v| v * b.waf), way))
     };
     let mut when: Vec<(usize, f64)> = vec![(from, 0.0)];
     let mut heap = BinaryHeap::from([Reached(0.0, from)]);

@@ -63,14 +63,23 @@ fn book_all(w: &mut World, s: &mut Scratch, kinds: &[usize], moves: &[&Crossings
 }
 
 /// What each cell holds that may move as the pass goes (`basin::movable`: rows of the liquids then the heat; and the
-/// volume, m³), what each cell's part of each body holds of it (`State::held`), m³, and what the pass sends into the samples'
-/// ways: mol and kg at each sample.
+/// volume, m³), the volume a mol of each liquid of a row fills, m³ (none for a gas), what each cell's part of each body
+/// holds of it (`State::held`), m³, and what the pass sends into the samples' ways: mol and kg at each sample.
 struct Held {
     q: Vec<f64>,
     vol: Vec<f64>,
+    per: Vec<f64>,
     width: usize,
     part: Vec<Vec<f64>>,
     into: Vec<[f64; 2]>,
+}
+
+impl Held {
+    /// The volume of what may move in cell `i`, m³: its row's liquids, each at its volume a mol (`Held::per`). Less
+    /// than all it holds (`Held::vol`) by what exchange sites hold of a mineral, which stays (`basin::movable`).
+    fn moving(&self, i: usize) -> f64 {
+        self.q[i * self.width..(i + 1) * self.width - 1].iter().zip(&self.per).map(|(m, v)| m * v).sum()
+    }
 }
 
 /// One pass a month of `dt` seconds (the module's doc), of the liquids `liq` (what boils below the coldest node, `tmin`,
@@ -86,7 +95,8 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let mut into = std::mem::take(&mut s.spare.samples);
     into.clear();
     into.resize(b.cell_of.len(), [0.0; 2]);
-    let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into };
+    let per = liq.iter().map(|&k| if s.sp[k].boil <= tmin { 0.0 } else { s.sp[k].v[1] }).collect();
+    let mut h = Held { q, vol, per, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into };
     let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
     send(w, s, &b, &mut h, &mut x, (slope, runs, &mm), dt);
     let (levels, came) = stand(s, &b, &mut h, (&mut x, &mut edge), (&mm, w.edges_open()));
@@ -137,6 +147,8 @@ fn runs_off(w: &World, s: &Scratch, h: &mut Held, (slope, runs): (&[f64], &[f64]
 fn send(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (slope, runs, mm): (&[f64], &[f64], &[f64]), dt: f64) {
     let (n, width) = (w.mesh.cells().n(), h.width);
     let off = runs_off(w, s, h, (slope, runs), dt);
+    // The share of each cell's rows that leaves: what leaves of its volume, from what of it may move (`Held::moving`).
+    let off: Vec<f64> = (0..n).map(|i| if off[i] > 0.0 { (off[i] * h.vol[i] / h.moving(i).max(f64::MIN_POSITIVE)).min(1.0) } else { 0.0 }).collect();
     // What each cell sends, mol and kg, as the pass starts, into the ways of its samples in no pond.
     let sent: Vec<[f64; 2]> = (0..n).map(|i| {
         let row = &h.q[i * width..(i + 1) * width - 1];
@@ -150,7 +162,7 @@ fn send(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (sl
         }
     }
     // What each cell sends, its row and volume, as the pass starts: what it then gets does not leave with it.
-    let leaving: Vec<(usize, Vec<f64>, f64)> = (0..n).filter(|&i| off[i] > 0.0).map(|i| (i, h.q[i * width..(i + 1) * width].iter().map(|m| m * off[i]).collect(), h.vol[i] * off[i])).collect();
+    let leaving: Vec<(usize, Vec<f64>, f64)> = (0..n).filter(|&i| off[i] > 0.0).map(|i| (i, h.q[i * width..(i + 1) * width].iter().map(|m| m * off[i]).collect(), h.moving(i) * off[i])).collect();
     for (i, row, v) in leaving {
         for &(r, part) in &b.ways[i] {
             let to = r.cell as usize;
@@ -239,6 +251,7 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, (x, edge): (&mut Crossings, &mut
         }
         let held: Vec<f64> = cells.iter().flat_map(|&i| h.q[i as usize * width..(i as usize + 1) * width].iter().copied()).collect();
         let vol: Vec<f64> = cells.iter().map(|&i| h.vol[i as usize]).collect();
+        let moving: Vec<f64> = cells.iter().map(|&i| h.moving(i as usize)).collect();
         let pass = if held_open { STAND_M } else { body.level };
         let (top, soak, over) = body_level(&parts, cells.iter().zip(&body.part).map(|(&i, &q)| h.part[i as usize][q]).sum(), pass);
         levels.push(top);
@@ -253,7 +266,7 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, (x, edge): (&mut Crossings, &mut
             (vol[c] - h.part[i][q]).max(others)
         };
         let want: Vec<f64> = (0..cells.len()).map(|c| apart(c) + own[c] + soak[c]).collect();
-        let (hub, change, left) = share_out(cells, (&held, &vol), &want, (width, over));
+        let (hub, change, left) = share_out(cells, (&held, &vol, &moving), &want, (width, over));
         for (c, &i) in cells.iter().enumerate() {
             let i = i as usize;
             (0..width).for_each(|r| h.q[i * width + r] += change[c * width + r]);
