@@ -122,7 +122,7 @@ impl Table {
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
-        let m = m.unwrap_or(Means { pore: 0.0, pores: 0.0, stands: depth });
+        let m = m.unwrap_or(Means { pore: 0.0, pores: 0.0, stands: depth, ..Default::default() });
         let [low, top] = level.unwrap_or([z, z + depth]);
         let (twi, area) = &self.inside[i];
         let soil = soil_level(&w.cfg.phys, twi, area, m).unwrap_or(0.0);

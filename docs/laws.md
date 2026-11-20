@@ -231,11 +231,15 @@ The shell draws inside the cells by general laws at each pixel of the ground's t
 cells' values between the squares' centres (`tape::Table`, docs/tape.md): the soil's liquid by the wetness index
 ln(a / tan β) of the terrain's samples (Beven and Kirkby 1979; a the area that drains through a sample per metre of
 contour, β its slope, no less than a valley floor's 1e-3; found once with the samples, `space::samples::sample_index`):
-as in TOPMODEL, the liquid a point's pores hold departs from its cell's mean by `soil_m` per unit
-of the index over its level, within none and the pores full, the level found by halving so the mean is the cell's
-(`inside::soil_level`, `soil_held`). The laws read the same rule over a cell's land samples (the highest, by its land's
-share of its area): a sample is saturated where its pores fill, at an index of at least the level plus the land's mean
-deficit over `soil_m`, and the drier rest holds what the saturated share does not (`inside::wet_ground`); flames read
+as in TOPMODEL, the cell's liquid table departs from its mean at each point by `soil_m` per unit of the index over its
+level (Beven and Kirkby 1979; Beven 1997). The table is where Flow keeps the liquid: with the loose ground over field
+capacity, in it (its room what its pores lack); else under it in the bed's store (its room the loose ground's pores over
+field capacity and what the store lacks of `bed_porosity` × `bed_depth`) (`Means::deficit`). The room at a point is the
+cell's less `soil_m` (λ − c), within none and the most, the level c found by halving so the mean room is the cell's: it
+moves no liquid, only shares it out (`inside::soil_level`, `deficit_at`). A point whose room is none is saturated, its
+pores full; elsewhere its soil holds the cell's liquid departed the same way (`soil_held`). The laws read it over a
+cell's land samples (the highest, by its land's share of its area; `inside::wet_ground`): the share saturated, at an
+index of at least c plus the mean room over `soil_m`, and the drier rest, which holds what that share does not; flames read
 it (3c). What stands where the ground lies under the cells' level; each channel as wide as
 the channel law makes its own sample's discharge (`World::discharge`, 1.2); each mark of cover by
 the activity of each kind of the squares about it at the mark's foot (`cover::activity`). A picture need not keep a cell's mean
