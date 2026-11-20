@@ -133,10 +133,11 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)
     for k in (0..chem.ns()).filter(|&k| chem.phase(k, t) == Phase::Gas) {
         counts.flame_air[k] -= b.ext[k];
     }
-    // For the tape: the gas given to the air and the minerals left on the ground, kg a m² of land.
+    // For the tape: the gas given to the air and the ash left on the ground (all it gave that is not a gas or the key
+    // liquid), kg a m² of land.
     let given = |k: usize| (-b.ext[k]).max(0.0) * chem.subs[k].molar_mass / crate::contract::land(w, i).max(f64::MIN_POSITIVE);
     let air: f64 = (0..chem.ns()).filter(|&k| chem.phase(k, t) == Phase::Gas).map(given).sum();
-    let ash: f64 = chem.minerals().iter().map(|m| given(m.0)).sum();
+    let ash: f64 = (0..chem.ns()).filter(|&k| k != p.liquid && chem.phase(k, t) != Phase::Gas).map(given).sum();
     counts.flamed.push((i as u32, super::Flamed { share: f as f32, length: r.flame as f32, ash: ash as f32, air: air as f32 }));
     // The heat the burning frees goes to the air over the cell (its plume); the rest closes with the ground as the
     // cover's books close (`life::book`).
