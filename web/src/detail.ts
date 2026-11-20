@@ -1,6 +1,6 @@
 // The ground's detail up close (web/shaders/lib/detail.wgsl): photographs of ground seen from above, tiles of ground
 // cover rendered from 3D models as the map sees them, and rendered plants (CC0, Poly Haven;
-// web/textures/SOURCES.md), strip images beside the page (`ground.jpg`, `carpets.jpg`, `fire.jpg`, then the rendered models' files
+// web/textures/SOURCES.md), strip images beside the page (`ground.jpg`, `carpets.jpg`, `fire.jpg`, `snags.png`, then the rendered models' files
 // that `STRIPS` names: `models.png`, `heights.png`, `trees.png`, `trees2.png`, ...), each square of them a layer of one texture array with its mip levels down to one texel, which is its mean. The map draws each at its
 // real size as a change around the colour the world gives the ground (the image over its mean), so from afar, where the
 // mips average it, the colour is the world's alone.
@@ -11,7 +11,8 @@ import { Gpu, Texture } from './gpu';
 declare const STRIPS: { models: string[]; heights: string[]; trees: string[] };
 
 /** The side of each layer of the strips, texels: the photographs (tex.wgsl's `*_TEX`), the ground cover after them
- * (tex.wgsl `CARPETS_FROM`), the fire's sprites and its photograph (tex.wgsl `FIRE_FROM`), the rendered models after
+ * (tex.wgsl `CARPETS_FROM`), the fire's sprites and its photograph (tex.wgsl `FIRE_FROM`), the snags (tex.wgsl
+ * `SNAGS_FROM`), the rendered models after
  * those (tex.wgsl `MODELS_FROM`), the heights of those that stand
  * in water (tex.wgsl `HEIGHTS_FROM`) and the trees last (tex.wgsl `TREES_FROM`), as many layers as each strip holds. */
 const PHOTO_SIDE = 512;
@@ -44,7 +45,7 @@ function photoImage(name: string): Promise<ImageBitmap> {
 /** Fetch the strips and make their levels off the page's thread, layer by layer (detail-worker.ts), so the page does
  * not stop for them; each is sent to the GPU as it comes (a failed fetch leaves the ground without its detail). */
 function fetchDetail(): void {
-  Promise.all(['ground.jpg', 'carpets.jpg', 'fire.jpg', ...STRIPS.models, ...STRIPS.heights, ...STRIPS.trees].map(photoImage))
+  Promise.all(['ground.jpg', 'carpets.jpg', 'fire.jpg', 'snags.png', ...STRIPS.models, ...STRIPS.heights, ...STRIPS.trees].map(photoImage))
     .then(strips => new Promise<void>((done, failed) => {
       const trees = strips.slice(-STRIPS.trees.length).reduce((n, s) => n + s.height / PHOTO_SIDE, 0);
       groundLayers = strips.reduce((n, s) => n + s.height / PHOTO_SIDE, 0);

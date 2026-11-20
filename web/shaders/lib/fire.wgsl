@@ -1,6 +1,6 @@
 // What fire leaves and does on each square of the live map (web/src/fire.ts), as the core's layers say it, and where it
 // lies inside a square: read by the ground's burn scars (burn.wgsl) and by the flames and smoke over the map
-// (flames.wgsl). Points are in metres from the map's north-west corner.
+// (flames.wgsl), and by the snags standing on them (snags.wgsl). Points are in metres from the map's north-west corner.
 
 struct Fire {
   // A square's side, m; the map's squares across and down; the view drawn (0 the Earth's colours, 1 the true colour).
@@ -8,7 +8,7 @@ struct Fire {
   // Where a pixel of the target lies in the world (field-window.ts `frameOf`): the origin of the draw, m, the metres a
   // pixel of the target and of the screen take; the world's point under the target's first pixel, m from the origin.
   frame: vec4f, corner: vec4f,
-  // The time, s (wrapped), the way the wind blows (a unit vector east and south) and its speed, m/s.
+  // The time, s (wrapped); the months since a burn that mean none (the core tells no more apart).
   air: vec4f,
 }
 @group(0) @binding(25) var fire_tex: texture_2d<f32>;
@@ -18,23 +18,55 @@ struct Fire {
 // e^x - 1, kept exact for small x.
 fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 1e-3); }
 
-// What fire did at a point, blended between the squares' centres: the share of the land burnt in the last 12 months,
-// the months since its last burn (its share's mean), the share burning this month, its flames' mean length, m (the
-// burning share's mean), the ash on the ground and the gas the flames sent to the air this month, kg/m².
-struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32 }
+// What fire did at a point, blended between the squares' centres: the share of the land under a scar (burnt within the
+// months the core tells apart, fire.ts), the months since its last burn (the scar's mean), the share burning this
+// month, its flames' mean length, m (the burning share's mean), the ash on the ground and the gas the flames sent to the
+// air this month, kg/m²; the low wind, m/s east and south; the dead walls standing and the cured leaves standing, kg/m².
+struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32, wind: vec2f, snag: f32, cured: f32 }
 
-// Plane k of the fire's texture at `at` (fire.ts: two planes of the map's squares, one under the other), blended
-// between the squares' centres and held inside its plane.
+// The planes of the fire's texture (fire.ts), one under the other.
+const FIRE_PLANES = 3.0;
+
+// Plane k of the fire's texture at `at`, blended between the squares' centres and held inside its plane.
 fn fire_plane(k: i32, at: vec2f) -> vec4f {
   let n = fire.map.yz;
   let s = clamp(at / fire.map.x, vec2f(0.5), n - 0.5);
-  return textureSampleLevel(fire_tex, fire_sampler, (s + vec2f(0.0, f32(k) * n.y)) / vec2f(n.x, 2.0 * n.y), 0.0);
+  return textureSampleLevel(fire_tex, fire_sampler, (s + vec2f(0.0, f32(k) * n.y)) / vec2f(n.x, FIRE_PLANES * n.y), 0.0);
+}
+
+// Plane k of the fire's texture at square `c` (held inside the map), its own numbers.
+fn fire_texel(k: i32, c: vec2i) -> vec4f {
+  let n = vec2i(fire.map.yz);
+  return textureLoad(fire_tex, clamp(c, vec2i(0), n - 1) + vec2i(0, k * n.y), 0);
 }
 
 fn fire_at(at: vec2f) -> FireAt {
   let a = fire_plane(0, at);
   let b = fire_plane(1, at);
-  return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y);
+  let c = fire_plane(2, at);
+  return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y, b.zw, c.x, c.y);
+}
+
+// The months since the burn of the scar at `at`, a point of rank `rank` among the patches (`burn_rank`, 0..1): of one
+// of the four squares whose centres lie about it, drawn by the rank with the chance of each square's blend weight
+// times its scar. So where scars of different ages meet, the point takes one of them, and their meeting is as ragged
+// as the patches; a blend of their ages would lay a straight line where the younger one's char fades.
+fn scar_age(at: vec2f, rank: f32) -> f32 {
+  let s = at / fire.map.x - 0.5;
+  let c = vec2i(floor(s));
+  let f = fract(s);
+  var t: array<vec4f, 4>;
+  var w = vec4f((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  for (var k = 0; k < 4; k++) {
+    t[k] = fire_texel(0, c + vec2i(k % 2, k / 2));
+    w[k] *= t[k].x;
+  }
+  var left = rank * (w.x + w.y + w.z + w.w);
+  for (var k = 0; k < 3; k++) {
+    if (left < w[k]) { return t[k].y / max(t[k].x, 1e-6); }
+    left -= w[k];
+  }
+  return t[3].y / max(t[3].x, 1e-6);
 }
 
 // A square's burnt share lies in patches with ragged edges (ragged.wgsl), from `BURN_PATCH_M` across down to the
