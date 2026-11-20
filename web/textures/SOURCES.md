@@ -66,6 +66,22 @@ fire.jpg`):
 | 0 | four sprites, a quarter each, their density alone (grey times cover) on black, each fitted to its quarter with its foot on the bottom middle: two flame tongues (`flame_05`, `flame_06`), two puffs of smoke (`smoke_07`, `smoke_08`) | [Particle Pack 1.1](https://kenney.nl/assets/particle-pack), its `PNG (Transparent)` folder | Kenney Vleugels (kenney.nl) | CC0 1.0 |
 | 1 | burnt ground: charred soil, ash, needles and grass stalks; 1 m across | [burned_ground_01](https://polyhaven.com/a/burned_ground_01) (diffuse, 2k), shrunk, its light divided out as `ground.jpg`'s | Rob Tuytel (Poly Haven) | CC0 1.0 |
 
+## snags.png
+
+Two 512 x 512 layers of four quarters, each a sprite with its cover, rendered by `bake/sprite.html` as the trees are
+(`node sprites.cjs snags.json OUT burned_tree_photogrammetry dead_trees burned_trunk_lassen`, the models downloaded by
+hand into `assets/sketchfab/<the model's id>/`) and packed by `bake/snags.py` (`python3 -I bake/snags.py OUT
+snags.png`): three charred standing trunks (one model from three sides), a stand of dead stems, and three charred
+stumps (one model from three sides, cut 0.3 of its height above its foot, so the ground it was scanned on is left
+out). Each licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/); the sprites are rendered from them
+(changed: lit, cut at the ground, shrunk). Not yet drawn by the page.
+
+| sprite | model | author | licence |
+|---|---|---|---|
+| `burned_tree_photogrammetry` | [Burned Tree Photogrammetry](https://sketchfab.com/3d-models/burned-tree-photogrammetry-1dc8bcac00e2433eb645e6c837a8d5b7) | [gino.demurtas](https://sketchfab.com/gino.demurtas) | CC BY 4.0 |
+| `dead_trees` | [Dead Trees](https://sketchfab.com/3d-models/dead-trees-41f9d44a8d8b45549dd6a0c947ca4eba) | [Darklordbroch](https://sketchfab.com/Darklordbroch) | CC BY 4.0 |
+| `burned_trunk_lassen` | [Burned tree trunk - Lassen Volcano Park](https://sketchfab.com/3d-models/burned-tree-trunk-lassen-volcano-park-82f510d9e012414d9aa980bf944efc93) | [David Antalek](https://sketchfab.com/David.Antalek) | CC BY 4.0 |
+
 ## trees.png, models.png and the sprites' table
 
 Sprites rendered from Poly Haven's CC0 3D models (glTF, 1k textures) and from Sketchfab's CC0 and CC BY 4.0 models

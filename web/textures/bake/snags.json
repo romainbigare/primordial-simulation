@@ -1,0 +1,39 @@
+{
+ "trees": {
+  "side": 512,
+  "per": 1,
+  "sprites": [
+   {
+    "model": "burned_tree_photogrammetry",
+    "file": "sketchfab/1dc8bcac00e2433eb645e6c837a8d5b7/scene.gltf",
+    "turns": [
+     0,
+     120,
+     240
+    ],
+    "set": "SNAG"
+   },
+   {
+    "model": "dead_trees",
+    "file": "sketchfab/41f9d44a8d8b45549dd6a0c947ca4eba/scene.gltf"
+   }
+  ]
+ },
+ "models": {
+  "side": 512,
+  "per": 4,
+  "sprites": [
+   {
+    "model": "burned_trunk_lassen",
+    "file": "sketchfab/82f510d9e012414d9aa980bf944efc93/scene.gltf",
+    "turns": [
+     0,
+     120,
+     240
+    ],
+    "cut": 0.3,
+    "set": "STUMP"
+   }
+  ]
+ }
+}
