@@ -122,6 +122,15 @@ export async function look(page, { x, y, mpp }) {
   await sleep(400);
 }
 
+/** Play the world in `page` until `months` months have passed, then pause: what the core counts only as it steps and
+ * does not save (a month's load in the channels, its plumes) is then drawn. */
+export async function step(page, months) {
+  const at = await page.evaluate(() => { const e = window.__ew, f = e.world.meta.frames[0]; e.setSpeed(1); e.togglePlay(); return f.year * 360 + f.day; });
+  await page.waitForFunction(([at, months]) => { const f = window.__ew.world.meta.frames[0]; return f.year * 360 + f.day >= at + 30 * months; }, [at, months], { timeout: 600000, polling: 100 });
+  await page.evaluate(() => window.__ew.togglePlay());
+  await sleep(1000);
+}
+
 /** In `page`, the plumes `list` (each [x, y, kg/s], x and y in squares) in place of the world's: a test of how a plume
  * is drawn (the core lays none yet); [] gives the world's own back at its next frame. */
 export async function plumes(page, list) {

@@ -61,8 +61,9 @@ const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
  * held to `MUD_PLUME_MOST_G`. That water spreads over the body as a layer `MUD_PLUME_DEEP_M` thick for
  * `MUD_PLUME_DAYS` before its load is mixed down and settled (a river's plume is a fresh layer a metre or so thick over
  * the body's water, its mud settling out within hours to days; from memory): the load falls by e over the radius of the
- * area the river fills in that time, no more than `MUD_PLUME_MOST_M`, out to where it falls to `MUD_CLEAR_G` g/m³. So a
- * river's plume is as wide as its discharge makes it, and it shows the farther the more load it brings. */
+ * area the river fills in that time, no more than `MUD_PLUME_MOST_M`, out to where it falls to `MUD_CLEAR_G` g/m³; a
+ * plume narrower than a sample (125 m) is drawn as its mean over the sample. So a river's plume is as wide as its
+ * discharge makes it, and it shows the farther the more load it brings. */
 const MUD_Q_LEAST = 0.01, MUD_PLUME_MOST_G = 2e4, DAY_S = 86400, MUD_PLUME_DEEP_M = 1, MUD_PLUME_DAYS = 1, MUD_PLUME_MOST_M = 8000, MUD_CLEAR_G = 1;
 
 export class Land {
@@ -119,10 +120,13 @@ export class Land {
       for (let j = Math.max(0, y - 1); j <= Math.min(s.down - 1, y + 1); j++) for (let i = Math.max(0, x - 1); i <= Math.min(s.across - 1, x + 1); i++) q = Math.max(q, unhalf(this.discharge[2 * (j * s.across + i)]));
       const flow = Math.max(q, MUD_Q_LEAST), at = Math.min((1000 * kg) / flow, MUD_PLUME_MOST_G);
       const fall = Math.min(Math.sqrt((flow * MUD_PLUME_DAYS * DAY_S) / (Math.PI * MUD_PLUME_DEEP_M)), MUD_PLUME_MOST_M) / sampleM;
-      const r = Math.ceil(fall * Math.log(Math.max(at / MUD_CLEAR_G, 1)));
+      // A plume narrower than a sample is its mean over the sample: its e-fold's area, 2π fall², over the sample's.
+      // and is drawn falling by e over a sample at least, so no sample's square shows.
+      const mean = at * Math.min(1, 2 * Math.PI * fall * fall), spread = Math.max(fall, 1);
+      const r = Math.ceil(spread * Math.log(Math.max(mean / MUD_CLEAR_G, 1)));
       for (let j = Math.max(0, y - r); j <= Math.min(s.down - 1, y + r); j++) {
         for (let i = Math.max(0, x - r); i <= Math.min(s.across - 1, x + r); i++) {
-          const d = Math.hypot(i - x, j - y), c = at * Math.exp(-d / fall), t = 2 * (j * s.across + i) + 1;
+          const d = Math.hypot(i - x, j - y), c = mean * Math.exp(-d / spread), t = 2 * (j * s.across + i) + 1;
           if (d <= r && c > unhalf(out[t])) out[t] = half(c);
         }
       }

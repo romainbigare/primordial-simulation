@@ -137,15 +137,15 @@ fn load_of(s: vec2i) -> f32 {
   if (s.x < 0) { return 0.0; }
   return textureLoad(flows, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).y;
 }
-// What the liquid at `at`, m from the map's north-west corner, carries, g/m³: the samples' (`load_of`) blended between
-// their centres.
+// What the liquid at `at`, m from the map's north-west corner, carries, g/m³: the samples' (`load_of`) through their
+// centres as a B-spline (draw.wgsl `b_spline`), so no sample's square shows in a plume.
 fn load_at(at: vec2f) -> f32 {
-  let p = at / (land.map.x * land.map.yz) * land.samples.xy - 0.5;
-  let i = vec2i(floor(p));
-  let f = p - floor(p);
-  let a = mix(load_of(i), load_of(i + vec2i(1, 0)), f.x);
-  let b = mix(load_of(i + vec2i(0, 1)), load_of(i + vec2i(1, 1)), f.x);
-  return mix(a, b, f.y);
+  let c = b_spline(at / (land.map.x * land.map.yz) * land.samples.xy - 0.5);
+  var sum = 0.0;
+  for (var y = 0; y < 3; y++) {
+    for (var x = 0; x < 3; x++) { sum += c.wx[x] * c.wy[y] * load_of(c.i + vec2i(x - 1, y - 1)); }
+  }
+  return sum;
 }
 
 // The sample next along the channel of sample `s` from the point `at` (m from the map's north-west corner), and the

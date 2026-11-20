@@ -47,6 +47,7 @@ async function set(out) {
   const at = worlds(set.world, world, dates(world))[world.at], s = await start(crowns ? { 'site-mask': maskShaders() } : {});
   mkdirSync(out, { recursive: true });
   const page = await P.open(s.browser, s.url, 'site', at, { px }), maskPage = crowns ? await P.open(s.browser, s.url, 'site-mask', at, { px }) : null;
+  if (world.step) for (const p of [page, maskPage]) if (p) await P.step(p, world.step);
   const result = { set: name, world: at, year: await P.year(page), px, scenes: {} }, items = [];
   for (const scene of scenes) {
     const r = result.scenes[scene.name] = { about: scene.about, at: scene.at, kinds: await kinds(page, scene.at), views: {} };
@@ -182,6 +183,7 @@ async function cost(out) {
   mkdirSync(join(out, 'raw'), { recursive: true });
   const pages = {};
   for (const pass of passes) pages[pass] = await P.open(s.browser, s.url, `site-cost-${pass}`, at, { px });
+  if (world.step) for (const pass of passes) await P.step(pages[pass], world.step);
   const result = { set: name, world: at, px, show: SHOW, scenes: {} }, items = [];
   for (const scene of scenes) {
     const r = result.scenes[scene.name] = { about: scene.about, at: scene.at, views: {} };
