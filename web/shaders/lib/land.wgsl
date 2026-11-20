@@ -255,13 +255,20 @@ fn soil_held(pore: f32, pores: f32, c: f32, twi: f32) -> f32 {
   return clamp(pore + land.soil.x * (twi - c), 0.0, pores);
 }
 
-// How saturated the ground at `at` is, 0..1 (TOPMODEL, Beven and Kirkby 1979): a point is saturated where its wetness
-// index (`Tiled.twi`) reaches the index of saturation of its cells (the core's `inside::wet_ground`), blended over
-// the cells about it that hold land (a cell of liquid alone has none), so the wet ground's edge is a line of the index,
-// along the valleys, not a ring about a wet cell; the edge is spread over `SATURATED_EDGE` of the index under it.
+// How saturated the ground at `at` is, 0..1 (TOPMODEL, Beven and Kirkby 1979): all of it in the water of a flowing
+// channel, as wide as the channel law makes it on its discharge this month (the core's `inside::channel_share`: the
+// flowing liquid is its table at the surface; rock.wgsl `discharge_at`, the drawn channel's own), about its line as
+// drawn; elsewhere where its wetness index (`Tiled.twi`) reaches the index of saturation of its cells (the core's
+// `inside::wet_ground`), blended over the cells about it that hold land (a cell of liquid alone has none), so the wet
+// ground's edge is a line of the index, along the valleys, not a ring about a wet cell; the edge is spread over
+// `SATURATED_EDGE` of the index under it. (The page draws that water about any channel line its tiles hold, the law
+// only about those that drain a channel's source, `inside::drains_source`: below it the law's channels are under a
+// metre wide.)
 const SATURATED_EDGE = 0.5;
 fn saturated_at(at: vec2f) -> f32 {
-  let twi = ground_at(at, false).twi;
+  let g = ground_at(at, false);
+  let q = discharge_at(g, at);
+  if (q > 0.0 && g.d <= 0.5 * land.channel.x * pow(q, land.channel.y)) { return 1.0; }
   let cs = corners(at / land.map.x);
   var level = 0.0;
   var weight = 0.0;
@@ -272,7 +279,7 @@ fn saturated_at(at: vec2f) -> f32 {
     weight += w;
   }
   if (weight <= 0.0) { return 0.0; }
-  return smoothstep(-SATURATED_EDGE, 0.0, twi - level / weight);
+  return smoothstep(-SATURATED_EDGE, 0.0, g.twi - level / weight);
 }
 
 // The share of a tent of half-width 1 that lies below t (a pixel's footprint across a line).
