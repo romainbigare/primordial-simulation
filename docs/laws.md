@@ -1478,10 +1478,14 @@ and the sea and fertility differs by place. **Exchange sites** (`soil::exchange`
 particles and its organic matter hold a share of its dissolved minerals in a linear balance with what stays
 dissolved: sites of 1,060 mol of charge a m³ of fine particles and 2,800 a m³ of organic matter (`SITES_FINE`,
 `SITES_ORGANIC`), each holding the minerals of 0.04 m³ of the liquid (`HELD_PER_SITE`), so the sites hold those of
-`Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral in V m³ of
-liquid stays dissolved (`soil::dissolved`). Only that share moves with the liquid that sinks, flows through the pores
-and runs off (`flow::liquid::mobile`, `basin::movable`); the rest stays in the ground node, where roots take from all
-of it (the sites give back to the liquid as fast as roots take from it). So coarse ground lets the rain wash its
+`Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral stays dissolved
+in the V m³ of the cell's other liquids (`soil::dissolved`), found when Flow builds the state of its ground in full
+(each month's start) and kept until the next (`State::dissolved`). Only that share is liquid (`Sp::liquid`): it moves
+with the liquid that sinks, flows through the pores and runs off (`flow::liquid::mobile`, `basin::movable`) and takes
+its liquid volume in the pores and over them. The rest is part of the ground everywhere Flow reads it: a solid at the
+solid's volume in the solid surface, in no pores and no cover, that neither moves nor fills (`land::layers`,
+`stack::ground_layers`, `land::rise`); roots take from all of it (the sites give back to the liquid as fast as roots
+take from it). So coarse ground lets the rain wash its
 minerals away and fine and organic ground keeps them: a loam's 2 m of loose ground holds some 97% of its minerals
 on its sites at field capacity, a coarse ground some 90%, so the coarse loses them three to four times as fast. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
 per m² of land, on every open land cell; then only fixing adds it, rotting (7) returns it, heat (11) sends it

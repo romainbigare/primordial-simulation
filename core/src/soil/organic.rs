@@ -5,7 +5,7 @@ use crate::World;
 
 /// What the ground of a cell holds, kg/m²: its fresh dead matter (of the substances life's parts are made of), its slow
 /// organic matter (what particles hold, `Substance::bound`), its minerals dissolved in its liquid and held on its
-/// exchange sites (`dissolved`); and the pace its dead frame rots at, a year: the open world's catalyst as moist as it
+/// exchange sites (by Flow's share, `flow::dissolved`); and the pace its dead frame rots at, a year: the open world's catalyst as moist as it
 /// is, times the rate constant at its temperature, in the share of it whose pores hold gas (laws.md 2.1, 2.3), with
 /// all the gas it needs.
 #[derive(Clone, Copy, Debug, Default)]
@@ -32,7 +32,7 @@ pub fn holdings(w: &World) -> Option<Vec<Holdings>> {
         let mineral: f64 = w.chem.minerals().iter().map(|m| kg(m.0)).sum();
         let m = means[i];
         let depth = m.pore + m.stands;
-        let dissolved = super::dissolved(w.soil[i].holds, depth * area);
+        let dissolved = crate::flow::dissolved(w, i);
         let aired = if m.stands > 0.0 { 1.0 } else { 1.0 - w.pores(i).full(m.pore / m.pores.max(1e-9)) };
         let moist = w.cfg.phys.wetness(depth);
         let rot = frame.map_or(0.0, |rx| crate::change::open_catalyst(rx.open, moist) * rx.arrhenius(w.t_ground_last(i)) * aired * year);
