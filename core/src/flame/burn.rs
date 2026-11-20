@@ -72,8 +72,8 @@ fn crown_burns(w: &World, p: &Parts, (c, x, (base, top)): (&mut Cover, usize, (f
         flows[SCORCHED] += scorched * mm[MATTER];
     }
     // (Shares of the slot taken one after another may pass what it holds by rounding: no more than it holds dies.)
-    for q in 0..NP {
-        let d = dead[q].min(c.mol[x][q].max(0.0));
+    for (q, &d) in dead.iter().enumerate() {
+        let d = d.min(c.mol[x][q].max(0.0));
         (c.mol[x][q], b.dead[p.sub[q]]) = (c.mol[x][q] - d, b.dead[p.sub[q]] + d);
     }
 }
