@@ -27,10 +27,15 @@ pub enum Purpose {
     Cover,
     /// The draws of a slot of takers in a month (`fauna::step`): its deaths
     Fauna,
+    /// The strikes that light the joined dry remains of a region in a month, and where (`flame::spread`)
+    Flame,
 }
 
 /// The number of values of a 16-bit uniform.
 const U16_SPAN: f32 = 65536.0;
+
+/// The mean past which a Poisson draw is taken as its normal (`Rng::poisson`).
+const POISSON_NORMAL: f64 = 50.0;
 
 pub struct Rng(u64);
 
@@ -67,6 +72,18 @@ impl Rng {
     pub fn near_normal(&mut self) -> f32 {
         let u = self.u64();
         (((u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48)) as f32 - 2.0 * (U16_SPAN - 1.0)) * (3f32.sqrt() / U16_SPAN)
+    }
+    /// How many events happen where `mean` are expected: a Poisson draw, by multiplying uniforms (Knuth); past
+    /// `POISSON_NORMAL` expected, the normal of its mean and spread (Knuth's product would take as many uniforms).
+    pub fn poisson(&mut self, mean: f64) -> u32 {
+        if mean > POISSON_NORMAL {
+            return (mean + mean.sqrt() * self.normal()).round().max(0.0) as u32;
+        }
+        let (floor, mut product, mut n) = ((-mean.max(0.0)).exp(), self.f64(), 0);
+        while product > floor {
+            (product, n) = (product * self.f64(), n + 1);
+        }
+        n
     }
     /// Standard normal (Box-Muller).
     pub fn normal(&mut self) -> f64 {

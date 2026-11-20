@@ -200,20 +200,26 @@ impl Cover {
         all[na..na + nb].copy_from_slice(&b[..nb]);
         self.set_groups(big, &mut all[..na + nb]);
     }
-    /// The plants of slot `x` no taller than `height` m (its walls of density `rho` kg/m³) die on the share `f` of its
-    /// ground, as a flame's plume kills them (`flame::burn`): each such group loses that share of its plants and of its
-    /// built cover. Returns what they held, kg: their living cover's body matter and their walls; and how many died.
-    /// The caller takes those amounts from the slot.
-    pub fn die_under(&mut self, ph: &Physics, (mm, rho): (&[f64; NP], f64), x: usize, (f, height): (f64, f64)) -> ([f64; 2], f64) {
+    /// The plants of slot `x` no taller than `height` m (its walls of density `rho` kg/m³) die above the ground on the
+    /// share `f` of its ground, as a flame's plume kills them (`flame::burn`). A group of plants no taller than
+    /// `surface_m` keeps its part below the ground, the share `base_share` of its built cover, and its plants: they grow
+    /// again from it and their store, as herbs and shrubs burnt to the ground sprout from their base (Bond and Midgley
+    /// 2001). A group of taller plants loses that share of its plants and of its built cover. Returns what they lost, kg:
+    /// of the plants that sprout and of those that died, their body matter and their walls; and how many died. The caller
+    /// takes those amounts from the slot.
+    pub fn die_under(&mut self, ph: &Physics, (mm, rho): (&[f64; NP], f64), x: usize, (f, height): (f64, f64)) -> ([[f64; 2]; 2], f64) {
         let s = self.sizes(ph, mm, x);
         let (mut g, held) = self.groups(mm, x);
-        let (mut kg, mut died) = ([0.0; 2], 0.0);
+        let (mut kg, mut died) = ([[0.0; 2]; 2], 0.0);
         for k in (0..held).filter(|&k| s.height(ph, rho, k) <= height) {
-            let dead = g[k].kg * f;
-            (kg[0], kg[1], died) = (kg[0] + dead * (1.0 - s.walls[k]), kg[1] + dead * s.walls[k], died + g[k].n * f);
-            g[k] = Group { n: g[k].n * (1.0 - f), kg: g[k].kg - dead };
+            let sprouts = s.height(ph, rho, k) <= ph.surface_m;
+            let dead = g[k].kg * f * if sprouts { 1.0 - ph.base_share } else { 1.0 };
+            let lost = &mut kg[(!sprouts) as usize];
+            (lost[0], lost[1]) = (lost[0] + dead * (1.0 - s.walls[k]), lost[1] + dead * s.walls[k]);
+            let gone = if sprouts { 0.0 } else { g[k].n * f };
+            (g[k], died) = (Group { n: g[k].n - gone, kg: g[k].kg - dead }, died + gone);
         }
-        if died > 0.0 {
+        if kg.iter().flatten().any(|&m| m > 0.0) {
             self.set_groups(x, &mut g[..held]);
         }
         (kg, died)

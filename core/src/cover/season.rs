@@ -33,7 +33,7 @@ pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, st
             // What its fuel can pay: keeping a kg through the months it expects, this one at least.
             let fuel = c.mol[x][FUEL].max(0.0) * e[FUEL] / (s[x].living * keep * months.max(1.0)).max(f64::MIN_POSITIVE);
             let shed = shed(c, x, &s[x], (floor(keep, (keep, rebuild), Some(months)) / net, fuel));
-            book_shed(b, counts, (p, &mm, e), shed);
+            shed_to(ph, c, (x, rho), (b, counts), (p, &mm, e), shed);
             s[x] = after_shed(ph, c, (&mm, rho), x, s[x]);
         }
         let (lost, cost) = upkeep(w, c, p, x, &s[x], (t, dt), b);
@@ -42,7 +42,7 @@ pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, st
         c.full[x] = !pays[x];
         if !pays[x] && season[x] {
             let shed = shed(c, x, &s[x], (floor(keep, (keep, rebuild), None) / net, 1.0));
-            book_shed(b, counts, (p, &mm, e), shed);
+            shed_to(ph, c, (x, rho), (b, counts), (p, &mm, e), shed);
         }
         // Its balance over about a year: what it stored less its upkeep, per kg.
         c.net[x] += (((stored[x] - cost) / s[x].built) as f32 - c.net[x]) / year;
@@ -50,11 +50,18 @@ pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, st
     (pays, season)
 }
 
-/// What slot `x` shed, `shed` mol of body matter, goes to its remains, counted as spent (`SPENT`) and booked (`SHED`).
-fn book_shed(b: &mut Books, counts: &mut Counters, (p, mm, e): (&Parts, &[f64; NP], &[f64; NP]), shed: f64) {
+/// What slot `x` of cover `c` shed, `shed` mol of body matter, is counted as spent (`SPENT`). Where its plants stand no
+/// taller than `surface_m` (its walls of density `rho`) the dead leaves stay standing on them, cured, among the cover's
+/// own (`Cover::cured`), as the dead leaves of herbs stay on their stems through a dry season; the leaves of taller
+/// plants fall at once to its remains, booked (`SHED`).
+fn shed_to(ph: &crate::Physics, c: &mut Cover, (x, rho): (usize, f64), (b, counts): (&mut Books, &mut Counters), (p, mm, e): (&Parts, &[f64; NP], &[f64; NP]), shed: f64) {
     counts.cover_lost[SPENT as usize] += shed * mm[MATTER];
-    b.dead[p.sub[MATTER]] += shed;
-    b.budget[SHED] -= shed * e[MATTER];
+    if c.height(ph, mm, rho, x) <= ph.surface_m {
+        c.cured[MATTER] += shed;
+    } else {
+        b.dead[p.sub[MATTER]] += shed;
+        b.budget[SHED] -= shed * e[MATTER];
+    }
 }
 
 /// What slot `x` of cover `c` is after it shed some of its living cover: its built and living cover, capture area, what
