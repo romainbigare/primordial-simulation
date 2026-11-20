@@ -391,7 +391,7 @@ fn csv_files_grown_year_by_year_are_those_written_at_once() {
     assert!(a.lines().next().unwrap().contains(&label), "the late kind has columns");
 }
 
-/// The minerals: the series has each mineral (`min0_`, the mineral of the fixing reaction's gas, the only one) in the ground
+/// The minerals: the series has each mineral (`min0_`, the mineral of the fixing reaction's gas, the one counted here; `min1_`, the dissolved mineral its rock weathers to) in the ground
 /// per m² of land and of sea, and where it is in all (dead matter on land and sea, the cover, the bed's stores), which
 /// with the ground's stays what the soil gave the world (no cover fixes, and the reaction that breaks it down is off).
 #[test]
@@ -408,7 +408,8 @@ fn yearly_series_counts_the_minerals() {
     let first = &rows[0];
     assert!(col("min0_land", first) > 0.015 && col("min0_land", first) <= 0.0286 + 1e-6, "{}", col("min0_land", first));
     assert!(col("min0_sea", first) > 0.0 && col("min0_sea", first) < col("min0_land", first), "{}", col("min0_sea", first));
-    assert!(!head.iter().any(|h| h.starts_with("min1_")), "one mineral");
+    // (A column of each mineral of growth: the fixed one first, then the dissolved one its rock weathers to.)
+    assert_eq!(head.iter().filter(|h| h.ends_with("_deep") && h.starts_with("min")).count(), w.chem.minerals().len());
     let mm = w.chem.subs[w.chem.minerals()[0].0].molar_mass;
     let all = |r: &Vec<f64>, a: [f64; 2]| {
         let ground = (col("min0_land", r) * a[0] + col("min0_sea", r) * a[1]) / mm / 1e9;
