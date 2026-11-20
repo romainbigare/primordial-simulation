@@ -11,8 +11,8 @@ use crate::chem::Chemistry;
 /// building and fixing (its conversions keep the content); the leaf layers it sheds, what dies (unpaid, worn, frozen,
 /// pushed out, emptied), the fuel its roots give its ground, its seeds out and in (they land on a ground, `lying`, part
 /// of the cover's node), the seeds lying that die, what takers take or break of it (`contract`), what is placed from
-/// outside, and what rounding set from below zero to zero.
-pub const BUDGET: [&str; 17] = ["stored", "basal", "capacity", "firmness", "leaves", "sapwood", "root_breath", "root_renew", "building", "shed", "died", "exuded", "seeds", "seeds_died", "takers", "placed", "rounded"];
+/// outside, what rounding set from below zero to zero, and what flames burnt or killed (`flame`).
+pub const BUDGET: [&str; 18] = ["stored", "basal", "capacity", "firmness", "leaves", "sapwood", "root_breath", "root_renew", "building", "shed", "died", "exuded", "seeds", "seeds_died", "takers", "placed", "rounded", "burnt"];
 pub const STORED: usize = 0;
 /// The first of the parts of the upkeep, in the order of `BUDGET`.
 pub const UPKEEP: usize = 1;
@@ -27,6 +27,7 @@ pub const SEEDS_DIED: usize = 13;
 pub const TAKERS: usize = 14;
 pub const PLACED: usize = 15;
 pub const ROUNDED: usize = 16;
+pub const BURNT: usize = 17;
 
 impl Parts {
     /// What a mol of each part holds, J: the fuel what its burning (reaction 1) frees, body matter and walls the fuel

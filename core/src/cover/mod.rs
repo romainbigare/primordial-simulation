@@ -25,6 +25,8 @@ pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
 pub use groups::Sizes;
+pub(crate) use build::per_input;
+pub(crate) use budget::BURNT;
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
@@ -141,6 +143,12 @@ pub struct Cover {
     pub keep: f32,
     /// The seeds lying on its cell's ground (`lying`), at its temperature
     pub lying: Lying,
+    /// The dead leaves its plants no taller than `surface_m` shed that still stand on them, cured, until they fall to
+    /// the ground (`season::shed_to`, `grow::fall`): mol of each part
+    pub cured: [f64; NP],
+    /// The walls of its plants flames killed whole that still stand, dead, until they fall to the ground
+    /// (`flame::burn`, `grow::fall`): mol of each part
+    pub snag: [f64; NP],
     /// Seeds made in its last step, landed after every cell had its step (`land`); not saved
     #[serde(skip)]
     pub(crate) seeds: Vec<Seed>,
@@ -149,7 +157,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new() }
     }
 }
 
@@ -163,9 +171,10 @@ impl Cover {
     pub fn any(&self) -> bool {
         self.root.iter().chain(&self.lying.root).any(|&r| r != NO_ROOT)
     }
-    /// The amounts of each of its slots, then of each lot of seeds lying (mol of each part).
+    /// The amounts of each of its slots, then of each lot of seeds lying, then of its cured leaves and its dead walls
+    /// standing (mol of each part).
     pub fn all_mol(&self) -> impl Iterator<Item = &[f64; NP]> + '_ {
-        self.mol.iter().chain(&self.lying.mol)
+        self.mol.iter().chain(&self.lying.mol).chain([&self.cured, &self.snag])
     }
     /// Its slots that hold cover.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {

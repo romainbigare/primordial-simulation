@@ -299,6 +299,8 @@ pub const LAYERS: &[Layer] = &[
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.rain.get(i).copied().unwrap_or(0.0) as f64),
     l("rises", "mol/m2/s", "log", 1e-5, 1e-2, |c, i| c.w.evap.get(i).copied().unwrap_or(0.0) as f64),
     l("sheds", "mol/m2/s", "lin", -4e-3, 4e-3, |c, i| sheds(c.w, i)),
+    l("wind_u", "m/s", "lin", -20.0, 20.0, |c, i| low_wind(c, i)[0]),
+    l("wind_v", "m/s", "lin", -20.0, 20.0, |c, i| -low_wind(c, i)[1]),
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
     l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| per_land(c.plants[i], c.land[i])),
@@ -307,6 +309,14 @@ pub const LAYERS: &[Layer] = &[
     l("seeds", "kg/m2", "log", 1e-5, 0.1, |c, i| per_land(c.seeds[i], c.land[i])),
     l("grown", "kg/m2/yr", "log", 0.01, 10.0, |c, i| per_land(c.grown[i], c.land[i])),
     l("takers", "kg/km2", "log", 1.0, 1e4, |c, i| c.takers[i]),
+    l("cured", "kg/m2", "log", 0.01, 3.0, |c, i| pcore::flame::cured(c.w, i)),
+    l("snag", "kg/m2", "log", 0.01, 30.0, |c, i| pcore::flame::snag(c.w, i)),
+    l("flame", "1", "lin", 0.0, 1.0, |c, i| flamed(c.w, i).share as f64),
+    l("flame_len", "m", "log", 0.01, 30.0, |c, i| flamed(c.w, i).length as f64),
+    l("burnt", "1/yr", "lin", 0.0, 1.0, |c, i| pcore::flame::burnt_year(c.w, i)),
+    l("burnt_age", "months", "lin", 0.0, pcore::flame::AGE_MOST as f64, |c, i| pcore::flame::since(c.w, i)),
+    l("ash", "kg/m2", "log", 1e-5, 1.0, |c, i| flamed(c.w, i).ash as f64),
+    l("flame_air", "kg/m2", "log", 1e-3, 10.0, |c, i| flamed(c.w, i).air as f64),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),
@@ -314,6 +324,16 @@ pub const LAYERS: &[Layer] = &[
     l("ground_g", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][1]),
     l("ground_b", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][2]),
 ];
+
+/// The low wind over cell `i` at the air's last step, m/s [east, south] (`Counters::low_wind`; none before the first).
+fn low_wind(c: &Ctx, i: usize) -> [f64; 2] {
+    c.w.counts.low_wind.get(c.air(i)).map_or([0.0; 2], |v| v.map(|x| x as f64))
+}
+
+/// What flames did on cell `i` of `w` in its last month (`Counters::flame_month`; nothing before the first).
+fn flamed(w: &World, i: usize) -> pcore::flame::Flamed {
+    w.counts.flame_month.get(i).copied().unwrap_or_default()
+}
 
 /// Quantise a value to a byte as the frames format defines: none (NaN) is 0, as nothing.
 pub fn quantise(l: &Layer, v: f64) -> u8 {
