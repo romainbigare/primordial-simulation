@@ -11,6 +11,8 @@ pub const M2_PER_KM2: f64 = 1e6;
 pub const M3_PER_KM3: f64 = 1e9;
 pub const M_PER_KM: f64 = 1e3;
 pub const KG_PER_MT: f64 = 1e9;
+/// Grams in a kilogram, the unit a shell is given the load a liquid carries in (g/m³).
+pub const G_PER_KG: f64 = 1e3;
 
 /// The planet's spin, rad/s: one turn in a sidereal day of 86,164 s.
 pub const SPIN: f64 = 7.292e-5;
