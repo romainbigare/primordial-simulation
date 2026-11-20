@@ -47,6 +47,28 @@ fn fire_at(at: vec2f) -> FireAt {
   return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y, b.zw, c.x, c.y);
 }
 
+// The months since the burn of the scar at `at`, a point of rank `rank` among the patches (`burn_rank`, 0..1): of one
+// of the four squares whose centres lie about it, drawn by the rank with the chance of each square's blend weight
+// times its scar. So where scars of different ages meet, the point takes one of them, and their meeting is as ragged
+// as the patches; a blend of their ages would lay a straight line where the younger one's char fades.
+fn scar_age(at: vec2f, rank: f32) -> f32 {
+  let s = at / fire.map.x - 0.5;
+  let c = vec2i(floor(s));
+  let f = fract(s);
+  var t: array<vec4f, 4>;
+  var w = vec4f((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  for (var k = 0; k < 4; k++) {
+    t[k] = fire_texel(0, c + vec2i(k % 2, k / 2));
+    w[k] *= t[k].x;
+  }
+  var left = rank * (w.x + w.y + w.z + w.w);
+  for (var k = 0; k < 3; k++) {
+    if (left < w[k]) { return t[k].y / max(t[k].x, 1e-6); }
+    left -= w[k];
+  }
+  return t[3].y / max(t[3].x, 1e-6);
+}
+
 // A square's burnt share lies in patches with ragged edges (ragged.wgsl), from `BURN_PATCH_M` across down to the
 // pixel: a fire runs where its fuel joins and stops at gaps, so its scar is a mosaic of burnt and spared ground (Turner
 // and others 1994). The patches are a share of the ground read off the noise, even over 0..1: a point is burnt where
