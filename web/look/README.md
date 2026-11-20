@@ -37,6 +37,9 @@ A scene set names its world, its views (metres a pixel; a scene may name its own
 size 32, band 20,65, the six starting kinds, the takers in year 52) at 42.75, with the builders' places. The law moves
 what grows where: `set` prints each scene's kinds, so you see what stands there.
 
+The scene set `sediment` stands on `seed1`'s world where the liquid lays its load: river mouths at the sea, rivers at the
+heads of drowned valleys, streams into the big lake, a valley floor, at 8, 2 and 0.5 m a pixel, and two mouths close.
+
 The scene set `swamp` stands on a larger, wetter island (seed 1, size 48, at 42.75) where kinds stand on shallow pond
 ground (the core's footing): the shores of a shallow lake and of a deeper one under trees, at 1, 0.25 and 0.1 m a pixel, and soaked bare ground with its puddles (scene `mud`).
 
