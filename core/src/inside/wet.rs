@@ -21,26 +21,47 @@ pub struct WetGround {
 /// stands over the lowest first, `flow::curve`), where its liquid table lies (`saturated`).
 pub fn wet_ground(w: &World, i: usize, m: Means) -> WetGround {
     let s = w.terrain_samples();
-    let mut at: Vec<(f64, f64)> = w.map.leaves()[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], index_now(w, &s, k))).collect();
+    let mut at: Vec<(f64, usize)> = w.map.leaves()[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], k)).collect();
     at.sort_by(|a, b| b.0.total_cmp(&a.0));
     let land = crate::contract::land(w, i) / w.mesh.cells().area()[i];
     at.truncate((land * at.len() as f64).round() as usize);
-    let twi: Vec<f64> = at.iter().map(|p| p.1).collect();
-    saturated(&w.cfg.phys, &twi, m)
+    let ks: Vec<usize> = at.iter().map(|p| p.1).collect();
+    let (twi, area) = parts_now(w, &s, i, &ks);
+    saturated(&w.cfg.phys, (&twi, &area), m)
 }
 
-/// Ground of equal parts of wetness index `twi` and means `m`: its liquid table departs over them by the index
-/// (`soil_level`, `deficit_at`), and a part is saturated where it reaches the surface, at an index of at least the level
-/// plus the mean room over `soil_m`. Its saturated parts' pores are full, so the rest hold what they do not.
-pub fn saturated(ph: &crate::Physics, twi: &[f64], m: Means) -> WetGround {
+/// The terrain samples `ks` of cell `i` as the table reads them now, each of equal area: of each, the part its channel's
+/// flowing liquid covers (`channel_share`) at an infinite wetness index, its room none, and the rest at its own index
+/// (`Samples::twi`). Returns the indices and the shares of the area, summing to 1.
+pub fn parts_now(w: &World, s: &crate::space::samples::Samples, i: usize, ks: &[usize]) -> (Vec<f64>, Vec<f64>) {
+    let each = 1.0 / ks.len().max(1) as f64;
+    let (mut twi, mut area) = (Vec::with_capacity(2 * ks.len()), Vec::with_capacity(2 * ks.len()));
+    for &k in ks {
+        let wet = channel_share(w, s, i, k);
+        if wet > 0.0 {
+            twi.push(f64::INFINITY);
+            area.push(each * wet);
+        }
+        twi.push(s.twi[k]);
+        area.push(each * (1.0 - wet));
+    }
+    (twi, area)
+}
+
+/// Ground of parts of wetness index `twi` and shares of the area `area` (summing to 1), of means `m`: its liquid table
+/// departs over them by the index (`soil_level`, `deficit_at`), and a part is saturated where it reaches the surface, at
+/// an index of at least the level plus the mean room over `soil_m`. Its saturated parts' pores are full, so the rest
+/// hold what they do not.
+pub fn saturated(ph: &crate::Physics, (twi, area): (&[f64], &[f64]), m: Means) -> WetGround {
     let filled = if m.pores > 0.0 { m.pore / m.pores } else { 1.0 };
     let [d, most] = m.deficit(ph);
-    let channels = twi.iter().filter(|&&t| t == f64::INFINITY).count() as f64 / twi.len().max(1) as f64;
-    let (share, level) = match soil_level(ph, twi, &vec![1.0 / twi.len().max(1) as f64; twi.len()], m) {
+    let by = |wet: &dyn Fn(f64) -> bool| twi.iter().zip(area).filter(|p| wet(*p.0)).map(|p| p.1).sum::<f64>();
+    let channels = by(&|t| t == f64::INFINITY);
+    let (share, level) = match soil_level(ph, twi, area, m) {
         _ if d <= 0.0 || filled >= 1.0 => (1.0, f64::NEG_INFINITY),
-        None if d >= most || channels >= 1.0 => (channels, f64::INFINITY),
+        None if d >= most || twi.iter().all(|&t| t == f64::INFINITY) => (channels, f64::INFINITY),
         None => (1.0, f64::NEG_INFINITY),
-        Some(c) => (twi.iter().filter(|&&t| deficit_at(ph, m, t, c) <= 0.0).count() as f64 / twi.len() as f64, c + d / ph.soil_m),
+        Some(c) => (by(&|t| deficit_at(ph, m, t, c) <= 0.0), c + d / ph.soil_m),
     };
     let rest = if share < 1.0 { ((filled - share) / (1.0 - share)).clamp(0.0, 1.0) } else { 1.0 };
     WetGround { share, level, filled: rest }
@@ -65,13 +86,17 @@ pub fn drains_source(ph: &crate::Physics, s: &crate::space::samples::Samples, k:
 
 /// Whether liquid flows in the channel of terrain sample `k` of `s`: it drains a channel's source (`drains_source`) and
 /// its liquid runs (its discharge over a year, `World::discharge`). Flowing liquid is its table at the surface: it has
-/// no room (`index_now`).
+/// no room (`channel_share`).
 pub fn flowing(w: &World, s: &crate::space::samples::Samples, k: usize) -> bool {
     drains_source(&w.cfg.phys, s, k) && w.discharge.get(k).is_some_and(|&q| q > 0.0)
 }
 
-/// The wetness index of terrain sample `k` of `s` as the table reads it now: its own (`Samples::twi`), infinite where
-/// liquid flows in its channel (`flowing`), so its room is none (`deficit_at`).
-pub fn index_now(w: &World, s: &crate::space::samples::Samples, k: usize) -> f64 {
-    if flowing(w, s, k) { f64::INFINITY } else { s.twi[k] }
+/// The share of the area of terrain sample `k` of `s`, in cell `i`, that the liquid flowing in its channel covers
+/// (`flowing`): its channel's width (`World::channel`, the channel law on its discharge) over the sample's side, at
+/// most all of it; none where none flows. Flowing liquid is its table at the surface (`parts_now`).
+pub fn channel_share(w: &World, s: &crate::space::samples::Samples, i: usize, k: usize) -> f64 {
+    if !flowing(w, s, k) {
+        return 0.0;
+    }
+    (w.channel(i, w.discharge[k] as f64).width / w.map.length(SAMPLE_DEPTH)).min(1.0)
 }

@@ -42,10 +42,11 @@ fn a_valley_floor_saturates_before_its_ridge() {
     assert!(s.twi[floor] > sorted[sorted.len() * 9 / 10], "the floor's index {} under the ground's top tenth", s.twi[floor]);
     let ph = Physics::default();
     let twi: Vec<f64> = (0..64).map(|p| 4.0 + 0.25 * p as f64).collect();
+    let area = vec![1.0 / 64.0; 64];
     let bed = ph.bed_porosity * ph.bed_depth;
     let mut last = 0.0;
     for store in [0.5, 0.8, 0.95, 1.0].map(|x| x * bed) {
-        let g = saturated(&ph, &twi, Means { pore: 0.08, pores: 0.2, stands: 0.0, store, field: 0.4 });
+        let g = saturated(&ph, (&twi, &area), Means { pore: 0.08, pores: 0.2, stands: 0.0, store, field: 0.4 });
         let wet = twi.iter().filter(|&&t| t >= g.level).count();
         assert!((wet as f64 / twi.len() as f64 - g.share).abs() < 1e-12 && twi.iter().rev().take(wet).all(|&t| t >= g.level), "the highest index saturates first");
         assert!(g.share >= last, "a fuller store saturates no less");

@@ -17,13 +17,13 @@ pub const ROW: usize = 11;
 const DRY_M: f64 = 0.1;
 
 /// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
-/// height over it, m, and the terrain's samples inside it with their shares of its area (whose wetness index the table
-/// reads as it is now, `inside::index_now`); the cell of each of the terrain's samples; and whether the shore a shell draws leaves
+/// height over it, m, and the terrain's samples inside it (which the table reads as they are now, `inside::parts_now`);
+/// the cell of each of the terrain's samples; and whether the shore a shell draws leaves
 /// each sample out of its pond's liquid (`ground::shore_dry`).
 pub struct Table {
     square: Vec<usize>,
     z: Vec<f64>,
-    inside: Vec<(Vec<usize>, Vec<f64>)>,
+    inside: Vec<Vec<usize>>,
     cell: Vec<u32>,
     dry: Vec<bool>,
 }
@@ -44,12 +44,9 @@ impl Table {
         let tree = w.mesh.tree();
         let cell = |k: usize| tree.cell_at(map.point_at(((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per));
         let of: Vec<usize> = (0..s.h.len()).map(cell).collect();
-        let mut inside = vec![(Vec::new(), Vec::new()); n];
+        let mut inside = vec![Vec::new(); n];
         for (k, &i) in of.iter().enumerate() {
-            inside[i].0.push(k);
-        }
-        for (t, a) in inside.iter_mut() {
-            *a = vec![1.0 / t.len().max(1) as f64; t.len()];
+            inside[i].push(k);
         }
         Table { square, z, inside, cell: of.iter().map(|&i| i as u32).collect(), dry: shore_dry(&s) }
     }
@@ -123,10 +120,8 @@ impl Table {
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
         let m = m.unwrap_or(Means { pore: 0.0, pores: 0.0, stands: depth, ..Default::default() });
         let [low, top] = level.unwrap_or([z, z + depth]);
-        let (at, area) = &self.inside[i];
-        let s = w.terrain_samples();
-        let twi: Vec<f64> = at.iter().map(|&k| pcore::inside::index_now(w, &s, k)).collect();
-        let soil = soil_level(&w.cfg.phys, &twi, area, m).unwrap_or(0.0);
+        let (twi, area) = pcore::inside::parts_now(w, &w.terrain_samples(), i, &self.inside[i]);
+        let soil = soil_level(&w.cfg.phys, &twi, &area, m).unwrap_or(0.0);
         let cools = w.air_drop(i).unwrap_or(0.0);
         [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, c.land[i]]
     }
