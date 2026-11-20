@@ -86,6 +86,8 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
         return None;
     }
     let l = layer(w, p, i, t)?;
+    // The remains on saturated ground are too wet to carry a flame (`inside::wet_ground`).
+    let cover = cover * (1.0 - l.saturated);
     // The cured leaves stand in the air near the ground and hold what the curve holds at its vapour.
     let (flaming, top) = (l.share(extinct, 0.0), l.sorbed(l.top));
     let standing = if top < extinct { cured } else { 0.0 };
@@ -98,13 +100,15 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     Some(bed)
 }
 
-/// The layer of remains on a cell: the relative vapour of the air in it at its top and at its bottom, the share of
-/// what its ground holds for roots that its ground holds, and its sorption curve's scale and power at its temperature.
+/// The layer of remains on the drier ground of a cell: the relative vapour of the air in it at its top and at its
+/// bottom, the share of what its ground holds for roots that its ground holds, and its sorption curve's scale and power
+/// at its temperature; and the share of the cell's land saturated, where no flame runs (`inside::wet_ground`).
 struct Layer {
     top: f64,
     bottom: f64,
     wet: f64,
     curve: [f64; 2],
+    saturated: f64,
 }
 
 /// Steps of halving that find where the liquid of a layer reaches a bound (`Layer::share`): its depth to 2^-40.
@@ -198,14 +202,15 @@ fn leaf_per_kg(w: &World, p: &Parts, i: usize) -> f64 {
 /// The layer of the remains on cell `i` at `t` K (`Layer`). The air at its top is the air near the ground
 /// (`World::near_ground`); at its bottom it lies between that and saturation by the share of what its ground holds for
 /// roots that its ground holds, its frozen liquid with it (`cover::soak`, `Pores::available`: the share by which the
-/// ground's evaporation draws its liquid; Manabe 1969). Vapour diffuses through it, so in a steady state its relative
+/// ground's evaporation draws its liquid; Manabe 1969), on the drier ground: its liquid less what its saturated share
+/// holds (`inside::wet_ground`). Vapour diffuses through it, so in a steady state its relative
 /// vapour runs in a straight line from its top to its bottom. None where snow lies over the remains
 /// (`contract::Place::snow`), or before the air near the ground is read.
 fn layer(w: &World, p: &Parts, i: usize, t: f64) -> Option<Layer> {
     let ph = &w.cfg.phys;
     let near = (w.near_ground(i, p.liquid)? / w.chem.p_sat(p.liquid, t)).clamp(0.0, 1.0);
     let (held, plateau) = (w.g(p.liquid, i).max(0.0), w.thaw_last(i).1);
-    let soak = crate::cover::soak(w, p, i, held).1;
+    let (soak, ground) = crate::inside::wet_land(w, p, i);
     // Snow lying hides the remains from a flame (`contract::place`); the key liquid frozen in the ground's pores fills
     // them as the liquid does.
     if crate::contract::place(w, i).snow > 0.0 {
@@ -213,8 +218,8 @@ fn layer(w: &World, p: &Parts, i: usize, t: f64) -> Option<Layer> {
     }
     let pores = w.scratch.land_pores(i).max(1e-9);
     let frozen = held * (1.0 - w.molten(p.liquid, i, t, plateau)) * w.chem.molar_volume(p.liquid, Phase::Solid) / w.mesh.cells().area()[i];
-    let wet = soak.pores.available(soak.filled + frozen / pores);
+    let wet = soak.pores.available(ground.filled + frozen / pores);
     let at = |c: [f64; 2]| c[0] + c[1] * (t - SORB_T);
     let bottom = near + wet * (1.0 - near);
-    Some(Layer { top: near, bottom, wet, curve: [at(ph.sorb_scale), at(ph.sorb_power)] })
+    Some(Layer { top: near, bottom, wet, curve: [at(ph.sorb_scale), at(ph.sorb_power)], saturated: ground.share })
 }

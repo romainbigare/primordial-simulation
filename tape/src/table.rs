@@ -3,7 +3,7 @@
 //! centres and applies the laws at each pixel of the ground's tiles (`ground`). It is made with each frame, from the
 //! frame's own context (`Ctx`), and holds nothing a picture needs to make.
 
-use crate::ground::{sample_index, shore_dry};
+use crate::ground::shore_dry;
 use crate::layers::{cover_melt, frame, pixels, Ctx};
 use pcore::inside::{soil_level, Means};
 use pcore::space::network::NONE;
@@ -18,7 +18,7 @@ const DRY_M: f64 = 0.1;
 
 /// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
 /// height over it, m, and the wetness index of the terrain's samples inside it with their shares of its area
-/// (`ground::sample_index`); the cell of each of the terrain's samples; and whether the shore a shell draws leaves
+/// (`space::samples::sample_index`); the cell of each of the terrain's samples; and whether the shore a shell draws leaves
 /// each sample out of its pond's liquid (`ground::shore_dry`).
 pub struct Table {
     square: Vec<usize>,
@@ -40,7 +40,7 @@ impl Table {
         }
         z.iter_mut().zip(&count).for_each(|(z, c)| *z /= c.max(1.0));
         let s = w.terrain_samples();
-        let twi = sample_index(map, &s);
+        let twi = &s.twi;
         let per = (1u64 << (SAMPLE_DEPTH - map.square_depth())) as f64;
         let tree = w.mesh.tree();
         let cell = |k: usize| tree.cell_at(map.point_at(((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per));
