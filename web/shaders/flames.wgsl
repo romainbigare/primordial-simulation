@@ -26,8 +26,13 @@ const EMBERS = 0.35; const EMBER_M = 0.6; const EMBER_RGB = vec3f(0.95, 0.25, 0.
 // burning share over `GLOW_SHARE` (held to 1) times its flames' length over `GLOW_M` (held to 1), fading in as a pixel
 // takes from `GLOW_E.x` to `GLOW_E.y` m, where its fronts are too thin to see. In the Earth view stronger by
 // `GLOW_EARTH`.
-const GLOW = 0.3; const GLOW_SHARE = 0.3; const GLOW_M = 3.0; const GLOW_E = vec2f(10.0, 60.0); const GLOW_EARTH = 1.6;
+const GLOW = 0.3; const GLOW_SHARE = 0.05; const GLOW_M = 3.0; const GLOW_E = vec2f(10.0, 60.0); const GLOW_EARTH = 1.6;
 const GLOW_RGB = vec3f(1.0, 0.36, 0.06);
+// A point's flames fade in over the first `FLAME_FADE` of a square's burning share, so they end smoothly where the
+// share blended between the squares' centres ends.
+const FLAME_FADE = 0.005;
+// No flame stands where the squares about a point hold standing liquid: they show from where those are `DRY_FROM` dry.
+const DRY_FROM = 0.5;
 
 // Smoke: of the gas a burning square sends to the air, `SMOKE_SHARE` is its particles (biomass burning gives about
 // 10 g of fine particles to 1600 g of carbon dioxide: Andreae and Merlet 2001), sent over the hours its fronts burn,
@@ -63,13 +68,12 @@ fn fire_sprite(s: i32, uv: vec2f, g: f32) -> f32 {
 fn flame_rgb(h: f32) -> vec3f { return mix(mix(FLAME_FOOT, FLAME_MID, ease(0.0, 0.45, h)), FLAME_TIP, ease(0.45, 1.0, h)); }
 
 // The tongues of flame at `at`, seen at `e` m a pixel, `t` m north of the front at the foot below it (as the map draws
-// a flame standing on it), flames `len` m long, at time `time`: their light, and how much of the point they cover.
-fn tongues(at: vec2f, t: f32, len: f32, e: f32, time: f32) -> vec4f {
+// a flame standing on it), flames `len` m long, at time `time`: their light.
+fn tongues(at: vec2f, t: f32, len: f32, e: f32, time: f32) -> vec3f {
   let tall = MAP_VIEW.y * len;
-  if (t < 0.0 || t > tall) { return vec4f(0.0); }
+  if (t < 0.0 || t > tall) { return vec3f(0.0); }
   let step = TONGUE_STEP * len;
   var light = vec3f(0.0);
-  var cover = 0.0;
   for (var row = 0; row < 2; row++) {
     let x = at.x / step + 0.5 * f32(row);
     let c = vec2i(i32(floor(x)), row);
@@ -82,9 +86,8 @@ fn tongues(at: vec2f, t: f32, len: f32, e: f32, time: f32) -> vec4f {
     if (abs(u.x - 0.5) > 0.5 || u.y < 0.0) { continue; }
     let d = fire_sprite(s, u, e / side);
     light += d * flame_rgb(t / h);
-    cover = max(cover, d);
   }
-  return vec4f(light, min(cover, 1.0));
+  return light;
 }
 
 // The column of smoke particles at `at`, g/m²: what the burning ground upwind sends (`SMOKE_SHARE` of its gas over
@@ -123,31 +126,27 @@ fn smoke_column(at: vec2f) -> vec2f {
   let f = fire_at(at);
   // The front: the outer edge of the burnt share, the flaming zone `FLAME_DEPTH` lengths deep behind it, and the embers
   // over the rest of this month's burnt share.
-  // (The burnt share and its band are read as the ground's scars read them, burn.wgsl; the front the flames stand on
-  // without the patches finer than they are, `FRONT_SMOOTH`.)
-  let fine = burn_rank(at, e);
-  var r = fine;
+  // (The front and the band behind it are read without the patches finer than the flames, `FRONT_SMOOTH`.)
+  var r = burn_rank(at, e);
   if (FRONT_SMOOTH * f.length > e) { r = burn_rank(at, FRONT_SMOOTH * f.length); }
   let across = fwidth(r.x);
   let depth = max(FLAME_DEPTH * f.length, FRONT_PX * e) / e * across;
-  let zone = select(0.0, max(under_share(r, f.burnt) - under_share(r, f.burnt - depth), 0.0), f.flame > 0.0);
-  let band = select(0.0, max(under_share(fine, f.burnt) - under_share(fine, f.burnt - f.flame), 0.0), f.flame > 0.0);
+  let zone = max(under_share(r, f.burnt) - under_share(r, f.burnt - depth), 0.0);
+  let band = max(under_share(r, f.burnt) - under_share(r, f.burnt - f.flame), 0.0);
   // The tongues stand on the front below the point: the rank rises to the burnt share that far south (to first order;
   // a front that runs north and south is read as no less than half as steep).
   let slope = vec2f(dpdx(r.x), dpdy(r.x)) / e;
   let dy = sign(slope.y + 1e-12) * max(abs(slope.y), 0.5 * length(slope));
   let t = (f.burnt - r.x) / dy;
   var light = vec3f(0.0);
-  var cover = 0.0;
   if (f.flame > 0.0) {
-    let flames = tongues(at, t, f.length, e, time) * ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * f.length);
-    light += flames.rgb;
-    cover = flames.a;
+    light += tongues(at, t, f.length, e, time) * ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * f.length);
     // The zone flames where tongues do not show (from afar, its mean light); the embers flicker behind it.
     light += zone * FLAME_MID * (1.0 - ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * f.length));
     let speck = ease(0.55, 0.9, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
     let specks = mix(0.5, speck * 2.0, shows_at(EMBER_M, e));
     light += EMBERS * max(band - zone, 0.0) * specks * EMBER_RGB;
+    light *= ease(0.0, FLAME_FADE, f.flame) * ease(DRY_FROM, 1.0, f.dry);
   }
   // The glow of the burning squares, seen from afar.
   let glow = GLOW * select(1.0, GLOW_EARTH, earth_view) * ease(0.0, GLOW_SHARE, f.flame) * min(f.length / GLOW_M, 1.0) * ease(GLOW_E.x, GLOW_E.y, e);

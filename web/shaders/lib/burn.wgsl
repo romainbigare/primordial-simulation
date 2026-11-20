@@ -8,13 +8,13 @@
 // Smith and Hudak 2005, Roy and others 2010, read); ash, grey to white where the flames burnt all (white ash 30 to 50 %,
 // grey ash about 15 %: Smith and Hudak 2005, Bodí and others 2014); scorched soil, the reddish brown of mineral soil
 // heated and bared (Certini 2005).
-const CHAR = vec3f(0.035, 0.032, 0.030);
+const CHAR = vec3f(0.022, 0.020, 0.019);
 const ASH = vec3f(0.36, 0.35, 0.33);
 const SCORCHED = vec3f(0.20, 0.12, 0.07);
 // The char darkens a scar by e^-(months / `CHAR_MONTHS`): wind and rain take a burn's char and ash away within months
 // (burn scars of savannas fade in 1 to 3 months, of forests over a year or more: Trigg and Flasse 2000); its bared,
 // scorched soil fades by e^-(months / `SCORCHED_MONTHS`) as litter falls on it again.
-const CHAR_MONTHS = 3.0; const SCORCHED_MONTHS = 9.0;
+const CHAR_MONTHS = 3.0; const SCORCHED_MONTHS = 12.0;
 // Ash on the ground covers all but e^-1 of it at this much, kg/m² (about a millimetre of loose ash at 0.2 to 0.4 t/m³:
 // Bodí and others 2014).
 const ASH_HIDES_KG = 0.25;
@@ -22,6 +22,10 @@ const ASH_HIDES_KG = 0.25;
 // a fire takes nearly all of the fine fuel it runs through, and herbs come back within a season; the trees drawn one
 // by one keep the core's numbers.
 const SCAR_BARE = 1.0; const BARE_MONTHS = 6.0;
+// What comes back on a scar is young leaf without the dead thatch about it, a brighter green than the plants about it
+// (the green flush after a fire, Archibald and others 2009): the Earth view tints its cover towards `FLUSH` by up to
+// `FLUSH_SHARE`, as long as its soil shows scorched and once its char is gone.
+const FLUSH = vec3f(0.16, 0.36, 0.05); const FLUSH_SHARE = 0.6;
 // The char's photograph (fire.jpg's second layer) is this many metres across.
 const CHAR_PHOTO_M = 1.0;
 
@@ -41,6 +45,8 @@ fn burnt_spot(p: Spot) -> Spot {
     let outside = min(1.0 + bare * f.burnt / max(1.0 - f.burnt, 1e-3), 1.0 / max(p.cover.a, 1e-3));
     let k = mix(max(outside, 1.0), 1.0 - bare, scar);
     q.cover *= k;
+    let flush = FLUSH_SHARE * scar * (1.0 - q.scar.y) * q.scar.w;
+    q.cover = vec4f(mix(q.cover.rgb, FLUSH * q.cover.a, flush), q.cover.a);
     q.low *= k;
     q.canopy *= k;
   }
