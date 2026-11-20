@@ -36,8 +36,9 @@ pub fn wet_ground(w: &World, i: usize, m: Means) -> WetGround {
 pub fn parts_now(w: &World, s: &crate::space::samples::Samples, i: usize, ks: &[usize]) -> (Vec<f64>, Vec<f64>) {
     let each = 1.0 / ks.len().max(1) as f64;
     let (mut twi, mut area) = (Vec::with_capacity(2 * ks.len()), Vec::with_capacity(2 * ks.len()));
+    let per_m3 = carried(w, i);
     for &k in ks {
-        let wet = channel_share(w, s, i, k);
+        let wet = share_of(w, s, per_m3, k);
         if wet > 0.0 {
             twi.push(f64::INFINITY);
             area.push(each * wet);
@@ -95,8 +96,21 @@ pub fn flowing(w: &World, s: &crate::space::samples::Samples, k: usize) -> bool 
 /// (`flowing`): its channel's width (`World::channel`, the channel law on its discharge) over the sample's side, at
 /// most all of it; none where none flows. Flowing liquid is its table at the surface (`parts_now`).
 pub fn channel_share(w: &World, s: &crate::space::samples::Samples, i: usize, k: usize) -> f64 {
+    share_of(w, s, carried(w, i), k)
+}
+
+/// The mol per m³ of the liquid the channels of cell `i` carry (`World::liquid_in`, as `World::channel` reads it);
+/// none where none is liquid.
+fn carried(w: &World, i: usize) -> Option<f64> {
+    w.liquid_in(i, w.stock(crate::store::Node::ground(i))).map(|l| l.1)
+}
+
+/// `channel_share` of terrain sample `k` of `s`, its cell's liquid of `per_m3` mol per m³ (`carried`): its channel's
+/// width (`Physics::channel`, on its discharge as a volume) over the sample's side.
+fn share_of(w: &World, s: &crate::space::samples::Samples, per_m3: Option<f64>, k: usize) -> f64 {
     if !flowing(w, s, k) {
         return 0.0;
     }
-    (w.channel(i, w.discharge[k] as f64).width / w.map.length(SAMPLE_DEPTH)).min(1.0)
+    let channel = per_m3.map_or_else(crate::flow::Channel::default, |p| w.cfg.phys.channel(w.discharge[k] as f64 / p));
+    (channel.width / w.map.length(SAMPLE_DEPTH)).min(1.0)
 }
