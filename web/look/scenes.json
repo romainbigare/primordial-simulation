@@ -38,6 +38,17 @@
       "years": ["A", "B", "SA"],
       "years_view": 0.2
     },
+    "mouths": {
+      "world": "seed1",
+      "views": [100.0, 25.0],
+      "cost_views": [25.0],
+      "scenes": [
+        { "name": "south", "about": "the largest river's mouth, at the sea in the south (344 km² drained), a test plume of 10 kg/s", "at": [16.469, 26.531], "plumes": [[16.469, 26.531, 10]] },
+        { "name": "east", "about": "the east delta's mouth at the sea (109 km²) and its lagoon's inlet, test plumes of 3 and 1 kg/s", "at": [29.8, 16.7], "plumes": [[29.969, 17.094, 3], [29.469, 16.156, 1]] },
+        { "name": "south_west", "about": "the south-west river's mouth (93 km²), a test plume of 6 kg/s", "at": [14.594, 26.094], "plumes": [[14.594, 26.094, 6]] },
+        { "name": "west", "about": "the west river's mouth (76 km²), a test plume of 5 kg/s", "at": [4.656, 21.656], "plumes": [[4.656, 21.656, 5]] }
+      ]
+    },
     "deltas": {
       "world": "seed1",
       "views": [100.0, 25.0, 5.0],

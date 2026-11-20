@@ -28,15 +28,19 @@ const TAKERS_YEAR: u64 = LIFE_YEAR + 50;
 /// discharge again once one has changed by more than this share since it was last sent, a change of its width of
 /// about 5%, a pixel of a river 20 pixels wide.
 const DISCHARGE_SHOWS: f64 = 0.1;
+/// A channel's water is coloured by the logarithm of what it carries (its attenuation and its colour grow with it): the
+/// page is sent the samples' load again once one has changed by more than this share since it was last sent.
+const LOAD_SHOWS: f64 = 0.25;
 
 /// The world, what is placed when, what the shell keeps of its cells (`tape::Table`), the table made with the last
-/// frame, and the samples' discharge last sent to the page, m³/s (`tape::Table::discharge`; none before the first).
+/// frame, and the samples' discharge, m³/s, and load, g/m³, last sent to the page (`tape::Table::discharge`,
+/// `tape::Table::load`; none before the first).
 struct Live {
     world: World,
     plan: Schedule,
     cells: tape::Table,
     table: Vec<f32>,
-    sent: Vec<f32>,
+    sent: Vec<[f32; 2]>,
 }
 
 thread_local! {
@@ -223,18 +227,21 @@ pub extern "C" fn table() -> *const u8 {
     give(bytes)
 }
 
-/// What runs through each of the terrain's samples, m³/s, row by row, as 16-bit floats little-endian
-/// (`tape::Table::discharge`): when the page has none yet, or one has changed by more than `DISCHARGE_SHOWS` since it
-/// was last sent (a sample that ran dry or began to run counts); else nothing (`out_len` 0).
+/// What runs through each of the terrain's samples, m³/s, and what it carries, g/m³, row by row, two 16-bit floats
+/// little-endian a sample (`tape::Table::discharge`, `tape::Table::load`): when the page has none yet, or one has
+/// changed by more than `DISCHARGE_SHOWS` or `LOAD_SHOWS` since it was last sent (a sample that ran dry or began to run
+/// or to carry counts); else nothing (`out_len` 0).
 #[no_mangle]
 pub extern "C" fn discharge() -> *const u8 {
     let bytes = with(|l| {
-        let now = l.cells.discharge(&l.world);
-        let moved = |(&a, &b): (&f32, &f32)| (a > 0.0) != (b > 0.0) || (a as f64 - b as f64).abs() > DISCHARGE_SHOWS * b.max(a) as f64;
+        let q = l.cells.discharge(&l.world);
+        let now: Vec<[f32; 2]> = q.iter().zip(l.cells.load(&l.world, &q)).map(|(&q, c)| [q, c]).collect();
+        let off = |a: f32, b: f32, share: f64| (a > 0.0) != (b > 0.0) || (a as f64 - b as f64).abs() > share * b.max(a) as f64;
+        let moved = |(a, b): (&[f32; 2], &[f32; 2])| off(a[0], b[0], DISCHARGE_SHOWS) || off(a[1], b[1], LOAD_SHOWS);
         if l.sent.len() == now.len() && !l.sent.iter().zip(&now).any(moved) {
             return Vec::new();
         }
-        let bytes = now.iter().flat_map(|&q| tape::half(q).to_le_bytes()).collect();
+        let bytes = now.iter().flat_map(|v| v.iter().flat_map(|&x| tape::half(x).to_le_bytes())).collect();
         l.sent = now;
         bytes
     });

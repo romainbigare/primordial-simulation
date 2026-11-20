@@ -40,6 +40,10 @@ what grows where: `set` prints each scene's kinds, so you see what stands there.
 The scene set `sediment` stands on `seed1`'s world where the liquid lays its load: river mouths at the sea, rivers at the
 heads of drowned valleys, streams into the big lake, a valley floor, at 8, 2 and 0.5 m a pixel, and two mouths close.
 
+The scene set `mouths` stands at the page's island's largest river mouths at 100 and 25 m a pixel, each with test
+plumes (`plumes`: [x, y, kg/s], x and y in squares), which `set` and `cost` put in place of the world's
+(`page.mjs` `plumes`): a test of how a plume is drawn while the core lays none.
+
 The scene set `deltas` stands on the same world's east delta (from 100 to 1 m a pixel: its top, a lagoon's shore and
 its front at the sea) and at two river mouths.
 

@@ -132,6 +132,21 @@ fn discharge_of(s: vec2i) -> f32 {
   if (s.x < 0) { return 0.0; }
   return textureLoad(flows, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).x;
 }
+// What the liquid of sample `s` (-1: none) carries, g/m³: its channel's, or a plume's in a body (web/src/land.ts).
+fn load_of(s: vec2i) -> f32 {
+  if (s.x < 0) { return 0.0; }
+  return textureLoad(flows, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).y;
+}
+// What the liquid at `at`, m from the map's north-west corner, carries, g/m³: the samples' (`load_of`) blended between
+// their centres.
+fn load_at(at: vec2f) -> f32 {
+  let p = at / (land.map.x * land.map.yz) * land.samples.xy - 0.5;
+  let i = vec2i(floor(p));
+  let f = p - floor(p);
+  let a = mix(load_of(i), load_of(i + vec2i(1, 0)), f.x);
+  let b = mix(load_of(i + vec2i(0, 1)), load_of(i + vec2i(1, 1)), f.x);
+  return mix(a, b, f.y);
+}
 
 // The sample next along the channel of sample `s` from the point `at` (m from the map's north-west corner), and the
 // share of the way from `s`'s centre to that one's the point lies (0: none): a channel's numbers grow evenly from one

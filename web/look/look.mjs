@@ -52,6 +52,7 @@ async function set(out) {
     const r = result.scenes[scene.name] = { about: scene.about, at: scene.at, kinds: await kinds(page, scene.at), views: {} };
     say(`${scene.name} (${scene.about}) at ${scene.at}: ${r.kinds}`);
     const shots = [];
+    if (scene.plumes) await P.plumes(page, scene.plumes);
     for (const mpp of scene.views ?? set.views) {
       const t = Date.now(), view = { x: scene.at[0], y: scene.at[1], mpp };
       await P.look(page, view);
@@ -69,6 +70,7 @@ async function set(out) {
       const b = r.views[near.mpp];
       r.views[`${far.mpp}_on_${near.mpp}`] = { ...a, lightness_change: +(100 * (b.lightness - a.lightness) / a.lightness).toFixed(1), ...(a.crowns !== undefined ? { crowns_change: +(b.crowns - a.crowns).toFixed(1) } : {}) };
     }
+    if (scene.plumes) await P.plumes(page, []);
   }
   result.errors = page.errors;
   writeFileSync(join(out, 'numbers.json'), JSON.stringify(result, null, 1));
@@ -183,6 +185,7 @@ async function cost(out) {
   const result = { set: name, world: at, px, show: SHOW, scenes: {} }, items = [];
   for (const scene of scenes) {
     const r = result.scenes[scene.name] = { about: scene.about, at: scene.at, views: {} };
+    if (scene.plumes) for (const pass of passes) await P.plumes(pages[pass], scene.plumes);
     for (const mpp of set.cost_views) for (const pass of passes) {
       const view = `${mpp}_${pass}`, file = `${scene.name}_${view}.png`;
       await P.look(pages[pass], { x: scene.at[0], y: scene.at[1], mpp });
@@ -192,6 +195,7 @@ async function cost(out) {
       items.push({ label: `${scene.name} ${mpp} m/px ${pass}`, png: c.seen });
       say(`${scene.name} ${view}: ${Object.entries(c.numbers).map(([k, q]) => `${k} ${q.mean} (p95 ${q.p95})`).join(', ')}`);
     }
+    if (scene.plumes) for (const pass of passes) await P.plumes(pages[pass], []);
   }
   result.errors = passes.flatMap(pass => pages[pass].errors);
   writeFileSync(join(out, 'cost.json'), JSON.stringify(result, null, 1));

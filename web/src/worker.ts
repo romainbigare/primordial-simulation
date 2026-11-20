@@ -1,8 +1,9 @@
 // The live world: the core as WebAssembly (wasm/src/lib.rs) in a Web Worker, so that the page never freezes. The world
 // is new, or a saved one the page hands in (a snapshot of `ew run`), and steps on the same way. It runs as
 // a separate script, built into the page as text (build.mjs), and started from a Blob. With each frame it posts the
-// cells' table (tape/src/table.rs), from which the page draws the state of the ground, and the samples' discharge when
-// it changed enough to show (wasm/src/lib.rs `discharge`); it makes no pictures. The page answers each frame once it has
+// cells' table (tape/src/table.rs), from which the page draws the state of the ground, the samples' discharge and load when
+// they changed enough to show (wasm/src/lib.rs `discharge`), and where load came into a body of liquid (`plumes`); it
+// makes no pictures. The page answers each frame once it has
 // drawn it ('shown'). While the world plays, the next frame waits for that answer, and once it is due the world waits
 // too: the world is never more than a frame's time ahead of the picture, so the date and the picture shown are the
 // world's within about `FRAME_MS`, and a pause stops it there, even where the page draws slowly.
@@ -19,6 +20,7 @@ interface Core {
   frame(): number;
   table(): number;
   discharge(): number;
+  plumes(): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   out_len(): number;
@@ -79,12 +81,13 @@ function postFrame(kind: 'world' | 'frame'): void {
   const frame = bytes(c.frame(), c.out_len());
   const table = new Float32Array(bytes(c.table(), c.out_len()).buffer);
   const flows = c.discharge(), discharge = c.out_len() > 0 ? new Uint16Array(bytes(flows, c.out_len()).buffer) : null;
+  const plumes = bytes(c.plumes(), c.out_len());
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   const now = performance.now();
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
   const stats = { cells: c.cells(), pace };
-  const moved = [frame.buffer, table.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : [])];
-  host.postMessage({ kind, meta: head, frame, table, discharge, year: c.year(), day: c.day(), stats, things }, moved);
+  const moved = [frame.buffer, table.buffer, plumes.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : [])];
+  host.postMessage({ kind, meta: head, frame, table, discharge, plumes, year: c.year(), day: c.day(), stats, things }, moved);
   posted = now; owed = false; unshown++;
 }
 

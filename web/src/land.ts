@@ -56,6 +56,14 @@ const SEA_BLUR = 1.5, SEA_REACH = 4, OPEN_SEA_M = 20;
  * shader's streaks fade out there) on water at least `FLOW_PX` pixels wide. */
 export const FLOW_FPS = 6;
 const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
+/** A plume (drawing only: the core moves no currents in a body of liquid): what a river brings into standing liquid,
+ * kg/s, is in the river's own water at its mouth, its discharge (no less than `MUD_Q_LEAST` m³/s): its load there, g/m³,
+ * held to `MUD_PLUME_MOST_G`. That water spreads over the body as a layer `MUD_PLUME_DEEP_M` thick for
+ * `MUD_PLUME_DAYS` before its load is mixed down and settled (a river's plume is a fresh layer a metre or so thick over
+ * the body's water, its mud settling out within hours to days; from memory): the load falls by e over the radius of the
+ * area the river fills in that time, no more than `MUD_PLUME_MOST_M`, out to where it falls to `MUD_CLEAR_G` g/m³. So a
+ * river's plume is as wide as its discharge makes it, and it shows the farther the more load it brings. */
+const MUD_Q_LEAST = 0.01, MUD_PLUME_MOST_G = 2e4, DAY_S = 86400, MUD_PLUME_DEEP_M = 1, MUD_PLUME_DAYS = 1, MUD_PLUME_MOST_M = 8000, MUD_CLEAR_G = 1;
 
 export class Land {
   /** The screen's pixels a css pixel, which the detail drawn is chosen by (map.ts `drawMap`): a picture drawn at fewer
@@ -72,10 +80,12 @@ export class Land {
   private sea = 0;
   /** The bytes of the layer shown over which an empty point fades into a full one (`OVER_FADE`). */
   private fade = OVER_FADE;
-  /** What runs through each sample, m³/s, as 16-bit floats, a texel a sample (none before the world's worker sent it),
-   * and whether it is still to be sent to the GPU. */
+  /** What runs through each sample, m³/s, and what its liquid carries, g/m³, as 16-bit floats, a texel a sample (none
+   * before the world's worker sent them); the plumes spread into the bodies of liquid (`plumesIn`); the two as the GPU
+   * reads them (the plumes' load where it is more than the sample's own), and whether that is still to be sent. */
   private flows: Texture | null = null;
   private discharge: Uint16Array;
+  private plumes: Uint8Array = new Uint8Array(0);
   private flowsDue = true;
   /** The rock of each sample on the GPU (ground.ts `rock`), and whether it is the ground's (before it came: loose ground
    * of `NO_ROCK_YET_M` everywhere). */
@@ -86,12 +96,43 @@ export class Land {
   flowAt: number | null = null;
 
   constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf) {
-    this.discharge = new Uint16Array(samples.across * samples.down);
+    this.discharge = new Uint16Array(2 * samples.across * samples.down);
+  }
+
+  /** Where load came into a body of liquid in the last month, `bytes` (a sample, u32, and kg/s, f32, each: wasm/src/lib.rs
+   * `plumes`): spread into the flows the GPU reads when they are new (`flowsOf`). */
+  plumesIn(bytes: Uint8Array): void {
+    if (bytes === this.plumes) return;
+    this.plumes = bytes;
+    this.flowsDue = true;
+  }
+
+  /** The flows the GPU reads: the samples' discharge and load, with each plume's load (`MUD_PLUME_DAYS`) where it is more. */
+  private flowsOf(): Uint16Array {
+    const s = this.samples, out = this.discharge.slice(), view = new DataView(this.plumes.buffer, this.plumes.byteOffset, this.plumes.byteLength);
+    const sampleM = (this.tiles.map.cell_m * this.tiles.map.w) / s.across;
+    for (let p = 0; p + 8 <= this.plumes.byteLength; p += 8) {
+      const k = view.getUint32(p, true), kg = view.getFloat32(p + 4, true), x = k % s.across, y = Math.floor(k / s.across);
+      if (!(kg > 0) || k >= s.across * s.down) continue;
+      // The river's discharge at its mouth: the most of the sample and those about it (under a body none runs).
+      let q = 0;
+      for (let j = Math.max(0, y - 1); j <= Math.min(s.down - 1, y + 1); j++) for (let i = Math.max(0, x - 1); i <= Math.min(s.across - 1, x + 1); i++) q = Math.max(q, unhalf(this.discharge[2 * (j * s.across + i)]));
+      const flow = Math.max(q, MUD_Q_LEAST), at = Math.min((1000 * kg) / flow, MUD_PLUME_MOST_G);
+      const fall = Math.min(Math.sqrt((flow * MUD_PLUME_DAYS * DAY_S) / (Math.PI * MUD_PLUME_DEEP_M)), MUD_PLUME_MOST_M) / sampleM;
+      const r = Math.ceil(fall * Math.log(Math.max(at / MUD_CLEAR_G, 1)));
+      for (let j = Math.max(0, y - r); j <= Math.min(s.down - 1, y + r); j++) {
+        for (let i = Math.max(0, x - r); i <= Math.min(s.across - 1, x + r); i++) {
+          const d = Math.hypot(i - x, j - y), c = at * Math.exp(-d / fall), t = 2 * (j * s.across + i) + 1;
+          if (d <= r && c > unhalf(out[t])) out[t] = half(c);
+        }
+      }
+    }
+    return out;
   }
 
   /** The table of frame 0 of world `w`: the core's rows `rows` (the melting point, then a row a square, then each
    * square's kinds of cover, which canopy.ts reads, then the level of each pond, then its fetch), the samples'
-   * discharge if it came since (`discharge`, else null), its wet squares `wet`, and the layer `look` draws. The ponds
+   * discharge and load if they came since (`discharge`, else null), its wet squares `wet`, and the layer `look` draws. The ponds
    * lie in rows under the planes, two a texel, each its level and its fetch (land.wgsl `pond_texel`; a level no body
    * holds far below any ground). */
   set(w: World, rows: Float32Array, discharge: Uint16Array | null, wet: Wet, look: MapLook): void {
@@ -161,7 +202,7 @@ export class Land {
     const least = (FLOW_PX * e / l.channel_width) ** (1 / l.channel_width_exp) / l.flood;
     const x0 = Math.max(0, Math.floor(x * per)), x1 = Math.min(s.across - 1, Math.ceil((x + w) * per));
     const y0 = Math.max(0, Math.floor(y * per)), y1 = Math.min(s.down - 1, Math.ceil((y + h) * per));
-    for (let r = y0; r <= y1; r++) for (let c = x0; c <= x1; c++) if (unhalf(this.discharge[r * s.across + c]) >= least) return true;
+    for (let r = y0; r <= y1; r++) for (let c = x0; c <= x1; c++) if (unhalf(this.discharge[2 * (r * s.across + c)]) >= least) return true;
     return false;
   }
 
@@ -173,8 +214,8 @@ export class Land {
     this.tex ??= gpu.texture(m.w, this.rows, 'rgba32float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const s = this.samples;
-    this.flows ??= gpu.texture(s.across, s.down, 'r16float');
-    if (this.flowsDue) { gpu.write(this.flows, this.discharge); this.flowsDue = false; }
+    this.flows ??= gpu.texture(s.across, s.down, 'rg16float');
+    if (this.flowsDue) { gpu.write(this.flows, this.flowsOf()); this.flowsDue = false; }
     this.rock ??= gpu.texture(s.across, ROCK_PLANES * s.down, 'rgba16float');
     if (!this.rockSent) {
       const r = this.tiles.rock;

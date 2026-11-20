@@ -122,6 +122,20 @@ export async function look(page, { x, y, mpp }) {
   await sleep(400);
 }
 
+/** In `page`, the plumes `list` (each [x, y, kg/s], x and y in squares) in place of the world's: a test of how a plume
+ * is drawn (the core lays none yet); [] gives the world's own back at its next frame. */
+export async function plumes(page, list) {
+  await page.evaluate(list => {
+    const e = window.__ew, s = e.land.samples, per = s.across / e.land.tiles.map.w, v = new DataView(new ArrayBuffer(8 * list.length));
+    list.forEach(([x, y, kg], i) => { v.setUint32(8 * i, Math.floor(y * per) * s.across + Math.floor(x * per), true); v.setFloat32(8 * i + 4, kg, true); });
+    const bytes = new Uint8Array(v.buffer);
+    if (e.live) e.live.plumes = bytes;
+    e.land.plumesIn(bytes);
+    e.map.invalidate();
+  }, list);
+  await sleep(400);
+}
+
 /** The picture of the map now, whole (`settle`), as PNG bytes; written to `out` where given. */
 export async function shot(page, out = null) {
   const waited = await settle(page);
