@@ -10,6 +10,7 @@
 
 use super::bends::Reaches;
 use super::half;
+use crate::layers::shown;
 use pcore::soil::{Pores, Texture};
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
@@ -46,11 +47,14 @@ fn links(s: &Samples, k: usize) -> u32 {
 /// over run; 0 there too) and its channel's links (`links`); then of each sample again the reflectance of the make of
 /// its bed (red, green, blue: `colours`, one a make, `Samples::make`) and a zero; then of each sample again the shares of
 /// coarse and fine particles of its loose ground (`grain`, one a sample), how slowly its pores pass liquid, the decimal
-/// logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s), and a zero: three planes
-/// of a texture, one under the other.
+/// logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s), and the liquid it holds
+/// for roots (`Pores::for_roots` over its loose ground's depth) as the layer `avail` shows it (`layers::shown`); then of
+/// each sample again its field capacity and its wilting point as shares of its pores (`Pores::of`) and two zeros, by
+/// which a shell finds the share of the liquid for roots its pores hold at a point (`Pores::available`): four planes of
+/// a texture, one under the other.
 pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<u16> {
     let s = r.s;
-    let mut out = Vec::with_capacity(12 * s.h.len());
+    let mut out = Vec::with_capacity(16 * s.h.len());
     for k in 0..s.h.len() {
         let slope = if s.to[k] == NONE || s.pond[k] != NONE { 0.0 } else { r.fall(k)[0] };
         let stone = (STONE_M * s.up[k].sqrt() * slope).min(STONE_MOST_M);
@@ -60,9 +64,13 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<
         let c = colours.get(m as usize).copied().unwrap_or([0.0; 3]);
         out.extend([half(c[0] as f32), half(c[1] as f32), half(c[2] as f32), 0]);
     }
-    for t in &grain[..s.h.len()] {
-        let slow = -Pores::of(t).seep.log10();
-        out.extend([half(t.coarse as f32), half(t.fine as f32), half(slow as f32), 0]);
+    let pores: Vec<Pores> = grain[..s.h.len()].iter().map(Pores::of).collect();
+    for ((t, p), &loose) in grain.iter().zip(&pores).zip(&s.loose) {
+        let roots = shown("avail", p.for_roots(loose));
+        out.extend([half(t.coarse as f32), half(t.fine as f32), half(-p.seep.log10() as f32), half(roots)]);
+    }
+    for p in &pores {
+        out.extend([half(p.field as f32), half(p.wilt as f32), 0, 0]);
     }
     out
 }

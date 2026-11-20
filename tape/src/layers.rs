@@ -327,6 +327,12 @@ pub fn quantise(l: &Layer, v: f64) -> u8 {
     b.round().clamp(0.0, 255.0) as u8
 }
 
+/// Where the value `v` stands on the scale of the layer named `name`, 0..1, as its byte over 255 (`quantise`).
+pub(crate) fn shown(name: &str, v: f64) -> f32 {
+    let l = LAYERS.iter().find(|l| l.name == name).expect("a layer of that name");
+    f32::from(quantise(l, v)) / 255.0
+}
+
 /// The cell each pixel of an `across` x `down` raster of `window` (column, row, width and height in squares) shows,
 /// row by row: the one that holds its centre.
 pub fn raster(w: &World, [x, y, wide, high]: [f64; 4], across: usize, down: usize) -> Vec<usize> {

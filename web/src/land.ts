@@ -35,7 +35,7 @@ const NO_POND_M = 1000;
 /** Before the rock of the samples came, the ground is drawn as if its loose ground were this deep, m: no bed shows. */
 const NO_ROCK_YET_M = 1;
 /** The planes of the rock of the samples, one under the other (rock.wgsl `ROCK_PLANES`). */
-const ROCK_PLANES = 3;
+const ROCK_PLANES = 4;
 /** Of the uniforms of land.wgsl (`Land`), four-wide members. */
 const LAND_VEC4S = 8;
 /** The open low ground freezes cell by cell, and its cells are blocks of squares (8 km: the core's coarse low ground), so

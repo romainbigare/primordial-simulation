@@ -227,7 +227,10 @@ and 17 times the step to its main neighbour upstream, by which a shell lets what
 from one sample's centre to the next, so its width has no step where two samples meet. Then of each sample again the
 reflectance of its bed's make and a zero. Then of each sample again the shares of coarse and of fine particles of its
 loose ground (`pcore::soil::textures`), how slowly its pores pass liquid (the decimal logarithm of 1 m/s over their
-conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground, and a zero. **The
+conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground, and the liquid its loose ground
+holds for roots (`Pores::for_roots` of its texture over its depth) as the `avail` layer shows it, 0..1 of its scale,
+which the page draws that layer by. Then of each sample again its field capacity and its wilting point as shares of
+its pores (`Pores::of`) and two zeros, by which the page draws the layer `roots` at each point. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
 sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries
