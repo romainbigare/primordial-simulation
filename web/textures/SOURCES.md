@@ -74,7 +74,7 @@ hand into `assets/sketchfab/<the model's id>/`) and packed by `bake/snags.py` (`
 snags.png`): three charred standing trunks (one model from three sides), a stand of dead stems, and three charred
 stumps (one model from three sides, cut 0.3 of its height above its foot, so the ground it was scanned on is left
 out). Each licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/); the sprites are rendered from them
-(changed: lit, cut at the ground, shrunk). Not yet drawn by the page.
+(changed: lit, cut at the ground, shrunk). Drawn by `shaders/snags.wgsl`.
 
 | sprite | model | author | licence |
 |---|---|---|---|
