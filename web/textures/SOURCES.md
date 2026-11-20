@@ -23,15 +23,16 @@ rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 51
 | 11 | dirt_floor (diffuse), https://polyhaven.com/a/dirt_floor | 2.07 m |
 | 12 | mud_cracked_dry_riverbed_002 (diffuse), https://polyhaven.com/a/mud_cracked_dry_riverbed_002 | 2.0 m |
 | 13 | mud_forest (diffuse), https://polyhaven.com/a/mud_forest | 2.35 m |
-| 14 | ambientCG Ground094B (color), https://ambientcg.com/a/Ground094B: rippled sand with water in its troughs | 1.2 m |
-| 15 | ambientCG Ground100 (color), https://ambientcg.com/a/Ground100: rippled silt | 1.5 m |
+| 14 | ambientCG Ground094B (color), https://ambientcg.com/a/Ground094B: rippled sand with water in its troughs | 4.0 m |
+| 15 | ambientCG Ground100 (color), https://ambientcg.com/a/Ground100: rippled silt | 3.0 m |
 | 16 | ambientCG Ground083 (color), https://ambientcg.com/a/Ground083: mud under a film of algae | 2.0 m |
 | 17 | low_tide_rocks (diffuse), https://polyhaven.com/a/low_tide_rocks: wet gravelly sand | 2.17 m |
 
 Each is the 2k diffuse (ambientCG's: its 2K-JPG colour map) shrunk to 512 x 512, its light divided by itself blurred (a
 Gaussian of 40 texels, wrapping round, so the layer still repeats) and scaled back to its mean. All are CC0
-(polyhaven.com/license, ambientcg.com/license). ambientCG gives no size for layers 14 to 16: their side is set by
-their ripples (current ripples lie 10 to 15 cm apart).
+(polyhaven.com/license, ambientcg.com/license). ambientCG gives no size for layers 14 to 16: layers 14 and 15 are
+laid with their ripples some 40 cm apart, as large as the larger ripples of a flat (current ripples lie 10 to 15 cm
+apart), so they show at the map's nearest views.
 
 ## carpets.jpg
 

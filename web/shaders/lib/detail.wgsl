@@ -8,7 +8,7 @@
 
 // Of each photograph laid as detail (`detail`): its side in the world, m (web/textures/SOURCES.md), and its own stream
 // of noise.
-fn detail_m(t: i32) -> f32 { var m = array<f32, PHOTOS>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35, 1.2, 1.5, 2.0, 2.17); return m[t]; }
+fn detail_m(t: i32) -> f32 { var m = array<f32, PHOTOS>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35, 4.0, 3.0, 2.0, 2.17); return m[t]; }
 fn detail_noise(t: i32) -> i32 { var k = array<i32, PHOTOS>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 185, 186, 187, 188); return k[t]; }
 // The streams of noise of the tiles of cover: their patches' shifts and their seams' waves (`carpet`), each tile its own.
 const CARPET_SHIFTS = 108; const CARPET_WAVES = 110;
@@ -64,7 +64,10 @@ fn carpet(c: i32, e: f32) -> vec3f {
 // is laid in hexagons (`hexes`, Mikkelsen 2022), each turned by any angle and shifted by its own draw (a photograph
 // from above has no up), the hexagons about the pixel meeting by their heights (`hex_mix`): a stochastic tiling
 // (Heitz and Neyret 2018), so no repeat shows and the mean stays the photograph's.
-fn detail(t: i32, e: f32) -> vec3f {
+fn detail(t: i32, e: f32) -> vec3f { return detail_turned(t, e, 0.0, 2.0 * PI); }
+// The same, each hexagon turned by its own draw within `spread` radians about a way that swings by up to a half turn
+// along noise `swing_m` m across (0: none), read at the hexagon (a turn is one for all its pixels).
+fn detail_turned(t: i32, e: f32, swing_m: f32, spread: f32) -> vec3f {
   let s = detail_m(t);
   var h = hexes(DETAIL_HEX * s, DETAIL_EDGE);
   let least = hex_least(h);
@@ -73,8 +76,9 @@ fn detail(t: i32, e: f32) -> vec3f {
   for (var k = 0; k < 3; k++) {
     if (h.w[k] < least) { continue; }
     let x = lowbias(h.at[k], detail_noise(t));
-    let turn = 2.0 * PI * f32(x & 1023u) / 1024.0;
-    let r = mat2x2f(cos(turn), sin(turn), -sin(turn), cos(turn));
+    var a = spread * f32(x & 1023u) / 1024.0;
+    if (swing_m > 0.0) { a += PI * noise(vec2f(h.at[k]) * (DETAIL_HEX * s / swing_m), RIPPLE_WAYS).x - 0.5 * spread; }
+    let r = mat2x2f(cos(a), sin(a), -sin(a), cos(a));
     let shift = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
     c[k] = photo(t, lat(r * (1.0 / s), shift).f, r * vec2f(e / s, 0.0), r * vec2f(0.0, e / s)) / mean;
   }
@@ -128,15 +132,22 @@ const SOIL_WET_SAND = 12; const SOIL_FLAT = 13; const SOIL_SILT = 14; const SOIL
 const SOIL_IMAGES = 17;
 fn soil_image(i: i32, p: Spot, wet: f32) -> vec3f {
   if (i == SOIL_MUD) { return detail(MUD_TEX, p.e); }
+  if (i == SOIL_FLAT || i == SOIL_SILT) { return ripples_laid(select(RIPPLE_SILT_TEX, RIPPLE_FLAT_TEX, i == SOIL_FLAT), p.e); }
   if (i == SOIL_BEACH) { return beach_sand(p, wet); }
   if (i >= SOIL_PEBBLES) {
-    var t = array<i32, 10>(ROUND_PEBBLE_TEX, DARK_MUD_TEX, LOAM_TEX, CLAY_TEX, HUMUS_TEX, WET_SAND_TEX, RIPPLE_FLAT_TEX,
-      RIPPLE_SILT_TEX, ALGAL_MUD_TEX, WET_GRAVEL_TEX);
+    var t = array<i32, 10>(ROUND_PEBBLE_TEX, DARK_MUD_TEX, LOAM_TEX, CLAY_TEX, HUMUS_TEX, WET_SAND_TEX, -1, -1, ALGAL_MUD_TEX,
+      WET_GRAVEL_TEX);
     return detail(t[i - SOIL_PEBBLES], p.e);
   }
   var c = array<i32, 7>(LITTER_CARPET, FERN_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, -1, SAND_CARPET);
   return carpet(c[i], p.e);
 }
+
+// Ripples lie in fields whose crests run one way, across the flow that made them: photograph t laid with each hexagon
+// turned within `FLAT_TILT` either way of a way that swings slowly over the ground, along noise `RIPPLE_SWING_M`
+// across of stream `RIPPLE_WAYS` (the page knows no flow over a flat). At e m a pixel.
+const RIPPLE_SWING_M = 40.0; const RIPPLE_WAYS = 184;
+fn ripples_laid(t: i32, e: f32) -> vec3f { return detail_turned(t, e, RIPPLE_SWING_M, 2.0 * FLAT_TILT); }
 
 // A beach's bare sand, soaked to `wet` (0..1): dry sand, and damp sand streaked by the swash where it is soaked past
 // half, the two meeting by their heights over an edge ragged by `SAND_WET_RAG` of noise over `SAND_WET_RAG_M`.
