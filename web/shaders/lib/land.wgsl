@@ -51,7 +51,8 @@ struct Land {
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
 // liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs
-// about, and the share of its area that is land; the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
+// about, the share of its area that is land and the wetness index from which its land is saturated (the core's
+// `inside::wet_ground`); the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
 // its loose ground; and in the last numbers of the true colour's and the layer's planes, the land's ice, m, its ground
 // temperature, K, and its mean height, m. (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
 const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
@@ -254,23 +255,16 @@ fn soil_held(pore: f32, pores: f32, c: f32, twi: f32) -> f32 {
   return clamp(pore + land.soil.x * (twi - c), 0.0, pores);
 }
 
-// How saturated the ground at `at` is, 0..1 (TOPMODEL, Beven and Kirkby 1979): a cell's soil is full where its liquid
-// by the wetness index (`soil_held`) reaches its pores, so from the index c + (pores - pore) / soil_m on; a point is
-// saturated from that level, blended over the cells about it, on (all of a cell whose pores are full, none of one whose
-// pores hold none), and its edge is spread over `SATURATED_EDGE` of the index under it.
+// How saturated the ground at `at` is, 0..1 (TOPMODEL, Beven and Kirkby 1979): a point is saturated where its wetness
+// index (`Tiled.twi`) reaches its cell's index of saturation (the core's `inside::wet_ground`), how far over or under
+// it blended over the cells about it (each held within `SATURATED_EDGE`), and its edge is spread over `SATURATED_EDGE`
+// of the index under it.
 const SATURATED_EDGE = 0.5;
 fn saturated_at(at: vec2f) -> f32 {
   let twi = ground_at(at, false).twi;
   let cs = corners(at / land.map.x);
   var over = 0.0;
-  for (var k = 0; k < 4; k++) {
-    let pore = cell(LIQUID, cs.at[k]).w;
-    let s = cell(SOIL, cs.at[k]);
-    var d = twi - s.y - (s.x - pore) / land.soil.x;
-    if (pore >= s.x) { d = SATURATED_EDGE; }
-    if (pore <= 0.0) { d = -SATURATED_EDGE; }
-    over += cs.w[k] * d;
-  }
+  for (var k = 0; k < 4; k++) { over += cs.w[k] * clamp(twi - cell(SOIL, cs.at[k]).w, -SATURATED_EDGE, SATURATED_EDGE); }
   return smoothstep(-SATURATED_EDGE, 0.0, over);
 }
 
