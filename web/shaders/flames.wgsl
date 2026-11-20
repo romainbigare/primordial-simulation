@@ -1,4 +1,4 @@
-// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl sprites.wgsl heights.wgsl tex.wgsl fire.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl fire.wgsl
 // The fires burning this month over the live map, over its plants (web/src/fire.ts; drawn only over the squares they
 // burn and the smoke's reach): the glow of the burning ground, the flames along the front of each burning patch (the
 // outer edge of the square's burnt share, fire.wgsl `burn_rank`, as tall as the core's flame length), the embers behind
