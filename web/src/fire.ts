@@ -1,8 +1,9 @@
 // Fire on the live map: what the core's layers say fire did on each square (tape/src/layers.rs), sent to the GPU as a
-// texture of two planes (web/shaders/lib/fire.wgsl), and the boxes of squares the map draws it in: the burn scars in
-// the ground's program made with them (burnt.wgsl, over the squares that hold one; land.wgsl elsewhere), the flames and
-// the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach). Where nothing burns or has
-// burnt, nothing of it is drawn and no pixel pays for it.
+// texture of three planes (web/shaders/lib/fire.wgsl), and the boxes of squares the map draws it in: the burn scars and
+// the cured grass in the ground's program made with them (burnt.wgsl, over the squares that hold either; land.wgsl
+// elsewhere), the dead trees standing (snags.wgsl, over the squares that hold them), the flames and the smoke over the
+// plants (flames.wgsl, over the squares that burn and the smoke's reach). Where nothing burns, has burnt or stands
+// cured, nothing of it is drawn and no pixel pays for it.
 import { World, decode } from './data';
 import { Draw, Gpu, Texture, Uniforms } from './gpu';
 import { half } from './canopy';
@@ -10,33 +11,27 @@ import { groundDetail } from './detail';
 import type { MapLook } from './field-window';
 
 /** What fire did on each square, a number a square (the core's layers, `LAYERS`). */
-export interface FirePlanes { burnt: Float32Array; age: Float32Array; flame: Float32Array; length: Float32Array; ash: Float32Array; air: Float32Array }
-/** The core's layers of fire, by the planes' names: the share of the land burnt in the last 12 months, the mean of
- * its land's months since it last burnt (land never burnt counts as `AGE_MOST`), the share burning this month, its flames' mean length (m), the ash on the ground and the gas the
- * flames sent to the air this month (kg/m²). */
-const LAYERS: Record<keyof FirePlanes, string> = { burnt: 'burnt', age: 'burnt_age', flame: 'flame', length: 'flame_len', ash: 'ash', air: 'flame_air' };
-
-/** The most months since a burn the core tells apart (`flame::AGE_MOST`), and the months its burnt share spans. */
-const AGE_MOST = 120, YEAR_MONTHS = 12;
-/** The months since the burnt share of a square burnt, from the mean `age` of its land's months since a burn, that
- * share `burnt` and the share burning this month `flame` (none old): the rest of the land taken as never burnt,
- * within the year the share spans. The layers do not tell it exactly: where the rest burnt too, earlier, the share
- * reads younger than it is. */
-function scarAge(age: number, burnt: number, flame: number): number {
-  if (burnt <= 0) return AGE_MOST;
-  const b = Math.min(burnt, 1), older = Math.min(Math.max((age - (1 - b) * AGE_MOST) / b, 0), YEAR_MONTHS);
-  return older * Math.max(1 - flame / b, 0);
+export interface FirePlanes {
+  burnt: Float32Array; age: Float32Array; flame: Float32Array; length: Float32Array; ash: Float32Array; air: Float32Array;
+  east: Float32Array; north: Float32Array; snag: Float32Array; cured: Float32Array;
 }
+/** The core's layers of fire, by the planes' names: the share of the land burnt in the last 12 months, the months since
+ * the square last burnt (at most the layer's top: never), the share burning this month, its flames' mean length (m),
+ * the ash on the ground and the gas the flames sent to the air this month (kg/m²), the low wind east and north (m/s),
+ * the dead walls standing and the cured leaves standing (kg/m²). */
+const LAYERS: Record<keyof FirePlanes, string> = {
+  burnt: 'burnt', age: 'burnt_age', flame: 'flame', length: 'flame_len', ash: 'ash', air: 'flame_air',
+  east: 'wind_u', north: 'wind_v', snag: 'snag', cured: 'cured',
+};
 
-/** The tape holds no wind: the smoke drifts with the westerlies of the middle latitudes the page's islands lie in
- * (a unit vector east and south: from the west, a little from the south), at a breeze's speed, m/s. */
-const WIND = [0.97, -0.24], WIND_M_S = 5;
 /** The smoke reaches this far downwind, m, and spreads this share of the way gone to each side (flames.wgsl
  * `PLUME_M`, `SPREAD`). */
 const PLUME_M = 8000, SPREAD = 0.25;
-/** A square's burn scar and glow are blended into the squares about it (fire.wgsl `fire_plane`): the boxes reach one
- * square farther. */
+/** A square's numbers are blended into the squares about it (fire.wgsl `fire_plane`): the boxes reach one square
+ * farther. */
 const BLEND_SQUARES = 1;
+/** The texture's planes (fire.wgsl `FIRE_PLANES`). */
+const PLANES = 3;
 /** Frames a second while a fire in view burns and the world plays. */
 export const FIRE_FPS = 8;
 /** The time the flames are drawn at, s, wraps round after this many seconds (a float keeps its steps fine). */
@@ -54,48 +49,56 @@ export class Fire {
   private w = 0;
   private h = 0;
   private cellM = 1;
-  /** The squares the burn scars lie in, and those the flames and their smoke reach (null: none). */
+  /** The months since a burn that mean none (the layer's top). */
+  private never = 0;
+  /** The squares the burn scars and the cured grass lie in, those the dead trees stand in, and those the flames and
+   * their smoke reach (null: none). */
   scars: Box | null = null;
+  snags: Box | null = null;
   flames: Box | null = null;
 
   /** What fire did on world `w`'s squares, from its layers (none on a world whose tape has no fire). */
   set(w: World | null): void {
     const has = w !== null && Object.values(LAYERS).every(name => w.index.has(name));
-    if (!w || !has) { this.put(0, 0, 1, null); return; }
+    if (!w || !has) { this.put(0, 0, 1, null, 0); return; }
     const p = Object.fromEntries(Object.entries(LAYERS).map(([k, name]) => [k, decode(w, 0, name)])) as unknown as FirePlanes;
-    this.put(w.meta.w, w.meta.h, w.meta.cell_m, p);
+    this.put(w.meta.w, w.meta.h, w.meta.cell_m, p, w.meta.layers[w.index.get(LAYERS.age)!].max);
   }
 
-  /** What fire did on a map of `w` x `h` squares of `cellM` m, `p` (null: nothing). The texture's first plane holds the
-   * burnt share, the months since a burn times that share, the burning share and the flames' length times that share
-   * (so the blend between squares gives each its share's mean), its second the ash and the gas sent to the air. */
-  put(w: number, h: number, cellM: number, p: FirePlanes | null): void {
-    this.w = w; this.h = h; this.cellM = cellM;
-    const n = w * h, burnt = (i: number) => (p ? p.burnt[i] : 0), burning = (i: number) => (p ? p.flame[i] : 0);
-    this.scars = p ? boxOf(w, h, i => burnt(i) > 0 || p.ash[i] > 0, BLEND_SQUARES) : null;
-    const lit = p ? boxOf(w, h, i => burning(i) > 0 || p.air[i] > 0, BLEND_SQUARES) : null;
-    this.flames = lit && smokeBox(lit, w, h, cellM);
-    if (!p || (!this.scars && !this.flames)) { this.data = null; return; }
-    const data = new Uint16Array(8 * n);
+  /** What fire did on a map of `w` x `h` squares of `cellM` m, `p` (null: nothing), where `never` months since a burn
+   * means none. A square burns whole, so its land is under a scar while it is younger than that, else its share burnt
+   * this year. The texture's first plane holds that share, the months since the burn times it, the burning share and
+   * the flames' length times that share (so the blend between squares gives each its share's mean); its second the
+   * ash, the gas sent to the air and the wind east and south; its third the dead walls and the cured leaves standing. */
+  put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number): void {
+    this.w = w; this.h = h; this.cellM = cellM; this.never = never;
+    const n = w * h, scar = (i: number) => (!p ? 0 : p.age[i] < never ? 1 : Math.min(p.burnt[i], 1));
+    this.scars = p ? boxOf(w, h, i => scar(i) > 0 || p.ash[i] > 0 || p.cured[i] > 0, BLEND_SQUARES) : null;
+    this.snags = p ? boxOf(w, h, i => p.snag[i] > 0, BLEND_SQUARES) : null;
+    this.flames = p ? smokeBox(p, w, h, cellM) : null;
+    if (!p || (!this.scars && !this.flames && !this.snags)) { this.data = null; return; }
+    const data = new Uint16Array(4 * PLANES * n);
     for (let i = 0; i < n; i++) {
-      const b = burnt(i), f = burning(i);
-      data.set([b, b * scarAge(p.age[i], b, f), f, f * p.length[i]].map(half), 4 * i);
-      data.set([p.ash[i], p.air[i], 0, 0].map(half), 4 * (n + i));
+      const s = scar(i), f = p.flame[i];
+      data.set([s, s * Math.min(p.age[i], never), f, f * p.length[i]].map(half), 4 * i);
+      data.set([p.ash[i], p.air[i], p.east[i], -p.north[i]].map(half), 4 * (n + i));
+      data.set([p.snag[i], p.cured[i], 0, 0].map(half), 4 * (2 * n + i));
     }
     this.data = data;
     this.due = true;
   }
 
-  /** The bindings fire.wgsl (and the sprites and photograph of tex.wgsl) read on `gpu` for a draw in view `look` whose pixels lie as `frame` says
-   * (field-window.ts `frameOf`), at time `now` (performance.now, ms); null when nothing of fire is known. */
+  /** The bindings fire.wgsl (and the sprites and photograph of tex.wgsl) read on `gpu` for a draw in view `look` whose
+   * pixels lie as `frame` says (field-window.ts `frameOf`), at time `now` (performance.now, ms); null when nothing of
+   * fire is known. */
   binds(gpu: Gpu, look: MapLook, frame: number[], now: number): Draw['binds'] | null {
     if (!this.data) return null;
-    if (this.tex && (this.tex.w !== this.w || this.tex.h !== 2 * this.h)) { gpu.drop(this.tex); this.tex = null; }
-    this.tex ??= gpu.texture(this.w, 2 * this.h, 'rgba16float');
+    if (this.tex && (this.tex.w !== this.w || this.tex.h !== PLANES * this.h)) { gpu.drop(this.tex); this.tex = null; }
+    this.tex ??= gpu.texture(this.w, PLANES * this.h, 'rgba16float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const mode = look.mode === 'earth' ? 0 : 1;
     const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h, mode).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
-      .vec4((now / 1000) % TIME_WRAP_S, WIND[0], WIND[1], WIND_M_S);
+      .vec4((now / 1000) % TIME_WRAP_S, this.never);
     return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer };
   }
 
@@ -119,10 +122,18 @@ function boxOf(w: number, h: number, has: (i: number) => boolean, grow: number):
   return [Math.max(x0 - grow, 0), Math.max(y0 - grow, 0), Math.min(x1 + 1 + grow, w), Math.min(y1 + 1 + grow, h)];
 }
 
-/** Box `b` grown by the reach of the smoke downwind (`PLUME_M`) and its spread across, within the map. */
-function smokeBox(b: Box, w: number, h: number, cellM: number): Box {
+/** The box of the squares that burn or send gas to the air on a `w` x `h` map of `cellM` m squares, each grown by the
+ * reach of its smoke down its own wind (`PLUME_M`) and its spread across, within the map; null: none. */
+function smokeBox(p: FirePlanes, w: number, h: number, cellM: number): Box | null {
   const reach = PLUME_M / cellM, side = SPREAD * reach;
-  const dx = WIND[0] * reach, dy = WIND[1] * reach, sx = Math.abs(WIND[1]) * side, sy = Math.abs(WIND[0]) * side;
-  return [Math.max(Math.floor(b[0] + Math.min(dx, 0) - sx), 0), Math.max(Math.floor(b[1] + Math.min(dy, 0) - sy), 0),
-    Math.min(Math.ceil(b[2] + Math.max(dx, 0) + sx), w), Math.min(Math.ceil(b[3] + Math.max(dy, 0) + sy), h)];
+  let b: Box | null = null;
+  for (let i = 0; i < w * h; i++) {
+    if (!(p.flame[i] > 0 || p.air[i] > 0)) continue;
+    const x = i % w, y = (i / w) | 0, speed = Math.hypot(p.east[i], p.north[i]) || 1;
+    const ex = (p.east[i] / speed) * reach, ey = (-p.north[i] / speed) * reach;
+    const sx = Math.abs(ey / reach) * side + BLEND_SQUARES, sy = Math.abs(ex / reach) * side + BLEND_SQUARES;
+    const own: Box = [x + Math.min(ex, 0) - sx, y + Math.min(ey, 0) - sy, x + 1 + Math.max(ex, 0) + sx, y + 1 + Math.max(ey, 0) + sy];
+    b = b ? [Math.min(b[0], own[0]), Math.min(b[1], own[1]), Math.max(b[2], own[2]), Math.max(b[3], own[3])] : own;
+  }
+  return b && [Math.max(Math.floor(b[0]), 0), Math.max(Math.floor(b[1]), 0), Math.min(Math.ceil(b[2]), w), Math.min(Math.ceil(b[3]), h)];
 }

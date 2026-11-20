@@ -272,7 +272,7 @@ export class MapView {
     if (fading) this.invalidate();
     this.drawMap(gpu, p, target, xs, k, d, [tw, th], waiting);
     this.layer?.draw(p);
-    this.drawFlames(gpu, p, target, xs, k, d, [tw, th], waiting);
+    this.drawFire(gpu, p, target, xs, k, d, [tw, th], waiting);
     p.end();
     if (target) this.show(target);
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
@@ -360,7 +360,7 @@ export class MapView {
     const p = gpu.pass(this.sharp, undefined, tile);
     this.drawMap(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
     this.layer?.draw(p);
-    this.drawFlames(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
+    this.drawFire(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
     p.end();
     this.show(this.sharp!);
     if (!job.tiles.length) this.sharpening = null;
@@ -418,13 +418,20 @@ export class MapView {
     } else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
   }
 
-  /** Draw into pass `p` (as `drawMap`) the flames and the smoke of the fires burning in view, over the squares they
-   * reach, once their program is made; none in a layer's view. */
-  private drawFlames(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
-    const { cam: { s, oy }, w, h, look } = this, box = this.fire?.flames;
-    if (!box || !this.land || look.mode === 'layer') return;
+  /** Draw into pass `p` (as `drawMap`) over the plants the dead trees fire left standing, then the flames and the smoke of
+   * the fires burning in view, each over the squares it reaches, once its program is made; none in a layer's view. */
+  private drawFire(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
+    if (!this.fire || this.look.mode === 'layer') return;
+    this.drawOver(gpu, p, 'snags', this.fire.snags, target, xs, k, d, size, waiting);
+    this.drawOver(gpu, p, 'flames', this.fire.flames, target, xs, k, d, size, waiting);
+  }
+
+  /** Draw into pass `p` (as `drawMap`) program `name` over the map's squares in `box` (null: none), once it is made. */
+  private drawOver(gpu: Gpu, p: Pass, name: string, box: Box | null, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
+    const { cam: { s, oy }, w, h, look } = this;
+    if (!box || !this.land) return;
     const mpp = this.cellM / (s * k), seen = this.cellM / (s * d);
-    const program = seenFrom(gpu, 'flames', seen, target?.format ?? null, true, waiting);
+    const program = seenFrom(gpu, name, seen, target?.format ?? null, true, waiting);
     if (!program) return;
     const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
     xs.forEach((_, c) => {
