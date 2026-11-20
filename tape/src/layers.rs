@@ -197,9 +197,9 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: the share of its area that is land, 0..1: its land (`contract::lands`, which its cover lives
     /// on) over its area
     pub land: Vec<f64>,
-    /// Per ground cell: the dead matter, minerals and rot of its ground (`soil::grounds`; none before Flow first built
+    /// Per ground cell: the dead matter, minerals and rot of its ground (`soil::holdings`; none before Flow first built
     /// its state)
-    pub dead: Option<Vec<pcore::soil::Ground>>,
+    pub dead: Option<Vec<pcore::soil::Holdings>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -213,13 +213,13 @@ impl<'a> Ctx<'a> {
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
         let land = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: pcore::soil::grounds(w) };
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: pcore::soil::holdings(w) };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
     /// Of the dead matter, minerals and rot of cell `i`'s ground (`dead`), the number `of`; none (NaN) before Flow
     /// first built its state.
-    fn dead(&self, i: usize, of: fn(&pcore::soil::Ground) -> f64) -> f64 {
+    fn dead(&self, i: usize, of: fn(&pcore::soil::Holdings) -> f64) -> f64 {
         self.dead.as_ref().map_or(f64::NAN, |d| of(&d[i]))
     }
     fn air(&self, i: usize) -> usize {
