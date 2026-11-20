@@ -85,11 +85,11 @@ export async function open(browser, base, site, world, { px = 400 } = {}) {
 }
 
 /** Wait until the page stands on a world and its ground is made; throws the page's message where the core refused the
- * world (a snapshot of another format, say) and the page says why. */
+ * world (a snapshot of another format, say) and the page says why (wasm/src/lib.rs `saved`, web/src/worker.ts). */
 export async function opened(page, ms = 300000) {
   const done = await page.waitForFunction(() => {
     const e = window.__ew, msg = document.getElementById('msg');
-    if (e && !e.world && msg && !msg.hidden && /saved world|refused/i.test(msg.textContent)) return { refused: msg.textContent };
+    if (e && !e.world && msg && !msg.hidden && /^(Not a saved world|A saved|The world (was refused|stopped))/.test(msg.textContent)) return { refused: msg.textContent };
     return e && e.world && e.land && e.land.tiles.rock ? { refused: null } : null;
   }, null, { timeout: ms, polling: 250 });
   const { refused } = await done.jsonValue();
