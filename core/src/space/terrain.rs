@@ -62,7 +62,7 @@ pub const SAMPLE_DEPTH: u8 = 6;
 /// 1 m³/s, m, and the power of the discharge it grows as (`Physics::channel_depth`, `channel_depth_exp`), which the high
 /// stand's flood reads (`space::stand`); and its drained samples, found from those when first read
 /// (`Terrain::samples`), not saved.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Terrain {
     pub seed: u64,
     pub level: f64,
@@ -217,12 +217,12 @@ fn height_of(above: f64) -> f64 {
 impl Terrain {
     /// The terrain of `seed` whose level 0 m lies at the rise `level`, its bed of `makes`, made under the laws `ph`.
     pub fn new(seed: u64, level: f64, makes: Vec<Make>, ph: &crate::Physics) -> Terrain {
-        Terrain { seed, level, makes, channel: [ph.channel_depth, ph.channel_depth_exp], ..Terrain::default() }
+        Terrain { seed, level, makes, shape: Shape::default(), channel: [ph.channel_depth, ph.channel_depth_exp], kept: Default::default() }
     }
     /// The terrain of an island of `shape` for `seed` (`Lift`), its level 0 m at `ISLAND_LEVEL`, its bed of `makes`, made
     /// under the laws `ph`.
     pub fn island(seed: u64, shape: Shape, makes: Vec<Make>, ph: &crate::Physics) -> Terrain {
-        Terrain { seed, level: ISLAND_LEVEL, makes, shape, channel: [ph.channel_depth, ph.channel_depth_exp], ..Terrain::default() }
+        Terrain { seed, level: ISLAND_LEVEL, makes, shape, channel: [ph.channel_depth, ph.channel_depth_exp], kept: Default::default() }
     }
     /// The rises of this terrain's island on the flat map `map` for `seed` (`Lift`): one in the middle, or those drawn
     /// from the seed, scaled so the share of the centres of its squares above the level (`land`) is their drawn share

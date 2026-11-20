@@ -293,9 +293,9 @@ fn the_wear_keeps_what_it_moves() {
     let w = worldgen::testkit::small_world();
     let s = w.terrain_samples();
     let b = s.books;
-    println!("taken {:.4e} m3, in the basins {:.4e}, on the shelf {:.4e}", b.taken, b.settled, b.shelf);
+    println!("taken {:.4e} m3, in the basins {:.4e}, on the shelf {:.4e}, by the high stand {:.4e}, not laid {:.4e}, beyond {:.4e}; held back {:.4e}", b.taken, b.settled, b.shelf, b.high, b.unlaid, b.beyond, b.held);
     assert!(b.taken > 0.0 && b.settled > 0.0 && b.shelf > 0.0, "{b:?}");
-    assert!(((b.settled + b.shelf + b.high + b.beyond) / b.taken - 1.0).abs() < 1e-9 && b.beyond.abs() < 1e-9 * b.taken, "{b:?}");
+    assert!(((b.settled + b.shelf + b.high + b.unlaid + b.beyond) / b.taken - 1.0).abs() < 1e-9 && b.beyond.abs() < 1e-9 * b.taken, "{b:?}");
     assert!(s.loose.iter().all(|&d| d >= 0.0), "loose ground under none");
     assert!(s.age.iter().chain(&s.h).all(|x| x.is_finite()), "a height or an age not finite");
 }
@@ -318,7 +318,7 @@ fn a_drawn_islands_low_ground_is_one_and_rings_the_map() {
     println!("land {:.1}%, taken {:.4e} m3, in the basins {:.4e}, on the shelf {:.4e}", 100.0 * land, b.taken, b.settled, b.shelf);
     assert!(land > 0.1, "land {land}");
     assert!(b.high > 0.0, "{b:?}");
-    assert!(((b.settled + b.shelf + b.high + b.beyond) / b.taken - 1.0).abs() < 1e-9, "{b:?}");
+    assert!(((b.settled + b.shelf + b.high + b.unlaid + b.beyond) / b.taken - 1.0).abs() < 1e-9, "{b:?}");
 }
 
 /// The terrain's channels (`space::network`): each sample's liquid runs to a neighbour no higher, but in a pond, where

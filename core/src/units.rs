@@ -6,6 +6,12 @@ pub const DAY_S: u64 = 86_400;
 /// Seconds in a day, as a real number.
 pub const DAY: f64 = DAY_S as f64;
 
+/// Units the laws fitted on the one planet known are given in: m² in a km², m³ in a km³, m in a km, kg in a Mt.
+pub const M2_PER_KM2: f64 = 1e6;
+pub const M3_PER_KM3: f64 = 1e9;
+pub const M_PER_KM: f64 = 1e3;
+pub const KG_PER_MT: f64 = 1e9;
+
 /// The planet's spin, rad/s: one turn in a sidereal day of 86,164 s.
 pub const SPIN: f64 = 7.292e-5;
 

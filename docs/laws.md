@@ -146,21 +146,25 @@ each on the ground the ones before it left: a mouth fills the liquid from where 
 to the **top** a deposit builds to there, the surface of the channel's flood (as deep as a channel of the terrain's law,
 `Terrain::channel`, carries `FLOOD_RUNOFF` from the area that drains to that sample, the mouths that share it together;
 Leopold and Maddock 1953), the samples in the order of the least cost to reach them (Dijkstra), until its load is laid,
-the last in part. A step costs its length, more by the depth of the liquid under the top over 10 m (`WAVE_BASE_M`: the
-base of an open coast's waves; the lobe follows a drowned valley and the shallows), more by 3 (`ALONG_COAST`) times how
+the last in part. A step costs its length, more by the depth of the liquid under the top over 10 m (`DEPTH_COST_M`: the
+lobe follows a drowned valley and the shallows, in a lagoon too), more by 3 (`ALONG_COAST`) times how
 open the sample lies to the waves times the square of how far the step leads away from the coast (the waves spread a
 lobe along the shore; Wright and Coleman 1973; Galloway 1975), and less by 0.5 (`DOWN_CHANNEL`) times how sheltered it
 lies times how far the step leads on along the channel's last steps (the channel carries it out). How open a sample
 lies is the mean, over the ways out of it that lead over open liquid, of the run of open liquid along each, at most
 50 km, over 50 km (`FETCH_REF_M`; an effective fetch, Håkanson 1981); the way out from the coast is the rise of the
 distance from the land. The waves shape the lobe, not its height: on a coast they build beaches up to the level and
-over it. Round each lobe a front falls from its top at 0.3 (`FORESET`), from the samples it filled last; the hollows the
-lobes leave (the liquid they cut off, the valleys behind them that drain to a mouth and lie under the highest top) are
-filled to where liquid would spill out of them (a flood from the open liquid, Barnes, Lehman and Mulla 2014), from the
-lobes' fronts; and the edges are rounded as the shelf's are, the mean over the ground the lobes may lie on alone. Each lobe holds its mouth's load, and what the land gave
-is what lies in the lobes and off the map. The top of what a lobe laid at a sample lies there for the share of its
-load laid after it, of the 6,000 years (its front, none; a filled hollow, half); a sample's loose ground is as old as
-the mean of its layers by depth (`Samples::age`). **Known limit:** the volumes of the wear are heights times areas: the
+over it. Round each lobe a front falls from its top at 0.3 (`FORESET`), from the samples it filled last (never over
+its top). The hollows the lobes leave (the liquid a lobe cut off from the rest of its body of liquid, not another body;
+the valleys behind them that drain to a mouth and lie under the highest top) are filled to where liquid would spill out
+of them (a flood from the open liquid, Barnes, Lehman and Mulla 2014), each by the lobe of most load the flood's way
+to it crossed (one it does not reach, by the lobe of the lowest ground round it), from that lobe's front and then the samples it filled
+last, at most all the lobe holds: where it holds less, its hollows are filled by that share. A lobe's edge is its
+front: it is not rounded. So each lobe holds its mouth's load: what the land gave is what lies in the lobes, what a lobe found no room for (`Books::unlaid`),
+and what left the map; what the catchments held back is apart (`Books::held`). The top of what a lobe laid at a sample
+lies there for the share of its load laid after it, of the 6,000 years (its front, none; a filled hollow, half); a
+sample's loose ground is as old as the mean of its layers by
+depth (`Samples::age`). **Known limit:** the volumes of the wear are heights times areas: the
 load's pores are not counted,
 so a deposit stands about 1.7 times thinner than one of the same rock would. **The loose ground** the wear leaves (`Samples::loose`):
 on land (`space::mantle`) the depth where the bed's breaking into loose ground balances what takes it away, the

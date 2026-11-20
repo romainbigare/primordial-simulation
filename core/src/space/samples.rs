@@ -29,7 +29,7 @@ use std::sync::{Arc, Mutex};
 /// (`space::strata`, as the wear left it); the depth of its loose ground the wear left, m, how much of it settled in
 /// the wear's last stage, m (all of it on the open low ground), and how long it has lain, years (`mantle::age`); and
 /// the volumes the wear moved (`wear::Books`); and how much liquid gathers at each, its topographic wetness index
-/// ln(a / tan β) (`sample_index`).
+/// ln(a / tan β) (`sample_index`); and the channel law of the terrain (`Terrain::channel`).
 #[derive(Clone, Debug)]
 pub struct Samples {
     pub seed: u64,
@@ -49,6 +49,7 @@ pub struct Samples {
     pub age: Vec<f64>,
     pub books: Books,
     pub twi: Vec<f64>,
+    pub channel: [f64; 2],
 }
 
 /// A pond: the samples of one closed basin that lie under its level, where liquid stands at one level before it runs
@@ -159,7 +160,7 @@ impl Terrain {
         let slope = (0..grid.n()).map(|k| if f.to[k] == NONE { 0.0 } else { (h[k] - h[f.to[k] as usize]).max(0.0) / f.apart[k] }).collect();
         let (loose, settled, age) = (worn.loose, worn.settled, worn.age);
         let twi = sample_index(across, down, dy, &up, &h);
-        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, slope, pond, ponds, make, loose, settled, age, books, twi }
+        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, slope, pond, ponds, make, loose, settled, age, books, twi, channel: self.channel }
     }
 }
 
