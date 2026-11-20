@@ -27,6 +27,8 @@ const LAYERS: Record<keyof FirePlanes, string> = {
 /** The smoke reaches this far downwind, m, and spreads this share of the way gone to each side (flames.wgsl
  * `PLUME_M`, `SPREAD`). */
 const PLUME_M = 8000, SPREAD = 0.25;
+/** The box of a plume reaches this many times its spread to each side, so its soft edge is not cut. */
+const SPREAD_BOX = 2.5;
 /** A square's numbers are blended into the squares about it (fire.wgsl `fire_plane`): the boxes reach one square
  * farther. */
 const BLEND_SQUARES = 1;
@@ -131,7 +133,7 @@ function smokeBox(p: FirePlanes, w: number, h: number, cellM: number): Box | nul
     if (!(p.flame[i] > 0 || p.air[i] > 0)) continue;
     const x = i % w, y = (i / w) | 0, speed = Math.hypot(p.east[i], p.north[i]) || 1;
     const ex = (p.east[i] / speed) * reach, ey = (-p.north[i] / speed) * reach;
-    const sx = Math.abs(ey / reach) * side + BLEND_SQUARES, sy = Math.abs(ex / reach) * side + BLEND_SQUARES;
+    const sx = Math.abs(ey / reach) * SPREAD_BOX * side + BLEND_SQUARES, sy = Math.abs(ex / reach) * SPREAD_BOX * side + BLEND_SQUARES;
     const own: Box = [x + Math.min(ex, 0) - sx, y + Math.min(ey, 0) - sy, x + 1 + Math.max(ex, 0) + sx, y + 1 + Math.max(ey, 0) + sy];
     b = b ? [Math.min(b[0], own[0]), Math.min(b[1], own[1]), Math.max(b[2], own[2]), Math.max(b[3], own[3])] : own;
   }
