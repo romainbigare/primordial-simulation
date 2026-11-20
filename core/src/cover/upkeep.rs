@@ -4,7 +4,7 @@
 use super::budget::{self, DIED, UPKEEP, UPKEEP_PARTS};
 use super::build::per_input;
 use super::grow::{Books, Slot};
-use super::{dec, Cover, Parts, FROST, FUEL, GAS, LIGHT, MOIST, NG, NP, REPAIR};
+use super::{dec, Cover, Parts, FROST, FUEL, GAS, LIGHT, MOIST, NG, NP, REPAIR, WALL};
 use crate::chem::Chemistry;
 use crate::life::{AGE, DROWNED, PHASE, SPENT};
 use crate::units::{DAY, FERMENT_YIELD};
@@ -66,12 +66,19 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
         lost.iter_mut().for_each(|l| *l *= all);
         // What dies are whole plants: each one left keeps its mass.
         c.plants[x].iter_mut().for_each(|n| *n *= left);
-        let alive = budget::held(&e, &c.mol[x]);
+        // The dead of plants no taller than `surface_m` stand, cured, as their dead leaves do (`season::shed_to`): their
+        // body matter and walls stay among the cover's own until they fall; their fuel goes to the ground.
+        let stands = c.height(ph, &mm, chem.subs[p.sub[WALL]].density[0], x) <= ph.surface_m;
         for q in 0..NP {
             let m = c.mol[x][q].max(0.0) * dies;
-            (c.mol[x][q], b.dead[p.sub[q]]) = (c.mol[x][q] - m, b.dead[p.sub[q]] + m);
+            c.mol[x][q] -= m;
+            if stands && q != FUEL {
+                c.cured[q] += m;
+            } else {
+                b.dead[p.sub[q]] += m;
+                b.budget[DIED] -= m * e[q];
+            }
         }
-        b.budget[DIED] += budget::held(&e, &c.mol[x]) - alive;
     }
     (lost, dear * cost)
 }

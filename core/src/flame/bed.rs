@@ -52,7 +52,8 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
     let load = crate::contract::remains_in(w, i, |k| w.g(k, i));
     let land = crate::contract::land(w, i);
-    let cured = if land > 0.0 { w.life.cover(i).cured[MATTER].max(0.0) * mm[MATTER] / land } else { 0.0 };
+    let standing_dead = w.life.cover(i).cured.map(|m| m.max(0.0));
+    let cured = if land > 0.0 { (standing_dead[MATTER] * mm[MATTER] + standing_dead[WALL] * mm[WALL]) / land } else { 0.0 };
     if load + cured <= 0.0 {
         return None;
     }
@@ -62,8 +63,7 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     }
     let t = w.thaw_last(i).0;
     // Per kg of what burns, by the mass of its parts: the heat their burning frees and their heat capacity.
-    let mut kg = [MATTER, WALL].map(|q| w.g(p.sub[q], i).max(0.0) * mm[q]);
-    kg[0] += cured * land;
+    let kg = [MATTER, WALL].map(|q| (w.g(p.sub[q], i).max(0.0) + standing_dead[q]) * mm[q]);
     let all = (kg[0] + kg[1]).max(f64::MIN_POSITIVE);
     let per_kg = |q: usize, j: usize, of: &dyn Fn(usize) -> f64| kg[j] / all * of(q);
     let burnt = |q: usize| chem.burner(p.sub[q]).map_or(0.0, |r| -chem.dh(r) / (per_input(&chem.reactions[r], p.sub[q]).unwrap_or(1.0) * mm[q]));
