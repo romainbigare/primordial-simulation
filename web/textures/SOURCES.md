@@ -1,13 +1,13 @@
 # Where the page's textures come from
 
-Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com) and Kenney (kenney.nl), but for the trees
+Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), ambientCG (ambientcg.com) and Kenney (kenney.nl), but for the trees
 rendered from PlantCatalog's models, which are CC BY 4.0 (credited below): the ground photographs resized and packed for
 the page by hand, each with its large-scale light divided out (so its repeat does not show); the carpets and the sprites
 rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 512 layers, top first.
 
 ## ground.jpg
 
-| layer | Poly Haven asset | its side in the world |
+| layer | asset (Poly Haven, unless named) | its side in the world |
 |---|---|---|
 | 0 | dry_river_pebbles (diffuse) | 2.0 m |
 | 1 | aerial_rocks_02 (diffuse) | 50 m |
@@ -23,9 +23,17 @@ rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 51
 | 11 | dirt_floor (diffuse), https://polyhaven.com/a/dirt_floor | 2.07 m |
 | 12 | mud_cracked_dry_riverbed_002 (diffuse), https://polyhaven.com/a/mud_cracked_dry_riverbed_002 | 2.0 m |
 | 13 | mud_forest (diffuse), https://polyhaven.com/a/mud_forest | 2.35 m |
+| 14 | ambientCG Ground094B (color), https://ambientcg.com/a/Ground094B: rippled sand with water in its troughs | 4.0 m |
+| 15 | ambientCG Ground100 (color), https://ambientcg.com/a/Ground100: rippled silt | 3.0 m |
+| 16 | ambientCG Ground083 (color), https://ambientcg.com/a/Ground083: mud under a film of algae | 2.0 m |
+| 17 | low_tide_rocks (diffuse), https://polyhaven.com/a/low_tide_rocks: wet gravelly sand | 2.17 m |
 
-Each is the 2k diffuse shrunk to 512 x 512, its light divided by itself blurred (a Gaussian of 40 texels, wrapping
-round, so the layer still repeats) and scaled back to its mean. All are CC0 (polyhaven.com/license).
+Each is the 2k diffuse (ambientCG's: its 2K-JPG colour map) shrunk to 512 x 512, its light divided by itself blurred (a
+Gaussian of 40 texels, wrapping round, so the layer still repeats) and scaled back to its mean. All are CC0
+(polyhaven.com/license, ambientcg.com/license). ambientCG gives no size for layers 14 to 16: layers 14 and 15 are
+laid with their ripples some 40 cm apart, as large as the larger ripples of a flat (current ripples lie 10 to 15 cm
+apart), so they show at the map's nearest views (the Earth view's look); layer 16 is laid 2.0 m across, as its clods
+and the stones on it are a few centimetres, as the other photographs' of mud.
 
 ## carpets.jpg
 
@@ -68,21 +76,20 @@ fire.jpg`):
 
 ## snags.png
 
-512 x 512 layers of four quarters, each a sprite with its cover, rendered by `bake/sprite.html` as the trees are
-(`node sprites.cjs snags.json OUT burned_tree_photogrammetry dead_trees burned_trunk_lassen old_burned_tree
-old_burnt_tree`, the models downloaded by hand into `assets/sketchfab/<the model's id>/`) and packed by `bake/snags.py`
-(`python3 -I bake/snags.py OUT snags.png ../shaders/lib/snag_sprites.wgsl`, which writes the sprites' table too): six
-sides of a charred standing trunk, two of a stand of dead stems, and fourteen charred stumps (one model from six sides,
+512 x 512 layers, the trunks each a whole layer and the stumps each a quarter of one, each a sprite with its cover,
+rendered by `bake/sprite.html` as the trees are (`node sprites.cjs snags.json OUT burned_tree_photogrammetry
+burned_trunk_lassen old_burned_tree old_burnt_tree`, the models downloaded by hand into `assets/sketchfab/<the model's id>/`) and packed by `bake/snags.py`
+(`python3 -I bake/snags.py OUT snags.png ../shaders/lib/snag_sprites.wgsl`, which writes the sprites' table with each sprite's
+width and foot row too, and sharpens each once): six sides of a charred standing trunk and fourteen charred stumps (one model from six sides,
 cut 0.3 of its height above its foot, two from four sides, cut 0.35 and 0.22, so the ground they were scanned on is
 left out), each with its light scaled to a mean of 0.06 (linear) and its darkest lifted by 0.006: burnt bark in the sun
 reads charcoal grey, as light as the bare trees' bark. Each licensed under CC BY 4.0
 (http://creativecommons.org/licenses/by/4.0/); the sprites are rendered from them (changed: lit, cut at the ground,
-shrunk, their light scaled). Drawn by `shaders/lib/snag.wgsl` among the plants' marks, with the bare twins of the trees of models.png.
+shrunk, sharpened, their light scaled). Drawn by `shaders/lib/snag.wgsl` among the plants' marks, with the bare twins of the trees of models.png.
 
 | sprite | model | author | licence |
 |---|---|---|---|
 | `burned_tree_photogrammetry` | [Burned Tree Photogrammetry](https://sketchfab.com/3d-models/burned-tree-photogrammetry-1dc8bcac00e2433eb645e6c837a8d5b7) | [gino.demurtas](https://sketchfab.com/gino.demurtas) | CC BY 4.0 |
-| `dead_trees` | [Dead Trees](https://sketchfab.com/3d-models/dead-trees-41f9d44a8d8b45549dd6a0c947ca4eba) | [Darklordbroch](https://sketchfab.com/Darklordbroch) | CC BY 4.0 |
 | `burned_trunk_lassen` | [Burned tree trunk - Lassen Volcano Park](https://sketchfab.com/3d-models/burned-tree-trunk-lassen-volcano-park-82f510d9e012414d9aa980bf944efc93) | [David Antalek](https://sketchfab.com/David.Antalek) | CC BY 4.0 |
 | `old_burned_tree` | [Old burned tree](https://sketchfab.com/3d-models/old-burned-tree-f15f10996647483185a04926a33758e6) | [Igor Denisov](https://sketchfab.com/Digor) | CC BY 4.0 |
 | `old_burnt_tree` | [Old Burnt Tree](https://sketchfab.com/3d-models/old-burnt-tree-d1ddd03e8ddc4103a3b4501fed7183fd) | [Beer Knight](https://sketchfab.com/dontshootnow) | CC BY 4.0 |

@@ -914,12 +914,12 @@ fn the_low_basin_under_one_air_node_takes_up_gas_as_one_liquid() {
     let books = Books::now(&w);
     pcore::flow::liquid(&mut w, DT);
     books.assert_within(&w, 1e-9, 1e-9);
-    // Each cell's liquid, mol: what is molten in its node and below its boiling point.
+    // Each cell's liquid, mol, as Flow counts it (`flow::liquid_share`).
     let liquid: Vec<f64> = under
         .iter()
         .map(|&i| {
             let (t, plateau) = w.thaw_node_last(i);
-            (0..w.chem.ns()).filter(|&q| t < w.chem.subs[q].boil).map(|q| w.g(q, i) * w.molten(q, i, t, plateau)).sum()
+            (0..w.chem.ns()).map(|q| w.g(q, i) * pcore::flow::liquid_share(&w, q, i, t, plateau)).sum()
         })
         .collect();
     let mut share: Vec<f64> = under.iter().zip(&liquid).map(|(&i, &l)| w.store.amounts(Class::Ground)[k * n + i] / l).collect();

@@ -8,8 +8,8 @@
 
 // Of each photograph laid as detail (`detail`): its side in the world, m (web/textures/SOURCES.md), and its own stream
 // of noise.
-fn detail_m(t: i32) -> f32 { var m = array<f32, 14>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35); return m[t]; }
-fn detail_noise(t: i32) -> i32 { var k = array<i32, 14>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199); return k[t]; }
+fn detail_m(t: i32) -> f32 { var m = array<f32, PHOTOS>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35, 4.0, 3.0, 2.0, 2.17); return m[t]; }
+fn detail_noise(t: i32) -> i32 { var k = array<i32, PHOTOS>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 185, 186, 187, 188); return k[t]; }
 // The streams of noise of the tiles of cover: their patches' shifts and their seams' waves (`carpet`), each tile its own.
 const CARPET_SHIFTS = 108; const CARPET_WAVES = 110;
 // A photograph's hexagons are `DETAIL_HEX` times its side across, and meet over `DETAIL_EDGE` of their weights.
@@ -64,7 +64,10 @@ fn carpet(c: i32, e: f32) -> vec3f {
 // is laid in hexagons (`hexes`, Mikkelsen 2022), each turned by any angle and shifted by its own draw (a photograph
 // from above has no up), the hexagons about the pixel meeting by their heights (`hex_mix`): a stochastic tiling
 // (Heitz and Neyret 2018), so no repeat shows and the mean stays the photograph's.
-fn detail(t: i32, e: f32) -> vec3f {
+fn detail(t: i32, e: f32) -> vec3f { return detail_turned(t, e, 0.0, 2.0 * PI); }
+// The same, each hexagon turned by its own draw within `spread` radians about a way that swings by up to a half turn
+// along noise `swing_m` m across (0: none), read at the hexagon (a turn is one for all its pixels).
+fn detail_turned(t: i32, e: f32, swing_m: f32, spread: f32) -> vec3f {
   let s = detail_m(t);
   var h = hexes(DETAIL_HEX * s, DETAIL_EDGE);
   let least = hex_least(h);
@@ -73,8 +76,9 @@ fn detail(t: i32, e: f32) -> vec3f {
   for (var k = 0; k < 3; k++) {
     if (h.w[k] < least) { continue; }
     let x = lowbias(h.at[k], detail_noise(t));
-    let turn = 2.0 * PI * f32(x & 1023u) / 1024.0;
-    let r = mat2x2f(cos(turn), sin(turn), -sin(turn), cos(turn));
+    var a = spread * f32(x & 1023u) / 1024.0;
+    if (swing_m > 0.0) { a += PI * noise(vec2f(h.at[k]) * (DETAIL_HEX * s / swing_m), RIPPLE_WAYS).x - 0.5 * spread; }
+    let r = mat2x2f(cos(a), sin(a), -sin(a), cos(a));
     let shift = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
     c[k] = photo(t, lat(r * (1.0 / s), shift).f, r * vec2f(e / s, 0.0), r * vec2f(0.0, e / s)) / mean;
   }
@@ -121,18 +125,30 @@ fn height_of(c: vec3f) -> f32 { return dot(c, LUMA); }
 // The change soil's image i gives (`soil_detail`) to spot p: the tiles of cover of leaf litter, of a shaded floor of
 // ferns, of dry stony soil and of cracked dry mud, the photograph of wet mud; a shore's: its bare sand
 // (`beach_sand`), the tile of sand with its dry tufts and drift, the photographs of rounded pebbles and of dark wet mud
-// (peat's too); and the photographs of bare loam, of cracked clay, of dark soil rich in humus and of damp sand.
-const SOIL_MUD = 4; const SOIL_BEACH = 5; const SOIL_IMAGES = 13;
+// (peat's too); the photographs of bare loam, of cracked clay, of dark soil rich in humus and of damp sand; and a
+// deposit's: a flat of rippled sand, rippled silt, mud under algae and wet gravelly sand.
+const SOIL_CROWNED = 2; const SOIL_MUD = 4; const SOIL_BEACH = 5; const SOIL_DRIFT = 6; const SOIL_PEBBLES = 7;
+const SOIL_DARK_MUD = 8; const SOIL_CLAY = 10;
+const SOIL_WET_SAND = 12; const SOIL_FLAT = 13; const SOIL_SILT = 14; const SOIL_ALGAE = 15; const SOIL_WET_GRAVEL = 16;
+const SOIL_IMAGES = 17;
 fn soil_image(i: i32, p: Spot, wet: f32) -> vec3f {
   if (i == SOIL_MUD) { return detail(MUD_TEX, p.e); }
+  if (i == SOIL_FLAT || i == SOIL_SILT) { return ripples_laid(select(RIPPLE_SILT_TEX, RIPPLE_FLAT_TEX, i == SOIL_FLAT), p.e); }
   if (i == SOIL_BEACH) { return beach_sand(p, wet); }
-  if (i >= 7) {
-    var t = array<i32, 6>(ROUND_PEBBLE_TEX, DARK_MUD_TEX, LOAM_TEX, CLAY_TEX, HUMUS_TEX, WET_SAND_TEX);
-    return detail(t[i - 7], p.e);
+  if (i >= SOIL_PEBBLES) {
+    var t = array<i32, 10>(ROUND_PEBBLE_TEX, DARK_MUD_TEX, LOAM_TEX, CLAY_TEX, HUMUS_TEX, WET_SAND_TEX, -1, -1, ALGAL_MUD_TEX,
+      WET_GRAVEL_TEX);
+    return detail(t[i - SOIL_PEBBLES], p.e);
   }
   var c = array<i32, 7>(LITTER_CARPET, FERN_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, -1, SAND_CARPET);
   return carpet(c[i], p.e);
 }
+
+// Ripples lie in fields whose crests run one way, across the flow that made them: photograph t laid with each hexagon
+// turned within `FLAT_TILT` either way of a way that swings slowly over the ground, along noise `RIPPLE_SWING_M`
+// across of stream `RIPPLE_WAYS` (the page knows no flow over a flat). At e m a pixel.
+const RIPPLE_SWING_M = 40.0; const RIPPLE_WAYS = 184;
+fn ripples_laid(t: i32, e: f32) -> vec3f { return detail_turned(t, e, RIPPLE_SWING_M, 2.0 * FLAT_TILT); }
 
 // A beach's bare sand, soaked to `wet` (0..1): dry sand, and damp sand streaked by the swash where it is soaked past
 // half, the two meeting by their heights over an edge ragged by `SAND_WET_RAG` of noise over `SAND_WET_RAG_M`.
@@ -146,23 +162,26 @@ fn beach_sand(p: Spot, wet: f32) -> vec3f {
   return mix(a, b, height_mix(d, height_of(a), height_of(b)));
 }
 
-// Open ground of coarse grain is sand (the grain's share from `DRIFT_COARSE`, all of it from `DRIFT_COARSE_FULL`): where
-// dry, drifted with its tufts (the tile of a shore's sand above the swash; wind moves bare sand, not a loam that holds
-// together, Bagnold 1941), else damp. Ground soaked from `MUD_WET` (all of it from `MUD_WET_FULL`) is mud, but sand.
-const DRIFT_COARSE = 0.45; const DRIFT_COARSE_FULL = 0.8; const MUD_WET = 0.8; const MUD_WET_FULL = 0.95;
+// Open sand (colour.wgsl `sandy_of`) is, where dry, drifted with its tufts (the tile of a shore's sand above the swash;
+// wind moves bare sand, not a loam that holds together, Bagnold 1941), else damp. Ground soaked from `MUD_WET` (all of
+// it from `MUD_WET_FULL`) is mud, but sand.
+const MUD_WET = 0.8; const MUD_WET_FULL = 0.95;
 // Cracked ground is the photograph of cracked clay as far as its fine grain's share passes `CLAY_PLATES` (all of it
 // from `CLAY_PLATES_FULL`), else the tile of cracked mud with its stones.
 const CLAY_PLATES = 0.25; const CLAY_PLATES_FULL = 0.5;
+// A deposit's ground is soaked from `LAID_SOAKED.x`, all of it from `.y` (`soaked`): wet sand and silt keep their
+// ripples, dry ones crumble and crack.
+const LAID_SOAKED = vec2f(0.6, 0.85);
 // The change the images give soil of spot p: under crowns its litter (a floor of ferns where wet); in the open peat
 // (colour.wgsl `peat_of`) dark wet mud, wet mud where soaked, sand where its grain is coarse, dark humus as far as its
 // organic matter darkens it (style.wgsl `humus`), cracked where driest as far as its grain shrinks (crag.wgsl
-// `shrinks`), the rest stony soil and loam by their coarse grain; on a shore its sand, pebbles or mud (colour.wgsl
-// `shore_grain`), the sand bare up to the storms' swash and with its tufts and drift above; and channels' pebbles
-// where they lie.
+// `shrinks`), the rest stony soil and loam by their coarse grain; a deposit in the open (`laid_images`); on a shore
+// its sand, pebbles or mud (colour.wgsl `shore_grain`), the mud of a fresh deposit rippled silt, the sand bare up to
+// the storms' swash and with its tufts and drift above; and channels' pebbles where they lie.
 fn soil_detail(p: Spot) -> vec3f {
   let canopy = min(p.canopy, 1.0);
   let dry = ease(0.45, 0.1, p.wet);
-  let sandy = ease(DRIFT_COARSE, DRIFT_COARSE_FULL, p.grain.x);
+  let sandy = sandy_of(p.grain);
   let cracked = ease(0.25, 0.05, p.wet) * shrinks(p.grain) * (1.0 - sandy);
   let peat = peat_of(p);
   let open = 1.0 - canopy;
@@ -172,7 +191,8 @@ fn soil_detail(p: Spot) -> vec3f {
   let clay = ease(CLAY_PLATES, CLAY_PLATES_FULL, p.grain.y);
   var w = array<f32, SOIL_IMAGES>(canopy * (1.0 - p.wet), canopy * p.wet, loam * (1.0 - cracked) * p.grain.x,
     loam * cracked * (1.0 - clay), mud, 0.0, soil * sandy * dry, 0.0, open * peat, loam * (1.0 - cracked) * (1.0 - p.grain.x),
-    loam * cracked * clay, soil * (1.0 - sandy) * humus(p.grain.z), soil * sandy * (1.0 - dry));
+    loam * cracked * clay, soil * (1.0 - sandy) * humus(p.grain.z), soil * sandy * (1.0 - dry), 0.0, 0.0, 0.0, 0.0);
+  laid_images(&w, p, open * (1.0 - peat), sandy);
   let sand = max(p.sand, 0.0);
   var wet = 0.0;
   if (sand > 0.0) {
@@ -180,10 +200,12 @@ fn soil_detail(p: Spot) -> vec3f {
     let grain = shore_grain(p);
     let fine = sand * (1.0 - grain.x - grain.y);
     let bare = 1.0 - ease(0.0, STORM_RUN_UP * run_up(waves_of(p.sea, p.fetch), p.slope / earth.look.x), p.over);
-    w[SOIL_BEACH] = fine * bare;
-    w[6] += fine * (1.0 - bare);
-    w[7] = sand * grain.x;
-    w[8] += sand * grain.y;
+    let fresh_mud = laid_fresh_share(p);
+    w[SOIL_BEACH] += fine * bare;
+    w[SOIL_DRIFT] += fine * (1.0 - bare);
+    w[SOIL_PEBBLES] += sand * grain.x;
+    w[SOIL_DARK_MUD] += sand * grain.y * (1.0 - fresh_mud);
+    w[SOIL_SILT] += sand * grain.y * fresh_mud;
     wet = grain.z;
   }
   var left = 0.0;
@@ -214,6 +236,39 @@ fn soil_detail(p: Spot) -> vec3f {
   // A channel's gravel and cobbles where the bed's stones lie (things.wgsl).
   out = bed_photos(out, p);
   return out;
+}
+
+// The images of a deposit (colour.wgsl `laid_share`) on the share `open` of spot p's ground in the open and not peat,
+// of coarse grain as far as `sandy`, added to the soil's weights `w`: the weights of that ground give way to them, the
+// litter under crowns (the first `SOIL_CROWNED`) and the peat's mud keep theirs. Fresh (`laid_fresh`)
+// and soaked (`LAID_SOAKED`): a flat of rippled sand, or rippled silt, or wet gravelly sand where its channel moves
+// stones (`Spot.moved`, from `BAR_SAND_STONE`); fresh and dry: bare sand (`beach_sand`), its fine grain cracked into
+// plates, its gravel bare pebbles; old and soaked: its sand damp, its fine grain mud under a film of algae (algae coat
+// mud that stays wet and still); old and dry, the soil as it is.
+fn laid_images(w: ptr<function, array<f32, SOIL_IMAGES>>, p: Spot, open: f32, sandy: f32) {
+  let laid = laid_share(p) * open;
+  if (laid <= 0.0) { return; }
+  let fresh = laid_fresh(p);
+  let soak = ease(LAID_SOAKED.x, LAID_SOAKED.y, soaked(p));
+  let gravel = ease(0.0, BAR_SAND_STONE, p.moved);
+  let sand = laid * (1.0 - gravel) * sandy;
+  let fine = laid * (1.0 - gravel) * (1.0 - sandy);
+  var add = array<f32, SOIL_IMAGES>();
+  add[SOIL_FLAT] = sand * fresh * soak;
+  add[SOIL_SILT] = fine * fresh * soak;
+  add[SOIL_WET_GRAVEL] = laid * gravel * soak;
+  add[SOIL_BEACH] = sand * fresh * (1.0 - soak);
+  add[SOIL_CLAY] = fine * fresh * (1.0 - soak);
+  add[SOIL_PEBBLES] = laid * gravel * fresh * (1.0 - soak);
+  add[SOIL_WET_SAND] = sand * (1.0 - fresh) * soak;
+  add[SOIL_ALGAE] = fine * (1.0 - fresh) * soak;
+  var taken = 0.0;
+  for (var i = 0; i < SOIL_IMAGES; i++) { taken += add[i]; }
+  let left = 1.0 - taken / max(open, 1e-6);
+  for (var i = SOIL_CROWNED; i < SOIL_IMAGES; i++) {
+    if (i != SOIL_DARK_MUD) { (*w)[i] *= left; }
+    (*w)[i] += add[i];
+  }
 }
 
 // The change the photograph of mossy rock gives bare bed, at e m a pixel.

@@ -38,6 +38,22 @@
       "years": ["A", "B", "SA"],
       "years_view": 0.2
     },
+    "sediment": {
+      "world": "seed1",
+      "views": [8.0, 2.0, 0.5],
+      "cost_views": [2.0],
+      "scenes": [
+        { "name": "mouth_e", "about": "the east river's mouth at the sea (s1_mouth)", "at": [29.494, 16.374] },
+        { "name": "mouth_e_close", "about": "close: the shore beside the east river's mouth", "at": [29.4905, 16.3672], "views": [0.1] },
+        { "name": "mouth_e2", "about": "a second east river's mouth at the sea, under trees", "at": [29.10, 16.90] },
+        { "name": "ria_s", "about": "a river at the head of a drowned valley, south", "at": [16.9, 25.47] },
+        { "name": "ria_sw", "about": "a river at the head of a drowned valley, south-west", "at": [14.2, 25.35] },
+        { "name": "ria_sw_close", "about": "close: the shallow mouth of scene ria_sw", "at": [14.183, 25.338], "views": [0.1] },
+        { "name": "inlet", "about": "a stream's inlet into the big lake, west shore", "at": [14.8, 17.0] },
+        { "name": "inlet2", "about": "the north-west stream's inlet into the big lake", "at": [14.05, 15.25] },
+        { "name": "valley", "about": "a valley floor at a confluence", "at": [14.05, 22.85] }
+      ]
+    },
     "swamp": {
       "world": "swamp",
       "views": [1.0, 0.25, 0.1],

@@ -158,7 +158,8 @@ impl Ground {
 
     /// The rock of each of the terrain's samples, row by row in four planes of four 16-bit floats a sample: the depth
     /// of its loose ground, m, the largest stone its channel moves, m, and its channel's links; the reflectance of its
-    /// bed's make, of `colours` one a make; the texture of its loose ground; and its pores (`rock::rock`).
+    /// bed's make, of `colours` one a make; the texture of its loose ground; and its pores and the deposit on it
+    /// (`rock::rock`).
     pub fn rock(&self, colours: &[[f64; 3]]) -> Vec<u16> {
         rock::rock(&self.reaches(), colours, &self.grain)
     }
