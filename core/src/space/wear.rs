@@ -101,8 +101,10 @@ impl Bed<'_> {
 
 /// The volumes the wear and the high stand move, m³: what they take off the land (cut, crept into the open low ground,
 /// and the high stand's load, `space::stand`), what settles in the closed basins, what lies on the open low ground's
-/// shelf at the low stand (`space::shelf`) and what the high stand lays at the mouths, and what leaves the map where a
-/// shelf fills the open low ground; the first is the sum of the others.
+/// shelf at the low stand (`space::shelf`) and what the high stand's lobes lay at the mouths, what leaves the map where
+/// a shelf fills the open low ground, and the load the lobes found no room for (it lies at the mouth, not laid out); the
+/// first is the sum of the others. Apart from them, what the catchments held back of what the yield law asked of them
+/// (`held`: their ground stood no higher than their outlets or their mouths' tops; not taken).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Books {
     pub taken: f64,
@@ -110,6 +112,8 @@ pub struct Books {
     pub shelf: f64,
     pub high: f64,
     pub beyond: f64,
+    pub unlaid: f64,
+    pub held: f64,
 }
 
 /// What a stage marks on each sample of its grid: the load it passes to the open low ground, m³ per m² (`offshore`),
@@ -176,7 +180,7 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, body
     let age: Vec<f64> = (0..g.n()).map(|k| {
         let under = (loose[k] - high[k]).max(0.0);
         let old = age(under, ((settled[k] - high[k]).clamp(0.0, under), last_years), lowers[k]);
-        if loose[k] > 0.0 { (high[k] * high_age[k] + under * old) / loose[k] } else { old }
+        if high[k] > 0.0 { (high[k] * high_age[k] + under * old) / loose[k] } else { old }
     }).collect();
     // The liquid rises to its stand: what lies under it and joins the open low ground is of it.
     assert!(h.iter().chain(&age).chain(&loose).all(|x| x.is_finite()), "the start law leaves a height, a depth or an age that is not finite");

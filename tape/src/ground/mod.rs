@@ -88,7 +88,7 @@ impl Ground {
         let shore = shore::Shore::new(&samples);
         let at = stems::points(&samples, &shore);
         let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
-        let grain = pcore::soil::textures(&samples, &terrain.makes, phys, gravity);
+        let grain = pcore::soil::textures(&samples, &terrain.makes, gravity);
         let strips = wetness::strips(&samples, phys);
         let hill = wetness::hill(&samples, &strips);
         Ground { seed, map, terrain, lat, samples, law, at, bends, shore, grain, strips, hill }

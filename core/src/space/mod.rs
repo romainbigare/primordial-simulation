@@ -16,6 +16,8 @@ pub mod square;
 pub mod samples;
 mod shelf;
 pub(crate) mod delta;
+mod fill;
+mod hollows;
 mod slopes;
 mod stand;
 mod strata;

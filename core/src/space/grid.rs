@@ -5,6 +5,9 @@
 
 use super::below::{lean_quarters, limited, Near};
 
+/// The sweeps of the distance from the edge of open samples round a globe (`Grid::edge_distance`): forward and back,
+/// twice, so a distance carries across the seam both ways.
+const EDGE_SWEEPS: usize = 4;
 /// The steps to the 8 neighbours of a sample, rows and columns.
 const STEPS: [(i64, i64); 8] = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)];
 
@@ -123,19 +126,16 @@ impl Grid {
         (0..n).map(|k| if ways[k] > 0 { sum[k] / ways[k] as f64 } else { 0.0 }).collect()
     }
 
-    /// Of each sample of `open`, how far it lies from the nearest sample not open, m, along the grid's 8 ways (two
-    /// sweeps of a chamfer distance, Borgefors 1986); none on the samples not open.
+    /// Of each sample of `open`, how far it lies from the nearest sample not open, m, along the grid's 8 ways: sweeps of
+    /// a chamfer distance (Borgefors 1986), forward and back, each sample from all its neighbours as they stand, so a
+    /// distance carries round a globe's seam too (`EDGE_SWEEPS`); none on the samples not open.
     pub(super) fn edge_distance(&self, open: &[bool]) -> Vec<f64> {
         let n = self.n();
         let mut d: Vec<f64> = (0..n).map(|k| if open[k] { f64::INFINITY } else { 0.0 }).collect();
-        for pass in 0..2 {
-            let order: Box<dyn Iterator<Item = usize>> = if pass == 0 { Box::new(0..n) } else { Box::new((0..n).rev()) };
-            for k in order {
-                if !open[k] {
-                    continue;
-                }
-                let best = self.around(k).filter(|&(j, _)| if pass == 0 { j < k } else { j > k }).map(|(j, len)| d[j] + len).fold(d[k], f64::min);
-                d[k] = best;
+        for pass in 0..if self.wrap { EDGE_SWEEPS } else { 2 } {
+            let order: Box<dyn Iterator<Item = usize>> = if pass % 2 == 0 { Box::new(0..n) } else { Box::new((0..n).rev()) };
+            for k in order.filter(|&k| open[k]) {
+                d[k] = self.around(k).map(|(j, len)| d[j] + len).fold(d[k], f64::min);
             }
         }
         d

@@ -75,7 +75,8 @@ fn reached(w: &World, i: usize) -> Vec<usize> {
 }
 
 /// What a body holds over its pass leaves over it and arrives in the bodies down its way in the same month: liquid
-/// poured on a cell of a body with a pass (to a body in other cells, so what the cells hold tells the two apart), far
+/// poured on a cell of a body with a pass (to a body in other cells, so what the cells hold tells the two apart; bodies
+/// that share cells with the body their pass leads to are not covered), far
 /// more than the body holds under its pass, leaves it at its pass's level,
 /// and all the rest of what was poured is in the bodies down its way and the bodies the cell's land drains to
 /// (`reached`, and theirs down their ways; against the same world with none poured), within a thousandth: the other

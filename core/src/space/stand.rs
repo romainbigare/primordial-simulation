@@ -6,13 +6,14 @@
 //! the sample its liquid runs to or the top of its mouth's lobe, and the load builds a lobe at the mouth
 //! (`space::delta`).
 
-use super::delta::{exposures, lobes, top, Mouth, Liquid};
+use super::delta::{exposures, lobes, top, Liquid, Mouth};
+use super::fill::offset;
 use super::drain::{draws, flood, open_low, starts, Flood};
 use super::grid::Grid;
 use super::network::NONE;
 use super::slopes::ROCK_KG_M3;
 use super::wear::{Books, STAND_M};
-use crate::units::T_SURF;
+use crate::units::{KG_PER_MT, M2_PER_KM2, M3_PER_KM3, M_PER_KM, T_SURF};
 
 /// The years the liquid stands at its level before the world starts, the channels filling what it drowned.
 const HIGH_STAND_YEARS: f64 = 6.0e3;
@@ -25,11 +26,6 @@ const YIELD_A_EXP: f64 = 0.5;
 const YIELD_T0_K: f64 = 273.15;
 /// The liquid that runs off a catchment in a year, m (its discharge over its area).
 const RUNOFF_M: f64 = 0.3;
-/// The units of the yield law: m² in a km², m³ in a km³, m in a km, kg in a Mt.
-const M2_PER_KM2: f64 = 1e6;
-const M3_PER_KM3: f64 = 1e9;
-const M_PER_KM: f64 = 1e3;
-const KG_PER_MT: f64 = 1e9;
 /// The samples of a channel a mouth's heading is read along, upstream of its mouth.
 const HEADING_SAMPLES: usize = 4;
 
@@ -86,8 +82,7 @@ fn heading(g: &Grid, c: &Catchments, (k, entry): (usize, usize)) -> [f64; 2] {
         }
         from = c.up[from] as usize;
     }
-    let (r0, c0, r1, c1) = ((from / g.across) as f64, (from % g.across) as f64, (entry / g.across) as f64, (entry % g.across) as f64);
-    let v = [(c1 - c0) * g.dx[entry / g.across], (r1 - r0) * g.dy];
+    let v = offset(g, from, entry);
     let len = v[0].hypot(v[1]);
     if len > 0.0 { [v[0] / len, v[1] / len] } else { [0.0; 2] }
 }
@@ -111,18 +106,20 @@ pub(super) fn high_stand(seed: u64, g: &Grid, (h, loose): (&mut [f64], &mut [f64
     ends.iter().for_each(|&k| load[k] = yields(c.area[k], (c.high[k] - STAND_M).max(0.0)) * HIGH_STAND_YEARS);
     let mouth = mouths_of(&f, &c, &open);
     let given = take(g, h, (&f, &c, &mouth), (lowers, &load, &mouth_top));
+    books.held += load.iter().sum::<f64>() - given.iter().sum::<f64>();
     let highest = ends.iter().map(|&k| mouth_top(k)).fold(STAND_M, f64::max);
     let behind: Vec<bool> = (0..n).map(|k| c.free[k] && h[k] < highest).collect();
     let mut mouths: Vec<Mouth> = ends.iter().filter(|&&k| given[k] > 0.0).map(|&k| {
         let entry = f.to[k] as usize;
-        Mouth { entry, load: given[k], drains: drains[entry], heading: heading(g, &c, (k, entry)) }
+        Mouth { entry, load: given[k], top: mouth_top(k), heading: heading(g, &c, (k, entry)) }
     }).collect();
     mouths.sort_by(|a, b| b.load.total_cmp(&a.load).then(a.entry.cmp(&b.entry)));
     let taken: f64 = given.iter().sum();
-    let liquid = Liquid::new(g, (&open, &exposed), STAND_M, channel);
-    let (laid, on, age) = lobes(g, (h, loose), (&liquid, &behind), &mouths, HIGH_STAND_YEARS);
-    (books.taken, books.high, books.beyond) = (books.taken + taken, laid, books.beyond + taken - laid);
-    (on, age)
+    let liquid = Liquid::new(g, (&open, &exposed), STAND_M);
+    let laid = lobes(g, (h, loose), (&liquid, &behind), &mouths, HIGH_STAND_YEARS);
+    (books.taken, books.high, books.unlaid) = (books.taken + taken, laid.volume, laid.unlaid);
+    books.beyond += taken - laid.volume - laid.unlaid;
+    (laid.on, laid.age)
 }
 
 /// Of each sample of the catchments `c` of flood `f`, the mouth its liquid leaves the land by into the open low ground
