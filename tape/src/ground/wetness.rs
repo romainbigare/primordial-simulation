@@ -3,20 +3,10 @@
 //! and β the slope of the samples' ground there (`Grid::slope`, no less than real ground's over a sample). A texel finer
 //! than the samples takes the index blended between the centres of the four samples about it; a coarser one the mean
 //! of the samples it covers. So the index is a function of the place alone, the same in every tile and at every zoom,
-//! and the one a shell shares each cell's soil liquid by (`table`).
+//! and the one a shell shares each cell's soil liquid by (`table`): the samples' own (`space::samples::sample_index`).
 
-use pcore::inside::Grid;
 use pcore::space::samples::Samples;
-use pcore::space::square::Square;
 use pcore::space::terrain::SAMPLE_DEPTH;
-
-/// The wetness index of each of `s`, the samples of `map`, row by row.
-pub fn sample_index(map: &Square, s: &Samples) -> Vec<f64> {
-    let dy = map.length(SAMPLE_DEPTH);
-    let grid = Grid::new(s.across, s.down, dy, vec![dy; s.down]);
-    let own = vec![dy * dy; s.h.len()];
-    Grid::wetness_index(&s.up, &own, &grid.slope(&s.h))
-}
 
 /// The wetness index `twi` of samples `s` at the texels of `depth` from column `x0` and row `y0`, `wide` x `high` of them
 /// (on the map), row by row: finer than the samples blended between the centres of the four about a texel (the weights
