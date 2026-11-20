@@ -222,6 +222,13 @@ const BAR_SAND_STONE = 0.03;
 // on (the sign of `Tiled.sd` there); and the half width the channel law gives its bed, m (`banks_of`).
 struct Channel { bed: f32, water: f32, middle: f32, mean: f32, deep: f32, bend: f32, outer: f32, law: f32 }
 fn channel_at(g: Tiled, q: f32) -> Channel { return channel_of(g, q, banks_of(q), through_band(g, 0.0)); }
+// The height of ground `g` over the nearest water, standing or running, m: over the standing liquid's level `over`
+// (land.wgsl `over_ponds`), or over channel `ch`'s water as its banks rise from its edge, as far as the channel shows
+// (`shown`, 0..1).
+fn over_water(g: Tiled, ch: Channel, over: f32, shown: f32) -> f32 {
+  if (ch.water <= 0.0) { return over; }
+  return mix(over, min(over, max(abs(g.sd - ch.middle) - ch.water, 0.0) * max(length(g.slope), ch.mean / max(ch.water, 1e-6))), shown);
+}
 // (The same, of a channel whose bed the law makes `banks` m half wide, `mouth` of the way through the band of shallows
 // of the liquid it runs into.)
 fn channel_of(g: Tiled, q: f32, banks: f32, mouth: f32) -> Channel {

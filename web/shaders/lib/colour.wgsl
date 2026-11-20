@@ -47,9 +47,6 @@ const EXAGGERATE = 6.0;
 const BEACH_SLOPE = 0.15; const ROCK_SLOPE = 0.35; const BEACH_LOOSE_M = 0.5; const LAKE_BEACH = 0.3; const BEACH_DEEP_M = 4.0;
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
-// Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
-// height, m (about half a metre in a loam; Bear 1972).
-const FRINGE_M = 0.5;
 // Soaked bare ground reflects this much less than dry (Lobell and Asner 2002: about half); a film of liquid starts to
 // shine on it from this share of soaking on.
 const WET_DARK = 0.5;
