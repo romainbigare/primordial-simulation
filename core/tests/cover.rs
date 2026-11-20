@@ -349,11 +349,11 @@ fn seeds_take_the_slot_in_deficit() {
     for k in 0..cfg.variety {
         let mut v = g;
         v[FROST] -= 3.0 * step * k as f32;
-        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &cfg, (1.0, 1.0), &mut [0.0; cover::SLOTS]), cover::Landed::In));
+        assert!(matches!(cover::lodge(&mut c, &mm, &seeds(v, k as u32, 0.5), &cfg, (1.0, 1.0, 0.0), &mut [0.0; cover::SLOTS]), cover::Landed::In));
     }
     (c.net[1], c.net[2]) = (-1.0, -3.0);
     let (held, worst) = (c.clone(), c.mol[2]);
-    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &cfg, (1.0, 1.0), &mut [0.0; cover::SLOTS]) else { panic!("the seeds took no slot in deficit") };
+    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, &seeds(g, 9, 0.01), &cfg, (1.0, 1.0, 0.0), &mut [0.0; cover::SLOTS]) else { panic!("the seeds took no slot in deficit") };
     assert_eq!(died, worst, "the worst in deficit gave way");
     assert_eq!(c.root[2], 9, "the new kind holds the slot");
     for x in [0, 1, 3] {
@@ -612,7 +612,7 @@ fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_
     let kept: Vec<f64> = (0..was.sizes(&w.cfg.phys, &mm, x).held).map(|g| c.plants[x][g] / was.plants[x][g]).collect();
     assert!(kept.iter().all(|k| (k / kept[0] - 1.0).abs() < 1e-9 && *k < 1.0 - 0.5 * was.airless[x] as f64), "each group kept {kept:?} of its plants");
     let soak = cover::soak(&w, &p, shore, w.g(p.liquid, shore)).1;
-    let foot = cover::footing(&w, shore, c.genes[x][cover::GAS] as f64, w.cfg.phys.root_least, &cover::Soak { breath: 0.0, ..soak }, Some(c.line[x] as f64));
+    let foot = cover::footing(&w, shore, &c.genes[x], w.cfg.phys.root_least, &cover::Soak { breath: 0.0, ..soak }, Some((c.line[x] as f64, c.strip[x] as f64)));
     assert!(foot.airless == 0.0, "after the line rose, {} of the stand is still under the liquid past its reach", foot.airless);
     // The liquid leaves: its roots get the gas everywhere, the ground below its line is free.
     let (line, large) = (c.line[x], c.sizes(&w.cfg.phys, &mm, x));
@@ -629,12 +629,12 @@ fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_
     // `Shore::found`), all of it without the gas, and dies whole, drowned, once its store is spent.
     let deep = |j: usize| {
         let s = cover::Soak { breath: 0.0, ..cover::soak(&w, &p, j, w.g(p.liquid, j)).1 };
-        let f = cover::footing(&w, j, TREE.genes[cover::GAS] as f64, w.cfg.phys.root_least, &s, None);
+        let f = cover::footing(&w, j, &TREE.genes, w.cfg.phys.root_least, &s, None);
         f.share > 0.0 && f.airless == 1.0 && s.loose > 0.0
     };
     let under = (0..area.len()).find(|&j| j != shore && deep(j)).expect("a cell all under the liquid");
     // A line over all the ground (the ground worn below it) holds the cell's highest ground.
-    let over = cover::footing(&w, under, TREE.genes[cover::GAS] as f64, w.cfg.phys.root_least, &cover::soak(&w, &p, under, w.g(p.liquid, under)).1, Some(1e6));
+    let over = cover::footing(&w, under, &TREE.genes, w.cfg.phys.root_least, &cover::soak(&w, &p, under, w.g(p.liquid, under)).1, Some((1e6, 0.0)));
     assert!(over.share > 0.0 && over.work.is_finite(), "a line over all the ground: {over:?}");
     let mut c = w.life.cover(shore).clone();
     let x = c.held().next().expect("the stand");

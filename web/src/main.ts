@@ -289,7 +289,9 @@ $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"
 /** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the saved world `from`, or a new one
  * of the seed, size and variety from the page. */
 async function startLive(from: ArrayBuffer | null): Promise<void> {
-  const wasm = await fetch('ew.wasm').then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`ew.wasm: ${r.status}`))));
+  // (Asked of the server each time, never from the browser's cache: a page of one build on the core of another reads
+  // layers the core does not make, and draws nothing.)
+  const wasm = await fetch('ew.wasm', { cache: 'no-cache' }).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`ew.wasm: ${r.status}`))));
   coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
   $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';

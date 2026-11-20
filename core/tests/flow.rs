@@ -199,11 +199,14 @@ fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
 /// air's step, which melts more of it, and after the liquid's step, whose meltwater runs off down the slope and leaves
 /// the ice (laws.md 1.2): what the world reads as molten and standing is what the heat holds, within the share the heat
 /// of the lifts and falls of the matter booked after moves (its meltwater falls at most from the snow's top to its bed's
-/// top or its lowest ground, the lower: g × molar mass × that fall / fusion enthalpy), and none stands there.
+/// top or its lowest ground, the lower: g × molar mass × that fall / fusion enthalpy), and none stands there. The runoff
+/// picks up no load here: what it picks up thins the loose ground after the liquid has run off, and the pores it took
+/// leave their liquid standing until the next pass (laws.md 1.3).
 #[test]
 fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
     const SNOW_M: f64 = 2.0;
     let (mut w, (i, _)) = worldgen::testkit::island_with(3, pair);
+    w.cfg.carry = 0.0;
     worldgen::testkit::flatten(&mut w, i);
     let snow = SNOW_M * w.mesh.cells().area()[i] / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, snow);
@@ -737,15 +740,14 @@ fn the_starting_ground_creeps_at_a_measured_diffusivity() {
     assert!(d > 2.7e-3 && d < 3.3e-3, "{d} m2/yr");
 }
 
-/// The two rates of running liquid are the measured yield: the sediment it carries to the low ground, about 15 to 20
-/// Gt a year, is 7e9 m³, and the potential energy of the runoff, 4e13 m³ a year falling 840 m, is 3.4e20 J: 2e-11 m³
-/// per J. A bed of the starting rock breaks at the same.
+/// A bed of the starting rock breaks at the measured yield of running liquid: the sediment it carries to the low ground,
+/// about 15 to 20 Gt a year, is 7e9 m³, and the potential energy of the runoff, 4e13 m³ a year falling 840 m, is
+/// 3.4e20 J: 2e-11 m³ per J. (What it picks up, `carry`, is held to the start's yield law by the ranges test.)
 #[test]
-fn liquid_carries_and_breaks_at_the_measured_yield_per_joule() {
+fn a_bed_breaks_at_the_measured_yield_per_joule() {
     let w = worldgen::testkit::squares(1, 16, 16);
     let yield_per_j = 7e9 / (4e13 * 840.0 * 1000.0 * 9.81);
-    println!("measured yield {yield_per_j:.2e} m3/J; carry {:.1e}, wear {:.1e}", w.cfg.carry, w.cfg.wear);
-    assert!((w.cfg.carry / yield_per_j - 1.0).abs() < 0.2, "carry {}", w.cfg.carry);
+    println!("measured yield {yield_per_j:.2e} m3/J; wear {:.1e}", w.cfg.wear);
     // The bed breaks at wear / strength for each substance, by its share of the bed's volume.
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[0]);
     let cell = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");

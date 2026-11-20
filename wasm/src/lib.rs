@@ -248,15 +248,6 @@ pub extern "C" fn discharge() -> *const u8 {
     give(bytes)
 }
 
-/// What the liquid of each cell's main channel carried in the last month, g/m³, and the depth of load that settled on
-/// the cell in it, m (`Counters::load_month`), two f32 little-endian a cell in the cells' order; none before the first
-/// month.
-#[no_mangle]
-pub extern "C" fn load() -> *const u8 {
-    let bytes = with(|l| l.world.counts.load_month.iter().flat_map(|c| c.iter().flat_map(|v| v.to_le_bytes())).collect());
-    give(bytes)
-}
-
 /// Where load came into a body of standing liquid in the last month (`Counters::plumes`): each the terrain's sample
 /// (u32) and how much, kg/s (f32), little-endian.
 #[no_mangle]

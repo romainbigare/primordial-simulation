@@ -60,6 +60,42 @@ pub(super) fn land_drains(w: &World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     super::parts::solve_nodes(w, s, &drained, (false, true));
 }
 
+/// What leaves each land cell (`World::is_land`) for the cells that are not land in a liquid step, mol, less what comes
+/// back (`World::off_land`): under the surface (`under`) and in the runoff's pass (`runoff`).
+pub(super) struct OffLand {
+    land: Vec<bool>,
+    pub(super) mol: Vec<f64>,
+}
+
+impl OffLand {
+    /// None yet, over the cells of `w`.
+    pub(super) fn new(w: &World) -> OffLand {
+        let n = w.mesh.cells().n();
+        OffLand { land: (0..n).map(|i| w.is_land(i)).collect(), mol: vec![0.0; n] }
+    }
+    /// What `mol` moves from cell `a` to cell `b`, between land and not.
+    pub(super) fn moved(&mut self, (a, b): (usize, usize), mol: f64) {
+        match (self.land[a], self.land[b]) {
+            (true, false) => self.mol[a] += mol,
+            (false, true) => self.mol[b] -= mol,
+            _ => (),
+        }
+    }
+    /// What `mol` leaves cell `i` for outside the map: what leaves the land, where it is land.
+    pub(super) fn left(&mut self, i: usize, mol: f64) {
+        if self.land[i] {
+            self.mol[i] += mol;
+        }
+    }
+    /// What crosses `c` (`Carried`, mol of each of `ks` substances per link, + from `a` to `b`).
+    fn crossed(&mut self, c: &Carried, ks: usize) {
+        let links = c.a.len();
+        for l in 0..links {
+            self.moved((c.a[l] as usize, c.b[l] as usize), (0..ks).map(|q| c.mol[q * links + l]).sum());
+        }
+    }
+}
+
 /// The heat of `mol` of the liquids `liq` leaving ground node `i`, at the node's temperature now, J (`liquid_heat_at`).
 pub(super) fn liquid_heat(w: &World, s: &Scratch, liq: &[usize], i: usize, mol: &[f64]) -> f64 {
     liquid_heat_at(s, liq, t_now(w, s, i), mol)
@@ -74,7 +110,7 @@ pub(super) fn liquid_heat_at(s: &Scratch, liq: &[usize], t: f64, mol: &[f64]) ->
 /// In each layer liquid flows between cells by Darcy's law (`pore_flow`, `deep::flow`), from the ground the laws under
 /// the surface reach (`liquid::soil_share`); what a store holds over its room comes up (`come_up`). A move takes its share of every liquid with
 /// what is dissolved and its heat; its fall heats where it goes (`potential`).
-pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt: f64) {
+pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt: f64, off: &mut OffLand) {
     let (n, p, cells) = (w.mesh.cells().n(), w.cfg.phys, w.mesh.cells());
     let (mob, held) = (mobile(w, s, liq, tmin), stores(w, s, tmin));
     let border: Vec<usize> = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0 && reached(s, cells.a()[l] as usize, cells.b()[l] as usize) > 0.0).collect();
@@ -89,6 +125,8 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
         LinkFlux { class: [Class::Deep; 2], a: &in_stores.a, b: &in_stores.b, ks: &deep16, mol: &in_stores.mol, heat: &in_stores.heat },
     ];
     book(w, s, &fluxes, Leaves::Land);
+    off.crossed(&pores, liq.len());
+    off.crossed(&in_stores, deep.len());
     let (held, area) = (stores(w, s, tmin), w.mesh.cells().area());
     let full = |i: usize| p.bed_porosity * p.bed_depth * area[i];
     let over: Vec<f64> = held.iter().enumerate().map(|(i, &v)| if v > full(i) { (v - full(i)) / v } else { 0.0 }).collect();
