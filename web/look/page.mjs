@@ -84,9 +84,16 @@ export async function open(browser, base, site, world, { px = 400 } = {}) {
   return page;
 }
 
-/** Wait until the page stands on a world and its ground is made. */
+/** Wait until the page stands on a world and its ground is made; throws the page's message where the core refused the
+ * world (a snapshot of another format, say) and the page says why. */
 export async function opened(page, ms = 300000) {
-  await page.waitForFunction(() => { const e = window.__ew; return e && e.world && e.land && e.land.tiles.rock; }, null, { timeout: ms, polling: 250 });
+  const done = await page.waitForFunction(() => {
+    const e = window.__ew, msg = document.getElementById('msg');
+    if (e && !e.world && msg && !msg.hidden && /saved world|refused/i.test(msg.textContent)) return { refused: msg.textContent };
+    return e && e.world && e.land && e.land.tiles.rock ? { refused: null } : null;
+  }, null, { timeout: ms, polling: 250 });
+  const { refused } = await done.jsonValue();
+  if (refused) throw new Error(`The page refused the world: ${refused}`);
 }
 
 /** Open the saved world at `url` in the running page (`__ew.open`) and wait for it. */

@@ -147,7 +147,7 @@ host.onmessage = async e => {
       if (!playing) postFrame('frame');
     }
   } catch (err) {
-    host.postMessage({ kind: 'error', text: String(err) }, []);
+    host.postMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) }, []);
   }
 };
 
