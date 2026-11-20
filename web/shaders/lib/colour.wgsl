@@ -152,8 +152,14 @@ struct Shaded { rgb: vec3f, m: f32, kind: u32 }
 // stand out of it (its cover, as far as
 // liquid over their roots leaves them on the bed, draw.wgsl `stands_in`; the cover's field holds how the snow buries them and how the bed
 // holds them). The share of it that is bare, its map class, the share of its bare part that takes the soil's tint
-// (`soil`: a beach's sand keeps its own colour), and its loose ground's grain (`Spot.grain`).
-struct Ground { rgb: vec3f, bare: f32, kind: u32, warm: f32, grain: vec4f }
+// (`soil`: a beach's sand keeps its own colour), its loose ground's grain (`Spot.grain`), and the share of it whose
+// soil is seen from above: its bare part, and `SWARD_GAP` of its low plants, the gaps between their leaves.
+struct Ground { rgb: vec3f, bare: f32, kind: u32, warm: f32, grain: vec4f, seen: f32 }
+// The share of the ground under low plants seen from above through the gaps between their leaves: exp(-0.5 LAI) for a
+// sward of leaf area index 2 (Monsi and Saeki 1953). Crowns of trees hide their floor (`Spot.canopy`).
+const SWARD_GAP = 0.35;
+// The share of the ground of spot p, whose share `plants` is plants, seen from above (`Ground.seen`).
+fn seen_of(p: Spot, plants: f32) -> f32 { return 1.0 - plants + SWARD_GAP * max(plants - min(p.canopy, 1.0), 0.0); }
 // The share of the plants of spot p that the waves strip where their swash soaks the ground `soak` (`swash_of`; all
 // of it under the liquid): as much as its waves are high against the sea's.
 fn waves_strip(p: Spot, soak: f32) -> f32 { return min(soak / SWASH_DRY, 1.0) * waves_of(p.sea, p.fetch).x / SEA_WAVE.x; }
@@ -169,7 +175,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // swash bares its beach, a lake's small waves leave its plants standing to the water.
   let stripped = waves_strip(p, p.swash.x);
   let plants = p.cover.a * stands_in(p.depth, 0.0) * (1.0 - stripped);
-  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0, p.grain); }
+  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0, p.grain, seen_of(p, 1.0)); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
   // In the style a beach of sand is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`); of pebbles,
@@ -199,6 +205,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   g.rgb = mix(g.rgb, SNOW * select(vec3f(1.0), snow_texture(p.e), styled()), snow);
   // Snow is not bare soil: it takes neither the soil's warmth nor its darkening when wet (`soil`).
   g.bare *= 1.0 - snow;
+  g.seen = seen_of(p, plants) * (1.0 - snow);
   if (snow > 0.5) { g.kind = ICE; }
   // Stones over it (stone.wgsl): scree, on bare bed, and in a channel; none on a beach.
   if (styled()) {
@@ -268,9 +275,10 @@ fn true_soaked(truth: vec3f, p: Spot) -> vec3f {
 }
 
 // Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part the darker the more soaked (and in the
-// style tinted by its grain as far as it takes the tint, style.wgsl `bare_tint`).
+// style tinted by its grain as far as it takes the tint, and darkened by its organic matter as far as its soil is seen,
+// style.wgsl `bare_tint`).
 fn soil(g: Ground, s: f32, lit: f32) -> vec3f {
-  let tint = select(vec3f(1.0), bare_tint(g.bare * g.warm, g.grain), styled());
+  let tint = select(vec3f(1.0), bare_tint(g.bare * g.warm, g.seen * g.warm, g.grain), styled());
   return lit_by(g.rgb * (1.0 - WET_DARK * s * g.bare) * tint, lit);
 }
 
@@ -299,7 +307,7 @@ fn reads_ground(p: Spot) -> bool {
 // snow over the liquid, without it under the liquid (frozen liquid lies on the surface); black where it is not read.
 // Each pixel's colours read it at one place in the code (land.wgsl `fs`), so its rock and stones are compiled once.
 fn ground_for(p: Spot, running: bool) -> Ground {
-  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE, 1.0, p.grain); }
+  if (!running && !reads_ground(p)) { return Ground(vec3f(0.0), 1.0, BARE, 1.0, p.grain, 1.0); }
   return ground_of(p, select(p.snow, 0.0, p.depth > 0.0 || running));
 }
 

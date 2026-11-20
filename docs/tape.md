@@ -50,8 +50,8 @@ size), `channel_w` and `channel_d` (the width and the depth of the cell's channe
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
 `filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
 the texture of its loose ground (`World::soil`, `soil::Texture`): `coarse` and `fine` (the shares of coarse and of fine
-particles, 0..1) and `organic` (the share of organic matter of its solid volume, 0 to 0.02, which the page's Earth view darkens its
-bare ground by), `conduct` (its pores' conductivity, m/s),
+particles, 0..1) and `organic` (the share of organic matter of its solid volume, log from 0.0003 to 0.05, which the page's
+Earth view darkens its bare ground by), `conduct` (its pores' conductivity, m/s),
 `avail` (the liquid its loose ground holds for roots when full, m), `roots` (the share of that it holds now,
 `Pores::available`), `rises` (what rises from it less what condenses on it, `World::evap`) and `sheds` (its rain less
 that, mol/m²/s, lin from -0.004 to 0.004: what it passes on to runoff and the ground below), and of its ground
