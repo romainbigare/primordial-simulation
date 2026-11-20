@@ -28,6 +28,11 @@ pub const SORB_T: f64 = 299.85;
 pub const SORB_HIGHEST: f64 = 0.99;
 /// How long a fine particle of the remains flames, s per m of its width: 8 minutes an inch (Anderson 1969).
 pub const RESIDENCE_PER_M: f64 = 8.0 * 60.0 / 0.0254;
+/// How long a fine particle of the remains flames, s: `RESIDENCE_PER_M` × `fine_d` (Anderson 1969).
+pub fn residence(ph: &crate::Physics) -> f64 {
+    RESIDENCE_PER_M * ph.fine_d
+}
+
 /// Byram's (1959) flame: L = `FLAME_K` I^`FLAME_EXP` m, I the intensity in kW a m of front.
 pub const FLAME_K: f64 = 0.0775;
 pub const FLAME_EXP: f64 = 0.46;
@@ -39,16 +44,18 @@ pub const W_PER_KW: f64 = 1e3;
 /// Work a cell's bed takes to find, in instructions, for the pool (`par::map_n`).
 const BED_WORK: usize = 2_000;
 
-/// What flames burnt and killed in the cover (`Counters::flame`), kg (plants: a count): the remains on the ground; the
+/// What flames burnt and killed in the cover (`Counters::flame`), kg (plants: a count): the remains on the ground that
+/// flamed and those that smouldered after them; the
 /// soft part of the cover that stood in the flame; the leaves under the scorch height that died; what else died of the
 /// plants whose whole crown stood under it (their walls and fuel); of that their walls; and those plants.
-pub const FLOWS: [&str; 6] = ["remains", "living", "scorched", "killed", "killed_walls", "plants"];
+pub const FLOWS: [&str; 7] = ["remains", "smouldered", "living", "scorched", "killed", "killed_walls", "plants"];
 pub const REMAINS: usize = 0;
-pub const LIVING: usize = 1;
-pub const SCORCHED: usize = 2;
-pub const KILLED: usize = 3;
-pub const KILLED_WALLS: usize = 4;
-pub const PLANTS: usize = 5;
+pub const SMOULDERED: usize = 1;
+pub const LIVING: usize = 2;
+pub const SCORCHED: usize = 3;
+pub const KILLED: usize = 4;
+pub const KILLED_WALLS: usize = 5;
+pub const PLANTS: usize = 6;
 
 /// What flames did on a cell in a month, for the tape: the share of its land they burnt; their mean length, m; the
 /// solids their burning left on its ground and the gas it gave the air, kg a m² of its land.
@@ -60,10 +67,9 @@ pub struct Flamed {
     pub air: f32,
 }
 
-/// The month a cell that never burnt last burnt in (`Counters::burnt_at`).
-pub const NEVER: u64 = u64::MAX;
-/// The most months since a cell last burnt that the tape tells apart (`since`).
-pub const AGE_MOST: u64 = 120;
+/// The most months since a cell's land last burnt that the tape tells apart (`since`): land that never burnt counts as
+/// this old.
+pub const AGE_MOST: f32 = 120.0;
 
 /// The flames' month, after the cover's (`life::month`): each land cell's bed (`bed`), the share of each cell that burns
 /// (`shares`) and the burning of it (`burn`), on the chunks of `life` only where some burns; what each cell's flames did
@@ -87,20 +93,25 @@ pub fn month(w: &mut World) {
 }
 
 /// What each cell's flames did in the month (`Counters::flamed`) becomes its last month's (`Counters::flame_month`,
-/// one a cell of `n`), the share it burnt that month of the year's (`burnt_months`), and the month it last burnt in
-/// (`burnt_at`), for the tape.
+/// one a cell of `n`) and the share it burnt that month of the year's (`burnt_months`); its land's mean months since it
+/// last burnt (`burnt_age`) grows by the month, at most `AGE_MOST`, and its share burnt starts again from none. For
+/// the tape.
 fn tally(w: &mut World, n: usize) {
-    let (months, now) = (w.cfg.months_per_year as usize, w.month());
-    let of_year = (now % months as u64) as usize;
+    let months = w.cfg.months_per_year as usize;
+    let of_year = (w.month() % months as u64) as usize;
     let c = &mut w.counts;
     c.flame_month.clear();
     c.flame_month.resize(n, Flamed::default());
     c.burnt_months.resize(n * months, 0.0);
-    c.burnt_at.resize(n, NEVER);
-    (0..n).for_each(|i| c.burnt_months[i * months + of_year] = 0.0);
+    c.burnt_age.resize(n, AGE_MOST);
+    for i in 0..n {
+        c.burnt_months[i * months + of_year] = 0.0;
+        c.burnt_age[i] = (c.burnt_age[i] + 1.0).min(AGE_MOST);
+    }
     for (i, f) in std::mem::take(&mut c.flamed) {
         let i = i as usize;
-        (c.flame_month[i], c.burnt_months[i * months + of_year], c.burnt_at[i]) = (f, f.share, now);
+        (c.flame_month[i], c.burnt_months[i * months + of_year]) = (f, f.share);
+        c.burnt_age[i] *= 1.0 - f.share;
     }
 }
 
@@ -110,9 +121,8 @@ pub fn burnt_year(w: &World, i: usize) -> f64 {
     w.counts.burnt_months.get(i * m..(i + 1) * m).map_or(0.0, |v| v.iter().map(|&f| f as f64).sum())
 }
 
-/// The whole months from the end of the month cell `i` last burnt in to now, at most `AGE_MOST` (that where it never
-/// burnt).
+/// The mean of cell `i`'s land's whole months since it last burnt, each at most `AGE_MOST` (land that never burnt
+/// counts as that old): with no draws a cell burns a share of its land, which starts again from none.
 pub fn since(w: &World, i: usize) -> f64 {
-    let at = w.counts.burnt_at.get(i).copied().unwrap_or(NEVER);
-    if at == NEVER { AGE_MOST as f64 } else { w.month().saturating_sub(at + 1).min(AGE_MOST) as f64 }
+    w.counts.burnt_age.get(i).copied().unwrap_or(AGE_MOST) as f64
 }

@@ -1179,23 +1179,31 @@ balance of the bed, not from the reactions' rates, which are those of rot (real 
 the next fuel; Rothermel 1972). Three stages, each number with one writer:
 - **The bed** (`flame::bed`, each land cell its own, in parallel): its load w, kg a m² of land; the share of its ground
   it covers, 1 − e^(−a w), a the capture area its leaves held per kg dry (its cover's `LEAF` gene over the dry share
-  of living tissue, its slots' mean by built cover; none without cover). The air in the bed lies between the air near
-  the ground (`World::near_ground`, its vapour over saturation at the ground's temperature) and saturation by the share
-  of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the share by which the ground's
-  evaporation draws its liquid; Manabe 1969): wet ground keeps its remains wet. Their moisture, liquid
-  per kg dry, is the sorption curve `sorb_scale` (−ln(1 − h))^`sorb_power` at that relative vapour h (Nelson 2000;
-  h at most 0.99). A burning kg frees h_c (its parts' burning heats by mass); lighting a kg takes Q = c (`t_light` − T)
-  + M (c_l (T_boil − T) + L_v), all from the chemistry's substances. It **carries a flame** where its remains cover
-  more than the site-percolation threshold of the square lattice (`flame::CARRY_SHARE`, 0.5927) and the share
-  `flux_ahead` of h_c lights the next kg: M below the moisture of extinction (`flux_ahead` h_c − c (`t_light` − T)) /
-  (c_l (T_boil − T) + L_v), 0.18 for the remains of chemistry 0 at 295 K.
+  of living tissue, its slots' mean by built cover; none without cover). **The layer** (`flame::bed`, `Layer`): vapour diffuses through
+  it, so in a steady state its relative vapour h runs in a straight line from its top, the air near the ground
+  (`World::near_ground`, its vapour over saturation at the ground's temperature), to its bottom, between that and
+  saturation by the share s of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the
+  share by which the ground's evaporation draws its liquid; Manabe 1969). At each depth it holds the sorption curve
+  `sorb_scale` (−ln(1 − h))^`sorb_power` per kg dry (Nelson 2000; h at most 0.99), and as duff, drawing liquid up from
+  the ground, `duff_hold` × s × the share of its depth over that. A burning kg frees h_c (its parts' burning heats by mass); lighting a kg takes Q = c (`t_light` −
+  T) + M (c_l (T_boil − T) + L_v), all from the chemistry's substances, M what the curve holds halfway down its part that
+  flames. The part that **flames** is its top down to where what the curve holds reaches the moisture of extinction (`flux_ahead` h_c − c
+  (`t_light` − T)) / (c_l (T_boil − T) + L_v), where the share `flux_ahead` of h_c still lights the next kg (0.18 for
+  the remains of chemistry 0 at 295 K): fine dead fuel dries with the air; the part that **smoulders** after the flame
+  goes on down to where all its liquid, the duff's with it, reaches `smoulder_moist`, the most liquid at which organic
+  matter smoulders (dry peat burns through, the bottom of a layer on moist ground does not). It **carries a
+  flame** where its remains cover more than the site-percolation threshold of the square lattice
+  (`flame::CARRY_SHARE`, 0.5927) and the load that flames is at least the **least load** σ (`t_burn`⁴ − T⁴) τ / (h_c −
+  Q), τ the flaming time of its particles (below): a bed thinner than that frees less heat while it flames than its top
+  sends to the open sky at the flaming bed's temperature, so its flame cools and goes out (0.15 kg/m² of dry remains at
+  295 K; real grass fires stop under 0.1 to 0.2).
 - **Reach** (`flame::shares`, serial, over the cells that carry a flame, in the order of the cells): a flame lit runs
   for `front_life` at its bed's speed R (below), so it covers a disc of radius R × `front_life`, no larger than the
   remains joined to it: cells that share an edge join into a region of A m² of covered ground (each cell's land times
   its cover). A point of a cell is reached by the flames lit within that disc: it expects λ = `strikes` × the disc's
   area × the month's share of a year of them, and with no draw the cell burns the share f = (1 − e^(−λ)) × its cover.
-- **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): its remains burn on f; a flame
-  through the bed moves at R = `flux_ahead` h_c δ / (τ Q), δ = w / `litter_rho` its depth, τ = 8 minutes an inch of
+- **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the part of its remains
+  that flames burns, and after it the part that smoulders; a flame through the part that flames moves at R = `flux_ahead` h_c δ / (τ Q), δ = w / `litter_rho` its depth, τ = 8 minutes an inch of
   `fine_d` its particles' flaming time (Anderson 1969); its intensity is I = h_c w R (Byram 1959), its flame
   0.0775 I^0.46 m long (Byram 1959), and its plume kills leaves up to 0.1483 I^(2/3) m (Van Wagner 1973), I in kW a m.
   Of each slot on f: the soft part of its crown (`contract::crown`, spread evenly over it) in the flame burns by its
@@ -1204,15 +1212,20 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   the fuel by their share of the slot's built cover), and of the plants that live the body matter between the flame and
   the scorch height dies to the ground: a young plant must outgrow the flame between fires (Bond and Midgley 2001). Seeds lying survive. Gases go to the cell's
   aside node and so to the air, what is not a gas (the liquid of the reactions, the nitrogen mineral of body matter, as
-  ash) to its ground, through the cell's view as the cover's books do (`life::book`, the oxidising gas within the cell's
+  ash) to its ground, where the soil keeps it on its exchange sites or the liquid washes it away (4). The mineral the
+  burning gives first breaks down as the chemistry breaks it down hot (`flame::break_down`: each reaction that takes it
+  alone, reaction 11 in chemistry 0, runs over the share 1 − e^(−k τ) of it, k its rate constant at `t_burn`): at 1,100
+  K all of it, so the fixed element of what burns goes to the air as its gas (Raison 1979: from 500 °C nearly all of
+  it is lost); through the cell's view as the cover's books do (`life::book`, the oxidising gas within the cell's
   share of its air, `Books::room`); the heat the burning frees goes to the air node over the cell. What it burnt and
   killed is counted (`Counters::flame`, `flame_air`, `cover_lost` by `life::FLAME`, the budget's `burnt`), and what the
   flames did on each cell in the month (`flame::Flamed`: the share burnt, the flame's length, the minerals left and
-  the gas given, per m² of land), the share burnt in each month of the last year and the month it last burnt, for the
-  tape (`Counters::flame_month`, `burnt_months`, `burnt_at`).
-- **Known limits:** litter and humus are one pool, burnt alike on f; all the fixed element stays in the ash; the liquid
-  the remains hold is not boiled off into the air (the heat balance counts it); a flame needs no least load (the
-  balance has no losses), so remains a few tens of g a m² carry one where they cover the ground; the scorch height has
+  the gas given, per m² of land), the share burnt in each month of the last year and its land's mean months since it last
+  burnt, for the tape (`Counters::flame_month`, `burnt_months`, `burnt_age`).
+- **Known limits:** the slow organic matter held on the mineral particles (14) does not burn; the smouldering part
+  burns in the month with no depth or speed of its own; the liquid the remains hold is not boiled off into the air
+  (the heat balance counts it); the plants of chemistry 0 hold no element that stays solid but the fixed one, so
+  the ash is the fixed element's mineral that the flame did not break down; the scorch height has
   no term for the air's temperature or wind; no crown fire; no bark; every year is the same, so return times come
   from the fuel's regrowth and the strikes alone.
 
