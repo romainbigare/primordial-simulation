@@ -9,16 +9,16 @@ use crate::World;
 /// is, times the rate constant at its temperature, in the share of it whose pores hold gas (laws.md 2.1, 2.3), with
 /// all the gas it needs.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Ground {
+pub struct Holdings {
     pub litter: f64,
     pub slow: f64,
     pub minerals: [f64; 2],
     pub rot: f64,
 }
 
-/// What the ground of each cell of `w` holds (`Ground`), by Flow's state of it (`flow::means`); none before Flow first
+/// What the ground of each cell of `w` holds (`Holdings`), by Flow's state of it (`flow::means`); none before Flow first
 /// built it.
-pub fn grounds(w: &World) -> Option<Vec<Ground>> {
+pub fn holdings(w: &World) -> Option<Vec<Holdings>> {
     let n = w.mesh.cells().n();
     let means = crate::flow::means(w, &(0..n).collect::<Vec<usize>>())?;
     let parts = crate::life::Parts::of(&w.chem);
@@ -36,6 +36,6 @@ pub fn grounds(w: &World) -> Option<Vec<Ground>> {
         let aired = if m.stands > 0.0 { 1.0 } else { 1.0 - w.pores(i).full(m.pore / m.pores.max(1e-9)) };
         let moist = w.cfg.phys.wetness(depth);
         let rot = frame.map_or(0.0, |rx| crate::change::open_catalyst(rx.open, moist) * rx.arrhenius(w.t_ground_last(i)) * aired * year);
-        Ground { litter, slow, minerals: [mineral * dissolved, mineral * (1.0 - dissolved)], rot }
+        Holdings { litter, slow, minerals: [mineral * dissolved, mineral * (1.0 - dissolved)], rot }
     }).collect())
 }

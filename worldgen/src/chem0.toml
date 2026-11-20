@@ -223,7 +223,7 @@ hf = -986
 rupture = 120
 shear = 60
 
-# 14: the slow organic matter that rotting body matter leaves (reaction 14), half its carbon and all its nitrogen,
+# 14: the slow organic matter that rotting body matter leaves (reaction 14), half its element 1 and all its element 2,
 # held on the faces of fine particles (`bound`): docs/numbers.md, "substance 14".
 [[s]] # 14
 e = [78,59,6,42,0,0]
@@ -354,7 +354,7 @@ k = 5.7e8
 ea = 9000
 open = 5
 
-# 15: the slow organic matter rots, 25 times slower than body matter, its nitrogen back as the mineral 12:
+# 15: the slow organic matter rots, 25 times slower than body matter, its element 2 back as the mineral 12:
 # docs/numbers.md, "reaction 15".
 [[r]] # 15
 i = [[14,1],[2,59]]

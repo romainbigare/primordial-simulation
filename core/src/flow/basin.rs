@@ -208,10 +208,10 @@ pub(super) fn phases(s: &Scratch, i: usize) -> u64 {
 /// each air block (`mix_heat`), and the cells that mixed find their state again.
 pub(super) fn mix(w: &mut World, s: &mut Scratch) {
     let cells = std::mem::take(&mut s.basin.cells);
-    cells_state(w, s, &cells);
+    cells_state(w, s, &cells, false);
     s.basin.cells = cells;
     let mixed = mix_heat(w, s);
-    cells_state(w, s, &mixed);
+    cells_state(w, s, &mixed, false);
 }
 
 /// Each body under each air block mixes its heat in a month: the liquid of its cells that mixes as one (`mixes`), with

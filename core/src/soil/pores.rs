@@ -71,7 +71,7 @@ impl Pores {
     }
 
     /// The liquid loose ground `depth` m deep holds for roots, between the wilting point and field capacity, m (its
-    /// available water capacity).
+    /// available capacity).
     pub fn for_roots(&self, depth: f64) -> f64 {
         (self.field - self.wilt) * self.porosity * depth
     }

@@ -196,8 +196,9 @@ fn empty(c: &mut Cover, (p, mm, e, n): (&Parts, &[f64; NP], &[f64; NP], usize), 
 
 /// The slots of cover `c` in `order` (cell `i`, that reads `a`) grow over `dt` (`grow_slot`), each as its slot `s` in
 /// the month says, whether it pays (`pays`) and whether it is in season (`season`), its parts `p` holding `e` J a mol.
-/// Its minerals in the ground are shared out over the slots by what each would take (`build::wants`): the slots' roots
-/// share the cell's ground, and where it is short each gets its share of what it holds, whatever slots hold them. Where
+/// Its minerals in the ground are shared out over the slots (`shares`): where the ground holds what they would take
+/// (`build::wants`) each gets its share of all of it by that; where it is short, by their fine roots, as roots compete
+/// below ground in proportion to their size (Casper and Jackson 1997), none more than it would take. Where
 /// one more kg would not pay a slot builds living cover no more, but walls alone while its plants lack them; out of
 /// season it builds nothing: its fuel is its store, kept for the leaves it builds anew. What a slot builds goes to its
 /// groups of plants by `Cover::growth`.
@@ -209,15 +210,51 @@ fn grow(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, pays, season
     let shared = order.len() > 1;
     let wants: Vec<_> = order.iter().zip(&plans).filter(|_| shared).map(|(&x, k)| k.as_ref().map_or([0.0; MAX_SUBSTANCES], |k| super::build::wants(w, (c, k), p, x, &s[x]))).collect();
     let ns = w.chem.ns();
-    let asked: Vec<f64> = (0..ns).map(|k| wants.iter().map(|d| d[k]).sum()).collect();
+    let roots: Vec<f64> = order.iter().map(|&x| s[x].drunk / super::upkeep::uptake(&w.cfg.phys, &c.genes[x])).collect();
+    let mut got = vec![[0.0; MAX_SUBSTANCES]; order.len()];
+    for k in (0..ns).filter(|_| shared) {
+        let want: Vec<f64> = wants.iter().map(|d| d[k]).collect();
+        shares(a.ground[k], &want, &roots).into_iter().enumerate().for_each(|(q, g)| got[q][k] = g);
+    }
     for (q, (&x, plan)) in order.iter().zip(&plans).enumerate() {
-        let mut ground = if shared { [0.0; MAX_SUBSTANCES] } else { a.ground };
-        if shared {
-            let want = &wants[q];
-            (0..ns).filter(|&k| want[k] > 0.0 && asked[k] > 0.0).for_each(|k| ground[k] = a.ground[k] * (want[k] / asked[k]));
-        }
+        let mut ground = if shared { got[q] } else { a.ground };
         grow_slot(w, c, (p, e), x, (&s[x], pays[x], season[x], plan.as_ref(), &growth[x]), (i, a.tick, a.t, dt), &mut ground, (b, counts));
     }
+}
+
+/// The shares of `held` mol of a mineral of the slots that would take `want` of it, their fine roots `roots`: where
+/// `held` covers all they would take, each its share of it by what it would take; where it is short, by their roots,
+/// none more than it would take, what that leaves shared again over the others by their roots (all by what they would
+/// take where no slot has roots).
+fn shares(held: f64, want: &[f64], roots: &[f64]) -> Vec<f64> {
+    let asked: f64 = want.iter().sum();
+    let mut got = vec![0.0; want.len()];
+    if asked <= 0.0 {
+        return got;
+    }
+    if asked <= held || roots.iter().all(|&r| r <= 0.0) {
+        return want.iter().map(|&x| held * x / asked).collect();
+    }
+    // By roots: each slot short of what it would take gets its share of what is left; those its share fills drop out.
+    let mut left = held;
+    let mut open: Vec<usize> = (0..want.len()).filter(|&q| want[q] > 0.0).collect();
+    while left > 0.0 && !open.is_empty() {
+        let r: f64 = open.iter().map(|&q| roots[q]).sum();
+        if r <= 0.0 {
+            break;
+        }
+        let full: Vec<usize> = open.iter().copied().filter(|&q| got[q] + left * roots[q] / r >= want[q]).collect();
+        if full.is_empty() {
+            open.iter().for_each(|&q| got[q] += left * roots[q] / r);
+            break;
+        }
+        for &q in &full {
+            left -= want[q] - got[q];
+            got[q] = want[q];
+        }
+        open.retain(|q| !full.contains(q));
+    }
+    got
 }
 
 /// Slot `x` of cover `c` (cell `i`), its parts `p` holding `e` J a mol, in season builds from its fuel and its share
