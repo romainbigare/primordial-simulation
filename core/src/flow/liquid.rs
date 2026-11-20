@@ -6,15 +6,16 @@
 use super::{drain::{springs, under}, land::{cells_state, wet, NONE}, potential::apply, range, runoff::surface, Scratch};
 use crate::{store::{Class, LinkFlux}, World};
 
-/// The mobile liquid of every ground node: of each liquid `liq[q]`, `mol[q * n + i]` (its liquid share; all of a
-/// dissolved gas), and its volume `vol[i]`, m³ (dissolved gas adds none).
+/// The mobile liquid of every ground node: of each liquid `liq[q]`, `mol[q * n + i]` (its liquid share, `land::wet`,
+/// which leaves what the exchange sites hold of a mineral; all of a dissolved gas), and its volume `vol[i]`, m³
+/// (dissolved gas adds none).
 pub(super) struct Mobile {
     pub(super) mol: Vec<f64>,
     pub(super) vol: Vec<f64>,
 }
 
 /// The mobile liquid of the ground nodes where `on(i)` (none elsewhere), of the liquids `liq`; what boils below the
-/// coldest node, `tmin`, is gas; of a mineral, the share that stays dissolved (`held_off`).
+/// coldest node, `tmin`, is gas.
 pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl Fn(usize) -> bool) -> Mobile {
     let n = w.mesh.cells().n();
     let mut m = Mobile { mol: vec![0.0; liq.len() * n], vol: vec![0.0; n] };
@@ -26,16 +27,7 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl 
             m.vol[i] += if gas { 0.0 } else { a * s.sp[k].v[1] };
         }
     }
-    for (q, _) in liq.iter().enumerate().filter(|p| w.chem.is_mineral(*p.1)) {
-        (0..n).for_each(|i| m.mol[q * n + i] *= held_off(w, i, m.vol[i]));
-    }
     m
-}
-
-/// The share of a mineral in ground node `i` holding `vol` m³ of liquid that stays dissolved, which moves with the
-/// liquid: the rest sits on the exchange sites of its loose ground (`soil::dissolved`).
-pub(super) fn held_off(w: &World, i: usize, vol: f64) -> f64 {
-    crate::soil::dissolved(w.soil[i].holds, vol)
 }
 
 /// Book `fluxes` through the store, and bring the ground nodes' state up to date for what changed (`Scratch::note`;

@@ -20,22 +20,28 @@ pub(super) fn melted(s: &Scratch, k: usize, i: usize) -> bool {
     s.latent[i].molten >> k & 1 == 1
 }
 
-/// Liquid share of substance `k` in ground node `i`.
+/// Liquid share of substance `k` in ground node `i` (`Sp::liquid`).
 #[inline]
 pub(super) fn wet(s: &Scratch, k: usize, i: usize) -> f64 {
-    if s.state.tg[i] < s.sp[k].boil { molten(s, k, i) } else { 0.0 }
+    s.sp[k].liquid(s.state.tg[i], molten(s, k, i), s.state.dissolved[i])
 }
 
-/// Rise of the solid surface and of the head of a ground node for `m` mol of a substance (negative: fall).
+/// Liquid share of substance `k` in ground node `i` by what is at or over its melting point (`melted`, `Sp::liquid`):
+/// the share of what comes and goes that its surface takes as liquid (`rise`).
 #[inline]
-pub(super) fn rise(p: &Sp, t: f64, liq: bool, m: f64, area: f64) -> [f64; 2] {
+pub(super) fn wet_now(s: &Scratch, k: usize, i: usize) -> f64 {
+    s.sp[k].liquid(s.state.tg[i], melted(s, k, i) as u8 as f64, s.state.dissolved[i])
+}
+
+/// Rise of the solid surface and of the head of a ground node for `m` mol of a substance (negative: fall), of which the
+/// share `liq` is liquid and the rest solid.
+#[inline]
+pub(super) fn rise(p: &Sp, t: f64, liq: f64, m: f64, area: f64) -> [f64; 2] {
     if t >= p.boil {
         [0.0; 2]
-    } else if !liq {
-        let d = m * p.v[0] / area;
-        [d, d]
     } else {
-        [0.0, m * p.v[1] / area]
+        let d = m * (1.0 - liq) * p.v[0] / area;
+        [d, d + m * liq * p.v[1] / area]
     }
 }
 
@@ -54,7 +60,7 @@ impl Scratch {
     #[inline]
     pub(super) fn note(&mut self, k: usize, i: usize, m: f64, area: f64) {
         self.hold(k, i, m);
-        let d = rise(&self.sp[k], self.state.tg[i], melted(self, k, i), m, area);
+        let d = rise(&self.sp[k], self.state.tg[i], wet_now(self, k, i), m, area);
         lift(self, i, d);
     }
     /// `note` but for the surface: for a gas dissolved in the liquid, which takes no room.
@@ -75,6 +81,16 @@ impl Scratch {
 #[inline]
 pub(super) fn boil_off(p: &Sp, cap: f64, t: f64) -> f64 {
     cap.max(1.0) * (t - p.boil) / (p.cp * (t - p.boil) + p.lv)
+}
+
+/// The share of the minerals of growth in ground node `i` that stays dissolved (`State::dissolved`): what the exchange
+/// sites of its loose ground leave in the liquid of its other substances (`soil::dissolved`), at its temperature and
+/// phases from its amounts and heat now (`World::thaw`), so a build at the same time finds the same share.
+fn dissolved(w: &World, s: &Scratch, i: usize) -> f64 {
+    let (n, (t, on)) = (w.mesh.cells().n(), w.thaw(i));
+    let liquids = s.state.loose.iter().filter(|&&k| !s.sp[k].mineral && t < s.sp[k].boil);
+    let vol: f64 = liquids.map(|&k| w.store.amounts(Class::Ground)[k * n + i] * w.molten(k, i, t, on) * s.sp[k].v[1]).sum();
+    crate::soil::dissolved(w.soil[i].holds, vol)
 }
 
 /// Solid amount of `k` in ground node `i`, mol.
@@ -98,9 +114,13 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
 /// far too hot or cold) and its temperature by its energy alone (`steady`); a node off its plateaus whose temperature
 /// left the span between them, or that is on one, is found anew, and one whose surface moved (`moved`) gets a new
 /// surface (`parts::solve_nodes`, with `moving` as it says), in parallel with `threads`. A full build finds every node
-/// anew, the bodies of standing liquid (`basin::find`) and the gases that dissolve in the month (`air::henry`).
+/// anew, with the share of the minerals the exchange sites leave dissolved (`dissolved`), the bodies of standing liquid
+/// (`basin::find`) and the gases that dissolve in the month (`air::henry`).
 pub(super) fn ground_state(w: &World, s: &mut Scratch, (full, moving): (bool, bool)) {
     let n = w.mesh.cells().n();
+    if full {
+        s.state.dissolved = crate::par::map_n(n, crate::par::UNCOUNTED, |i| dissolved(w, s, i));
+    }
     let caps = capacities(w, s, 0..n);
     let mut anew = Vec::new();
     for (i, &cap) in caps.iter().enumerate() {
@@ -117,8 +137,12 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, (full, moving): (bool, bo
 }
 
 /// The state of the ground nodes `cells` alone brought up to date, as `ground_state` does it; with `all`, each of them,
-/// as a node whose pores changed (`flow::new_pores`), and the bodies found again over them.
+/// as a node whose pores changed (`flow::new_pores`), with the share its exchange sites leave dissolved (`dissolved`),
+/// and the bodies found again over them.
 pub(super) fn cells_state(w: &World, s: &mut Scratch, cells: &[u32], all: bool) {
+    if all {
+        cells.iter().for_each(|&i| s.state.dissolved[i as usize] = dissolved(w, s, i as usize));
+    }
     let caps = capacities(w, s, cells.iter().map(|&i| i as usize));
     let mut anew = Vec::new();
     for (&i, &cap) in cells.iter().zip(&caps) {
@@ -252,7 +276,7 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
         for (i, x) in kt.iter_mut().enumerate() {
             let a = w.store.amounts(Class::Ground)[k * n + i];
             if a > 0.0 && on[i] {
-                *x += a * ((1.0 - molten(s, k, i)) * p.v[0] + wet(s, k, i) * p.v[1]) * p.cond / cells.area()[i];
+                *x += a * p.volume(s.state.tg[i], molten(s, k, i), s.state.dissolved[i]) * p.cond / cells.area()[i];
             }
         }
     }
@@ -286,8 +310,8 @@ fn surface_of(w: &World, s: &Scratch, i: usize, t: f64, molten: impl Fn(usize) -
 
 /// The layers of the share `part` of the area of ground node `i` holding the share `ground` of its bed and its fixed
 /// solids (1 and 1: the node; a part of a mixed cell, `parts`) at temperature `t` with amounts `amt(k)`, of which the share `molten(k)`
-/// is molten: the volume and volume × reflectance of each of [soft solid, liquid, loose solid] top down, m³; its solid
-/// surface, m; and of its soft cover the heat resistance, m² K/W, and the melting point, K: its solids' melting points
+/// is molten (of it liquid its share by `Sp::liquid`): the volume and volume × reflectance of each of [soft solid,
+/// liquid, loose solid] top down, m³; its solid surface, m (with what the exchange sites hold); and of its soft cover the heat resistance, m² K/W, and the melting point, K: its solids' melting points
 /// `melt(k)` (lowered by what is dissolved, `Chemistry::melt_in`), a mean by volume; infinite with no cover.
 pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64), t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64, melt: impl Fn(usize) -> f64) -> ([f64; 6], f64, [f64; 2]) {
     let (area, fix) = (w.mesh.cells().area()[i] * part, s.state.fix[i].map(|v| v * ground));
@@ -298,12 +322,16 @@ pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64
         if a <= 0.0 || t >= p.boil {
             continue;
         }
-        let liq = molten(k);
-        let vs = a * (1.0 - liq) * p.v[0];
+        let (m, liq) = (molten(k), p.liquid(t, molten(k), s.state.dissolved[i]));
+        let vs = a * (1.0 - m) * p.v[0];
         let o = if t > p.soft { 0 } else { 4 };
         (l[o], l[o + 1]) = (l[o] + vs, l[o + 1] + vs * p.refl[0]);
         (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
         z += vs / area;
+        // What the exchange sites hold of a molten mineral lies in the solid surface: no cover, and no pores.
+        if m > liq {
+            z += a * (m - liq) * p.v[0] / area;
+        }
         if o == 0 {
             (cover[0], cover[1]) = (cover[0] + vs / area / p.cond, cover[1] + vs * melt(k));
         }

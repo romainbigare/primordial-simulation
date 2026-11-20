@@ -145,7 +145,7 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
         scratch::refresh(w, &mut s);
         // A new world's ground nodes, before its first step: no plateau, no clouds.
         let st = &mut s.state;
-        (st.tg, st.pk, st.phi, st.cloud, st.parts) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()], vec![None; n]);
+        (st.tg, st.pk, st.phi, st.cloud, st.parts, st.dissolved) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![[0.0; 2]; w.mesh.level(AIR).n()], vec![None; n], vec![0.0; n]);
     }
     let build = s.cap.len() != n;
     if s.lifts.is_none() && !fresh && (moving || build) {
@@ -197,6 +197,12 @@ pub fn chain(w: &mut World, on: bool) {
 /// Lowest and highest of `v`.
 fn range(v: &[f64]) -> (f64, f64) {
     v.iter().fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)))
+}
+
+/// The share of the minerals of growth in ground node `i` that stays dissolved in its liquid, the rest held on the
+/// exchange sites of its loose ground, as Flow's last build of the state of its ground found it (`State::dissolved`).
+pub(crate) fn dissolved(w: &World, i: usize) -> f64 {
+    w.scratch.state.dissolved[i]
 }
 
 /// Is cell `i` land (its solid surface above 0 m, as Flow's state has it)? Creep and heat conducted sideways act only on

@@ -19,8 +19,8 @@ pub(super) fn conductance(w: &World, s: &Scratch, i: usize, p: &Parts, f: &[Foun
         let share = p.share(q);
         let mut kt = s.state.bed[i].cond * w.cfg.skin_m;
         for &k in &s.state.loose {
-            let (sp, m) = (s.sp[k], if f[q].th.t < s.sp[k].boil { f[q].th.molten(k) } else { 0.0 });
-            kt += p.amt[k][q] * ((1.0 - f[q].th.molten(k)) * sp.v[0] + m * sp.v[1]) * sp.cond / (area * share);
+            let sp = s.sp[k];
+            kt += p.amt[k][q] * sp.volume(f[q].th.t, f[q].th.molten(k), s.state.dissolved[i]) * sp.cond / (area * share);
         }
         2.0 * kt * shore * shore / (share * area)
     };

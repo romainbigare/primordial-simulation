@@ -866,20 +866,20 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substance
 | 6 | fat-like store |
 | 7, 8 | rock: sand and common rock (≈ SiO2, CaSiO3) |
 | 9 | lime (≈ CaCO3), rock |
-| 10 | body matter (≈ tissue): C118H196N6O101 |
+| 10 | body matter (≈ tissue): C120H198N6O107 and one of the rock element (Ca) |
 | 11 | the rock salt, lives dissolved (≈ Ca(HCO3)2) |
 | 12 | the nitrogen mineral, lives dissolved |
 | 13 | the frame, a solid bodies build (≈ cellulose) |
 | 14 | the slow organic matter, held on fine and middle particles (`bound`; ≈ humus): C59H78N6O42 |
 
 Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 3 burning and making fat; 4 burning
-methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
+methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral and the salt 11); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
 of the frame; 13 splitting the frame into sugar (needs an enzyme); 14 body matter rotting into the slow organic matter
 (beside 7, at a quarter of its rate: a fifth of what rots of it goes this way, keeping half its carbon and all its
-nitrogen); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). Dead matter rots in moist open ground at a litter
+nitrogen, its salt 11 back to the ground); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). Dead matter rots in moist open ground at a litter
 constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
-work): matter from 118 sugar + 3 nitrogen mineral; frame from 6 sugar.
-`Chemistry::minerals` are growth's inputs no reaction burns (12), `materials` the solids bodies build (13).
+work): matter from 118 sugar + 3 nitrogen mineral + 1 salt 11; frame from 6 sugar.
+`Chemistry::minerals` are growth's inputs no reaction burns (12 and 11), `materials` the solids bodies build (13).
 The air's carbon gas (3) settles where the cover's light reaction takes it up as fast as rot and burning give it back:
 the world has no source of it (an input from below, as volcanoes give, would be an edit from outside the laws, and is
 not built).
@@ -1478,15 +1478,20 @@ and the sea and fertility differs by place. **Exchange sites** (`soil::exchange`
 particles and its organic matter hold a share of its dissolved minerals in a linear balance with what stays
 dissolved: sites of 1,060 mol of charge a m³ of fine particles and 2,800 a m³ of organic matter (`SITES_FINE`,
 `SITES_ORGANIC`), each holding the minerals of 0.04 m³ of the liquid (`HELD_PER_SITE`), so the sites hold those of
-`Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral in V m³ of
-liquid stays dissolved (`soil::dissolved`). Only that share moves with the liquid that sinks, flows through the pores
-and runs off (`flow::liquid::mobile`, `basin::movable`); the rest stays in the ground node, where roots take from all
-of it (the sites give back to the liquid as fast as roots take from it). So coarse ground lets the rain wash its
+`Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral stays dissolved
+in the V m³ of the cell's other liquids (`soil::dissolved`), found when Flow builds the state of its ground in full
+(each month's start) and kept until the next (`State::dissolved`). Only that share is liquid (`Sp::liquid`): it moves
+with the liquid that sinks, flows through the pores and runs off (`flow::liquid::mobile`, `basin::movable`) and takes
+its liquid volume in the pores and over them. The rest is part of the ground everywhere Flow reads it: a solid at the
+solid's volume in the solid surface, in no pores and no cover, that neither moves nor fills (`land::layers`,
+`stack::ground_layers`, `land::rise`); roots take from all of it (the sites give back to the liquid as fast as roots
+take from it). So coarse ground lets the rain wash its
 minerals away and fine and organic ground keeps them: a loam's 2 m of loose ground holds some 97% of its minerals
 on its sites at field capacity, a coarse ground some 90%, so the coarse loses them three to four times as fast. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
 per m² of land, on every open land cell; then only fixing adds it, rotting (7) returns it, heat (11) sends it
-to the air. Body matter holds no rock element: the **rock salt (11)** is rock chemistry, made in wet cells from lime
-(8), turned back by 9, near balance (2.5).
+to the air. The **rock salt (11)**, made in wet cells from lime (8) and turned back by 9, near balance (2.5), is the
+second mineral of growth: body matter holds one of its rock element (1.2% of its mass), rotting (7, 14) gives it back,
+and a flame leaves it as lime (9 at `t_burn`, laws.md 3c), which weathers back (8) where the ground is wet.
 
 ## 5. Starting conditions (not laws)
 Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
