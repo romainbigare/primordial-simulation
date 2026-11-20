@@ -123,9 +123,10 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         let sizes = c.sizes(ph, &mm, q);
         let h = sizes.height(ph, rho, sizes.large());
         let need = super::stand::need(ph, h);
-        // Its activity by its drought: on its land by the land's liquid, under the liquid full.
+        // Its activity by its drought: on its land by the liquid of the ground its plants stand on (`Footing::act`),
+        // under the liquid full.
         let foot = feet[q];
-        let (act, work) = ((1.0 - foot.wet) * super::activity(&c.genes[q], a.soak.moist) + foot.wet * super::activity(&c.genes[q], 1.0), foot.work);
+        let (act, work) = ((1.0 - foot.wet) * foot.act + foot.wet * super::activity(&c.genes[q], 1.0), foot.work);
         let sapwood = super::stand::sapwood(ph, (leaf, sizes.lift(ph, rho)), c.walls(&mm, q), rho);
         let roots = super::upkeep::root_share(w, p, (t, dt), per_unit, &c.genes[q]);
         *sq = Slot { built, living: c.living(&mm, q), leaf, abs: leaf * (1.0 - c.reflectance(chem, p, q)), act, work, wet: foot.wet, airless: foot.airless, rise: foot.rise, sapwood, roots, ..Default::default() };
@@ -159,6 +160,15 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let order = &*order;
     let (pays, season) = super::season::pay(w, c, (p, &e), (&mut s, &stored), order, (t, dt), (&mut b, counts));
     grow(w, c, (p, &e), (&s, pays, season), order, (i, a, dt), (&mut b, counts));
+    // Its plants grow where their roots gain (`soak::strips_share`): of what each slot holds now, what it stored this
+    // month went to its strips and its rest by what a plant gains on each; the rest stands where it stood.
+    for &q in order {
+        let now = budget::held(&e, &c.mol[q]);
+        if now > 0.0 {
+            let (grew, on) = (stored[q].clamp(0.0, now), feet[q].strip);
+            c.strip[q] = ((on * (now - grew) + super::strips_share(on, feet[q].gain) * grew) / now) as f32;
+        }
+    }
     super::stand::thin(c, &mm, (ph, rho, n), area);
     super::stand::merge_alike(c, &mm, (ph, n));
     remember(c, a.soak.moist, w.cfg.months_per_year as f32);
@@ -178,8 +188,8 @@ fn feet(w: &World, c: &mut Cover, (mm, rho, n): (&[f64; NP], f64, usize), i: usi
     for x in (0..n).filter(|&x| c.root[x] != NO_ROOT) {
         let need = super::stand::need(ph, c.height(ph, mm, rho, x));
         let line = (c.line[x] >= 0.0).then_some(c.line[x] as f64);
-        out[x] = super::footing(w, i, c.genes[x][super::GAS] as f64, need, soak, line);
-        (c.line[x], c.stands[x]) = (out[x].line as f32, out[x].share as f32);
+        out[x] = super::footing(w, i, &c.genes[x], need, soak, line.map(|l| (l, c.strip[x] as f64)));
+        (c.line[x], c.stands[x], c.strip[x]) = (out[x].line as f32, out[x].share as f32, out[x].strip as f32);
     }
     out
 }

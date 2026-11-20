@@ -3,7 +3,7 @@
 //! network to the bodies of standing liquid, which stand each at one level, in one pass (`runoff::surface`), doing
 //! work on its bed; and each body mixes its heat (`basin::mix`).
 
-use super::{drain::{land_drains, springs, under}, land::{cells_state, t_now, wet, NONE}, parts::{Leaves, LAND}, potential::apply, range, runoff::surface, Scratch};
+use super::{drain::{land_drains, springs, under, OffLand}, land::{cells_state, t_now, wet, NONE}, parts::{Leaves, LAND}, potential::apply, range, runoff::surface, Scratch};
 use crate::{store::{Class, LinkFlux}, units::T_FLOOR, World};
 
 /// The liquid under the surface of every ground node, as the laws under it move it (`drain`): of each liquid `liq[q]`,
@@ -106,9 +106,10 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let slope = slopes(w, s);
     let runs = springs(w, s, tmin, &slope, dt);
-    under(w, s, &liq, tmin, dt);
+    let mut off = OffLand::new(w);
+    under(w, s, &liq, tmin, dt, &mut off);
     land_drains(w, s, (&liq, tmin), &slope, dt);
-    surface(w, s, (&liq, tmin), (&slope, &runs), dt);
+    surface(w, s, (&liq, tmin), (&slope, &runs, off), dt);
     let mixed = super::parts::mix(w, s, dt);
     cells_state(w, s, &mixed, false);
     super::basin::mix(w, s);

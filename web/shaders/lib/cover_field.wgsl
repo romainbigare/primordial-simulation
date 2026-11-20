@@ -459,8 +459,12 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
 // They melt into their mean, the share evenly, as they shrink from `SPECK_PX`.y to `SPECK_PX`.x pixels across. Of the
 // point: the specks' cover, and how lit it is, -1..1, from its shaded side (south-east, away from `LIGHT`) to its lit
 // side (a round crown or stem lit from the north-west).
+// No speck is wider than `SPECK_MOST_M` (a mark is at most 10 m across: lattices.ts `marksOf`): in a program made for
+// draws whose pixels are wider than a speck (draw.wgsl `LEAST_E`) they are compiled out.
 const SPECK_BASE_M = 1.0; const SPECK_TURN = 0.9; const SPECK_JITTER = 0.4; const SPECK_PX = vec2f(1.0, 3.0);
+const SPECK_MOST_M = 10.0;
 fn specks(at: vec2f, w: f32, share: f32, e: f32, k: i32) -> vec2f {
+  if (SPECK_PX.x * least_e() >= SPECK_MOST_M) { return vec2f(min(share, 1.0), 0.0); }
   let detail = ease(SPECK_PX.x * e, SPECK_PX.y * e, w);
   if (detail <= 0.0 || share <= 0.0) { return vec2f(min(share, 1.0), 0.0); }
   let octave = log2(max(w, SPECK_BASE_M) / SPECK_BASE_M);
@@ -517,13 +521,15 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, ho
     let groups = shows_at(CANOPY_M, e);
     if (groups > 0.0) { c *= 1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * groups; }
     c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
-    let w = field_at(at, WIDE_LAYER)[l];
-    let dome = specks(at, w, crowns, e, 83);
-    // The shadows: the crowns' own specks laid south-east, as dark on the mean as the field's shade.
-    let laid = specks(at - DOME_SHADOW * w * vec2f(1.0), w, crowns, e, 83).x;
-    dark *= laid / max(crowns, 1e-3);
-    share = dome.x;
-    c *= 1.0 + DOME_LIT * dome.y;
+    if (SPECK_PX.x * least_e() < SPECK_MOST_M && SPECK_PX.x * e < SPECK_MOST_M) {
+      let w = field_at(at, WIDE_LAYER)[l];
+      let dome = specks(at, w, crowns, e, 83);
+      // The shadows: the crowns' own specks laid south-east, as dark on the mean as the field's shade.
+      let laid = specks(at - DOME_SHADOW * w * vec2f(1.0), w, crowns, e, 83).x;
+      dark *= laid / max(crowns, 1e-3);
+      share = dome.x;
+      c *= 1.0 + DOME_LIT * dome.y;
+    }
   }
   share *= unshown;
   dark = min(dark, 1.0) * unshown;

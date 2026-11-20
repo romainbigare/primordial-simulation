@@ -137,9 +137,9 @@ pub struct World {
     /// (`contract::liquid`). Not saved: the runoff's pass writes it each month before life reads it
     #[serde(skip)]
     pub liquid_month: Vec<f32>,
-    /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what runs over the
-    /// surface of each land cell into cells that are not land (`is_land`), mol/s: moving averages over about a year,
-    /// for the tape
+    /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what leaves each land
+    /// cell for the cells that are not land (`is_land`), over its surface and under it (`flow::drain`), mol/s: moving averages over about a
+    /// year, for the tape
     pub evap: Vec<f32>,
     pub off_land: Vec<f32>,
     pub counts: Counters,

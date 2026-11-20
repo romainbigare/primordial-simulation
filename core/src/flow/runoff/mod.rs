@@ -13,7 +13,7 @@ mod edge;
 pub(super) mod load;
 use edge::come_in;
 use super::{curve::Part, level::{level_with, Level}};
-use super::{bare_share, drain::{liquid_heat, to_channels}, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
+use super::{bare_share, drain::{liquid_heat, to_channels, OffLand}, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
 use crate::{space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux, Move, Node}, World};
 
 /// Least bond strength wear divides by.
@@ -75,8 +75,10 @@ struct Held {
 }
 
 /// One pass a month of `dt` seconds (the module's doc), of the liquids `liq` (what boils below the coldest node, `tmin`,
-/// is a dissolved gas); `slope` and `runs` as the drain to the channels inside each cell found them (`drain::springs`).
-pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
+/// is a dissolved gas); `slope` and `runs` as the drain to the channels inside each cell found them (`drain::springs`),
+/// and what left each land cell for the cells that are not land under the surface in the step (`drain::OffLand`), to which
+/// it adds what leaves them in the pass.
+pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs, mut off): (&[f64], &[f64], OffLand), dt: f64) {
     let n = w.mesh.cells().n();
     let all: Vec<u32> = (0..n as u32).collect();
     let (q, vol) = movable(w, s, liq, &all, tmin, (|k, i| super::land::wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
@@ -110,7 +112,14 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     w.counts.load.iter_mut().zip(carried.volumes).for_each(|(a, v)| *a += v);
     load::mix(w, s, &carried.settled, &sol);
     apply(w, s, &[], &carried.broke);
-    follow_flux(w, &b, &flux, dt);
+    for (l, row) in x.rows.chunks_exact(x.width).enumerate() {
+        off.moved((x.a[l] as usize, x.b[l] as usize), row[..x.width - 1].iter().sum());
+    }
+    // (What leaves over the planet's level goes from the open low ground's hub, `stand`.)
+    for (l, row) in edge.rows.chunks_exact(edge.width).enumerate() {
+        off.left(edge.b[l] as usize, -row[..edge.width - 1].iter().sum::<f64>());
+    }
+    follow_flux(w, &b, (&flux, &off.mol), dt);
     (s.bodies, s.spare.samples) = (b, flux);
 }
 
@@ -304,32 +313,23 @@ fn discharge(w: &World, b: &Bodies, flux: &mut [[f64; 2]]) {
 /// What ran through each cell's main channel in the month (`World::liquid_month`), and the moving averages over about a
 /// year (`World::discharge`, `World::liquid_flux`, `World::off_land`), from what ran
 /// through each sample in the pass of `dt` seconds (an average that is none stays none where none ran): a cell's flux
-/// is the most through one of its samples in no pond, its main channel; what leaves a land cell's samples for those of
-/// the open low ground runs off the land.
-fn follow_flux(w: &mut World, b: &Bodies, flux: &[[f64; 2]], dt: f64) {
-    let (ema, samples) = (year_weight(w, dt), w.terrain_samples());
-    let n = w.mesh.cells().n();
-    let (mut most, mut off) = (vec![0.0f64; n], vec![0.0f64; n]);
+/// is the most through one of its samples in no pond, its main channel; what left each land cell for the cells that
+/// are not land in the step, `left` mol (`drain::OffLand`), runs off the land.
+fn follow_flux(w: &mut World, b: &Bodies, (flux, left): (&[[f64; 2]], &[f64]), dt: f64) {
+    let (ema, n) = (year_weight(w, dt), w.mesh.cells().n());
+    let mut most = vec![0.0f64; n];
     for (avg, f) in w.discharge.iter_mut().zip(flux).filter(|p| *p.0 != 0.0 || p.1[0] != 0.0) {
         follow(avg, (f[0] / dt) as f32, ema);
     }
-    // Whether each cell is land (`World::is_land`), found once for a cell, at its first sample that needs it.
-    let mut land: Vec<Option<bool>> = vec![None; n];
     for &k in &b.land {
-        let (k, f) = (k as usize, flux[k as usize]);
-        let i = b.cell_of[k] as usize;
-        most[i] = most[i].max(f[0]);
-        let j = samples.to[k];
-        let low = j != NONE && b.at[j as usize] != NONE && b.list[b.at[j as usize] as usize].pass == NONE;
-        if low && *land[i].get_or_insert_with(|| w.is_land(i)) {
-            off[i] += f[0];
-        }
+        let i = b.cell_of[k as usize] as usize;
+        most[i] = most[i].max(flux[k as usize][0]);
     }
     w.liquid_month.resize(n, 0.0);
     for i in 0..n {
         w.liquid_month[i] = (most[i] / dt) as f32;
         follow(&mut w.liquid_flux[i], (most[i] / dt) as f32, ema);
-        follow(&mut w.off_land[i], (off[i] / dt) as f32, ema);
+        follow(&mut w.off_land[i], (left[i] / dt) as f32, ema);
     }
 }
 
