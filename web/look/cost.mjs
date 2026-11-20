@@ -52,7 +52,7 @@ export function costShaders(pass) {
     ed('lib/tex.wgsl', 'fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {\n', 'fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {\n  n_photo += 1.0;\n');
     const draw = join(dir, 'lib/draw.wgsl');
     writeFileSync(draw, COUNTERS + readFileSync(draw, 'utf8'));
-    ed('land.wgsl', LAND_OUT, PASSES[pass].land);
+    ed('lib/live_map.wgsl', LAND_OUT, PASSES[pass].land);
     ed('cover.wgsl', MARKS_OUT, PASSES[pass].marks);
   });
 }

@@ -1,6 +1,6 @@
 # Where the page's textures come from
 
-Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), but for the trees
+Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com) and Kenney (kenney.nl), but for the trees
 rendered from PlantCatalog's models, which are CC BY 4.0 (credited below): the ground photographs resized and packed for
 the page by hand, each with its large-scale light divided out (so its repeat does not show); the carpets and the sprites
 rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 512 layers, top first.
@@ -52,6 +52,16 @@ table below.
 | 13 | dry_ground_rocks | layer 11 dried in colour | 2 m |
 
 grass_medium_01's tall stems with seed heads (its meshes named `_ta…`) are left out of every tile.
+
+## fire.jpg
+
+Two 512 x 512 layers, made by `bake/fire.py` (`python3 -I bake/fire.py KENNEY_PNG_DIR burned_ground_01_diff_2k.jpg
+fire.jpg`):
+
+| layer | what | source | author | licence |
+|---|---|---|---|---|
+| 0 | four sprites, a quarter each, their density alone (grey times cover) on black, each fitted to its quarter with its foot on the bottom middle: two flame tongues (`flame_05`, `flame_06`), two puffs of smoke (`smoke_07`, `smoke_08`) | [Particle Pack 1.1](https://kenney.nl/assets/particle-pack), its `PNG (Transparent)` folder | Kenney Vleugels (kenney.nl) | CC0 1.0 |
+| 1 | burnt ground: charred soil, ash, needles and grass stalks; 1 m across | [burned_ground_01](https://polyhaven.com/a/burned_ground_01) (diffuse, 2k), shrunk, its light divided out as `ground.jpg`'s | Rob Tuytel (Poly Haven) | CC0 1.0 |
 
 ## trees.png, models.png and the sprites' table
 

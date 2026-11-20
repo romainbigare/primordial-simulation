@@ -15,6 +15,9 @@ struct Fire {
 @group(0) @binding(23) var fire_sampler: sampler;
 @group(0) @binding(24) var<uniform> fire: Fire;
 
+// e^x - 1, kept exact for small x.
+fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 1e-3); }
+
 // What fire did at a point, blended between the squares' centres: the share of the land burnt in the last 12 months,
 // the months since its last burn (its share's mean), the share burning this month, its flames' mean length, m (the
 // burning share's mean), the ash on the ground and the gas the flames sent to the air this month, kg/m².

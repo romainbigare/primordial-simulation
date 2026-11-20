@@ -41,11 +41,15 @@ const TURF_CARPET = 10; const TUSSOCK_CARPET = 11; const DRY_TURF_CARPET = 12; c
 // Each tile's side in the world, m.
 fn carpet_m(c: i32) -> f32 { var m = array<f32, 14>(1.5, 1.5, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.0, 0.8, 2.0, 2.0, 2.0, 2.0); return m[c]; }
 
+// The fire's strip (web/textures/fire.jpg, after the carpets): its first layer four sprites a quarter each, their
+// density alone (two flame tongues, two puffs of smoke: flames.wgsl), its second a photograph of burnt ground (burn.wgsl).
+const FIRE_FROM = CARPETS_FROM + 14;
+
 // The rendered models (web/textures/trees.png and models.png; their table, sets and counts in sprites.wgsl, which the
 // bake tool writes): the trees one to a layer from `TREES_FROM` on, the rest four to a layer from `MODELS_FROM` on
 // (models.wgsl draws the plants from them, detail.wgsl the things on the ground); the heights of those that stand in
 // water four to a layer from `HEIGHTS_FROM` on (heights.png, heights.wgsl).
-const MODELS_FROM = 25; const HEIGHTS_FROM = MODELS_FROM + MODEL_LAYERS; const TREES_FROM = HEIGHTS_FROM + HEIGHT_LAYERS;
+const MODELS_FROM = FIRE_FROM + 2; const HEIGHTS_FROM = MODELS_FROM + MODEL_LAYERS; const TREES_FROM = HEIGHTS_FROM + HEIGHT_LAYERS;
 // The mean lightness of the grass tufts' blades (linear).
 const TUFT_MEAN = 0.048;
 // The texel of model sprite s at `uv` in its content (0..1, y down), at `g` of its content a pixel: linear, with cover.

@@ -19,8 +19,9 @@ const CHAR_MONTHS = 3.0; const SCORCHED_MONTHS = 9.0;
 // Bodí and others 2014).
 const ASH_HIDES_KG = 0.25;
 // The Earth view draws a scar's cover thinner by this share of it while the scar is fresh (e^-(months / `BARE_MONTHS`)):
-// herbs come back within a season; the trees drawn one by one keep the core's numbers.
-const SCAR_BARE = 0.85; const BARE_MONTHS = 6.0;
+// a fire takes nearly all of the fine fuel it runs through, and herbs come back within a season; the trees drawn one
+// by one keep the core's numbers.
+const SCAR_BARE = 1.0; const BARE_MONTHS = 6.0;
 // The char's photograph (fire.jpg's second layer) is this many metres across.
 const CHAR_PHOTO_M = 1.0;
 
@@ -45,8 +46,6 @@ fn burnt_spot(p: Spot) -> Spot {
   }
   return q;
 }
-
-fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 1e-3); }
 
 // The scar's colour over ground colour `c` at spot p: its scorched soil, its char, its ash (`burnt_spot`), each over
 // the last; up close the char's photograph gives it its grain.
