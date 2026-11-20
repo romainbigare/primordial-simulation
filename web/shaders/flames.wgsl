@@ -30,6 +30,12 @@ const EMBERS = 0.35; const EMBER_M = 0.6; const EMBER_RGB = vec3f(0.95, 0.25, 0.
 // `GLOW_EARTH`.
 const GLOW = 0.3; const GLOW_SHARE = 0.05; const GLOW_M = 3.0; const GLOW_E = vec2f(10.0, 60.0); const GLOW_EARTH = 1.6;
 const GLOW_RGB = vec3f(1.0, 0.36, 0.06);
+// Inside a square's burning share its fire runs as fronts across it, each point swept once by a front as `SWEEP` runs
+// down through a whole number: `SWEEP` is a smooth field of the place (noise `SWEEP_M` across, `SWEEP_LEVELS` whole
+// numbers deep, so fronts lie a few hundred metres apart and run along no line) less the time over `SWEEP_S` s, so the
+// fronts move while the world plays. A front flames `FLAME_DEPTH` lengths deep (as the outer front, tongues on it as
+// tall); behind it the embers fade over `EMBER_FADE` of the way to the next front.
+const SWEEP_M = 600.0; const SWEEP_LEVELS = 4.0; const SWEEP_S = 6.0; const EMBER_FADE = 0.35;
 // A point's flames fade in over the first `FLAME_FADE` of a square's burning share, so they end smoothly where the
 // share blended between the squares' centres ends; none stands on liquid (its ponds' as the ground's tiles draw them,
 // land.wgsl `standing`, deeper than `FILM_M`).
@@ -98,6 +104,16 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
 // (`SMOKE_SHARE` of its gas over `FLAMING_S`) over the time the wind takes to cross each step, spread across, fading
 // out over `PLUME_M`; and the mean distance from where it was sent, m. A calm air (under `CALM_M_S`) lays it about its
 // fire as a wind of that speed would along its last way.
+// The gas a burning square sends to the air at `at`, kg/m²: its square's, laid round its centre as a Gaussian of
+// `SOURCE_SPREAD` of a square's side (of the same sum), so a plume starts as a soft round cloud, not as the square.
+const SOURCE_SPREAD = 0.4;
+fn round_air(at: vec2f) -> f32 {
+  let s = at / fire.map.x;
+  let c = floor(s);
+  let d = s - c - 0.5;
+  return fire_texel(1, vec2i(c)).y * exp(-0.5 * dot(d, d) / (SOURCE_SPREAD * SOURCE_SPREAD)) / (2.0 * PI * SOURCE_SPREAD * SOURCE_SPREAD);
+}
+
 fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
   let speed = max(length(wind_at), CALM_M_S);
   let wind = select(vec2f(1.0, 0.0), wind_at / length(wind_at), length(wind_at) > 1e-3);
@@ -113,7 +129,7 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
     let s = 0.5 * (s0 + s1);
     let spread = SPREAD * s;
     let src = at - wind * s;
-    let air = (fire_plane(1, src).y + fire_plane(1, src + side * spread).y + fire_plane(1, src - side * spread).y) / 3.0;
+    let air = (round_air(src) + round_air(src + side * spread) + round_air(src - side * spread)) / 3.0;
     let c = air * (s1 - s0) * exp(-s / PLUME_M) * -expm1(-s / SMOKE_RISE_M);
     column += c;
     far += c * s;
@@ -144,14 +160,25 @@ fn smoke_column(at: vec2f, wind_at: vec2f) -> vec2f {
   let slope = vec2f(dpdx(r.x), dpdy(r.x)) / e;
   let dy = sign(slope.y + 1e-12) * max(abs(slope.y), 0.5 * length(slope));
   let t = (f.burnt - r.x) / dy;
+  // The fronts inside the burning share (`SWEEP`): how far behind the last front the point lies, as a share of the way
+  // between two, and in metres; the tongues on the front south of it, as on the outer front.
+  let sweep = (0.5 + 0.5 * noise(at / SWEEP_M, 17).x) * SWEEP_LEVELS - time / SWEEP_S;
+  let sweep_slope = vec2f(dpdx(sweep), dpdy(sweep)) / e;
+  let sweep_dy = sign(sweep_slope.y + 1e-12) * max(abs(sweep_slope.y), 0.5 * length(sweep_slope));
+  let behind = 1.0 - fract(sweep);
+  let behind_m = behind / max(length(sweep_slope), 1e-9);
   var light = vec3f(0.0);
   if (f.flame > 0.0) {
-    light += tongues(at, t, f.length, f.wind, e, time) * ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * f.length);
-    // The zone flames where tongues do not show (from afar, its mean light); the embers flicker behind it.
-    light += zone * FLAME_MID * (1.0 - ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * f.length));
+    let shown = ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * f.length);
+    let inner = max(band - zone, 0.0);
+    let flaming = max(1.0 - ease(max(FLAME_DEPTH * f.length, FRONT_PX * e), max(FLAME_DEPTH * f.length, FRONT_PX * e) + e, behind_m), 0.0);
+    light += tongues(at, t, f.length, f.wind, e, time) * shown;
+    light += inner * tongues(at, (round(sweep) - sweep) / sweep_dy, f.length, f.wind, e, time) * shown;
+    // The fronts flame where tongues do not show (from afar, their mean light); the embers flicker behind them.
+    light += (zone + inner * flaming) * FLAME_MID * (1.0 - shown);
     let speck = ease(0.55, 0.9, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
     let specks = mix(0.5, speck * 2.0, shows_at(EMBER_M, e));
-    light += EMBERS * max(band - zone, 0.0) * specks * EMBER_RGB;
+    light += EMBERS * inner * (1.0 - flaming) * exp(-behind / EMBER_FADE) * specks * EMBER_RGB;
     light *= ease(0.0, FLAME_FADE, f.flame) * select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M);
   }
   // The glow of the burning squares, seen from afar.

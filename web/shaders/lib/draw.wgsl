@@ -189,6 +189,9 @@ fn snow_depth(ice_m: f32, t: f32, melt: f32) -> f32 { return SNOW_PER_ICE * ice_
 // A crown's shadow darkens what lies under it by this share: it lets through the sky's light and what crowns scatter,
 // about half of the sun's (canopy.ts `CROWN_SHADOW`).
 const CROWN_SHADOW = 0.42;
+// A thing standing up casts its shadow on the ground away from the sun (south-east, `LIGHT`), this many times its
+// height long (models.wgsl `model_shadow`, snags.wgsl).
+const MODEL_SHADOW_RUN = 0.9;
 
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the
 // samples within a few centimetres, so a body whose level lies that near its flat floor is a soaked basin, not water.
