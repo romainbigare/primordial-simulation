@@ -17,7 +17,7 @@ use super::grid::Grid;
 use super::network::NONE;
 use super::mantle::{age, mantle};
 use super::ponds::settle;
-use super::shelf::lay;
+use super::shelf::{self, lay};
 use super::slopes::{creep, rebound};
 use super::strata::Strata;
 use crate::math::spread_down;
@@ -161,7 +161,7 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, body
     let soil = mantle(&g.coarser(from), (&z, &marks.drained), (&marks.settled, &marks.lowers), (CREEP, last_years));
     let mut loose: Vec<f64> = g.carried((from, &soil), 1).iter().zip(&low).map(|(&d, &o)| if o { OOZE_M } else { d.max(0.0) }).collect();
     let offshore = g.carried((from, &offshore), 1);
-    books.shelf = lay(g, &mut h, (&low, LOW_STAND_M, &offshore), &mut loose);
+    books.shelf = lay(g, &mut h, (&low, &vec![shelf::top(LOW_STAND_M); g.n()], &offshore), &mut loose);
     books.beyond = (0..g.n()).map(|k| offshore[k] * g.area(k)).sum::<f64>() - books.shelf;
     let (settled_g, lowers) = (g.carried((from, &marks.settled), 1), g.carried((from, &marks.lowers), 1));
     let settled: Vec<f64> = (0..g.n()).map(|k| if low[k] { loose[k] } else { settled_g[k].clamp(0.0, loose[k]) }).collect();
