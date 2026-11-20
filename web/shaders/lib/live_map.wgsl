@@ -133,7 +133,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
   let fringe = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * ch.water);
   let shore_over = over_water(g, ch, p.over, fringe);
-  let cf = cover_field(at, e, Beneath(soaked(p), shore_over, length(g.slope), p.depth, loose, loose_mean, fwidth(loose), p.snow, st.snow_m));
+  let cf = cover_field(at, e, Beneath(max(soaked(p), marsh_of(p)), shore_over, length(g.slope), p.depth, loose, loose_mean, fwidth(loose), p.snow, st.snow_m));
   p.cover = cf.cover;
   p.canopy = cf.canopy;
   p.shed = cf.shed;
@@ -168,7 +168,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
   p.fetch = g.water.z;
   let waves = waves_of(p.sea, p.fetch);
-  p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z, waves);
+  // On a deposit (colour.wgsl `laid_share`) the waves sort sand up their storms' swash alone: past it lies what the
+  // floods laid, a delta's top or a flood plain, not a beach.
+  p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z * (1.0 - laid_share(p)), waves);
   p.swash = swash_of(over_ponds(tiled, 0.0), waves, length(tiled.slope), at, e, p.snow);
   // A beach of pebbles takes their colour from the bed they are worn from (colour.wgsl `shore_grain`).
   if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) { p.bed = bed_make_at(at); }

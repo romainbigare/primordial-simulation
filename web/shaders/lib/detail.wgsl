@@ -249,7 +249,7 @@ fn laid_images(w: ptr<function, array<f32, SOIL_IMAGES>>, p: Spot, open: f32, sa
   let laid = laid_share(p) * open;
   if (laid <= 0.0) { return; }
   let fresh = laid_fresh(p);
-  let soak = ease(LAID_SOAKED.x, LAID_SOAKED.y, soaked(p));
+  let soak = ease(LAID_SOAKED.x, LAID_SOAKED.y, max(soaked(p), marsh_of(p)));
   let gravel = ease(0.0, BAR_SAND_STONE, p.moved);
   let sand = laid * (1.0 - gravel) * sandy;
   let fine = laid * (1.0 - gravel) * (1.0 - sandy);
