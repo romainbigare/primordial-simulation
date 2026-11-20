@@ -11,9 +11,9 @@ struct Fire {
   // The time, s (wrapped), the way the wind blows (a unit vector east and south) and its speed, m/s.
   air: vec4f,
 }
-@group(0) @binding(22) var fire_tex: texture_2d<f32>;
-@group(0) @binding(23) var fire_sampler: sampler;
-@group(0) @binding(24) var<uniform> fire: Fire;
+@group(0) @binding(25) var fire_tex: texture_2d<f32>;
+@group(0) @binding(26) var fire_sampler: sampler;
+@group(0) @binding(27) var<uniform> fire: Fire;
 
 // e^x - 1, kept exact for small x.
 fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 1e-3); }

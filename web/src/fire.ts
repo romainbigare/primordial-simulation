@@ -11,10 +11,22 @@ import type { MapLook } from './field-window';
 
 /** What fire did on each square, a number a square (the core's layers, `LAYERS`). */
 export interface FirePlanes { burnt: Float32Array; age: Float32Array; flame: Float32Array; length: Float32Array; ash: Float32Array; air: Float32Array }
-/** The core's layers of fire, by the planes' names: the share of the land burnt in the last 12 months, the months
- * since its last burn, the share burning this month, its flames' mean length (m), the ash on the ground and the gas the
+/** The core's layers of fire, by the planes' names: the share of the land burnt in the last 12 months, the mean of
+ * its land's months since it last burnt (land never burnt counts as `AGE_MOST`), the share burning this month, its flames' mean length (m), the ash on the ground and the gas the
  * flames sent to the air this month (kg/m²). */
 const LAYERS: Record<keyof FirePlanes, string> = { burnt: 'burnt', age: 'burnt_age', flame: 'flame', length: 'flame_len', ash: 'ash', air: 'flame_air' };
+
+/** The most months since a burn the core tells apart (`flame::AGE_MOST`), and the months its burnt share spans. */
+const AGE_MOST = 120, YEAR_MONTHS = 12;
+/** The months since the burnt share of a square burnt, from the mean `age` of its land's months since a burn, that
+ * share `burnt` and the share burning this month `flame` (none old): the rest of the land taken as never burnt,
+ * within the year the share spans. The layers do not tell it exactly: where the rest burnt too, earlier, the share
+ * reads younger than it is. */
+function scarAge(age: number, burnt: number, flame: number): number {
+  if (burnt <= 0) return AGE_MOST;
+  const b = Math.min(burnt, 1), older = Math.min(Math.max((age - (1 - b) * AGE_MOST) / b, 0), YEAR_MONTHS);
+  return older * Math.max(1 - flame / b, 0);
+}
 
 /** The tape holds no wind: the smoke drifts with the westerlies of the middle latitudes the page's islands lie in
  * (a unit vector east and south: from the west, a little from the south), at a breeze's speed, m/s. */
@@ -67,7 +79,7 @@ export class Fire {
     const data = new Uint16Array(8 * n);
     for (let i = 0; i < n; i++) {
       const b = burnt(i), f = burning(i);
-      data.set([b, b * p.age[i], f, f * p.length[i]].map(half), 4 * i);
+      data.set([b, b * scarAge(p.age[i], b, f), f, f * p.length[i]].map(half), 4 * i);
       data.set([p.ash[i], p.air[i], 0, 0].map(half), 4 * (n + i));
     }
     this.data = data;
@@ -84,7 +96,7 @@ export class Fire {
     const mode = look.mode === 'earth' ? 0 : 1;
     const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h, mode).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
       .vec4((now / 1000) % TIME_WRAP_S, WIND[0], WIND[1], WIND_M_S);
-    return { 20: groundDetail(gpu), 21: 'tile', 22: this.tex, 23: 'smooth', 24: u.buffer };
+    return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer };
   }
 
   stop(gpu: Gpu | null): void {
