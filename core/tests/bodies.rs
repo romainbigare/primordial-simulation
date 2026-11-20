@@ -75,7 +75,8 @@ fn reached(w: &World, i: usize) -> Vec<usize> {
 }
 
 /// What a body holds over its pass leaves over it and arrives in the bodies down its way in the same month: liquid
-/// poured on a cell of a body with a pass, far more than the body holds under its pass, leaves it at its pass's level,
+/// poured on a cell of a body with a pass (to a body in other cells, so what the cells hold tells the two apart), far
+/// more than the body holds under its pass, leaves it at its pass's level,
 /// and all the rest of what was poured is in the bodies down its way and the bodies the cell's land drains to
 /// (`reached`, and theirs down their ways; against the same world with none poured), within a thousandth: the other
 /// laws of the month (the poured cell's pores, the flow under the ground) differ a little between the two.
@@ -83,7 +84,8 @@ fn reached(w: &World, i: usize) -> Vec<usize> {
 fn what_leaves_a_body_over_its_pass_arrives_in_the_body_below() {
     let w0 = world();
     let pools = w0.pools();
-    let (x, pool) = pools.iter().enumerate().find(|(_, l)| l.next.is_some()).expect("a body with a pass");
+    let apart = |l: &pcore::flow::Pool, n: usize| pools[n].cells.iter().all(|c| !l.cells.contains(c));
+    let (x, pool) = pools.iter().enumerate().find(|(_, l)| l.next.is_some_and(|n| apart(l, n))).expect("a body with a pass to a body in other cells");
     let pass = w0.terrain_samples().ponds[pool.pond].level;
     let i = pool.cells[0] as usize;
     // The bodies down the way of each body the cell's ground drains to, and of this body, apart from this body.

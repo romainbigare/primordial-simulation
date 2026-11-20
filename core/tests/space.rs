@@ -307,7 +307,7 @@ fn the_wear_keeps_what_it_moves() {
 fn a_drawn_islands_low_ground_is_one_and_rings_the_map() {
     use pcore::space::network::NONE;
     let cfg = pcore::Config::default();
-    let (map, terrain) = worldgen::terrain::island_ground(2, (32, 32), pcore::space::terrain::Shape::Drawn);
+    let (map, terrain) = worldgen::terrain::island_ground(2, (32, 32), pcore::space::terrain::Shape::Drawn, &cfg.phys);
     let s = terrain.samples(2, &map, (cfg.lat_south, cfg.lat_north));
     let open: Vec<usize> = (0..s.ponds.len()).filter(|&p| s.ponds[p].pass == NONE).collect();
     assert_eq!(open.len(), 1, "one open low ground");

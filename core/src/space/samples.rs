@@ -144,7 +144,7 @@ impl Terrain {
         let (place, lift) = (|k: usize| map.place_of(&block(k), south, north).1, self.lift(seed, map));
         let at: Vec<(f64, (f64, f64))> = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| (self.sample(seed, map, &lift, place(k)), Strata::at(seed, map, place(k))));
         let (rise, (fold, body)): (Vec<f64>, (Vec<f64>, Vec<f64>)) = at.into_iter().unzip();
-        let worn = wear(seed, &grid, (by, &rise), (&fold, &body, &Strata::of(seed, &self.makes)));
+        let worn = wear(seed, &grid, (by, &rise), (&fold, &body, &Strata::of(seed, &self.makes)), self.channel);
         let (mut h, open, books, make) = (worn.h, worn.open, worn.books, worn.make);
         let f = flood(&grid, &h, &open, (&starts(&grid, &open, false), &draws(seed, 1, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));

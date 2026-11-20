@@ -87,23 +87,58 @@ impl Grid {
         [r as usize * self.across + wrapped(cj), rj as usize * self.across + wrapped(c)]
     }
 
-    /// The run over the samples `open` from sample `k` (not counted), m, the mean over the 8 ways of `STEPS` of the
-    /// straight run along each until a sample not open, each at most `most` (off the grid the run goes on to it): the
-    /// fetch the waves at `k` come over (an effective fetch over 8 ways, after Håkanson 1981).
-    pub(super) fn fetch(&self, open: &[bool], k: usize, most: f64) -> f64 {
-        let (r, c) = ((k / self.across) as i64, (k % self.across) as i64);
-        let run = |(a, b): (i64, i64), d: f64| {
-            let mut i = 1;
-            while (i as f64) * d < most {
-                match self.at(r + a * i, c + b * i) {
-                    Some(j) if !open[j] => return (i - 1) as f64 * d,
-                    None => return most,
-                    _ => i += 1,
+    /// Of each sample, the mean over the ways of `STEPS` that lead onto the samples `open` (or off the grid) of the
+    /// straight run along each until a sample not open, m, each at most `most` (off the grid the run goes on to it); none
+    /// where no way leads onto them: the fetch the waves at a sample come over, over the open liquid only (an effective
+    /// fetch over 8 ways, after Håkanson 1981). One sweep over the grid for each way, each sample from the next on it.
+    pub(super) fn fetches(&self, open: &[bool], most: f64) -> Vec<f64> {
+        let n = self.n();
+        let (mut sum, mut ways) = (vec![0.0; n], vec![0u8; n]);
+        let mut run = vec![0.0; n];
+        for (s, &(a, b)) in STEPS.iter().enumerate() {
+            // Rows and columns in the order that takes the next sample on the way first; round a globe a row is swept
+            // twice, so a run across its seam is found too.
+            let rows: Vec<usize> = if a > 0 { (0..self.down).rev().collect() } else { (0..self.down).collect() };
+            let cols: Vec<usize> = if b > 0 { (0..self.across).rev().collect() } else { (0..self.across).collect() };
+            for _ in 0..if self.wrap && a == 0 { 2 } else { 1 } {
+                for &r in &rows {
+                    let d = self.far[r][s];
+                    for &c in &cols {
+                        let next = self.at(r as i64 + a, c as i64 + b);
+                        run[r * self.across + c] = match next {
+                            None => most,
+                            Some(j) if open[j] => (d + run[j]).min(most),
+                            _ => 0.0,
+                        };
+                    }
                 }
             }
-            most
-        };
-        STEPS.iter().zip(&self.far[r as usize]).map(|(&s, &d)| run(s, d)).sum::<f64>() / STEPS.len() as f64
+            for k in 0..n {
+                let (r, c) = ((k / self.across) as i64, (k % self.across) as i64);
+                if self.at(r + a, c + b).is_none_or(|j| open[j]) {
+                    (sum[k], ways[k]) = (sum[k] + run[k], ways[k] + 1);
+                }
+            }
+        }
+        (0..n).map(|k| if ways[k] > 0 { sum[k] / ways[k] as f64 } else { 0.0 }).collect()
+    }
+
+    /// Of each sample of `open`, how far it lies from the nearest sample not open, m, along the grid's 8 ways (two
+    /// sweeps of a chamfer distance, Borgefors 1986); none on the samples not open.
+    pub(super) fn edge_distance(&self, open: &[bool]) -> Vec<f64> {
+        let n = self.n();
+        let mut d: Vec<f64> = (0..n).map(|k| if open[k] { f64::INFINITY } else { 0.0 }).collect();
+        for pass in 0..2 {
+            let order: Box<dyn Iterator<Item = usize>> = if pass == 0 { Box::new(0..n) } else { Box::new((0..n).rev()) };
+            for k in order {
+                if !open[k] {
+                    continue;
+                }
+                let best = self.around(k).filter(|&(j, _)| if pass == 0 { j < k } else { j > k }).map(|(j, len)| d[j] + len).fold(d[k], f64::min);
+                d[k] = best;
+            }
+        }
+        d
     }
 
     /// The neighbours of sample `k` across its sides and corners, each with its distance, m.
