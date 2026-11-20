@@ -20,9 +20,12 @@ rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 51
 | 8 | river_small_rocks (diffuse) | 2.9 m |
 | 9 | brown_mud_leaves_01 (diffuse) | 1.3 m |
 | 10 | forest_leaves_03 (diffuse) | 2.3 m |
+| 11 | dirt_floor (diffuse), https://polyhaven.com/a/dirt_floor | 2.07 m |
+| 12 | mud_cracked_dry_riverbed_002 (diffuse), https://polyhaven.com/a/mud_cracked_dry_riverbed_002 | 2.0 m |
+| 13 | mud_forest (diffuse), https://polyhaven.com/a/mud_forest | 2.35 m |
 
 Each is the 2k diffuse shrunk to 512 x 512, its light divided by itself blurred (a Gaussian of 40 texels, wrapping
-round, so the layer still repeats) and scaled back to its mean.
+round, so the layer still repeats) and scaled back to its mean. All are CC0 (polyhaven.com/license).
 
 ## carpets.jpg
 

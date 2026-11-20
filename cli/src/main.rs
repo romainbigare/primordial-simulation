@@ -63,6 +63,7 @@ fn main() {
             drive(w, &args, plan, Some(kept));
         }
         "view" => view(&args),
+        "cells" => cells(&args),
         "card" => card(&args),
         "chem" => chem::run(),
         "numbers" => numbers::run(&args.0),
@@ -77,6 +78,16 @@ fn view(a: &Args) {
     let window = a.window([0.0, 0.0, w.map.w as f64, w.map.h as f64]);
     let out = window.and_then(|win| render::window(&w, win, a.get("--px", 512usize), &a.get("--layer", String::from("map")), a.has("--edges"), &a.get("--out", String::from("view.png"))));
     if let Err(e) = out {
+        eprintln!("ew: {e}");
+        std::process::exit(2);
+    }
+}
+
+/// `ew cells`: write a table of a snapshot's cells (`render::table`).
+fn cells(a: &Args) {
+    let from = a.get("--from", String::new());
+    let (w, _): (World, (Schedule, Kept)) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
+    if let Err(e) = render::table(&w, &a.get("--out", String::from("cells.csv"))) {
         eprintln!("ew: {e}");
         std::process::exit(2);
     }

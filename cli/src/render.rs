@@ -12,16 +12,20 @@ const ICE_M: f64 = 0.05;
 const PX: usize = 3;
 /// The panels of the pictures of a world, in the order they are drawn side by side.
 const SIDE_BY_SIDE: usize = 5;
-/// The panels `ew view` draws: those of the pictures, the land with no river drawn over it, and of the loose ground
-/// (`GROUND`): its conductivity, the liquid it holds for roots, what the year's rain leaves after what rises (its
-/// yield), the share of its pores its liquid fills, what rises from it, its texture, the cell's (soil), its organic
+/// The panels `ew view` draws: those of the pictures, the land with no river drawn over it, the starting kind that holds
+/// the most cover in each cell (kinds, `lead`), and of the loose ground (`GROUND`): its conductivity, the liquid it holds
+/// for roots, what the year's rain leaves after what rises (its yield), the share of its pores its liquid fills, what rises from it, its texture, the cell's (soil), its organic
 /// share, the minerals it holds, how easily flowing liquid carries it off, its slow organic matter, how fast its dead
 /// frame rots, and the terrain's sample's texture under each pixel (texture, `SAMPLED`).
-pub const PANELS: [&str; 18] = ["map", "temperature", "rain", "life", "depth", "land", "conductivity", "water", "yield", "wetness", "rise", "soil", "organic", "minerals", "erodibility", "slow", "rot", "texture"];
+pub const PANELS: [&str; 19] = ["map", "temperature", "rain", "life", "depth", "land", "kinds", "conductivity", "water", "yield", "wetness", "rise", "soil", "organic", "minerals", "erodibility", "slow", "rot", "texture"];
 /// The panel drawn by the terrain's samples, not by the cells: the last.
 const SAMPLED: usize = PANELS.len() - 1;
 /// The first of the loose ground's panels in `PANELS`.
-const GROUND: usize = 6;
+const GROUND: usize = 7;
+/// The colour of each starting kind of cover (`Cover::root`, the rows of `worldgen::life::KINDS`).
+const KIND_RGB: [Rgb; 6] = [[225, 215, 80], [120, 190, 70], [25, 95, 40], [40, 150, 160], [160, 110, 50], [190, 80, 170]];
+/// The colour of a cell whose cover holds none.
+const NO_KIND: Rgb = [90, 85, 80];
 const GAP: usize = 4;
 /// Seconds of a year for the rain panel (1e4 mol/(m² year) is about 0.2 m of liquid).
 const YEAR_S: f64 = 3.15e7;
@@ -54,6 +58,8 @@ struct Look<'a> {
     liquid_m3: f64,
     /// What each cell's ground holds of dead matter and minerals, and how fast its frame rots (`soil::holdings`).
     ground: Vec<pcore::soil::Holdings>,
+    /// The starting kind whose slots hold the most cover in each cell (`lead`).
+    lead: Vec<Option<u32>>,
 }
 
 impl<'a> Look<'a> {
@@ -63,7 +69,7 @@ impl<'a> Look<'a> {
         let liquid = pcore::life::Parts::of(&w.chem).map_or(0, |p| p.liquid);
         let liquid_m3 = w.chem.molar_volume(liquid, pcore::chem::Phase::Liquid);
         let ground = pcore::soil::holdings(w).unwrap_or_else(|| vec![Default::default(); cells.len()]);
-        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3, ground }
+        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3, ground, lead: lead(w) }
     }
 
     /// The minerals the ground of cell `i` holds (`Chemistry::minerals`), mol/m².
@@ -116,6 +122,7 @@ impl<'a> Look<'a> {
         match panel {
             0 => self.map(i, beside, step, true),
             5 => self.map(i, beside, step, false),
+            6 => self.lead[i].map_or(NO_KIND, |k| KIND_RGB[k as usize % KIND_RGB.len()]),
             GROUND.. => self.ground(panel, i),
             1 => ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
             // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
@@ -156,6 +163,46 @@ impl<'a> Look<'a> {
         let shade = if f.depth[i] > STANDING_M || river { 1.0 } else { shade };
         c.map(|v| (v as f64 * shade).clamp(0.0, 255.0) as u8)
     }
+}
+
+/// Of each cell of `w`, the starting kind (`Cover::root`) whose slots hold the most cover; none where no slot holds any.
+fn lead(w: &World) -> Vec<Option<u32>> {
+    let Some(p) = pcore::life::Parts::of(&w.chem) else { return vec![None; w.mesh.cells().n()] };
+    let mm = p.mm(&w.chem);
+    let lead = |c: &pcore::cover::Cover| {
+        let mut kg: Vec<(u32, f64)> = Vec::new();
+        for x in c.held() {
+            match kg.iter_mut().find(|r| r.0 == c.root[x]) {
+                Some(r) => r.1 += c.kg(&mm, x),
+                None => kg.push((c.root[x], c.kg(&mm, x))),
+            }
+        }
+        kg.into_iter().filter(|r| r.1 > 0.0).max_by(|a, b| a.1.total_cmp(&b.1)).map(|r| r.0)
+    };
+    (0..w.mesh.cells().n()).map(|i| lead(w.life.cover(i))).collect()
+}
+
+/// Write a table of the cells of `w` to `path` (CSV, one row a cell): its area, whether it is land with no liquid
+/// standing on it, its height and frozen cover, its ground temperature, its year's rain and what rises from it, its
+/// cover and the starting kind that leads it (`lead`), and its loose ground: texture, pores, depth, what it holds for
+/// roots, the share of its pores its liquid fills, its slow organic matter, its minerals (`soil::holdings`) and its
+/// erodibility.
+pub fn table(w: &World, path: &str) -> Result<(), String> {
+    let look = Look::new(w);
+    let (f, area) = (&look.f, w.mesh.cells().area());
+    let mut out = String::from("cell,area_m2,open_land,z_m,ice_m,t_ground_k,rain_mm,rise_mm,cover_kg_m2,lead_kind,coarse,fine,organic,porosity,field,wilt,seep_m_s,loose_m,for_roots_mm,wetness,slow_kg_m2,mineral_dissolved_kg_m2,mineral_held_kg_m2,erodibility\n");
+    for (i, a) in area.iter().enumerate() {
+        let (t, p, g) = (&w.soil[i].texture, &w.soil[i].pores, &look.ground[i]);
+        let open = u8::from(w.is_land(i) && f.depth[i] <= STANDING_M);
+        let lead = look.lead[i].map_or(-1, i64::from);
+        let (rain, rise) = (look.mm_a_year(w.rain[i] as f64), look.mm_a_year(w.evap[i] as f64));
+        out += &format!(
+            "{i},{},{open},{},{},{},{rain},{rise},{},{lead},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            a, f.z[i], f.ice[i], f.t[i], look.green[i], t.coarse, t.fine, t.organic, p.porosity, p.field, p.wilt, p.seep, f.loose[i],
+            p.for_roots(f.loose[i]) * 1e3, look.wet[i], g.slow, g.minerals[0], g.minerals[1], t.erodibility()
+        );
+    }
+    std::fs::write(path, out).map_err(|e| format!("{path}: {e}"))
 }
 
 /// The colour of texture `t`: of sand, silt and clay by their shares, darker as it holds more organic matter.

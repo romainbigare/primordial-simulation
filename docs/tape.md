@@ -50,8 +50,8 @@ size), `channel_w` and `channel_d` (the width and the depth of the cell's channe
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
 `filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
 the texture of its loose ground (`World::soil`, `soil::Texture`): `coarse` and `fine` (the shares of coarse and of fine
-particles, 0..1) and `organic` (the share of organic matter of its solid volume, 0 to 0.02, which the page's Earth view darkens its
-bare ground by), `conduct` (its pores' conductivity, m/s),
+particles, 0..1) and `organic` (the share of organic matter of its solid volume, log from 0.0003 to 0.05, which the page's
+Earth view darkens its bare ground by), `conduct` (its pores' conductivity, m/s),
 `avail` (the liquid its loose ground holds for roots when full, m), `roots` (the share of that it holds now,
 `Pores::available`), `rises` (what rises from it less what condenses on it, `World::evap`) and `sheds` (its rain less
 that, mol/m²/s, lin from -0.004 to 0.004: what it passes on to runoff and the ground below), and of its ground
@@ -227,7 +227,10 @@ and 17 times the step to its main neighbour upstream, by which a shell lets what
 from one sample's centre to the next, so its width has no step where two samples meet. Then of each sample again the
 reflectance of its bed's make and a zero. Then of each sample again the shares of coarse and of fine particles of its
 loose ground (`pcore::soil::textures`), how slowly its pores pass liquid (the decimal logarithm of 1 m/s over their
-conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground, and a zero. **The
+conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground, and the liquid its loose ground
+holds for roots (`Pores::for_roots` of its texture over its depth) as the `avail` layer shows it, 0..1 of its scale,
+which the page draws that layer by. Then of each sample again its field capacity and its wilting point as shares of
+its pores (`Pores::of`) and two zeros, by which the page draws the layer `roots` at each point. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
 sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries
