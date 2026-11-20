@@ -19,12 +19,12 @@ function playwright() {
 }
 
 /** The hooks the tool gives the page (`window.__ew`), put at the end of the page's script, inside its scope: the map,
- * the cover, the world, its worker and its ground, play and pause, the speed and the view, opening a saved world by URL, and the numbers the marks' textures are laid out by (textures.ts `prepare`, read.mjs `marks`).
+ * the cover, the world, its worker and its ground, play and pause, the speed, the view and the layer, opening a saved world by URL, and the numbers the marks' textures are laid out by (textures.ts `prepare`, read.mjs `marks`).
  * The shipped page holds none of this. */
 const HOOKS = `
 window.__ew = { map, vegetation, fire,
   get world() { return world; }, get live() { return live; }, get land() { return land; }, get playing() { return playing; },
-  setView, togglePlay, setSpeed(s) { speed = s; live && live.rate(s); syncUi(); },
+  setView, setLayer, togglePlay, setSpeed(s) { speed = s; live && live.rate(s); syncUi(); },
   open: u => fetch(u).then(r => r.arrayBuffer()).then(openSaved),
   lattices: { LATTICES, REACH, STAND, ROWS_MOST, MARK_MARGIN, MARK_SPARE, PLANES_DOWN, GROUPS } };
 `;
@@ -84,9 +84,16 @@ export async function open(browser, base, site, world, { px = 400 } = {}) {
   return page;
 }
 
-/** Wait until the page stands on a world and its ground is made. */
+/** Wait until the page stands on a world and its ground is made; throws the page's message where the core refused the
+ * world (a snapshot of another format, say) and the page says why (wasm/src/lib.rs `saved`, web/src/worker.ts). */
 export async function opened(page, ms = 300000) {
-  await page.waitForFunction(() => { const e = window.__ew; return e && e.world && e.land && e.land.tiles.rock; }, null, { timeout: ms, polling: 250 });
+  const done = await page.waitForFunction(() => {
+    const e = window.__ew, msg = document.getElementById('msg');
+    if (e && !e.world && msg && !msg.hidden && /^(Not a saved world|A saved|The world (was refused|stopped))/.test(msg.textContent)) return { refused: msg.textContent };
+    return e && e.world && e.land && e.land.tiles.rock ? { refused: null } : null;
+  }, null, { timeout: ms, polling: 250 });
+  const { refused } = await done.jsonValue();
+  if (refused) throw new Error(`The page refused the world: ${refused}`);
 }
 
 /** Open the saved world at `url` in the running page (`__ew.open`) and wait for it. */

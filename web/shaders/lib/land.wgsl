@@ -51,10 +51,12 @@ struct Land {
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
 // liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs
-// about, the share of its area that is land and the mean wetness index of its terrain's samples; the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
+// about, the share of its area that is land and the wetness index from which its land is saturated (the core's
+// `inside::wet_ground`); the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
 // its loose ground; and in the last numbers of the true colour's and the layer's planes, the land's ice, m, its ground
-// temperature, K, and its mean height, m. (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
-const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
+// temperature, K, and its mean height, m; and the mean wetness index of the terrain's samples inside the cell (its first
+// number). (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
+const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const TERRAIN = 6; const PLANES = 7;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
 // Between texels of one channel its signed distance changes by at most the distance between them (√2 texels across a
@@ -252,6 +254,33 @@ fn ground_at(at: vec2f, spline: bool) -> Tiled {
 fn soil_held(pore: f32, pores: f32, c: f32, twi: f32) -> f32 {
   if (pore <= 0.0 || pore >= pores) { return pore; }
   return clamp(pore + land.soil.x * (twi - c), 0.0, pores);
+}
+
+// How saturated the ground at `at` is, 0..1 (TOPMODEL, Beven and Kirkby 1979): all of it in the water of a flowing
+// channel, as wide as the channel law makes it on its discharge this month (the core's `inside::channel_share`: the
+// flowing liquid is its table at the surface; rock.wgsl `discharge_at`, the drawn channel's own), about its line as
+// drawn; elsewhere where its wetness index (`Tiled.twi`) reaches the index of saturation of its cells (the core's
+// `inside::wet_ground`), blended over the cells about it that hold land (a cell of liquid alone has none), so the wet
+// ground's edge is a line of the index, along the valleys, not a ring about a wet cell; the edge is spread over
+// `SATURATED_EDGE` of the index under it. (The page draws that water about any channel line its tiles hold, the law
+// only about those that drain a channel's source, `inside::drains_source`: below it the law's channels are under a
+// metre wide.)
+const SATURATED_EDGE = 0.5;
+fn saturated_at(at: vec2f) -> f32 {
+  let g = ground_at(at, false);
+  let q = discharge_at(g, at);
+  if (q > 0.0 && g.d <= 0.5 * land.channel.x * pow(q, land.channel.y)) { return 1.0; }
+  let cs = corners(at / land.map.x);
+  var level = 0.0;
+  var weight = 0.0;
+  for (var k = 0; k < 4; k++) {
+    let s = cell(SOIL, cs.at[k]);
+    let w = select(0.0, cs.w[k], s.z > 0.0);
+    level += w * s.w;
+    weight += w;
+  }
+  if (weight <= 0.0) { return 0.0; }
+  return smoothstep(-SATURATED_EDGE, 0.0, g.twi - level / weight);
 }
 
 // The share of a tent of half-width 1 that lies below t (a pixel's footprint across a line).

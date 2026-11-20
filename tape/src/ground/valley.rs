@@ -15,6 +15,11 @@ use pcore::space::samples::Samples;
 /// m, toward their floor, on texels finer than the samples and out of the ponds (`Ground::tile`).
 pub const VALLEY_FROM: f64 = 1.0e6;
 pub const VALLEY_M: f64 = 250.0;
+
+/// Whether sample `k` of `s` draws a valley about its line (`VALLEY_FROM`, out of the ponds).
+pub(super) fn carves(s: &Samples, k: usize) -> bool {
+    s.up[k] >= VALLEY_FROM && s.pond[k] == NONE
+}
 /// A valley follows its line in straight pieces no shorter than this share of `VALLEY_M`: within that of the line the
 /// ground is drawn at the floor's height all the same.
 const CHORD_SHARE: f64 = 1.0 / 32.0;

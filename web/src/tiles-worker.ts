@@ -45,7 +45,7 @@ host.onmessage = async e => {
       host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data }, [data.buffer]);
     }
   } catch (err) {
-    host.postMessage({ kind: 'error', text: String(err) }, []);
+    host.postMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) }, []);
   }
 };
 

@@ -3,7 +3,7 @@
 //! centres and applies the laws at each pixel of the ground's tiles (`ground`). It is made with each frame, from the
 //! frame's own context (`Ctx`), and holds nothing a picture needs to make.
 
-use crate::ground::{sample_index, shore_dry};
+use crate::ground::shore_dry;
 use crate::layers::{cover_melt, frame, pixels, Ctx};
 use pcore::inside::{soil_level, Means};
 use pcore::space::network::NONE;
@@ -17,13 +17,13 @@ pub const ROW: usize = 12;
 const DRY_M: f64 = 0.1;
 
 /// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
-/// height over it, m, and the wetness index of the terrain's samples inside it with their shares of its area
-/// (`ground::sample_index`); the cell of each of the terrain's samples; and whether the shore a shell draws leaves
+/// height over it, m, and the terrain's samples inside it (which the table reads as they are now, `inside::parts_now`);
+/// the cell of each of the terrain's samples; and whether the shore a shell draws leaves
 /// each sample out of its pond's liquid (`ground::shore_dry`).
 pub struct Table {
     square: Vec<usize>,
     z: Vec<f64>,
-    inside: Vec<(Vec<f64>, Vec<f64>)>,
+    inside: Vec<Vec<usize>>,
     cell: Vec<u32>,
     dry: Vec<bool>,
 }
@@ -40,17 +40,13 @@ impl Table {
         }
         z.iter_mut().zip(&count).for_each(|(z, c)| *z /= c.max(1.0));
         let s = w.terrain_samples();
-        let twi = sample_index(map, &s);
         let per = (1u64 << (SAMPLE_DEPTH - map.square_depth())) as f64;
         let tree = w.mesh.tree();
         let cell = |k: usize| tree.cell_at(map.point_at(((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per));
         let of: Vec<usize> = (0..s.h.len()).map(cell).collect();
-        let mut inside = vec![(Vec::new(), Vec::new()); n];
+        let mut inside = vec![Vec::new(); n];
         for (k, &i) in of.iter().enumerate() {
-            inside[i].0.push(twi[k]);
-        }
-        for (t, a) in inside.iter_mut() {
-            *a = vec![1.0 / t.len().max(1) as f64; t.len()];
+            inside[i].push(k);
         }
         Table { square, z, inside, cell: of.iter().map(|&i| i as u32).collect(), dry: shore_dry(&s) }
     }
@@ -123,12 +119,13 @@ impl Table {
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
-        let m = m.unwrap_or(Means { pore: 0.0, pores: 0.0, stands: depth });
+        let m = m.unwrap_or(Means { pore: 0.0, pores: 0.0, stands: depth, ..Default::default() });
         let [low, top] = level.unwrap_or([z, z + depth]);
-        let (twi, area) = &self.inside[i];
-        let soil = soil_level(&w.cfg.phys, twi, area, m).unwrap_or(0.0);
+        let s = w.terrain_samples();
+        let (twi, area) = pcore::inside::parts_now(w, &s, i, &self.inside[i]);
+        let soil = soil_level(&w.cfg.phys, &twi, &area, m).unwrap_or(0.0);
         let cools = w.air_drop(i).unwrap_or(0.0);
-        let twi_mean = twi.iter().zip(area).map(|(t, a)| t * a).sum();
+        let twi_mean = self.inside[i].iter().map(|&k| s.twi[k]).sum::<f64>() / self.inside[i].len().max(1) as f64;
         [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, c.land[i], twi_mean]
     }
 }

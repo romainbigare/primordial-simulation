@@ -107,7 +107,7 @@ fn thrive(twi: f32, c: vec2i, need: vec4f) -> vec4f {
   let soil = cell(SOIL, c);
   let mean = HELD_FILL * soil.x;
   let half = land.soil.y;
-  let here = soil_held(mean, soil.x, soil.w, twi);
+  let here = soil_held(mean, soil.x, cell(TERRAIN, c).x, twi);
   var out = vec4f(1.0);
   for (var s = 0; s < 4; s++) {
     if (need[s] <= 0.0) { continue; }
