@@ -34,9 +34,9 @@ const MOLTEN_MARGIN: f64 = 2.0;
 
 /// The terrain of `seed` on `map` whose samples are `cells` (`space::terrain`): an island's level 0 m lies at the rise
 /// `ISLAND_LEVEL` (`Terrain::island`); a globe's leaves the share `LAND_SHARE` of the area of the samples above it.
-fn terrain_of(seed: u64, map: &Square, cells: &Level, makes: Vec<Make>) -> Terrain {
+fn terrain_of(seed: u64, map: &Square, cells: &Level, makes: Vec<Make>, ph: &pcore::Physics) -> Terrain {
     if !map.wrap {
-        return Terrain::island(seed, Shape::One, makes);
+        return Terrain::island(seed, Shape::One, makes, ph);
     }
     let lift = Lift::one(seed, map);
     let rise: Vec<f64> = (0..cells.n()).map(|i| terrain::rise(seed, map, &lift, Place::of(cells, i), 0.0).0).collect();
@@ -47,7 +47,7 @@ fn terrain_of(seed: u64, map: &Square, cells: &Level, makes: Vec<Make>) -> Terra
         above += cells.area()[i];
         above >= LAND_SHARE * total
     });
-    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]), makes)
+    Terrain::new(seed, level.map_or(0.0, |&i| rise[i]), makes, ph)
 }
 
 /// The volume fractions of a bed that holds the share `shares[m]` of each make `m` of the chemistry's (`Init::makes`),
@@ -143,16 +143,16 @@ pub fn new_map(seed: u64, map: Square) -> World {
 /// `Config::lat_south` and `lat_north`, its low ground away from land in coarse cells (`coarse_low`): terrain, chemistry
 /// 0, ground, liquid and air. One terrain, so its worn samples are found once.
 pub fn new_island(seed: u64, (w, h): (usize, usize), shape: Shape, cfg: Config) -> World {
-    let ((squares, terrain), (chem, init)) = (island_ground(seed, (w, h), shape), chemistry0());
+    let ((squares, terrain), (chem, init)) = (island_ground(seed, (w, h), shape, &cfg.phys), chemistry0());
     let map = coarse_low(seed, squares, &terrain, &cfg);
     build_on(seed, map, terrain, (chem, &init), cfg)
 }
 
 /// The ground of the island of `w × h` squares and the large shape `shape` that `new_island` makes from `seed`: the
 /// map of its squares and its terrain (how its cells are cut does not change the ground).
-pub fn island_ground(seed: u64, (w, h): (usize, usize), shape: Shape) -> (Square, Terrain) {
+pub fn island_ground(seed: u64, (w, h): (usize, usize), shape: Shape, ph: &pcore::Physics) -> (Square, Terrain) {
     let (chem, init) = chemistry0();
-    (island(w, h), Terrain::island(seed, shape, makes_of(&chem, &init)))
+    (island(w, h), Terrain::island(seed, shape, makes_of(&chem, &init), ph))
 }
 
 /// `map` (of squares) with its low ground away from land in coarse cells (`coarsen`): an air block whose squares all
@@ -192,7 +192,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     if map.wrap {
         (cfg.lat_south, cfg.lat_north) = (-90.0, 90.0);
     }
-    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells(), makes_of(&chem, init));
+    let terrain = terrain_of(seed, &map, World::mesh_of(&map.samples(), &cfg).cells(), makes_of(&chem, init), &cfg.phys);
     build_on(seed, map, terrain, (chem, init), cfg)
 }
 

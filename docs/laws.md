@@ -123,15 +123,46 @@ makes no new pit and no new peak); a map whose first grid would hold more than 6
 twice as coarse until it fits (`MOST_SAMPLES`). **The shelf** (`space::shelf`): the load that reached the open low
 ground is spread along the shore by the waves, each sample of the shore taking the load that reached the shore within
 5 km of it as a share of that stretch (`ALONG_M`); from it the load builds out a platform 10 m under the low stand
-(`TOPSET_M`, a
-delta's topset), as wide as that load in proportion (a round lobe: a sample the open low ground joins to a shore's sample lies inside
-that one's platform by its width less the straight distance between them), fronted by a slope of 0.3 down to the floor (`FORESET`, the load at
-rest under liquid; Gilbert 1885). So a channel that brings much load builds a fan at its mouth and a coast that gets
-little keeps its steep drop; its edge is rounded over 250 m as a clinoform's top rolls over (`ROUNDED_M`), never over
-the platform's top; the width is found so the shelf holds all the load (where the platform fills the open low ground of
-a small map, the rest leaves the map), and what the wear took off the land is what lies in the basins, on the shelf and
-off the map (`Samples::books`). Laid at the low stand's shore, the shelf lies 110 m under 0 m once the liquid has
-risen: a drowned shelf, its front where the low stand's coast was; the drowned valleys get no load after the rise. **The loose ground** the wear leaves (`Samples::loose`):
+(`TOPSET_M`, a delta's topset), as wide as that load in proportion (a round lobe: a sample the open low ground joins to
+a shore's sample lies inside that one's platform by its width less the straight distance between them), fronted by a
+slope of 0.3 down to the floor (`FORESET`, the load at rest under liquid; Gilbert 1885). So a channel that brings much
+load builds a fan at its mouth and a coast that gets little keeps its steep drop; its edge is rounded over 250 m as a
+clinoform's top rolls over (`ROUNDED_M`: the mean of the thickness over a square that wide, the land in it as none),
+never over the platform's top; the width is found so the shelf holds all the load (where the platform fills the
+open low ground of a small map, the rest leaves the map), and what the wear took off the land is what lies in the
+basins, on the shelf and off the map (`Samples::books`). Laid at the low stand's shore, the shelf lies 110 m under 0 m
+once the liquid has risen: a drowned shelf, its front where the low stand's coast was. **The high stand**
+(`space::stand`): then the liquid stands at 0 m for 6,000 years (`HIGH_STAND_YEARS`; the sea's rise ended about then on
+the one planet known, Fairbanks 1989; Stanley and Warne 1994), and the channels fill the liquid they run into. A flood
+from the open low ground at 0 m finds each mouth and the ground that drains to it with no closed basin on its way (a
+basin keeps what comes into it, so its catchment brings none); each mouth brings the load its catchment yields, by the
+law fitted to the load of the large channels of the one planet known (Syvitski and Milliman 2007, read for catchments
+of 1 to 100 km²): Qs = 6e-4 Mt a year × Q^0.31 A^0.5 R T, Q its discharge in km³ a year (0.3 m a year of runoff,
+`RUNOFF_M`), A its area in km², R the height of its highest ground in km and T the typical surface temperature
+(`T_SURF`) in degrees over 273.15 K, of a bed of 2,700 kg/m³. Its catchment gives that ground where the wear's last
+stage lowered it fastest, each sample no lower than the one its liquid runs to (or the liquid's level) or the top of
+its mouth's lobe; what that holds back the mouth does not bring. **The lobes** (`space::delta`), largest load first,
+each on the ground the ones before it left: a mouth fills the liquid from where its channel comes in, each sample up
+to the **top** a deposit builds to there, the surface of the channel's flood (as deep as a channel of the terrain's law,
+`Terrain::channel`, carries `FLOOD_RUNOFF` from the area that drains to that sample, the mouths that share it together;
+Leopold and Maddock 1953), the samples in the order of the least cost to reach them (Dijkstra), until its load is laid,
+the last in part. A step costs its length, more by the depth of the liquid under the top over 10 m (`WAVE_BASE_M`: the
+base of an open coast's waves; the lobe follows a drowned valley and the shallows), more by 3 (`ALONG_COAST`) times how
+open the sample lies to the waves times the square of how far the step leads away from the coast (the waves spread a
+lobe along the shore; Wright and Coleman 1973; Galloway 1975), and less by 0.5 (`DOWN_CHANNEL`) times how sheltered it
+lies times how far the step leads on along the channel's last steps (the channel carries it out). How open a sample
+lies is the mean, over the ways out of it that lead over open liquid, of the run of open liquid along each, at most
+50 km, over 50 km (`FETCH_REF_M`; an effective fetch, Håkanson 1981); the way out from the coast is the rise of the
+distance from the land. The waves shape the lobe, not its height: on a coast they build beaches up to the level and
+over it. Round each lobe a front falls from its top at 0.3 (`FORESET`), from the samples it filled last; the hollows the
+lobes leave (the liquid they cut off, the valleys behind them that drain to a mouth and lie under the highest top) are
+filled to where liquid would spill out of them (a flood from the open liquid, Barnes, Lehman and Mulla 2014), from the
+lobes' fronts; and the edges are rounded as the shelf's are, the mean over the ground the lobes may lie on alone. Each lobe holds its mouth's load, and what the land gave
+is what lies in the lobes and off the map. The top of what a lobe laid at a sample lies there for the share of its
+load laid after it, of the 6,000 years (its front, none; a filled hollow, half); a sample's loose ground is as old as
+the mean of its layers by depth (`Samples::age`). **Known limit:** the volumes of the wear are heights times areas: the
+load's pores are not counted,
+so a deposit stands about 1.7 times thinner than one of the same rock would. **The loose ground** the wear leaves (`Samples::loose`):
 on land (`space::mantle`) the depth where the bed's breaking into loose ground balances what takes it away, the
 smaller of two balances. The bed breaks at 7.7e-5 m a year under none, e times slower under each 0.4 m (`BREAKS`,
 `BREAKS_UNDER_M`; Heimsath, Dietrich, Nishiizumi and Finkel 1997). Against the lowering of the last step E (cut and
@@ -1428,7 +1459,8 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   grain fine as 1 − exp(−t / 1e5 years) (`WEATHER_YEARS`; the lifetime of a silicate grain in the field, White and
   Brantley 2003), t the time the loose ground has lain: its depth over how fast it is renewed, from below as fast as
   the ground lowers or from above as fast as it settled in the wear's last stage (`Samples::age`; at least the
-  lowering of `SLOWEST`). A substance that weathers only into liquid or gas dissolves away and leaves no fine grain.
+  lowering of `SLOWEST`); where the high stand laid a layer over it (0), the mean of the two layers' ages by their
+  depths. A substance that weathers only into liquid or gas dissolves away and leaves no fine grain.
   So thin ground on steep slopes, quickly renewed, keeps its coarse grain; old flat ground on a weathering bed is fine.
 - **Sorting.** What settled on a sample in the wear's last stage (`Samples::settled`; all of the open low ground's) is
   sorted by the flow that laid it: grains settle where they sink faster than the flow's shear velocity u* = √(g d S)
@@ -1507,7 +1539,8 @@ read a kind.
   land rises from a low stand of the sea 100 m under 0 m to the noise's height over 2 million years while flowing
   liquid cuts it, its slopes creep and it floats back up as it is unloaded; the load settles in the closed basins the
   cutting leaves, and those it does not fill are ponds, each with its pass and level; what reaches the open low ground
-  lies there as a shelf; then the sea rises to 0 m and drowns what lies under it. **The starting
+  lies there as a shelf; then the sea rises to 0 m and drowns what lies under it, and stands there 6,000 years while the
+  channels fill the heads of the valleys it drowned (the high stand, 0). **The starting
   liquid** (`World::full_bodies`): the open low ground stands at 0 m and every body of standing liquid with a pass
   stands full to its pass, each part of it holding what its samples hold under that level, as the runoff's pass leaves
   a body (1.2); a cell that holds no pond's samples holds what its ground dips under 0 m. Each cell that holds some of

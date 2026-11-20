@@ -18,6 +18,7 @@ use super::network::NONE;
 use super::mantle::{age, mantle};
 use super::ponds::settle;
 use super::shelf::lay;
+use super::stand::high_stand;
 use super::slopes::{creep, rebound};
 use super::strata::Strata;
 use crate::math::spread_down;
@@ -27,7 +28,7 @@ use crate::rng::{Purpose, Rng};
 const WEAR_YEARS: f64 = 2.0e6;
 /// The height of the liquid of the open low ground while the land is worn, m: the low stand the valleys are cut to,
 /// before it rises to 0 m and drowns them.
-const LOW_STAND_M: f64 = -100.0;
+pub(super) const LOW_STAND_M: f64 = -100.0;
 /// The height the liquid of the open low ground rises to after the wear, m: the level the world is made with, and the
 /// level of the planet's low liquid beyond the edges of a map in the planet's air (`flow::runoff`).
 pub const STAND_M: f64 = 0.0;
@@ -98,14 +99,16 @@ impl Bed<'_> {
     }
 }
 
-/// The volumes the wear moves, m³: what it takes off the land (cut, and crept into the open low ground), what settles
-/// in the closed basins, what lies on the open low ground's shelf (`space::shelf`), and what leaves the map where the
+/// The volumes the wear and the high stand move, m³: what they take off the land (cut, crept into the open low ground,
+/// and the high stand's load, `space::stand`), what settles in the closed basins, what lies on the open low ground's
+/// shelf at the low stand (`space::shelf`) and what the high stand lays at the mouths, and what leaves the map where a
 /// shelf fills the open low ground; the first is the sum of the others.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Books {
     pub taken: f64,
     pub settled: f64,
     pub shelf: f64,
+    pub high: f64,
     pub beyond: f64,
 }
 
@@ -130,7 +133,7 @@ struct Marks {
 /// reaches the open low ground lies there at the end as a shelf under the low stand's shore (`shelf::lay`) over
 /// `OOZE_M` of loose ground, and the last stage's marks give the land's loose ground (`space::mantle`); the open low
 /// ground it returns is what lies under 0 m joined to it.
-pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, body, strata): (&[f64], &[f64], &Strata)) -> Worn {
+pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, body, strata): (&[f64], &[f64], &Strata), channel: [f64; 2]) -> Worn {
     let rough = |k: usize| ROUGH_M * (Rng::new(seed, 0, k as u64, Purpose::Terrain).f64() - 0.5);
     let noise = g.coarser(by);
     let on = |x: &[f64], to: usize| if to >= by { noise.mean_over(x, to / by) } else { g.carried((by, x), to) };
@@ -161,12 +164,22 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, body
     let soil = mantle(&g.coarser(from), (&z, &marks.drained), (&marks.settled, &marks.lowers), (CREEP, last_years));
     let mut loose: Vec<f64> = g.carried((from, &soil), 1).iter().zip(&low).map(|(&d, &o)| if o { OOZE_M } else { d.max(0.0) }).collect();
     let offshore = g.carried((from, &offshore), 1);
+    // (Its load comes carried smooth from coarser grids, not to the samples of the shore its mouths reach: the waves take
+    // it all along the shore.)
     books.shelf = lay(g, &mut h, (&low, LOW_STAND_M, &offshore), &mut loose);
     books.beyond = (0..g.n()).map(|k| offshore[k] * g.area(k)).sum::<f64>() - books.shelf;
     let (settled_g, lowers) = (g.carried((from, &marks.settled), 1), g.carried((from, &marks.lowers), 1));
-    let settled: Vec<f64> = (0..g.n()).map(|k| if low[k] { loose[k] } else { settled_g[k].clamp(0.0, loose[k]) }).collect();
-    let age = (0..g.n()).map(|k| age(loose[k], (settled[k], last_years), lowers[k])).collect();
+    let (high, high_age) = high_stand(seed, g, (&mut h, &mut loose), (&lowers, channel), &mut books);
+    let settled: Vec<f64> = (0..g.n()).map(|k| if low[k] { loose[k] } else { (settled_g[k] + high[k]).clamp(0.0, loose[k]) }).collect();
+    // (The top of what the high stand laid is as old as the high stand left it.)
+    // The age of the loose ground is the mean of its layers' by their depths: what the high stand laid on what lay.
+    let age: Vec<f64> = (0..g.n()).map(|k| {
+        let under = (loose[k] - high[k]).max(0.0);
+        let old = age(under, ((settled[k] - high[k]).clamp(0.0, under), last_years), lowers[k]);
+        if loose[k] > 0.0 { (high[k] * high_age[k] + under * old) / loose[k] } else { old }
+    }).collect();
     // The liquid rises to its stand: what lies under it and joins the open low ground is of it.
+    assert!(h.iter().chain(&age).chain(&loose).all(|x| x.is_finite()), "the start law leaves a height, a depth or an age that is not finite");
     let open = open_low(g, &h, STAND_M);
     Worn { h, open, loose, settled, age, make, books }
 }
