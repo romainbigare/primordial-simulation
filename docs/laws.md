@@ -1032,7 +1032,7 @@ seeds fill it:
   (`cover::soak`, `cover::working`): up to field capacity the ground's liquid lies in its small pores all through it
   and its large pores hold the gas, so every root breathes; what it holds over field capacity fills the rest of its
   pores from the bottom up (Flow's one store over the depth of its loose ground), and over its top it stands; its
-  saturated share's pores are full (`inside::airless`, 0), so its table lies that much higher. A root
+  saturated strips (`inside::wet_ground`, 0) are full: their pores hold no gas and all they hold is for roots. A root
   under that table gets the oxidising gas its burning needs only down its own gas spaces, from the air over the ground
   or over the liquid standing on it, whose depth that gas crosses first: a kind's `GAS` gene is the share φ of its
   roots' volume that is gas space, and its gas reaches (2 D C φ / ((1 − φ) M))^½ m down a root (`cover::aired`;
@@ -1047,7 +1047,17 @@ seeds fill it:
   not always better: a kind of few gas spaces (φ 0.05, the 2 to 7% of plants of drained ground; Justin and Armstrong
   1987) loses most of its roots where its pores fill, one of many (0.3, of the 20 to 55% of plants of wet ground)
   keeps them, and a cold month, whose slow burning lets the gas reach far, costs less than a warm one (flooding in the
-  dormant season harms trees far less; Kozlowski 1997). A seed wakes as far as its first roots (`root_least`) work. Both the light
+  dormant season harms trees far less; Kozlowski 1997). **The wet strips** (`Cover::strip`, `cover::gains`,
+  `strips_share`): a slot's plants on its land stand on its saturated strips or on its drier rest, the share `strip` of
+  them on the strips (`cover::working` and `cover::moist` on each: on the strips pores full and all their liquid
+  available, on the rest its own fill, `inside::rest`); its roots work and its activity runs as the mean by its plants
+  there. Seeds land evenly over the land, and of them those take hold on each ground as a plant gains there (the share
+  of its roots that work times its activity): so a kind takes the strips only where its roots get the gas and the
+  liquid there. Its plants grow where they gain: of what a slot holds after its month, what it stored in the month
+  goes to the two grounds by what a plant gains on each, the rest stands where it stood, so plants die back where
+  their roots fail. Its plants stand over all its land (`Cover::stands`), so no denser on the strips than on the land
+  as a whole: its share there is at most the strips' share of the land. A kind of many gas spaces keeps the wet strips
+  of a dry cell and a kind of drained ground leaves them. A seed wakes as far as its first roots (`root_least`) work. Both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
   over its value at `gas_ref` (`Physics::gas_factor`; the light-limited rate of Farquhar, von Caemmerer and Berry
   1980): nothing at or below the floor, so the cover cannot strip the air of that gas. **Liquid for gas**: its pores that

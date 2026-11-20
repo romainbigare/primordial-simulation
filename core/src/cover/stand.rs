@@ -215,7 +215,7 @@ pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usi
 
 /// Slot `small` joins slot `big` of the same cover: amounts added, and their groups of plants together
 /// (`Cover::join_groups`; the stand thins at its month, `thin`), genes, balance and the store its plants under the
-/// liquid burnt the mean by built cover, its line the lower of the two (the ground of both; the one set where the other
+/// liquid burnt and its share in the strips the mean by built cover, its line the lower of the two (the ground of both; the one set where the other
 /// is not, `UNSET`), its starting kind the
 /// heavier's; `small` is empty after.
 pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
@@ -226,6 +226,7 @@ pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
     c.net[big] += f * (c.net[small] - c.net[big]);
     c.airless[big] += f * (c.airless[small] - c.airless[big]);
     c.drained[big] += f * (c.drained[small] - c.drained[big]);
+    c.strip[big] += f * (c.strip[small] - c.strip[big]);
     let lines = (c.line[big], c.line[small]);
     c.line[big] = if lines.0 < 0.0 || lines.1 < 0.0 { lines.0.max(lines.1) } else { lines.0.min(lines.1) };
     c.join_groups(mm, big, small);
