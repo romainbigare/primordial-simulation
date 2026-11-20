@@ -116,7 +116,7 @@ impl Layer {
 /// The least load of remains whose flame holds its heat on ground at `t` K, kg a m², where a kg of them burning leaves
 /// `net` J once it is lit: a flaming bed at `t_burn` sends σ (T_b⁴ − T⁴) a m² of its top to the open sky for as long
 /// as its particles flame (`flame::residence`), and a thinner bed frees less heat than that, so its flame cools and goes
-/// out (a grass fire stops spreading under 0.1 to 0.2 kg/m² of fine fuel; Cheney and Sullivan 2008). None burns where
+/// out (a flame in fine dead leaves stops spreading under 0.1 to 0.2 kg/m²; Cheney and Sullivan 2008). None burns where
 /// a kg frees no more than lighting it takes.
 fn least(ph: &crate::Physics, t: f64, net: f64) -> f64 {
     let lost = SIGMA * (ph.t_burn.powi(4) - t.powi(4)).max(0.0) * super::residence(ph);
