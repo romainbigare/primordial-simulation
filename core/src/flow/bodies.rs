@@ -7,7 +7,7 @@
 //! does the way down from a body's pass.
 
 use super::curve::Curve;
-use super::runoff::load::Carriage;
+use super::runoff::Carriage;
 use crate::space::network::NONE;
 use crate::space::samples::Samples;
 use crate::space::terrain::SAMPLE_DEPTH;

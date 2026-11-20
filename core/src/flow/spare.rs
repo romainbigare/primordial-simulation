@@ -10,4 +10,6 @@ pub(super) struct Spare {
     pub(super) response: Vec<f64>,
     /// What runs through each of the terrain's samples in the runoff's pass, mol and kg (`runoff::surface`)
     pub(super) samples: Vec<[f64; 2]>,
+    /// What each cell picks up in the runoff's pass, a row of the solids then the heat (`runoff::pick_up`)
+    pub(super) picked: Vec<f64>,
 }

@@ -10,14 +10,14 @@ use super::basin::{movable, share_out};
 use super::bodies::Bodies;
 
 mod edge;
-pub(super) mod load;
+mod carriage;
+mod load;
+mod pick;
+pub(super) use carriage::Carriage;
 use edge::come_in;
 use super::{curve::Part, level::{level_with, Level}};
-use super::{bare_share, drain::{liquid_heat, to_channels, OffLand}, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
-use crate::{space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux, Move, Node}, World};
-
-/// Least bond strength wear divides by.
-const STRENGTH_MIN: f64 = 0.05;
+use super::{drain::{liquid_heat, to_channels, OffLand}, follow, land::standing, liquid::book, parts::{pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
+use crate::{space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux}, World};
 
 /// The moves of the pass, each from a node of the class `class[0]` to one of `class[1]` (a cell to another, or the
 /// boundary for outside to a cell): what crosses, a row of `kinds` (mol) then the heat (J).
@@ -109,7 +109,7 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let carried = load::carry(w, s, &b, (&flux, &sol), &mut load, dt);
     book_all(w, s, &sol, &[&load]);
     (w.counts.load_month, w.counts.plumes) = (carried.loads, carried.plumes);
-    w.counts.load.iter_mut().zip(carried.volumes).for_each(|(a, v)| *a += v);
+    w.counts.load.iter_mut().zip(carried.volumes.counts()).for_each(|(a, v)| *a += v);
     load::mix(w, s, &carried.settled, &sol);
     apply(w, s, &[], &carried.broke);
     for (l, row) in x.rows.chunks_exact(x.width).enumerate() {
@@ -330,26 +330,5 @@ fn follow_flux(w: &mut World, b: &Bodies, (flux, left): (&[[f64; 2]], &[f64]), d
         w.liquid_month[i] = (most[i] / dt) as f32;
         follow(&mut w.liquid_flux[i], (most[i] / dt) as f32, ema);
         follow(&mut w.off_land[i], (left[i] / dt) as f32, ema);
-    }
-}
-
-/// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each substance by its share of
-/// the bed's volume, at most all of it: moves from `Class::Bed` gathered in `broke`. Its heat was already the node's.
-fn wear(w: &World, s: &mut Scratch, i: usize, bedwork: f64, broke: &mut Vec<Move>) {
-    let n = w.mesh.cells().n();
-    for bi in 0..s.state.bedk.len() {
-        let (k, bv) = (s.state.bedk[bi], s.state.bed[i].vol);
-        let b = w.store.amounts(Class::Bed)[k * n + i];
-        if b > 0.0 && bv > 0.0 {
-            let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
-            let go = Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol: (v / s.sp[k].v[0]).min(b), heat: 0.0 };
-            let area = w.mesh.cells().area()[i];
-            let (m, dz) = (go.mol, go.mol * s.sp[k].v[0] / area);
-            broke.push(go);
-            s.state.bed[i].vol -= m * s.sp[k].v[0];
-            s.add_loose(k, false);
-            s.note(k, i, m, area);
-            lift(s, i, [-dz, -dz]);
-        }
     }
 }
