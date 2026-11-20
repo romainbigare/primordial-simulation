@@ -34,7 +34,8 @@ fn wet(w: &World, s: &Scratch, cells: &[usize]) -> Wet {
 
 /// What each of `cells` holds as the shares inside it read it (`inside::Means`), by Flow's state of the ground: the
 /// liquid in its pores (`movable`, as far as its pores hold), what its pores hold when full and what stands over them
-/// (`land::layers`), as depths, m. None before Flow first built the state.
+/// (`land::layers`), and what the bed's store under it holds (`store_depth`), as depths, m, and its pores' field
+/// capacity. None before Flow first built the state.
 pub fn means(w: &World, cells: &[usize]) -> Option<Vec<Means>> {
     if !stated(w) {
         return None;
@@ -43,7 +44,7 @@ pub fn means(w: &World, cells: &[usize]) -> Option<Vec<Means>> {
     let x = wet(w, &s, cells);
     let one = |c: usize| {
         let (a, pore) = (area[cells[c]], x.vol[c].min(x.pores[c]));
-        Means { pore: pore / a, pores: x.pores[c] / a, stands: (x.vol[c] - pore) / a }
+        Means { pore: pore / a, pores: x.pores[c] / a, stands: (x.vol[c] - pore) / a, store: super::store_depth(w, cells[c]), field: w.pores(cells[c]).field }
     };
     Some((0..cells.len()).map(one).collect())
 }

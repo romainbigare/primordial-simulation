@@ -12,8 +12,8 @@ struct Earth {
   look: vec4f,
   // What is drawn: the view (0 the Earth's colours, 1 the true colour, 2 a layer over them); the stops of the layer's
   // ramp; the sea's level, m (the live map: the lowest body's); and where the layer is of the soil (drawn on dry
-  // ground alone, `in_view_of`) 1, or where the live map finds it at each point (land.wgsl `layer_at`) 2 the share of
-  // the pores the soil's liquid fills, 3 the coarse grain's share, 4 the fine grain's.
+  // ground alone, `in_view_of`) 1, or from 2 on which of the layers the live map finds at each point (live_map.wgsl
+  // `layer_at`, earth.ts `GROUND_LAYERS`).
   view: vec4f,
   // Where the map drawn lies in the world: its top-left corner and its size, m.
   place: vec4f,

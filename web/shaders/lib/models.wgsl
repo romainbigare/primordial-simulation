@@ -182,31 +182,69 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   return vec4f(seen_in_liquid(rgb, q.wades, model_height_m(s, uv, e / w, up, h), e / MAP_VIEW.y), a + under);
 }
 
-// The shadow of plant q drawn from its model sprite `fit` at p, e m a pixel: its sprite cast on the ground away from the
-// sun (south-east), each of its texels over its stem's foot (tex.wgsl `foot_rise`) at a height on it laid `MODEL_SHADOW_RUN` (draw.wgsl) of
-// that height along the ground, blurred (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of
-// its sprays as are left, over its bare twin's, a bush's lighter (`BUSH_SHADOW`). It fades out before the edge of the
-// reach a pixel looks for it (cover.wgsl `lattice`). How dark it makes the ground, 0..1. It is laid from where its
-// stem meets what it falls on: the ground at its foot, or the surface of the liquid it stands in, where its stem shows
-// out of it (`seen_in_liquid`): the map's view (water.wgsl `MAP_VIEW`) draws it the cosine of the depth north of the
-// foot.
+// A thing standing up from its foot (a plant, a dead tree) casts its sprite on the ground away from the sun
+// (south-east): each of its texels over its foot, at a height on it, laid `MODEL_SHADOW_RUN` (draw.wgsl) of that height
+// south and as far east. A pixel looks for a mark no farther than its lattice's reach `side` m east and south of the
+// mark's foot (cover.wgsl `lattice`, mark.wgsl `mark_box`): a shadow that would reach farther is drawn smaller, all of it
+// by one factor, so it is never cut by a straight line. The cast of a thing `h` m tall and `w` m wide, its top leaning
+// `top` m east: how long it lies south, how wide, and how far east its top lies, m.
+struct Cast { long: f32, w: f32, top: f32 }
+fn cast_of(h: f32, w: f32, top: f32, side: f32) -> Cast {
+  let long = MODEL_SHADOW_RUN * h;
+  let k = min(1.0, side / max(long + 0.5 * w + max(top, 0.0), 1e-6));
+  return Cast(k * long, k * w, k * top);
+}
+
+// A stem stands round on the ground: its shadow starts across its whole base, and the base is read `BASE_ROW` of the
+// sprite's height over its foot (the lowest rows of a sprite are the near rim of its stem's foot, narrower than the stem).
+const BASE_ROW = 0.03;
+
+// Where the ground point v (m from the foot, east and south) lies on the sprite cast `c` lays (uv: across, and down, 1
+// at the sprite's bottom; its foot `foot` of its height over that), its base read as the stem just over it (`BASE_ROW`);
+// out of 0..1 where the cast does not reach.
+fn cast_uv(c: Cast, v: vec2f, foot: f32) -> vec2f {
+  let up = v.y / max(c.long, 1e-6);
+  if (up < 0.0 || up > 1.0) { return vec2f(-1.0); }
+  return vec2f((v.x - v.y - c.top * up) / c.w + 0.5, min((1.0 - foot) * (1.0 - up), 1.0 - foot - BASE_ROW));
+}
+
+// Where a stem meets the ground, the sky's light is shut out on every side but one: the ground under and about its foot
+// is darker than its cast shadow (ambient occlusion): `CONTACT_SHADE` dark under the stem's round base, the ground point
+// `v` m from its foot, fading out from half the stem's reach `most` m to it.
+const CONTACT_SHADE = 0.6;
+fn contact_shade(v: vec2f, most: f32) -> f32 { return CONTACT_SHADE * (1.0 - smoothstep(0.5 * most, most, length(v))); }
+// A tree's stem reaches at most this share of its height from its foot (a stem is about 1/40 of its height across, and
+// its root flare twice that: from memory).
+const STEM_REACH = 0.03;
+
+// The shadow of plant q drawn from its model sprite `fit` at p, e m a pixel: its sprite cast on the ground (`cast_of`)
+// from where its stem meets what it falls on: the ground at its foot, or the surface of the liquid it stands in, where
+// its stem shows out of it (`seen_in_liquid`): the map's view (water.wgsl `MAP_VIEW`) draws it the cosine of the depth
+// north of the foot. Blurred (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of its sprays as
+// are left, over its bare twin's, a bush's lighter (`BUSH_SHADOW`). On land, its stem's contact shade (`contact_shade`)
+// at its foot. How dark it makes the ground, 0..1.
 const SHADOW_BLUR = 0.05;
-// The length of that shadow along the ground southward, m, within its reach.
-fn model_shadow_long(q: Plant, fit: ModelFit) -> f32 { return min(MODEL_SHADOW_RUN * fit.h, 0.9 * q.reach); }
+// The cast of plant q drawn from sprite `fit`.
+fn model_cast(q: Plant, fit: ModelFit) -> Cast { return cast_of(fit.h, fit.w, 0.0, q.reach); }
 fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let v = p - q.at + vec2f(0.0, MAP_VIEW.y * q.wades);
-  let long = model_shadow_long(q, fit);
-  let up = v.y / long;
-  if (up < 0.0 || up > 1.0) { return 0.0; }
-  let uv = vec2f((v.x - v.y) / fit.w + 0.5, (1.0 - foot_rise(fit.s)) * (1.0 - up));
-  if (uv.x < 0.0 || uv.x > 1.0) { return 0.0; }
-  // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
-  let g = max(max(e / fit.w, e / long), SHADOW_BLUR);
-  let leafy = dense_cover(fit.s, model_texel(fit.s, uv, g).a, fit.dense) * q.left;
-  var kept = leafy;
-  if (q.left < 1.0) { kept += bare_texel(fit.s, uv, g).a * (1.0 - leafy); }
-  let edge = (1.0 - smoothstep(0.8 * q.reach, q.reach, abs(v.x))) * (1.0 - smoothstep(0.8 * q.reach, q.reach, v.y));
-  return select(BUSH_SHADOW, 1.0, q.design == TREE) * CROWN_SHADOW * kept * edge;
+  let c = model_cast(q, fit);
+  let foot = foot_rise(fit.s);
+  var dark = 0.0;
+  let uv = cast_uv(c, v, foot);
+  if (all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))) {
+    // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
+    let g = max(max(e / c.w, e / c.long), SHADOW_BLUR);
+    let leafy = dense_cover(fit.s, model_texel(fit.s, uv, g).a, fit.dense) * q.left;
+    var kept = leafy;
+    if (q.left < 1.0) { kept += bare_texel(fit.s, uv, g).a * (1.0 - leafy); }
+    dark = CROWN_SHADOW * kept;
+  }
+  let most = STEM_REACH * fit.h;
+  if (q.wades <= 0.0) {
+    dark = max(dark, contact_shade(v, most));
+  }
+  return select(BUSH_SHADOW, 1.0, q.design == TREE) * dark;
 }
 
 // How wide the feet tree q drawn from sprite s stands on, 0..1: a woody tree's as wet as its kind's ground (form.ts

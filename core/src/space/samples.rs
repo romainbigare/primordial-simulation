@@ -28,7 +28,8 @@ use std::sync::{Arc, Mutex};
 /// pond each lies in (`NONE` on ground that drains), and the ponds; the make of each sample's bed at its surface
 /// (`space::strata`, as the wear left it); the depth of its loose ground the wear left, m, how much of it settled in
 /// the wear's last stage, m (all of it on the open low ground), and how long it has lain, years (`mantle::age`); and
-/// the volumes the wear moved (`wear::Books`).
+/// the volumes the wear moved (`wear::Books`); and how much liquid gathers at each, its topographic wetness index
+/// ln(a / tan β) (`sample_index`).
 #[derive(Clone, Debug)]
 pub struct Samples {
     pub seed: u64,
@@ -47,6 +48,7 @@ pub struct Samples {
     pub settled: Vec<f64>,
     pub age: Vec<f64>,
     pub books: Books,
+    pub twi: Vec<f64>,
 }
 
 /// A pond: the samples of one closed basin that lie under its level, where liquid stands at one level before it runs
@@ -87,6 +89,7 @@ impl Terrain {
             let k = s.index(&f);
             s.h[k] = mean;
         }
+        s.twi = sample_index(s.across, s.down, map.length(SAMPLE_DEPTH), &s.up, &s.h);
         *self.kept.0.lock().expect("the kept samples") = Some(Arc::new(s));
     }
 
@@ -155,6 +158,17 @@ impl Terrain {
         open_parts(&grid, &open, (&mut pond, &mut ponds));
         let slope = (0..grid.n()).map(|k| if f.to[k] == NONE { 0.0 } else { (h[k] - h[f.to[k] as usize]).max(0.0) / f.apart[k] }).collect();
         let (loose, settled, age) = (worn.loose, worn.settled, worn.age);
-        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, slope, pond, ponds, make, loose, settled, age, books }
+        let twi = sample_index(across, down, dy, &up, &h);
+        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, slope, pond, ponds, make, loose, settled, age, books, twi }
     }
+}
+
+/// How much liquid gathers at each of the samples `across` x `down`, `dy` m a side, of heights `h`, m, through which
+/// `up` m² drain (`network::accumulate`): the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979,
+/// `inside::Grid::wetness_index`), a sample's width its side and its slope that of the samples' ground (`Grid::slope`).
+/// A function of the place alone: the law (`inside::wet_ground`), the page's tiles and the tape read this one.
+pub fn sample_index(across: usize, down: usize, dy: f64, up: &[f64], h: &[f64]) -> Vec<f64> {
+    let grid = crate::inside::Grid::new(across, down, dy, vec![dy; down]);
+    let own = vec![dy * dy; h.len()];
+    crate::inside::Grid::wetness_index(up, &own, &grid.slope(h))
 }

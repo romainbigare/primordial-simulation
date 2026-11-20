@@ -53,7 +53,8 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
 // the soil's liquid fills by the laws inside a cell (`State`), the grain's shares of the samples (rock.wgsl
 // `soil_samples_at`, without the patches the Earth's colours draw), the liquid the samples' loose ground holds for roots as
 // its layer shows it, or the share of that its pores hold at the point: none at the wilting point, all at field
-// capacity, in proportion between (core/src/soil/pores.rs `Pores::available`).
+// capacity, in proportion between (core/src/soil/pores.rs `Pores::available`); or how saturated the ground is there
+// (land.wgsl `saturated_at`).
 fn layer_at(at: vec2f, dry: Spot) -> f32 {
   let k = earth.view.w;
   if (k == 2.0) { return dry.filled; }
@@ -64,6 +65,7 @@ fn layer_at(at: vec2f, dry: Spot) -> f32 {
     let p = soil_samples_at(at, PORES_PLANE);
     return clamp((dry.filled - p.y) / max(p.x - p.y, 1e-6), 0.0, 1.0);
   }
+  if (k == 7.0) { return saturated_at(at); }
   return cells_smooth(VIEW, at / land.map.x).x;
 }
 

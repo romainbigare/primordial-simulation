@@ -62,6 +62,14 @@ const SNAGS_FROM = FIRE_FROM + 2;
 const MODELS_FROM = SNAGS_FROM + SNAG_LAYERS; const HEIGHTS_FROM = MODELS_FROM + MODEL_LAYERS; const TREES_FROM = HEIGHTS_FROM + HEIGHT_LAYERS;
 // The mean lightness of the grass tufts' blades (linear).
 const TUFT_MEAN = 0.048;
+// A sprite read at a coarse level blurs its texels past its box, where nothing is read: its cover fades to none over
+// half a pixel (`g` of its content, across and down) inside its box's sides and top, so the box's edge never shows as a
+// straight line, in the sprite or in its shadow. (Its bottom is its foot, cut by the ground.)
+fn box_fade(uv: vec2f, g: vec2f) -> f32 {
+  let inside = vec3f(uv.x, 1.0 - uv.x, uv.y) / max(0.5 * vec3f(g.x, g.x, g.y), vec3f(1e-6));
+  return smoothstep(0.0, 1.0, min(min(inside.x, inside.y), inside.z));
+}
+
 // The texel of model sprite s at `uv` in its content (0..1, y down), at `g` of its content a pixel: linear, with cover.
 // Each stands on the bottom middle of its layer or quarter, two texels over its edge.
 fn model_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
@@ -76,7 +84,7 @@ fn model_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
     let at = (q + vec2f(0.5 - 0.5 * size.x, 1.0 - size.y - 2.0 / 256.0) + uv * size) * 0.5;
     t = textureSampleGrad(detail_tex, detail_sampler, at, MODELS_FROM + k / 4, vec2f(0.5 * g * size.x, 0.0), vec2f(0.0, 0.5 * g * size.y));
   }
-  return vec4f(unsrgb(t.rgb), t.a);
+  return vec4f(unsrgb(t.rgb), t.a * box_fade(uv, vec2f(g)));
 }
 
 // The height over the ground of the point of sprite s at `uv` in its content (`g` of it a pixel), drawn `h` m tall, the

@@ -13,15 +13,15 @@ import type { MapLook } from './field-window';
 /** What fire did on each square, a number a square (the core's layers, `LAYERS`). */
 export interface FirePlanes {
   burnt: Float32Array; age: Float32Array; flame: Float32Array; length: Float32Array; ash: Float32Array; air: Float32Array;
-  east: Float32Array; north: Float32Array; snag: Float32Array; cured: Float32Array;
+  east: Float32Array; north: Float32Array; snag: Float32Array; cured: Float32Array; wet: Float32Array;
 }
 /** The core's layers of fire, by the planes' names: the share of the land burnt in the last 12 months, the months since
  * the square last burnt (at most the layer's top: never), the share burning this month, its flames' mean length (m),
  * the ash on the ground and the gas the flames sent to the air this month (kg/m²), the low wind east and north (m/s),
- * the dead walls standing and the cured leaves standing (kg/m²). */
+ * the dead walls standing and the cured leaves standing (kg/m²), the share of the land saturated. */
 const LAYERS: Record<keyof FirePlanes, string> = {
   burnt: 'burnt', age: 'burnt_age', flame: 'flame', length: 'flame_len', ash: 'ash', air: 'flame_air',
-  east: 'wind_u', north: 'wind_v', snag: 'snag', cured: 'cured',
+  east: 'wind_u', north: 'wind_v', snag: 'snag', cured: 'cured', wet: 'wet_share',
 };
 
 /** The smoke reaches this far downwind, m, and spreads this share of the way gone to each side (flames.wgsl
@@ -73,10 +73,11 @@ export class Fire {
    * means none. A square burns whole, so its land is under a scar while it is younger than that, else its share burnt
    * this year. The texture's first plane holds that share, the months since the burn times it, the burning share and
    * the flames' length times that share (so the blend between squares gives each its share's mean); its second the
-   * ash, the gas sent to the air and the wind east and south; its third the dead walls and the cured leaves standing. */
+   * ash, the gas sent to the air and the wind east and south; its third the dead walls and the cured leaves standing and the share of the land saturated. */
   put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number): void {
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
-    const n = w * h, scar = (i: number) => (!p ? 0 : p.age[i] < never ? 1 : Math.min(p.burnt[i], 1));
+    // (Saturated ground does not burn: a scar lies on the dry land alone.)
+    const n = w * h, scar = (i: number) => (!p ? 0 : Math.min(p.age[i] < never ? 1 : p.burnt[i], 1 - p.wet[i]));
     this.scars = p ? boxOf(w, h, i => scar(i) > 0 || p.ash[i] > 0 || p.cured[i] > 0, BLEND_SQUARES) : null;
     this.snags = p !== null && p.snag.some(x => x > 0);
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
@@ -86,7 +87,7 @@ export class Fire {
       const s = scar(i), f = p.flame[i];
       data.set([s, s * Math.min(p.age[i], never), f, f * p.length[i]].map(half), 4 * i);
       data.set([p.ash[i], p.air[i], p.east[i], -p.north[i]].map(half), 4 * (n + i));
-      data.set([p.snag[i], p.cured[i], 0, 0].map(half), 4 * (2 * n + i));
+      data.set([p.snag[i], p.cured[i], p.wet[i], 0].map(half), 4 * (2 * n + i));
     }
     this.data = data;
     this.due = true;

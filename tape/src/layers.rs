@@ -200,6 +200,9 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: the dead matter, minerals and rot of its ground (`soil::holdings`; none before Flow first built
     /// its state)
     pub dead: Option<Vec<pcore::soil::Holdings>>,
+    /// Per ground cell: where its soil's liquid saturates its land (`inside::wet_land`; none where it holds no land, life
+    /// has no key liquid, or before Flow first built its state)
+    pub saturated: Vec<Option<pcore::inside::WetGround>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -212,8 +215,10 @@ impl<'a> Ctx<'a> {
         let filled = means.iter().map(|m| if m.pores > 0.0 { m.pore / m.pores } else { f64::NAN }).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
-        let land = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: pcore::soil::holdings(w) };
+        let land: Vec<f64> = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
+        let parts = pcore::cover::Parts::of(&w.chem).filter(|_| pcore::flow::means(w, &[]).is_some());
+        let saturated = par::map_n(n, par::UNCOUNTED, |i| parts.as_ref().filter(|_| land[i] > 0.0).map(|p| pcore::inside::wet_land(w, p, i).1));
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: pcore::soil::holdings(w), saturated };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
@@ -293,6 +298,8 @@ pub const LAYERS: &[Layer] = &[
     l("rot", "1/yr", "log", 0.01, 10.0, |c, i| c.dead(i, |g| g.rot)),
     l("conduct", "m/s", "log", 1e-9, 1e-4, |c, i| c.w.pores(i).seep),
     l("avail", "m", "log", 0.01, 0.3, |c, i| c.w.pores(i).for_roots(c.f.loose[i])),
+    l("wet_share", "1", "lin", 0.0, 1.0, |c, i| c.saturated[i].map_or(f64::NAN, |g| g.share)),
+    l("lambda_sat", "1", "lin", 0.0, 30.0, |c, i| c.saturated[i].map_or(f64::NAN, |g| g.level)),
     l("roots", "1", "lin", 0.0, 1.0, |c, i| c.w.pores(i).available(c.filled[i])),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),

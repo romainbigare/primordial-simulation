@@ -16,8 +16,6 @@ const ALL_STRIKES: f64 = 1.0;
 /// How much warmer than the small world's month the test's ground is, K: a hot dry month, its air near the ground far
 /// from saturation.
 const WARMER: f64 = 15.0;
-/// The ground's liquid times this fills it past field capacity.
-const WETTER: f64 = 10.0;
 /// The share either side of the flux at which the remains' moisture is their moisture of extinction.
 const NEAR: f64 = 1e-3;
 
@@ -64,8 +62,10 @@ fn remains(w: &World, i: usize) -> [f64; 2] {
 fn dry_remains_burn_through_and_wet_ones_only_at_their_top() {
     let (mut wet, i) = start();
     let p = Parts::of(&wet.chem).unwrap();
-    let held = wet.g(p.liquid, i);
-    liquid_to(&mut wet, i, WETTER * held);
+    // Its pores filled to field capacity: wet, short of the saturation that would keep a flame off the ground.
+    let (held, filled) = (wet.g(p.liquid, i), pcore::cover::soak(&wet, &p, i, wet.g(p.liquid, i)).1.filled);
+    let field = wet.pores(i).field;
+    liquid_to(&mut wet, i, held * field / filled);
     assert_eq!(pcore::cover::soak(&wet, &p, i, wet.g(p.liquid, i)).1.moist, 1.0, "the wet ground is at field capacity");
     let mut dry = wet.clone();
     liquid_to(&mut dry, i, 0.0);
