@@ -7,7 +7,7 @@ rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 51
 
 ## ground.jpg
 
-| layer | Poly Haven asset | its side in the world |
+| layer | asset (Poly Haven, unless named) | its side in the world |
 |---|---|---|
 | 0 | dry_river_pebbles (diffuse) | 2.0 m |
 | 1 | aerial_rocks_02 (diffuse) | 50 m |
@@ -32,7 +32,8 @@ Each is the 2k diffuse (ambientCG's: its 2K-JPG colour map) shrunk to 512 x 512,
 Gaussian of 40 texels, wrapping round, so the layer still repeats) and scaled back to its mean. All are CC0
 (polyhaven.com/license, ambientcg.com/license). ambientCG gives no size for layers 14 to 16: layers 14 and 15 are
 laid with their ripples some 40 cm apart, as large as the larger ripples of a flat (current ripples lie 10 to 15 cm
-apart), so they show at the map's nearest views.
+apart), so they show at the map's nearest views (the Earth view's look); layer 16 is laid 2.0 m across, as its clods
+and the stones on it are a few centimetres, as the other photographs' of mud.
 
 ## carpets.jpg
 

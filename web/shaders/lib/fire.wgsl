@@ -77,11 +77,28 @@ const BURN_PATCH_M = 600.0; const BURN_OCTAVES = 7; const BURN_NOISE = 91;
 // The edge of a patch is spread over this much of the number besides the swing of the patches too small to show.
 const BURN_EDGE = 0.02;
 
-// The place of point `at` among the patches, 0..1, even, seen at `e` m a pixel; and how far the number swings over the
-// patches that do not show there (the spread a share read on it takes).
+// Wet ground burns last: by open water the ground draws the water up through its pores, its fuel stays wet, and a strip
+// of green along a shore or a stream stops a fire or is passed by it (riparian buffers, Dwire and Kauffman 2003). A
+// point is spared (0..1) as wet as its capillary fringe keeps it: e^-1 at `FRINGE_M` over the nearest water, standing
+// or running (rock.wgsl `over_water`), all of it on soaked ground and under a film of liquid; and along a channel, all
+// of it at its water's edge, none from `RIPARIAN_M` off it (its banks' wet soil and the green strip it feeds).
+const RIPARIAN_M = 5.0;
+fn burn_spared(at: vec2f) -> f32 {
+  let g = ground_at(at, false);
+  let ch = channel_at(g, discharge_at(g, at));
+  let fringe = exp(-over_water(g, ch, over_ponds(g, depth_in(g, ch)), 1.0) / FRINGE_M);
+  if (ch.water <= 0.0) { return fringe; }
+  return max(fringe, 1.0 - smoothstep(0.0, RIPARIAN_M, abs(g.sd - ch.middle) - ch.water));
+}
+
+// The place of point `at` among the patches, 0..1, seen at `e` m a pixel; and how far the number swings over the
+// patches that do not show there (the spread a share read on it takes). The patches' number is even over 0..1; wet
+// ground (`burn_spared`) takes the place of the last of the dry ground, inside the edge, so a square's burnt share lies
+// on its drier ground first and a square burnt whole burns its wet ground too.
 fn burn_rank(at: vec2f, e: f32) -> vec2f {
-  let n = ragged(at, e, BURN_PATCH_M, BURN_OCTAVES, BURN_NOISE);
-  return vec2f(smoothstep(-EVEN_ONE, EVEN_ONE, n), BURN_EDGE + 0.25 * ragged_hidden(e, BURN_PATCH_M, BURN_OCTAVES));
+  let n = smoothstep(-EVEN_ONE, EVEN_ONE, ragged(at, e, BURN_PATCH_M, BURN_OCTAVES, BURN_NOISE));
+  let spread = BURN_EDGE + 0.25 * ragged_hidden(e, BURN_PATCH_M, BURN_OCTAVES);
+  return vec2f(mix(n, max(n, 1.0 - spread), burn_spared(at)), spread);
 }
 
 // The share of a point of rank `r` (`burn_rank`) in the first `share` of the ground.

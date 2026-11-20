@@ -73,21 +73,25 @@ struct SoilAt { grain: vec4f, deposit: vec2f }
 // The loose ground at `at`, seen at `e` m a pixel, with its organic matter `organic` (the cells', which changes as the
 // dead matter on the ground rots): the samples' grain (`samples_at`: the shares of coarse and fine grain and how
 // slowly it passes liquid), with its patches; and how deep the load the liquid laid lies there, m, and the decimal
-// logarithm of the years its loose ground has lain (`PORES_PLANE`, blended between the samples' centres: a deposit's
-// edge is eased where it is drawn, detail.wgsl `deposit_share`). Both read at one place (`soil_place`).
+// logarithm of the years its loose ground has lain (`PORES_PLANE`, `rock_blended`: a deposit's edge is eased where
+// it is drawn, colour.wgsl `laid_share`). Both read at one place (`soil_place`).
 fn soil_at(at: vec2f, e: f32, organic: f32) -> SoilAt {
   let place = soil_place(at);
   let g = samples_at(place, GRAIN_PLANE);
   let n = GRAIN_PATCHY * ragged(at, e, GRAIN_PATCH_M, GRAIN_OCTAVES, 210);
-  let laid = textureSampleLevel(rock_field, rock_sampler, rock_plane(place / (land.map.x * land.map.yz), PORES_PLANE), 0.0).zw;
+  let laid = rock_blended(place, PORES_PLANE).zw;
   return SoilAt(vec4f(g.x * (1.0 + n), g.y * (1.0 - n), organic, g.z), laid);
 }
 
-// The reflectance of the bed's make at `at`, m from the map's north-west corner, blended between the samples' centres:
-// so bare rock shows the bands the folded layers make (core/src/space/strata.rs).
-fn bed_make_at(at: vec2f) -> vec3f {
-  return textureSampleLevel(rock_field, rock_sampler, rock_plane(at / (land.map.x * land.map.yz), MAKE_PLANE), 0.0).xyz;
+// Plane `plane` of the samples at `at`, m from the map's north-west corner, blended between the samples' centres (one
+// filtered read).
+fn rock_blended(at: vec2f, plane: i32) -> vec4f {
+  return textureSampleLevel(rock_field, rock_sampler, rock_plane(at / (land.map.x * land.map.yz), plane), 0.0);
 }
+
+// The reflectance of the bed's make at `at`, m from the map's north-west corner (`rock_blended`): so bare rock shows
+// the bands the folded layers make (core/src/space/strata.rs).
+fn bed_make_at(at: vec2f) -> vec3f { return rock_blended(at, MAKE_PLANE).xyz; }
 
 // Of the channel of sample `s`: the largest stone it moves, m, and the slope of its reach, rise over run (both 0 for
 // none, `s.x < 0`).
@@ -222,6 +226,13 @@ const BAR_SAND_STONE = 0.03;
 // on (the sign of `Tiled.sd` there); and the half width the channel law gives its bed, m (`banks_of`).
 struct Channel { bed: f32, water: f32, middle: f32, mean: f32, deep: f32, bend: f32, outer: f32, law: f32 }
 fn channel_at(g: Tiled, q: f32) -> Channel { return channel_of(g, q, banks_of(q), through_band(g, 0.0)); }
+// The height of ground `g` over the nearest water, standing or running, m: over the standing liquid's level `over`
+// (land.wgsl `over_ponds`), or over channel `ch`'s water as its banks rise from its edge, as far as the channel shows
+// (`shown`, 0..1).
+fn over_water(g: Tiled, ch: Channel, over: f32, shown: f32) -> f32 {
+  if (ch.water <= 0.0) { return over; }
+  return mix(over, min(over, max(abs(g.sd - ch.middle) - ch.water, 0.0) * max(length(g.slope), ch.mean / max(ch.water, 1e-6))), shown);
+}
 // (The same, of a channel whose bed the law makes `banks` m half wide, `mouth` of the way through the band of shallows
 // of the liquid it runs into.)
 fn channel_of(g: Tiled, q: f32, banks: f32, mouth: f32) -> Channel {

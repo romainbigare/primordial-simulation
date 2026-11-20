@@ -47,9 +47,6 @@ const EXAGGERATE = 6.0;
 const BEACH_SLOPE = 0.15; const ROCK_SLOPE = 0.35; const BEACH_LOOSE_M = 0.5; const LAKE_BEACH = 0.3; const BEACH_DEEP_M = 4.0;
 // Water standing deeper than this, m, is the deep sea's.
 const DEEP_SEA_M = 200.0;
-// Over the liquid's surface the ground draws water up through its pores (the capillary fringe), wet to e^-1 at this
-// height, m (about half a metre in a loam; Bear 1972).
-const FRINGE_M = 0.5;
 // Soaked bare ground reflects this much less than dry (Lobell and Asner 2002: about half); a film of liquid starts to
 // shine on it from this share of soaking on.
 const WET_DARK = 0.5;
@@ -103,9 +100,11 @@ const REWORK_M = 0.3; const FRESH_LOG_YEARS = vec2f(1.5, 3.5);
 fn laid_fresh(p: Spot) -> f32 {
   return max(ease(REWORK_M, 0.0, p.over), ease(FRESH_LOG_YEARS.y, FRESH_LOG_YEARS.x, p.deposit.y));
 }
+// The share of spot p's ground that is a fresh deposit (`laid_share`, `laid_fresh`), 0..1.
+fn laid_fresh_share(p: Spot) -> f32 { return laid_share(p) * laid_fresh(p); }
 // The grain of spot p's soil as it is seen (`Spot.grain`): a fresh deposit holds next to no organic matter yet, so
 // it is not darkened by it (style.wgsl `humus`).
-fn grain_seen(p: Spot) -> vec4f { return vec4f(p.grain.xy, p.grain.z * (1.0 - laid_share(p) * laid_fresh(p)), p.grain.w); }
+fn grain_seen(p: Spot) -> vec4f { return vec4f(p.grain.xy, p.grain.z * (1.0 - laid_fresh_share(p)), p.grain.w); }
 
 // Bare sand reaches up a beach to `STORM_RUN_UP` times the waves' run-up (water.wgsl `run_up`): a storm's swash keeps
 // plants and their drift off it (its waves some three times as high).
@@ -214,7 +213,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // swash bares its beach, a lake's small waves leave its plants standing to the water.
   let stripped = waves_strip(p, p.swash.x);
   let plants = p.cover.a * stands_in(p.depth, 0.0) * (1.0 - stripped);
-  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0, p.grain, seen_of(p, 1.0), peat_of(p)); }
+  if (plants >= 1.0) { return Ground(p.cover.rgb / p.cover.a, 0.0, PLANTS, 1.0, g.grain, seen_of(p, 1.0), peat_of(p)); }
   g.rgb = mix(g.rgb, TUNDRA, ease(278.0, 266.0, p.t) * 0.7);
   g.rgb = mix(g.rgb, UPLAND, ease(1200.0, 2600.0, p.z) * 0.5);
   // In the style a beach of sand is the loose ground's own colour lightened toward washed sand (`BEACH_OWN`); of pebbles,

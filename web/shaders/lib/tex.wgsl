@@ -40,15 +40,17 @@ fn photo_light(t: i32, uv: vec2f, g: f32) -> f32 {
 // flowers alone, grey on black (their lightness: the world gives their colour); short turf and tussocks with bare
 // ground between them, green and dry.
 const CARPETS_FROM = PHOTOS;
+// The carpets' layers.
+const CARPETS = 14;
 const GRASS_CARPET = 0; const STRAW_CARPET = 1; const LITTER_CARPET = 2; const FERN_CARPET = 3; const SCRUB_CARPET = 4;
 const CRACKED_CARPET = 5; const SAND_CARPET = 6; const SNOW_CARPET = 7; const REED_CARPET = 8; const FLOWER_CARPET = 9;
 const TURF_CARPET = 10; const TUSSOCK_CARPET = 11; const DRY_TURF_CARPET = 12; const DRY_TUSSOCK_CARPET = 13;
 // Each tile's side in the world, m.
-fn carpet_m(c: i32) -> f32 { var m = array<f32, 14>(1.5, 1.5, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.0, 0.8, 2.0, 2.0, 2.0, 2.0); return m[c]; }
+fn carpet_m(c: i32) -> f32 { var m = array<f32, CARPETS>(1.5, 1.5, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.0, 0.8, 2.0, 2.0, 2.0, 2.0); return m[c]; }
 
 // The fire's strip (web/textures/fire.jpg, after the carpets): its first layer four sprites a quarter each, their
 // density alone (two flame tongues, two puffs of smoke: flames.wgsl), its second a photograph of burnt ground (burn.wgsl).
-const FIRE_FROM = CARPETS_FROM + 14;
+const FIRE_FROM = CARPETS_FROM + CARPETS;
 // The snags' strip (web/textures/snags.png, after the fire's): `SNAG_LAYERS` layers of sprites with their cover, a
 // charred trunk a whole layer, a charred stump a quarter of one (snag_sprites.wgsl, snag.wgsl).
 const SNAGS_FROM = FIRE_FROM + 2;
