@@ -1197,11 +1197,16 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   Q), τ the flaming time of its particles (below): a bed thinner than that frees less heat while it flames than its top
   sends to the open sky at the flaming bed's temperature, so its flame cools and goes out (0.15 kg/m² of dry remains at
   295 K; real grass fires stop under 0.1 to 0.2).
-- **Reach** (`flame::shares`, serial, over the cells that carry a flame, in the order of the cells): a flame lit runs
-  for `front_life` at its bed's speed R (below), so it covers a disc of radius R × `front_life`, no larger than the
-  remains joined to it: cells that share an edge join into a region of A m² of covered ground (each cell's land times
-  its cover). A point of a cell is reached by the flames lit within that disc: it expects λ = `strikes` × the disc's
-  area × the month's share of a year of them, and with no draw the cell burns the share f = (1 − e^(−λ)) × its cover.
+- **Strikes and runs** (`flame::shares`, serial, over the cells that carry a flame, in the order of the cells): cells
+  that share an edge join into a region of A m² of covered ground (each cell's land times its cover). A region expects
+  `strikes` × A × the month's share of a year of strikes that light it; their count is a Poisson draw and each lights
+  a cell drawn by its covered ground, from the world's seed by the month and the region's first cell
+  (`rng::Purpose::Flame`; the same draws for any number of threads). Each flame runs from the cell it lit over the
+  region's cells for `front_life`, crossing half the way between two cells' centres at each one's speed R (below),
+  the earliest first (`flame::run`). Every cell it reaches burns all of its land that its remains cover (f = its
+  cover): a patch burns whole, keeps no remains to carry a flame, and burns again only once its cover's leaves have
+  built them back. So the land burnt is a mosaic of patches of different ages, from that feedback alone (no rule keeps
+  a cell from burning). The wind does not stretch a run.
 - **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the part of its remains
   that flames burns, and after it the part that smoulders; a flame through the part that flames moves at R = `flux_ahead` h_c δ / (τ Q), δ = w / `litter_rho` its depth, τ = 8 minutes an inch of
   `fine_d` its particles' flaming time (Anderson 1969); its intensity is I = h_c w R (Byram 1959), its flame
