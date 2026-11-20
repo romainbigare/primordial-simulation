@@ -1215,8 +1215,12 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   cover): a patch burns whole, keeps no remains to carry a flame, and burns again only once its cover's leaves have
   built them back. So the land burnt is a mosaic of patches of different ages, from that feedback alone (no rule keeps
   a cell from burning). The wind stretches a run downwind: along the way between two cells a bed's speed is R (1 + φ_w),
-  φ_w Rothermel's (1972) wind factor of the low wind's speed along that way (`World::low_wind`, the air's at its last
-  step), the particles' surface to volume ratio 4 / `fine_d` and the packing of what flames (`flame::downwind`); none
+  φ_w Rothermel's (1972) wind factor of the wind's speed along that way at mid-flame: the low wind (`World::low_wind`,
+  the air's at its last step) times Albini and Baughman's (1979) share of it that reaches the flame (`flame::sheltered`,
+  Andrews 2012): over open ground by the depth of what flames (about 0.3 for a cured bed), under a canopy by its height
+  and how its crowns fill the space under it (0.1 to 0.2 under closed tall crowns), by the share of the ground that the
+  slots taller than `surface_m` cover, 1 − e^(−their capture area a m²); the shade itself reaches the bed through the
+  ground's temperature and the air near the ground, which its layer reads (`World::near_ground`, `thaw_last`), the particles' surface to volume ratio 4 / `fine_d` and the packing of what flames (`flame::downwind`); none
   against the wind.
 - **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the cured leaves and the
   part of its remains that flames burn, and after them the part that smoulders; a flame through what flames, its depth
