@@ -1,4 +1,4 @@
-// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl sprites.wgsl heights.wgsl tex.wgsl fire.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl sprites.wgsl heights.wgsl tex.wgsl fire.wgsl
 // The fires burning this month over the live map, over its plants (web/src/fire.ts; drawn only over the squares they
 // burn and the smoke's reach): the glow of the burning ground, the flames along the front of each burning patch (the
 // outer edge of the square's burnt share, fire.wgsl `burn_rank`, as tall as the core's flame length), the embers behind
@@ -29,10 +29,9 @@ const EMBERS = 0.35; const EMBER_M = 0.6; const EMBER_RGB = vec3f(0.95, 0.25, 0.
 const GLOW = 0.3; const GLOW_SHARE = 0.05; const GLOW_M = 3.0; const GLOW_E = vec2f(10.0, 60.0); const GLOW_EARTH = 1.6;
 const GLOW_RGB = vec3f(1.0, 0.36, 0.06);
 // A point's flames fade in over the first `FLAME_FADE` of a square's burning share, so they end smoothly where the
-// share blended between the squares' centres ends.
+// share blended between the squares' centres ends; none stands on liquid (its ponds' as the ground's tiles draw them,
+// land.wgsl `standing`, deeper than `FILM_M`).
 const FLAME_FADE = 0.005;
-// No flame stands where the squares about a point hold standing liquid: they show from where those are `DRY_FROM` dry.
-const DRY_FROM = 0.5;
 
 // Smoke: of the gas a burning square sends to the air, `SMOKE_SHARE` is its particles (biomass burning gives about
 // 10 g of fine particles to 1600 g of carbon dioxide: Andreae and Merlet 2001), sent over the hours its fronts burn,
@@ -51,8 +50,9 @@ const PLUME_STEPS = 8;
 // flames (`SMOKE_YOUNG_RGB`), where unburnt tar and soot darken it.
 const SMOKE_RGB = vec3f(0.78, 0.78, 0.80); const SMOKE_YOUNG_RGB = vec3f(0.42, 0.38, 0.35); const SMOKE_YOUNG_M = 1500.0;
 // The smoke's texture: noise `SMOKE_NOISE_M` across and half that, moving with the wind; up close the puffs of
-// fire.jpg's last two sprites, `PUFF_M` across, from `PUFF_PX` pixels.
-const SMOKE_NOISE_M = 900.0; const PUFF_M = 30.0; const PUFF_PX = vec2f(6.0, 16.0);
+// fire.jpg's last two sprites, one in each cell `PUFF_M` across of two lattices (along the axes and turned), each
+// placed and sized (`PUFF_SIZE`) by its own draw, from `PUFF_PX` pixels.
+const SMOKE_NOISE_M = 900.0; const PUFF_M = 30.0; const PUFF_PX = vec2f(6.0, 16.0); const PUFF_SIZE = vec2f(0.7, 1.3);
 
 // A random number 0..1 of the grid cell c and the stream k.
 fn unit(c: vec2i, k: i32) -> f32 { return f32(lowbias(c, k)) * (1.0 / 4294967296.0); }
@@ -146,7 +146,7 @@ fn smoke_column(at: vec2f) -> vec2f {
     let speck = ease(0.55, 0.9, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
     let specks = mix(0.5, speck * 2.0, shows_at(EMBER_M, e));
     light += EMBERS * max(band - zone, 0.0) * specks * EMBER_RGB;
-    light *= ease(0.0, FLAME_FADE, f.flame) * ease(DRY_FROM, 1.0, f.dry);
+    light *= ease(0.0, FLAME_FADE, f.flame) * select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M);
   }
   // The glow of the burning squares, seen from afar.
   let glow = GLOW * select(1.0, GLOW_EARTH, earth_view) * ease(0.0, GLOW_SHARE, f.flame) * min(f.length / GLOW_M, 1.0) * ease(GLOW_E.x, GLOW_E.y, e);
@@ -158,9 +158,17 @@ fn smoke_column(at: vec2f) -> vec2f {
   var tau = EXTINCTION * col.x * select(1.0, SMOKE_EARTH, earth_view) * max(rough, 0.0);
   let puffs = shows_at(PUFF_M, e) * ease(PUFF_PX.x * e, PUFF_PX.y * e, PUFF_M);
   if (puffs > 0.0 && tau > 0.0) {
-    let l = lat_axes(PUFF_M, -fire.air.yz * fire.air.w * time / PUFF_M);
-    let s = 2 + i32(lowbias(l.i, 31) & 1u);
-    tau *= mix(1.0, 0.3 + 1.4 * fire_sprite(s, l.f, e / PUFF_M), puffs);
+    let moved = -fire.air.yz * fire.air.w * time / PUFF_M;
+    var d = 0.0;
+    for (var k = 0; k < 2; k++) {
+      var l = lat_axes(PUFF_M, moved);
+      if (k == 1) { l = lat_turned(PUFF_M, moved); }
+      let size = mix(PUFF_SIZE.x, PUFF_SIZE.y, unit(l.i, 32 + k));
+      let off = vec2f(unit(l.i, 34 + k), unit(l.i, 36 + k)) - 0.5;
+      let uv = (l.f - 0.5 - (1.0 - size) * off) / size + 0.5;
+      if (all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))) { d += fire_sprite(2 + i32(lowbias(l.i, 31 + k) & 1u), uv, e / (size * PUFF_M)); }
+    }
+    tau *= mix(1.0, 0.4 + 0.9 * d, puffs);
   }
   let smoke = 1.0 - exp(-tau);
   let tone = mix(SMOKE_YOUNG_RGB, SMOKE_RGB, ease(0.0, SMOKE_YOUNG_M, col.y));

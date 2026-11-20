@@ -4,7 +4,6 @@
 // the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach). Where nothing burns or has
 // burnt, nothing of it is drawn and no pixel pays for it.
 import { World, decode } from './data';
-import { wetOf } from './earth';
 import { Draw, Gpu, Texture, Uniforms } from './gpu';
 import { half } from './canopy';
 import { groundDetail } from './detail';
@@ -12,8 +11,6 @@ import type { MapLook } from './field-window';
 
 /** What fire did on each square, a number a square (the core's layers, `LAYERS`). */
 export interface FirePlanes { burnt: Float32Array; age: Float32Array; flame: Float32Array; length: Float32Array; ash: Float32Array; air: Float32Array }
-/** What fire did on each square (`FirePlanes`), and of each whether it holds standing liquid (1) or not (0). */
-export interface FireOf { planes: FirePlanes; wet: ArrayLike<number> }
 /** The core's layers of fire, by the planes' names: the share of the land burnt in the last 12 months, the months
  * since its last burn, the share burning this month, its flames' mean length (m), the ash on the ground and the gas the
  * flames sent to the air this month (kg/m²). */
@@ -53,16 +50,14 @@ export class Fire {
   set(w: World | null): void {
     const has = w !== null && Object.values(LAYERS).every(name => w.index.has(name));
     if (!w || !has) { this.put(0, 0, 1, null); return; }
-    const planes = Object.fromEntries(Object.entries(LAYERS).map(([k, name]) => [k, decode(w, 0, name)])) as unknown as FirePlanes;
-    this.put(w.meta.w, w.meta.h, w.meta.cell_m, { planes, wet: wetOf(w, 0).wet });
+    const p = Object.fromEntries(Object.entries(LAYERS).map(([k, name]) => [k, decode(w, 0, name)])) as unknown as FirePlanes;
+    this.put(w.meta.w, w.meta.h, w.meta.cell_m, p);
   }
 
-  /** What fire did on a map of `w` x `h` squares of `cellM` m, `of` (null: nothing). The texture's first plane holds the
+  /** What fire did on a map of `w` x `h` squares of `cellM` m, `p` (null: nothing). The texture's first plane holds the
    * burnt share, the months since a burn times that share, the burning share and the flames' length times that share
-   * (so the blend between squares gives each its share's mean), its second the ash, the gas sent to the air and
-   * whether the square is dry (no flame is drawn over standing liquid). */
-  put(w: number, h: number, cellM: number, of: FireOf | null): void {
-    const p = of?.planes ?? null;
+   * (so the blend between squares gives each its share's mean), its second the ash and the gas sent to the air. */
+  put(w: number, h: number, cellM: number, p: FirePlanes | null): void {
     this.w = w; this.h = h; this.cellM = cellM;
     const n = w * h, burnt = (i: number) => (p ? p.burnt[i] : 0), burning = (i: number) => (p ? p.flame[i] : 0);
     this.scars = p ? boxOf(w, h, i => burnt(i) > 0 || p.ash[i] > 0, BLEND_SQUARES) : null;
@@ -73,7 +68,7 @@ export class Fire {
     for (let i = 0; i < n; i++) {
       const b = burnt(i), f = burning(i);
       data.set([b, b * p.age[i], f, f * p.length[i]].map(half), 4 * i);
-      data.set([p.ash[i], p.air[i], 1 - of!.wet[i], 0].map(half), 4 * (n + i));
+      data.set([p.ash[i], p.air[i], 0, 0].map(half), 4 * (n + i));
     }
     this.data = data;
     this.due = true;

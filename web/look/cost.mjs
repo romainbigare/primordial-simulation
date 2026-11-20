@@ -18,6 +18,7 @@ const COLOUR = `vec4f(vec3f(n_reads / ${READ_STEP}.0, n_noise, n_photo) / 255.0,
 /** A texture read of WGSL (every texture of the page holds floats: each read is a vec4f). */
 const READ = /\btexture(?:Sample\w*|Load)\(/g;
 const LAND_OUT = '  return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);';
+const FLAMES_OUT = '  return vec4f(tone * a + light * (1.0 - 0.7 * a), a) * draw.alpha;';
 const MARKS_OUT = '@fragment fn fs(v: Varying) -> @location(0) vec4f { return marks_over(v); }';
 
 /** The counted programs: `ground`, the ground's, or `marks`, the marks'. */
@@ -55,6 +56,8 @@ export function costShaders(pass) {
     writeFileSync(draw, COUNTERS + readFileSync(draw, 'utf8'));
     ed('lib/live_map.wgsl', LAND_OUT, PASSES[pass].land);
     ed('cover.wgsl', MARKS_OUT, PASSES[pass].marks);
+    // The flames and smoke over the map are not counted: they draw nothing over the counts.
+    ed('flames.wgsl', FLAMES_OUT, '  return vec4f(0.0);');
   });
 }
 

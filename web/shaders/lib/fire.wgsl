@@ -20,9 +20,8 @@ fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 
 
 // What fire did at a point, blended between the squares' centres: the share of the land burnt in the last 12 months,
 // the months since its last burn (its share's mean), the share burning this month, its flames' mean length, m (the
-// burning share's mean), the ash on the ground and the gas the flames sent to the air this month, kg/m², and how dry
-// the squares about it are (0 where they hold standing liquid).
-struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32, dry: f32 }
+// burning share's mean), the ash on the ground and the gas the flames sent to the air this month, kg/m².
+struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32 }
 
 // Plane k of the fire's texture at `at` (fire.ts: two planes of the map's squares, one under the other), blended
 // between the squares' centres and held inside its plane.
@@ -35,7 +34,7 @@ fn fire_plane(k: i32, at: vec2f) -> vec4f {
 fn fire_at(at: vec2f) -> FireAt {
   let a = fire_plane(0, at);
   let b = fire_plane(1, at);
-  return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y, b.z);
+  return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y);
 }
 
 // A square's burnt share lies in patches with ragged edges (ragged.wgsl), from `BURN_PATCH_M` across down to the

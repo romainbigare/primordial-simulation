@@ -430,8 +430,8 @@ export class MapView {
     xs.forEach((_, c) => {
       const map: Rect = [Math.max(edge(c), 0), Math.max(oy * k, 0), Math.min(edge(c + 1), size[0]), Math.min((oy + h * s) * k, size[1])];
       const r = clip(boxRect(box, edge(c), oy * k, s * k), map);
-      const binds = r && this.fire!.binds(gpu, look, frameOf(edge(c), oy * k, mpp, seen), this.fireTime());
-      if (r && binds) p.draw(program, { rect: [r[0], r[1], r[2] - r[0], r[3] - r[1]], binds }, true);
+      const binds = r && this.fire!.binds(gpu, look, frameOf(edge(c), oy * k, mpp, seen), this.fireTime()), ground = this.land!.lawBinds(gpu);
+      if (r && binds && ground) p.draw(program, { rect: [r[0], r[1], r[2] - r[0], r[3] - r[1]], binds: { ...ground, ...binds } }, true);
     });
   }
 
