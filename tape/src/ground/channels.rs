@@ -22,7 +22,7 @@ use super::lines::{Drawn, Join};
 use super::mend::STRIP;
 use super::shore::drowned;
 use super::stems::SMOOTH_MOST;
-use super::valley::{carve, VALLEY_FROM, VALLEY_M};
+use super::valley::{carve, VALLEY_M};
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 
@@ -128,7 +128,8 @@ impl Window {
 /// its bends, m (`NO_CHANNEL_M` for none); the valleys about the lines (`valley`): the sum of their weights at the
 /// texel and of their floors' heights so weighted, m; and the deepest mouth of the lines that reach it
 /// (`shore::drowned`): where lines of two channels lie near, the texel's ground goes under as the larger mouth's does,
-/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it.
+/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it; and the
+/// nearest line of a channel sample within a bank's reach (`wetness::bank_lines`: its distance, samples, and sample).
 pub(super) struct Field {
     pub dist: Vec<f64>,
     pub sample: Vec<u32>,
@@ -137,6 +138,7 @@ pub(super) struct Field {
     pub valley: Vec<f64>,
     pub weight: Vec<f64>,
     pub mouth: Vec<[f64; 2]>,
+    pub bank: Vec<(f64, u32)>,
 }
 
 impl Field {
@@ -238,7 +240,7 @@ impl<'a> Channels<'a> {
                 }
                 let Some(b) = base(s, self.r.at, q) else { continue };
                 let (own, reach) = reach_of(s.up[q]);
-                let carves = s.up[q] >= VALLEY_FROM && reach_valley > 0.0 && s.pond[q] == NONE;
+                let carves = reach_valley > 0.0 && super::valley::carves(s, q);
                 let widest = if carves { reach.max(reach_valley) } else { reach };
                 // The box the line lies in: its curve's points and, where a tributary joins, the next sample's centre,
                 // widened by its sway, by how far the next sample's line lies from its centre and by its reach: none
@@ -281,11 +283,12 @@ impl<'a> Channels<'a> {
         let (near, reach_valley) = self.near(&all, all.k * self.r.metres);
         let mut f = self.laid(&all, &near, reach_valley);
         self.mend(&mut f, &all, &near);
+        let bank = super::wetness::bank_lines(&all, near.iter().filter(|l| l.carves).map(|l| (l.q, l.drawn.line.iter().map(|v| v.p).collect())));
         fn cut<T: Copy>(v: &[T], high: usize, m: usize, wide: usize) -> Vec<T> {
             (0..high).flat_map(|y| v[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect()
         }
         let c = |v: &[f64]| cut(v, win.high, m, wide);
-        Field { dist: c(&f.dist), sample: cut(&f.sample, win.high, m, wide), along: c(&f.along), calm: c(&f.calm), valley: c(&f.valley), weight: c(&f.weight), mouth: cut(&f.mouth, win.high, m, wide) }
+        Field { dist: c(&f.dist), sample: cut(&f.sample, win.high, m, wide), along: c(&f.along), calm: c(&f.calm), valley: c(&f.valley), weight: c(&f.weight), mouth: cut(&f.mouth, win.high, m, wide), bank: cut(&bank, win.high, m, wide) }
     }
 
     /// The lines `near` laid into the texels of the window `win`: each line drawn into the texels within its reach,
@@ -293,7 +296,7 @@ impl<'a> Channels<'a> {
     /// into the texels that hold its own channel's line (the line from the same head, `Bends::head`) or none.
     fn laid(&self, win: &Window, near: &[Near], reach_valley: f64) -> Field {
         let n = win.wide * win.high;
-        let mut f = Field { dist: vec![NO_CHANNEL_M; n], sample: vec![NONE; n], along: vec![0.0; n], calm: vec![NO_CHANNEL_M; n], valley: vec![0.0; n], weight: vec![0.0; n], mouth: vec![[0.0; 2]; n] };
+        let mut f = Field { dist: vec![NO_CHANNEL_M; n], sample: vec![NONE; n], along: vec![0.0; n], calm: vec![NO_CHANNEL_M; n], valley: vec![0.0; n], weight: vec![0.0; n], mouth: vec![[0.0; 2]; n], bank: Vec::new() };
         // Of each texel, how near the line it holds lies, over the line's scale.
         let mut best = vec![f64::INFINITY; n];
         for l in near {

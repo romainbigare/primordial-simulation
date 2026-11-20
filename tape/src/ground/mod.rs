@@ -60,7 +60,8 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 /// The ground of an island: its seed, map and terrain, the latitudes of its rows, the terrain's samples (with the
 /// wetness index of each, `space::samples::sample_index`), the channel law (`Physics::channel`), by which the channel nearest a texel is found,
 /// the point each sample's line runs through (`stems::points`), how each sample's piece of its line starts
-/// (`bends::Bends`), and the texture of each sample's loose ground (`pcore::soil::textures`).
+/// (`bends::Bends`), the texture of each sample's loose ground (`pcore::soil::textures`), and the wetness index of
+/// each as the hillslope holds it (`wetness::hill`).
 pub struct Ground {
     seed: u64,
     map: Square,
@@ -72,6 +73,7 @@ pub struct Ground {
     bends: bends::Bends,
     shore: shore::Shore,
     grain: Vec<pcore::soil::Texture>,
+    hill: Vec<f64>,
 }
 
 impl Ground {
@@ -85,7 +87,8 @@ impl Ground {
         let at = stems::points(&samples, &shore);
         let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
         let grain = pcore::soil::textures(&samples, &terrain.makes, phys, gravity);
-        Ground { seed, map, terrain, lat, samples, law, at, bends, shore, grain }
+        let hill = wetness::hill(&samples);
+        Ground { seed, map, terrain, lat, samples, law, at, bends, shore, grain, hill }
     }
 
     /// The ground of world `w`.
@@ -116,8 +119,8 @@ impl Ground {
         let (wide, high) = ((win[2] - win[0] + 1) as usize, (win[3] - win[1] + 1) as usize);
         let heights = self.terrain.heights(self.seed, &self.map, self.lat, win, depth);
         let k = 2f64.powi(SAMPLE_DEPTH as i32 - depth as i32);
-        let twi = wetness::field(&self.samples, &self.samples.twi, depth, [win[0], win[1]], [wide, high]);
         let near = channels::Channels::new(self.reaches(), &self.bends).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
+        let twi = wetness::field(&self.samples, &self.hill, depth, [win[0], win[1]], [wide, high], &near.bank);
         // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`); near a pond
         // (`shore::Shore::beside`) a valley only lowers the ground, and never under the pond's level where the ground is
         // not: its mouth meets the level of the pond it runs into. Then the shore drawn smooth (`shore`). Which of
