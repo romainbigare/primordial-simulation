@@ -215,6 +215,15 @@ pub fn liquid_share(w: &World, k: usize, i: usize, t: f64, plateau: Option<(usiz
     potential::scratch_of(w).sp[k].liquid(t, w.molten(k, i, t, plateau), dissolved(w, i))
 }
 
+/// The liquid in the bed's store under ground node `i`, as a depth over the cell, m: what is liquid of it at the
+/// ground's temperature (`Class::Deep`).
+pub(crate) fn store_depth(w: &World, i: usize) -> f64 {
+    let (n, t) = (w.mesh.cells().n(), w.t_ground_last(i));
+    let deep = w.store.amounts(Class::Deep);
+    let liquid = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].boil > t).map(|k| deep[k * n + i] * w.chem.molar_volume(k, crate::chem::Phase::Liquid));
+    liquid.sum::<f64>() / w.mesh.cells().area()[i]
+}
+
 /// Is cell `i` land (its solid surface above 0 m, as Flow's state has it)? Creep and heat conducted sideways act only on
 /// land: below 0 m they are far slower than the step.
 fn on_land(s: &Scratch, i: usize) -> bool {

@@ -20,6 +20,9 @@ export interface SamplesOf { across: number; down: number; depth: number }
 /** Planes of four numbers a square of the table (land.wgsl `GROUND` to `VIEW`): the core's (`TileMeta.row` numbers), then
  * the page's three. */
 const PLANES = 6;
+/** The number of the table a square's wetness index of saturation goes in (land.wgsl `saturated_at`): the last of its
+ * soil's plane, past the core's numbers. */
+const SATURATED_AT = 4 * 2 + 3;
 /** The ground's slope at the view's depth is read as a square's slope (for its shading and its rock) times its texel's
  * size over a square's to this power, and no less than `SLOPE_LEAST` times it: the slope over a short run is steeper
  * than over a long one, and the map shades and colours slopes as they look from afar. */
@@ -105,6 +108,8 @@ export class Land {
     const truth = fromLand(['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name)), Uint8Array.from(wet.wet, v => 1 - v), W, H);
     // The share of organic matter of each square's loose ground, which the Earth view darkens it by (land.wgsl).
     const organic = w.index.has('organic') ? decode(w, 0, 'organic') : new Float32Array(n);
+    // The wetness index from which each square's land is saturated (the core's `inside::wet_ground`).
+    const saturated = decode(w, 0, 'lambda_sat');
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
     this.fade = shown && w.meta.layers[w.index.get(look.layer)!].scale !== 'log' ? 1 : OVER_FADE;
     const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
@@ -114,6 +119,7 @@ export class Land {
       put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, landIce[i]]);
       put(5, i, [shown ? shown[i] / 255 : 0, organic[i], landT[i], landZ[i]]);
+      data[4 * n * Math.floor(SATURATED_AT / 4) + 4 * i + SATURATED_AT % 4] = saturated[i];
     }
     blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
     // The sea's squares are marked by their air's fall with height as -(it + 1) (land.wgsl `state_on`): only a point
