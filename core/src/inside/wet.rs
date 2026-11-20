@@ -64,8 +64,27 @@ pub fn saturated(ph: &crate::Physics, (twi, area): (&[f64], &[f64]), m: Means) -
         None => (1.0, f64::NEG_INFINITY),
         Some(c) => (by(&|t| deficit_at(ph, m, t, c) <= 0.0), c + d / ph.soil_m),
     };
-    let rest = if share < 1.0 { ((filled - share) / (1.0 - share)).clamp(0.0, 1.0) } else { 1.0 };
-    WetGround { share, level, filled: rest }
+    WetGround { share, level, filled: rest(share, filled) }
+}
+
+/// The share of the pores of the drier rest of a land that its liquid fills, its share `share` saturated and its pores
+/// the share `filled` full on the mean: its saturated share's pores are full, so the rest hold what they do not.
+pub fn rest(share: f64, filled: f64) -> f64 {
+    if share < 1.0 { ((filled - share) / (1.0 - share)).clamp(0.0, 1.0) } else { 1.0 }
+}
+
+/// The share of a land whose pores hold no gas, its share `share` saturated (`wet_ground`) and its pores `soil` the
+/// share `filled` full on the mean: its saturated share, and of the drier rest (`rest`) the share its liquid fills from
+/// the bottom up (`Pores::full`). Every law that asks how much of the ground is waterlogged reads this: roots there get
+/// the oxidising gas only down their gas spaces (`cover::working`), and the decomposers none (`change`, laws.md 2.3).
+pub fn airless(soil: &crate::soil::Pores, share: f64, filled: f64) -> f64 {
+    share + (1.0 - share) * soil.full(rest(share, filled))
+}
+
+/// The share of the land of cell `i` saturated at the month's start (`contract::surroundings`, `wet_land`); none where
+/// it holds no land or life has no key liquid.
+pub fn saturated_share(w: &World, i: usize) -> f64 {
+    w.life.wet.get(i).copied().flatten().map_or(0.0, |g| g.share)
 }
 
 /// The land of cell `i` as its key liquid (that of `p`) lies over it now: how the cover's roots meet it (`cover::soak`),

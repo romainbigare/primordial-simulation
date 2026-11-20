@@ -49,8 +49,9 @@ in units of its own: its liquid flux over its rain less evaporation times its ar
 size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground,
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
 `filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
-`wet_share` (the share of its land whose pores its soil's liquid fills, 0..1, `inside::wet_land`) and `lambda_sat` (the
-wetness index ln(a / tan β) at and over which its land is saturated this month, lin from 0 to 30; `space::samples::sample_index`
+`wet_share` (the share of its land whose pores its soil's liquid fills, 0..1, `inside::wet_land`, as the month's start
+found it for the laws, `World::life`) and `lambda_sat` (the wetness index ln(a / tan β) at and over which its land is
+saturated this month, lin from 0 to 30; `space::samples::sample_index`
 gives each terrain sample's), both none where the cell holds no land,
 the texture of its loose ground (`World::soil`, `soil::Texture`): `coarse` and `fine` (the shares of coarse and of fine
 particles, 0..1) and `organic` (the share of organic matter of its solid volume, log from 0.0003 to 0.05, which the page's

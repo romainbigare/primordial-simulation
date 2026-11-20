@@ -200,8 +200,8 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: the dead matter, minerals and rot of its ground (`soil::holdings`; none before Flow first built
     /// its state)
     pub dead: Option<Vec<pcore::soil::Holdings>>,
-    /// Per ground cell: where its soil's liquid saturates its land (`inside::wet_land`; none where it holds no land, life
-    /// has no key liquid, or before Flow first built its state)
+    /// Per ground cell: where its soil's liquid saturated its land at the month's start, as the laws read it
+    /// (`World::life`'s `wet`; none where it holds no land, life has no key liquid, or before the month's start built it)
     pub saturated: Vec<Option<pcore::inside::WetGround>>,
 }
 
@@ -216,8 +216,7 @@ impl<'a> Ctx<'a> {
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
         let land: Vec<f64> = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
-        let parts = pcore::cover::Parts::of(&w.chem).filter(|_| pcore::flow::means(w, &[]).is_some());
-        let saturated = par::map_n(n, par::UNCOUNTED, |i| parts.as_ref().filter(|_| land[i] > 0.0).map(|p| pcore::inside::wet_land(w, p, i).1));
+        let saturated = (0..n).map(|i| w.life.wet.get(i).copied().flatten()).collect();
         let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: pcore::soil::holdings(w), saturated };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c

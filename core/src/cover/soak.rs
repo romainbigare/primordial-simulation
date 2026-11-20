@@ -9,7 +9,8 @@ use crate::units::{DAY, GAS_DIFFUSIVITY, GAS_DIFFUSIVITY_MM, R_GAS};
 
 /// How the roots of a cell's cover meet its ground's liquid in a month (`soak`): the share of what its ground holds
 /// for roots that it holds (`Pores::available`); the share of its pores its liquid fills (past 1 where liquid stands
-/// over them); the depth of its loose ground, m, and its pores (`World::pores`); and the oxidising gas's spread through
+/// over them); the share of its land saturated (`inside::saturated_share`); the depth of its loose ground, m, and its
+/// pores (`World::pores`); and the oxidising gas's spread through
 /// a root's gas spaces against what the root's living tissue burns, m² (`breath`): a root of gas share φ keeps
 /// (2 breath φ / (1 − φ))^½ m of its length in that gas (`aired`); and the key liquid that is liquid in the cell's
 /// ground outside its land, mol: what the roots of plants standing under the liquid reach (`footing`).
@@ -17,6 +18,7 @@ use crate::units::{DAY, GAS_DIFFUSIVITY, GAS_DIFFUSIVITY_MM, R_GAS};
 pub struct Soak {
     pub moist: f64,
     pub filled: f64,
+    pub saturated: f64,
     pub loose: f64,
     pub pores: crate::soil::Pores,
     pub breath: f64,
@@ -40,7 +42,8 @@ pub fn soak(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, Soak) {
     let filled = depth / pores.max(1e-9);
     let loose = if soil.porosity > 0.0 { pores / soil.porosity } else { 0.0 };
     let pond = (held * molten - liquid).max(0.0);
-    (liquid, Soak { moist: soil.available(filled), filled, loose, pores: soil, breath: breath(w, p, i, t), pond })
+    let saturated = crate::inside::saturated_share(w, i);
+    (liquid, Soak { moist: soil.available(filled), filled, saturated, loose, pores: soil, breath: breath(w, p, i, t), pond })
 }
 
 /// The oxidising gas's spread through a root's gas spaces against what the root's living tissue burns, at the ground
@@ -70,15 +73,15 @@ pub fn aired(breath: f64, phi: f64) -> f64 {
 }
 
 /// The share of the roots of a kind of gas gene `phi`, rooted `need` m deep, that work on ground `s`: its roots stand in
-/// its loose ground (no deeper than it). Up to field capacity (`Pores::field`) its liquid is held in the small pores
-/// all through it and the large ones hold the gas, so every root breathes; what it holds over that fills the rest of
-/// its pores from the bottom up (Flow's one store over the depth of its loose ground), and over its top it stands. The
-/// roots above that table breathe the gas of the open pores, and of those below it the length the gas spaces keep in
+/// its loose ground (no deeper than it). The share of it whose pores hold no gas (`inside::airless`: its saturated
+/// share, and where the rest holds over field capacity what fills its pores from the bottom up) is where its table
+/// lies, and over its top the liquid stands. The roots above that table breathe the gas of the open pores, and of those
+/// below it the length the gas spaces keep in
 /// the gas (`aired`), less the depth of liquid standing over the ground, which that gas crosses first (Armstrong 1979;
 /// Feddes, Kowalik and Zaradny 1978: none at saturation for a plant with no gas spaces).
 pub fn working(phi: f64, need: f64, s: &Soak) -> f64 {
     let roots = need.min(s.loose).max(1e-9);
-    let open = (1.0 - s.pores.full(s.filled)) * s.loose;
+    let open = (1.0 - crate::inside::airless(&s.pores, s.saturated, s.filled)) * s.loose;
     let standing = (s.filled - 1.0).max(0.0) * s.loose * s.pores.porosity;
     ((open + aired(s.breath, phi) - standing) / roots).clamp(0.0, 1.0)
 }

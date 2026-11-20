@@ -215,11 +215,12 @@ fn layer(w: &World, p: &Parts, i: usize, t: f64) -> Option<Layer> {
     if crate::contract::place(w, i).snow > 0.0 {
         return None;
     }
-    let (soak, ground) = crate::inside::wet_land(w, p, i);
+    let soak = crate::cover::soak(w, p, i, held).1;
+    let share = crate::inside::saturated_share(w, i);
     let pores = w.scratch.land_pores(i).max(1e-9);
     let frozen = held * (1.0 - w.molten(p.liquid, i, t, plateau)) * w.chem.molar_volume(p.liquid, Phase::Solid) / w.mesh.cells().area()[i];
-    let wet = soak.pores.available(ground.filled + frozen / pores);
+    let wet = soak.pores.available(crate::inside::rest(share, soak.filled.min(1.0)) + frozen / pores);
     let at = |c: [f64; 2]| c[0] + c[1] * (t - SORB_T);
     let bottom = near + wet * (1.0 - near);
-    Some(Layer { top: near, bottom, wet, curve: [at(ph.sorb_scale), at(ph.sorb_power)], saturated: ground.share })
+    Some(Layer { top: near, bottom, wet, curve: [at(ph.sorb_scale), at(ph.sorb_power)], saturated: share })
 }
