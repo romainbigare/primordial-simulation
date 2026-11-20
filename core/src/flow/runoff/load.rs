@@ -120,11 +120,13 @@ fn shares(w: &World, s: &Samples, k: usize) -> Shares {
 
 /// What the load did in a month: the moves of the bed into loose ground (`wear`); of each cell what its main channel
 /// carried, g per m³ of its liquid, and the depth that settled on it, m; the plumes: each sample where a way entered a
-/// body, with the load that came in there, kg/s.
+/// body, with the load that came in there, kg/s; and the volumes, m³, picked up, carried into the open low ground and
+/// into the other bodies, settled on land, and of the bed worn into loose ground (`Counters::load`).
 pub(super) struct Carried {
     pub(super) broke: Vec<Move>,
     pub(super) loads: Vec<[f32; 2]>,
     pub(super) plumes: Vec<(u32, f32)>,
+    pub(super) volumes: [f64; 5],
 }
 
 /// The moves of the month between pairs of cells (mol of each solid substance, then the heat), summed in the order each
@@ -173,6 +175,8 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     let (c, n, width) = (&b.carriage, w.mesh.cells().n(), sol.len() + 1);
     let (work, picked, broke) = pick_up(w, s, b, flux, sol);
     let sol_v: Vec<f64> = sol.iter().map(|&k| s.sp[k].v[0]).collect();
+    let mut volumes = [0.0; 5];
+    volumes[4] = broke.iter().map(|m| m.mol * s.sp[m.k as usize].v[0]).sum();
     let mm: Vec<f64> = sol.iter().map(|&k| s.sp[k].mm).collect();
     let volume = |row: &[f64]| row.iter().zip(&sol_v).map(|(m, v)| m * v).sum::<f64>();
     let kg = |row: &[f64]| row.iter().zip(&mm).map(|(m, k)| m * k).sum::<f64>();
@@ -200,7 +204,9 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     for i in (0..n).filter(|&i| work.cells[i] > 0.0 && sent[i] < 1.0) {
         let v = volume(&picked[i * width..(i + 1) * width - 1]) * (1.0 - sent[i]);
         settled[i].iter_mut().zip(texture(i)).for_each(|(d, t)| *d += v * t);
+        volumes[3] += v;
     }
+    volumes[0] = (0..n).filter(|&i| work.cells[i] > 0.0).map(|i| volume(&picked[i * width..(i + 1) * width - 1])).sum();
     let mut loads = vec![[0.0f32; 2]; n];
     let mut plumes = Vec::new();
     // The serial pass: each key sample settles its share of each class, and its pool's rest goes on to the next; where
@@ -215,9 +221,12 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
         let out = step(came, got, &sh);
         let (all, on) = (came.iter().chain(&got).sum::<f64>(), out.iter().sum::<f64>());
         (0..CLASSES).for_each(|l| settled[i][l] += came[l] + got[l] - out[l]);
+        let body = b.at[k as usize];
+        let into = if body == NONE { 3 } else if b.list[body as usize].pass == NONE { 1 } else { 2 };
+        volumes[if c.next[q] == NONE { into } else { 3 }] += all - on;
         if c.next[q] == NONE {
             let mass = kg(&row[..width - 1]);
-            if b.at[k as usize] != NONE && mass > 0.0 {
+            if body != NONE && mass > 0.0 {
                 plumes.push((k, (mass / dt) as f32));
             }
         } else if on > 0.0 {
@@ -233,7 +242,7 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     }
     let area = w.mesh.cells().area();
     loads.iter_mut().zip(&settled).zip(area).for_each(|((l, v), a)| l[1] = (v.iter().sum::<f64>() / a) as f32);
-    Carried { broke, loads, plumes }
+    Carried { broke, loads, plumes, volumes }
 }
 
 /// What of a pool leaves a key sample of shares `sh`, m³ of each class: of what came in from the key samples above,

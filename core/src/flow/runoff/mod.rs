@@ -107,6 +107,7 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let carried = load::carry(w, s, &b, (&flux, &sol), &mut load, dt);
     book_all(w, s, &sol, &[&load]);
     (w.counts.load_month, w.counts.plumes) = (carried.loads, carried.plumes);
+    w.counts.load.iter_mut().zip(carried.volumes).for_each(|(a, v)| *a += v);
     apply(w, s, &[], &carried.broke);
     follow_flux(w, &b, &flux, dt);
     (s.bodies, s.spare.samples) = (b, flux);
