@@ -137,8 +137,9 @@ struct Spot {
   at: vec2f, e: f32,
   // Its loose ground's grain: the shares of coarse and of fine grain, of organic matter, and how slowly its pores pass
   // liquid (the decimal logarithm of 1 m/s over their conductivity; tape/src/ground/rock.rs); and the share of its
-  // pores the soil's liquid fills, 0..1 (land.wgsl `State`).
-  grain: vec4f, filled: f32,
+  // pores the soil's liquid fills, 0..1 (land.wgsl `State`); how deep the load the liquid laid lies on it, m, and the
+  // decimal logarithm of the years its loose ground has lain (rock.wgsl `soil_at`).
+  grain: vec4f, filled: f32, deposit: vec2f,
   // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
   // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
   // plants cover there on their mean (cover_field.wgsl `CoverAt.low`).
