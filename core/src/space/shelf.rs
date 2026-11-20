@@ -16,7 +16,7 @@ use std::collections::BinaryHeap;
 /// platform, where the waves stir the bed.
 const TOPSET_M: f64 = 10.0;
 /// The slope of the front of the load under liquid, rise over run: its angle of rest there.
-const FORESET: f64 = 0.3;
+pub(super) const FORESET: f64 = 0.3;
 /// Half the width over which the edge of the shelf is rounded, m: its front's top rolls over as a clinoform's does, not
 /// at a corner (Pirmez, Pratson and Steckler 1998, from memory).
 const ROUNDED_M: f64 = 250.0;
@@ -69,10 +69,20 @@ pub(super) fn lay(g: &Grid, h: &mut [f64], (open, stand, offshore): (&[bool], f6
     let floor = (0..n).filter(|&k| open[k]).map(|k| h[k]).fold(0.0, f64::min);
     let top = stand - TOPSET_M;
     let laid = |wide: f64| shelf(g, h, open, (&load, wide), (top, floor));
-    let held = |wide: f64| laid(wide).iter().map(|&(k, t)| t * g.area(k)).sum::<f64>();
-    // The width a m³ of load builds, m per m³: first as if the shelf stood `TOPSET_M` thick along a shore of the
-    // samples' side, doubled until the shelf holds the load (where the open low ground is full to the platform before,
-    // the rest leaves the map), then by false position between the two last (Illinois: Dowell and Jarratt 1971).
+    let wide = width(g, (&load, volume), &|wide| laid(wide).iter().map(|&(k, t)| t * g.area(k)).sum::<f64>());
+    let mut thick = vec![0.0; n];
+    laid(wide).iter().for_each(|&(k, t)| thick[k] = t);
+    let target = volume.min((0..n).map(|k| thick[k] * g.area(k)).sum::<f64>());
+    let room: Vec<f64> = h.iter().map(|&z| (top - z).max(0.0)).collect();
+    // (The platform is the mean over all the square, the land in it as none: its edge rounds off toward the shore.)
+    round(g, (h, loose), (open, &vec![1.0; n]), (&thick, &room, target))
+}
+
+/// The width a m³ of the `load` of each sample of the shore of grid `g` builds, m per m³, at which the shelf holds
+/// `volume`, m³, as `held(width)` finds it: first as if the shelf stood `TOPSET_M` thick along a shore of the samples'
+/// side, doubled until the shelf holds the load (where the open low ground is full to the platform before, the rest
+/// leaves the map), then by false position between the two last (Illinois: Dowell and Jarratt 1971).
+fn width(g: &Grid, (load, volume): (&[f64], f64), held: &dyn Fn(f64) -> f64) -> f64 {
     let along_shore: f64 = load.iter().sum::<f64>() * g.dy * TOPSET_M;
     let (mut lo, mut hi) = ((0.0, f64::NAN), (volume / along_shore / g.dy, 0.0));
     hi.1 = held(hi.0) - volume;
@@ -104,16 +114,17 @@ pub(super) fn lay(g: &Grid, h: &mut [f64], (open, stand, offshore): (&[bool], f6
             side = 1;
         }
     }
-    let hi = hi.0;
-    // The shelf's edge rounded over `ROUNDED_M` (its mean over a square that wide, on the open low ground alone).
-    let mut thick = vec![0.0; n];
-    laid(hi).iter().for_each(|&(k, t)| thick[k] = t);
-    let rounded: Vec<f64> = g.spread(&thick, ROUNDED_M).iter().zip(open).map(|(&t, &o)| if o { t } else { 0.0 }).collect();
-    // Thinned or thickened to hold what the shelf holds, never over the platform's top: where the rounding would raise
-    // a sample over it, the rest thickens the others, a round at a time.
-    let target = volume.min((0..n).map(|k| thick[k] * g.area(k)).sum::<f64>());
-    let room: Vec<f64> = h.iter().map(|&z| (top - z).max(0.0)).collect();
-    let held = |scale: f64| (0..n).map(|k| (rounded[k] * scale).min(room[k]) * g.area(k)).sum::<f64>();
+    hi.0
+}
+
+/// A deposit of `thick` m on each sample of grid `g` with its edge rounded over `ROUNDED_M` (its mean over a square that
+/// wide, by the weight `over` of each sample, laid on the samples `open` alone), thinned or thickened to hold `target`
+/// m³, never over the `room` each sample has, m: where the rounding would raise a sample over it, the rest thickens the
+/// others, a round at a time. Laid on the heights `h` and the loose ground `loose`, m; returns the volume laid, m³.
+pub(super) fn round(g: &Grid, (h, loose): (&mut [f64], &mut [f64]), (open, over): (&[bool], &[f64]), (thick, room, target): (&[f64], &[f64], f64)) -> f64 {
+    let (spread, share) = (g.spread(thick, ROUNDED_M), g.spread(over, ROUNDED_M));
+    let rounded: Vec<f64> = (0..g.n()).map(|k| if open[k] { spread[k] / share[k] } else { 0.0 }).collect();
+    let held = |scale: f64| (0..g.n()).map(|k| (rounded[k] * scale).min(room[k]) * g.area(k)).sum::<f64>();
     let mut scale = 1.0;
     for _ in 0..ROUNDS {
         let now = held(scale);
@@ -122,7 +133,7 @@ pub(super) fn lay(g: &Grid, h: &mut [f64], (open, stand, offshore): (&[bool], f6
         }
         scale *= target / now;
     }
-    (0..n).filter(|&k| rounded[k] > 0.0).map(|k| {
+    (0..g.n()).filter(|&k| rounded[k] > 0.0).map(|k| {
         let t = (rounded[k] * scale).min(room[k]);
         h[k] += t;
         loose[k] += t;

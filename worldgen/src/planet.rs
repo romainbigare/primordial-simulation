@@ -35,7 +35,7 @@ pub fn planet() -> Planet {
     let cfg = Config { lat_south: -90.0, lat_north: 90.0, ..Config::default() };
     let map = coarsen(Square::new(COLUMNS * AIR_SCALE, ROWS, PI * cfg.radius_m / ROWS as f64, true, AIR_SCALE), |_, _| false);
     let makes = makes_of(&chem, &init);
-    let mut w = build_on(seed, map, Terrain::new(seed, ALL_LOW, makes), (chem, &init), cfg);
+    let mut w = build_on(seed, map, Terrain::new(seed, ALL_LOW, makes, &cfg.phys), (chem, &init), cfg);
     pcore::flow::state(&mut w, true);
     let months = w.cfg.months_per_year as usize;
     for _ in 0..(YEARS - 1) * months as u64 {

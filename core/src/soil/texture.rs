@@ -11,10 +11,11 @@
 
 use super::Texture;
 use crate::space::network::NONE;
+use crate::space::delta::FLOOD_RUNOFF;
 use crate::space::samples::Samples;
 use crate::space::terrain::Make;
 use crate::units::LIQUID_VISCOSITY;
-use crate::{Physics, World};
+use crate::World;
 
 /// The particle classes, fine, middle and coarse, by their least and most diameter, m (fine under 2 µm, middle to
 /// 50 µm, coarse to 2 mm; Soil Survey Staff 1993); within a class the particles spread evenly over the logarithm of
@@ -27,8 +28,6 @@ const COARSE: usize = 2;
 const WEATHER_YEARS: f64 = 1e5;
 /// A deposit spans at least this factor of particle sizes: no flow sorts its particles to one size.
 const SORTING: f64 = 2.0;
-/// The flood that sorts what settles: its runoff from the area that drains through a sample, m/s.
-const FLOOD_RUNOFF: f64 = 1e-6;
 /// The drag constants of a natural particle's sinking (Ferguson et al. 2004).
 const DRAG_STOKES: f64 = 18.0;
 const DRAG_FORM: f64 = 1.0;
@@ -37,18 +36,18 @@ const HALVINGS: usize = 40;
 
 /// The texture of each of the terrain's samples of world `w` (`Samples`, in their order, `textures`).
 pub fn samples(w: &World) -> Vec<Texture> {
-    textures(&of(w), &w.terrain.makes, &w.cfg.phys, w.cfg.gravity)
+    textures(&of(w), &w.terrain.makes, w.cfg.gravity)
 }
 
 /// The texture of each of samples `s`, their bed of `makes`, at gravity `g`: its bed's particles
 /// (`Make::coarse`), weathered over the time its loose ground has lain, and the share of it that settled there sorted
 /// by the flow that laid it (the module's doc). A sample under standing liquid (in a pond, or the open low ground) was
 /// laid by still liquid. The flow at a sample is the flood's (`FLOOD_RUNOFF` from the area that drains through it), as
-/// deep as Flow's channels carry it (`Physics::channel_depth`), down its slope; the load that reaches it is what the
-/// flow at its main sample upstream (`Samples::main`) carried on, all particles where none runs to it.
-pub fn textures(s: &Samples, makes: &[Make], ph: &Physics, g: f64) -> Vec<Texture> {
+/// deep as a channel of the terrain's law carries it (`Samples::channel`), down its slope; the load that reaches it is
+/// what the flow at its main sample upstream (`Samples::main`) carried on, all particles where none runs to it.
+pub fn textures(s: &Samples, makes: &[Make], g: f64) -> Vec<Texture> {
     let shear = |k: usize| {
-        let depth = ph.channel_depth * (FLOOD_RUNOFF * s.up[k]).powf(ph.channel_depth_exp);
+        let depth = s.channel[0] * (FLOOD_RUNOFF * s.up[k]).powf(s.channel[1]);
         if s.pond[k] != NONE { 0.0 } else { (g * depth * s.slope[k]).sqrt() }
     };
     crate::par::map_n(s.h.len(), crate::par::UNCOUNTED, |k| {
