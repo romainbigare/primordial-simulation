@@ -1214,7 +1214,10 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   the earliest first (`flame::run`). Every cell it reaches burns all of its land that its remains cover (f = its
   cover): a patch burns whole, keeps no remains to carry a flame, and burns again only once its cover's leaves have
   built them back. So the land burnt is a mosaic of patches of different ages, from that feedback alone (no rule keeps
-  a cell from burning). The wind does not stretch a run.
+  a cell from burning). The wind stretches a run downwind: along the way between two cells a bed's speed is R (1 + φ_w),
+  φ_w Rothermel's (1972) wind factor of the low wind's speed along that way (`World::low_wind`, the air's at its last
+  step), the particles' surface to volume ratio 4 / `fine_d` and the packing of what flames (`flame::downwind`); none
+  against the wind.
 - **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the cured leaves and the
   part of its remains that flames burn, and after them the part that smoulders; a flame through what flames, its depth
   the cured leaves at `cured_rho` and the remains at `litter_rho`, moves at R = `flux_ahead` h_c δ / (τ Q), δ its depth, τ = 8 minutes an inch of

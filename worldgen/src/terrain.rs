@@ -266,6 +266,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         store: Store::new(n, (ground, bed, vec![0.0; n]), (air, vec![0.0; na])),
         base_z: BASE_Z,
         counts: Counters::default(),
+        low_wind: Vec::new(),
         rain: vec![0.0; n],
         discharge: Vec::new(),
         liquid_flux: vec![0.0; n],

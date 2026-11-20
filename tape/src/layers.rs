@@ -325,9 +325,9 @@ pub const LAYERS: &[Layer] = &[
     l("ground_b", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][2]),
 ];
 
-/// The low wind over cell `i` at the air's last step, m/s [east, south] (`Counters::low_wind`; none before the first).
+/// The low wind over cell `i` at the air's last step, m/s [east, south] (`World::low_wind`; none before the first).
 fn low_wind(c: &Ctx, i: usize) -> [f64; 2] {
-    c.w.counts.low_wind.get(c.air(i)).map_or([0.0; 2], |v| v.map(|x| x as f64))
+    c.w.low_wind.get(c.air(i)).map_or([0.0; 2], |v| v.map(|x| x as f64))
 }
 
 /// What flames did on cell `i` of `w` in its last month (`Counters::flame_month`; nothing before the first).

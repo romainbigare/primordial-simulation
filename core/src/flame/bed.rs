@@ -13,7 +13,7 @@ use crate::World;
 /// of the ground they cover; the mean liquid per kg dry of what flames (its moisture) and the most a kg could hold and
 /// still carry a flame (their moisture of extinction); what a kg of them frees burning, J, and what lighting a kg of
 /// them takes, J; the least load whose flame holds its heat (`least`), kg a m²; and the shares of the remains' load dry
-/// enough to flame and to smoulder (`layer`).
+/// enough to flame and to smoulder (`layer`); and the density of its particles, kg/m³ (the frame's).
 #[derive(Clone, Copy, Debug)]
 pub struct Bed {
     pub load: f64,
@@ -26,6 +26,7 @@ pub struct Bed {
     pub least: f64,
     pub flaming: f64,
     pub smoulder: f64,
+    pub particle_rho: f64,
 }
 
 impl Bed {
@@ -90,7 +91,7 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     let moist = (standing * top + lying * l.sorbed(l.h(flaming / 2.0))) / (standing + lying).max(f64::MIN_POSITIVE);
     let light = dry + moist * per_liquid;
     let smoulder = l.share(ph.smoulder_moist, ph.duff_hold).max(flaming);
-    Some(Bed { load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder })
+    Some(Bed { load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder, particle_rho: chem.subs[p.sub[WALL]].density[0] })
 }
 
 /// The layer of remains on a cell: the relative vapour of the air in it at its top and at its bottom, the share of
