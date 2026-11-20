@@ -8,7 +8,7 @@ mod shares;
 mod wet;
 
 pub use shares::{soil_held, soil_level, Means};
-pub use wet::{wet_ground, wet_land, WetGround};
+pub use wet::{saturated, wet_ground, wet_land, WetGround};
 
 use crate::math::central;
 use crate::World;
@@ -17,17 +17,9 @@ use crate::World;
 /// flux all from upstream).
 const SHED_MIN: f64 = 1e-6;
 
-/// The rms slope of real ground (rise over run) measured over `REAL_LENGTH_M`, and the Hurst exponent of its roughness:
-/// the slope over a length ℓ goes as ℓ^(`HURST` − 1) (`real_slope`).
-const REAL_SLOPE: f64 = 0.1;
-const REAL_LENGTH_M: f64 = 30.0;
-const HURST: f64 = 0.8;
-
-/// The rms slope of real ground over a length `len`, m: self-affine, so it falls slowly as the length grows. The
-/// ground inside a cell is no smoother than it at the size of its samples.
-fn real_slope(len: f64) -> f64 {
-    REAL_SLOPE * (len / REAL_LENGTH_M).powf(HURST - 1.0)
-}
+/// The least slope of the ground's liquid table, rise over run: the floors of real valleys fall no less than about this
+/// (lowland floodplains 1e-4 to 1e-3, Leopold, Wolman and Miller 1964), so the wetness index of a flat sample stays finite.
+const TAN_MIN: f64 = 1e-3;
 
 /// A grid of samples of the ground: `across` x `down` of them, row by row from the north-west, a sample's length north
 /// to south, m, and the width of each row's samples, m. The ground inside a cell stands on one (`Ground`), and so does
@@ -73,10 +65,9 @@ impl Grid {
             .collect()
     }
 
-    /// The slope of ground `h` at each sample, rise over run, no less than real ground's over a sample (`real_slope`).
+    /// The slope of ground `h` at each sample, rise over run, no less than a valley floor's (`TAN_MIN`).
     pub fn slope(&self, h: &[f64]) -> Vec<f64> {
-        let floor = real_slope(self.dy);
-        self.gradient(h).iter().map(|g| g[0].hypot(g[1]).max(floor)).collect()
+        self.gradient(h).iter().map(|g| g[0].hypot(g[1]).max(TAN_MIN)).collect()
     }
 
     /// How much liquid gathers at each sample, the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979), from
