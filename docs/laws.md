@@ -1187,10 +1187,12 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   it, so in a steady state its relative vapour h runs in a straight line from its top, the air near the ground
   (`World::near_ground`, its vapour over saturation at the ground's temperature), to its bottom, between that and
   saturation by the share s of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the
-  share by which the ground's evaporation draws its liquid; Manabe 1969). At each depth it holds the sorption curve
+  share by which the ground's evaporation draws its liquid; Manabe 1969), the key liquid frozen in its pores counted
+  with it; where snow lies (`contract::Place::snow`) it hides the remains and they do not burn.
+  At each depth it holds the sorption curve
   `sorb_scale` (−ln(1 − h))^`sorb_power` per kg dry (Nelson 2000; h at most 0.99), and as duff, drawing liquid up from
   the ground, `duff_hold` × s × the share of its depth over that. A burning kg frees h_c (its parts' burning heats by mass); lighting a kg takes Q = c (`t_light` −
-  T) + M (c_l (T_boil − T) + L_v), all from the chemistry's substances, M what the curve holds halfway down its part that
+  T) + M (c_l (T_boil − T) + L_v, + L_f below the liquid's melting point), all from the chemistry's substances, M what the curve holds halfway down its part that
   flames. The part that **flames** is its top down to where what the curve holds reaches the moisture of extinction (`flux_ahead` h_c − c
   (`t_light` − T)) / (c_l (T_boil − T) + L_v), where the share `flux_ahead` of h_c still lights the next kg (0.18 for
   the remains of chemistry 0 at 295 K): fine dead fuel dries with the air; the cured leaves, in the air near the
@@ -1235,7 +1237,7 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   share of its air, `Books::room`); the heat the burning frees goes to the air node over the cell. What it burnt and
   killed is counted (`Counters::flame`, `flame_air`, `cover_lost` by `life::FLAME`, the budget's `burnt`), and what the
   flames did on each cell in the month (`flame::Flamed`: the share burnt, the flame's length, the minerals left and
-  the gas given, per m² of land), the share burnt in each month of the last year and its land's mean months since it last
+  the gas given, per m² of land), the share burnt in each month of the last year and the months since it last
   burnt, for the tape (`Counters::flame_month`, `burnt_months`, `burnt_age`).
 - **Known limits:** the slow organic matter held on the mineral particles (14) does not burn; the smouldering part
   burns in the month with no depth or speed of its own; the liquid the remains hold is not boiled off into the air

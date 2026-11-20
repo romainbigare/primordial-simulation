@@ -68,8 +68,8 @@ pub struct Flamed {
     pub air: f32,
 }
 
-/// The most months since a cell's land last burnt that the tape tells apart (`since`): land that never burnt counts as
-/// this old.
+/// The most months since a cell last burnt that the tape tells apart (`since`): a cell that never burnt counts as this
+/// old.
 pub const AGE_MOST: f32 = 120.0;
 
 /// The flames' month, after the cover's (`life::month`): each land cell's bed (`bed`), the share of each cell that burns
@@ -94,9 +94,8 @@ pub fn month(w: &mut World) {
 }
 
 /// What each cell's flames did in the month (`Counters::flamed`) becomes its last month's (`Counters::flame_month`,
-/// one a cell of `n`) and the share it burnt that month of the year's (`burnt_months`); its land's mean months since it
-/// last burnt (`burnt_age`) grows by the month, at most `AGE_MOST`, and its share burnt starts again from none. For
-/// the tape.
+/// one a cell of `n`) and the share it burnt that month of the year's (`burnt_months`); its months since it last burnt
+/// (`burnt_age`) grow by the month, at most `AGE_MOST`, and start again from none where it burns. For the tape.
 fn tally(w: &mut World, n: usize) {
     let months = w.cfg.months_per_year as usize;
     let of_year = (w.month() % months as u64) as usize;
@@ -112,7 +111,7 @@ fn tally(w: &mut World, n: usize) {
     for (i, f) in std::mem::take(&mut c.flamed) {
         let i = i as usize;
         (c.flame_month[i], c.burnt_months[i * months + of_year]) = (f, f.share);
-        c.burnt_age[i] *= 1.0 - f.share;
+        c.burnt_age[i] = 0.0;
     }
 }
 
@@ -138,8 +137,7 @@ pub fn burnt_year(w: &World, i: usize) -> f64 {
     w.counts.burnt_months.get(i * m..(i + 1) * m).map_or(0.0, |v| v.iter().map(|&f| f as f64).sum())
 }
 
-/// The mean of cell `i`'s land's whole months since it last burnt, each at most `AGE_MOST` (land that never burnt
-/// counts as that old): with no draws a cell burns a share of its land, which starts again from none.
+/// The whole months since cell `i` last burnt, at most `AGE_MOST` (a cell that never burnt counts as that old).
 pub fn since(w: &World, i: usize) -> f64 {
     w.counts.burnt_age.get(i).copied().unwrap_or(AGE_MOST) as f64
 }

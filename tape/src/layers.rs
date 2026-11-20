@@ -299,6 +299,8 @@ pub const LAYERS: &[Layer] = &[
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.rain.get(i).copied().unwrap_or(0.0) as f64),
     l("rises", "mol/m2/s", "log", 1e-5, 1e-2, |c, i| c.w.evap.get(i).copied().unwrap_or(0.0) as f64),
     l("sheds", "mol/m2/s", "lin", -4e-3, 4e-3, |c, i| sheds(c.w, i)),
+    l("wind_u", "m/s", "lin", -20.0, 20.0, |c, i| low_wind(c, i)[0]),
+    l("wind_v", "m/s", "lin", -20.0, 20.0, |c, i| -low_wind(c, i)[1]),
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
     l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| per_land(c.plants[i], c.land[i])),
@@ -322,6 +324,11 @@ pub const LAYERS: &[Layer] = &[
     l("ground_g", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][1]),
     l("ground_b", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][2]),
 ];
+
+/// The low wind over cell `i` at the air's last step, m/s [east, south] (`Counters::low_wind`; none before the first).
+fn low_wind(c: &Ctx, i: usize) -> [f64; 2] {
+    c.w.counts.low_wind.get(c.air(i)).map_or([0.0; 2], |v| v.map(|x| x as f64))
+}
 
 /// What flames did on cell `i` of `w` in its last month (`Counters::flame_month`; nothing before the first).
 fn flamed(w: &World, i: usize) -> pcore::flame::Flamed {
