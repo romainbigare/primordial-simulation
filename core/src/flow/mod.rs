@@ -99,6 +99,21 @@ pub fn creep(w: &mut World, dt: f64) {
     });
 }
 
+/// The pores of some ground nodes change (`change`, `soil::month`, which names them), their lifts and falls booked: the
+/// liquid they hold and let stand rises or falls with them, and its potential energy goes to or from its ground's heat
+/// (`potential::Lifts`); the state of those nodes is found anew from them (`land::cells_state`), or of every node where
+/// it was not built at the world's time now.
+pub fn new_pores(w: &mut World, change: impl FnOnce(&mut World) -> Vec<u32>) {
+    with(w, true, |w, s| {
+        let cells = change(w);
+        if s.built_at == Some(w.time) {
+            land::cells_state(w, s, &cells, true);
+        } else if !cells.is_empty() {
+            ground_now(w, s, true);
+        }
+    });
+}
+
 /// The slow ground and the substances present are rechecked (`scratch::refresh`).
 pub fn refresh(w: &mut World) {
     with(w, false, |w, s| scratch::refresh(w, s));

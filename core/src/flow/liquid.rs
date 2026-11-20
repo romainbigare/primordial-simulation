@@ -14,7 +14,7 @@ pub(super) struct Mobile {
 }
 
 /// The mobile liquid of the ground nodes where `on(i)` (none elsewhere), of the liquids `liq`; what boils below the
-/// coldest node, `tmin`, is gas.
+/// coldest node, `tmin`, is gas; of a mineral, the share that stays dissolved (`held_off`).
 pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl Fn(usize) -> bool) -> Mobile {
     let n = w.mesh.cells().n();
     let mut m = Mobile { mol: vec![0.0; liq.len() * n], vol: vec![0.0; n] };
@@ -26,7 +26,16 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64, on: impl 
             m.vol[i] += if gas { 0.0 } else { a * s.sp[k].v[1] };
         }
     }
+    for (q, _) in liq.iter().enumerate().filter(|p| w.chem.is_mineral(*p.1)) {
+        (0..n).for_each(|i| m.mol[q * n + i] *= held_off(w, i, m.vol[i]));
+    }
     m
+}
+
+/// The share of a mineral in ground node `i` holding `vol` m³ of liquid that stays dissolved, which moves with the
+/// liquid: the rest sits on the exchange sites of its loose ground (`soil::dissolved`).
+pub(super) fn held_off(w: &World, i: usize, vol: f64) -> f64 {
+    crate::soil::dissolved(w.soil[i].holds, vol)
 }
 
 /// Book `fluxes` through the store, and bring the ground nodes' state up to date for what changed (`Scratch::note`;
@@ -62,7 +71,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     // plateau's substance was liquid, so the share of what stays is not the share it had; and a mixed node, from its
     // parts.
     let on: Vec<u32> = cells.into_iter().filter(|&i| s.state.pk[i as usize] != NONE || super::parts::has(s, i as usize)).collect();
-    cells_state(w, s, &on);
+    cells_state(w, s, &on, false);
 }
 
 /// One liquid step of `dt` seconds (the module's doc): after the runoff's pass the liquid's top and deep swap liquid
@@ -76,7 +85,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     under(w, s, &liq, tmin, dt);
     surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     let mixed = super::parts::mix(w, s, dt);
-    cells_state(w, s, &mixed);
+    cells_state(w, s, &mixed, false);
     super::basin::mix(w, s);
     super::air::dissolve(w, s, dt);
 }

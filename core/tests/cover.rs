@@ -60,7 +60,7 @@ fn start() -> (pcore::World, usize) {
 #[test]
 fn the_cover_grows_by_what_its_budget_books() {
     let (mut w, i) = start();
-    worldgen::testkit::set_pores(&mut w, |p| *p = worldgen::testkit::loam());
+    worldgen::testkit::set_loam(&mut w);
     let books = Books::now(&w);
     assert!(cover::place(&mut w, i, genes(), 0, 0.1));
     w.take_counters();

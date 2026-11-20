@@ -223,6 +223,22 @@ hf = -986
 rupture = 120
 shear = 60
 
+# 14: the slow organic matter that rotting body matter leaves (reaction 14), half its element 1 and all its element 2,
+# held on the faces of fine particles (`bound`): docs/numbers.md, "substance 14".
+[[s]] # 14
+e = [78,59,6,42,0,0]
+cp = 1900
+melt = 1500
+boil = 3000
+rho = [1400, 1300]
+hard = 0.2
+str = 0.3
+refl = [[0.15,0.12,0.10],[0.10,0.08,0.06]]
+sol = 0.0
+cond = 0.2
+hf = -6098
+bound = true
+
 # Reactions: i/o = [[substance, count]], k 1/s, ea K, ord the power of each input in the rate law (`Reaction::ord`).
 [[r]] # 0
 i = [[3,1],[0,1]]
@@ -327,6 +343,26 @@ i = [[13,1],[0,1]]
 o = [[5,6]]
 k = 9.6e-4
 ea = 7760
+
+# 14: body matter rots into the slow organic matter, in the open world beside reaction 7 at a quarter of its rate:
+# docs/numbers.md, "reaction 14".
+[[r]] # 14
+i = [[10,1],[2,59]]
+o = [[14,1],[3,59],[0,59]]
+ord = [1,6]
+k = 5.7e8
+ea = 9000
+open = 5
+
+# 15: the slow organic matter rots, 25 times slower than body matter, its element 2 back as the mineral 12:
+# docs/numbers.md, "reaction 15".
+[[r]] # 15
+i = [[14,1],[2,59]]
+o = [[3,59],[0,33],[12,3]]
+ord = [1,6]
+k = 9.12e7
+ea = 9000
+open = 5
 
 # Growth (`Chemistry::build`), no reaction of the open world: body matter (the first output) of 5 and 12, paid by work
 # (Copy): docs/numbers.md, "Chemistry::build".

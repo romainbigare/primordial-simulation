@@ -7,7 +7,7 @@ use pcore::space::network::NONE;
 const STEPS: usize = 20;
 const ORGANIC_STEPS: usize = 4;
 
-/// For every texture (coarse and fine shares that sum to at most 1, organic matter to 0.1) the pores hold liquid at the
+/// For every texture (coarse and fine shares that sum to at most 1, any organic share) the pores hold liquid at the
 /// wilting point, more at field capacity and more again when full (0 < θ1500 < θ33 < θs < 1), and pass liquid when
 /// full (Saxton and Rawls 2006).
 #[test]
@@ -15,7 +15,7 @@ fn ground_holds_less_at_the_wilting_point_than_at_field_capacity_than_full() {
     for o in 0..=ORGANIC_STEPS {
         for f in 0..=STEPS {
             for c in 0..=STEPS - f {
-                let t = Texture { coarse: c as f64 / STEPS as f64, fine: f as f64 / STEPS as f64, organic: 0.1 * o as f64 / ORGANIC_STEPS as f64 };
+                let t = Texture { coarse: c as f64 / STEPS as f64, fine: f as f64 / STEPS as f64, organic: o as f64 / ORGANIC_STEPS as f64 };
                 let p = Pores::of(&t);
                 assert!(p.porosity > 0.0 && p.porosity < 1.0 && 0.0 < p.wilt && p.wilt < p.field && p.field < 1.0, "{t:?}: {p:?}");
                 assert!(p.seep > 0.0, "{t:?}: {p:?}");
@@ -41,3 +41,42 @@ fn still_liquid_lays_finer_ground_than_flowing_liquid() {
     println!("fine share laid by still liquid {still:.3} ({n_still} samples), by flowing liquid {flowing:.3} ({n_flowing})");
     assert!(n_still > 0 && n_flowing > 0 && still > flowing, "still {still}, flowing {flowing}");
 }
+
+/// A cell's organic share is the dead matter its ground holds (`soil::month`): dead frame laid on a cell's ground makes
+/// its loose ground organic and its pores hold more liquid at field capacity, and the books hold as its pores change.
+#[test]
+fn dead_matter_on_the_ground_makes_it_organic_and_hold_more_liquid() {
+    let (mut w, i) = worldgen::testkit::start();
+    pcore::soil::month(&mut w);
+    let wall = pcore::life::Parts::of(&w.chem).expect("life's parts").sub[pcore::life::WALL];
+    let held = |w: &pcore::World| w.pores(i).field * w.pores(i).porosity;
+    let (was, before) = (w.soil[i].texture.organic, held(&w));
+    let mol = KG_M2 * w.mesh.cells().area()[i] / w.chem.subs[wall].molar_mass;
+    worldgen::testkit::put(&mut w, wall, i, mol);
+    let books = worldgen::testkit::Books::now(&w);
+    pcore::soil::month(&mut w);
+    books.assert_within(&w, 1e-9, 1e-9);
+    println!("organic share {was:.2e} -> {:.2e}, field capacity {before:.4} -> {:.4} of the volume", w.soil[i].texture.organic, held(&w));
+    assert!(w.soil[i].texture.organic > was && held(&w) > before);
+}
+
+/// Flowing liquid carries loose ground of middle particles most easily (Wischmeier and Smith 1978): against a loam's
+/// (1), more for middle particles, less for coarse and for fine ones, and less with organic matter.
+#[test]
+fn middle_particles_are_carried_most_easily() {
+    let k = |coarse: f64, fine: f64, organic: f64| Texture { coarse, fine, organic }.erodibility();
+    let (loam, middle, coarse, fine) = (k(0.4, 0.2, 0.0), k(0.1, 0.1, 0.0), k(0.9, 0.05, 0.0), k(0.1, 0.6, 0.0));
+    println!("erodibility: loam {loam:.3}, middle {middle:.3}, coarse {coarse:.3}, fine {fine:.3}");
+    assert!((loam - 1.0).abs() < 1e-12 && middle > loam && coarse < loam && fine < loam && k(0.4, 0.2, 0.02) < loam);
+}
+
+/// Fine and middle particles shelter what they hold from the decomposers (Parton et al. 1987): more the more of them,
+/// none on ground of coarse particles alone, at most 0.75 of the rot.
+#[test]
+fn fine_particles_shelter_the_slow_organic_matter() {
+    let s = |coarse: f64, fine: f64| Texture { coarse, fine, organic: 0.0 }.shelters();
+    assert!(s(1.0, 0.0) == 0.0 && s(0.6, 0.1) < s(0.3, 0.2) && s(0.0, 0.5) == 0.75, "{} {} {} {}", s(1.0, 0.0), s(0.6, 0.1), s(0.3, 0.2), s(0.0, 0.5));
+}
+
+/// The dead frame laid on the ground, kg/m²: a thick litter.
+const KG_M2: f64 = 20.0;

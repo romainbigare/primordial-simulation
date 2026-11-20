@@ -95,6 +95,15 @@ aside .group { background: var(--panel); border: 1px solid var(--line); border-r
 .ramp .lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
 .ramp .unit { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 .ramp[hidden] { display: none; }
+.tri { margin-top: 10px; max-width: 260px; }
+.tri[hidden] { display: none; }
+.tri svg { width: 100%; height: auto; display: block; }
+.tri polygon { stroke: rgba(255,255,255,.75); stroke-width: 1; }
+.tri text { font-size: 6.5px; text-anchor: middle; dominant-baseline: middle; fill: #2b2420; }
+.tri text.end { font-size: 9px; fill: var(--muted); }
+.tri text.left { text-anchor: start; }
+.tri text.right { text-anchor: end; }
+.tri circle.at { fill: none; stroke: #111; stroke-width: 2; }
 
 .inspect .hint { color: var(--muted); margin: 0; font-size: 13px; }
 .cell { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 6px; }

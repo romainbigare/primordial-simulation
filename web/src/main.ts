@@ -8,16 +8,22 @@ import { GroundTiles, GroundOf } from './ground';
 import { Land } from './land';
 import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
+import { textureClass, textureLegend } from './soil';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
   t_ground: 'Ground temperature', t_air: 'Air temperature', rain: 'Rain', vapor: 'Vapor', absorber: 'Absorber',
   depth: 'Liquid depth', flux: 'River flux', catch: 'Catchment', loose: 'Loose sediment', wet: 'Ground wetness', ice: 'Ice', z: 'Elevation',
   coarse: 'Sand (coarse grain)', fine: 'Clay (fine grain)', organic: 'Organic matter', conduct: 'Soil conductivity',
-  avail: 'Available water', filled: 'Soil water (pores filled)',
+  avail: 'Available water', filled: 'Soil water (pores filled)', roots: 'Water for roots (share)',
+  rises: 'Evaporation', sheds: 'Runoff and drainage (rain less evaporation)',
+  litter: 'Fresh litter', slow: 'Humus (slow organic pool)', mineral_free: 'Nitrogen, dissolved', mineral_held: 'Nitrogen, held on the soil',
+  rot: 'Rot speed',
   seeds: 'Seeds on the ground', grown: 'Growth last year', takers: 'Takers',
 };
 const ORDER = Object.keys(LABELS);
+/** The layers of the soil's grain, shown with the texture classes' legend (soil.ts). */
+const GRAIN_LAYERS = ['coarse', 'fine'];
 const label = (n: string) => LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).replace(/_/g, ' '));
 const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
@@ -162,6 +168,8 @@ function mapLook(): MapLook {
 function setLayer(n: string | null): void {
   layer = n;
   const r = $('ramp'); r.hidden = !n;
+  $('texture').hidden = !GRAIN_LAYERS.includes(n ?? '');
+  $('texture').innerHTML = GRAIN_LAYERS.includes(n ?? '') ? textureLegend(null) : '';
   if (n && world) {
     const l = world.meta.layers[world.index.get(n)!], lut = world.lut[world.index.get(n)!];
     $('rampbar').style.background = rampCss(rampFor(n));
@@ -194,7 +202,10 @@ function inspect(): void {
   if (cover) { el.innerHTML = cover; return; }
   if (!world || i < 0) { el.innerHTML = '<p class="hint">Hover or tap the map.</p>'; return; }
   const { meta } = world, [name, color] = CLASSES[cls[i]];
-  let rows = '';
+  const share = (n: string) => world!.lut[world!.index.get(n)!][plane(world!, frame, n)[i]];
+  const grain: [number, number] | null = world.index.has('coarse') ? [share('coarse'), share('fine')] : null;
+  if (!$('texture').hidden) $('texture').innerHTML = textureLegend(grain);
+  let rows = grain ? `<tr><td>Soil texture</td><td>${textureClass(...grain)}</td></tr>` : '';
   meta.layers.forEach((l, k) => {
     if (/^(true|ground)_[rgb]$/.test(l.name)) return;
     rows += `<tr><td>${label(l.name)}</td><td>${fmt(world!.lut[k][plane(world!, frame, l.name)[i]])} <u>${unitText(l.unit)}</u></td></tr>`;

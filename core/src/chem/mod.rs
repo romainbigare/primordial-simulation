@@ -74,6 +74,9 @@ pub struct Substance {
     pub rupture: f64,
     /// The stress to cut the solid across its fibres, Pa (0: none given)
     pub shear: f64,
+    /// Held on the faces of fine and middle particles, which shelter it from the decomposers of the open world
+    /// (`Texture::shelters`)
+    pub bound: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

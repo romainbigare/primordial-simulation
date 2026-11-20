@@ -257,9 +257,18 @@ pub fn set_pores(w: &mut World, f: impl Fn(&mut pcore::soil::Pores)) {
     w.soil.iter_mut().for_each(|s| f(&mut s.pores));
 }
 
-/// The pores of a loam, its particles 0.4 coarse and 0.2 fine with no organic matter (`soil::Pores::of`).
+/// The pores of a loam with no organic matter (`soil::LOAM`, `soil::Pores::of`).
 pub fn loam() -> pcore::soil::Pores {
-    pcore::soil::Pores::of(&pcore::soil::Texture { coarse: 0.4, fine: 0.2, organic: 0.0 })
+    pcore::soil::Pores::of(&pcore::soil::LOAM)
+}
+
+/// Every cell of `w` of a loam's particles (`soil::LOAM`), its organic share as it is, and its pores of that
+/// (`soil::Pores::of`; each month's start finds them again as its organic share moves, `soil::month`).
+pub fn set_loam(w: &mut World) {
+    for s in w.soil.iter_mut() {
+        (s.texture.coarse, s.texture.fine) = (pcore::soil::LOAM.coarse, pcore::soil::LOAM.fine);
+        s.pores = pcore::soil::Pores::of(&s.texture);
+    }
 }
 
 /// Cell `i` flat inside: its ground level at its mean (`World::level_inside`).

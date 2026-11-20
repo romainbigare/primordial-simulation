@@ -50,10 +50,18 @@ size), `channel_w` and `channel_d` (the width and the depth of the cell's channe
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
 `filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
 the texture of its loose ground (`World::soil`, `soil::Texture`): `coarse` and `fine` (the shares of coarse and of fine
-particles, 0..1) and `organic` (the share of organic matter, 0 to 0.1), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land` of the cell's amount per m² of its area and its land's share, `contract::lands`: the cover and its seeds live and are drawn on the land alone, divided by the land once; 0 where the cell holds no land), the living mass of the takers per km² of the cell's land (`takers`, kg/km², `fauna::per_km2`; 0 where the cell holds no land; log from 1 to 10,000), true colour (r, g, b: the colour of what covers the surface, its frozen cover, liquid or
-ground) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid, under
+particles, 0..1) and `organic` (the share of organic matter of its solid volume, 0 to 0.02, which the page's Earth view darkens its
+bare ground by), `conduct` (its pores' conductivity, m/s),
+`avail` (the liquid its loose ground holds for roots when full, m), `roots` (the share of that it holds now,
+`Pores::available`), `rises` (what rises from it less what condenses on it, `World::evap`) and `sheds` (its rain less
+that, mol/m²/s, lin from -0.004 to 0.004: what it passes on to runoff and the ground below), and of its ground
+(`soil::holdings`; 0 before Flow first built its state): `litter` (fresh dead matter, kg/m²), `slow` (the slow organic
+pool, kg/m²), `mineral_free` and `mineral_held` (the nitrogen mineral dissolved and held on the exchange sites,
+kg/m²) and `rot` (how fast dead frame rots there, per year), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land` of the cell's amount per m² of its area and its land's share, `contract::lands`: the cover and its seeds live and are drawn on the land alone, divided by the land once; 0 where the cell holds no land), the living mass of the takers per km² of the cell's land (`takers`, kg/km², `fauna::per_km2`; 0 where the cell holds no land; log from 1 to 10,000), true colour (r, g, b: the colour of what covers the surface, its frozen cover, the liquid standing over its pores
+(`flow::means`; the liquid in the pores is part of the ground) or its ground; the page draws a point no liquid stands
+on in its ground's colour, darker as far as it is soaked) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid, under
 the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `LITTER_KG`), 0.3 kg/m²). The page draws
-the layers of the soil (`filled`, `coarse`, `fine`, `organic`) on dry ground alone (web/src/earth.ts `GROUND_LAYERS`);
+the layers of the soil and of the land's liquid on dry ground alone (web/src/earth.ts `GROUND_LAYERS`);
 the live map finds `filled` at each point by the laws inside a cell, and `coarse` and `fine` from the samples' texture
 (below). The tape holds whole-map frames only. The live viewer draws its map from two
 things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`), which never change, so a page
@@ -217,8 +225,9 @@ at most 2 m; 0 for a sink or a sample under a pond; that slope of its reach (ris
 the sample it runs to (1 to 8, its neighbours row by row; 8 more where it joins that one as a tributary; 0 for none)
 and 17 times the step to its main neighbour upstream, by which a shell lets what runs through a channel grow evenly
 from one sample's centre to the next, so its width has no step where two samples meet. Then of each sample again the
-reflectance of its bed's make and a zero. Then of each sample again the shares of coarse and of fine particles and of
-organic matter of its loose ground (`pcore::soil::textures`) and a zero. **The
+reflectance of its bed's make and a zero. Then of each sample again the shares of coarse and of fine particles of its
+loose ground (`pcore::soil::textures`), how slowly its pores pass liquid (the decimal logarithm of 1 m/s over their
+conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground, and a zero. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
 sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries
@@ -249,7 +258,7 @@ are not recorded.
 | `elem_<j>` | mol | element j in the world (must not change) |
 | `energy` | J | heat and chemical energy in the world |
 | `min<q>_land`, `min<q>_sea` | kg/m² | mineral q in the ground of land and of the sea floor |
-| `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_cover`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea, in the cover, in the bed's stores |
+| `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_cover`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea (the slow organic pool among it), in the cover, in the bed's stores |
 | `t_ground`, `t_air` | K | mean ground and air temperature (by area; of a cell of parts its land's and its liquid's top's mean by area, `World::t_surface_last`) |
 | `t_land`, `t_land_summer`, `t_land_winter` | K | the land's ground as life feels it (of a cell of parts its land, `World::t_ground_last`): the mean of the year's months, the warmest month and the coldest |
 | `absorber` | | mean absorption of the heat-absorbing gases |
