@@ -45,10 +45,10 @@ pub const W_PER_KW: f64 = 1e3;
 const BED_WORK: usize = 2_000;
 
 /// What flames burnt and killed in the cover (`Counters::flame`), kg (plants: a count): the remains on the ground that
-/// flamed and those that smouldered after them; the
+/// flamed and those that smouldered after them; the cured leaves standing (last, `CURED`); the
 /// soft part of the cover that stood in the flame; the leaves under the scorch height that died; what else died of the
 /// plants whose whole crown stood under it (their walls and fuel); of that their walls; and those plants.
-pub const FLOWS: [&str; 7] = ["remains", "smouldered", "living", "scorched", "killed", "killed_walls", "plants"];
+pub const FLOWS: [&str; 8] = ["remains", "smouldered", "living", "scorched", "killed", "killed_walls", "plants", "cured"];
 pub const REMAINS: usize = 0;
 pub const SMOULDERED: usize = 1;
 pub const LIVING: usize = 2;
@@ -56,6 +56,7 @@ pub const SCORCHED: usize = 3;
 pub const KILLED: usize = 4;
 pub const KILLED_WALLS: usize = 5;
 pub const PLANTS: usize = 6;
+pub const CURED: usize = 7;
 
 /// What flames did on a cell in a month, for the tape: the share of its land they burnt; their mean length, m; the
 /// solids their burning left on its ground and the gas it gave the air, kg a m² of its land.
@@ -113,6 +114,22 @@ fn tally(w: &mut World, n: usize) {
         (c.flame_month[i], c.burnt_months[i * months + of_year]) = (f, f.share);
         c.burnt_age[i] *= 1.0 - f.share;
     }
+}
+
+/// The cured leaves standing on cell `i` (`Cover::cured`), kg a m² of its land (none where it holds no land).
+pub fn cured(w: &World, i: usize) -> f64 {
+    per_land(w, i, &w.life.cover(i).cured)
+}
+
+/// The dead walls flames left standing on cell `i` (`Cover::snag`), kg a m² of its land (none where it holds no land).
+pub fn snag(w: &World, i: usize) -> f64 {
+    per_land(w, i, &w.life.cover(i).snag)
+}
+
+/// The mass of the amounts `mol` of the cover's parts on cell `i`, kg a m² of its land (none where it holds no land).
+fn per_land(w: &World, i: usize, mol: &[f64; crate::cover::NP]) -> f64 {
+    let (land, p) = (crate::contract::land(w, i), Parts::of(&w.chem));
+    p.filter(|_| land > 0.0).map_or(0.0, |p| mol.iter().zip(p.mm(&w.chem)).map(|(m, kg)| m * kg).sum::<f64>() / land)
 }
 
 /// The share of cell `i`'s land flames burnt in the last year's months (a share burnt twice counts twice).

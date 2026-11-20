@@ -7,14 +7,16 @@ use crate::life::WET_TISSUE;
 use crate::units::SIGMA;
 use crate::World;
 
-/// What the remains lying on a land cell are to a flame this month: their load, kg a m² of land; the share of the
-/// ground they cover; the mean liquid per kg dry of their part that flames (their moisture) and the most a kg could
-/// hold and still carry a flame (their moisture of extinction); what a kg of them frees burning, J, and what lighting a
-/// kg of them takes, J; the least load whose flame holds its heat (`least`), kg a m²; and the shares of their load dry
+/// What the remains lying on a land cell and the cured leaves standing over them (`Cover::cured`) are to a flame this
+/// month: the load of the remains, kg a m² of land; the load of the cured leaves dry enough to flame, kg a m²; the share
+/// of the ground they cover; the mean liquid per kg dry of what flames (its moisture) and the most a kg could hold and
+/// still carry a flame (their moisture of extinction); what a kg of them frees burning, J, and what lighting a kg of
+/// them takes, J; the least load whose flame holds its heat (`least`), kg a m²; and the shares of the remains' load dry
 /// enough to flame and to smoulder (`layer`).
 #[derive(Clone, Copy, Debug)]
 pub struct Bed {
     pub load: f64,
+    pub standing: f64,
     pub cover: f64,
     pub moist: f64,
     pub extinct: f64,
@@ -32,28 +34,35 @@ impl Bed {
     pub fn carries(&self) -> bool {
         self.cover >= CARRY_SHARE && self.flaming > 0.0 && self.flames() >= self.least
     }
-    /// The load of its part that flames, kg a m² of land.
+    /// The load of its part that flames, kg a m² of land: the cured leaves and the top of the remains.
     pub fn flames(&self) -> f64 {
-        self.flaming * self.load
+        self.standing + self.flaming * self.load
+    }
+    /// The depth of its part that flames, m: the cured leaves standing at `cured_rho`, the remains lying at
+    /// `litter_rho`.
+    pub fn depth(&self, ph: &crate::Physics) -> f64 {
+        self.standing / ph.cured_rho + self.flaming * self.load / ph.litter_rho
     }
 }
 
-/// The remains lying on land cell `i` as a flame meets them this month (`Bed`); none on a cell with no land, no
-/// remains, remains under the least load even dry, or no air read yet.
+/// The remains lying on land cell `i` and the cured leaves standing over them as a flame meets them this month (`Bed`);
+/// none on a cell with no land, nothing that burns, less than the least load even dry, or no air read yet.
 pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
-    let (chem, ph) = (&w.chem, &w.cfg.phys);
+    let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
     let load = crate::contract::remains_in(w, i, |k| w.g(k, i));
-    if load <= 0.0 {
+    let land = crate::contract::land(w, i);
+    let cured = if land > 0.0 { w.life.cover(i).cured[MATTER].max(0.0) * mm[MATTER] / land } else { 0.0 };
+    if load + cured <= 0.0 {
         return None;
     }
-    let cover = 1.0 - (-leaf_per_kg(w, p, i) * load).exp();
+    let cover = 1.0 - (-leaf_per_kg(w, p, i) * (load + cured)).exp();
     if cover < CARRY_SHARE {
         return None;
     }
     let t = w.thaw_last(i).0;
-    // Per kg of the remains, by the mass of their parts: the heat their burning frees and their heat capacity.
-    let mm = p.mm(chem);
-    let kg = [MATTER, WALL].map(|q| w.g(p.sub[q], i).max(0.0) * mm[q]);
+    // Per kg of what burns, by the mass of its parts: the heat their burning frees and their heat capacity.
+    let mut kg = [MATTER, WALL].map(|q| w.g(p.sub[q], i).max(0.0) * mm[q]);
+    kg[0] += cured * land;
     let all = (kg[0] + kg[1]).max(f64::MIN_POSITIVE);
     let per_kg = |q: usize, j: usize, of: &dyn Fn(usize) -> f64| kg[j] / all * of(q);
     let burnt = |q: usize| chem.burner(p.sub[q]).map_or(0.0, |r| -chem.dh(r) / (per_input(&chem.reactions[r], p.sub[q]).unwrap_or(1.0) * mm[q]));
@@ -67,14 +76,18 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     // The most liquid a kg may hold where the share `flux_ahead` of its heat still lights the next kg.
     let extinct = (ph.flux_ahead * heat - dry) / per_liquid;
     // (A bed under the least load of its dry remains is under it at any moisture: its layer need not be read.)
-    if load < least(ph, t, heat - dry) {
+    if load + cured < least(ph, t, heat - dry) {
         return None;
     }
     let l = layer(w, p, i, t)?;
-    let flaming = l.share(extinct, 0.0);
-    let moist = l.sorbed(l.h(flaming / 2.0));
+    // The cured leaves stand in the air near the ground and hold what the curve holds at its vapour.
+    let (flaming, top) = (l.share(extinct, 0.0), l.sorbed(l.top));
+    let standing = if top < extinct { cured } else { 0.0 };
+    let lying = flaming * load;
+    let moist = (standing * top + lying * l.sorbed(l.h(flaming / 2.0))) / (standing + lying).max(f64::MIN_POSITIVE);
     let light = dry + moist * per_liquid;
-    Some(Bed { load, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder: l.share(ph.smoulder_moist, ph.duff_hold).max(flaming) })
+    let smoulder = l.share(ph.smoulder_moist, ph.duff_hold).max(flaming);
+    Some(Bed { load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder })
 }
 
 /// The layer of remains on a cell: the relative vapour of the air in it at its top and at its bottom, the share of

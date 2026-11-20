@@ -234,6 +234,16 @@ pub struct Physics {
     pub duff_hold: f64,
     /// Most liquid per kg dry at which organic remains smoulder, kg
     pub smoulder_moist: f64,
+    /// Height up to which plants keep their dead leaves standing as a loose bed near the ground, m
+    pub surface_m: f64,
+    /// Mean time a cured dead leaf stands before it falls to the ground, s
+    pub cured_life: f64,
+    /// Bulk density of a bed of cured leaves standing, kg/m³
+    pub cured_rho: f64,
+    /// Share of the built cover of a plant no taller than `surface_m` that lies below the ground, its base
+    pub base_share: f64,
+    /// Mean time a dead wall killed by flame stands before it falls to the ground, s
+    pub snag_life: f64,
     /// Strikes that light dry joined remains, per m² of land a year
     pub strikes: f64,
     /// Width of the fine particles of the remains lying, m
@@ -374,6 +384,11 @@ impl Default for Physics {
             t_burn: 1100.0,
             duff_hold: 3.0,
             smoulder_moist: 1.15,
+            surface_m: 1.8,
+            cured_life: 6.0 * 30.0 * DAY_S as f64,
+            cured_rho: 3.0,
+            base_share: 0.5,
+            snag_life: 8.0 * 365.0 * DAY_S as f64,
             strikes: 5e-8,
             fine_d: 1.5e-3,
             front_life: 4.0 * DAY_S as f64,
@@ -431,6 +446,8 @@ impl Config {
         require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
         // A flame sends ahead a share of its heat, lights above any ground's temperature, from particles of some width.
         require(p.flux_ahead > 0.0 && p.flux_ahead <= 1.0, || format!("flux_ahead ({}) must be above 0 and at most 1", p.flux_ahead))?;
+        require((0.0..1.0).contains(&p.base_share) && p.snag_life > 0.0, || format!("base_share ({}) must be in [0, 1), snag_life ({}) above 0", p.base_share, p.snag_life))?;
+        require(p.surface_m >= 0.0 && p.cured_life > 0.0 && p.cured_rho > 0.0, || format!("surface_m ({}) must not be below 0, cured_life ({}) and cured_rho ({}) must be above 0", p.surface_m, p.cured_life, p.cured_rho))?;
         require(p.duff_hold >= 0.0 && p.smoulder_moist >= 0.0, || format!("duff_hold ({}) and smoulder_moist ({}) must not be below 0", p.duff_hold, p.smoulder_moist))?;
         require(p.t_burn > p.t_light, || format!("t_burn ({}) must be above t_light ({})", p.t_burn, p.t_light))?;
         require(p.t_light > 0.0 && p.strikes >= 0.0 && p.fine_d > 0.0 && p.front_life >= 0.0, || format!("t_light ({}) and fine_d ({}) must be above 0, strikes ({}) and front_life ({}) not below", p.t_light, p.fine_d, p.strikes, p.front_life))?;

@@ -307,6 +307,8 @@ pub const LAYERS: &[Layer] = &[
     l("seeds", "kg/m2", "log", 1e-5, 0.1, |c, i| per_land(c.seeds[i], c.land[i])),
     l("grown", "kg/m2/yr", "log", 0.01, 10.0, |c, i| per_land(c.grown[i], c.land[i])),
     l("takers", "kg/km2", "log", 1.0, 1e4, |c, i| c.takers[i]),
+    l("cured", "kg/m2", "log", 0.01, 3.0, |c, i| pcore::flame::cured(c.w, i)),
+    l("snag", "kg/m2", "log", 0.01, 30.0, |c, i| pcore::flame::snag(c.w, i)),
     l("flame", "1", "lin", 0.0, 1.0, |c, i| flamed(c.w, i).share as f64),
     l("flame_len", "m", "log", 0.01, 30.0, |c, i| flamed(c.w, i).length as f64),
     l("burnt", "1/yr", "lin", 0.0, 1.0, |c, i| pcore::flame::burnt_year(c.w, i)),

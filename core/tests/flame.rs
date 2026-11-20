@@ -2,7 +2,7 @@
 //! reactions, wet ones do not, the moisture of extinction falls out of the heat balance, and a crown under the scorch
 //! height loses its plants where one above loses none; the books are kept.
 
-use pcore::cover::{Parts, MATTER, WALL};
+use pcore::cover::{Parts, FUEL, MATTER, WALL};
 use pcore::flame::{self, Bed};
 use pcore::store::{Class, Node};
 use pcore::World;
@@ -147,10 +147,11 @@ fn the_fixed_element_goes_to_the_air_and_the_rest_to_the_ground() {
     assert!((share - 0.5).abs() < 1e-9, "{share} of the mineral broke down, {to_air} mol to the air, {to_ground} to the ground");
 }
 
-/// A slot whose crown stands under the scorch height loses the burnt share of its plants; a slot of one tall plant,
-/// whose crown rises above it, loses none.
+/// A low slot whose crown stands under the scorch height dies above the ground on the burnt share and sprouts again:
+/// it keeps its plants and its store, and loses no more of its built cover than the share burnt of what stands above
+/// its base; a slot of one tall plant, whose crown rises above it, loses no plants.
 #[test]
-fn a_crown_under_the_scorch_height_loses_plants() {
+fn a_low_plant_burnt_to_its_base_keeps_its_plants_and_store() {
     let (mut w, i) = start();
     liquid_to(&mut w, i, 0.0);
     let tree = KINDS.iter().position(|k| k.name == "big slow light-eaters").unwrap();
@@ -165,11 +166,14 @@ fn a_crown_under_the_scorch_height_loses_plants() {
     let top = |x: usize| pcore::contract::crown(&w, i, &cell, &p, x).1;
     assert!(top(low) < scorch && scorch < top(tall), "tops {} and {} against the scorch height {scorch}", top(low), top(tall));
     let plants = |w: &World, x: usize| w.life.cover(i).count(x);
-    let (low0, tall0) = (plants(&w, low), plants(&w, tall));
+    let mm = p.mm(&w.chem);
+    let built = |w: &World| w.life.cover(i).built(&mm, low);
+    let (low0, tall0, built0, fuel0) = (plants(&w, low), plants(&w, tall), built(&w), w.life.cover(i).mol[low][FUEL]);
     let share = flame::shares(&w, &(0..w.mesh.cells().n()).map(|j| flame::bed(&w, &p, j)).collect::<Vec<_>>(), w.cfg.calendar().month as f64)[i];
     assert!(share > 0.0, "the cell burns");
     flame::month(&mut w);
-    let kept = plants(&w, low) / low0;
-    assert!((kept - (1.0 - share)).abs() < 1e-9, "the low slot kept {kept} of its plants, burnt {share}");
+    assert_eq!((plants(&w, low), w.life.cover(i).mol[low][FUEL]), (low0, fuel0), "the low slot lost plants or store");
+    let base = w.cfg.phys.base_share;
+    assert!(built(&w) < built0 && built(&w) >= built0 * (1.0 - share * (1.0 - base)) - 1e-12, "built {} of {built0}, burnt {share}", built(&w));
     assert_eq!(plants(&w, tall), tall0, "the tall slot lost plants");
 }

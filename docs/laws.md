@@ -1177,8 +1177,12 @@ lying on a land cell (its ground's body matter and walls, `contract::remains`) m
 heat, come from the chemistry's own burning reactions (`Chemistry::burner` of each part); the speed comes from the heat
 balance of the bed, not from the reactions' rates, which are those of rot (real surface fires are limited by heating
 the next fuel; Rothermel 1972). Three stages, each number with one writer:
-- **The bed** (`flame::bed`, each land cell its own, in parallel): its load w, kg a m² of land; the share of its ground
-  it covers, 1 − e^(−a w), a the capture area its leaves held per kg dry (its cover's `LEAF` gene over the dry share
+- **The cured leaves**: a slot whose plants stand no taller than `surface_m` keeps the leaves it sheds standing on its
+  plants, cured (`Cover::cured`, part of the cover's node; `season::shed_to`), as herbs keep their dead leaves on their
+  stems through a dry season; they fall to the ground's remains with a mean life of `cured_life` (`grow::fall`, booked
+  as shed). Taller plants drop theirs at once.
+- **The bed** (`flame::bed`, each land cell its own, in parallel): the load w of its remains, kg a m² of land, and of
+  the cured leaves standing over them; the share of its ground they cover, 1 − e^(−a w), a the capture area its leaves held per kg dry (its cover's `LEAF` gene over the dry share
   of living tissue, its slots' mean by built cover; none without cover). **The layer** (`flame::bed`, `Layer`): vapour diffuses through
   it, so in a steady state its relative vapour h runs in a straight line from its top, the air near the ground
   (`World::near_ground`, its vapour over saturation at the ground's temperature), to its bottom, between that and
@@ -1189,7 +1193,8 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   T) + M (c_l (T_boil − T) + L_v), all from the chemistry's substances, M what the curve holds halfway down its part that
   flames. The part that **flames** is its top down to where what the curve holds reaches the moisture of extinction (`flux_ahead` h_c − c
   (`t_light` − T)) / (c_l (T_boil − T) + L_v), where the share `flux_ahead` of h_c still lights the next kg (0.18 for
-  the remains of chemistry 0 at 295 K): fine dead fuel dries with the air; the part that **smoulders** after the flame
+  the remains of chemistry 0 at 295 K): fine dead fuel dries with the air; the cured leaves, in the air near the
+  ground, flame all where its top does, as a loose bed at `cured_rho`; the part that **smoulders** after the flame
   goes on down to where all its liquid, the duff's with it, reaches `smoulder_moist`, the most liquid at which organic
   matter smoulders (dry peat burns through, the bottom of a layer on moist ground does not). It **carries a
   flame** where its remains cover more than the site-percolation threshold of the square lattice
@@ -1207,15 +1212,20 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   cover): a patch burns whole, keeps no remains to carry a flame, and burns again only once its cover's leaves have
   built them back. So the land burnt is a mosaic of patches of different ages, from that feedback alone (no rule keeps
   a cell from burning). The wind does not stretch a run.
-- **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the part of its remains
-  that flames burns, and after it the part that smoulders; a flame through the part that flames moves at R = `flux_ahead` h_c δ / (τ Q), δ = w / `litter_rho` its depth, τ = 8 minutes an inch of
+- **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the cured leaves and the
+  part of its remains that flames burn, and after them the part that smoulders; a flame through what flames, its depth
+  the cured leaves at `cured_rho` and the remains at `litter_rho`, moves at R = `flux_ahead` h_c δ / (τ Q), δ its depth, τ = 8 minutes an inch of
   `fine_d` its particles' flaming time (Anderson 1969); its intensity is I = h_c w R (Byram 1959), its flame
   0.0775 I^0.46 m long (Byram 1959), and its plume kills leaves up to 0.1483 I^(2/3) m (Van Wagner 1973), I in kW a m.
-  Of each slot on f: the soft part of its crown (`contract::crown`, spread evenly over it) in the flame burns by its
-  burning reactions; each of its size groups (`Cover::sizes`) whose plants stand no taller than the scorch height loses
-  the share f of its plants and of its built cover to the ground (`Cover::die_under`: their body matter and walls, and
-  the fuel by their share of the slot's built cover), and of the plants that live the body matter between the flame and
-  the scorch height dies to the ground: a young plant must outgrow the flame between fires (Bond and Midgley 2001). Seeds lying survive. Gases go to the cell's
+  Of each slot on f (`flame::crown_burns`): each of its size groups (`Cover::sizes`) whose plants stand no taller than
+  the scorch height dies above the ground on f (`Cover::die_under`): a group of plants no taller than `surface_m` keeps
+  its plants, its store and its part below the ground (`base_share` of its built cover) and sprouts again from it, as
+  burnt herbs and shrubs do, what stood above its base burning by its burning reactions; a group of taller plants loses the share f of its plants and of its built cover, their fuel by their share of
+  the slot's built cover to the ground and their walls standing dead (`Cover::snag`, part of the cover's node), which
+  fall to the ground with a mean life of `snag_life` (`grow::fall`, booked as died). Of a slot taller than `surface_m`
+  the body matter of its crown (`contract::crown`, spread evenly over it) of the plants that live burns where it stands
+  in the flame, and dies to the ground between the flame and the scorch height: a young tree must outgrow the flame between fires
+  (Bond and Midgley 2001). Seeds lying survive. Gases go to the cell's
   aside node and so to the air, what is not a gas (the liquid of the reactions, the nitrogen mineral of body matter, as
   ash) to its ground, where the soil keeps it on its exchange sites or the liquid washes it away (4). The mineral the
   burning gives first breaks down as the chemistry breaks it down hot (`flame::break_down`: each reaction that takes it
