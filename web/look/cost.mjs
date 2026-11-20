@@ -1,8 +1,9 @@
 // The cost of a pixel as a count: the page's programs built again (variant.mjs) so that each pixel counts what it reads,
 // every texture read (each call of textureSample* and textureLoad), each gradient noise (draw.wgsl `gradient_noise`)
 // and each read of a photograph (tex.wgsl `photo`), and draws the counts as its colour (red, green, blue: a level of
-// 255 two texture reads, a noise, a photograph). One build counts the ground's program (land.wgsl) and draws no marks; the other counts the marks'
-// (cover.wgsl) over a black ground. The count is the same on every machine and from run to run.
+// 255 two texture reads, a noise, a photograph). One build counts the ground's programs (land.wgsl, and burnt.wgsl over
+// burn scars: lib/live_map.wgsl) and draws no marks; the other counts the marks' (cover.wgsl) over a black ground. The
+// count is the same on every machine and from run to run.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { programs, patch } from './variant.mjs';
@@ -17,6 +18,7 @@ const COLOUR = `vec4f(vec3f(n_reads / ${READ_STEP}.0, n_noise, n_photo) / 255.0,
 /** A texture read of WGSL (every texture of the page holds floats: each read is a vec4f). */
 const READ = /\btexture(?:Sample\w*|Load)\(/g;
 const LAND_OUT = '  return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);';
+const FLAMES_OUT = '  return vec4f(tone * a + light * (1.0 - 0.7 * a), a) * draw.alpha;';
 const MARKS_OUT = '@fragment fn fs(v: Varying) -> @location(0) vec4f { return marks_over(v); }';
 
 /** The counted programs: `ground`, the ground's, or `marks`, the marks'. */
@@ -52,8 +54,10 @@ export function costShaders(pass) {
     ed('lib/tex.wgsl', 'fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {\n', 'fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {\n  n_photo += 1.0;\n');
     const draw = join(dir, 'lib/draw.wgsl');
     writeFileSync(draw, COUNTERS + readFileSync(draw, 'utf8'));
-    ed('land.wgsl', LAND_OUT, PASSES[pass].land);
+    ed('lib/live_map.wgsl', LAND_OUT, PASSES[pass].land);
     ed('cover.wgsl', MARKS_OUT, PASSES[pass].marks);
+    // The flames and smoke over the map are not counted: they draw nothing over the counts.
+    ed('flames.wgsl', FLAMES_OUT, '  return vec4f(0.0);');
   });
 }
 

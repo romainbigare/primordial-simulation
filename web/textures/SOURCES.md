@@ -1,6 +1,6 @@
 # Where the page's textures come from
 
-Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), but for the trees
+Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com) and Kenney (kenney.nl), but for the trees
 rendered from PlantCatalog's models, which are CC BY 4.0 (credited below): the ground photographs resized and packed for
 the page by hand, each with its large-scale light divided out (so its repeat does not show); the carpets and the sprites
 rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 512 layers, top first.
@@ -55,6 +55,32 @@ table below.
 | 13 | dry_ground_rocks | layer 11 dried in colour | 2 m |
 
 grass_medium_01's tall stems with seed heads (its meshes named `_ta…`) are left out of every tile.
+
+## fire.jpg
+
+Two 512 x 512 layers, made by `bake/fire.py` (`python3 -I bake/fire.py KENNEY_PNG_DIR burned_ground_01_diff_2k.jpg
+fire.jpg`):
+
+| layer | what | source | author | licence |
+|---|---|---|---|---|
+| 0 | four sprites, a quarter each, their density alone (grey times cover) on black, each fitted to its quarter with its foot on the bottom middle: two flame tongues (`flame_05`, `flame_06`), two puffs of smoke (`smoke_07`, `smoke_08`) | [Particle Pack 1.1](https://kenney.nl/assets/particle-pack), its `PNG (Transparent)` folder | Kenney Vleugels (kenney.nl) | CC0 1.0 |
+| 1 | burnt ground: charred soil, ash, needles and grass stalks; 1 m across | [burned_ground_01](https://polyhaven.com/a/burned_ground_01) (diffuse, 2k), shrunk, its light divided out as `ground.jpg`'s | Rob Tuytel (Poly Haven) | CC0 1.0 |
+
+## snags.png
+
+Two 512 x 512 layers of four quarters, each a sprite with its cover, rendered by `bake/sprite.html` as the trees are
+(`node sprites.cjs snags.json OUT burned_tree_photogrammetry dead_trees burned_trunk_lassen`, the models downloaded by
+hand into `assets/sketchfab/<the model's id>/`) and packed by `bake/snags.py` (`python3 -I bake/snags.py OUT
+snags.png`): three charred standing trunks (one model from three sides), a stand of dead stems, and three charred
+stumps (one model from three sides, cut 0.3 of its height above its foot, so the ground it was scanned on is left
+out). Each licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/); the sprites are rendered from them
+(changed: lit, cut at the ground, shrunk). Not yet drawn by the page.
+
+| sprite | model | author | licence |
+|---|---|---|---|
+| `burned_tree_photogrammetry` | [Burned Tree Photogrammetry](https://sketchfab.com/3d-models/burned-tree-photogrammetry-1dc8bcac00e2433eb645e6c837a8d5b7) | [gino.demurtas](https://sketchfab.com/gino.demurtas) | CC BY 4.0 |
+| `dead_trees` | [Dead Trees](https://sketchfab.com/3d-models/dead-trees-41f9d44a8d8b45549dd6a0c947ca4eba) | [Darklordbroch](https://sketchfab.com/Darklordbroch) | CC BY 4.0 |
+| `burned_trunk_lassen` | [Burned tree trunk - Lassen Volcano Park](https://sketchfab.com/3d-models/burned-tree-trunk-lassen-volcano-park-82f510d9e012414d9aa980bf944efc93) | [David Antalek](https://sketchfab.com/David.Antalek) | CC BY 4.0 |
 
 ## trees.png, models.png and the sprites' table
 

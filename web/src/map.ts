@@ -7,6 +7,7 @@ import { Draw, Format, Gpu, Made, Pass, Texture, Uniforms, madeFor, openGpu, see
 import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
+import { Box, FIRE_FPS, Fire } from './fire';
 import { detailLost, sendDetail } from './detail';
 
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
@@ -91,8 +92,9 @@ export class MapView {
   private sharpTimer = 0;
   /** Whether the GPU's picture is to be drawn anew at the next frame. */
   private gpuDue = false;
-  /** The timer of the next frame of the flow's signs (`flowSoon`). */
+  /** The timer of the next frame of the flow's signs (`flowSoon`), and of the flames (`fireSoon`). */
   private flowTimer = 0;
+  private fireTimer = 0;
   private sharpening: Sharpening | null = null;
   private sharp: Texture | null = null;
   /** Whether the programs the map may draw next are being made ahead (`warmAhead`). */
@@ -102,13 +104,16 @@ export class MapView {
   /** Drawn by another module on the GPU over the map, and on the 2D canvas over it at each redraw: its context, where
    * the map's corner is and the pixels a square takes. */
   layer: GpuLayer | null = null;
+  /** Fire on the live map (null: none drawn), and whether its flames move: while the world plays. */
+  fire: Fire | null = null;
+  playing = false;
   overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
     this.over.className = 'over';
     cv.after(this.over);
     this.ctx = this.over.getContext('2d')!;
-    this.ready = openGpu(cv, () => { this.land?.tiles.lost(); detailLost(); this.invalidate(); }).then(g => {
+    this.ready = openGpu(cv, () => { this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); }).then(g => {
       this.gpu = g;
       if (g) sendDetail(g, () => this.invalidate());
       this.invalidate();
@@ -267,6 +272,7 @@ export class MapView {
     if (fading) this.invalidate();
     this.drawMap(gpu, p, target, xs, k, d, [tw, th], waiting);
     this.layer?.draw(p);
+    this.drawFlames(gpu, p, target, xs, k, d, [tw, th], waiting);
     p.end();
     if (target) this.show(target);
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
@@ -276,6 +282,7 @@ export class MapView {
     if (r < 1 && !fading && !waiting.length) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
     this.drawWhenMade(gpu, waiting);
     this.flowSoon();
+    this.fireSoon();
   }
 
   /** Draw the map anew once the programs `waiting` that the frame just drawn went without are made (looked at every
@@ -300,6 +307,16 @@ export class MapView {
     if (document.hidden || this.scale < 1 || !this.land?.flowing(v.x, v.y, v.w, v.h, this.cellM / (v.s * this.drawnDpr()))) return;
     const step = 1000 / FLOW_FPS;
     this.flowTimer = window.setTimeout(() => this.invalidate(), step - (performance.now() % step) + 1);
+  }
+
+  /** Draw the map again when the flames next move (`FIRE_FPS`), while the world plays, a fire burns in view, the page
+   * is seen and the map is drawn at the screen's own pixels. */
+  private fireSoon(): void {
+    clearTimeout(this.fireTimer);
+    const b = this.fire?.flames, v = this.view();
+    if (!b || !this.playing || document.hidden || this.scale < 1 || b[2] <= v.x || b[0] >= v.x + v.w || b[3] <= v.y || b[1] >= v.y + v.h) return;
+    const step = 1000 / FIRE_FPS;
+    this.fireTimer = window.setTimeout(() => this.invalidate(), step - (performance.now() % step) + 1);
   }
 
   /** Start drawing the map at the screen's own pixels, in tiles each of about `SHARPEN_MS` on the GPU, into the sharp
@@ -343,6 +360,7 @@ export class MapView {
     const p = gpu.pass(this.sharp, undefined, tile);
     this.drawMap(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
     this.layer?.draw(p);
+    this.drawFlames(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
     p.end();
     this.show(this.sharp!);
     if (!job.tiles.length) this.sharpening = null;
@@ -382,14 +400,43 @@ export class MapView {
     const program = this.land ? seenFrom(gpu, 'land', seen, target?.format ?? null, false, waiting) : null;
     // Each copy is drawn over the part of the target it covers, so what a pixel reads of its place (`frameOf`) never
     // runs over more than the target's pixels.
-    const lands = xs.map((_, c) => this.land?.binds(gpu, look, frameOf(edge(c), oy * k, mpp, seen)));
+    const frames = xs.map((_, c) => frameOf(edge(c), oy * k, mpp, seen));
+    const lands = frames.map(f => this.land?.binds(gpu, look, f));
+    // Over the squares that hold a burn scar, the ground's program made with them, once it is made (till then the
+    // ground's own, without them); in a layer's view none.
+    const scars = this.fire?.scars && look.mode !== 'layer' ? this.fire.scars : null;
+    const burnt = scars && program ? seenFrom(gpu, 'burnt', seen, target?.format ?? null, false, waiting) : null;
     if (lands[0] && under) {
       if (program) xs.forEach((_, c) => {
         const x0 = Math.max(edge(c), 0), x1 = Math.min(edge(c + 1), size[0]), y0 = Math.max(oy * k, 0), y1 = Math.min((oy + h * s) * k, size[1]);
-        if (x1 > x0 && y1 > y0) p.draw(program, { rect: [x0, y0, x1 - x0, y1 - y0], binds: { ...lands[c]!, ...under } }, false);
+        if (x1 <= x0 || y1 <= y0) return;
+        const binds = { ...lands[c]!, ...under }, fire = burnt ? this.fire!.binds(gpu, look, frames[c], this.fireTime()) : null;
+        const inner = fire ? clip(boxRect(scars!, edge(c), oy * k, s * k), [x0, y0, x1, y1]) : null;
+        for (const r of inner ? around([x0, y0, x1, y1], inner) : [[x0, y0, x1, y1]]) p.draw(program, { rect: [r[0], r[1], r[2] - r[0], r[3] - r[1]], binds }, false);
+        if (inner) p.draw(burnt!, { rect: [inner[0], inner[1], inner[2] - inner[0], inner[3] - inner[1]], binds: { ...binds, ...fire! } }, false);
       });
     } else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
   }
+
+  /** Draw into pass `p` (as `drawMap`) the flames and the smoke of the fires burning in view, over the squares they
+   * reach, once their program is made; none in a layer's view. */
+  private drawFlames(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
+    const { cam: { s, oy }, w, h, look } = this, box = this.fire?.flames;
+    if (!box || !this.land || look.mode === 'layer') return;
+    const mpp = this.cellM / (s * k), seen = this.cellM / (s * d);
+    const program = seenFrom(gpu, 'flames', seen, target?.format ?? null, true, waiting);
+    if (!program) return;
+    const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
+    xs.forEach((_, c) => {
+      const map: Rect = [Math.max(edge(c), 0), Math.max(oy * k, 0), Math.min(edge(c + 1), size[0]), Math.min((oy + h * s) * k, size[1])];
+      const r = clip(boxRect(box, edge(c), oy * k, s * k), map);
+      const binds = r && this.fire!.binds(gpu, look, frameOf(edge(c), oy * k, mpp, seen), this.fireTime()), ground = this.land!.lawBinds(gpu);
+      if (r && binds && ground) p.draw(program, { rect: [r[0], r[1], r[2] - r[0], r[3] - r[1]], binds: { ...ground, ...binds } }, true);
+    });
+  }
+
+  /** The time the flames stand at, ms: while one picture is drawn in tiles, the one it began at (as the flow's signs). */
+  private fireTime(): number { return this.land?.flowAt ?? performance.now(); }
 
   /** Time the frame just sent at `r` of the screen's pixels along each axis on the GPU (one at a time), and take the
    * share the next frames are drawn at from it: the largest of `SCALES` at which a frame would meet `FRAME_BUDGET_MS`,
@@ -455,4 +502,25 @@ export class MapView {
     ctx.fillText(m >= 1000 ? `${m / 1000} km` : `${m} m`, x, y - 7);
     ctx.globalAlpha = 1;
   }
+}
+
+/** A rectangle of the target, px: x0, y0, x1, y1. */
+type Rect = [number, number, number, number];
+
+/** The rectangle of the target box `b` of squares covers, where the map's corner is at (`left`, `top`) px and a square
+ * takes `side` px, out to whole pixels. */
+function boxRect(b: Box, left: number, top: number, side: number): Rect {
+  return [Math.floor(left + b[0] * side), Math.floor(top + b[1] * side), Math.ceil(left + b[2] * side), Math.ceil(top + b[3] * side)];
+}
+
+/** Rectangle `r` inside `within`; null where none of it is. */
+function clip(r: Rect, within: Rect): Rect | null {
+  const out: Rect = [Math.max(r[0], within[0]), Math.max(r[1], within[1]), Math.min(r[2], within[2]), Math.min(r[3], within[3])];
+  return out[2] > out[0] && out[3] > out[1] ? out : null;
+}
+
+/** The rectangles of `r` about `inner` (inside it): the rows above and below it, and the columns beside it. */
+function around(r: Rect, inner: Rect): Rect[] {
+  const parts: Rect[] = [[r[0], r[1], r[2], inner[1]], [r[0], inner[3], r[2], r[3]], [r[0], inner[1], inner[0], inner[3]], [inner[2], inner[1], r[2], inner[3]]];
+  return parts.filter(q => q[2] > q[0] && q[3] > q[1]);
 }

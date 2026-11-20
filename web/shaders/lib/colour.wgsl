@@ -143,6 +143,9 @@ struct Spot {
   // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
   // plants cover there on their mean (cover_field.wgsl `CoverAt.low`).
   hollow: f32, hollow_d: vec2f, basin: f32, low: f32,
+  // The share of it under a burn scar, and how much of the scar is char, ash and scorched soil, 0..1 (burn.wgsl
+  // `burnt_spot`; none where no program draws the marks of fire).
+  scar: vec4f,
 }
 // A spot's shaded colour (linear light), its shade's multiplier and its map class.
 struct Shaded { rgb: vec3f, m: f32, kind: u32 }
@@ -201,7 +204,10 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   let steep = p.slope / earth.look.x;
   var bed = p.bed;
   if (styled()) {
-    g.rgb = floor_of(g.rgb, p.e, p.canopy, p.wet, p.grain) * soil_detail(p);
+    // A burn scar takes the floor (burn.wgsl `burnt_floor`) and as much of the soil's own tint.
+    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, p.grain) * soil_detail(p), p);
+    g.rgb = burnt.rgb;
+    g.warm *= 1.0 - burnt.a;
     // Bed the waves' swash wets takes the one wet look of rock (stone.wgsl `wet_stone`) as far as it is soaked.
     if (p.rock > 0.0) {
       bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade) * rock_detail(p.e);

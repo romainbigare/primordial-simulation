@@ -22,7 +22,7 @@ function playwright() {
  * the cover, the world, its worker and its ground, play and pause, the speed and the view, opening a saved world by URL, and the numbers the marks' textures are laid out by (textures.ts `prepare`, read.mjs `marks`).
  * The shipped page holds none of this. */
 const HOOKS = `
-window.__ew = { map, vegetation,
+window.__ew = { map, vegetation, fire,
   get world() { return world; }, get live() { return live; }, get land() { return land; }, get playing() { return playing; },
   setView, togglePlay, setSpeed(s) { speed = s; live && live.rate(s); syncUi(); },
   open: u => fetch(u).then(r => r.arrayBuffer()).then(openSaved),

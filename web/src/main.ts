@@ -8,6 +8,7 @@ import { GroundTiles, GroundOf } from './ground';
 import { Land } from './land';
 import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
+import { Fire } from './fire';
 import { textureClass, textureLegend } from './soil';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -62,6 +63,9 @@ let thingsKey = '';
 /** The cover of the live map (earth view only). */
 const vegetation = new Vegetation();
 map.layer = vegetation;
+/** Fire on the live map: its scars, flames and smoke. */
+const fire = new Fire();
+map.fire = fire;
 map.overlay = (_, ox, oy, s) => slots.seen(ox, oy, s);
 /** Which GPU draws the map (none: the page cannot draw it). */
 let drawnWith = '';
@@ -151,6 +155,7 @@ function repaint(): void {
   map.setMap(squares.fields);
   if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
   vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
+  fire.set(land && live ? w : null);
   map.setLook(look);
   map.mapClasses().then(c => {
     if (world !== w) return;
@@ -184,6 +189,7 @@ function syncUi(): void {
   document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
   document.querySelectorAll<HTMLElement>('#speeds button').forEach(b => b.classList.toggle('on', b.dataset.speed === String(speed)));
   $('play').classList.toggle('playing', playing);
+  map.playing = playing && live !== null;
 }
 
 function setView(v: string): void { view = v; layer = null; setLayer(null); }
