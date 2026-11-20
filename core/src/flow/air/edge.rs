@@ -29,31 +29,49 @@ pub(super) struct Edges {
     heat_of: Vec<f64>,
     pub(super) mol: Vec<f64>,
     pub(super) heat: Vec<f64>,
+    pub(super) lat: Vec<f64>,
 }
 
 impl Edges {
     /// The links of the air nodes `ends` (`wind::ends`) of `w` to the planet's air beyond its open edges, at the time of
     /// the step's start; none where `w` holds no planet's air.
     pub(super) fn of(w: &World, s: &Scratch, ends: &[End], cell: &Cell) -> Edges {
-        let mut x = Edges { node: Vec::new(), side: Vec::new(), push: Vec::new(), share: Vec::new(), heat_of: Vec::new(), mol: Vec::new(), heat: Vec::new() };
-        let (air, st) = (w.mesh.level(AIR), Stretch::of(w));
+        let mut x = Edges { node: Vec::new(), side: Vec::new(), push: Vec::new(), share: Vec::new(), heat_of: Vec::new(), mol: Vec::new(), heat: Vec::new(), lat: Vec::new() };
         for (j, side, lat, beyond) in columns(w) {
-            let (node, spacing) = (&ends[j], air.area()[j].sqrt());
-            let share: Vec<f64> = s.state.gas.iter().map(|&k| beyond.share[k]).collect();
-            let all = share.iter().sum::<f64>().max(f64::MIN_POSITIVE);
-            let share: Vec<f64> = share.iter().map(|v| v / all).collect();
-            let cp = s.state.gas.iter().zip(&share).map(|(&k, v)| v * s.sp[k].cp).sum::<f64>();
-            let end = beyond_end(w, (node, lat, &beyond, cp), st);
-            let ab = beyond_offset(side, spacing);
-            let [mix, over, contrast, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab), cell);
-            x.heat_of.push(beyond.t * cp);
+            let (push, share, heat_of) = link(w, s, (&ends[j], j, side, lat), &beyond, cell);
+            x.heat_of.push(heat_of);
             x.node.push(j as u32);
             x.side.push(side);
-            x.push.push([mix, over, contrast, stir]);
+            x.push.push(push);
             x.share.push(share);
+            x.lat.push(lat);
         }
         (x.mol, x.heat) = (vec![0.0; s.state.gas.len() * x.node.len()], vec![0.0; x.node.len()]);
         x
+    }
+
+    /// STUDY PROBE: the day's weather on each link (`weather`): where `shift` is not zero, the column beyond read at its
+    /// latitude less `shift` degrees (the air the eddies brought from there); the eddies' mixing (and the heat they
+    /// carry) times `mixf`; `base` the pushes of the step (`pushes`).
+    pub(super) fn weather(&mut self, w: &World, s: &Scratch, (ends, cell): (&[End], &Cell), (shift, mixf): (&[f64], &[f64]), base: &[[f64; 4]]) {
+        for l in 0..self.node.len() {
+            let mut p = base[l];
+            if shift[l] != 0.0 {
+                let planet = w.planet.as_ref().expect("open edges hold the planet's air");
+                let (j, lat) = (self.node[l] as usize, self.lat[l]);
+                let beyond = planet.at(lat - shift[l], w.season());
+                let (push, share, heat_of) = link(w, s, (&ends[j], j, self.side[l], lat), &beyond, cell);
+                (p, self.share[l], self.heat_of[l]) = (push, share, heat_of);
+            }
+            p[0] *= mixf[l];
+            p[3] *= mixf[l];
+            self.push[l] = p;
+        }
+    }
+
+    /// Each link's pushes as `of` found them.
+    pub(super) fn pushes(&self) -> Vec<[f64; 4]> {
+        self.push.clone()
     }
 
     /// One day of `dd` seconds of the exchange across the open edges, after the wind, from the air `x` (`[gi * na + j]`)
@@ -93,6 +111,21 @@ impl Edges {
             e[j] = now - if kg > 0.0 { g * kg * s.za[j] } else { 0.0 };
         }
     }
+}
+
+/// One link to the column `beyond` of edge node `j` (its end `node`) on side `side` at latitude `lat`: its pushes
+/// (`Edges::push`), the shares of the gases of the air of the column, and its heat per mol, J.
+fn link(w: &World, s: &Scratch, (node, j, side, lat): (&End, usize, usize, f64), beyond: &Beyond, cell: &Cell) -> ([f64; 4], Vec<f64>, f64) {
+    let (air, st) = (w.mesh.level(AIR), Stretch::of(w));
+    let spacing = air.area()[j].sqrt();
+    let share: Vec<f64> = s.state.gas.iter().map(|&k| beyond.share[k]).collect();
+    let all = share.iter().sum::<f64>().max(f64::MIN_POSITIVE);
+    let share: Vec<f64> = share.iter().map(|v| v / all).collect();
+    let cp = s.state.gas.iter().zip(&share).map(|(&k, v)| v * s.sp[k].cp).sum::<f64>();
+    let end = beyond_end(w, (node, lat, beyond, cp), st);
+    let ab = beyond_offset(side, spacing);
+    let [mix, over, contrast, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab), cell);
+    ([mix, over, contrast, stir], share, beyond.t * cp)
 }
 
 /// The columns of the planet's air beyond the map's open edges (`SIDES`), the time of the year now: per column its

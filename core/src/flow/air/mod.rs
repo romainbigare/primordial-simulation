@@ -22,6 +22,7 @@ mod step;
 mod stretch;
 mod surf;
 mod together;
+mod weather;
 mod wind;
 
 pub(super) use corners::Corners;

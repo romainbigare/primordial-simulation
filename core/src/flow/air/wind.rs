@@ -32,6 +32,7 @@ impl Links {
 /// `b` over what the two columns' mean heat per mol carries, W (`stir`); overturning, mol/s of the lower half from its
 /// `a` to its `b` (the upper half comes back), and the heat its halves carry from its `b` to its `a` over what their
 /// mean heat per mol carries, W (`contrast`); and the conductance of the evening of pressure, mol/(Pa s).
+#[derive(Clone)]
 pub(super) struct Pushes {
     pub(super) mix: Vec<f64>,
     pub(super) stir: Vec<f64>,

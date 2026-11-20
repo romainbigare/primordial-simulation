@@ -29,6 +29,8 @@ pub enum Purpose {
     Fauna,
     /// The strikes that light the joined dry remains of a region in a month, and where (`flame::spread`)
     Flame,
+    /// The weather of the air's days (`flow::air::weather`, a study probe)
+    Weather,
 }
 
 /// The number of values of a 16-bit uniform.
