@@ -17,9 +17,13 @@ export interface Laws { soil_m: number; wet_depth: number; dormancy: number; roo
 /** The terrain's samples: across, down, and their depth. */
 export interface SamplesOf { across: number; down: number; depth: number }
 
-/** Planes of four numbers a square of the table (land.wgsl `GROUND` to `VIEW`): the core's (`TileMeta.row` numbers), then
- * the page's three. */
-const PLANES = 6;
+/** Planes of four numbers a square of the table (land.wgsl `GROUND` to `TERRAIN`): the core's numbers before
+ * `TWI_MEAN_AT` (`TileMeta.row`) with the wetness index of saturation (`SATURATED_AT`), the page's three, then the
+ * core's mean wetness index. */
+const PLANES = 7;
+/** The number of the core's row that is the mean wetness index of the terrain's samples in the cell (tape/src/table.rs
+ * `row`), sent alone in the table's last plane (land.wgsl `TERRAIN`). */
+const TWI_MEAN_AT = 11;
 /** The number of the table a square's wetness index of saturation goes in (land.wgsl `saturated_at`): the last of its
  * soil's plane, past the core's numbers. */
 const SATURATED_AT = 4 * 2 + 3;
@@ -115,7 +119,8 @@ export class Land {
     const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
     this.melt = rows[0];
     for (let i = 0; i < n; i++) {
-      for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
+      for (let k = 0; k < Math.ceil(TWI_MEAN_AT / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, TWI_MEAN_AT))));
+      put(6, i, [rows[1 + row * i + TWI_MEAN_AT], 0, 0, 0]);
       put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, landIce[i]]);
       put(5, i, [shown ? shown[i] / 255 : 0, organic[i], landT[i], landZ[i]]);

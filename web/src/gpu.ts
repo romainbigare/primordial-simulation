@@ -52,14 +52,21 @@ export type Made = [name: string, target: Format | null, blend: boolean];
 /** Of program `name`, the one a draw into `target` (null: the canvas), over what is there or not (`blend`), where a pixel
  * takes `e` metres, draws with: the best of those that may (`madeFor`) that is made, so a draw never waits for a
  * program while one that draws the same picture is made; the best is made in its turn (`Gpu.warm`). With none made,
- * none: the best is made before all others and the draw waits for it (`waiting`), and the page does not stop while it
- * is made. */
+ * the best is made before all others and the draw is drawn again once it is (`waiting`), meanwhile by the one made for
+ * the nearest size of a pixel (none when none is made), and the page does not stop while it is made. */
 export function seenFrom(gpu: Gpu, name: string, e: number, target: Format | null, blend: boolean, waiting: Made[]): string | null {
   const may = madeFor(name, e), made = may.find(key => gpu.ready(key, target, blend));
   gpu.warm(may[0], target, blend, made === undefined);
-  if (made === undefined) waiting.push([may[0], target, blend]);
-  return made ?? null;
+  if (made !== undefined) return made;
+  waiting.push([may[0], target, blend]);
+  // Till one is made, the one made for the nearest size of a pixel draws (a little more or less detail for a moment),
+  // so a zoom past a size never takes away what was drawn.
+  const size = (key: string) => Math.abs(Math.log(Math.max(+(key.split(':')[1] ?? 0), EVERY_SIZE_M) / e));
+  return madeFor(name, Infinity).filter(key => gpu.ready(key, target, blend)).sort((x, y) => size(x) - size(y))[0] ?? null;
 }
+/** Where programs are sorted by the sizes of a pixel they are made for (`seenFrom`, map.ts `warmAhead`), the one made
+ * for every size counts as made for this many metres. */
+export const EVERY_SIZE_M = 0.25;
 
 /** Of `programs`, those not made (`Gpu.ready`), each asked to be made before all others (`Gpu.warm`). */
 export function notMade(gpu: Gpu, programs: Made[]): Made[] {

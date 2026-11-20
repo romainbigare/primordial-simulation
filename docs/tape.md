@@ -186,13 +186,14 @@ lies under `EDGE_M`, 2 m; the ground drawn lies over the level up to there, by a
 about it has no pond near, so the edge of where liquid may stand is dry ground: a smooth line of the place, the same in
 every tile at every depth, never the texels' or the samples' edges; a shell draws the liquid where the ground drawn
 lies under the pond's level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
-frame: the melting point of the frozen cover, K, then for each square row by row 11 f32 (`ROW`) of the cell that holds
+frame: the melting point of the frozen cover, K, then for each square row by row 12 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full); and the share of its area that is land, its land over its area (`contract::lands`: as the
-month's start found it, the land its cover lives on). Before Flow built its state the level and
+0 where the pores are dry or full); the share of its area that is land, its land over its area (`contract::lands`: as the
+month's start found it, the land its cover lives on); and the mean wetness index of the samples inside it (the level the
+liquid departs about where none is dry or full, of the terrain alone: a shell places plants by it the same in every month). Before Flow built its state the level and
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 8 unless the

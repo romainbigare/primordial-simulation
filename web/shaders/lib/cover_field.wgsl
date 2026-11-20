@@ -449,25 +449,84 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0), min(field_at(at, LOW_LAYER).a * hold.w * thick, 1.0));
 }
 
+// Things too small to be drawn one by one but a pixel or more across (crowns and dead trees seen from afar) are drawn
+// as round specks about `w` m across that cover the share `share` of the ground on the mean: on lattices fixed in the
+// world whose cells are a power of two metres from `SPECK_BASE_M`, each turned its own way (`SPECK_TURN` radians an
+// octave, so no rows line up), each cell as wide as its specks, one speck a cell at most at a place of its own draw
+// (`SPECK_JITTER` of its cell either way), in as many cells as the share asks (past
+// what specks in every cell cover, the rest lies evenly between them); the two lattices whose cells are nearest `w`
+// blended by how near, so a speck's size follows the plants' with no seam. A point reads the four cells nearest it.
+// They melt into their mean, the share evenly, as they shrink from `SPECK_PX`.y to `SPECK_PX`.x pixels across. Of the
+// point: the specks' cover, and how lit it is, -1..1, from its shaded side (south-east, away from `LIGHT`) to its lit
+// side (a round crown or stem lit from the north-west).
+const SPECK_BASE_M = 1.0; const SPECK_TURN = 0.9; const SPECK_JITTER = 0.4; const SPECK_PX = vec2f(1.0, 3.0);
+fn specks(at: vec2f, w: f32, share: f32, e: f32, k: i32) -> vec2f {
+  let detail = ease(SPECK_PX.x * e, SPECK_PX.y * e, w);
+  if (detail <= 0.0 || share <= 0.0) { return vec2f(min(share, 1.0), 0.0); }
+  let octave = log2(max(w, SPECK_BASE_M) / SPECK_BASE_M);
+  let low = floor(octave);
+  let fine = speck_lattice(at, SPECK_BASE_M * exp2(low), SPECK_TURN * low, share, e, k);
+  let coarse = speck_lattice(at, SPECK_BASE_M * exp2(low + 1.0), SPECK_TURN * (low + 1.0), share, e, k + 3);
+  let got = mix(fine, coarse, octave - low);
+  return vec2f(mix(min(share, 1.0), got.x, detail), got.y * detail);
+}
+// The specks of `specks` on the lattice of cells `side` m, as wide as its cells, turned `turn` radians.
+fn speck_lattice(at_m: vec2f, side: f32, turn: f32, share: f32, e: f32, k: i32) -> vec2f {
+  let full = 0.25 * PI;
+  let chance = share / full;
+  let r = 0.5 * side;
+  let turned = mat2x2f(cos(turn), sin(turn), -sin(turn), cos(turn));
+  let at = turned * at_m;
+  let light = turned * LIGHT.xy / length(LIGHT.xy);
+  let near = floor(at / side - 0.5);
+  var on = 0.0;
+  var lit = 0.0;
+  for (var c = 0; c < 4; c++) {
+    let cell = near + vec2f(f32(c % 2), f32(c / 2));
+    let id = vec2i(cell);
+    let draw = vec3f(f32(lowbias(id, k) & 1023u), f32(lowbias(id, k + 1) & 1023u), f32(lowbias(id, k + 2) & 1023u)) / 1023.0;
+    if (draw.z >= chance) { continue; }
+    let d = (at - (cell + 0.5 + SPECK_JITTER * (2.0 * draw.xy - 1.0)) * side) / r;
+    let one = 1.0 - smoothstep(1.0 - 0.5 * e / r, 1.0 + 0.5 * e / r, length(d));
+    if (one > on) { on = one; lit = -dot(d, light); }
+  }
+  let even = max(share - full, 0.0) / (1.0 - full);
+  return vec2f(on + (1.0 - on) * even, lit * on);
+}
+
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_thing`
 // by the width of its marks there, as each mark shows, mark.wgsl `decide`), thicker and thinner by `thick`, holding
 // `hold` of its plants there, over `dst` (premultiplied): its shadows darken what lies below, its crowns cover their
 // share at their mean; the trees' in their stands, in groups of lighter and darker crowns, and snowy as the ground under
-// them. A lattice no square holds (its side 0, textures.ts) adds nothing.
+// them, each crown a lit dome over its shadow (`specks`, as wide as the marks there) from where it takes a pixel or more.
+// A lattice no square holds (its side 0, textures.ts) adds nothing.
+// A far crown is lit by up to `DOME_LIT` of its colour either way across it, and casts its shadow `DOME_SHADOW` of its
+// width south-east (the marks' shadows reach about a crown's width: models.wgsl `cast_of`).
+const DOME_LIT = 0.35; const DOME_SHADOW = 0.6;
 fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, hold: f32, dst: vec4f) -> vec4f {
   if (cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
   var unshown = 1.0;
   if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_thing(field_at(at, WIDE_LAYER)[l], e); }
-  let share = min(f.a * hold * thick, 1.0) * unshown;
-  if (share <= 0.0) { return dst; }
+  let crowns = min(f.a * hold * thick, 1.0);
+  if (crowns * unshown <= 0.0) { return dst; }
   var c = f.rgb / f.a;
+  var share = crowns;
+  var dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * thick, 1.0);
   if (l == STANDS) {
     c = in_stands(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M);
     let groups = shows_at(CANOPY_M, e);
     if (groups > 0.0) { c *= 1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * groups; }
     c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
+    let w = field_at(at, WIDE_LAYER)[l];
+    let dome = specks(at, w, crowns, e, 83);
+    // The shadows: the crowns' own specks laid south-east, as dark on the mean as the field's shade.
+    let laid = specks(at - DOME_SHADOW * w * vec2f(1.0), w, crowns, e, 83).x;
+    dark *= laid / max(crowns, 1e-3);
+    share = dome.x;
+    c *= 1.0 + DOME_LIT * dome.y;
   }
-  let dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * thick, 1.0) * unshown;
+  share *= unshown;
+  dark = min(dark, 1.0) * unshown;
   let below = vec4f(dst.rgb * (1.0 - dark), dark + dst.a * (1.0 - dark));
   return vec4f(c * share, share) + below * (1.0 - share);
 }

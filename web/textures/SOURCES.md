@@ -70,11 +70,11 @@ fire.jpg`):
 
 512 x 512 layers, the trunks each a whole layer and the stumps each a quarter of one, each a sprite with its cover,
 rendered by `bake/sprite.html` as the trees are (`node sprites.cjs snags.json OUT burned_tree_photogrammetry
-burned_trunk_lassen old_burned_tree old_burnt_tree`, the models downloaded by hand into `assets/sketchfab/<the model's id>/`) and packed by `bake/snags.py`
+burned_trunk_lassen old_burned_tree`, the models downloaded by hand into `assets/sketchfab/<the model's id>/`) and packed by `bake/snags.py`
 (`python3 -I bake/snags.py OUT snags.png ../shaders/lib/snag_sprites.wgsl`, which writes the sprites' table with each sprite's
-width and foot row too, and sharpens each once): six sides of a charred standing trunk and fourteen charred stumps (one model from six sides,
-cut 0.3 of its height above its foot, two from four sides, cut 0.35 and 0.22, so the ground they were scanned on is
-left out), each with its light scaled to a mean of 0.06 (linear) and its darkest lifted by 0.006: burnt bark in the sun
+width and foot row too, keeps each one's largest piece alone, without the chips and the scraps of ground of the scan,
+and sharpens each once): six sides of a charred standing trunk and ten charred stumps (one model from six sides,
+cut 0.3 of its height above its foot, one from four sides, cut 0.35, so the ground they were scanned on is left out), each with its light scaled to a mean of 0.06 (linear) and its darkest lifted by 0.006: burnt bark in the sun
 reads charcoal grey, as light as the bare trees' bark. Each licensed under CC BY 4.0
 (http://creativecommons.org/licenses/by/4.0/); the sprites are rendered from them (changed: lit, cut at the ground,
 shrunk, sharpened, their light scaled). Drawn by `shaders/lib/snag.wgsl` among the plants' marks, with the bare twins of the trees of models.png.
@@ -84,7 +84,6 @@ shrunk, sharpened, their light scaled). Drawn by `shaders/lib/snag.wgsl` among t
 | `burned_tree_photogrammetry` | [Burned Tree Photogrammetry](https://sketchfab.com/3d-models/burned-tree-photogrammetry-1dc8bcac00e2433eb645e6c837a8d5b7) | [gino.demurtas](https://sketchfab.com/gino.demurtas) | CC BY 4.0 |
 | `burned_trunk_lassen` | [Burned tree trunk - Lassen Volcano Park](https://sketchfab.com/3d-models/burned-tree-trunk-lassen-volcano-park-82f510d9e012414d9aa980bf944efc93) | [David Antalek](https://sketchfab.com/David.Antalek) | CC BY 4.0 |
 | `old_burned_tree` | [Old burned tree](https://sketchfab.com/3d-models/old-burned-tree-f15f10996647483185a04926a33758e6) | [Igor Denisov](https://sketchfab.com/Digor) | CC BY 4.0 |
-| `old_burnt_tree` | [Old Burnt Tree](https://sketchfab.com/3d-models/old-burnt-tree-d1ddd03e8ddc4103a3b4501fed7183fd) | [Beer Knight](https://sketchfab.com/dontshootnow) | CC BY 4.0 |
 
 ## trees.png, models.png and the sprites' table
 

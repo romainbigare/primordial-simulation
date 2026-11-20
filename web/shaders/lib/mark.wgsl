@@ -75,13 +75,14 @@ fn along(v: vec4f, z: f32, held: i32) -> f32 {
 // other's size (`along`).
 const NEAR_SIZES = 3.0;
 
-// What the ground at `at` leaves a plant: the depth of the liquid over its roots, m, how wet it is and how wet its cells
-// are on their mean (land.wgsl `state_at`), the snow there (lib/land.wgsl `snow_at`, 1 where it lies) and its cells'
-// snow's depth, m.
-struct Foot { depth: f32, wet: f32, mean: f32, snow: f32, snow_m: f32 }
+// What the ground at `at` leaves a plant: the depth of the liquid over its roots, m (land.wgsl `state_at`), its
+// wetness index (where its soil's liquid gathers), the snow there (lib/land.wgsl `snow_at`, 1 where it lies) and its
+// cells' snow's depth, m.
+struct Foot { depth: f32, twi: f32, snow: f32, snow_m: f32 }
 fn foot(at: vec2f) -> Foot {
-  let st = state_at(at, ground_at(at, false), corners(at / land.map.x));
-  return Foot(st.depth, st.wet, st.mean, select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
+  let g = ground_at(at, false);
+  let st = state_at(at, g, corners(at / land.map.x));
+  return Foot(st.depth, g.twi, select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
 }
 
 // Of each of four kinds that stand in liquid as deep as `reach` m (canopy.ts: down to the core's `Cover::line`), 1 where
@@ -96,14 +97,22 @@ fn holds(loose: f32, need: vec4f) -> vec4f {
   return select(vec4f(rooted(loose, need.x, 0.0), rooted(loose, need.y, 0.0), rooted(loose, need.z, 0.0), rooted(loose, need.w, 0.0)), vec4f(1.0), need <= vec4f(0.0));
 }
 
-// The share of a kind that needs `need` that stands where the ground is `wet` against its cells' mean: its activity
-// there over its activity at the mean, at most 1 (land.wgsl `activity`).
-fn thrive(wet: f32, mean: f32, need: vec4f) -> vec4f {
+// The share of a kind that needs `need` that stands at a point of wetness index `twi` in the square at c: its activity
+// there over its activity at the square's mean (land.wgsl `activity`), at most 1, with the square's pores filled
+// `HELD_FILL` (its liquid departing about its samples' mean index, land.wgsl `soil_held`). A plant lives through the
+// year: where it stands is the place's (wet hollows, dry knobs), not the month's, so a stand keeps its trees as its
+// soil dries and wets with the seasons.
+const HELD_FILL = 0.5;
+fn thrive(twi: f32, c: vec2i, need: vec4f) -> vec4f {
+  let soil = cell(SOIL, c);
+  let mean = HELD_FILL * soil.x;
+  let half = land.soil.y;
+  let here = soil_held(mean, soil.x, cell(TERRAIN, c).x, twi);
   var out = vec4f(1.0);
   for (var s = 0; s < 4; s++) {
     if (need[s] <= 0.0) { continue; }
-    let whole = activity(mean, need[s]);
-    if (whole > 0.0) { out[s] = min(activity(wet, need[s]) / whole, 1.0); }
+    let whole = activity(mean / (mean + half), need[s]);
+    if (whole > 0.0) { out[s] = min(activity(here / (here + half), need[s]) / whole, 1.0); }
   }
   return out;
 }
@@ -114,7 +123,7 @@ fn thrive(wet: f32, mean: f32, need: vec4f) -> vec4f {
 // the most they may count for there, before the ground is read (`pick_kind`).
 fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32, exact: bool) -> vec4f {
   if (!exact) { return vec4f(cs.w[s] * (1.0 + PATCH)); }
-  return cs.w[s] * thick * thrive(f.wet, f.mean, kind(need_plane(q), cs.at[s])) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
+  return cs.w[s] * thick * thrive(f.twi, cs.at[s], kind(need_plane(q), cs.at[s])) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
 }
 
 // Where two plants would stand in one cell, one `h` m tall stands over one `under` m tall with this chance: a race whose
@@ -304,7 +313,7 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   if (thing <= 0.0 || all <= 0.0) { return dead_decided(l, k, id, at, cs, all); }
   // Whether any kind may claim the cell, before its ground is read.
   let own = rand3(id, l).y;
-  let most = Foot(0.0, 0.0, 0.0, 0.0, 0.0);
+  let most = Foot(0.0, 0.0, 0.0, 0.0);
   if (pick_kind(l, at, cs, 1.0 + PATCH, most, own, id, false).x < 0) { return dead_decided(l, k, id, at, cs, all); }
   let f = foot(at);
   let pick = ground_pick(l, at, cs, f, own, id);
@@ -370,8 +379,7 @@ fn dead_at(l: i32, k: vec2f) -> Dead {
   if (under_share(rank, fa.burnt) <= 0.5) { return out; }
   let side = cover.grid[l].z;
   let clump = 2.0 * smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / DEAD_CLUMP_M, 97));
-  let reach = (cover.grid[l].w + cover.reach[l].x) * side;
-  out.q = snag_of(cover.base[l].xy + vec2i(k), clamp(scar_age(at, rank.x) / max(fire.air.y, 1.0), 0.0, 1.0), reach / MAP_VIEW.y);
+  out.q = snag_of(cover.base[l].xy + vec2i(k), clamp(scar_age(at, rank.x) / max(fire.air.y, 1.0), 0.0, 1.0), cover.reach[l].x * side, (cover.grid[l].w + cover.reach[l].x) * side);
   out.mean = clump * fa.snag * side * side / SNAG_KG / min(fa.burnt, 1.0);
   return out;
 }
@@ -390,21 +398,19 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32) -
   if (all > 0.0) {
     if (!ground_holds(l, at, cs, f)) { return none; }
   } else if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
-  let reach = (cover.grid[l].w + cover.reach[l].x) * cover.grid[l].z;
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_thing(dead.q.h, cover.seen.x);
   if (shows <= 0.0) { return none; }
-  return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q, reach));
+  return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q));
 }
 
 // The box dead tree q of lattice l covers about its foot, as `mark_box`: its sprite with its lean, and its shadow.
-fn dead_box(l: i32, q: Snag, reach: f32) -> f32 {
+fn dead_box(l: i32, q: Snag) -> f32 {
   let g = cover.grid[l];
   let r = cover.reach[l].x;
-  let size = snag_size(q);
-  let w = size.x * q.h / size.y;
+  let w = snag_w(q);
   let body = 0.5 * w + abs(sin(q.lean)) * q.h;
-  let long = min(MODEL_SHADOW_RUN * q.h, 0.9 * reach);
-  let m = vec4f(body, max(body, min(long + 0.5 * w, reach)), q.h, long);
+  let c = snag_cast(q, r * g.z);
+  let m = vec4f(body, max(body, c.long + 0.5 * c.w + max(c.top, 0.0)), q.h, c.long);
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
@@ -431,8 +437,8 @@ fn mark_box(l: i32, q: Plant) -> f32 {
   let fit = model_fit(q);
   // Its clump's plants stand up to `spread` from its foot (models.wgsl `clump_one`).
   let body = fit.spread + 0.5 * fit.w + abs(q.lean.x) * fit.h;
-  let long = model_shadow_long(q, fit);
-  let m = vec4f(body, max(body, min(long + 0.5 * fit.w + fit.spread, q.reach)), fit.h + fit.spread, max(long, foot_rise(fit.s) * fit.h) + fit.spread);
+  let c = model_cast(q, fit);
+  let m = vec4f(body, max(body, min(c.long + 0.5 * c.w + fit.spread, q.reach)), fit.h + fit.spread, max(c.long, foot_rise(fit.s) * fit.h) + fit.spread);
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }

@@ -250,7 +250,8 @@ share and, of the drier rest, the share its liquid fills from the bottom up over
 `Pores::full`), which roots (3) and the decomposers (2.3) read. Where the rest holds more than field capacity that is
 the share the cell's mean fill gives; where it holds less it adds the wet strips of a drier cell. What stands where the ground lies under the cells' level; each channel as wide as
 the channel law makes its own sample's discharge (`World::discharge`, 1.2); each mark of cover by
-the activity of each kind of the squares about it at the mark's foot (`cover::activity`). A picture need not keep a cell's mean
+the activity of each kind of the squares about it at the mark's foot (`cover::activity`), with the cell's pores half full and
+the liquid departing about its samples' mean index, so where a plant stands is the place's, not the month's. A picture need not keep a cell's mean
 exactly (the core keeps the books).
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
