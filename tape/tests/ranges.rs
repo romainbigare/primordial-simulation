@@ -63,6 +63,13 @@ const EARTH_ABSORBER_PPM: [f64; 2] = [180.0, 420.0];
 /// The most share of the cover's dry mass its stored solid may make: plants hold about a tenth of theirs as
 /// stored sugars and starch, rarely over a third in storage organs (from memory).
 const STORED_MOST: f64 = 0.5;
+/// The factor either way the running world's load into the open low ground a year may lie from what the start's yield
+/// law asks of the high stand's mouths (`Books::yields`, the anchor of `carry`): one law of the load for both.
+const DELIVERY_RANGE: f64 = 2.0;
+/// The load is held to the start's yield law over the years from this one to `YEARS` (those `carry` is anchored on).
+const LOAD_FROM: u64 = 10;
+/// Cubic metres in a series column's Mm³.
+const M3_PER_MM3: f64 = 1e6;
 
 /// Rain of the key liquid, mol/m²/s, in m of liquid a year of `w`.
 fn rain_m_yr(w: &World, rain: f64) -> f64 {
@@ -150,16 +157,20 @@ fn rock(w: &World, land: &[usize]) -> f64 {
 }
 
 /// `YEARS` years of `ew run --seed <seed> --size 64`: the key numbers in the order of `KEYS`, then the rain on
-/// land in m/yr and the cover's stored share (`stored_share`) at the end.
-fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
+/// land in m/yr, the cover's stored share (`stored_share`) at the end, and over the climate's years the load into the
+/// open low ground a year from `LOAD_FROM` over the start's yield law's (`Books::yields`) and over the load picked up.
+fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 4]) {
     let gas = format!("air_{ABSORBER}");
     let climate = ["t_land", "t_land_summer", "t_land_winter", "rain_land", gas.as_str(), "rivers"];
-    let (mut mean, mut land, mut rock_from) = ([0.0; 6], vec![], 0.0);
+    let (mut mean, mut land, mut rock_from, mut load_from) = ([0.0; 6], vec![], 0.0, [0.0; 2]);
     let span = (YEARS - FROM + 1) as f64;
     let (w, rec) = run(seed, SIDE, YEARS, &ONE, |_| {}, |y, w, rec| {
         if y == FROM - 1 {
             land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
             rock_from = rock(w, &land);
+        }
+        if y == LOAD_FROM - 1 {
+            load_from = [rec.last("load_sea"), rec.last("load_picked")];
         }
         if y >= FROM {
             mean.iter_mut().zip(climate).for_each(|(m, c)| *m += rec.last(c) / span);
@@ -169,16 +180,20 @@ fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
     let [t, summer, winter, rain, air, rivers] = mean;
     let cover = rec.last("root_1_cover_kg").log10();
     let keys = [t, summer - winter, rain, air * PPM, rivers, worn, cover];
-    (keys, [rain_m_yr(&w, rain), stored_share(&w)])
+    let load_span = (YEARS - LOAD_FROM + 1) as f64;
+    let sea = (rec.last("load_sea") - load_from[0]) * M3_PER_MM3 / load_span;
+    let picked = (rec.last("load_picked") - load_from[1]) * M3_PER_MM3 / load_span;
+    (keys, [rain_m_yr(&w, rain), stored_share(&w), sea / w.terrain_samples().books.yields, sea / picked])
 }
 
 /// The key numbers of three seeds, each mean in its range around its reference; the rain on land within
-/// `EARTH_RAIN_RANGE` of Earth's, the heat-absorbing gas within `EARTH_ABSORBER_PPM`, and the cover's stored share
-/// under `STORED_MOST`.
+/// `EARTH_RAIN_RANGE` of Earth's, the heat-absorbing gas within `EARTH_ABSORBER_PPM`, the cover's stored share under
+/// `STORED_MOST`, and the load into the open low ground within `DELIVERY_RANGE` of the start's yield law's (printed
+/// with the share of what is picked up that it is, against the delivery ratio of real catchments, 0.1 to 0.3).
 #[test]
 #[ignore = "slow: three 30-year runs of a 64 x 64 world of plants"]
 fn the_key_numbers_stay_in_their_ranges() {
-    let runs: Vec<([f64; KEYS.len()], [f64; 2])> = std::thread::scope(|s| {
+    let runs: Vec<([f64; KEYS.len()], [f64; 4])> = std::thread::scope(|s| {
         let runs: Vec<_> = SEEDS.iter().map(|&seed| s.spawn(move || key_numbers(seed))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
     });
@@ -203,6 +218,9 @@ fn the_key_numbers_stay_in_their_ranges() {
     println!("heat-absorbing gas {ppm:.1} ppm, within Earth's {EARTH_ABSORBER_PPM:?}");
     out.extend((!(EARTH_ABSORBER_PPM[0]..=EARTH_ABSORBER_PPM[1]).contains(&ppm)).then_some("heat-absorbing gas against Earth's"));
     out.extend((stored >= STORED_MOST).then_some("the cover's stored share"));
+    let (delivery, ratio) = (earth(2).iter().sum::<f64>() / 3.0, earth(3));
+    println!("load into the open low ground over the start's yield law's {delivery:.3} (seeds {:.3?}), x/ {DELIVERY_RANGE}; of what is picked up {ratio:.3?}", earth(2));
+    out.extend((!Range::Times(DELIVERY_RANGE).holds(delivery, 1.0)).then_some("the load against the start's yield law"));
     assert!(out.is_empty(), "out of their ranges: {out:?}");
 }
 

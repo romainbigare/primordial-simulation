@@ -71,7 +71,7 @@ pub struct Config {
     pub moist_min: f64,
     /// Time condensed rain drifts with the low wind before it lands, s
     pub rain_drift_s: f64,
-    /// Loose solid volume moving liquid carries off per J it dissipates, m³/J
+    /// Loose solid volume moving liquid picks up per J it dissipates (some settles on its way), m³/J
     pub carry: f64,
     /// Bonded volume broken per J dissipated, times 1 / bond strength, m³/J
     pub wear: f64,
@@ -514,7 +514,7 @@ impl Default for Config {
             rain_time: 86400.0,
             moist_min: 0.5,
             rain_drift_s: 2000.0,
-            carry: 2e-11,
+            carry: 1.8e-10,
             wear: 1.4e-11,
             creep: 6.3e-11,
             hard_min: 0.05,
