@@ -34,6 +34,12 @@ fn fire_plane(k: i32, at: vec2f) -> vec4f {
   return textureSampleLevel(fire_tex, fire_sampler, (s + vec2f(0.0, f32(k) * n.y)) / vec2f(n.x, FIRE_PLANES * n.y), 0.0);
 }
 
+// Plane k of the fire's texture at square `c` (held inside the map), its own numbers.
+fn fire_texel(k: i32, c: vec2i) -> vec4f {
+  let n = vec2i(fire.map.yz);
+  return textureLoad(fire_tex, clamp(c, vec2i(0), n - 1) + vec2i(0, k * n.y), 0);
+}
+
 fn fire_at(at: vec2f) -> FireAt {
   let a = fire_plane(0, at);
   let b = fire_plane(1, at);
