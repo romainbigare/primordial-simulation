@@ -519,7 +519,7 @@ what the heat holds molten, as every law and the shell then read it.
   does work (1.3).
 
 ### 1.3 Erosion and creep
-The head lost by moving liquid does work where it is lost on land (`flow::runoff::erode`, `wear`; in a body and below
+The head lost by moving liquid does work where it is lost on land (`flow::runoff::load`, `wear`; in a body and below
 0 m it wears nothing): in each land cell, g times what runs through each of its samples in no pond in the month, kg,
 times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
 **carries** up to `carry` m³ of loose solids per J of the cell's work times its loose ground's erodibility against a

@@ -3,17 +3,18 @@
 //! samples' ways from its samples to the bodies they reach (`bodies::Bodies::ways`);
 //! the bodies, each before the body its pass leads to, stand at one level, and what one holds over its pass runs on to
 //! the next (`basin::share_out`); what each sample passes on is summed down the samples' ways (`discharge`), and the
-//! head it loses there does work on the bed (`erode`). Every move goes from the cell it leaves to the cell it lands
+//! head it loses there picks up a load and does work on the bed (`load`). Every move goes from the cell it leaves to the cell it lands
 //! in, with its heat, and its potential energy is booked from where it leaves (`potential::apply`).
 
 use super::basin::{movable, share_out};
 use super::bodies::Bodies;
 
 mod edge;
+pub(super) mod load;
 use edge::come_in;
 use super::{curve::Part, level::{level_with, Level}};
 use super::{bare_share, drain::{liquid_heat, to_channels}, follow, land::{lift, solid, standing}, liquid::book, parts::{pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
-use crate::{space::{network::NONE, wear::STAND_M}, units::G_PER_KG, store::{Boundary, Class, LinkFlux, Move, Node}, World};
+use crate::{space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux, Move, Node}, World};
 
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
@@ -103,10 +104,10 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     // of parts (`parts::to_liquid`).
     let sol = s.solids(tmin);
     let mut load = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: sol.len() + 1, class: [Class::Ground; 2] };
-    let (broke, loads) = erode(w, s, &b, &flux, &sol, &mut load);
+    let carried = load::carry(w, s, &b, (&flux, &sol), &mut load, dt);
     book_all(w, s, &sol, &[&load]);
-    (w.counts.load_month, w.counts.plumes) = (loads, Vec::new());
-    apply(w, s, &[], &broke);
+    (w.counts.load_month, w.counts.plumes) = (carried.loads, carried.plumes);
+    apply(w, s, &[], &carried.broke);
     follow_flux(w, &b, &flux, dt);
     (s.bodies, s.spare.samples) = (b, flux);
 }
@@ -296,54 +297,6 @@ fn discharge(w: &World, b: &Bodies, flux: &mut [[f64; 2]]) {
             (flux[j][0], flux[j][1]) = (flux[j][0] + f[0], flux[j][1] + f[1]);
         }
     }
-}
-
-/// The head the liquid loses down the samples' ways in each land cell does work there (laws.md 1.3): g times what runs
-/// through each of its samples in no pond, kg, times the fall to the sample it runs to. It picks up loose solids up to
-/// `carry` m³ per J times its loose ground's erodibility (`Texture::erodibility`; at most all that lies loose), which go with the cell's runoff to where its ways land, with their
-/// heat (what would land on its own ground stays);
-/// the work its load leaves free (the cover effect, Sklar and Dietrich 2004) breaks bonded ground into loose (`wear`).
-/// Returns the moves of the bed into loose ground, and of each cell the load in its main channel, g per m³ of its liquid,
-/// and the depth that settled on it, m (`Counters::load_month`: none settles on the way yet).
-fn erode(w: &World, s: &mut Scratch, b: &Bodies, flux: &[[f64; 2]], sol: &[usize], x: &mut Crossings) -> (Vec<Move>, Vec<[f32; 2]>) {
-    let samples = w.terrain_samples();
-    let n = w.mesh.cells().n();
-    let mut work = vec![0.0; n];
-    for &k in b.land.iter().filter(|&&k| flux[k as usize][1] > 0.0) {
-        let (k, f) = (k as usize, flux[k as usize]);
-        let (i, j) = (b.cell_of[k] as usize, samples.to[k]);
-        if j != NONE && s.z[i] > 0.0 {
-            work[i] += w.cfg.gravity * f[1] * (samples.h[k] - samples.h[j as usize]).max(0.0);
-        }
-    }
-    let mut broke = Vec::new();
-    // What the main channel of each cell carried in the month, mol of liquid (the most through one of its samples).
-    let mut main = vec![0.0f64; n];
-    b.land.iter().for_each(|&k| main[b.cell_of[k as usize] as usize] = main[b.cell_of[k as usize] as usize].max(flux[k as usize][0]));
-    let mut loads = vec![[0.0f32; 2]; n];
-    for i in (0..n).filter(|&i| work[i] > 0.0) {
-        let cap = w.cfg.carry * work[i] * bare_share(w, i) * w.soil[i].texture.erodibility();
-        let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
-        let f = if avail > 0.0 { (cap / avail).min(1.0) } else { 0.0 };
-        let per_m3 = w.liquid_in(i, |k| w.g(k, i)).map_or(0.0, |l| l.1);
-        if per_m3 > 0.0 && main[i] > 0.0 {
-            let kg: f64 = sol.iter().map(|&k| solid(w, s, k, i) * f * s.sp[k].mm).sum();
-            loads[i][0] = (G_PER_KG * kg / (main[i] / per_m3)) as f32;
-        }
-        if f > 0.0 {
-            for &(r, part) in b.ways[i].iter().filter(|r| r.0.cell as usize != i) {
-                let to = r.cell;
-                let row = sol.iter().enumerate().map(|(c, &k)| (c, solid(w, s, k, i) * f * part));
-                let heat = sol.iter().map(|&k| solid(w, s, k, i) * f * part * s.sp[k].cp * s.state.tg[i]).sum();
-                x.push(i as u32, to, row, heat);
-            }
-        }
-        let worn = work[i] * (1.0 - f * avail / cap).max(0.0);
-        if worn > 0.0 {
-            wear(w, s, i, worn, &mut broke);
-        }
-    }
-    (broke, loads)
 }
 
 /// What ran through each cell's main channel in the month (`World::liquid_month`), and the moving averages over about a
