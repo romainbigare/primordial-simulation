@@ -236,7 +236,10 @@ level (Beven and Kirkby 1979; Beven 1997). The table is where Flow keeps the liq
 capacity, in it (its room what its pores lack); else under it in the bed's store (its room the loose ground's pores over
 field capacity and what the store lacks of `bed_porosity` × `bed_depth`) (`Means::deficit`). The room at a point is the
 cell's less `soil_m` (λ − c), within none and the most, the level c found by halving so the mean room is the cell's: it
-moves no liquid, only shares it out (`inside::soil_level`, `deficit_at`). A point whose room is none is saturated, its
+moves no liquid, only shares it out (`inside::soil_level`, `deficit_at`). A sample where liquid flows in its channel
+(its yearly discharge above none, and it drains a channel's source, the square of the channels' spacing, 2 `hill` a
+side; Horton 1945) is the table at the surface: its index counts as infinite, its room none (`inside::flowing`,
+`index_now`). A point whose room is none is saturated, its
 pores full; elsewhere its soil holds the cell's liquid departed the same way (`soil_held`). The laws read it over a
 cell's land samples (the highest, by its land's share of its area; `inside::wet_ground`): the share saturated, at an
 index of at least c plus the mean room over `soil_m`, and the drier rest, which holds what that share does not; flames read

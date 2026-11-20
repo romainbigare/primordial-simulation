@@ -21,7 +21,7 @@ pub struct WetGround {
 /// stands over the lowest first, `flow::curve`), where its liquid table lies (`saturated`).
 pub fn wet_ground(w: &World, i: usize, m: Means) -> WetGround {
     let s = w.terrain_samples();
-    let mut at: Vec<(f64, f64)> = w.map.leaves()[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], s.twi[k])).collect();
+    let mut at: Vec<(f64, f64)> = w.map.leaves()[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], index_now(w, &s, k))).collect();
     at.sort_by(|a, b| b.0.total_cmp(&a.0));
     let land = crate::contract::land(w, i) / w.mesh.cells().area()[i];
     at.truncate((land * at.len() as f64).round() as usize);
@@ -35,9 +35,11 @@ pub fn wet_ground(w: &World, i: usize, m: Means) -> WetGround {
 pub fn saturated(ph: &crate::Physics, twi: &[f64], m: Means) -> WetGround {
     let filled = if m.pores > 0.0 { m.pore / m.pores } else { 1.0 };
     let [d, most] = m.deficit(ph);
+    let channels = twi.iter().filter(|&&t| t == f64::INFINITY).count() as f64 / twi.len().max(1) as f64;
     let (share, level) = match soil_level(ph, twi, &vec![1.0 / twi.len().max(1) as f64; twi.len()], m) {
         _ if d <= 0.0 || filled >= 1.0 => (1.0, f64::NEG_INFINITY),
-        None => (if d >= most { 0.0 } else { 1.0 }, if d >= most { f64::INFINITY } else { f64::NEG_INFINITY }),
+        None if d >= most || channels >= 1.0 => (channels, f64::INFINITY),
+        None => (1.0, f64::NEG_INFINITY),
         Some(c) => (twi.iter().filter(|&&t| deficit_at(ph, m, t, c) <= 0.0).count() as f64 / twi.len() as f64, c + d / ph.soil_m),
     };
     let rest = if share < 1.0 { ((filled - share) / (1.0 - share)).clamp(0.0, 1.0) } else { 1.0 };
@@ -52,4 +54,19 @@ pub fn wet_land(w: &World, p: &crate::cover::Parts, i: usize) -> (crate::cover::
     let pores = w.scratch.land_pores(i).max(1e-9);
     let m = Means { pore: soak.filled.min(1.0) * pores, pores, stands: 0.0, store: crate::flow::store_depth(w, i), field: soak.pores.field };
     (soak, wet_ground(w, i, m))
+}
+
+/// Whether liquid flows in the channel of terrain sample `k` of `s` (`World::terrain_samples`): its liquid runs (its
+/// discharge over a year, `World::discharge`) and it drains a channel's source, the square of the spacing of the
+/// channels inside a cell (2 `hill` a side, the hillslopes on both sides of a channel; Horton 1945). Flowing liquid is
+/// its table at the surface: it has no room (`index_now`).
+pub fn flowing(w: &World, s: &crate::space::samples::Samples, k: usize) -> bool {
+    let spacing = 2.0 * w.cfg.phys.hill;
+    s.up[k] >= spacing * spacing && w.discharge.get(k).is_some_and(|&q| q > 0.0)
+}
+
+/// The wetness index of terrain sample `k` of `s` as the table reads it now: its own (`Samples::twi`), infinite where
+/// liquid flows in its channel (`flowing`), so its room is none (`deficit_at`).
+pub fn index_now(w: &World, s: &crate::space::samples::Samples, k: usize) -> f64 {
+    if flowing(w, s, k) { f64::INFINITY } else { s.twi[k] }
 }

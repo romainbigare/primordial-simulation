@@ -53,20 +53,24 @@ pub fn deficit_at(ph: &Physics, m: Means, t: f64, c: f64) -> f64 {
 /// (`soil_level`), as a depth, m: the cell's, departed as its table does (`deficit_at`), within none and its pores
 /// full; full where it is saturated.
 pub fn soil_held(ph: &Physics, m: Means, t: f64, c: f64) -> f64 {
+    if t == f64::INFINITY {
+        return m.pores;
+    }
     if deficit_at(ph, m, t, c) <= 0.0 { m.pores } else { (m.pore + ph.soil_m * (t - c)).clamp(0.0, m.pores) }
 }
 
 /// The level of the wetness index about which the table of a cell of means `m` departs at points of index `twi` and
 /// shares of the area `area` (summing to 1), such that the mean by area of their room over it (`deficit_at`) is the
 /// cell's (found by halving): its liquid lies where it lies, only shared out. None where it is saturated all over or
-/// its room is the most there is (it lies evenly).
+/// its room is the most there is (it lies evenly), or every point is a channel. A channel's point, of infinite index
+/// (`flowing`), has no room.
 pub fn soil_level(ph: &Physics, twi: &[f64], area: &[f64], m: Means) -> Option<f64> {
     let [d, most] = m.deficit(ph);
-    if d <= 0.0 || d >= most || twi.is_empty() {
+    let (lo, hi) = twi.iter().filter(|t| t.is_finite()).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &t| (a.min(t), b.max(t)));
+    if d <= 0.0 || d >= most || lo > hi {
         return None;
     }
     let mean = |c: f64| twi.iter().map(|&t| deficit_at(ph, m, t, c)).zip(area).map(|(v, a)| v * a).sum::<f64>();
-    let (lo, hi) = twi.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &t| (a.min(t), b.max(t)));
     let (mut lo, mut hi) = (lo - most / ph.soil_m, hi + most / ph.soil_m);
     for _ in 0..HALVINGS {
         let mid = 0.5 * (lo + hi);
