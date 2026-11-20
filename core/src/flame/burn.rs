@@ -2,7 +2,7 @@
 //! what of its cover stands in the flame, and scorches what stands under the height its plume kills at; booked through
 //! the cell's view as the cover's books are (`life::book`), the heat freed to its air.
 
-use super::{Bed, FLAME_EXP, FLAME_K, KILLED, KILLED_WALLS, LIVING, PLANTS, REMAINS, RESIDENCE_PER_M, SCORCHED, SCORCH_EXP, SCORCH_K, W_PER_KW};
+use super::{Bed, FLAME_EXP, FLAME_K, KILLED, KILLED_WALLS, LIVING, PLANTS, REMAINS, SCORCHED, SMOULDERED, SCORCH_EXP, SCORCH_K, W_PER_KW};
 use crate::chem::{Chemistry, Phase};
 use crate::cover::{per_input, Books, Parts, BUDGET, BURNT, FUEL, MATTER, NP, WALL};
 use crate::life::{Chunk, FLAME};
@@ -22,9 +22,9 @@ pub struct Reach {
 /// `RESIDENCE_PER_M` × `fine_d`), its intensity is I = h w R (Byram 1959), its flame 0.0775 I^0.46 long (Byram 1959) and
 /// its plume kills leaves up to 0.1483 I^(2/3) (Van Wagner 1973), I in kW a m.
 pub fn reach(ph: &crate::Physics, bed: &Bed) -> Reach {
-    let depth = bed.load / ph.litter_rho;
-    let speed = ph.flux_ahead * bed.heat * depth / (RESIDENCE_PER_M * ph.fine_d * bed.light.max(f64::MIN_POSITIVE));
-    let kw = bed.heat * bed.load * speed / W_PER_KW;
+    let depth = bed.flames() / ph.litter_rho;
+    let speed = ph.flux_ahead * bed.heat * depth / (super::residence(ph) * bed.light.max(f64::MIN_POSITIVE));
+    let kw = bed.heat * bed.flames() * speed / W_PER_KW;
     Reach { speed, flame: FLAME_K * kw.powf(FLAME_EXP), scorch: SCORCH_K * kw.powf(SCORCH_EXP) }
 }
 
@@ -40,7 +40,23 @@ fn burn_up(chem: &Chemistry, b: &mut Books, (sub, m): (&[usize], &mut [f64]), k:
     x * n
 }
 
-/// Cell `i` of chunk `d` burns the share `f` of its land, its remains lying as `bed`: there all its remains burn; of
+/// What the burning gave of each mineral (`Chemistry::minerals`) breaks down in the flame as the chemistry breaks it
+/// down hot: each reaction that takes the mineral alone runs over the share 1 − e^(−k τ) of it, k its rate constant at
+/// the flaming bed's temperature (`t_burn`), τ the time the bed flames (`residence`). So the fixed element of what burns
+/// goes to the air as its gas where the flame is hot enough, and the rest lies as ash (Raison 1979: from 500 °C nearly
+/// all of it is lost).
+fn break_down(chem: &Chemistry, ph: &crate::Physics, b: &mut Books) {
+    for &(k, _) in chem.minerals() {
+        for rx in chem.reactions.iter().filter(|rx| rx.inputs.iter().all(|q| q.0 as usize == k)) {
+            let (given, n) = ((-b.ext[k]).max(0.0), per_input(rx, k).unwrap_or(1.0));
+            let share = 1.0 - (-rx.arrhenius(ph.t_burn) * super::residence(ph)).exp();
+            b.run(chem, &[], &mut [], rx, given * share / n);
+        }
+    }
+}
+
+/// Cell `i` of chunk `d` burns the share `f` of its land, its remains lying as `bed`: there the part of its remains dry
+/// enough to flame burns, and the part under it dry enough to smoulder after the flame (`Bed::flaming`, `smoulder`); of
 /// each slot of its cover the soft part of its crown (`contract::crown`, spread evenly over it) that stands in the
 /// flame burns, what stands between the flame and the scorch height dies to its remains, and a slot whose whole crown
 /// stands under the scorch height loses its plants there (a young plant must outgrow the flame between flames; Bond and
@@ -57,8 +73,9 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)
     let mut b = Books::new(air, [0.0; BUDGET.len()]);
     let mut flows = [0.0; super::FLOWS.len()];
     for q in [MATTER, WALL] {
-        let held = moves.amount(w, Node::ground(i), p.sub[q]).max(0.0);
-        flows[REMAINS] += burn_up(chem, &mut b, (&[], &mut []), p.sub[q], held * f) * mm[q];
+        let held = moves.amount(w, Node::ground(i), p.sub[q]).max(0.0) * f;
+        flows[REMAINS] += burn_up(chem, &mut b, (&[], &mut []), p.sub[q], held * bed.flaming) * mm[q];
+        flows[SMOULDERED] += burn_up(chem, &mut b, (&[], &mut []), p.sub[q], held * (bed.smoulder - bed.flaming)) * mm[q];
     }
     let before = c.content(&e);
     for (x, (base, top)) in crowns {
@@ -87,6 +104,7 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)
         flows[SCORCHED] += scorched * mm[MATTER];
         (0..NP).for_each(|q| (c.mol[x][q], b.dead[p.sub[q]]) = (c.mol[x][q] - dead[q], b.dead[p.sub[q]] + dead[q]));
     }
+    break_down(chem, &w.cfg.phys, &mut b);
     b.budget[BURNT] += c.content(&e) - before;
     counts.cover_lost[FLAME as usize] += flows[LIVING] + flows[SCORCHED] + flows[KILLED];
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, x)| *a += x);

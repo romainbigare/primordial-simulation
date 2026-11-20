@@ -16,6 +16,8 @@ const ALL_STRIKES: f64 = 1.0;
 /// How much warmer than the small world's month the test's ground is, K: a hot dry month, its air near the ground far
 /// from saturation.
 const WARMER: f64 = 15.0;
+/// The ground's liquid times this fills it past field capacity.
+const WETTER: f64 = 10.0;
 /// The share either side of the flux at which the remains' moisture is their moisture of extinction.
 const NEAR: f64 = 1e-3;
 
@@ -54,38 +56,37 @@ fn remains(w: &World, i: usize) -> [f64; 2] {
     [MATTER, WALL].map(|q| w.g(p.sub[q], i))
 }
 
-/// The same remains on ground at field capacity and on ground holding nothing for roots: the wet one does not burn; the
-/// dry one burns the share of them its remains cover, the burnt mass leaving by the burning reactions (the
-/// frame's gas to the air, the mineral of body matter to the ground, as ash), and every element and the energy are
-/// kept.
+/// The same remains on ground at field capacity and on ground holding nothing for roots: on the dry ground all of them
+/// burn, on the wet one only their top, down to where the liquid their bottom draws from the ground stops them
+/// smouldering; the burnt mass leaves by the burning reactions (the frame's gas to the air), and every element and the
+/// energy are kept.
 #[test]
-fn dry_remains_burn_and_wet_ones_do_not() {
+fn dry_remains_burn_through_and_wet_ones_only_at_their_top() {
     let (mut wet, i) = start();
     let p = Parts::of(&wet.chem).unwrap();
     let held = wet.g(p.liquid, i);
-    liquid_to(&mut wet, i, 10.0 * held);
+    liquid_to(&mut wet, i, WETTER * held);
     assert_eq!(pcore::cover::soak(&wet, &p, i, wet.g(p.liquid, i)).1.moist, 1.0, "the wet ground is at field capacity");
     let mut dry = wet.clone();
     liquid_to(&mut dry, i, 0.0);
-    assert!(!bed_of(&wet, i).carries() && bed_of(&dry, i).carries(), "wet {:?}, dry {:?}", bed_of(&wet, i), bed_of(&dry, i));
-    let before = remains(&wet, i);
-    flame::month(&mut wet);
-    assert_eq!(remains(&wet, i), before, "wet remains burn");
-    let (bed, books) = (bed_of(&dry, i), Books::now(&dry));
-    // The gas the frame's burning gives, and the mineral body matter's burning gives back.
+    // The gas the frame's burning gives.
     let burner = &dry.chem.reactions[dry.chem.burner(p.sub[WALL]).unwrap()];
     let gas = burner.outputs.iter().map(|o| o.0 as usize).find(|&k| dry.chem.phase(k, dry.t_ground(i)) == pcore::chem::Phase::Gas).unwrap();
-    let ash = dry.chem.minerals()[0].0;
     let air = |w: &World| (0..w.mesh.level(pcore::AIR).n()).map(|j| w.a(gas, j)).sum::<f64>() + w.store.amounts(Class::Aside).iter().skip(gas * w.mesh.cells().n()).take(w.mesh.cells().n()).sum::<f64>();
-    let (gas0, ash0) = (air(&dry), dry.g(ash, i));
-    flame::month(&mut dry);
-    // (What the flame killed of the cover lies on the ground after it: the remains it burnt are counted.)
     let mm = p.mm(&dry.chem);
-    let load: f64 = before.iter().zip([MATTER, WALL]).map(|(m, q)| m * mm[q]).sum();
-    let burnt = dry.counts.flame[flame::REMAINS] / load;
-    assert!((burnt - bed.cover).abs() < 1e-9, "burnt {burnt} of the remains, their cover {}", bed.cover);
-    assert!(air(&dry) > gas0 && dry.g(ash, i) > ash0, "the gas to the air, the ash to the ground");
-    books.assert_kept(&dry, 1e-9);
+    let load: f64 = remains(&dry, i).iter().zip([MATTER, WALL]).map(|(m, q)| m * mm[q]).sum();
+    let mut smouldered = vec![];
+    for w in [&mut wet, &mut dry] {
+        let (bed, books, gas0) = (bed_of(w, i), Books::now(w), air(w));
+        assert!(bed.carries(), "{bed:?}");
+        flame::month(w);
+        let burnt = (w.counts.flame[flame::REMAINS] + w.counts.flame[flame::SMOULDERED]) / load;
+        assert!((burnt - bed.cover * bed.smoulder).abs() < 1e-9, "burnt {burnt} of the remains, their cover {} and dry share {}", bed.cover, bed.smoulder);
+        assert!(air(w) > gas0, "the gas to the air");
+        books.assert_kept(w, 1e-9);
+        smouldered.push(bed.smoulder);
+    }
+    assert!(smouldered[0] < 1.0 && smouldered[1] == 1.0, "dry shares {smouldered:?}");
 }
 
 /// Remains whose moisture is just under their moisture of extinction burn, just over it do not: the flux a burning kg
@@ -104,6 +105,46 @@ fn remains_burn_just_under_their_moisture_of_extinction() {
         flame::month(&mut v);
         assert_eq!(remains(&v, i) != before, burns, "flux {} of {just}: moisture {} against {}", just * share, bed.moist, bed_of(&v, i).extinct);
     }
+}
+
+/// A bed just under its least load carries no flame and one just over it does: what it frees burning while it flames
+/// against what its top sends to the open sky at the flaming bed's temperature (`t_burn`).
+#[test]
+fn no_flame_below_the_least_load() {
+    let (mut w, i) = start();
+    liquid_to(&mut w, i, 0.0);
+    let (bed, p) = (bed_of(&w, i), Parts::of(&w.chem).unwrap());
+    assert!(bed.least > 0.0 && bed.least < bed.load, "{bed:?}");
+    for (share, burns) in [(1.0 - NEAR, false), (1.0 + NEAR, true)] {
+        let mut v = w.clone();
+        for q in [MATTER, WALL] {
+            testkit::set_amount(&mut v, Node::ground(i), p.sub[q], w.g(p.sub[q], i) * bed.least * share / bed.load);
+        }
+        assert!(bed_of(&v, i).cover > flame::CARRY_SHARE, "{:?}", bed_of(&v, i));
+        let before = remains(&v, i);
+        flame::month(&mut v);
+        assert_eq!(remains(&v, i) != before, burns, "a load of {} against {}", bed_of(&v, i).load, bed.least);
+    }
+}
+
+/// The mineral the burning of body matter gives breaks down in the flame by the chemistry's own reaction that takes it
+/// alone, over the share 1 − e^(−k τ) of it at the flaming bed's temperature: its fixed element goes to the air as the
+/// gas, the rest lies on the ground as ash. Here the flame's temperature is set so that half breaks down.
+#[test]
+fn the_fixed_element_goes_to_the_air_and_the_rest_to_the_ground() {
+    let (mut w, i) = start();
+    liquid_to(&mut w, i, 0.0);
+    let ash = w.chem.minerals()[0].0;
+    let rx = w.chem.reactions.iter().find(|rx| rx.inputs.iter().all(|q| q.0 as usize == ash)).expect("a breaking down").clone();
+    let (gas, made) = (rx.outputs[0].0 as usize, rx.outputs[0].1 as f64);
+    let tau = flame::residence(&w.cfg.phys);
+    w.cfg.phys.t_burn = rx.ea / (rx.k * tau / std::f64::consts::LN_2).ln();
+    let ash0 = w.g(ash, i);
+    flame::month(&mut w);
+    let to_air = w.counts.flame_air[gas] * rx.inputs[0].1 as f64 / made;
+    let to_ground = w.g(ash, i) - ash0;
+    let share = to_air / (to_air + to_ground);
+    assert!((share - 0.5).abs() < 1e-9, "{share} of the mineral broke down, {to_air} mol to the air, {to_ground} to the ground");
 }
 
 /// A slot whose crown stands under the scorch height loses the burnt share of its plants; a slot of one tall plant,

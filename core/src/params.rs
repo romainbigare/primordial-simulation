@@ -228,6 +228,12 @@ pub struct Physics {
     pub flux_ahead: f64,
     /// Temperature at which the remains lying light from a flame, K
     pub t_light: f64,
+    /// Temperature of a flaming bed of remains, K
+    pub t_burn: f64,
+    /// Liquid the bottom of the remains lying holds per kg dry where their ground holds all it holds for roots, kg
+    pub duff_hold: f64,
+    /// Most liquid per kg dry at which organic remains smoulder, kg
+    pub smoulder_moist: f64,
     /// Strikes that light dry joined remains, per m² of land a year
     pub strikes: f64,
     /// Width of the fine particles of the remains lying, m
@@ -365,6 +371,9 @@ impl Default for Physics {
             thin_exp: 2.0 / 3.0,
             flux_ahead: 0.05,
             t_light: 600.0,
+            t_burn: 1100.0,
+            duff_hold: 3.0,
+            smoulder_moist: 1.15,
             strikes: 5e-8,
             fine_d: 1.5e-3,
             front_life: 4.0 * DAY_S as f64,
@@ -422,6 +431,8 @@ impl Config {
         require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
         // A flame sends ahead a share of its heat, lights above any ground's temperature, from particles of some width.
         require(p.flux_ahead > 0.0 && p.flux_ahead <= 1.0, || format!("flux_ahead ({}) must be above 0 and at most 1", p.flux_ahead))?;
+        require(p.duff_hold >= 0.0 && p.smoulder_moist >= 0.0, || format!("duff_hold ({}) and smoulder_moist ({}) must not be below 0", p.duff_hold, p.smoulder_moist))?;
+        require(p.t_burn > p.t_light, || format!("t_burn ({}) must be above t_light ({})", p.t_burn, p.t_light))?;
         require(p.t_light > 0.0 && p.strikes >= 0.0 && p.fine_d > 0.0 && p.front_life >= 0.0, || format!("t_light ({}) and fine_d ({}) must be above 0, strikes ({}) and front_life ({}) not below", p.t_light, p.fine_d, p.strikes, p.front_life))?;
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
