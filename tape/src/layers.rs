@@ -285,7 +285,7 @@ pub const LAYERS: &[Layer] = &[
     l("filled", "1", "lin", 0.0, 1.0, |c, i| c.filled[i]),
     l("coarse", "1", "lin", 0.0, 1.0, |c, i| c.w.soil[i].texture.coarse),
     l("fine", "1", "lin", 0.0, 1.0, |c, i| c.w.soil[i].texture.fine),
-    l("organic", "1", "lin", 0.0, 0.02, |c, i| c.w.soil[i].texture.organic),
+    l("organic", "1", "log", 3e-4, 0.05, |c, i| c.w.soil[i].texture.organic),
     l("litter", "kg/m2", "log", 0.01, 30.0, |c, i| c.dead(i, |g| g.litter)),
     l("slow", "kg/m2", "log", 0.1, 10.0, |c, i| c.dead(i, |g| g.slow)),
     l("mineral_free", "kg/m2", "log", 1e-5, 0.1, |c, i| c.dead(i, |g| g.minerals[0])),
@@ -325,6 +325,12 @@ pub fn quantise(l: &Layer, v: f64) -> u8 {
         _ => 255.0 * (v - l.min) / (l.max - l.min),
     };
     b.round().clamp(0.0, 255.0) as u8
+}
+
+/// Where the value `v` stands on the scale of the layer named `name`, 0..1, as its byte over 255 (`quantise`).
+pub(crate) fn shown(name: &str, v: f64) -> f32 {
+    let l = LAYERS.iter().find(|l| l.name == name).expect("a layer of that name");
+    f32::from(quantise(l, v)) / 255.0
 }
 
 /// The cell each pixel of an `across` x `down` raster of `window` (column, row, width and height in squares) shows,

@@ -6,8 +6,9 @@
 
 // Of each sample (a texel each): the depth of its loose ground, m, the largest stone its channel moves, m, the slope of
 // its channel's reach (rise over run), and its channel's links (`links_of`); in a second plane under the first, the
-// reflectance of its bed's make; and in a third, its loose ground's shares of coarse and fine grain and how slowly it
-// passes liquid (`grain_at`; tape/src/ground/rock.rs).
+// reflectance of its bed's make; and in a third, its loose ground's shares of coarse and fine grain, how slowly it
+// passes liquid (`grain_at`) and the liquid it holds for roots as the layer `avail` shows it; and in a fourth, its
+// field capacity and wilting point as shares of its pores (tape/src/ground/rock.rs).
 @group(0) @binding(18) var rock_field: texture_2d<f32>;
 @group(0) @binding(19) var rock_sampler: sampler;
 
@@ -21,8 +22,9 @@ const PATCHY = 0.6; const PATCHY_M = 40.0; const PATCHY_OCTAVES = 4;
 // (relief.wgsl).
 const SMOOTH_LOOSE_M = 0.5;
 
-// The rock's planes (`rock_field`): the loose ground's and its channel's, the bed's make, the loose ground's grain.
-const LOOSE_PLANE = 0; const MAKE_PLANE = 1; const GRAIN_PLANE = 2; const ROCK_PLANES = 3.0;
+// The rock's planes (`rock_field`): the loose ground's and its channel's, the bed's make, the loose ground's grain, its
+// pores.
+const LOOSE_PLANE = 0; const MAKE_PLANE = 1; const GRAIN_PLANE = 2; const PORES_PLANE = 3; const ROCK_PLANES = 4.0;
 
 // Plane `plane` of the samples at `at`, m from the map's north-west corner: through the samples' centres as a
 // B-spline read texel by texel (draw.wgsl `b_spline`), so no sample's square shows.
@@ -58,12 +60,16 @@ fn rock_plane(uv: vec2f, plane: i32) -> vec2f {
 // fast.
 const GRAIN_PATCHY = 0.6; const GRAIN_PATCH_M = 60.0; const GRAIN_OCTAVES = 3;
 const GRAIN_WARP_M = 110.0; const GRAIN_WARP_SIZE_M = 260.0;
+// Plane `plane` of the samples' soil at `at` (`samples_at`), read up to `GRAIN_WARP_M` away.
+fn soil_samples_at(at: vec2f, plane: i32) -> vec4f {
+  let warp = vec2f(noise_turned(at / GRAIN_WARP_SIZE_M, 214), noise_turned(at / GRAIN_WARP_SIZE_M + 3.7, 215));
+  return samples_at(at + GRAIN_WARP_M * warp, plane);
+}
 // The loose ground's grain at `at`, seen at `e` m a pixel, as `Spot.grain` holds it with its organic matter `organic`
 // (the cells', which changes as the dead matter on the ground rots): the samples' (`samples_at`: the shares of coarse
 // and fine grain and how slowly it passes liquid), with its patches.
 fn grain_at(at: vec2f, e: f32, organic: f32) -> vec4f {
-  let warp = vec2f(noise_turned(at / GRAIN_WARP_SIZE_M, 214), noise_turned(at / GRAIN_WARP_SIZE_M + 3.7, 215));
-  let g = samples_at(at + GRAIN_WARP_M * warp, GRAIN_PLANE);
+  let g = soil_samples_at(at, GRAIN_PLANE);
   let n = GRAIN_PATCHY * ragged(at, e, GRAIN_PATCH_M, GRAIN_OCTAVES, 210);
   return vec4f(g.x * (1.0 + n), g.y * (1.0 - n), organic, g.z);
 }

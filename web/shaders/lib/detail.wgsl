@@ -2,18 +2,18 @@
 // rendered from 3D models as the map sees it (tex.wgsl `CARPETS_FROM`), each a layer of `detail_tex` with its
 // mips down to its mean, laid on the map at its real size and read as a change around the colour the world gives the
 // ground: the image over its mean. From afar the mips average the image to its mean, so the ground's colour there is
-// the world's alone; near, the same colour shows its leaves, stones, cracks, grass and sticks. Each image is laid
-// twice, blended by noise, so no repeat shows: a photograph the second time turned and `DETAIL_AGAIN` times as large,
-// a tile of cover (whose things stand up the screen) in patches each shifted by its own draw (`carpet`).
+// the world's alone; near, the same colour shows its leaves, stones, cracks, grass and sticks. No repeat shows: a
+// photograph is laid in hexagons, each turned and shifted by its own draw (`detail`), a tile of cover (whose things
+// stand up the screen) in patches each shifted by its own draw (`carpet`).
 
 // Of each photograph laid as detail (`detail`): its side in the world, m (web/textures/SOURCES.md), and its own stream
 // of noise.
-fn detail_m(t: i32) -> f32 { var m = array<f32, 11>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3); return m[t]; }
-fn detail_noise(t: i32) -> i32 { var k = array<i32, 11>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196); return k[t]; }
+fn detail_m(t: i32) -> f32 { var m = array<f32, 14>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35); return m[t]; }
+fn detail_noise(t: i32) -> i32 { var k = array<i32, 14>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199); return k[t]; }
 // The streams of noise of the tiles of cover: their patches' shifts and their seams' waves (`carpet`), each tile its own.
 const CARPET_SHIFTS = 108; const CARPET_WAVES = 110;
-// The turned laying is this many times as large; the two blend over noise `DETAIL_BLEND` times the image's size.
-const DETAIL_AGAIN = 2.7; const DETAIL_BLEND = 3.0;
+// A photograph's hexagons are `DETAIL_HEX` times its side across, and meet over `DETAIL_EDGE` of their weights.
+const DETAIL_HEX = 1.0; const DETAIL_EDGE = 0.12;
 const CARPET_PATCH = 1.7; const CARPET_SEAM = 0.02; const CARPET_WAVE = 0.06;
 // An image's own hue shows this much (the rest of its change is its lightness alone): the world gives the colour; a
 // tile of cover's more (`CARPET_HUE`), its green plants on brown ground.
@@ -60,15 +60,53 @@ fn carpet(c: i32, e: f32) -> vec3f {
   return change_of(t, a, b, height_mix(d, dot(a, LUMA) / mean, dot(b, LUMA) / mean), CARPET_HUE);
 }
 
-// The change photograph t gives the ground's colour at the pixel, at e m a pixel: 1 where it averages to its mean.
+// The change photograph t gives the ground's colour at the pixel, at e m a pixel: 1 where it averages to its mean. It
+// is laid in hexagons (`hexes`, Mikkelsen 2022), each turned by any angle and shifted by its own draw (a photograph
+// from above has no up), the hexagons about the pixel meeting by their heights (`hex_mix`): a stochastic tiling
+// (Heitz and Neyret 2018), so no repeat shows and the mean stays the photograph's.
 fn detail(t: i32, e: f32) -> vec3f {
   let s = detail_m(t);
-  let a = photo(t, lat_axes(s, vec2f(0.0)).f, vec2f(e / s, 0.0), vec2f(0.0, e / s));
-  let k = DETAIL_AGAIN * s;
-  let r = mat2x2f(cos(TURN_A), sin(TURN_A), -sin(TURN_A), cos(TURN_A));
-  let b = photo(t, lat_turned(k, vec2f(0.37)).f, r * vec2f(e / k, 0.0), r * vec2f(0.0, e / k));
-  let w = smoothstep(-EVEN_ONE, EVEN_ONE, noise_l(lat_turned(DETAIL_BLEND * s, vec2f(0.61)), detail_noise(t)).x);
-  return change_of(t, a, b, w, DETAIL_HUE);
+  var h = hexes(DETAIL_HEX * s, DETAIL_EDGE);
+  let least = hex_least(h);
+  let mean = max(dot(photo_mean(t), LUMA), 1e-3);
+  var c = array<vec3f, 3>(vec3f(1.0), vec3f(1.0), vec3f(1.0));
+  for (var k = 0; k < 3; k++) {
+    if (h.w[k] < least) { continue; }
+    let x = lowbias(h.at[k], detail_noise(t));
+    let turn = 2.0 * PI * f32(x & 1023u) / 1024.0;
+    let r = mat2x2f(cos(turn), sin(turn), -sin(turn), cos(turn));
+    let shift = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
+    c[k] = photo(t, lat(r * (1.0 / s), shift).f, r * vec2f(e / s, 0.0), r * vec2f(0.0, e / s)) / mean;
+  }
+  let ratio = hex_mix(h, c[0], c[1], c[2]) * mean / max(photo_mean(t), vec3f(1e-3));
+  return mix(vec3f(dot(ratio, LUMA)), ratio, DETAIL_HUE);
+}
+
+// The hexagons about the pixel (Mikkelsen 2022, hex-tiling): over a lattice of equal-sided triangles whose hexagons
+// are `m` m across, the three corners of the pixel's triangle (`at`) and the pixel's weight in each over `edge`
+// (`w`: the corner whose weight is largest by `CLAIMS_WITHIN` alone claims it).
+struct Hexes { at: array<vec2i, 3>, w: vec3f }
+fn hexes(m: f32, edge: f32) -> Hexes {
+  // The triangle lattice: the plane skewed so its triangles are equal-sided, 2 sqrt 3 cells a hexagon's side.
+  let skew = mat2x2f(1.0, 0.0, -0.57735027, 1.15470054) * (2.0 * 1.7320508 / m);
+  let l = lat(skew, vec2f(0.0));
+  let z = 1.0 - l.f.x - l.f.y;
+  let up = select(0, 1, z < 0.0);
+  let sg = 2.0 * f32(up) - 1.0;
+  let w = vec3f(-z * sg, f32(up) - l.f.y * sg, f32(up) - l.f.x * sg) / edge;
+  return Hexes(array<vec2i, 3>(l.i + vec2i(up, up), l.i + vec2i(up, 1 - up), l.i + vec2i(1 - up, up)), w);
+}
+// The least weight of a corner of `h` that claims the pixel.
+fn hex_least(h: Hexes) -> f32 { return max(h.w.x, max(h.w.y, h.w.z)) - CLAIMS_WITHIN; }
+// The changes `a`, `b` and `c` of the corners of `h` met by their heights (ragged.wgsl `claim`), so a pixel shows one
+// image's grains, not the mean of three.
+fn hex_mix(h: Hexes, a: vec3f, b: vec3f, c: vec3f) -> vec3f {
+  let least = hex_least(h);
+  let claims = vec3f(select(-1e6, claim(h.w.x, height_of(a)), h.w.x >= least), select(-1e6, claim(h.w.y, height_of(b)), h.w.y >= least),
+    select(-1e6, claim(h.w.z, height_of(c)), h.w.z >= least));
+  let top = max(claims.x, max(claims.y, claims.z));
+  let k = vec3f(claim_weight(claims.x, top), claim_weight(claims.y, top), claim_weight(claims.z, top));
+  return (k.x * a + k.y * b + k.z * c) / (k.x + k.y + k.z);
 }
 
 // Soil's images lie in patches about `SOIL_IMAGE_M` m across, each on a noise of its own (streams from `SOIL_NOISE`), and
@@ -81,14 +119,17 @@ const TAKES_ALL = 0.999;
 fn height_of(c: vec3f) -> f32 { return dot(c, LUMA); }
 
 // The change soil's image i gives (`soil_detail`) to spot p: the tiles of cover of leaf litter, of a shaded floor of
-// ferns, of dry stony soil and of cracked dry mud, the photograph of wet mud; and a shore's: its bare sand
-// (`beach_sand`), the tile of sand with its dry tufts and drift, the photographs of rounded pebbles and of dark wet mud.
-const SOIL_MUD = 4; const SOIL_BEACH = 5; const SOIL_IMAGES = 9;
+// ferns, of dry stony soil and of cracked dry mud, the photograph of wet mud; a shore's: its bare sand
+// (`beach_sand`), the tile of sand with its dry tufts and drift, the photographs of rounded pebbles and of dark wet mud
+// (peat's too); and the photographs of bare loam, of cracked clay, of dark soil rich in humus and of damp sand.
+const SOIL_MUD = 4; const SOIL_BEACH = 5; const SOIL_IMAGES = 13;
 fn soil_image(i: i32, p: Spot, wet: f32) -> vec3f {
   if (i == SOIL_MUD) { return detail(MUD_TEX, p.e); }
   if (i == SOIL_BEACH) { return beach_sand(p, wet); }
-  if (i == 7) { return detail(ROUND_PEBBLE_TEX, p.e); }
-  if (i == 8) { return detail(DARK_MUD_TEX, p.e); }
+  if (i >= 7) {
+    var t = array<i32, 6>(ROUND_PEBBLE_TEX, DARK_MUD_TEX, LOAM_TEX, CLAY_TEX, HUMUS_TEX, WET_SAND_TEX);
+    return detail(t[i - 7], p.e);
+  }
   var c = array<i32, 7>(LITTER_CARPET, FERN_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, -1, SAND_CARPET);
   return carpet(c[i], p.e);
 }
@@ -105,33 +146,44 @@ fn beach_sand(p: Spot, wet: f32) -> vec3f {
   return mix(a, b, height_mix(d, height_of(a), height_of(b)));
 }
 
-// Dry open ground of coarse grain is drifted sand with its tufts (the tile of a shore's sand above the swash): over the
-// share of its dry part its coarse grain is past `DRIFT_COARSE` (all of it from `DRIFT_COARSE_FULL`): wind moves bare
-// sand, not a loam that holds together (Bagnold 1941).
-const DRIFT_COARSE = 0.45; const DRIFT_COARSE_FULL = 0.8;
-// The change the images give soil of spot p: under crowns its litter (a floor of ferns where wet), in the open dry
-// stony soil, drifted sand where its grain is coarse, cracked where driest as far as its grain shrinks (crag.wgsl
-// `shrinks`), wet mud where wet; on a shore its sand, pebbles or mud (colour.wgsl `shore_grain`), the sand bare up to
-// the storms' swash and with its tufts and drift above; and channels' pebbles where they lie.
+// Open ground of coarse grain is sand (the grain's share from `DRIFT_COARSE`, all of it from `DRIFT_COARSE_FULL`): where
+// dry, drifted with its tufts (the tile of a shore's sand above the swash; wind moves bare sand, not a loam that holds
+// together, Bagnold 1941), else damp. Ground soaked from `MUD_WET` (all of it from `MUD_WET_FULL`) is mud, but sand.
+const DRIFT_COARSE = 0.45; const DRIFT_COARSE_FULL = 0.8; const MUD_WET = 0.8; const MUD_WET_FULL = 0.95;
+// Cracked ground is the photograph of cracked clay as far as its fine grain's share passes `CLAY_PLATES` (all of it
+// from `CLAY_PLATES_FULL`), else the tile of cracked mud with its stones.
+const CLAY_PLATES = 0.25; const CLAY_PLATES_FULL = 0.5;
+// The change the images give soil of spot p: under crowns its litter (a floor of ferns where wet); in the open peat
+// (colour.wgsl `peat_of`) dark wet mud, wet mud where soaked, sand where its grain is coarse, dark humus as far as its
+// organic matter darkens it (style.wgsl `humus`), cracked where driest as far as its grain shrinks (crag.wgsl
+// `shrinks`), the rest stony soil and loam by their coarse grain; on a shore its sand, pebbles or mud (colour.wgsl
+// `shore_grain`), the sand bare up to the storms' swash and with its tufts and drift above; and channels' pebbles
+// where they lie.
 fn soil_detail(p: Spot) -> vec3f {
   let canopy = min(p.canopy, 1.0);
   let dry = ease(0.45, 0.1, p.wet);
-  let drift = ease(DRIFT_COARSE, DRIFT_COARSE_FULL, p.grain.x);
-  let cracked = ease(0.25, 0.05, p.wet) * shrinks(p.grain) * (1.0 - drift);
+  let sandy = ease(DRIFT_COARSE, DRIFT_COARSE_FULL, p.grain.x);
+  let cracked = ease(0.25, 0.05, p.wet) * shrinks(p.grain) * (1.0 - sandy);
+  let peat = peat_of(p);
   let open = 1.0 - canopy;
-  var w = array<f32, SOIL_IMAGES>(canopy * (1.0 - p.wet), canopy * p.wet, open * dry * (1.0 - cracked) * (1.0 - drift), open * cracked, open * (1.0 - dry), 0.0, open * dry * (1.0 - cracked) * drift, 0.0, 0.0);
+  let mud = open * (1.0 - peat) * ease(MUD_WET, MUD_WET_FULL, p.wet) * (1.0 - sandy);
+  let soil = open * (1.0 - peat) - mud;
+  let loam = soil * (1.0 - sandy) * (1.0 - humus(p.grain.z));
+  let clay = ease(CLAY_PLATES, CLAY_PLATES_FULL, p.grain.y);
+  var w = array<f32, SOIL_IMAGES>(canopy * (1.0 - p.wet), canopy * p.wet, loam * (1.0 - cracked) * p.grain.x,
+    loam * cracked * (1.0 - clay), mud, 0.0, soil * sandy * dry, 0.0, open * peat, loam * (1.0 - cracked) * (1.0 - p.grain.x),
+    loam * cracked * clay, soil * (1.0 - sandy) * humus(p.grain.z), soil * sandy * (1.0 - dry));
   let sand = max(p.sand, 0.0);
   var wet = 0.0;
   if (sand > 0.0) {
-    for (var i = 0; i < 5; i++) { w[i] *= 1.0 - sand; }
+    for (var i = 0; i < SOIL_IMAGES; i++) { w[i] *= 1.0 - sand; }
     let grain = shore_grain(p);
     let fine = sand * (1.0 - grain.x - grain.y);
     let bare = 1.0 - ease(0.0, STORM_RUN_UP * run_up(waves_of(p.sea, p.fetch), p.slope / earth.look.x), p.over);
-    w[6] *= 1.0 - sand;
     w[SOIL_BEACH] = fine * bare;
     w[6] += fine * (1.0 - bare);
     w[7] = sand * grain.x;
-    w[8] = sand * grain.y;
+    w[8] += sand * grain.y;
     wet = grain.z;
   }
   var left = 0.0;
@@ -141,7 +193,8 @@ fn soil_detail(p: Spot) -> vec3f {
   // its weight is of what is left, where its own noise falls under that share. So each holds its share of the ground
   // on the mean, and a small share is a few small patches of its own, not a thin band between two others. `d`: how far
   // inside its part each lies, in half widths of the edge; from `last` on, one covers all.
-  var d = array<f32, SOIL_IMAGES>(-CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN, -CLAIMS_WITHIN);
+  var d: array<f32, SOIL_IMAGES>;
+  for (var i = 0; i < SOIL_IMAGES; i++) { d[i] = -CLAIMS_WITHIN; }
   var last = SOIL_IMAGES - 1;
   for (var i = 0; i < SOIL_IMAGES; i++) {
     if (w[i] <= 0.0) { continue; }
@@ -188,7 +241,7 @@ fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
   return out * (1.0 + DRIFT_TONE * d) * (1.0 + DRIFT_HUE * h);
 }
 
-// The grass's tiles laid in hexagons (Mikkelsen 2022, hex-tiling): over a lattice of triangles `HEX_M` m across, each
+// The grass's tiles laid in hexagons (`hexes`) `HEX_M` m across, each
 // corner a hexagon holding one of the three tiles (by its own draw against `n`, 0..1 from turf to tussocks: kinds mix
 // at their edges hexagon by hexagon), or reeds in `reeds` of them, shifted and mirrored by its own draw; the three
 // corners of a pixel's triangle meet by their heights (ragged.wgsl `claim`) over `HEX_EDGE` of its weights either way
@@ -196,23 +249,14 @@ fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
 // Dry tiles where `dry`. The change it gives a colour, about 1.
 const HEX_M = 1.6; const HEX_EDGE = 0.08; const HEX_MIX = 0.25; const GRASS_DETAIL_M = 0.25;
 fn grass_hexes(e: f32, n: f32, dry: bool, reeds: f32) -> vec3f {
-  // The triangle lattice: the plane skewed so its triangles are equal-sided, 2 sqrt 3 cells a hexagon's side.
-  let skew = mat2x2f(1.0, 0.0, -0.57735027, 1.15470054) * (2.0 * 1.7320508 / HEX_M);
-  let l = lat(skew, vec2f(0.0));
-  let z = 1.0 - l.f.x - l.f.y;
-  let up = select(0, 1, z < 0.0);
-  let sg = 2.0 * f32(up) - 1.0;
-  let w = vec3f(-z * sg, f32(up) - l.f.y * sg, f32(up) - l.f.x * sg) / HEX_EDGE;
-  // Each corner near enough the nearest to claim the pixel (the others none): its tile's change and its claim.
-  let least = max(w.x, max(w.y, w.z)) - CLAIMS_WITHIN;
-  var a = vec3f(1.0); var b = vec3f(1.0); var c = vec3f(1.0);
-  var claims = vec3f(-1e6);
-  if (w.x >= least) { a = hex_tile(l.i + vec2i(up, up), e, n, dry, reeds); claims.x = claim(w.x, height_of(a)); }
-  if (w.y >= least) { b = hex_tile(l.i + vec2i(up, 1 - up), e, n, dry, reeds); claims.y = claim(w.y, height_of(b)); }
-  if (w.z >= least) { c = hex_tile(l.i + vec2i(1 - up, up), e, n, dry, reeds); claims.z = claim(w.z, height_of(c)); }
-  let top = max(claims.x, max(claims.y, claims.z));
-  let k = vec3f(claim_weight(claims.x, top), claim_weight(claims.y, top), claim_weight(claims.z, top));
-  let out = (k.x * a + k.y * b + k.z * c) / (k.x + k.y + k.z);
+  var h = hexes(HEX_M, HEX_EDGE);
+  // Each corner near enough the nearest to claim the pixel (the others none): its tile's change.
+  let least = hex_least(h);
+  var c = array<vec3f, 3>(vec3f(1.0), vec3f(1.0), vec3f(1.0));
+  for (var k = 0; k < 3; k++) {
+    if (h.w[k] >= least) { c[k] = hex_tile(h.at[k], e, n, dry, reeds); }
+  }
+  let out = hex_mix(h, c[0], c[1], c[2]);
   return mix(vec3f(dot(out, LUMA)), out, CARPET_HUE);
 }
 
