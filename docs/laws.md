@@ -1519,7 +1519,10 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   The settled share of the loose ground holds that grain, the rest the weathered bed's.
 
 A cell's texture (`World::soil`, found when the world is built) is its samples' mean weighted by the loose ground each
-gives its ground node (at most `skin_m` of it; by area where it holds none).
+gives its ground node (at most `skin_m` of it; by area where it holds none). In the running world the load that settles on a cell
+(1.3) mixes into it by volume over its loose ground up to `skin_m` deep, each class as it settled (`runoff::load::mix`);
+the load is picked up as the ground lies, so what it leaves keeps its texture. Its pores are found again at the next
+month's start where the texture moved its field capacity by more than 2% (`TEXTURE_STEP`, `soil::month`).
 
 **Organic matter** (`soil::month`, at each month's start): a cell's organic share is the share of the volume of its
 ground node's solids that stay solid at the surface (not its frozen liquid) that is of the substances life's parts are

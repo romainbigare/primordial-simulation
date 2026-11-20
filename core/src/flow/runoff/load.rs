@@ -121,12 +121,14 @@ fn shares(w: &World, s: &Samples, k: usize) -> Shares {
 /// What the load did in a month: the moves of the bed into loose ground (`wear`); of each cell what its main channel
 /// carried, g per m³ of its liquid, and the depth that settled on it, m; the plumes: each sample where a way entered a
 /// body, with the load that came in there, kg/s; and the volumes, m³, picked up, carried into the open low ground and
-/// into the other bodies, settled on land, and of the bed worn into loose ground (`Counters::load`).
+/// into the other bodies, settled on land, and of the bed worn into loose ground (`Counters::load`); and of each cell the
+/// volume of each class that settled on it, m³ (`mix`).
 pub(super) struct Carried {
     pub(super) broke: Vec<Move>,
     pub(super) loads: Vec<[f32; 2]>,
     pub(super) plumes: Vec<(u32, f32)>,
     pub(super) volumes: [f64; 5],
+    pub(super) settled: Vec<[f64; CLASSES]>,
 }
 
 /// The moves of the month between pairs of cells (mol of each solid substance, then the heat), summed in the order each
@@ -242,7 +244,22 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     }
     let area = w.mesh.cells().area();
     loads.iter_mut().zip(&settled).zip(area).for_each(|((l, v), a)| l[1] = (v.iter().sum::<f64>() / a) as f32);
-    Carried { broke, loads, plumes, volumes }
+    Carried { broke, loads, plumes, volumes, settled }
+}
+
+/// What settled on each cell, `settled` (m³ of each class, `Carried`), mixes into its texture by volume over its loose
+/// ground (the solids `sol`) up to `skin_m` deep, as the texture of a cell is found (`soil::of_world`): the load booked,
+/// what it held before is what it holds less what settled. Its pores are found again at the month's start where they
+/// moved (`soil::month`).
+pub(super) fn mix(w: &mut World, s: &Scratch, settled: &[[f64; CLASSES]], sol: &[usize]) {
+    let area = w.mesh.cells().area();
+    for (i, v) in settled.iter().enumerate().filter(|(_, v)| v.iter().sum::<f64>() > 0.0) {
+        let came: f64 = v.iter().sum();
+        let loose: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
+        let held = (loose - came).clamp(0.0, w.cfg.skin_m * area[i]);
+        let t = &mut w.soil[i].texture;
+        (t.fine, t.coarse) = ((t.fine * held + v[0]) / (held + came), (t.coarse * held + v[2]) / (held + came));
+    }
 }
 
 /// What of a pool leaves a key sample of shares `sh`, m³ of each class: of what came in from the key samples above,

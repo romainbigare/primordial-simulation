@@ -89,11 +89,12 @@ pub fn of_world(w: &World) -> Vec<Soil> {
     })
 }
 
-/// Each cell's organic share anew from what its ground holds now (`solids`), and its pores where the share moved
-/// (`flow::new_pores`, which books the potential energy of the liquid they hold): the dead matter its cover leaves on
-/// its ground, which rots there as the open world's reactions rot it (laws.md 2.1), so ground under a dense cover grows
-/// richer in organic matter and holds more liquid, and bare ground loses it (found again where it moved by more than
-/// `ORGANIC_STEP`); and its exchange sites (`exchange::holds`).
+/// Each cell's organic share anew from what its ground holds now (`solids`), and its pores where the share or its
+/// texture moved (`flow::new_pores`, which books the potential energy of the liquid they hold): the dead matter its
+/// cover leaves on its ground, which rots there as the open world's reactions rot it (laws.md 2.1), so ground under a
+/// dense cover grows richer in organic matter and holds more liquid, and bare ground loses it (found again where it
+/// moved by more than `ORGANIC_STEP`); the load that settles on it mixes into its texture (`flow::runoff`; found again
+/// where its field capacity moved by more than `TEXTURE_STEP`); and its exchange sites (`exchange::holds`).
 /// Once a month, at its start.
 pub fn month(w: &mut World) {
     let Some(parts) = crate::life::Parts::of(&w.chem) else { return };
@@ -105,9 +106,13 @@ pub fn month(w: &mut World) {
 /// what it was when they were last found: its pores move by less than a twentieth of what the organic share moves
 /// them over a loam's (a speed tolerance).
 const ORGANIC_STEP: f64 = 0.05;
+/// A cell's pores are found again once its texture has moved its field capacity by more than this share of what it
+/// was when they were last found (a speed tolerance: the liquid its ground holds moves by less).
+const TEXTURE_STEP: f64 = 0.02;
 
 /// Each cell's exchange sites anew (`solids`, of the substances `organics`), and its organic share and pores where the
-/// share has moved by more than `ORGANIC_STEP`. Returns the cells whose pores changed.
+/// share has moved by more than `ORGANIC_STEP` or its texture its field capacity by more than `TEXTURE_STEP`. Returns
+/// the cells whose pores changed.
 fn organic_pores(w: &mut World, organics: &[usize]) -> Vec<u32> {
     let mut moved = Vec::new();
     for i in 0..w.mesh.cells().n() {
@@ -115,7 +120,9 @@ fn organic_pores(w: &mut World, organics: &[usize]) -> Vec<u32> {
         let share = if all > 0.0 { organic / all } else { 0.0 };
         let soil = &mut w.soil[i];
         soil.holds = exchange::holds(all - organic, soil.texture.fine, organic);
-        if (share - soil.texture.organic).abs() > ORGANIC_STEP * soil.texture.organic || (share == 0.0) != (soil.texture.organic == 0.0) {
+        let organic = (share - soil.texture.organic).abs() > ORGANIC_STEP * soil.texture.organic || (share == 0.0) != (soil.texture.organic == 0.0);
+        let texture = (Pores::of(&soil.texture).field - soil.pores.field).abs() > TEXTURE_STEP * soil.pores.field;
+        if organic || texture {
             soil.texture.organic = share;
             soil.pores = Pores::of(&soil.texture);
             moved.push(i as u32);
