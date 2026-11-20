@@ -190,7 +190,7 @@ fn shelf(g: &Grid, h: &[f64], open: &[bool], (load, wide): (&[f64], f64), (tops,
             continue;
         }
         top_at[k] = tops[from];
-        since[k] = (v / (wide * load[from])).clamp(0.0, 1.0);
+        since[k] = if wide > 0.0 { (v / (wide * load[from])).clamp(0.0, 1.0) } else { 0.0 };
         let at = tops[from] - FORESET * (-v).max(0.0);
         if at > h[k] {
             out.push((k, at - h[k]));

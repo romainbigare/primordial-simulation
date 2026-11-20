@@ -287,7 +287,7 @@ fn the_steepest_way_down_a_tilted_surface_is_its_slope_on_any_cells() {
 
 /// The wear and the high stand at the world's start keep what they move (`Samples::books`): what they take off the land
 /// lies in the closed basins and on the shelves of the open low ground (none leaves this island's map), to a part in
-/// 1e9; the loose ground they leave is nowhere less than none.
+/// 1e9; the loose ground they leave is nowhere less than none, and every height and age is finite.
 #[test]
 fn the_wear_keeps_what_it_moves() {
     let w = worldgen::testkit::small_world();
@@ -297,6 +297,7 @@ fn the_wear_keeps_what_it_moves() {
     assert!(b.taken > 0.0 && b.settled > 0.0 && b.shelf > 0.0, "{b:?}");
     assert!(((b.settled + b.shelf + b.high + b.beyond) / b.taken - 1.0).abs() < 1e-9 && b.beyond.abs() < 1e-9 * b.taken, "{b:?}");
     assert!(s.loose.iter().all(|&d| d >= 0.0), "loose ground under none");
+    assert!(s.age.iter().chain(&s.h).all(|x| x.is_finite()), "a height or an age not finite");
 }
 
 /// An island of drawn rises (`space::rises`): its land stays off the map's edges, so the open low ground runs along every
