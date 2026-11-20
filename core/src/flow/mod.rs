@@ -205,6 +205,16 @@ pub(crate) fn dissolved(w: &World, i: usize) -> f64 {
     w.scratch.state.dissolved[i]
 }
 
+/// The liquid share of substance `k` in ground node `i` at `t` K with its `plateau` (`World::molten`), as Flow counts
+/// it (`Sp::liquid`: of a mineral of growth only what its exchange sites leave dissolved); none before Flow first built
+/// the state of its ground (`potential::stated`).
+pub fn liquid_share(w: &World, k: usize, i: usize, t: f64, plateau: Option<(usize, f64)>) -> f64 {
+    if !potential::stated(w) {
+        return 0.0;
+    }
+    potential::scratch_of(w).sp[k].liquid(t, w.molten(k, i, t, plateau), dissolved(w, i))
+}
+
 /// Is cell `i` land (its solid surface above 0 m, as Flow's state has it)? Creep and heat conducted sideways act only on
 /// land: below 0 m they are far slower than the step.
 fn on_land(s: &Scratch, i: usize) -> bool {
