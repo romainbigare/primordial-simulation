@@ -526,13 +526,25 @@ times the fall to the sample it runs to (the samples' heights, which the run's e
 loam's (`Texture::erodibility`: M^1.14 (12 − OM) of Wischmeier and Smith 1978, M its middle share times its share
 that is not fine, OM its organic per cent read to 4; middle particles are carried most easily, coarse ones are heavy,
 fine ones and organic matter bind; a coarse or a fine ground carries a tenth to a third of a loam's, one of middle
-particles up to four times) (at most all that lies loose), which go with the
-cell's runoff to the cells its ways land in, where they settle, and with the work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
-bed per J over its strength into loose ground. The load is booked apart from the liquid (`runoff::Crossings`), each
-with its own heat. **Known limit:** the load goes straight from the cell to the cells its ways land in, as the liquid
-does (1.2): it is not checked against what the channel can carry at each sample on its way, so it does not settle
-where the channel slows (where a sample's fall is less than the one before it, on a plain, at a body's shore), and
-the cells it passes neither gain nor lose by it. The heat of the liquid's fall lands with the liquid, not along its
+particles up to four times) (at most all that lies loose), shared to its samples by their own work, and with the
+work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears**
+`wear` m³ of bed per J over its strength into loose ground. **The load settles on its way** (`runoff::load`), in the
+three particle classes of the texture (4), each as the cell it came from holds them: each month it goes down the samples'
+ways and is followed at the key samples, where some class settles, at each land cell's main channel and where the
+ways end. Over the run L from a sample to the next, under the shear velocity u* of the flood (`FLOOD_RUNOFF` from the
+area that drains through it, in a channel as deep and wide as the terrain's laws make it; `soil::flood_shear`), the
+share φ of a class's log-sizes that sink faster than u* (`texture::settles`, Bagnold 1966; particles as heavy as the
+sample's bed's) settles at the sinking speed
+V of their mean log-size over the length ξ = q / V, q the flood's discharge a m of width (the ξ-q model, Davy and
+Lague 2009); the rest passes: of what comes in, P = 1 − φ (1 − e^(−L/ξ)) passes, and of what is picked up on the way,
+R = 1 − φ + φ (ξ/L)(1 − e^(−L/ξ)) (`soil::passes`; a sample where each class passes to within 1e-4 is no key). What
+reaches a body, or a sample whose liquid runs to none, settles in the cell that holds it. The form is tuned: the
+shares are fixed by the flood, not by the month's flow. The load is booked apart from the liquid
+(`runoff::Crossings`), each with its own heat: each key sample's pool (mol of each substance and the heat) leaves by
+the share of its volume that passes, so in a pool the substances and the particle classes are independent. **Known
+limit:** a fixed share per class ignores that a class loses its coarse end as it goes, so far down a plain the coarse
+class settles a little faster than it would; the heights do not move by what settles (it is matter of the cell, its
+surface rises evenly). The heat of the liquid's fall lands with the liquid, not along its
 way. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). What stands on a cell holds the ground: carrying and creep
