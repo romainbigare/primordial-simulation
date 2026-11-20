@@ -199,14 +199,12 @@ fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
 /// air's step, which melts more of it, and after the liquid's step, whose meltwater runs off down the slope and leaves
 /// the ice (laws.md 1.2): what the world reads as molten and standing is what the heat holds, within the share the heat
 /// of the lifts and falls of the matter booked after moves (its meltwater falls at most from the snow's top to its bed's
-/// top or its lowest ground, the lower: g × molar mass × that fall / fusion enthalpy), and none stands there. The runoff
-/// picks up no load here: what it picks up thins the loose ground after the liquid has run off, and the pores it took
-/// leave their liquid standing until the next pass (laws.md 1.3).
+/// top or its lowest ground, the lower: g × molar mass × that fall / fusion enthalpy), and what stands there is at most
+/// what filled the pores of the loose ground its runoff picked up (they leave after the liquid's pass, laws.md 1.3).
 #[test]
 fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
     const SNOW_M: f64 = 2.0;
     let (mut w, (i, _)) = worldgen::testkit::island_with(3, pair);
-    w.cfg.carry = 0.0;
     worldgen::testkit::flatten(&mut w, i);
     let snow = SNOW_M * w.mesh.cells().area()[i] / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, snow);
@@ -222,10 +220,17 @@ fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
     pcore::flow::air(&mut w, DT);
     let (read, held) = molten(&w);
     assert!((read - held).abs() < share, "after the air's step: molten share {read} read, {held} held (within {share})");
+    // The depth of the cell's loose ground of the substances still solid where the liquid boils (no gas, no frozen
+    // liquid), m.
+    let n = w.mesh.cells().n();
+    let loose = |w: &World| (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > w.chem.subs[LIQUID].boil).map(|k| w.store.amounts(Class::Ground)[k * n + i] * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>() / w.mesh.cells().area()[i];
+    let before = loose(&w);
     pcore::flow::liquid(&mut w, LIQUID_STEP);
     books.assert_within(&w, 1e-9, 1e-9);
     let ((read, held), stands) = (molten(&w), pcore::flow::means(&w, &[i]).unwrap()[0].stands);
-    assert!((read - held).abs() < share && stands < 1e-9, "molten share {read} read, {held} held (within {share}); {stands} m stands");
+    // What it picked up: what it lost, and what settled on it from above (`Counters::load_month`).
+    let picked_pores = w.pores(i).porosity * (before - loose(&w) + f64::from(w.counts.load_month[i][1])).max(0.0);
+    assert!((read - held).abs() < share && stands < 1e-9 + picked_pores, "molten share {read} read, {held} held (within {share}); {stands} m stands, the pores picked up {picked_pores} m");
 }
 
 /// A warmer air node gives its heat to its neighbours.

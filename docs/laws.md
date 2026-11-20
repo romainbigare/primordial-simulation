@@ -545,8 +545,10 @@ than 1e-10 of it, measured). What reaches a body, or a sample whose liquid runs 
 holds it. The form is tuned: the
 shares are fixed by the flood, not by the month's flow. The load is booked apart from the liquid
 (`runoff::Crossings`), each with its own heat: each key sample's pool (mol of each substance and the heat) leaves by
-the share of its volume that passes, so in a pool the substances and the particle classes are independent. **Known
-limit:** a fixed share per class ignores that a class loses its coarse end as it goes, so far down a plain the coarse
+the share of its volume that passes, so in a pool the substances and the particle classes are independent. The load is the loose ground's solids, never the liquids' (a frozen liquid is no load). **Known
+limits:** the load is booked after the liquid's pass, so the liquid in the pores of the ground it picks up stays in
+its cell and stands over its pores until the next pass; snow or ice on a cell does not shield its ground (the meltwater
+of a snowpack picks up the ground under it); a fixed share per class ignores that a class loses its coarse end as it goes, so far down a plain the coarse
 class settles a little faster than it would; the heights do not move by what settles (it is matter of the cell, its
 surface rises evenly). The heat of the liquid's fall lands with the liquid, not along its
 way. **Creep** (`flow::creep`, yearly, out of land cells):

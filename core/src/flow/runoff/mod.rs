@@ -104,8 +104,8 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
         (w.counts.edge_liquid[0], w.counts.edge_liquid[1]) = (w.counts.edge_liquid[0] + came, w.counts.edge_liquid[1] + heat);
     }
     // What the liquid carries is booked apart from the liquid, so the heat of each lands with its own matter in a cell
-    // of parts (`parts::to_liquid`).
-    let sol = s.solids(tmin);
+    // of parts (`parts::to_liquid`): the loose ground's solids, not the liquids' (frozen liquid is no load).
+    let sol: Vec<usize> = s.solids(tmin).into_iter().filter(|k| !liq.contains(k)).collect();
     let mut load = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: sol.len() + 1, class: [Class::Ground; 2] };
     let carried = load::carry(w, s, &b, (&flux, &sol), &mut load, dt);
     book_all(w, s, &sol, &[&load]);
