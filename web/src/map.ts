@@ -422,7 +422,8 @@ export class MapView {
    * the fires burning in view, each over the squares it reaches, once its program is made; none in a layer's view. */
   private drawFire(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
     if (!this.fire || this.look.mode === 'layer') return;
-    this.drawOver(gpu, p, 'snags', this.fire.snags, target, xs, k, d, size, waiting);
+    // The dead trees stand with the plants, drawn in the Earth view alone (vegetation.ts).
+    if (this.look.mode === 'earth') this.drawOver(gpu, p, 'snags', this.fire.snags, target, xs, k, d, size, waiting);
     this.drawOver(gpu, p, 'flames', this.fire.flames, target, xs, k, d, size, waiting);
   }
 
