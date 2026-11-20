@@ -42,12 +42,17 @@ use scratch::tables;
 
 /// Each part of the law (`state`, `air`, `liquid`, `creep`, `refresh`) is a pass of the month (`schedule`). This
 /// one: the state of ground and air nodes from the world now, which the other laws read (in full at each month's start,
-/// so a world resumed there goes on as an unbroken one; the survey builds it in full then, `built_now`).
+/// the air's columns too, `air::state`, so a world resumed there goes on as an unbroken one; the survey builds it in
+/// full then, `built_now`).
 pub fn state(w: &mut World, full: bool) {
     with(w, true, |w, s| {
         ground_now(w, s, full);
-        air::sums(w, s);
-        (0..w.mesh.level(AIR).n()).for_each(|j| s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]));
+        if full {
+            air::state(w, s);
+        } else {
+            air::sums(w, s);
+            (0..w.mesh.level(AIR).n()).for_each(|j| s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]));
+        }
     });
 }
 

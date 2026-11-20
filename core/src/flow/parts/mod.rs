@@ -14,7 +14,7 @@ mod node;
 mod view;
 
 pub(super) use deep::mix;
-pub(super) use moves::{after_air, to_liquid};
+pub(super) use moves::{after_air, drain_land, to_liquid, Leaves};
 pub(super) use view::{amounts, pores_first, under_liquid};
 
 use super::land::{column, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
@@ -103,8 +103,11 @@ pub(super) struct Piece {
 impl Piece {
     /// The mol of substance `k` (`sp`) it holds liquid, by its temperature and plateau (`Sp::liquid`).
     pub(super) fn liquid(&self, k: usize, sp: &super::scratch::Sp) -> f64 {
-        let molten = if self.pk == k { self.phi } else { (self.latent.molten >> k & 1) as f64 };
-        self.amt[k] * sp.liquid(self.tg, molten, self.free)
+        self.amt[k] * sp.liquid(self.tg, self.molten(k), self.free)
+    }
+    /// The share of substance `k` it holds molten, by its plateau and the substances molten in it.
+    pub(super) fn molten(&self, k: usize) -> f64 {
+        if self.pk == k { self.phi } else { (self.latent.molten >> k & 1) as f64 }
     }
 }
 

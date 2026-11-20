@@ -34,7 +34,8 @@ fn world() -> (World, usize, Parts) {
 /// Up to field capacity every root breathes, whatever its gas spaces. In full pores a root works only as far down as
 /// its gas spaces keep it in the gas (`cover::aired`), so a kind of few gas spaces is less active on full pores than on
 /// ground at field capacity, a kind of many is more active there than it, and liquid standing as deep as a kind's
-/// aired length leaves none of its roots working.
+/// aired length leaves none of its roots working. A saturated share of a land at field capacity is in full pores too
+/// (`inside::airless`): there only the gas spaces' reach works.
 #[test]
 fn roots_in_full_pores_breathe_only_through_their_gas_spaces() {
     let (w, i, p) = world();
@@ -42,7 +43,7 @@ fn roots_in_full_pores_breathe_only_through_their_gas_spaces() {
     let breath = cover::breath(&w, &p, i, ph.t_cat);
     assert!(breath > 0.0, "no oxidising gas reaches the roots");
     let (need, loose) = (1.0, 1.0);
-    let soak = |filled: f64| Soak { moist: pores.available(filled), filled, loose, pores, breath, pond: 0.0 };
+    let soak = |filled: f64| Soak { moist: pores.available(filled), filled, saturated: 0.0, loose, pores, breath, pond: 0.0 };
     // What it runs of its light reaction: its activity times the share of its roots that work (`grow::light`).
     let act = |phi: f32, filled: f64| cover::activity(&herb(phi), pores.available(filled)) * cover::working(phi as f64, need, &soak(filled));
     let (few, many) = (0.05, 0.4);
@@ -53,6 +54,9 @@ fn roots_in_full_pores_breathe_only_through_their_gas_spaces() {
     assert!((low - cover::aired(breath, few as f64) / need).abs() < 1e-12, "{low} of its roots work");
     let drowned = 1.0 + cover::aired(breath, many as f64) / (loose * pores.porosity);
     assert_eq!(act(many, drowned * (1.0 + 1e-9)), 0.0, "roots work under liquid deeper than their gas spaces reach");
+    let strips = Soak { saturated: 0.3, ..soak(pores.field) };
+    let reach = cover::aired(breath, few as f64);
+    assert!((cover::working(few as f64, need, &strips) - (0.7 * loose + reach).min(need) / need).abs() < 1e-12, "the saturated share's roots work as in full pores");
 }
 
 /// Cold ground lets the gas reach farther down a root (`cover::breath`): its living tissue burns the gas at the

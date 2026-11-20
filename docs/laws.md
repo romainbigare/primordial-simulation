@@ -243,8 +243,12 @@ side; Horton 1945) is the table at the surface over its channel's width (the cha
 (`inside::flowing`, `channel_share`, `parts_now`). A point whose room is none is saturated, its
 pores full; elsewhere its soil holds the cell's liquid departed the same way (`soil_held`). The laws read it over a
 cell's land samples (the highest, by its land's share of its area; `inside::wet_ground`): the share saturated, at an
-index of at least c plus the mean room over `soil_m`, and the drier rest, which holds what that share does not; flames read
-it (3c). What stands where the ground lies under the cells' level; each channel as wide as
+index of at least c plus the mean room over `soil_m`, and the drier rest, which holds what that share does not
+(`inside::rest`). The month's start finds it for each cell (`contract::surroundings`, `World::life`'s `wet`), and every
+law reads that one share: flames (3c), and how much of the land is waterlogged, its pores holding no gas: the saturated
+share and, of the drier rest, the share its liquid fills from the bottom up over field capacity (`inside::airless`,
+`Pores::full`), which roots (3) and the decomposers (2.3) read. Where the rest holds more than field capacity that is
+the share the cell's mean fill gives; where it holds less it adds the wet strips of a drier cell. What stands where the ground lies under the cells' level; each channel as wide as
 the channel law makes its own sample's discharge (`World::discharge`, 1.2); each mark of cover by
 the activity of each kind of the squares about it at the mark's foot (`cover::activity`), with the cell's pores half full and
 the liquid departing about its samples' mean index, so where a plant stands is the place's, not the month's. A picture need not keep a cell's mean
@@ -454,13 +458,21 @@ what the heat holds molten, as every law and the shell then read it.
   rain: held until the month's liquid step, it would cover and darken the ground (`land::reflectance`, 1.4) and
   warm it. The store flows by `bed_seep` (`flow::deep`). Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`). Pore water moves before the
-  runoff's pass, so the bodies end the month at one level. **None of this runs under a body**: the loose ground of a
-  cell under its body's level lies under it with its pores full, and the bed's store under it is not drained, so no
-  liquid sinks there, no pore or store flow reaches or leaves it, and its store feeds no channel.
-- **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what they take leaves its
-  top and its deep by their shares of the liquid they hold (what stands leaves from the liquid), and its land only for
-  what they lack, which keeps its own pores' liquid; at the parts' temperature by the liquid each holds
-  (`parts::to_liquid`, `land::t_now`).
+  runoff's pass, so the bodies end the month at one level. **None of this runs under a body**: the loose ground under
+  a body's liquid lies with its pores full, and the bed's store under it is not drained. So in a cell of parts (1.1)
+  the sink, the pore flow and the store's drain act on its land alone (`liquid::soil_share`, `liquid::mobile`): what
+  sinks or flows away is its land's liquid over field capacity, on its land's area and pores, at its land's
+  temperature; its store drains by its land's share of the cell's area, and what comes up gathers in its liquid. Its
+  land's pores drain to its liquid, its land's lowest ground, as a cell's pores drain to its channels
+  (`drain::to_channels`, `drain::land_drains`): a move inside the cell from its land to its liquid's top, with its heat
+  at the land's temperature; in the runoff's pass the pores of a cell of parts or under a body drain to no channel.
+  Both drain down the slope of the cell's solid ground (its land drains to its liquid). A link between two cells
+  passes, in each layer, the product of their land's shares (`liquid::reached`), so no liquid sinks into, flows
+  through or comes up from the ground and the store of a cell all under a body.
+- **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what the laws under the
+  surface take leaves its land (`parts::Leaves`); what the others take leaves its top and its deep by their shares of
+  the liquid they hold (what stands leaves from the liquid), and its land only for what they lack, which keeps its
+  own pores' liquid; at the parts' temperature by the liquid each holds (`parts::to_liquid`, `land::t_now`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
@@ -843,10 +855,10 @@ Its own gas and its cell's share of the air. **Under standing liquid** only the 
 the liquid's film in τ = depth / `dissolve` (`FlowView::standing`): a gas it takes is held at Henry's share × (1 +
 made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast as the film brings the oxidising gas.
 **In full pores** (on ground with no liquid standing over it): a reaction of the open world that takes a gas (the
-decomposers' rot) runs only in the share of the node whose pores hold gas, 1 − the share full of liquid
-(`Pores::full`: what the ground holds over field capacity fills its pores from the bottom up, the same rule by which
-roots in full pores get no gas, 3). So ground whose pores stay full keeps its dead matter and builds organic ground,
-as peat builds on wet flat ground (Clymo 1984).
+decomposers' rot) runs only in the share of the node whose pores hold gas, 1 − the share waterlogged
+(`inside::airless`, 0: its land's saturated share, and of the drier rest what it holds over field capacity, which fills
+its pores from the bottom up; the same rule by which roots in full pores get no gas, 3). So ground whose pores stay
+full keeps its dead matter and builds organic ground, as peat builds on wet flat ground and valley floors (Clymo 1984).
 
 ### 2.4 Phases and the freezing law
 Solid, liquid or gas by melting and boiling points (`Chemistry::phase`). A liquid's melting point in a mixture falls by
@@ -1019,7 +1031,8 @@ seeds fill it:
   10^`MOIST` times its light gene's). Frozen ground holds no liquid that is liquid: w = 0. **Roots in full pores**
   (`cover::soak`, `cover::working`): up to field capacity the ground's liquid lies in its small pores all through it
   and its large pores hold the gas, so every root breathes; what it holds over field capacity fills the rest of its
-  pores from the bottom up (Flow's one store over the depth of its loose ground), and over its top it stands. A root
+  pores from the bottom up (Flow's one store over the depth of its loose ground), and over its top it stands; its
+  saturated share's pores are full (`inside::airless`, 0), so its table lies that much higher. A root
   under that table gets the oxidising gas its burning needs only down its own gas spaces, from the air over the ground
   or over the liquid standing on it, whose depth that gas crosses first: a kind's `GAS` gene is the share φ of its
   roots' volume that is gas space, and its gas reaches (2 D C φ / ((1 − φ) M))^½ m down a root (`cover::aired`;
@@ -1202,7 +1215,7 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   (`World::near_ground`, its vapour over saturation at the ground's temperature), to its bottom, between that and
   saturation by the share s of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the
   share by which the ground's evaporation draws its liquid; Manabe 1969) on the drier part of its land: the share of its
-  land saturated (`inside::wet_ground`, 0) is too wet to carry a flame, so the share of its ground the remains cover
+  land saturated at the month's start (`inside::saturated_share`, 0) is too wet to carry a flame, so the share of its ground the remains cover
   is times one less that share, and s is read from what the rest holds; the key liquid frozen in its pores counted
   with it; where snow lies (`contract::Place::snow`) it hides the remains and they do not burn.
   At each depth it holds the sorption curve
