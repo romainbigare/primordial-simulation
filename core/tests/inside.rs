@@ -23,3 +23,29 @@ fn the_soil_keeps_its_mean_over_a_cell() {
     assert!(held.iter().all(|&h| (0.0..=MEANS.pores).contains(&h)), "within none and full pores");
     assert!(held.windows(2).all(|p| p[1] >= p[0]), "more where more gathers");
 }
+
+/// A valley floor saturates before its ridge: where the most liquid gathers on the terrain's samples (the sample that
+/// the most drains through) the wetness index is higher than on most of the ground; and as a ground of a ridge-to-valley
+/// spread of that index fills, the parts it saturates are those of the highest index, their share grows with the
+/// liquid, and the drier rest with them keeps the mean.
+#[test]
+fn a_valley_floor_saturates_before_its_ridge() {
+    let w = worldgen::testkit::small_world();
+    let s = w.terrain_samples();
+    let floor = (0..s.up.len()).max_by(|&a, &b| s.up[a].total_cmp(&s.up[b])).expect("samples");
+    let mut sorted = s.twi.clone();
+    sorted.sort_by(f64::total_cmp);
+    assert!(s.twi[floor] > sorted[sorted.len() * 9 / 10], "the floor's index {} under the ground's top tenth", s.twi[floor]);
+    let ph = Physics::default();
+    let twi: Vec<f64> = (0..64).map(|p| 4.0 + 0.25 * p as f64).collect();
+    let mut last = 0.0;
+    for filled in [0.5, 0.7, 0.9, 0.97] {
+        let g = pcore::inside::saturated(&ph, &twi, (filled, 0.2));
+        let wet = twi.iter().filter(|&&t| t >= g.level).count();
+        assert!((wet as f64 / twi.len() as f64 - g.share).abs() < 1e-12 && twi.iter().rev().take(wet).all(|&t| t >= g.level), "the highest index saturates first");
+        assert!(g.share >= last, "more liquid saturates no less");
+        assert!((g.share + (1.0 - g.share) * g.filled - filled).abs() < 1e-12, "the mean kept at {filled}");
+        last = g.share;
+    }
+    assert!(last > 0.0, "a ground nearly full saturates some of it");
+}

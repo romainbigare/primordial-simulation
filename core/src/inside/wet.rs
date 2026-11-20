@@ -22,21 +22,26 @@ pub struct WetGround {
 /// first, `flow::curve`), each holding the liquid the wetness index shares to it (`soil_level`, `soil_held`). A sample
 /// is saturated where that fills its pores: at an index of at least the level the soil's liquid departs about plus the
 /// mean deficit over `soil_m` (the steady state of the liquid running downhill, Beven and Kirkby 1979). The drier rest
-/// holds what the saturated part does not, so the cell's mean is kept.
+/// holds what the saturated part does not, so the cell's mean is kept (`saturated`).
 pub fn wet_ground(w: &World, i: usize, (filled, pores): (f64, f64)) -> WetGround {
-    let none = WetGround { share: 0.0, level: f64::INFINITY, filled: filled.clamp(0.0, 1.0) };
-    if filled >= 1.0 {
-        return WetGround { share: 1.0, level: f64::NEG_INFINITY, filled: 1.0 };
-    }
     let s = w.terrain_samples();
     let mut at: Vec<(f64, f64)> = w.map.leaves()[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], s.twi[k])).collect();
     at.sort_by(|a, b| b.0.total_cmp(&a.0));
     let land = crate::contract::land(w, i) / w.mesh.cells().area()[i];
     at.truncate((land * at.len() as f64).round() as usize);
     let twi: Vec<f64> = at.iter().map(|p| p.1).collect();
-    let area = vec![1.0 / twi.len().max(1) as f64; twi.len()];
-    let (ph, m) = (&w.cfg.phys, Means { pore: filled * pores, pores, stands: 0.0 });
-    let Some(c) = soil_level(ph, &twi, &area, m).filter(|_| !twi.is_empty()) else { return none };
+    saturated(&w.cfg.phys, &twi, (filled, pores))
+}
+
+/// Ground of equal parts of wetness index `twi` whose pores, `pores` m deep as liquid, its liquid fills by the share
+/// `filled` on the mean (`wet_ground`): each part holds what the index shares to it (`soil_level`, `soil_held`).
+pub fn saturated(ph: &crate::Physics, twi: &[f64], (filled, pores): (f64, f64)) -> WetGround {
+    if filled >= 1.0 {
+        return WetGround { share: 1.0, level: f64::NEG_INFINITY, filled: 1.0 };
+    }
+    let none = WetGround { share: 0.0, level: f64::INFINITY, filled: filled.max(0.0) };
+    let (area, m) = (vec![1.0 / twi.len().max(1) as f64; twi.len()], Means { pore: filled * pores, pores, stands: 0.0 });
+    let Some(c) = soil_level(ph, twi, &area, m).filter(|_| !twi.is_empty()) else { return none };
     let held: Vec<f64> = twi.iter().map(|&t| soil_held(ph, m, t, c)).collect();
     let wet = held.iter().filter(|&&h| h >= pores).count();
     let dry: f64 = held.iter().filter(|&&h| h < pores).sum();

@@ -230,9 +230,13 @@ it). The ground inside it is the terrain's worn samples inside it, and what stan
 The shell draws inside the cells by general laws at each pixel of the ground's tiles (`tape::Ground`), blending its
 cells' values between the squares' centres (`tape::Table`, docs/tape.md): the soil's liquid by the wetness index
 ln(a / tan β) of the terrain's samples (Beven and Kirkby 1979; a the area that drains through a sample per metre of
-contour, β its slope): as in TOPMODEL, the liquid a point's pores hold departs from its cell's mean by `soil_m` per unit
+contour, β its slope, no less than a valley floor's 1e-3; found once with the samples, `space::samples::sample_index`):
+as in TOPMODEL, the liquid a point's pores hold departs from its cell's mean by `soil_m` per unit
 of the index over its level, within none and the pores full, the level found by halving so the mean is the cell's
-(`inside::soil_level`, `soil_held`); what stands where the ground lies under the cells' level; each channel as wide as
+(`inside::soil_level`, `soil_held`). The laws read the same rule over a cell's land samples (the highest, by its land's
+share of its area): a sample is saturated where its pores fill, at an index of at least the level plus the land's mean
+deficit over `soil_m`, and the drier rest holds what the saturated share does not (`inside::wet_ground`); flames read
+it (3c). What stands where the ground lies under the cells' level; each channel as wide as
 the channel law makes its own sample's discharge (`World::discharge`, 1.2); each mark of cover by
 the activity of each kind of the squares about it at the mark's foot (`cover::activity`). A picture need not keep a cell's mean
 exactly (the core keeps the books).
@@ -1188,7 +1192,9 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   it, so in a steady state its relative vapour h runs in a straight line from its top, the air near the ground
   (`World::near_ground`, its vapour over saturation at the ground's temperature), to its bottom, between that and
   saturation by the share s of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the
-  share by which the ground's evaporation draws its liquid; Manabe 1969), the key liquid frozen in its pores counted
+  share by which the ground's evaporation draws its liquid; Manabe 1969) on the drier part of its land: the share of its
+  land saturated (`inside::wet_ground`, 0) is too wet to carry a flame, so the share of its ground the remains cover
+  is times one less that share, and s is read from what the rest holds; the key liquid frozen in its pores counted
   with it; where snow lies (`contract::Place::snow`) it hides the remains and they do not burn.
   At each depth it holds the sorption curve
   `sorb_scale` (−ln(1 − h))^`sorb_power` per kg dry (Nelson 2000; h at most 0.99), and as duff, drawing liquid up from
