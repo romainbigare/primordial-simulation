@@ -353,7 +353,8 @@ pub extern "C" fn rock() -> *const u8 {
 }
 
 /// What the page's edits read of the cell under the place `x`, `y` (squares from the map's north-west corner), as JSON:
-/// the cell, its edges in squares [west, north, east, south], its area and its land, m², the patches of its cover, and
+/// the cell, its edges in squares [west, north, east, south], its area and its land, m², the patches of its cover, the
+/// centre in squares of its sample under the place, about which a clearing makes its patch (`World::sample_in`), and
 /// whether a strike there lights it (`flame::lights`: "yes", or the reason it does not, `flame::Unlit`).
 #[no_mangle]
 pub extern "C" fn probe(x: f64, y: f64) -> *const u8 {
@@ -361,7 +362,10 @@ pub extern "C" fn probe(x: f64, y: f64) -> *const u8 {
         let w = &l.world;
         let i = w.cell_under([x, y]);
         let fire = pcore::flame::lights(w, i).map_or_else(|why| format!("{why:?}"), |_| String::from("yes"));
-        json!({"cell": i, "bounds": w.map.bounds(i), "area": w.mesh.cells().area()[i], "land": pcore::contract::land(w, i), "patches": w.life.cover(i).patch_count(), "fire": fire})
+        let ([w0, n0, e0, s0], side) = (w.map.bounds(i), pcore::inside::patch_ground(w, i).side);
+        let k = w.sample_in(i, [x, y]);
+        let at = [w0 + ((k % side) as f64 + 0.5) / side as f64 * (e0 - w0), n0 + ((k / side) as f64 + 0.5) / side as f64 * (s0 - n0)];
+        json!({"cell": i, "bounds": w.map.bounds(i), "at": at, "area": w.mesh.cells().area()[i], "land": pcore::contract::land(w, i), "patches": w.life.cover(i).patch_count(), "fire": fire})
     });
     give(out.to_string().into_bytes())
 }

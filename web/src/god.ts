@@ -4,8 +4,9 @@
 // cannot do there is greyed out with the reason, from the core's own test (`probe`: the flames' `lights`).
 
 /** What the core says of the cell under a place (wasm/src/lib.rs `probe`): the cell, its edges in squares (west, north,
- * east, south), its area and land (m²), its patches, and whether a strike lights it ("yes", or the core's reason). */
-export interface Probe { cell: number; bounds: [number, number, number, number]; area: number; land: number; patches: number; fire: string }
+ * east, south), the centre of its sample under the place (squares), about which a clearing makes its patch, its area
+ * and land (m²), its patches, and whether a strike lights it ("yes", or the core's reason). */
+export interface Probe { cell: number; bounds: [number, number, number, number]; at: [number, number]; area: number; land: number; patches: number; fire: string }
 /** A starting kind the world's plan places (wasm/src/lib.rs `kinds`): its row, the core's name, kg per m² placed. */
 export interface StartKind { row: number; name: string; kg: number }
 /** What an edit did (wasm/src/lib.rs `edit`): the cell, and whether each of its edits was made. */
@@ -99,6 +100,7 @@ export class God {
     this.asking = false;
     const was = this.probe;
     this.probe = p;
+    if (this.tool) this.redraw();
     if (!was || was.cell !== p.cell || was.fire !== p.fire || was.land !== p.land || was.patches !== p.patches) { this.show(); this.redraw(); }
   }
 
@@ -136,8 +138,8 @@ export class God {
   }
 
   /** Over the map, with its corner at (ox, oy) and a square `s` pixels: the patch the tool would make under the cursor,
-   * a circle of the share's area of the cell (the patch's ground is the share of the cell's samples nearest the place,
-   * the core's `patch_ground`), cut to the cell; for fire, the cell that would be struck. Grey where it cannot be done. */
+   * a circle of the share's area of the cell about the sample under the cursor (the patch's ground is the share of the
+   * cell's samples nearest that sample, the core's `patch_ground`), cut to the cell; for fire, the cell that would be struck. Grey where it cannot be done. */
   draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number): void {
     this.drawnAt = [ox, oy, s];
     const t = this.tool, at = this.at, p = this.probe;
@@ -156,7 +158,7 @@ export class God {
       } else {
         const r = Math.sqrt((this.share * (e - w) * (so - n)) / Math.PI) * s;
         ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+        ctx.beginPath(); ctx.arc(ox + p.at[0] * s, oy + p.at[1] * s, r, 0, 2 * Math.PI);
         ctx.fillStyle = no ? 'rgba(120,120,120,.25)' : t === 'plant' ? 'rgba(126,217,87,.22)' : 'rgba(255,255,255,.18)';
         ctx.fill();
         ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.stroke();
