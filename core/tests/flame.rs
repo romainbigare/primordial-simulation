@@ -37,12 +37,13 @@ fn start() -> (World, usize) {
 }
 
 /// The key liquid of the ground of cell `i` set to `mol`, its ground `WARMER` than the world left it (booked as edits),
-/// and Flow's state found again from them.
+/// and Flow's state and the wet ground the laws read found again from them.
 fn liquid_to(w: &mut World, i: usize, mol: f64) {
     let (p, t) = (Parts::of(&w.chem).unwrap(), w.t_ground_last(i));
     testkit::set_amount(w, Node::ground(i), p.liquid, mol);
     testkit::hold_ground(w, i, t + WARMER);
     pcore::flow::state(w, true);
+    pcore::contract::wet_grounds(w);
 }
 
 /// The bed of cell `i` as the flames read it now.
@@ -65,7 +66,7 @@ fn dry_remains_burn_through_and_wet_ones_only_at_their_top() {
     let (mut wet, i) = start();
     let p = Parts::of(&wet.chem).unwrap();
     // Its pores filled to field capacity: wet, short of the saturation that would keep a flame off the ground.
-    let (held, filled) = (wet.g(p.liquid, i), pcore::cover::soak(&wet, &p, i, wet.g(p.liquid, i)).1.filled);
+    let (held, filled) = (wet.g(p.liquid, i), pcore::cover::fill_now(&wet, &p, i, wet.g(p.liquid, i))[1]);
     let field = wet.pores(i).field;
     liquid_to(&mut wet, i, held * field / filled);
     let moist = pcore::cover::soak(&wet, &p, i, wet.g(p.liquid, i)).1.moist;

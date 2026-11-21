@@ -74,7 +74,7 @@ fn main() {
 /// `ew view`: draw a window of a snapshot's map (`render::window`).
 fn view(a: &Args) {
     let from = a.get("--from", String::new());
-    let (w, _): (World, (Schedule, Kept)) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
+    let w = loaded(&from);
     let window = a.window([0.0, 0.0, w.map.w as f64, w.map.h as f64]);
     let out = window.and_then(|win| render::window(&w, win, a.get("--px", 512usize), &a.get("--layer", String::from("map")), a.has("--edges"), &a.get("--out", String::from("view.png"))));
     if let Err(e) = out {
@@ -86,11 +86,19 @@ fn view(a: &Args) {
 /// `ew cells`: write a table of a snapshot's cells (`render::table`).
 fn cells(a: &Args) {
     let from = a.get("--from", String::new());
-    let (w, _): (World, (Schedule, Kept)) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
+    let w = loaded(&from);
     if let Err(e) = render::table(&w, &a.get("--out", String::from("cells.csv"))) {
         eprintln!("ew: {e}");
         std::process::exit(2);
     }
+}
+
+/// The world of the snapshot at `from`, with Flow's state of its ground built from it once (as `ew run` builds a new
+/// world's), so each reader of that state borrows it rather than building its own.
+fn loaded(from: &str) -> World {
+    let (mut w, _): (World, (Schedule, Kept)) = tape::load_snapshot(from).unwrap_or_else(|e| panic!("load {from}: {e}"));
+    pcore::flow::state(&mut w, true);
+    w
 }
 
 /// `ew card`: write the test card (`worldgen::testkit::card`) as a snapshot, with a plan that places nothing.

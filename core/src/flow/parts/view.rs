@@ -2,7 +2,7 @@
 
 use super::{has, Mixed, Parts, Piece, DEEP, LAND, TOP};
 use crate::flow::Scratch;
-use crate::{ground::amounts_cap, store::Class, units::MAX_SUBSTANCES, World};
+use crate::{ground::ground_cap, store::Class, units::MAX_SUBSTANCES, World};
 
 impl World {
     /// The ground of cell `i`, which holds its heat now, held at one temperature `t` K: of a cell of parts (`Parts`) the
@@ -14,7 +14,7 @@ impl World {
         let Some(Some(p)) = self.scratch.state.parts.get(i) else { return };
         let held = |q: usize| {
             let amt = |k: usize| p.amt[k][q];
-            let cap = skin * p.ground(q) + amounts_cap(0..self.chem.ns(), amt, |k| self.chem.subs[k].cp);
+            let cap = ground_cap(skin * p.ground(q), 0..self.chem.ns(), amt, |k| self.chem.subs[k].cp);
             cap * t + (0..self.chem.ns()).map(|k| amt(k) * self.chem.fused_heat(k, t, amt)).sum::<f64>()
         };
         let (top, deep) = (held(TOP), held(DEEP));
@@ -35,6 +35,23 @@ impl Scratch {
             }
             _ => self.plateau(i),
         }
+    }
+    /// The molten share of substance `k` in the ground of cell `i` as life feels it, as Flow's last solve found it: of a
+    /// cell of parts its land's (its liquid's top's where it has no land, as `land`), else the node's (`molten_node`).
+    /// None for a substance Flow does not let melt there (`State::vary`), or a cell of parts not solved since a load.
+    pub(crate) fn molten_land(&self, k: usize, i: usize) -> Option<f64> {
+        match self.state.parts.get(i) {
+            Some(Some(p)) => {
+                let q = if p.land() { LAND } else { TOP };
+                self.mixed(i).filter(|_| self.state.vary.contains(&k)).map(|m| m.piece[q].molten(k))
+            }
+            _ => self.molten_node(k, i),
+        }
+    }
+    /// The molten share of substance `k` in ground node `i` as Flow's last solve found it (`land::molten`), for a
+    /// substance it lets melt there (`State::vary`); None for the others, or before Flow first built the state.
+    pub(crate) fn molten_node(&self, k: usize, i: usize) -> Option<f64> {
+        (i < self.latent.len() && self.state.vary.contains(&k)).then(|| crate::flow::land::molten(self, k, i))
     }
     /// The depth of the liquid standing on the ground of cell `i` as life stands on it, m, and its solid surface, m
     /// (`FlowView::standing`): none on the land of a cell of parts, whose liquid runs down to the part under the liquid.
@@ -58,9 +75,36 @@ impl Scratch {
         }
     }
     /// The depth of the soft solid lying on the land of cell `i`, m, at its solid's density: of a cell of parts its
-    /// land's, else the node's (`Scratch::cover`).
+    /// land's, else the node's (`soft`).
     pub(crate) fn soft_land(&self, i: usize) -> f64 {
-        self.mixed(i).map_or_else(|| self.cover.get(i).map_or(0.0, |c| c[2]), |m| m.piece[LAND].cover[2])
+        self.mixed(i).map_or_else(|| self.soft(i), |m| m.piece[LAND].cover[2])
+    }
+    /// The depth of the soft solid lying on ground node `i`, on its land and on its liquid, m over its area, at its
+    /// solid's density (`Scratch::cover`): the snow and ice of the law. None before Flow first built its state.
+    pub fn soft(&self, i: usize) -> f64 {
+        self.cover.get(i).map_or(0.0, |c| c[2])
+    }
+    /// Ground node `i` as Flow's state has it, none before Flow first built it: the height of its solid surface and the
+    /// depth of its liquid, in its pores and standing, m (`Scratch::z`, `Scratch::head`).
+    pub fn surface(&self, i: usize) -> Option<[f64; 2]> {
+        if self.state.tg.len() != self.z.len() {
+            return None;
+        }
+        let (z, head) = (*self.z.get(i)?, *self.head.get(i)?);
+        Some([z, (head - z).max(0.0)])
+    }
+    /// What `a` mol of substance `k` in ground node `i` is, as Flow's state has the node's phases (its temperature, its
+    /// plateau and what is molten, the share of the minerals that stays dissolved): its soft solid, its liquid and its
+    /// loose solid, m³, by the rule of the node's layers (`land::layers`: a solid warmer than `Sp::soft` is soft cover,
+    /// the liquid by `Sp::liquid`; none as a gas). None before Flow first built its state.
+    pub fn phases(&self, i: usize, k: usize, a: f64) -> Option<[f64; 3]> {
+        let (p, t) = (self.sp.get(k)?, *self.state.tg.get(i)?);
+        if a <= 0.0 || t >= p.boil {
+            return Some([0.0; 3]);
+        }
+        let m = if self.state.pk[i] == k { self.state.phi[i] } else { (self.latent.get(i)?.molten >> k & 1) as f64 };
+        let (solid, liquid) = (a * (1.0 - m) * p.v[0], a * p.liquid(t, m, self.state.dissolved[i]) * p.v[1]);
+        Some(if p.soft_at(t) { [solid, liquid, 0.0] } else { [0.0, liquid, solid] })
     }
     /// The temperature of the surface of cell `i`, K: of a cell of parts its land's and its liquid's top's mean by
     /// area, else the node's.

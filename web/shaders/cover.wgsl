@@ -6,14 +6,14 @@
 // Olano 2020; lowbias32, draw.wgsl), so the marks hold while the camera moves and stand in no rows. A mark picks its
 // kind at its own foot: of the four squares about it, blended as the map's other fields (land.wgsl `corners`), each
 // kind's chance that a cell holds one of its plants (thicker and thinner over the field's patches, cover_field.wgsl
-// `patchy`), less where the ground at the foot lies drier than its cell's mean (its wetness index, the same in every month: mark.wgsl
-// `thrive`) as the kind's activity law says and where
+// `patchy`), on the saturated ground at the foot (land.wgsl `saturated_at`) and on the drier ground as densely as the
+// core splits the kind's plants between its land's saturated strips and its rest (mark.wgsl `dense_at`), and less where
 // its loose ground is thinner than its roots need (land.wgsl `rooted`, its chance raised where its square's ground is
 // thin, so the square keeps its cover); a plant buried by the snow's depth against its height does not show, one
 // standing in snow carries it on its crown; each kind claims cells by its own draw (on the trees' lattice in stands of
 // their kinds as the field far away has them, cover_field.wgsl `stand_pick`), and where several claim one the tallest
-// plant stands. So kinds mix mark by mark across a square's edge and a kind that needs wet ground gathers in the
-// hollows. None stands where liquid stands over its roots or under snow. Its size, shape and colour are its kind's
+// plant stands. So kinds mix mark by mark across a square's edge and a kind the law holds on the strips gathers in
+// the hollows. None stands where liquid stands over its roots or under snow. Its size, shape and colour are its kind's
 // numbers (canopy.ts, web/src/style.ts, web/src/form.ts): each plant is its model's sprite (lib/models.wgsl) standing up
 // on its foot over its shadow, leaning a little its own way. Points are in metres from the draw's top-left corner.
 // Each mark is decided once a frame for its cell (lib/mark.wgsl, marks.wgsl) and drawn here.

@@ -1,6 +1,6 @@
 //! Conservation and sanity checks.
 
-use crate::{store::{BOUNDARIES, Boundary, Class}, AIR, World};
+use crate::{chem::Heat, store::{BOUNDARIES, Boundary, Class}, AIR, World};
 
 #[derive(Clone, Debug)]
 pub struct Totals {

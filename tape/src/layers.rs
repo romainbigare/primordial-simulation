@@ -4,6 +4,7 @@
 use pcore::par;
 use pcore::cover::{lying, per_m2, Cover};
 use pcore::chem::{Phase, Substance};
+use pcore::inside::Means;
 use pcore::{World, AIR};
 
 /// Thinnest cover (m) that hides what lies below it.
@@ -38,9 +39,10 @@ pub struct Fields {
     pub z: Vec<f64>,
     /// Liquid depth, m
     pub depth: Vec<f64>,
-    /// Frozen cover depth, m
+    /// Depth of the soft solid lying on the ground and on its liquid, m: the law's snow and ice (`Scratch::soft`; none
+    /// before Flow first built its state)
     pub ice: Vec<f64>,
-    /// Loose solid depth (without frozen cover), m
+    /// Loose solid depth (without the soft solid), m
     pub loose: Vec<f64>,
     /// Ground temperature, K
     pub t: Vec<f64>,
@@ -51,23 +53,21 @@ pub struct Fields {
     pub ground: Vec<[f64; 3]>,
 }
 
-/// One cell's values: elevation, liquid depth, frozen cover depth, loose solid depth, temperature, colour of the
+/// One cell's values: elevation, liquid depth, soft solid's depth, loose solid depth, temperature, colour of the
 /// surface and of the ground.
 type Cell = (f64, f64, f64, f64, f64, [f64; 3], [f64; 3]);
 
-/// Of each cell of `w`, its liquid in its pores and over them (`flow::means`; none before Flow first built its state).
-fn liquid_of(w: &World) -> Vec<pcore::inside::Means> {
-    let n = w.mesh.cells().n();
-    pcore::flow::means(w, &(0..n).collect::<Vec<usize>>()).unwrap_or_else(|| vec![Default::default(); n])
+/// Of each cell of `w`, its liquid in its pores and over them (`flow::means`); none before Flow first built its state.
+/// A frame works it out once and hands it to all that read it.
+pub fn means(w: &World) -> Option<Vec<Means>> {
+    pcore::flow::means(w, &(0..w.mesh.cells().n()).collect::<Vec<usize>>())
 }
 
-pub fn fields(w: &World) -> Fields {
-    fields_of(w, &liquid_of(w))
-}
-
-/// The fields of `w` whose cells hold the liquid `liquid` (`liquid_of`).
-fn fields_of(w: &World, liquid: &[pcore::inside::Means]) -> Fields {
-    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i, liquid[i].stands));
+/// The fields of `w` whose cells hold the liquid `means` (`means`; none before Flow first built its state: then no
+/// liquid in or over the pores).
+pub fn fields(w: &World, means: Option<&[Means]>) -> Fields {
+    let stands = |i: usize| means.map_or(0.0, |m| m[i].stands);
+    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i, stands(i)));
     let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], rgb: vec![], ground: vec![] };
     for (z, depth, ice, loose, t, rgb, ground) in cells {
         f.z.push(z);
@@ -81,11 +81,15 @@ fn fields_of(w: &World, liquid: &[pcore::inside::Means]) -> Fields {
     f
 }
 
-/// The values of cell `i` (`Cell`), over whose pores `stands` m of liquid stands: the liquid shows as the surface only
-/// so far as it stands over the ground; the liquid in the pores is part of the ground (`flow::means`).
+/// The values of cell `i` (`Cell`), over whose pores `stands` m of liquid stands, as Flow's state has it: its solid
+/// surface, its liquid, in its pores and standing (`Scratch::surface`), its soft cover (`Scratch::soft`) and the
+/// phase of each substance (`Scratch::phases`); before Flow first built its state, none (NaN) and black. The liquid
+/// shows as the surface only so far as it stands over the ground; the liquid in the pores is part of the ground
+/// (`flow::means`).
 fn cell(w: &World, i: usize, stands: f64) -> Cell {
-    let (t, pl) = w.thaw_node_last(i);
-    // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
+    let t = w.thaw_node_last(i).0;
+    let Some([z, depth]) = w.scratch.surface(i) else { return (f64::NAN, f64::NAN, 0.0, f64::NAN, w.t_surface_last(i), [0.0; 3], [0.0; 3]) };
+    // Kinds of cover in order of priority: soft solid, liquid, loose, bonded. Each: volume, volume * colour.
     let mut acc = [[0.0f64; 4]; 4];
     let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {
         acc[kind][0] += vol;
@@ -95,21 +99,19 @@ fn cell(w: &World, i: usize, stands: f64) -> Cell {
     };
     for k in 0..w.chem.ns() {
         let s = &w.chem.subs[k];
-        let (melt, a) = (w.molten(k, i, t, pl), w.g(k, i));
-        let solid = a * (1.0 - melt) * w.chem.molar_volume(k, Phase::Solid);
-        add(if is_cover(s) { 0 } else { 2 }, solid, s.refl[0]);
-        if t < s.boil {
-            add(1, a * melt * w.chem.molar_volume(k, Phase::Liquid), s.refl[1]);
-        }
+        let [soft, liquid, loose] = w.scratch.phases(i, k, w.g(k, i)).unwrap_or_default();
+        add(0, soft, s.refl[0]);
+        add(1, liquid, s.refl[1]);
+        add(2, loose, s.refl[0]);
     }
     acc[3] = bonded(w, i);
-    let area = w.mesh.cells().area()[i];
-    let shows = |kind: usize, a: &[f64; 4]| (if kind == 1 { stands } else { a[0] / area }) >= COVER_MIN;
+    let (area, ice) = (w.mesh.cells().area()[i], w.scratch.soft(i));
+    let shows = |kind: usize, a: &[f64; 4]| a[0] > 0.0 && [ice, stands, a[0] / area][kind] >= COVER_MIN;
     let top = acc[..3].iter().enumerate().find(|&(kind, a)| shows(kind, a)).map_or(&acc[3], |(_, a)| a);
     let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
     let colour = |a: &[f64; 4]| [1, 2, 3].map(|c| if a[0] > 0.0 { (a[c] / a[0] * glow).min(1.0) } else { 0.0 });
     let ground = colour(acc[2..].iter().find(|a| a[0] > 0.0).unwrap_or(&acc[3]));
-    (w.surface_z(i), acc[1][0] / area, acc[0][0] / area, acc[2][0] / area, w.t_surface_last(i), colour(top), litter(w, i, area, ground))
+    (z, depth, ice, acc[2][0] / area, w.t_surface_last(i), colour(top), litter(w, i, area, ground))
 }
 
 /// The bonded solids of cell `i` (its bed): their volume, m³, and that times their reflectance (red, green, blue).
@@ -203,21 +205,25 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: where its soil's liquid saturated its land at the month's start, as the laws read it
     /// (`World::life`'s `wet`; none where it holds no land, life has no key liquid, or before the month's start built it)
     pub saturated: Vec<Option<pcore::inside::WetGround>>,
+    /// Per ground cell: what it holds as the shares read it (`means`; none before Flow first built its state)
+    pub means: Option<Vec<Means>>,
 }
 
 impl<'a> Ctx<'a> {
     pub(crate) fn new(w: &'a World) -> Self {
         let n = w.mesh.cells().n();
         let t_air = (0..w.mesh.level(AIR).n()).map(|j| w.t_air(j)).collect();
-        let means = liquid_of(w);
-        let f = fields_of(w, &means);
-        let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
-        let filled = means.iter().map(|m| if m.pores > 0.0 { m.pore / m.pores } else { f64::NAN }).collect();
+        let means = means(w);
+        let f = fields(w, means.as_deref());
+        let none = vec![Means::default(); n];
+        let each = means.as_deref().unwrap_or(&none);
+        let wet = each.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
+        let filled = each.iter().map(|m| if m.pores > 0.0 { m.pore / m.pores } else { f64::NAN }).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
         let land: Vec<f64> = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
         let saturated = (0..n).map(|i| w.life.wet.get(i).copied().flatten()).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: pcore::soil::holdings(w), saturated };
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: means.as_deref().map(|m| pcore::soil::holdings(w, m)), saturated, means };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }
@@ -229,7 +235,9 @@ impl<'a> Ctx<'a> {
     fn air(&self, i: usize) -> usize {
         self.w.mesh.up(i, 0, AIR)
     }
-    /// The channel of cell `i`'s own liquid flux (`World::channel`).
+    /// The channel of cell `i`'s main channel (`World::channel` of `World::liquid_flux`, the most through one of its
+    /// samples): the channel law the wet ground's law applies at each sample (`inside::channel_share`), at the cell's
+    /// largest. A tape's map draws its river by it (web/src/earth.ts `mapFields`).
     pub(crate) fn channel(&self, i: usize) -> pcore::flow::Channel {
         self.w.channel(i, self.w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64)
     }
@@ -299,7 +307,7 @@ pub const LAYERS: &[Layer] = &[
     l("avail", "m", "log", 0.01, 0.3, |c, i| c.w.pores(i).for_roots(c.f.loose[i])),
     l("wet_share", "1", "lin", 0.0, 1.0, |c, i| c.saturated[i].map_or(f64::NAN, |g| g.share)),
     l("lambda_sat", "1", "lin", 0.0, 30.0, |c, i| c.saturated[i].map_or(f64::NAN, |g| g.level)),
-    l("roots", "1", "lin", 0.0, 1.0, |c, i| c.w.pores(i).available(c.filled[i])),
+    l("roots", "1", "lin", 0.0, 1.0, |c, i| c.w.counts.ran_month.get(i).map_or(f64::NAN, |r| r.roots as f64)),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.rain.get(i).copied().unwrap_or(0.0) as f64),

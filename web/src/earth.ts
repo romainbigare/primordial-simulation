@@ -41,7 +41,8 @@ const ROTS = ramps('#3d4a63', '#7b8aa0', '#d8cfae', '#e3a254', '#b4521c');
  * no soil a plant roots in and the large cells of the sea would show as squares: 1 as the cells hold it, or found by the
  * live map at each point (land.wgsl `layer_at`): 2 the share of the pores the soil's liquid fills by the laws inside a
  * cell, 3 and 4 the coarse and the fine grain's share of the terrain's samples, 5 the liquid the samples' loose ground
- * holds for roots, 6 the share of that its pores hold at each point, 7 how saturated the ground is at each point. */
+ * holds for roots, 6 the share of that the roots read at each point (all of it on the saturated strips, the core's on
+ * the drier rest), 7 how saturated the ground is at each point. */
 export const GROUND_LAYERS = new Map([['filled', 2], ['coarse', 3], ['fine', 4], ['organic', 1], ['conduct', 1], ['avail', 5], ['roots', 6], ['rises', 1], ['sheds', 1],
   ['litter', 1], ['slow', 1], ['mineral_free', 1], ['mineral_held', 1], ['rot', 1], ['wet_share', 7]]);
 

@@ -2,7 +2,7 @@
 //! (`Books`), and how that is booked through the cell's view of the store (`book`), each move with its heat. The cover
 //! and every other life of a cell keep their books this one way.
 
-use crate::chem::{Chemistry, Phase, Reaction};
+use crate::chem::{Chemistry, Heat, Phase, Reaction};
 use crate::store::{Moves, Node};
 use crate::units::MAX_SUBSTANCES;
 use crate::{World, AIR};
@@ -50,7 +50,8 @@ impl<const N: usize> Books<N> {
 /// Book what a life of cell `i` (ground at `t` K), which held `e` J and was given `set_aside` J from its
 /// aside node, took and gave in its month (`Books`): the light set aside for it from its aside node; gases from and to
 /// the air (taken from its air node with their heat at its temperature and their latent heat, given into the aside
-/// node with theirs, as bodies breathe); liquids and minerals from and to its ground, with their heat; its remains to its
+/// node with theirs, as bodies breathe); liquids and minerals from and to its ground, with their heat and the fusion
+/// enthalpy of the share of them molten there (`World::molten_last`); its remains to its
 /// ground. Last its heat comes to `target` J (its heat capacity at the temperature it ends at) with its ground. Returns
 /// the heat it holds then, J.
 pub fn book<const N: usize>(w: &World, moves: &mut Moves, (i, t): (usize, f64), (e, set_aside): (f64, f64), target: f64, b: &Books<N>) -> f64 {
@@ -58,7 +59,7 @@ pub fn book<const N: usize>(w: &World, moves: &mut Moves, (i, t): (usize, f64), 
     let (mut e, lift, ta, ground) = (e + set_aside + b.heat, w.lift(i), moves.t_air(w, j), Node::ground(i));
     moves.take(w, Node::aside(i), 0, 0.0, set_aside);
     let cap = moves.heat_cap_ground(w, i);
-    let held = |kk: usize, m: f64| m * (chem.subs[kk].cp * t + if chem.phase(kk, t) == Phase::Solid { 0.0 } else { chem.subs[kk].lf });
+    let held = |kk: usize, m: f64| m * chem.subs[kk].carried(t, w.molten_last(kk, i));
     for (kk, (&ext, &died)) in b.ext.iter().zip(&b.dead).enumerate().take(chem.ns()) {
         let (m, s) = (ext - died, &chem.subs[kk]);
         if m == 0.0 {
@@ -68,10 +69,10 @@ pub fn book<const N: usize>(w: &World, moves: &mut Moves, (i, t): (usize, f64), 
             moves.gas(w, kk, -m, lift);
             if m > 0.0 {
                 moves.take(w, Node::air(j), 0, 0.0, m * s.cp * ta);
-                e += m * (s.cp * ta + s.latent_gas());
+                e += m * s.carried_gas(ta);
             } else {
                 moves.give(w, Node::aside(i), 0, 0.0, -m * s.cp * t);
-                e += m * (s.cp * t + s.latent_gas());
+                e += m * s.carried_gas(t);
             }
         } else if m > 0.0 {
             moves.take(w, ground, kk, m, 0.0);

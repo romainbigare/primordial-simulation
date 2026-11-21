@@ -55,9 +55,8 @@ struct Land {
 // about, the share of its area that is land and the wetness index from which its land is saturated (the core's
 // `inside::wet_ground`); the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
 // its loose ground; and in the last numbers of the true colour's and the layer's planes, the land's ice, m, its ground
-// temperature, K, and its mean height, m; and the mean wetness index of the terrain's samples inside the cell (its first
-// number). (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
-const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const TERRAIN = 6; const PLANES = 7;
+// temperature, K, and its mean height, m. (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
+const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
 // Between texels of one channel its signed distance changes by at most the distance between them (√2 texels across a
@@ -271,7 +270,10 @@ fn soil_held(pore: f32, pores: f32, c: f32, twi: f32) -> f32 {
 // `inside::drains_source`: below it the law's channels are under a metre wide.)
 const SATURATED_EDGE = 0.5;
 fn saturated_at(at: vec2f) -> f32 {
-  let g = ground_at(at, false);
+  return saturated_of(ground_at(at, false), at);
+}
+// The same of the ground `g` at `at` (`ground_at`), where it is read already.
+fn saturated_of(g: Tiled, at: vec2f) -> f32 {
   let q = discharge_at(g, at);
   if (q > 0.0 && g.d <= 0.5 * land.channel.x * pow(q, land.channel.y)) { return 1.0; }
   let c = b_spline(at / land.map.x - 0.5);
@@ -295,21 +297,14 @@ fn tent(x: f32) -> f32 {
   return select(1.0 - (1.0 - t) * (1.0 - t) / 2.0, (1.0 + t) * (1.0 + t) / 2.0, t <= 0.0);
 }
 
-// The activity of a living thing on ground as wet as `wet` where it needs `need` (cover::activity, Physics::activity):
-// full where it is as wet as it needs, less as it dries.
-fn activity(wet: f32, need: f32) -> f32 {
-  let x = wet / need;
-  return select(pow(max(x, 0.0), land.soil.z), 1.0, x >= 1.0);
-}
-
 // The share of a kind whose roots need `need` m of loose ground that holds where `loose` m lies (the cover's own rule,
-// `cover::stand::rooted`, with its number `land.soil.w`): none from that share of its need down, all from its need up.
+// `cover::stand::rooted`, with its number `land.soil.z`): none from that share of its need down, all from its need up.
 // Bare bed holds no liquid in pores and nothing to anchor a tall plant; the need of each kind is its slot's
 // (`Cover::need`, tape/src/stands.rs). Where the loose depth changes by `spread` m across a pixel and that is more than
 // the rule's own span, the edge is spread over it, as the share of water at a shore is (no speckle where the loose
 // ground has fine patches).
 fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
-  let none = land.soil.w;
+  let none = land.soil.z;
   let middle = 0.5 * (1.0 + none) * need;
   let half = 0.5 * max((1.0 - none) * need, spread);
   return ease(middle - half, middle + half, loose);

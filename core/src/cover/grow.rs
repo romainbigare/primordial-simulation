@@ -22,7 +22,11 @@ pub fn step(w: &World, d: &mut Chunk) {
             cell(w, d, &p, i, dt);
         } else {
             let land = super::ground(w, i);
-            let moist = if land > 0.0 { super::soak(w, &p, i, w.g(p.liquid, i)).1.moist } else { 1.0 };
+            let soak = (land > 0.0).then(|| super::soak(w, &p, i, w.g(p.liquid, i)).1);
+            let moist = soak.map_or(1.0, |s| s.moist);
+            if let Some(s) = soak {
+                d.counts.ran.push((i as u32, super::CellRan { roots: super::moist(&s, false) as f32, ..Default::default() }));
+            }
             let c = d.cover(i);
             (c.mark, c.keep, c.film, c.reach) = (w.light[i], 0.0, 0.0, 0.0);
             remember(c, moist, w.cfg.months_per_year as f32);
@@ -39,7 +43,8 @@ fn remember(c: &mut Cover, moist: f64, year: f32) {
 /// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
 /// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer (its
 /// crown's base), and the capture area per unit of ground the light passes through its crown (`canopy::shade`); its
-/// activity (`cover::activity`), the share of its roots that work (`cover::working`), the share of its ground under the
+/// activity (`cover::activity`) and the share of it frozen (`cover::frozen`, set by `upkeep`), the share of its roots
+/// that work (`cover::working`), the share of its ground under the
 /// liquid, and the share of its plants on ground under the liquid past its roots' reach with the line over which none
 /// lies (`Footing`); what one more kg of it would
 /// store in the month at the bottom of its layer, J (`light`); its conducting walls, kg (`stand::sapwood`), and the key
@@ -55,6 +60,7 @@ pub(super) struct Slot {
     pub(super) bottom: f64,
     pub(super) layer: f64,
     pub(super) act: f64,
+    pub(super) frozen: f64,
     pub(super) work: f64,
     pub(super) wet: f64,
     pub(super) airless: f64,
@@ -160,6 +166,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let order = &*order;
     let (pays, season) = super::season::pay(w, c, (p, &e), (&mut s, &stored), order, (t, dt), (&mut b, counts));
     grow(w, c, (p, &e), (&s, pays, season), order, (i, a, dt), (&mut b, counts));
+    ran(&s, order, (i, super::moist(&a.soak, false)), counts);
     // Its plants grow where their roots gain (`soak::strips_share`): of what each slot holds now, what it stored this
     // month went to its strips and its rest by what a plant gains on each; the rest stands where it stood.
     for &q in order {
@@ -177,6 +184,16 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     fall(&mut c.snag, (p, &e), (ph.snag_life, dt), (&mut b, DIED));
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
     (b, caught)
+}
+
+/// What the cover of cell `i` ran at (`cover::CellRan`), counted for the tape: its slots `order`, `s` in the month, and
+/// the share of what the drier rest of its land holds for roots that it held, `roots`.
+fn ran(s: &[Slot; SLOTS], order: &[usize], (i, roots): (usize, f64), counts: &mut Counters) {
+    let mut out = super::CellRan { roots: roots as f32, ..Default::default() };
+    for &q in order {
+        out.slots[q] = super::Ran { act: s[q].act as f32, frozen: s[q].frozen as f32, wet: s[q].wet as f32 };
+    }
+    counts.ran.push((i as u32, out));
 }
 
 /// Where each of the `n` slots in use of cover `c` of cell `i` stands this month (`cover::footing` above its line, a
@@ -339,7 +356,7 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     let pond = if s.iter().any(|x| x.wet > 0.0) { a.soak.pond } else { 0.0 };
     let (t, liquid, gas) = (a.t, a.liquid + pond, a.gas);
     let rx = &chem.reactions[p.light];
-    let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
+    let (dh, pace) = (chem.dh(p.light), rx.relative_rate(t, ph.t_cat));
     let mut x = [0.0; SLOTS];
     for q in 0..s.len() {
         let need = dec(c.genes[q][MOIST]);

@@ -7,7 +7,7 @@
 //! (`liquid::soil_share`, `parts::Leaves`).
 
 use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile, reached, soil_share, Mobile}, parts::Leaves, range, Scratch};
-use crate::{math::one_minus_exp, solve::sweep::{sweep, Net}, store::{Class, LinkFlux}, World};
+use crate::{chem::Heat, math::one_minus_exp, solve::sweep::{sweep, Net}, store::{Class, LinkFlux}, World};
 
 /// Liquid over field capacity sinks into the store, at most its conductivity a second (`Pores::seep`, Darcy's law
 /// under its own weight) and no more than its room, with its heat, from the ground the laws under the surface reach
@@ -104,7 +104,7 @@ pub(super) fn liquid_heat(w: &World, s: &Scratch, liq: &[usize], i: usize, mol: 
 /// The heat of `mol` of the liquids `liq` at `t` K, J: each its heat capacity times `t` and the fusion enthalpy it
 /// holds as a liquid.
 pub(super) fn liquid_heat_at(s: &Scratch, liq: &[usize], t: f64, mol: &[f64]) -> f64 {
-    liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
+    liq.iter().zip(mol).map(|(&k, m)| m * s.sp[k].carried(t, 1.0)).sum()
 }
 
 /// In each layer liquid flows between cells by Darcy's law (`pore_flow`, `deep::flow`), from the ground the laws under

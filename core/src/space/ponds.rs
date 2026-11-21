@@ -67,11 +67,18 @@ pub(super) fn basins(g: &Grid, z: &[f64], f: &Flood) -> (Vec<u32>, Vec<Vec<u32>>
 /// flood's ways over it stay).
 pub(super) fn grade(h: &mut [f64], f: &Flood, basins: &[Vec<u32>]) {
     for members in basins {
-        let level = f.level[members[0] as usize];
-        if members.iter().all(|&k| level - h[k as usize] < GRADED_M) {
+        if shallow(h, f, members) {
+            let level = f.level[members[0] as usize];
             members.iter().for_each(|&k| h[k as usize] = level);
         }
     }
+}
+
+/// Is the closed basin of samples `members` of the flood `f` over heights `h` too shallow to hold a pond: its deepest
+/// sample less than `GRADED_M` under its level (the floods over a plain flow through it)?
+pub(super) fn shallow(h: &[f64], f: &Flood, members: &[u32]) -> bool {
+    let level = f.level[members[0] as usize];
+    members.iter().all(|&k| level - h[k as usize] < GRADED_M)
 }
 
 /// Where the load of a step of `dt` years settles (each sample's rise at `up` less how far it rose from heights `was`,

@@ -28,10 +28,10 @@ pub use groups::Sizes;
 pub(crate) use build::per_input;
 pub(crate) use budget::{BURNT, ROUNDED};
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
-pub use month::{landed, release};
+pub use month::{landed, release, CellRan, Ran};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
-pub use soak::{aired, breath, footing, gains, moist, soak, strips_share, working, Footing, Soak};
+pub use soak::{aired, breath, fill_now, footing, gains, moist, soak, strips_share, working, Footing, Soak};
 pub use stand::{height, loose_bins, stem, BINS};
 
 use crate::life::WET_TISSUE;

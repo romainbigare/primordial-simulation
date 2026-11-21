@@ -1,7 +1,7 @@
 //! What the reactions and conversions do for life: their heat, which burn, which keep their energy, what life builds
 //! of, and the roles the first life is placed with (`life_roles`, `matter_roles`, `fixing`).
 
-use super::{Chemistry, Phase, Reaction};
+use super::{Chemistry, Heat, Phase, Reaction};
 use crate::units::T_SURF;
 
 /// A reaction keeps energy (`keeps`) only where a burning gets more than this share more heat out of the same input:
@@ -82,6 +82,18 @@ impl Chemistry {
         let rich = rx.outputs.iter().find(|p| at(p.0) == Phase::Solid)?.0 as usize;
         let liquid = rx.inputs.iter().find(|p| at(p.0) == Phase::Liquid)?.0 as usize;
         Some((r_light, rich, liquid, self.burner(rich)?))
+    }
+
+    /// The solid life builds of its energy-rich solid alone (`life_roles`; its walls): the first output of the first of
+    /// `builds` whose inputs are all that solid.
+    pub fn wall(&self) -> Option<usize> {
+        self.derived().wall
+    }
+
+    /// `wall` worked out from the `life_roles` (`Chemistry::derived`).
+    pub(super) fn find_wall(&self, roles: Option<(usize, usize, usize, usize)>) -> Option<usize> {
+        let rich = roles?.1;
+        Some(self.builds.iter().find(|b| b.inputs.iter().all(|p| p.0 as usize == rich))?.outputs[0].0 as usize)
     }
 
     /// Body matter and the reaction that burns it with a gas (none where life does not grow).

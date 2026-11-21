@@ -13,12 +13,12 @@ use crate::World;
 /// Slot `x` pays its upkeep over `dt` at `t` K by burning its fuel (its plants without the oxidising gas at the yield
 /// of their fuel without it, `FERMENT_YIELD`), then loses to its cell's remains the plants on its
 /// ground under the liquid past its roots' reach whose store is spent (`airless`, `DROWNED`), the share unpaid
-/// (`SPENT`), the share its wear gives (`AGE`) and the share frozen (`PHASE`). Returns the kg lost by cause, and the
-/// upkeep, J.
-pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64, f64), b: &mut Books) -> ([f64; crate::life::DEATHS], f64) {
+/// (`SPENT`), the share its wear gives (`AGE`) and the share frozen (`PHASE`, kept in `Slot::frozen`). Returns the kg
+/// lost by cause, and the upkeep, J.
+pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &mut Slot, (t, dt): (f64, f64), b: &mut Books) -> ([f64; crate::life::DEATHS], f64) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
     let (burn, days) = (&chem.reactions[p.burn], dt / DAY);
-    let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
+    let pace = burn.relative_rate(t, ph.t_cat);
     let k = ph.repair(g[REPAIR] as f64) * pace;
     let living = upkeep_rates(chem, ph, p, &g, pace).map(|x| s.living * days * x);
     let active = living.iter().sum::<f64>() + ph.c_leaf * s.leaf * days * k;
@@ -51,7 +51,8 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     // Members of a field wear out at the rate of living (Rubner 1908), a dormant one at least at `Physics::dormant` of
     // the active rate; below its frost gene, hardened by its dormancy, its frozen share dies (laws.md 3).
     let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
-    let frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
+    s.frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
+    let frozen = s.frozen;
     let drowned = airless(c, x, s, burnt / held_fuel.max(1e-300) / (FERMENT_YIELD * dear));
     let mut lost = [0.0; crate::life::DEATHS];
     let mut left = 1.0;
@@ -115,7 +116,7 @@ fn airless(c: &mut Cover, x: usize, s: &Slot, burnt: f64) -> f64 {
 pub(super) fn keep_per_kg(w: &World, c: &Cover, p: &Parts, x: usize, (t, dt): (f64, f64)) -> f64 {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
     let (mm, rho, days) = (p.mm(chem), chem.subs[p.sub[super::WALL]].density[0], dt / DAY);
-    let pace = chem.reactions[p.burn].arrhenius(t.max(1.0)) / chem.reactions[p.burn].arrhenius(ph.t_cat);
+    let pace = chem.reactions[p.burn].relative_rate(t, ph.t_cat);
     let leaf = dec(g[super::LEAF]);
     let sapwood = super::stand::sapwood(ph, (leaf, c.lift(ph, &mm, rho, x)), f64::INFINITY, rho);
     let living: f64 = upkeep_rates(chem, ph, p, &g, pace).iter().sum();
@@ -129,7 +130,7 @@ pub(super) fn keep_per_kg(w: &World, c: &Cover, p: &Parts, x: usize, (t, dt): (f
 pub(super) fn root_share(w: &World, p: &Parts, (t, dt): (f64, f64), drink: f64, g: &[f32; NG]) -> f64 {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let burn = &chem.reactions[p.burn];
-    let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
+    let pace = burn.relative_rate(t, ph.t_cat);
     let per_kg = ph.c_basal * dt / DAY * pace + ph.root_turnover * p.living_cost(chem, ph) / w.cfg.months_per_year as f64;
     drink / (dt * uptake(ph, g)) * per_kg / chem.dh(p.light)
 }

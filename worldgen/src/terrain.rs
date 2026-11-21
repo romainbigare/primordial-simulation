@@ -3,7 +3,7 @@
 use crate::chemistry::{chemistry0, Init};
 
 use pcore::change::Reactor;
-use pcore::chem::{Chemistry, Phase};
+use pcore::chem::{Chemistry, Heat, Phase};
 use pcore::flow::scale_height;
 use pcore::life::Life;
 use pcore::space::square::Square;
@@ -119,7 +119,7 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
     for j in 0..w.mesh.level(AIR).n() {
         let t = w.t_air(j);
         let more: Vec<(usize, f64)> = (0..w.chem.ns()).filter(|&k| w.chem.absorbs_heat(k)).map(|k| (k, w.a(k, j) * (factor - 1.0))).collect();
-        let heat = more.iter().map(|&(k, m)| m * (w.chem.subs[k].cp * t + w.chem.subs[k].latent_gas())).sum();
+        let heat = more.iter().map(|&(k, m)| m * w.chem.subs[k].carried_gas(t)).sum();
         w.cross((Boundary::Outside, Node::air(j)), more, heat);
     }
 }
@@ -296,6 +296,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         rise_south: Vec::new(),
         loose_bins: Vec::new(),
         soil: Vec::new(),
+        relief: Default::default(),
         planet: None,
         light: vec![0.0; n],
         events: Vec::new(),
@@ -303,11 +304,11 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
     };
     world.soil = pcore::soil::of_world(&world);
     let (amounts, heat) = (|w: &World, c: Class| w.store.amounts(c).to_vec(), |w: &World, c: Class| w.store.heat(c).to_vec());
-    // The low basin's liquid at 0 m and each body of standing liquid full to its pass: each cell whose own ground dips
+    // The low basin's liquid at its level (`STAND_M`, 0 m) and each body of standing liquid full to its pass: each cell whose own ground dips
     // under them holds the liquid that fills its pores and stands over its ground up to them (`World::full_bodies`), as
     // Flow's pass stands it.
     let v_low = world.chem.molar_volume(init.low, Phase::Liquid);
-    let low = world.full_bodies(0.0);
+    let low = world.full_bodies(pcore::space::wear::STAND_M);
     let mut ground = amounts(&world, Class::Ground);
     for (i, &under) in low.iter().enumerate().filter(|p| *p.1 > 0.0) {
         ground[init.low * n + i] += (world.pores(i).porosity * loose[i] * world.mesh.cells().area()[i] + under) / v_low;

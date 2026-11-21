@@ -219,7 +219,8 @@ point (the tape's frames, a byte a square; the pictures) asks the tree for the l
 stands on each cell (`contract::stands`), and the surroundings (`contract::surroundings`: Flow's state rebuilt in full
 and each cell's place from it, which Flow's own pass then leaves). Then Flow: the air in steps of `AIR_STEP_DAYS` (15
 days, two a month, each at its own time in the month), after each the sink of the liquid over field capacity into the
-bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: the cover's,
+bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: where
+the soil's liquid saturates each cell's land, by Flow's state as its month left it, `contract::wet_grounds`; the cover's,
 then the takers') and Change.
 **Chunks and the parallel pass** (`life::run`). The cells are cut into `Config::chunks` runs of neighbouring indices,
 the same for any number of threads. Each chunk is one task on the pool, its cells' life taken out of the world, the
@@ -251,7 +252,8 @@ start found it), in its pores (the cover's roots reach it, a mouth does not), fr
 (as deep as the month's start found it), and frozen in its pores; and beside them what ran over it in the month (its main channel's month,
 `World::liquid_month`), which a mouth reaches though it is no amount of the cell's. **The way to it**
 (`contract::ways_to_liquid`, at the start of life's month, after Flow's): for each decade of liquid (`LEVELS`), the shortest way
-along the links between cells' centres over land from each cell to the nearest cell whose open liquid over the month
+along the links between cells' centres over cells that hold land out of their liquid (`contract::land`, as the month's
+start found it) from each cell to the nearest cell whose open liquid over the month
 (standing and running) holds that much (Dijkstra 1959; ties by the cell's index); `contract::to_liquid` gives it for a need
 rounded up to its decade. **Vapour** (`contract::vapour`):
 a taker sheds heat by turning liquid and soft solid of its ground into vapour (what it drank of the running liquid
@@ -285,8 +287,10 @@ side; Horton 1945) is the table at the surface over its channel's width (the cha
 pores full; elsewhere its soil holds the cell's liquid departed the same way (`soil_held`). The laws read it over a
 cell's land samples (the highest, by its land's share of its area; `inside::wet_ground`): the share saturated, at an
 index of at least c plus the mean room over `soil_m`, and the drier rest, which holds what that share does not
-(`inside::rest`). The month's start finds it for each cell (`contract::surroundings`, `World::life`'s `wet`), and every
-law reads that one share: flames (3c), and how much of the land is waterlogged, its pores holding no gas: the saturated
+(`inside::rest`). The start of life's month finds it for each cell, after Flow's month and the soil's new pores, by
+Flow's state then: the land's share of the cell (`flow::land_shares`), its pores' fill and the share saturated
+(`contract::wet_grounds`, `World::life`'s `wet`). Every law reads that one moment, the fill and the share together
+(`inside::land_filled`, `saturated_share`): the cover's roots (`cover::soak`), and flames (3c), and how much of the land is waterlogged, its pores holding no gas: the saturated
 share and, of the drier rest, the share its liquid fills from the bottom up over field capacity (`inside::airless`,
 `Pores::full`), which roots (3) and the decomposers (2.3) read. Where the rest holds more than field capacity that is
 the share the cell's mean fill gives; where it holds less it adds the wet strips of a drier cell. What stands where the ground lies under the cells' level; each channel as wide as
@@ -360,8 +364,16 @@ them a deep store (`Class::Deep`, `bed_depth`, `bed_porosity`) that bodies and C
 a solid near its melting point (`soft`), as snow and ice. It holds no liquid: its pores close as it settles, as snow
 becomes ice (Cuffey and Paterson 2010). It insulates the node under it (its depth over its conductivity), and its
 surface warms no further than its melting point: past it the top melts and the melt soaks in, so the node takes all
-the heat that reaches the surface (`air::radiation`). A cell is **land**
-when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
+the heat that reaches the surface (`air::radiation`). A node's solid surface is one height (`World::surface_z`):
+Flow's, kept as matter moves (`land::layers`), and before Flow first built its state the same sum from its amounts and
+`thaw`; only the potential energy stacks its own from the store as it is now (`stack::Column`), so its books follow
+every move exactly. A node's heat capacity is its bed's skin and then its loose amounts (`ground::ground_cap`), for
+Flow, Change and life alike. **Land** asks two questions. A cell is land in the sense of the sea when its solid
+surface is above the open low liquid's level, 0 m (`World::is_land`, `flow::on_land`, `space::wear::STAND_M`): what
+leaves it for a cell under that level reaches the sea, and creep and heat conducted sideways act on it. The land a
+cell offers life is the area of it out of the liquid that stands over its pores (`contract::land`, `flow::land_shares`):
+the cover, the soil and the walkers live on it; before Flow first built its state it is all of a cell that is land in
+the sense of the sea. The top `skin_m` trades heat with the surface. Heat spreads
 sideways yearly by one explicit `solve::sweep`, a link passing the harmonic mean of conductivity × thickness, times
 width over length (Patankar 1980; `flow::land::conduct`), between land cells (`flow::on_land`): rock spreads a hot spot one cell in about 70,000 years, so a
 year is far below the explicit limit on cells of kilometres (1.7).
@@ -426,7 +438,9 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
 (`Scratch::note`). The state is brought up to date after each of the air's steps, whose heat melts and freezes, before
 the sink into the bed's store and the liquid read it; and a node on a plateau that liquid left or reached finds its
 molten share again from its heat (`liquid::book`): what moved of the plateau's substance was liquid, and what stays is
-what the heat holds molten, as every law and the shell then read it.
+what the heat holds molten, as every law and the shell then read it. Life reads the ground it stands on as Flow's last
+solve left it: its temperature (`World::thaw_last`) and the share of each substance molten there
+(`World::molten_last`), so what it takes from its ground or gives it carries the fusion enthalpy of that share.
 
 ### 1.2 Liquid
 `flow::liquid`, once a month, after the air's steps; last, gases dissolve in the liquid (1.5). The sink into the bed's store ends each of the air's steps
@@ -534,7 +548,7 @@ what the heat holds molten, as every law and the shell then read it.
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::runoff::load`, `wear`; in a body and below
 0 m it wears nothing): in each land cell, g times what runs through each of its samples in no pond in the month, kg,
-times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
+times the fall to the sample it runs to (the samples' heights as last built, below). It
 **carries** up to `carry` m³ of loose solids per J of the cell's work times its loose ground's erodibility against a
 loam's (`Texture::erodibility`: M^1.14 (12 − OM) of Wischmeier and Smith 1978, M its middle share times its share
 that is not fine, OM its organic per cent read to 4; middle particles are carried most easily, coarse ones are heavy,
@@ -555,17 +569,41 @@ up; what was picked up above it comes in at its top. A sample where each class p
 sample. What leaves a key sample reaches the next by the product of the passes of the samples between
 (`Carriage::skip`); the rest settles in the next one's cell. The load picked up between two key samples skips that
 product (it would lose less than 1e-10 of it, measured). What reaches a body, or a sample whose liquid runs to none,
-settles in the cell that holds it. The form is tuned: the shares are fixed by the flood, not by the month's flow.
+settles in the cell that holds it. The form is tuned: the shares are fixed by the flood, not by the month's flow. What settles at a key sample whose
+way runs on or ends on land lies on that sample as its **relief** (`space::relief::Relief`: solid volume per area, m,
+as `surface_z`; saved, sparse); a cell's pick-up takes first from the relief of its samples, each its share by its work
+and at most what lies on it, the rest from the cell's loose ground at large. The relief says where in a cell its
+matter lies; the matter is the cell's. **A sample holds load up to its room**, a cap: the volume that lifts it to the
+threshold slope over the sample its liquid runs to, the slope at which the flood stirs every class (u* reaches the
+coarsest's sinking speed, S = w² / (g H), `soil::threshold_slope`; the threshold channel, Parker 1978), and no higher
+than the lowest sample whose liquid runs to it (a pond's too: a deposit dams no way that feeds it and raises no lake
+over its outlet), as the samples were last built, less what was laid on it since. Where what would settle at a key sample fills more than its room,
+every class settles by the share the room takes and the rest passes on; a sample whose liquid runs to none has no
+room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`): the
+samples stand at the seed's heights with what was laid on each, each cell's raised to its ground (`World::ground_z`,
+its solids that stay solid at the surface: snow and ice do not raise it): the cells' offsets spread smoothly between
+their centres (a box filter half a square each way, three passes, round a globe's rows), what their means then lack spread the same way
+eight times, and each raised by the constant it still lacks, so each cell's samples' mean is its ground exactly
+(`space::relief::heights`). Over them the flood finds the ways, the ponds and the wetness index again
+(`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level; a closed basin
+too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flow through it (the start's wear fills
+such basins; a build moves no ground). Then each cell's ground as liquid stands on it, the bodies, the key samples and
+their rooms are found again; what a cell's parts of the bodies held follows each part's pond (a new pond comes from the
+old pond that held most of its samples, one to one; a cell whose parts do not all match shares its liquid at one
+level, as at the start),
+and no matter moves. `World::is_land` stays the cell's own: its surface over the level (`surface_z`, with its snow and
+ice), so a cell can be land while its samples, built at its ground without them (`ground_z`), lie under the level.
 
 The load is booked apart from the liquid (`runoff::Crossings`), each with its own heat. Each key sample's pool (mol of
 each substance and the heat) leaves by the share of its volume that passes, so in a pool the substances and the
 particle classes are independent. The load is the loose ground's solids (`Scratch::solids`), never the liquids' (a
-frozen liquid is no load). **Known limits:** the load is booked after the liquid's pass, so the liquid in the pores of
+frozen liquid is no load). **Known limits:** between builds of the samples a fan or a plain builds forward, but does not
+fill back up its valley (the rooms are of the slopes as last built); the load is booked after the liquid's pass, so the liquid in the pores of
 the ground it picks up stays in its cell and stands over its pores until the next pass. Snow or ice on a cell does not
 shield its ground (the meltwater of a snowpack picks up the ground under it). What the skip product takes settles in
 the next key sample's cell, which may not be the cell of the sample where it settled. A fixed share per class ignores
 that a class loses its coarse end as it goes, so far down a plain the coarse class settles a little faster than it
-would. The heights do not move by what settles (it is matter of the cell, its surface rises evenly). The heat of the
+would. What reaches a body spreads evenly over its entry cell's ground (no lobe yet). The heat of the
 liquid's fall lands with the liquid, not along its
 way. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion (its solids, `Scratch::solids`, as the load's: snow and ice, a liquid's
@@ -667,8 +705,8 @@ gives the climate of 1-day ones within 0.3 K on the land and the land's runoff w
   the book takes it once, at the mean of that air over the step. Each cell takes its share of what it gives: of the heat
   by its heat capacity, so they warm alike, and of each gas by what it holds of it, so none gives more than it holds.
   Its rain falls on it as on one place, at the air touching it by area, shared to its cells by area (1.5).
-- **Gas from the cover** goes into the aside node with its latent heat; the air's step takes it up with
-  its lift.
+- **Gas from the cover and from Change** goes into the aside node with its latent heat; the air's step takes it up
+  with its lift, the one way a gas given by the ground or its life rises into the air.
 - **Shade**: the cover's kinds share its light by height (3).
 
 ### 1.5 Evaporation, rain and dissolved gases
@@ -981,8 +1019,10 @@ tolerance.
 ### 2.2 Where it runs
 **Ground and air nodes** (`change::step`, `Reactor::react`) react when due over all the time since, at Flow's last
 temperature (a plateau's fusion heat set aside), then sleep until their reactions would use 5% of an input or warm
-them 0.5 K, at most `sleep_days`. The nodes under one air node react as one task (a block), each into a row of what its reactions changed and the gas it gives its air node; the rows are booked after the call, each array of the store by one task (`change/booking.rs`, `store::book_by_array`), so an air node gets the gas of its ground nodes in the order of their cells whatever thread ran them. Gas a ground node takes or gives
-(what its reactions made less what the node itself gained, so it never gives more than it holds) crosses to its air node with its heat and latent heat. **Growth** is a
+them 0.5 K, at most `sleep_days`. The nodes under one air node react as one task (a block), each into a row of what its reactions changed and the gas it gives or takes; the rows are booked after the call, each array of the store by one task (`change/booking.rs`, `store::book_by_array`), so an air node gets the gas of its ground nodes in the order of their cells whatever thread ran them. Gas a ground node takes or gives
+(what its reactions made less what the node itself gained, so it never gives more than it holds) carries its heat and
+latent heat: what it gives goes into its cell's aside node, which the air's next step empties into the air with its
+lift, as life's gas does; what it takes comes down from its air node, which is given back its lift. **Growth** is a
 conversion the cover runs, paid by work (3).
 
 ### 2.3 What gas a ground node touches
@@ -1001,7 +1041,7 @@ the ideal-solution law (`Chemistry::melt_in`): 1/T = 1/Tm − R · ln(x) / Lf, x
 its solutes. Only the solvent (the most abundant liquid) is lowered; solutes are liquids melting below it (the salts 11
 and 12, the fat 6); ice and liquid count together, so it freezes at one point. One law for ground plateaus, ice cover
 (`World::thaw`) and Change. **Latent heat**: a gas in the air holds its melting and boiling heat
-(`Substance::latent_gas`), paid or got as it enters or leaves, and liquid taken or given carries
+(`chem::Heat::latent_gas`), paid or got as it enters or leaves, and liquid taken or given carries
 it. **The densest temperature** of a liquid (`Chemistry::dense_in`, what overturns a liquid's top and
 deep, 1.1) is its pure liquid's (`Substance::dense`) lowered in proportion to the mass of its solutes per mass of it
 (Despretz's law, `Substance::dense_drop`), and no lower than its melting point there: a liquid salty enough is densest
@@ -1249,7 +1289,9 @@ seeds fill it:
   building, what it sheds, what dies, the fuel its roots give its ground, seeds out and landed, the seeds lying that
   die, what takers take or break, what is placed, rounding, and what flames burn or kill (3c). The seeds' flows in kg (landed, sprouted, worn, frozen,
   taken: `Counters::seeds`) and what each cell's cover built in the last whole year (`Counters::grown_last`) are counted
-  for the tape. The tape records them each year.
+  for the tape. The tape records them each year. What each slot ran at in its cell's last month (its activity, its
+  frozen share and the share of its ground under the liquid, `cover::Ran` in `Counters::ran_month`) is kept for the
+  page, which draws a slot by the numbers the law used.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out over the slots, `grow::shares`: where the ground holds what they would take, `build::wants`, each gets its share
   of all of it by that; where it is short, by their fine roots (as many as the liquid each drew needs, the minerals
@@ -1368,7 +1410,7 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   (`World::near_ground`, its vapour over saturation at the ground's temperature), to its bottom, between that and
   saturation by the share s of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the
   share by which the ground's evaporation draws its liquid; Manabe 1969) on the drier part of its land: the share of its
-  land saturated at the month's start (`inside::saturated_share`, 0) is too wet to carry a flame, so the share of its ground the remains cover
+  land saturated at the start of life's month (`inside::saturated_share`, 0) is too wet to carry a flame, so the share of its ground the remains cover
   is times one less that share, and s is read from what the rest holds; the key liquid frozen in its pores counted
   with it; where snow lies (`contract::Place::snow`) it hides the remains and they do not burn.
   At each depth it holds the sorption curve

@@ -47,10 +47,10 @@ pub(crate) fn around(w: &World, moves: &Moves, p: &Parts, i: usize) -> Around {
         Some((gas, w.near_ground(i, p.liquid)?, w.near_ground(i, gas)?))
     });
     let film = near.map_or(0.0, |(gas, _, p_gas)| pores(chem, ph, (p.liquid, gas), t, p_gas));
-    let thirst = near.map_or(0.0, |(_, p_liquid, _)| film * (chem.p_sat(p.liquid, t) - p_liquid).max(0.0) / t);
+    let lost = near.map_or(0.0, |(_, p_liquid, _)| thirst(chem, p.liquid, film, t, p_liquid));
     let air = std::array::from_fn(|kk| if kk < chem.ns() && chem.phase(kk, t) == Phase::Gas { seen(kk) } else { f64::INFINITY });
     let ground = std::array::from_fn(|x| if x < chem.ns() { moves.amount(w, Node::ground(i), x) } else { 0.0 });
-    Around { t, liquid, soak, reach, light: w.light[i], gas, thirst, pores: film, air, ground, tick: w.month() }
+    Around { t, liquid, soak, reach, light: w.light[i], gas, thirst: lost, pores: film, air, ground, tick: w.month() }
 }
 
 /// The film of a leaf's pores at `t` K for the vapour of the key liquid `liquid`, per mol a s of the gas `gas` they take
@@ -63,10 +63,10 @@ pub fn pores(chem: &Chemistry, ph: &crate::Physics, (liquid, gas): (usize, usize
     (chem.subs[gas].molar_mass / chem.subs[liquid].molar_mass).sqrt() * t / (ph.drawdown * p_gas).max(1e-300)
 }
 
-/// The key liquid `liquid` a leaf at `t` K loses as vapour per mol of the gas `gas` it takes in, mol, where the air near
-/// it holds the partial pressures `[p_liquid, p_gas]` of them, Pa: its pores' film (`pores`) times the vapour's deficit
+/// The key liquid `liquid` a leaf at `t` K loses as vapour per mol of the gas it takes in, mol, where its pores' film is
+/// `film` (`pores`) and the air near it holds `p_liquid` Pa of the vapour: the film times the vapour's deficit
 /// (saturation at the leaf, `Chemistry::p_sat`, less the air's) over the temperature.
-pub fn thirst(chem: &Chemistry, ph: &crate::Physics, (liquid, gas): (usize, usize), t: f64, [p_liquid, p_gas]: [f64; 2]) -> f64 {
-    pores(chem, ph, (liquid, gas), t, p_gas) * (chem.p_sat(liquid, t) - p_liquid).max(0.0) / t
+pub fn thirst(chem: &Chemistry, liquid: usize, film: f64, t: f64, p_liquid: f64) -> f64 {
+    film * (chem.p_sat(liquid, t) - p_liquid).max(0.0) / t
 }
 

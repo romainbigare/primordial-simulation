@@ -17,15 +17,17 @@ struct Columns<'a> {
     ns: usize,
     /// What a mol of each substance holds apart from heat in a node of the rows' class, J/mol (`held`)
     held: Vec<f64>,
-    /// What a mol of each holds more in the air than in the ground, J/mol (`held_more`)
+    /// What a mol of each holds more in the air than in the ground, J/mol (`held_more`), and in an aside node
     more: Vec<f64>,
+    aside: Vec<f64>,
     /// Per row of ground nodes, the heat its node gives the potential energy, J (`fall`)
     fall: Vec<f64>,
 }
 
 impl Rows {
-    /// Book the rows on the world: the reactions of each node, and the gas a ground node gives its air node with its
-    /// heat and latent heat, the air paying its lift from its heat into the potential energy (`Store::lifted`), and a
+    /// Book the rows on the world: the reactions of each node; the gas a ground node gives its cell's aside node with
+    /// its heat and latent heat (the air's next step lifts it, `flow::air`, as it lifts life's), and the gas it takes
+    /// from its air node with its heat, the air given back its lift from the potential energy (`Store::lifted`); and a
     /// ground node what its stack gains (`fall`). What rounding leaves below zero is set to zero and counted
     /// (`Counters::rounded`).
     pub(super) fn book(&self, w: &mut World) {
@@ -37,9 +39,10 @@ impl Rows {
             ns,
             held: (0..ns).map(|k| held(chem, self.class, k)).collect(),
             more: (0..ns).map(|k| held_more(chem, Class::Ground, Class::Air, k)).collect(),
+            aside: (0..ns).map(|k| held_more(chem, Class::Ground, Class::Aside, k)).collect(),
             fall,
         };
-        let classes: &[Class] = if self.class == Class::Ground { &[Class::Ground, Class::Air] } else { &[Class::Air] };
+        let classes: &[Class] = if self.class == Class::Ground { &[Class::Ground, Class::Air, Class::Aside] } else { &[Class::Air] };
         counts.add_rounded(book_by_array(store, ns, classes, self.nodes.len() / ROWS_PER_ITEM, |b| cols.changes(b)));
         // The potential energy is a whole history's sum: the lifts are summed apart, in the order of the air nodes, and
         // added once; then what the ground nodes' stacks gained, in the order of the rows.
@@ -47,10 +50,10 @@ impl Rows {
         store.lift(-cols.fall.iter().sum::<f64>());
     }
 
-    /// Per row of ground nodes, what its node's heat gives the potential energy, J: its gas leaves from its head (the
-    /// air pays the rest of its lift, `rows`), and its reactions and the gas it gave move the matter of its stack and
-    /// the air over it (`flow::gain`); none for the rows of air nodes, whose matter all lies at their mean ground
-    /// (laws.md 0, "The books").
+    /// Per row of ground nodes, what its node's heat gives the potential energy, J: its reactions and the gas it gave
+    /// its aside node (at its head) move the matter of its stack and the air over it (`flow::gain`), and the gas it took
+    /// comes down from its air node to its head (the air gives back the rest of its lift, `rows`); none for the rows of
+    /// air nodes, whose matter all lies at their mean ground (laws.md 0, "The books").
     fn fall(&self, w: &World) -> Vec<f64> {
         if self.class != Class::Ground {
             return Vec::new();
@@ -58,8 +61,13 @@ impl Rows {
         let (ns, g, head) = (w.chem.ns(), w.cfg.gravity, w.scratch.view().lift_at[0]);
         let rows: Vec<(usize, &[f64])> = self.each().collect();
         crate::par::map(&rows, |&(i, row)| {
-            let up: f64 = (0..ns).map(|k| row[ns + k] * w.chem.subs[k].molar_mass).sum();
-            -(crate::flow::gain(w, i, |c, k| if c == Class::Ground { row[k] - row[ns + k] } else { 0.0 }, 0.0) + up * g * head[i])
+            let taken: f64 = (0..ns).map(|k| row[ns + k].min(0.0) * w.chem.subs[k].molar_mass).sum();
+            let d = |c: Class, k: usize| match c {
+                Class::Ground => row[k] - row[ns + k],
+                Class::Aside => row[ns + k].max(0.0),
+                _ => 0.0,
+            };
+            -(crate::flow::gain(w, i, d, 0.0) + taken * g * head[i])
         })
     }
 }
@@ -70,6 +78,8 @@ impl Columns<'_> {
         match (b.class, b.ks.clone()) {
             (class, Some(ks)) if class == self.rows.class => self.own_amounts(b, ks),
             (class, None) if class == self.rows.class => self.own_heat(b),
+            (Class::Aside, Some(ks)) => self.aside_amounts(b, ks),
+            (Class::Aside, None) => self.aside_heat(b),
             (_, Some(ks)) => self.air_amounts(b, ks),
             _ => self.air_heat(b),
         }
@@ -96,22 +106,42 @@ impl Columns<'_> {
             }
         }
     }
-    /// The gas the ground nodes gave goes into their air nodes.
+    /// The gas the ground nodes gave goes into their cells' aside nodes.
+    fn aside_amounts(&self, b: &mut Booker, ks: Range<usize>) {
+        let (ns, len) = (self.ns, b.len);
+        for (i, row) in self.rows.each() {
+            for k in ks.clone().filter(|&k| row[ns + k] > 0.0) {
+                b.add(k * len + i, row[ns + k]);
+            }
+        }
+    }
+    /// The heat of the aside nodes: the heat of the gas their ground nodes gave less what it holds more there.
+    fn aside_heat(&self, b: &mut Booker) {
+        let ns = self.ns;
+        for (i, row) in self.rows.each() {
+            for k in (0..ns).filter(|&k| row[ns + k] > 0.0) {
+                b.add(i, heat_received(row[2 * ns + k], row[ns + k], self.aside[k]));
+            }
+        }
+    }
+    /// The gas the ground nodes took comes from their air nodes.
     fn air_amounts(&self, b: &mut Booker, ks: Range<usize>) {
         let (ns, len, width) = (self.ns, b.len, self.rows.width);
         for (block, rows) in self.rows.by_block() {
             for row in rows.chunks_exact(width) {
-                b.column(|q| (ks.start + q) * len + block.at, &row[ns + ks.start..ns + ks.end], 1.0);
+                for k in ks.clone().filter(|&k| row[ns + k] < 0.0) {
+                    b.add(k * len + block.at, row[ns + k]);
+                }
             }
         }
     }
-    /// The heat of the air nodes: the heat of the gas their ground nodes gave less what it holds more in the air, one gas
-    /// after the other (the rows of one air node stay near each other), then the lift they pay.
+    /// The heat of the air nodes: the heat of the gas their ground nodes took less what it holds more in the air, one gas
+    /// after the other (the rows of one air node stay near each other), then the lift they are given back.
     fn air_heat(&self, b: &mut Booker) {
         let (ns, width) = (self.ns, self.rows.width);
         for (block, rows) in self.rows.by_block() {
             for k in 0..ns {
-                for row in rows.chunks_exact(width).filter(|row| row[ns + k] != 0.0) {
+                for row in rows.chunks_exact(width).filter(|row| row[ns + k] < 0.0) {
                     b.add(block.at, heat_received(row[2 * ns + k], row[ns + k], self.more[k]));
                 }
             }

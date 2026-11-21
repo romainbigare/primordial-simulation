@@ -8,7 +8,7 @@ mod shares;
 mod wet;
 
 pub use shares::{deficit_at, soil_held, soil_level, Means};
-pub use wet::{airless, channel_share, drains_source, flowing, parts_now, rest, saturated, saturated_share, wet_ground, wet_land, WetGround};
+pub use wet::{aired, airless, channel_share, drains_source, flowing, land_filled, parts_now, rest, saturated, saturated_share, wet_ground, wet_land, WetGround};
 
 use crate::math::central;
 use crate::World;
@@ -40,9 +40,10 @@ impl World {
         self.liquid_flux.get(i).copied().unwrap_or(0.0) as f64 / shed
     }
 
-    /// The terrain's worn samples of this world (`Terrain::samples`), which the ground inside each cell reads.
+    /// The terrain's samples of this world as last built from what its load laid (`Terrain::built`; the seed's worn
+    /// samples before the first build), which the ground inside each cell reads.
     pub fn terrain_samples(&self) -> std::sync::Arc<crate::space::samples::Samples> {
-        self.terrain.samples(self.terrain.seed, &self.map, (self.cfg.lat_south, self.cfg.lat_north))
+        self.terrain.built(self.terrain.seed, &self.map, (self.cfg.lat_south, self.cfg.lat_north), &self.relief)
     }
 }
 

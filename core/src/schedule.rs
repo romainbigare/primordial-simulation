@@ -31,10 +31,11 @@ type Pass = (Stage, &'static str, fn(&mut World));
 /// its ground holds (`soil::month`), Flow's state built anew where its pores changed.
 const START: [Pass; 3] = [(Stage::Cover, "stands", contract::stands), (Stage::Flow, "surroundings", contract::surroundings), (Stage::Flow, "soil", soil::month)];
 
-/// The passes of a month's start alone (`START`): for a world placed or edited between months, which the laws read
-/// as they would at a month's start.
+/// The passes of a month's start alone (`START`), then the wet ground life's month finds (`contract::wet_grounds`):
+/// for a world placed or edited between months, which the laws read as they would at a month's start.
 pub fn month_start(w: &mut World) {
     START.iter().for_each(|&(_, _, run)| run(w));
+    contract::wet_grounds(w);
 }
 
 /// Advance the world by one month. This is the whole step: `next_state = step(state)`.
@@ -88,6 +89,10 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
             panic!("broken after {what} (day {}): {e}", w.day());
         }
     };
+    // At a year's start, every `build_years`, the terrain's samples are built from what the load laid (`flow::build`).
+    if flow::build::due(w) {
+        pass(w, Stage::Flow, "build", &flow::build::build);
+    }
     // The month's start builds Flow's state in full for the cells' surroundings; Flow's own pass leaves it then.
     for (stage, what, run) in START {
         pass(w, stage, what, &run);

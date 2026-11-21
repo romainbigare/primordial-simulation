@@ -88,6 +88,14 @@ pub(crate) fn passes(u: f64, q: f64, run: f64, buoyant: f64, g: f64) -> [[f64; 3
     shares
 }
 
+/// The threshold channel (Parker 1978): the slope over which a flood `depth` m deep stirs every particle of the classes,
+/// its particles `buoyant` times the liquid's weight at gravity `g`: its shear velocity √(g H S) reaches the sinking
+/// speed of the coarsest (`settles` returns the top size), S = w² / (g H). Down it `passes` lets every class pass.
+pub(crate) fn threshold_slope(depth: f64, buoyant: f64, g: f64) -> f64 {
+    let w = sinking(CLASSES[COARSE][1], buoyant, g);
+    w * w / (g * depth)
+}
+
 /// Particle shares `x` (fine, middle, coarse) of which the share `weathers` weathers, after `years`: that share of the
 /// middle and coarse particles turned fine as 1 − exp(−years / `WEATHER_YEARS`).
 fn weathered(x: [f64; 3], weathers: f64, years: f64) -> [f64; 3] {

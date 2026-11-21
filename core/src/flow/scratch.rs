@@ -32,7 +32,24 @@ pub(super) struct Sp {
     pub(super) mineral: bool,
 }
 
+impl crate::chem::Heat for Sp {
+    fn cp(&self) -> f64 {
+        self.cp
+    }
+    fn lf(&self) -> f64 {
+        self.lf
+    }
+    fn lv(&self) -> f64 {
+        self.lv
+    }
+}
+
 impl Sp {
+    /// Whether its solid lies as soft cover on the loose ground at `t` K: warmer than `soft`.
+    #[inline]
+    pub(super) fn soft_at(&self, t: f64) -> bool {
+        t > self.soft
+    }
     /// Its liquid share in ground at `t` K where the share `molten` of it is molten and the minerals of growth stay
     /// dissolved by the share `free` (`State::dissolved`): none at or over its boiling point; of a mineral only what
     /// stays dissolved, the rest held on the exchange sites, which neither moves, nor fills, nor takes room (laws.md 4).
@@ -167,10 +184,17 @@ pub(super) struct State {
     /// Of each ground node whose own ground lies partly under its liquid, how its matter and heat lie between its land
     /// and its liquid (`parts::Parts`); none for a node that is one.
     pub(super) parts: Vec<Option<super::parts::Parts>>,
-    /// Of each cell, what its part of each body of standing liquid holds of what stands over its pores, m³, in the
-    /// order of its parts (`curve::Curve::ponds`), as the last runoff's pass left it (`runoff::stand`): the share of a
-    /// cell's liquid each of its bodies has.
-    pub(super) held: Vec<Vec<f64>>,
+    /// Of each cell, what its part of each body of standing liquid holds of what stands over its pores (`Holding`), as the
+    /// last runoff's pass left it (`runoff::stand`): the share of a cell's liquid each of its bodies has.
+    pub(super) held: Vec<Holding>,
+}
+
+/// What a cell's parts of the bodies hold (`State::held`): the pond of each part (`curve::Curve::ponds`, in their
+/// order), and what each holds, m³.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub(super) struct Holding {
+    pub(super) ponds: Vec<u32>,
+    pub(super) m3: Vec<f64>,
 }
 
 /// Working memory of the law: its saved state (`State`) and caches, rebuilt at each liquid step and when missing
@@ -280,6 +304,11 @@ impl Scratch {
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
         FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, lift_at: [&self.lift_at[0], &self.lift_at[1]], ta: &self.ta, latent: &self.latent, pk: &self.state.pk, z: &self.z, pd: &self.pd }
+    }
+    /// Heat capacity of a ground node or of a part of one with its share `skin` of its bed's skin and the loose amounts
+    /// `amt`, mol, J/K (`ground::ground_cap` over `loose`).
+    pub(super) fn part_cap(&self, skin: f64, amt: impl Fn(usize) -> f64) -> f64 {
+        crate::ground::ground_cap(skin, self.state.loose.iter().copied(), amt, |k| self.sp[k].cp)
     }
     /// Loose substances that may be liquid between `tmin` and `tmax`, K, or (with `dissolved`) gases dissolved in it.
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {
