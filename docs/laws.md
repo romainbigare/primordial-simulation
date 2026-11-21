@@ -1609,7 +1609,8 @@ read a kind.
   drawn rises or of one rise (`--shape`, 0), or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); the bed of the chemistry's `makes`, each over the share of the cell's samples whose surface the
   wear left in it (`space::strata`); the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
-  mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with
+  mean over its samples of the top `skin_m` of each sample's at most, each sample's of the make of its bed (a residual
+  soil: the bed broken where it lies; so loose ground over a seam is of the seam's substances): the ground node is the layer that exchanges with
   the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
   under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at
   balance (2.5); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):

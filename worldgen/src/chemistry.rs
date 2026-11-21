@@ -105,8 +105,6 @@ pub struct Init {
     pub seams: Vec<(usize, f64, u8)>,
     /// The make round the rims of the bodies (`space::strata::Lies::Rim`)
     pub rim: usize,
-    /// Volume fractions of loose ground
-    pub loose: Vec<(usize, f64)>,
     /// Amounts in the loose ground of every land cell when life starts, mol per m² (`life::soil`; empty: none)
     pub soil: Vec<(usize, f64)>,
 }
