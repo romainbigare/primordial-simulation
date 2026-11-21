@@ -8,8 +8,10 @@
 //! own, and a weather system's convergence and the sinking that pays for it close within a few thousand km, inside the
 //! map's air (laws.md 1.6).
 
-use super::wind::{column, End, Links};
-use crate::{space::Level, Config};
+use super::super::Scratch;
+use super::daily::Moved;
+use super::wind::{column, cross, half, halves, halves_heat, lift, masses, End, Links};
+use crate::{solve::sweep::HALF_WAY, space::Level, Config, World};
 
 /// The conjugate gradients stop where the residual is below this share of the lift's (`Draw::flows`): far below what
 /// the books or the rain could feel, as the flows are booked whatever they are.
@@ -103,6 +105,43 @@ impl Draw {
             rz = next;
         }
         phi
+    }
+}
+
+/// One day of `dd` seconds of the drawn flow `flows` (`Draw::flows`, mol/s of the lower half from each link's `a` to
+/// its `b`, by the place of the links between blocks in `moved`), explicit, from the air `x` (`[gi * na + j]`) and heat
+/// `e` as the day's wind left them. The flow's sign follows the weather's random lift, so the air it moves is the air at
+/// the link: each half carries per mol the mean of its two ends' content of that half (`wind::half`), and a flow of f
+/// moves f times the lower half's content less the upper half's, the vertical contrast, and nothing down the gradient;
+/// the heat, which a mol of either half holds alike, moves only by what its halves carry of the rise of the static
+/// energy (`halves_heat`). A booking by the sender's air would make the reversible sloshing of the weather act as
+/// irreversible mixing. No node gives more than `HALF_WAY` of any gas or of its heat over its links: where it would,
+/// its own outgoing links of that gas or heat are cut in proportion. The node the mass enters pays its lift.
+pub(super) fn carry(w: &World, s: &Scratch, (ends, flows): (&[End], &[f64]), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
+    let (na, ng, nb) = (e.len(), s.state.gas.len(), flows.len());
+    let ends_of: Vec<(usize, usize)> = (0..nb).map(|p| (moved.a[p] as usize, moved.b[p] as usize)).collect();
+    // The node that gives what crosses link `p`, `v` from its `a` to its `b`.
+    let sender = |p: usize, v: f64| if v > 0.0 { ends_of[p].0 } else { ends_of[p].1 };
+    // Per gas, then the heat, what crosses each link over the day, + from its `a` to its `b`.
+    let [nt, upper, lower] = halves(s, x, na);
+    // What a mol of node `j`'s lower half holds of gas `q` less what a mol of its upper half holds.
+    let lower_less_upper = |q: usize, j: usize| (half(s, (&nt, &upper, &lower), (q, j), false) - half(s, (&nt, &upper, &lower), (q, j), true)) * x[q * na + j];
+    let mut crossing: Vec<Vec<f64>> = (0..ng)
+        .map(|q| ends_of.iter().zip(flows).map(|(&(a, b), f)| dd * f * (lower_less_upper(q, a) + lower_less_upper(q, b)) / 2.0).collect())
+        .collect();
+    let heat = ends_of.iter().zip(flows).map(|(&(a, b), &f)| -dd * halves_heat(f, (&ends[a], &ends[b]), column(&w.cfg, &ends[a], &ends[b]).1));
+    crossing.push(heat.collect());
+    let (mm, mut kg) = (masses(s), vec![0.0; nb]);
+    for (q, d) in crossing.iter_mut().enumerate() {
+        let held: Vec<f64> = if q < ng { x[q * na..(q + 1) * na].to_vec() } else { e.to_vec() };
+        let mut gives = vec![0.0; na];
+        d.iter().enumerate().for_each(|(p, &v)| gives[sender(p, v)] += v.abs());
+        let cut: Vec<f64> = (0..na).map(|j| if gives[j] > HALF_WAY * held[j] { HALF_WAY * held[j].max(0.0) / gives[j] } else { 1.0 }).collect();
+        d.iter_mut().enumerate().for_each(|(p, v)| *v *= cut[sender(p, *v)]);
+        cross((q, d.iter().copied().enumerate()), (x, e), (moved, &mm, &mut kg));
+    }
+    for (p, &kg) in kg.iter().enumerate() {
+        lift(ends_of[p], kg, (s, w.cfg.gravity), e);
     }
 }
 

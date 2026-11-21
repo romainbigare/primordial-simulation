@@ -32,7 +32,6 @@ impl Links {
 /// `b` over what the two columns' mean heat per mol carries, W (`stir`); overturning, mol/s of the lower half from its
 /// `a` to its `b` (the upper half comes back), and the heat its halves carry from its `b` to its `a` over what their
 /// mean heat per mol carries, W (`contrast`); and the conductance of the evening of pressure, mol/(Pa s).
-#[derive(Clone)]
 pub(super) struct Pushes {
     pub(super) mix: Vec<f64>,
     pub(super) stir: Vec<f64>,
@@ -123,22 +122,6 @@ pub(super) fn column(cfg: &Config, a: &End, b: &End) -> (f64, f64) {
 /// apart. So where air rises, fed from below and leaving aloft, it cools as rising air does (Neelin and Held 1987).
 pub(super) fn halves_heat(flux: f64, (a, b): (&End, &End), depth: f64) -> f64 {
     flux * (a.rise + b.rise) / 2.0 * depth / 2.0
-}
-
-impl Pushes {
-    /// These pushes with the lower halves' flows `drawn` (`draw::Draw::flows`) on the links between blocks (`border`,
-    /// by their place, mol/s from each link's `a` to its `b`) added to the overturning's, and the heat their halves carry
-    /// (`halves_heat`) to its contrast. The eddies' mixing stays whole: it is their net flux down the gradient, and the
-    /// drawn flow, whose sign follows the weather's lift, is not a part of it (laws.md 1.6).
-    pub(super) fn drawn(&self, ends: &[End], links: &Links, border: &[usize], drawn: &[f64], cfg: &Config) -> Pushes {
-        let mut p = self.clone();
-        for (&l, &f) in border.iter().zip(drawn) {
-            let (a, b) = (&ends[links.a[l] as usize], &ends[links.b[l] as usize]);
-            p.over[l] += f;
-            p.contrast[l] += halves_heat(f, (a, b), column(cfg, a, b).1);
-        }
-        p
-    }
 }
 
 /// Three pushes on each link (`push`): the column's pressure, evened in the time sound takes to cross it (Lamb waves,
@@ -242,7 +225,7 @@ pub(super) fn even(w: &World, s: &Scratch, blocks: &[Vec<u32>], (x, e): (&mut [f
 
 /// `kg` of mass moves from node `a` to node `b` (back where negative): the node it enters pays its lift from its heat,
 /// from the mean ground of the node it leaves to its own (`potential`).
-fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64]) {
+pub(super) fn lift((a, b): (usize, usize), kg: f64, (s, g): (&Scratch, f64), e: &mut [f64]) {
     let (from, to) = if kg > 0.0 { (a, b) } else { (b, a) };
     e[to] -= g * kg.abs() * (s.za[to] - s.za[from]);
 }
@@ -282,13 +265,8 @@ impl Implicit {
             for p in class.links.iter().map(|&p| p as usize) {
                 let (ia, ib, l) = (a[p] as usize, b[p] as usize, border[p]);
                 let (mix, o) = (push.mix[l], push.over[l]);
-                // The share of what a node holds that leaves it in a half of its column (its upper half, `up`): the
-                // lower half of the colder node, the upper half of the warmer; the heat by mol.
-                let half = |j: usize, up: bool| match (q < ng, up) {
-                    (false, _) => 1.0 / nt[j],
-                    (true, true) => s.split[q * na + j] / upper[j],
-                    (true, false) => (1.0 - s.split[q * na + j]) / lower[j],
-                };
+                // The lower half of the colder node leaves it, the upper half of the warmer (`half`).
+                let half = |j: usize, up: bool| half(s, (&nt, &upper, &lower), (q, j), up);
                 ca[p] = mix / nt[ia] + o.abs() * half(ia, o < 0.0);
                 cb[p] = mix / nt[ib] + o.abs() * half(ib, o > 0.0);
                 k[p] = if q < ng { 0.0 } else { push.stir[l] - push.contrast[l] };
@@ -344,8 +322,20 @@ pub(super) fn wind(w: &World, s: &Scratch, (push, border, lines, imp): (&Pushes,
     }
 }
 
+/// The share of what node `j` holds of gas `q` (the heat where `q` is the number of gases) that a mol of its upper
+/// half (`up`) or its lower half holds, its air `nt`, `upper`, `lower` (`halves`): the gas as it splits between them
+/// (`Scratch::split`, the vapour crowding low), the heat by mol.
+pub(super) fn half(s: &Scratch, (nt, upper, lower): (&[f64], &[f64], &[f64]), (q, j): (usize, usize), up: bool) -> f64 {
+    let na = nt.len();
+    match (q < s.state.gas.len(), up) {
+        (false, _) => 1.0 / nt[j],
+        (true, true) => s.split[q * na + j] / upper[j],
+        (true, false) => (1.0 - s.split[q * na + j]) / lower[j],
+    }
+}
+
 /// Each node's air, mol, and its upper and lower halves (`Scratch::split`), from the amounts `x`.
-fn halves(s: &Scratch, x: &[f64], na: usize) -> [Vec<f64>; 3] {
+pub(super) fn halves(s: &Scratch, x: &[f64], na: usize) -> [Vec<f64>; 3] {
     let sum = |f: &dyn Fn(usize, usize) -> f64, j: usize| (0..s.state.gas.len()).map(|q| f(q, j)).sum::<f64>();
     let nt: Vec<f64> = (0..na).map(|j| sum(&|q, j| x[q * na + j], j)).collect();
     let upper: Vec<f64> = (0..na).map(|j| sum(&|q, j| x[q * na + j] * s.split[q * na + j], j)).collect();
@@ -383,13 +373,13 @@ fn pressure(s: &Scratch, (push, border): (&Pushes, &[usize]), (x, e): (&mut [f64
 }
 
 /// The mass of a mol of each gas of the air, kg, then 0 for the heat (as `cross` counts them).
-fn masses(s: &Scratch) -> Vec<f64> {
+pub(super) fn masses(s: &Scratch) -> Vec<f64> {
     s.state.gas.iter().map(|&k| s.sp[k].mm).chain([0.0]).collect()
 }
 
 /// What crosses links between blocks of gas `q`, or of the heat where `q` is the number of gases (each link `p` and
 /// `d`, + from its `a` to its `b`), moved and counted (`Moved`), its mass added to `kg` (`masses`, `mm`).
-fn cross((q, flows): (usize, impl Iterator<Item = (usize, f64)>), (x, e): (&mut [f64], &mut [f64]), (moved, mm, kg): (&mut Moved, &[f64], &mut [f64])) {
+pub(super) fn cross((q, flows): (usize, impl Iterator<Item = (usize, f64)>), (x, e): (&mut [f64], &mut [f64]), (moved, mm, kg): (&mut Moved, &[f64], &mut [f64])) {
     let (na, pairs) = (e.len(), moved.heat.len());
     let (v, count) = if q < mm.len() - 1 { (&mut x[q * na..(q + 1) * na], &mut moved.mol[q * pairs..(q + 1) * pairs]) } else { (&mut e[..], &mut moved.heat[..]) };
     for (p, d) in flows {
