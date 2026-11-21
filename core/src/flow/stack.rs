@@ -142,7 +142,7 @@ pub(super) fn ground_layers(x: &mut [f64; LAYERS], s: &Scratch, (k, i): (usize, 
 pub(super) fn solid_layer(x: &mut [f64; LAYERS], sp: &Sp, t: f64, a: f64) {
     let v = a * sp.v[0];
     (x[1], x[4]) = (x[1] + a * sp.mm, x[4] + v);
-    if t <= sp.soft {
+    if !sp.soft_at(t) {
         x[PORED] += v;
     }
 }

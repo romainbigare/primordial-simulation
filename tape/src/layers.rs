@@ -39,9 +39,10 @@ pub struct Fields {
     pub z: Vec<f64>,
     /// Liquid depth, m
     pub depth: Vec<f64>,
-    /// Frozen cover depth, m
+    /// Depth of the soft solid lying on the ground and on its liquid, m: the law's snow and ice (`Scratch::soft`; none
+    /// before Flow first built its state)
     pub ice: Vec<f64>,
-    /// Loose solid depth (without frozen cover), m
+    /// Loose solid depth (without the soft solid), m
     pub loose: Vec<f64>,
     /// Ground temperature, K
     pub t: Vec<f64>,
@@ -52,7 +53,7 @@ pub struct Fields {
     pub ground: Vec<[f64; 3]>,
 }
 
-/// One cell's values: elevation, liquid depth, frozen cover depth, loose solid depth, temperature, colour of the
+/// One cell's values: elevation, liquid depth, soft solid's depth, loose solid depth, temperature, colour of the
 /// surface and of the ground.
 type Cell = (f64, f64, f64, f64, f64, [f64; 3], [f64; 3]);
 
@@ -81,10 +82,12 @@ pub fn fields(w: &World, means: Option<&[Means]>) -> Fields {
 }
 
 /// The values of cell `i` (`Cell`), over whose pores `stands` m of liquid stands: the liquid shows as the surface only
-/// so far as it stands over the ground; the liquid in the pores is part of the ground (`flow::means`).
+/// so far as it stands over the ground; the liquid in the pores is part of the ground (`flow::means`). A solid lies as
+/// soft cover where Flow's law has it so (`Scratch::lies_soft`), and the depth of that cover is Flow's own
+/// (`Scratch::soft`).
 fn cell(w: &World, i: usize, stands: f64) -> Cell {
     let (t, pl) = w.thaw_node_last(i);
-    // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
+    // Kinds of cover in order of priority: soft solid, liquid, loose, bonded. Each: volume, volume * colour.
     let mut acc = [[0.0f64; 4]; 4];
     let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {
         acc[kind][0] += vol;
@@ -96,19 +99,19 @@ fn cell(w: &World, i: usize, stands: f64) -> Cell {
         let s = &w.chem.subs[k];
         let (melt, a) = (w.molten(k, i, t, pl), w.g(k, i));
         let solid = a * (1.0 - melt) * w.chem.molar_volume(k, Phase::Solid);
-        add(if is_cover(s) { 0 } else { 2 }, solid, s.refl[0]);
+        add(if w.scratch.lies_soft(k, t) { 0 } else { 2 }, solid, s.refl[0]);
         if t < s.boil {
             add(1, a * melt * w.chem.molar_volume(k, Phase::Liquid), s.refl[1]);
         }
     }
     acc[3] = bonded(w, i);
-    let area = w.mesh.cells().area()[i];
-    let shows = |kind: usize, a: &[f64; 4]| (if kind == 1 { stands } else { a[0] / area }) >= COVER_MIN;
+    let (area, ice) = (w.mesh.cells().area()[i], w.scratch.soft(i));
+    let shows = |kind: usize, a: &[f64; 4]| a[0] > 0.0 && [ice, stands, a[0] / area][kind] >= COVER_MIN;
     let top = acc[..3].iter().enumerate().find(|&(kind, a)| shows(kind, a)).map_or(&acc[3], |(_, a)| a);
     let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
     let colour = |a: &[f64; 4]| [1, 2, 3].map(|c| if a[0] > 0.0 { (a[c] / a[0] * glow).min(1.0) } else { 0.0 });
     let ground = colour(acc[2..].iter().find(|a| a[0] > 0.0).unwrap_or(&acc[3]));
-    (w.surface_z(i), acc[1][0] / area, acc[0][0] / area, acc[2][0] / area, w.t_surface_last(i), colour(top), litter(w, i, area, ground))
+    (w.surface_z(i), acc[1][0] / area, ice, acc[2][0] / area, w.t_surface_last(i), colour(top), litter(w, i, area, ground))
 }
 
 /// The bonded solids of cell `i` (its bed): their volume, m³, and that times their reflectance (red, green, blue).

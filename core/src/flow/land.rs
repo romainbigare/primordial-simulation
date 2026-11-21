@@ -335,7 +335,7 @@ pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64
         }
         let (m, liq) = (molten(k), p.liquid(t, molten(k), free));
         let vs = a * (1.0 - m) * p.v[0];
-        let o = if t > p.soft { 0 } else { 4 };
+        let o = if p.soft_at(t) { 0 } else { 4 };
         (l[o], l[o + 1]) = (l[o] + vs, l[o + 1] + vs * p.refl[0]);
         (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
         z += vs / area;
