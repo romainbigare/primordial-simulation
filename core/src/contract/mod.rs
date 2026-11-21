@@ -36,6 +36,8 @@ pub struct Stand {
     /// reaction, m²
     pub absorbed: f64,
     pub kept: f64,
+    /// PROBE: per patch its share of the cell and its capture area, m² (share 0: none)
+    pub patches: [(f64, f64); crate::cover::PATCHES],
 }
 
 impl Stand {
@@ -43,6 +45,15 @@ impl Stand {
     /// 1 - e^-this of the light.
     pub fn canopy(&self, area: f64) -> f64 {
         (self.leaf / area) as f32 as f64
+    }
+    /// PROBE: the share of the light on a cell of `area` m² its cover intercepts: by Beer's law over each patch's own
+    /// ground, summed by the patches' shares (one patch: 1 - e^-`canopy`).
+    pub fn intercept(&self, area: f64) -> f64 {
+        let a = self.canopy(area);
+        if self.patches.iter().filter(|p| p.0 > 0.0).count() <= 1 {
+            return crate::math::one_minus_exp(a);
+        }
+        self.patches.iter().filter(|p| p.0 > 0.0).map(|&(s, leaf)| s * crate::math::one_minus_exp(leaf / (area * s))).sum()
     }
     /// The share of the light reaching its capture area that it absorbs (a share, in single precision).
     pub fn absorb(&self) -> f64 {

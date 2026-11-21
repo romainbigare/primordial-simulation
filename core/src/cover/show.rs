@@ -17,7 +17,9 @@ impl Cover {
         for x in self.held() {
             let (leaf, abs) = (self.leaf(&mm, x), self.leaf(&mm, x) * (1.0 - self.reflectance(chem, p, x)));
             (s.mass, s.leaf, s.absorbed, s.kept) = (s.mass + self.kg(&mm, x), s.leaf + leaf, s.absorbed + abs, s.kept + abs * self.keep as f64);
+            s.patches[self.patch[x] as usize].1 += leaf;
         }
+        (0..super::PATCHES).for_each(|k| s.patches[k].0 = self.pshare[k] as f64);
         s
     }
     /// What the shares `of(x)` of each part of each slot `x` show a taker (`contract::Shown`): its mass, what it holds of

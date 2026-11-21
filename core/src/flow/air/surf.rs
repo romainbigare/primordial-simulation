@@ -46,6 +46,8 @@ pub(super) struct Surf {
     pub(super) amt: [f64; MAX_SUBSTANCES],
     pub(super) fusion: f64,
     pub(super) canopy: f64,
+    /// PROBE: the share of the light its cover intercepts (`Stand::intercept`)
+    pub(super) intercept: f64,
     pub(super) absorb: f64,
     pub(super) keep: f64,
     /// A second film over it beside the air's (`World::second_film`): its substance, mol K/(Pa s), and the share of
@@ -95,6 +97,7 @@ impl Surf {
             amt,
             fusion: if pk != NONE { ground[pk * n + i] * s.sp[pk].lf } else { 0.0 },
             canopy: crate::contract::stand(w, i).canopy(w.mesh.cells().area()[i]),
+            intercept: crate::contract::stand(w, i).intercept(w.mesh.cells().area()[i]),
             absorb: crate::contract::stand(w, i).absorb(),
             keep: crate::contract::stand(w, i).keep(),
             second: w.second_film(i).map(|(k, film, reach)| (k, film * w.mesh.cells().area()[i], reach)),
@@ -128,6 +131,7 @@ impl Surf {
             // so does its cover, whose capture area spreads over the land part's area.
             second: g.second.filter(|_| q == LAND),
             canopy: if q == LAND { crate::contract::stand(cx.w, i).canopy(g.area * p.share) } else { 0.0 },
+            intercept: if q == LAND { crate::contract::stand(cx.w, i).intercept(g.area * p.share) } else { 0.0 },
             part: Some(q),
             share: p.share,
             ..g
@@ -177,6 +181,7 @@ impl Surf {
             amt,
             fusion: 0.0,
             canopy: 0.0,
+            intercept: 0.0,
             absorb: 0.0,
             keep: 0.0,
             second: None,

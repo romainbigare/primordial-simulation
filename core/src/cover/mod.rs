@@ -30,7 +30,7 @@ pub(crate) use build::per_input;
 pub(crate) use budget::{BURNT, ROUNDED};
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
-pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
+pub use seed::{land, lodge, place, place_in, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use soak::{aired, breath, footing, gains, moist, soak, strips_share, working, Footing, Soak};
 pub use stand::{height, loose_bins, stem, BINS};
@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 
 /// Kinds of cover a cell's arrays hold: the most a world's `Config::variety` may be. A cell uses its first `variety`
 /// slots; the rest stay empty.
-pub const SLOTS: usize = 12;
+pub const SLOTS: usize = 16;
 /// Size groups a slot keeps its plants in (`groups`): the resolution of plant sizes a slot holds, as `SLOTS` is of kinds
 /// (seedlings, young plants, plants under the canopy and plants of the canopy).
 pub const GROUPS: usize = 4;
@@ -162,6 +162,9 @@ pub struct Cover {
     pub patch: [u8; SLOTS],
     pub pshare: [f32; PATCHES],
     pub page: [f32; PATCHES],
+    /// PROBE: per slot the seeds it sent since the probe last read them, mol of fuel and of body matter; not saved
+    #[serde(skip)]
+    pub seeded: [[f64; 2]; SLOTS],
 }
 
 /// PROBE: the most patches a cell's cover holds.
@@ -170,7 +173,7 @@ pub const PATCHES: usize = 4;
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], pshare: [1.0, 0.0, 0.0, 0.0], page: [0.0; PATCHES] }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], pshare: [1.0, 0.0, 0.0, 0.0], page: [0.0; PATCHES], seeded: [[0.0; 2]; SLOTS] }
     }
 }
 

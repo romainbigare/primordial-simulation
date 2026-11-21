@@ -44,6 +44,7 @@ pub(super) fn send(c: &mut Cover, x: usize, (mol, heat): ([f64; NP], f64), genes
         (0..NP).for_each(|q| left[q] -= part[q]);
         warm -= h;
         c.seeds.push(Seed { to: j as u32, mol: part, genes, root: c.root[x], heat: h });
+        (c.seeded[x][0], c.seeded[x][1]) = (c.seeded[x][0] + part[FUEL], c.seeded[x][1] + part[MATTER]);
     }
 }
 
@@ -119,7 +120,17 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area
         return Landed::In;
     }
     let poorest = (0..n).filter(|&x| c.root[x] != super::NO_ROOT && c.patch[x] == pp && c.net[x] < 0.0).min_by(|&a, &b| c.net[a].total_cmp(&c.net[b]).then(c.built(mm, a).total_cmp(&c.built(mm, b))));
-    let (x, out) = match (kin::empty(&c.root[..n]), poorest) {
+    // PROBE: with `MORE_SLOTS` a patch holds at most its world's `variety` slots (the cell at most `SLOTS`).
+    let cap = super::patches::MORE_SLOTS.load(std::sync::atomic::Ordering::Relaxed) && n > cfg.variety;
+    let in_pp = (0..n).filter(|&x| c.root[x] != super::NO_ROOT && c.patch[x] == pp).count();
+    let free = kin::empty(&c.root[..n]);
+    if cap && free.is_none() {
+        super::patches::HITS[1].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    } else if cap && in_pp >= cfg.variety {
+        super::patches::HITS[0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    let free = if cap && in_pp >= cfg.variety { None } else { free };
+    let (x, out) = match (free, poorest) {
         (Some(x), _) => (x, None),
         (None, Some(x)) => (x, Some(c.mol[x])),
         (None, None) if n > 1 => match room(c, mm, n, pp) {
@@ -160,6 +171,7 @@ fn room(c: &mut Cover, mm: &[f64; NP], n: usize, pp: u8) -> Option<usize> {
         pairs.min_by(|p, q| distance(&c.genes[p.0], &c.genes[p.1]).total_cmp(&distance(&c.genes[q.0], &c.genes[q.1])))
     };
     let (a, z) = if mine { best(true).or_else(|| best(false)) } else { best(false) }?;
+    let _ = n;
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
     super::stand::join(c, mm, big, small);
     Some(small)
@@ -171,11 +183,17 @@ fn room(c: &mut Cover, mm: &[f64; NP], n: usize, pp: u8) -> Option<usize> {
 /// ground temperature; it lodges as seeds do (`seed::lodge`). False if the chemistry has no cover or its kind has no
 /// ground or no room in the cell (nothing is placed then).
 pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
+    place_in(w, i, genes, root, kg, 0)
+}
+
+/// PROBE: `place` into patch `pp` of cell `i`, `kg` per m² of the ground its kind stands on in that patch.
+pub fn place_in(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f64, pp: u8) -> bool {
     let Some(p) = Parts::of(&w.chem) else { return false };
     let (mm, cell) = (p.mm(&w.chem), super::ground(w, i));
+    let ps = w.life.cells[i].cover.pshare[pp as usize] as f64;
     let soak = super::soak(w, &p, i, w.g(p.liquid, i)).1;
     let foot = super::footing(w, i, &genes, w.cfg.phys.root_least, &soak, None);
-    let area = cell * foot.share;
+    let area = cell * ps * foot.share;
     if area <= 0.0 {
         return false;
     }
@@ -185,7 +203,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let mut recruits = [0.0; super::SLOTS];
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
-    let landed = lodge(c, &mm, &s, &w.cfg, (cell, foot.share, foot.strip), &mut recruits, 0);
+    let landed = lodge(c, &mm, &s, &w.cfg, (cell, foot.share, foot.strip), &mut recruits, pp);
     let to = lines(w, &w.life.cells[i].cover, i, &soak, (&recruits, built_kg(&mm, &mol)), area);
     let c = &mut w.life.cells[i].cover;
     c.line = to;

@@ -7,6 +7,9 @@
 use super::budget::{held, DIED, SEEDS_DIED};
 use super::seed::{lodge, Landed, Seed};
 use super::{built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, MOIST, NG, NO_ROOT, NP, REPAIR, SLOTS};
+
+/// PROBE: the lots of seeds lying a cell keeps (the old `SLOTS`, kept when the slots grew for patches).
+pub const LOTS: usize = 12;
 use crate::life::kin;
 use crate::units::DAY;
 use crate::{Counters, World};
@@ -26,22 +29,22 @@ pub const TAKEN_LYING: usize = 4;
 /// at its temperature.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Lying {
-    pub mol: [[f64; NP]; SLOTS],
-    pub genes: [[f32; NG]; SLOTS],
-    pub root: [u32; SLOTS],
+    pub mol: [[f64; NP]; LOTS],
+    pub genes: [[f32; NG]; LOTS],
+    pub root: [u32; LOTS],
 }
 
 impl Default for Lying {
     /// No seeds.
     fn default() -> Lying {
-        Lying { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS] }
+        Lying { mol: [[0.0; NP]; LOTS], genes: [[0.0; NG]; LOTS], root: [NO_ROOT; LOTS] }
     }
 }
 
 impl Lying {
     /// Its lots that hold seeds.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
-        (0..SLOTS).filter(|&x| self.root[x] != NO_ROOT)
+        (0..LOTS).filter(|&x| self.root[x] != NO_ROOT)
     }
     /// All its seeds, kg.
     pub fn kg(&self, mm: &[f64; NP]) -> f64 {
@@ -93,7 +96,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
     let burn = &chem.reactions[p.burn];
     let pace = burn.arrhenius(a.t.max(1.0)) / burn.arrhenius(ph.t_cat);
     let melt = chem.subs[p.liquid].melt;
-    for x in 0..SLOTS {
+    for x in 0..LOTS {
         if c.lying.root[x] == NO_ROOT {
             continue;
         }

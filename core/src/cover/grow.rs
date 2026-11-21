@@ -142,6 +142,27 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         (layers[n_layers], n_layers) = ((base, top, leaf / (area * c.ps(q)), c.on(q), q), n_layers + 1);
     }
     super::canopy::shade(&layers[..n_layers], &pat[..n_layers], |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
+    // PROBE: the light each patch's leaves get is what Beer's law over its own ground intercepts (`Stand::intercept`),
+    // not a share of the cell's by their shade alone.
+    if c.pshare.iter().filter(|&&f| f > 0.0).count() > 1 {
+        let (mut want, mut got) = ([0.0f64; super::PATCHES], [0.0f64; super::PATCHES]);
+        for k in 0..super::PATCHES {
+            let sh = c.pshare[k] as f64;
+            let leaf: f64 = (0..n).filter(|&q| c.root[q] != NO_ROOT && c.patch[q] as usize == k).map(|q| s[q].leaf).sum();
+            if sh > 0.0 && leaf > 0.0 {
+                want[k] = sh * crate::math::one_minus_exp(leaf / (area * sh));
+                got[k] = (0..n).filter(|&q| c.root[q] != NO_ROOT && c.patch[q] as usize == k).map(|q| s[q].abs * s[q].shade).sum();
+            }
+        }
+        let (tw, tg): (f64, f64) = (want.iter().sum(), got.iter().sum());
+        for q in (0..n).filter(|&q| c.root[q] != NO_ROOT) {
+            let k = c.patch[q] as usize;
+            if got[k] > 0.0 && tw > 0.0 {
+                let r = (want[k] / tw) / (got[k] / tg);
+                (s[q].shade, s[q].bottom) = (s[q].shade * r, s[q].bottom * r);
+            }
+        }
+    }
     let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books::new(a.air, flows);
