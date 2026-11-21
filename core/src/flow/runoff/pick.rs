@@ -2,7 +2,7 @@
 //! (`runoff::load`).
 
 use super::super::{bare_share, land::{lift, solid}, on_land};
-use super::{Bodies, Scratch};
+use super::{carriage::sample_area, Bodies, Scratch};
 use crate::{space::network::NONE, store::{Class, Move, Node}, World};
 
 /// Least bond strength wear divides by.
@@ -57,17 +57,17 @@ pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f
             wear(w, s, i, worn, &mut broke);
         }
     }
-    let taken = taken(w, b, &work, &volume);
+    let taken = taken(w, &work, &volume);
     (work, broke, taken)
 }
 
 /// What the pick-up of each cell, `volume` m³, takes from its samples' relief (`Relief`): each sample that does work
 /// (`Work::on_relief`) gives its share of the cell's pick-up by its work, at most the relief it holds, m; the rest
 /// comes from the cell's loose ground at large.
-fn taken(w: &World, b: &Bodies, work: &Work, volume: &[f64]) -> Vec<(u32, f64)> {
-    let area = w.mesh.cells().area();
+fn taken(w: &World, work: &Work, volume: &[f64]) -> Vec<(u32, f64)> {
+    let samples = w.terrain_samples();
     work.on_relief.iter().map(|&(k, i, done)| {
-        let a = b.share[k as usize] * area[i as usize];
+        let a = sample_area(w, &samples, k as usize);
         (k, (volume[i as usize] * done / work.cells[i as usize] / a).min(w.relief.at(k as usize)))
     }).collect()
 }

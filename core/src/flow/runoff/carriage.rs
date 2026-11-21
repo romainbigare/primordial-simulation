@@ -126,14 +126,13 @@ impl Carriage {
             _ => End::Body,
         }).collect();
         c.main = main.iter().map(|&k| if k == NONE { NONE } else { c.place[k as usize] }).collect();
-        let area = w.mesh.cells().area();
         // Of each sample, the lowest of the samples whose liquid runs to it (infinite for none).
         let mut feeds = vec![f64::INFINITY; s.h.len()];
         b.down.iter().for_each(|&k| feeds[s.to[k as usize] as usize] = feeds[s.to[k as usize] as usize].min(s.h[k as usize]));
         c.room = order.iter().zip(&c.keys).zip(&c.end).map(|((&old, &k), &end)| {
             let (k, slope) = (k as usize, grade[old as usize]);
             let top = if end == End::On { (s.h[s.to[k] as usize] + slope * s.run[k]).min(feeds[k]) } else { s.h[k] };
-            (top - s.h[k]).max(0.0) * b.share[k] * area[b.cell_of[k] as usize]
+            (top - s.h[k]).max(0.0) * sample_area(w, &s, k)
         }).collect();
         c
     }
@@ -205,6 +204,11 @@ impl Carriage {
         self.link = (0..self.keys.len() as u32).zip(&self.next).map(to_next).collect();
         self.links = links;
     }
+}
+
+/// The area of sample `k` of samples `s` of world `w`, m² (its own, also where finer cells share it).
+pub(super) fn sample_area(w: &World, s: &Samples, k: usize) -> f64 {
+    w.map.place_of(&s.leaf(k), w.cfg.lat_south, w.cfg.lat_north).0
 }
 
 /// An order of the key samples whose next key samples are `next` (`NONE` for an end): each after all those whose ways

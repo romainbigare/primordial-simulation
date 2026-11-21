@@ -12,7 +12,7 @@
 //! **Known limit:** in a pool the substances and the particle classes are independent: what leaves takes the pool's
 //! mixture of substances by the share of its volume that leaves.
 
-use super::carriage::{End, Shares, CLASS_COUNT};
+use super::carriage::{sample_area, End, Shares, CLASS_COUNT};
 use super::pick::{pick_up, Work};
 use super::super::land::solid;
 use super::{Bodies, Crossings, Scratch};
@@ -105,7 +105,7 @@ impl Links {
 /// solid substances `sol`, in a month of `dt` s: each cell's pick-up, its share to each of its pairs by their work,
 /// the serial pass over the key samples, the ends. Notes the crossings in `x`. Returns `Carried`.
 pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64; 2]], &[usize]), x: &mut Crossings, dt: f64) -> Carried {
-    let (c, n, width) = (&b.carriage, w.mesh.cells().n(), sol.len() + 1);
+    let (c, n, width, samples) = (&b.carriage, w.mesh.cells().n(), sol.len() + 1, w.terrain_samples());
     let mut picked = std::mem::take(&mut s.spare.picked);
     let (work, broke, taken) = pick_up(w, s, b, (flux, sol), &mut picked);
     let mut relief: Vec<(u32, f64)> = taken.into_iter().map(|(k, m)| (k, -m)).collect();
@@ -127,7 +127,7 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     for (q, &k) in c.keys.iter().enumerate() {
         let i = c.cell[q] as usize;
         let [came, own, dropped] = pools.take(q, &mut row);
-        let a = b.share[k as usize] * w.mesh.cells().area()[i];
+        let a = sample_area(w, &samples, k as usize);
         if c.main[i] == q as u32 {
             loads[i][0] = main_load(w, i, kg(&row[..width - 1]), flux[k as usize][0]);
         }
