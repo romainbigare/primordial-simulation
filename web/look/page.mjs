@@ -122,6 +122,29 @@ export async function look(page, { x, y, mpp }) {
   await sleep(400);
 }
 
+/** Play the world in `page` until `months` months have passed, then pause: what the core counts only as it steps and
+ * does not save (a month's load in the channels, its plumes) is then drawn. */
+export async function step(page, months) {
+  const at = await page.evaluate(() => { const e = window.__ew, f = e.world.meta.frames[0]; e.setSpeed(1); e.togglePlay(); return f.year * 360 + f.day; });
+  await page.waitForFunction(([at, months]) => { const f = window.__ew.world.meta.frames[0]; return f.year * 360 + f.day >= at + 30 * months; }, [at, months], { timeout: 600000, polling: 100 });
+  await page.evaluate(() => window.__ew.togglePlay());
+  await sleep(1000);
+}
+
+/** In `page`, the plumes `list` (each [x, y, kg/s], x and y in squares) in place of the world's: a test of how a plume
+ * is drawn (the core lays none yet); [] gives the world's own back at its next frame. */
+export async function plumes(page, list) {
+  await page.evaluate(list => {
+    const e = window.__ew, s = e.land.samples, per = s.across / e.land.tiles.map.w, v = new DataView(new ArrayBuffer(8 * list.length));
+    list.forEach(([x, y, kg], i) => { v.setUint32(8 * i, Math.floor(y * per) * s.across + Math.floor(x * per), true); v.setFloat32(8 * i + 4, kg, true); });
+    const bytes = new Uint8Array(v.buffer);
+    if (e.live) e.live.plumes = bytes;
+    e.land.plumesIn(bytes);
+    e.map.invalidate();
+  }, list);
+  await sleep(400);
+}
+
 /** The picture of the map now, whole (`settle`), as PNG bytes; written to `out` where given. */
 export async function shot(page, out = null) {
   const waited = await settle(page);

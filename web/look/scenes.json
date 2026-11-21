@@ -11,6 +11,18 @@
       "card": true,
       "at": 0.75
     },
+    "seed1_wet": {
+      "about": "the page's own world in its wettest months (42.5), stepped a month in the page: a month's load and plumes are counted as it steps, not saved",
+      "run": ["--seed", "1", "--size", "32", "--band", "20,65", "--roster", "--fauna-year", "52"],
+      "at": 42.5,
+      "step": 1
+    },
+    "seed1_dry": {
+      "about": "the same world in its driest months (42.0), stepped a month in the page",
+      "run": ["--seed", "1", "--size", "32", "--band", "20,65", "--roster", "--fauna-year", "52"],
+      "at": 42.0,
+      "step": 1
+    },
     "swamp": {
       "about": "a world with plants standing in liquid: seed 1, size 48, band 20,65, the six starting kinds, the takers in year 52 (about 20 km² of shallow pond ground)",
       "run": ["--seed", "1", "--size", "48", "--band", "20,65", "--roster", "--fauna-year", "52"],
@@ -37,6 +49,40 @@
       "cost_views": [0.52],
       "years": ["A", "B", "SA"],
       "years_view": 0.2
+    },
+    "load_wet": {
+      "world": "seed1_wet",
+      "views": [100.0, 25.0, 5.0],
+      "cost_views": [25.0],
+      "scenes": [
+        { "name": "south", "about": "the largest river's mouth at the sea (344 km² drained)", "at": [16.438, 26.5] },
+        { "name": "south_west", "about": "the south-west river's mouth (93 km²)", "at": [14.562, 26.062] },
+        { "name": "lagoon", "about": "the east river's inlet into the delta's lagoon (92 km²), the largest plume", "at": [29.438, 16.125] },
+        { "name": "west", "about": "the west river's mouth (76 km²)", "at": [4.625, 21.625] },
+        { "name": "burnt", "about": "a catchment burnt a month before", "at": [24.5, 24.94], "views": [25.0, 5.0] }
+      ]
+    },
+    "load_dry": {
+      "world": "seed1_dry",
+      "views": [25.0, 5.0],
+      "cost_views": [25.0],
+      "scenes": [
+        { "name": "south", "about": "the largest river's mouth at the sea (344 km² drained)", "at": [16.438, 26.5] },
+        { "name": "south_west", "about": "the south-west river's mouth (93 km²)", "at": [14.562, 26.062] },
+        { "name": "lagoon", "about": "the east river's inlet into the delta's lagoon (92 km²)", "at": [29.438, 16.125] },
+        { "name": "west", "about": "the west river's mouth (76 km²)", "at": [4.625, 21.625] }
+      ]
+    },
+    "mouths": {
+      "world": "seed1",
+      "views": [100.0, 25.0],
+      "cost_views": [25.0],
+      "scenes": [
+        { "name": "south", "about": "the largest river's mouth, at the sea in the south (344 km² drained), a test plume of 10 kg/s", "at": [16.469, 26.531], "plumes": [[16.469, 26.531, 10]] },
+        { "name": "east", "about": "the east delta's mouth at the sea (109 km²) and its lagoon's inlet, test plumes of 3 and 1 kg/s", "at": [29.8, 16.7], "plumes": [[29.969, 17.094, 3], [29.469, 16.156, 1]] },
+        { "name": "south_west", "about": "the south-west river's mouth (93 km²), a test plume of 6 kg/s", "at": [14.594, 26.094], "plumes": [[14.594, 26.094, 6]] },
+        { "name": "west", "about": "the west river's mouth (76 km²), a test plume of 5 kg/s", "at": [4.656, 21.656], "plumes": [[4.656, 21.656, 5]] }
+      ]
     },
     "deltas": {
       "world": "seed1",
