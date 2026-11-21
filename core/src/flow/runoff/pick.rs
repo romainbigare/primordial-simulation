@@ -34,7 +34,7 @@ pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f
             work.cells[i] += done;
             debug_assert!(c.pair_of[k] != NONE, "a land sample whose way reaches no key sample");
             work.pairs[c.pair_of[k] as usize][usize::from(c.place[k] != NONE)] += done;
-            if w.relief.at(k) > 0.0 {
+            if done > 0.0 && w.relief.at(k) > 0.0 {
                 work.on_relief.push((k as u32, i as u32, done));
             }
         }

@@ -1000,6 +1000,23 @@ fn the_relief_is_what_the_load_laid_on_land() {
     assert!(settled > 0.0 && (laid - settled).abs() <= 1e-9 * settled, "{laid} m3 on the samples, {settled} m3 settled on land");
 }
 
+/// The pick-up takes from the samples' relief no more than it picks up: with a metre laid on every sample, a liquid step
+/// leaves the relief over the map less by at most what was picked up (and more by what settled on land).
+#[test]
+fn the_pick_up_takes_no_more_relief_than_it_picks_up() {
+    let mut w = worldgen::testkit::squares(1, 16, 16);
+    (0..3).for_each(|_| pcore::step(&mut w));
+    let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
+    let samples: Vec<(usize, f64)> = w.map.leaves().iter().filter(|l| l.depth <= pcore::space::terrain::SAMPLE_DEPTH).flat_map(|l| l.split(pcore::space::terrain::SAMPLE_DEPTH)).map(|f| (s.index(&f), w.map.place_of(&f, lat.0, lat.1).0)).collect();
+    let n = s.h.len();
+    samples.iter().for_each(|&(k, _)| w.relief.lay(k, 1.0, n));
+    let volume = |w: &World| samples.iter().map(|&(k, a)| w.relief.at(k) * a).sum::<f64>();
+    let (before, counts) = (volume(&w), w.counts.load);
+    flow_step(&mut w, LIQUID_STEP);
+    let (picked, laid) = (w.counts.load[0] - counts[0], w.counts.load[3] - counts[3]);
+    assert!(before - volume(&w) <= picked - laid + 1e-9 * before, "{} m3 of relief taken, {picked} m3 picked up", before - volume(&w) + laid);
+}
+
 /// After a build of the terrain's samples from what the load laid (`flow::build`), the samples of each cell (of a
 /// sample or coarser) stand, by their mean by area, at the cell's ground (`World::ground_z`), to 1e-9 m; and the build
 /// moves no matter (every node's amounts bit for bit) and keeps the energy (1e-9).
