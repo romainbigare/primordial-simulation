@@ -7,11 +7,12 @@
 //! them (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
 //! terrain, not saved.
 
-use super::drain::{draws, flood, starts};
+use super::drain::{draws, flood, open_low, starts};
+use super::relief::Relief;
 use super::grid::Grid;
 use super::network::{accumulate, NONE};
-use super::ponds::{basins, grade, open_parts};
-use super::wear::{noise_grid, wear, Books};
+use super::ponds::{basins, grade, open_parts, shallow};
+use super::wear::{noise_grid, wear, Books, STAND_M};
 use crate::math::central;
 use super::square::Square;
 use super::strata::Strata;
@@ -75,13 +76,14 @@ impl Samples {
     }
 }
 
-/// The samples a terrain found, kept with it (not saved: found again from the seed when first read).
+/// The samples a terrain found, kept with it (not saved: found again when first read): the seed's, and those last built
+/// from what the running world laid (`Terrain::built`), with the build they are of.
 #[derive(Debug, Default)]
-pub(super) struct Kept(Mutex<Option<Arc<Samples>>>);
+pub(super) struct Kept(Mutex<Option<Arc<Samples>>>, Mutex<Option<(u32, Arc<Samples>)>>);
 
 impl Clone for Kept {
     fn clone(&self) -> Kept {
-        Kept(Mutex::new(self.0.lock().expect("the kept samples").clone()))
+        Kept(Mutex::new(self.0.lock().expect("the kept samples").clone()), Mutex::new(self.1.lock().expect("the built samples").clone()))
     }
 }
 
@@ -112,6 +114,32 @@ impl Terrain {
         let mut kept = self.kept.0.lock().expect("the kept samples");
         known(&kept).unwrap_or_else(|| {
             *kept = Some(found.clone());
+            found
+        })
+    }
+
+    /// The samples of `map` for `seed` (its rows between latitudes `lat`) as built from the relief `r` (`Relief`): the
+    /// seed's (`samples`) with the heights `relief::heights` gives, and the flood over them found again (`found`; no
+    /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
+    /// stands over the liquid's level (`wear::STAND_M`). The seed's samples where there was no build; found once for
+    /// each build and kept.
+    pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief) -> Arc<Samples> {
+        let s0 = self.samples(seed, map, lat);
+        if r.builds == 0 {
+            return s0;
+        }
+        let known = |kept: &Option<(u32, Arc<Samples>)>| kept.as_ref().filter(|b| b.0 == r.builds && b.1.seed == seed).map(|b| b.1.clone());
+        if let Some(s) = known(&self.kept.1.lock().expect("the built samples")) {
+            return s;
+        }
+        let (grid, _) = grid_of(map, lat);
+        let h = super::relief::heights(&s0, map, lat, r);
+        let open = open_low(&grid, &h, STAND_M);
+        let ground = Ground { make: s0.make.clone(), loose: s0.loose.clone(), settled: s0.settled.clone(), age: s0.age.clone(), books: s0.books };
+        let found = Arc::new(self.found(seed, &grid, (h, &open, false), ground));
+        let mut kept = self.kept.1.lock().expect("the built samples");
+        known(&kept).unwrap_or_else(|| {
+            *kept = Some((r.builds, found.clone()));
             found
         })
     }
@@ -157,9 +185,9 @@ impl Terrain {
     }
 
     /// The samples of heights `h` on grid `g` for `seed`, the open low ground `open` (`drain::open_low`), and their
-    /// ground `ground`: the flood over them from all the open low ground, with `graded` the closed basins too shallow
-    /// to hold a pond graded (`ponds::grade`), the area that drains through each sample, the ponds, and the wetness
-    /// index (`sample_index`).
+    /// ground `ground`: the flood over them from all the open low ground, the closed basins too shallow to hold a pond
+    /// (`ponds::shallow`) with `graded` filled (`ponds::grade`), else left as they lie but no ponds (the floods flow
+    /// through them), the area that drains through each sample, the ponds, and the wetness index (`sample_index`).
     fn found(&self, seed: u64, grid: &Grid, (mut h, open, graded): (Vec<f64>, &[bool], bool), ground: Ground) -> Samples {
         let f = flood(grid, &h, open, (&starts(grid, open, false), &draws(seed, 1, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
@@ -167,7 +195,13 @@ impl Terrain {
             let shallow = basins(grid, &h, &f).1;
             grade(&mut h, &f, &shallow);
         }
-        let (mut pond, members) = basins(grid, &h, &f);
+        let (mut pond, mut members) = basins(grid, &h, &f);
+        if !graded {
+            let (deep, flat): (Vec<Vec<u32>>, Vec<Vec<u32>>) = members.into_iter().partition(|m| !shallow(&h, &f, m));
+            flat.iter().flatten().for_each(|&k| pond[k as usize] = NONE);
+            deep.iter().enumerate().for_each(|(p, m)| m.iter().for_each(|&k| pond[k as usize] = p as u32));
+            members = deep;
+        }
         let mut ponds: Vec<Pond> = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
         open_parts(grid, open, (&mut pond, &mut ponds));
         let twi = sample_index(grid.across, grid.down, grid.dy, &up, &h);

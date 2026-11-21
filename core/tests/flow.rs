@@ -1000,6 +1000,43 @@ fn the_relief_is_what_the_load_laid_on_land() {
     assert!(settled > 0.0 && (laid - settled).abs() <= 1e-9 * settled, "{laid} m3 on the samples, {settled} m3 settled on land");
 }
 
+/// After a build of the terrain's samples from what the load laid (`flow::build`), the samples of each cell (of a
+/// sample or coarser) stand, by their mean by area, at the cell's ground (`World::ground_z`), to 1e-9 m; and the build
+/// moves no matter (every node's amounts bit for bit) and keeps the energy (1e-9).
+#[test]
+fn a_build_stands_the_samples_at_their_cells_ground_and_moves_no_matter() {
+    let mut w = worldgen::testkit::squares(1, 16, 16);
+    (0..14).for_each(|_| pcore::step(&mut w));
+    let (amounts, books) = ([Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Aside].map(|c| w.store.amounts(c).to_vec()), Books::now(&w));
+    pcore::flow::build::build(&mut w);
+    assert_eq!([Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Aside].map(|c| w.store.amounts(c).to_vec()), amounts, "a build moved matter");
+    books.assert_within(&w, 1e-9, 1e-9);
+    let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
+    for (i, l) in w.map.leaves().iter().enumerate().filter(|p| p.1.depth <= pcore::space::terrain::SAMPLE_DEPTH) {
+        let (area, sum) = l.split(pcore::space::terrain::SAMPLE_DEPTH).map(|f| (w.map.place_of(&f, lat.0, lat.1).0, s.h[s.index(&f)])).fold((0.0, 0.0), |(a, x), (da, h)| (a + da, x + da * h));
+        let (mean, ground) = (sum / area, w.ground_z(i));
+        assert!((mean - ground).abs() < 1e-9, "cell {i}: its samples stand at {mean} m, its ground at {ground} m");
+    }
+}
+
+/// A cell of the open low ground whose ground the load raises over the liquid's level keeps every element and its
+/// energy through the liquid's step that finds it land (1e-9).
+#[test]
+fn a_cell_whose_ground_crosses_the_level_keeps_its_books() {
+    let mut w = worldgen::testkit::squares(1, 16, 16);
+    (0..3).for_each(|_| pcore::step(&mut w));
+    let n = w.mesh.cells().n();
+    let i = (0..n).filter(|&i| w.surface_z(i) < 0.0).max_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).expect("a cell under the level");
+    let held = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
+    let k = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > w.chem.subs[LIQUID].boil).max_by(|&a, &b| held(a).total_cmp(&held(b)).then(b.cmp(&a))).expect("a solid of its ground");
+    let lift = (1.0 - w.surface_z(i)) * w.mesh.cells().area()[i] / w.chem.molar_volume(k, Phase::Solid);
+    put(&mut w, k, i, lift);
+    assert!(w.surface_z(i) > 0.0, "the cell stands over the level");
+    let books = Books::now(&w);
+    flow_step(&mut w, LIQUID_STEP);
+    books.assert_within(&w, 1e-9, 1e-9);
+}
+
 /// A small island, ten years: the land loses rock (the rock-making solids of its loose ground and bed, over its
 /// cells) at the real rate of denudation, 0.01 to 1 mm a year.
 #[test]

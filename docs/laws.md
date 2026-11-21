@@ -534,7 +534,7 @@ what the heat holds molten, as every law and the shell then read it.
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost on land (`flow::runoff::load`, `wear`; in a body and below
 0 m it wears nothing): in each land cell, g times what runs through each of its samples in no pond in the month, kg,
-times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
+times the fall to the sample it runs to (the samples' heights as last built, below). It
 **carries** up to `carry` m³ of loose solids per J of the cell's work times its loose ground's erodibility against a
 loam's (`Texture::erodibility`: M^1.14 (12 − OM) of Wischmeier and Smith 1978, M its middle share times its share
 that is not fine, OM its organic per cent read to 4; middle particles are carried most easily, coarse ones are heavy,
@@ -564,7 +564,18 @@ threshold slope over the sample its liquid runs to, the slope at which the flood
 coarsest's sinking speed, S = w² / (g H), `soil::threshold_slope`; the threshold channel, Parker 1978), as the samples
 were last built, less what was laid on it since. Where what would settle at a key sample fills more than its room,
 every class settles by the share the room takes and the rest passes on; a sample whose liquid runs to none has no
-room to fill (all settles there). So a plain builds forward sample by sample.
+room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`): the
+samples stand at the seed's heights with what was laid on each, each cell's raised to its ground (`World::ground_z`,
+its solids that stay solid at the surface: snow and ice do not raise it): the cells' offsets spread smoothly between
+their centres (a box filter half a square each way, three passes), what their means then lack spread the same way
+eight times, and each raised by the constant it still lacks, so each cell's samples' mean is its ground exactly
+(`space::relief::heights`). Over them the flood finds the ways, the ponds and the wetness index again
+(`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level; a closed basin
+too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flow through it (the start's wear fills
+such basins; a build moves no ground). Then each cell's ground as liquid stands on it, the bodies, the key samples and
+their rooms are found again; what a cell's parts of the bodies held follows each part's pond (matched by its pass, the
+open low ground by its one part; a cell whose parts do not all match shares its liquid at one level, as at the start),
+and no matter moves. `World::is_land` stays the cell's own: its surface over the level.
 
 The load is booked apart from the liquid (`runoff::Crossings`), each with its own heat. Each key sample's pool (mol of
 each substance and the heat) leaves by the share of its volume that passes, so in a pool the substances and the
@@ -575,7 +586,7 @@ the ground it picks up stays in its cell and stands over its pores until the nex
 shield its ground (the meltwater of a snowpack picks up the ground under it). What the skip product takes settles in
 the next key sample's cell, which may not be the cell of the sample where it settled. A fixed share per class ignores
 that a class loses its coarse end as it goes, so far down a plain the coarse class settles a little faster than it
-would. The heights do not move by what settles (it is matter of the cell, its surface rises evenly). The heat of the
+would. What reaches a body spreads evenly over its entry cell's ground (no lobe yet). The heat of the
 liquid's fall lands with the liquid, not along its
 way. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion (its solids, `Scratch::solids`, as the load's: snow and ice, a liquid's

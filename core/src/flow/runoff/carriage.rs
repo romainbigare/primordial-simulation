@@ -68,7 +68,8 @@ impl Carriage {
     /// liquid runs to none. A land sample's pair is its cell with the first key sample at it or below it; every land
     /// sample has one (`pair_of[k] != NONE`), as every way ends at a key sample: the pick-up reads it so. A key sample
     /// whose way runs on has a room: the volume that lifts it to the threshold slope over the sample its liquid runs to
-    /// (`soil::threshold_slope`, Parker 1978), m³, as these samples stand; the load fills it (`runoff::load`).
+    /// (`soil::threshold_slope`, Parker 1978), no higher than the lowest sample whose liquid runs to it (a deposit dams
+    /// no way that feeds it), m³, as these samples stand; the load fills it (`runoff::load`).
     pub(in crate::flow) fn of(w: &World, b: &Bodies) -> Carriage {
         let s = w.terrain_samples();
         let mut main = vec![NONE; b.of.len()];
@@ -126,9 +127,12 @@ impl Carriage {
         }).collect();
         c.main = main.iter().map(|&k| if k == NONE { NONE } else { c.place[k as usize] }).collect();
         let area = w.mesh.cells().area();
+        // Of each sample, the lowest of the samples whose liquid runs to it (infinite for none).
+        let mut feeds = vec![f64::INFINITY; s.h.len()];
+        b.down.iter().for_each(|&k| feeds[s.to[k as usize] as usize] = feeds[s.to[k as usize] as usize].min(s.h[k as usize]));
         c.room = order.iter().zip(&c.keys).zip(&c.end).map(|((&old, &k), &end)| {
             let (k, slope) = (k as usize, grade[old as usize]);
-            let top = if end == End::On { s.h[s.to[k] as usize] + slope * s.run[k] } else { s.h[k] };
+            let top = if end == End::On { (s.h[s.to[k] as usize] + slope * s.run[k]).min(feeds[k]) } else { s.h[k] };
             (top - s.h[k]).max(0.0) * b.share[k] * area[b.cell_of[k] as usize]
         }).collect();
         c

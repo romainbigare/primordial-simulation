@@ -21,6 +21,7 @@ mod shore;
 mod spare;
 mod stack;
 mod basin;
+pub mod build;
 mod channel;
 pub(crate) use air::air_temp;
 pub use air::{band_depths, column, declination, insolation, on_slope, scale_height, sun_by_latitude, Heat, Planet, DOWN, UP};

@@ -36,6 +36,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `rotation` | none (0 = none) | strength of the turning of moving air by the planet's spin | 1 is the real size of the spin's effect; the wind closure is crude (unchecked) | anchored |
 | `days_per_month` | days | the calendar | 12 x 30 = 360 days for a year of 365 | anchored |
 | `months_per_year` | months | the calendar | the same | anchored |
+| `build_years` | years | years between two builds of the terrain's samples from what the load laid (`flow::build`): their heights, ways, ponds and the load's rooms stay as last built between | none: a choice between the cost of a build (0.75 s on the 64 island, about 3% of a year once a decade) and how long a deposit waits to steepen its reach; 10 | tuned, first guess |
 | `skin_m` | m | depth of the layer that exchanges with the surface within a year: its heat (and what it conducts sideways), and the pores roots and evaporation draw from; a cell takes at most this of each sample's loose ground | the yearly swing of temperature reaches 2 to 4 m in soil (my arithmetic, unchecked); 95% of roots lie in the top 2 m in most biomes (Schenk and Jackson 2002, from memory) | anchored |
 | `air_top_m` | m | height of the air column | the lower air of Earth, 8 to 16 km | anchored |
 | `gravity` | m/s² | pull of the planet | 9.81 | physical |
@@ -445,14 +446,14 @@ Not rows of the model: real sizes that a run's results can be held against, kept
 
 ## Counts
 
-The 131 rows of `Config` and `Physics` are their 131 fields; the constants outside the structs are counted by their mark.
+The 132 rows of `Config` and `Physics` are their 132 fields; the constants outside the structs are counted by their mark.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 7, and 8 outside the structs | `sun`, `tilt`, `radius_m`, `gravity`, `rho_body`, `sorb_scale`, `sorb_power` |
 | anchored | 104, and 46 outside the structs | `lat_south`, `lat_north`, `rotation`, `days_per_month`, `months_per_year`, `skin_m`, `air_top_m`, `sensible`, `evap`, `dissolve`, `wind`, `mix`, `rain_drift_s`, `moist_min`, `line_spread`, `cloud_life`, `drop_m`, `drop_forward`, `drop_dark`, `carry`, `wear`, `creep`, `bury`, `light_depth`, `light_yield`, `gas_floor`, `gas_ref`, `wet_depth`, `t_cat`, `frost_k`, `harden`, `c_basal`, `e_life`, `c_repair`, `dormant`, `dormancy`, `kernel_near`, `c_copy`, `c_capacity`, `mut_size`, `thin_kg`, `tall`, `stem_form`, `stem_solid`, `wall_kg`, `drawdown`, `huber`, `c_sapwood`, `root_uptake`, `root_turnover`, `seed_kg`, `bed_depth`, `bed_porosity`, `bed_seep`, `soil_m`, `hill`, `channel_width`, `channel_width_exp`, `channel_depth`, `channel_depth_exp`, `h_mix`, `thermocline`, `eddy_time`, `eddy_speed`, `eddy_size`, `top_damp`, `c_muscle`, `upkeep_exp`, `meeh`, `r_air`, `r_coat`, `drink_least`, `drink_exp`, `walk_froude`, `c_move`, `move_ref`, `move_exp`, `chew`, `busy`, `bite_floor`, `reach_len`, `store_most`, `dry_most`, `litter_rho`, `litter_k`, `jaw`, `jaw_exp`, `bite_time`, `bite_breadth`, `bite_exp`, `crown_density`, `thin_exp`, `flux_ahead`, `t_light`, `t_burn`, `duff_hold`, `smoulder_moist`, `surface_m`, `cured_life`, `cured_rho`, `base_share`, `snag_life`, `fine_d`, `front_life` |
 | tuned | 6, and 36 outside the structs | `rain_time`, `c_leaf`, `kernel_far`, `kernel_far_share`, `alike`, `strikes` |
-| tuned, first guess | 9, and 17 outside the structs | `hard_min`, `c_firm`, `root_per_height`, `root_least`, `rooted_from`, `hide`, `soft`, `still`, `hold` |
+| tuned, first guess | 10, and 17 outside the structs | `build_years`, `hard_min`, `c_firm`, `root_per_height`, `root_least`, `rooted_from`, `hide`, `soft`, `still`, `hold` |
 | speed | 2, and 4 outside the structs | `wake_share`, `sleep_days` |
 | setting | 1 | `variety` |
 | container | 1 | `phys` |

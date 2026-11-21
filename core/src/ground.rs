@@ -159,6 +159,13 @@ impl World {
     pub fn t_air(&self, j: usize) -> f64 {
         crate::flow::air_temp(self.store.heat(Class::Air)[j], self.heat_cap_air(j))
     }
+    /// Height of the ground of node `i`, m: its bonded and loose solids that stay solid at the surface (`T_SURF`), not
+    /// the frozen liquids that lie on it (the ground the terrain's samples stand at, `flow::build`).
+    pub fn ground_z(&self, i: usize) -> f64 {
+        let solid = |k: usize| (self.b(k, i) + self.g(k, i)) * self.chem.molar_volume(k, chem::Phase::Solid);
+        let v: f64 = (0..self.chem.ns()).filter(|&k| self.chem.subs[k].melt > crate::units::T_SURF).map(solid).sum();
+        self.base_z + v / self.mesh.cells().area()[i]
+    }
     /// Height of the solid surface (bonded and loose solids), m, at the node's temperature now, with the solid share of a
     /// substance on its plateau.
     pub fn surface_z(&self, i: usize) -> f64 {
