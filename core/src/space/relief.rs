@@ -81,13 +81,19 @@ impl<'de> Deserialize<'de> for Relief {
     }
 }
 
+/// The share of a square's side in samples the offsets of the cells are smoothed over, each way (`heights`).
+const SMOOTH_SHARE: f64 = 0.5;
+/// The passes of the box filter that smooths them: three give nearly a Gaussian's shape.
+const SMOOTH_PASSES: usize = 3;
+/// The rounds that smooth what the cells' means lack after the first smoothing: each takes most of the step left at
+/// the cells' borders.
+const SMOOTH_ROUNDS: usize = 8;
+
 /// The heights of the samples built from the seed's samples `seed` of `map` (its rows between latitudes `lat`) and the
 /// relief `r` as last built (`Relief::built`, `Relief::offset`), m: each the seed's height with what was laid on it,
-/// raised by its cell's offset, which lies on one plane through the cell's centre whose slope each way is the smaller
-/// of the slopes to the neighbours on its two sides, none where they differ in sign (minmod: the reconstruction of the
-/// finite volumes, van Leer 1979), round a globe's rows where `map` wraps; then each cell raised by the constant it
-/// lacks, so that its samples' mean by area is its ground exactly. A cell finer than a sample shares it: the sample
-/// takes their offsets' mean by area.
+/// raised by its cell's offset; the offsets spread smoothly between the cells (`SMOOTH_SHARE` of a square each way,
+/// `SMOOTH_PASSES` passes of a box filter), what the cells' means then lack spread the same way `SMOOTH_ROUNDS` times,
+/// and each cell's raised by the constant it still lacks, so that its samples' mean by area is its ground exactly. A cell finer than a sample shares it: the sample takes their offsets' mean by area.
 pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), r: &Relief) -> Vec<f64> {
     let n = seed.h.len();
     let base: Vec<f64> = (0..n).map(|k| seed.h[k] + r.built.get(k).copied().unwrap_or(0.0)).collect();
@@ -106,71 +112,52 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
             (target[k], weight[k]) = (target[k] + r.offset[i] * area, weight[k] + area);
         }
     }
-    let cells = map.leaves().len();
+    let (cells, own) = (map.leaves().len() as u32, |k: usize| map.leaves().len() as u32 + k as u32);
     for k in 0..n {
         if group[k] == u32::MAX {
-            (target[k], group[k]) = (target[k] / weight[k].max(f64::MIN_POSITIVE), (cells + k) as u32);
+            (target[k], group[k]) = (target[k] / weight[k].max(f64::MIN_POSITIVE), own(k));
         }
     }
-    let planes = planes(seed, map, (&target, &group));
-    let at = |k: usize| {
-        let g = group[k] as usize;
-        let (x, y) = ((k % seed.across) as f64, (k / seed.across) as f64);
-        planes.get(g).copied().flatten().map_or(target[k], |p| p[0] + p[1] * (x - p[3]) + p[2] * (y - p[4]))
+    let side = (1usize << (SAMPLE_DEPTH - map.square_depth())) as f64;
+    let radius = (SMOOTH_SHARE * side).round() as usize;
+    let area: Vec<f64> = (0..n).map(|k| map.place_of(&seed.leaf(k), south, north).0).collect();
+    // What each group's mean by area of `f` lacks of its own offset, at each of its samples.
+    let lacks = |f: &[f64]| {
+        let mut sums = vec![[0.0; 2]; (cells as usize) + n];
+        (0..n).for_each(|k| {
+            let g = group[k] as usize;
+            sums[g] = [sums[g][0] + area[k], sums[g][1] + area[k] * (target[k] - f[k])];
+        });
+        (0..n).map(|k| sums[group[k] as usize][1] / sums[group[k] as usize][0]).collect::<Vec<f64>>()
     };
-    let f: Vec<f64> = (0..n).map(at).collect();
-    // What each group's mean by area of the planes lacks of its own offset.
-    let mut sums = vec![[0.0; 2]; cells + n];
-    for k in 0..n {
-        let (g, a) = (group[k] as usize, map.place_of(&seed.leaf(k), south, north).0);
-        sums[g] = [sums[g][0] + a, sums[g][1] + a * (target[k] - f[k])];
+    // The offsets smoothed, what the groups' means then lack smoothed and added, `SMOOTH_ROUNDS` times; then each group
+    // raised by what it still lacks, so its mean is exact.
+    let mut smooth = blur(&target, (seed.across, seed.down), radius);
+    for _ in 0..SMOOTH_ROUNDS {
+        let more = blur(&lacks(&smooth), (seed.across, seed.down), radius);
+        smooth.iter_mut().zip(more).for_each(|(f, m)| *f += m);
     }
-    (0..n).map(|k| base[k] + f[k] + sums[group[k] as usize][1] / sums[group[k] as usize][0]).collect()
+    let last = lacks(&smooth);
+    (0..n).map(|k| base[k] + smooth[k] + last[k]).collect()
 }
 
-/// Of each cell of `map` of a sample or coarser, its plane over the samples `seed` (`heights`): its offset, its slopes
-/// along the rows and the columns, m a sample, and its centre (column, row); of the samples' offsets `target` and
-/// groups `group`. A cell finer than a sample has none (its sample keeps its offset).
-fn planes(seed: &Samples, map: &Square, (target, group): (&[f64], &[u32])) -> Vec<Option<[f64; 5]>> {
-    let (across, down) = (seed.across as i64, seed.down as i64);
-    let side = super::tree::BLOCK >> SAMPLE_DEPTH;
-    let box_of = |l: &super::Leaf| ((l.x / side) as i64, (l.y / side) as i64, 1i64 << (SAMPLE_DEPTH - l.depth));
-    // The centre of each group, (column, row).
-    let mut centre = vec![[0.0f64; 3]; group.iter().map(|&g| g as usize + 1).max().unwrap_or(0)];
-    for (k, &g) in group.iter().enumerate() {
-        let c = &mut centre[g as usize];
-        *c = [c[0] + (k as i64 % across) as f64, c[1] + (k as i64 / across) as f64, c[2] + 1.0];
-    }
-    let mid = |g: u32| [centre[g as usize][0] / centre[g as usize][2], centre[g as usize][1] / centre[g as usize][2]];
-    // The mean offset and position of the samples just across a side of a cell, each at its group's centre, along the
-    // axis `axis` (0 the rows, 1 the columns): the samples `edge` yields, each with how far round the rows it wrapped.
-    let across_side = |edge: &mut dyn Iterator<Item = (i64, i64)>, axis: usize| {
-        let (mut v, mut x, mut m) = (0.0, 0.0, 0.0);
-        for (c, row) in edge {
-            let (c0, wrapped) = if map.wrap { (c.rem_euclid(across), (c - c.rem_euclid(across)) as f64) } else { (c, 0.0) };
-            if c0 < 0 || c0 >= across || row < 0 || row >= down {
-                continue;
-            }
-            let k = (row * across + c0) as usize;
-            (v, x, m) = (v + target[k], x + mid(group[k])[axis] + if axis == 0 { wrapped } else { 0.0 }, m + 1.0);
-        }
-        (m > 0.0).then(|| (v / m, x / m))
+/// Values `v` on a grid `across` x `down` smoothed by `SMOOTH_PASSES` passes of a box filter `radius` samples each way
+/// along the rows and then the columns (shorter at the grid's edges).
+fn blur(v: &[f64], (across, down): (usize, usize), radius: usize) -> Vec<f64> {
+    let mut x = v.to_vec();
+    let line = |x: &mut [f64], at: &dyn Fn(usize) -> usize, len: usize| {
+        let mut prefix = vec![0.0; len + 1];
+        (0..len).for_each(|q| prefix[q + 1] = prefix[q] + x[at(q)]);
+        (0..len).for_each(|q| {
+            let (lo, hi) = (q.saturating_sub(radius), (q + radius + 1).min(len));
+            x[at(q)] = (prefix[hi] - prefix[lo]) / (hi - lo) as f64;
+        });
     };
-    let minmod = |a: f64, b: f64| if a * b <= 0.0 { 0.0 } else { a.signum() * a.abs().min(b.abs()) };
-    map.leaves().iter().enumerate().map(|(i, l)| {
-        if l.depth > SAMPLE_DEPTH {
-            return None;
-        }
-        let (x0, y0, m) = box_of(l);
-        let (d, [cx, cy]) = (target[(y0 * across + x0) as usize], mid(i as u32));
-        let slope = |side: Option<(f64, f64)>, at: f64| side.map(|(v, x)| (v - d) / (x - at));
-        let east = slope(across_side(&mut (y0..y0 + m).map(|y| (x0 + m, y)), 0), cx);
-        let west = slope(across_side(&mut (y0..y0 + m).map(|y| (x0 - 1, y)), 0), cx);
-        let south_side = slope(across_side(&mut (x0..x0 + m).map(|x| (x, y0 + m)), 1), cy);
-        let north_side = slope(across_side(&mut (x0..x0 + m).map(|x| (x, y0 - 1)), 1), cy);
-        let limited = |a: Option<f64>, b: Option<f64>| a.zip(b).map_or(0.0, |(a, b)| minmod(a, b));
-        Some([d, limited(east, west), limited(south_side, north_side), cx, cy])
-    }).collect()
+    for _ in 0..SMOOTH_PASSES {
+        (0..down).for_each(|r| line(&mut x, &|q| r * across + q, across));
+        (0..across).for_each(|c| line(&mut x, &|q| q * across + c, down));
+    }
+    x
 }
 
 #[cfg(test)]
