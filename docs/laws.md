@@ -568,9 +568,9 @@ R = 1 − φ + φ (ξ/L)(1 − e^(−L/ξ)) (`soil::passes`). A key sample's own
 up; what was picked up above it comes in at its top. A sample where each class passes to within 1e-4 is no key
 sample. What leaves a key sample reaches the next by the product of the passes of the samples between
 (`Carriage::skip`); the rest settles in the next one's cell. The load picked up between two key samples skips that
-product (it would lose less than 1e-10 of it, measured). What reaches a body, or a sample whose liquid runs to none,
-settles in the cell that holds it. The form is tuned: the shares are fixed by the flood, not by the month's flow. What settles at a key sample whose
-way runs on or ends on land lies on that sample as its **relief** (`space::relief::Relief`: solid volume per area, m,
+product (it would lose less than 1e-10 of it, measured). What reaches a body piles on its entry sample (its matter in the
+entry cell); what reaches a sample whose liquid runs to none settles there. The form is tuned: the shares are fixed by the flood, not by the month's flow. What settles at a key sample, and
+what piles at a mouth, lies on that sample as its **relief** (`space::relief::Relief`: solid volume per area, m,
 as `surface_z`; saved, sparse); a cell's pick-up takes first from the relief of its samples, each its share by its work
 and at most what lies on it, the rest from the cell's loose ground at large. The relief says where in a cell its
 matter lies; the matter is the cell's. **A sample holds load up to its room**, a cap: the volume that lifts it to the
@@ -579,7 +579,15 @@ coarsest's sinking speed, S = w² / (g H), `soil::threshold_slope`; the threshol
 than the lowest sample whose liquid runs to it (a pond's too: a deposit dams no way that feeds it and raises no lake
 over its outlet), as the samples were last built, less what was laid on it since. Where what would settle at a key sample fills more than its room,
 every class settles by the share the room takes and the rest passes on; a sample whose liquid runs to none has no
-room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`): the
+room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`): first
+**the mouths lay their lobes**: what piled on the bodies' samples since the last build leaves the relief, and each pile
+is a mouth of the start's lobes (laws.md 0, `delta::lobes`, one call over the whole map), its top the level of its
+body's liquid now with the depth of the flood over its entry (`delta::flood_depth`), no higher than its pass; the
+liquid's samples are those of every body (a closed body's: its pond's, so a dry basin has room), each at its body's
+level. What the lobes lay joins the relief; what found no room is matter of the entry cell, which its offset spreads
+over it. What a lobe laid in another cell moves there from the entry cell's loose ground, by its mixture, with its heat
+and its potential energy (`runoff::book_solids`), each entry cell giving at most what it holds loose (the rest stays,
+for the offsets), and mixes into the texture it reaches (`runoff::mix`): the only matter a build moves. Then the
 samples stand at the seed's heights with what was laid on each, each cell's raised to its ground (`World::ground_z`,
 its solids that stay solid at the surface: snow and ice do not raise it): the cells' offsets spread smoothly between
 their centres (a box filter half a square each way, three passes, round a globe's rows), what their means then lack spread the same way
@@ -590,8 +598,7 @@ too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flo
 such basins; a build moves no ground). Then each cell's ground as liquid stands on it, the bodies, the key samples and
 their rooms are found again; what a cell's parts of the bodies held follows each part's pond (a new pond comes from the
 old pond that held most of its samples, one to one; a cell whose parts do not all match shares its liquid at one
-level, as at the start),
-and no matter moves. `World::is_land` stays the cell's own: its surface over the level (`surface_z`, with its snow and
+level, as at the start). `World::is_land` stays the cell's own: its surface over the level (`surface_z`, with its snow and
 ice), so a cell can be land while its samples, built at its ground without them (`ground_z`), lie under the level.
 
 The load is booked apart from the liquid (`runoff::Crossings`), each with its own heat. Each key sample's pool (mol of
@@ -603,7 +610,8 @@ the ground it picks up stays in its cell and stands over its pores until the nex
 shield its ground (the meltwater of a snowpack picks up the ground under it). What the skip product takes settles in
 the next key sample's cell, which may not be the cell of the sample where it settled. A fixed share per class ignores
 that a class loses its coarse end as it goes, so far down a plain the coarse class settles a little faster than it
-would. What reaches a body spreads evenly over its entry cell's ground (no lobe yet). The heat of the
+would. A pile is never read between builds (no wave moves it, no channel crosses it); a lobe is laid once a build, at
+the level its body's liquid stands at then, and the ages of its layers are not kept. The heat of the
 liquid's fall lands with the liquid, not along its
 way. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion (its solids, `Scratch::solids`, as the load's: snow and ice, a liquid's

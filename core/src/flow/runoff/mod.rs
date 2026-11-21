@@ -14,6 +14,7 @@ mod carriage;
 mod load;
 mod pick;
 pub(super) use carriage::Carriage;
+pub(super) use load::mix;
 pub(super) use load::Pools;
 use edge::come_in;
 use super::{curve::Part, level::{level_with, Level}, scratch::Holding};
@@ -67,6 +68,18 @@ fn book_all(w: &mut World, s: &mut Scratch, kinds: &[usize], moves: &[&Crossings
 /// What the liquid standing in ground node `i` gains by `row` mol of the liquids `liq` that come to it (`basin::gain`), m³.
 fn gains(s: &Scratch, liq: &[usize], i: usize, row: &[f64]) -> f64 {
     row.iter().zip(liq).map(|(m, &k)| m * gain(s, k, i)).sum()
+}
+
+/// Loose solids of the substances `sol` moved between ground nodes, each a link from a cell to another with its row
+/// (mol of each, then the heat, J), booked through the store as the load is (`book_all`, its potential energy by the
+/// height it leaves, `potential::apply`).
+pub(super) fn book_solids(w: &mut World, s: &mut Scratch, sol: &[usize], rows: &[(u32, u32, Vec<f64>)]) {
+    let width = sol.len() + 1;
+    let mut x = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width, class: [Class::Ground; 2] };
+    for (from, to, row) in rows {
+        x.push(*from, *to, row[..width - 1].iter().copied().enumerate(), row[width - 1]);
+    }
+    book_all(w, s, sol, &[&x]);
 }
 
 /// What each cell holds that may move as the pass goes (`basin::movable`: rows of the liquids then the heat; and the

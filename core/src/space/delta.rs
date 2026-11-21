@@ -69,13 +69,15 @@ impl<'a> Liquid<'a> {
     }
 }
 
-/// What the lobes laid: the volume, m³; of each sample what was laid, m, and how long ago its top was laid, years; and
-/// the load the lobes found no room for, m³.
+/// What the lobes laid: the volume, m³; of each sample what was laid, m, and how long ago its top was laid, years; the
+/// load the lobes found no room for, m³; and each sample each lobe laid on, with the volume, m³, and the lobe (its
+/// mouth's place in the mouths).
 pub(super) struct Laid {
     pub(super) volume: f64,
     pub(super) on: Vec<f64>,
     pub(super) age: Vec<f64>,
     pub(super) unlaid: f64,
+    pub(super) parts: Vec<(usize, f64, u32)>,
 }
 
 /// The lobes of the `mouths` (largest load first, then by entry) on grid `g` of heights `h`, laid over the open low
@@ -97,21 +99,23 @@ pub(super) fn lobes(g: &Grid, (h, loose): (&mut [f64], &mut [f64]), (liquid, beh
     let lifts = hollows(g, (&mut built, h), &shut_by, (liquid, behind));
     let held = charge(g, &mut built, &mut lobes, &lifts);
     let was = h.to_vec();
-    let (mut age, mut holds) = (vec![0.0; n], vec![0.0; mouths.len()]);
+    let (mut age, mut holds, mut parts) = (vec![0.0; n], vec![0.0; mouths.len()], Vec::new());
     for (m, (lobe, mouth)) in lobes.iter().zip(mouths).enumerate() {
         for (k, put, laid) in laid_by(lobe, (mouth.load, years)) {
             (h[k], loose[k], age[k]) = (h[k] + put / g.area(k), loose[k] + put / g.area(k), laid);
             holds[m] += put;
+            parts.push((k, put, m as u32));
         }
     }
     for &(k, by, m) in &held {
         (h[k], loose[k], age[k]) = (h[k] + by, loose[k] + by, HOLLOW_AGE * years);
         holds[m as usize] += by * g.area(k);
+        parts.push((k, by * g.area(k), m));
     }
     let volume = holds.iter().sum();
     let unlaid = mouths.iter().zip(&holds).map(|(mouth, held)| mouth.load - held).sum();
     let on = (0..n).map(|k| (h[k] - was[k]).max(0.0)).collect();
-    Laid { volume, on, age, unlaid }
+    Laid { volume, on, age, unlaid, parts }
 }
 
 /// The hollows' raises `lifts` charged to the lobes that shut them: each lobe gives what its hollows take, at most all

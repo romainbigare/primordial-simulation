@@ -985,19 +985,24 @@ fn liquid_wears_its_bed_with_the_work_its_load_leaves_free() {
     }
 }
 
-/// What the load settles on land lies on the samples it settles at (`space::relief::Relief`): from no relief, a liquid
-/// step lays on the samples, summed by their area, what it counts as settled on land (`Counters::load`), to 1e-9.
+/// What the load settles lies on the samples it settles at (`space::relief::Relief`), and what reaches a body piles on
+/// its entry sample: from no relief, a liquid step lays on the samples of no body, summed by their area, what it counts
+/// as settled on land, and on the bodies' samples what it counts as carried into them (`Counters::load`), to 1e-9.
 #[test]
-fn the_relief_is_what_the_load_laid_on_land() {
+fn the_relief_is_what_the_load_laid() {
     let mut w = worldgen::testkit::squares(1, 16, 16);
     (0..3).for_each(|_| pcore::step(&mut w));
     w.relief = Default::default();
-    let land = w.counts.load[3];
+    let before = w.counts.load;
     flow_step(&mut w, LIQUID_STEP);
     let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
-    let laid: f64 = w.map.leaves().iter().flat_map(|l| l.split(pcore::space::terrain::SAMPLE_DEPTH.max(l.depth))).map(|f| w.relief.at(s.index(&f)) * w.map.place_of(&f, lat.0, lat.1).0).sum();
-    let settled = w.counts.load[3] - land;
-    assert!(settled > 0.0 && (laid - settled).abs() <= 1e-9 * settled, "{laid} m3 on the samples, {settled} m3 settled on land");
+    let on = |body: bool| -> f64 {
+        let at = |f: &pcore::space::Leaf| (s.pond[s.index(f)] != u32::MAX) == body;
+        w.map.leaves().iter().flat_map(|l| l.split(pcore::space::terrain::SAMPLE_DEPTH.max(l.depth))).filter(at).map(|f| w.relief.at(s.index(&f)) * w.map.place_of(&f, lat.0, lat.1).0).sum()
+    };
+    let (land, bodies) = (w.counts.load[3] - before[3], w.counts.load[1] + w.counts.load[2] - before[1] - before[2]);
+    assert!(land > 0.0 && (on(false) - land).abs() <= 1e-9 * land, "{} m3 on the land's samples, {land} m3 settled on land", on(false));
+    assert!(bodies > 0.0 && (on(true) - bodies).abs() <= 1e-9 * bodies, "{} m3 piled at the mouths, {bodies} m3 carried into the bodies", on(true));
 }
 
 /// The pick-up takes from the samples' relief no more than it picks up: with a metre laid on every sample, a liquid step
@@ -1018,15 +1023,15 @@ fn the_pick_up_takes_no_more_relief_than_it_picks_up() {
 }
 
 /// After a build of the terrain's samples from what the load laid (`flow::build`), the samples of each cell (of a
-/// sample or coarser) stand, by their mean by area, at the cell's ground (`World::ground_z`), to 1e-9 m; and the build
-/// moves no matter (every node's amounts bit for bit) and keeps the energy (1e-9).
+/// sample or coarser) stand, by their mean by area, at the cell's ground (`World::ground_z`), to 1e-9 m; and the build,
+/// which lays the load piled at the mouths out as lobes, keeps every element and the energy (1e-9) with no node under
+/// none (`check::broken`).
 #[test]
-fn a_build_stands_the_samples_at_their_cells_ground_and_moves_no_matter() {
+fn a_build_stands_the_samples_at_their_cells_ground_and_keeps_the_books() {
     let mut w = worldgen::testkit::squares(1, 16, 16);
     (0..14).for_each(|_| pcore::step(&mut w));
-    let (amounts, books) = ([Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Aside].map(|c| w.store.amounts(c).to_vec()), Books::now(&w));
+    let books = Books::now(&w);
     pcore::flow::build::build(&mut w);
-    assert_eq!([Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Aside].map(|c| w.store.amounts(c).to_vec()), amounts, "a build moved matter");
     books.assert_within(&w, 1e-9, 1e-9);
     let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
     for (i, l) in w.map.leaves().iter().enumerate().filter(|p| p.1.depth <= pcore::space::terrain::SAMPLE_DEPTH) {
@@ -1053,6 +1058,20 @@ fn a_cell_whose_ground_crosses_the_level_keeps_its_books() {
     flow_step(&mut w, LIQUID_STEP);
     books.assert_within(&w, 1e-9, 1e-9);
     assert!(w.surface_z(i) > 0.0, "Flow finds the cell's surface over the level");
+}
+
+/// A mouth builds land: on a small island, after two builds of the samples (twenty years), samples of the open low
+/// ground the seed made lie as land under a lobe (laid on, over the liquid's level, in no pond), and a way runs over one.
+#[test]
+#[ignore = "slow: twenty years of a 32 x 32 world"]
+fn a_mouth_builds_land_at_the_shore() {
+    let mut w = worldgen::testkit::one_rise(1, 32, 32);
+    (0..21 * w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
+    let (seed, built) = (w.terrain.samples(w.terrain.seed, &w.map, (w.cfg.lat_south, w.cfg.lat_north)), w.terrain_samples());
+    let open = |s: &pcore::space::samples::Samples, k: usize| s.pond[k] != u32::MAX && s.ponds[s.pond[k] as usize].pass == u32::MAX;
+    let land: Vec<usize> = (0..seed.h.len()).filter(|&k| open(&seed, k) && !open(&built, k) && w.relief.at(k) > 0.0).collect();
+    let crossed = land.iter().any(|&k| built.to[k] != u32::MAX && built.pond[k] == u32::MAX);
+    assert!(!land.is_empty() && crossed, "{} samples of the open low ground turned land under a lobe; a way over one: {crossed}", land.len());
 }
 
 /// A small island, ten years: the land loses rock (the rock-making solids of its loose ground and bed, over its

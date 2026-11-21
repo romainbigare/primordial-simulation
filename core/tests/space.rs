@@ -354,3 +354,24 @@ fn the_terrains_channels_run_down() {
     }
     println!("{} ponds over {} samples", s.ponds.len(), s.pond.iter().filter(|&&p| p != NONE).count());
 }
+
+/// The lobes the running world's mouths lay keep the load (`Terrain::lobes_of`): what they lay over the samples and what
+/// found no room are the mouths' loads, to 1e-9; nothing is laid out of the liquid's samples but by a lobe's front.
+#[test]
+fn the_lobes_keep_the_load_the_mouths_bring() {
+    let w = worldgen::testkit::squares(1, 16, 16);
+    let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
+    let n = s.h.len();
+    let open: Vec<bool> = (0..n).map(|k| s.pond[k] != u32::MAX).collect();
+    let level: Vec<f64> = (0..n).map(|k| if open[k] { s.ponds[s.pond[k] as usize].level.min(0.0) } else { f64::NEG_INFINITY }).collect();
+    // Three mouths: entry samples of the liquid whose land neighbour runs to them, the most drained first.
+    let mut entries: Vec<usize> = (0..n).filter(|&k| open[k] && s.main[k] != u32::MAX && !open[s.main[k] as usize]).collect();
+    entries.sort_by(|&a, &b| s.up[b].total_cmp(&s.up[a]).then(a.cmp(&b)));
+    let mouths: Vec<(usize, f64, f64)> = entries.iter().take(3).zip([1e6, 3e5, 1e5]).map(|(&k, load)| (k, load, level[k] + 1.0)).collect();
+    assert_eq!(mouths.len(), 3, "three mouths");
+    let (parts, unlaid) = w.terrain.lobes_of(&w.map, lat, &s, (&open, &level), &mouths, 10.0);
+    let laid: f64 = parts.iter().map(|p| p.1).sum();
+    let brought: f64 = mouths.iter().map(|m| m.1).sum();
+    assert!((laid + unlaid - brought).abs() <= 1e-9 * brought, "laid {laid} m3 and {unlaid} m3 without room, of {brought} m3");
+    assert!(laid > 0.0 && parts.iter().all(|p| p.1 > 0.0 && (p.2 as usize) < mouths.len()), "each part laid by a mouth");
+}
