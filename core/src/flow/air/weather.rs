@@ -35,13 +35,13 @@ const WIND_SHARE: f64 = 0.5;
 /// The spread of the weather's vertical speed of the air, m/s (probe E): of the synoptic scale, about 1 cm/s (Holton
 /// 2004, 2.4, the scale analysis of the middle latitudes' weather; from memory).
 const LIFT_M_S: f64 = 0.01;
-/// Depth of the planet's sea's top layer the slow part reads, m (`Physics::h_mix`'s anchor, de Boyer Montégut 2004).
-const SEA_TOP_M: f64 = 50.0;
-/// The air-sea feedback that damps a top layer's warmth anomaly, W/m²/K (Frankignoul and Hasselmann 1977;
+/// Depth of the top layer of the planet's low liquid the slow part reads, m (`Physics::h_mix`'s anchor, de Boyer Montégut 2004).
+const TOP_LAYER_M: f64 = 50.0;
+/// The feedback of the air on the liquid's top that damps a top layer's warmth anomaly, W/m²/K (Frankignoul and Hasselmann 1977;
 /// Frankignoul 1985: 15 to 25; from memory).
-const SEA_DAMP: f64 = 20.0;
-/// Volumetric heat capacity of the sea's liquid, J/m³/K.
-const SEA_RHO_CP: f64 = 4.1e6;
+const TOP_DAMP: f64 = 20.0;
+/// Volumetric heat capacity of the key liquid, J/m³/K.
+const LIQUID_RHO_CP: f64 = 4.1e6;
 
 /// The fields of the weather, each its own stream.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -90,6 +90,9 @@ impl Probe {
     }
 }
 
+/// The red series of each place and field of a step (`Weather::series`).
+type Series = HashMap<((i64, i64), Field), Vec<f64>>;
+
 /// The weather of one air step: per place of the lattice and field, the keyed draws of the days the step reads.
 pub(super) struct Weather {
     seed: u64,
@@ -100,7 +103,7 @@ pub(super) struct Weather {
     phi_fast: f64,
     phi_slow: f64,
     slow_gain: f64,
-    cache: std::cell::RefCell<HashMap<((i64, i64), Field), Vec<f64>>>,
+    cache: std::cell::RefCell<Series>,
     pub(super) probe: Probe,
 }
 
@@ -109,10 +112,10 @@ impl Weather {
     pub(super) fn of(w: &World, days: usize, stretch: f64) -> Weather {
         let probe = Probe::of(w);
         let phi_fast = (-1.0 / EDDY_DAYS).exp();
-        // The slow part: the planet's sea's top layer sums the same weather and lets it go in tau = rho cp h / lambda
+        // The slow part: the top layer of the planet's low liquid sums the same weather and lets it go in tau = rho cp h / lambda
         // (Hasselmann 1976). Forced by the fast part, its spread over the fast part's is sqrt(tau_fast / tau_slow) for
         // tau_fast << tau_slow.
-        let tau_slow = SEA_RHO_CP * SEA_TOP_M / SEA_DAMP / DAY;
+        let tau_slow = LIQUID_RHO_CP * TOP_LAYER_M / TOP_DAMP / DAY;
         let phi_slow = (-1.0 / tau_slow).exp();
         let slow_gain = if probe.slow { (EDDY_DAYS / tau_slow).sqrt() } else { 0.0 };
         let past = (FOLDS * if probe.slow { tau_slow } else { EDDY_DAYS }).ceil() as usize;
@@ -126,7 +129,7 @@ impl Weather {
     }
 
     /// The red field at a place for each day of the step: its fast part (AR(1) of `EDDY_DAYS`, unit spread) and, in
-    /// probe C, for the displacement, the slow part the sea sums, both run over the past days from rest.
+    /// probe C, for the displacement, the slow part the top layer sums, both run over the past days from rest.
     fn series(&self, place: (i64, i64), field: Field) -> Vec<f64> {
         let e = self.draws(place, field);
         let (nf, ns) = ((1.0 - self.phi_fast * self.phi_fast).sqrt(), (1.0 - self.phi_slow * self.phi_slow).sqrt());
