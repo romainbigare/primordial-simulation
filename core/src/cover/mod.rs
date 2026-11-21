@@ -20,6 +20,7 @@ mod show;
 mod soak;
 mod stand;
 mod upkeep;
+pub mod patches;
 
 pub use around::{pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
@@ -157,12 +158,19 @@ pub struct Cover {
     /// Seeds made in its last step, landed after every cell had its step (`land`); not saved
     #[serde(skip)]
     pub(crate) seeds: Vec<Seed>,
+    /// PROBE: per slot its patch; per patch its share of the cell (0: unused) and its age, years.
+    pub patch: [u8; SLOTS],
+    pub pshare: [f32; PATCHES],
+    pub page: [f32; PATCHES],
 }
+
+/// PROBE: the most patches a cell's cover holds.
+pub const PATCHES: usize = 4;
 
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], pshare: [1.0, 0.0, 0.0, 0.0], page: [0.0; PATCHES] }
     }
 }
 
@@ -185,6 +193,10 @@ impl Cover {
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
         (0..SLOTS).filter(|&x| self.root[x] != NO_ROOT)
     }
+    /// PROBE: the share of the cell slot `x`'s patch holds.
+    pub fn ps(&self, x: usize) -> f64 {
+        self.pshare[self.patch[x] as usize] as f64
+    }
     /// The built cover of slot `x` (body matter and solids), kg.
     pub fn built(&self, mm: &[f64; NP], x: usize) -> f64 {
         built_kg(mm, &self.mol[x])
@@ -201,7 +213,7 @@ impl Cover {
     /// plants hold (`Cover::on`), over `crown_density` m² a m³, down from its top, and no lower than the ground: a sward is
     /// as dense as that over its whole height.
     pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], ground: f64, x: usize, top: f64) -> (f64, f64) {
-        let patch = ground * self.on(x).max(f32::MIN_POSITIVE as f64);
+        let patch = ground * self.ps(x) * self.on(x).max(f32::MIN_POSITIVE as f64);
         let depth = self.leaf(mm, x) / patch.max(1e-300) / ph.crown_density;
         ((top - depth).max(0.0), top)
     }

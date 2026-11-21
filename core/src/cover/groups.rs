@@ -116,28 +116,32 @@ impl Cover {
     /// by size (Weiner 1990), and seedlings, all leaf, grow fast where light reaches them. A slot with no leaves gets
     /// none (`Cover::grew`).
     pub(super) fn growth(&self, ph: &Physics, (mm, rho): (&[f64; NP], f64), area: f64, order: &[usize]) -> [[f64; GROUPS]; SLOTS] {
-        let (mut all, mut k, mut out) = ([(0, 0, 0.0, 0.0); SLOTS * GROUPS], 0, [[0.0; GROUPS]; SLOTS]);
+        let (mut all, mut out) = ([(0, 0, 0.0, 0.0); SLOTS * GROUPS], [[0.0; GROUPS]; SLOTS]);
         // (Slots of one group each take all they build.)
         if order.iter().all(|&x| self.held_groups(x) <= 1) {
             order.iter().for_each(|&x| out[x][0] = 1.0);
             return out;
         }
-        for &x in order {
-            let s = self.sizes(ph, mm, x);
-            let per = self.leaf(mm, x) / (area * self.on(x)).max(1e-300);
-            for g in 0..s.held {
-                (all[k], k) = ((x, g, s.height(ph, rho, g), per * s.leaf[g]), k + 1);
+        // PROBE: the light passes down through the plants of each patch alone.
+        for pp in 0..super::PATCHES as u8 {
+            let mut k = 0;
+            for &x in order.iter().filter(|&&x| self.patch[x] == pp) {
+                let s = self.sizes(ph, mm, x);
+                let per = self.leaf(mm, x) / (area * self.ps(x) * self.on(x)).max(1e-300);
+                for g in 0..s.held {
+                    (all[k], k) = ((x, g, s.height(ph, rho, g), per * s.leaf[g]), k + 1);
+                }
             }
-        }
-        let all = &mut all[..k];
-        all.sort_by(|a, b| b.2.total_cmp(&a.2));
-        let (mut above, mut i) = (0.0f64, 0);
-        while i < k {
-            let j = i + all[i..].iter().take_while(|e| e.2 >= all[i].2 * (1.0 - SAME)).count();
-            let y: f64 = all[i..j].iter().map(|e| e.3).sum();
-            let lit = (-above).exp() * crate::math::mean_decay(y);
-            all[i..j].iter().for_each(|&(x, g, _, leaf)| out[x][g] = leaf * lit);
-            (above, i) = (above + y, j);
+            let all = &mut all[..k];
+            all.sort_by(|a, b| b.2.total_cmp(&a.2));
+            let (mut above, mut i) = (0.0f64, 0);
+            while i < k {
+                let j = i + all[i..].iter().take_while(|e| e.2 >= all[i].2 * (1.0 - SAME)).count();
+                let y: f64 = all[i..j].iter().map(|e| e.3).sum();
+                let lit = (-above).exp() * crate::math::mean_decay(y);
+                all[i..j].iter().for_each(|&(x, g, _, leaf)| out[x][g] = leaf * lit);
+                (above, i) = (above + y, j);
+            }
         }
         for &x in order {
             let sum: f64 = out[x].iter().sum();

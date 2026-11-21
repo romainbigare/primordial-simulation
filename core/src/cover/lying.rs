@@ -119,20 +119,33 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         // Those that join a stand of their kind take, as seedlings, its ground below its line where they land
         // (`seed::lines`): its grown plants stand where they stood.
         let mut recruits = [0.0; SLOTS];
-        let landed = if up.iter().any(|&m| m > 0.0) { lodge(c, &mm, &Seed { to: i as u32, mol: up, genes: g, root, heat: 0.0 }, &w.cfg, (area, foot.share, foot.strip), &mut recruits) } else { Landed::Refused };
-        c.line = super::seed::lines(w, c, i, &a.soak, (&recruits, built_kg(&mm, &up)), area * foot.share);
-        let woke = match landed {
-            Landed::In => true,
-            Landed::Out(m) => {
-                budget[DIED] -= held(&e, &m);
-                (0..NP).for_each(|q| dead[q] += m[q]);
-                true
+        // PROBE: what wakes takes hold in each patch by its share of the cell; what a patch refuses stays lying.
+        let (mut pats, mut n_pats) = ([0u8; super::PATCHES], 0);
+        for pp in (0..super::PATCHES as u8).filter(|&pp| c.pshare[pp as usize] > 0.0) {
+            (pats[n_pats], n_pats) = (pp, n_pats + 1);
+        }
+        let pats = &pats[..n_pats];
+        let mut left = up;
+        let mut took = [0.0; NP];
+        for (k, &pp) in pats.iter().enumerate() {
+            let part: [f64; NP] = if k + 1 == pats.len() { left } else { std::array::from_fn(|q| (up[q] * c.pshare[pp as usize] as f64).min(left[q])) };
+            (0..NP).for_each(|q| left[q] -= part[q]);
+            let landed = if part.iter().any(|&m| m > 0.0) { lodge(c, &mm, &Seed { to: i as u32, mol: part, genes: g, root, heat: 0.0 }, &w.cfg, (area, foot.share, foot.strip), &mut recruits, pp) } else { Landed::Refused };
+            match landed {
+                Landed::In => (0..NP).for_each(|q| took[q] += part[q]),
+                Landed::Out(m) => {
+                    budget[DIED] -= held(&e, &m);
+                    (0..NP).for_each(|q| dead[q] += m[q]);
+                    (0..NP).for_each(|q| took[q] += part[q]);
+                }
+                Landed::Refused => {}
             }
-            Landed::Refused => false,
-        };
-        c.lying.mol[x] = std::array::from_fn(|q| (lot[q] - gone[q] - if woke { up[q] } else { 0.0 }).max(0.0));
+        }
+        let woke = took.iter().any(|&m| m > 0.0);
+        c.line = super::seed::lines(w, c, i, &a.soak, (&recruits, built_kg(&mm, &up)), area * foot.share);
+        c.lying.mol[x] = std::array::from_fn(|q| (lot[q] - gone[q] - if woke { took[q] } else { 0.0 }).max(0.0));
         if woke {
-            counts.seeds[SPROUTED] += wakes * kg;
+            counts.seeds[SPROUTED] += wakes * kg * (built_kg(&mm, &took) / built_kg(&mm, &up).max(1e-300));
         }
         if built_kg(&mm, &c.lying.mol[x]) <= super::EMPTY_KG {
             let rest = std::mem::take(&mut c.lying.mol[x]);

@@ -44,7 +44,28 @@ fn share(s: f64) -> f64 {
 /// all (weighted by capture area, the factors have mean 1), the light at its crown's base per unit of capture area over
 /// the same mean, and the capture area per unit of ground the light passes through its crown (ln of the light at its top
 /// over that at its base): each the mean over its rings by its capture area in each.
-pub(super) fn shade(l: &[(f64, f64, f64, f64, usize)], mut set: impl FnMut(usize, f64, f64, f64)) {
+pub(super) fn shade(l: &[(f64, f64, f64, f64, usize)], pat: &[(u8, f64)], mut set: impl FnMut(usize, f64, f64, f64)) {
+    let mut got = [[0.0; 3]; SLOTS];
+    // PROBE: each patch's slots shade over its own ground only.
+    for pp in 0..super::PATCHES as u8 {
+        let (mut idx, mut k) = ([0usize; SLOTS], 0);
+        for q in (0..l.len()).filter(|&q| pat[q].0 == pp) {
+            (idx[k], k) = (q, k + 1);
+        }
+        if k == 0 {
+            continue;
+        }
+        let sub: Vec<(f64, f64, f64, f64, usize)> = idx[..k].iter().map(|&q| l[q]).collect();
+        let part = shade_one(&sub);
+        idx[..k].iter().zip(part).for_each(|(&q, g)| got[q] = g);
+    }
+    let (sum_x, sum_a) = got.iter().zip(l.iter()).zip(pat).fold((0.0, 0.0), |(sx, sa), ((g, m), pt)| (sx + m.2 * pt.1, sa + m.2 * pt.1 * g[0]));
+    let all = if sum_x > 0.0 { sum_a / sum_x } else { 1.0 };
+    got.iter().zip(l.iter()).for_each(|(g, m)| set(m.4, g[0] / all.max(1e-300), g[1] / all.max(1e-300), g[2]));
+}
+
+/// PROBE: `shade` over one patch's slots: each slot's three sums, in the order of `l`.
+fn shade_one(l: &[(f64, f64, f64, f64, usize)]) -> Vec<[f64; 3]> {
     let mut got = [[0.0; 3]; SLOTS];
     // The slots on a ring, the heights of their crowns, and the light each slot's capture area gets and what the light
     // has passed at each one's top and base there.
@@ -100,9 +121,7 @@ pub(super) fn shade(l: &[(f64, f64, f64, f64, usize)], mut set: impl FnMut(usize
             got[q] = [got[q][0] + part * lit[q], got[q][1] + part * (-base[q]).exp(), got[q][2] + part * (base[q] - top[q])];
         }
     }
-    let (sum_x, sum_a) = got.iter().zip(l.iter()).fold((0.0, 0.0), |(sx, sa), (g, m)| (sx + m.2, sa + m.2 * g[0]));
-    let all = if sum_x > 0.0 { sum_a / sum_x } else { 1.0 };
-    got.iter().zip(l.iter()).for_each(|(g, m)| set(m.4, g[0] / all.max(1e-300), g[1] / all.max(1e-300), g[2]));
+    got[..l.len()].to_vec()
 }
 
 /// The units of the light reaction `x` the slots in use of cover `c` would run, cut to the key liquid their roots reach:
@@ -112,14 +131,26 @@ pub(super) fn shade(l: &[(f64, f64, f64, f64, usize)], mut set: impl FnMut(usize
 /// hold them.
 pub(super) fn drawn(c: &Cover, x: &mut [f64], units: f64) {
     let rooted = |q: usize| share(c.on(q));
-    let mut shares = [0.0; SLOTS];
-    (0..x.len()).for_each(|q| shares[q] = rooted(q));
     let mut got = [0.0; SLOTS];
-    let (rings, count) = rings(&shares[..x.len()]);
-    for &(at_least, ring) in &rings[..count] {
-        let on = || (0..x.len()).filter(|&q| rooted(q) >= at_least);
-        let f = (units * ring / on().map(|q| x[q] * ring / rooted(q)).sum::<f64>().max(1e-300)).min(1.0);
-        on().for_each(|q| got[q] += x[q] * ring / rooted(q) * f);
+    // PROBE: each patch's slots draw on its own share of the ground's liquid.
+    for pp in 0..super::PATCHES as u8 {
+        let mine = |q: usize| c.patch[q] == pp;
+        if !(0..x.len()).any(mine) {
+            continue;
+        }
+        let pu = units * c.pshare[pp as usize] as f64;
+        let mut shares = [0.0; SLOTS];
+        let (mut idx, mut k) = ([0usize; SLOTS], 0);
+        for q in (0..x.len()).filter(|&q| mine(q)) {
+            (shares[k], idx[k], k) = (rooted(q), q, k + 1);
+        }
+        let idx = &idx[..k];
+        let (rings, count) = rings(&shares[..k]);
+        for &(at_least, ring) in &rings[..count] {
+            let on = || idx.iter().copied().filter(|&q| rooted(q) >= at_least);
+            let f = (pu * ring / on().map(|q| x[q] * ring / rooted(q)).sum::<f64>().max(1e-300)).min(1.0);
+            on().for_each(|q| got[q] += x[q] * ring / rooted(q) * f);
+        }
     }
     x.copy_from_slice(&got[..x.len()]);
 }

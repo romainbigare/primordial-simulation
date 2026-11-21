@@ -93,8 +93,11 @@ pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, 
     }
     let (held, ground) = (&held[..k], &ground[..k]);
     // The ground each slot stands on, m², and the share of each other slot's plants that stand on it.
-    let own: [f64; SLOTS] = std::array::from_fn(|q| if q < k { area * c.stands[held[q]] as f64 } else { 0.0 });
-    let on_own = |q: usize, r: usize| if r == q { 1.0 } else { own[q].min(own[r]) / own[r].max(1e-300) };
+    let own: [f64; SLOTS] = std::array::from_fn(|q| if q < k { area * c.ps(held[q]) * c.stands[held[q]] as f64 } else { 0.0 });
+    // PROBE: slots of another patch do not crowd a slot.
+    let pat = c.patch;
+    let same = |q: usize, r: usize| pat[held[q]] == pat[held[r]];
+    let on_own = |q: usize, r: usize| if r == q { 1.0 } else if !same(q, r) { 0.0 } else { own[q].min(own[r]) / own[r].max(1e-300) };
     // A crown shares all of itself: a lone slot's crowd is its own ground, and its crown is not needed.
     if k > 1 {
         held.iter().zip(span.iter_mut()).for_each(|(&x, s)| *s = c.crown(ph, mm, area, x, c.height(ph, mm, rho, x)));
@@ -204,7 +207,7 @@ pub(super) fn founded(ph: &Physics, kg: f64, area: f64) -> f64 {
 pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usize)) {
     for a in 0..n {
         for z in a + 1..n {
-            if !kin::together(&c.genes, &c.root, (a, z), super::APART * ph.alike, super::distance) {
+            if c.patch[a] != c.patch[z] || !kin::together(&c.genes, &c.root, (a, z), super::APART * ph.alike, super::distance) {
                 continue;
             }
             let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };

@@ -91,7 +91,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (area, mm, t, rho) = (super::ground(w, i), p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
     // The slots its world uses (`Config::variety`).
-    let n = w.cfg.variety;
+    let n = super::patches::n_slots(c, w.cfg.variety);
     // The light since the last step: its capture areas share it down through their crowns, each on the share of its
     // ground its roots hold.
     let dl = (a.light - c.mark).max(0.0);
@@ -115,6 +115,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     // Per unit of the light reaction, the key liquid a leaf draws in this air (`drink`).
     let per_unit = drink(chem, p, a).0;
     let (mut layers, mut n_layers) = ([(0.0, 0.0, 0.0, 0.0, 0); SLOTS], 0);
+    let mut pat = [(0u8, 1.0f64); SLOTS];
     for (q, sq) in s.iter_mut().enumerate().take(n) {
         let (built, leaf) = (c.built(&mm, q), c.leaf(&mm, q));
         if c.root[q] == NO_ROOT || built <= EMPTY_KG {
@@ -137,9 +138,10 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             c.need[q] = need as f32;
         }
         let (base, top) = c.crown(ph, &mm, area, q, h);
-        (layers[n_layers], n_layers) = ((base, top, leaf / area, c.on(q), q), n_layers + 1);
+        pat[n_layers] = (c.patch[q], c.ps(q));
+        (layers[n_layers], n_layers) = ((base, top, leaf / (area * c.ps(q)), c.on(q), q), n_layers + 1);
     }
-    super::canopy::shade(&layers[..n_layers], |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
+    super::canopy::shade(&layers[..n_layers], &pat[..n_layers], |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
     let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books::new(a.air, flows);

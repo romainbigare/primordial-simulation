@@ -88,12 +88,13 @@ pub enum Landed {
 /// (`Config::variety` 1) has no two to join, and the seeds do not take hold (`Landed::Refused`). So a cell of more slots
 /// is never closed to seeds and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
 /// the light that reaches the bottom of the layers above them and what does not pay dies (the gap models, Shugart 1984).
-pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area, share, strip): (f64, f64, f64), recruits: &mut [f64; super::SLOTS]) -> Landed {
-    let (ph, n) = (&cfg.phys, cfg.variety);
+pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area, share, strip): (f64, f64, f64), recruits: &mut [f64; super::SLOTS], pp: u8) -> Landed {
+    let (ph, n) = (&cfg.phys, super::patches::n_slots(c, cfg.variety));
     let kg = built_kg(mm, &s.mol);
-    let plants = super::stand::founded(ph, kg, area * share);
+    let plants = super::stand::founded(ph, kg, area * c.pshare[pp as usize] as f64 * share);
     let (mut kin, mut n_kin) = ([0; super::SLOTS], 0);
-    for x in kin::kins(&c.genes[..n], &c.root[..n], (&s.genes, s.root), APART * ph.alike, distance) {
+    let pat = c.patch;
+    for x in kin::kins(&c.genes[..n], &c.root[..n], (&s.genes, s.root), APART * ph.alike, distance).filter(|&x| pat[x] == pp) {
         (kin[n_kin], n_kin) = (x, n_kin + 1);
     }
     let kin = &kin[..n_kin];
@@ -117,13 +118,17 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area
         c.e += s.heat;
         return Landed::In;
     }
-    let poorest = (0..n).filter(|&x| c.net[x] < 0.0).min_by(|&a, &b| c.net[a].total_cmp(&c.net[b]).then(c.built(mm, a).total_cmp(&c.built(mm, b))));
+    let poorest = (0..n).filter(|&x| c.root[x] != super::NO_ROOT && c.patch[x] == pp && c.net[x] < 0.0).min_by(|&a, &b| c.net[a].total_cmp(&c.net[b]).then(c.built(mm, a).total_cmp(&c.built(mm, b))));
     let (x, out) = match (kin::empty(&c.root[..n]), poorest) {
         (Some(x), _) => (x, None),
         (None, Some(x)) => (x, Some(c.mol[x])),
-        (None, None) if n > 1 => (room(c, mm, n), None),
+        (None, None) if n > 1 => match room(c, mm, n, pp) {
+            Some(x) => (x, None),
+            None => return Landed::Refused,
+        },
         (None, None) => return Landed::Refused,
     };
+    c.patch[x] = pp;
     (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, 0.0);
     (c.line[x], c.stands[x], c.airless[x], c.drained[x], c.strip[x]) = (super::UNSET, share as f32, 0.0, 0.0, strip as f32);
     c.found(x, plants);
@@ -147,11 +152,17 @@ pub(super) fn lines(w: &World, c: &Cover, i: usize, soak: &super::Soak, (recruit
 /// Room in cover `c` whose `n` slots in use all hold cover that pays its way: the two nearest each other by their genes
 /// (`distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the slots are a limit of the
 /// bookkeeping, and the two hold the same niche to within what it resolves. Returns the slot it leaves empty.
-fn room(c: &mut Cover, mm: &[f64; NP], n: usize) -> usize {
-    let (a, z) = kin::nearest(&c.genes[..n], distance);
+fn room(c: &mut Cover, mm: &[f64; NP], n: usize, pp: u8) -> Option<usize> {
+    // PROBE: only two slots of one patch join; with `MORE_SLOTS`, two of the seeds' patch first.
+    let mine = super::patches::MORE_SLOTS.load(std::sync::atomic::Ordering::Relaxed);
+    let best = |only: bool| {
+        let pairs = (0..n).flat_map(|a| (a + 1..n).map(move |z| (a, z))).filter(|&(a, z)| c.patch[a] == c.patch[z] && (!only || c.patch[a] == pp));
+        pairs.min_by(|p, q| distance(&c.genes[p.0], &c.genes[p.1]).total_cmp(&distance(&c.genes[q.0], &c.genes[q.1])))
+    };
+    let (a, z) = if mine { best(true).or_else(|| best(false)) } else { best(false) }?;
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
     super::stand::join(c, mm, big, small);
-    small
+    Some(small)
 }
 
 /// Place `kg` per m² of the ground its kind stands on (`cover::footing` at the least root need, of the cell's ground,
@@ -174,7 +185,7 @@ pub fn place(w: &mut crate::World, i: usize, genes: [f32; NG], root: u32, kg: f6
     let mut recruits = [0.0; super::SLOTS];
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
-    let landed = lodge(c, &mm, &s, &w.cfg, (cell, foot.share, foot.strip), &mut recruits);
+    let landed = lodge(c, &mm, &s, &w.cfg, (cell, foot.share, foot.strip), &mut recruits, 0);
     let to = lines(w, &w.life.cells[i].cover, i, &soak, (&recruits, built_kg(&mm, &mol)), area);
     let c = &mut w.life.cells[i].cover;
     c.line = to;

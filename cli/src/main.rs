@@ -3,6 +3,7 @@
 mod args;
 mod chem;
 mod numbers;
+mod probe;
 mod render;
 mod report;
 mod writer;
@@ -154,6 +155,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     if !resumed {
         report::balances(&w).iter().for_each(|l| println!("{l}"));
     }
+    let mut probe = probe::Probe::new(&w);
     for y in y0 + 1..=y0 + years {
         for month in 0..w.cfg.months_per_year {
             if month == 0 {
@@ -173,6 +175,12 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
                 writer.start(&w, &(&plan, rec.kept()), Some(at), rec.tape(), out.clone());
             }
             clock.spent[TAPE] += t.elapsed();
+            if let Some(p) = probe.as_mut() {
+                p.month(&w, y, month);
+            }
+        }
+        if let Some(p) = probe.as_mut() {
+            p.year(&mut w, y);
         }
         writer.check();
         // The yearly check is the release check, with the books' drift; debug builds also check after every law part.
