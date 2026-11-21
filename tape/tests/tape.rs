@@ -138,7 +138,9 @@ fn a_resumed_run_places_the_kinds_still_due() {
 #[test]
 fn frames_file_round_trip() {
     let dir = tmp("frames");
+    // (Flow's state of its ground first, as `ew run` builds a new world's: the frames draw the ground by it.)
     let mut w = world();
+    pcore::flow::state(&mut w, true);
     let mut rec = tape::Recorder::new(&w, 1, 1);
     common::record(&mut rec, &mut w);
     run(&mut w, 1);
@@ -156,8 +158,9 @@ fn frames_file_round_trip() {
     // Layer "z" of frame 0 is the first layer: check one square, which shows the cell that holds it.
     let z = &tape::LAYERS[0];
     assert_eq!(z.name, meta["layers"][0]["name"].as_str().unwrap());
-    let w0 = world();
-    let first = tape::quantise(z, w0.surface_z(tape::pixels(&w0)[100]));
+    let mut w0 = world();
+    pcore::flow::state(&mut w0, true);
+    let first = tape::quantise(z, w0.scratch.surface(tape::pixels(&w0)[100]).expect("Flow's state")[0]);
     assert_eq!(raw[8 + n + 100], first);
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
 }
