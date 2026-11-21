@@ -199,7 +199,8 @@ fn a_pool_far_over_its_boiling_point_gives_no_more_than_it_holds() {
 /// air's step, which melts more of it, and after the liquid's step, whose meltwater runs off down the slope and leaves
 /// the ice (laws.md 1.2): what the world reads as molten and standing is what the heat holds, within the share the heat
 /// of the lifts and falls of the matter booked after moves (its meltwater falls at most from the snow's top to its bed's
-/// top or its lowest ground, the lower: g × molar mass × that fall / fusion enthalpy), and none stands there.
+/// top or its lowest ground, the lower: g × molar mass × that fall / fusion enthalpy), and what stands there is at most
+/// what filled the pores of the loose ground its runoff picked up (they leave after the liquid's pass, laws.md 1.3).
 #[test]
 fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
     const SNOW_M: f64 = 2.0;
@@ -219,10 +220,17 @@ fn meltwater_runs_off_and_the_snow_keeps_the_share_its_heat_holds() {
     pcore::flow::air(&mut w, DT);
     let (read, held) = molten(&w);
     assert!((read - held).abs() < share, "after the air's step: molten share {read} read, {held} held (within {share})");
+    // The depth of the cell's loose ground of the substances still solid where the liquid boils (no gas, no frozen
+    // liquid), m.
+    let n = w.mesh.cells().n();
+    let loose = |w: &World| (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > w.chem.subs[LIQUID].boil).map(|k| w.store.amounts(Class::Ground)[k * n + i] * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>() / w.mesh.cells().area()[i];
+    let before = loose(&w);
     pcore::flow::liquid(&mut w, LIQUID_STEP);
     books.assert_within(&w, 1e-9, 1e-9);
     let ((read, held), stands) = (molten(&w), pcore::flow::means(&w, &[i]).unwrap()[0].stands);
-    assert!((read - held).abs() < share && stands < 1e-9, "molten share {read} read, {held} held (within {share}); {stands} m stands");
+    // What it picked up: what it lost, and what settled on it from above (`Counters::load_month`).
+    let picked_pores = w.pores(i).porosity * (before - loose(&w) + f64::from(w.counts.load_month[i][1])).max(0.0);
+    assert!((read - held).abs() < share && stands < 1e-9 + picked_pores, "molten share {read} read, {held} held (within {share}); {stands} m stands, the pores picked up {picked_pores} m");
 }
 
 /// A warmer air node gives its heat to its neighbours.
@@ -737,15 +745,14 @@ fn the_starting_ground_creeps_at_a_measured_diffusivity() {
     assert!(d > 2.7e-3 && d < 3.3e-3, "{d} m2/yr");
 }
 
-/// The two rates of running liquid are the measured yield: the sediment it carries to the low ground, about 15 to 20
-/// Gt a year, is 7e9 m³, and the potential energy of the runoff, 4e13 m³ a year falling 840 m, is 3.4e20 J: 2e-11 m³
-/// per J. A bed of the starting rock breaks at the same.
+/// A bed of the starting rock breaks at the measured yield of running liquid: the sediment it carries to the low ground,
+/// about 15 to 20 Gt a year, is 7e9 m³, and the potential energy of the runoff, 4e13 m³ a year falling 840 m, is
+/// 3.4e20 J: 2e-11 m³ per J. (What it picks up, `carry`, is held to the start's yield law by the ranges test.)
 #[test]
-fn liquid_carries_and_breaks_at_the_measured_yield_per_joule() {
+fn a_bed_breaks_at_the_measured_yield_per_joule() {
     let w = worldgen::testkit::squares(1, 16, 16);
     let yield_per_j = 7e9 / (4e13 * 840.0 * 1000.0 * 9.81);
-    println!("measured yield {yield_per_j:.2e} m3/J; carry {:.1e}, wear {:.1e}", w.cfg.carry, w.cfg.wear);
-    assert!((w.cfg.carry / yield_per_j - 1.0).abs() < 0.2, "carry {}", w.cfg.carry);
+    println!("measured yield {yield_per_j:.2e} m3/J; wear {:.1e}", w.cfg.wear);
     // The bed breaks at wear / strength for each substance, by its share of the bed's volume.
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[0]);
     let cell = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");

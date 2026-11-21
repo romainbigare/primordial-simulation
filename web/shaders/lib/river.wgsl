@@ -313,10 +313,11 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let soaked_bed = soil(g, 1.0, lit);
   let ripple = ripples(p.e) * (1.0 - p.snow);
-  var water = seen_through(BED_FILM * soaked_bed, p.depth, ripple, RUNNING_ATTENUATION, DEEP_WATER);
+  let k = loaded_k(RUNNING_CLEAR, p.load);
+  var water = seen_through(BED_FILM * soaked_bed, p.depth, ripple, k, loaded_deep(DEEP_WATER, p.load));
   // In the style a channel's water is coloured by its bed's shape (style.wgsl `river_seen`): light shallows over the
   // bed's stones, a dark deep thread, a light wash at its edge.
-  if (styled()) { water = mix(water_painted(BED_SHOWN * soaked_bed, river_seen(p.depth, w.x), ripple) * (1.0 + EDGE_LIGHT * w.y), FAST_WATER, FAST * flow.z); }
+  if (styled()) { water = mix(water_painted(BED_SHOWN * soaked_bed, river_seen(p.depth, w.x), ripple, p.load) * (1.0 + EDGE_LIGHT * w.y), FAST_WATER, FAST * flow.z); }
   // The signs of its flow (lib/flow.wgsl `flow_signs`): streaks catch the sky's light, white water breaks over its
   // steps.
   water = mix(water + flow.x * REFLECT_STREAK * SKY, FOAM_RGB, flow.y);
@@ -336,5 +337,5 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
     }
   }
   let rgb = mix(water, SNOW, p.snow * 0.85);
-  return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * RUNNING_ATTENUATION.g * p.depth), RIVER);
+  return Shaded(rgb, 1.0 + (lit - 1.0) * exp(-2.0 * k.g * p.depth), RIVER);
 }

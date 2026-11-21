@@ -155,6 +155,7 @@ function repaint(): void {
   const w = world, f = frame, squares = mapFields(w, f), look = mapLook();
   map.setMap(squares.fields);
   if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
+  if (land && live) land.plumesIn(live.plumes);
   vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
   fire.set(land && live ? w : null);
   map.setLook(look);

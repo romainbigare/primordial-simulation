@@ -130,17 +130,20 @@ fn river_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + RIVER_S
 fn standing_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + STANDING_SEEN_M * pow(max(rel, 0.0), RIVER_SEEN_POW); }
 
 // Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g, `clear` of it the
-// sea's clear water (the rest inland water, `INLAND_ATTENUATION`): through its stretched attenuation (the bed
-// lightened, `BED_LIGHTEN`), over its deep colour, the open sea's darkening with depth.
-fn painted_through(bed: vec3f, depth: f32, g: vec2f, clear: f32) -> vec3f {
+// sea's clear water (the rest inland water, `INLAND_ATTENUATION`), carrying `load` g/m³ (water.wgsl `loaded_k`):
+// through its stretched attenuation (the bed lightened, `BED_LIGHTEN`), over its deep colour, the open sea's darkening
+// with depth.
+fn painted_through(bed: vec3f, depth: f32, g: vec2f, clear: f32, load: f32) -> vec3f {
   let open = mix(OPEN_WATER, DEEP_WATER_PAINT, ease(log(OPEN_M), log(DEEP_M), log(max(depth, 1.0))));
-  let k = mix(INLAND_ATTENUATION, CLEAR_ATTENUATION, clear);
-  return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, k, mix(INLAND_DEEP, open, clear));
+  let k = loaded_k(mix(INLAND_ATTENUATION, CLEAR_ATTENUATION, clear), load);
+  return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, k, loaded_deep(mix(INLAND_DEEP, open, clear), load));
 }
 // Running water (river.wgsl), inland water all.
-fn water_painted(bed: vec3f, depth: f32, g: vec2f) -> vec3f { return painted_through(bed, depth, g, 0.0); }
+fn water_painted(bed: vec3f, depth: f32, g: vec2f, load: f32) -> vec3f { return painted_through(bed, depth, g, 0.0, load); }
 // Standing liquid, `sea` of it the sea's.
-fn standing_painted(bed: vec3f, depth: f32, g: vec2f, sea: f32) -> vec3f { return painted_through(bed, depth, g, mix(LAKE_CLEAR, 1.0, sea)); }
+fn standing_painted(bed: vec3f, depth: f32, g: vec2f, sea: f32, load: f32) -> vec3f {
+  return painted_through(bed, depth, g, mix(LAKE_CLEAR, 1.0, sea), load);
+}
 
 // A point of a plant of colour `c` (linear) `height` m over the ground at its foot, where liquid stands `depth` m deep
 // over its foot (0: on land): over the surface as it is; under it seen as the water drawn shows its bed
@@ -156,7 +159,7 @@ fn seen_in_liquid(c: vec3f, depth: f32, height: f32, e: f32) -> vec3f {
   var seen = c;
   if (below > 0.0) {
     let column = standing_seen(depth, shore_rim(depth, 0.0, e, LAKE_RIM_M));
-    seen = standing_painted(BED_SHOWN * c, column * min(below / depth, 1.0), vec2f(0.0), 0.0);
+    seen = standing_painted(BED_SHOWN * c, column * min(below / depth, 1.0), vec2f(0.0), 0.0, 0.0);
   }
   return seen + WATERLINE * SKY * (1.0 - smoothstep(0.0, e, abs(below)));
 }

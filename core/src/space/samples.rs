@@ -24,7 +24,7 @@ use std::sync::{Arc, Mutex};
 /// the terrain's channels on them (`space::network`): the sample its liquid runs to (`network::NONE` for a sink of the
 /// open low ground), the area that drains through it, m², and its neighbour upstream that the most drains through
 /// (`NONE` where none runs to it), and the samples in the order the flood reached them (each after the one its liquid
-/// runs to), and its slope to the sample its liquid runs to, rise over run (none where it runs to none or uphill); the
+/// runs to), and how far it lies from the sample its liquid runs to, m (none where it runs to none); the
 /// pond each lies in (`NONE` on ground that drains), and the ponds; the make of each sample's bed at its surface
 /// (`space::strata`, as the wear left it); the depth of its loose ground the wear left, m, how much of it settled in
 /// the wear's last stage, m (all of it on the open low ground), and how long it has lain, years (`mantle::age`); and
@@ -40,7 +40,7 @@ pub struct Samples {
     pub order: Vec<u32>,
     pub up: Vec<f64>,
     pub main: Vec<u32>,
-    pub slope: Vec<f64>,
+    pub run: Vec<f64>,
     pub pond: Vec<u32>,
     pub ponds: Vec<Pond>,
     pub make: Vec<u8>,
@@ -63,6 +63,11 @@ pub struct Pond {
 }
 
 impl Samples {
+    /// The slope of sample `k` to the sample its liquid runs to, rise over run (none where it runs to none or uphill).
+    pub fn slope(&self, k: usize) -> f64 {
+        if self.to[k] == NONE { 0.0 } else { (self.h[k] - self.h[self.to[k] as usize]).max(0.0) / self.run[k] }
+    }
+
     /// The index of the sample over leaf `l` of `SAMPLE_DEPTH` or finer.
     pub fn index(&self, l: &Leaf) -> usize {
         let side = BLOCK >> SAMPLE_DEPTH;
@@ -161,10 +166,9 @@ impl Terrain {
         let (mut pond, members) = basins(&grid, &h, &f);
         let mut ponds: Vec<Pond> = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
         open_parts(&grid, &open, (&mut pond, &mut ponds));
-        let slope = (0..grid.n()).map(|k| if f.to[k] == NONE { 0.0 } else { (h[k] - h[f.to[k] as usize]).max(0.0) / f.apart[k] }).collect();
         let (loose, settled, age) = (worn.loose, worn.settled, worn.age);
         let twi = sample_index(across, down, dy, &up, &h);
-        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, slope, pond, ponds, make, loose, settled, age, books, twi, channel: self.channel }
+        Samples { seed, across, down, h, to: f.to, order: f.order, up, main, run: f.apart, pond, ponds, make, loose, settled, age, books, twi, channel: self.channel }
     }
 }
 
