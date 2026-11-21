@@ -1,13 +1,16 @@
 # Earth names for chemistry 0 (viewer and analysis only; the core never reads this).
-elements = ["H", "C", "N", "O", "Si", "Ca"]
+elements = ["H", "C", "N", "O", "Si", "Ca", "Fe", "Cu", "Na", "Cl", "Al"]
 substances = [
   "water", "nitrogen", "oxygen", "carbon dioxide", "methane", "sugar / plant matter",
   "fat / oil", "sand / quartz", "common rock", "limestone",
   "body matter (tissue)", "calcium bicarbonate (dissolved)", "nitrogen mineral (a nitrate-ammonium fertiliser salt)", "frame (cellulose)",
   "humus (stable soil organic matter)",
+  "iron", "iron ore (haematite)", "copper", "copper ore (tenorite)", "solid carbon (charcoal / coal)", "rock salt (halite)",
+  "clay (kaolinite)", "fired clay (metakaolin)",
 ]
 reactions = [
   "light to sugar", "burning sugar", "burning fat", "fat making", "burning methane", "rotting to methane",
   "rock weathering", "burning body matter", "limestone dissolving", "limestone settling", "nitrogen fixation", "fertiliser salt breaking down hot", "rotting of the frame", "splitting the frame (cellulase)",
   "humus forming", "humus rotting",
+  "charring wood", "burning charcoal / coal", "smelting iron", "smelting copper", "firing clay", "rusting",
 ]
