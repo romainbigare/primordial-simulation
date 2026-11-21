@@ -22,7 +22,11 @@ pub fn step(w: &World, d: &mut Chunk) {
             cell(w, d, &p, i, dt);
         } else {
             let land = super::ground(w, i);
-            let moist = if land > 0.0 { super::soak(w, &p, i, w.g(p.liquid, i)).1.moist } else { 1.0 };
+            let soak = (land > 0.0).then(|| super::soak(w, &p, i, w.g(p.liquid, i)).1);
+            let moist = soak.map_or(1.0, |s| s.moist);
+            if let Some(s) = soak {
+                d.counts.ran.push((i as u32, super::CellRan { roots: super::moist(&s, false) as f32, ..Default::default() }));
+            }
             let c = d.cover(i);
             (c.mark, c.keep, c.film, c.reach) = (w.light[i], 0.0, 0.0, 0.0);
             remember(c, moist, w.cfg.months_per_year as f32);
@@ -162,7 +166,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let order = &*order;
     let (pays, season) = super::season::pay(w, c, (p, &e), (&mut s, &stored), order, (t, dt), (&mut b, counts));
     grow(w, c, (p, &e), (&s, pays, season), order, (i, a, dt), (&mut b, counts));
-    ran(&s, order, i, counts);
+    ran(&s, order, (i, super::moist(&a.soak, false)), counts);
     // Its plants grow where their roots gain (`soak::strips_share`): of what each slot holds now, what it stored this
     // month went to its strips and its rest by what a plant gains on each; the rest stands where it stood.
     for &q in order {
@@ -182,11 +186,12 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     (b, caught)
 }
 
-/// What the slots `order` of cell `i`, `s` in the month, ran at (`cover::Ran`), counted for the tape.
-fn ran(s: &[Slot; SLOTS], order: &[usize], i: usize, counts: &mut Counters) {
-    let mut out = [super::Ran::default(); SLOTS];
+/// What the cover of cell `i` ran at (`cover::CellRan`), counted for the tape: its slots `order`, `s` in the month, and
+/// the share of what the drier rest of its land holds for roots that it held, `roots`.
+fn ran(s: &[Slot; SLOTS], order: &[usize], (i, roots): (usize, f64), counts: &mut Counters) {
+    let mut out = super::CellRan { roots: roots as f32, ..Default::default() };
     for &q in order {
-        out[q] = super::Ran { act: s[q].act as f32, frozen: s[q].frozen as f32, wet: s[q].wet as f32 };
+        out.slots[q] = super::Ran { act: s[q].act as f32, frozen: s[q].frozen as f32, wet: s[q].wet as f32 };
     }
     counts.ran.push((i as u32, out));
 }

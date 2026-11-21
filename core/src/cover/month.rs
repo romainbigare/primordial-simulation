@@ -16,6 +16,21 @@ pub struct Ran {
     pub wet: f32,
 }
 
+/// What a cell's cover ran at in its month, for the tape (`Counters::ran_month`; no law reads it): the share of what
+/// the drier rest of its land holds for roots that it held, as its roots read it (`cover::moist` off the strips; on
+/// the saturated strips they read all of it; none where it holds no land), and what each slot ran at (`Ran`).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CellRan {
+    pub roots: f32,
+    pub slots: [Ran; super::SLOTS],
+}
+
+impl Default for CellRan {
+    fn default() -> Self {
+        CellRan { roots: f32::NAN, slots: [Ran::default(); super::SLOTS] }
+    }
+}
+
 /// After the month of every chunk (`life::month`): the cover's seeds land (`cover::land`), what each cell's cover
 /// built is counted into its year (`grown`), and what its slots ran at becomes its last month's (`ran`).
 pub fn landed(w: &mut World) {
@@ -24,12 +39,12 @@ pub fn landed(w: &mut World) {
     ran(w);
 }
 
-/// What the slots of each cell's cover ran at in the month (`Counters::ran`) becomes its last month's
-/// (`Counters::ran_month`); a cell whose cover did not run holds none.
+/// What each cell's cover ran at in the month (`Counters::ran`) becomes its last month's (`Counters::ran_month`); a
+/// cell whose cover did not run holds none.
 fn ran(w: &mut World) {
     let (n, c) = (w.mesh.cells().n(), &mut w.counts);
     c.ran_month.clear();
-    c.ran_month.resize(n, [Ran::default(); super::SLOTS]);
+    c.ran_month.resize(n, CellRan::default());
     for (i, r) in std::mem::take(&mut c.ran) {
         c.ran_month[i as usize] = r;
     }

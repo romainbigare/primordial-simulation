@@ -159,7 +159,7 @@ pub fn rows(w: &World, i: usize, level: f64) -> Vec<f64> {
     let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
     let saturated = w.life.wet.get(i).copied().flatten().map_or(0.0, |g| g.share);
-    let g = Ground { level, ran: w.counts.ran_month.get(i), saturated, rho: w.chem.subs[p.sub[cover::WALL]].density[0], area: w.mesh.cells().area()[i] };
+    let g = Ground { level, ran: w.counts.ran_month.get(i).map(|r| &r.slots), saturated, rho: w.chem.subs[p.sub[cover::WALL]].density[0], area: w.mesh.cells().area()[i] };
     let mut slots: Vec<usize> = c.held().filter(|&x| c.stands[x] > 0.0).collect();
     slots.sort_by(|&a, &b| c.built(&mm, b).total_cmp(&c.built(&mm, a)));
     for (k, &x) in slots.iter().enumerate() {
