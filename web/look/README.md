@@ -20,7 +20,7 @@ It needs Playwright (found the normal way, else set `PLAYWRIGHT` to its folder, 
 | `cost OUT [--scenes NAME] [--only A,B]` | the cost of a pixel as a count: each scene drawn once at each of the set's `cost_views` by two counted builds, the ground's and the marks' (below): `OUT/cost.json`, the count pictures `OUT/<scene>_<mpp>_<build>.png`, `OUT/sheet.png`, the counts as drawn in `OUT/raw/` | 3.7 min for `seed1` (8 scenes x 2 builds, 16 pictures), the two builds made first; 4 min for `card` (36 pictures) |
 | `years OUT [--scenes NAME]` | the set's `years` scenes at its `years_view` in each of 10 years at the same date, from 10 saved worlds a year apart: the pictures, `OUT/years.png`, `OUT/years.json` | 10.5 min for `seed1` (3 scenes x 10 years), and 30 s to make its 10 worlds |
 
-The map is `--px` css pixels a side (400 by default). A picture takes 15 to 50 s, and 2 to 3 min at 1 m a pixel over
+The map is `--px` css pixels a side (400 by default), taken at `--scale` screen pixels a css pixel (1 by default). A picture takes 15 to 50 s, and 2 to 3 min at 1 m a pixel over
 forest (the page draws its frames there at half the pixels first, then the sharp picture in tiles). Two `set`s of one
 build give the same numbers to the last digit.
 
