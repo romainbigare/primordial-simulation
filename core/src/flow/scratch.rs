@@ -293,6 +293,11 @@ impl Scratch {
     pub(crate) fn view(&self) -> FlowView<'_> {
         FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, lift_at: [&self.lift_at[0], &self.lift_at[1]], ta: &self.ta, latent: &self.latent, pk: &self.state.pk, z: &self.z, pd: &self.pd }
     }
+    /// Heat capacity of a ground node or of a part of one with its share `skin` of its bed's skin and the loose amounts
+    /// `amt`, mol, J/K (`ground::ground_cap` over `loose`).
+    pub(super) fn part_cap(&self, skin: f64, amt: impl Fn(usize) -> f64) -> f64 {
+        crate::ground::ground_cap(skin, self.state.loose.iter().copied(), amt, |k| self.sp[k].cp)
+    }
     /// Loose substances that may be liquid between `tmin` and `tmax`, K, or (with `dissolved`) gases dissolved in it.
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {
         self.state.loose.iter().copied().filter(|&k| self.sp[k].melt <= tmax && (self.sp[k].boil > tmin || dissolved && chem.subs[k].solubility > 0.0)).collect()

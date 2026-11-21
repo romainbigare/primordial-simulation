@@ -4,7 +4,7 @@
 //! (`Rows::book`).
 
 use super::Reactor;
-use crate::{chem::Heat, flow::FlowView, ground::{amounts_cap, share}, store::Class, World, AIR};
+use crate::{chem::Heat, flow::FlowView, ground::{ground_cap, share}, store::Class, World, AIR};
 
 /// A node sleeps until its reactions would use this share of their inputs (but for those on a `SPECK` of what it
 /// holds) or warm it `CALM_K` kelvin: for so little, one long span is as good as many steps.
@@ -161,7 +161,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     // (`inside::airless`; under standing liquid the liquid's film brings their gas).
     rc.aired = if rc.film > 0.0 { 1.0 } else { 1.0 - crate::inside::airless(w.pores(i), crate::inside::saturated_share(w, i), nodes.filled(i)) };
     rc.shelter = w.soil[i].texture.shelters();
-    let cap = |amt: &[f64]| nodes.skin[i] + amounts_cap(0..chem.ns(), |k| amt[k], |k| chem.subs[k].cp);
+    let cap = |amt: &[f64]| ground_cap(nodes.skin[i], 0..chem.ns(), |k| amt[k], |k| chem.subs[k].cp);
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.store.heat(Class::Ground)[i] - fused;
     rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], time);
