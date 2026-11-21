@@ -175,11 +175,11 @@ impl World {
     pub fn t_air(&self, j: usize) -> f64 {
         crate::flow::air_temp(self.store.heat(Class::Air)[j], self.heat_cap_air(j))
     }
-    /// Height of the solid surface (bonded and loose solids) of ground node `i`, m: Flow's (`flow::land::layers`, kept as
+    /// Height of the solid surface (bonded and loose solids) of ground node `i`, m: Flow's (`Scratch::surface`, kept as
     /// matter moves), once Flow has built its state; before, from its amounts at its temperature now (`thaw`), with the
     /// solid share of a substance on its plateau.
     pub fn surface_z(&self, i: usize) -> f64 {
-        if let Some(z) = self.scratch.surface(i) {
+        if let Some([z, _]) = self.scratch.surface(i) {
             return z;
         }
         let (t, pl) = self.thaw(i);

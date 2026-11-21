@@ -289,11 +289,6 @@ impl<'de> Deserialize<'de> for Scratch {
 }
 
 impl Scratch {
-    /// The height of the solid surface of ground node `i` as Flow's state has it, m (`land::layers`); None before Flow
-    /// first built its state.
-    pub(crate) fn surface(&self, i: usize) -> Option<f64> {
-        self.z.get(i).copied().filter(|_| self.state.tg.len() == self.z.len())
-    }
     /// Temperature of ground node `i` at the last flow step, K, and the substance on its plateau with its molten share.
     pub(crate) fn plateau(&self, i: usize) -> Option<(f64, Option<(usize, f64)>)> {
         let t = *self.state.tg.get(i)?;

@@ -87,6 +87,9 @@ impl Scratch {
     /// Ground node `i` as Flow's state has it, none before Flow first built it: the height of its solid surface and the
     /// depth of its liquid, in its pores and standing, m (`Scratch::z`, `Scratch::head`).
     pub fn surface(&self, i: usize) -> Option<[f64; 2]> {
+        if self.state.tg.len() != self.z.len() {
+            return None;
+        }
         let (z, head) = (*self.z.get(i)?, *self.head.get(i)?);
         Some([z, (head - z).max(0.0)])
     }
