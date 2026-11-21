@@ -195,10 +195,17 @@ pub(super) struct State {
     /// Of each ground node whose own ground lies partly under its liquid, how its matter and heat lie between its land
     /// and its liquid (`parts::Parts`); none for a node that is one.
     pub(super) parts: Vec<Option<super::parts::Parts>>,
-    /// Of each cell, what its part of each body of standing liquid holds of what stands over its pores, m³, in the
-    /// order of its parts (`curve::Curve::ponds`), as the last runoff's pass left it (`runoff::stand`): the share of a
-    /// cell's liquid each of its bodies has.
-    pub(super) held: Vec<Vec<f64>>,
+    /// Of each cell, what its part of each body of standing liquid holds of what stands over its pores (`Holding`), as the
+    /// last runoff's pass left it (`runoff::stand`): the share of a cell's liquid each of its bodies has.
+    pub(super) held: Vec<Holding>,
+}
+
+/// What a cell's parts of the bodies hold (`State::held`): the pond of each part (`curve::Curve::ponds`, in their
+/// order), and what each holds, m³.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub(super) struct Holding {
+    pub(super) ponds: Vec<u32>,
+    pub(super) m3: Vec<f64>,
 }
 
 /// Working memory of the law: its saved state (`State`) and caches, rebuilt at each liquid step and when missing

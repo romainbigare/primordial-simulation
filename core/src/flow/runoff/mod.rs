@@ -16,7 +16,7 @@ mod pick;
 pub(super) use carriage::Carriage;
 pub(super) use load::Pools;
 use edge::come_in;
-use super::{curve::Part, level::{level_with, Level}};
+use super::{curve::Part, level::{level_with, Level}, scratch::Holding};
 use super::{drain::{liquid_heat, to_channels, OffLand}, follow, land::standing, liquid::book, parts::{liquid_movable, pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
 use crate::{space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux}, World};
 
@@ -102,12 +102,12 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let mut into = std::mem::take(&mut s.spare.samples);
     into.clear();
     into.resize(b.cell_of.len(), [0.0; 2]);
-    let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into };
+    let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.m3.len()]).collect(), into };
     let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
     send(w, s, &b, &mut h, &mut x, (liq, slope, runs, &mm), (&pores, dt));
     let (levels, came) = stand(s, &b, &mut h, (&mut x, &mut edge), (liq, &mm, w.edges_open()));
     s.basin.level = levels;
-    s.state.held = std::mem::take(&mut h.part);
+    s.state.held = std::mem::take(&mut h.part).into_iter().zip(&s.state.held).map(|(m3, was)| Holding { ponds: was.ponds.clone(), m3 }).collect();
     discharge(w, &b, &mut h.into);
     let flux = h.into;
     book_all(w, s, liq, &[&x, &edge]);
@@ -124,6 +124,10 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     (w.counts.load_month, w.counts.plumes) = (carried.loads, carried.plumes);
     w.counts.load.iter_mut().zip(carried.volumes.counts()).for_each(|(a, v)| *a += v);
     load::mix(w, s, &carried.settled, &sol);
+    let n = w.terrain_samples().h.len();
+    for &(k, m) in &carried.relief {
+        if m > 0.0 { w.relief.lay(k as usize, m, n) } else { w.relief.take(k as usize, -m); }
+    }
     apply(w, s, &[], &carried.broke);
     for (l, row) in x.rows.chunks_exact(x.width).enumerate() {
         off.moved((x.a[l] as usize, x.b[l] as usize), row[..x.width - 1].iter().sum());
@@ -151,9 +155,9 @@ fn runs_off(w: &World, s: &Scratch, h: &mut Held, (liq, slope, runs): (&[usize],
         let soil = w.pores(i);
         let free = if s.head[i] > s.z[i] { lp - soil.field * pores } else { 0.0 };
         let hill = if s.basin.is[i] || super::parts::has(s, i) { 0.0 } else { to_channels(&ph, soil, slope[i], dt, (free, lp)) };
-        let held: f64 = s.state.held[i].iter().sum();
+        let held: f64 = s.state.held[i].m3.iter().sum();
         let kept = held.min((stands - hill).max(0.0));
-        h.part[i].iter_mut().zip(&s.state.held[i]).for_each(|(p, &was)| *p = if held > 0.0 { was * kept / held } else { 0.0 });
+        h.part[i].iter_mut().zip(&s.state.held[i].m3).for_each(|(p, &was)| *p = if held > 0.0 { was * kept / held } else { 0.0 });
         let all = gains(s, liq, i, &h.q[i * h.width..(i + 1) * h.width - 1]);
         off[i] = (((stands - kept).max(hill) + runs[i]) / all.max(f64::MIN_POSITIVE)).min(1.0);
     }

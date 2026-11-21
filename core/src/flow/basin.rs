@@ -58,7 +58,7 @@ impl World {
             let z = self.surface_z(i);
             let parts: Vec<f64> = c.parts.iter().map(|p| p.volume(level(p) - z)).collect();
             stands.push(parts.iter().sum());
-            held.push(if c.ponds().is_empty() { Vec::new() } else { parts });
+            held.push(curve::held_by(c, if c.ponds().is_empty() { Vec::new() } else { parts }));
         }
         self.scratch.state.held = held;
         stands
@@ -110,7 +110,7 @@ pub struct Pool {
 /// (`level::level_over`), m, no higher than its pass.
 fn body_level(s: &Scratch, b: &Body) -> f64 {
     let parts: Vec<(&Part, f64)> = b.cells.iter().zip(&b.part).map(|(&i, &q)| (&s.curves[i as usize].parts[q], s.z[i as usize])).collect();
-    let held: f64 = b.cells.iter().zip(&b.part).map(|(&i, &q)| s.state.held[i as usize][q]).sum();
+    let held: f64 = b.cells.iter().zip(&b.part).map(|(&i, &q)| s.state.held[i as usize].m3[q]).sum();
     level_over(&parts, held).min(b.level)
 }
 

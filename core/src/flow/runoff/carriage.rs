@@ -2,7 +2,7 @@
 //! the load's moves take: found once with the bodies (`Bodies::of`).
 
 use super::Bodies;
-use crate::soil::{flood_shear, passes};
+use crate::soil::{flood_shear, passes, threshold_slope};
 use crate::space::{delta::FLOOD_RUNOFF, network::NONE, samples::Samples};
 use crate::World;
 use std::collections::HashMap;
@@ -32,8 +32,8 @@ pub(super) struct Pair {
 /// between it and the next (`skip`); and the link to the next's cell (`NONE` where it is its own). Of each land sample
 /// its pair (`NONE` for none), and whether it is a key sample; of each key sample its cell and where its way ends
 /// (`End`); the pairs, in the order of their key samples; the links
-/// between cells, from and to, in the order they first come (the pairs', then the key samples'); and of each cell its
-/// main channel's key sample (`NONE` for none).
+/// between cells, from and to, in the order they first come (the pairs', then the key samples'); of each cell its
+/// main channel's key sample (`NONE` for none); and of each key sample whose way runs on its room (`Carriage::room`).
 #[derive(Clone, Debug, Default)]
 pub(in crate::flow) struct Carriage {
     pub(super) keys: Vec<u32>,
@@ -48,6 +48,7 @@ pub(in crate::flow) struct Carriage {
     pub(super) pairs: Vec<Pair>,
     pub(super) links: Vec<(u32, u32)>,
     pub(super) main: Vec<u32>,
+    pub(super) room: Vec<f64>,
 }
 
 /// Where a key sample's way ends: on it, in the open low ground (`Open`), in another body (`Body`) or on land (`Land`);
@@ -65,7 +66,10 @@ impl Carriage {
     /// passes its reach by less than 1 − `PASS_TOLERANCE` (`shares`), or where it is its cell's main channel, its land
     /// sample the most drains through (`Samples::up`); a way ends where it enters a body, or at a land sample whose
     /// liquid runs to none. A land sample's pair is its cell with the first key sample at it or below it; every land
-    /// sample has one (`pair_of[k] != NONE`), as every way ends at a key sample: the pick-up reads it so.
+    /// sample has one (`pair_of[k] != NONE`), as every way ends at a key sample: the pick-up reads it so. A key sample
+    /// whose way runs on has a room: the volume that lifts it to the threshold slope over the sample its liquid runs to
+    /// (`soil::threshold_slope`, Parker 1978), no higher than the lowest sample whose liquid runs to it (a deposit dams
+    /// no way that feeds it), m³, as these samples stand; the load fills it (`runoff::load`).
     pub(in crate::flow) fn of(w: &World, b: &Bodies) -> Carriage {
         let s = w.terrain_samples();
         let mut main = vec![NONE; b.of.len()];
@@ -76,28 +80,31 @@ impl Carriage {
             }
         }
         let mut c = Carriage { place: vec![NONE; s.h.len()], ..Carriage::default() };
-        let key = |c: &mut Carriage, k: u32, shares: Shares| {
+        let mut grade = Vec::new();
+        let mut key = |c: &mut Carriage, k: u32, (shares, slope): (Shares, f64)| {
             if c.place[k as usize] == NONE {
                 c.place[k as usize] = c.keys.len() as u32;
                 c.keys.push(k);
                 c.shares.push(shares);
+                grade.push(slope);
             }
         };
         let of_down = crate::par::map_n(b.down.len(), crate::par::UNCOUNTED, |q| shares(w, &s, b.down[q] as usize));
-        for (&k, &sh) in b.down.iter().zip(&of_down) {
+        for (&k, &(sh, slope)) in b.down.iter().zip(&of_down) {
             let settles = sh[0].iter().any(|&p| f64::from(p) < 1.0 - PASS_TOLERANCE);
             if settles || main[b.cell_of[k as usize] as usize] == k {
-                key(&mut c, k, sh);
+                key(&mut c, k, (sh, slope));
             }
         }
         for &k in &b.land {
             let j = s.to[k as usize];
             if j == NONE {
-                key(&mut c, k, [[0.0; CLASS_COUNT]; 2]);
+                key(&mut c, k, ([[0.0; CLASS_COUNT]; 2], 0.0));
             } else if b.at[j as usize] != NONE {
-                key(&mut c, j, [[0.0; CLASS_COUNT]; 2]);
+                key(&mut c, j, ([[0.0; CLASS_COUNT]; 2], 0.0));
             }
         }
+        let of_down: Vec<Shares> = of_down.into_iter().map(|x| x.0).collect();
         let (mut first, skip) = c.below(b, &s, &of_down);
         // The key samples in an order that keeps each way's key samples together, each before the next.
         let order = upstream_first(&c.next_of(b, &s, &first));
@@ -119,6 +126,17 @@ impl Carriage {
             _ => End::Body,
         }).collect();
         c.main = main.iter().map(|&k| if k == NONE { NONE } else { c.place[k as usize] }).collect();
+        // Of each sample, the lowest of the samples whose liquid runs to it (infinite for none).
+        let mut feeds = vec![f64::INFINITY; s.h.len()];
+        for j in (0..s.h.len()).filter(|&j| s.to[j] != NONE) {
+            let k = s.to[j] as usize;
+            feeds[k] = feeds[k].min(s.h[j]);
+        }
+        c.room = order.iter().zip(&c.keys).zip(&c.end).map(|((&old, &k), &end)| {
+            let (k, slope) = (k as usize, grade[old as usize]);
+            let top = if end == End::On { (s.h[s.to[k] as usize] + slope * s.run[k]).min(feeds[k]) } else { s.h[k] };
+            (top - s.h[k]).max(0.0) * sample_area(w, &s, k)
+        }).collect();
         c
     }
 
@@ -191,6 +209,11 @@ impl Carriage {
     }
 }
 
+/// The area of sample `k` of samples `s` of world `w`, m² (its own, also where finer cells share it).
+pub(super) fn sample_area(w: &World, s: &Samples, k: usize) -> f64 {
+    w.map.place_of(&s.leaf(k), w.cfg.lat_south, w.cfg.lat_north).0
+}
+
 /// An order of the key samples whose next key samples are `next` (`NONE` for an end): each after all those whose ways
 /// lead to it, and each way's key samples together (the ends in their order, each after the tree of ways above it,
 /// each tree's branches in their order, depth first): the pass then reads the pools it writes close together.
@@ -226,12 +249,13 @@ fn upstream_first(next: &[u32]) -> Vec<u32> {
 
 /// The shares of sample `k` of samples `s` in world `w` (`Shares`, `soil::passes`): under the flood (`FLOOD_RUNOFF`
 /// from the area that drains through it) in its channel (`Physics::channel`; `soil::flood_shear`), over the run to the
-/// sample its liquid runs to, of particles of its bed's make.
-fn shares(w: &World, s: &Samples, k: usize) -> Shares {
+/// sample its liquid runs to, of particles of its bed's make; and the threshold slope of that flood
+/// (`soil::threshold_slope`).
+fn shares(w: &World, s: &Samples, k: usize) -> (Shares, f64) {
     let g = w.cfg.gravity;
     let flood = FLOOD_RUNOFF * s.up[k];
     let channel = w.cfg.phys.channel(flood);
     let buoyant = w.terrain.makes.get(s.make[k] as usize).copied().unwrap_or_default().buoyant;
     let shares = passes(flood_shear(s, k, g, channel.depth), flood / channel.width, s.run[k], buoyant, g);
-    shares.map(|r| r.map(|x| x as f32))
+    (shares.map(|r| r.map(|x| x as f32)), threshold_slope(channel.depth, buoyant, g))
 }

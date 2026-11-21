@@ -4,7 +4,7 @@
 //! liquid stands over each part at its body's level; a cell that holds no pond's samples holds liquid only until the
 //! runoff's pass, from its lowest sample up.
 
-use super::{level::level_of, Scratch};
+use super::{level::level_of, scratch::Holding, Scratch};
 use crate::space::{network::NONE, terrain::SAMPLE_DEPTH};
 use crate::World;
 use std::borrow::Cow;
@@ -239,20 +239,35 @@ impl Scratch {
 
 /// The `Fill` of `c`, the curve of cell `i`, with what its parts held, `held[i]` (`State::held`; none where that is
 /// not one number for each of its ponds' parts).
-fn fill_of<'a>(c: &'a Curve, held: &'a [Vec<f64>], i: usize) -> Fill<'a> {
-    Fill { c, held: held.get(i).filter(|h| h.len() == c.ponds().len()).map_or(&[], |h| &h[..]) }
+fn fill_of<'a>(c: &'a Curve, held: &'a [Holding], i: usize) -> Fill<'a> {
+    Fill { c, held: held.get(i).filter(|h| holds(c, h)).map_or(&[], |h| &h.m3[..]) }
 }
 
-/// Does `held` (`State::held`) hold one number for each part of a body of each of the cells' `curves`?
-pub(super) fn holds_all(curves: &[Curve], held: &[Vec<f64>]) -> bool {
-    held.len() == curves.len() && curves.iter().zip(held).all(|(c, h)| h.len() == c.ponds().len())
+/// Does `h` hold what each part of a body of curve `c` holds, part by part (the same ponds in the same order)?
+fn holds(c: &Curve, h: &Holding) -> bool {
+    h.ponds.len() == c.ponds().len() && c.ponds().iter().zip(&h.ponds).all(|(p, &q)| p.pond == q)
+}
+
+/// Does `held` (`State::held`) hold what each part of a body of each of the cells' `curves` holds?
+pub(super) fn holds_all(curves: &[Curve], held: &[Holding]) -> bool {
+    held.len() == curves.len() && curves.iter().zip(held).all(|(c, h)| holds(c, h))
+}
+
+/// What the parts of the bodies of curve `c` hold, `m3`, by their ponds (`Holding`).
+pub(super) fn held_by(c: &Curve, m3: Vec<f64>) -> Holding {
+    Holding { ponds: c.ponds().iter().map(|p| p.pond).collect(), m3 }
 }
 
 /// What each part of a body holds of what stands over its cell's pores now, m³, as if they held none before: at one
 /// level over the cell's parts (`Fill::shares`); none for a cell that holds no pond's samples.
-pub(super) fn first_held(s: &Scratch) -> Vec<Vec<f64>> {
-    let one = |(i, c): (usize, &Curve)| if c.ponds().is_empty() { Vec::new() } else { Fill { c, held: &[] }.shares(super::land::standing(s, i)) };
-    s.curves.iter().enumerate().map(one).collect()
+pub(super) fn first_held(s: &Scratch) -> Vec<Holding> {
+    (0..s.curves.len()).map(|i| first_held_at(s, i)).collect()
+}
+
+/// What each part of a body in cell `i` holds as if they held none before (`first_held`).
+pub(super) fn first_held_at(s: &Scratch, i: usize) -> Holding {
+    let c = &s.curves[i];
+    held_by(c, if c.ponds().is_empty() { Vec::new() } else { Fill { c, held: &[] }.shares(super::land::standing(s, i)) })
 }
 
 /// The curve of cell `i` of `w` (`Curve`): the terrain's samples inside it, their departures from their mean by area,

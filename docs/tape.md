@@ -72,7 +72,7 @@ the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `L
 the layers of the soil and of the land's liquid on dry ground alone (web/src/earth.ts `GROUND_LAYERS`);
 the live map finds `filled` at each point by the laws inside a cell, and `coarse` and `fine` from the samples' texture
 (below). The tape holds whole-map frames only. The live viewer draws its map from two
-things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`), which never change, so a page
+things, neither recorded. **The ground's tiles** (`tape::Ground`, `tape/src/ground/`) are made from the seed's samples: the page draws the seed's ground, not the samples the running world builds from what its load laid (`flow::build`), until the page reads them; they never change, so a page
 makes each once and keeps it: a tile of a depth holds 256 x 256 texels (`TILE`), each a leaf of that depth, and 2 more
 along each edge (`GUTTER`), row by row from its north-west corner, as 16-bit floats (IEEE binary16, little-endian) in two
 planes: first four a texel (the height as the sum of two, the nearest 16-bit float and what it lacks, so it holds to a

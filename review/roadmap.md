@@ -659,6 +659,8 @@ section 4, with its known faults; the lines here are the rest.
 - Liquid over a small pond's part of a cell stands over that part only, as a pillar (`curve::Part`, `Fill`): poured
   over a one-sample pond it stood 30 km high in a test. It should spread over the cell's other samples.
 - The passes over the samples cost about 20 ms a month on a 64 x 64 island.
+- The long air step moves `runoff_sea` by about 1% against shorter steps (the same on main); that is more than the
+  year-to-year spread now, so `the_long_step_keeps_the_climate` fails: fix it in the air step.
 - The surface solve is backward Euler (`docs/laws.md` 1.1, known limit). The design: solve the linear balance exactly
   by pieces, T_e + (T_0 - T_e) e^(-h/τ), the fluxes from its mean over each piece, the end from its end; a plateau is
   a piece where the temperature stands while its fusion enthalpy is paid. It touches `Air::moves`' slopes, the

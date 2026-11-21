@@ -72,16 +72,19 @@ fn a_file_without_the_snapshot_header_is_refused() {
     assert!(e.to_string().contains("not a snapshot"), "{e}");
 }
 
-/// Months saved at, from the start: past a creep (once a year) and four refreshes (once in three months) of Flow.
+/// Months saved at, from the start: past a creep (once a year), four refreshes (once in three months) and a build of the
+/// terrain's samples (once a year here) of Flow.
 const SAVED: usize = 14;
-/// Months each resumed run goes on for: through a creep and the refreshes.
+/// Months each resumed run goes on for: through a creep, the refreshes and a build.
 const RESUMED: usize = 12;
 
-/// Save and load at each month's start through the slow cycles of Flow (refresh, creep) with life about: the loaded
-/// world is the saved one, and each resumed run gives the same history as the unbroken one, month by month.
+/// Save and load at each month's start through the slow cycles of Flow (refresh, creep, the samples built from what
+/// the load laid, `flow::build`, each year here) with life about: the loaded world is the saved one, and each resumed
+/// run gives the same history as the unbroken one, month by month.
 #[test]
 fn snapshot_round_trip_at_every_month() {
     let mut w = two_kinds();
+    w.cfg.build_years = 1;
     let (mut saved, mut whole) = (vec![], vec![]);
     for m in 0..SAVED + RESUMED {
         if m < SAVED {

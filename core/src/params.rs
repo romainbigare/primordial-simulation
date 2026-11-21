@@ -31,6 +31,8 @@ pub struct Config {
     pub days_per_month: u32,
     /// Months in a year
     pub months_per_year: u32,
+    /// Years between two builds of the terrain's samples from what the load laid (`flow::build`)
+    pub build_years: u64,
     /// Speed setting: a sleeping node that has gained over this share of an amount it held when it fell asleep wakes
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
@@ -470,6 +472,7 @@ impl Config {
         require(p.eddy_time > 0.0 && p.eddy_size > 0.0 && p.top_damp > 0.0 && p.eddy_speed > 0.0, || format!("eddy_time ({}), eddy_size ({}), top_damp ({}) and eddy_speed ({}) must be above 0", p.eddy_time, p.eddy_size, p.top_damp, p.eddy_speed))?;
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
+        require(self.build_years > 0, || format!("build_years ({}) must be above 0", self.build_years))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
         // The moistest air of a node saturates before the node does, and not when it holds nothing (`seen::saturated`).
         require(self.moist_min > 0.0 && self.moist_min < 1.0, || format!("moist_min ({}) must be above 0 and below 1", self.moist_min))?;
@@ -513,6 +516,7 @@ impl Default for Config {
             gravity: 9.81,
             days_per_month: 30,
             months_per_year: 12,
+            build_years: 10,
             wake_share: 0.05,
             sleep_days: 90,
             chunks: default_chunks(),
@@ -531,7 +535,7 @@ impl Default for Config {
             rain_time: 86400.0,
             moist_min: 0.5,
             rain_drift_s: 2000.0,
-            carry: 1.75e-10,
+            carry: 4.7e-11,
             wear: 1.4e-11,
             creep: 6.3e-11,
             hard_min: 0.05,
