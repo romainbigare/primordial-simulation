@@ -11,7 +11,7 @@ use pcore::{Physics, World};
 /// `KIND_TAIL`.
 pub const KIND_ROW: usize = KIND_HEAD + GROUPS * GROUP_ROW + KIND_TAIL;
 /// The numbers of a kind's row before its groups.
-const KIND_HEAD: usize = 21;
+const KIND_HEAD: usize = 22;
 /// The numbers of a group of plants in a kind's row.
 const GROUP_ROW: usize = 4;
 /// The numbers of a kind's row after its groups: where it stands under the liquid, and how dense on its land's
@@ -95,9 +95,10 @@ struct Ground<'a> {
 /// that goes to seeds (`SEED`); the share of the ground it stands on whose loose ground holds its plants (`Cover::rooted`, a share of the
 /// ground its cover lives on) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
 /// whose need is not found yet: seeds that landed since its cell's last month); and its walls gene, log10 kg of walls
-/// per kg of matter (`WALLS`), by which a viewer knows a woody kind while its plants are young; and its slot, which it
+/// per kg of matter (`WALLS`), by which a viewer knows a woody kind while its plants are young; its slot, which it
 /// keeps while it lives (a slot that joins another is gone, the other keeps its own), so a viewer tells two slots of
-/// one starting kind apart from month to month. Then of each of its
+/// one starting kind apart from month to month; and the patch of its cell's cover it stands in (`Cover::patch`), whose
+/// ground a viewer draws it on (`inside::patch_ground`). Then of each of its
 /// groups, the large plants first (empty groups last, all 0): how many a m², and a plant's height, stem's width and
 /// crown's width, m (`plants` of that group). Then where it stands: how deep under its cell's level its line lies, m
 /// (`Cover::line`: it stands on the ground above it, on land and under the liquid as deep as that; plants do not move,
@@ -138,6 +139,7 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
         need as f64,
         gene(WALLS),
         x as f64,
+        c.patch[x] as f64,
     ]);
     for (k, at) in (0..s.held).rev().zip((KIND_HEAD..KIND_ROW).step_by(GROUP_ROW)) {
         let q = group(k);
@@ -149,18 +151,45 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
     out
 }
 
-/// The kinds of cell `i` of `w`, a row of `KIND_ROW` numbers (`row`) for each slot its world uses (`Config::variety`):
-/// its slots that stand on any of its ground, the heaviest first; an empty kind is all 0 with its starting kind -1. Its
+/// Numbers of the places of a cell's patches (`places`): three for each patch past the first.
+pub const PLACE_ROW: usize = 3 * (cover::PATCHES - 1);
+
+/// Where the patches of the cover of cell `i` of `w` past the first lie (`inside::patch_ground`), in squares from the
+/// map's north-west corner: of each its point, x and y, and its reach (all 0 for a patch not in use). A viewer draws a
+/// point of the cell in the first of them whose reach holds it, else in the first patch: the ground the samples give,
+/// its edge drawn smooth between them.
+pub fn places(w: &World, i: usize) -> [f64; PLACE_ROW] {
+    let g = pcore::inside::patch_ground(w, i);
+    let mut out = [0.0; PLACE_ROW];
+    for (k, &([x, y], reach)) in g.reach.iter().enumerate().skip(1).filter(|(_, p)| p.1 > 0.0) {
+        out[3 * (k - 1)..3 * k].copy_from_slice(&[g.bounds[0] + x / w.map.side, g.bounds[1] + y / w.map.side, reach / w.map.side]);
+    }
+    out
+}
+
+/// The kinds a square holds in the rows of world `w` (`rows`): the slots its world uses in a cell of one patch
+/// (`Config::variety`), or as many as the cell that holds the most (a cell of patches uses up to `cover::SLOTS`).
+pub fn kinds(w: &World) -> usize {
+    (0..w.mesh.cells().n()).map(|i| standing(w.life.cover(i)).len()).fold(w.cfg.variety, usize::max)
+}
+
+/// The slots of cover `c` that stand on any of its cell's ground.
+fn standing(c: &Cover) -> Vec<usize> {
+    c.held().filter(|&x| c.stands[x] > 0.0).collect()
+}
+
+/// The kinds of cell `i` of `w`, a row of `KIND_ROW` numbers (`row`) for each of `kinds` slots (`kinds`): its slots
+/// that stand on any of its ground, the heaviest first; an empty kind is all 0 with its starting kind -1. Its
 /// liquid's level stands `level` m over its lowest ground (`flow::levels`, which a frame finds for all cells at once;
 /// 0 before Flow first built its state).
-pub fn rows(w: &World, i: usize, level: f64) -> Vec<f64> {
-    let mut out = vec![0.0; w.cfg.variety * KIND_ROW];
+pub fn rows(w: &World, i: usize, level: f64, kinds: usize) -> Vec<f64> {
+    let mut out = vec![0.0; kinds * KIND_ROW];
     out.iter_mut().step_by(KIND_ROW).for_each(|r| *r = -1.0);
     let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
     let saturated = w.life.wet.get(i).copied().flatten().map_or(0.0, |g| g.share);
     let g = Ground { level, ran: w.counts.ran_month.get(i).map(|r| &r.slots), saturated, rho: w.chem.subs[p.sub[cover::WALL]].density[0], area: w.mesh.cells().area()[i] };
-    let mut slots: Vec<usize> = c.held().filter(|&x| c.stands[x] > 0.0).collect();
+    let mut slots = standing(c);
     slots.sort_by(|&a, &b| c.built(&mm, b).total_cmp(&c.built(&mm, a)));
     for (k, &x) in slots.iter().enumerate() {
         out[k * KIND_ROW..(k + 1) * KIND_ROW].copy_from_slice(&row(w, c, &mm, x, &g));
@@ -188,13 +217,13 @@ mod tests {
         let (mm, area, c) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.life.cover(i));
         let own = |x: usize| area * c.stands[x] as f64;
         let all: f64 = c.held().map(|x| c.built(&mm, x) / own(x)).sum::<f64>();
-        let r = rows(&w, i, 0.0);
+        let r = rows(&w, i, 0.0, w.cfg.variety);
         let kind = |k: usize| &r[k * KIND_ROW..(k + 1) * KIND_ROW];
         assert!(kind(0)[1] > kind(1)[1] && kind(1)[1] > 0.0 && kind(2)[0] == -1.0, "two rows, the heaviest first");
         assert!(((kind(0)[1] + kind(1)[1]) / all - 1.0).abs() < 1e-12, "{} and {} against {all}", kind(0)[1], kind(1)[1]);
         let counts: Vec<f64> = c.held().map(|x| c.count(x) / own(x)).collect();
         assert!((0..2).all(|k| counts.iter().any(|&n| (kind(k)[3] / n - 1.0).abs() < 1e-9)), "each row's plants are a slot's");
-        assert!(kind(0)[KIND_HEAD - 1] != kind(1)[KIND_HEAD - 1], "each row names its own slot");
+        assert!(kind(0)[KIND_HEAD - 2] != kind(1)[KIND_HEAD - 2], "each row names its own slot");
         let stand = |leaf: f64| plants(&w.cfg.phys, (2.0, leaf, 0.05), 0.8, 0.9, 500.0);
         let (bare, leafy) = (stand(0.0), stand(1e-12));
         assert!(bare.per_m2 == leafy.per_m2 && bare.mass == leafy.mass && bare.height == leafy.height && bare.stem == leafy.stem, "{bare:?} against {leafy:?}");

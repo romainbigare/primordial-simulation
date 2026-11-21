@@ -1,6 +1,7 @@
 //! Quick PNG pictures of a world: map, temperature, rain, the cover and the depth of the cells side by side, and
 //! one panel of a window of the map (`window`).
 
+use pcore::cover::{Cover, PATCHES};
 use pcore::World;
 use tape::{fields, is_river, pixels, raster, Fields, STANDING_M};
 
@@ -60,6 +61,29 @@ struct Look<'a> {
     ground: Vec<pcore::soil::Holdings>,
     /// The starting kind whose slots hold the most cover in each cell (`lead`).
     lead: Vec<Option<u32>>,
+    /// Of each cell whose cover holds more than one patch, its patches (`Patched`).
+    patched: Vec<Option<Patched>>,
+}
+
+/// The patches of a cell's cover as the panels draw them (`window`): where each lies (`inside::patch_ground`), and of
+/// each its cover per m² of its ground, kg/m², and the starting kind that leads it (`lead`).
+struct Patched {
+    ground: pcore::inside::PatchGround,
+    green: [f64; PATCHES],
+    lead: [Option<u32>; PATCHES],
+}
+
+impl Patched {
+    /// The patches of the cover of cell `i` of `w`, if it holds more than one.
+    fn of(w: &World, i: usize) -> Option<Patched> {
+        let (p, c) = (pcore::life::Parts::of(&w.chem)?, w.life.cover(i));
+        if c.patch_count() < 2 {
+            return None;
+        }
+        let (mm, area) = (p.mm(&w.chem), w.mesh.cells().area()[i]);
+        let green = std::array::from_fn(|k| c.held_in(k).map(|x| c.kg(&mm, x)).sum::<f64>() / (area * c.patches[k].share).max(1e-9));
+        Some(Patched { ground: pcore::inside::patch_ground(w, i), green, lead: std::array::from_fn(|k| lead_of(c, &mm, c.held_in(k))) })
+    }
 }
 
 impl<'a> Look<'a> {
@@ -70,7 +94,8 @@ impl<'a> Look<'a> {
         let liquid = pcore::life::Parts::of(&w.chem).map_or(0, |p| p.liquid);
         let liquid_m3 = w.chem.molar_volume(liquid, pcore::chem::Phase::Liquid);
         let ground = means.as_deref().map_or_else(|| vec![Default::default(); cells.len()], |m| pcore::soil::holdings(w, m));
-        Look { w, f: fields(w, means.as_deref()), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3, ground, lead: lead(w) }
+        let patched = (0..cells.len()).map(|i| Patched::of(w, i)).collect();
+        Look { w, f: fields(w, means.as_deref()), green: pcore::cover::per_m2(w, Cover::kg), wet, liquid_m3, ground, lead: lead(w), patched }
     }
 
     /// The minerals the ground of cell `i` holds (`Chemistry::minerals`), mol/m².
@@ -117,20 +142,29 @@ impl<'a> Look<'a> {
     }
 
     /// The colour of panel `panel` (index in `PANELS`) for cell `i`; `beside` are the cells west and north of it, `step`
-    /// the distance to them, m (the map panel shades by the slope to them).
-    fn colour(&self, panel: usize, i: usize, beside: (usize, usize), step: f64) -> Rgb {
+    /// the distance to them, m (the map panel shades by the slope to them). At a place `at` in squares from the map's
+    /// north-west corner, the cover's panels (life, kinds) draw the patch of the cell's cover that lies there
+    /// (`Patched`); with none, the cell's.
+    fn colour(&self, panel: usize, i: usize, beside: (usize, usize), step: f64, at: Option<[f64; 2]>) -> Rgb {
         let (w, f) = (self.w, &self.f);
+        let (green, lead) = match (&self.patched[i], at) {
+            (Some(p), Some(at)) => {
+                let k = p.ground.patch_at(at);
+                (p.green[k], p.lead[k])
+            }
+            _ => (self.green[i], self.lead[i]),
+        };
         match panel {
             0 => self.map(i, beside, step, true),
             5 => self.map(i, beside, step, false),
-            6 => self.lead[i].map_or(NO_KIND, |k| KIND_RGB[k as usize % KIND_RGB.len()]),
+            6 => lead.map_or(NO_KIND, |k| KIND_RGB[k as usize % KIND_RGB.len()]),
             GROUND.. => self.ground(panel, i),
             1 => ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
             // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
             2 => ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.rain[i] as f64 * YEAR_S).max(1.0).log10()),
             3 => {
                 let base = if f.depth[i] > STANDING_M { [40, 50, 70] } else { [90, 85, 80] };
-                ramp(&[(-1.5, base), (0.0, [60, 120, 40]), (1.5, [30, 200, 40])], self.green[i].max(1e-9).log10())
+                ramp(&[(-1.5, base), (0.0, [60, 120, 40]), (1.5, [30, 200, 40])], green.max(1e-9).log10())
             }
             // The depth of the cell at the square's centre against a square's: coarser dark, a square light grey, each
             // depth finer warmer.
@@ -170,17 +204,20 @@ impl<'a> Look<'a> {
 fn lead(w: &World) -> Vec<Option<u32>> {
     let Some(p) = pcore::life::Parts::of(&w.chem) else { return vec![None; w.mesh.cells().n()] };
     let mm = p.mm(&w.chem);
-    let lead = |c: &pcore::cover::Cover| {
-        let mut kg: Vec<(u32, f64)> = Vec::new();
-        for x in c.held() {
-            match kg.iter_mut().find(|r| r.0 == c.root[x]) {
-                Some(r) => r.1 += c.kg(&mm, x),
-                None => kg.push((c.root[x], c.kg(&mm, x))),
-            }
+    (0..w.mesh.cells().n()).map(|i| lead_of(w.life.cover(i), &mm, w.life.cover(i).held())).collect()
+}
+
+/// The starting kind (`Cover::root`) whose slots of cover `c` among `slots` hold the most cover (molar masses `mm`);
+/// none where none holds any.
+fn lead_of(c: &Cover, mm: &[f64; pcore::cover::NP], slots: impl Iterator<Item = usize>) -> Option<u32> {
+    let mut kg: Vec<(u32, f64)> = Vec::new();
+    for x in slots {
+        match kg.iter_mut().find(|r| r.0 == c.root[x]) {
+            Some(r) => r.1 += c.kg(mm, x),
+            None => kg.push((c.root[x], c.kg(mm, x))),
         }
-        kg.into_iter().filter(|r| r.1 > 0.0).max_by(|a, b| a.1.total_cmp(&b.1)).map(|r| r.0)
-    };
-    (0..w.mesh.cells().n()).map(|i| lead(w.life.cover(i))).collect()
+    }
+    kg.into_iter().filter(|r| r.1 > 0.0).max_by(|a, b| a.1.total_cmp(&b.1)).map(|r| r.0)
 }
 
 /// Write a table of the cells of `w` to `path` (CSV, one row a cell): its area, whether it is land with no liquid
@@ -233,7 +270,7 @@ pub fn save(w: &World, path: &str) {
         let ((x, y), i) = (w.map.xy(sq), cells[sq]);
         let beside = (cells[w.map.step(sq, (-1, 0)).unwrap_or(sq)], cells[w.map.step(sq, (0, -1)).unwrap_or(sq)]);
         for p in 0..panels {
-            let c = look.colour(p, i, beside, w.map.side);
+            let c = look.colour(p, i, beside, w.map.side, None);
             for dy in 0..s {
                 for dx in 0..s {
                     let px = p * (gw * s + GAP) + x * s + dx;
@@ -261,14 +298,16 @@ pub fn window(w: &World, window: [f64; 4], px: usize, panel: &str, edges: bool, 
         let (x, y) = (p % px, p / px);
         let beside = (cells[if x > 0 { p - 1 } else { p }], cells[if y > 0 { p - px } else { p }]);
         let edge = edges && ((x + 1 < px && cells[p + 1] != cells[p]) || (y + 1 < down && cells[p + px] != cells[p]));
+        // The pixel's centre, in squares from the map's north-west corner.
+        let centre = |o: usize, along: f64| window[o] + (along + 0.5) * window[o + 2] / [px, down][o] as f64;
         let c = match &sampled {
             // The sample under the pixel's centre, standing liquid over its cell as the cell's panels draw it.
             Some((tex, s)) if look.f.depth[cells[p]] <= STANDING_M => {
                 let per = s.across as f64 / w.map.w as f64;
-                let at = |o: usize, along: f64, n: usize| (((window[o] + (along + 0.5) * window[o + 2] / [px, down][o] as f64) * per) as usize).min(n - 1);
+                let at = |o: usize, along: f64, n: usize| ((centre(o, along) * per) as usize).min(n - 1);
                 texture(&tex[at(1, y as f64, s.down) * s.across + at(0, x as f64, s.across)])
             }
-            _ => look.colour(panel.min(SAMPLED - 1), cells[p], beside, step),
+            _ => look.colour(panel.min(SAMPLED - 1), cells[p], beside, step, Some([centre(0, x as f64), centre(1, y as f64)])),
         };
         img.extend(if edge { c.map(|v| v / 2) } else { c });
     }

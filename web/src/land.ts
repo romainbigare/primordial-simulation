@@ -134,14 +134,15 @@ export class Land {
   }
 
   /** The table of frame 0 of world `w`: the core's rows `rows` (the melting point, then a row a square, then each
-   * square's kinds of cover, which canopy.ts reads, then the level of each pond, then its fetch), the samples'
+   * square's kinds of cover and the places of its patches, which canopy.ts reads, then the level of each pond, then its
+   * fetch, last the kinds a square holds), the samples'
    * discharge and load if they came since (`discharge`, else null), its wet squares `wet`, and the layer `look` draws. The ponds
    * lie in rows under the planes, two a texel, each its level and its fetch (land.wgsl `pond_texel`; a level no body
    * holds far below any ground). */
   set(w: World, rows: Float32Array, discharge: Uint16Array | null, wet: Wet, look: MapLook): void {
     if (discharge) { this.discharge = discharge; this.flowsDue = true; }
-    const { w: W, h: H } = w.meta, n = W * H, { row, kinds, kind_row } = this.tiles.meta;
-    const ponds = rows.subarray(1 + (row + kinds * kind_row) * n), count = ponds.length / 2;
+    const { w: W, h: H } = w.meta, n = W * H, { row, kind_row, place_row } = this.tiles.meta, kinds = rows[rows.length - 1];
+    const ponds = rows.subarray(1 + (row + kinds * kind_row + place_row) * n, rows.length - 1), count = ponds.length / 2;
     const levels = ponds.subarray(0, count), fetches = ponds.subarray(count);
     this.rows = PLANES * H + Math.ceil(count / 2 / W);
     const data = new Float32Array(4 * W * this.rows);

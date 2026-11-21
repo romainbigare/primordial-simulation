@@ -79,11 +79,13 @@ impl Table {
 
     /// The present state of world `w` as one tape frame, as a tape would keep it (`frame`), and its table: the melting point of the frozen
     /// cover, K (`cover_melt`), then `ROW` f32 numbers for each square, row by row (`row`), then the kinds of cover of
-    /// each square, row by row (`stands::rows`, `Config::variety` × `KIND_ROW` f32), then the level of each pond of the terrain's
+    /// each square, row by row (`stands::rows`, `stands::kinds` × `KIND_ROW` f32), then the places of its cell's
+    /// patches, row by row (`stands::places`, `PLACE_ROW` f32), then the level of each pond of the terrain's
     /// samples, m (`World::pond_levels`: NaN where no body holds it, or where its body holds less than `DRY_M` of liquid on
     /// its mean: dry ground), which a shell draws each pond's liquid flat at, over the ground that lies under it; then
     /// the fetch of each pond, m: the side of a square as large as its liquid's surface, the length of open water a
-    /// wind blows over, which a shell sizes its waves by (0 where it holds none).
+    /// wind blows over, which a shell sizes its waves by (0 where it holds none); last the kinds a square holds
+    /// (`stands::kinds`).
     pub fn frame(&self, w: &World) -> (Vec<u8>, Vec<f32>) {
         let c = Ctx::new(w);
         let mut bytes = Vec::with_capacity(w.map.n() * crate::LAYERS.len());
@@ -94,8 +96,11 @@ impl Table {
         let mut table = vec![cover_melt(w) as f32];
         table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
         let stands = |i: usize| levels.as_ref().map_or(0.0, |l| l[i][1] - l[i][0]);
-        let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i, stands(i))).collect();
+        let count = crate::stands::kinds(w);
+        let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i, stands(i), count)).collect();
         table.extend(self.square.iter().flat_map(|&i| kinds[i].iter().map(|&v| v as f32)));
+        let places: Vec<_> = (0..n).map(|i| crate::stands::places(w, i)).collect();
+        table.extend(self.square.iter().flat_map(|&i| places[i].map(|v| v as f32)));
         let mut ponds = w.pond_levels();
         let mut fetch = vec![0.0; ponds.len()];
         for p in w.pools() {
@@ -107,6 +112,7 @@ impl Table {
         }
         table.extend(ponds.iter().map(|&l| l as f32));
         table.extend(fetch.iter().map(|&f| f as f32));
+        table.push(count as f32);
         (bytes, table)
     }
 
