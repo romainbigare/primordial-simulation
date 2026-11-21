@@ -50,21 +50,31 @@ fn offsets(w: &World) -> Vec<f64> {
     }).collect()
 }
 
-/// What each cell's parts of the bodies hold after a build: a part of a new pond takes what the cell's part of the
-/// same pond held before, ponds matched by their pass (`samples` before and after), the open low ground's one part by
-/// itself; a cell whose parts do not all match takes `curve::first_held`. `was` the ponds of each cell's parts before,
-/// `held` what they held.
+/// What each cell's parts of the bodies hold after a build: a part of a new pond takes what the cell's part of the old
+/// pond it came from held (`came_from`); a cell whose parts do not each take one part of its own, all of them, takes
+/// `curve::first_held_at`. `samples` before and after; `was` the ponds of each cell's parts before, `held` what they
+/// held.
 fn held_by_pond(s: &Scratch, (old, new): (&Samples, &Samples), (was, held): (&[Vec<u32>], Vec<Holding>)) -> Vec<Holding> {
-    let first = curve::first_held(s);
-    let key = |samples: &Samples, p: u32| samples.ponds[p as usize].pass;
+    let from = came_from(old, new);
     s.curves.iter().enumerate().map(|(i, c)| {
-        let (before, h) = (was.get(i), held.get(i));
-        let matched: Option<Vec<f64>> = before.zip(h).and_then(|(before, h)| {
-            let open_before = before.iter().filter(|&&p| key(old, p) == NONE).count();
-            let take = |q: u32| before.iter().position(|&p| key(old, p) == key(new, q) && (key(new, q) != NONE || open_before == 1)).map(|at| h.m3[at]);
-            let m3: Option<Vec<f64>> = c.ponds().iter().map(|p| take(p.pond)).collect();
-            m3.filter(|m| m.len() == before.len())
+        let matched: Option<Vec<f64>> = was.get(i).zip(held.get(i)).and_then(|(before, h)| {
+            let at = |q: u32| before.iter().position(|&p| from[q as usize] == p);
+            let places: Option<Vec<usize>> = c.ponds().iter().map(|p| at(p.pond)).collect();
+            places.filter(|ps| ps.len() == before.len()).map(|ps| ps.iter().map(|&q| h.m3[q]).collect())
         });
-        matched.map_or_else(|| first[i].clone(), |m3| curve::held_by(c, m3))
+        matched.map_or_else(|| curve::first_held_at(s, i), |m3| curve::held_by(c, m3))
     }).collect()
+}
+
+/// Of each pond of the samples `new`, the pond of the samples `old` that held most of its samples, where that pond is
+/// the one that most of no other new pond came from (`NONE` for none): one to one.
+fn came_from(old: &Samples, new: &Samples) -> Vec<u32> {
+    let mut counts: Vec<std::collections::BTreeMap<u32, u32>> = vec![Default::default(); new.ponds.len()];
+    for (k, &q) in new.pond.iter().enumerate().filter(|p| *p.1 != NONE && old.pond[p.0] != NONE) {
+        *counts[q as usize].entry(old.pond[k]).or_default() += 1;
+    }
+    let best: Vec<u32> = counts.iter().map(|c| c.iter().max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))).map_or(NONE, |p| *p.0)).collect();
+    let mut taken = vec![0u32; old.ponds.len()];
+    best.iter().filter(|&&p| p != NONE).for_each(|&p| taken[p as usize] += 1);
+    best.iter().map(|&p| if p != NONE && taken[p as usize] == 1 { p } else { NONE }).collect()
 }

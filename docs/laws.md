@@ -574,8 +574,9 @@ eight times, and each raised by the constant it still lacks, so each cell's samp
 (`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level; a closed basin
 too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flow through it (the start's wear fills
 such basins; a build moves no ground). Then each cell's ground as liquid stands on it, the bodies, the key samples and
-their rooms are found again; what a cell's parts of the bodies held follows each part's pond (matched by its pass, the
-open low ground by its one part; a cell whose parts do not all match shares its liquid at one level, as at the start),
+their rooms are found again; what a cell's parts of the bodies held follows each part's pond (a new pond comes from the
+old pond that held most of its samples, one to one; a cell whose parts do not all match shares its liquid at one
+level, as at the start),
 and no matter moves. `World::is_land` stays the cell's own: its surface over the level (`surface_z`, with its snow and
 ice), so a cell can be land while its samples, built at its ground without them (`ground_z`), lie under the level.
 

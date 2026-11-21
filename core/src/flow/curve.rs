@@ -261,8 +261,13 @@ pub(super) fn held_by(c: &Curve, m3: Vec<f64>) -> Holding {
 /// What each part of a body holds of what stands over its cell's pores now, m³, as if they held none before: at one
 /// level over the cell's parts (`Fill::shares`); none for a cell that holds no pond's samples.
 pub(super) fn first_held(s: &Scratch) -> Vec<Holding> {
-    let one = |(i, c): (usize, &Curve)| held_by(c, if c.ponds().is_empty() { Vec::new() } else { Fill { c, held: &[] }.shares(super::land::standing(s, i)) });
-    s.curves.iter().enumerate().map(one).collect()
+    (0..s.curves.len()).map(|i| first_held_at(s, i)).collect()
+}
+
+/// What each part of a body in cell `i` holds as if they held none before (`first_held`).
+pub(super) fn first_held_at(s: &Scratch, i: usize) -> Holding {
+    let c = &s.curves[i];
+    held_by(c, if c.ponds().is_empty() { Vec::new() } else { Fill { c, held: &[] }.shares(super::land::standing(s, i)) })
 }
 
 /// The curve of cell `i` of `w` (`Curve`): the terrain's samples inside it, their departures from their mean by area,
