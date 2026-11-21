@@ -356,7 +356,7 @@ fn the_terrains_channels_run_down() {
 }
 
 /// The lobes the running world's mouths lay keep the load (`Terrain::lobes_of`): what they lay over the samples and what
-/// found no room are the mouths' loads, to 1e-9; nothing is laid out of the liquid's samples but by a lobe's front.
+/// found no room are the mouths' loads, to 1e-9; and each lobe lays only on samples of its mouth's body.
 #[test]
 fn the_lobes_keep_the_load_the_mouths_bring() {
     let w = worldgen::testkit::squares(1, 16, 16);
@@ -369,9 +369,10 @@ fn the_lobes_keep_the_load_the_mouths_bring() {
     entries.sort_by(|&a, &b| s.up[b].total_cmp(&s.up[a]).then(a.cmp(&b)));
     let mouths: Vec<(usize, f64, f64)> = entries.iter().take(3).zip([1e6, 3e5, 1e5]).map(|(&k, load)| (k, load, level[k] + 1.0)).collect();
     assert_eq!(mouths.len(), 3, "three mouths");
-    let (parts, unlaid) = w.terrain.lobes_of(&w.map, lat, &s, (&open, &level), &mouths, 10.0);
+    let (parts, unlaid) = w.terrain.lobes_of(&w.map, lat, &s, (&s.pond, &level), &mouths, 10.0);
     let laid: f64 = parts.iter().map(|p| p.1).sum();
     let brought: f64 = mouths.iter().map(|m| m.1).sum();
     assert!((laid + unlaid - brought).abs() <= 1e-9 * brought, "laid {laid} m3 and {unlaid} m3 without room, of {brought} m3");
     assert!(laid > 0.0 && parts.iter().all(|p| p.1 > 0.0 && (p.2 as usize) < mouths.len()), "each part laid by a mouth");
+    assert!(parts.iter().all(|&(k, _, m)| s.pond[k] == s.pond[mouths[m as usize].0]), "a lobe laid out of its mouth's body");
 }

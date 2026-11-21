@@ -152,15 +152,16 @@ impl Terrain {
     }
 
     /// The lobes the running world's mouths lay at a build of the samples `s` of `map` (`delta::lobes`, one call on the
-    /// whole grid): the liquid stands on the samples `open` at each one's `level`, m; each mouth an entry sample, the
+    /// whole grid): the liquid stands on the samples of a body `body` (`NONE` for none) at each one's `level`, m; each mouth an entry sample, the
     /// load it brings, m³, and its top, m, its way in along its channel from the sample upstream the most drains
     /// through (`Samples::main`); over `years`, nothing behind them. Returns each sample each lobe laid on, with the
     /// volume, m³, and the mouth's place in `mouths`; and the load they found no room for, m³. The ages of the layers are
     /// not read (the running world keeps no age of its relief).
-    pub fn lobes_of(&self, map: &Square, lat: (f64, f64), s: &Samples, (open, level): (&[bool], &[f64]), mouths: &[(usize, f64, f64)], years: f64) -> (Vec<(usize, f64, u32)>, f64) {
+    pub fn lobes_of(&self, map: &Square, lat: (f64, f64), s: &Samples, (body, level): (&[u32], &[f64]), mouths: &[(usize, f64, f64)], years: f64) -> (Vec<(usize, f64, u32)>, f64) {
         let (grid, _) = grid_of(map, lat);
-        let exposed = exposures(&grid, open);
-        let liquid = Liquid::new(&grid, (open, &exposed), level);
+        let open: Vec<bool> = body.iter().map(|&b| b != NONE).collect();
+        let exposed = exposures(&grid, &open);
+        let liquid = Liquid::new(&grid, (&open, &exposed), (level, body));
         let heading = |k: usize| {
             let from = s.main[k];
             let v = if from == NONE { [0.0; 2] } else { offset(&grid, from as usize, k) };

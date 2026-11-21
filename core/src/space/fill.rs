@@ -75,7 +75,7 @@ pub(super) struct Lobe {
 /// lobe holds the load exactly (none where it finds no more room: what it laid is the lobe's). `seen` holds the
 /// searches' marks.
 pub(super) fn fill(g: &Grid, built: &mut [f64], (liquid, mouth, m): (&Liquid, &Mouth, u32), (seen, near): (&mut Seen, &mut Seen)) -> Lobe {
-    let top = mouth.top;
+    let (top, own) = (mouth.top, liquid.body[mouth.entry]);
     let mut heap = BinaryHeap::from([Step(0.0, mouth.entry)]);
     seen.set(m, mouth.entry, 0.0);
     let (mut left, mut filled) = (mouth.load, Vec::new());
@@ -92,7 +92,7 @@ pub(super) fn fill(g: &Grid, built: &mut [f64], (liquid, mouth, m): (&Liquid, &M
             left -= put;
             filled.push((k, put));
         }
-        for (j, d) in g.around(k).filter(|&(j, _)| liquid.open[j]) {
+        for (j, d) in g.around(k).filter(|&(j, _)| liquid.body[j] == own) {
             let cost = c + d * step(g, (k, j), (liquid, mouth), (top - built[j]).max(0.0));
             if cost < seen.get(m, j) {
                 seen.set(m, j, cost);
@@ -100,7 +100,7 @@ pub(super) fn fill(g: &Grid, built: &mut [f64], (liquid, mouth, m): (&Liquid, &M
             }
         }
     }
-    let front = front(g, built, (liquid, top, m), &mut filled, near);
+    let front = front(g, built, (liquid, top, m, own), &mut filled, near);
     Lobe { top: filled, front }
 }
 
@@ -132,11 +132,11 @@ fn step(g: &Grid, (k, j): (usize, usize), (liquid, mouth): (&Liquid, &Mouth), de
 /// is moved from the samples filled last, a few rounds; it is then thinned or thickened to hold exactly what they gave,
 /// never over the top (what it cannot hold goes back to the sample filled last). Lays it on `built` and returns its
 /// samples, each with the m³ it got.
-fn front(g: &Grid, built: &mut [f64], (liquid, top, m): (&Liquid, f64, u32), filled: &mut Vec<(usize, f64)>, near: &mut Seen) -> Vec<(usize, f64)> {
+fn front(g: &Grid, built: &mut [f64], (liquid, top, m, own): (&Liquid, f64, u32, u32), filled: &mut Vec<(usize, f64)>, near: &mut Seen) -> Vec<(usize, f64)> {
     let lobe: f64 = filled.iter().map(|f| f.1).sum();
     let mut ring = Vec::new();
     for round in 0..FRONT_ROUNDS as u32 {
-        ring = slope(g, built, (liquid, top, m * FRONT_ROUNDS as u32 + round), filled, near);
+        ring = slope(g, built, (liquid, top, m * FRONT_ROUNDS as u32 + round, own), filled, near);
         let mut want: f64 = ring.iter().map(|r: &(usize, f64)| r.1 * g.area(r.0)).sum::<f64>() - (lobe - filled.iter().map(|f| f.1).sum::<f64>());
         while want > 0.0 && filled.len() > 1 {
             let (k, put) = filled.last_mut().expect("a filled sample");
@@ -164,7 +164,7 @@ fn front(g: &Grid, built: &mut [f64], (liquid, top, m): (&Liquid, f64, u32), fil
 /// raises, each with how much, m: from the lobe out, by the shortest way through the open low ground (search `id` of
 /// `near`, which holds the distances), each to the lobe's top `top` less `FORESET` times how far it lies, down to where
 /// that meets the bed.
-fn slope(g: &Grid, built: &[f64], (liquid, top, id): (&Liquid, f64, u32), filled: &[(usize, f64)], near: &mut Seen) -> Vec<(usize, f64)> {
+fn slope(g: &Grid, built: &[f64], (liquid, top, id, own): (&Liquid, f64, u32, u32), filled: &[(usize, f64)], near: &mut Seen) -> Vec<(usize, f64)> {
     filled.iter().for_each(|&(k, _)| near.set(id, k, 0.0));
     let mut heap: BinaryHeap<Step> = filled.iter().map(|&(k, _)| Step(0.0, k)).collect();
     let mut ring = Vec::new();
@@ -174,7 +174,7 @@ fn slope(g: &Grid, built: &[f64], (liquid, top, id): (&Liquid, f64, u32), filled
         }
         for (j, len) in g.around(k) {
             let dj = d + len;
-            if liquid.open[j] && top - FORESET * dj > built[j] && dj < near.get(id, j) {
+            if liquid.body[j] == own && top - FORESET * dj > built[j] && dj < near.get(id, j) {
                 near.set(id, j, dj);
                 heap.push(Step(dj, j));
             }

@@ -117,7 +117,8 @@ pub(super) fn high_stand(seed: u64, g: &Grid, (h, loose): (&mut [f64], &mut [f64
     mouths.sort_by(|a, b| b.load.total_cmp(&a.load).then(a.entry.cmp(&b.entry)));
     let taken: f64 = given.iter().sum();
     let level = vec![STAND_M; n];
-    let liquid = Liquid::new(g, (&open, &exposed), &level);
+    let body = super::hollows::parts(g, &open).0;
+    let liquid = Liquid::new(g, (&open, &exposed), (&level, &body));
     let laid = lobes(g, (h, loose), (&liquid, &behind), &mouths, HIGH_STAND_YEARS);
     (books.taken, books.high, books.unlaid) = (books.taken + taken, laid.volume, laid.unlaid);
     books.beyond += taken - laid.volume - laid.unlaid;

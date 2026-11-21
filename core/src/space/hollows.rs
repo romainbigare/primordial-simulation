@@ -13,15 +13,15 @@ pub(super) type Lift = (usize, f64, u32);
 
 /// The hollows the lobes leave on the heights `built` over the heights before them `before`, each sample's lobe in
 /// `shut_by` (`NONE` for none): a flood from the open liquid of `liquid` still joined to the most of its own body (each
-/// part of the open low ground before the lobes keeps its largest part after them; another body of liquid is not cut
-/// off) over what the lobes raised, the liquid they cut off and the ground behind them (`behind`), each sample up to the
+/// body keeps its largest part after the lobes, a part joined through its samples' sides and corners; another body is
+/// not cut off from it, even where they touch at a corner) over what the lobes raised, the liquid they cut off and the ground behind them (`behind`), each sample up to the
 /// lowest height its liquid could leave it by (Barnes, Lehman and Mulla 2014), charged to the lobe of most load the
 /// flood's way to it crossed; one the flood does not reach (shut in by higher ground), up to the lowest ground of a lobe round it, charged
 /// to that lobe. Raises `built` and returns the raises; a hollow no lobe shut is left.
 pub(super) fn hollows(g: &Grid, (built, before): (&mut [f64], &[f64]), shut_by: &[u32], (liquid, behind): (&Liquid, &[bool])) -> Vec<Lift> {
     let n = g.n();
     let wet: Vec<bool> = (0..n).map(|k| liquid.open[k] && built[k] < liquid.level[k]).collect();
-    let main = kept(g, liquid.open, &wet);
+    let main = kept(g, liquid.body, &wet);
     let laid: Vec<bool> = (0..n).map(|k| built[k] > before[k] || (wet[k] && !main[k]) || behind[k]).collect();
     // (Of each sample, the lowest height the flood reached it at so far, and the lobe it came over last on that way.)
     let (mut done, mut best, mut from) = ((0..n).map(|k| !laid[k]).collect::<Vec<bool>>(), vec![f64::INFINITY; n], vec![NONE; n]);
@@ -65,11 +65,10 @@ fn lift((k, at, by): (usize, f64, u32), built: &mut [f64], lifts: &mut Vec<Lift>
 }
 
 /// Of the samples `wet` of grid `g`, those in the largest part (joined through their sides and corners, the least index
-/// where two tie) of each part of `open` they lie in: the liquid each body keeps joined.
-fn kept(g: &Grid, open: &[bool], wet: &[bool]) -> Vec<bool> {
-    let (body, _) = parts(g, open);
+/// where two tie) of each body `body` they lie in: the liquid each body keeps joined.
+fn kept(g: &Grid, body: &[u32], wet: &[bool]) -> Vec<bool> {
     let (piece, sizes) = parts(g, wet);
-    let mut best: Vec<(usize, u32)> = vec![(0, NONE); g.n()];
+    let mut best: Vec<(usize, u32)> = vec![(0, NONE); body.iter().filter(|&&b| b != NONE).map(|&b| b as usize + 1).max().unwrap_or(0)];
     for k in (0..g.n()).filter(|&k| wet[k]) {
         let (b, p) = (body[k] as usize, piece[k]);
         let size = sizes[p as usize];
@@ -82,7 +81,7 @@ fn kept(g: &Grid, open: &[bool], wet: &[bool]) -> Vec<bool> {
 
 /// The parts of the samples `of` of grid `g` joined through their sides and corners: of each sample its part (`NONE`
 /// where not of them), and the samples of each part.
-fn parts(g: &Grid, of: &[bool]) -> (Vec<u32>, Vec<usize>) {
+pub(super) fn parts(g: &Grid, of: &[bool]) -> (Vec<u32>, Vec<usize>) {
     let n = g.n();
     let mut part = vec![NONE; n];
     let mut sizes = Vec::new();

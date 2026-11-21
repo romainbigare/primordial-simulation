@@ -41,7 +41,8 @@ pub fn build(w: &mut World) {
 
 /// The load piled at the mouths since the last build (what was laid on the samples of the bodies since, `Relief::since`)
 /// laid out as lobes on the samples as last built (`Terrain::lobes_of`, `delta::lobes`): each body's liquid at its
-/// level now (`basin::body_level`, from what its parts hold), the open samples its pond's; each mouth's top its level and the flood's depth
+/// level now (`basin::body_level`, from what its parts hold), the samples of its liquid its pond's (a lobe stays in its
+/// mouth's body); each mouth's top its level and the flood's depth
 /// over its entry (`delta::flood_depth`), no higher than its pass. The piles leave the relief, the lobes join it, and
 /// what found no room is matter of the entry cell, which its offset spreads over it (as all matter the relief does
 /// not place). What a lobe laid in another cell moves there from the entry cell's loose ground, by its mixture, with its
@@ -52,12 +53,10 @@ fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
     // (Each body's level from what its parts hold, the saved state, as a loaded world finds it.)
     let levels: Vec<f64> = b.list.iter().map(|body| super::basin::body_level(s, body)).collect();
     let area = |k: usize| w.map.place_of(&samples.leaf(k), w.cfg.lat_south, w.cfg.lat_north).0;
-    let (open, level): (Vec<bool>, Vec<f64>) = (0..n).map(|k| match b.at.get(k).copied() {
-        Some(body) if body != NONE => (true, levels[body as usize]),
-        _ => (false, f64::NEG_INFINITY),
-    }).unzip();
+    let body: Vec<u32> = (0..n).map(|k| b.at.get(k).copied().unwrap_or(NONE)).collect();
+    let level: Vec<f64> = body.iter().map(|&x| if x == NONE { f64::NEG_INFINITY } else { levels[x as usize] }).collect();
     let mut mouths = Vec::new();
-    let piled: Vec<usize> = (0..n).filter(|&k| open[k] && w.relief.since(k) > 0.0).collect();
+    let piled: Vec<usize> = (0..n).filter(|&k| body[k] != NONE && w.relief.since(k) > 0.0).collect();
     for k in piled {
         let pond = samples.ponds[samples.pond[k] as usize];
         let pass = if pond.pass == NONE { f64::INFINITY } else { pond.level };
@@ -68,7 +67,7 @@ fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
         return;
     }
     let lat = (w.cfg.lat_south, w.cfg.lat_north);
-    let (parts, _unlaid) = w.terrain.lobes_of(&w.map, lat, samples, (&open, &level), &mouths, w.cfg.build_years as f64);
+    let (parts, _unlaid) = w.terrain.lobes_of(&w.map, lat, samples, (&body, &level), &mouths, w.cfg.build_years as f64);
     // What each lobe laid, on the relief and by cell: of each sample laid on, its cells and their shares of its area.
     let cells = cells_of(w, samples);
     let mut out: Vec<((u32, u32), f64)> = Vec::new();

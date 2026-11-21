@@ -46,17 +46,20 @@ pub(crate) fn flood_depth(drains: f64, channel: [f64; 2]) -> f64 {
 
 /// What the lobes read of the liquid they fill: which samples are open liquid, how open to the waves each lies, the way
 /// out from the coast at each (a unit vector east and south along the rise of the distance from the land; none where it
-/// has none), and the level of the liquid at each, m (its body's; any for a sample of no body).
+/// has none), the level of the liquid at each, m (its body's; any for a sample of no body), and the body each lies in
+/// (`network::NONE` for none): a lobe stays in its mouth's body.
 pub(super) struct Liquid<'a> {
     pub(super) open: &'a [bool],
     pub(super) exposed: &'a [f64],
     pub(super) seaward: Vec<[f64; 2]>,
     pub(super) level: &'a [f64],
+    pub(super) body: &'a [u32],
 }
 
 impl<'a> Liquid<'a> {
-    /// The open liquid `open` of grid `g`, its samples as open to the waves as `exposed`, its liquid at `level`, m.
-    pub(super) fn new(g: &Grid, (open, exposed): (&'a [bool], &'a [f64]), level: &'a [f64]) -> Liquid<'a> {
+    /// The open liquid `open` of grid `g`, its samples as open to the waves as `exposed`, its liquid at `level`, m, each
+    /// in its body `body`.
+    pub(super) fn new(g: &Grid, (open, exposed): (&'a [bool], &'a [f64]), (level, body): (&'a [f64], &'a [u32])) -> Liquid<'a> {
         let edge = g.edge_distance(open);
         let seaward = (0..g.n()).map(|k| {
             let [(e, _), (w, _), (north, _), (s, _)] = g.sides(k);
@@ -65,7 +68,7 @@ impl<'a> Liquid<'a> {
             let len = v[0].hypot(v[1]);
             if open[k] && len.is_finite() && len > 0.0 { [v[0] / len, v[1] / len] } else { [0.0; 2] }
         }).collect();
-        Liquid { open, exposed, seaward, level }
+        Liquid { open, exposed, seaward, level, body }
     }
 }
 
