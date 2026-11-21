@@ -36,7 +36,7 @@ pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, st
             shed_to(ph, c, (x, rho), (b, counts), (p, &mm, e), shed);
             s[x] = after_shed(ph, c, (&mm, rho), x, s[x]);
         }
-        let (lost, cost) = upkeep(w, c, p, x, &s[x], (t, dt), b);
+        let (lost, cost) = upkeep(w, c, p, x, &mut s[x], (t, dt), b);
         counts.cover_lost.iter_mut().zip(lost).for_each(|(a, l)| *a += l);
         pays[x] = s[x].gain * net > keep;
         c.full[x] = !pays[x];

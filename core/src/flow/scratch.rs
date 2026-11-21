@@ -45,6 +45,11 @@ impl crate::chem::Heat for Sp {
 }
 
 impl Sp {
+    /// Whether its solid lies as soft cover on the loose ground at `t` K: warmer than `soft`.
+    #[inline]
+    pub(super) fn soft_at(&self, t: f64) -> bool {
+        t > self.soft
+    }
     /// Its liquid share in ground at `t` K where the share `molten` of it is molten and the minerals of growth stay
     /// dissolved by the share `free` (`State::dissolved`): none at or over its boiling point; of a mineral only what
     /// stays dissolved, the rest held on the exchange sites, which neither moves, nor fills, nor takes room (laws.md 4).

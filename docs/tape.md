@@ -44,9 +44,11 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 (`rivers`, the cover's median) are of cells (a cell of many squares counts one).
 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
-that holds its centre, `tape::pixels`, as do the PNG pictures): height, liquid depth, ice, liquid flux, `catch` (the upstream area a cell drains
+that holds its centre, `tape::pixels`, as do the PNG pictures): height and liquid depth (Flow's solid surface and its liquid in the pores and standing, `Scratch::surface`), ice (Flow's soft cover, `Scratch::soft`), liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
-size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground,
+size), `channel_w` and `channel_d` (the width and the depth of the cell's main channel: the channel law, `Physics::channel`, on
+the most that runs through one of its samples, `World::liquid_flux`; the law draws that channel at each sample, on its
+own discharge, in the wet ground, `inside::channel_share`; a tape's map draws its rivers by these two), loose ground (its loose solids in Flow's phases, `Scratch::phases`),
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
 `filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
 `wet_share` (the share of its land whose pores its soil's liquid fills, 0..1, `inside::wet_land`, as the start of life's month
@@ -56,12 +58,13 @@ gives each terrain sample's), both none where the cell holds no land,
 the texture of its loose ground (`World::soil`, `soil::Texture`): `coarse` and `fine` (the shares of coarse and of fine
 particles, 0..1) and `organic` (the share of organic matter of its solid volume, log from 0.0003 to 0.05, which the page's
 Earth view darkens its bare ground by), `conduct` (its pores' conductivity, m/s),
-`avail` (the liquid its loose ground holds for roots when full, m), `roots` (the share of that it holds now,
-`Pores::available`), `rises` (what rises from it less what condenses on it, `World::evap`) and `sheds` (its rain less
+`avail` (the liquid its loose ground holds for roots when full, m), `roots` (the share of that the drier rest of its land held
+for roots as the cover's roots read it in its last month, `cover::moist` off the strips in `cover::CellRan`: on the
+saturated strips they read all of it, which the page draws at each point by `saturated_at`; 0 where it holds no land), `rises` (what rises from it less what condenses on it, `World::evap`) and `sheds` (its rain less
 that, mol/m²/s, lin from -0.004 to 0.004: what it passes on to runoff and the ground below), and of its ground
 (`soil::holdings`; 0 before Flow first built its state): `litter` (fresh dead matter, kg/m²), `slow` (the slow organic
 pool, kg/m²), `mineral_free` and `mineral_held` (the nitrogen mineral dissolved and held on the exchange sites,
-kg/m²) and `rot` (how fast dead frame rots there, per year), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land` of the cell's amount per m² of its area and its land's share, `contract::lands`: the cover and its seeds live and are drawn on the land alone, divided by the land once; 0 where the cell holds no land), the living mass of the takers per km² of the cell's land (`takers`, kg/km², `fauna::per_km2`; 0 where the cell holds no land; log from 1 to 10,000), the low wind over the cell at the air's last step (`wind_u` to the east and `wind_v` to the north, m/s, lin from −20 to 20, `World::low_wind`: the overturning's lower half, `rise::low_wind`; 0 before the air's first step), the cured leaves standing on its land (`cured`, kg/m², log from 0.01 to 3, `flame::cured`) and the dead walls flames left standing (`snag`, kg/m², log from 0.01 to 30, `flame::snag`), what flames did on the cell's land (`flame`, laws.md 3c; all 0 where none ever burnt): in the last month the share of its land they burnt (`flame`, 0..1), their length (`flame_len`, m, log from 0.01 to 30), the minerals their burning left on its ground (`ash`, kg/m² of land, log from 1e-5 to 1) and the gas it gave the air (`flame_air`, kg/m² of land, log from 0.001 to 10), all `Counters::flame_month`; the share of its land burnt in the last year's months (`burnt`, 1/yr, `flame::burnt_year`, 0 to 1, a share burnt twice counts twice) and the whole months since it last burnt (`burnt_age`, `flame::since`: 0 in the month it burns, at most 120, a cell that never burnt counts as 120), true colour (r, g, b: the colour of what covers the surface, its frozen cover, the liquid standing over its pores
+kg/m²) and `rot` (how fast dead frame rots there, per year), ground and air temperature, rain, vapour, absorber, the cover's mass, its walls (`wood`) and its capture area (`leaf`) per m², the seeds lying on the ground (`seeds`, kg/m²), what the cover built in the last whole year (`grown`, kg of dry matter per m² a year, `Counters::grown_last`; 0 in the first year), these five per m² of the cell's land (`layers::per_land` of the cell's amount per m² of its area and its land's share, `contract::lands`: the cover and its seeds live and are drawn on the land alone, divided by the land once; 0 where the cell holds no land), the living mass of the takers per km² of the cell's land (`takers`, kg/km², `fauna::per_km2`; 0 where the cell holds no land; log from 1 to 10,000), the low wind over the cell at the air's last step (`wind_u` to the east and `wind_v` to the north, m/s, lin from −20 to 20, `World::low_wind`: the overturning's lower half, `rise::low_wind`; 0 before the air's first step), the cured leaves standing on its land (`cured`, kg/m², log from 0.01 to 3, `flame::cured`) and the dead walls flames left standing (`snag`, kg/m², log from 0.01 to 30, `flame::snag`), what flames did on the cell's land (`flame`, laws.md 3c; all 0 where none ever burnt): in the last month the share of its land they burnt (`flame`, 0..1), their length (`flame_len`, m, log from 0.01 to 30), the minerals their burning left on its ground (`ash`, kg/m² of land, log from 1e-5 to 1) and the gas it gave the air (`flame_air`, kg/m² of land, log from 0.001 to 10), all `Counters::flame_month`; the share of its land burnt in the last year's months (`burnt`, 1/yr, `flame::burnt_year`, 0 to 1, a share burnt twice counts twice) and the whole months since it last burnt (`burnt_age`, `flame::since`: 0 in the month it burns, at most 120, a cell that never burnt counts as 120), true colour (r, g, b: the colour of what covers the surface, its soft cover (each substance in its phase as Flow's state has it, `Scratch::phases`), the liquid standing over its pores
 (`flow::means`; the liquid in the pores is part of the ground) or its ground; the page draws a point no liquid stands
 on in its ground's colour, darker as far as it is soaked) and the ground's colour (r, g, b: its loose solids, else its bonded ones, without frozen cover or liquid, under
 the litter of the cover's remains in it over the share 1 - e^-(their kg/m² / `LITTER_KG`), 0.3 kg/m²). The page draws
@@ -186,24 +189,25 @@ lies under `EDGE_M`, 2 m; the ground drawn lies over the level up to there, by a
 about it has no pond near, so the edge of where liquid may stand is dry ground: a smooth line of the place, the same in
 every tile at every depth, never the texels' or the samples' edges; a shell draws the liquid where the ground drawn
 lies under the pond's level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
-frame: the melting point of the frozen cover, K, then for each square row by row 12 f32 (`ROW`) of the cell that holds
+frame: the melting point of the frozen cover, K, then for each square row by row 11 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
-height, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest ground, m
+height, K/m (`World::air_drop`); its ice, m (Flow's soft cover, `Scratch::soft`); the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full); the share of its area that is land, its land over its area (`contract::lands`: as the
-month's start found it, the land its cover lives on); and the mean wetness index of the samples inside it (the level the
-liquid departs about where none is dry or full, of the terrain alone: a shell places plants by it the same in every month). Before Flow built its state the level and
+0 where the pores are dry or full); and the share of its area that is land, its land over its area (`contract::lands`: as the
+month's start found it, the land its cover lives on). Before Flow built its state the level and
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 8 unless the
-start chose other) of `KIND_ROW` (39) f32 each, the heaviest first: the slots of
+start chose other) of `KIND_ROW` (41) f32 each, the heaviest first: the slots of
 its cover that stand on any of its ground, each as the law holds it, per m² of the ground it stands on (its share of
 the cell, `Cover::stands`: its land, and its ground under the liquid where its roots work, `cover::footing`); of each its starting kind (-1: none); its built cover, kg/m²; its large plants (`stands::plants` of the slot's group of the largest plants, `cover::Sizes::large`, with that group's built cover and share of the capture area): the stem's width, m, plants a m² (that group's count), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-their leaf area; plants with no capture area stand bare, their crowns of no width, covering none, which the page draws by their stems as a crown that has shed its leaves); its walls' share of its built cover; its
 capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s;
-its moisture gene and frost gene, K; its fuel over its reserve; its activity on its cell's ground (`cover::activity`, its drought's);
-the share of it frozen this month (`cover::frozen`); the share of what it builds that goes to seeds (`SEED`); and the
+its moisture gene and frost gene, K; its fuel over its reserve; its activity and the share of it frozen in its cell's
+last month, the numbers the law used (`cover::Ran` in `Counters::ran_month`: its activity by the strips, the drier rest
+and its ground under the liquid, `cover::activity` of its footing; `cover::frozen` at that activity; a slot that has
+not run since it took hold is active and not frozen); the share of what it builds that goes to seeds (`SEED`); and the
 share of the ground it stands on whose loose ground holds its plants (`Cover::rooted`) with
 the loose ground their roots need, m (`Cover::need`; all of the land and 0 while the need of a slot of newly landed
 seeds is not found); its walls gene (`WALLS`, log10 kg of walls per kg of matter), by which the page draws a woody
@@ -217,7 +221,13 @@ marks (web/src/kind_row.ts `groupsOf`, web/shaders/lib/mark.wgsl `along`, `pick_
 about their size while smaller plants come and go and groups join or split. Then two numbers of where it stands under
 the liquid: how deep under the cell's level its line lies, m (`Cover::line`: it stands on the ground above it, on land
 and under the liquid as deep as that; plants do not move, so this deepens as the level rises and the page draws them
-on the same ground), and the share of its ground that lies under the liquid (`Footing::wet`). The page thins a
+on the same ground; 0 before its line is found), and the share of its ground that lay under the liquid in its cell's
+last month (`Footing::wet`, `cover::Ran`); then two numbers of where it stands on its land: how dense its plants
+stand on the land's saturated strips and on its drier rest, over their mean on its land (`stands::dense`: its share in
+the strips, `Cover::strip`, over the strips' share of the land, `WetGround::share`, and the rest's over the rest's;
+the cover's law knows no other place in a land). The page stands each kind's marks by them: a mark's foot on saturated
+ground (land.wgsl `saturated_at`, by the law's level of the wetness index) takes the first, on drier ground the second
+(mark.wgsl `dense_at`). The page thins a
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /
@@ -234,8 +244,7 @@ reflectance of its bed's make and a zero. Then of each sample again the shares o
 loose ground (`pcore::soil::textures`), how slowly its pores pass liquid (the decimal logarithm of 1 m/s over their
 conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground, and the liquid its loose ground
 holds for roots (`Pores::for_roots` of its texture over its depth) as the `avail` layer shows it, 0..1 of its scale,
-which the page draws that layer by. Then of each sample again its field capacity and its wilting point as shares of
-its pores (`Pores::of`) and two zeros, by which the page draws the layer `roots` at each point. **The
+which the page draws that layer by. Then of each sample again two zeros, how deep the load the liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain, by which the page draws a deposit. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
 sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries
@@ -271,9 +280,9 @@ are not recorded.
 | `t_land`, `t_land_summer`, `t_land_winter` | K | the land's ground as life feels it (of a cell of parts its land, `World::t_ground_last`): the mean of the year's months, the warmest month and the coldest |
 | `absorber` | | mean absorption of the heat-absorbing gases |
 | `air_<k>` | | mole fraction of heat-absorbing gas k in the air |
-| `ice_frac` | | share of the area under ice |
+| `ice_frac` | | share of the area under 1 cm or more of soft cover (Flow's snow and ice, `Scratch::soft`, laws.md 1) |
 | `liquid_land` | km³ | liquid on land |
-| `ice_land` | km³ | frozen cover on land |
+| `ice_land` | km³ | soft cover (Flow's snow and ice, `Scratch::soft`) of the land cells |
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what leaves land cells for the sea: what runs down the terrain's samples into the open low ground, and what flows under the surface into cells that are not land or drains from a land into the open low ground's liquid in its cell (`World::off_land`, `flow::drain::OffLand`), per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
 | `lakes`, `lake_area`, `lake_m3`, `low_level` | , km², km³, m | the bodies of standing liquid above the open low ground that hold liquid over their cells' pores (`World::pools`, laws.md 1.2), the area their liquid covers and its volume; and the level of the open low ground's largest body |
@@ -285,7 +294,7 @@ are not recorded.
 | `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`Config::variety` a cell at most), and its mass |
 | `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (by a taker, `contract::take`), `broken` (pressed loose, `contract::press`), `drowned` (its ground went under the standing liquid, `cover::live`), `flame` (burnt or scorched to death, `flame`); `lack` is never written to |
 | `cover_budget_<flow>` | J/yr | the flows of the cover's budget in the year, + into the cover (`cover::BUDGET`): what its parts and the seeds lying on the ground hold as fuel changes by their sum. `stored` (light reaction); the upkeep's parts `basal`, `capacity`, `firmness`, `leaves`, `sapwood`, `root_breath`, `root_renew`; `building` (its work and fixing); `shed`, `died`, `exuded` (fuel its roots give the ground), `seeds` (out and landed), `seeds_died` (seeds lying that wore out or froze), `takers` (taken or pressed loose through the contract), `placed`, `rounded`, `burnt` (burnt or killed by flames, `flame`) |
-| `burnt_land` | 1/yr | the share of the land's area flames burnt in the last year's months (`flame::burnt_year` by each cell's land): a cell burnt twice counts twice |
+| `burnt_land` | 1/yr | the share of the land's area flames burnt in the last year's months (`flame::burnt_year` over every cell's land, `contract::land`, the land flames burn on): a cell burnt twice counts twice |
 | `flame_<flow>` | kg/yr | what flames burnt and killed in the year (`flame::FLOWS`): `remains` (the remains on the ground that flamed), `smouldered` (those that smouldered after the flame), `cured` (the cured dead leaves and stems standing that burnt), `living` (the soft part of the cover in the flame, burnt), `scorched` (leaves under the scorch height, dead to the ground), `killed` (the walls and fuel of the plants whose whole crown stood under it), `killed_walls` (of that, their walls); `plants` (1/yr) those plants, a count |
 | `flame_air_<k>` | kg/yr | of each gas, what flames gave the air in the year, less what they took of it (the fixed element's gas, 1 in chemistry 0, is what the flames took from the ground's cycle) |
 | `seeds_kg` | kg | the seeds lying on the ground of the world (`cover::Lying`) |

@@ -86,10 +86,12 @@ impl Recorder {
         for (flow, &x) in pcore::cover::SEED_FLOWS.iter().zip(&self.year.seeds) {
             row.push(format!("seeds_{flow}"), "kg/yr", x);
         }
-        // The flames of the year: the share of the land they burnt in the last year's months (`flame::burnt_year`), what they burnt and killed,
-        // and what they gave the air of each gas.
-        let land_m2: f64 = land.iter().map(|&i| pcore::contract::land(w, i)).sum();
-        let burnt: f64 = land.iter().map(|&i| pcore::flame::burnt_year(w, i) * pcore::contract::land(w, i)).sum();
+        // The flames of the year: the share of the land they burnt in the last year's months (`flame::burnt_year`) over
+        // the land the flames burn on, every cell's (`contract::land`), what they burnt and killed, and what they gave the
+        // air of each gas.
+        let on = |i: usize| pcore::contract::land(w, i);
+        let land_m2: f64 = (0..w.mesh.cells().n()).map(on).sum();
+        let burnt: f64 = (0..w.mesh.cells().n()).map(|i| pcore::flame::burnt_year(w, i) * on(i)).sum();
         row.push("burnt_land", "1/yr", burnt / land_m2.max(f64::MIN_POSITIVE));
         for (flow, &x) in pcore::flame::FLOWS.iter().zip(&self.year.flame) {
             row.push(format!("flame_{flow}"), if *flow == "plants" { "1/yr" } else { "kg/yr" }, x);

@@ -13,17 +13,13 @@ import { groundDetail } from './detail';
 /** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), the discharge
  * per metre a css pixel takes past which a channel shows as a line, m³/s per m, and that line's law (its css pixels,
  * the power it widens by, the most times: tape/src/ground/channels.rs `LINE_PX`). */
-export interface Laws { soil_m: number; wet_depth: number; dormancy: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number; station: number }
+export interface Laws { soil_m: number; wet_depth: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number; station: number }
 /** The terrain's samples: across, down, and their depth. */
 export interface SamplesOf { across: number; down: number; depth: number }
 
-/** Planes of four numbers a square of the table (land.wgsl `GROUND` to `TERRAIN`): the core's numbers before
- * `TWI_MEAN_AT` (`TileMeta.row`) with the wetness index of saturation (`SATURATED_AT`), the page's three, then the
- * core's mean wetness index. */
-const PLANES = 7;
-/** The number of the core's row that is the mean wetness index of the terrain's samples in the cell (tape/src/table.rs
- * `row`), sent alone in the table's last plane (land.wgsl `TERRAIN`). */
-const TWI_MEAN_AT = 11;
+/** Planes of four numbers a square of the table (land.wgsl `GROUND` to `VIEW`): the core's row (`TileMeta.row`
+ * numbers) with the wetness index of saturation (`SATURATED_AT`), then the page's three. */
+const PLANES = 6;
 /** The number of the table a square's wetness index of saturation goes in (land.wgsl `saturated_at`): the last of its
  * soil's plane, past the core's numbers. */
 const SATURATED_AT = 4 * 2 + 3;
@@ -164,8 +160,7 @@ export class Land {
     const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
     this.melt = rows[0];
     for (let i = 0; i < n; i++) {
-      for (let k = 0; k < Math.ceil(TWI_MEAN_AT / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, TWI_MEAN_AT))));
-      put(6, i, [rows[1 + row * i + TWI_MEAN_AT], 0, 0, 0]);
+      for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
       put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, landIce[i]]);
       put(5, i, [shown ? shown[i] / 255 : 0, organic[i], landT[i], landZ[i]]);
@@ -228,7 +223,7 @@ export class Land {
     }
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)
-      .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.dormancy, l.rooted_from).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
+      .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.rooted_from, 0).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
       .vec4(s.across, s.down, s.depth, this.drawn).vec4(tm.along_wrap, l.flood, this.slid(this.flowAt ?? performance.now()), l.flood ** -l.station).vec4(...l.line_law);
     return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
   }
