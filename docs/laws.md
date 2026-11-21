@@ -673,9 +673,11 @@ gives the climate of 1-day ones within 0.3 K on the land and the land's runoff w
   sensible heat with the air (`sensible`).
 - **The cover's share** of the light reaching a cell is what the cover's own law finds its leaves catch
   (`contract::Stand::catch`, at the month's start): over each ring of the ground its kinds stand on (3,
-  `canopy::rings`), that ring's share times 1 − e^−(the capture area per m² of all the crowns on it), times
-  e^(−depth / `light_depth`) under the liquid standing on the cell (`cover::reach`); the light the liquid stops warms
-  the liquid, as the surface it reaches. The cover reflects its share of what it catches and absorbs the rest; per m²
+  `canopy::rings`), that ring's share times 1 − e^−(the capture area per m² of all the crowns on it), on the cover's
+  own ground (`cover::ground`: a cell of parts' all, else its land), which lies over its land first and then under its
+  liquid (`cover::over`); under standing liquid times e^(−depth / `light_depth`) of the mean depth over that part
+  (`cover::dimmed`); the light the liquid stops warms the liquid, as the surface it reaches. The cell's light per m² of
+  capture area is what both parts' leaves caught over all of them. The cover reflects its share of what it catches and absorbs the rest; per m²
   of its capture area that is the cell's light (`World::light`), which the cover shares down through its crowns.
 - **The aside node** (`Class::Aside`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
