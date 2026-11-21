@@ -978,7 +978,7 @@ gas and the liquid; 9 turns it back. Wet cells start at that balance (`worldgen:
 times the air's carbon and gives it back when the air thins, with no rule for the sea.
 
 ### 2.6 Chemistry 0 in short
-One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substances, 14 reactions, numbers only in
+One fixed Earth-like chemistry until M7 (handover 6.0): 11 elements, 23 substances, 22 reactions, numbers only in
 `core` and `worldgen`; Earth names in `library/chem0.toml`. Molar masses are sums over elements, so reactions keep mass.
 
 | Number | Role (≈ Earth name, for reading only) |
@@ -994,12 +994,20 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substance
 | 12 | the nitrogen mineral, lives dissolved |
 | 13 | the frame, a solid bodies build (≈ cellulose) |
 | 14 | the slow organic matter, held on fine and middle particles (`bound`; ≈ humus): C59H78N6O42 |
+| 15, 16 | the free element 6 and its oxide (≈ iron, Fe2O3) |
+| 17, 18 | the free element 7 and its oxide (≈ copper, CuO) |
+| 19 | the solid of element 1 alone (≈ charcoal, and coal as a rock) |
+| 20 | a crystal of elements 8 and 9 (≈ rock salt, NaCl); nothing dissolves it, so it stays where it is laid |
+| 21, 22 | a clay mineral and the clay baked dry (≈ kaolinite, metakaolin) |
 
 Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 3 burning and making fat; 4 burning
 methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral and the salt 11); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
 of the frame; 13 splitting the frame into sugar (needs an enzyme); 14 body matter rotting into the slow organic matter
 (beside 7, at a quarter of its rate: a fifth of what rots of it goes this way, keeping half its carbon and all its
-nitrogen, its salt 11 back to the ground); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). Dead matter rots in moist open ground at a litter
+nitrogen, its salt 11 back to the ground); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). 16 to 21 run fast only in a flame's or a kiln's heat and are frozen at the ground's warmth (`frozen_below`): 16
+charring the frame into the solid 19 and the liquid, with no gas; 17 burning 19; 18 and 19, the solid 19 freeing the
+elements 6 and 7 from their oxides (at about 1300 K and 1100 K); 20 baking the clay (about 800 K); and 21, the free
+element 6 turning back to its oxide in the air, about 1% a year at 290 K. Dead matter rots in moist open ground at a litter
 constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
 work): matter from 118 sugar + 3 nitrogen mineral + 1 salt 11; frame from 6 sugar.
 `Chemistry::minerals` are growth's inputs no reaction burns (12 and 11), `materials` the solids bodies build (13).
