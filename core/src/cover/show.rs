@@ -3,7 +3,7 @@
 //! (`Cover::take`, `Cover::take_lying`, `lose`). All of it is read from
 //! the cover's own numbers when asked; it keeps no copy.
 
-use super::{Cover, Parts, NP, WALL};
+use super::{Cover, Parts, NP, SLOTS, WALL};
 use crate::chem::Chemistry;
 use crate::contract::{Shown, Stand};
 use crate::units::MAX_SUBSTANCES;
@@ -11,13 +11,18 @@ use crate::units::MAX_SUBSTANCES;
 impl Cover {
     /// What it stands on its cell as (`contract::Stand`): over its slots that hold cover its mass, capture area, that
     /// times the share of light it absorbs (`reflectance`) and that times the share set aside for its light reaction
-    /// (`Cover::keep`).
+    /// (`Cover::keep`); and the rings of the ground its slots with capture area stand on (`canopy::catch_rings`).
     pub fn stand(&self, chem: &Chemistry, p: &Parts) -> Stand {
         let (mut s, mm) = (Stand::default(), p.mm(chem));
+        let (mut slots, mut n) = ([(0.0, 0.0); SLOTS], 0);
         for x in self.held() {
             let (leaf, abs) = (self.leaf(&mm, x), self.leaf(&mm, x) * (1.0 - self.reflectance(chem, p, x)));
             (s.mass, s.leaf, s.absorbed, s.kept) = (s.mass + self.kg(&mm, x), s.leaf + leaf, s.absorbed + abs, s.kept + abs * self.keep as f64);
+            if leaf > 0.0 {
+                (slots[n], n) = ((leaf, self.on(x)), n + 1);
+            }
         }
+        (s.rings, s.n_rings) = super::canopy::catch_rings(&slots[..n]);
         s
     }
     /// What the shares `of(x)` of each part of each slot `x` show a taker (`contract::Shown`): its mass, what it holds of

@@ -703,6 +703,14 @@ gives the climate of 1-day ones within 0.3 K on the land and the land's runoff w
   space take the two by the cloud's share. **Known limit:** the cloud's droplets are spread like the air's mass, not
   set where they condense, so a deep cloud sends its heat to space from the top of the air. The ground also trades
   sensible heat with the air (`sensible`).
+- **The cover's share** of the light reaching a cell is what the cover's own law finds its leaves catch
+  (`contract::Stand::catch`, at the month's start): over each ring of the ground its kinds stand on (3,
+  `canopy::rings`), that ring's share times 1 − e^−(the capture area per m² of all the crowns on it), on the cover's
+  own ground (`cover::ground`: a cell of parts' all, else its land), which lies over its land first and then under its
+  liquid (`cover::over`); under standing liquid times e^(−depth / `light_depth`) of the mean depth over that part
+  (`cover::dimmed`); the light the liquid stops warms the liquid, as the surface it reaches. The cell's light per m² of
+  capture area is what both parts' leaves caught over all of them. The cover reflects its share of what it catches and absorbs the rest; per m²
+  of its capture area that is the cell's light (`World::light`), which the cover shares down through its crowns.
 - **The aside node** (`Class::Aside`, one per cell): light the cover absorbs warms the ground, except the share its
   light reaction stores (`Cover::keep`), booked from the sun into this node; the cover takes it at its month, and what
   it does not claim goes back to the ground before each air step (`cover::release`).
@@ -1194,7 +1202,8 @@ seeds fill it:
   through the crowns of its kinds (Beer's law, `canopy::shade`): each kind's capture area spread evenly through its
   crown (`Cover::crown`), the light at each height absorbed by the capture area of all the crowns there, whatever
   slot holds them, so the tallest take it first, crowns that share a layer share its light, and a seedling lives on
-  what reaches below the crowns above it; under standing liquid times e^(−depth / `light_depth`). **Roots**: a
+  what reaches below the crowns above it; the light the air found its leaves catch already holds the rings of its
+  ground and the liquid standing over it (1.4). **Roots**: a
   kind's plants root in `root_per_height` of their height of loose ground, at least `root_least` (rooting depth grows
   with a plant's size; Schenk and Jackson 2002), and hold a point of the cell where its loose ground reaches that need
   (none below `rooted_from` of it, all from it, smoothly between: bare bed anchors nothing and holds no liquid in

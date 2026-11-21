@@ -8,12 +8,15 @@ use crate::World;
 
 /// The land of a cell as its soil's liquid lies over it (`wet_ground`): the share of its land saturated; the wetness
 /// index at and over which a sample is saturated (infinite where none is, minus infinite where all are); and the share
-/// of its land's pores its key liquid fills on the mean (past 1 where liquid stands over them), at the same moment.
+/// of its land's pores its key liquid fills on the mean (past 1 where liquid stands over them), at the same moment; and
+/// the level of the wetness index its liquid table departs about (`soil_level`; 0 where it lies evenly), which the
+/// shells draw the table by.
 #[derive(Clone, Copy, Debug)]
 pub struct WetGround {
     pub share: f64,
     pub level: f64,
     pub filled: f64,
+    pub soil: f64,
 }
 
 /// The land of cell `i` of means `m` (`Means`, over its land): its samples (`World::terrain_samples`) but the lowest,
@@ -32,7 +35,7 @@ pub fn wet_ground(w: &World, i: usize, m: Means, land: f64) -> WetGround {
 /// The terrain samples `ks` of cell `i` as the table reads them now, each of equal area: of each, the part its channel's
 /// flowing liquid covers (`channel_share`) at an infinite wetness index, its room none, and the rest at its own index
 /// (`Samples::twi`). Returns the indices and the shares of the area, summing to 1.
-pub fn parts_now(w: &World, s: &crate::space::samples::Samples, i: usize, ks: &[usize]) -> (Vec<f64>, Vec<f64>) {
+fn parts_now(w: &World, s: &crate::space::samples::Samples, i: usize, ks: &[usize]) -> (Vec<f64>, Vec<f64>) {
     let each = 1.0 / ks.len().max(1) as f64;
     let (mut twi, mut area) = (Vec::with_capacity(2 * ks.len()), Vec::with_capacity(2 * ks.len()));
     let per_m3 = carried(w, i);
@@ -50,19 +53,20 @@ pub fn parts_now(w: &World, s: &crate::space::samples::Samples, i: usize, ks: &[
 
 /// Ground of parts of wetness index `twi` and shares of the area `area` (summing to 1), of means `m`: its liquid table
 /// departs over them by the index (`soil_level`, `deficit_at`), and a part is saturated where it reaches the surface, at
-/// an index of at least the level plus the mean room over `soil_m`; and its pores' mean fill.
+/// an index of at least the level plus the mean room over `soil_m`; its pores' mean fill and the level it departs about.
 pub fn saturated(ph: &crate::Physics, (twi, area): (&[f64], &[f64]), m: Means) -> WetGround {
     let filled = if m.pores > 0.0 { m.pore / m.pores } else { 1.0 };
     let [d, most] = m.deficit(ph);
     let by = |wet: &dyn Fn(f64) -> bool| twi.iter().zip(area).filter(|p| wet(*p.0)).map(|p| p.1).sum::<f64>();
     let channels = by(&|t| t == f64::INFINITY);
-    let (share, level) = match soil_level(ph, twi, area, m) {
+    let at = soil_level(ph, twi, area, m);
+    let (share, level) = match at {
         _ if d <= 0.0 || filled >= 1.0 => (1.0, f64::NEG_INFINITY),
         None if d >= most || twi.iter().all(|&t| t == f64::INFINITY) => (channels, f64::INFINITY),
         None => (1.0, f64::NEG_INFINITY),
         Some(c) => (by(&|t| deficit_at(ph, m, t, c) <= 0.0), c + d / ph.soil_m),
     };
-    WetGround { share, level, filled }
+    WetGround { share, level, filled, soil: at.unwrap_or(0.0) }
 }
 
 /// The share of the pores of the drier rest of a land that its liquid fills, its share `share` saturated and its pores

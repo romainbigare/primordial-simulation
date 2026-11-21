@@ -95,16 +95,11 @@ impl Scratch {
     }
     /// What `a` mol of substance `k` in ground node `i` is, as Flow's state has the node's phases (its temperature, its
     /// plateau and what is molten, the share of the minerals that stays dissolved): its soft solid, its liquid and its
-    /// loose solid, m³, by the rule of the node's layers (`land::layers`: a solid warmer than `Sp::soft` is soft cover,
-    /// the liquid by `Sp::liquid`; none as a gas). None before Flow first built its state.
+    /// loose solid, m³, by the rule of the node's layers (`Sp::volumes`, as `land::layers` reads it). None before Flow first built its state.
     pub fn phases(&self, i: usize, k: usize, a: f64) -> Option<[f64; 3]> {
         let (p, t) = (self.sp.get(k)?, *self.state.tg.get(i)?);
-        if a <= 0.0 || t >= p.boil {
-            return Some([0.0; 3]);
-        }
         let m = if self.state.pk[i] == k { self.state.phi[i] } else { (self.latent.get(i)?.molten >> k & 1) as f64 };
-        let (solid, liquid) = (a * (1.0 - m) * p.v[0], a * p.liquid(t, m, self.state.dissolved[i]) * p.v[1]);
-        Some(if p.soft_at(t) { [solid, liquid, 0.0] } else { [0.0, liquid, solid] })
+        Some(p.volumes(t, a, m, self.state.dissolved[i]).unwrap_or([0.0; 3]))
     }
     /// The temperature of the surface of cell `i`, K: of a cell of parts its land's and its liquid's top's mean by
     /// area, else the node's.

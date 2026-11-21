@@ -50,7 +50,8 @@ size), `channel_w` and `channel_d` (the width and the depth of the cell's main c
 the most that runs through one of its samples, `World::liquid_flux`; the law draws that channel at each sample, on its
 own discharge, in the wet ground, `inside::channel_share`; a tape's map draws its rivers by these two), loose ground (its loose solids in Flow's phases, `Scratch::phases`),
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
-`filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
+`filled` (the share of its land's pores its key liquid fills, 0..1, `inside::WetGround::filled`, as the start of
+life's month found it for the laws; none where it was not found),
 `wet_share` (the share of its land whose pores its soil's liquid fills, 0..1, `inside::wet_land`, as the start of life's month
 found it for the laws, `World::life`) and `lambda_sat` (the wetness index ln(a / tan β) at and over which its land is
 saturated this month, lin from 0 to 30; `space::samples::sample_index`

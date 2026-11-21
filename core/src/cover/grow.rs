@@ -152,7 +152,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     (0..NP).for_each(|q| b.dead[p.sub[q]] += lying[q]);
     let before = c.content(&e);
     // The light per unit of absorbing area at the top of its layers: with no leaves, all that reaches the ground.
-    let per = if lit > 0.0 { caught * a.reach / lit } else { dl * a.reach };
+    let per = if lit > 0.0 { caught / lit } else { dl };
     let stored = light(chem, ph, c, p, &mut s[..n], (per, w.mesh.cells().area()[i], a, dt), &mut b);
     b.budget[STORED] += c.content(&e) - before;
     let all: f64 = stored.iter().sum();
