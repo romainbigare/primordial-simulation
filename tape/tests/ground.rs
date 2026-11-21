@@ -152,22 +152,45 @@ fn every_tile_agrees_on_where_a_pond_is() {
 }
 
 /// The ground made again where a world built its samples anew (`Ground::rebuild`) draws every tile as the ground made
-/// whole on those samples (`Ground::of`), and says each square whose tiles changed: no tile of a square it keeps differs
-/// from the one drawn before.
+/// whole on those samples (`Ground::of`), and each tile over squares it says did not change as it was drawn before:
+/// over a window at a middle depth and at the finest.
 #[test]
 fn a_rebuilt_ground_draws_as_one_made_anew() {
     let mut w = worldgen::testkit::squares(1, 16, 16);
     (0..14).for_each(|_| pcore::step(&mut w));
     let mut ground = Ground::of(&w);
-    let depth = *tape::depths(&w.map).start();
-    let n = (w.map.w.max(w.map.h) * (1usize << (depth - w.map.square_depth()))).div_ceil(TILE) as i64;
-    let tiles = |g: &Ground| -> Vec<Vec<u16>> { (0..n * n).map(|i| g.tile(depth, i % n, i / n)).collect() };
-    let before = tiles(&ground);
+    let depths = tape::depths(&w.map);
+    let (middle, finest) = ((depths.start() + depths.end()) / 2, *depths.end());
+    // The tiles of a depth over a window of `most` a side from the map's north-west corner.
+    let tiles = |depth: u8, most: i64| -> Vec<(u8, i64, i64)> {
+        let n = ((w.map.w * (1usize << (depth - w.map.square_depth()))).div_ceil(TILE) as i64).min(most);
+        (0..n * n).map(|i| (depth, i % n, i / n)).collect()
+    };
+    let all: Vec<(u8, i64, i64)> = tiles(middle, 3).into_iter().chain(tiles(finest, 2)).collect();
+    let before: Vec<Vec<u16>> = all.iter().map(|&(d, x, y)| ground.tile(d, x, y)).collect();
     pcore::flow::build::build(&mut w);
     let changed = ground.rebuild(w.terrain_samples());
-    let (rebuilt, anew) = (tiles(&ground), tiles(&Ground::of(&w)));
-    assert!(rebuilt == anew, "a rebuilt ground draws as one made anew");
-    if !changed.iter().any(|&c| c) {
-        assert!(before == rebuilt, "a ground that says nothing changed draws as before");
-    }
+    let fresh = Ground::of(&w);
+    let check = |ground: &Ground, before: &[Vec<u16>], changed: &[bool], fresh: &Ground| {
+        for (t, &(d, x, y)) in all.iter().enumerate() {
+            let (now, made) = (ground.tile(d, x, y), fresh.tile(d, x, y));
+            assert!(now == made, "tile {x}, {y} of depth {d}: a rebuilt ground draws it as one made anew");
+            // The squares the tile's texels lie in: a square holds `per` texels a side.
+            let per = 1usize << (d - w.map.square_depth());
+            let spans = |v: i64| (v as usize * TILE / per..=(((v as usize + 1) * TILE - 1) / per).min(w.map.w - 1)).collect::<Vec<usize>>();
+            let kept = spans(y).iter().all(|&j| spans(x).iter().all(|&i| !changed[j * w.map.w + i]));
+            assert!(!kept || before[t] == made, "tile {x}, {y} of depth {d}: over squares said unchanged, it is drawn as before");
+        }
+    };
+    check(&ground, &before, &changed, &fresh);
+    // A build moves every cell's samples; one sample raised alone changes the tiles about it and down its way only.
+    let before: Vec<Vec<u16>> = all.iter().map(|&(d, x, y)| ground.tile(d, x, y)).collect();
+    let mut s = (*w.terrain_samples()).clone();
+    let k = (s.across / 8) * s.across + s.across / 8;
+    s.h[k] += 1.0;
+    let s = std::sync::Arc::new(s);
+    let changed = ground.rebuild(s.clone());
+    assert!(changed.iter().any(|&c| !c), "a sample raised alone leaves some squares as they were");
+    let fresh = Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), s);
+    check(&ground, &before, &changed, &fresh);
 }

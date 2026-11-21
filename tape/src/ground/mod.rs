@@ -1,7 +1,7 @@
 //! The ground a shell draws, in tiles (laws.md 10): what never changes of a place, made once and kept. A tile of
 //! `depth` holds `TILE` x `TILE` texels, each a leaf of that depth, and `GUTTER` texels more along each edge, so a
 //! shader reads a texel's neighbours inside the tile. Per texel: the terrain's mean height over it
-//! (`Terrain::heights`, so a texel is the mean of its four children), the wetness index of the place (`wetness`), and
+//! (`Terrain::heights_on`, so a texel is the mean of its four children), the wetness index of the place (`wetness`), and
 //! the channel it is nearest by the channel law (`channels`), with how far along that channel's line it lies and how
 //! far from that line without its bends; and the pond whose liquid may stand on it (`shore`).
 //! Each is a function of the seed, the map and the place alone: the same texel holds the same numbers in every tile
@@ -111,8 +111,7 @@ impl Ground {
     /// The relief a world built its samples from (`World::relief`) and the years since its start at its last build, as
     /// bytes (bincode), for a shell's ground to build the same samples (`rebuild_from`).
     pub fn relief_bytes(w: &World) -> Vec<u8> {
-        let years = (w.relief.builds as u64 * w.cfg.build_years) as f64;
-        bincode::serialize(&(&w.relief, years)).expect("a relief serializes")
+        bincode::serialize(&(&w.relief, w.built_years())).expect("a relief serializes")
     }
 
     /// The ground made again on the samples the relief `bytes` builds (`relief_bytes`, `Terrain::built`; `rebuild`).
@@ -123,23 +122,15 @@ impl Ground {
         Ok(self.rebuild(s))
     }
 
-    /// The ground on the samples `new` (as a world built them again, `Terrain::built`), made again only where it changed
-    /// (`rebuild::changed`): the points of the lines, the shore, the textures and the strips found again over all
-    /// samples (a few tenths of a second), the starts of the lines' pieces only down the ways that changed
-    /// (`bends::Bends::update`). Returns the squares whose tiles changed (`rebuild::squares`), row by row, true for
+    /// The ground made again on the samples `new` (as a world built them again, `Terrain::built`): all of it, as a
+    /// build moves the samples of every cell. Returns the squares whose tiles changed (`rebuild`), row by row, true for
     /// each.
     pub fn rebuild(&mut self, new: Arc<Samples>) -> Vec<bool> {
-        let shore = shore::Shore::new(&new);
-        let at = stems::points(&new, &shore);
-        let changed = rebuild::changed(&self.samples, &new, (&self.at, &at));
-        let r = bends::Reaches { seed: self.seed, s: &new, at: &at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) };
-        let affected = rebuild::downstream(&new, &rebuild::ring(&new, &changed));
-        self.bends = self.bends.update(&r, &affected);
-        self.grain = pcore::soil::textures(&new, &self.terrain.makes, self.gravity);
-        self.strips = wetness::strips(&new, &self.phys);
-        self.hill = wetness::hill(&new, &self.strips);
-        (self.shore, self.at, self.samples) = (shore, at, new);
-        rebuild::squares(&self.map, &self.samples, &affected)
+        let made = Ground::on(self.seed, (self.map.clone(), self.terrain.clone(), self.lat), (&self.phys, self.gravity), new);
+        let changed = rebuild::readers(&made.samples, &rebuild::changed(&self.read(), &made.read()));
+        let squares = rebuild::squares(&self.map, &made.samples, &changed);
+        *self = made;
+        squares
     }
 
     /// The tile of `depth` at column `tx` and row `ty` of tiles, `TILE` + 2 `GUTTER` texels a side row by row from its
@@ -213,6 +204,11 @@ impl Ground {
     /// The ponds of the ground, each with its pass and its level (`Samples::ponds`).
     pub fn ponds(&self) -> &[Pond] {
         &self.samples.ponds
+    }
+
+    /// What a tile reads of the ground's samples (`rebuild::Read`).
+    fn read(&self) -> rebuild::Read<'_> {
+        rebuild::Read { s: &self.samples, hill: &self.hill, strips: &self.strips, at: &self.at }
     }
 
     /// The reaches of the ground's channels (`bends::Reaches`).

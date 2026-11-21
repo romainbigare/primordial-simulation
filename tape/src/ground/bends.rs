@@ -57,7 +57,7 @@ const STRAIGHT_ABOVE: f64 = 0.03;
 const TURN_SHARE: f64 = 0.4;
 /// A reach's slope and its valley's floor are read over this many samples up and down the channel from its own: the
 /// ground from one sample to the next steps, a reach's bends follow the valley over a few of them.
-const REACH_SAMPLES: usize = 2;
+pub(super) const REACH_SAMPLES: usize = 2;
 /// The valley's side holds the sway where the ground stands this many bed depths over the channel: a bank a few times
 /// as high as the bed is deep is cut back by the bends, a higher one is the valley's wall.
 const WALL_DEPTHS: f64 = 4.0;
@@ -286,30 +286,6 @@ impl Bends {
         let mut b = Bends { straight: vec![0.0; n], bent: HashMap::new(), lean: vec![0.0; n], head: (0..n as u32).collect(), down: vec![0.0; n] };
         for &k in s.order.iter().rev() {
             b.reach(r, k as usize);
-        }
-        b
-    }
-
-    /// The starts of the pieces of `r`'s channels found again only where `affected` (`rebuild`: what changed and every
-    /// sample down its way); every other sample keeps its own from these (the reaches before them).
-    pub(super) fn update(&self, r: &Reaches, affected: &[bool]) -> Bends {
-        let s = r.s;
-        let n = s.h.len();
-        let mut b = Bends { straight: vec![0.0; n], bent: HashMap::new(), lean: vec![0.0; n], head: (0..n as u32).collect(), down: vec![0.0; n] };
-        for &k in s.order.iter().rev() {
-            let (k, to) = (k as usize, s.to[k as usize]);
-            if !affected[k] && (to == NONE || !affected[to as usize]) {
-                b.lean[k] = self.lean[k];
-                if to != NONE && s.main[to as usize] == k as u32 {
-                    let to = to as usize;
-                    (b.head[to], b.down[to], b.straight[to]) = (self.head[to], self.down[to], self.straight[to]);
-                    if let Some(e) = self.bent.get(&(to as u32)) {
-                        b.bent.insert(to as u32, *e);
-                    }
-                }
-                continue;
-            }
-            b.reach(r, k);
         }
         b
     }
