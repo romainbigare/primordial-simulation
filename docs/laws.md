@@ -519,20 +519,38 @@ what the heat holds molten, as every law and the shell then read it.
   does work (1.3).
 
 ### 1.3 Erosion and creep
-The head lost by moving liquid does work where it is lost on land (`flow::runoff::erode`, `wear`; in a body and below
+The head lost by moving liquid does work where it is lost on land (`flow::runoff::load`, `wear`; in a body and below
 0 m it wears nothing): in each land cell, g times what runs through each of its samples in no pond in the month, kg,
 times the fall to the sample it runs to (the samples' heights, which the run's erosion does not change). It
 **carries** up to `carry` m³ of loose solids per J of the cell's work times its loose ground's erodibility against a
 loam's (`Texture::erodibility`: M^1.14 (12 − OM) of Wischmeier and Smith 1978, M its middle share times its share
 that is not fine, OM its organic per cent read to 4; middle particles are carried most easily, coarse ones are heavy,
 fine ones and organic matter bind; a coarse or a fine ground carries a tenth to a third of a loam's, one of middle
-particles up to four times) (at most all that lies loose), which go with the
-cell's runoff to the cells its ways land in, where they settle, and with the work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
-bed per J over its strength into loose ground. The load is booked apart from the liquid (`runoff::Crossings`), each
-with its own heat. **Known limit:** the load goes straight from the cell to the cells its ways land in, as the liquid
-does (1.2): it is not checked against what the channel can carry at each sample on its way, so it does not settle
-where the channel slows (where a sample's fall is less than the one before it, on a plain, at a body's shore), and
-the cells it passes neither gain nor lose by it. The heat of the liquid's fall lands with the liquid, not along its
+particles up to four times) (at most all that lies loose), shared to its samples by their own work, and with the
+work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears**
+`wear` m³ of bed per J over its strength into loose ground. **The load settles on its way** (`runoff::load`), in the
+three particle classes of the texture (4), each as the cell it came from holds them: each month it goes down the samples'
+ways and is followed at the key samples, where some class settles, at each land cell's main channel and where the
+ways end. Over the reach of each sample, the run L to the sample its liquid runs to, under the shear velocity u* of
+the flood (`FLOOD_RUNOFF` from the area that drains through it, in its channel, `Physics::channel`;
+`soil::flood_shear`), the share φ of a class's log-sizes that sink faster than u* (`texture::settles`, Bagnold 1966;
+particles as heavy as the sample's bed's) settles at the sinking speed V of their mean log-size over the length
+ξ = q / V, q the flood's discharge a m of width (the ξ-q model, Davy and Lague 2009); the rest passes: of what comes
+in at the top of the reach, P = 1 − φ (1 − e^(−L/ξ)) passes, and of what is picked up along it, R = 1 − φ +
+φ (ξ/L)(1 − e^(−L/ξ)) (`soil::passes`). A key sample's own reach picks up what its own fall's work picks up; what was
+picked up above it comes in at its top. A sample where each class passes to within 1e-4 is no key sample: what
+leaves a key sample reaches the next by the product of the passes of the samples between (`Carriage::skip`), and the
+rest settles in the next one's cell; the load picked up between two key samples skips that product (it loses less
+than 1e-10 of it, measured). What reaches a body, or a sample whose liquid runs to none, settles in the cell that
+holds it. The form is tuned: the
+shares are fixed by the flood, not by the month's flow. The load is booked apart from the liquid
+(`runoff::Crossings`), each with its own heat: each key sample's pool (mol of each substance and the heat) leaves by
+the share of its volume that passes, so in a pool the substances and the particle classes are independent. The load is the loose ground's solids, never the liquids' (a frozen liquid is no load). **Known
+limits:** the load is booked after the liquid's pass, so the liquid in the pores of the ground it picks up stays in
+its cell and stands over its pores until the next pass; snow or ice on a cell does not shield its ground (the meltwater
+of a snowpack picks up the ground under it); a fixed share per class ignores that a class loses its coarse end as it goes, so far down a plain the coarse
+class settles a little faster than it would; the heights do not move by what settles (it is matter of the cell, its
+surface rises evenly). The heat of the liquid's fall lands with the liquid, not along its
 way. **Creep** (`flow::creep`, yearly, out of land cells):
 loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). What stands on a cell holds the ground: carrying and creep
@@ -1525,7 +1543,10 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   The settled share of the loose ground holds that grain, the rest the weathered bed's.
 
 A cell's texture (`World::soil`, found when the world is built) is its samples' mean weighted by the loose ground each
-gives its ground node (at most `skin_m` of it; by area where it holds none).
+gives its ground node (at most `skin_m` of it; by area where it holds none). In the running world the load that settles on a cell
+(1.3) mixes into it by volume over its loose ground up to `skin_m` deep, each class as it settled (`runoff::load::mix`);
+the load is picked up as the ground lies, so what it leaves keeps its texture. Its pores are found again at the next
+month's start where the texture moved its field capacity by more than 2% (`TEXTURE_STEP`, `soil::month`).
 
 **Organic matter** (`soil::month`, at each month's start): a cell's organic share is the share of the volume of its
 ground node's solids that stay solid at the surface (not its frozen liquid) that is of the substances life's parts are
