@@ -84,10 +84,10 @@ export class Land {
   private discharge: Uint16Array;
   private plumes: Uint8Array = new Uint8Array(0);
   private flowsDue = true;
-  /** The rock of each sample on the GPU (ground.ts `rock`), and whether it is the ground's (before it came: loose ground
-   * of `NO_ROCK_YET_M` everywhere). */
+  /** The rock of each sample on the GPU (ground.ts `rock`), and the version of the ground's rock it holds (ground.ts
+   * `rockVersion`; before it came: loose ground of `NO_ROCK_YET_M` everywhere). */
   private rock: Texture | null = null;
-  private rockSent = false;
+  private rockAt = -1;
   /** The time the flow's signs stand at while one picture is drawn in tiles (performance.now, ms; null: each draw's
    * own), so all its tiles show the signs at one place along the channels. */
   flowAt: number | null = null;
@@ -216,10 +216,10 @@ export class Land {
     this.flows ??= gpu.texture(s.across, s.down, 'rg16float');
     if (this.flowsDue) { gpu.write(this.flows, this.flowsOf()); this.flowsDue = false; }
     this.rock ??= gpu.texture(s.across, ROCK_PLANES * s.down, 'rgba16float');
-    if (!this.rockSent) {
+    if (this.rockAt !== this.tiles.rockVersion) {
       const r = this.tiles.rock;
       gpu.write(this.rock, r ?? Uint16Array.from({ length: 4 * ROCK_PLANES * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
-      this.rockSent = r !== null;
+      this.rockAt = this.tiles.rockVersion;
     }
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)

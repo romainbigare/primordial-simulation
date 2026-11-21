@@ -2,8 +2,8 @@
 // is new, or a saved one the page hands in (a snapshot of `ew run`), and steps on the same way. It runs as
 // a separate script, built into the page as text (build.mjs), and started from a Blob. With each frame it posts the
 // cells' table (tape/src/table.rs), from which the page draws the state of the ground, the samples' discharge and load when
-// they changed enough to show (wasm/src/lib.rs `discharge`), and where load came into a body of liquid (`plumes`); it
-// makes no pictures. The page answers each frame once it has
+// they changed enough to show (wasm/src/lib.rs `discharge`), where load came into a body of liquid (`plumes`), and the
+// relief once the world built its samples anew (`relief`); it makes no pictures. The page answers each frame once it has
 // drawn it ('shown'). While the world plays, the next frame waits for that answer, and once it is due the world waits
 // too: the world is never more than a frame's time ahead of the picture, so the date and the picture shown are the
 // world's within about `FRAME_MS`, and a pause stops it there, even where the page draws slowly.
@@ -21,6 +21,8 @@ interface Core {
   table(): number;
   discharge(): number;
   plumes(): number;
+  builds(): number;
+  relief(): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   out_len(): number;
@@ -57,6 +59,8 @@ let timer = 0;
 let thingsAt: [number, number, number, number] | null = null;
 /** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
 let stepped = 0, since = 0, pace = 0;
+/** The build of the samples (`builds`) whose relief the page has: it is sent with the first frame after the next. */
+let sentBuilds = 0;
 /** When the last frame was posted (ms), whether months were stepped since, and how many frames posted the page has not
  * yet drawn. */
 let posted = 0, owed = false, unshown = 0;
@@ -82,12 +86,17 @@ function postFrame(kind: 'world' | 'frame'): void {
   const table = new Float32Array(bytes(c.table(), c.out_len()).buffer);
   const flows = c.discharge(), discharge = c.out_len() > 0 ? new Uint16Array(bytes(flows, c.out_len()).buffer) : null;
   const plumes = bytes(c.plumes(), c.out_len());
+  // A new world's ground is the seed's, a saved one's as last built: the relief goes to the ground once the world builds
+  // its samples anew.
+  if (kind === 'world') sentBuilds = c.builds();
+  const relief = c.builds() !== sentBuilds ? bytes(c.relief(), c.out_len()) : null;
+  sentBuilds = c.builds();
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   const now = performance.now();
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
   const stats = { cells: c.cells(), pace };
-  const moved = [frame.buffer, table.buffer, plumes.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : [])];
-  host.postMessage({ kind, meta: head, frame, table, discharge, plumes, year: c.year(), day: c.day(), stats, things }, moved);
+  const moved = [frame.buffer, table.buffer, plumes.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : []), ...(relief ? [relief.buffer] : [])];
+  host.postMessage({ kind, meta: head, frame, table, discharge, plumes, relief, year: c.year(), day: c.day(), stats, things }, moved);
   posted = now; owed = false; unshown++;
 }
 
