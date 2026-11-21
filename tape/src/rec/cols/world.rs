@@ -60,8 +60,9 @@ impl Recorder {
         row.push("edge_liquid", "km3", w.counts.edge_liquid[0] / GIGA);
         row.push("edge_liquid_heat", "PJ", w.counts.edge_liquid[1] / 1e15);
         // The load of the running liquid since the start: picked up, into the open low ground, into the other bodies,
-        // settled on land, and the bed worn into loose ground.
-        for (name, v) in ["load_picked", "load_sea", "load_lakes", "load_land", "bed_worn"].iter().zip(w.counts.load) {
+        // settled on land, the bed worn into loose ground; at the builds, what the lobes found no room for and what
+        // their moves lacked.
+        for (name, v) in ["load_picked", "load_sea", "load_lakes", "load_land", "bed_worn", "load_unlaid", "load_short"].iter().zip(w.counts.load) {
             row.push(*name, "Mm3", v / MEGA);
         }
         // Rivers as the web viewer draws them.

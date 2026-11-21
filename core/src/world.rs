@@ -66,8 +66,10 @@ pub struct Counters {
     /// and its heat, J
     pub edge_liquid: [f64; 2],
     /// The load of the running liquid since the start (`flow::runoff::load`), m³: picked up, carried into the open low
-    /// ground, carried into the other bodies, settled on land, and the bed worn into loose ground
-    pub load: [f64; 5],
+    /// ground, carried into the other bodies, settled on land, the bed worn into loose ground; and at the builds, what the
+    /// mouths' lobes found no room for, and what their moves to other cells lacked of the entry cells' loose ground
+    /// (`flow::build`)
+    pub load: [f64; 7],
 }
 
 impl Counters {

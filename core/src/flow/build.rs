@@ -70,7 +70,7 @@ fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
         return;
     }
     let lat = (w.cfg.lat_south, w.cfg.lat_north);
-    let (parts, _unlaid) = w.terrain.lobes_of(&w.map, lat, samples, (&body, &level), &mouths, w.cfg.build_years as f64);
+    let (parts, unlaid) = w.terrain.lobes_of(&w.map, lat, samples, (&body, &level), &mouths, w.cfg.build_years as f64);
     // What each lobe laid, on the relief and by cell: of each sample laid on, its cells and their shares of its area.
     let cells = cells_of(w, samples);
     let mut out: Vec<((u32, u32), f64)> = Vec::new();
@@ -88,7 +88,8 @@ fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
             }
         }
     }
-    move_out(w, s, &out);
+    let short = move_out(w, s, &out);
+    (w.counts.load[5], w.counts.load[6]) = (w.counts.load[5] + unlaid.max(0.0), w.counts.load[6] + short);
 }
 
 /// Of each sample the cells it lies in, each with its share of the sample's area (one, but under cells finer than it).
@@ -107,15 +108,16 @@ fn cells_of(w: &World, samples: &Samples) -> Vec<Vec<(u32, f64)>> {
 }
 
 /// The volumes `out` (m³ from a cell to another, in the order they came) moved as loose solids (`lay`): each entry
-/// cell gives at most what it holds loose, every move from it scaled by the same share where it holds less.
-fn move_out(w: &mut World, s: &mut Scratch, out: &[((u32, u32), f64)]) {
+/// cell gives at most what it holds loose, every move from it scaled by the same share where it holds less. Returns
+/// what the moves lacked, m³.
+fn move_out(w: &mut World, s: &mut Scratch, out: &[((u32, u32), f64)]) -> f64 {
     let n = w.mesh.cells().n();
     let t = range(&s.state.tg);
     let sol = s.solids(t.0, &s.liquids(&w.chem, t, true));
     let mut leaving = vec![0.0; n];
     out.iter().for_each(|&((from, _), v)| leaving[from as usize] += v);
     let mut rows = Vec::with_capacity(out.len());
-    let mut mixed = vec![[0.0; runoff::CLASS_COUNT]; n];
+    let (mut mixed, mut short) = (vec![[0.0; runoff::CLASS_COUNT]; n], 0.0);
     {
         let s: &Scratch = s;
         // (The loose ground: its solids that are not soft cover lying on it at its land's temperature, `Sp::soft_at`.)
@@ -127,6 +129,7 @@ fn move_out(w: &mut World, s: &mut Scratch, out: &[((u32, u32), f64)]) {
         for &((from, to), v) in out {
             let (i, held) = (from as usize, loose(from as usize));
             let gives = if leaving[i] > held { v * held / leaving[i] } else { v };
+            short += v - gives.max(0.0);
             if gives <= 0.0 || held <= 0.0 {
                 continue;
             }
@@ -137,6 +140,7 @@ fn move_out(w: &mut World, s: &mut Scratch, out: &[((u32, u32), f64)]) {
     }
     runoff::book_solids(w, s, &sol, &rows);
     runoff::mix(w, s, &mixed, &sol);
+    short
 }
 
 /// Of each cell, how far its ground (`World::ground_z`) stands over the mean by area of its samples as the seed made
