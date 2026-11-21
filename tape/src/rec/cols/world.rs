@@ -59,6 +59,11 @@ impl Recorder {
         // What crossed into the open low ground at the map's open edges since the start, and its heat.
         row.push("edge_liquid", "km3", w.counts.edge_liquid[0] / GIGA);
         row.push("edge_liquid_heat", "PJ", w.counts.edge_liquid[1] / 1e15);
+        // The load of the running liquid since the start: picked up, into the open low ground, into the other bodies,
+        // settled on land, and the bed worn into loose ground.
+        for (name, v) in ["load_picked", "load_sea", "load_lakes", "load_land", "bed_worn"].iter().zip(w.counts.load) {
+            row.push(*name, "Mm3", v / MEGA);
+        }
         // Rivers as the web viewer draws them.
         row.push("rivers", "1", river_count(w, &c.f) as f64);
         row.push("river_flux", "mol/s", river_flux(w, &c.f));

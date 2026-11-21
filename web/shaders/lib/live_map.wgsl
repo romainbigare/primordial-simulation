@@ -69,6 +69,16 @@ fn layer_at(at: vec2f, dry: Spot) -> f32 {
   return cells_smooth(VIEW, at / land.map.x).x;
 }
 
+// A plume's load is drawn in streaks in the Earth view (drawing only: the core moves no currents in a body of liquid):
+// `PLUME_STREAK` times an even noise over `PLUME_STREAK_M` m along the e-fold of the load, so the cloud's edge breaks
+// into tongues and filaments.
+const PLUME_STREAK = 1.2; const PLUME_STREAK_M = 300.0;
+// The load `load` g/m³ of standing liquid at `at`, as drawn.
+fn plume_streaks(load: f32, at: vec2f) -> f32 {
+  if (load <= 0.0 || !styled()) { return load; }
+  return load * exp(PLUME_STREAK * noise_l(lat_turned(PLUME_STREAK_M, vec2f(0.3)), 216).x);
+}
+
 // Herbs float their leaves on liquid from their height's depth on, all of them from `FLOAT_TALL` times it.
 const FLOAT_TALL = 1.5;
 
@@ -117,6 +127,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
   p.depth = select(st.depth, 0.0, st.depth < FILM_M);
+  // What standing liquid carries: its plumes' load (web/src/land.ts), in the Earth view in streaks (`PLUME_STREAK`).
+  if (p.depth > 0.0) { p.load = plume_streaks(load_at(at), at); }
   p.over = st.over;
   p.sea = surface.w;
   p.wet = st.wet;
@@ -196,7 +208,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
   if (!near) { return out; }
-  return river_spots(out, g, ch, q, moved, fall, grows, line_of(q, e), mouth);
+  var r = river_spots(out, g, ch, q, moved, fall, grows, line_of(q, e), mouth);
+  // A channel's water carries its sample's load, grown along it as its discharge is.
+  r.wet.load = mix(load_of(reach), load_of(next.s), next.share);
+  return r;
 }
 
 // The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); where
