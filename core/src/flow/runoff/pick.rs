@@ -1,7 +1,7 @@
 //! What the runoff picks up and the bed it wears (laws.md 1.3), each month before the load goes down its ways
 //! (`runoff::load`).
 
-use super::super::{bare_share, land::{lift, solid}};
+use super::super::{bare_share, land::{lift, solid}, on_land};
 use super::{Bodies, Scratch};
 use crate::{space::network::NONE, store::{Class, Move, Node}, World};
 
@@ -27,7 +27,7 @@ pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f
     for &k in b.land.iter().filter(|&&k| flux[k as usize][1] > 0.0) {
         let (k, f) = (k as usize, flux[k as usize]);
         let (i, j) = (b.cell_of[k] as usize, samples.to[k]);
-        if j != NONE && s.z[i] > 0.0 {
+        if j != NONE && on_land(s, i) {
             let done = w.cfg.gravity * f[1] * (samples.h[k] - samples.h[j as usize]).max(0.0);
             work.cells[i] += done;
             debug_assert!(c.pair_of[k] != NONE, "a land sample whose way reaches no key sample");

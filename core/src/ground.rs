@@ -31,6 +31,13 @@ pub(crate) fn amounts_cap(ks: impl IntoIterator<Item = usize>, amt: impl Fn(usiz
     ks.into_iter().map(|k| amt(k) * cp(k)).sum()
 }
 
+/// Heat capacity of a ground node or of a part of one, J/K: its share `skin` of its bed's skin (`skin_cap`), then its
+/// loose amounts `amt` (mol) of the substances `ks` (`amounts_cap`).
+#[inline]
+pub(crate) fn ground_cap(skin: f64, ks: impl IntoIterator<Item = usize>, amt: impl Fn(usize) -> f64, cp: impl Fn(usize) -> f64) -> f64 {
+    skin + amounts_cap(ks, amt, cp)
+}
+
 /// Where a ground node of heat capacity `c` (J/K) and energy `e` (J) stands among its melting plateaus.
 pub struct Melting {
     /// Temperature, K

@@ -2,7 +2,7 @@
 //! sides, so the books are kept by their form (laws.md 0).
 
 use super::nodes::{Class, Node};
-use crate::chem::Chemistry;
+use crate::chem::{Chemistry, Heat};
 
 /// `mol` of substance `k` and `heat` J leave node `from` for node `to`, which receives `heat` less what the mol hold
 /// more there (`held_more`): so the law chooses who pays a gas's latent heat. The cover's end is its law's.

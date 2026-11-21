@@ -32,6 +32,18 @@ pub(super) struct Sp {
     pub(super) mineral: bool,
 }
 
+impl crate::chem::Heat for Sp {
+    fn cp(&self) -> f64 {
+        self.cp
+    }
+    fn lf(&self) -> f64 {
+        self.lf
+    }
+    fn lv(&self) -> f64 {
+        self.lv
+    }
+}
+
 impl Sp {
     /// Its liquid share in ground at `t` K where the share `molten` of it is molten and the minerals of growth stay
     /// dissolved by the share `free` (`State::dissolved`): none at or over its boiling point; of a mineral only what
@@ -280,6 +292,11 @@ impl Scratch {
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
         FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, lift_at: [&self.lift_at[0], &self.lift_at[1]], ta: &self.ta, latent: &self.latent, pk: &self.state.pk, z: &self.z, pd: &self.pd }
+    }
+    /// Heat capacity of a ground node or of a part of one with its share `skin` of its bed's skin and the loose amounts
+    /// `amt`, mol, J/K (`ground::ground_cap` over `loose`).
+    pub(super) fn part_cap(&self, skin: f64, amt: impl Fn(usize) -> f64) -> f64 {
+        crate::ground::ground_cap(skin, self.state.loose.iter().copied(), amt, |k| self.sp[k].cp)
     }
     /// Loose substances that may be liquid between `tmin` and `tmax`, K, or (with `dissolved`) gases dissolved in it.
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {

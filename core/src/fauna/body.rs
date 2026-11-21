@@ -79,12 +79,12 @@ pub(super) fn body(w: &World, p: &Parts, f: &Fauna, (x, mm): (usize, &[f64; NF])
     let len = (m / ph.rho_body).cbrt();
     let (keep, rx) = (g[KEEP] as f64, &chem.reactions[p.burn]);
     let tb = keep.max(t);
-    let pace = rx.arrhenius(tb.max(1.0)) / rx.arrhenius(ph.t_cat);
+    let pace = rx.relative_rate(tb, ph.t_cat);
     let k = pace * ph.repair(g[REPAIR] as f64);
     let gut = dec(g[ENZYME]) * m * pace;
     let rest = (m.powf(ph.upkeep_exp) * (ph.c_basal + ph.c_muscle) / DAY + ph.c_capacity * dec(g[ENZYME]) * m * fuel) * k;
     let held = keep > t;
-    let work = (rx.arrhenius(tb.max(1.0)) / rx.arrhenius(WORK_T)).min(1.0);
+    let work = rx.relative_rate(tb, WORK_T).min(1.0);
     let speed = (ph.walk_froude * w.cfg.gravity * len).sqrt() * work;
     let (area, busy) = (ph.meeh * m.powf(2.0 / 3.0), ph.busy * DAY);
     let coat = area / (ph.r_air + g[COAT] as f64 * ph.r_coat);

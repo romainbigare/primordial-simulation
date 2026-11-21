@@ -5,7 +5,7 @@
 use super::moves::ROUNDING;
 use super::{Found, Parts, Piece, DEEP, PARTS, TOP};
 use crate::flow::{curve::Fill, Scratch};
-use crate::{math::one_minus_exp, World};
+use crate::{chem::Heat, math::one_minus_exp, World};
 
 /// The liquid of the deep of a cell of ground `fill` where `v` m³ of liquid stand over the pores of its ground under
 /// the liquid: what stands deeper than `h_mix` under its level (`Fill::deep`), m³; none where none does.
@@ -61,7 +61,7 @@ fn give(s: &Scratch, p: &mut Parts, (f, from, to): (&Found, usize, usize), x: f6
     for &k in s.state.vary.iter().filter(|&&k| t < s.sp[k].boil) {
         let m = p.amt[k][from] * s.sp[k].liquid(t, f.th.molten(k), f.free) * x;
         (p.amt[k][from], p.amt[k][to]) = (p.amt[k][from] - m, p.amt[k][to] + m);
-        h += m * (s.sp[k].cp * t + s.sp[k].lf);
+        h += m * s.sp[k].carried(t, 1.0);
     }
     (p.heat[from], p.heat[to]) = (p.heat[from] - h, p.heat[to] + h);
 }
@@ -102,7 +102,7 @@ pub(in crate::flow) fn mix(w: &World, s: &mut Scratch, dt: f64) -> Vec<u32> {
                 let (up, down) = (deep.liquid(k, sp) * v / vd, top.liquid(k, sp) * v / vt);
                 if up != 0.0 || down != 0.0 {
                     moved.push((k, up - down));
-                    heat += up * (sp.cp * deep.tg + sp.lf) - down * (sp.cp * top.tg + sp.lf);
+                    heat += up * sp.carried(deep.tg, 1.0) - down * sp.carried(top.tg, 1.0);
                 }
             }
             Some((i, moved, heat))

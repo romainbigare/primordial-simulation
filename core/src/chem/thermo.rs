@@ -13,11 +13,42 @@ const LEAST_SHARE: f64 = 1e-30;
 /// Least amount a share is taken of, mol (no division by 0 where a node holds nothing).
 const LEAST_MOL: f64 = 1e-300;
 
-impl Substance {
+/// The heat a mol of a substance carries as it moves: its heat capacity times its temperature, and the latent heat of
+/// its phase.
+pub trait Heat {
+    /// Heat capacity, J/(mol K)
+    fn cp(&self) -> f64;
+    /// Fusion enthalpy, J/mol
+    fn lf(&self) -> f64;
+    /// Vaporisation enthalpy, J/mol
+    fn lv(&self) -> f64;
     /// Energy a mole holds apart from its heat while a gas in the air: its fusion and vaporisation enthalpy, J/mol.
     #[inline]
-    pub fn latent_gas(&self) -> f64 {
-        self.lf + self.lv
+    fn latent_gas(&self) -> f64 {
+        self.lf() + self.lv()
+    }
+    /// The heat a mol carries at `t` K with the share `molten` of it molten, J: its heat capacity times `t` and the
+    /// fusion enthalpy of its molten share.
+    #[inline]
+    fn carried(&self, t: f64, molten: f64) -> f64 {
+        self.cp() * t + self.lf() * molten
+    }
+    /// The heat a mol carries at `t` K as a gas in the air, J: its heat capacity times `t` and its latent heat of a gas.
+    #[inline]
+    fn carried_gas(&self, t: f64) -> f64 {
+        self.cp() * t + self.latent_gas()
+    }
+}
+
+impl Heat for Substance {
+    fn cp(&self) -> f64 {
+        self.cp
+    }
+    fn lf(&self) -> f64 {
+        self.lf
+    }
+    fn lv(&self) -> f64 {
+        self.lv
     }
 }
 

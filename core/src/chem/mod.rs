@@ -4,6 +4,7 @@
 mod planck;
 mod roles;
 mod thermo;
+pub use thermo::Heat;
 
 use crate::{params::require, units::{MAX_REACTIONS, MAX_SUBSTANCES}};
 use serde::{Deserialize, Serialize};
@@ -110,6 +111,13 @@ impl Reaction {
         self.k * (-self.ea / t).exp()
     }
 
+    /// Its rate constant at `t` K (no colder than 1 K) over its rate constant at `t_ref` K (`arrhenius`): how much
+    /// faster it runs at `t` than at `t_ref`.
+    #[inline]
+    pub fn relative_rate(&self, t: f64, t_ref: f64) -> f64 {
+        self.arrhenius(t.max(1.0)) / self.arrhenius(t_ref)
+    }
+
     /// The power of the share of input `q` in the rate law (`ord`, else its count).
     #[inline]
     pub fn order(&self, q: usize) -> u16 {
@@ -146,9 +154,10 @@ struct Derived {
     minerals: Vec<(usize, f64)>,
     /// `Chemistry::air_cp`
     air_cp: f64,
-    /// `Chemistry::life_roles` and `Chemistry::fixing`
+    /// `Chemistry::life_roles`, `Chemistry::fixing` and `Chemistry::wall`
     roles: Option<(usize, usize, usize, usize)>,
     fixing: Option<usize>,
+    wall: Option<usize>,
     /// `Chemistry::mixes` of each substance
     mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
     /// The substances others dissolve in (`Chemistry::mixes` is some), a bit per substance
@@ -210,8 +219,8 @@ impl Chemistry {
             let mixes: Vec<_> = (0..self.ns()).map(|k| self.find_mixes(k)).collect();
             let solvents = (0..self.ns()).filter(|&k| mixes[k].is_some()).fold(0, |m, k| m | 1 << k);
             let (roles, fixing) = (self.find_life_roles(), self.find_fixing(&minerals));
-            let heat_shares = planck::table(&self.heat_spans);
-            Derived { minerals, air_cp, roles, fixing, mixes, solvents, heat_shares }
+            let (wall, heat_shares) = (self.find_wall(roles), planck::table(&self.heat_spans));
+            Derived { minerals, air_cp, roles, fixing, wall, mixes, solvents, heat_shares }
         })
     }
 

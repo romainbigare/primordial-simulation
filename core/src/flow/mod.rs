@@ -229,10 +229,10 @@ pub(crate) fn store_depth(w: &World, i: usize) -> f64 {
     liquid.sum::<f64>() / w.mesh.cells().area()[i]
 }
 
-/// Is cell `i` land (its solid surface above 0 m, as Flow's state has it)? Creep and heat conducted sideways act only on
-/// land: below 0 m they are far slower than the step.
+/// Is cell `i` land (its solid surface above the open low liquid's level `STAND_M`, as Flow's state has it)? Creep,
+/// heat conducted sideways and the runoff's work act only on land: below it they are far slower than the step.
 fn on_land(s: &Scratch, i: usize) -> bool {
-    s.z[i] > 0.0
+    s.z[i] > crate::space::wear::STAND_M
 }
 
 /// Share of carrying and creep the bodies on cell `i` leave there (1 when bare).

@@ -218,9 +218,9 @@ impl World {
     pub fn season(&self) -> f64 {
         self.cfg.calendar().season(self.time)
     }
-    /// Whether ground node `i` is land: its solid surface above 0 m (`surface_z`).
+    /// Whether ground node `i` is land: its solid surface (`surface_z`) above the open low liquid's level (`STAND_M`).
     pub fn is_land(&self, i: usize) -> bool {
-        self.surface_z(i) > 0.0
+        self.surface_z(i) > crate::space::wear::STAND_M
     }
     /// The amounts of node `x` of the store (a ground, bed, bodies' or air node): of substance `k`, mol, at `k`.
     #[inline]
