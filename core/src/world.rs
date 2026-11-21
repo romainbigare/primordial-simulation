@@ -31,12 +31,11 @@ pub struct Counters {
     /// Per cell, what its cover built in the year so far, and in the last whole year, kg of dry matter
     pub grown_year: Vec<f64>,
     pub grown_last: Vec<f64>,
-    /// What the slots of a cell's cover ran at in a month (cell, `cover::Ran` of each slot), until its month ends
-    /// (`cover::landed`)
+    /// What a cell's cover ran at in a month (cell, `cover::CellRan`), until its month ends (`cover::landed`)
     #[serde(skip)]
-    pub ran: Vec<(u32, [crate::cover::Ran; crate::cover::SLOTS])>,
-    /// Per cell, what the slots of its cover ran at in its last month (`cover::Ran`)
-    pub ran_month: Vec<[crate::cover::Ran; crate::cover::SLOTS]>,
+    pub ran: Vec<(u32, crate::cover::CellRan)>,
+    /// Per cell, what its cover ran at in its last month (`cover::CellRan`)
+    pub ran_month: Vec<crate::cover::CellRan>,
     /// What flames did on a cell in a month (cell, `flame::Flamed`), until the month's flames end (`flame::month`)
     #[serde(skip)]
     pub flamed: Vec<(u32, crate::flame::Flamed)>,

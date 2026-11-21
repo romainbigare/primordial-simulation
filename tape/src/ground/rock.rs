@@ -59,8 +59,7 @@ fn laid_years(settled: f64, age: f64) -> f64 {
 /// coarse and fine particles of its loose ground (`grain`, one a sample), how slowly its pores pass liquid, the decimal
 /// logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s), and the liquid it holds
 /// for roots (`Pores::for_roots` over its loose ground's depth) as the layer `avail` shows it (`layers::shown`); then of
-/// each sample again its field capacity and its wilting point as shares of its pores (`Pores::of`), by which a shell
-/// finds the share of the liquid for roots its pores hold at a point (`Pores::available`), and how deep the load the
+/// each sample again two zeros, how deep the load the
 /// liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain
 /// (`laid_years`), by which a shell draws a deposit: four planes of a texture, one under the other.
 pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<u16> {
@@ -80,8 +79,8 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<
         let roots = shown("avail", p.for_roots(loose));
         out.extend([half(t.coarse as f32), half(t.fine as f32), half(-p.seep.log10() as f32), half(roots)]);
     }
-    for ((p, &settled), &age) in pores.iter().zip(&s.settled).zip(&s.age) {
-        out.extend([half(p.field as f32), half(p.wilt as f32), half(settled as f32), half(laid_years(settled, age).log10() as f32)]);
+    for (&settled, &age) in s.settled.iter().zip(&s.age) {
+        out.extend([0, 0, half(settled as f32), half(laid_years(settled, age).log10() as f32)]);
     }
     out
 }

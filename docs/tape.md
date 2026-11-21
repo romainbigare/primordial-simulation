@@ -56,8 +56,9 @@ gives each terrain sample's), both none where the cell holds no land,
 the texture of its loose ground (`World::soil`, `soil::Texture`): `coarse` and `fine` (the shares of coarse and of fine
 particles, 0..1) and `organic` (the share of organic matter of its solid volume, log from 0.0003 to 0.05, which the page's
 Earth view darkens its bare ground by), `conduct` (its pores' conductivity, m/s),
-`avail` (the liquid its loose ground holds for roots when full, m), `roots` (the share of that it holds now,
-`Pores::available`), `rises` (what rises from it less what condenses on it, `World::evap`) and `sheds` (its rain less
+`avail` (the liquid its loose ground holds for roots when full, m), `roots` (the share of that the drier rest of its land held
+for roots as the cover's roots read it in its last month, `cover::moist` off the strips in `cover::CellRan`: on the
+saturated strips they read all of it, which the page draws at each point by `saturated_at`; 0 where it holds no land), `rises` (what rises from it less what condenses on it, `World::evap`) and `sheds` (its rain less
 that, mol/m²/s, lin from -0.004 to 0.004: what it passes on to runoff and the ground below), and of its ground
 (`soil::holdings`; 0 before Flow first built its state): `litter` (fresh dead matter, kg/m²), `slow` (the slow organic
 pool, kg/m²), `mineral_free` and `mineral_held` (the nitrogen mineral dissolved and held on the exchange sites,
@@ -241,8 +242,7 @@ reflectance of its bed's make and a zero. Then of each sample again the shares o
 loose ground (`pcore::soil::textures`), how slowly its pores pass liquid (the decimal logarithm of 1 m/s over their
 conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground, and the liquid its loose ground
 holds for roots (`Pores::for_roots` of its texture over its depth) as the `avail` layer shows it, 0..1 of its scale,
-which the page draws that layer by. Then of each sample again its field capacity and its wilting point as shares of
-its pores (`Pores::of`) and two zeros, by which the page draws the layer `roots` at each point. **The
+which the page draws that layer by. Then of each sample again two zeros, how deep the load the liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain, by which the page draws a deposit. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
 sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries

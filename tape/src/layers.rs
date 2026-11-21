@@ -305,7 +305,7 @@ pub const LAYERS: &[Layer] = &[
     l("avail", "m", "log", 0.01, 0.3, |c, i| c.w.pores(i).for_roots(c.f.loose[i])),
     l("wet_share", "1", "lin", 0.0, 1.0, |c, i| c.saturated[i].map_or(f64::NAN, |g| g.share)),
     l("lambda_sat", "1", "lin", 0.0, 30.0, |c, i| c.saturated[i].map_or(f64::NAN, |g| g.level)),
-    l("roots", "1", "lin", 0.0, 1.0, |c, i| c.w.pores(i).available(c.filled[i])),
+    l("roots", "1", "lin", 0.0, 1.0, |c, i| c.w.counts.ran_month.get(i).map_or(f64::NAN, |r| r.roots as f64)),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.rain.get(i).copied().unwrap_or(0.0) as f64),
