@@ -5,7 +5,7 @@ use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
 use pcore::store::{Class, Node};
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
-use worldgen::testkit::{empty_cell, hold_ground, in_all, loose_volume, set_amount, set_heat, BURN, BURNING_GAS, DISSOLVING, SETTLING, node_totals, open_air, put, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{empty_cell, hold_ground, in_all, loose_volume, set_amount, set_heat, BURN, BURNING_GAS, CHAR, FREE_6, OXIDE_6, DISSOLVING, SETTLING, node_totals, open_air, put, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 use pcore::AIR;
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -62,6 +62,27 @@ fn hot_energy_rich_node_keeps_burning() {
         assert!((el1[j] - el0[j]).abs() <= 1e-10 * el0[j].max(1.0), "element {j}");
     }
     assert!((en1 - en0).abs() <= 1e-9 * en0.abs(), "energy {en0} -> {en1}");
+}
+
+/// The oxide of element 6 with the solid of element 1 frees element 6 in a flame's heat and none at the ground's warmth;
+/// elements and energy are kept.
+#[test]
+fn a_hot_oxide_with_char_frees_its_element() {
+    let (chem, _) = worldgen::chemistry0();
+    let mut rc = Reactor::new(&chem, &cfg());
+    let mut freed = |t: f64| {
+        let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
+        (n[OXIDE_6], n[CHAR]) = (100.0, 150.0);
+        let mut e = t * HUGE_CAP;
+        let (el0, en0) = node_totals(&chem, &n, &gas, e);
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, DAY);
+        let (el1, en1) = node_totals(&chem, &n, &gas, e);
+        (0..chem.n_elements).for_each(|j| assert!((el1[j] - el0[j]).abs() <= 1e-10 * el0[j].max(1.0), "element {j}"));
+        assert!((en1 - en0).abs() <= 1e-9 * en0.abs(), "energy {en0} -> {en1}");
+        n[FREE_6]
+    };
+    let (cold, hot) = (freed(T_SURF), freed(1400.0));
+    assert!(cold == 0.0 && hot > 150.0, "cold {cold}, hot {hot}");
 }
 
 /// A ground node sleeps by its own rates (`clock::Sleep`): a node at 600 K holding the energy-rich solid with the
