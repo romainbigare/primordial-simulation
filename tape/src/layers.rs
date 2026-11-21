@@ -235,7 +235,9 @@ impl<'a> Ctx<'a> {
     fn air(&self, i: usize) -> usize {
         self.w.mesh.up(i, 0, AIR)
     }
-    /// The channel of cell `i`'s own liquid flux (`World::channel`).
+    /// The channel of cell `i`'s main channel (`World::channel` of `World::liquid_flux`, the most through one of its
+    /// samples): the channel law the wet ground's law applies at each sample (`inside::channel_share`), at the cell's
+    /// largest. A tape's map draws its river by it (web/src/earth.ts `mapFields`).
     pub(crate) fn channel(&self, i: usize) -> pcore::flow::Channel {
         self.w.channel(i, self.w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64)
     }

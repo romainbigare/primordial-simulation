@@ -46,7 +46,9 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square shows the cell
 that holds its centre, `tape::pixels`, as do the PNG pictures): height and liquid depth (Flow's solid surface and its liquid in the pores and standing, `Scratch::surface`), ice (Flow's soft cover, `Scratch::soft`), liquid flux, `catch` (the upstream area a cell drains
 in units of its own: its liquid flux over its rain less evaporation times its area, so a river reads the same at any cell
-size), `channel_w` and `channel_d` (the width and the depth of the cell's channel, `World::channel`), loose ground (its loose solids in Flow's phases, `Scratch::phases`),
+size), `channel_w` and `channel_d` (the width and the depth of the cell's main channel: the channel law, `Physics::channel`, on
+the most that runs through one of its samples, `World::liquid_flux`; the law draws that channel at each sample, on its
+own discharge, in the wet ground, `inside::channel_share`; a tape's map draws its rivers by these two), loose ground (its loose solids in Flow's phases, `Scratch::phases`),
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
 `filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
 `wet_share` (the share of its land whose pores its soil's liquid fills, 0..1, `inside::wet_land`, as the month's start
