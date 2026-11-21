@@ -953,7 +953,7 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
 4. **Fill-in, on the page**: the four commits on small plants (`wip/lakes`), each reviewed with pairs; the dark-red
    specks at the 200 m bar and the blocky dark patches at the 2 km bar; the straight shores of the made ground; the
    pale band round a summit pond if the owner minds it; a program without ice when no cell holds ice on water.
-5. **Years that differ** (a study first: today rain on land changes by 0.02% from year to year), and wet and dry
+5. **Years that differ**: built (roadmap section 6, item 1, with its open limit); wet and dry
    sides: a law for the mean wind's momentum. The strip of the planet with land and life (it is an all-liquid,
    lifeless planet: its air is warmer and its heat-absorbing gas higher than a globe's with life).
 6. Channels that lay down their load (plains, marsh, deltas). The owner asked for wide deltas at some mouths, and
@@ -1025,6 +1025,7 @@ push is refused here: push to a new branch name instead.
 - `wip/lakes`: four commits on small plants, not reviewed, under the lakes' mend that is on main.
 - `wip/drawing`, `wip/cover-law`, `wip/cover-costs`, `wip/page-cover`, `wip/rivers`, `experiment/climate-bands`:
   merged; kept as they were pushed.
+- `wip/years-study`, `wip/years-law`, `wip/years-storms`, `wip/years-speed`, `wip/years-close`: the weather as it was built, sets 1 to 7; on main. `wip/years-centred` and `wip/years-moist-try`: two tries at the drawn flow's heat that failed (their commit messages say why); not on main. The study scripts and pictures were in the session's scratch folder.
 - `tools/checks`: the check scripts and probes of this work (`tools/check/paused.js`, `phone.js`, `inspect.js`; the
   frame's bench in `tools/frame/`; `tools/rivers/` with the page's cost by CPU time (`cpucost.sh`); `tools/air/`;
   `tools/sorted/`; the climate's and the ground's probes). Study files: never on main.

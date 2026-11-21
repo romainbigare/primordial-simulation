@@ -96,14 +96,20 @@ open low ground of the low stand (on an island, to its lowest sample), so the va
 by the shore are drowned: inlets, bays and small islands off the coast. An island's level (`ISLAND_LEVEL`, 0.27) keeps
 its land's share of the map about what it was with no low stand; a globe's is found on the noise as before, and the
 drowning takes about half a percent of its area from its land (28.4% to 27.9% on a globe of 32 rows). **The bed is of
-a few makes** (`space::strata`), each a mix of the chemistry's own bed substances (`makes`, section 8; five in
+a few makes** (`space::strata`), each a mix of the chemistry's own bed substances (`makes`, section 8; ten in
 chemistry 0), and flowing liquid wears each as much faster than the first as Flow's wear breaks it (the sum of each
-substance's share over its bond strength, 1.3; `Terrain::cut`: 1, 0.88, 1.11, 1.18 and 1.36 in chemistry 0). They lie
-in **layers**: a stack of 12 layers, each 60 to 400 m thick and of a make drawn from the seed (never the make of the
+substance's share over its bond strength, 1.3; `Terrain::cut`: 1, 0.88, 1.11, 1.18 and 1.36 for the five of the
+stack in chemistry 0, 2.82, 2.37, 2.37, 1.29 and 1.28 for its seams and its rim). They lie in **layers**: a stack
+of 12 layers, each 60 to 400 m thick and of a make of the stack's drawn from the seed (never the make of the
 layer over it), repeating under them (`LAYERS`, `THICK_M`), folded up and down by up to 2 km by fractal noise of
 three scales from about 8 km (`FOLD_M`, `FOLD_PER_SQUARE`); and through them stand **bodies** of the hardest make
 where fractal noise over four scales from about 4 km down passes 0.66 (`BODY_ABOVE`), as rock cooled from a melt
-rises through strata. The top of the stack rises with the land and floats back up with it, so how deep the wear has
+rises through strata. Some makes lie only as **seams** (`Lies::Seam`, `seams` in the chemistry): each repeat of the
+stack holds a set number of seams of a set thickness, each at a depth drawn in its own even slot of the stack, cut over
+the layers drawn before (in chemistry 0: one of make 5, 100 m; three of make 6, 30 m; two of make 7, 40 m; one of
+make 8, 30 m). One make (`rim`, make 9 in chemistry 0) stands round the **rims** of some bodies: where no body stands, their noise read
+at each sample passes 0.63 (`RIM_ABOVE`) and a second noise passes 0.7 (`RIM_GATE`). The top of the stack rises with the
+land and floats back up with it, so how deep the wear has
 cut under it, plus the fold, says which layer a sample's surface is in; at each step the wear cuts each sample at the
 rate of the make it has reached. So a soft layer opens into a wide vale, a hard one stands as a scarp or caps a
 tableland, and folded layers clip out in bands round the heights. A cell's bed is the mean of its samples' makes by
@@ -459,7 +465,12 @@ what the heat holds molten, as every law and the shell then read it.
   height of samples whose pores take more than is left, those pores take what is left; each cell whose part holds more than its samples hold under that level gives the share of its
   liquid over it, with that share of its heat; mixed, it goes to the cells whose part holds less, by what each lacks
   (`basin::share_out`), and what the body holds over its pass leaves, mixed, to the part its pass's way reaches, in
-  the same month. Each part then holds what its samples hold under its body's level; a cell that was one node becomes
+  the same month. What liquid comes to a cell or leaves it moves what stands there by its volume, of a mineral of
+  growth only its share that stays dissolved: the cell's exchange sites take the rest of what comes and give the rest
+  of what leaves at once (`basin::gain`), and the pass's shares and levels count it so. Of a cell of parts the pass moves
+  its liquid's liquid alone, over the pores under its liquid, at the temperatures of its top and deep
+  (`parts::liquid_movable`): its land keeps its own pores' liquid, and what runs through a body's cell mixes in its
+  liquid, not in its land's soil. Each part then holds what its samples hold under its body's level; a cell that was one node becomes
   a cell of parts (1.1) whose liquid holds what its part holds over its pores, the pores under it full, its land
   keeping the rest of its pores' liquid (`parts::create`). What a cell sends from its
   samples in no pond and what a body lets over its pass go into the samples' ways at each sample and at the pass, and
@@ -507,7 +518,9 @@ what the heat holds molten, as every law and the shell then read it.
 - **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what the laws under the
   surface take leaves its land (`parts::Leaves`); what the others take leaves its top and its deep by their shares of
   the liquid they hold (what stands leaves from the liquid), and its land only for what they lack, which keeps its
-  own pores' liquid; at the parts' temperature by the liquid each holds (`parts::to_liquid`, `land::t_now`).
+  own pores' liquid; at the parts' temperature by the liquid each holds (`land::t_now`). The land and the deep give
+  the heat of what they give at their own temperature and phases (`Piece::heat_of`); the top takes the rest of the
+  node's change of heat, as it takes what came in (`parts::to_liquid`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
@@ -840,7 +853,7 @@ lengths): its eddies and its overturning, the lower half outward where it is war
 its own air, turned by the rotation; across the east and west edges the turned overturning of the planet's gradient
 is its mean wind along the row, in at one side and out at the other in the lower half and back in the upper; its
 pressure is the planet's, so no evening crosses. Each day, after the wind, each such link is one implicit step with
-the column beyond held. What crosses comes from and goes to the boundary node for outside, with its heat and the
+the column beyond held, read where the weather brings its air from (below). What crosses comes from and goes to the boundary node for outside, with its heat and the
 latent heat its gases hold in the air; mass that enters pays its lift from 0 m, mass that leaves takes its potential
 energy there (`potential::Lifts`). The heat that comes in at each edge is counted (`Counters::edges`, printed by
 `ew run`). **The planet's low liquid**: where the edges are open (`World::edges_open`), the part of the open low ground
@@ -852,6 +865,71 @@ planet's strip holds only air). So what the island's air gains or loses through 
 liquid, and its level holds each month. Lakes and closed basins, and the open low ground of a world alone, are not
 joined; a cell of land at the map's edge opens nothing, only the cells of the open low ground there. What crosses is
 counted (`Counters::edge_liquid`, m³ and its heat; the series' `edge_liquid`, `ew run`'s line of the edges).
+
+**The weather** (`air::weather`). The air's step of 15 days, with its eddies a smooth mixing, cannot hold the weather
+systems of the middle latitudes, which last a few days; without them each year repeats the last. They enter as one
+random field of spread one: how far, and how fast, the eddies move the air that is at a place north and south, toward
+the north above zero. On a lattice of points `eddy_size` apart on the planet (the map's metres times
+its stretch, one node beyond the edges), each point draws a unit normal each day, keyed by the seed, the day since the
+start and the point (`rng::Purpose::Weather`): the field holds no state, and is the same on any count of threads.
+Its fast part is the sum of a point's draws of the past days, each weighted by e^(-age / `eddy_time`), over the last 5
+of those e-folds (`weather::FOLDS`), scaled to a spread of one: a red noise of the eddies' time. Its slow part is what a
+liquid's top layer sums of the same weather and lets go in τ = its heat per K (`h_mix` of the key liquid) over
+`top_damp` (about 4 months with chemistry 0): the same draws weighted by e^(-age / τ), with sqrt(`eddy_time` / τ) of
+the fast part's spread, as a top layer that the fast weather forces holds it (Hasselmann 1976; Frankignoul and
+Hasselmann 1977). A point of the map reads the four points of the lattice about it bilinearly, the weights over their
+root sum of squares, so its spread is the same everywhere. The field has no size of its own: a unit of it is two
+measured moments of the same eddies. Its displacement η is their mixing length sqrt(`mix` × `eddy_time`), 525 km (a
+diffusivity is a speed times the length an eddy moves air, Taylor 1922): over the year the band's ground cools by about
+0.55 K a degree, so the air it brings is some 2.5 K off over the year, against the measured lower air's 3 to 5 K of
+the storm tracks' winter.
+Its speed v is `eddy_speed`, 6 m/s: the strong weather. A world may be made with soft weather instead
+(`worldgen::terrain::soft_weather`, `ew run --weather soft`, the page's Weather choice): v is then sqrt(`mix` /
+`eddy_time`), 2 m/s, the speed the eddies' diffusion alone gives (r = 1), and the rain of a year swings less. Their ratio, about a day, is the eddy's 1 / ω: a wave of about 6 days' period,
+inside the band of 2.5 to 6 days that `eddy_time` keeps. The eddies' motion is mostly reversible sloshing: their mean
+flux, `mix`, is r v' ℓ with r = `mix` / (`eddy_speed` × η's unit) = 0.34, inside the measured correlation of v' and
+T' of 0.2 to 0.5. It acts in two places. **Across the open edges**, each day each link's column beyond is read again
+(`Edges::weather`) at its latitude less η at the column, in degrees: the air the eddies bring from there. Past a pole
+that is the other meridian's air, the latitude folded back and its gradient turned (`Planet::at`); across the equator it is the other half's air in its own
+season. **On the air
+it lifts**: air that an eddy moves along the warmth's gradient slides along the surfaces of equal warmth (the
+baroclinic eddy, Holton 2004, 8.4). Moving at v, it rises by v times their slope: the warmth's gradient toward
+the south that the node feels (`rise::felt`, as the low wind reads it: the planet's where the edges are open, the
+node's own where it is a block alone, else none) over how fast the warmth rises with height (the dry air's fall with
+height less the node's, `wind::End::rise`; none where it does not rise). That lifts the node's air at the ground's
+density. It is the size of the weather's vertical speed in the middle latitudes, about 1 cm/s (Holton 2004, 2.4).
+**The lifted air draws the low air in** (`air::draw`): air that rises must be fed from below and leave aloft, so where
+the weather lifts a node's air its lower half gathers air from the nodes about it and its upper half gives as much
+back, and where it sinks the low air spreads out. This low convergence is what feeds a weather system's rain
+(P − E = −∇·(q v), Holton 2004, 3.5; Trenberth 1999). Each day the lifts are summed per block (1.6), and the flow on
+each link between blocks is the difference across it of a potential (the divergent part of the wind, Lynch 1989)
+whose convergence at each block is its lift: a Poisson problem over the blocks, each link's conductance the lower
+half's cross-section (mol per m³ times half the column's depth) times its width over its length, solved by conjugate
+gradients (`draw::RESIDUAL`). Each group of blocks lets sink, over its area, as much as it lifts. The flow does not
+cross the open edges: the planet's columns beyond them are a held table of its climate with no weather of their own,
+so a circulation fed from them would draw vapour and heat from a store that never pays them back; and the map's air
+spans some 5,000 km of the planet, about five weather systems, while a system's convergence and the sinking that pays
+for it close within a few thousand km, inside it. The flow is added that day to the overturning's on each link
+between blocks, so it moves as the overturning does:
+each half its node's air, the vapour crowding low, in the same implicit step, each half's mol each way, so no node
+gains or loses air by it and none gives more than it holds. The eddies' smooth mixing stays whole beside it: `mix`
+stands for the eddies' net transport down the gradient, the part of their motion that is correlated (r = 0.34), and
+the drawn flow is the weather's divergent circulation, whose sign follows the random lift, so it is not a part of
+that net flux; taking it off `mix` day by day would take the vapour the sea sends the land away exactly on the stormy
+days. Its halves carry the rise of the static energy over half
+the column's depth (`wind::halves_heat`), so a node whose air rises cools as rising air does, which lowers what
+saturates it; the rain law reads no rise of the weather. The weather acts nowhere on a
+globe: the planet's strip is one, and the edges read its last year as the climate, which one year of weather would
+stand in for. On a world alone whose air is one block (a small island) the air feels no gradient and the edges are
+closed, so it has no weather. **Known limits:** inside a block the flow does nothing, as the eddies even the block each
+day: an island alone in one block is a closed box. The field moves the air only by the flow its lift draws. Each
+half carries its sender's air, so the flow's exchange also mixes down the gradient, whatever its sign: the heat, which
+its halves move at the columns' mean heat per mol, as much as its mol each way, about `mix` itself on the links between
+blocks of the band of 20 to 65 degrees (more than `mix` on a third of the link-days), so the heat's mixing there is
+about twice `mix` and the map's north-south contrast of the air some 4 K (12 %) less; the vapour, which crowds low,
+about a quarter of `mix`. Rain inside a day is as smooth as the lift, not the few strong storms of a real month. The
+field is one number: the air's displacement east or west is not drawn. Its slow part stands for a top layer's memory
+on every world and over land too.
 
 ### 1.7 Each law takes one step
 An explicit step is safe while `dt Σ g / cap` of each node stays within 1/2 (no pattern changes sign in a step,
@@ -937,7 +1015,7 @@ gas and the liquid; 9 turns it back. Wet cells start at that balance (`worldgen:
 times the air's carbon and gives it back when the air thins, with no rule for the sea.
 
 ### 2.6 Chemistry 0 in short
-One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substances, 14 reactions, numbers only in
+One fixed Earth-like chemistry until M7 (handover 6.0): 11 elements, 23 substances, 22 reactions, numbers only in
 `core` and `worldgen`; Earth names in `library/chem0.toml`. Molar masses are sums over elements, so reactions keep mass.
 
 | Number | Role (≈ Earth name, for reading only) |
@@ -953,12 +1031,20 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 6 elements, 14 substance
 | 12 | the nitrogen mineral, lives dissolved |
 | 13 | the frame, a solid bodies build (≈ cellulose) |
 | 14 | the slow organic matter, held on fine and middle particles (`bound`; ≈ humus): C59H78N6O42 |
+| 15, 16 | the free element 6 and its oxide (≈ iron, Fe2O3) |
+| 17, 18 | the free element 7 and its oxide (≈ copper, CuO) |
+| 19 | the solid of element 1 alone (≈ charcoal, and coal as a rock) |
+| 20 | a crystal of elements 8 and 9 (≈ rock salt, NaCl); nothing dissolves it, so it stays where it is laid |
+| 21, 22 | a clay mineral and the clay baked dry (≈ kaolinite, metakaolin) |
 
 Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 3 burning and making fat; 4 burning
 methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral and the salt 11); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
 of the frame; 13 splitting the frame into sugar (needs an enzyme); 14 body matter rotting into the slow organic matter
 (beside 7, at a quarter of its rate: a fifth of what rots of it goes this way, keeping half its carbon and all its
-nitrogen, its salt 11 back to the ground); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). Dead matter rots in moist open ground at a litter
+nitrogen, its salt 11 back to the ground); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). 16 to 21 run fast only in a flame's or a kiln's heat and are frozen at the ground's warmth (`frozen_below`): 16
+charring the frame into the solid 19 and the liquid, with no gas; 17 burning 19; 18 and 19, the solid 19 freeing the
+elements 6 and 7 from their oxides (at about 1300 K and 1100 K); 20 baking the clay (about 800 K); and 21, the free
+element 6 turning back to its oxide in the air, about 1% a year at 290 K. Dead matter rots in moist open ground at a litter
 constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
 work): matter from 118 sugar + 3 nitrogen mineral + 1 salt 11; frame from 6 sugar.
 `Chemistry::minerals` are growth's inputs no reaction burns (12 and 11), `materials` the solids bodies build (13).
@@ -1579,11 +1665,13 @@ dissolved: sites of 1,060 mol of charge a m³ of fine particles and 2,800 a m³ 
 `SITES_ORGANIC`), each holding the minerals of 0.04 m³ of the liquid (`HELD_PER_SITE`), so the sites hold those of
 `Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral stays dissolved
 in the V m³ of the cell's other liquids (`soil::dissolved`), found when Flow builds the state of its ground in full
-(each month's start) and kept until the next (`State::dissolved`). Only that share is liquid (`Sp::liquid`): it moves
+(each month's start) and kept until the next (`State::dissolved`); in a cell of parts (1.1) each part's, by the sites of
+the particles it holds (`Soil::holds` by its share of the cell's ground) over its own liquid, found and kept so
+(`Parts::free`): a liquid's top over a deep holds no particles, and what is dissolved in it stays dissolved. Only that share is liquid (`Sp::liquid`): it moves
 with the liquid that sinks, flows through the pores and runs off (`flow::liquid::mobile`, `basin::movable`) and takes
-its liquid volume in the pores and over them. The rest is part of the ground everywhere Flow reads it: a solid at the
-solid's volume in the solid surface, in no pores and no cover, that neither moves nor fills (`land::layers`,
-`stack::ground_layers`, `land::rise`); roots take from all of it (the sites give back to the liquid as fast as roots
+its liquid volume in the pores and over them. The rest is part of the ground everywhere Flow reads it: ions held on
+the faces of the particles, with the solids' mass but taking no room, in no pores and no cover, that neither move nor
+fill (`land::layers`, `stack::ground_layers`, `land::rise`); roots take from all of it (the sites give back to the liquid as fast as roots
 take from it). So coarse ground lets the rain wash its
 minerals away and fine and organic ground keeps them: a loam's 2 m of loose ground holds some 97% of its minerals
 on its sites at field capacity, a coarse ground some 90%, so the coarse loses them three to four times as fast. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
@@ -1599,7 +1687,8 @@ read a kind.
   drawn rises or of one rise (`--shape`, 0), or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); the bed of the chemistry's `makes`, each over the share of the cell's samples whose surface the
   wear left in it (`space::strata`); the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
-  mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with
+  mean over its samples of the top `skin_m` of each sample's at most, each sample's of the make of its bed (a residual
+  soil: the bed broken where it lies; so loose ground over a seam is of the seam's substances): the ground node is the layer that exchanges with
   the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
   under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at
   balance (2.5); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):

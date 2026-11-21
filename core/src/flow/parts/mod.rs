@@ -15,12 +15,12 @@ mod view;
 
 pub(super) use deep::mix;
 pub(super) use moves::{after_air, drain_land, to_liquid, Leaves};
-pub(super) use view::{amounts, pores_first, under_liquid};
+pub(super) use view::{amounts, liquid_movable, pores_first, under_liquid};
 
-use super::land::{column, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
+use super::land::{column, dissolved_in, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
 use node::{conductance, row};
 use super::scratch::{Latent, Scratch};
-use crate::{ground::{amounts_cap, skin_cap, Melting}, store::Class, World};
+use crate::{ground::{amounts_cap, skin_cap, Melting}, store::Class, units::MAX_SUBSTANCES, World};
 use serde::{Deserialize, Serialize};
 
 /// The land part, the liquid's top layer and its deep, in `Parts` and `Mixed`, and how many parts there are.
@@ -35,7 +35,8 @@ pub(super) const PARTS: usize = 3;
 /// share, as the last `solve` found them (what life reads, `World::thaw_last`), and the room the land's pores have
 /// left, m³ (the liquid of the cell fills the pores under its liquid and what the land's hold before it stands, `room`,
 /// `Scratch::dry`). A part that holds nothing is not there: a cell all under its liquid has no land, a liquid shallower
-/// than `h_mix` no deep.
+/// than `h_mix` no deep. And the share of the minerals of growth that stays dissolved in each part (`dissolved`), as the
+/// node's (`State::dissolved`) found at each full build of the state and kept until the next.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Parts {
     pub(super) wet: f64,
@@ -44,6 +45,7 @@ pub(crate) struct Parts {
     pub(super) t: [f64; PARTS],
     pub(super) on: [Option<(usize, f64)>; PARTS],
     pub(super) dry: f64,
+    pub(super) free: [f64; PARTS],
 }
 
 impl Parts {
@@ -108,6 +110,11 @@ impl Piece {
     /// The share of substance `k` it holds molten, by its plateau and the substances molten in it.
     pub(super) fn molten(&self, k: usize) -> f64 {
         if self.pk == k { self.phi } else { (self.latent.molten >> k & 1) as f64 }
+    }
+    /// The heat a mol of substance `k` (`sp`) holds in it, J: its heat capacity times its temperature and the fusion
+    /// enthalpy of its molten share.
+    pub(super) fn heat_of(&self, k: usize, sp: &super::scratch::Sp) -> f64 {
+        sp.cp * self.tg + sp.lf * self.molten(k)
     }
 }
 
@@ -202,11 +209,13 @@ pub(super) fn solve_nodes(w: &World, s: &mut Scratch, anew: &[(u32, bool)], (ful
     }
 }
 
-/// A part as one solve finds it: its heat capacity, J/K, where it stands on its melting plateaus (`land::thaw_at`), and
-/// its layers, solid surface and soft cover (`land::layers`).
+/// A part as one solve finds it: its heat capacity, J/K, where it stands on its melting plateaus (`land::thaw_at`), the
+/// share of the minerals of growth that stays dissolved in it (`Parts::free`), and its layers, solid surface and soft
+/// cover (`land::layers`).
 struct Found {
     cap: f64,
     th: Melting,
+    free: f64,
     l: [f64; 6],
     z: f64,
     cover: [f64; 2],
@@ -216,21 +225,15 @@ impl Found {
     /// Part `q` of `p` in cell `i`, whose bed's skin holds `skin` J/K: its share of that and the heat capacity of its
     /// loose amounts; a part that is not there holds nothing (`none`).
     fn of(w: &World, s: &Scratch, (i, skin): (usize, f64), p: &Parts, q: usize) -> Found {
-        let (share, ground) = (p.share(q), p.ground(q));
-        if share <= 0.0 || (q == DEEP && !p.deep()) {
-            return Found::none(w.base_z);
-        }
-        let amt = |k: usize| p.amt[k][q];
-        let cap = skin * ground + amounts_cap(s.state.loose.iter().copied(), amt, |k| s.sp[k].cp);
-        let melt = melts(w, s, amt);
-        let th = thaw_at(s, cap.max(1.0), p.heat[q], amt, &melt);
-        let (l, z, cover) = layers(w, s, (i, share, ground), th.t, amt, |k| th.molten(k), |k| melt[k]);
-        Found { cap, th, l, z, cover }
+        let Some((cap, melt, th)) = thawed(w, s, skin, p, q) else { return Found::none(w.base_z) };
+        let (share, ground, free, amt) = (p.share(q), p.ground(q), p.free[q], |k: usize| p.amt[k][q]);
+        let (l, z, cover) = layers(w, s, (i, share, ground), (th.t, free), amt, |k| th.molten(k), |k| melt[k]);
+        Found { cap, th, free, l, z, cover }
     }
     /// A part that is not there, its surface at `z`.
     fn none(z: f64) -> Found {
         let th = Melting { t: 0.0, on: None, held: 0.0, lo: f64::MIN, hi: f64::MAX, lat: [0.0; 2], bits: 0 };
-        Found { cap: 0.0, th, l: [0.0; 6], z, cover: [0.0, f64::INFINITY] }
+        Found { cap: 0.0, th, free: 0.0, l: [0.0; 6], z, cover: [0.0, f64::INFINITY] }
     }
     /// What its pores hold when full, m³ (porosity `por`).
     fn pores(&self, por: f64) -> f64 {
@@ -242,11 +245,38 @@ impl Found {
     }
 }
 
-/// The parts of `p` in cell `i` (`Found::of`), the heat capacity of its bed's skin found once (`ground::skin_cap`).
-fn found(w: &World, s: &Scratch, i: usize, p: &Parts) -> [Found; PARTS] {
+/// Part `q` of `p`, whose cell's bed's skin holds `skin` J/K: its heat capacity (its share of that and that of its loose
+/// amounts), J/K, its melting points (`land::melts`) and where it stands on them (`land::thaw_at`); none for a part
+/// that is not there.
+fn thawed(w: &World, s: &Scratch, skin: f64, p: &Parts, q: usize) -> Option<(f64, [f64; MAX_SUBSTANCES], Melting)> {
+    if p.share(q) <= 0.0 || (q == DEEP && !p.deep()) {
+        return None;
+    }
+    let amt = |k: usize| p.amt[k][q];
+    let cap = skin * p.ground(q) + amounts_cap(s.state.loose.iter().copied(), amt, |k| s.sp[k].cp);
+    let melt = melts(w, s, amt);
+    let th = thaw_at(s, cap.max(1.0), p.heat[q], amt, &melt);
+    Some((cap, melt, th))
+}
+
+/// The heat capacity of the bed's skin of cell `i`, J/K (`ground::skin_cap`).
+fn skin_of(w: &World, s: &Scratch, i: usize) -> f64 {
     let n = w.mesh.cells().n();
-    let skin = skin_cap(&w.chem, &w.cfg, w.mesh.cells().area()[i], s.state.bedk.iter().copied(), |k| w.store.amounts(Class::Bed)[k * n + i]);
+    skin_cap(&w.chem, &w.cfg, w.mesh.cells().area()[i], s.state.bedk.iter().copied(), |k| w.store.amounts(Class::Bed)[k * n + i])
+}
+
+/// The parts of `p` in cell `i` (`Found::of`), the heat capacity of its bed's skin found once (`skin_of`).
+fn found(w: &World, s: &Scratch, i: usize, p: &Parts) -> [Found; PARTS] {
+    let skin = skin_of(w, s, i);
     [LAND, TOP, DEEP].map(|q| Found::of(w, s, (i, skin), p, q))
+}
+
+/// The share of the minerals of growth that stays dissolved in each part of `p` in cell `i` (`Parts::free`): what the
+/// exchange sites of the particles it holds (the cell's `Soil::holds` by its share of the cell's ground,
+/// `Parts::ground`) leave in its liquid (`land::dissolved_in`); none in a part that is not there.
+pub(super) fn dissolved(w: &World, s: &Scratch, i: usize, p: &Parts) -> [f64; PARTS] {
+    let skin = skin_of(w, s, i);
+    [LAND, TOP, DEEP].map(|q| thawed(w, s, skin, p, q).map_or(0.0, |(_, _, th)| dissolved_in(s, w.soil[i].holds * p.ground(q), th.t, |k| p.amt[k][q], |k| th.molten(k))))
 }
 
 /// What stands over the pores of the ground under the liquid of the parts found as `f` (its top and deep, porosity
@@ -273,7 +303,7 @@ pub(super) fn solve(w: &World, s: &Scratch, i: usize, kept: &Parts, moving: bool
     let mut p = kept.clone();
     moves::reconcile(w, s, i, &mut p);
     let mut f = found(w, s, i, &p);
-    if moving && moves::settle(s, i, &mut p, &f, por) {
+    if moving && moves::settle(s, &mut p, &f, por) {
         f = found(w, s, i, &p);
     }
     let (to, deep) = if moving { (moves::covers(s, i, &p, &f, (stands(&f, por), por)), deep::under(w, s.fill(i), liquid(&f, por))) } else { (p.wet, None) };
@@ -316,9 +346,9 @@ pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Pa
     let th = thaw_at(s, cap.max(1.0), e, amt, &melt);
     if wet >= 1.0 {
         let amts = (0..w.chem.ns()).map(|k| [0.0, amt(k), 0.0]).collect();
-        return Some(Parts { wet: 1.0, heat: [0.0, e, 0.0], amt: amts, t: [th.t; PARTS], on: [th.on; PARTS], dry: 0.0 });
+        return Some(with_free(w, s, i, Parts { wet: 1.0, heat: [0.0, e, 0.0], amt: amts, t: [th.t; PARTS], on: [th.on; PARTS], dry: 0.0, free: [0.0; PARTS] }));
     }
-    let (l, ..) = layers(w, s, (i, 1.0, 1.0), th.t, amt, |k| th.molten(k), |k| melt[k]);
+    let (l, ..) = layers(w, s, (i, 1.0, 1.0), (th.t, s.state.dissolved[i]), amt, |k| th.molten(k), |k| melt[k]);
     // The liquid's volume: what stands over the pores and its area's share of what they hold; where the pores are not
     // full, what its parts of the bodies held over the pores under them, full.
     let (pores, stands) = (por * l[4], l[2] - por * l[4]);
@@ -337,7 +367,24 @@ pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Pa
     let c = s.skin[i] * wet + amounts_cap(s.state.loose.iter().copied(), |k| amts[k][TOP], |k| s.sp[k].cp);
     let fused: f64 = s.state.vary.iter().map(|&k| amts[k][TOP] * s.sp[k].lf * th.molten(k)).sum();
     let heat = c * th.t + fused;
-    Some(Parts { wet, heat: [e - heat, heat, 0.0], amt: amts, t: [th.t; PARTS], on: [th.on; PARTS], dry: 0.0 })
+    Some(with_free(w, s, i, Parts { wet, heat: [e - heat, heat, 0.0], amt: amts, t: [th.t; PARTS], on: [th.on; PARTS], dry: 0.0, free: [0.0; PARTS] }))
+}
+
+/// The cells of parts among `cells` find the share of the minerals of growth each part keeps dissolved again
+/// (`dissolved`), as a full build of the state finds the node's.
+pub(super) fn find_dissolved(w: &World, s: &mut Scratch, cells: impl Iterator<Item = usize>) {
+    let found: Vec<(usize, [f64; PARTS])> = cells.filter_map(|i| s.state.parts[i].as_ref().map(|p| (i, dissolved(w, s, i, p)))).collect();
+    for (i, free) in found {
+        if let Some(Some(p)) = s.state.parts.get_mut(i) {
+            p.free = free;
+        }
+    }
+}
+
+/// `p`, new parts of cell `i`, with the share of the minerals of growth each keeps dissolved (`dissolved`).
+fn with_free(w: &World, s: &Scratch, i: usize, mut p: Parts) -> Parts {
+    p.free = dissolved(w, s, i, &p);
+    p
 }
 
 /// Part `q` of `p` in cell `i`, its parts found as `f`, as the air's step reads it (`Piece`): the top's reflectance
@@ -364,6 +411,6 @@ fn piece(w: &World, s: &Scratch, i: usize, (p, q): (&Parts, usize), f: &[Found; 
         alb: column(w, s, (i, share), &std::array::from_fn(|y| x.l[y] + below[y])),
         pd: per(por * x.l[4]),
         below,
-        free: s.state.dissolved[i],
+        free: x.free,
     }
 }

@@ -6,15 +6,15 @@
 # (0: always in proportion; none: 0), cont m2/(mol Pa) (its continuum, by its column times its own pressure; none: 0),
 # sw m2/mol and swsat mol/m2 (the same for sunlight; none: 0),
 # ray m2/mol (the sunlight its molecules scatter; none: 0), sol mole fraction (for a gas that cannot condense on the ground: dissolved under
-# 101 kPa of it at 298 K; for a solid that melts above the ground's warmth: the mole fraction of its solution at saturation,
-# which moves with the liquid), cond W/(m K), hf kJ/mol of the solid (of a substance that is liquid at 290 K: its measured value less lf; gas:
+# 101 kPa of it at 298 K; no law reads it for a solid, which dissolves only by melting below the liquid's melting point,
+# as 11 and 12 do), cond W/(m K), hf kJ/mol of the solid (of a substance that is liquid at 290 K: its measured value less lf; gas:
 # less lf and lv), lv/lf kJ/mol (none: Trouton's and Richards's rules), rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
-element_masses = [1, 12, 14, 16, 28, 40]
+element_masses = [1, 12, 14, 16, 28, 40, 56, 64, 23, 35.5, 27]
 # The bands of heat radiation, µm, but the last, which is all the other wavelengths.
 heat_bands = [[8.0, 12.5], [12.5, 18.0]]
 
 [[s]] # 0
-e = [2,0,0,1,0,0]
+e = [2,0,0,1,0,0,0,0,0,0,0]
 cp = 75
 melt = 273
 boil = 373
@@ -35,7 +35,7 @@ lv = 40.7
 lf = 6.0
 
 [[s]] # 1
-e = [0,0,2,0,0,0]
+e = [0,0,2,0,0,0,0,0,0,0,0]
 cp = 29
 melt = 63
 boil = 77
@@ -49,7 +49,7 @@ cond = 0.03
 hf = -7.3745
 
 [[s]] # 2
-e = [0,0,0,2,0,0]
+e = [0,0,0,2,0,0,0,0,0,0,0]
 cp = 29
 melt = 54
 boil = 90
@@ -63,7 +63,7 @@ cond = 0.03
 hf = -8.433
 
 [[s]] # 3
-e = [0,1,0,2,0,0]
+e = [0,1,0,2,0,0,0,0,0,0,0]
 cp = 37
 melt = 194
 boil = 195
@@ -77,7 +77,7 @@ cond = 0.02
 hf = -412.503
 
 [[s]] # 4
-e = [4,1,0,0,0,0]
+e = [4,1,0,0,0,0,0,0,0,0,0]
 cp = 35
 melt = 91
 boil = 112
@@ -91,7 +91,7 @@ cond = 0.03
 hf = -85.5205
 
 [[s]] # 5
-e = [2,1,0,1,0,0]
+e = [2,1,0,1,0,0,0,0,0,0,0]
 cp = 40
 melt = 460
 boil = 700
@@ -104,7 +104,7 @@ cond = 0.2
 hf = -212
 
 [[s]] # 6
-e = [2,1,0,0,0,0]
+e = [2,1,0,0,0,0,0,0,0,0,0]
 cp = 30
 melt = 260
 boil = 600
@@ -117,7 +117,7 @@ cond = 0.15
 hf = -27.47
 
 [[s]] # 7
-e = [0,0,0,2,1,0]
+e = [0,0,0,2,1,0,0,0,0,0,0]
 cp = 44
 melt = 1986
 boil = 2500
@@ -132,7 +132,7 @@ hf = -911
 rupture = 10
 
 [[s]] # 8
-e = [0,0,0,3,1,1]
+e = [0,0,0,3,1,1,0,0,0,0,0]
 cp = 86
 melt = 1800
 boil = 3000
@@ -147,7 +147,7 @@ hf = -1635
 rupture = 15
 
 [[s]] # 9
-e = [0,1,0,3,0,1]
+e = [0,1,0,3,0,1,0,0,0,0,0]
 cp = 82
 melt = 1600
 boil = 3000
@@ -164,7 +164,7 @@ rupture = 7
 # 10: body matter, what bodies are built of (`build`), holding the energy of what it is made of, with one of substance 11
 # and its element 5: docs/numbers.md, "substance 10".
 [[s]] # 10
-e = [198,120,6,107,0,1]
+e = [198,120,6,107,0,1,0,0,0,0,0]
 cp = 4282
 melt = 1500
 boil = 3000
@@ -180,7 +180,7 @@ rupture = 1
 
 # 11: a mineral that exists only dissolved in the liquid, its store of the gas of reaction 8: docs/numbers.md, "substance 11".
 [[s]] # 11
-e = [2,2,0,6,0,1]
+e = [2,2,0,6,0,1,0,0,0,0,0]
 cp = 194
 melt = 271
 boil = 3000
@@ -194,7 +194,7 @@ hf = -1929.3745
 
 # 12: the mineral of the gas reaction 10 fixes (1), that gas's only way into body matter: docs/numbers.md, "substance 12".
 [[s]] # 12
-e = [4,0,2,3,0,0]
+e = [4,0,2,3,0,0,0,0,0,0,0]
 cp = 140
 melt = 255
 boil = 3000
@@ -209,7 +209,7 @@ lf = 5.9
 
 # 13: the frame, a solid bodies build of 6 units of the energy-rich solid (5, `builds`): docs/numbers.md, "substance 13".
 [[s]] # 13
-e = [10,6,0,5,0,0]
+e = [10,6,0,5,0,0,0,0,0,0,0]
 cp = 210
 melt = 1500
 boil = 3000
@@ -227,7 +227,7 @@ shear = 60
 # 14: the slow organic matter that rotting body matter leaves (reaction 14), half its element 1 and all its element 2,
 # held on the faces of fine particles (`bound`): docs/numbers.md, "substance 14".
 [[s]] # 14
-e = [78,59,6,42,0,0]
+e = [78,59,6,42,0,0,0,0,0,0,0]
 cp = 1900
 melt = 1500
 boil = 3000
@@ -239,6 +239,128 @@ sol = 0.0
 cond = 0.2
 hf = -6098
 bound = true
+
+# 15 to 22: two free elements and their oxides, the solid of element 1 alone, a crystal and a clay, for heat and fuel:
+# docs/numbers.md, "substances 15 to 22".
+# 15: the free element 6, freed from its oxide 16 by the solid 19 in a flame's heat (reaction 18).
+[[s]] # 15
+e = [0,0,0,0,0,0,1,0,0,0,0]
+cp = 25.1
+melt = 1811
+boil = 3134
+rho = [7874, 6980]
+hard = 0.45
+str = 0.9
+refl = [[0.53,0.51,0.49],[0.45,0.43,0.41]]
+sol = 0.0
+cond = 80
+hf = 0
+lv = 340
+lf = 13.8
+rupture = 250
+
+# 16: the oxide of element 6.
+[[s]] # 16
+e = [0,0,0,3,0,0,2,0,0,0,0]
+cp = 104
+melt = 1838
+boil = 3000
+rho = [5240, 4500]
+hard = 0.6
+str = 0.6
+refl = [[0.35,0.15,0.10],[0.25,0.10,0.07]]
+sol = 0.0
+cond = 6
+hf = -824.2
+
+# 17: the free element 7, freed from its oxide 18 by the solid 19 (reaction 19).
+[[s]] # 17
+e = [0,0,0,0,0,0,0,1,0,0,0]
+cp = 24.4
+melt = 1358
+boil = 2835
+rho = [8960, 8020]
+hard = 0.3
+str = 0.8
+refl = [[0.85,0.55,0.40],[0.70,0.45,0.30]]
+sol = 0.0
+cond = 400
+hf = 0
+lv = 300
+lf = 13.3
+
+# 18: the oxide of element 7.
+[[s]] # 18
+e = [0,0,0,1,0,0,0,1,0,0,0]
+cp = 42.3
+melt = 1599
+boil = 3000
+rho = [6310, 5500]
+hard = 0.4
+str = 0.5
+refl = [[0.08,0.12,0.10],[0.06,0.08,0.07]]
+sol = 0.0
+cond = 3
+hf = -157.3
+
+# 19: the solid of element 1 alone, what charring leaves of the frame (reaction 16) and the rock of a fuel bed; it burns
+# (reaction 17).
+[[s]] # 19
+e = [0,1,0,0,0,0,0,0,0,0,0]
+cp = 8.5
+melt = 3800
+boil = 4200
+rho = [1400, 1200]
+hard = 0.25
+str = 0.3
+refl = [[0.05,0.05,0.05],[0.05,0.05,0.05]]
+sol = 0.0
+cond = 0.3
+hf = 0
+
+# 20: a crystal of the elements 8 and 9; no law dissolves it (`sol`), so it stays where it lies.
+[[s]] # 20
+e = [0,0,0,0,0,0,0,0,1,1,0]
+cp = 50.5
+melt = 1074
+boil = 1738
+rho = [2165, 1556]
+hard = 0.25
+str = 0.3
+refl = [[0.90,0.90,0.90],[0.30,0.30,0.30]]
+sol = 0.0
+cond = 6.5
+hf = -411.2
+lv = 170
+lf = 28.2
+
+# 21: a clay mineral holding bound liquid, which heat bakes into 22 (reaction 20).
+[[s]] # 21
+e = [4,0,0,9,2,0,0,0,0,0,2]
+cp = 246
+melt = 2000
+boil = 3000
+rho = [2600, 2400]
+hard = 0.2
+str = 0.2
+refl = [[0.85,0.83,0.78],[0.6,0.6,0.6]]
+sol = 0.0
+cond = 1.0
+hf = -4119.6
+
+# 22: baked clay, the clay mineral that heat has dried of its bound liquid.
+[[s]] # 22
+e = [0,0,0,7,2,0,0,0,0,0,2]
+cp = 200
+melt = 2000
+boil = 3000
+rho = [2500, 2300]
+hard = 0.5
+str = 0.6
+refl = [[0.82,0.72,0.60],[0.6,0.6,0.6]]
+sol = 0.0
+cond = 1.5
+hf = -3340
 
 # Reactions: i/o = [[substance, count]], k 1/s, ea K, ord the power of each input in the rate law (`Reaction::ord`).
 [[r]] # 0
@@ -366,6 +488,50 @@ k = 9.12e7
 ea = 9000
 open = 5
 
+# 16 to 21: fast only in a flame's or a kiln's heat, frozen at the ground's warmth; docs/numbers.md, "reactions 16 to 21".
+# 16: charring the frame, with no gas: the solid 19 and the liquid.
+[[r]] # 16
+i = [[13,1]]
+o = [[19,6],[0,5]]
+k = 2.8e19
+ea = 29000
+
+# 17: burning the solid 19.
+[[r]] # 17
+i = [[19,1],[2,1]]
+o = [[3,1]]
+k = 2.3e8
+ea = 20000
+
+# 18: the solid 19 frees element 6 from its oxide.
+[[r]] # 18
+i = [[16,2],[19,3]]
+o = [[15,4],[3,3]]
+k = 1.05e7
+ea = 30000
+
+# 19: the solid 19 frees element 7 from its oxide.
+[[r]] # 19
+i = [[18,2],[19,1]]
+o = [[17,2],[3,1]]
+k = 7.3e6
+ea = 25000
+
+# 20: baking the clay mineral: its bound liquid leaves.
+[[r]] # 20
+i = [[21,1]]
+o = [[22,1],[0,2]]
+k = 3.7e10
+ea = 25000
+
+# 21: the free element 6 turns back to its oxide with the oxidising gas, slowly at the ground's warmth.
+[[r]] # 21
+i = [[15,4],[2,3]]
+o = [[16,2]]
+ord = [1,1]
+k = 0.044
+ea = 5000
+
 # Growth (`Chemistry::build`), no reaction of the open world: body matter (the first output) of 5, 12 and 11, paid by work
 # (Copy): docs/numbers.md, "Chemistry::build".
 [build]
@@ -382,6 +548,7 @@ o = [[13,1],[0,1]]
 [init]
 air = [[1,0.78],[2,0.21],[3,0.0004],[4,1.8e-6],[0,0.004]]
 low = 0
-makes = [[[8,0.7],[7,0.2],[9,0.1]], [[8,0.95],[9,0.05]], [[8,0.4],[7,0.3],[9,0.3]], [[9,0.9],[7,0.1]], [[7,0.9],[9,0.1]]]
-loose = [[7,0.5],[8,0.4],[9,0.1]]
+makes = [[[8,0.7],[7,0.2],[9,0.1]], [[8,0.95],[9,0.05]], [[8,0.4],[7,0.3],[9,0.3]], [[9,0.9],[7,0.1]], [[7,0.9],[9,0.1]], [[21,0.7],[7,0.2],[9,0.1]], [[19,0.9],[21,0.07],[7,0.03]], [[20,0.95],[21,0.05]], [[16,0.4],[7,0.6]], [[18,0.3],[7,0.5],[8,0.2]]]
+seams = [[5, 100.0, 1], [6, 30.0, 3], [7, 40.0, 2], [8, 30.0, 1]]
+rim = 9
 soil = [[12,0.357]]

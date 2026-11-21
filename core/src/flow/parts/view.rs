@@ -118,6 +118,30 @@ pub(in crate::flow) fn pores_first(s: &Scratch, i: usize) -> [f64; 2] {
     }
 }
 
+/// What may move in the month's pass of cell `i` of parts, of the liquids `liq` (what boils below the coldest node,
+/// `tmin`, a gas dissolved in the liquid): the liquid of its liquid's top and deep (`Piece::liquid`; all of such a gas),
+/// mol, into `row`, then their heat at their own temperatures (`drain::liquid_heat_at`), J; and their volume and what
+/// the pores under the liquid hold when full, m³. Its land keeps its own pores' liquid (`moves::settle`), so the pass's
+/// liquid mixes in its liquid alone. None for a node that is one.
+pub(in crate::flow) fn liquid_movable(s: &Scratch, (liq, tmin): (&[usize], f64), i: usize, row: &mut [f64]) -> Option<[f64; 2]> {
+    let m = s.mixed(i)?;
+    let (area, nl) = (s.curves[i].area(), liq.len());
+    let (mut vol, mut pores, mut heat) = (0.0, 0.0, 0.0);
+    row[..nl].fill(0.0);
+    for q in [TOP, DEEP] {
+        let p = &m.piece[q];
+        let mol: Vec<f64> = liq.iter().map(|&k| if s.sp[k].boil <= tmin { p.amt[k] } else { p.liquid(k, &s.sp[k]) }).collect();
+        heat += crate::flow::drain::liquid_heat_at(s, liq, p.tg, &mol);
+        for (r, (&k, &x)) in liq.iter().zip(&mol).enumerate() {
+            row[r] += x;
+            vol += if s.sp[k].boil <= tmin { 0.0 } else { x * s.sp[k].v[1] };
+        }
+        pores += p.pd * area * p.share;
+    }
+    row[nl] = heat;
+    Some([vol, pores])
+}
+
 /// The share of cell `i`'s area under its liquid as its last solve left it (`Parts::wet`); none for a node that is one.
 pub(in crate::flow) fn under_liquid(s: &Scratch, i: usize) -> Option<f64> {
     s.state.parts.get(i).and_then(Option::as_ref).map(|p| p.wet)

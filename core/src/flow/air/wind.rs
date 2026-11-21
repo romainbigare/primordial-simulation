@@ -32,6 +32,7 @@ impl Links {
 /// `b` over what the two columns' mean heat per mol carries, W (`stir`); overturning, mol/s of the lower half from its
 /// `a` to its `b` (the upper half comes back), and the heat its halves carry from its `b` to its `a` over what their
 /// mean heat per mol carries, W (`contrast`); and the conductance of the evening of pressure, mol/(Pa s).
+#[derive(Clone)]
 pub(super) struct Pushes {
     pub(super) mix: Vec<f64>,
     pub(super) stir: Vec<f64>,
@@ -89,7 +90,7 @@ pub(super) fn aloft(cp: f64, mg: f64, gam: f64, (zair, za): (f64, f64)) -> f64 {
 /// its halves carry of it warms no column (a flow along the isotherms crosses none; Holton 2004, 3.4) and it carries
 /// none. Down the gradient it runs inside the month's overturning cell (`Cell::share`).
 pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab): (f64, f64, [f64; 2]), cell: &Cell) -> [f64; 5] {
-    let (rho, depth) = ((a.rho + b.rho) / 2.0, cfg.air_top_m - (a.za + b.za) / 2.0);
+    let (rho, depth) = column(cfg, a, b);
     let lat = (a.lat + b.lat) / 2.0;
     let (turn, cell) = (cfg.rotation * lat.to_radians().sin(), cell.share(lat));
     // The warmth's differences along the link and across it, as the mean of its ends' fitted gradients times its
@@ -103,13 +104,41 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
     // so it does not depend on `d`: down the gradient inside the cell of the low latitudes (`in_cell`).
     let per_k = st.per_column(cfg.wind / d * rho * wd * depth / 2.0);
     let (down, over) = (per_k * cell * along, per_k * (cell * along + turn * across));
-    // The middles of a column's halves lie half its depth apart.
-    let contrast = down * (a.rise + b.rise) / 2.0 * depth / 2.0;
+    let contrast = halves_heat(down, (a, b), depth);
     // Sound crosses the link in d / its speed. The stretched column holds the stretch squared times the mol at the same
     // pressure, so its c is that much less, and its rate per column of the map (`Stretch::per_column`) is this, with
     // the map's c, over the stretched `d`.
     let even = (a.sound + b.sound) / 2.0 / (d * (a.c + b.c));
     [mix, over, contrast, even, mix * (a.aloft - b.aloft)]
+}
+
+/// The air of a link between ends `a` and `b` (`End`): its mol per m³ and its column's depth, m, their means.
+pub(super) fn column(cfg: &Config, a: &End, b: &End) -> (f64, f64) {
+    ((a.rho + b.rho) / 2.0, cfg.air_top_m - (a.za + b.za) / 2.0)
+}
+
+/// The heat that `flux` mol/s of a lower half flowing from end `a` to end `b`, and as much of the upper half back,
+/// carry from `b` to `a` over their mean heat per mol, W, the column `depth` m deep: the upper half holds more heat per
+/// mol than the lower by the rise of the static energy (`End::rise`), and the middles of the halves lie half the depth
+/// apart. So where air rises, fed from below and leaving aloft, it cools as rising air does (Neelin and Held 1987).
+pub(super) fn halves_heat(flux: f64, (a, b): (&End, &End), depth: f64) -> f64 {
+    flux * (a.rise + b.rise) / 2.0 * depth / 2.0
+}
+
+impl Pushes {
+    /// These pushes with the lower halves' flows `drawn` (`draw::Draw::flows`) on the links between blocks (`border`,
+    /// by their place, mol/s from each link's `a` to its `b`) added to the overturning's, and the heat their halves carry
+    /// (`halves_heat`) to its contrast. The eddies' mixing stays whole: it is their net flux down the gradient, and the
+    /// drawn flow, whose sign follows the weather's lift, is not a part of it (laws.md 1.6).
+    pub(super) fn drawn(&self, ends: &[End], links: &Links, border: &[usize], drawn: &[f64], cfg: &Config) -> Pushes {
+        let mut p = self.clone();
+        for (&l, &f) in border.iter().zip(drawn) {
+            let (a, b) = (&ends[links.a[l] as usize], &ends[links.b[l] as usize]);
+            p.over[l] += f;
+            p.contrast[l] += halves_heat(f, (a, b), column(cfg, a, b).1);
+        }
+        p
+    }
 }
 
 /// Three pushes on each link (`push`): the column's pressure, evened in the time sound takes to cross it (Lamb waves,

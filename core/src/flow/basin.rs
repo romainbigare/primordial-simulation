@@ -135,20 +135,32 @@ pub(super) fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin
     (held, vol)
 }
 
+/// The liquid standing in ground node `i` gains per mol of liquid `k` that comes to it with the liquid (less: leaves),
+/// m³: its liquid's molar volume; of a mineral only its share that stays dissolved (`State::dissolved`), as the node's
+/// exchange sites take the rest of what comes (give the rest of what leaves) at once, its state splitting what it holds
+/// so (`Sp::volume`; of a cell of parts its liquid's top's, where what comes gathers, `parts::to_liquid`); none of a
+/// gas, which takes no room.
+pub(super) fn gain(s: &Scratch, k: usize, i: usize) -> f64 {
+    let free = s.mixed(i).map_or(s.state.dissolved[i], |m| m.piece[super::parts::TOP].free);
+    s.sp[k].v[1] * s.sp[k].liquid(s.state.tg[i], 1.0, free)
+}
+
 /// Cells `cells`, of the liquids that may move `held` (`movable`: rows of `width - 1` liquids, then the heat) and
 /// their volumes `vol`, m³, come to hold `want` m³: each cell that holds more gives the share of its liquid over it,
 /// with that share of its heat; mixed, it goes to the cells that hold less, by what each lacks. Where they hold more
-/// than they want together (`over`), what the cells that hold less do not take is left over, mixed. Returns the moves
-/// from the cell that wants the most to each other one (each other's change, a row of `held`, `[c * width + q]`, + to
-/// it) with that cell, and what is left over (a row).
-pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f64], (width, over): (usize, bool)) -> (usize, Vec<f64>, Vec<f64>) {
+/// than they want together (`over`), what the cells that hold less do not take is left over, mixed. A row's volume to a
+/// cell is what it gains by it, `gains(c, row)`, m³ (`gain`). Returns the moves from the cell that wants the most to each
+/// other one (each other's change, a row of `held`, `[c * width + q]`, + to it) with that cell, and what is left over
+/// (a row).
+pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f64], (width, over): (usize, bool), gains: impl Fn(usize, &[f64]) -> f64) -> (usize, Vec<f64>, Vec<f64>) {
     let m = cells.len();
     // What the cells over the level give, mixed (as a row of `held`), its volume, and the volume the cells under it lack, m³.
     let (mut spare, mut given, mut lack) = (vec![0.0; width], 0.0, 0.0);
     let mut change = vec![0.0; m * width];
     for c in 0..m {
         if vol[c] > want[c] {
-            let gives = (vol[c] - want[c]) / vol[c];
+            let row = &held[c * width..(c + 1) * width - 1];
+            let gives = ((vol[c] - want[c]) / gains(c, row).max(f64::MIN_POSITIVE)).min(1.0);
             for (q, x) in spare.iter_mut().enumerate() {
                 change[c * width + q] = -held[c * width + q] * gives;
                 *x -= change[c * width + q];
@@ -158,11 +170,14 @@ pub(super) fn share_out(cells: &[u32], (held, vol): (&[f64], &[f64]), want: &[f6
             lack += want[c] - vol[c];
         }
     }
-    // Shared by what each lacks: all that was given where the cells want what they hold, else as much as each lacks.
-    let whole = if over { given } else { lack };
+    // Shared by what each lacks: all that was given where the cells want what they hold, else as much as each lacks by
+    // what the mix gives it (no more than all of it).
+    let takes: Vec<f64> = (0..m).map(|c| if want[c] > vol[c] { (want[c] - vol[c]) / if over { gains(c, &spare[..width - 1]) } else { lack } } else { 0.0 }).collect();
+    let all: f64 = takes.iter().sum();
+    let whole = if over { all.max(1.0) } else { 1.0 };
     let mut left = spare.clone();
-    for c in (0..m).filter(|&c| want[c] > vol[c] && whole > 0.0) {
-        let gets = (want[c] - vol[c]) / whole;
+    for c in (0..m).filter(|&c| takes[c] > 0.0 && takes[c].is_finite() && given > 0.0) {
+        let gets = takes[c] / whole;
         for q in 0..width {
             change[c * width + q] = spare[q] * gets;
             left[q] -= change[c * width + q];

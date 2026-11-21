@@ -87,12 +87,14 @@ fn shape_of(drawn: u32) -> Shape {
 
 /// Make an island of `size` x `size` cells and the large shape of `drawn` (`shape_of`) from `seed` between the latitudes
 /// `south` and `north` (`island`), its cells holding at most `variety` kinds of cover (`Config::variety`), standing in
-/// the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), with the schedule of `ew run
-/// --roster`: the starting kinds of cover. Its cells stay those as built: the map draws every zoom from the ground's
+/// the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), its weather soft where `soft`
+/// is not 0 (`worldgen::terrain::soft_weather`, `ew run --weather soft`), with the schedule of `ew run --roster`: the
+/// starting kinds of cover. Its cells stay those as built: the map draws every zoom from the ground's
 /// tiles and the cells' table. Returns 0, or 1 if the world is refused.
 #[no_mangle]
-pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn: u32, variety: u32) -> u32 {
-    let cfg = Config { variety: variety as usize, ..island((south, north)) };
+pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn: u32, variety: u32, soft: u32) -> u32 {
+    let band = island((south, north));
+    let cfg = Config { variety: variety as usize, ..if soft != 0 { worldgen::terrain::soft_weather(band) } else { band } };
     let mut world = worldgen::terrain::new_island(seed as u64, (size as usize, size as usize), shape_of(drawn), cfg);
     if south < north {
         world.planet = Some(PLANET.with(|p| p.borrow_mut().get_or_insert_with(worldgen::planet::planet).clone()));

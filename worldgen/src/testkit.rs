@@ -66,6 +66,11 @@ pub const DISSOLVED: usize = 11;
 pub const MINERAL: usize = 12;
 /// The frame, a solid bodies build.
 pub const FRAME: usize = 13;
+/// The free element 6, and its oxide.
+pub const FREE_6: usize = 15;
+pub const OXIDE_6: usize = 16;
+/// The solid of element 1 alone: what charring leaves of the frame, and the fuel that frees an element from its oxide.
+pub const CHAR: usize = 19;
 /// The reaction that burns the energy-rich solid with `OX`.
 pub const BURN: usize = 1;
 /// The reactions that dissolve `ROCK` with the heat-absorbing gas and the liquid into `DISSOLVED`, and settle it back.
