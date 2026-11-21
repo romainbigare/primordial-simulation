@@ -119,7 +119,7 @@ fn minerals(c: &Ctx, row: &mut Row) {
         let (mut t, mut areas) = ([[0.0f64; 2]; 2], [0.0f64; 2]);
         let held = held_mineral(w, k);
         for (i, &a) in area.iter().enumerate() {
-            let sea = (c.f.z[i] <= 0.0) as usize;
+            let sea = (!w.is_land(i)) as usize;
             areas[sea] += a;
             t[0][sea] += w.store.amounts(Class::Ground)[k * n + i];
             t[1][sea] += matter.map_or(0.0, |m| w.store.amounts(Class::Ground)[m * n + i]) * per;

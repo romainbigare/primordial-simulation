@@ -252,7 +252,8 @@ start found it), in its pores (the cover's roots reach it, a mouth does not), fr
 (as deep as the month's start found it), and frozen in its pores; and beside them what ran over it in the month (its main channel's month,
 `World::liquid_month`), which a mouth reaches though it is no amount of the cell's. **The way to it**
 (`contract::ways_to_liquid`, at the start of life's month, after Flow's): for each decade of liquid (`LEVELS`), the shortest way
-along the links between cells' centres over land from each cell to the nearest cell whose open liquid over the month
+along the links between cells' centres over cells that hold land out of their liquid (`contract::land`, as the month's
+start found it) from each cell to the nearest cell whose open liquid over the month
 (standing and running) holds that much (Dijkstra 1959; ties by the cell's index); `contract::to_liquid` gives it for a need
 rounded up to its decade. **Vapour** (`contract::vapour`):
 a taker sheds heat by turning liquid and soft solid of its ground into vapour (what it drank of the running liquid
@@ -367,8 +368,12 @@ the heat that reaches the surface (`air::radiation`). A node's solid surface is 
 Flow's, kept as matter moves (`land::layers`), and before Flow first built its state the same sum from its amounts and
 `thaw`; only the potential energy stacks its own from the store as it is now (`stack::Column`), so its books follow
 every move exactly. A node's heat capacity is its bed's skin and then its loose amounts (`ground::ground_cap`), for
-Flow, Change and life alike. A cell is **land**
-when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
+Flow, Change and life alike. **Land** asks two questions. A cell is land in the sense of the sea when its solid
+surface is above the open low liquid's level, 0 m (`World::is_land`, `flow::on_land`, `space::wear::STAND_M`): what
+leaves it for a cell under that level reaches the sea, and creep and heat conducted sideways act on it. The land a
+cell offers life is the area of it out of the liquid that stands over its pores (`contract::land`, `flow::land_shares`):
+the cover, the soil and the walkers live on it; before Flow first built its state it is all of a cell that is land in
+the sense of the sea. The top `skin_m` trades heat with the surface. Heat spreads
 sideways yearly by one explicit `solve::sweep`, a link passing the harmonic mean of conductivity × thickness, times
 width over length (Patankar 1980; `flow::land::conduct`), between land cells (`flow::on_land`): rock spreads a hot spot one cell in about 70,000 years, so a
 year is far below the explicit limit on cells of kilometres (1.7).

@@ -105,7 +105,7 @@ pub fn ways_to_liquid(w: &mut World) {
     let n = cells.n();
     let volume = Parts::of(&w.chem).map_or(f64::INFINITY, |p| w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid));
     let open: Vec<f64> = (0..n).map(|i| place(w, i).liquid * cells.area()[i] / volume + w.liquid_month.get(i).map_or(0.0, |&f| f as f64 * month)).collect();
-    let land: Vec<bool> = (0..n).map(|i| w.is_land(i)).collect();
+    let land: Vec<bool> = (0..n).map(|i| super::land(w, i) > 0.0).collect();
     let mut field = vec![[(f64::INFINITY, 0); LEVELS]; n];
     for k in 0..LEVELS {
         let way = shortest(w, &land, (0..n).filter(|&i| open[i] >= 10f64.powi(k as i32)));
@@ -114,7 +114,7 @@ pub fn ways_to_liquid(w: &mut World) {
     w.life.to_liquid = field;
 }
 
-/// The shortest way of each cell over the cells that are `land` to the nearest of `sources`, m (infinite where none is
+/// The shortest way of each cell over the cells that hold `land` to the nearest of `sources`, m (infinite where none is
 /// reached), and that source.
 fn shortest(w: &World, land: &[bool], sources: impl Iterator<Item = usize>) -> Vec<(f64, u32)> {
     let cells = w.mesh.cells();
