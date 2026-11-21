@@ -176,6 +176,9 @@ pub struct World {
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,
+    /// The cells an edit strikes in the coming month (`edit::Act::Strike`), which the flames' month lights and then
+    /// forgets (`flame::shares`)
+    pub strikes: Vec<u32>,
     /// Flow's working memory: its state (saved) and its caches (rebuilt when missing, `flow::Scratch`)
     pub scratch: flow::Scratch,
 }

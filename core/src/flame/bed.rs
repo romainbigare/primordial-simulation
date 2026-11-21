@@ -1,7 +1,7 @@
 //! The first stage of the flames' month (laws.md 3c): what the remains lying on each land cell are to a flame (`Bed`),
 //! read by each cell of its own numbers alone.
 
-use super::{CARRY_SHARE, SORB_HIGHEST, SORB_T};
+use super::{Unlit, CARRY_SHARE, SORB_HIGHEST, SORB_T};
 use crate::chem::Phase;
 use crate::cover::{dec, per_input, Parts, LEAF, MATTER, WALL};
 use crate::life::WET_TISSUE;
@@ -36,7 +36,19 @@ impl Bed {
     /// across it (`CARRY_SHARE`), and the part dry enough that the heat a burning kg sends ahead dries and lights the
     /// next kg is as much as a flame needs to hold its heat (`least`).
     pub fn carries(&self) -> bool {
-        self.cover >= CARRY_SHARE && self.flaming > 0.0 && self.flames() >= self.least
+        self.unlit().is_none()
+    }
+    /// Why it carries no flame (`carries`), or none where it does: a bed covers the ground past the threshold before
+    /// its saturated share is taken off (`bed`), so short of it here its ground is too wet (`Unlit::Wet`); a part dry
+    /// enough to flame short of the least load is too damp (`Unlit::Damp`).
+    pub fn unlit(&self) -> Option<Unlit> {
+        if self.cover < CARRY_SHARE {
+            Some(Unlit::Wet)
+        } else if self.flaming <= 0.0 || self.flames() < self.least {
+            Some(Unlit::Damp)
+        } else {
+            None
+        }
     }
     /// The load of its part that flames, kg a m² of land: the cured leaves and the top of the remains.
     pub fn flames(&self) -> f64 {
@@ -50,19 +62,20 @@ impl Bed {
 }
 
 /// The remains lying on land cell `i` and the cured leaves standing over them as a flame meets them this month (`Bed`);
-/// none on a cell with no land, nothing that burns, less than the least load even dry, or no air read yet.
-pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
+/// or why there is none (`Unlit`): nothing that burns, remains that cover too little of the ground to join across it,
+/// less than the least load even dry, snow over them, or no air read yet.
+pub fn bed(w: &World, p: &Parts, i: usize) -> Result<Bed, Unlit> {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
     let load = crate::contract::remains_in(w, i, |k| w.g(k, i));
     let land = crate::contract::land(w, i);
     let standing_dead = w.life.cover(i).cured.map(|m| m.max(0.0));
     let cured = if land > 0.0 { (standing_dead[MATTER] * mm[MATTER] + standing_dead[WALL] * mm[WALL]) / land } else { 0.0 };
     if load + cured <= 0.0 {
-        return None;
+        return Err(Unlit::Bare);
     }
     let cover = 1.0 - (-leaf_per_kg(w, p, i) * (load + cured)).exp();
     if cover < CARRY_SHARE {
-        return None;
+        return Err(Unlit::Sparse);
     }
     let t = w.thaw_last(i).0;
     // Per kg of what burns, by the mass of its parts: the heat their burning frees and their heat capacity.
@@ -83,7 +96,7 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     let extinct = (ph.flux_ahead * heat - dry) / per_liquid;
     // (A bed under the least load of its dry remains is under it at any moisture: its layer need not be read.)
     if load + cured < least(ph, t, heat - dry) {
-        return None;
+        return Err(Unlit::Thin);
     }
     let l = layer(w, p, i, t)?;
     // The remains on saturated ground are too wet to carry a flame (`inside::wet_ground`).
@@ -97,7 +110,7 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Option<Bed> {
     let smoulder = l.share(ph.smoulder_moist, ph.duff_hold).max(flaming);
     let mut bed = Bed { load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder, particle_rho: chem.subs[p.sub[WALL]].density[0], waf: 0.0 };
     bed.waf = sheltered(w, p, i, bed.depth(ph));
-    Some(bed)
+    Ok(bed)
 }
 
 /// The layer of remains on the drier ground of a cell: the relative vapour of the air in it at its top and at its
@@ -205,15 +218,15 @@ fn leaf_per_kg(w: &World, p: &Parts, i: usize) -> f64 {
 /// ground's evaporation draws its liquid; Manabe 1969), on the drier ground: its liquid less what its saturated share
 /// holds (`inside::wet_ground`). Vapour diffuses through it, so in a steady state its relative
 /// vapour runs in a straight line from its top to its bottom. None where snow lies over the remains
-/// (`contract::Place::snow`), or before the air near the ground is read.
-fn layer(w: &World, p: &Parts, i: usize, t: f64) -> Option<Layer> {
+/// (`contract::Place::snow`, `Unlit::Snow`), or before the air near the ground is read (`Unlit::Unread`).
+fn layer(w: &World, p: &Parts, i: usize, t: f64) -> Result<Layer, Unlit> {
     let ph = &w.cfg.phys;
-    let near = (w.near_ground(i, p.liquid)? / w.chem.p_sat(p.liquid, t)).clamp(0.0, 1.0);
+    let near = (w.near_ground(i, p.liquid).ok_or(Unlit::Unread)? / w.chem.p_sat(p.liquid, t)).clamp(0.0, 1.0);
     let held = w.g(p.liquid, i).max(0.0);
     // Snow lying hides the remains from a flame (`contract::place`); the key liquid frozen in the ground's pores fills
     // them as the liquid does.
     if crate::contract::place(w, i).snow > 0.0 {
-        return None;
+        return Err(Unlit::Snow);
     }
     let soak = crate::cover::soak(w, p, i, held).1;
     let share = crate::inside::saturated_share(w, i);
@@ -222,5 +235,5 @@ fn layer(w: &World, p: &Parts, i: usize, t: f64) -> Option<Layer> {
     let wet = soak.pores.available(crate::inside::rest(share, soak.filled.min(1.0)) + frozen / pores);
     let at = |c: [f64; 2]| c[0] + c[1] * (t - SORB_T);
     let bottom = near + wet * (1.0 - near);
-    Some(Layer { top: near, bottom, wet, curve: [at(ph.sorb_scale), at(ph.sorb_power)], saturated: share })
+    Ok(Layer { top: near, bottom, wet, curve: [at(ph.sorb_scale), at(ph.sorb_power)], saturated: share })
 }

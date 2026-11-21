@@ -23,10 +23,12 @@ pub(super) struct YearTally {
 }
 
 impl Recorder {
-    /// Count one event: the viewer's log shows the first appearance of a substance.
+    /// Count one event: the viewer's log shows the first appearance of a substance and each edit (`World::edit`).
     pub(super) fn count(&mut self, e: &Event) {
-        match e.kind {
-            EventKind::FirstSubstance(k) => self.files.log.push((e.day, format!("substance {k} first appears"))),
-        }
+        let text = match e.kind {
+            EventKind::FirstSubstance(k) => format!("substance {k} first appears"),
+            EventKind::Edit(edit) => format!("edit: {}", edit.line(e.node as usize, e.value > 0.0)),
+        };
+        self.files.log.push((e.day, text));
     }
 }

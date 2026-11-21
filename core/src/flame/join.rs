@@ -24,8 +24,9 @@ fn root(up: &mut [u32], mut i: u32) -> u32 {
 /// cover). Each region expects `strikes` × A × the month's share of a year of strikes that light it; their count is a
 /// Poisson draw, and each lights a cell drawn by its covered ground, from the world's seed by the month and the
 /// region's first cell (`Purpose::Flame`), so the draws do not depend on the threads. Each flame runs over its region
-/// for `front_life` (`run`), and every cell it reaches burns all of its land its remains cover. A cell that burnt keeps
-/// no remains to carry a flame until its cover's leaves build them again.
+/// for `front_life` (`run`), and every cell it reaches burns all of its land its remains cover. Each strike of an edit
+/// (`World::strikes`) lights its cell too, after them, where its remains carry a flame. A cell that burnt keeps no
+/// remains to carry a flame until its cover's leaves build them again.
 pub fn shares(w: &World, beds: &[Option<Bed>], month: f64) -> Vec<f64> {
     let (cells, n) = (w.mesh.cells(), beds.len());
     let carries = |i: usize| beds[i].is_some_and(|b| b.carries());
@@ -60,6 +61,11 @@ pub fn shares(w: &World, beds: &[Option<Bed>], month: f64) -> Vec<f64> {
             for i in run(w, beds, lit.unwrap_or(region[region.len() - 1]) as usize) {
                 share[i] = beds[i].map_or(0.0, |b| b.cover);
             }
+        }
+    }
+    for &lit in w.strikes.iter().filter(|&&i| carries(i as usize)) {
+        for i in run(w, beds, lit as usize) {
+            share[i] = beds[i].map_or(0.0, |b| b.cover);
         }
     }
     share

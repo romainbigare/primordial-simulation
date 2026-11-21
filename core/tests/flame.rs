@@ -173,7 +173,7 @@ fn a_low_plant_burnt_to_its_base_keeps_its_plants_and_store() {
     let mm = p.mm(&w.chem);
     let built = |w: &World| w.life.cover(i).built(&mm, low);
     let (low0, tall0, built0, fuel0) = (plants(&w, low), plants(&w, tall), built(&w), w.life.cover(i).mol[low][FUEL]);
-    let share = flame::shares(&w, &(0..w.mesh.cells().n()).map(|j| flame::bed(&w, &p, j)).collect::<Vec<_>>(), w.cfg.calendar().month as f64)[i];
+    let share = flame::shares(&w, &(0..w.mesh.cells().n()).map(|j| flame::bed(&w, &p, j).ok()).collect::<Vec<_>>(), w.cfg.calendar().month as f64)[i];
     assert!(share > 0.0, "the cell burns");
     flame::month(&mut w);
     assert_eq!((plants(&w, low), w.life.cover(i).mol[low][FUEL]), (low0, fuel0), "the low slot lost plants or store");
