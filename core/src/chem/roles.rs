@@ -84,6 +84,18 @@ impl Chemistry {
         Some((r_light, rich, liquid, self.burner(rich)?))
     }
 
+    /// The solid life builds of its energy-rich solid alone (`life_roles`; its walls): the first output of the first of
+    /// `builds` whose inputs are all that solid.
+    pub fn wall(&self) -> Option<usize> {
+        self.derived().wall
+    }
+
+    /// `wall` worked out from the `life_roles` (`Chemistry::derived`).
+    pub(super) fn find_wall(&self, roles: Option<(usize, usize, usize, usize)>) -> Option<usize> {
+        let rich = roles?.1;
+        Some(self.builds.iter().find(|b| b.inputs.iter().all(|p| p.0 as usize == rich))?.outputs[0].0 as usize)
+    }
+
     /// Body matter and the reaction that burns it with a gas (none where life does not grow).
     pub fn matter_roles(&self) -> Option<(usize, usize)> {
         let m = self.matter()?;

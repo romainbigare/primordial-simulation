@@ -24,10 +24,10 @@ pub struct Parts {
 }
 
 impl Parts {
-    /// The parts in `chem`: none unless it has the roles of life, body matter and a solid built of the fuel alone.
+    /// The parts in `chem`: none unless it has the roles of life, body matter and a solid built of the fuel alone
+    /// (`Chemistry::wall`).
     pub fn of(chem: &Chemistry) -> Option<Parts> {
-        let ((light, rich, liquid, burn), matter) = (chem.life_roles()?, chem.matter()?);
-        let wall = chem.builds.iter().find(|b| b.inputs.iter().all(|p| p.0 as usize == rich))?.outputs[0].0 as usize;
+        let ((light, rich, liquid, burn), matter, wall) = (chem.life_roles()?, chem.matter()?, chem.wall()?);
         Some(Parts { sub: [rich, matter, wall], light, burn, fix: chem.fixing(), liquid })
     }
     /// The molar mass of each part, kg/mol.

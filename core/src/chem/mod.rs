@@ -154,9 +154,10 @@ struct Derived {
     minerals: Vec<(usize, f64)>,
     /// `Chemistry::air_cp`
     air_cp: f64,
-    /// `Chemistry::life_roles` and `Chemistry::fixing`
+    /// `Chemistry::life_roles`, `Chemistry::fixing` and `Chemistry::wall`
     roles: Option<(usize, usize, usize, usize)>,
     fixing: Option<usize>,
+    wall: Option<usize>,
     /// `Chemistry::mixes` of each substance
     mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
     /// The substances others dissolve in (`Chemistry::mixes` is some), a bit per substance
@@ -218,8 +219,8 @@ impl Chemistry {
             let mixes: Vec<_> = (0..self.ns()).map(|k| self.find_mixes(k)).collect();
             let solvents = (0..self.ns()).filter(|&k| mixes[k].is_some()).fold(0, |m, k| m | 1 << k);
             let (roles, fixing) = (self.find_life_roles(), self.find_fixing(&minerals));
-            let heat_shares = planck::table(&self.heat_spans);
-            Derived { minerals, air_cp, roles, fixing, mixes, solvents, heat_shares }
+            let (wall, heat_shares) = (self.find_wall(roles), planck::table(&self.heat_spans));
+            Derived { minerals, air_cp, roles, fixing, wall, mixes, solvents, heat_shares }
         })
     }
 
