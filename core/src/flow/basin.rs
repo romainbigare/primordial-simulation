@@ -108,7 +108,7 @@ pub struct Pool {
 
 /// The level of body `b`: what its parts held at the last pass (`State::held`) at one level over their samples
 /// (`level::level_over`), m, no higher than its pass.
-fn body_level(s: &Scratch, b: &Body) -> f64 {
+pub(super) fn body_level(s: &Scratch, b: &Body) -> f64 {
     let parts: Vec<(&Part, f64)> = b.cells.iter().zip(&b.part).map(|(&i, &q)| (&s.curves[i as usize].parts[q], s.z[i as usize])).collect();
     let held: f64 = b.cells.iter().zip(&b.part).map(|(&i, &q)| s.state.held[i as usize].m3[q]).sum();
     level_over(&parts, held).min(b.level)

@@ -41,7 +41,7 @@ pub fn build(w: &mut World) {
 
 /// The load piled at the mouths since the last build (what was laid on the samples of the bodies since, `Relief::since`)
 /// laid out as lobes on the samples as last built (`Terrain::lobes_of`, `delta::lobes`): each body's liquid at its
-/// level now (`basin::Basin::level`), the open samples its pond's; each mouth's top its level and the flood's depth
+/// level now (`basin::body_level`, from what its parts hold), the open samples its pond's; each mouth's top its level and the flood's depth
 /// over its entry (`delta::flood_depth`), no higher than its pass. The piles leave the relief, the lobes join it, and
 /// what found no room is matter of the entry cell, which its offset spreads over it (as all matter the relief does
 /// not place). What a lobe laid in another cell moves there from the entry cell's loose ground, by its mixture, with its
@@ -49,9 +49,11 @@ pub fn build(w: &mut World) {
 /// most what it holds loose (the rest stays, for the offsets); it mixes into the cell it reaches (`runoff::mix`).
 fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
     let (n, b) = (samples.h.len(), &s.bodies);
+    // (Each body's level from what its parts hold, the saved state, as a loaded world finds it.)
+    let levels: Vec<f64> = b.list.iter().map(|body| super::basin::body_level(s, body)).collect();
     let area = |k: usize| w.map.place_of(&samples.leaf(k), w.cfg.lat_south, w.cfg.lat_north).0;
     let (open, level): (Vec<bool>, Vec<f64>) = (0..n).map(|k| match b.at.get(k).copied() {
-        Some(body) if body != NONE => (true, s.basin.level[body as usize]),
+        Some(body) if body != NONE => (true, levels[body as usize]),
         _ => (false, f64::NEG_INFINITY),
     }).unzip();
     let mut mouths = Vec::new();
