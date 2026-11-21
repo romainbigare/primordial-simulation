@@ -1043,15 +1043,16 @@ fn a_cell_whose_ground_crosses_the_level_keeps_its_books() {
     let mut w = worldgen::testkit::squares(1, 16, 16);
     (0..3).for_each(|_| pcore::step(&mut w));
     let n = w.mesh.cells().n();
-    let i = (0..n).filter(|&i| w.surface_z(i) < 0.0).max_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).expect("a cell under the level");
+    let i = (0..n).filter(|&i| w.ground_z(i) < 0.0).max_by(|&a, &b| w.ground_z(a).total_cmp(&w.ground_z(b))).expect("a cell under the level");
     let held = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
     let k = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > w.chem.subs[LIQUID].boil).max_by(|&a, &b| held(a).total_cmp(&held(b)).then(b.cmp(&a))).expect("a solid of its ground");
-    let lift = (1.0 - w.surface_z(i)) * w.mesh.cells().area()[i] / w.chem.molar_volume(k, Phase::Solid);
+    let lift = (1.0 - w.ground_z(i)) * w.mesh.cells().area()[i] / w.chem.molar_volume(k, Phase::Solid);
     put(&mut w, k, i, lift);
-    assert!(w.surface_z(i) > 0.0, "the cell stands over the level");
+    assert!(w.ground_z(i) > 0.0, "the cell's ground stands over the level");
     let books = Books::now(&w);
     flow_step(&mut w, LIQUID_STEP);
     books.assert_within(&w, 1e-9, 1e-9);
+    assert!(w.surface_z(i) > 0.0, "Flow finds the cell's surface over the level");
 }
 
 /// A small island, ten years: the land loses rock (the rock-making solids of its loose ground and bed, over its
