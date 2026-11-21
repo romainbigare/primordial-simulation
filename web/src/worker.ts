@@ -10,7 +10,7 @@
 
 interface Core {
   memory: WebAssembly.Memory;
-  new_world(seed: number, size: number, south: number, north: number, drawn: number, variety: number): number;
+  new_world(seed: number, size: number, south: number, north: number, drawn: number, variety: number, soft: number): number;
   input(len: number): number;
   open_world(): number;
   step_month(): void;
@@ -27,7 +27,7 @@ interface Core {
 }
 type Command =
   | { cmd: 'init'; wasm: ArrayBuffer }
-  | { cmd: 'new'; seed: number; size: number; band: [number, number]; drawn: boolean; variety: number }
+  | { cmd: 'new'; seed: number; size: number; band: [number, number]; drawn: boolean; variety: number; soft: boolean }
   | { cmd: 'open'; saved: ArrayBuffer }
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
@@ -133,7 +133,7 @@ host.onmessage = async e => {
       // A new world, or the saved one handed in.
       start(false);
       const c = core, refused = m.cmd === 'open' ? handIn(m.saved, () => c.open_world())
-        : c.new_world(m.seed, m.size, m.band[0], m.band[1], m.drawn ? 1 : 0, m.variety) !== 0 ? 'The world was refused.' : '';
+        : c.new_world(m.seed, m.size, m.band[0], m.band[1], m.drawn ? 1 : 0, m.variety, m.soft ? 1 : 0) !== 0 ? 'The world was refused.' : '';
       if (refused) throw new Error(refused);
       due = 0; thingsAt = null; stepped = pace = 0;
       postFrame('world');

@@ -866,7 +866,9 @@ measured moments of the same eddies. Its displacement η is their mixing length 
 diffusivity is a speed times the length an eddy moves air, Taylor 1922): over the year the band's ground cools by about
 0.55 K a degree, so the air it brings is some 2.5 K off over the year, against the measured lower air's 3 to 5 K of
 the storm tracks' winter.
-Its speed v is `eddy_speed`, 6 m/s. Their ratio, about a day, is the eddy's 1 / ω: a wave of about 6 days' period,
+Its speed v is `eddy_speed`, 6 m/s: the strong weather. A world may be made with soft weather instead
+(`worldgen::terrain::soft_weather`, `ew run --weather soft`, the page's Weather choice): v is then sqrt(`mix` /
+`eddy_time`), 2 m/s, the speed the eddies' diffusion alone gives (r = 1), and the rain of a year swings less. Their ratio, about a day, is the eddy's 1 / ω: a wave of about 6 days' period,
 inside the band of 2.5 to 6 days that `eddy_time` keeps. The eddies' motion is mostly reversible sloshing: their mean
 flux, `mix`, is r v' ℓ with r = `mix` / (`eddy_speed` × η's unit) = 0.34, inside the measured correlation of v' and
 T' of 0.2 to 0.5. It acts in two places. **Across the open edges**, each day each link's column beyond is read again
