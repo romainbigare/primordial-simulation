@@ -9,7 +9,8 @@ use crate::units::{DAY, GAS_DIFFUSIVITY, GAS_DIFFUSIVITY_MM, R_GAS};
 
 /// How the roots of a cell's cover meet its ground's liquid in a month (`soak`): the share of what its ground holds
 /// for roots that it holds (`Pores::available`); the share of its pores its liquid fills (past 1 where liquid stands
-/// over them); the share of its land saturated (`inside::saturated_share`); the depth of its loose ground, m, and its
+/// over them) and the share of its land saturated, both as its wet ground was found at the start of life's month
+/// (`inside::WetGround`); the depth of its loose ground, m, and its
 /// pores (`World::pores`); and the oxidising gas's spread through
 /// a root's gas spaces against what the root's living tissue burns, m² (`breath`): a root of gas share φ keeps
 /// (2 breath φ / (1 − φ))^½ m of its length in that gas (`aired`); and the key liquid that is liquid in the cell's
@@ -26,23 +27,31 @@ pub struct Soak {
 }
 
 /// Of `held` mol of the key liquid in the ground of cell `i`: what is liquid that its cover reaches, mol, and how its
-/// roots meet it (`Soak`), its pores' space read from Flow (`Scratch::land_pores`; one store over the depth of its loose
-/// ground). Of a cell of parts with land, its land part's own (`flow::parts`) over that part's area, no more than the
-/// cell holds; else the cell's over its area.
+/// roots meet it (`Soak`): its pores' fill and saturated share as its wet ground was found (`inside::WetGround`; where
+/// it was not, its fill now, `fill_now`), its pores' space read from Flow (`Scratch::land_pores`; one store over the
+/// depth of its loose ground).
 pub fn soak(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, Soak) {
-    let (t, molten) = (w.t_ground_last(i), w.molten_last(p.liquid, i));
-    let area = w.mesh.cells().area()[i];
+    let t = w.t_ground_last(i);
+    let [liquid, now, pond] = fill_now(w, p, i, held);
+    let (soil, pores) = (*w.pores(i), w.scratch.land_pores(i));
+    let filled = crate::inside::land_filled(w, i).unwrap_or(now);
+    let loose = if soil.porosity > 0.0 { pores / soil.porosity } else { 0.0 };
+    let saturated = crate::inside::saturated_share(w, i);
+    (liquid, Soak { moist: soil.available(filled), filled, saturated, loose, pores: soil, breath: breath(w, p, i, t), pond })
+}
+
+/// Of `held` mol of the key liquid in the ground of cell `i` now: what is liquid that its cover reaches, mol; the share
+/// of its pores (`Scratch::land_pores`) that fills (past 1 where liquid stands over them); and the liquid of the cell's
+/// ground outside its land, mol. Of a cell of parts with land, its land part's own (`flow::parts`) over that part's
+/// area, no more than the cell holds; else the cell's over its area.
+pub fn fill_now(w: &crate::World, p: &Parts, i: usize, held: f64) -> [f64; 3] {
+    let (molten, area) = (w.molten_last(p.liquid, i), w.mesh.cells().area()[i]);
     let (liquid, over) = match w.scratch.land_part(i, p.liquid) {
         Some((mol, share)) => (mol.min(held) * molten, area * share),
         None => (held * molten, area),
     };
-    let (soil, depth) = (*w.pores(i), liquid * w.chem.molar_volume(p.liquid, Phase::Liquid) / over);
-    let pores = w.scratch.land_pores(i);
-    let filled = depth / pores.max(1e-9);
-    let loose = if soil.porosity > 0.0 { pores / soil.porosity } else { 0.0 };
-    let pond = (held * molten - liquid).max(0.0);
-    let saturated = crate::inside::saturated_share(w, i);
-    (liquid, Soak { moist: soil.available(filled), filled, saturated, loose, pores: soil, breath: breath(w, p, i, t), pond })
+    let depth = liquid * w.chem.molar_volume(p.liquid, Phase::Liquid) / over;
+    [liquid, depth / w.scratch.land_pores(i).max(1e-9), (held * molten - liquid).max(0.0)]
 }
 
 /// The oxidising gas's spread through a root's gas spaces against what the root's living tissue burns, at the ground

@@ -33,7 +33,7 @@ pub fn holdings(w: &World) -> Option<Vec<Holdings>> {
         let m = means[i];
         let depth = m.pore + m.stands;
         let dissolved = crate::flow::dissolved(w, i);
-        let aired = crate::inside::aired(w, i, m.stands, m.pore / m.pores.max(1e-9));
+        let aired = crate::inside::aired(w, i, m.stands, crate::inside::land_filled(w, i).unwrap_or(m.pore / m.pores.max(1e-9)));
         let moist = w.cfg.phys.wetness(depth);
         let rot = frame.map_or(0.0, |rx| crate::change::open_catalyst(rx.open, moist) * rx.arrhenius(w.t_ground_last(i)) * aired * year);
         Holdings { litter, slow, minerals: [mineral * dissolved, mineral * (1.0 - dissolved)], rot }

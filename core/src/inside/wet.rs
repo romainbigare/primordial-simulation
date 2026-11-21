@@ -6,22 +6,23 @@ use super::{deficit_at, soil_level, Means};
 use crate::space::terrain::SAMPLE_DEPTH;
 use crate::World;
 
-/// The land of a cell as its soil's liquid lies over it (`wet_ground`): the share of its land saturated, and the wetness
-/// index at and over which a sample is saturated (infinite where none is, minus infinite where all are).
+/// The land of a cell as its soil's liquid lies over it (`wet_ground`): the share of its land saturated; the wetness
+/// index at and over which a sample is saturated (infinite where none is, minus infinite where all are); and the share
+/// of its land's pores its key liquid fills on the mean (past 1 where liquid stands over them), at the same moment.
 #[derive(Clone, Copy, Debug)]
 pub struct WetGround {
     pub share: f64,
     pub level: f64,
+    pub filled: f64,
 }
 
 /// The land of cell `i` of means `m` (`Means`, over its land): its samples (`World::terrain_samples`) but the lowest,
-/// which the liquid that stands over the cell covers, by its land's share of its area (`contract::land`; the liquid
-/// stands over the lowest first, `flow::curve`), where its liquid table lies (`saturated`).
-pub fn wet_ground(w: &World, i: usize, m: Means) -> WetGround {
+/// which the liquid that stands over the cell covers, by its land's share `land` of its area (the liquid stands over
+/// the lowest first, `flow::curve`), where its liquid table lies (`saturated`).
+pub fn wet_ground(w: &World, i: usize, m: Means, land: f64) -> WetGround {
     let s = w.terrain_samples();
     let mut at: Vec<(f64, usize)> = w.map.leaves()[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], k)).collect();
     at.sort_by(|a, b| b.0.total_cmp(&a.0));
-    let land = crate::contract::land(w, i) / w.mesh.cells().area()[i];
     at.truncate((land * at.len() as f64).round() as usize);
     let ks: Vec<usize> = at.iter().map(|p| p.1).collect();
     let (twi, area) = parts_now(w, &s, i, &ks);
@@ -49,7 +50,7 @@ pub fn parts_now(w: &World, s: &crate::space::samples::Samples, i: usize, ks: &[
 
 /// Ground of parts of wetness index `twi` and shares of the area `area` (summing to 1), of means `m`: its liquid table
 /// departs over them by the index (`soil_level`, `deficit_at`), and a part is saturated where it reaches the surface, at
-/// an index of at least the level plus the mean room over `soil_m`.
+/// an index of at least the level plus the mean room over `soil_m`; and its pores' mean fill.
 pub fn saturated(ph: &crate::Physics, (twi, area): (&[f64], &[f64]), m: Means) -> WetGround {
     let filled = if m.pores > 0.0 { m.pore / m.pores } else { 1.0 };
     let [d, most] = m.deficit(ph);
@@ -61,7 +62,7 @@ pub fn saturated(ph: &crate::Physics, (twi, area): (&[f64], &[f64]), m: Means) -
         None => (1.0, f64::NEG_INFINITY),
         Some(c) => (by(&|t| deficit_at(ph, m, t, c) <= 0.0), c + d / ph.soil_m),
     };
-    WetGround { share, level }
+    WetGround { share, level, filled }
 }
 
 /// The share of the pores of the drier rest of a land that its liquid fills, its share `share` saturated and its pores
@@ -85,20 +86,26 @@ pub fn aired(w: &World, i: usize, standing: f64, filled: f64) -> f64 {
     if standing > 0.0 { 1.0 } else { 1.0 - airless(w.pores(i), saturated_share(w, i), filled) }
 }
 
-/// The share of the land of cell `i` saturated at the month's start (`contract::surroundings`, `wet_land`); none where
-/// it holds no land or life has no key liquid.
+/// The share of the land of cell `i` saturated at the start of life's month (`contract::wet_grounds`, `wet_land`); none
+/// where it holds no land or life has no key liquid.
 pub fn saturated_share(w: &World, i: usize) -> f64 {
     w.life.wet.get(i).copied().flatten().map_or(0.0, |g| g.share)
 }
 
-/// Where the liquid table of the land of cell `i` reaches its surface (`wet_ground`), its key liquid (that of `p`) as
-/// the cover's roots meet it now (`cover::soak`): its pores as Flow has them (`Scratch::land_pores`) over the bed's store
-/// under the cell (`Class::Deep`).
-pub fn wet_land(w: &World, p: &crate::cover::Parts, i: usize) -> WetGround {
-    let soak = crate::cover::soak(w, p, i, w.g(p.liquid, i).max(0.0)).1;
+/// The share of the pores of the land of cell `i` its key liquid fills, as its wet ground was found at the start of
+/// life's month (`WetGround::filled`); None where it was not (no land, or life has no key liquid).
+pub fn land_filled(w: &World, i: usize) -> Option<f64> {
+    w.life.wet.get(i).copied().flatten().map(|g| g.filled)
+}
+
+/// Where the liquid table of the land of cell `i`, the share `land` of its area, reaches its surface (`wet_ground`),
+/// its key liquid (that of `p`) as the cover's roots meet it now (`cover::fill_now`): its pores as Flow has them
+/// (`Scratch::land_pores`) over the bed's store under the cell (`Class::Deep`).
+pub fn wet_land(w: &World, p: &crate::cover::Parts, i: usize, land: f64) -> WetGround {
+    let filled = crate::cover::fill_now(w, p, i, w.g(p.liquid, i).max(0.0))[1];
     let pores = w.scratch.land_pores(i).max(1e-9);
-    let m = Means { pore: soak.filled.min(1.0) * pores, pores, stands: 0.0, store: crate::flow::store_depth(w, i), field: soak.pores.field };
-    wet_ground(w, i, m)
+    let m = Means { pore: filled.min(1.0) * pores, pores, stands: 0.0, store: crate::flow::store_depth(w, i), field: w.pores(i).field };
+    WetGround { filled, ..wet_ground(w, i, m, land) }
 }
 
 /// Whether terrain sample `k` of `s` (`World::terrain_samples`) drains a channel's source: the square of the spacing of

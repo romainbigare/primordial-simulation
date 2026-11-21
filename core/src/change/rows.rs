@@ -158,7 +158,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     // side is 100 times faster or more, left out).
     (rc.film, rc.moist) = (nodes.standing(i).0 / w.cfg.dissolve, nodes.moist(i, &w.cfg.phys));
     // Its decomposers breathe in the share of it that the oxidising gas reaches (`inside::aired`).
-    rc.aired = crate::inside::aired(w, i, rc.film, nodes.filled(i));
+    rc.aired = crate::inside::aired(w, i, rc.film, crate::inside::land_filled(w, i).unwrap_or_else(|| nodes.filled(i)));
     rc.shelter = w.soil[i].texture.shelters();
     let cap = |amt: &[f64]| ground_cap(nodes.skin[i], 0..chem.ns(), |k| amt[k], |k| chem.subs[k].cp);
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);

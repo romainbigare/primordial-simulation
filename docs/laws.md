@@ -219,7 +219,8 @@ point (the tape's frames, a byte a square; the pictures) asks the tree for the l
 stands on each cell (`contract::stands`), and the surroundings (`contract::surroundings`: Flow's state rebuilt in full
 and each cell's place from it, which Flow's own pass then leaves). Then Flow: the air in steps of `AIR_STEP_DAYS` (15
 days, two a month, each at its own time in the month), after each the sink of the liquid over field capacity into the
-bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: the cover's,
+bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: where
+the soil's liquid saturates each cell's land, by Flow's state as its month left it, `contract::wet_grounds`; the cover's,
 then the takers') and Change.
 **Chunks and the parallel pass** (`life::run`). The cells are cut into `Config::chunks` runs of neighbouring indices,
 the same for any number of threads. Each chunk is one task on the pool, its cells' life taken out of the world, the
@@ -285,8 +286,10 @@ side; Horton 1945) is the table at the surface over its channel's width (the cha
 pores full; elsewhere its soil holds the cell's liquid departed the same way (`soil_held`). The laws read it over a
 cell's land samples (the highest, by its land's share of its area; `inside::wet_ground`): the share saturated, at an
 index of at least c plus the mean room over `soil_m`, and the drier rest, which holds what that share does not
-(`inside::rest`). The month's start finds it for each cell (`contract::surroundings`, `World::life`'s `wet`), and every
-law reads that one share: flames (3c), and how much of the land is waterlogged, its pores holding no gas: the saturated
+(`inside::rest`). The start of life's month finds it for each cell, after Flow's month and the soil's new pores, by
+Flow's state then: the land's share of the cell (`flow::land_shares`), its pores' fill and the share saturated
+(`contract::wet_grounds`, `World::life`'s `wet`). Every law reads that one moment, the fill and the share together
+(`inside::land_filled`, `saturated_share`): the cover's roots (`cover::soak`), and flames (3c), and how much of the land is waterlogged, its pores holding no gas: the saturated
 share and, of the drier rest, the share its liquid fills from the bottom up over field capacity (`inside::airless`,
 `Pores::full`), which roots (3) and the decomposers (2.3) read. Where the rest holds more than field capacity that is
 the share the cell's mean fill gives; where it holds less it adds the wet strips of a drier cell. What stands where the ground lies under the cells' level; each channel as wide as
@@ -1370,7 +1373,7 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   (`World::near_ground`, its vapour over saturation at the ground's temperature), to its bottom, between that and
   saturation by the share s of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the
   share by which the ground's evaporation draws its liquid; Manabe 1969) on the drier part of its land: the share of its
-  land saturated at the month's start (`inside::saturated_share`, 0) is too wet to carry a flame, so the share of its ground the remains cover
+  land saturated at the start of life's month (`inside::saturated_share`, 0) is too wet to carry a flame, so the share of its ground the remains cover
   is times one less that share, and s is read from what the rest holds; the key liquid frozen in its pores counted
   with it; where snow lies (`contract::Place::snow`) it hides the remains and they do not burn.
   At each depth it holds the sorption curve
