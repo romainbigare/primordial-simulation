@@ -200,15 +200,19 @@ pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Groun
     // and their upper halves' away (`Draw`), and moves where the edges' air comes from (`Weather`).
     let weather = Weather::of(w, s, &ends, days as usize).map(|wx| (Draw::of(&w.cfg, air, (&links, &border, &block), &ends), wx));
     for d in 0..days as usize {
-        exchange(w, s, (act, ground), (&blocks, &one, &rise), (&mut x, &mut e), (dd, dt), (&mut out, &mut rooms, &mut soaks));
+        // The day's lift by the weather, which the rain law reads with the ground's rise (`rise::saturates`): the
+        // ascent's cooling, booked once, inside its own column.
+        let lift = weather.as_ref().map(|(_, wx)| wx.lift(w, d));
+        let risen: Option<Vec<f64>> = lift.as_ref().map(|l| rise.iter().zip(l).map(|(r, l)| r + l).collect());
+        exchange(w, s, (act, ground), (&blocks, &one, risen.as_deref().unwrap_or(&rise)), (&mut x, &mut e), (dd, dt), (&mut out, &mut rooms, &mut soaks));
         even(w, s, &blocks, (&mut x, &mut e), border.len(), &mut out.moved);
-        let Some((draw, wx)) = &weather else {
+        let (Some((draw, wx)), Some(lift)) = (&weather, &lift) else {
             wind(w, s, (&push, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
             out.edges.day(s, (&mut x, &mut e), (dd, w.cfg.gravity));
             continue;
         };
         // The overturning's halves with the day's drawn flow, at the rates per mol of the step's start, as all of it.
-        let today = push.drawn(&border, &draw.flows(&wx.lift(w, d)));
+        let today = push.drawn(&border, &draw.flows(lift));
         let imp = Implicit::of(s, (&today, &border, &lines), (&out.moved.a, &out.moved.b), &start, dd);
         wind(w, s, (&today, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
         out.edges.weather(w, s, (&ends, &cell), |xy| wx.shift(xy, d));
