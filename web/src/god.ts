@@ -40,6 +40,8 @@ const UNLIT: Record<string, string> = {
   Wet: 'The ground is too wet. Much of it is soaked.',
   Damp: 'The dead leaves and stems are too damp to burn.',
 };
+/** The widest line of the box that says beside the cursor why a tool cannot be used there, css px. */
+const LABEL_PX = 220;
 /** Least time between two questions about the place under the cursor, ms. */
 const PROBE_MS = 80;
 
@@ -154,7 +156,9 @@ export class God {
       ctx.strokeRect(bx, by, bw, bh);
       ctx.setLineDash([]);
       if (t === 'fire') {
-        ctx.lineWidth = 2.5; ctx.strokeStyle = ink; ctx.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
+        // (Inside the map's own outline of the square under the pointer.)
+        if (!no) { ctx.fillStyle = 'rgba(255,122,26,.12)'; ctx.fillRect(bx, by, bw, bh); }
+        ctx.lineWidth = 2.5; ctx.strokeStyle = ink; ctx.strokeRect(bx + 4, by + 4, bw - 8, bh - 8);
       } else {
         const r = Math.sqrt((this.share * (e - w) * (so - n)) / Math.PI) * s;
         ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
@@ -169,6 +173,24 @@ export class God {
     ctx.restore();
     ctx.fillStyle = ink; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    if (no) this.label(ctx, cx, cy, this.why(t));
+  }
+
+  /** The reason a tool cannot be used, in a box beside the cursor at (x, y), its words wrapped at `LABEL_PX`. */
+  private label(ctx: CanvasRenderingContext2D, x: number, y: number, text: string): void {
+    ctx.font = '12px system-ui, sans-serif';
+    const lines: string[] = [];
+    for (const word of text.split(' ')) {
+      const last = lines.length - 1;
+      if (last >= 0 && ctx.measureText(`${lines[last]} ${word}`).width <= LABEL_PX) lines[last] += ` ${word}`;
+      else lines.push(word);
+    }
+    const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, h = lines.length * 16 + 10;
+    const W = ctx.canvas.clientWidth || ctx.canvas.width, bx = x + 14 + w > W ? x - 14 - w : x + 14, by = y + 12;
+    ctx.fillStyle = 'rgba(35,39,43,.88)';
+    ctx.beginPath(); ctx.roundRect(bx, by, w, h, 6); ctx.fill();
+    ctx.fillStyle = '#fff';
+    lines.forEach((l, k) => ctx.fillText(l, bx + 8, by + 18 + 16 * k));
   }
 
   /** The panel: the tools, the choices of the tool on, and a line of what it does here or why it cannot. */
