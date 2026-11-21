@@ -581,14 +581,14 @@ coarsest's sinking speed, S = w² / (g H), `soil::threshold_slope`; the threshol
 than the lowest sample whose liquid runs to it (a pond's too: a deposit dams no way that feeds it and raises no lake
 over its outlet), as the samples were last built, less what was laid on it since. Where what would settle at a key sample fills more than its room,
 every class settles by the share the room takes and the rest passes on; a sample whose liquid runs to none has no
-room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`): first
+room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`, after the month's start passes have found Flow's state and before the flood): first
 **the mouths lay their lobes**: what piled on the bodies' samples since the last build leaves the relief, and each pile
 is a mouth of the start's lobes (laws.md 0, `delta::lobes`, one call over the whole map), its top the level of its
 body's liquid now with the depth of the flood over its entry (`delta::flood_depth`), no higher than its pass; the
 liquid's samples are those of every body (a closed body's: its pond's, so a dry basin has room), each at its body's
-level. What the lobes lay joins the relief; what found no room is matter of the entry cell, which its offset spreads
+level, and a lobe and its front step only over the samples of its mouth's body. What the lobes lay joins the relief; what found no room is matter of the entry cell, which its offset spreads
 over it. What a lobe laid in another cell moves there from the entry cell's loose ground, by its mixture, with its heat
-and its potential energy (`runoff::book_solids`), each entry cell giving at most what it holds loose (the rest stays,
+and its potential energy (`runoff::book_solids`), each entry cell giving at most what it holds loose (its solids that stay solid at its land's temperature; the rest stays,
 for the offsets), and mixes into the texture it reaches (`runoff::mix`): the only matter a build moves. Then the
 samples stand at the seed's heights with what was laid on each, each cell's raised to its ground (`World::ground_z`,
 its solids that stay solid at the surface: snow and ice do not raise it): the cells' offsets spread smoothly between
@@ -597,7 +597,7 @@ eight times, and each raised by the constant it still lacks, so each cell's samp
 (`space::relief::heights`). Over them the flood finds the ways, the ponds and the wetness index again
 (`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level; a closed basin
 too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flow through it (the start's wear fills
-such basins; a build moves no ground). Then each cell's ground as liquid stands on it, the bodies, the key samples and
+such basins; the build fills none). Then each cell's ground as liquid stands on it, the bodies, the key samples and
 their rooms are found again; what a cell's parts of the bodies held follows each part's pond (a new pond comes from the
 old pond that held most of its samples, one to one; a cell whose parts do not all match shares its liquid at one
 level, as at the start). `World::is_land` stays the cell's own: its surface over the level (`surface_z`, with its snow and

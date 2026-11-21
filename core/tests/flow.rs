@@ -1060,6 +1060,43 @@ fn a_cell_whose_ground_crosses_the_level_keeps_its_books() {
     assert!(w.surface_z(i) > 0.0, "Flow finds the cell's surface over the level");
 }
 
+/// What a mouth's lobe lays in another cell moves there at the build (`flow::build`): with one pile at an entry sample,
+/// each cell but the entry's gets the volume of loose ground the lobe laid on its samples, to 1e-9, and some moves.
+#[test]
+fn a_lobe_moves_its_load_into_the_cells_it_lays_on() {
+    let mut w = worldgen::testkit::squares(1, 16, 16);
+    (0..3).for_each(|_| pcore::step(&mut w));
+    let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
+    let n = s.h.len();
+    w.relief = Default::default();
+    // The shallowest entry of the liquid, with a pile of 3e5 m3 on it: it fills the entry and spreads.
+    let depth = |k: usize| s.ponds[s.pond[k] as usize].level - s.h[k];
+    let entry = (0..n).filter(|&k| s.pond[k] != u32::MAX && s.main[k] != u32::MAX && s.pond[s.main[k] as usize] == u32::MAX).min_by(|&a, &b| depth(a).total_cmp(&depth(b))).expect("an entry");
+    let map = w.map.clone();
+    let area = |k: usize| map.place_of(&s.leaf(k), lat.0, lat.1).0;
+    w.relief.lay(entry, 3e5 / area(entry), n);
+    let cells = w.mesh.cells().n();
+    let of = |k: usize| map.leaves().iter().position(|l| l.depth <= pcore::space::terrain::SAMPLE_DEPTH && l.split(pcore::space::terrain::SAMPLE_DEPTH).any(|f| s.index(&f) == k));
+    let from = of(entry).expect("the entry's cell");
+    let before: Vec<f64> = w.store.amounts(Class::Ground).to_vec();
+    let short = w.counts.load[6];
+    pcore::flow::build::build(&mut w);
+    assert_eq!(w.counts.load[6], short, "the entry cell held what its lobe moves");
+    // The substances that left the entry cell, and the volume of them each cell got.
+    let ns = w.chem.ns();
+    let moved: Vec<usize> = (0..ns).filter(|&k| w.store.amounts(Class::Ground)[k * cells + from] < before[k * cells + from]).collect();
+    let got = |i: usize| moved.iter().map(|&k| (w.store.amounts(Class::Ground)[k * cells + i] - before[k * cells + i]) * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>();
+    let mut laid = vec![0.0; cells];
+    for k in (0..n).filter(|&k| w.relief.at(k) > 0.0) {
+        laid[of(k).expect("a cell of a sample or coarser")] += w.relief.at(k) * area(k);
+    }
+    let into: Vec<usize> = (0..cells).filter(|&i| i != from && laid[i] > 0.0).collect();
+    assert!(!into.is_empty(), "the lobe crossed into no other cell");
+    for i in into {
+        assert!((got(i) - laid[i]).abs() <= 1e-9 * laid[i], "cell {i} got {} m3 of the lobe's {} m3", got(i), laid[i]);
+    }
+}
+
 /// A mouth builds land: on a small island, after two builds of the samples (twenty years), samples of the open low
 /// ground the seed made lie as land under a lobe (laid on, over the liquid's level, in no pond), and a way runs over one.
 #[test]
