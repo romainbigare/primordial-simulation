@@ -871,9 +871,8 @@ inside the band of 2.5 to 6 days that `eddy_time` keeps. The eddies' motion is m
 flux, `mix`, is r v' ℓ with r = `mix` / (`eddy_speed` × η's unit) = 0.34, inside the measured correlation of v' and
 T' of 0.2 to 0.5. It acts in two places. **Across the open edges**, each day each link's column beyond is read again
 (`Edges::weather`) at its latitude less η at the column, in degrees: the air the eddies bring from there. Past a pole
-that is the other meridian's air, the latitude folded back and its gradient turned (`Planet::at`; 3 of 1.15 million
-readings in 100 years on the band of 20 to 65 degrees); across the equator it is the other half's air in its own season
-(some 90). **On the air
+that is the other meridian's air, the latitude folded back and its gradient turned (`Planet::at`); across the equator it is the other half's air in its own
+season. **On the air
 it lifts**: air that an eddy moves along the warmth's gradient slides along the surfaces of equal warmth (the
 baroclinic eddy, Holton 2004, 8.4). Moving at v, it rises by v times their slope: the warmth's gradient toward
 the south that the node feels (`rise::felt`, as the low wind reads it: the planet's where the edges are open, the
