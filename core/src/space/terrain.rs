@@ -278,9 +278,12 @@ impl Terrain {
     }
     /// The mean by area of `x(samples, k)` over the samples `k` of leaf `l` of `map` (of `SAMPLE_DEPTH` or coarser;
     /// for `seed`, its rows between latitudes `south` and `north`).
-    pub fn over(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64), x: impl Fn(&Samples, usize) -> f64) -> f64 {
-        let s = self.samples(seed, map, (south, north));
-        let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, x(&s, s.index(&f)))).fold((0.0, 0.0), |(a, sum), (da, v)| (a + da, sum + da * v));
+    pub fn over(&self, seed: u64, map: &Square, l: Leaf, lat: (f64, f64), x: impl Fn(&Samples, usize) -> f64) -> f64 {
+        self.over_on(&self.samples(seed, map, lat), map, l, lat, x)
+    }
+    /// The same over the samples `s` (the seed's, or as built: `Terrain::built`).
+    pub fn over_on(&self, s: &Samples, map: &Square, l: Leaf, (south, north): (f64, f64), x: impl Fn(&Samples, usize) -> f64) -> f64 {
+        let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, x(s, s.index(&f)))).fold((0.0, 0.0), |(a, sum), (da, v)| (a + da, sum + da * v));
         sum / area
     }
 }

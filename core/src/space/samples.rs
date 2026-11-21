@@ -174,8 +174,11 @@ impl Terrain {
     /// and `north`), m per m: by area over the samples it covers, each its central difference north to south
     /// (one-sided at the map's edge); a leaf finer than a sample takes its sample's. So a leaf's is its quarters' mean by
     /// area at every depth. It is what the sun on a cell reads of the way the cell faces (`flow::on_slope`).
-    pub fn rise_south(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
-        let s = self.samples(seed, map, (south, north));
+    pub fn rise_south(&self, seed: u64, map: &Square, l: Leaf, lat: (f64, f64)) -> f64 {
+        self.rise_south_on(&self.samples(seed, map, lat), map, l, lat)
+    }
+    /// The same over the samples `s` (the seed's, or as built: `Terrain::built`).
+    pub fn rise_south_on(&self, s: &Samples, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
         let dy = map.length(SAMPLE_DEPTH);
         let at = |f: &Leaf| {
             let k = s.index(f);
