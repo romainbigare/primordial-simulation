@@ -145,7 +145,7 @@ impl Pushes {
 /// drawn flow moves `drawn` mol/s of the lower half one way and as much of the upper half back: `mix` stands for all
 /// the eddies' exchange, and the weather's flow is the part of it the weather resolves, so the smooth mixing is the
 /// rest, `mix` less the flow's mol each way, none below zero, its heat in proportion. One eddy transport, split in two.
-pub(super) fn eddies_left(mix: f64, stir: f64, drawn: f64) -> (f64, f64) {
+fn eddies_left(mix: f64, stir: f64, drawn: f64) -> (f64, f64) {
     let rest = (mix - drawn.abs()).max(0.0);
     (rest, stir * (rest / mix.max(f64::MIN_POSITIVE)))
 }

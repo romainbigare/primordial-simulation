@@ -9,8 +9,7 @@ use super::super::Scratch;
 use super::planet::Beyond;
 use super::stretch::Stretch;
 use super::cell::Cell;
-use super::draw::conductance;
-use super::wind::{column, eddies_left, halves_heat, push, End};
+use super::wind::{push, End};
 use crate::{World, AIR};
 
 /// The edges that are open, as the side of the map beyond them [east, south] from a node of that edge: north, south,
@@ -22,8 +21,7 @@ const SIDES: [[f64; 2]; 4] = [[0.0, -1.0], [0.0, 1.0], [1.0, 0.0], [-1.0, 0.0]];
 /// of its column beyond, its pushes (eddies, mol/s each way; overturning, mol/s of the lower half from the node
 /// outward; the heat its halves carry inward over their mean heat per mol, W; and the heat the eddies carry outward over
 /// the columns' mean heat per mol, W), the share of each gas of the air (`Scratch::state`) of the column beyond and its
-/// heat per mol, J; for the flow the weather draws (`draw::Draw`) its conductance, and the heat its halves carry
-/// inward per mol/s of the lower half outward, J/mol (`wind::halves_heat`); and what crossed into the node over the
+/// heat per mol, J; and what crossed into the node over the
 /// step: per gas and link (`[q * links + l]`) mol, and per link the heat, J (its sensible heat as the air's days move
 /// it, `store::Class::Air`).
 pub(super) struct Edges {
@@ -33,8 +31,6 @@ pub(super) struct Edges {
     push: Vec<[f64; 4]>,
     share: Vec<Vec<f64>>,
     heat_of: Vec<f64>,
-    pub(super) conduct: Vec<f64>,
-    per_flux: Vec<f64>,
     pub(super) mol: Vec<f64>,
     pub(super) heat: Vec<f64>,
 }
@@ -43,17 +39,15 @@ impl Edges {
     /// The links of the air nodes `ends` (`wind::ends`) of `w` to the planet's air beyond its open edges, at the time of
     /// the step's start; none where `w` holds no planet's air.
     pub(super) fn of(w: &World, s: &Scratch, ends: &[End], cell: &Cell) -> Edges {
-        let mut x = Edges { node: Vec::new(), side: Vec::new(), lat: Vec::new(), push: Vec::new(), share: Vec::new(), heat_of: Vec::new(), conduct: Vec::new(), per_flux: Vec::new(), mol: Vec::new(), heat: Vec::new() };
+        let mut x = Edges { node: Vec::new(), side: Vec::new(), lat: Vec::new(), push: Vec::new(), share: Vec::new(), heat_of: Vec::new(), mol: Vec::new(), heat: Vec::new() };
         for (j, side, lat, beyond) in columns(w) {
-            let (push, share, heat_of, [conduct, per_flux]) = link(w, s, (&ends[j], j, side, lat), &beyond, cell);
+            let (push, share, heat_of) = link(w, s, (&ends[j], j, side, lat), &beyond, cell);
             x.node.push(j as u32);
             x.side.push(side);
             x.lat.push(lat);
             x.push.push(push);
             x.share.push(share);
             x.heat_of.push(heat_of);
-            x.conduct.push(conduct);
-            x.per_flux.push(per_flux);
         }
         (x.mol, x.heat) = (vec![0.0; s.state.gas.len() * x.node.len()], vec![0.0; x.node.len()]);
         x
@@ -69,7 +63,7 @@ impl Edges {
             let (j, side, lat) = (self.node[l] as usize, self.side[l], self.lat[l]);
             let (c, off) = (air.centre()[j], beyond_offset(side, air.area()[j].sqrt()));
             let from = planet.at(lat - shift([c[0] + off[0], c[1] + off[1]]) / per_degree, w.season());
-            (self.push[l], self.share[l], self.heat_of[l], _) = link(w, s, (&ends[j], j, side, lat), &from, cell);
+            (self.push[l], self.share[l], self.heat_of[l]) = link(w, s, (&ends[j], j, side, lat), &from, cell);
         }
     }
 
@@ -77,16 +71,13 @@ impl Edges {
     /// and its heat `e`, each link implicit (backward Euler) with the column beyond held: the eddies' mol each way and the
     /// overturning's halves, the lower half outward where the column beyond is warmer and the upper back, each half of
     /// its own air (vapour crowding low, `Scratch::split`), heat by mol, the halves carrying `contrast` more inward, the
-    /// eddies' mol each its column's near-ground energy (`wind::push`, `stir`); with the lower half's flow the weather
-    /// draws outward, `drawn` per link (mol/s, `draw::Draw::flows`; none where empty), added to the overturning's, its
-    /// halves carrying its heat (`per_flux`), and the eddies' mixing the rest of theirs (`wind::eddies_left`). The column beyond lies over low open ground at 0 m: the node pays the lift
-    /// of the mass that enters it (`wind::lift`).
-    pub(super) fn day(&mut self, s: &Scratch, (x, e): (&mut [f64], &mut [f64]), (dd, g): (f64, f64), drawn: &[f64]) {
+    /// eddies' mol each its column's near-ground energy (`wind::push`, `stir`). The weather's drawn flow does not cross
+    /// (`draw`). The column beyond lies over low open ground at 0 m: the node pays the lift of the mass that enters it
+    /// (`wind::lift`).
+    pub(super) fn day(&mut self, s: &Scratch, (x, e): (&mut [f64], &mut [f64]), (dd, g): (f64, f64)) {
         let (na, ng, links) = (e.len(), s.state.gas.len(), self.node.len());
         for l in 0..links {
             let (j, [mix, o, contrast, stir]) = (self.node[l] as usize, self.push[l]);
-            let f = drawn.get(l).copied().unwrap_or(0.0);
-            let ((mix, stir), o, contrast) = (eddies_left(mix, stir, f), o + f, contrast + f * self.per_flux[l]);
             let split = |q: usize| s.split[q * na + j];
             let nt: f64 = (0..ng).map(|q| x[q * na + j]).sum::<f64>().max(f64::MIN_POSITIVE);
             let upper: f64 = (0..ng).map(|q| x[q * na + j] * split(q)).sum();
@@ -117,10 +108,8 @@ impl Edges {
 }
 
 /// The link of edge node `j` (its end `node`) on side `side` to its column `beyond` at latitude `lat` (`Edges`): its
-/// pushes (`wind::push`, with the stretch), the share of each gas of the air of the column, its heat per mol, J; and
-/// for the flow the weather draws its conductance (`draw::conductance`, as long as it is wide: the node's spacing) and
-/// the heat its halves carry inward per mol/s outward (`wind::halves_heat`).
-fn link(w: &World, s: &Scratch, (node, j, side, lat): (&End, usize, usize, f64), beyond: &Beyond, cell: &Cell) -> ([f64; 4], Vec<f64>, f64, [f64; 2]) {
+/// pushes (`wind::push`, with the stretch), the share of each gas of the air of the column and its heat per mol, J.
+fn link(w: &World, s: &Scratch, (node, j, side, lat): (&End, usize, usize, f64), beyond: &Beyond, cell: &Cell) -> ([f64; 4], Vec<f64>, f64) {
     let (spacing, st) = (w.mesh.level(AIR).area()[j].sqrt(), Stretch::of(w));
     let share: Vec<f64> = s.state.gas.iter().map(|&k| beyond.share[k]).collect();
     let all = share.iter().sum::<f64>().max(f64::MIN_POSITIVE);
@@ -129,8 +118,7 @@ fn link(w: &World, s: &Scratch, (node, j, side, lat): (&End, usize, usize, f64),
     let end = beyond_end(w, (node, lat, beyond, cp), st);
     let ab = beyond_offset(side, spacing);
     let [mix, over, contrast, _, stir] = push(&w.cfg, st, (node, &end), (st.length(spacing), st.length(spacing), ab), cell);
-    let draw = [conductance(&w.cfg, (node, &end), 1.0), halves_heat(1.0, (node, &end), column(&w.cfg, node, &end).1)];
-    ([mix, over, contrast, stir], share, beyond.t * cp, draw)
+    ([mix, over, contrast, stir], share, beyond.t * cp)
 }
 
 /// The columns of the planet's air beyond the map's open edges (`SIDES`), the time of the year now: per column its

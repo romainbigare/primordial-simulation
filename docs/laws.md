@@ -864,7 +864,8 @@ Hasselmann 1977). A point of the map reads the four points of the lattice about 
 root sum of squares, so its spread is the same everywhere. The field has no size of its own: a unit of it is two
 measured moments of the same eddies. Its displacement η is their mixing length sqrt(`mix` × `eddy_time`), 525 km (a
 diffusivity is a speed times the length an eddy moves air, Taylor 1922): over the year the band's ground cools by about
-0.55 K a degree, so the air it brings is some 2.5 K off, the measured lower air's 3 to 5 K of the storm tracks' winter.
+0.55 K a degree, so the air it brings is some 2.5 K off over the year, against the measured lower air's 3 to 5 K of
+the storm tracks' winter.
 Its speed v is `eddy_speed`, 6 m/s. Their ratio, about a day, is the eddy's 1 / ω: a wave of about 6 days' period,
 inside the band of 2.5 to 6 days that `eddy_time` keeps. The eddies' motion is mostly reversible sloshing: their mean
 flux, `mix`, is r v' ℓ with r = `mix` / (`eddy_speed` × η's unit) = 0.34, inside the measured correlation of v' and
@@ -885,15 +886,18 @@ back, and where it sinks the low air spreads out. This low convergence is what f
 (P − E = −∇·(q v), Holton 2004, 3.5; Trenberth 1999). Each day the lifts are summed per block (1.6), and the flow on
 each link between blocks is the difference across it of a potential (the divergent part of the wind, Lynch 1989)
 whose convergence at each block is its lift: a Poisson problem over the blocks, each link's conductance the lower
-half's cross-section (mol per m³ times half the column's depth) times its width over its length, the columns of
-the planet's air beyond the open edges held at none, solved by conjugate gradients (`draw::RESIDUAL`). A group of
-blocks that no open edge holds lets sink, over its area, as much as it lifts. The flow is added that day to the
-overturning's on each link (and across the open edges to their overturning), so it moves as the overturning does:
+half's cross-section (mol per m³ times half the column's depth) times its width over its length, solved by conjugate
+gradients (`draw::RESIDUAL`). Each group of blocks lets sink, over its area, as much as it lifts. The flow does not
+cross the open edges: the planet's columns beyond them are a held table of its climate with no weather of their own,
+so a circulation fed from them would draw vapour and heat from a store that never pays them back; and the map's air
+spans some 5,000 km of the planet, about five weather systems, while a system's convergence and the sinking that pays
+for it close within a few thousand km, inside it. The flow is added that day to the overturning's on each link
+between blocks, so it moves as the overturning does:
 each half its node's air, the vapour crowding low, in the same implicit step, each half's mol each way, so no node
 gains or loses air by it and none gives more than it holds. The flow is part of the eddies' exchange, which `mix`
-stands for all of: the eddies' smooth mixing on that link that day is the rest of it, `mix` less the flow's mol each
+stands for all of: the eddies' smooth mixing on that link between blocks that day is the rest of it, `mix` less the flow's mol each
 way, none below zero, its heat in proportion (`wind::eddies_left`), so the two are one eddy transport, the part the
-weather resolves and the smooth rest. Its halves carry the rise of the static energy over half
+weather resolves and the smooth rest; across the open edges it is all `mix`. Its halves carry the rise of the static energy over half
 the column's depth (`wind::halves_heat`), so a node whose air rises cools as rising air does, which lowers what
 saturates it; the rain law reads no rise of the weather. The weather acts nowhere on a
 globe: the planet's strip is one, and the edges read its last year as the climate, which one year of weather would
@@ -901,7 +905,7 @@ stand in for. On a world alone whose air is one block (a small island) the air f
 closed, so it has no weather. **Known limits:** inside a block the flow does nothing, as the eddies even the block each
 day: an island alone in one block is a closed box. The field moves the air only by the flow its lift draws. Where
 that flow moves more than `mix` on a link, the eddies' smooth mixing there is none and their exchange that day is
-more than `mix`. Rain inside a day is as smooth as the lift, not the few strong storms of a real month. The
+more than `mix`: on a third of the link-days of the band of 20 to 65 degrees (the flow averages about `mix` itself). Rain inside a day is as smooth as the lift, not the few strong storms of a real month. The
 field is one number: the air's displacement east or west is not drawn. Its slow part stands for a top layer's memory
 on every world and over land too.
 
