@@ -164,7 +164,7 @@ pub struct Cover {
     pub(crate) seeds: Vec<Seed>,
     /// Per slot: the patch of its cell it stands in (`patches`)
     pub patch: [u8; SLOTS],
-    /// Per slot: the ground the crowns of its large plants that died uncrowded this year held, m² (`Cover::fell`, `gaps`)
+    /// Per slot: the ground the crowns of its large plants that died of an event this year held, m² (`Cover::fell`, `gaps`)
     pub fell: [f64; SLOTS],
     /// Its patches, those in use first (`Patch::share` above zero): each a share of its cell and an age
     pub patches: [Patch; PATCHES],

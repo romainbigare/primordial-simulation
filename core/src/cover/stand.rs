@@ -152,10 +152,11 @@ fn lose(c: &mut Cover, mm: &[f64; NP], x: usize, (mut dead, most): (f64, f64)) {
 }
 
 impl Cover {
-    /// The share `dead` of the large plants of slot `x` (its last group) died where no crowding killed them (wear,
-    /// upkeep unpaid, frost, flame): the ground their crowns held where their stand is closed (`plant_ground`) adds to
-    /// its fallen crowns (`Cover::fell`), the opening a gap is made of (`gaps`). Plants crowded out (`thin`) open no
-    /// ground: the crowns of the living fill it as it frees (Yoda and others 1963).
+    /// The share `dead` of the large plants of slot `x` (its last group) died of an event (upkeep unpaid, frost,
+    /// drowning, flame): the ground their crowns held where their stand is closed (`plant_ground`) adds to its fallen
+    /// crowns (`Cover::fell`), the opening a gap is made of (`gaps`). Plants worn out (`upkeep`) or crowded out
+    /// (`thin`) open no ground: they are the stand's own turnover, and the crowns of the living fill the room they free
+    /// (Yoda and others 1963).
     pub(super) fn fell(&mut self, ph: &Physics, mm: &[f64; NP], x: usize, dead: f64) {
         let (g, held) = self.groups(mm, x);
         if let Some(l) = held.checked_sub(1).map(|l| g[l]) {

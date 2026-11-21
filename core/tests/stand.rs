@@ -343,15 +343,17 @@ fn a_patch_holds_its_share_of_the_samples_nearest_its_point() {
     }
 }
 
-/// How much the repair gene of a stand's trees falls for the last month of a year (log10), a die-off: their wear life
-/// a thousandth of theirs, so about half of them die in that month (seen: 0.49).
-const DIE_OFF: f32 = 3.0;
+/// How far below its ground's temperature of the month before the frost gene of a stand's trees is set for the last
+/// month of a year, K, a die-off: the ground cools by about 3.4 K into that month (seen), so their frost limit stands
+/// about 1.4 K above it, within the spread of their microclimates (`frost_k`, 3 K), and about half of them freeze
+/// (seen: 0.48).
+const DIE_OFF: f64 = 2.0;
 /// How near a gap's share of its cell is to the crown ground of the canopy that died in its year, a share: the masses
 /// of the dead trees move within the month.
 const CROWNS: f64 = 0.02;
 
 /// Fallen trees open a gap at a die-off (laws.md 3, `cover::gaps`): in a stand of trees, a year of the canopy's own
-/// deaths opens none; a year whose last month kills a large share of its trees (`DIE_OFF`) makes the ground their
+/// deaths opens none; a year whose last month freezes a large share of its trees (`DIE_OFF`) makes the ground their
 /// crowns held (`cover::plant_ground` of each, with the year's earlier deaths, `Cover::fell`) a patch of its own, to
 /// `CROWNS`, the stand's living trees all left in the first patch; the books are kept.
 #[test]
@@ -370,7 +372,8 @@ fn a_die_off_opens_a_gap_of_its_crowns() {
     let (c, ph) = (w.life.cover(i), &w.cfg.phys);
     let x = c.held().max_by(|&a, &b| c.height(ph, &mm, rho, a).total_cmp(&c.height(ph, &mm, rho, b))).expect("trees");
     let (was, fell) = (c.sizes(ph, &mm, x), c.fell[x]);
-    w.in_cell(i, |_, d| d.cover(i).genes[x][cover::REPAIR] -= DIE_OFF);
+    let frost = (w.t_ground_last(i) - DIE_OFF) as f32;
+    w.in_cell(i, |_, d| d.cover(i).genes[x][cover::FROST] = frost);
     pcore::step(&mut w);
     let (c, ph, ground) = (w.life.cover(i), &w.cfg.phys, cover::ground(&w, i));
     let now = c.sizes(ph, &mm, x);

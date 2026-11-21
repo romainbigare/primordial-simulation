@@ -1,9 +1,10 @@
 //! Gaps (laws.md 3): a closed forest is a mosaic of gaps, each opened where a canopy tree died and its crown left its
 //! ground to the light, and of the stands that grow back in them (Watt 1947; the gap models, Shugart 1984). The large
-//! plants of a slot that die uncrowded leave the ground their crowns held (`Cover::fell`); once a year, where the
-//! canopy of a patch left at least `GAP_LEAST` of the patch's ground in that year (a die-off: frost, drowning, flame,
-//! a year its upkeep went unpaid), that share of the patch becomes a patch of its own: the plants under the fallen
-//! trees, in full light. A canopy's yearly turnover stays spread over its stand, as its size groups and thinning hold it.
+//! plants of a slot that die of an event (frost, drowning, flame, a month its upkeep went unpaid) leave the ground their
+//! crowns held (`Cover::fell`); once a year, where the canopy of a patch left at least `GAP_LEAST` of the patch's ground
+//! in that year, a die-off, that share of the patch becomes a patch of its own: the plants under the fallen trees, in
+//! full light. A canopy's own turnover, its worn out and crowded out, stays spread over its stand, as its size groups
+//! and thinning hold it.
 
 use super::patches::{carve, fold};
 use super::{stand, Cover, Parts, GROUPS, NO_ROOT, NP, SLOTS, WALL};

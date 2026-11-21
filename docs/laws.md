@@ -1445,10 +1445,10 @@ seeds fill it:
 - **Gaps** (`cover/gaps.rs`): a patch is made for an event, a die-off of a stand's canopy that opens its ground to
   the light (Watt 1947; Shugart 1984), not for one tree: a canopy's own yearly deaths, a share of a crown each, stay
   spread over its stand, as its size groups and thinning hold it. When the large plants of a slot (its last group) die
-  uncrowded, of wear, unpaid upkeep, frost, drowning or flame (`upkeep`, `Cover::die_under`), the ground their crowns
-  held where their stand is closed (`stand::plant_ground` of each, the self-thinning law's measure) adds to the slot's
-  fallen crowns (`Cover::fell`, m², saved); plants crowded out (`stand::thin`) add none, as the crowns of the living
-  fill the room they free. Once a year, after the patches fuse (`patches::year`), each patch sums the fallen crowns of
+  of an event, unpaid upkeep, frost, drowning or flame (`upkeep`, `Cover::die_under`), the ground their crowns held
+  where their stand is closed (`stand::plant_ground` of each, the self-thinning law's measure) adds to the slot's
+  fallen crowns (`Cover::fell`, m², saved); plants worn out (`upkeep`) or crowded out (`stand::thin`) add none: they
+  are the stand's own turnover, and the crowns of the living fill the room they free. Once a year, after the patches fuse (`patches::year`), each patch sums the fallen crowns of
   its canopy that year, the slots whose large plants stand taller than `surface_m` and reach the base of the crown of
   its tallest (`Cover::crown`), over the cell's ground. Where that is at least `GAP_LEAST` (0.15) of the patch's own
   ground and less than all of it, that share of the patch becomes a new patch of age 0 (`patches::carve`): every slot of the

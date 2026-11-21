@@ -63,10 +63,11 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &mut Slot
     let dies = 1.0 - left;
     if dies > 0.0 {
         let mm = p.mm(chem);
+        // The worn out are the stand's own turnover, spread over it; the rest die of an event that may open a gap.
+        c.fell(ph, &mm, x, (dies - lost[AGE as usize]).max(0.0));
         let all = c.kg(&mm, x);
         lost.iter_mut().for_each(|l| *l *= all);
         // What dies are whole plants: each one left keeps its mass.
-        c.fell(ph, &mm, x, dies);
         c.plants[x].iter_mut().for_each(|n| *n *= left);
         // The dead of plants no taller than `surface_m` stand, cured, as their dead leaves do (`season::shed_to`): their
         // body matter and walls stay among the cover's own until they fall; their fuel goes to the ground.
