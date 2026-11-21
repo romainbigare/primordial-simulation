@@ -96,14 +96,20 @@ open low ground of the low stand (on an island, to its lowest sample), so the va
 by the shore are drowned: inlets, bays and small islands off the coast. An island's level (`ISLAND_LEVEL`, 0.27) keeps
 its land's share of the map about what it was with no low stand; a globe's is found on the noise as before, and the
 drowning takes about half a percent of its area from its land (28.4% to 27.9% on a globe of 32 rows). **The bed is of
-a few makes** (`space::strata`), each a mix of the chemistry's own bed substances (`makes`, section 8; five in
+a few makes** (`space::strata`), each a mix of the chemistry's own bed substances (`makes`, section 8; ten in
 chemistry 0), and flowing liquid wears each as much faster than the first as Flow's wear breaks it (the sum of each
-substance's share over its bond strength, 1.3; `Terrain::cut`: 1, 0.88, 1.11, 1.18 and 1.36 in chemistry 0). They lie
-in **layers**: a stack of 12 layers, each 60 to 400 m thick and of a make drawn from the seed (never the make of the
+substance's share over its bond strength, 1.3; `Terrain::cut`: 1, 0.88, 1.11, 1.18 and 1.36 for the five of the
+stack in chemistry 0, 2.82, 2.37, 2.37, 1.29 and 1.28 for its seams and its rim). They lie in **layers**: a stack
+of 12 layers, each 60 to 400 m thick and of a make of the stack's drawn from the seed (never the make of the
 layer over it), repeating under them (`LAYERS`, `THICK_M`), folded up and down by up to 2 km by fractal noise of
 three scales from about 8 km (`FOLD_M`, `FOLD_PER_SQUARE`); and through them stand **bodies** of the hardest make
 where fractal noise over four scales from about 4 km down passes 0.66 (`BODY_ABOVE`), as rock cooled from a melt
-rises through strata. The top of the stack rises with the land and floats back up with it, so how deep the wear has
+rises through strata. Some makes lie only as **seams** (`Lies::Seam`, `seams` in the chemistry): each repeat of the
+stack holds a set number of seams of a set thickness, each at a depth drawn in its own even slot of the stack, cut over
+the layers drawn before (in chemistry 0: one of make 5, 100 m; three of make 6, 30 m; two of make 7, 40 m; one of
+make 8, 30 m). One make (`rim`, make 9 in chemistry 0) stands round the **rims** of some bodies: where their noise lies
+between 0.63 and 0.66 (`RIM_ABOVE`) and a second noise passes 0.7 (`RIM_GATE`). The top of the stack rises with the
+land and floats back up with it, so how deep the wear has
 cut under it, plus the fold, says which layer a sample's surface is in; at each step the wear cuts each sample at the
 rate of the make it has reached. So a soft layer opens into a wide vale, a hard one stands as a scarp or caps a
 tableland, and folded layers clip out in bands round the heights. A cell's bed is the mean of its samples' makes by

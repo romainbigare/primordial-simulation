@@ -100,6 +100,11 @@ pub struct Init {
     /// Volume fractions of each make of bonded ground (`space::strata`), the first the one the wear's `CUT` is
     /// anchored at
     pub makes: Vec<Vec<(usize, f64)>>,
+    /// The makes that lie as seams in the stack (`space::strata::Lies::Seam`): each its make, its thickness, m, and
+    /// how many seams of it lie in each repeat of the stack
+    pub seams: Vec<(usize, f64, u8)>,
+    /// The make round the rims of the bodies (`space::strata::Lies::Rim`)
+    pub rim: usize,
     /// Volume fractions of loose ground
     pub loose: Vec<(usize, f64)>,
     /// Amounts in the loose ground of every land cell when life starts, mol per m² (`life::soil`; empty: none)
@@ -149,7 +154,25 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
     let conversion = |b: &B| Reaction::conversion(pair(&b.i), pair(&b.o));
     let chem = Chemistry::new(f.element_masses.len(), subs, reactions, (Some(conversion(&f.build)), f.builds.iter().map(conversion).collect()), &f.init.air, f.heat_bands);
     chem.validate()?;
+    check_makes(&f.init)?;
     Ok((chem, f.init))
+}
+
+/// Refuses makes that the seams or the rim name but the file does not hold, a make named twice, and a stack left with
+/// no make of its own.
+fn check_makes(init: &Init) -> Result<(), String> {
+    let named: Vec<usize> = init.seams.iter().map(|s| s.0).chain([init.rim]).collect();
+    let n = init.makes.len();
+    if let Some(&m) = named.iter().find(|&&m| m >= n) {
+        return Err(format!("make {m} is named as a seam or the rim, but there are {n} makes"));
+    }
+    if (1..named.len()).any(|i| named[..i].contains(&named[i])) {
+        return Err("a make is named twice as a seam or the rim".into());
+    }
+    if named.len() >= n || named.contains(&0) {
+        return Err("the stack needs its own makes, the first among them".into());
+    }
+    Ok(())
 }
 
 pub fn chemistry0() -> (Chemistry, Init) {
