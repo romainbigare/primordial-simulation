@@ -152,7 +152,7 @@ impl Cover {
         out
     }
     /// Its held groups of slot `x`: those that hold plants, the first ones.
-    fn held_groups(&self, x: usize) -> usize {
+    pub(super) fn held_groups(&self, x: usize) -> usize {
         self.plants[x].iter().take_while(|&&n| n > 0.0).count()
     }
     /// The groups of slot `x` as the bookkeeping moves them (`Group`), and how many are held.
@@ -182,7 +182,7 @@ impl Cover {
     pub(super) fn clear(&mut self, x: usize) {
         (self.mol[x], self.root[x], self.full[x], self.net[x], self.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
         (self.line[x], self.stands[x], self.airless[x], self.drained[x], self.strip[x]) = (0.0, 0.0, 0.0, 0.0, 0.0);
-        (self.plants[x], self.share[x], self.patch[x]) = ([0.0; GROUPS], [0.0; GROUPS], 0);
+        (self.plants[x], self.share[x], self.patch[x], self.fell[x]) = ([0.0; GROUPS], [0.0; GROUPS], 0, 0.0);
     }
     /// `n` plants of `kg` of built cover take hold in slot `x` (seeds of its kind, before their amounts join it): a
     /// group of their own, or, where every group is held, the group of its smallest plants.
@@ -217,6 +217,9 @@ impl Cover {
         let (mut kg, mut died) = ([[0.0; 2]; 2], 0.0);
         for k in (0..held).filter(|&k| s.height(ph, rho, k) <= height) {
             let sprouts = s.height(ph, rho, k) <= ph.surface_m;
+            if !sprouts && k + 1 == held {
+                self.fell(ph, mm, x, f);
+            }
             let dead = g[k].kg * f * if sprouts { 1.0 - ph.base_share } else { 1.0 };
             let lost = &mut kg[(!sprouts) as usize];
             (lost[0], lost[1]) = (lost[0] + dead * (1.0 - s.walls[k]), lost[1] + dead * s.walls[k]);

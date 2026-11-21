@@ -10,6 +10,7 @@ mod around;
 mod budget;
 mod build;
 mod canopy;
+mod gaps;
 mod grow;
 mod groups;
 mod lying;
@@ -24,6 +25,7 @@ mod upkeep;
 
 pub use around::{dimmed, over, pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
+pub use gaps::GAP_LEAST;
 pub use grow::{live, step, Books};
 pub use groups::Sizes;
 pub(crate) use build::per_input;
@@ -34,7 +36,7 @@ pub use patches::{Patch, PATCHES};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use soak::{aired, breath, fill_now, footing, gains, moist, soak, strips_share, working, Footing, Soak};
-pub use stand::{height, loose_bins, stem, BINS};
+pub use stand::{height, loose_bins, plant_ground, stem, BINS};
 
 use crate::life::WET_TISSUE;
 use crate::chem::Chemistry;
@@ -162,6 +164,8 @@ pub struct Cover {
     pub(crate) seeds: Vec<Seed>,
     /// Per slot: the patch of its cell it stands in (`patches`)
     pub patch: [u8; SLOTS],
+    /// Per slot: the ground the crowns of its large plants that died of an event this year held, m² (`Cover::fell`, `gaps`)
+    pub fell: [f64; SLOTS],
     /// Its patches, those in use first (`Patch::share` above zero): each a share of its cell and an age
     pub patches: [Patch; PATCHES],
 }
@@ -169,7 +173,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], patches: patches::whole() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], fell: [0.0; SLOTS], patches: patches::whole() }
     }
 }
 

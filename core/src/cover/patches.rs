@@ -7,16 +7,21 @@
 //! pictures. Edits make patches (`World::clear`, `World::split`); once a year alike patches fuse (`year`).
 
 use super::budget::{held, DIED};
-use super::{stand, Cover, Parts, NO_ROOT, NP, SLOTS, WALL};
+use super::groups::Group;
+use super::{stand, Cover, Parts, FUEL, GROUPS, MATTER, NO_ROOT, NP, SLOTS, WALL};
 use crate::life::kin;
 use crate::{Physics, World};
 use serde::{Deserialize, Serialize};
 
 /// The most patches a cell's cover holds.
 pub const PATCHES: usize = 3;
-/// Two patches are alike when the same kinds hold them (`HOLDS`) and their tallest plants stand within this share of
-/// the taller's height: a rule of the model, as `kin::APART` is for slots.
+/// Two patches are alike when the same kinds hold them (`HOLDS`), their tallest plants stand within this share of
+/// the taller's height and their built cover per m² of their own ground within `ALIKE_COVER` of the larger's: rules
+/// of the model, as `kin::APART` is for slots.
 pub const ALIKE_HEIGHT: f64 = 0.2;
+/// Two patches are alike only when their built cover per m² of their own ground is within this share of the larger's
+/// (`ALIKE_HEIGHT`): young plants reach the height of the old while they hold far less mass.
+pub const ALIKE_COVER: f64 = 0.2;
 /// A starting kind holds a patch when its slots there hold at least this share of the patch's built cover.
 pub const HOLDS: f64 = 0.1;
 
@@ -53,42 +58,73 @@ impl Cover {
     pub fn held_in(&self, k: usize) -> impl Iterator<Item = usize> + '_ {
         self.held().filter(move |&x| self.patch[x] as usize == k)
     }
-    /// Slot `q`, empty, takes the share `s` of slot `x`, of its amounts and of its plants in each group, and the rest of
-    /// its numbers as they are (all of it with `s` 1, and slot `x` is emptied then).
-    fn part(&mut self, x: usize, q: usize, s: f64) {
-        for k in 0..NP {
-            let m = self.mol[x][k] * s;
+    /// Slot `q`, empty, takes of slot `x` the share `s[g]` of the plants of each of its groups `g` and of their built
+    /// cover: of its body matter and its walls what those plants hold (`Cover::sizes`), of its fuel and of its fallen
+    /// crowns the share of its built cover they hold; and the rest of its numbers as they are. With one share for every
+    /// group, that share of each amount (all of it with 1, and slot `x` is emptied then).
+    pub(super) fn part(&mut self, (ph, mm): (&Physics, &[f64; NP]), x: usize, q: usize, s: &[f64; GROUPS]) {
+        let (g, held) = self.groups(mm, x);
+        let even = s[..held].iter().all(|&f| f == s[0]);
+        let by = if even { [s[0]; NP] } else { self.shares_of(ph, mm, x, s) };
+        for (k, f) in by.iter().enumerate() {
+            let m = self.mol[x][k] * f;
             (self.mol[q][k], self.mol[x][k]) = (m, self.mol[x][k] - m);
         }
-        for g in 0..super::GROUPS {
-            let n = self.plants[x][g] * s;
-            (self.plants[q][g], self.plants[x][g]) = (n, self.plants[x][g] - n);
+        let f = self.fell[x] * by[FUEL];
+        (self.fell[q], self.fell[x]) = (f, self.fell[x] - f);
+        if even {
+            for k in 0..GROUPS {
+                let n = self.plants[x][k] * s[0];
+                (self.plants[q][k], self.plants[x][k]) = (n, self.plants[x][k] - n);
+            }
+            self.share[q] = self.share[x];
+        } else {
+            let mut taken: [Group; GROUPS] = std::array::from_fn(|k| Group { n: g[k].n * s[k], kg: g[k].kg * s[k] });
+            let mut left: [Group; GROUPS] = std::array::from_fn(|k| Group { n: g[k].n - taken[k].n, kg: g[k].kg - taken[k].kg });
+            self.set_groups(q, &mut taken[..held]);
+            self.set_groups(x, &mut left[..held]);
         }
-        (self.genes[q], self.root[q], self.full[q], self.net[q], self.share[q]) = (self.genes[x], self.root[x], self.full[x], self.net[x], self.share[x]);
+        (self.genes[q], self.root[q], self.full[q], self.net[q]) = (self.genes[x], self.root[x], self.full[x], self.net[x]);
         (self.rooted[q], self.need[q], self.line[q], self.stands[q]) = (self.rooted[x], self.need[x], self.line[x], self.stands[x]);
         (self.airless[q], self.drained[q], self.strip[q], self.patch[q]) = (self.airless[x], self.drained[x], self.strip[x], self.patch[x]);
-        if s >= 1.0 {
+        if even && s[0] >= 1.0 {
             self.clear(x);
         }
     }
+    /// The share of each of the amounts of slot `x` (fuel, body matter, walls) that the share `s[g]` of the plants of
+    /// each of its groups `g` hold (`Cover::part`): of its body matter and walls each group's (`Cover::sizes`), of its
+    /// fuel its built cover's.
+    fn shares_of(&self, ph: &Physics, mm: &[f64; NP], x: usize, s: &[f64; GROUPS]) -> [f64; NP] {
+        let z = self.sizes(ph, mm, x);
+        let of = |part: &dyn Fn(usize) -> f64| {
+            let all: f64 = (0..z.held).map(|g| z.count[g] * z.mass[g] * part(g)).sum();
+            (0..z.held).map(|g| s[g] * z.count[g] * z.mass[g] * part(g)).sum::<f64>() / all.max(1e-300)
+        };
+        let mut by = [0.0; NP];
+        (by[FUEL], by[MATTER], by[WALL]) = (of(&|_| 1.0), of(&|g| 1.0 - z.walls[g]), of(&|g| z.walls[g]));
+        by
+    }
 }
 
-/// What patch `k` of cover `c` is to another (`alike`): the height its tallest plants stand at, m, and the starting
-/// kinds that hold it (`HOLDS`), in order.
-fn sketch(c: &Cover, (ph, mm, rho): (&Physics, &[f64; NP], f64), k: usize) -> (f64, Vec<u32>) {
+/// What patch `k` of cover `c` is to another (`alike`): the height its tallest plants stand at, m, its built cover over
+/// its share of the cell (kg; as its cover per m² of its own ground, the cell's ground the same for every patch), and
+/// the starting kinds that hold it (`HOLDS`), in order.
+fn sketch(c: &Cover, (ph, mm, rho): (&Physics, &[f64; NP], f64), k: usize) -> (f64, f64, Vec<u32>) {
     let all: f64 = c.held_in(k).map(|x| c.built(mm, x)).sum();
     let tallest = c.held_in(k).map(|x| c.height(ph, mm, rho, x)).fold(0.0, f64::max);
     let mut kinds: Vec<u32> = c.held_in(k).map(|x| c.root[x]).collect();
     kinds.sort_unstable();
     kinds.dedup();
     kinds.retain(|&r| c.held_in(k).filter(|&x| c.root[x] == r).map(|x| c.built(mm, x)).sum::<f64>() >= HOLDS * all);
-    (tallest, kinds)
+    (tallest, all / c.patches[k].share, kinds)
 }
 
-/// Whether two patches of sketches `a` and `b` (`sketch`) are alike: the same kinds hold them and their tallest plants
-/// stand within `ALIKE_HEIGHT` of the taller's height.
-fn alike(a: &(f64, Vec<u32>), b: &(f64, Vec<u32>)) -> bool {
-    a.1 == b.1 && (a.0 - b.0).abs() <= ALIKE_HEIGHT * a.0.max(b.0)
+/// Whether two patches of sketches `a` and `b` (`sketch`) are alike: the same kinds hold them, their tallest plants
+/// stand within `ALIKE_HEIGHT` of the taller's height and their built cover per m² of their own ground within
+/// `ALIKE_COVER` of the larger's.
+fn alike(a: &(f64, f64, Vec<u32>), b: &(f64, f64, Vec<u32>)) -> bool {
+    let near = |x: f64, y: f64, within: f64| (x - y).abs() <= within * x.max(y);
+    a.2 == b.2 && near(a.0, b.0, ALIKE_HEIGHT) && near(a.1, b.1, ALIKE_COVER)
 }
 
 /// Patch `from` of cover `c` joins patch `into`: their shares add, its age the mean of theirs by share, its slots
@@ -109,30 +145,58 @@ fn join(c: &mut Cover, into: usize, from: usize) {
     }
 }
 
-/// A new patch of the share `s` of the cell of cover `c`, age 0, made at its sample `point` (`Patch::at`), the ground
-/// of each patch in use giving the share `s` of its own (the laws know no place of a patch in its cell). Where
-/// `PATCHES` are in use the new one joins the one most alike to bare ground: the one whose tallest plants stand lowest,
-/// which keeps its sample. Returns the patch it is.
-fn open(c: &mut Cover, s: f64, point: u32, at: (&Physics, &[f64; NP], f64)) -> usize {
+/// A new patch of the share `s` of the cell of cover `c`, age 0, made at its sample `point` (`Patch::at`), its ground
+/// given by patch `from` (a gap, `gaps`), or where none by each patch in use, the share `s` of its own (the laws know no
+/// place of a patch in its cell). Where `PATCHES` are in use the new one joins the one most alike to bare ground: the
+/// one whose tallest plants stand lowest, which keeps its sample. Returns the patch it is; none where that is `from`
+/// (nothing changes then).
+pub(super) fn open(c: &mut Cover, s: f64, point: u32, from: Option<usize>, at: (&Physics, &[f64; NP], f64)) -> Option<usize> {
     let n = c.patch_count();
-    c.patches[..n].iter_mut().for_each(|p| p.share *= 1.0 - s);
-    let k = if n < PATCHES {
-        c.patches[n] = Patch { share: s, age: 0.0, at: point };
-        n
-    } else {
-        let low = (0..n).min_by(|&a, &b| sketch(c, at, a).0.total_cmp(&sketch(c, at, b).0)).unwrap_or(0);
-        let p = c.patches[low];
-        c.patches[low] = Patch { share: p.share + s, age: (p.age as f64 * p.share / (p.share + s)) as f32, at: p.at };
-        low
+    let low = (n == PATCHES).then(|| (0..n).min_by(|&a, &b| sketch(c, at, a).0.total_cmp(&sketch(c, at, b).0)).unwrap_or(0));
+    if low.is_some() && low == from {
+        return None;
+    }
+    match from {
+        Some(k) => c.patches[k].share -= s,
+        None => c.patches[..n].iter_mut().for_each(|p| p.share *= 1.0 - s),
+    }
+    let k = match low {
+        None => {
+            c.patches[n] = Patch { share: s, age: 0.0, at: point };
+            n
+        }
+        Some(low) => {
+            let p = c.patches[low];
+            c.patches[low] = Patch { share: p.share + s, age: (p.age as f64 * p.share / (p.share + s)) as f32, at: p.at };
+            low
+        }
     };
     let all: f64 = c.patches.iter().map(|p| p.share).sum();
     c.patches.iter_mut().for_each(|p| p.share /= all);
-    k
+    Some(k)
+}
+
+/// Patch `k` of cover `c` gives the share `s` of its cell as a new patch about its sample `point` (`open`), each of its
+/// slots `x` giving it the share `by[x][g]` of the plants of each of its groups `g` as a slot of its own there
+/// (`Cover::part`; none where it gives no plants). Returns the patch it is; none (nothing done) where the arrays hold
+/// fewer empty slots than it has slots that give, or the new one would join `k`.
+pub(super) fn carve(c: &mut Cover, at: (&Physics, &[f64; NP], f64), (k, s, point): (usize, f64, u32), by: &[[f64; GROUPS]; SLOTS]) -> Option<usize> {
+    let giving: Vec<usize> = c.held_in(k).filter(|&x| by[x][..c.held_groups(x)].iter().any(|&f| f > 0.0)).collect();
+    if c.root.iter().filter(|&&r| r == NO_ROOT).count() < giving.len() {
+        return None;
+    }
+    let into = open(c, s, point, Some(k), at)?;
+    for x in giving {
+        let q = kin::empty(&c.root).expect("an empty slot");
+        c.part((at.0, at.1), x, q, &by[x]);
+        c.patch[q] = into as u8;
+    }
+    Some(into)
 }
 
 /// A patch of cover `c` holds no more than `variety` slots: while it holds more, its two nearest slots join
 /// (`seed::room`); a cover left with one patch keeps its slots in its first `variety` (`Cover::slots`).
-fn fold(c: &mut Cover, mm: &[f64; NP], variety: usize) {
+pub(super) fn fold(c: &mut Cover, (ph, mm): (&Physics, &[f64; NP]), variety: usize) {
     for k in 0..c.patch_count() {
         while c.held_in(k).count() > variety && super::seed::room(c, mm, SLOTS, k).is_some() {}
     }
@@ -140,7 +204,7 @@ fn fold(c: &mut Cover, mm: &[f64; NP], variety: usize) {
         let past: Vec<usize> = (variety..SLOTS).filter(|&x| c.root[x] != NO_ROOT).collect();
         for x in past {
             if let Some(q) = kin::empty(&c.root[..variety]) {
-                c.part(x, q, 1.0);
+                c.part((ph, mm), x, q, &[1.0; GROUPS]);
             }
         }
     }
@@ -148,7 +212,7 @@ fn fold(c: &mut Cover, mm: &[f64; NP], variety: usize) {
 
 /// A year of the patches of every cell: each ages a year, and while two are alike (`alike`) the younger joins the
 /// older (`join`), its slots meeting slots of their kind joining them (`stand::merge_alike`), and a patch of more than
-/// `variety` slots folding (`fold`).
+/// `variety` slots folding (`fold`); then the canopy that fell over the year opens gaps (`gaps::year`).
 pub(super) fn year(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
@@ -163,9 +227,10 @@ pub(super) fn year(w: &mut World) {
             let (into, from) = if c.patches[z].age > c.patches[a].age { (z, a) } else { (a, z) };
             join(c, into, from);
             stand::merge_alike(c, &mm, (ph, SLOTS));
-            fold(c, &mm, variety);
+            fold(c, (ph, &mm), variety);
         }
     }
+    super::gaps::year(w);
 }
 
 impl World {
@@ -186,30 +251,25 @@ impl World {
         for x in (0..SLOTS).filter(|&x| c.root[x] != NO_ROOT) {
             c.plants[x].iter_mut().for_each(|n| *n -= *n * s);
         }
-        open(c, s, point, (&self.cfg.phys, &mm, rho));
+        open(c, s, point, None, (&self.cfg.phys, &mm, rho));
         self.counts.cover_budget[DIED] -= held(&e, &dead);
         crate::contract::died_at(self, i, (0..NP).map(|q| (p.sub[q], dead[q])), heat);
         true
     }
-    /// An edit that changes nothing: the share `s` (0 to 1) of cell `i` becomes a new patch of its cover (`open`) at its
-    /// centre (`World::centre_sample`), of its age, each slot giving it the share `s` of its amounts and plants as a slot of its own there; the two patches are
-    /// alike. A control run the patches' law is checked against: each patch stands as the cell did. False (nothing done)
-    /// for a share outside 0 to 1, a cell of more than one patch or one with too few empty slots.
+    /// An edit that changes nothing: the share `s` (0 to 1) of the first patch of cell `i` becomes a new patch of its
+    /// cover at its centre (`World::centre_sample`), of its age, each slot of the first patch giving it the share `s` of
+    /// its amounts and plants as a slot of its own there (`carve`); the two patches are alike. A control run the
+    /// patches' law is checked against: each patch stands as the cell did. False (nothing done) for a share outside 0 to
+    /// 1, a cell whose `PATCHES` are in use or one with too few empty slots.
     pub fn split(&mut self, i: usize, s: f64) -> bool {
         let Some(p) = Parts::of(&self.chem) else { return false };
         let (mm, rho, point) = (p.mm(&self.chem), self.chem.subs[p.sub[WALL]].density[0], self.centre_sample(i) as u32);
         let c = &mut self.life.cells[i].cover;
-        let held: Vec<usize> = c.held().collect();
-        if !(s > 0.0 && s < 1.0) || c.patch_count() > 1 || 2 * held.len() > SLOTS {
+        if !(s > 0.0 && s < 1.0) || c.patch_count() == PATCHES {
             return false;
         }
-        let k = open(c, s, point, (&self.cfg.phys, &mm, rho));
+        let Some(k) = carve(c, (&self.cfg.phys, &mm, rho), (0, s * c.patches[0].share, point), &[[s; GROUPS]; SLOTS]) else { return false };
         c.patches[k].age = c.patches[0].age;
-        for x in held {
-            let q = kin::empty(&c.root).expect("an empty slot");
-            c.part(x, q, s);
-            c.patch[q] = k as u8;
-        }
         true
     }
 }

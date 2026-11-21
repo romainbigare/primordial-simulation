@@ -69,7 +69,7 @@ pub(super) fn most_plants(ph: &Physics, kg: f64) -> f64 {
 
 /// The ground a plant of `mass` kg of built cover holds where its stand is as dense as the self-thinning law allows, m²:
 /// (mass / `thin_kg`)^(2/3) (`most_plants`: n plants a m² of mean mass m fill the ground at n (m / thin_kg)^(2/3) = 1).
-pub(super) fn plant_ground(ph: &Physics, mass: f64) -> f64 {
+pub fn plant_ground(ph: &Physics, mass: f64) -> f64 {
     (mass / ph.thin_kg).powf(2.0 / 3.0)
 }
 
@@ -149,6 +149,20 @@ fn lose(c: &mut Cover, mm: &[f64; NP], x: usize, (mut dead, most): (f64, f64)) {
     }
     g[k].n = (g[k].n - dead.max(0.0)).max(f64::MIN_POSITIVE);
     c.set_groups(x, &mut g[..held]);
+}
+
+impl Cover {
+    /// The share `dead` of the large plants of slot `x` (its last group) died of an event (upkeep unpaid, frost,
+    /// drowning, flame): the ground their crowns held where their stand is closed (`plant_ground`) adds to its fallen
+    /// crowns (`Cover::fell`), the opening a gap is made of (`gaps`). Plants worn out (`upkeep`) or crowded out
+    /// (`thin`) open no ground: they are the stand's own turnover, and the crowns of the living fill the room they free
+    /// (Yoda and others 1963).
+    pub(super) fn fell(&mut self, ph: &Physics, mm: &[f64; NP], x: usize, dead: f64) {
+        let (g, held) = self.groups(mm, x);
+        if let Some(l) = held.checked_sub(1).map(|l| g[l]) {
+            self.fell[x] += l.n * dead * plant_ground(ph, l.plant());
+        }
+    }
 }
 
 /// The share of the crown from `b` to `t` m that the crown from `b2` to `t2` shares; of a crown of no depth, whether the
@@ -234,6 +248,7 @@ pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
     let lines = (c.line[big], c.line[small]);
     c.line[big] = if lines.0 < 0.0 || lines.1 < 0.0 { lines.0.max(lines.1) } else { lines.0.min(lines.1) };
     c.join_groups(mm, big, small);
+    c.fell[big] += c.fell[small];
     (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
     c.clear(small);
 }
