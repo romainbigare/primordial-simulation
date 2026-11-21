@@ -38,7 +38,7 @@ pub fn build(w: &mut World) {
 
 /// The load piled at the mouths since the last build (what was laid on the samples of the bodies since, `Relief::since`)
 /// laid out as lobes on the samples as last built (`Terrain::lobes_of`, `delta::lobes`): each body's liquid at its
-/// level now (`basin::body_level`, from what its parts hold), the samples of its liquid its pond's (a lobe stays in its
+/// level now (from what its parts hold), the samples of its liquid its pond's (a lobe stays in its
 /// mouth's body); each mouth's top its level and the flood's depth
 /// over its entry (`delta::flood_depth`), no higher than its pass. The piles leave the relief, the lobes join it, and
 /// what found no room is matter of the entry cell, which its offset spreads over it (as all matter the relief does
@@ -47,8 +47,14 @@ pub fn build(w: &mut World) {
 /// most what it holds loose (the rest stays, for the offsets); it mixes into the cell it reaches (`runoff::mix`).
 fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
     let (n, b) = (samples.h.len(), &s.bodies);
-    // (Each body's level from what its parts hold, the saved state, as a loaded world finds it.)
-    let levels: Vec<f64> = b.list.iter().map(|body| super::basin::body_level(s, body)).collect();
+    // Each body's level: what its parts hold (the saved state) at one level over their samples (`level::level_over`),
+    // each cell's at its ground found from its amounts (`World::ground_z`), no higher than its pass; so a loaded world
+    // finds the same, as it reads no cache of the run.
+    let levels: Vec<f64> = b.list.iter().map(|body| {
+        let parts: Vec<(&super::curve::Part, f64)> = body.cells.iter().zip(&body.part).map(|(&i, &q)| (&s.curves[i as usize].parts[q], w.ground_z(i as usize))).collect();
+        let held: f64 = body.cells.iter().zip(&body.part).map(|(&i, &q)| s.state.held[i as usize].m3[q]).sum();
+        super::level::level_over(&parts, held).min(body.level)
+    }).collect();
     let area = |k: usize| w.map.place_of(&samples.leaf(k), w.cfg.lat_south, w.cfg.lat_north).0;
     let body: Vec<u32> = (0..n).map(|k| b.at.get(k).copied().unwrap_or(NONE)).collect();
     let level: Vec<f64> = body.iter().map(|&x| if x == NONE { f64::NEG_INFINITY } else { levels[x as usize] }).collect();

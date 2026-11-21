@@ -89,13 +89,15 @@ fn month(w: &mut World, air_days: u32, mark: &mut dyn FnMut(&mut World, Stage)) 
             panic!("broken after {what} (day {}): {e}", w.day());
         }
     };
-    // At a year's start, every `build_years`, the terrain's samples are built from what the load laid (`flow::build`).
-    if flow::build::due(w) {
-        pass(w, Stage::Flow, "build", &flow::build::build);
-    }
     // The month's start builds Flow's state in full for the cells' surroundings; Flow's own pass leaves it then.
     for (stage, what, run) in START {
         pass(w, stage, what, &run);
+    }
+    // At a year's start, every `build_years`, the terrain's samples are built from what the load laid (`flow::build`),
+    // once the month's start has built Flow's state (a loaded world's too), so the lobes' moves book their lifts and falls
+    // from it.
+    if flow::build::due(w) {
+        pass(w, Stage::Flow, "build", &flow::build::build);
     }
     // Flow's parts follow each other with nothing between, from here to its refresh: their lifts and falls are booked
     // once (`flow::chain`).
