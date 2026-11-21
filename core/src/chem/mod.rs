@@ -111,6 +111,13 @@ impl Reaction {
         self.k * (-self.ea / t).exp()
     }
 
+    /// Its rate constant at `t` K (no colder than 1 K) over its rate constant at `t_ref` K (`arrhenius`): how much
+    /// faster it runs at `t` than at `t_ref`.
+    #[inline]
+    pub fn relative_rate(&self, t: f64, t_ref: f64) -> f64 {
+        self.arrhenius(t.max(1.0)) / self.arrhenius(t_ref)
+    }
+
     /// The power of the share of input `q` in the rate law (`ord`, else its count).
     #[inline]
     pub fn order(&self, q: usize) -> u16 {
