@@ -186,18 +186,17 @@ lies under `EDGE_M`, 2 m; the ground drawn lies over the level up to there, by a
 about it has no pond near, so the edge of where liquid may stand is dry ground: a smooth line of the place, the same in
 every tile at every depth, never the texels' or the samples' edges; a shell draws the liquid where the ground drawn
 lies under the pond's level; 0 for none), whole numbers a 16-bit float holds exactly up to `PONDS_EXACT` (2,048). **The cells' table** (`tape::Table`, `tape/src/table.rs`), made with each
-frame: the melting point of the frozen cover, K, then for each square row by row 12 f32 (`ROW`) of the cell that holds
+frame: the melting point of the frozen cover, K, then for each square row by row 11 f32 (`ROW`) of the cell that holds
 its centre: the terrain's mean height over the cell, m; its ground's temperature, K, and how fast its air cools with
 height, K/m (`World::air_drop`); its ice, m (Flow's soft cover, `Scratch::soft`); the level its standing liquid reaches and its lowest ground, m
 (`flow::levels`), and the depth that stands, m; the liquid in its pores and what they hold full, m (`flow::means`), and
 the level of the wetness index its soil's liquid departs about (`inside::soil_level` over the samples inside the cell;
-0 where the pores are dry or full); the share of its area that is land, its land over its area (`contract::lands`: as the
-month's start found it, the land its cover lives on); and the mean wetness index of the samples inside it (the level the
-liquid departs about where none is dry or full, of the terrain alone: a shell places plants by it the same in every month). Before Flow built its state the level and
+0 where the pores are dry or full); and the share of its area that is land, its land over its area (`contract::lands`: as the
+month's start found it, the land its cover lives on). Before Flow built its state the level and
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 8 unless the
-start chose other) of `KIND_ROW` (39) f32 each, the heaviest first: the slots of
+start chose other) of `KIND_ROW` (41) f32 each, the heaviest first: the slots of
 its cover that stand on any of its ground, each as the law holds it, per m² of the ground it stands on (its share of
 the cell, `Cover::stands`: its land, and its ground under the liquid where its roots work, `cover::footing`); of each its starting kind (-1: none); its built cover, kg/m²; its large plants (`stands::plants` of the slot's group of the largest plants, `cover::Sizes::large`, with that group's built cover and share of the capture area): the stem's width, m, plants a m² (that group's count), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-their leaf area; plants with no capture area stand bare, their crowns of no width, covering none, which the page draws by their stems as a crown that has shed its leaves); its walls' share of its built cover; its
@@ -220,7 +219,12 @@ about their size while smaller plants come and go and groups join or split. Then
 the liquid: how deep under the cell's level its line lies, m (`Cover::line`: it stands on the ground above it, on land
 and under the liquid as deep as that; plants do not move, so this deepens as the level rises and the page draws them
 on the same ground; 0 before its line is found), and the share of its ground that lay under the liquid in its cell's
-last month (`Footing::wet`, `cover::Ran`). The page thins a
+last month (`Footing::wet`, `cover::Ran`); then two numbers of where it stands on its land: how dense its plants
+stand on the land's saturated strips and on its drier rest, over their mean on its land (`stands::dense`: its share in
+the strips, `Cover::strip`, over the strips' share of the land, `WetGround::share`, and the rest's over the rest's;
+the cover's law knows no other place in a land). The page stands each kind's marks by them: a mark's foot on saturated
+ground (land.wgsl `saturated_at`, by the law's level of the wetness index) takes the first, on drier ground the second
+(mark.wgsl `dense_at`). The page thins a
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /

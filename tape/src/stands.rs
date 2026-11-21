@@ -14,8 +14,9 @@ pub const KIND_ROW: usize = KIND_HEAD + GROUPS * GROUP_ROW + KIND_TAIL;
 const KIND_HEAD: usize = 21;
 /// The numbers of a group of plants in a kind's row.
 const GROUP_ROW: usize = 4;
-/// The numbers of a kind's row after its groups: where it stands under the liquid.
-const KIND_TAIL: usize = 2;
+/// The numbers of a kind's row after its groups: where it stands under the liquid, and how dense on its land's
+/// saturated strips and on its drier rest (`dense`).
+const KIND_TAIL: usize = 4;
 
 /// The plants of a stand: how many a m², each one's mass, kg, height, stem's width and crown's width, m, the share of
 /// the ground the crowns cover, and how closed one crown is (the light it stops, as the cover's light law: 1 - e^-leaf
@@ -55,12 +56,28 @@ pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, wa
     Plants { per_m2, mass, height, stem, width, cover, crown: -(-leaf / cover).exp_m1() }
 }
 
+/// How dense a slot's plants stand on its land's saturated strips and on its drier rest, over their mean on its land,
+/// [strips, rest]: of its plants on its land the share `strip` stand on the strips (`Cover::strip`), which are the share
+/// `saturated` of the land (`WetGround::share`, as the month's start found it). The law knows no other place in a land:
+/// these are its split, and their mean over the land is 1.
+fn dense(strip: f64, saturated: f64) -> [f64; 2] {
+    if saturated <= 0.0 {
+        [0.0, 1.0]
+    } else if saturated >= 1.0 {
+        [1.0, 0.0]
+    } else {
+        [strip / saturated, (1.0 - strip) / (1.0 - saturated)]
+    }
+}
+
 /// What a slot's row reads of its cell `i`: the height of its liquid's level over its lowest ground, m
 /// (`flow::levels`), what its cover's slots ran at in its last month (`Counters::ran_month`; none before its first),
-/// the density of its walls, kg/m³, and its area, m².
+/// the share of its land saturated (`WetGround::share`; none where the month's start found no wet ground), the density
+/// of its walls, kg/m³, and its area, m².
 struct Ground<'a> {
     level: f64,
     ran: Option<&'a [cover::Ran; cover::SLOTS]>,
+    saturated: f64,
     rho: f64,
     area: f64,
 }
@@ -85,7 +102,8 @@ struct Ground<'a> {
 /// crown's width, m (`plants` of that group). Then where it stands: how deep under its cell's level its line lies, m
 /// (`Cover::line`: it stands on the ground above it, on land and under the liquid as deep as that; plants do not move,
 /// so as the level rises by a metre this deepens by a metre, and a viewer draws them on the same ground; 0 before its
-/// line is found), and the share of its ground that lies under the liquid in its last month (`cover::Ran`).
+/// line is found), and the share of its ground that lies under the liquid in its last month (`cover::Ran`). Then how
+/// dense its plants stand on its land's saturated strips and on its drier rest, over their mean on its land (`dense`).
 fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
     let ph = &w.cfg.phys;
     let (built, genes) = (c.built(mm, x), c.genes[x]);
@@ -126,7 +144,8 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
         out[at..at + GROUP_ROW].copy_from_slice(&[q.per_m2, q.height, q.stem, q.width]);
     }
     let deep = if c.line[x] >= 0.0 { g.level - c.line[x] as f64 } else { 0.0 };
-    out[KIND_ROW - KIND_TAIL..].copy_from_slice(&[deep, ran.wet as f64]);
+    let [strips, rest] = dense(c.strip[x] as f64, g.saturated);
+    out[KIND_ROW - KIND_TAIL..].copy_from_slice(&[deep, ran.wet as f64, strips, rest]);
     out
 }
 
@@ -139,7 +158,8 @@ pub fn rows(w: &World, i: usize, level: f64) -> Vec<f64> {
     out.iter_mut().step_by(KIND_ROW).for_each(|r| *r = -1.0);
     let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
-    let g = Ground { level, ran: w.counts.ran_month.get(i), rho: w.chem.subs[p.sub[cover::WALL]].density[0], area: w.mesh.cells().area()[i] };
+    let saturated = w.life.wet.get(i).copied().flatten().map_or(0.0, |g| g.share);
+    let g = Ground { level, ran: w.counts.ran_month.get(i), saturated, rho: w.chem.subs[p.sub[cover::WALL]].density[0], area: w.mesh.cells().area()[i] };
     let mut slots: Vec<usize> = c.held().filter(|&x| c.stands[x] > 0.0).collect();
     slots.sort_by(|&a, &b| c.built(&mm, b).total_cmp(&c.built(&mm, a)));
     for (k, &x) in slots.iter().enumerate() {
