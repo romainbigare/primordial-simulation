@@ -240,8 +240,9 @@ cond = 0.2
 hf = -6098
 bound = true
 
-# 15 to 22: metals, their ores, solid carbon, a salt and a clay, for heat and fuel; docs/numbers.md, "substances 15 to 22".
-# 15: metal A, freed from its ore 16 by solid carbon in a fire's heat (reaction 18).
+# 15 to 22: two free elements and their oxides, the solid of element 1 alone, a crystal and a clay, for heat and fuel:
+# docs/numbers.md, "substances 15 to 22".
+# 15: the free element 6, freed from its oxide 16 by the solid 19 in a flame's heat (reaction 18).
 [[s]] # 15
 e = [0,0,0,0,0,0,1,0,0,0,0]
 cp = 25.1
@@ -258,7 +259,7 @@ lv = 340
 lf = 13.8
 rupture = 250
 
-# 16: ore A, the oxide of metal A.
+# 16: the oxide of element 6.
 [[s]] # 16
 e = [0,0,0,3,0,0,2,0,0,0,0]
 cp = 104
@@ -272,7 +273,7 @@ sol = 0.0
 cond = 6
 hf = -824.2
 
-# 17: metal B, freed from its ore 18 by solid carbon (reaction 19).
+# 17: the free element 7, freed from its oxide 18 by the solid 19 (reaction 19).
 [[s]] # 17
 e = [0,0,0,0,0,0,0,1,0,0,0]
 cp = 24.4
@@ -288,7 +289,7 @@ hf = 0
 lv = 300
 lf = 13.3
 
-# 18: ore B, the oxide of metal B.
+# 18: the oxide of element 7.
 [[s]] # 18
 e = [0,0,0,1,0,0,0,1,0,0,0]
 cp = 42.3
@@ -302,7 +303,8 @@ sol = 0.0
 cond = 3
 hf = -157.3
 
-# 19: solid carbon, what charring leaves of the frame (reaction 16) and the rock of a fuel bed; it burns (reaction 17).
+# 19: the solid of element 1 alone, what charring leaves of the frame (reaction 16) and the rock of a fuel bed; it burns
+# (reaction 17).
 [[s]] # 19
 e = [0,1,0,0,0,0,0,0,0,0,0]
 cp = 8.5
@@ -316,7 +318,7 @@ sol = 0.0
 cond = 0.3
 hf = 0
 
-# 20: a salt of the elements 8 and 9; no law dissolves it (`sol`), so it stays where it lies.
+# 20: a crystal of the elements 8 and 9; no law dissolves it (`sol`), so it stays where it lies.
 [[s]] # 20
 e = [0,0,0,0,0,0,0,0,1,1,0]
 cp = 50.5
@@ -332,7 +334,7 @@ hf = -411.2
 lv = 170
 lf = 28.2
 
-# 21: a clay mineral, which heat fires into 22 (reaction 20).
+# 21: a clay mineral holding bound liquid, which heat bakes into 22 (reaction 20).
 [[s]] # 21
 e = [4,0,0,9,2,0,0,0,0,0,2]
 cp = 246
@@ -346,7 +348,7 @@ sol = 0.0
 cond = 1.0
 hf = -4119.6
 
-# 22: fired clay, the clay mineral that heat has dried of its bound liquid.
+# 22: baked clay, the clay mineral that heat has dried of its bound liquid.
 [[s]] # 22
 e = [0,0,0,7,2,0,0,0,0,0,2]
 cp = 200
@@ -486,43 +488,43 @@ k = 9.12e7
 ea = 9000
 open = 5
 
-# 16 to 21: fast only in a fire's or a kiln's heat, frozen at the ground's warmth; docs/numbers.md, "reactions 16 to 21".
-# 16: charring the frame, with no gas: solid carbon and the liquid.
+# 16 to 21: fast only in a flame's or a kiln's heat, frozen at the ground's warmth; docs/numbers.md, "reactions 16 to 21".
+# 16: charring the frame, with no gas: the solid 19 and the liquid.
 [[r]] # 16
 i = [[13,1]]
 o = [[19,6],[0,5]]
 k = 2.8e19
 ea = 29000
 
-# 17: burning solid carbon.
+# 17: burning the solid 19.
 [[r]] # 17
 i = [[19,1],[2,1]]
 o = [[3,1]]
 k = 2.3e8
 ea = 20000
 
-# 18: solid carbon frees metal A from its ore.
+# 18: the solid 19 frees element 6 from its oxide.
 [[r]] # 18
 i = [[16,2],[19,3]]
 o = [[15,4],[3,3]]
 k = 1.05e7
 ea = 30000
 
-# 19: solid carbon frees metal B from its ore.
+# 19: the solid 19 frees element 7 from its oxide.
 [[r]] # 19
 i = [[18,2],[19,1]]
 o = [[17,2],[3,1]]
 k = 7.3e6
 ea = 25000
 
-# 20: firing the clay mineral: its bound liquid leaves.
+# 20: baking the clay mineral: its bound liquid leaves.
 [[r]] # 20
 i = [[21,1]]
 o = [[22,1],[0,2]]
 k = 3.7e10
 ea = 25000
 
-# 21: metal A turns back to its ore with the oxidising gas, slowly at the ground's warmth.
+# 21: the free element 6 turns back to its oxide with the oxidising gas, slowly at the ground's warmth.
 [[r]] # 21
 i = [[15,4],[2,3]]
 o = [[16,2]]
