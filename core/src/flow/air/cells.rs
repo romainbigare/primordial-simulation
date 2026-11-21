@@ -4,6 +4,7 @@
 //! (`Response::ground`), and the book takes each cell's at the step's mean air (`Response::booked`), so the air and its
 //! cells agree.
 
+use super::super::parts::{LAND, TOP};
 use super::super::Scratch;
 use super::daily::Ground;
 use super::rain::Wet;
@@ -224,8 +225,15 @@ pub(super) fn respond(cx: &Ctx, patches: &[Vec<u32>], room: Vec<f64>) -> Respons
     for (&i, [land, liquid]) in mixed.iter().zip(both) {
         let row = &mut rows[i * width..(i + 1) * width];
         row.iter_mut().zip(land.iter().zip(&liquid)).for_each(|(r, (a, b))| *r = a + b);
-        // The light per unit of the cover's capture area is the same on both parts.
-        row[LIGHT] = land[LIGHT];
+        // The light per unit of the cover's capture area: what both parts' leaves caught over all of them, each part's by
+        // its capture area (`surf::part_cover`).
+        let area = cx.w.mesh.cells().area()[i];
+        let leaf = [LAND, TOP].map(|q| {
+            let share = cx.s.mixed(i).map_or(0.0, |m| m.piece[q].share);
+            super::surf::part_cover(cx, i, (q, share), area).0[0] * area * share
+        });
+        let all = leaf[0] + leaf[1];
+        row[LIGHT] = if all > 0.0 { (land[LIGHT] * leaf[0] + liquid[LIGHT] * leaf[1]) / all } else { land[LIGHT] };
         wet.push((i as u32, liquid));
     }
     let patches = crate::par::map(patches, |cells| Patch::of(cx, cells));
@@ -285,8 +293,8 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     let (w, s, dt, act) = (cx.w, cx.s, cx.dt, cx.act);
     let (na, area) = (w.mesh.level(AIR).n(), g.area);
     let (adt, tl, top) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun);
-    // What its cover's law finds its leaves catch (`Stand::catch`, under the liquid standing on it `cover::reach`), and
-    // its capture area per m², over which that light is shared.
+    // What its cover's law finds its leaves catch over it (`cover::over`, under the liquid standing on it
+    // `cover::dimmed`), and its capture area per m², over which that light is shared.
     let (a, cover) = (g.canopy, g.catch);
     let caught = cover * g.absorb;
     // Under the reflectance `alb` of its ground, with the share its cover and ground reflect and its air's shares of

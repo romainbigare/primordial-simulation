@@ -29,10 +29,24 @@ pub struct Around {
     pub tick: u64,
 }
 
-/// The share of the light reaching the ground of cell `i` that reaches its cover under the liquid standing on it at
-/// the month's start (`contract::place`): e^-(its depth / `light_depth`), the liquid absorbing the rest.
-pub fn reach(w: &World, i: usize) -> f64 {
-    (-crate::contract::place(w, i).liquid / w.cfg.phys.light_depth).exp()
+/// The share of light that passes `depth` m of standing liquid: e^-(depth / `light_depth`), the liquid absorbing the
+/// rest.
+pub fn dimmed(ph: &crate::Physics, depth: f64) -> f64 {
+    (-depth / ph.light_depth).exp()
+}
+
+/// How the cover of cell `i` stands over `area` m² of the cell that lie after `before` m² of it, its land first and
+/// then the ground under its liquid: its slots stand on its own ground (`ground`, over which its rings spread,
+/// `contract::Stand`), from the land on, so it covers what of the part that ground reaches. Its capture area per m² of
+/// the part and the share of the light reaching the part that its leaves catch (`Stand::catch`), before any liquid
+/// over them dims it (`dimmed`).
+pub fn over(w: &World, i: usize, (before, area): (f64, f64)) -> [f64; 2] {
+    let (stand, own) = (crate::contract::stand(w, i), super::ground(w, i));
+    let covered = if area > 0.0 { (own - before).clamp(0.0, area) / area } else { 0.0 };
+    if covered <= 0.0 {
+        return [0.0; 2];
+    }
+    [covered * stand.canopy(own), covered * stand.catch(own)]
 }
 
 /// What the cover of cell `i` reads of the world now, through the moves `moves` opened on it.

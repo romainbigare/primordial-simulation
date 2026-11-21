@@ -21,7 +21,7 @@ mod soak;
 mod stand;
 mod upkeep;
 
-pub use around::{pores, reach, thirst, Around};
+pub use around::{dimmed, over, pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
 pub use groups::Sizes;
