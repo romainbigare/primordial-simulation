@@ -14,9 +14,13 @@ use serde::{Deserialize, Serialize};
 
 /// The most patches a cell's cover holds.
 pub const PATCHES: usize = 3;
-/// Two patches are alike when the same kinds hold them (`HOLDS`) and their tallest plants stand within this share of
-/// the taller's height: a rule of the model, as `kin::APART` is for slots.
+/// Two patches are alike when the same kinds hold them (`HOLDS`), their tallest plants stand within this share of
+/// the taller's height and their built cover per m² of their own ground within `ALIKE_COVER` of the larger's: rules
+/// of the model, as `kin::APART` is for slots.
 pub const ALIKE_HEIGHT: f64 = 0.2;
+/// Two patches are alike only when their built cover per m² of their own ground is within this share of the larger's
+/// (`ALIKE_HEIGHT`): young plants reach the height of the old while they hold far less mass.
+pub const ALIKE_COVER: f64 = 0.2;
 /// A starting kind holds a patch when its slots there hold at least this share of the patch's built cover.
 pub const HOLDS: f64 = 0.1;
 
@@ -73,22 +77,25 @@ impl Cover {
     }
 }
 
-/// What patch `k` of cover `c` is to another (`alike`): the height its tallest plants stand at, m, and the starting
-/// kinds that hold it (`HOLDS`), in order.
-fn sketch(c: &Cover, (ph, mm, rho): (&Physics, &[f64; NP], f64), k: usize) -> (f64, Vec<u32>) {
+/// What patch `k` of cover `c` is to another (`alike`): the height its tallest plants stand at, m, its built cover over
+/// its share of the cell (kg; as its cover per m² of its own ground, the cell's ground the same for every patch), and
+/// the starting kinds that hold it (`HOLDS`), in order.
+fn sketch(c: &Cover, (ph, mm, rho): (&Physics, &[f64; NP], f64), k: usize) -> (f64, f64, Vec<u32>) {
     let all: f64 = c.held_in(k).map(|x| c.built(mm, x)).sum();
     let tallest = c.held_in(k).map(|x| c.height(ph, mm, rho, x)).fold(0.0, f64::max);
     let mut kinds: Vec<u32> = c.held_in(k).map(|x| c.root[x]).collect();
     kinds.sort_unstable();
     kinds.dedup();
     kinds.retain(|&r| c.held_in(k).filter(|&x| c.root[x] == r).map(|x| c.built(mm, x)).sum::<f64>() >= HOLDS * all);
-    (tallest, kinds)
+    (tallest, all / c.patches[k].share, kinds)
 }
 
-/// Whether two patches of sketches `a` and `b` (`sketch`) are alike: the same kinds hold them and their tallest plants
-/// stand within `ALIKE_HEIGHT` of the taller's height.
-fn alike(a: &(f64, Vec<u32>), b: &(f64, Vec<u32>)) -> bool {
-    a.1 == b.1 && (a.0 - b.0).abs() <= ALIKE_HEIGHT * a.0.max(b.0)
+/// Whether two patches of sketches `a` and `b` (`sketch`) are alike: the same kinds hold them, their tallest plants
+/// stand within `ALIKE_HEIGHT` of the taller's height and their built cover per m² of their own ground within
+/// `ALIKE_COVER` of the larger's.
+fn alike(a: &(f64, f64, Vec<u32>), b: &(f64, f64, Vec<u32>)) -> bool {
+    let near = |x: f64, y: f64, within: f64| (x - y).abs() <= within * x.max(y);
+    a.2 == b.2 && near(a.0, b.0, ALIKE_HEIGHT) && near(a.1, b.1, ALIKE_COVER)
 }
 
 /// Patch `from` of cover `c` joins patch `into`: their shares add, its age the mean of theirs by share, its slots

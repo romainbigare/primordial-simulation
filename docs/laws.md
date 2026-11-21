@@ -1427,8 +1427,9 @@ seeds fill it:
   first `variety` slots. Once a year (`patches::year`, after the year's last month) each patch ages a year, and two
   **alike** patches fuse, the younger into the older (their shares added, the age the mean by share): the same
   starting kinds hold them (a kind holds a patch where its slots hold at least `HOLDS`, 0.1, of the patch's built
-  cover) and their tallest plants stand within `ALIKE_HEIGHT` (0.2) of the taller's height, rules of the model as
-  `APART` is. Its slots that meet slots of their kind join them (`merge_alike`), a patch of more than `variety` slots
+  cover), their tallest plants stand within `ALIKE_HEIGHT` (0.2) of the taller's height and their built cover per m²
+  of their own ground within `ALIKE_COVER` (0.2) of the larger's (young plants reach the height of the old while they
+  hold far less mass), rules of the model as `APART` is. Its slots that meet slots of their kind join them (`merge_alike`), a patch of more than `variety` slots
   joins its nearest two until it holds `variety` (`seed::room`), and a cell back to one patch moves its slots into its
   first `variety`. **Edits** make patches (handover.md 11: an action is a physics edit): `World::clear` makes the share
   s of a cell a new patch of age 0 about a sample of the cell (the edit's place, `World::sample_in`; else the cell's
