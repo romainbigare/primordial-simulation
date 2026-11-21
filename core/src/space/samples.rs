@@ -69,6 +69,11 @@ impl Samples {
         if self.to[k] == NONE { 0.0 } else { (self.h[k] - self.h[self.to[k] as usize]).max(0.0) / self.run[k] }
     }
 
+    /// The leaf of sample `k` (`SAMPLE_DEPTH`).
+    pub fn leaf(&self, k: usize) -> Leaf {
+        leaf_at(self.across, k)
+    }
+
     /// The index of the sample over leaf `l` of `SAMPLE_DEPTH` or finer.
     pub fn index(&self, l: &Leaf) -> usize {
         let side = BLOCK >> SAMPLE_DEPTH;
@@ -225,11 +230,16 @@ struct Ground {
 fn grid_of(map: &Square, (south, north): (f64, f64)) -> (Grid, impl Fn(usize) -> Leaf) {
     let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
     let (across, down) = (map.w * per, map.h * per);
-    let side = BLOCK >> SAMPLE_DEPTH;
-    let leaf = move |k: usize| Leaf { x: (k % across) as u64 * side, y: (k / across) as u64 * side, depth: SAMPLE_DEPTH };
+    let leaf = move |k: usize| leaf_at(across, k);
     let dy = map.length(SAMPLE_DEPTH);
     let grid = Grid::new(across, down, map.wrap, dy, (0..down).map(|r| map.place_of(&leaf(r * across), south, north).0 / dy).collect());
     (grid, leaf)
+}
+
+/// The leaf of sample `k` of samples `across` a row.
+fn leaf_at(across: usize, k: usize) -> Leaf {
+    let side = BLOCK >> SAMPLE_DEPTH;
+    Leaf { x: (k % across) as u64 * side, y: (k / across) as u64 * side, depth: SAMPLE_DEPTH }
 }
 
 /// How much liquid gathers at each of the samples `across` x `down`, `dy` m a side, of heights `h`, m, through which

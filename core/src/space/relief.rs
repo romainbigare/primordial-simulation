@@ -125,7 +125,7 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
     }
     let side = (1usize << (SAMPLE_DEPTH - map.square_depth())) as f64;
     let radius = (SMOOTH_SHARE * side).round() as usize;
-    let area: Vec<f64> = (0..n).map(|k| map.place_of(&leaf_of(seed, k), south, north).0).collect();
+    let area: Vec<f64> = (0..n).map(|k| map.place_of(&seed.leaf(k), south, north).0).collect();
     // What each group's mean by area of `f` lacks of its own offset, at each of its samples.
     let lacks = |f: &[f64]| {
         let mut sums = vec![[0.0; 2]; (cells as usize) + n];
@@ -144,12 +144,6 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
     }
     let last = lacks(&smooth);
     (0..n).map(|k| base[k] + smooth[k] + last[k]).collect()
-}
-
-/// The leaf of sample `k` of samples `s`.
-fn leaf_of(s: &Samples, k: usize) -> super::Leaf {
-    let side = super::tree::BLOCK >> SAMPLE_DEPTH;
-    super::Leaf { x: (k % s.across) as u64 * side, y: (k / s.across) as u64 * side, depth: SAMPLE_DEPTH }
 }
 
 /// Values `v` on a grid `across` x `down` smoothed by `SMOOTH_PASSES` passes of a box filter `radius` samples each way
