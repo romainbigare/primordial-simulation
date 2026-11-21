@@ -2,33 +2,43 @@
 //! lets sink where it climbs or descends the ground (`rise`), and what that does to the vapour the rain law finds
 //! saturating a node (`saturates`). Air that rises carries its lower half's vapour up, where the cold air holds less of
 //! it, and what it cannot hold condenses; air that sinks brings the upper half's dry air down, and the lower air holds
-//! less than it would (the linear theory of rain over the ground, Smith and Barstad 2004). The rain law reads the rise
-//! only here.
+//! less than it would (the linear theory of rain over the ground, Smith and Barstad 2004); the weather adds its own rise
+//! each day (`weather`). The rain law reads the rise only here.
 
 use super::super::Scratch;
 use super::cell::Cell;
 use super::daily::blocks;
-use super::wind::{ends, gradient};
+use super::wind::{ends, gradient, End};
 use crate::{World, AIR};
 
 /// Each air node's low wind, m/s [east, south]: the overturning's lower half as the warmth's gradient drives it
-/// (`wind::push`), `wind` times the gradient, down it inside the month's cell (`Cell::share`) and turned by the spin
-/// across it. The gradient is the planet's at the node's latitude and time (`Planet::at`) where the map's edges are open;
-/// else the air's own (`wind::ends`; its metres are the planet's there) where a node is a block alone (`daily::blocks`),
-/// as the overturning runs between blocks; a node that shares its block, whose air the eddies even each day, has no wind
-/// of its own. The air as the step starts.
+/// (`wind::push`), `wind` times the gradient the node feels (`felt`), down it inside the month's cell (`Cell::share`)
+/// and turned by the spin across it. The air as the step starts.
 pub(super) fn low_wind(w: &World, s: &Scratch) -> Vec<[f64; 2]> {
-    let (planet, cell, air) = (w.planet.as_ref().filter(|_| w.edges_open()), Cell::of(w), w.mesh.level(AIR));
+    let (cell, ends) = (Cell::of(w), ends(w, s));
+    felt(w, &ends)
+        .iter()
+        .zip(&ends)
+        .map(|(g, e)| {
+            let (down, turn) = (cell.share(e.lat), w.cfg.rotation * e.lat.to_radians().sin());
+            [w.cfg.wind * (down * g[0] - turn * g[1]), w.cfg.wind * (down * g[1] + turn * g[0])]
+        })
+        .collect()
+}
+
+/// The warmth's gradient each air node feels, K per m of the planet [east, south], as the overturning and the weather
+/// read it: the planet's at the node's latitude and time (`Planet::at`) where the map's edges are open; else the air's
+/// own (`wind::ends`; its metres are the planet's there) where a node is a block alone (`daily::blocks`), as the
+/// overturning runs between blocks; none where a node shares its block, whose air the eddies even each day.
+pub(super) fn felt(w: &World, ends: &[End]) -> Vec<[f64; 2]> {
+    let (planet, air) = (w.planet.as_ref().filter(|_| w.edges_open()), w.mesh.level(AIR));
     let mut alone = vec![false; air.n()];
     blocks(w).iter().filter(|b| b.len() == 1).for_each(|b| alone[b[0] as usize] = true);
-    ends(w, s)
-        .iter()
+    ends.iter()
         .enumerate()
         .map(|(j, e)| {
             let own = if alone[j] { e.grad } else { [0.0; 2] };
-            let g = planet.map_or(own, |p| [0.0, p.at(e.lat, w.season()).south]);
-            let (down, turn) = (cell.share(e.lat), w.cfg.rotation * e.lat.to_radians().sin());
-            [w.cfg.wind * (down * g[0] - turn * g[1]), w.cfg.wind * (down * g[1] + turn * g[0])]
+            planet.map_or(own, |p| [0.0, p.at(e.lat, w.season()).south])
         })
         .collect()
 }
