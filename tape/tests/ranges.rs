@@ -49,7 +49,8 @@ const RAIN_LAND: f64 = 2.529e-3;
 const ABSORBER_PPM: f64 = 310.3;
 /// Dry land cells that are rivers (`rivers`, `tape::is_river`), in the reference runs.
 const RIVERS: f64 = 293.5;
-/// Mineral matter lost on the land of year 20, mm/yr (`rock`, loose and bonded), in the reference runs.
+/// Mineral matter lost on the land a year over the years from `FROM` to `YEARS`, mm/yr (`rock`, loose and bonded), in
+/// the reference runs.
 const WORN: f64 = 0.03764;
 /// The cover (the light-eaters, `LIGHT_ROW`) at year 30, log10 kg (`root_1_cover_kg`), in the reference runs.
 const COVER_KG: f64 = 10.011;
