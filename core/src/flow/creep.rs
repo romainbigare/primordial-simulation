@@ -9,7 +9,8 @@ use crate::{store::{Batch, Class}, World};
 /// across a corner), whatever the sizes of the two cells.
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
-    let sol = s.solids(range(&s.state.tg).0);
+    let t = range(&s.state.tg);
+    let sol = s.solids(t.0, &s.liquids(&w.chem, t, true));
     let soft: Vec<f64> = sol.iter().map(|&k| 1.0 / (w.chem.subs[k].hardness + w.cfg.hard_min)).collect();
     // Each solid in each node, mol (`[q * n + i]`), and the volume able to creep by softness, m³, as the links so far
     // leave them; and what moves over each link with its heat.

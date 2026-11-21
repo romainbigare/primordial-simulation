@@ -285,9 +285,10 @@ impl Scratch {
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {
         self.state.loose.iter().copied().filter(|&k| self.sp[k].melt <= tmax && (self.sp[k].boil > tmin || dissolved && chem.subs[k].solubility > 0.0)).collect()
     }
-    /// Loose substances solid in some node: melting above the coldest, `tmin`, K.
-    pub(super) fn solids(&self, tmin: f64) -> Vec<usize> {
-        self.state.loose.iter().copied().filter(|&k| self.sp[k].melt > tmin).collect()
+    /// The solids of the loose ground: loose substances solid in some node (melting above the coldest, `tmin`, K) that
+    /// are none of the liquids `liq` (`liquids`): a liquid's frozen solid, snow or ice, is no ground.
+    pub(super) fn solids(&self, tmin: f64, liq: &[usize]) -> Vec<usize> {
+        self.state.loose.iter().copied().filter(|&k| self.sp[k].melt > tmin && !liq.contains(&k)).collect()
     }
     /// `k` has come into the loose ground: add it to `loose` and to `vary` (at its end, which keeps the order of sums,
     /// or `in_order` of melting point).

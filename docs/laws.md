@@ -542,30 +542,34 @@ fine ones and organic matter bind; a coarse or a fine ground carries a tenth to 
 particles up to four times) (at most all that lies loose), shared to its samples by their own work, and with the
 work its load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears**
 `wear` m³ of bed per J over its strength into loose ground. **The load settles on its way** (`runoff::load`), in the
-three particle classes of the texture (4), each as the cell it came from holds them: each month it goes down the samples'
-ways and is followed at the key samples, where some class settles, at each land cell's main channel and where the
-ways end. Over the reach of each sample, the run L to the sample its liquid runs to, under the shear velocity u* of
-the flood (`FLOOD_RUNOFF` from the area that drains through it, in its channel, `Physics::channel`;
-`soil::flood_shear`), the share φ of a class's log-sizes that sink faster than u* (`texture::settles`, Bagnold 1966;
-particles as heavy as the sample's bed's) settles at the sinking speed V of their mean log-size over the length
-ξ = q / V, q the flood's discharge a m of width (the ξ-q model, Davy and Lague 2009); the rest passes: of what comes
-in at the top of the reach, P = 1 − φ (1 − e^(−L/ξ)) passes, and of what is picked up along it, R = 1 − φ +
-φ (ξ/L)(1 − e^(−L/ξ)) (`soil::passes`). A key sample's own reach picks up what its own fall's work picks up; what was
-picked up above it comes in at its top. A sample where each class passes to within 1e-4 is no key sample: what
-leaves a key sample reaches the next by the product of the passes of the samples between (`Carriage::skip`), and the
-rest settles in the next one's cell; the load picked up between two key samples skips that product (it loses less
-than 1e-10 of it, measured). What reaches a body, or a sample whose liquid runs to none, settles in the cell that
-holds it. The form is tuned: the
-shares are fixed by the flood, not by the month's flow. The load is booked apart from the liquid
-(`runoff::Crossings`), each with its own heat: each key sample's pool (mol of each substance and the heat) leaves by
-the share of its volume that passes, so in a pool the substances and the particle classes are independent. The load is the loose ground's solids, never the liquids' (a frozen liquid is no load). **Known
-limits:** the load is booked after the liquid's pass, so the liquid in the pores of the ground it picks up stays in
-its cell and stands over its pores until the next pass; snow or ice on a cell does not shield its ground (the meltwater
-of a snowpack picks up the ground under it); a fixed share per class ignores that a class loses its coarse end as it goes, so far down a plain the coarse
-class settles a little faster than it would; the heights do not move by what settles (it is matter of the cell, its
-surface rises evenly). The heat of the liquid's fall lands with the liquid, not along its
+three particle classes of the texture (4), each as the cell it came from holds them. Each month it goes down the
+samples' ways. It is followed at the key samples: where some class settles, at each land cell's main channel, and
+where the ways end. Each sample's reach is the run L to the sample its liquid runs to. The flood (`FLOOD_RUNOFF` from
+the area that drains through it) runs in its channel (`Physics::channel`) at the shear velocity u*
+(`soil::flood_shear`). The share φ of a class's log-sizes that sink faster than u* (`texture::settles`, Bagnold 1966;
+particles as heavy as the sample's bed's) settles at the sinking speed V of their mean log-size, over the length
+ξ = q / V, q the flood's discharge a m of width (the ξ-q model, Davy and Lague 2009); the rest passes. Of what comes
+in at the top of the reach, P = 1 − φ (1 − e^(−L/ξ)) passes; of what is picked up along it,
+R = 1 − φ + φ (ξ/L)(1 − e^(−L/ξ)) (`soil::passes`). A key sample's own reach picks up what its own fall's work picks
+up; what was picked up above it comes in at its top. A sample where each class passes to within 1e-4 is no key
+sample. What leaves a key sample reaches the next by the product of the passes of the samples between
+(`Carriage::skip`); the rest settles in the next one's cell. The load picked up between two key samples skips that
+product (it would lose less than 1e-10 of it, measured). What reaches a body, or a sample whose liquid runs to none,
+settles in the cell that holds it. The form is tuned: the shares are fixed by the flood, not by the month's flow.
+
+The load is booked apart from the liquid (`runoff::Crossings`), each with its own heat. Each key sample's pool (mol of
+each substance and the heat) leaves by the share of its volume that passes, so in a pool the substances and the
+particle classes are independent. The load is the loose ground's solids (`Scratch::solids`), never the liquids' (a
+frozen liquid is no load). **Known limits:** the load is booked after the liquid's pass, so the liquid in the pores of
+the ground it picks up stays in its cell and stands over its pores until the next pass. Snow or ice on a cell does not
+shield its ground (the meltwater of a snowpack picks up the ground under it). What the skip product takes settles in
+the next key sample's cell, which may not be the cell of the sample where it settled. A fixed share per class ignores
+that a class loses its coarse end as it goes, so far down a plain the coarse class settles a little faster than it
+would. The heights do not move by what settles (it is matter of the cell, its surface rises evenly). The heat of the
+liquid's fall lands with the liquid, not along its
 way. **Creep** (`flow::creep`, yearly, out of land cells):
-loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
+loose ground slides downhill as a slow diffusion (its solids, `Scratch::solids`, as the load's: snow and ice, a liquid's
+frozen solid, do not creep), `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). What stands on a cell holds the ground: carrying and creep
 are cut by 1 / (1 + its mass per area / `hold`) (`contract::Stand`). Most rock leaving the land is lime dissolved by
 reaction 8.
