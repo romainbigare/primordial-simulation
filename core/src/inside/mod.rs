@@ -8,7 +8,7 @@ mod shares;
 mod wet;
 
 pub use shares::{deficit_at, soil_held, soil_level, Means};
-pub use wet::{aired, airless, channel_share, drains_source, flowing, land_filled, parts_now, rest, saturated, saturated_share, wet_ground, wet_land, WetGround};
+pub use wet::{aired, airless, channel_share, drains_source, flowing, land_filled, rest, saturated, saturated_share, wet_ground, wet_land, WetGround};
 
 use crate::math::central;
 use crate::World;

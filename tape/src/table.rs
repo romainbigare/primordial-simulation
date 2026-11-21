@@ -5,7 +5,7 @@
 
 use crate::ground::shore_dry;
 use crate::layers::{cover_melt, frame, pixels, Ctx};
-use pcore::inside::{soil_level, Means};
+use pcore::inside::Means;
 use pcore::space::network::NONE;
 use pcore::space::terrain::SAMPLE_DEPTH;
 use pcore::World;
@@ -17,13 +17,11 @@ pub const ROW: usize = 11;
 const DRY_M: f64 = 0.1;
 
 /// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
-/// height over it, m, and the terrain's samples inside it (which the table reads as they are now, `inside::parts_now`);
-/// the cell of each of the terrain's samples; and whether the shore a shell draws leaves
+/// height over it, m; the cell of each of the terrain's samples; and whether the shore a shell draws leaves
 /// each sample out of its pond's liquid (`ground::shore_dry`).
 pub struct Table {
     square: Vec<usize>,
     z: Vec<f64>,
-    inside: Vec<Vec<usize>>,
     cell: Vec<u32>,
     dry: Vec<bool>,
 }
@@ -43,12 +41,8 @@ impl Table {
         let per = (1u64 << (SAMPLE_DEPTH - map.square_depth())) as f64;
         let tree = w.mesh.tree();
         let cell = |k: usize| tree.cell_at(map.point_at(((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per));
-        let of: Vec<usize> = (0..s.h.len()).map(cell).collect();
-        let mut inside = vec![Vec::new(); n];
-        for (k, &i) in of.iter().enumerate() {
-            inside[i].push(k);
-        }
-        Table { square, z, inside, cell: of.iter().map(|&i| i as u32).collect(), dry: shore_dry(&s) }
+        let cell: Vec<u32> = (0..s.h.len()).map(|k| cell(k) as u32).collect();
+        Table { square, z, cell, dry: shore_dry(&s) }
     }
 
     /// The volume of liquid that runs through each of the terrain's samples, m³/s, row by row: its discharge
@@ -121,16 +115,15 @@ impl Table {
     /// depth of its liquid): the terrain's mean height over it, m; its ground's temperature, K, and how fast the air
     /// cools with height there, K/m (`World::air_drop`); its ice, m; the level its standing liquid reaches and its lowest
     /// ground, m, and the depth that stands, m; the liquid in its pores and what they hold full, m, the level of the
-    /// wetness index its soil's liquid departs about (`inside::soil_level`; 0 where it lies evenly), and the share of
-    /// its area that is land (`Ctx::land`), on which a shell draws its cover.
+    /// wetness index its soil's liquid departs about as the laws found it at the start of life's month
+    /// (`inside::WetGround::soil`; 0 where it lies evenly or none was found), and the share of its area that is land
+    /// (`Ctx::land`), on which a shell draws its cover.
     fn row(&self, c: &Ctx, i: usize, m: Option<Means>, level: Option<[f64; 2]>) -> [f64; ROW] {
         let w = c.w;
         let (z, depth) = (c.f.z[i], c.f.depth[i]);
         let m = m.unwrap_or(Means { pore: 0.0, pores: 0.0, stands: depth, ..Default::default() });
         let [low, top] = level.unwrap_or([z, z + depth]);
-        let s = w.terrain_samples();
-        let (twi, area) = pcore::inside::parts_now(w, &s, i, &self.inside[i]);
-        let soil = soil_level(&w.cfg.phys, &twi, &area, m).unwrap_or(0.0);
+        let soil = c.saturated[i].map_or(0.0, |g| g.soil);
         let cools = w.air_drop(i).unwrap_or(0.0);
         [self.z[i], c.f.t[i], cools, c.f.ice[i], top, low, m.stands, m.pore, m.pores, soil, c.land[i]]
     }
