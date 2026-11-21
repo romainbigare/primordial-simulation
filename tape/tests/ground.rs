@@ -150,3 +150,24 @@ fn every_tile_agrees_on_where_a_pond_is() {
     }
     assert!(edges > 100 && under > 100, "{edges} edges of named texels, {under} texels under a pond");
 }
+
+/// The ground made again where a world built its samples anew (`Ground::rebuild`) draws every tile as the ground made
+/// whole on those samples (`Ground::of`), and says each square whose tiles changed: no tile of a square it keeps differs
+/// from the one drawn before.
+#[test]
+fn a_rebuilt_ground_draws_as_one_made_anew() {
+    let mut w = worldgen::testkit::squares(1, 16, 16);
+    (0..14).for_each(|_| pcore::step(&mut w));
+    let mut ground = Ground::of(&w);
+    let depth = *tape::depths(&w.map).start();
+    let n = (w.map.w.max(w.map.h) * (1usize << (depth - w.map.square_depth()))).div_ceil(TILE) as i64;
+    let tiles = |g: &Ground| -> Vec<Vec<u16>> { (0..n * n).map(|i| g.tile(depth, i % n, i / n)).collect() };
+    let before = tiles(&ground);
+    pcore::flow::build::build(&mut w);
+    let changed = ground.rebuild(w.terrain_samples());
+    let (rebuilt, anew) = (tiles(&ground), tiles(&Ground::of(&w)));
+    assert!(rebuilt == anew, "a rebuilt ground draws as one made anew");
+    if !changed.iter().any(|&c| c) {
+        assert!(before == rebuilt, "a ground that says nothing changed draws as before");
+    }
+}

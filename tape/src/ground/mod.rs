@@ -15,6 +15,7 @@ mod frame;
 mod lines;
 mod mend;
 mod half;
+mod rebuild;
 mod rock;
 mod shore;
 mod stems;
@@ -28,6 +29,7 @@ pub use valley::{VALLEY_FROM, VALLEY_M};
 pub use half::{half, unhalf};
 
 use pcore::space::network::NONE;
+use pcore::space::relief::Relief;
 use pcore::space::samples::{Pond, Samples};
 use pcore::space::square::Square;
 use pcore::space::terrain::{Terrain, SAMPLE_DEPTH};
@@ -62,7 +64,7 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 /// the point each sample's line runs through (`stems::points`), how each sample's piece of its line starts
 /// (`bends::Bends`), the texture of each sample's loose ground (`pcore::soil::textures`), the samples whose line
 /// carries their wetness index (`wetness::strips`) and the wetness index of each as the hillslope holds it
-/// (`wetness::hill`).
+/// (`wetness::hill`); and the laws and the gravity it was made under, by which it is made again (`rebuild`).
 pub struct Ground {
     seed: u64,
     map: Square,
@@ -76,27 +78,68 @@ pub struct Ground {
     grain: Vec<pcore::soil::Texture>,
     strips: Vec<bool>,
     hill: Vec<f64>,
+    phys: Physics,
+    gravity: f64,
 }
 
 impl Ground {
     /// The ground of `terrain` on the island `map` for `seed`, its rows between latitudes `lat`, under the laws `phys`
     /// at gravity `gravity`: its channels sized by them (`Law`), and its samples' texture (`pcore::soil::textures`).
     pub fn new(seed: u64, map: Square, terrain: Terrain, lat: (f64, f64), phys: &Physics, gravity: f64) -> Ground {
+        let samples = terrain.samples(seed, &map, lat);
+        Ground::on(seed, (map, terrain, lat), (phys, gravity), samples)
+    }
+
+    /// The same on the terrain's samples `samples` (the seed's, or as a world built them: `Terrain::built`).
+    pub fn on(seed: u64, (map, terrain, lat): (Square, Terrain, (f64, f64)), (phys, gravity): (&Physics, f64), samples: Arc<Samples>) -> Ground {
         let law = Law::of(phys);
         assert!(!map.wrap, "tiles of the ground are made for an island");
-        let samples = terrain.samples(seed, &map, lat);
         let shore = shore::Shore::new(&samples);
         let at = stems::points(&samples, &shore);
         let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
         let grain = pcore::soil::textures(&samples, &terrain.makes, gravity);
         let strips = wetness::strips(&samples, phys);
         let hill = wetness::hill(&samples, &strips);
-        Ground { seed, map, terrain, lat, samples, law, at, bends, shore, grain, strips, hill }
+        Ground { seed, map, terrain, lat, samples, law, at, bends, shore, grain, strips, hill, phys: *phys, gravity }
     }
 
-    /// The ground of world `w`.
+    /// The ground of world `w`, on its samples as last built (`World::terrain_samples`).
     pub fn of(w: &World) -> Ground {
-        Ground::new(w.terrain.seed, w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north), &w.cfg.phys, w.cfg.gravity)
+        Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), w.terrain_samples())
+    }
+
+    /// The relief a world built its samples from (`World::relief`) and the years since its start at its last build, as
+    /// bytes (bincode), for a shell's ground to build the same samples (`rebuild_from`).
+    pub fn relief_bytes(w: &World) -> Vec<u8> {
+        let years = (w.relief.builds as u64 * w.cfg.build_years) as f64;
+        bincode::serialize(&(&w.relief, years)).expect("a relief serializes")
+    }
+
+    /// The ground made again on the samples the relief `bytes` builds (`relief_bytes`, `Terrain::built`; `rebuild`).
+    /// Returns the squares whose tiles changed, or why the bytes are refused.
+    pub fn rebuild_from(&mut self, bytes: &[u8]) -> Result<Vec<bool>, String> {
+        let (r, years): (Relief, f64) = bincode::deserialize(bytes).map_err(|e| format!("a relief: {e}"))?;
+        let s = self.terrain.built(self.seed, &self.map, self.lat, &r, years);
+        Ok(self.rebuild(s))
+    }
+
+    /// The ground on the samples `new` (as a world built them again, `Terrain::built`), made again only where it changed
+    /// (`rebuild::changed`): the points of the lines, the shore, the textures and the strips found again over all
+    /// samples (a few tenths of a second), the starts of the lines' pieces only down the ways that changed
+    /// (`bends::Bends::update`). Returns the squares whose tiles changed (`rebuild::squares`), row by row, true for
+    /// each.
+    pub fn rebuild(&mut self, new: Arc<Samples>) -> Vec<bool> {
+        let shore = shore::Shore::new(&new);
+        let at = stems::points(&new, &shore);
+        let changed = rebuild::changed(&self.samples, &new, (&self.at, &at));
+        let r = bends::Reaches { seed: self.seed, s: &new, at: &at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) };
+        let affected = rebuild::downstream(&new, &rebuild::ring(&new, &changed));
+        self.bends = self.bends.update(&r, &affected);
+        self.grain = pcore::soil::textures(&new, &self.terrain.makes, self.gravity);
+        self.strips = wetness::strips(&new, &self.phys);
+        self.hill = wetness::hill(&new, &self.strips);
+        (self.shore, self.at, self.samples) = (shore, at, new);
+        rebuild::squares(&self.map, &self.samples, &affected)
     }
 
     /// The tile of `depth` at column `tx` and row `ty` of tiles, `TILE` + 2 `GUTTER` texels a side row by row from its
@@ -120,7 +163,7 @@ impl Ground {
         // The window of the map's texels the tile holds; the tile's texels off the map repeat its edge.
         let win = [clamp(x0, across), clamp(y0, down), clamp(x0 + side as i64 - 1, across), clamp(y0 + side as i64 - 1, down)];
         let (wide, high) = ((win[2] - win[0] + 1) as usize, (win[3] - win[1] + 1) as usize);
-        let heights = self.terrain.heights(self.seed, &self.map, self.lat, win, depth);
+        let heights = self.terrain.heights_on(&self.samples, &self.map, self.lat, win, depth);
         let k = 2f64.powi(SAMPLE_DEPTH as i32 - depth as i32);
         let near = channels::Channels::new(self.reaches(), &self.bends, &self.strips).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
         let twi = wetness::field(&self.samples, &self.hill, depth, [win[0], win[1]], [wide, high], &near.bank);

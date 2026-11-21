@@ -285,21 +285,50 @@ impl Bends {
         let n = s.h.len();
         let mut b = Bends { straight: vec![0.0; n], bent: HashMap::new(), lean: vec![0.0; n], head: (0..n as u32).collect(), down: vec![0.0; n] };
         for &k in s.order.iter().rev() {
-            let (k, to) = (k as usize, s.to[k as usize]);
-            let Some(frame) = r.frame(k) else { continue };
-            b.lean[k] = r.sway(k, &frame)[0];
-            if to == NONE || s.main[to as usize] != k as u32 {
-                continue;
-            }
-            (b.head[to as usize], b.down[to as usize]) = (b.head[k], b.down[k] + frame.len() / (WANDER_EVERY * r.metres));
-            match r.walk(k, &frame, b.start(k), &mut |_| {}) {
-                Start::Straight(s) => b.straight[to as usize] = s,
-                Start::Bent(e) => {
-                    b.bent.insert(to, e);
-                }
-            }
+            b.reach(r, k as usize);
         }
         b
+    }
+
+    /// The starts of the pieces of `r`'s channels found again only where `affected` (`rebuild`: what changed and every
+    /// sample down its way); every other sample keeps its own from these (the reaches before them).
+    pub(super) fn update(&self, r: &Reaches, affected: &[bool]) -> Bends {
+        let s = r.s;
+        let n = s.h.len();
+        let mut b = Bends { straight: vec![0.0; n], bent: HashMap::new(), lean: vec![0.0; n], head: (0..n as u32).collect(), down: vec![0.0; n] };
+        for &k in s.order.iter().rev() {
+            let (k, to) = (k as usize, s.to[k as usize]);
+            if !affected[k] && (to == NONE || !affected[to as usize]) {
+                b.lean[k] = self.lean[k];
+                if to != NONE && s.main[to as usize] == k as u32 {
+                    let to = to as usize;
+                    (b.head[to], b.down[to], b.straight[to]) = (self.head[to], self.down[to], self.straight[to]);
+                    if let Some(e) = self.bent.get(&(to as u32)) {
+                        b.bent.insert(to as u32, *e);
+                    }
+                }
+                continue;
+            }
+            b.reach(r, k);
+        }
+        b
+    }
+
+    /// The start of the piece after sample `k` of `r` (`new`), from `k`'s own.
+    fn reach(&mut self, r: &Reaches, k: usize) {
+        let (s, to) = (r.s, r.s.to[k]);
+        let Some(frame) = r.frame(k) else { return };
+        self.lean[k] = r.sway(k, &frame)[0];
+        if to == NONE || s.main[to as usize] != k as u32 {
+            return;
+        }
+        (self.head[to as usize], self.down[to as usize]) = (self.head[k], self.down[k] + frame.len() / (WANDER_EVERY * r.metres));
+        match r.walk(k, &frame, self.start(k), &mut |_| {}) {
+            Start::Straight(s) => self.straight[to as usize] = s,
+            Start::Bent(e) => {
+                self.bent.insert(to, e);
+            }
+        }
     }
 
     /// The sample the line of sample `k` began at: the same down a main way, so it names the channel.
