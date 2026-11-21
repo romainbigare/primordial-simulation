@@ -44,17 +44,17 @@ pub struct Stand {
 }
 
 impl Stand {
-    /// The share of the light reaching the ground of `area` m² it stands on that its leaves catch (each ring's capture
-    /// area per m² in single precision): of each ring its share times 1 - e^-(that capture area per m² of it), the
+    /// The share of the light reaching the ground of `area` m² it stands on that its leaves catch: of each ring its share times 1 - e^-(that capture area per m² of it), the
     /// light passing down through all the crowns that stand on it (Beer's law, as the cover's own law shares it among
     /// them, `cover::canopy::shade`). None where it holds no capture area.
     pub fn catch(&self, area: f64) -> f64 {
-        self.rings[..self.n_rings].iter().map(|&[ring, leaf]| ring * one_minus_exp((leaf / area) as f32 as f64)).sum()
+        self.rings[..self.n_rings].iter().map(|&[ring, leaf]| ring * one_minus_exp(leaf / area)).sum()
     }
-    /// Its capture area per m² of a cell of `area` m² (in single precision), by which the light its leaves catch
-    /// (`catch`) is shared out per m² of capture area.
+    /// Its capture area per m² of a cell of `area` m², by which the light its leaves catch (`catch`) is shared out per
+    /// m² of capture area: in the precision of `catch`, which is no more than it, so the light per m² of capture area is
+    /// no more than the light reaching the ground.
     pub fn canopy(&self, area: f64) -> f64 {
-        (self.leaf / area) as f32 as f64
+        self.leaf / area
     }
     /// The share of the light reaching its capture area that it absorbs (a share, in single precision).
     pub fn absorb(&self) -> f64 {
