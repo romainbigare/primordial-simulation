@@ -60,7 +60,7 @@ pub fn breath(w: &crate::World, p: &Parts, i: usize, t: f64) -> f64 {
     let Some(p_ox) = w.near_ground(i, ox) else { return 0.0 };
     let d = GAS_DIFFUSIVITY * (GAS_DIFFUSIVITY_MM / chem.subs[ox].molar_mass).sqrt();
     let c = p_ox / (R_GAS * t.max(1.0));
-    let pace = burn.arrhenius(t.max(1.0)) / burn.arrhenius(ph.t_cat);
+    let pace = burn.relative_rate(t, ph.t_cat);
     let per_mol = -chem.dh(p.burn) / n as f64;
     let m = ph.c_basal / DAY * pace * ph.rho_body / per_mol.max(1e-300);
     d * c / m.max(1e-300)

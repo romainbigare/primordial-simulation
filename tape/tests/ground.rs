@@ -103,9 +103,6 @@ fn a_place_holds_the_same_numbers_in_every_tile() {
 /// How finely a tile holds a height, m: the sum of two 16-bit floats.
 const HEIGHT_M: f64 = 1e-3;
 
-/// The level the open low ground's liquid is drawn at, m (`tape/src/ground/shore.rs` `SEA_M`).
-const SEA_M: f64 = 0.0;
-
 /// The pond a texel is named in (whose liquid may stand on it), one more than it (0: none), and its height, m: of the
 /// texel at column `x` and row `y` of tile `t`, counted from its own corner.
 fn named(t: &[u16], x: usize, y: usize) -> (usize, f64) {
@@ -122,7 +119,7 @@ fn every_tile_agrees_on_where_a_pond_is() {
     let depth = pcore::space::terrain::SAMPLE_DEPTH;
     assert!(depths.contains(&(depth + 1)) && !g.ponds().is_empty(), "the island's ponds at the samples' depth and one finer");
     assert!(g.ponds().len() < tape::PONDS_EXACT, "{} ponds, more than a tile names", g.ponds().len());
-    let level = |q: usize| { let p = &g.ponds()[q - 1]; if p.pass == pcore::space::network::NONE { SEA_M } else { p.level } };
+    let level = |q: usize| { let p = &g.ponds()[q - 1]; if p.pass == pcore::space::network::NONE { pcore::space::wear::STAND_M } else { p.level } };
     let (coarse, fine) = (g.tile(depth, 0, 0), [[0, 0], [1, 0], [0, 1], [1, 1]].map(|[x, y]| g.tile(depth + 1, x, y)));
     let fine_at = |x: usize, y: usize| named(&fine[(y / TILE) * 2 + x / TILE], x % TILE, y % TILE);
     let (mut edges, mut under) = (0, 0);

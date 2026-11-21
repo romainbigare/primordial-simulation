@@ -20,7 +20,7 @@ pub(super) use view::{amounts, liquid_movable, pores_first, under_liquid};
 use super::land::{column, dissolved_in, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
 use node::{conductance, row};
 use super::scratch::{Latent, Scratch};
-use crate::{ground::{amounts_cap, skin_cap, Melting}, store::Class, units::MAX_SUBSTANCES, World};
+use crate::{chem::Heat, ground::{skin_cap, Melting}, store::Class, units::MAX_SUBSTANCES, World};
 use serde::{Deserialize, Serialize};
 
 /// The land part, the liquid's top layer and its deep, in `Parts` and `Mixed`, and how many parts there are.
@@ -114,7 +114,7 @@ impl Piece {
     /// The heat a mol of substance `k` (`sp`) holds in it, J: its heat capacity times its temperature and the fusion
     /// enthalpy of its molten share.
     pub(super) fn heat_of(&self, k: usize, sp: &super::scratch::Sp) -> f64 {
-        sp.cp * self.tg + sp.lf * self.molten(k)
+        sp.carried(self.tg, self.molten(k))
     }
 }
 
@@ -253,7 +253,7 @@ fn thawed(w: &World, s: &Scratch, skin: f64, p: &Parts, q: usize) -> Option<(f64
         return None;
     }
     let amt = |k: usize| p.amt[k][q];
-    let cap = skin * p.ground(q) + amounts_cap(s.state.loose.iter().copied(), amt, |k| s.sp[k].cp);
+    let cap = s.part_cap(skin * p.ground(q), amt);
     let melt = melts(w, s, amt);
     let th = thaw_at(s, cap.max(1.0), p.heat[q], amt, &melt);
     Some((cap, melt, th))
@@ -364,7 +364,7 @@ pub(super) fn create(w: &World, s: &Scratch, i: usize, row: &[f64]) -> Option<Pa
             [amt(k) - held, held, 0.0]
         })
         .collect();
-    let c = s.skin[i] * wet + amounts_cap(s.state.loose.iter().copied(), |k| amts[k][TOP], |k| s.sp[k].cp);
+    let c = s.part_cap(s.skin[i] * wet, |k| amts[k][TOP]);
     let fused: f64 = s.state.vary.iter().map(|&k| amts[k][TOP] * s.sp[k].lf * th.molten(k)).sum();
     let heat = c * th.t + fused;
     Some(with_free(w, s, i, Parts { wet, heat: [e - heat, heat, 0.0], amt: amts, t: [th.t; PARTS], on: [th.on; PARTS], dry: 0.0, free: [0.0; PARTS] }))

@@ -91,7 +91,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (mm, e) = (p.mm(chem), p.content(chem));
     let burn = &chem.reactions[p.burn];
-    let pace = burn.arrhenius(a.t.max(1.0)) / burn.arrhenius(ph.t_cat);
+    let pace = burn.relative_rate(a.t, ph.t_cat);
     let melt = chem.subs[p.liquid].melt;
     for x in 0..SLOTS {
         if c.lying.root[x] == NO_ROOT {

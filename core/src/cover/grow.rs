@@ -339,7 +339,7 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     let pond = if s.iter().any(|x| x.wet > 0.0) { a.soak.pond } else { 0.0 };
     let (t, liquid, gas) = (a.t, a.liquid + pond, a.gas);
     let rx = &chem.reactions[p.light];
-    let (dh, pace) = (chem.dh(p.light), rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat));
+    let (dh, pace) = (chem.dh(p.light), rx.relative_rate(t, ph.t_cat));
     let mut x = [0.0; SLOTS];
     for q in 0..s.len() {
         let need = dec(c.genes[q][MOIST]);

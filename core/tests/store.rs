@@ -3,6 +3,7 @@
 //! a sample member's update leaves the bodies' view of the store as it found it.
 
 use pcore::check;
+use pcore::chem::Heat;
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{apply, held, fall_heat, Boundary, Class, LinkFlux, Move, Node, BOUNDARIES};
 use pcore::{World, AIR};

@@ -6,7 +6,7 @@ use super::super::basin::{mixes, phases};
 use super::surf::groups;
 use super::touching;
 use super::super::potential::apply;
-use crate::{chem::Chemistry, math::one_minus_exp, store::{Class, LinkFlux}, units::R_GAS, AIR, World};
+use crate::{chem::{Chemistry, Heat}, math::one_minus_exp, store::{Class, LinkFlux}, units::R_GAS, AIR, World};
 
 /// Entries of the table of a saturation pressure (`Sat`) per K.
 const SAT_PER_K: f64 = 20.0;
@@ -173,7 +173,7 @@ pub(in crate::flow) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64) {
             // node; `-m` mol go up from the ground node into its air node, and the ground node's state follows.
             let tq = if m > 0.0 { s.ta[j] } else { liquid_t(s, i) };
             up[x * links + l] = -m;
-            up[nh * links + l] -= m * (sp.cp * tq + sp.lf + sp.lv);
+            up[nh * links + l] -= m * (sp.carried(tq, 1.0) + sp.lv);
             left[x * na + j] -= m;
         }
     }
