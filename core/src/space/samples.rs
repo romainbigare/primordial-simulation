@@ -3,7 +3,7 @@
 //! (`space::wear`), so valleys branch between ridges and the closed basins the cutting left stay. A
 //! flood over the worn heights (`space::drain`) finds where each sample's liquid runs, and the ponds: the samples
 //! under a closed basin's level, each pond with its pass and the level of the pass. Every cell's height is a mean over
-//! these samples (`Terrain::inside`); so is the way it faces the sun (`Terrain::rise_south`); and the liquid runs down
+//! these samples (`Terrain::inside`); so is the way it faces the sun (`Terrain::rise_south_on`); and the liquid runs down
 //! them (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
 //! terrain, not saved.
 
@@ -94,6 +94,26 @@ impl Clone for Kept {
     }
 }
 
+/// The loose ground of the seed's samples `s0` with what the relief `r` (`Relief::built`) laid on them over `years`
+/// since the start: the relief is loose ground that settled (`Samples::loose`, `settled`), and the age of a sample's
+/// loose ground the mean by volume of the seed's and the relief's, the relief laid evenly over the years since the
+/// start, so half as old as they are on its mean.
+fn laid_ground(s0: &Samples, r: &Relief, years: f64) -> Ground {
+    let laid = |k: usize| r.built.get(k).copied().unwrap_or(0.0);
+    let n = s0.h.len();
+    let age = (0..n).map(|k| {
+        let (old, new) = (s0.loose[k], laid(k));
+        if old + new > 0.0 { (old * s0.age[k] + new * 0.5 * years) / (old + new) } else { s0.age[k] }
+    });
+    Ground {
+        make: s0.make.clone(),
+        loose: (0..n).map(|k| s0.loose[k] + laid(k)).collect(),
+        settled: (0..n).map(|k| s0.settled[k] + laid(k)).collect(),
+        age: age.collect(),
+        books: s0.books,
+    }
+}
+
 impl Terrain {
     /// The samples under leaf `l` of `map` (of `SAMPLE_DEPTH` or coarser; for `seed`, its rows between latitudes `lat`)
     /// set to their mean height by area: the ground inside it level, the ground round it as it was.
@@ -128,9 +148,10 @@ impl Terrain {
     /// The samples of `map` for `seed` (its rows between latitudes `lat`) as built from the relief `r` (`Relief`): the
     /// seed's (`samples`) with the heights `relief::heights` gives, and the flood over them found again (`found`; no
     /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
-    /// stands over the liquid's level (`wear::STAND_M`). The seed's samples where there was no build; found once for
-    /// each build and kept.
-    pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief) -> Arc<Samples> {
+    /// stands over the liquid's level (`wear::STAND_M`). What the relief laid on a sample is loose ground that settled
+    /// there (`laid_ground`), laid over `years` since the start. The seed's samples where there was no build; found
+    /// once for each build and kept.
+    pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief, years: f64) -> Arc<Samples> {
         let s0 = self.samples(seed, map, lat);
         if r.builds == 0 {
             return s0;
@@ -142,7 +163,7 @@ impl Terrain {
         let (grid, _) = grid_of(map, lat);
         let h = super::relief::heights(&s0, map, lat, r);
         let open = open_low(&grid, &h, STAND_M);
-        let ground = Ground { make: s0.make.clone(), loose: s0.loose.clone(), settled: s0.settled.clone(), age: s0.age.clone(), books: s0.books };
+        let ground = laid_ground(&s0, r, years);
         let found = Arc::new(self.found(seed, &grid, (h, &open, false), ground));
         let mut kept = self.kept.1.lock().expect("the built samples");
         known(&kept).unwrap_or_else(|| {
@@ -170,12 +191,11 @@ impl Terrain {
         (laid.parts.into_iter().map(|(k, v, m)| (k, v, order[m as usize] as u32)).collect(), laid.unlaid)
     }
 
-    /// The mean rise of the ground toward the south over leaf `l` of `map` for `seed` (its rows between latitudes `south`
-    /// and `north`), m per m: by area over the samples it covers, each its central difference north to south
+    /// The mean rise of the ground toward the south over leaf `l` of `map` (its rows between latitudes `south` and
+    /// `north`) on the samples `s` (the seed's, or as built: `Terrain::built`), m per m: by area over the samples it covers, each its central difference north to south
     /// (one-sided at the map's edge); a leaf finer than a sample takes its sample's. So a leaf's is its quarters' mean by
     /// area at every depth. It is what the sun on a cell reads of the way the cell faces (`flow::on_slope`).
-    pub fn rise_south(&self, seed: u64, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
-        let s = self.samples(seed, map, (south, north));
+    pub fn rise_south_on(&self, s: &Samples, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
         let dy = map.length(SAMPLE_DEPTH);
         let at = |f: &Leaf| {
             let k = s.index(f);

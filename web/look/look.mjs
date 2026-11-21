@@ -17,6 +17,8 @@ const [cmd, ...rest] = process.argv.slice(2);
 const flags = {}, words = [];
 for (let i = 0; i < rest.length; i++) if (rest[i].startsWith('--')) flags[rest[i].slice(2)] = rest[++i]; else words.push(rest[i]);
 const px = +(flags.px ?? PX);
+/** The screen's pixels a css pixel the pictures are taken at (`--scale`, 1 by default). */
+const scale = +(flags.scale ?? 1);
 const say = (...a) => console.log(...a);
 const secs = t0 => `${((Date.now() - t0) / 1000).toFixed(0)} s`;
 
@@ -46,7 +48,7 @@ async function set(out) {
   const t0 = Date.now(), { name, set, world, scenes } = setOf(), crowns = flags.crowns !== 'no';
   const at = worlds(set.world, world, dates(world))[world.at], s = await start(crowns ? { 'site-mask': maskShaders() } : {});
   mkdirSync(out, { recursive: true });
-  const page = await P.open(s.browser, s.url, 'site', at, { px }), maskPage = crowns ? await P.open(s.browser, s.url, 'site-mask', at, { px }) : null;
+  const page = await P.open(s.browser, s.url, 'site', at, { px, scale }), maskPage = crowns ? await P.open(s.browser, s.url, 'site-mask', at, { px, scale }) : null;
   if (world.step) for (const p of [page, maskPage]) if (p) await P.step(p, world.step);
   const result = { set: name, world: at, year: await P.year(page), px, scenes: {} }, items = [];
   for (const scene of scenes) {
@@ -120,7 +122,7 @@ async function shot(out) {
   const s = await start();
   let at = worlds(set.world, world, dates(world))[world.at];
   if (flags.world) { mkdirSync(join(P.OUT, 'given'), { recursive: true }); writeFileSync(join(P.OUT, 'given', basename(flags.world)), readFileSync(flags.world)); at = `given/${basename(flags.world)}`; }
-  const page = await P.open(s.browser, s.url, 'site', at, { px });
+  const page = await P.open(s.browser, s.url, 'site', at, { px, scale });
   await P.look(page, { x, y, mpp: +flags.mpp });
   await P.shot(page, resolve(out));
   say(`${resolve(out)}: year ${(await P.year(page)).toFixed(2)}, ${secs(t0)}, ${page.errors.length} page errors`);
@@ -143,7 +145,7 @@ async function years(out) {
   const scenes = set.scenes.filter(sc => set.years.includes(sc.name)), mpp = set.years_view;
   const s = await start();
   mkdirSync(out, { recursive: true });
-  const page = await P.open(s.browser, s.url, 'site', saved[when[0]], { px });
+  const page = await P.open(s.browser, s.url, 'site', saved[when[0]], { px, scale });
   const seen = Object.fromEntries(scenes.map(sc => [sc.name, []])), items = [];
   for (const [i, d] of when.entries()) {
     if (i > 0) await P.reopen(page, `${s.url}/${saved[d]}`);
@@ -182,7 +184,7 @@ async function cost(out) {
   const s = await start(Object.fromEntries(passes.map(pass => [`site-cost-${pass}`, costShaders(pass)])));
   mkdirSync(join(out, 'raw'), { recursive: true });
   const pages = {};
-  for (const pass of passes) pages[pass] = await P.open(s.browser, s.url, `site-cost-${pass}`, at, { px });
+  for (const pass of passes) pages[pass] = await P.open(s.browser, s.url, `site-cost-${pass}`, at, { px, scale });
   if (world.step) for (const pass of passes) await P.step(pages[pass], world.step);
   const result = { set: name, world: at, px, show: SHOW, scenes: {} }, items = [];
   for (const scene of scenes) {

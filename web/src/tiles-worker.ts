@@ -1,8 +1,9 @@
 // The ground's tiles: a second Web Worker with its own instance of the core's WebAssembly (wasm/src/lib.rs `ground`,
 // `tile`, `rock`), which needs no world, so the world steps in its own worker while tiles are made. The ground is that of a
-// new island (`ground`, from its seed), or of a saved world handed in (`ground_of_world`). It runs as a separate
+// new island (`ground`, from its seed), or of a saved world handed in (`ground_of_world`), made again on the samples the
+// world builds from the relief the page hands in (`ground_built`). It runs as a separate
 // script, built into the page as text (build.mjs), started from a Blob by ground.ts, and makes one tile at a time, as
-// the page asks.
+// the page asks, in the order it asks.
 import type { GroundOf } from './ground';
 
 interface Core {
@@ -12,17 +13,23 @@ interface Core {
   ground_of_world(): number;
   tile(depth: number, x: number, y: number): number;
   rock(): number;
+  ground_built(): number;
   out_len(): number;
 }
 type Command =
   | { cmd: 'init'; wasm: ArrayBuffer; ground: GroundOf }
-  | { cmd: 'tile'; depth: number; x: number; y: number };
+  | { cmd: 'tile'; depth: number; x: number; y: number; gen: number }
+  | { cmd: 'built'; relief: ArrayBuffer; gen: number };
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Command>) => void) | null };
 let core: Core | null = null;
 
-host.onmessage = async e => {
-  const m = e.data;
+/** The messages, each handled once the one before is done: a tile or a build asked while the core is still starting
+ * waits for it. */
+let handled: Promise<void> = Promise.resolve();
+host.onmessage = e => { handled = handled.then(() => handle(e.data)); };
+
+async function handle(m: Command): Promise<void> {
   try {
     if (m.cmd === 'init') {
       core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
@@ -35,18 +42,28 @@ host.onmessage = async e => {
         const at = core.ground_of_world(), refused = new TextDecoder().decode(new Uint8Array(core.memory.buffer, at, core.out_len()));
         if (refused) throw new Error(refused);
       } else core.ground(g.seed, g.size, g.band[0], g.band[1], g.drawn ? 1 : 0);
-      // The rock of each of the terrain's samples, which never changes, with the first word that the worker is ready.
+      // The rock of each of the terrain's samples (again after each build, `built`), with the first word that the worker
+      // is ready.
       const at = core.rock();
       const rock = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
       host.postMessage({ kind: 'ready', rock }, [rock.buffer]);
     } else if (m.cmd === 'tile' && core) {
       const at = core.tile(m.depth, m.x, m.y);
       const data = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
-      host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data }, [data.buffer]);
+      host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data, gen: m.gen }, [data.buffer]);
+    } else if (m.cmd === 'built' && core) {
+      // The ground made again on the samples the world built (`ground_built`): a byte a square, 1 where its tiles
+      // changed, or why the relief was refused; then the rock again.
+      const n = m.relief.byteLength, into = core.input(n);
+      new Uint8Array(core.memory.buffer, into, n).set(new Uint8Array(m.relief));
+      const t0 = performance.now(), at = core.ground_built(), out = new Uint8Array(core.memory.buffer.slice(at, at + core.out_len()));
+      if (out.some(v => v > 1)) throw new Error(new TextDecoder().decode(out));
+      const ms = performance.now() - t0, r = core.rock(), rock = new Uint16Array(core.memory.buffer.slice(r, r + core.out_len()));
+      host.postMessage({ kind: 'rebuilt', squares: out, rock, gen: m.gen, ms }, [out.buffer, rock.buffer]);
     }
   } catch (err) {
     host.postMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) }, []);
   }
-};
+}
 
 export {};

@@ -189,12 +189,12 @@ pub(super) fn moved(was: f32, now: f64) -> bool {
 }
 
 /// The loose ground of each cell of a world as built: the share of its area in each bin of depth (`BINS`), from its
-/// terrain's samples (`Samples::loose`; laws.md 1.1).
+/// terrain's samples as last built (`World::terrain_samples`, `Samples::loose`; laws.md 1.1).
 pub fn loose_bins(w: &crate::World) -> Vec<[f32; BINS]> {
-    let lat = (w.cfg.lat_south, w.cfg.lat_north);
+    let (lat, s) = ((w.cfg.lat_south, w.cfg.lat_north), w.terrain_samples());
     let bin = |m: f64| (((m.max(LEAST_M) / LEAST_M).ln() / bin_width()) as usize).min(BINS - 1);
     crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| {
-        std::array::from_fn(|b| w.terrain.over(w.terrain.seed, &w.map, w.map.leaves()[i], lat, |s, k| if bin(s.loose[k]) == b { 1.0 } else { 0.0 }) as f32)
+        std::array::from_fn(|b| w.terrain.over_on(&s, &w.map, w.map.leaves()[i], lat, |s, k| if bin(s.loose[k]) == b { 1.0 } else { 0.0 }) as f32)
     })
 }
 /// The plants that `kg` of seeds found on ground of `area` m²: one for each `seed_kg`, as many as the self-thinning

@@ -43,7 +43,11 @@ impl World {
     /// The terrain's samples of this world as last built from what its load laid (`Terrain::built`; the seed's worn
     /// samples before the first build), which the ground inside each cell reads.
     pub fn terrain_samples(&self) -> std::sync::Arc<crate::space::samples::Samples> {
-        self.terrain.built(self.terrain.seed, &self.map, (self.cfg.lat_south, self.cfg.lat_north), &self.relief)
+        self.terrain.built(self.terrain.seed, &self.map, (self.cfg.lat_south, self.cfg.lat_north), &self.relief, self.built_years())
+    }
+    /// The years since the start at the last build of the samples (`Relief::builds`, every `Config::build_years`).
+    pub fn built_years(&self) -> f64 {
+        (self.relief.builds as u64 * self.cfg.build_years) as f64
     }
 }
 

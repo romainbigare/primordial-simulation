@@ -16,9 +16,9 @@ pub const ROW: usize = 11;
 /// soaked ground rather than water.
 const DRY_M: f64 = 0.1;
 
-/// What a shell keeps of a world's cells, which do not change: the cell of each square; of each cell the terrain's mean
-/// height over it, m; the cell of each of the terrain's samples; and whether the shore a shell draws leaves
-/// each sample out of its pond's liquid (`ground::shore_dry`).
+/// What a shell keeps of a world's cells, made again when the world builds its samples anew (`Relief::builds`): the
+/// cell of each square; of each cell the terrain's mean height over it as built, m; the cell of each of the terrain's
+/// samples; and whether the shore a shell draws leaves each sample out of its pond's liquid (`ground::shore_dry`).
 pub struct Table {
     square: Vec<usize>,
     z: Vec<f64>,
@@ -31,13 +31,13 @@ impl Table {
         let (map, n) = (&w.map, w.mesh.cells().n());
         let square = pixels(w);
         let lat = (w.cfg.lat_south, w.cfg.lat_north);
-        let means = w.terrain.heights(w.terrain.seed, map, lat, [0, 0, map.w as i64 - 1, map.h as i64 - 1], map.square_depth());
+        let s = w.terrain_samples();
+        let means = w.terrain.heights_on(&s, map, lat, [0, 0, map.w as i64 - 1, map.h as i64 - 1], map.square_depth());
         let (mut z, mut count) = (vec![0.0f64; n], vec![0.0f64; n]);
         for (s, &i) in square.iter().enumerate() {
             (z[i], count[i]) = (z[i] + means[s], count[i] + 1.0);
         }
         z.iter_mut().zip(&count).for_each(|(z, c)| *z /= c.max(1.0));
-        let s = w.terrain_samples();
         let per = (1u64 << (SAMPLE_DEPTH - map.square_depth())) as f64;
         let tree = w.mesh.tree();
         let cell = |k: usize| tree.cell_at(map.point_at(((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per));

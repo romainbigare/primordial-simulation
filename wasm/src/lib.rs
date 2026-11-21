@@ -32,11 +32,13 @@ const DISCHARGE_SHOWS: f64 = 0.1;
 /// page is sent the samples' load again once one has changed by more than this share since it was last sent.
 const LOAD_SHOWS: f64 = 0.25;
 
-/// The world, what is placed when, what the shell keeps of its cells (`tape::Table`), the table made with the last
+/// The world, the build of its samples what the shell keeps of its cells is of (`Relief::builds`), what is placed when,
+/// what the shell keeps of its cells (`tape::Table`), the table made with the last
 /// frame, and the samples' discharge, m³/s, and load, g/m³, last sent to the page (`tape::Table::discharge`,
 /// `tape::Table::load`; none before the first).
 struct Live {
     world: World,
+    built: u32,
     plan: Schedule,
     cells: tape::Table,
     table: Vec<f32>,
@@ -107,11 +109,12 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
     pcore::flow::state(&mut world, true);
     let plan = Schedule { takers: Some(TAKERS_YEAR), ..Schedule::new(Some(LIFE_YEAR), &worldgen::life::ROSTER, Seeding { rounds: SPRAY_ROUNDS, fixers: FIXERS }) };
     let cells = tape::Table::new(&world);
-    LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
+    LIVE.with(|c| *c.borrow_mut() = Some(Live { built: world.relief.builds, world, plan, cells, table: Vec::new(), sent: Vec::new() }));
     0
 }
 
-/// Room for `len` bytes the page hands in (the gzip of a snapshot, for `open_world` or `ground_of_world`): their
+/// Room for `len` bytes the page hands in (the gzip of a snapshot, for `open_world` or `ground_of_world`; a relief, for
+/// `ground_built`): their
 /// address in memory, valid until the next call.
 #[no_mangle]
 pub extern "C" fn input(len: usize) -> *mut u8 {
@@ -144,7 +147,7 @@ pub extern "C" fn open_world() -> *const u8 {
             // start finds them, so the page draws the world at its date as one it played into, its rivers too.
             pcore::contract::surroundings(&mut world);
             let cells = tape::Table::new(&world);
-            LIVE.with(|c| *c.borrow_mut() = Some(Live { world, plan, cells, table: Vec::new(), sent: Vec::new() }));
+            LIVE.with(|c| *c.borrow_mut() = Some(Live { built: world.relief.builds, world, plan, cells, table: Vec::new(), sent: Vec::new() }));
             Vec::new()
         }
         Err(e) => e.into_bytes(),
@@ -160,6 +163,39 @@ pub extern "C" fn step_month() {
         }
         pcore::step(&mut l.world);
         l.world.drain_events();
+        // A build of the samples moves the cells' ground and the shore: what the shell keeps of the cells, again.
+        if l.world.relief.builds != l.built {
+            l.cells = tape::Table::new(&l.world);
+            l.built = l.world.relief.builds;
+        }
+    })
+}
+
+/// How many times the world built its samples anew (`Relief::builds`): the page asks its ground for the samples as
+/// built (`relief`) when it moved.
+#[no_mangle]
+pub extern "C" fn builds() -> u32 {
+    with(|l| l.world.relief.builds)
+}
+
+/// The relief the world last built its samples from, and the years since its start then (`tape::Ground::relief_bytes`),
+/// for the ground's worker (`ground_built`).
+#[no_mangle]
+pub extern "C" fn relief() -> *const u8 {
+    let bytes = with(|l| tape::Ground::relief_bytes(&l.world));
+    give(bytes)
+}
+
+/// The ground made by `ground` made again on the samples the relief handed in (`input`, from `relief`) builds
+/// (`tape::Ground::rebuild_from`): returns a byte for each square of the map, row by row, 1 where its tiles changed;
+/// or, past them, why the relief was refused, as text.
+#[no_mangle]
+pub extern "C" fn ground_built() -> *const u8 {
+    let bytes = IN.with(|i| std::mem::take(&mut *i.borrow_mut()));
+    let out = GROUND.with(|c| c.borrow_mut().as_mut().expect("no ground: call ground first").rebuild_from(&bytes));
+    give(match out {
+        Ok(squares) => squares.iter().map(|&c| c as u8).collect(),
+        Err(e) => e.into_bytes(),
     })
 }
 

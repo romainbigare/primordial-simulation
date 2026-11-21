@@ -1,5 +1,5 @@
 //! The ground below the terrain's samples (laws.md 0 and 8): one function of the seed and the map that every cell's
-//! height and level-volume curve and every pixel a shell draws read (`Terrain::heights`, `Terrain::inside`).
+//! height and level-volume curve and every pixel a shell draws read (`Terrain::heights_on`, `Terrain::inside`).
 //!
 //! Each leaf finer than `SAMPLE_DEPTH` departs from its parent's mean by a smooth continuation of the coarser heights
 //! that keeps that mean: the parent's quarters lean as the quartic through the parent and two neighbours each way on
@@ -8,6 +8,7 @@
 //! worn samples (`space::wear`) hold the ground's shape. A leaf's height depends on its own place only, whatever window
 //! it is found for.
 
+use super::samples::Samples;
 use super::square::Square;
 use super::terrain::{Terrain, SAMPLE_DEPTH};
 use super::tree::BLOCK;
@@ -97,43 +98,43 @@ fn cover([x0, y0, x1, y1]: [i64; 4], of: u8, depth: u8, (across, down): (i64, i6
 
 impl Terrain {
     /// The terrain's mean height over each leaf of `depth` (no shallower than a square) of the window `win` (from column
-    /// `x0` and row `y0` to `x1` and `y1`, inclusive, in those leaves), m, row by row: at or above `SAMPLE_DEPTH` the
-    /// mean by area of the samples it covers, finer the ground below them (the module's doc).
-    pub fn heights(&self, seed: u64, map: &Square, lat: (f64, f64), win: [i64; 4], depth: u8) -> Vec<f64> {
+    /// `x0` and row `y0` to `x1` and `y1`, inclusive, in those leaves), m, row by row, over the samples `s` (the seed's,
+    /// or as built: `Terrain::built`): at or above `SAMPLE_DEPTH` the mean by area of the samples it covers, finer the
+    /// ground below them (the module's doc).
+    pub fn heights_on(&self, s: &Samples, map: &Square, lat: (f64, f64), win: [i64; 4], depth: u8) -> Vec<f64> {
         let (across, down) = ((win[2] - win[0] + 1) as usize, (win[3] - win[1] + 1) as usize);
         let pixel = |p: usize| (win[0] + (p % across) as i64, win[1] + (p / across) as i64);
         if depth <= SAMPLE_DEPTH {
-            return (0..across * down).map(pixel).map(|(x, y)| self.inside(seed, map, leaf_at(depth, x, y), lat)).collect();
+            return (0..across * down).map(pixel).map(|(x, y)| self.over_on(s, map, leaf_at(depth, x, y), lat, |s, k| s.h[k])).collect();
         }
-        let p = self.patch(seed, map, lat, win, depth);
+        let p = patch(s, map, lat, win, depth);
         (0..across * down).map(pixel).map(|(x, y)| p.z[p.near(x, y)]).collect()
     }
 
     /// The mean height of leaf `l`, finer than `SAMPLE_DEPTH`, m.
     pub(super) fn below(&self, seed: u64, map: &Square, l: Leaf, lat: (f64, f64)) -> f64 {
         let (x, y) = ((l.x / l.side()) as i64, (l.y / l.side()) as i64);
-        let p = self.patch(seed, map, lat, [x, y, x, y], l.depth);
+        let p = patch(&self.samples(seed, map, lat), map, lat, [x, y, x, y], l.depth);
         p.z[p.near(x, y)]
     }
+}
 
-    /// The patch of leaves of `depth` (finer than `SAMPLE_DEPTH`) over the window `win` and its margin, from the drained
-    /// samples down, a depth at a time (`finer`).
-    fn patch(&self, seed: u64, map: &Square, lat: (f64, f64), win: [i64; 4], depth: u8) -> Patch {
-        let s = self.samples(seed, map, lat);
-        let shift = depth - map.square_depth();
-        let extent = ((map.w as i64) << shift, (map.h as i64) << shift);
-        let first = cover(win, depth, SAMPLE_DEPTH, extent);
-        let (pw, ph) = ((first[2] - first[0] + 1) as usize, (first[3] - first[1] + 1) as usize);
-        let mut patch = Patch { depth: SAMPLE_DEPTH, x: first[0], y: first[1], w: pw, h: ph, z: Vec::with_capacity(pw * ph) };
-        for k in 0..pw * ph {
-            let k = s.index(&leaf_at(SAMPLE_DEPTH, first[0] + (k % pw) as i64, first[1] + (k / pw) as i64));
-            patch.z.push(s.h[k]);
-        }
-        for d in SAMPLE_DEPTH + 1..=depth {
-            patch = finer(map, lat, &patch, cover(win, depth, d, extent));
-        }
-        patch
+/// The patch of leaves of `depth` (finer than `SAMPLE_DEPTH`) over the window `win` and its margin, from the samples `s`
+/// down, a depth at a time (`finer`).
+fn patch(s: &Samples, map: &Square, lat: (f64, f64), win: [i64; 4], depth: u8) -> Patch {
+    let shift = depth - map.square_depth();
+    let extent = ((map.w as i64) << shift, (map.h as i64) << shift);
+    let first = cover(win, depth, SAMPLE_DEPTH, extent);
+    let (pw, ph) = ((first[2] - first[0] + 1) as usize, (first[3] - first[1] + 1) as usize);
+    let mut patch = Patch { depth: SAMPLE_DEPTH, x: first[0], y: first[1], w: pw, h: ph, z: Vec::with_capacity(pw * ph) };
+    for k in 0..pw * ph {
+        let k = s.index(&leaf_at(SAMPLE_DEPTH, first[0] + (k % pw) as i64, first[1] + (k / pw) as i64));
+        patch.z.push(s.h[k]);
     }
+    for d in SAMPLE_DEPTH + 1..=depth {
+        patch = finer(map, lat, &patch, cover(win, depth, d, extent));
+    }
+    patch
 }
 
 /// The leaves of the depth below `p`'s over the rectangle of them from `x0`, `y0` to `x1`, `y1` (inside `p`'s quarters),

@@ -161,10 +161,10 @@ pub struct World {
     /// The terrain the world was built on (`space::terrain`)
     pub terrain: crate::space::terrain::Terrain,
     /// The mean rise of the ground of each cell toward the south, m per m, which the sun on it reads (`flow::on_slope`):
-    /// the terrain's, found when the world is built (`World::rise_at_build`)
+    /// the terrain's, found when the world is built and at each build of its samples (`World::rise_at_build`)
     pub rise_south: Vec<f64>,
     /// The loose ground of each cell, the share of its area in each bin of depth, which its cover's roots read
-    /// (`cover::loose_bins`): the terrain's samples', found when the world is built
+    /// (`cover::loose_bins`): the terrain's samples', found when the world is built and at each build of its samples
     pub loose_bins: Vec<[f32; crate::cover::BINS]>,
     /// The soil of each cell (`soil::Soil`): its texture, the terrain's samples', and its pores, found when the world is
     /// built (`soil::of_world`)
@@ -188,11 +188,11 @@ impl World {
     pub fn mesh_of(map: &Square, cfg: &Config) -> Mesh {
         map.mesh(cfg.lat_south, cfg.lat_north)
     }
-    /// The rise toward the south of each cell of a world as built, m per m: the terrain's inside it
-    /// (`Terrain::rise_south`).
+    /// The rise toward the south of each cell of a world as built, m per m: the terrain's samples' (as last built,
+    /// `World::terrain_samples`) inside it (`Terrain::rise_south_on`).
     pub fn rise_at_build(&self) -> Vec<f64> {
-        let lat = (self.cfg.lat_south, self.cfg.lat_north);
-        crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain.rise_south(self.terrain.seed, &self.map, self.map.leaves()[i], lat))
+        let (lat, s) = ((self.cfg.lat_south, self.cfg.lat_north), self.terrain_samples());
+        crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain.rise_south_on(&s, &self.map, self.map.leaves()[i], lat))
     }
     /// The cell that holds the centre of square (`x`, `y`) of its map.
     pub fn cell_of(&self, (x, y): (usize, usize)) -> usize {

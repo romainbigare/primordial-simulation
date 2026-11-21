@@ -83,6 +83,12 @@ export class GroundTiles {
    * links; the reflectance of its bed's make; its loose ground's grain; its pores and the deposit on it
    * (tape/src/ground/rock.rs); none until a worker made the ground. */
   rock: Uint16Array | null = null;
+  /** How many times the rock came (the land sends it to the GPU when this moves). */
+  rockVersion = 0;
+  /** The ground's version: how many times the world's samples were built anew and handed to the workers (`rebuild`); a
+   * tile made of an older one is stale. The tiles kept that a build changed, drawn until each comes again. */
+  private gen = 0;
+  private stale = new Set<number>();
   private start = performance.now();
   private lastCame = -Infinity;
 
@@ -94,15 +100,43 @@ export class GroundTiles {
       const w = { worker: new Worker(this.url), ready: false, making: 0 };
       w.worker.onerror = e => error(e.message);
       w.worker.onmessage = e => {
-        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock: Uint16Array; text: string };
+        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock: Uint16Array; text: string; gen: number; squares: Uint8Array };
         if (m.kind === 'error') return error(m.text);
-        if (m.kind === 'ready') { w.ready = true; this.rock ??= m.rock; this.changed(true); return this.next(); }
-        if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data); }
+        if (m.kind === 'ready') { w.ready = true; if (!this.rock) { this.rock = m.rock; this.rockVersion++; } this.changed(true); return this.next(); }
+        if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data, m.gen); }
+        if (m.kind === 'rebuilt' && k === 0) this.rebuilt(m.squares, m.rock);
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
       w.worker.postMessage({ cmd: 'init', wasm: copy, ground }, [copy]);
       this.workers.push(w);
     }
+  }
+
+  /** The world built its samples anew from `relief` (wasm/src/lib.rs `relief`): each worker makes its ground again
+   * (`ground_built`), and the tiles asked after are of it. */
+  rebuild(relief: Uint8Array): void {
+    this.gen++;
+    for (const w of this.workers) {
+      const copy = relief.slice();
+      w.worker.postMessage({ cmd: 'built', relief: copy.buffer, gen: this.gen }, [copy.buffer]);
+    }
+  }
+
+  /** The first worker's ground made again, each build in its order: the rock of the latest, and each tile kept over a
+   * square whose tiles changed (`squares`, a byte a square row by row) stale, asked for again and drawn until it comes
+   * (so builds that come before the first is answered mark the union of their squares). */
+  private rebuilt(squares: Uint8Array, rock: Uint16Array): void {
+    this.rock = rock;
+    this.rockVersion++;
+    for (const [key, k] of this.kept) {
+      const s = this.squaresOf(k.depth), x0 = Math.floor(k.x * s), y0 = Math.floor(k.y * s);
+      const x1 = Math.min(Math.ceil((k.x + 1) * s), this.map.w), y1 = Math.min(Math.ceil((k.y + 1) * s), this.map.h);
+      let changed = false;
+      for (let y = y0; y < y1 && !changed; y++) for (let x = x0; x < x1 && !changed; x++) changed = squares[y * this.map.w + x] === 1;
+      if (changed) this.stale.add(key);
+    }
+    this.changed(true);
+    if (this.last) this.view(this.last);
   }
 
   /** Squares a tile of `depth` spans. */
@@ -127,9 +161,9 @@ export class GroundTiles {
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
         const inside = (x + 1) * s > v.x && x * s < v.x + v.w && (y + 1) * s > v.y && y * s < v.y + v.h;
         if (d === depth && inside) this.inView.add(keyOf(d, x, y));
-        const k = this.kept.get(keyOf(d, x, y));
+        const key = keyOf(d, x, y), k = this.kept.get(key);
         if (k) k.asked = asked;
-        else wanted.push({ depth: d, x, y, far: (inside ? 0 : 1e9) + Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
+        if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, far: (inside ? 0 : 1e9) + Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
       }
     }
     this.queue = wanted.sort((a, b) => a.depth - b.depth || a.far - b.far);
@@ -151,12 +185,12 @@ export class GroundTiles {
       const w = this.workers.filter(v => v.ready && v.making < MAKING).sort((a, b) => a.making - b.making)[0];
       if (!w || !(this.free.length > this.making.size || this.oldest() !== null)) return;
       let t = this.queue.shift();
-      const known = (q: { depth: number; x: number; y: number }) => this.kept.has(keyOf(q.depth, q.x, q.y)) || this.making.has(keyOf(q.depth, q.x, q.y));
+      const known = (q: { depth: number; x: number; y: number }) => { const key = keyOf(q.depth, q.x, q.y); return (this.kept.has(key) && !this.stale.has(key)) || this.making.has(key); };
       while (t && known(t)) t = this.queue.shift();
       if (!t) return;
       this.making.add(keyOf(t.depth, t.x, t.y));
       w.making++;
-      w.worker.postMessage({ cmd: 'tile', depth: t.depth, x: t.x, y: t.y });
+      w.worker.postMessage({ cmd: 'tile', depth: t.depth, x: t.x, y: t.y, gen: this.gen });
     }
   }
 
@@ -170,6 +204,7 @@ export class GroundTiles {
   /** After a lost context the card's tiles are empty: forget them and ask for the view's again. */
   lost(): void {
     this.kept.clear();
+    this.stale.clear();
     this.come = [];
     this.free = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
     this.numbers.fill(0);
@@ -178,14 +213,18 @@ export class GroundTiles {
     if (this.last) this.view(this.last);
   }
 
-  /** Keep the tile that came, on a free layer or on the oldest's. Only a tile that changes what the view shows draws
-   * the map anew and fades in: one ahead of the view, or under finer tiles kept, is kept for later. */
-  private took(depth: number, x: number, y: number, data: Uint16Array): void {
-    this.making.delete(keyOf(depth, x, y));
-    let layer = this.free.pop();
+  /** Keep the tile that came (made of the ground's version `gen`), on its own layer where it is kept stale, else on a
+   * free layer or on the oldest's. Only a tile that changes what the view shows draws the map anew and fades in: one
+   * ahead of the view, or under finer tiles kept, is kept for later. */
+  private took(depth: number, x: number, y: number, data: Uint16Array, gen: number): void {
+    const key = keyOf(depth, x, y), had = this.kept.get(key);
+    this.making.delete(key);
+    if (gen === this.gen) this.stale.delete(key);
+    else this.stale.add(key);
+    let layer = had ? had.layer : this.free.pop();
     if (layer === undefined) {
       const old = this.oldest();
-      if (old) { this.kept.delete(keyOf(old.depth, old.x, old.y)); layer = old.layer; }
+      if (old) { this.kept.delete(keyOf(old.depth, old.x, old.y)); this.stale.delete(keyOf(old.depth, old.x, old.y)); layer = old.layer; }
     }
     if (layer !== undefined) {
       const came = performance.now() - this.start;
