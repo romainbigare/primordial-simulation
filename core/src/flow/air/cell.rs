@@ -78,8 +78,7 @@ fn yearly(cfg: &Config, lat: f64) -> f64 {
 /// lag: each harmonic of the year damped by 1 / (1 + i k ω τ)). On the equator where the chemistry names no key liquid.
 fn peak(w: &World, r: f64) -> f64 {
     let cfg = &w.cfg;
-    let Some((_, _, liquid, _)) = w.chem.life_roles() else { return 0.0 };
-    let heat = cfg.phys.h_mix * w.chem.subs[liquid].cp / w.chem.molar_volume(liquid, Phase::Liquid);
+    let Some(heat) = top_layer(w) else { return 0.0 };
     let t = (yearly(cfg, 0.0) / SIGMA).powf(0.25);
     let tau = heat / (4.0 * SIGMA * t.powi(3)) / cfg.calendar().year as f64;
     let now = w.season();
@@ -114,6 +113,13 @@ fn peak(w: &World, r: f64) -> f64 {
         }
     }
     (a + b) / 2.0
+}
+
+/// The heat a m² of the top layer of the low liquid holds per K, J/(m² K): `h_mix` of the key liquid
+/// (`Chemistry::life_roles`); none where the chemistry names no key liquid.
+pub(super) fn top_layer(w: &World) -> Option<f64> {
+    let (_, _, liquid, _) = w.chem.life_roles()?;
+    Some(w.cfg.phys.h_mix * w.chem.subs[liquid].cp / w.chem.molar_volume(liquid, Phase::Liquid))
 }
 
 /// What a half of the cell from `y1` to `y`, radians, holds of warmth over radiative balance (Held and Hou's equal

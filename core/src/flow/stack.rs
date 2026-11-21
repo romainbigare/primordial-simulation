@@ -121,14 +121,19 @@ pub(super) fn bed_layer(x: &mut [f64; LAYERS], sp: &Sp, a: f64) {
 }
 
 /// `a` mol of substance `k` in ground node `i`, in its phase by the node's temperature and plateau (`State`): its gas
-/// and its liquid (`Sp::liquid`) with the liquid, the rest with the solids.
+/// and its liquid (`Sp::liquid`) with the liquid, what is not molten with the solids, and what the exchange sites hold
+/// with the solids' mass, taking no room.
 #[inline]
 pub(super) fn ground_layers(x: &mut [f64; LAYERS], s: &Scratch, (k, i): (usize, usize), a: f64) {
     let (sp, t) = (&s.sp[k], s.state.tg[i]);
     let molten = if s.state.pk[i] == k { s.state.phi[i] } else { (t >= sp.melt) as u8 as f64 };
     let wet = if t >= sp.boil { 1.0 } else { sp.liquid(t, molten, s.state.dissolved[i]) };
-    let (wet_mol, dry_mol) = (a * wet, a - a * wet);
+    let wet_mol = a * wet;
+    let dry_mol = if sp.mineral && t < sp.boil { a * (1.0 - molten) } else { a - wet_mol };
     (x[2], x[5]) = (x[2] + wet_mol * sp.mm, x[5] + if t < sp.boil { wet_mol * sp.v[1] } else { 0.0 });
+    if sp.mineral {
+        x[1] += (a - wet_mol - dry_mol) * sp.mm;
+    }
     solid_layer(x, sp, t, dry_mol);
 }
 

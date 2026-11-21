@@ -138,7 +138,7 @@ impl Terrain {
     /// samples of the grid the wear reads it on (`wear::noise_grid`), worn (`space::wear`) with the open low ground
     /// held; then the flood over them from all the open low ground, the closed basins too shallow to hold a pond graded
     /// (`ponds::grade`), the area that drains through each sample, and the ponds; the folds of the bed's layers and its
-    /// bodies are read on the noise's grid too (`Strata::at`).
+    /// bodies are read on the noise's grid too, their rims at each sample (`Strata::at`).
     fn worn(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
         let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
         let (across, down) = (map.w * per, map.h * per);
@@ -153,7 +153,8 @@ impl Terrain {
         let (place, lift) = (|k: usize| map.place_of(&block(k), south, north).1, self.lift(seed, map));
         let at: Vec<(f64, (f64, f64))> = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| (self.sample(seed, map, &lift, place(k)), Strata::at(seed, map, place(k))));
         let (rise, (fold, body)): (Vec<f64>, (Vec<f64>, Vec<f64>)) = at.into_iter().unzip();
-        let worn = wear(seed, &grid, (by, &rise), (&fold, &body, &Strata::of(seed, &self.makes)), self.channel);
+        let rim = crate::par::map_n(grid.n(), crate::par::UNCOUNTED, |k| Strata::rim(seed, map, map.place_of(&leaf(k), south, north).1));
+        let worn = wear(seed, &grid, (by, &rise), (&fold, [&body, &rim], &Strata::of(seed, &self.makes)), self.channel);
         let (mut h, open, books, make) = (worn.h, worn.open, worn.books, worn.make);
         let f = flood(&grid, &h, &open, (&starts(&grid, &open, false), &draws(seed, 1, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));

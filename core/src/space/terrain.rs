@@ -7,7 +7,7 @@
 //! height, and a shell draws that ground.
 
 pub use super::rises::{Lift, Shape};
-pub use super::strata::Make;
+pub use super::strata::{Lies, Make};
 use super::samples::Samples;
 use super::square::Square;
 use super::{Leaf, Level};

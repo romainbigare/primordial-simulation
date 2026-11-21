@@ -10,6 +10,8 @@ use super::together::Together;
 use super::cell::Cell;
 use super::rise::{rise, saturates};
 use super::edge::Edges;
+use super::draw::Draw;
+use super::weather::Weather;
 use super::wind::{ends, even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::UP, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
@@ -189,15 +191,29 @@ pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Groun
     let mut x: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut e = w.store.heat(Class::Air).to_vec();
     let imp = Implicit::of(s, (&push, &border, &lines), (&out.moved.a, &out.moved.b), &x, dd);
+    let start = x.clone();
     // What each active gas's vapour in each block keeps from day to day (`[y * nb + b]`, `rain::Room`).
     let mut rooms: Vec<Room> = (0..nx * blocks.len()).map(|_| Room::default()).collect();
     // The buckets the step's rain wets as it falls (`Soak`).
     let mut soaks = Soaks::new(ground.soaks.clone(), ground.wet(), nx);
-    for _ in 0..days as usize {
+    // The weather of the step: each day it lifts the nodes' air, drawing their lower halves' air toward where it lifts
+    // and their upper halves' away (`Draw`), and moves where the edges' air comes from (`Weather`).
+    let weather = Weather::of(w, s, &ends, days as usize).map(|wx| (Draw::of(&w.cfg, air, (&links, &border, &block), &ends, &out.edges), wx));
+    for d in 0..days as usize {
         exchange(w, s, (act, ground), (&blocks, &one, &rise), (&mut x, &mut e), (dd, dt), (&mut out, &mut rooms, &mut soaks));
         even(w, s, &blocks, (&mut x, &mut e), border.len(), &mut out.moved);
-        wind(w, s, (&push, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
-        out.edges.day(s, (&mut x, &mut e), dd, w.cfg.gravity);
+        let Some((draw, wx)) = &weather else {
+            wind(w, s, (&push, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
+            out.edges.day(s, (&mut x, &mut e), (dd, w.cfg.gravity), &[]);
+            continue;
+        };
+        // The overturning's halves with the day's drawn flow, at the rates per mol of the step's start, as all of it.
+        let (inner, outer) = draw.flows(&wx.lift(w, d));
+        let today = push.drawn(&ends, &links, &border, &inner, &w.cfg);
+        let imp = Implicit::of(s, (&today, &border, &lines), (&out.moved.a, &out.moved.b), &start, dd);
+        wind(w, s, (&today, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
+        out.edges.weather(w, s, (&ends, &cell), |xy| wx.shift(xy, d));
+        out.edges.day(s, (&mut x, &mut e), (dd, w.cfg.gravity), &outer);
     }
     out
 }
