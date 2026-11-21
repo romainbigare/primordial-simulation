@@ -138,7 +138,7 @@ impl Terrain {
     /// samples of the grid the wear reads it on (`wear::noise_grid`), worn (`space::wear`) with the open low ground
     /// held; then the flood over them from all the open low ground, the closed basins too shallow to hold a pond graded
     /// (`ponds::grade`), the area that drains through each sample, and the ponds; the folds of the bed's layers and its
-    /// bodies and their rims are read on the noise's grid too (`Strata::at`).
+    /// bodies are read on the noise's grid too, their rims at each sample (`Strata::at`).
     fn worn(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
         let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
         let (across, down) = (map.w * per, map.h * per);
@@ -151,12 +151,9 @@ impl Terrain {
         let (wide, depth) = (across / by, SAMPLE_DEPTH - by.trailing_zeros() as u8);
         let block = |k: usize| Leaf { x: (k % wide) as u64 * side * by as u64, y: (k / wide) as u64 * side * by as u64, depth };
         let (place, lift) = (|k: usize| map.place_of(&block(k), south, north).1, self.lift(seed, map));
-        let at = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| {
-            let (fold, [body, rim]) = Strata::at(seed, map, place(k));
-            [self.sample(seed, map, &lift, place(k)), fold, body, rim]
-        });
-        let column = |c: usize| at.iter().map(|a| a[c]).collect::<Vec<f64>>();
-        let (rise, fold, body, rim) = (column(0), column(1), column(2), column(3));
+        let at: Vec<(f64, (f64, f64))> = crate::par::map_n(wide * (down / by), crate::par::UNCOUNTED, |k| (self.sample(seed, map, &lift, place(k)), Strata::at(seed, map, place(k))));
+        let (rise, (fold, body)): (Vec<f64>, (Vec<f64>, Vec<f64>)) = at.into_iter().unzip();
+        let rim = crate::par::map_n(grid.n(), crate::par::UNCOUNTED, |k| Strata::rim(seed, map, map.place_of(&leaf(k), south, north).1));
         let worn = wear(seed, &grid, (by, &rise), (&fold, [&body, &rim], &Strata::of(seed, &self.makes)), self.channel);
         let (mut h, open, books, make) = (worn.h, worn.open, worn.books, worn.make);
         let f = flood(&grid, &h, &open, (&starts(&grid, &open, false), &draws(seed, 1, grid.n())));

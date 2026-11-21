@@ -107,8 +107,8 @@ where fractal noise over four scales from about 4 km down passes 0.66 (`BODY_ABO
 rises through strata. Some makes lie only as **seams** (`Lies::Seam`, `seams` in the chemistry): each repeat of the
 stack holds a set number of seams of a set thickness, each at a depth drawn in its own even slot of the stack, cut over
 the layers drawn before (in chemistry 0: one of make 5, 100 m; three of make 6, 30 m; two of make 7, 40 m; one of
-make 8, 30 m). One make (`rim`, make 9 in chemistry 0) stands round the **rims** of some bodies: where their noise lies
-between 0.63 and 0.66 (`RIM_ABOVE`) and a second noise passes 0.7 (`RIM_GATE`). The top of the stack rises with the
+make 8, 30 m). One make (`rim`, make 9 in chemistry 0) stands round the **rims** of some bodies: where no body stands, their noise read
+at each sample passes 0.63 (`RIM_ABOVE`) and a second noise passes 0.7 (`RIM_GATE`). The top of the stack rises with the
 land and floats back up with it, so how deep the wear has
 cut under it, plus the fold, says which layer a sample's surface is in; at each step the wear cuts each sample at the
 rate of the make it has reached. So a soft layer opens into a wide vale, a hard one stands as a scarp or caps a

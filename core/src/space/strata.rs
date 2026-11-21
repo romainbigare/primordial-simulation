@@ -28,9 +28,9 @@ const BODY_KEY: u64 = 100;
 const BODY_PER_SQUARE: f64 = 0.5;
 const BODY_OCTAVES: u32 = 4;
 const BODY_ABOVE: f64 = 0.66;
-/// The bodies' rims: the value of the bodies' noise above which (and under `BODY_ABOVE`) the bed is of the rim's make,
-/// where the noise of the key `RIM_KEY` (its units a square, its octaves) passes `RIM_GATE`, so only some bodies have
-/// one.
+/// The bodies' rims: the value of the bodies' noise above which the bed is of the rim's make where no body stands, read
+/// at each sample (finer than the bodies), where the noise of the key `RIM_KEY` (its units a square, its octaves)
+/// passes `RIM_GATE`, so only some bodies have one.
 const RIM_ABOVE: f64 = 0.63;
 const RIM_KEY: u64 = 103;
 const RIM_PER_SQUARE: f64 = 0.5;
@@ -114,13 +114,17 @@ impl Strata {
         Strata { foot, of, seams, body, rim, cut }
     }
 
-    /// The fold of the layers at `place` of `map` for `seed`, m (up is positive), and the shares of a body and of a
-    /// body's rim there (each 0 or 1).
-    pub(super) fn at(seed: u64, map: &Square, place: Place) -> (f64, [f64; 2]) {
+    /// The fold of the layers at `place` of `map` for `seed`, m (up is positive), and the share of a body there (0 or
+    /// 1).
+    pub(super) fn at(seed: u64, map: &Square, place: Place) -> (f64, f64) {
         let fold = (2.0 * noise(seed ^ FOLD_KEY, map, place, FOLD_PER_SQUARE, FOLD_OCTAVES) - 1.0) * FOLD_M;
-        let body = noise(seed ^ BODY_KEY, map, place, BODY_PER_SQUARE, BODY_OCTAVES);
-        let rim = body > RIM_ABOVE && body <= BODY_ABOVE && noise(seed ^ RIM_KEY, map, place, RIM_PER_SQUARE, RIM_OCTAVES) > RIM_GATE;
-        (fold, [if body > BODY_ABOVE { 1.0 } else { 0.0 }, if rim { 1.0 } else { 0.0 }])
+        (fold, if noise(seed ^ BODY_KEY, map, place, BODY_PER_SQUARE, BODY_OCTAVES) > BODY_ABOVE { 1.0 } else { 0.0 })
+    }
+
+    /// The share of a body's rim at `place` of `map` for `seed` (0 or 1; a body there stands over it, `Strata::make`).
+    pub(super) fn rim(seed: u64, map: &Square, place: Place) -> f64 {
+        let near = noise(seed ^ BODY_KEY, map, place, BODY_PER_SQUARE, BODY_OCTAVES) > RIM_ABOVE;
+        if near && noise(seed ^ RIM_KEY, map, place, RIM_PER_SQUARE, RIM_OCTAVES) > RIM_GATE { 1.0 } else { 0.0 }
     }
 
     /// The make of the bed worn `worn` m under the top of the stack where its layers are folded `fold` m up and a body
