@@ -263,22 +263,27 @@ fn soil_held(pore: f32, pores: f32, c: f32, twi: f32) -> f32 {
 // drawn; elsewhere where its wetness index (`Tiled.twi`) reaches the index of saturation of its cells (the core's
 // `inside::wet_ground`), blended over the cells about it that hold land (a cell of liquid alone has none), so the wet
 // ground's edge is a line of the index, along the valleys, not a ring about a wet cell; the edge is spread over
-// `SATURATED_EDGE` of the index under it. (The page draws that water about any channel line its tiles hold, the law
-// only about those that drain a channel's source, `inside::drains_source`: below it the law's channels are under a
-// metre wide.)
+// `SATURATED_EDGE` of the index under it. The blend is the B-spline through the cells' centres (draw.wgsl `b_spline`),
+// each cell's weight kept where it holds land and the sum divided by the weights kept: where all hold land, the
+// B-spline of the levels. Its value and its change are smooth across the centres, as the edge is narrow in the index
+// and would draw any crease of the level as a straight line along the cells' rows and columns. (The page draws that
+// water about any channel line its tiles hold, the law only about those that drain a channel's source,
+// `inside::drains_source`: below it the law's channels are under a metre wide.)
 const SATURATED_EDGE = 0.5;
 fn saturated_at(at: vec2f) -> f32 {
   let g = ground_at(at, false);
   let q = discharge_at(g, at);
   if (q > 0.0 && g.d <= 0.5 * land.channel.x * pow(q, land.channel.y)) { return 1.0; }
-  let cs = corners(at / land.map.x);
+  let c = b_spline(at / land.map.x - 0.5);
   var level = 0.0;
   var weight = 0.0;
-  for (var k = 0; k < 4; k++) {
-    let s = cell(SOIL, cs.at[k]);
-    let w = select(0.0, cs.w[k], s.z > 0.0);
-    level += w * s.w;
-    weight += w;
+  for (var y = 0; y < 3; y++) {
+    for (var x = 0; x < 3; x++) {
+      let s = cell(SOIL, c.i + vec2i(x - 1, y - 1));
+      let w = select(0.0, c.wx[x] * c.wy[y], s.z > 0.0);
+      level += w * s.w;
+      weight += w;
+    }
   }
   if (weight <= 0.0) { return 0.0; }
   return smoothstep(-SATURATED_EDGE, 0.0, g.twi - level / weight);
@@ -389,14 +394,21 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, e: f32, knob: f32) -> St
     covered += cs.w[k] * snow_of(c.w, 0.0, 0.0);
   }
   // The liquid standing over the point: its ponds', flat at their levels over the ground under it (laws.md 1.2).
-  // The soil's liquid of each cell about it at the point's wetness index, blended.
+  // The soil's liquid of each cell about it at the point's wetness index, blended through the cells' centres as a
+  // B-spline (draw.wgsl `b_spline`): its value and its change are smooth there, as the wet soil's colours switch over a
+  // narrow edge of it and would draw any crease of the blend as a straight line along the cells' rows and columns.
   var held = 0.0;
   var pores = 0.0;
-  for (var k = 0; k < 4; k++) {
-    let l = cell(LIQUID, cs.at[k]);
-    let s = cell(SOIL, cs.at[k]);
-    held += cs.w[k] * soil_held(l.w, s.x, s.y, g.twi);
-    pores += cs.w[k] * s.x;
+  let bs = b_spline(at / land.map.x - 0.5);
+  for (var y = 0; y < 3; y++) {
+    for (var x = 0; x < 3; x++) {
+      let ci = bs.i + vec2i(x - 1, y - 1);
+      let w = bs.wx[x] * bs.wy[y];
+      let l = cell(LIQUID, ci);
+      let s = cell(SOIL, ci);
+      held += w * soil_held(l.w, s.x, s.y, g.twi);
+      pores += w * s.x;
+    }
   }
   var p: State;
   if (g.water.x > -NO_LIQUID_M && g.water.y > 0.0) {
