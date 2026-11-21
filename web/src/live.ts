@@ -1,4 +1,5 @@
 import { World, makeWorld, Meta } from './data';
+import type { Probe, StartKind, Edited } from './god';
 
 /** What the core reports with each frame: its cells and the months stepped per second of real time. */
 export interface Stats { cells: number; pace: number }
@@ -18,20 +19,24 @@ export class Live {
   /** The relief the world last built its samples from, come since it was last taken (wasm/src/lib.rs `relief`). */
   private relief: Uint8Array | null = null;
   stats: Stats = { cells: 0, pace: 0 };
+  /** The starting kinds the world's plan places (wasm/src/lib.rs `kinds`). */
+  kinds: StartKind[] = [];
   private worker: Worker;
   private url: string;
   /** The frames taken that wait for their answer (`shown`), and the listener that answers them when the page is hidden. */
   private unanswered = 0;
   private onHide = () => { if (document.hidden) this.answer(); };
 
-  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void }) {
+  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; probe: (p: Probe) => void; edited: (r: Edited) => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message);
     this.worker.onmessage = e => {
-      const m = e.data as { kind: string; meta: string; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; plumes: Uint8Array; relief: Uint8Array | null; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
+      const m = e.data as { kind: string; meta: string; kinds: string; edited: boolean; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; plumes: Uint8Array; relief: Uint8Array | null; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
       if (m.kind === 'ready') return on.ready();
       if (m.kind === 'error') return on.error(m.text);
+      if (m.kind === 'probe') return on.probe(JSON.parse(m.text) as Probe);
+      if (m.kind === 'edited') return on.edited(JSON.parse(m.text) as Edited);
       if (m.discharge) this.discharge = m.discharge;
       if (m.plumes) this.plumes = m.plumes;
       if (m.relief) this.relief = m.relief;
@@ -41,19 +46,20 @@ export class Live {
         this.world = makeWorld(meta, m.frame, 0);
         this.table = m.table;
         this.stats = m.stats;
+        this.kinds = JSON.parse(m.kinds) as StartKind[];
         on.world(this.world);
         return this.shown();
       }
       if (!this.world) return this.shown();
       // The world changes only as it steps: a frame of the date shown (a pause, or the things of another window)
-      // brings its things and its stats, and the map is not drawn anew (`changed` false).
+      // brings its things and its stats, and the map is not drawn anew (`changed` false), unless an edit changed it.
       const date = this.world.meta.frames[0], same = date.day === m.day && date.year === m.year;
       this.world.data = m.frame;
       this.table = m.table;
       this.world.meta.frames[0] = { day: m.day, year: m.year };
       this.stats = m.stats;
       on.things(m.things);
-      on.frame(m.stats, !same);
+      on.frame(m.stats, !same || m.edited);
       this.shown();
     };
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);
@@ -84,5 +90,9 @@ export class Live {
   rate(monthsPerSecond: number): void { this.worker.postMessage({ cmd: 'rate', rate: monthsPerSecond }); }
   /** Ask with every frame for the things of a window (x, y, w, h in squares) to draw one by one, or for none. */
   things(at: [number, number, number, number] | null): void { this.worker.postMessage({ cmd: 'things', at }); }
+  /** Ask what lies under the place (x, y) in squares (`probe`, answered by `on.probe`). */
+  probe(x: number, y: number): void { this.worker.postMessage({ cmd: 'probe', at: [x, y] }); }
+  /** Edit the world at (x, y) in squares between two months (god.ts `TOOLS`; answered by `on.edited`). */
+  edit(act: number, x: number, y: number, share: number, row: number): void { this.worker.postMessage({ cmd: 'edit', act, at: [x, y], share, row }); }
   stop(): void { this.worker.terminate(); URL.revokeObjectURL(this.url); document.removeEventListener('visibilitychange', this.onHide); }
 }

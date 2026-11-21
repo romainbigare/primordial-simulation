@@ -9,6 +9,7 @@ import { Land } from './land';
 import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
 import { Fire } from './fire';
+import { God } from './god';
 import { textureClass, textureLegend } from './soil';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -70,7 +71,11 @@ map.layer = vegetation;
 const fire = new Fire();
 map.fire = fire;
 vegetation.fire = fire;
-map.overlay = (_, ox, oy, s) => slots.seen(ox, oy, s);
+/** God mode: the tools that edit the live world (live world only). */
+const god = new God($('god'), { probe: (x, y) => live?.probe(x, y), edit: (a, x, y, s, r) => live?.edit(a, x, y, s, r) }, () => map.redraw());
+god.listen($<HTMLCanvasElement>('cv'));
+map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live) god.draw(ctx, ox, oy, s); };
+map.tap = (x, y) => live !== null && god.tap(x, y);
 /** Which GPU draws the map (none: the page cannot draw it). */
 let drawnWith = '';
 map.onScale = () => { if (live) showStats(live.stats); };
@@ -95,6 +100,7 @@ const say = (t: string) => { $('msg').textContent = t; $('msg').hidden = !t; };
 /** The live world or a tape: what only one of them has is shown, and the speeds are its own. */
 function setMode(isLive: boolean): void {
   $('live').hidden = !isLive;
+  $('god-group').hidden = !isLive;
   document.querySelectorAll<HTMLElement>('.tape-only').forEach(el => (el.hidden = isLive));
   speed = isLive ? LIVE_SPEEDS[1] : 4;
   $('speeds').replaceChildren(...(isLive ? LIVE_SPEEDS : SPEEDS).map(s => {
@@ -319,13 +325,15 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => (from ? openSaved(from) : newWorld()),
-    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
+    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); god.setKinds(l.kinds); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) slots.set(data); },
     frame: (stats, changed) => {
       if (live !== l) return;
       if (changed) setFrame(0);
       showStats(stats);
     },
+    probe: p => { if (live === l) god.probed(p); },
+    edited: r => { if (live === l) god.edited(r); },
     error: text => { playing = false; syncUi(); say(text); },
   });
   setMode(true);

@@ -105,6 +105,8 @@ export class MapView {
   fire: Fire | null = null;
   playing = false;
   overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
+  /** Told of a tap at a place (squares) before the map picks its square: true takes the tap (a tool's edit). */
+  tap: ((x: number, y: number) => boolean) | null = null;
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
     this.over.className = 'over';
@@ -133,7 +135,8 @@ export class MapView {
       this.cam.ox += m1.x - m0.x; this.cam.oy += m1.y - m0.y; this.fitted = false; this.invalidate();
     });
     const up = (e: PointerEvent) => {
-      if (ptrs.size === 1 && moved < 6 && e.type === 'pointerup') { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
+      const taken = () => this.tap?.((e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s) ?? false;
+      if (ptrs.size === 1 && moved < 6 && e.type === 'pointerup' && !taken()) { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
       ptrs.delete(e.pointerId);
     };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
