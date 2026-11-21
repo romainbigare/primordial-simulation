@@ -162,17 +162,20 @@ pub(in crate::flow) enum Leaves {
 
 /// What Flow's liquid laws moved of the cells of parts among `cells` (`liquid::book`): what came in gathers in the
 /// liquid's top; what left, as `leaves` says: of the top and the deep by their shares of their liquid and of the land
-/// only what they lack (only liquid moves), or of a land all of it; and the heat that left by the share of the mol
-/// each gave. Of each of `ks` what each cell holds now less `before` (`[q * cells.len() + c]`), mol, and of its heat
-/// now less `heat`, J.
+/// only what they lack (only liquid moves), or of a land all of it; the land and the deep give the heat of what they
+/// gave at their own temperature and phases (`Piece::heat_of`), and the top takes the rest of the node's change of heat,
+/// as it takes what came in. Of each of `ks` what each cell holds now less `before` (`[q * cells.len() + c]`), mol, and
+/// of its heat now less `heat`, J.
 pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks, before): (&[usize], &[f64]), heat: &[f64], leaves: Leaves) {
     let (n, len) = (w.mesh.cells().n(), cells.len());
     for (c, &i) in cells.iter().enumerate() {
         // Each part's liquid of each substance, mol, as its last solve found it.
         let liquid = s.mixed(i as usize).map(|m| m.piece.each_ref().map(|q| ks.iter().map(|&k| q.liquid(k, &s.sp[k])).collect::<Vec<f64>>()));
+        // The heat a mol of each of `ks` holds in the land and in the deep, J.
+        let per_mol = s.mixed(i as usize).map(|m| [LAND, DEEP].map(|x| ks.iter().map(|&k| m.piece[x].heat_of(k, &s.sp[k])).collect::<Vec<f64>>()));
         let Some(Some(p)) = s.state.parts.get_mut(i as usize) else { continue };
-        // What left, mol, and of it what the land and the deep gave.
-        let (mut left, mut land, mut deep) = (0.0, 0.0, 0.0);
+        // The heat of what the land and the deep gave, J.
+        let (mut land, mut deep) = (0.0, 0.0);
         for (q, &k) in ks.iter().enumerate() {
             let d = w.store.amounts(Class::Ground)[k * n + i as usize] - before[q * len + c];
             if d >= 0.0 {
@@ -196,11 +199,12 @@ pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks,
             gain(p, k, LAND, d * by_land);
             gain(p, k, TOP, d * (1.0 - by_land - by_deep));
             gain(p, k, DEEP, d * by_deep);
-            (left, land, deep) = (left - d, land + was[0] - p.amt[k][LAND], deep + was[1] - p.amt[k][DEEP]);
+            if let Some(h) = &per_mol {
+                (land, deep) = (land + (was[0] - p.amt[k][LAND]) * h[0][q], deep + (was[1] - p.amt[k][DEEP]) * h[1][q]);
+            }
         }
         let e = w.store.heat(Class::Ground)[i as usize] - heat[c];
-        let (by_land, by_deep) = if left > 0.0 { (land / left, deep / left) } else { (0.0, 0.0) };
-        p.heat = [p.heat[LAND] + e * by_land, p.heat[TOP] + e * (1.0 - by_land - by_deep), p.heat[DEEP] + e * by_deep];
+        p.heat = [p.heat[LAND] - land, p.heat[TOP] + e + land + deep, p.heat[DEEP] - deep];
     }
 }
 

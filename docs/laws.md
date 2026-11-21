@@ -515,7 +515,9 @@ what the heat holds molten, as every law and the shell then read it.
 - **A cell of parts** (1.1): what the liquid laws bring to it gathers in its liquid's top; what the laws under the
   surface take leaves its land (`parts::Leaves`); what the others take leaves its top and its deep by their shares of
   the liquid they hold (what stands leaves from the liquid), and its land only for what they lack, which keeps its
-  own pores' liquid; at the parts' temperature by the liquid each holds (`parts::to_liquid`, `land::t_now`).
+  own pores' liquid; at the parts' temperature by the liquid each holds (`land::t_now`). The land and the deep give
+  the heat of what they give at their own temperature and phases (`Piece::heat_of`); the top takes the rest of the
+  node's change of heat, as it takes what came in (`parts::to_liquid`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
   (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node

@@ -109,6 +109,11 @@ impl Piece {
     pub(super) fn molten(&self, k: usize) -> f64 {
         if self.pk == k { self.phi } else { (self.latent.molten >> k & 1) as f64 }
     }
+    /// The heat a mol of substance `k` (`sp`) holds in it, J: its heat capacity times its temperature and the fusion
+    /// enthalpy of its molten share.
+    pub(super) fn heat_of(&self, k: usize, sp: &super::scratch::Sp) -> f64 {
+        sp.cp * self.tg + sp.lf * self.molten(k)
+    }
 }
 
 /// A cell's parts as the last `solve` found them (`Piece`), and the heat conductance between its land and its liquid's
