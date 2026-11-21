@@ -138,9 +138,11 @@ pub(super) fn movable(w: &World, s: &Scratch, liq: &[usize], cells: &[u32], tmin
 /// The liquid standing in ground node `i` gains per mol of liquid `k` that comes to it with the liquid (less: leaves),
 /// m³: its liquid's molar volume; of a mineral only its share that stays dissolved (`State::dissolved`), as the node's
 /// exchange sites take the rest of what comes (give the rest of what leaves) at once, its state splitting what it holds
-/// so (`Sp::volume`); none of a gas, which takes no room.
+/// so (`Sp::volume`; of a cell of parts its liquid's top's, where what comes gathers, `parts::to_liquid`); none of a
+/// gas, which takes no room.
 pub(super) fn gain(s: &Scratch, k: usize, i: usize) -> f64 {
-    s.sp[k].v[1] * s.sp[k].liquid(s.state.tg[i], 1.0, s.state.dissolved[i])
+    let free = s.mixed(i).map_or(s.state.dissolved[i], |m| m.piece[super::parts::TOP].free);
+    s.sp[k].v[1] * s.sp[k].liquid(s.state.tg[i], 1.0, free)
 }
 
 /// Cells `cells`, of the liquids that may move `held` (`movable`: rows of `width - 1` liquids, then the heat) and

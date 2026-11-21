@@ -89,9 +89,17 @@ pub(super) fn boil_off(p: &Sp, cap: f64, t: f64) -> f64 {
 /// phases from its amounts and heat now (`World::thaw`), so a build at the same time finds the same share.
 fn dissolved(w: &World, s: &Scratch, i: usize) -> f64 {
     let (n, (t, on)) = (w.mesh.cells().n(), w.thaw(i));
+    dissolved_in(s, w.soil[i].holds, t, |k| w.store.amounts(Class::Ground)[k * n + i], |k| w.molten(k, i, t, on))
+}
+
+/// The share of the minerals of growth that stays dissolved in ground of `amt(k)` mol of each substance at `t` K, the
+/// share `molten(k)` of each molten, whose exchange sites hold the minerals of `holds` m³ of liquid: what they leave
+/// in the liquid of its other substances (`soil::dissolved`). Of a node (`dissolved`) and of each part of a cell of
+/// parts, by the sites of the particles it holds (`parts`).
+pub(super) fn dissolved_in(s: &Scratch, holds: f64, t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64) -> f64 {
     let liquids = s.state.loose.iter().filter(|&&k| !s.sp[k].mineral && t < s.sp[k].boil);
-    let vol: f64 = liquids.map(|&k| w.store.amounts(Class::Ground)[k * n + i] * w.molten(k, i, t, on) * s.sp[k].v[1]).sum();
-    crate::soil::dissolved(w.soil[i].holds, vol)
+    let vol: f64 = liquids.map(|&k| amt(k) * molten(k) * s.sp[k].v[1]).sum();
+    crate::soil::dissolved(holds, vol)
 }
 
 /// Solid amount of `k` in ground node `i`, mol.
@@ -121,6 +129,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, (full, moving): (bool, bo
     let n = w.mesh.cells().n();
     if full {
         s.state.dissolved = crate::par::map_n(n, crate::par::UNCOUNTED, |i| dissolved(w, s, i));
+        parts::find_dissolved(w, s, 0..n);
     }
     let caps = capacities(w, s, 0..n);
     let mut anew = Vec::new();
@@ -143,6 +152,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, (full, moving): (bool, bo
 pub(super) fn cells_state(w: &World, s: &mut Scratch, cells: &[u32], all: bool) {
     if all {
         cells.iter().for_each(|&i| s.state.dissolved[i as usize] = dissolved(w, s, i as usize));
+        parts::find_dissolved(w, s, cells.iter().map(|&i| i as usize));
     }
     let caps = capacities(w, s, cells.iter().map(|&i| i as usize));
     let mut anew = Vec::new();
@@ -305,7 +315,7 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
 fn surface_of(w: &World, s: &Scratch, i: usize, t: f64, molten: impl Fn(usize) -> f64, melt: &[f64; MAX_SUBSTANCES]) -> [f64; 7] {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
     let amt = |k: usize| w.store.amounts(Class::Ground)[k * n + i];
-    let (l, z, [rc, tc]) = layers(w, s, (i, 1.0, 1.0), t, amt, molten, |k| melt[k]);
+    let (l, z, [rc, tc]) = layers(w, s, (i, 1.0, 1.0), (t, s.state.dissolved[i]), amt, molten, |k| melt[k]);
     [z, z + l[2] / area, rc, tc, l[0] / area, reflectance(w, s, i, &l), w.pores(i).porosity * l[4] / area]
 }
 
@@ -314,7 +324,7 @@ fn surface_of(w: &World, s: &Scratch, i: usize, t: f64, molten: impl Fn(usize) -
 /// is molten (of it liquid its share by `Sp::liquid`): the volume and volume × reflectance of each of [soft solid,
 /// liquid, loose solid] top down, m³; its solid surface, m; and of its soft cover the heat resistance, m² K/W, and the melting point, K: its solids' melting points
 /// `melt(k)` (lowered by what is dissolved, `Chemistry::melt_in`), a mean by volume; infinite with no cover.
-pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64), t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64, melt: impl Fn(usize) -> f64) -> ([f64; 6], f64, [f64; 2]) {
+pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64), (t, free): (f64, f64), amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64, melt: impl Fn(usize) -> f64) -> ([f64; 6], f64, [f64; 2]) {
     let (area, fix) = (w.mesh.cells().area()[i] * part, s.state.fix[i].map(|v| v * ground));
     let mut l = [0.0, 0.0, 0.0, 0.0, fix[0], fix[1]];
     let (mut z, mut cover) = (w.base_z + (s.state.bed[i].vol * ground + fix[0]) / area, [0.0; 2]);
@@ -323,7 +333,7 @@ pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64
         if a <= 0.0 || t >= p.boil {
             continue;
         }
-        let (m, liq) = (molten(k), p.liquid(t, molten(k), s.state.dissolved[i]));
+        let (m, liq) = (molten(k), p.liquid(t, molten(k), free));
         let vs = a * (1.0 - m) * p.v[0];
         let o = if t > p.soft { 0 } else { 4 };
         (l[o], l[o + 1]) = (l[o] + vs, l[o + 1] + vs * p.refl[0]);

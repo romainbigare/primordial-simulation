@@ -1641,7 +1641,9 @@ dissolved: sites of 1,060 mol of charge a m³ of fine particles and 2,800 a m³ 
 `SITES_ORGANIC`), each holding the minerals of 0.04 m³ of the liquid (`HELD_PER_SITE`), so the sites hold those of
 `Soil::holds` m³ (found each month's start, `soil::month`) and the share V / (V + holds) of a mineral stays dissolved
 in the V m³ of the cell's other liquids (`soil::dissolved`), found when Flow builds the state of its ground in full
-(each month's start) and kept until the next (`State::dissolved`). Only that share is liquid (`Sp::liquid`): it moves
+(each month's start) and kept until the next (`State::dissolved`); in a cell of parts (1.1) each part's, by the sites of
+the particles it holds (`Soil::holds` by its share of the cell's ground) over its own liquid, found and kept so
+(`Parts::free`): a liquid's top over a deep holds no particles, and what is dissolved in it stays dissolved. Only that share is liquid (`Sp::liquid`): it moves
 with the liquid that sinks, flows through the pores and runs off (`flow::liquid::mobile`, `basin::movable`) and takes
 its liquid volume in the pores and over them. The rest is part of the ground everywhere Flow reads it: ions held on
 the faces of the particles, with the solids' mass but taking no room, in no pores and no cover, that neither move nor

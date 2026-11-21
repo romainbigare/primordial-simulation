@@ -65,24 +65,24 @@ pub(super) fn reconcile(w: &World, s: &Scratch, i: usize, p: &mut Parts) {
     }
 }
 
-/// The liquid over the pores of the land of `p` in cell `i` (found as `f`, porosity `por`) runs down to the liquid's top,
+/// The liquid over the pores of the land of `p` (found as `f`, porosity `por`) runs down to the liquid's top,
 /// as the ground inside a cell drains to its lowest, each liquid (`Sp::liquid`) with its heat at the land's
 /// temperature; the land keeps what its pores hold, its own soil's liquid. Whether any moved.
-pub(super) fn settle(s: &Scratch, i: usize, p: &mut Parts, f: &[Found; PARTS], por: f64) -> bool {
+pub(super) fn settle(s: &Scratch, p: &mut Parts, f: &[Found; PARTS], por: f64) -> bool {
     let over = f[LAND].over(por);
     if over <= 0.0 {
         return false;
     }
-    land_to_top(s, i, p, (f[LAND].th.t, &|k| f[LAND].th.molten(k)), over / f[LAND].l[2]);
+    land_to_top(s, p, (f[LAND].th.t, f[LAND].free, &|k| f[LAND].th.molten(k)), over / f[LAND].l[2]);
     true
 }
 
-/// The share `part` of the liquid of the land of `p` in cell `i` goes to the liquid's top: of each liquid (`Sp::liquid`,
-/// at `t` K, the share `molten(k)` of it molten), with its heat at `t`.
-fn land_to_top(s: &Scratch, i: usize, p: &mut Parts, (t, molten): (f64, &dyn Fn(usize) -> f64), part: f64) {
+/// The share `part` of the liquid of the land of `p` goes to the liquid's top: of each liquid (`Sp::liquid`, at `t` K,
+/// the share `molten(k)` of it molten, of a mineral the share `free` dissolved), with its heat at `t`.
+fn land_to_top(s: &Scratch, p: &mut Parts, (t, free, molten): (f64, f64, &dyn Fn(usize) -> f64), part: f64) {
     let mut heat = 0.0;
     for &k in s.state.vary.iter().filter(|&&k| t < s.sp[k].boil) {
-        let m = p.amt[k][LAND] * s.sp[k].liquid(t, molten(k), s.state.dissolved[i]) * part;
+        let m = p.amt[k][LAND] * s.sp[k].liquid(t, molten(k), free) * part;
         p.amt[k][LAND] -= m;
         p.amt[k][TOP] += m;
         heat += m * (s.sp[k].cp * t + s.sp[k].lf);
@@ -98,7 +98,7 @@ pub(in crate::flow) fn drain_land(s: &mut Scratch, i: usize, part: f64) {
     let Some(land) = s.mixed(i).map(|m| m.piece[LAND].clone()) else { return };
     let mut parts = std::mem::take(&mut s.state.parts);
     if let Some(Some(p)) = parts.get_mut(i) {
-        land_to_top(s, i, p, (land.tg, &|k| land.molten(k)), part);
+        land_to_top(s, p, (land.tg, land.free, &|k| land.molten(k)), part);
     }
     s.state.parts = parts;
 }
@@ -124,7 +124,7 @@ pub(super) fn strip(s: &Scratch, i: usize, p: &mut Parts, (f, por): (&Found, f64
         let pore = if f.l[2] > 0.0 { f.pores(por).min(f.l[2]) / f.l[2] } else { 0.0 };
         // Of each substance it gives, the share of what the bottom holds and the heat of a mol.
         let solids = s.state.fixed.iter().map(|&k| (k, y, s.sp[k].cp * t));
-        let liquids = s.state.vary.iter().filter(|&&k| t < s.sp[k].boil).map(|&k| (k, s.sp[k].liquid(t, f.th.molten(k), s.state.dissolved[i]) * pore * y, s.sp[k].cp * t + s.sp[k].lf));
+        let liquids = s.state.vary.iter().filter(|&&k| t < s.sp[k].boil).map(|&k| (k, s.sp[k].liquid(t, f.th.molten(k), f.free) * pore * y, s.sp[k].cp * t + s.sp[k].lf));
         let mut h = -d * s.skin[i] * t;
         for (k, x, per) in solids.chain(liquids) {
             let m = p.amt[k][b] * x;

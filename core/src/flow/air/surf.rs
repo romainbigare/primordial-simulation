@@ -389,9 +389,9 @@ pub(super) fn end_reflectance(cx: &Ctx, g: &Surf, (sun, out): (f64, &[f64])) -> 
     let th = thaw_at(s, c.max(1.0), e, |k| amt[k], &melt);
     match piece {
         Some(p) => {
-            let l = layers(w, s, (i, g.share, p.ground), th.t, |k| amt[k], |k| th.molten(k), |k| melt[k]).0;
+            let l = layers(w, s, (i, g.share, p.ground), (th.t, p.free), |k| amt[k], |k| th.molten(k), |k| melt[k]).0;
             column(w, s, (i, g.share), &std::array::from_fn(|y| l[y] + p.below[y]))
         }
-        None => reflectance(w, s, i, &layers(w, s, (i, 1.0, 1.0), th.t, |k| amt[k], |k| th.molten(k), |k| melt[k]).0),
+        None => reflectance(w, s, i, &layers(w, s, (i, 1.0, 1.0), (th.t, s.state.dissolved[i]), |k| amt[k], |k| th.molten(k), |k| melt[k]).0),
     }
 }
