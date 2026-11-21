@@ -50,6 +50,17 @@ impl Sp {
     pub(super) fn soft_at(&self, t: f64) -> bool {
         t > self.soft
     }
+    /// What `a` mol of it in ground at `t` K is, the share `molten` of it molten and the minerals of growth dissolved
+    /// by the share `free`: its soft solid, its liquid (`liquid`) and its loose solid, m³, its solid soft cover where it
+    /// is warmer than `soft` (`soft_at`). None with none of it, or at or over its boiling point (a gas takes no room).
+    #[inline]
+    pub(super) fn volumes(&self, t: f64, a: f64, molten: f64, free: f64) -> Option<[f64; 3]> {
+        if a <= 0.0 || t >= self.boil {
+            return None;
+        }
+        let (solid, liquid) = (a * (1.0 - molten) * self.v[0], a * self.liquid(t, molten, free) * self.v[1]);
+        Some(if self.soft_at(t) { [solid, liquid, 0.0] } else { [0.0, liquid, solid] })
+    }
     /// Its liquid share in ground at `t` K where the share `molten` of it is molten and the minerals of growth stay
     /// dissolved by the share `free` (`State::dissolved`): none at or over its boiling point; of a mineral only what
     /// stays dissolved, the rest held on the exchange sites, which neither moves, nor fills, nor takes room (laws.md 4).
