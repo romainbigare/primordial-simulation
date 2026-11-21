@@ -74,8 +74,9 @@ pub(super) fn plant_ground(ph: &Physics, mass: f64) -> f64 {
 }
 
 /// The plants of the `n` slots in use of cover `c` on its cell's ground of `area` m² (`cover::ground`), each slot on
-/// its share of it (`Cover::stands`; the grounds nested, so of another slot's plants the share on a slot's own ground is
-/// the lesser ground over that slot's), its walls of density `rho` kg/m³, thin out together: plants crowd the plants whose crowns share their layer of the air (`Cover::crown`),
+/// its share of its patch's ground (`Cover::stands`; the grounds nested, so of another slot's plants the share on a
+/// slot's own ground is the lesser ground over that slot's, and none of another patch's), its walls of density `rho`
+/// kg/m³, thin out together: plants crowd the plants of their patch whose crowns share their layer of the air (`Cover::crown`),
 /// whatever slot holds them, as the self-thinning law is the crowns of a stand filling its space (Yoda and others 1963)
 /// and the layers of a stand thin apart (an understory under a closed canopy). Of each slot the ground its layer's
 /// plants hold (its plants at their mean mass, the law's own measure of a stand, `plant_ground`), each other slot's
@@ -92,9 +93,12 @@ pub(super) fn thin(c: &mut Cover, mm: &[f64; NP], (ph, rho, n): (&Physics, f64, 
         k += 1;
     }
     let (held, ground) = (&held[..k], &ground[..k]);
-    // The ground each slot stands on, m², and the share of each other slot's plants that stand on it.
-    let own: [f64; SLOTS] = std::array::from_fn(|q| if q < k { area * c.stands[held[q]] as f64 } else { 0.0 });
-    let on_own = |q: usize, r: usize| if r == q { 1.0 } else { own[q].min(own[r]) / own[r].max(1e-300) };
+    // The ground each slot stands on, m², and the share of each other slot's plants that stand on it: none of a slot
+    // of another patch.
+    let own: [f64; SLOTS] = std::array::from_fn(|q| if q < k { area * c.patch_share(held[q]) * c.stands[held[q]] as f64 } else { 0.0 });
+    let patch = c.patch;
+    let apart = |q: usize, r: usize| patch[held[q]] != patch[held[r]];
+    let on_own = |q: usize, r: usize| if r == q { 1.0 } else if apart(q, r) { 0.0 } else { own[q].min(own[r]) / own[r].max(1e-300) };
     // A crown shares all of itself: a lone slot's crowd is its own ground, and its crown is not needed.
     if k > 1 {
         held.iter().zip(span.iter_mut()).for_each(|(&x, s)| *s = c.crown(ph, mm, area, x, c.height(ph, mm, rho, x)));
@@ -199,12 +203,12 @@ pub(super) fn founded(ph: &Physics, kg: f64, area: f64) -> f64 {
     (kg / ph.seed_kg).min(area * most_plants(ph, kg / area))
 }
 
-/// Alike kinds of a cell (`APART` × `Physics::alike` steps in every gene, `distance`) share a slot: of its `n` slots in
-/// use, the lighter joins the heavier (`join`).
+/// Alike kinds of a patch of a cell (`APART` × `Physics::alike` steps in every gene, `distance`) share a slot: of its
+/// `n` slots in use, the lighter joins the heavier (`join`).
 pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usize)) {
     for a in 0..n {
         for z in a + 1..n {
-            if !kin::together(&c.genes, &c.root, (a, z), super::APART * ph.alike, super::distance) {
+            if c.patch[a] != c.patch[z] || !kin::together(&c.genes, &c.root, (a, z), super::APART * ph.alike, super::distance) {
                 continue;
             }
             let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };

@@ -85,7 +85,7 @@ fn the_gas_reaches_farther_down_a_root_in_the_cold() {
 #[test]
 fn gas_spaces_cost_on_drained_ground_and_pay_on_full_pores() {
     let (mut w, i, p) = world();
-    assert!(cover::place(&mut w, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 2.0));
+    assert!(pcore::cover::place(&mut w, i, 0, KINDS[TREE_ROW].genes, TREE_ROW as u32, 2.0));
     let month = w.cfg.calendar().month as f64;
     let breath = cover::breath(&w, &p, i, 295.0);
     let grown = |phi: f32, full: bool| {

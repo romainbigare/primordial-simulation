@@ -32,11 +32,16 @@ impl Default for CellRan {
 }
 
 /// After the month of every chunk (`life::month`): the cover's seeds land (`cover::land`), what each cell's cover
-/// built is counted into its year (`grown`), and what its slots ran at becomes its last month's (`ran`).
+/// built is counted into its year (`grown`), and what its slots ran at becomes its last month's (`ran`); after the
+/// year's last month its patches age and alike ones fuse (`patches::year`).
 pub fn landed(w: &mut World) {
     super::land(w);
     grown(w);
     ran(w);
+    let year = w.cfg.months_per_year as u64;
+    if w.month() % year == year - 1 {
+        super::patches::year(w);
+    }
 }
 
 /// What each cell's cover ran at in the month (`Counters::ran`) becomes its last month's (`Counters::ran_month`); a

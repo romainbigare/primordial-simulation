@@ -706,8 +706,10 @@ gives the climate of 1-day ones within 0.3 K on the land and the land's runoff w
   set where they condense, so a deep cloud sends its heat to space from the top of the air. The ground also trades
   sensible heat with the air (`sensible`).
 - **The cover's share** of the light reaching a cell is what the cover's own law finds its leaves catch
-  (`contract::Stand::catch`, at the month's start): over each ring of the ground its kinds stand on (3,
-  `canopy::rings`), that ring's share times 1 − e^−(the capture area per m² of all the crowns on it), on the cover's
+  (`contract::Stand::catch`, at the month's start): over each ring of the ground its kinds stand on in each patch (3,
+  `canopy::rings`), that ring's share of the cell times 1 − e^−(the capture area per m² of all the crowns on it), the
+  light passing through each patch's crowns over the patch's own ground (a ring's share of the patch times the patch's
+  share of the cell, its capture area over that share; Beer's law per patch, summed by share), on the cover's
   own ground (`cover::ground`: a cell of parts' all, else its land), which lies over its land first and then under its
   liquid (`cover::over`); under standing liquid times e^(−depth / `light_depth`) of the mean depth over that part
   (`cover::dimmed`); the light the liquid stops warms the liquid, as the surface it reaches. The cell's light per m² of
@@ -1112,7 +1114,8 @@ not built).
 
 ## 3. Life: the cover, light-eaters as a field
 `core/src/cover/`. Each cell holds up to its world's `Config::variety` kinds of **cover** (a setting of a world, 8
-unless a start chooses other, at most `cover::SLOTS`, 12, the size of its arrays), each the
+unless a start chooses other, at most `cover::SLOTS`, 16, the size of its arrays; a cell of more than one patch,
+below, uses all 16, each patch at most `variety`), each the
 amounts of three substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10 and its walls
 13: `cover::Parts`, found from the chemistry's roles) and 10 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
 `STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`, `GAS`; ranges in `cover::RANGE`). Its **living cover** is its body
@@ -1136,9 +1139,10 @@ reach; where no ground lies above a slot's line, founded so or worn below it, th
 ground, `Shore::holding`, and lives there on its store where all of it lies deeper than its reach; `cover::UNSET` till then). The share of the cell's ground above its line is the slot's (`Cover::stands`), and
 of it the share whose loose ground holds its roots (`Cover::rooted`): their product (`Cover::on`) is the ground its
 plants hold, taken as nested over the slots as the loose depths are (`canopy::rings`; the ground under the liquid is
-the cell's low ground). Its leaves layer over that ground (its light and its shade), its plants find their room on it
-(the self-thinning law, each slot against its own ground, of another slot's plants the share on it the lesser ground
-over that slot's), and it is placed per m² of that ground. Under the liquid its activity is full (its pores hold all
+the cell's low ground), within its patch (**Patches**, below: that share of the patch's share of the cell,
+`Cover::holds`). Its leaves layer over that ground (its light and its shade), its plants find their room on it
+(the self-thinning law, each slot against its own ground, of another slot's plants of its patch the share on it the
+lesser ground over that slot's), and it is placed per m² of that ground. Under the liquid its activity is full (its pores hold all
 they can), its roots work as far as that depth lets them, and they reach the liquid of the parts under it
 (`Soak::pond`). How wet its land is to it is the land part's own liquid over that part's area for a cell of parts (no
 more than the cell holds; `flow::parts` keeps each part's matter), else the cell's over its area. **Its plants under
@@ -1184,7 +1188,7 @@ for light by size (Weiner 1990), and seedlings, all leaf, grow fast where light 
 groups that pass each other keep the order of their plants. A stand holds at most (`thin_kg` / kg per m²)² plants a
 m², the self-thinning law (Yoda and others 1963), a law of its plants' mean mass and their count: a plant of the mean
 mass m holds (m / `thin_kg`)^(2/3) m² of ground in a full stand. The law is the crowns of a stand filling its space,
-so plants crowd the plants whose crowns share their layer of the air (`Cover::crown`: from its top down the depth its
+so plants crowd the plants of their patch whose crowns share their layer of the air (`Cover::crown`: from its top down the depth its
 capture area fills at `crown_density`), whatever slot holds them, and the layers of a stand thin apart (an understory
 under a closed canopy): after its seeds wake and after it builds (`stand::thin`), the ground the plants of a slot's
 layer hold, each other slot's counted by the share of the slot's crown its own crown shares, is set against the
@@ -1202,7 +1206,7 @@ seeds fill it:
 - **Light**: the light the cell caught since its last month per m² of capture area (`World::light`), on its capture
   area (10^`LEAF` m² per kg of living cover) less what it reflects (its parts' colours by volume), passing down
   through the crowns of its kinds (Beer's law, `canopy::shade`): each kind's capture area spread evenly through its
-  crown (`Cover::crown`), the light at each height absorbed by the capture area of all the crowns there, whatever
+  crown (`Cover::crown`), the light at each height absorbed by the capture area of all the crowns of its patch there, whatever
   slot holds them, so the tallest take it first, crowns that share a layer share its light, and a seedling lives on
   what reaches below the crowns above it; the light the air found its leaves catch already holds the rings of its
   ground and the liquid standing over it (1.4). **Roots**: a
@@ -1371,7 +1375,7 @@ seeds fill it:
   store, fuel at its `STORE` gene per kg of it, from the slot's fuel: a slot short of fuel makes fewer seeds, not
   lighter ones. When every cell has had its month the seeds land (`cover::land`), cell by cell in the order made (the
   potential energy of the life that left a cell's head and came to it is booked once for each cell and way,
-  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in up to `SLOTS` (12) lots at any variety, each its
+  `store::life_sent`) and **lie on its ground** (`cover::Lying`, `lying.rs`) in up to `GROUND_LOTS` (12) lots at any variety and any patches, each its
   amounts of the three parts, its genes and its starting kind, at the cover's temperature (their heat is the cover's,
   and they are matter of the cover's node: in its books, its budget and its potential energy). Seeds that land join the
   most alike lot of their kind within `APART` × `alike` steps (the genes the mean by built matter), else an empty lot,
@@ -1383,24 +1387,51 @@ seeds fill it:
   by the seeds' rule, min(1, w / 10^`MOIST`)^`dormancy` (Harrington's: dry tissue, `Physics::activity`),
   and pace its burning's pace at the ground's temperature over that at `t_cat`: at `t_cat` all that is active wakes in a
   month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
-  ground none. What wakes takes hold (`seed::lodge`): it joins the stand of its starting kind in the cell, the slots
+  ground none. What wakes takes hold (`seed::lodge`) in each patch by the patch's share of the cell (what a patch has
+  no room for stays lying): it joins the stand of its starting kind in the patch, the slots
   of it within `APART` (0.5) × `alike` steps (in every gene, `cover::distance`), shared over them by their built cover
   (the genes of each the mean by built cover; in each a group of plants of their own, or the group of its smallest
   plants where all are held, `Cover::recruit`);
-  else they found a slot of their own: an empty one; else the slot **in deficit**, whose balance over about its last
+  else they found a slot of their own: an empty one, while the patch holds fewer than `variety`; else the patch's slot
+  **in deficit**, whose balance over about its last
   year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
-  below zero, the worst first (its cover dies as remains); else the two slots nearest each other by their genes,
-  of any starting kind, join (`seed::room`: the slots are a limit of the bookkeeping, and the two hold the same niche
+  below zero, the worst first (its cover dies as remains); else the two slots of the patch nearest each other by their
+  genes (where it holds fewer than two, of another patch), of any starting kind, join (`seed::room`: the slots are a
+  limit of the bookkeeping, and the two hold the same niche
   to within what it resolves) and they found the slot it frees (a world of one kind a cell, `Config::variety` 1, has
   no two to join: the seeds stay lying). So a cell of more slots is never closed to seeds and a holder that pays its
   way is never pushed out by weight: what lives after is the light's to decide, as seedlings live on their store and on
   the light that reaches the bottom of the layers above them, and what does not pay dies (the gap models, Shugart
   1984). A variant farther than `APART` × `alike` from its kind founds a slot of its own and competes with the others
-  for light by height. Slots of a cell within the same distance share one (`merge_alike`). A slot is the bookkeeping of a kind in a cell, not
+  for light by height. Slots of a patch within the same distance share one (`merge_alike`). A slot is the bookkeeping of a kind in a cell, not
   a thing of the world: every law above acts on the stand, so a cell whose slot is cut into alike slots stands at the
   end of that month as the uncut cell does, when the pieces merge back, in every month of its year, its dry season too
   (`core/tests/stand.rs`). Selection is between slots
   and cells: what grows better sends more seeds (frost selects the hardy where it kills the tender, `core/tests/cover.rs`).
+- **Patches** (`cover/patches.rs`): a cell's ground falls into up to `PATCHES` (3) patches, each a share of the cell
+  (`Patch::share`, the shares summing to 1) and an age, years since it was made, and each slot stands in one of them
+  (`Cover::patch`). A patch is a stand of its own, as a gap in a forest is (Watt 1947; the gap models, Shugart 1984):
+  the ground a slot holds is its share of its patch's ground (its line, rooted share, footing and strips as above), and
+  its plants shade (`canopy::shade`, `Cover::growth`), crowd (`stand::thin`), fill their crowns over (`Cover::crown`)
+  and join (`merge_alike`) the plants of their own patch alone. The soil, its liquid and minerals and the air stay the
+  cell's: each patch draws the key liquid (`canopy::drawn`) and the minerals (`grow::grow`) of its share of the cell's
+  ground. The light its leaves catch is found per patch (1.4). A patch has no place in its cell: it lies over the
+  cell's ground as the cell does, so the seeds lying are one pool. A cell of one patch is the cell above, using its
+  first `variety` slots. Once a year (`patches::year`, after the year's last month) each patch ages a year, and two
+  **alike** patches fuse, the younger into the older (their shares added, the age the mean by share): the same
+  starting kinds hold them (a kind holds a patch where its slots hold at least `HOLDS`, 0.1, of the patch's built
+  cover) and their tallest plants stand within `ALIKE_HEIGHT` (0.2) of the taller's height, rules of the model as
+  `APART` is. Its slots that meet slots of their kind join them (`merge_alike`), a patch of more than `variety` slots
+  joins its nearest two until it holds `variety` (`seed::room`), and a cell back to one patch moves its slots into its
+  first `variety`. **Edits** make patches (handover.md 11: an action is a physics edit): `World::clear` makes the share
+  s of a cell a new patch of age 0, every patch giving the share s of its ground, and kills the plants above the
+  ground there: the share s of every slot's amounts and plants goes to the cell's ground with its heat (`Cover::cut`,
+  as a press breaks it, booked as the cover's deaths), its seeds lying, cured leaves and dead walls staying; where
+  `PATCHES` are in use the new patch joins the one most alike to bare ground, whose tallest plants stand lowest.
+  `World::split` makes the share s of a cell of one patch a new patch alike to it, each slot giving it the share s of
+  its amounts and plants, nothing dying: a control, as each patch stands per m² as the cell did
+  (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). `ew run`
+  makes them at the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Edit`).
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's aside node (with theirs), as living things
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
