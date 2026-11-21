@@ -77,7 +77,7 @@ fn catchments(g: &Grid, h: &[f64], f: &Flood, open: &[bool]) -> Catchments {
 pub(super) fn high_stand(seed: u64, g: &Grid, (h, loose): (&mut [f64], &mut [f64]), (lowers, channel): (&[f64], [f64; 2]), books: &mut Books) -> (Vec<f64>, Vec<f64>) {
     let n = g.n();
     let open = open_low(g, h, STAND_M);
-    let f = flood(g, h, &open, (&starts(g, &open, false), &draws(seed, 1, n)), &[]);
+    let f = flood(g, h, &open, (&starts(g, &open, false), &draws(seed, 1, n)));
     let c = catchments(g, h, &f, &open);
     let exposed = exposures(g, &open);
     // The mouths: their entries, loads over the stand and heads; the channels that share an entry share their flood.

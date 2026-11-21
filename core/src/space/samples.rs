@@ -147,8 +147,7 @@ impl Terrain {
 
     /// The samples of `map` for `seed` (its rows between latitudes `lat`) as built from the relief `r` (`Relief`): the
     /// seed's (`samples`) with the heights `relief::heights` gives, and the flood over them found again (`found`; no
-    /// grading: it would move ground the books do not know), each sample keeping the seed's way where that still runs
-    /// down (the offsets move a flat's samples by millimetres, which would turn its ways each build); a sample of the seed's open low ground is land where it
+    /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
     /// stands over the liquid's level (`wear::STAND_M`). What the relief laid on a sample is loose ground that settled
     /// there (`laid_ground`), laid over `years` since the start. The seed's samples where there was no build; found
     /// once for each build and kept.
@@ -165,7 +164,7 @@ impl Terrain {
         let h = super::relief::heights(&s0, map, lat, r);
         let open = open_low(&grid, &h, STAND_M);
         let ground = laid_ground(&s0, r, years);
-        let found = Arc::new(self.found(seed, &grid, (h, &open, false), ground, &s0.to));
+        let found = Arc::new(self.found(seed, &grid, (h, &open, false), ground));
         let mut kept = self.kept.1.lock().expect("the built samples");
         known(&kept).unwrap_or_else(|| {
             *kept = Some((r.builds, found.clone()));
@@ -228,16 +227,15 @@ impl Terrain {
         let rim = crate::par::map_n(grid.n(), crate::par::UNCOUNTED, |k| Strata::rim(seed, map, map.place_of(&leaf(k), south, north).1));
         let worn = wear(seed, &grid, (by, &rise), (&fold, [&body, &rim], &Strata::of(seed, &self.makes)), self.channel);
         let ground = Ground { make: worn.make, loose: worn.loose, settled: worn.settled, age: worn.age, books: worn.books };
-        self.found(seed, &grid, (worn.h, &worn.open, true), ground, &[])
+        self.found(seed, &grid, (worn.h, &worn.open, true), ground)
     }
 
     /// The samples of heights `h` on grid `g` for `seed`, the open low ground `open` (`drain::open_low`), and their
     /// ground `ground`: the flood over them from all the open low ground, the closed basins too shallow to hold a pond
     /// (`ponds::shallow`) with `graded` filled (`ponds::grade`), else left as they lie but no ponds (the floods flow
-    /// through them), the area that drains through each sample, the ponds, and the wetness index (`sample_index`); each
-    /// sample's way the one `keep` gives it where that is still a way down (`drain::flood`; empty: none).
-    fn found(&self, seed: u64, grid: &Grid, (mut h, open, graded): (Vec<f64>, &[bool], bool), ground: Ground, keep: &[u32]) -> Samples {
-        let f = flood(grid, &h, open, (&starts(grid, open, false), &draws(seed, 1, grid.n())), keep);
+    /// through them), the area that drains through each sample, the ponds, and the wetness index (`sample_index`).
+    fn found(&self, seed: u64, grid: &Grid, (mut h, open, graded): (Vec<f64>, &[bool], bool), ground: Ground) -> Samples {
+        let f = flood(grid, &h, open, (&starts(grid, open, false), &draws(seed, 1, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
         if graded {
             let shallow = basins(grid, &h, &f).1;

@@ -594,9 +594,7 @@ samples stand at the seed's heights with what was laid on each, each cell's rais
 its solids that stay solid at the surface: snow and ice do not raise it): the cells' offsets spread smoothly between
 their centres (a box filter half a square each way, three passes, round a globe's rows), what their means then lack spread the same way
 eight times, and each raised by the constant it still lacks, so each cell's samples' mean is its ground exactly
-(`space::relief::heights`). Over them the flood finds the ways (each sample keeping the seed's where that still runs
-down: the offsets move a flat's samples by millimetres, which would turn its ways at each build), the ponds and the
-wetness index again
+(`space::relief::heights`). Over them the flood finds the ways, the ponds and the wetness index again
 (`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level; a closed basin
 too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flow through it (the start's wear fills
 such basins; the build fills none). Then each cell's ground as liquid stands on it, the bodies, the key samples and

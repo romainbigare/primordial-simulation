@@ -107,10 +107,8 @@ pub(super) fn starts(g: &Grid, open: &[bool], shore: bool) -> Vec<usize> {
 /// lowest on the flood's surface, then the least index. A neighbour across a side it reaches stands at its own height
 /// or the level the flood came at, the higher, and on the surface at its own height or `FLOOD_RISE` times their
 /// distance times one and its draw higher than the sample it was reached from, the higher, so each sample of land has a
-/// way down; of its ways down it takes the way `keep` gives it where that is one of them (the seed's, at a build: a
-/// way does not leave its sample for another as the ground moves by a little, `Terrain::built`), else one by its draw
-/// `draw` (`pick`). `keep` empty: none.
-pub(super) fn flood(g: &Grid, z: &[f64], open: &[bool], (start, draw): (&[usize], &[f64]), keep: &[u32]) -> Flood {
+/// way down; of its ways down it takes one by its draw `draw` (`pick`).
+pub(super) fn flood(g: &Grid, z: &[f64], open: &[bool], (start, draw): (&[usize], &[f64])) -> Flood {
     let n = z.len();
     let (mut surface, mut level, mut seen) = (z.to_vec(), z.to_vec(), open.to_vec());
     let (mut to, mut apart, mut rank, mut order) = (vec![NONE; n], vec![0.0; n], vec![NONE; n], Vec::with_capacity(n));
@@ -134,8 +132,7 @@ pub(super) fn flood(g: &Grid, z: &[f64], open: &[bool], (start, draw): (&[usize]
             (surface[j], level[j]) = (z[j].max(s + FLOOD_RISE * d * (1.0 + draw[j])), z[j].max(l));
             heap.push(Low(level[j], surface[j], j));
         }
-        let kept = keep.get(i).and_then(|&w| down.iter().find(|x| x.0 == w));
-        (to[i], apart[i]) = kept.map_or_else(|| pick(&down, draw[i]), |&(j, _, d)| (j, d));
+        (to[i], apart[i]) = pick(&down, draw[i]);
     }
     Flood { surface, level, to, apart, rank, order }
 }

@@ -218,7 +218,7 @@ fn run(g: &Grid, h: &mut [f64], (up, open, draw): (&[f64], &[bool], &[f64]), (be
     let volume = |x: &dyn Fn(usize) -> f64| (0..g.n()).filter(|&i| !open[i]).map(|i| x(i) * g.area(i)).sum::<f64>();
     let start = starts(g, open, true);
     for _ in 0..steps {
-        let f = flood(g, h, open, (&start, draw), &[]);
+        let f = flood(g, h, open, (&start, draw));
         let was = h.to_vec();
         let k: Vec<f64> = (0..g.n()).map(|i| CUT * bed.strata.cut(bed.make(i, was[i]))).collect();
         marks.drained = cut(g, h, &f, (up, open, &k), dt);
