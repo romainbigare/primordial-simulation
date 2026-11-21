@@ -363,7 +363,11 @@ them a deep store (`Class::Deep`, `bed_depth`, `bed_porosity`) that bodies and C
 a solid near its melting point (`soft`), as snow and ice. It holds no liquid: its pores close as it settles, as snow
 becomes ice (Cuffey and Paterson 2010). It insulates the node under it (its depth over its conductivity), and its
 surface warms no further than its melting point: past it the top melts and the melt soaks in, so the node takes all
-the heat that reaches the surface (`air::radiation`). A cell is **land**
+the heat that reaches the surface (`air::radiation`). A node's solid surface is one height (`World::surface_z`):
+Flow's, kept as matter moves (`land::layers`), and before Flow first built its state the same sum from its amounts and
+`thaw`; only the potential energy stacks its own from the store as it is now (`stack::Column`), so its books follow
+every move exactly. A node's heat capacity is its bed's skin and then its loose amounts (`ground::ground_cap`), for
+Flow, Change and life alike. A cell is **land**
 when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
 sideways yearly by one explicit `solve::sweep`, a link passing the harmonic mean of conductivity × thickness, times
 width over length (Patankar 1980; `flow::land::conduct`), between land cells (`flow::on_land`): rock spreads a hot spot one cell in about 70,000 years, so a
