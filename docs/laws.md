@@ -567,7 +567,7 @@ over its outlet), as the samples were last built, less what was laid on it since
 every class settles by the share the room takes and the rest passes on; a sample whose liquid runs to none has no
 room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`): the
 samples stand at the seed's heights with what was laid on each, each cell's raised to its ground (`World::ground_z`,
-its solids that stay solid at the surface: snow and ice do not raise it): each cell's offset lies on a linear ramp through
+its solids that stay solid at the surface: snow and ice do not raise it): each cell's offset lies on a plane through
 its centre whose slope each way is the smaller of the slopes to its neighbours on the two sides, none where they differ
 in sign (minmod, the finite volumes' reconstruction, van Leer 1979; round a globe's rows), then each cell is raised by
 the constant it lacks, so its samples' mean is its ground exactly (`space::relief::heights`). Over them the flood finds the ways, the ponds and the wetness index again
