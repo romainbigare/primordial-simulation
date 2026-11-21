@@ -64,7 +64,8 @@ impl Carriage {
     /// The carriage of the bodies `b` of world `w` (`Carriage`): a sample whose liquid runs on is a key where some class
     /// passes its reach by less than 1 − `PASS_TOLERANCE` (`shares`), or where it is its cell's main channel, its land
     /// sample the most drains through (`Samples::up`); a way ends where it enters a body, or at a land sample whose
-    /// liquid runs to none. A land sample's pair is its cell with the first key sample at it or below it.
+    /// liquid runs to none. A land sample's pair is its cell with the first key sample at it or below it; every land
+    /// sample has one (`pair_of[k] != NONE`), as every way ends at a key sample: the pick-up reads it so.
     pub(in crate::flow) fn of(w: &World, b: &Bodies) -> Carriage {
         let s = w.terrain_samples();
         let mut main = vec![NONE; b.of.len()];
@@ -84,7 +85,8 @@ impl Carriage {
         };
         let of_down = crate::par::map_n(b.down.len(), crate::par::UNCOUNTED, |q| shares(w, &s, b.down[q] as usize));
         for (&k, &sh) in b.down.iter().zip(&of_down) {
-            if sh[0].iter().any(|&p| f64::from(p) < 1.0 - PASS_TOLERANCE) || main[b.cell_of[k as usize] as usize] == k {
+            let settles = sh[0].iter().any(|&p| f64::from(p) < 1.0 - PASS_TOLERANCE);
+            if settles || main[b.cell_of[k as usize] as usize] == k {
                 key(&mut c, k, sh);
             }
         }
@@ -96,15 +98,18 @@ impl Carriage {
                 key(&mut c, j, [[0.0; CLASS_COUNT]; 2]);
             }
         }
- // The key samples in an order that keeps each way's key samples together, each before the next.
-        let (first, _) = c.below(b, &s, &of_down);
-        let next: Vec<u32> = c.keys.iter().map(|&k| if b.at[k as usize] != NONE || s.to[k as usize] == NONE { NONE } else { first[s.to[k as usize] as usize] }).collect();
-        let order = upstream_first(&next);
-        (c.keys, c.shares) = (order.iter().map(|&q| c.keys[q as usize]).collect(), order.iter().map(|&q| c.shares[q as usize]).collect());
+        let (mut first, skip) = c.below(b, &s, &of_down);
+        // The key samples in an order that keeps each way's key samples together, each before the next.
+        let order = upstream_first(&c.next_of(b, &s, &first));
+        let mut new = vec![0u32; order.len()];
+        order.iter().enumerate().for_each(|(q, &old)| new[old as usize] = q as u32);
+        c.keys = order.iter().map(|&q| c.keys[q as usize]).collect();
+        c.shares = order.iter().map(|&q| c.shares[q as usize]).collect();
         c.keys.iter().enumerate().for_each(|(q, &k)| c.place[k as usize] = q as u32);
-        let (first, skip) = c.below(b, &s, &of_down);
-        c.next = c.keys.iter().map(|&k| if b.at[k as usize] != NONE || s.to[k as usize] == NONE { NONE } else { first[s.to[k as usize] as usize] }).collect();
-        c.skip = c.keys.iter().map(|&k| if b.at[k as usize] != NONE { [1.0; CLASS_COUNT] } else { skip[k as usize] }).collect();
+        first.iter_mut().filter(|f| **f != NONE).for_each(|f| *f = new[*f as usize]);
+        c.next = c.next_of(b, &s, &first);
+        let at_body = |k: u32| b.at[k as usize] != NONE;
+        c.skip = c.keys.iter().map(|&k| if at_body(k) { [1.0; CLASS_COUNT] } else { skip[k as usize] }).collect();
         c.pair(b, &first);
         c.cell = c.keys.iter().map(|&k| b.cell_of[k as usize]).collect();
         c.end = c.keys.iter().zip(&c.next).map(|(&k, &n)| match b.at[k as usize] {
@@ -115,6 +120,13 @@ impl Carriage {
         }).collect();
         c.main = main.iter().map(|&k| if k == NONE { NONE } else { c.place[k as usize] }).collect();
         c
+    }
+
+    /// Of each key sample, the next key sample down its way (`NONE` where its way ends): `first` of the sample its
+    /// liquid runs to.
+    fn next_of(&self, b: &Bodies, s: &Samples, first: &[u32]) -> Vec<u32> {
+        let end = |k: usize| b.at[k] != NONE || s.to[k] == NONE;
+        self.keys.iter().map(|&k| if end(k as usize) { NONE } else { first[s.to[k as usize] as usize] }).collect()
     }
 
     /// Of each sample, the first key sample at it or below it, and of each class the product of the passes of the
@@ -172,7 +184,9 @@ impl Carriage {
         order.iter().enumerate().for_each(|(at, &p)| new[p] = at as u32);
         self.pairs = order.iter().map(|&p| self.pairs[p]).collect();
         self.pair_of.iter_mut().filter(|p| **p != NONE).for_each(|p| *p = new[*p as usize]);
-        self.link = self.keys.iter().zip(&self.next).map(|(&k, &n)| if n == NONE { NONE } else { link(b.cell_of[k as usize], b.cell_of[self.keys[n as usize] as usize]) }).collect();
+        let cell = |q: u32| b.cell_of[self.keys[q as usize] as usize];
+        let to_next = |(q, &n): (u32, &u32)| if n == NONE { NONE } else { link(cell(q), cell(n)) };
+        self.link = (0..self.keys.len() as u32).zip(&self.next).map(to_next).collect();
         self.links = links;
     }
 }
@@ -218,5 +232,6 @@ fn shares(w: &World, s: &Samples, k: usize) -> Shares {
     let flood = FLOOD_RUNOFF * s.up[k];
     let channel = w.cfg.phys.channel(flood);
     let buoyant = w.terrain.makes.get(s.make[k] as usize).copied().unwrap_or_default().buoyant;
-    passes(flood_shear(s, k, g, channel.depth), flood / channel.width, s.run[k], buoyant, g).map(|r| r.map(|x| x as f32))
+    let shares = passes(flood_shear(s, k, g, channel.depth), flood / channel.width, s.run[k], buoyant, g);
+    shares.map(|r| r.map(|x| x as f32))
 }
