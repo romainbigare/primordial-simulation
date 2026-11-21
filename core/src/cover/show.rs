@@ -11,18 +11,25 @@ use crate::units::MAX_SUBSTANCES;
 impl Cover {
     /// What it stands on its cell as (`contract::Stand`): over its slots that hold cover its mass, capture area, that
     /// times the share of light it absorbs (`reflectance`) and that times the share set aside for its light reaction
-    /// (`Cover::keep`); and the rings of the ground its slots with capture area stand on (`canopy::catch_rings`).
+    /// (`Cover::keep`); and the rings of the ground its slots with capture area stand on in each patch
+    /// (`canopy::catch_rings`), each ring's share of the patch's ground times the patch's share of the cell and its
+    /// capture area over that share: the light passes through each patch's crowns over its own ground.
     pub fn stand(&self, chem: &Chemistry, p: &Parts) -> Stand {
         let (mut s, mm) = (Stand::default(), p.mm(chem));
-        let (mut slots, mut n) = ([(0.0, 0.0); SLOTS], 0);
         for x in self.held() {
             let (leaf, abs) = (self.leaf(&mm, x), self.leaf(&mm, x) * (1.0 - self.reflectance(chem, p, x)));
             (s.mass, s.leaf, s.absorbed, s.kept) = (s.mass + self.kg(&mm, x), s.leaf + leaf, s.absorbed + abs, s.kept + abs * self.keep as f64);
-            if leaf > 0.0 {
-                (slots[n], n) = ((leaf, self.on(x)), n + 1);
+        }
+        for k in 0..self.patch_count() {
+            let (mut slots, mut n, f) = ([(0.0, 0.0); SLOTS], 0, self.patches[k].share);
+            for x in self.held_in(k).filter(|&x| self.leaf(&mm, x) > 0.0) {
+                (slots[n], n) = ((self.leaf(&mm, x), self.on(x)), n + 1);
+            }
+            let (rings, count) = super::canopy::catch_rings(&slots[..n]);
+            for &[ring, leaf] in &rings[..count] {
+                (s.rings[s.n_rings], s.n_rings) = ([ring * f, leaf / f], s.n_rings + 1);
             }
         }
-        (s.rings, s.n_rings) = super::canopy::catch_rings(&slots[..n]);
         s
     }
     /// What the shares `of(x)` of each part of each slot `x` show a taker (`contract::Shown`): its mass, what it holds of
@@ -37,6 +44,19 @@ impl Cover {
     /// The height the plants of slot `x` stand at, m (`Cover::height`, its walls at their own density).
     pub fn stands_at(&self, chem: &Chemistry, ph: &crate::Physics, p: &Parts, x: usize) -> f64 {
         self.height(ph, &p.mm(chem), chem.subs[p.sub[WALL]].density[0], x)
+    }
+    /// The share `f` of the amounts of each of its slots leaves it, with its heat at its temperature: returns what left,
+    /// mol of each part, and its heat, J. Its plants stay as many (`lose`) unless the caller kills them.
+    pub(crate) fn cut(&mut self, chem: &Chemistry, p: &Parts, f: f64) -> ([f64; NP], f64) {
+        let t = self.temp(chem, p);
+        let mut dead = [0.0; NP];
+        for m in &mut self.mol {
+            (0..NP).for_each(|q| dead[q] += m[q] * f);
+            m.iter_mut().for_each(|a| *a -= *a * f);
+        }
+        let heat = ((0..NP).map(|q| dead[q] * chem.subs[p.sub[q]].cp).sum::<f64>() * t).min(self.e);
+        self.e -= heat;
+        (dead, heat)
     }
     /// The share `g` of the shares `of(x)` of each part of each slot `x` taken whole, each part in its own proportion (a
     /// bite): returns what is taken of each substance, mol, and the heat that goes with it, J (at its temperature).
@@ -86,15 +106,7 @@ fn take_from<'a>(chem: &Chemistry, p: &Parts, g: f64, t: f64, of: impl Iterator<
 /// The share `f` of the cover of cell `i` of `d` breaks: it goes to the cell's ground as remains, with its heat,
 /// through the chunk's moves (opened by the caller for the cover's node).
 pub(crate) fn lose(w: &crate::World, d: &mut crate::life::Chunk, p: &Parts, i: usize, f: f64) {
-    let c = d.cover(i);
-    let t = c.temp(&w.chem, p);
-    let mut dead = [0.0; NP];
-    for m in &mut c.mol {
-        (0..NP).for_each(|q| dead[q] += m[q] * f);
-        m.iter_mut().for_each(|a| *a -= *a * f);
-    }
-    let heat = ((0..NP).map(|q| dead[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * t).min(c.e);
-    c.e -= heat;
+    let (dead, heat) = d.cover(i).cut(&w.chem, p, f);
     let ground = crate::store::Node::ground(i);
     (0..NP).for_each(|q| d.moves.give(w, ground, p.sub[q], dead[q], 0.0));
     d.moves.give(w, ground, 0, 0.0, heat);

@@ -96,8 +96,8 @@ fn cell(w: &World, d: &mut Chunk, p: &Parts, i: usize, dt: f64) {
 pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f64), counts: &mut Counters) -> (Books, f64) {
     let (chem, ph) = (&w.chem, &w.cfg.phys);
     let (area, mm, t, rho) = (super::ground(w, i), p.mm(chem), a.t, chem.subs[p.sub[WALL]].density[0]);
-    // The slots its world uses (`Config::variety`).
-    let n = w.cfg.variety;
+    // The slots it uses (`Cover::slots`).
+    let n = c.slots(w.cfg.variety);
     // The light since the last step: its capture areas share it down through their crowns, each on the share of its
     // ground its roots hold.
     let dl = (a.light - c.mark).max(0.0);
@@ -143,9 +143,9 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
             c.need[q] = need as f32;
         }
         let (base, top) = c.crown(ph, &mm, area, q, h);
-        (layers[n_layers], n_layers) = ((base, top, leaf / area, c.on(q), q), n_layers + 1);
+        (layers[n_layers], n_layers) = ((base, top, leaf / (area * c.patch_share(q)), c.on(q), q), n_layers + 1);
     }
-    super::canopy::shade(&layers[..n_layers], |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
+    super::canopy::shade(c, &layers[..n_layers], |q, f, bottom, layer| (s[q].shade, s[q].bottom, s[q].layer) = (f, bottom, layer));
     let (a_abs, lit): (f64, f64) = (s[..n].iter().map(|x| x.abs).sum(), s[..n].iter().map(|x| x.abs * x.shade).sum());
     let caught = dl * a_abs;
     let mut b = Books::new(a.air, flows);
@@ -237,7 +237,7 @@ fn empty(c: &mut Cover, (p, mm, e, n): (&Parts, &[f64; NP], &[f64; NP], usize), 
 
 /// The slots of cover `c` in `order` (cell `i`, that reads `a`) grow over `dt` (`grow_slot`), each as its slot `s` in
 /// the month says, whether it pays (`pays`) and whether it is in season (`season`), its parts `p` holding `e` J a mol.
-/// Its minerals in the ground are shared out over the slots (`shares`): where the ground holds what they would take
+/// Its minerals in the ground are shared out over the slots of each patch, its share of them (`shares`): where the ground holds what they would take
 /// (`build::wants`) each gets its share of all of it by that; where it is short, by their fine roots, as roots compete
 /// below ground in proportion to their size (Casper and Jackson 1997), none more than it would take. Where
 /// one more kg would not pay a slot builds living cover no more, but walls alone while its plants lack them; out of
@@ -247,15 +247,20 @@ fn grow(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, pays, season
     let mm = p.mm(&w.chem);
     let growth = c.growth(&w.cfg.phys, (&mm, w.chem.subs[p.sub[WALL]].density[0]), super::ground(w, i), order);
     let plans: Vec<_> = order.iter().map(|&x| (season[x] && (pays[x] || super::build::frame_short(w, c, p, x) <= 0.0)).then(|| super::build::per_kg(w, c, p, x, (&s[x], &growth[x]))).flatten()).collect();
-    // (A lone slot's share is all of it.)
-    let shared = order.len() > 1;
+    // (A lone slot of a lone patch's share is all of it.)
+    let shared = order.len() > 1 || c.patch_count() > 1;
     let wants: Vec<_> = order.iter().zip(&plans).filter(|_| shared).map(|(&x, k)| k.as_ref().map_or([0.0; MAX_SUBSTANCES], |k| super::build::wants(w, (c, k), p, x, &s[x]))).collect();
     let ns = w.chem.ns();
     let roots: Vec<f64> = order.iter().map(|&x| s[x].drunk / super::upkeep::uptake(&w.cfg.phys, &c.genes[x])).collect();
     let mut got = vec![[0.0; MAX_SUBSTANCES]; order.len()];
-    for k in (0..ns).filter(|_| shared) {
-        let want: Vec<f64> = wants.iter().map(|d| d[k]).collect();
-        shares(a.ground[k], &want, &roots).into_iter().enumerate().for_each(|(q, g)| got[q][k] = g);
+    // Each patch's slots share its share of the ground's minerals.
+    for patch in (0..c.patch_count()).filter(|_| shared) {
+        let at: Vec<usize> = (0..order.len()).filter(|&q| c.patch[order[q]] as usize == patch).collect();
+        let roots: Vec<f64> = at.iter().map(|&q| roots[q]).collect();
+        for k in 0..ns {
+            let want: Vec<f64> = at.iter().map(|&q| wants[q][k]).collect();
+            shares(a.ground[k] * c.patches[patch].share, &want, &roots).into_iter().zip(&at).for_each(|(g, &q)| got[q][k] = g);
+        }
     }
     for (q, (&x, plan)) in order.iter().zip(&plans).enumerate() {
         let mut ground = if shared { got[q] } else { a.ground };
@@ -396,6 +401,6 @@ fn light(chem: &Chemistry, ph: &crate::Physics, c: &mut Cover, p: &Parts, s: &mu
     // share of the ground's liquid its roots reach, by each slot's gas taken in.
     let taken = all * f * gas_in / dt;
     c.film = (a.pores * taken / cell) as f32;
-    c.reach = ((0..s.len()).map(|q| x[q] * c.on(q)).sum::<f64>() / all) as f32;
+    c.reach = ((0..s.len()).map(|q| x[q] * c.holds(1.0, q)).sum::<f64>() / all) as f32;
     x.map(|xq| xq * f * dh)
 }

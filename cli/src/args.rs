@@ -3,7 +3,7 @@
 use pcore::space::terrain::Shape;
 use pcore::{Config, World};
 use worldgen::life::{Seeding, FIXERS};
-use worldgen::schedule::Schedule;
+use worldgen::schedule::{Due, Edit, Schedule};
 
 pub const USAGE: &str = "usage:
   ew run      simulate a new world, write the tape and a snapshot at the end to --out
@@ -36,7 +36,14 @@ pub const USAGE: &str = "usage:
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --variety N           kinds of cover a cell may hold, a setting of the world from 1 to 12 (cover::SLOTS) (8)
+    --variety N           kinds of cover a cell may hold, a setting of the world from 1 to 16 (cover::SLOTS) (8)
+    --clear YEAR:X,Y:SHARE
+                          an edit at the start of that year: the share SHARE of the cell at square X,Y made a new
+                          patch whose plants die above the ground (World::clear); may be given more than once
+    --split YEAR:X,Y:SHARE
+                          as --clear, the new patch alike to the rest, nothing dying: a control (World::split)
+    --plant YEAR:X,Y:KIND an edit at the start of that year: the starting kind of row KIND of worldgen::life::KINDS
+                          placed in the newest patch of the cell at square X,Y (cover::place); may be given more than once
     --chunks N            a speed setting: the cells cut into N runs for the cover's parallel passes (64; any count
                           gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
@@ -91,6 +98,11 @@ impl Args {
     /// The value after `name`, if it is there and parses.
     pub fn value<T: std::str::FromStr>(&self, name: &str) -> Option<T> {
         self.0.iter().position(|a| a == name).and_then(|p| self.0.get(p + 1)).and_then(|v| v.parse().ok())
+    }
+
+    /// The values after each `name`.
+    pub fn values<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a str> {
+        self.0.windows(2).filter(move |p| p[0] == name).map(|p| p[1].as_str())
     }
 
     /// The value after `name`, or `default`.
@@ -193,11 +205,35 @@ impl Args {
         Seeding { rounds: self.get("--spray", 20), fixers: self.get("--fixers", FIXERS) }
     }
 
-    /// The run's plan: what is placed when (`--life-year`, `--roster`, and the seeding flags).
-    pub fn schedule(&self) -> Schedule {
+    /// The run's plan: what is placed when (`--life-year`, `--roster`, and the seeding flags), and its edits
+    /// (`--clear`, `--split`, `--plant`); an error if an edit does not parse.
+    pub fn schedule(&self) -> Result<Schedule, String> {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
         let rows: &[usize] = if self.has("--roster") { &worldgen::life::ROSTER } else { &worldgen::life::ONE };
         let life = year("--life-year", 2);
-        Schedule { takers: year("--fauna-year", -1), ..Schedule::new(life, rows, self.seeding()) }
+        Ok(Schedule { takers: year("--fauna-year", -1), edits: self.edits()?, ..Schedule::new(life, rows, self.seeding()) })
+    }
+
+    /// The edits of `--clear`, `--split` and `--plant`, each YEAR:X,Y:WHAT, in that order; an error if one does not parse.
+    fn edits(&self) -> Result<Vec<Due>, String> {
+        let share = |v: &str| v.parse::<f64>().ok().filter(|s| *s > 0.0 && *s < 1.0);
+        let kind = |v: &str| v.parse::<usize>().ok().filter(|&k| k < worldgen::life::KINDS.len());
+        let mut out = Vec::new();
+        for flag in ["--clear", "--split", "--plant"] {
+            let make = |what: &str| match flag {
+                "--clear" => share(what).map(Edit::Clear),
+                "--split" => share(what).map(Edit::Split),
+                _ => kind(what).map(Edit::Plant),
+            };
+            for text in self.values(flag) {
+                let due = || {
+                    let [y, at, what]: [&str; 3] = text.split(':').collect::<Vec<_>>().try_into().ok()?;
+                    let (x, z) = at.split_once(',')?;
+                    Some(Due { year: y.parse().ok()?, square: (x.parse().ok()?, z.parse().ok()?), edit: make(what)? })
+                };
+                out.push(due().ok_or(format!("{flag} {text}: want YEAR:X,Y:SHARE (a share from 0 to 1) or, for --plant, YEAR:X,Y:KIND (a row of the starting kinds)"))?);
+            }
+        }
+        Ok(out)
     }
 }

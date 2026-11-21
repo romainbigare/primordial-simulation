@@ -37,8 +37,8 @@ pub struct Stand {
     /// reaction, m²
     pub absorbed: f64,
     pub kept: f64,
-    /// The rings of the ground its slots stand on (`cover::canopy::catch_rings`): each its share of the ground and the capture
-    /// area of the slots that stand on it over their shares, m²; and how many
+    /// The rings of the ground its slots stand on in each patch (`cover::canopy::catch_rings`): each its share of the
+    /// cell's ground and the capture area of the slots that stand on it over their shares of it, m²; and how many
     pub rings: [[f64; 2]; SLOTS],
     pub n_rings: usize,
 }
