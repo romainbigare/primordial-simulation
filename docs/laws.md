@@ -160,8 +160,10 @@ lies times how far the step leads on along the channel's last steps (the channel
 lies is the mean, over the ways out of it that lead over open liquid, of the run of open liquid along each, at most
 50 km, over 50 km (`FETCH_REF_M`; an effective fetch, Håkanson 1981); the way out from the coast is the rise of the
 distance from the land. The waves shape the lobe, not its height: on a coast they build beaches up to the level and
-over it. Round each lobe a front falls from its top at 0.3 (`FORESET`), from the samples it filled last (never over
-its top). The hollows the lobes leave (the liquid a lobe cut off from the rest of its body of liquid, not another body;
+over it. Round each lobe a front falls at 0.3 (`FORESET`) from the height each of its samples reaches, its load moved
+from the samples it filled last (the entry's too, so a lobe of one sample has a front; never over its top); a lobe and
+its front stay in their mouth's body. The hollows the lobes leave (the liquid a lobe cut off from the rest of its body
+of liquid, not another body, even one it touches at a corner;
 the valleys behind them that drain to a mouth and lie under the highest top) are filled to where liquid would spill out
 of them (a flood from the open liquid, Barnes, Lehman and Mulla 2014), each by the lobe of most load the flood's way
 to it crossed (one it does not reach, by the lobe of the lowest ground round it), from that lobe's front and then the samples it filled

@@ -128,21 +128,27 @@ fn step(g: &Grid, (k, j): (usize, usize), (liquid, mouth): (&Liquid, &Mouth), de
 }
 
 /// The front of the lobe `m` whose samples got `filled` (each with the m³ it got, in the order filled) on the heights
-/// `built`, its top at `top`, m: round its edge the open liquid falls from the top at `FORESET` (`slope`); what it takes
-/// is moved from the samples filled last, a few rounds; it is then thinned or thickened to hold exactly what they gave,
+/// `built`, its top at `top`, m: round its edge the open liquid of its body `own` falls from the heights the lobe's
+/// samples reach at `FORESET` (`slope`); what it takes is moved from the samples filled last, the entry's too (a lobe
+/// of one sample has a front), a few rounds; it is then thinned or thickened to hold exactly what they gave,
 /// never over the top (what it cannot hold goes back to the sample filled last). Lays it on `built` and returns its
 /// samples, each with the m³ it got.
 fn front(g: &Grid, built: &mut [f64], (liquid, top, m, own): (&Liquid, f64, u32, u32), filled: &mut Vec<(usize, f64)>, near: &mut Seen) -> Vec<(usize, f64)> {
     let lobe: f64 = filled.iter().map(|f| f.1).sum();
     let mut ring = Vec::new();
     for round in 0..FRONT_ROUNDS as u32 {
-        ring = slope(g, built, (liquid, top, m * FRONT_ROUNDS as u32 + round, own), filled, near);
+        ring = slope(g, built, (liquid, m * FRONT_ROUNDS as u32 + round, own), filled, near);
         let mut want: f64 = ring.iter().map(|r: &(usize, f64)| r.1 * g.area(r.0)).sum::<f64>() - (lobe - filled.iter().map(|f| f.1).sum::<f64>());
-        while want > 0.0 && filled.len() > 1 {
+        while want > 0.0 && !filled.is_empty() {
+            let last = filled.len() == 1;
             let (k, put) = filled.last_mut().expect("a filled sample");
             let back = put.min(want);
             (*put, want) = (*put - back, want - back);
             built[*k] -= back / g.area(*k);
+            // (The entry stays the lobe's last sample, even emptied: what the front cannot hold goes back to it.)
+            if last {
+                break;
+            }
             if *put <= 0.0 {
                 filled.pop();
             }
@@ -160,27 +166,30 @@ fn front(g: &Grid, built: &mut [f64], (liquid, top, m, own): (&Liquid, f64, u32,
     laid
 }
 
-/// The samples of the open low ground round a lobe whose samples are `filled` on the heights `built` that its front
-/// raises, each with how much, m: from the lobe out, by the shortest way through the open low ground (search `id` of
-/// `near`, which holds the distances), each to the lobe's top `top` less `FORESET` times how far it lies, down to where
-/// that meets the bed.
-fn slope(g: &Grid, built: &[f64], (liquid, top, id, own): (&Liquid, f64, u32, u32), filled: &[(usize, f64)], near: &mut Seen) -> Vec<(usize, f64)> {
-    filled.iter().for_each(|&(k, _)| near.set(id, k, 0.0));
-    let mut heap: BinaryHeap<Step> = filled.iter().map(|&(k, _)| Step(0.0, k)).collect();
+/// The samples of the liquid of the body `own` round a lobe whose samples are `filled` on the heights `built` that its
+/// front raises, each with how much, m: from the lobe out, each to the height of the lobe's sample it is reached from
+/// less `FORESET` times how far it lies, the highest such height (search `id` of `near`, which holds the heights,
+/// negated), down to where that meets the bed.
+fn slope(g: &Grid, built: &[f64], (liquid, id, own): (&Liquid, u32, u32), filled: &[(usize, f64)], near: &mut Seen) -> Vec<(usize, f64)> {
+    filled.iter().for_each(|&(k, _)| near.set(id, k, -built[k]));
+    let mut heap: BinaryHeap<Step> = filled.iter().map(|&(k, _)| Step(-built[k], k)).collect();
+    let mut lobe: Vec<usize> = filled.iter().map(|f| f.0).collect();
+    lobe.sort_unstable();
     let mut ring = Vec::new();
-    while let Some(Step(d, k)) = heap.pop() {
-        if d > near.get(id, k) {
+    while let Some(Step(c, k)) = heap.pop() {
+        if c > near.get(id, k) {
             continue;
         }
+        let at = -c;
         for (j, len) in g.around(k) {
-            let dj = d + len;
-            if liquid.body[j] == own && top - FORESET * dj > built[j] && dj < near.get(id, j) {
-                near.set(id, j, dj);
-                heap.push(Step(dj, j));
+            let hj = at - FORESET * len;
+            if liquid.body[j] == own && hj > built[j] && -hj < near.get(id, j) {
+                near.set(id, j, -hj);
+                heap.push(Step(-hj, j));
             }
         }
-        if d > 0.0 {
-            ring.push((k, (top - FORESET * d - built[k]).max(0.0)));
+        if lobe.binary_search(&k).is_err() {
+            ring.push((k, (at - built[k]).max(0.0)));
         }
     }
     ring.sort_by_key(|r| r.0);
