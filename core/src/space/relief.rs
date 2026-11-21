@@ -46,43 +46,38 @@ impl Relief {
     }
 }
 
-/// The relief as saved: of each list the samples that hold some, each with what it holds, and the number of samples;
-/// the cells' offsets and the builds.
+/// The relief as saved: of each list its length and the samples that hold some, each with what it holds; the cells'
+/// offsets and the builds.
 #[derive(Serialize, Deserialize)]
 struct Sparse {
-    n: u32,
-    laid: Vec<(u32, f64)>,
-    built: Vec<(u32, f64)>,
+    laid: (u32, Vec<(u32, f64)>),
+    built: (u32, Vec<(u32, f64)>),
     offset: Vec<f64>,
     builds: u32,
 }
 
-/// The samples of `v` that hold some, in their order.
-fn sparse(v: &[f64]) -> Vec<(u32, f64)> {
-    v.iter().enumerate().filter(|p| *p.1 != 0.0).map(|(k, &m)| (k as u32, m)).collect()
+/// The length of `v` and its samples that hold some, in their order.
+fn sparse(v: &[f64]) -> (u32, Vec<(u32, f64)>) {
+    (v.len() as u32, v.iter().enumerate().filter(|p| *p.1 != 0.0).map(|(k, &m)| (k as u32, m)).collect())
 }
 
-/// `n` samples, those of `v` holding what it says and the rest none (none at all where `v` is empty).
-fn dense(n: usize, v: &[(u32, f64)]) -> Vec<f64> {
-    if v.is_empty() {
-        return Vec::new();
-    }
-    let mut d = vec![0.0; n];
+/// `n` samples, those of `v` holding what it says and the rest none.
+fn dense((n, v): (u32, Vec<(u32, f64)>)) -> Vec<f64> {
+    let mut d = vec![0.0; n as usize];
     v.iter().for_each(|&(k, m)| d[k as usize] = m);
     d
 }
 
 impl Serialize for Relief {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        let n = self.laid.len().max(self.built.len()) as u32;
-        Sparse { n, laid: sparse(&self.laid), built: sparse(&self.built), offset: self.offset.clone(), builds: self.builds }.serialize(to)
+        Sparse { laid: sparse(&self.laid), built: sparse(&self.built), offset: self.offset.clone(), builds: self.builds }.serialize(to)
     }
 }
 
 impl<'de> Deserialize<'de> for Relief {
     fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Relief, D::Error> {
         let s = Sparse::deserialize(from)?;
-        Ok(Relief { laid: dense(s.n as usize, &s.laid), built: dense(s.n as usize, &s.built), offset: s.offset, builds: s.builds })
+        Ok(Relief { laid: dense(s.laid), built: dense(s.built), offset: s.offset, builds: s.builds })
     }
 }
 
@@ -163,4 +158,17 @@ fn blur(v: &[f64], (across, down): (usize, usize), radius: usize) -> Vec<f64> {
         (0..across).for_each(|c| line(&mut x, &|q| q * across + c, down));
     }
     x
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Relief;
+
+    /// A relief saved and read again is the same, also where a list holds only none.
+    #[test]
+    fn a_relief_reads_back_the_same() {
+        let r = Relief { laid: vec![0.0; 4], built: vec![0.0, 1.5, 0.0], offset: vec![0.25], builds: 2 };
+        let back: Relief = serde_json::from_str(&serde_json::to_string(&r).expect("saved")).expect("read");
+        assert_eq!(back, r);
+    }
 }
