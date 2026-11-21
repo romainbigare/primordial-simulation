@@ -20,14 +20,14 @@ pub(super) type Lift = (usize, f64, u32);
 /// to that lobe. Raises `built` and returns the raises; a hollow no lobe shut is left.
 pub(super) fn hollows(g: &Grid, (built, before): (&mut [f64], &[f64]), shut_by: &[u32], (liquid, behind): (&Liquid, &[bool])) -> Vec<Lift> {
     let n = g.n();
-    let wet: Vec<bool> = (0..n).map(|k| liquid.open[k] && built[k] < liquid.level).collect();
+    let wet: Vec<bool> = (0..n).map(|k| liquid.open[k] && built[k] < liquid.level[k]).collect();
     let main = kept(g, liquid.open, &wet);
     let laid: Vec<bool> = (0..n).map(|k| built[k] > before[k] || (wet[k] && !main[k]) || behind[k]).collect();
     // (Of each sample, the lowest height the flood reached it at so far, and the lobe it came over last on that way.)
     let (mut done, mut best, mut from) = ((0..n).map(|k| !laid[k]).collect::<Vec<bool>>(), vec![f64::INFINITY; n], vec![NONE; n]);
     let mut heap = BinaryHeap::new();
     for k in (0..n).filter(|&k| !done[k] && g.around(k).any(|(j, _)| main[j])) {
-        (best[k], from[k]) = (built[k].max(liquid.level), shut_by[k]);
+        (best[k], from[k]) = (built[k].max(liquid.level[k]), shut_by[k]);
         heap.push(Step(best[k], k));
     }
     let mut lifts = Vec::new();
@@ -50,7 +50,7 @@ pub(super) fn hollows(g: &Grid, (built, before): (&mut [f64], &[f64]), shut_by: 
     for k in (0..n).filter(|&k| !done[k]) {
         let rim = g.around(k).filter(|&(j, _)| !laid[j] && shut_by[j] != NONE).map(|(j, _)| (built[j], shut_by[j])).min_by(|a, b| a.0.total_cmp(&b.0));
         if let Some((at, by)) = rim {
-            lift((k, at.max(liquid.level), by), built, &mut lifts);
+            lift((k, at.max(liquid.level[k]), by), built, &mut lifts);
         }
     }
     lifts
