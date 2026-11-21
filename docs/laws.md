@@ -683,8 +683,7 @@ middle latitudes, which the eddies drive (Vallis 2017, 15), so there the wet sid
 like ours it is its west; and the wind is some five times weaker than the measured trades (5 to 10 m/s), as the
 overturning it is part of carries about a fifth of the measured flux (1.6). Where it climbs the ground's rise along it (the surface the air touches, the
 liquid's on the liquid, fitted to the bordering cells) it lifts the air at the ground's density, and where it
-descends lets it sink; summed per node, a rising (or sinking) mass flux, to which the weather adds its own each day
-(1.6). In `rain_time` the share f = min(1, |that| ×
+descends lets it sink; summed per node, a rising (or sinking) mass flux. In `rain_time` the share f = min(1, |that| ×
 `rain_time` / the lower half's mol) of the node's lower air changes places with its upper half's, which holds
 ρ = split / (1 − split) of the vapour per mol the lower holds (`Scratch::split`, the column's profile): rising air
 condenses down to the upper half's cold, so the node saturates at what saturates it times 1 − f (1 − ρ); sinking air
@@ -866,20 +865,32 @@ root sum of squares, so its spread is the same everywhere. A unit of the field i
 sqrt(`mix` × `eddy_time`), 525 km: a diffusivity is a speed times the length an eddy moves air in its time (Taylor
 1922). So the field has no size of its own. It acts in two places. **Across the open edges**, each day each link's
 column beyond is read again (`Edges::weather`) at its latitude less η at the column, in degrees: the air the eddies
-bring from there. **On the rise the rain law reads**: air that an eddy moves along the warmth's gradient slides along
+bring from there. **On the air it lifts**: air that an eddy moves along the warmth's gradient slides along
 the surfaces of equal warmth (the baroclinic eddy, Holton 2004, 8.4). Moving η in `eddy_time`, at η / `eddy_time`
 (its spread sqrt(`mix` / `eddy_time`), 2 m/s), it rises by that speed times their slope: the warmth's gradient toward
 the south that the node feels (`rise::felt`, as the low wind reads it: the planet's where the edges are open, the
 node's own where it is a block alone, else none) over how fast the warmth rises with height (the dry air's fall with
 height less the node's, `wind::End::rise`; none where it does not rise). That lifts the node's air at the ground's
-density, and the mass flux is added each day to the ground's rise (`rise::saturates`, 1.5). It is the size of the
-weather's vertical speed in the middle latitudes, about 1 cm/s (Holton 2004, 2.4). The weather acts nowhere on a
+density. It is the size of the weather's vertical speed in the middle latitudes, about 1 cm/s (Holton 2004, 2.4).
+**The lifted air draws the low air in** (`air::draw`): air that rises must be fed from below and leave aloft, so where
+the weather lifts a node's air its lower half gathers air from the nodes about it and its upper half gives as much
+back, and where it sinks the low air spreads out. This low convergence is what feeds a weather system's rain
+(P − E = −∇·(q v), Holton 2004, 3.5; Trenberth 1999). Each day the lifts are summed per block (1.6), and the flow on
+each link between blocks is the difference across it of a potential (the divergent part of the wind, Lynch 1989)
+whose convergence at each block is its lift: a Poisson problem over the blocks, each link's conductance the lower
+half's cross-section (mol per m³ times half the column's depth) times its width over its length, the columns of
+the planet's air beyond the open edges held at none, solved by conjugate gradients (`draw::RESIDUAL`). A group of
+blocks that no open edge holds lets sink, over its area, as much as it lifts. The flow is added that day to the
+overturning's on each link (and across the open edges to their overturning), so it moves as the overturning does:
+each half its node's air, the vapour crowding low, in the same implicit step, each half's mol each way, so no node
+gains or loses air by it and none gives more than it holds. Its halves carry the rise of the static energy over half
+the column's depth (`wind::halves_heat`), so a node whose air rises cools as rising air does, which lowers what
+saturates it; the rain law reads no rise of the weather. The weather acts nowhere on a
 globe: the planet's strip is one, and the edges read its last year as the climate, which one year of weather would
 stand in for. On a world alone whose air is one block (a small island) the air feels no gradient and the edges are
-closed, so it has no weather. **Known limits:** the field moves no air itself: the eddies' mixing inside the map stays
-smooth, so the weather brings a place no more vapour, except across the edges. The rain answers it only as the rise
-moves the ratio at which a node saturates, and the vapour the node holds bounds that: a wet spell takes the vapour
-the next spell would rain. Rain inside a step is as smooth as the rise, not the few strong storms of a real month. The
+closed, so it has no weather. **Known limits:** inside a block the flow does nothing, as the eddies even the block each
+day: an island alone in one block is a closed box. The eddies' mixing stays smooth: the field moves the air only by
+the flow its lift draws. Rain inside a day is as smooth as the lift, not the few strong storms of a real month. The
 field is one number: the air's displacement east or west is not drawn. Its slow part stands for a top layer's memory
 on every world and over land too.
 

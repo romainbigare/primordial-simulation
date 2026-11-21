@@ -11,6 +11,7 @@ mod edge;
 mod exchange;
 mod radiation;
 mod rise;
+mod draw;
 mod drift;
 mod planet;
 mod outs;

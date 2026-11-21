@@ -2,7 +2,8 @@
 //! the north-south displacement of the air they bring to each place, keyed by the seed, the day and the place, so it
 //! holds no state and is the same on any count of threads. It acts in two places with no amplitude of its own: across
 //! the map's open edges the planet's air is read where the eddies bring it from (`Edges::weather`), and the air an
-//! eddy moves slides along the surfaces of equal warmth, so it rises or sinks, which the rain law reads (`Weather::lift`).
+//! eddy moves slides along the surfaces of equal warmth, so it rises or sinks (`Weather::lift`), drawing the low air of
+//! the nodes about it in, or spreading its own out (`draw`).
 
 use super::super::Scratch;
 use super::cell::top_layer;
@@ -54,20 +55,18 @@ impl Weather {
         let size = [(end[0] - origin[0] + 1) as usize, (end[1] - origin[1] + 1) as usize];
         let parts = Parts::of(w);
         let first = (w.time / DAY_S) as i64;
-        let mut field = Vec::with_capacity(size[0] * size[1] * days);
-        for y in 0..size[1] as i64 {
-            for x in 0..size[0] as i64 {
-                field.extend(parts.series(w.seed, [origin[0] + x, origin[1] + y], first, days));
-            }
-        }
+        // Each point of the lattice on the pool, in the order of the points (`par::map_n`).
+        let points = size[0] * size[1];
+        let work = points.saturating_sub(1) * (parts.longest() + days) * DRAW_WORK;
+        let field = crate::par::map_n(points, work, |i| parts.series(w.seed, [origin[0] + (i % size[0]) as i64, origin[1] + (i / size[0]) as i64], first, days)).concat();
         Some(Weather { origin, size, days, field, per_m, reach: (w.cfg.mix * phys.eddy_time).sqrt(), lift })
     }
 
-    /// Each air node's rise on day `d` of the step, mol/s: `rise` (the ground's, `rise::rise`) and what the weather lifts
-    /// it by (`lift`) times the air's displacement at its centre (`shift`).
-    pub(super) fn rise(&self, w: &World, rise: &[f64], d: usize) -> Vec<f64> {
+    /// What the weather lifts each air node's air by on day `d` of the step, mol/s (sinking below 0): what it lifts it by
+    /// per m (`lift`) times the air's displacement at its centre (`shift`).
+    pub(super) fn lift(&self, w: &World, d: usize) -> Vec<f64> {
         let air = w.mesh.level(AIR);
-        rise.iter().zip(&self.lift).enumerate().map(|(j, (r, l))| r + l * self.shift(air.centre()[j], d)).collect()
+        self.lift.iter().enumerate().map(|(j, l)| l * self.shift(air.centre()[j], d)).collect()
     }
 
     /// The displacement of the air at a point of the map, m [east, south] from its north-west corner, on day `d` of the
@@ -100,10 +99,31 @@ fn lift(w: &World, s: &Scratch, ends: &[End]) -> Vec<f64> {
         .collect()
 }
 
-/// The parts of the field (`Parts::of`): a fast one of the eddies' time and a slow one that a liquid's top layer sums.
+/// Instructions of a point's keyed draw of a day (`Rng::new`, `Rng::normal`: a logarithm, a root and a cosine), as
+/// `Weather::of` shares its points over the pool (`par::map_n`).
+const DRAW_WORK: usize = 100;
+
+/// The parts of the field (`Parts::of`): a fast one of the eddies' time and a slow one that a liquid's top layer sums,
+/// with its gain.
 struct Parts {
-    fast: f64,
-    slow: Option<(f64, f64)>,
+    fast: Window,
+    slow: Option<(Window, f64)>,
+}
+
+/// The weights of a part's window (`Parts::series`): the keep to the power of each age over its last K days, K for
+/// `FOLDS` e-folds, and the spread of such a sum of unit normals.
+struct Window {
+    weights: Vec<f64>,
+    norm: f64,
+}
+
+impl Window {
+    fn of(keep: f64) -> Window {
+        let k = (FOLDS / -keep.ln()).ceil() as usize;
+        let weights: Vec<f64> = (0..k as i32).map(|age| keep.powi(age)).collect();
+        let norm = weights.iter().map(|v| v * v).sum::<f64>().sqrt();
+        Window { weights, norm }
+    }
 }
 
 impl Parts {
@@ -114,32 +134,38 @@ impl Parts {
     fn of(w: &World) -> Parts {
         let phys = &w.cfg.phys;
         let slow = top_layer(w).map(|heat| heat / phys.top_damp).map(|tau| ((-DAY / tau).exp(), (phys.eddy_time / tau).sqrt()));
-        Parts { fast: (-DAY / phys.eddy_time).exp(), slow }
+        Parts::new((-DAY / phys.eddy_time).exp(), slow)
+    }
+
+    /// The parts whose fast part keeps by `fast` a day, the slow part by its keep with its gain.
+    fn new(fast: f64, slow: Option<(f64, f64)>) -> Parts {
+        Parts { fast: Window::of(fast), slow: slow.map(|(keep, gain)| (Window::of(keep), gain)) }
+    }
+
+    /// The days of the longest window.
+    fn longest(&self) -> usize {
+        self.slow.as_ref().map_or(0, |(s, _)| s.weights.len()).max(self.fast.weights.len())
     }
 
     /// The field at lattice point `p` on each of the `days` days from day `first`: per part the sum of the point's keyed
-    /// daily draws (unit normals) over its last K days, weighted by its keep to the age of each, K for `FOLDS` e-folds,
-    /// over its spread, so the part's spread is one and each day's value reads only that day's draws; the fast part plus
-    /// the slow part times its gain.
+    /// daily draws (unit normals) over its window (`Window`), over its spread, so the part's spread is one and each day's
+    /// value reads only that day's draws; the fast part plus the slow part times its gain.
     fn series(&self, seed: u64, p: [i64; 2], first: i64, days: usize) -> Vec<f64> {
-        let reach = |keep: f64| (FOLDS / -keep.ln()).ceil() as usize;
-        let longest = self.slow.map_or(reach(self.fast), |(keep, _)| reach(keep).max(reach(self.fast)));
+        let longest = self.longest();
         let node = ((p[0] as i32 as u32 as u64) << 32) | p[1] as i32 as u32 as u64;
         let draws: Vec<f64> = (0..longest + days - 1).map(|k| Rng::new(seed, (first - longest as i64 + 1 + k as i64) as u64, node, Purpose::Weather).normal()).collect();
-        let mut out = summed(&draws, self.fast, reach(self.fast), days);
-        if let Some((keep, gain)) = self.slow {
-            out.iter_mut().zip(summed(&draws, keep, reach(keep), days)).for_each(|(v, s)| *v += gain * s);
+        let mut out = summed(&draws, &self.fast, days);
+        if let Some((window, gain)) = &self.slow {
+            out.iter_mut().zip(summed(&draws, window, days)).for_each(|(v, s)| *v += gain * s);
         }
         out
     }
 }
 
-/// For each of the last `days` of `draws`, the sum of it and the `k - 1` before it, each weighted by `keep` to the
-/// power of its age, over the spread of such a sum of unit normals.
-fn summed(draws: &[f64], keep: f64, k: usize, days: usize) -> Vec<f64> {
-    let weights: Vec<f64> = (0..k as i32).map(|age| keep.powi(age)).collect();
-    let norm = weights.iter().map(|v| v * v).sum::<f64>().sqrt();
-    (draws.len() - days..draws.len()).map(|t| weights.iter().enumerate().map(|(age, v)| v * draws[t - age]).sum::<f64>() / norm).collect()
+/// For each of the last `days` of `draws`, the sum of it and those before it over `window`, each by its weight, over
+/// the window's spread.
+fn summed(draws: &[f64], window: &Window, days: usize) -> Vec<f64> {
+    (draws.len() - days..draws.len()).map(|t| window.weights.iter().enumerate().map(|(age, v)| v * draws[t - age]).sum::<f64>() / window.norm).collect()
 }
 
 #[cfg(test)]
@@ -150,9 +176,9 @@ mod tests {
     /// mean zero and spread one.
     #[test]
     fn the_weather_of_a_day_is_the_same_in_any_step() {
-        let parts = Parts { fast: (-1.0f64 / 3.0).exp(), slow: Some(((-1.0f64 / 120.0).exp(), (3.0f64 / 120.0).sqrt())) };
+        let parts = Parts::new((-1.0f64 / 3.0).exp(), Some(((-1.0f64 / 120.0).exp(), (3.0f64 / 120.0).sqrt())));
         assert!(parts.series(7, [2, -1], 100, 30)[15..] == parts.series(7, [2, -1], 115, 15)[..], "a day reads only its own draws");
-        let x = Parts { slow: None, ..parts }.series(7, [0, 0], 0, 100_000);
+        let x = Parts::new((-1.0f64 / 3.0).exp(), None).series(7, [0, 0], 0, 100_000);
         let mean = x.iter().sum::<f64>() / x.len() as f64;
         let spread = (x.iter().map(|v| v * v).sum::<f64>() / x.len() as f64).sqrt();
         assert!(mean.abs() < 0.03 && (spread - 1.0).abs() < 0.02, "mean {mean}, spread {spread}");

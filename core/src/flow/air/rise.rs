@@ -2,8 +2,8 @@
 //! lets sink where it climbs or descends the ground (`rise`), and what that does to the vapour the rain law finds
 //! saturating a node (`saturates`). Air that rises carries its lower half's vapour up, where the cold air holds less of
 //! it, and what it cannot hold condenses; air that sinks brings the upper half's dry air down, and the lower air holds
-//! less than it would (the linear theory of rain over the ground, Smith and Barstad 2004); the weather adds its own rise
-//! each day (`weather`). The rain law reads the rise only here.
+//! less than it would (the linear theory of rain over the ground, Smith and Barstad 2004). The rain law reads the rise
+//! only here; the weather's lift moves air between the nodes instead (`draw`).
 
 use super::super::Scratch;
 use super::cell::Cell;
