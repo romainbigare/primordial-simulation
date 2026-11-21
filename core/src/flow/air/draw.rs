@@ -3,10 +3,11 @@
 //! where it sinks the low air spreads out (the divergent wind of the weather systems, whose low convergence feeds their
 //! rain: P - E = -∇·(q v), Holton 2004, 3.5 and 8.4; Trenberth 1999). The flow on each link is the difference across
 //! it of a velocity potential whose convergence at each block is the block's lift (the divergent part of the wind,
-//! Helmholtz; Lynch 1989): a Poisson problem on the air's blocks, the columns of the planet's air beyond the open
-//! edges held at none, solved each day by conjugate gradients.
+//! Helmholtz; Lynch 1989): a Poisson problem on the air's blocks, solved each day by conjugate gradients. It does not
+//! cross the map's open edges: the planet's columns beyond them are a held table of its climate with no weather of their
+//! own, and a weather system's convergence and the sinking that pays for it close within a few thousand km, inside the
+//! map's air (laws.md 1.6).
 
-use super::edge::Edges;
 use super::wind::{column, End, Links};
 use crate::{space::Level, Config};
 
@@ -16,26 +17,21 @@ const RESIDUAL: f64 = 1e-12;
 
 /// The air's blocks (`daily::blocks`) as one Poisson problem (`Draw::flows`): per link between blocks (`border`) its
 /// blocks and its conductance, mol/s per unit of the potential's difference (the lower half's cross-section over its
-/// length); per link across the open edges (`edge::Edges`) its block and conductance; per block the sum of its
-/// conductances, and its group of blocks joined by links (`group`) with whether an open edge holds that group
-/// (`held`) and each block's area, m².
+/// length); per block the sum of its conductances, its group of blocks joined by links (`group`) and its area, m².
 pub(super) struct Draw {
     block: Vec<usize>,
     a: Vec<usize>,
     b: Vec<usize>,
     c: Vec<f64>,
-    edge: Vec<(usize, f64)>,
     diag: Vec<f64>,
     group: Vec<usize>,
-    held: Vec<bool>,
     area: Vec<f64>,
 }
 
 impl Draw {
     /// The problem of the blocks (`block`, per air node its block) and the links between them (`border`, of `links`),
-    /// from the nodes' ends (`ends`); and per link across the open edges its node and its two ends (the node's, the
-    /// column's beyond).
-    pub(super) fn of(cfg: &Config, air: &Level, (links, border, block): (&Links, &[usize], &[usize]), ends: &[End], edges: &Edges) -> Draw {
+    /// from the nodes' ends (`ends`).
+    pub(super) fn of(cfg: &Config, air: &Level, (links, border, block): (&Links, &[usize], &[usize]), ends: &[End]) -> Draw {
         let nb = block.iter().max().map_or(0, |&b| b + 1);
         let (mut a, mut b, mut c) = (Vec::new(), Vec::new(), Vec::new());
         for &l in border {
@@ -44,24 +40,19 @@ impl Draw {
             b.push(block[ib]);
             c.push(conductance(cfg, (&ends[ia], &ends[ib]), air.width()[id] / air.dist()[id]));
         }
-        let edge: Vec<(usize, f64)> = edges.node.iter().zip(&edges.conduct).map(|(&j, &g)| (block[j as usize], g)).collect();
         let mut diag = vec![0.0; nb];
         a.iter().zip(&b).zip(&c).for_each(|((&i, &k), &g)| [i, k].iter().for_each(|&m| diag[m] += g));
-        edge.iter().for_each(|&(m, g)| diag[m] += g);
         let mut area = vec![0.0; nb];
         block.iter().enumerate().for_each(|(j, &m)| area[m] += air.area()[j]);
         let group = groups(nb, &a, &b);
-        let mut held = vec![false; nb];
-        edge.iter().for_each(|&(m, _)| held[group[m]] = true);
-        Draw { block: block.to_vec(), a, b, c, edge, diag, group, held, area }
+        Draw { block: block.to_vec(), a, b, c, diag, group, area }
     }
 
     /// The flows the lift `lift` (per air node, mol/s, rising above 0) draws: per link between blocks the lower half's
-    /// flow from its `a` to its `b`, mol/s (the upper half's as much back), and per link across the edges the lower
-    /// half's flow outward. Their convergence at each block is its lift: a group of blocks no open edge holds can only
-    /// lift as much as it lets sink, so there its mean lift per m² sinks over it all, as the compensating subsidence
-    /// does.
-    pub(super) fn flows(&self, lift: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    /// flow from its `a` to its `b`, mol/s (the upper half's as much back). Their convergence at each block is its lift:
+    /// a group of blocks can only lift as much as it lets sink, so its mean lift per m² sinks over it all, as the
+    /// compensating subsidence does.
+    pub(super) fn flows(&self, lift: &[f64]) -> Vec<f64> {
         let nb = self.diag.len();
         let mut rhs = vec![0.0; nb];
         lift.iter().zip(&self.block).for_each(|(l, &m)| rhs[m] -= l);
@@ -70,13 +61,11 @@ impl Draw {
             sum[self.group[m]] += rhs[m];
             area[self.group[m]] += self.area[m];
         }
-        for m in (0..nb).filter(|&m| !self.held[self.group[m]]) {
+        for m in 0..nb {
             rhs[m] -= sum[self.group[m]] * self.area[m] / area[self.group[m]].max(f64::MIN_POSITIVE);
         }
         let phi = self.solve(&rhs);
-        let inner = (0..self.a.len()).map(|p| self.c[p] * (phi[self.a[p]] - phi[self.b[p]])).collect();
-        let outer = self.edge.iter().map(|&(m, g)| g * phi[m]).collect();
-        (inner, outer)
+        (0..self.a.len()).map(|p| self.c[p] * (phi[self.a[p]] - phi[self.b[p]])).collect()
     }
 
     /// The Laplacian of the blocks times `phi`: per block what its lower half sends out over its links for the potential.
@@ -145,29 +134,15 @@ fn groups(n: usize, a: &[usize], b: &[usize]) -> Vec<usize> {
 mod tests {
     use super::Draw;
 
-    /// The flows the lift draws converge at each block to its lift: on a row of three blocks held at one end by an open
-    /// edge, and on the same row closed, where the mean lift sinks over all.
+    /// The flows the lift draws converge at each block to its lift less the mean lift, which sinks over all: on a row of
+    /// three blocks of one area.
     #[test]
     fn the_low_air_gathers_where_the_weather_lifts() {
-        let row = |edge: Vec<(usize, f64)>| {
-            let held = vec![!edge.is_empty(); 3];
-            let mut diag = vec![2.0, 4.0, 2.0];
-            edge.iter().for_each(|&(m, g)| diag[m] += g);
-            Draw { block: vec![0, 1, 2], a: vec![0, 1], b: vec![1, 2], c: vec![2.0, 2.0], edge, diag, group: vec![0; 3], held, area: vec![1.0; 3] }
-        };
+        let row = Draw { block: vec![0, 1, 2], a: vec![0, 1], b: vec![1, 2], c: vec![2.0, 2.0], diag: vec![2.0, 4.0, 2.0], group: vec![0; 3], area: vec![1.0; 3] };
         let lift = [3.0, -1.0, 0.5];
-        let into = |d: &Draw, (inner, outer): (Vec<f64>, Vec<f64>)| {
-            let mut got = vec![0.0; 3];
-            inner.iter().enumerate().for_each(|(p, f)| (got[d.a[p]], got[d.b[p]]) = (got[d.a[p]] - f, got[d.b[p]] + f));
-            outer.iter().zip(&d.edge).for_each(|(f, &(m, _))| got[m] -= f);
-            got
-        };
-        let open = row(vec![(2, 1.0)]);
-        let got = into(&open, open.flows(&lift));
-        assert!(got.iter().zip(&lift).all(|(g, l)| (g - l).abs() < 1e-9), "open: {got:?}");
-        let closed = row(Vec::new());
-        let got = into(&closed, closed.flows(&lift));
+        let mut got = vec![0.0; 3];
+        row.flows(&lift).iter().enumerate().for_each(|(p, f)| (got[row.a[p]], got[row.b[p]]) = (got[row.a[p]] - f, got[row.b[p]] + f));
         let mean = lift.iter().sum::<f64>() / 3.0;
-        assert!(got.iter().zip(&lift).all(|(g, l)| (g - (l - mean)).abs() < 1e-9), "closed: {got:?}");
+        assert!(got.iter().zip(&lift).all(|(g, l)| (g - (l - mean)).abs() < 1e-9), "{got:?}");
     }
 }

@@ -864,8 +864,8 @@ counted (`Counters::edge_liquid`, m³ and its heat; the series' `edge_liquid`, `
 
 **The weather** (`air::weather`). The air's step of 15 days, with its eddies a smooth mixing, cannot hold the weather
 systems of the middle latitudes, which last a few days; without them each year repeats the last. They enter as one
-random field: η, the north-south distance the eddies have moved the air that is at a place, m on the planet, toward the
-north for air that came from the south. On a lattice of points `eddy_size` apart on the planet (the map's metres times
+random field of spread one: how far, and how fast, the eddies move the air that is at a place north and south, toward
+the north above zero. On a lattice of points `eddy_size` apart on the planet (the map's metres times
 its stretch, one node beyond the edges), each point draws a unit normal each day, keyed by the seed, the day since the
 start and the point (`rng::Purpose::Weather`): the field holds no state, and is the same on any count of threads.
 Its fast part is the sum of a point's draws of the past days, each weighted by e^(-age / `eddy_time`), over the last 5
@@ -874,13 +874,22 @@ liquid's top layer sums of the same weather and lets go in τ = its heat per K (
 `top_damp` (about 4 months with chemistry 0): the same draws weighted by e^(-age / τ), with sqrt(`eddy_time` / τ) of
 the fast part's spread, as a top layer that the fast weather forces holds it (Hasselmann 1976; Frankignoul and
 Hasselmann 1977). A point of the map reads the four points of the lattice about it bilinearly, the weights over their
-root sum of squares, so its spread is the same everywhere. A unit of the field is the eddies' mixing length,
-sqrt(`mix` × `eddy_time`), 525 km: a diffusivity is a speed times the length an eddy moves air in its time (Taylor
-1922). So the field has no size of its own. It acts in two places. **Across the open edges**, each day each link's
-column beyond is read again (`Edges::weather`) at its latitude less η at the column, in degrees: the air the eddies
-bring from there. **On the air it lifts**: air that an eddy moves along the warmth's gradient slides along
-the surfaces of equal warmth (the baroclinic eddy, Holton 2004, 8.4). Moving η in `eddy_time`, at η / `eddy_time`
-(its spread sqrt(`mix` / `eddy_time`), 2 m/s), it rises by that speed times their slope: the warmth's gradient toward
+root sum of squares, so its spread is the same everywhere. The field has no size of its own: a unit of it is two
+measured moments of the same eddies. Its displacement η is their mixing length sqrt(`mix` × `eddy_time`), 525 km (a
+diffusivity is a speed times the length an eddy moves air, Taylor 1922): over the year the band's ground cools by about
+0.55 K a degree, so the air it brings is some 2.5 K off over the year, against the measured lower air's 3 to 5 K of
+the storm tracks' winter.
+Its speed v is `eddy_speed`, 6 m/s: the strong weather. A world may be made with soft weather instead
+(`worldgen::terrain::soft_weather`, `ew run --weather soft`, the page's Weather choice): v is then sqrt(`mix` /
+`eddy_time`), 2 m/s, the speed the eddies' diffusion alone gives (r = 1), and the rain of a year swings less. Their ratio, about a day, is the eddy's 1 / ω: a wave of about 6 days' period,
+inside the band of 2.5 to 6 days that `eddy_time` keeps. The eddies' motion is mostly reversible sloshing: their mean
+flux, `mix`, is r v' ℓ with r = `mix` / (`eddy_speed` × η's unit) = 0.34, inside the measured correlation of v' and
+T' of 0.2 to 0.5. It acts in two places. **Across the open edges**, each day each link's column beyond is read again
+(`Edges::weather`) at its latitude less η at the column, in degrees: the air the eddies bring from there. Past a pole
+that is the other meridian's air, the latitude folded back and its gradient turned (`Planet::at`); across the equator it is the other half's air in its own
+season. **On the air
+it lifts**: air that an eddy moves along the warmth's gradient slides along the surfaces of equal warmth (the
+baroclinic eddy, Holton 2004, 8.4). Moving at v, it rises by v times their slope: the warmth's gradient toward
 the south that the node feels (`rise::felt`, as the low wind reads it: the planet's where the edges are open, the
 node's own where it is a block alone, else none) over how fast the warmth rises with height (the dry air's fall with
 height less the node's, `wind::End::rise`; none where it does not rise). That lifts the node's air at the ground's
@@ -891,19 +900,30 @@ back, and where it sinks the low air spreads out. This low convergence is what f
 (P − E = −∇·(q v), Holton 2004, 3.5; Trenberth 1999). Each day the lifts are summed per block (1.6), and the flow on
 each link between blocks is the difference across it of a potential (the divergent part of the wind, Lynch 1989)
 whose convergence at each block is its lift: a Poisson problem over the blocks, each link's conductance the lower
-half's cross-section (mol per m³ times half the column's depth) times its width over its length, the columns of
-the planet's air beyond the open edges held at none, solved by conjugate gradients (`draw::RESIDUAL`). A group of
-blocks that no open edge holds lets sink, over its area, as much as it lifts. The flow is added that day to the
-overturning's on each link (and across the open edges to their overturning), so it moves as the overturning does:
+half's cross-section (mol per m³ times half the column's depth) times its width over its length, solved by conjugate
+gradients (`draw::RESIDUAL`). Each group of blocks lets sink, over its area, as much as it lifts. The flow does not
+cross the open edges: the planet's columns beyond them are a held table of its climate with no weather of their own,
+so a circulation fed from them would draw vapour and heat from a store that never pays them back; and the map's air
+spans some 5,000 km of the planet, about five weather systems, while a system's convergence and the sinking that pays
+for it close within a few thousand km, inside it. The flow is added that day to the overturning's on each link
+between blocks, so it moves as the overturning does:
 each half its node's air, the vapour crowding low, in the same implicit step, each half's mol each way, so no node
-gains or loses air by it and none gives more than it holds. Its halves carry the rise of the static energy over half
+gains or loses air by it and none gives more than it holds. The eddies' smooth mixing stays whole beside it: `mix`
+stands for the eddies' net transport down the gradient, the part of their motion that is correlated (r = 0.34), and
+the drawn flow is the weather's divergent circulation, whose sign follows the random lift, so it is not a part of
+that net flux; taking it off `mix` day by day would take the vapour the sea sends the land away exactly on the stormy
+days. Its halves carry the rise of the static energy over half
 the column's depth (`wind::halves_heat`), so a node whose air rises cools as rising air does, which lowers what
 saturates it; the rain law reads no rise of the weather. The weather acts nowhere on a
 globe: the planet's strip is one, and the edges read its last year as the climate, which one year of weather would
 stand in for. On a world alone whose air is one block (a small island) the air feels no gradient and the edges are
 closed, so it has no weather. **Known limits:** inside a block the flow does nothing, as the eddies even the block each
-day: an island alone in one block is a closed box. The eddies' mixing stays smooth: the field moves the air only by
-the flow its lift draws. Rain inside a day is as smooth as the lift, not the few strong storms of a real month. The
+day: an island alone in one block is a closed box. The field moves the air only by the flow its lift draws. Each
+half carries its sender's air, so the flow's exchange also mixes down the gradient, whatever its sign: the heat, which
+its halves move at the columns' mean heat per mol, as much as its mol each way, about `mix` itself on the links between
+blocks of the band of 20 to 65 degrees (more than `mix` on a third of the link-days), so the heat's mixing there is
+about twice `mix` and the map's north-south contrast of the air some 4 K (12 %) less; the vapour, which crowds low,
+about a quarter of `mix`. Rain inside a day is as smooth as the lift, not the few strong storms of a real month. The
 field is one number: the air's displacement east or west is not drawn. Its slow part stands for a top layer's memory
 on every world and over land too.
 

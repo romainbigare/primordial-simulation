@@ -38,8 +38,8 @@ can hold. **A make of bed** is a kind of rock. **A push** is what drives a flow 
 - **A field is right for wild animals. It is not enough for people.** Houses, stores, tools and trade need single
   things with a place and a life. People will need a second layer of single agents on top of the field (section
   4.8). By the owner's decision no work goes into it before the animal layer is done.
-- **The natural world misses things that animals and people will need:** years that differ (today every year is the
-  same year), a store of seeds on the ground, fresh water against salt water, fire, life in the water, soil that
+- **The natural world misses things that animals and people will need:** years that differ (built: storms now make dry and wet
+  years), a store of seeds on the ground, fresh water against salt water, fire, life in the water, soil that
   builds up, and useful rocks (ores, fuels, clay, salt). None is urgent for plants. Several decide whether farming,
   storing and settling can ever appear.
 - **Yes, a clean-up cycle first.** Two to three weeks of work (est.). Its largest step is to delete the old
@@ -443,7 +443,7 @@ Ranked by how much each one decides later. "Kind of work" says whether it is a l
 
 | # | Missing | Why it matters later | Kind of work | When |
 |---|---|---|---|---|
-| 1 | **Years that differ.** No law of Flow has a random term and the air's long step is smooth: each year repeats the last. Measured (section 10): rain on land changes by 0.02% from one year to the next, the winter by 0.005 K. On Earth rain differs by 10 to 30% and winters by about 1 K. No dry year, no hard winter, no flood | Boom and bust, famine, moving on, and above all **storing** food need bad years. Farming is an answer to them | The real cause is weather: storms that the air's 15-day step cannot hold. So it must enter as a random term with a physical shape, on the mixing by eddies (which stands for that weather), keyed by the seed, the year and the place; the sea's top layer then sums it into slow swings (Hasselmann 1976, from memory). Not noise put on the rain itself. To study before it is built | Before animals are judged |
+| 1 | **Years that differ: built** (`flow/air/weather.rs`, `draw.rs`; laws.md 1.6). A keyed random field of the eddies' displacement reads the planet's air at the open edges, and its lift draws a flow inside the map that feeds rain. On the band island of 32 (seeds 1 to 3): rain on land swings 4.6 to 5.6% from year to year, 10 to 17% at a single place; the coldest month 0.4 to 0.5 K; 3 to 8% of a place's months get under half their rain. The owner chose this strong weather knowing its cost: rain on land 2 to 8% lower and the land 0.6 K colder to 1.3 K warmer by seed, and the drawn flow's halves mix heat about as much again as `mix` on the links between blocks (laws.md, its known limit). An island alone gets no weather (one closed block) | Boom and bust, famine, moving on, storing food | Open: the drawn flow's heat. Booked centred it overdraws; with no sensible heat the land dries, as the rising column then keeps the heat its rain frees (branches `wip/years-centred`, `wip/years-moist-try`). Next idea: the rising column's static energy goes to the sinking area of its group, not across links. Also open: the land-mean spread is half of Earth's 10%; a month's rain is as smooth as the lift | Done; its limit open |
 | 2 | **Seeds on the ground as a store.** A seed lands and takes hold in the same month. The ground never holds a stock of seeds. (A plant does keep fuel, by its `STORE` gene, but inside itself, not as a part an eater can pick) | Seeds are the food that keeps over winter: the base of seed-eaters, of caching, of granaries and of every grain crop. Also a seed bank is how real plants come back after fire or drought | Law (cover): seeds lie as a pool per cell, with a life and an eater's price | With the first animals |
 | 3 | **Fresh and salt.** No law reads how salty a liquid is: a body drinks from any ground that holds the key liquid, and so do roots. And the sea of chemistry 0 is kept nearly fresh on purpose (0.2 g per kg against a real 35), so that it turns over and freezes as it does now | Rivers, springs and lakes are why animals and towns stand where they do. Salt itself is something animals seek | Two steps. A term for saltiness in drinking and in roots (small). A truly salty sea changes how the sea mixes and freezes: a change of the climate's laws with its own long runs (not small) | The first with the first animals; the second when the coast matters |
 | 4 | **Fast events: fire.** Change runs once a month in each cell. Burning exists as chemistry, but nothing starts it and a month cannot hold a fire | Fire shapes grassland against forest, clears land, cooks, fires clay, smelts. The spec parks it "for M4" | A law for a fast event inside a month: it starts (dry fuel, heat), spreads by the wind and the fuel next door, and ends in the same month, booked whole | Before people; good for god mode |
@@ -700,7 +700,7 @@ section 4, with its known faults; the lines here are the rest.
 **Variety: landscapes and biomes on a small world**
 - Wet and dry sides of the island: a mean wind across the map from the band's own circulation, with mountains across
   it, and a law for the mean wind's momentum.
-- Years that differ: today rain on land changes by 0.02% from year to year.
+- Years that differ: built; the drawn flow's heat is its open limit (section 6, item 1).
 - Flat wet ground: channels lay down their load where the slope falls (the law for mud and sand), so valley floors,
   fans, deltas and ground whose pores stay full appear. A delta's size is the load that reached the mouth over the
   depth of the water there (Gilbert 1885; Galloway 1975).

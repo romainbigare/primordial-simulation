@@ -128,7 +128,8 @@ pub(super) fn halves_heat(flux: f64, (a, b): (&End, &End), depth: f64) -> f64 {
 impl Pushes {
     /// These pushes with the lower halves' flows `drawn` (`draw::Draw::flows`) on the links between blocks (`border`,
     /// by their place, mol/s from each link's `a` to its `b`) added to the overturning's, and the heat their halves carry
-    /// (`halves_heat`) to its contrast.
+    /// (`halves_heat`) to its contrast. The eddies' mixing stays whole: it is their net flux down the gradient, and the
+    /// drawn flow, whose sign follows the weather's lift, is not a part of it (laws.md 1.6).
     pub(super) fn drawn(&self, ends: &[End], links: &Links, border: &[usize], drawn: &[f64], cfg: &Config) -> Pushes {
         let mut p = self.clone();
         for (&l, &f) in border.iter().zip(drawn) {
