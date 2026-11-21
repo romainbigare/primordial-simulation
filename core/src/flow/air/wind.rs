@@ -128,26 +128,17 @@ pub(super) fn halves_heat(flux: f64, (a, b): (&End, &End), depth: f64) -> f64 {
 impl Pushes {
     /// These pushes with the lower halves' flows `drawn` (`draw::Draw::flows`) on the links between blocks (`border`,
     /// by their place, mol/s from each link's `a` to its `b`) added to the overturning's, and the heat their halves carry
-    /// (`halves_heat`) to its contrast; the eddies' mixing the rest of theirs (`eddies_left`).
+    /// (`halves_heat`) to its contrast. The eddies' mixing stays whole: it is their net flux down the gradient, and the
+    /// drawn flow, whose sign follows the weather's lift, is not a part of it (laws.md 1.6).
     pub(super) fn drawn(&self, ends: &[End], links: &Links, border: &[usize], drawn: &[f64], cfg: &Config) -> Pushes {
         let mut p = self.clone();
         for (&l, &f) in border.iter().zip(drawn) {
             let (a, b) = (&ends[links.a[l] as usize], &ends[links.b[l] as usize]);
             p.over[l] += f;
             p.contrast[l] += halves_heat(f, (a, b), column(cfg, a, b).1);
-            (p.mix[l], p.stir[l]) = eddies_left(p.mix[l], p.stir[l], f);
         }
         p
     }
-}
-
-/// The eddies' mixing of a link, `mix` mol/s each way with the heat `stir` it carries (`push`), where the weather's
-/// drawn flow moves `drawn` mol/s of the lower half one way and as much of the upper half back: `mix` stands for all
-/// the eddies' exchange, and the weather's flow is the part of it the weather resolves, so the smooth mixing is the
-/// rest, `mix` less the flow's mol each way, none below zero, its heat in proportion. One eddy transport, split in two.
-fn eddies_left(mix: f64, stir: f64, drawn: f64) -> (f64, f64) {
-    let rest = (mix - drawn.abs()).max(0.0);
-    (rest, stir * (rest / mix.max(f64::MIN_POSITIVE)))
 }
 
 /// Three pushes on each link (`push`): the column's pressure, evened in the time sound takes to cross it (Lamb waves,
