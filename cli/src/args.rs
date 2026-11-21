@@ -59,7 +59,8 @@ pub const USAGE: &str = "usage:
     --window X,Y,W,H      the window from column X and row Y, W x H squares, fractions allowed (the whole map)
     --px N                pixels across; the height follows the window (512)
     --layer NAME          map, temperature, rain, life, depth, land (the map with no rivers), kinds (the starting
-                          kind whose cover leads each cell), or of the loose ground: conductivity, water (what it
+                          kind whose cover leads each cell; life and kinds draw each patch of a cell's cover on
+                          its own ground), or of the loose ground: conductivity, water (what it
                           holds for roots), yield (rain less what rises), wetness (of its pores), rise (what rises
                           from it), soil (the cell's texture), organic (its organic share), minerals (it holds),
                           erodibility, slow (its slow organic matter), rot (how fast its dead frame rots), texture

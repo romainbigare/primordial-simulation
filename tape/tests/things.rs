@@ -53,6 +53,7 @@ fn a_window_lists_what_lies_in_its_cells() {
     assert!(named.iter().zip(GENES).all(|((n, u), (gn, gu))| n == gn && u == gu), "{named:?}");
     assert_eq!((r.u32(), r.u32()), (1, i as u32));
     assert_eq!(r.f32s::<5>(), [x0, y0, x1, y1, area].map(|v| v as f32));
+    assert_eq!((r.take::<1>(), r.f32s::<2>()), ([1], [1.0, 0.0]), "one patch, all of the cell, of age 0");
     assert_eq!(r.u16(), 1, "one slot of cover");
 
     // The slot of cover: its kind, its built cover and capture area per m² (10^`LEAF` per kg of its living cover,
@@ -68,7 +69,7 @@ fn a_window_lists_what_lies_in_its_cells() {
     assert!((leaf / (living * 10f64.powf(genes[LEAF] as f64)) - 1.0).abs() < 1e-5, "capture area {leaf} m²/m²");
     let seen = r.f32s::<{ pcore::cover::NG }>();
     assert_eq!(seen[WALLS], genes[WALLS]);
-    assert_eq!(r.take::<4>(), [0; 4]);
+    assert_eq!(r.take::<4>(), [0; 4], "not full, in patch 0");
     assert!(r.0.is_empty(), "nothing after the last record");
 
     // The whole map lists every cell.
