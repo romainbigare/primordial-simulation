@@ -282,6 +282,14 @@ pub struct Physics {
     pub h_mix: f64,
     /// Eddy diffusivity through the thermocline under it, m²/s
     pub thermocline: f64,
+
+    // The weather (`flow::air::weather`)
+    /// Time over which the weather at a place keeps (the eddies' time scale), s
+    pub eddy_time: f64,
+    /// Distance over which the weather is one (the eddies' size), m of the planet
+    pub eddy_size: f64,
+    /// Heat flux by which the air damps a warmth anomaly of a liquid's top layer, W/(m² K)
+    pub top_damp: f64,
 }
 
 impl Physics {
@@ -408,6 +416,9 @@ impl Default for Physics {
             channel_depth_exp: 0.4,
             h_mix: 50.0,
             thermocline: 1e-4,
+            eddy_time: 3.0 * DAY_S as f64,
+            eddy_size: 1.0e6,
+            top_damp: 20.0,
         }
     }
 }
@@ -451,6 +462,8 @@ impl Config {
         require(p.duff_hold >= 0.0 && p.smoulder_moist >= 0.0, || format!("duff_hold ({}) and smoulder_moist ({}) must not be below 0", p.duff_hold, p.smoulder_moist))?;
         require(p.t_burn > p.t_light, || format!("t_burn ({}) must be above t_light ({})", p.t_burn, p.t_light))?;
         require(p.t_light > 0.0 && p.strikes >= 0.0 && p.fine_d > 0.0 && p.front_life >= 0.0, || format!("t_light ({}) and fine_d ({}) must be above 0, strikes ({}) and front_life ({}) not below", p.t_light, p.fine_d, p.strikes, p.front_life))?;
+        // The weather's field divides by its time, its size and the damping of the top layer (`flow::air::weather`).
+        require(p.eddy_time > 0.0 && p.eddy_size > 0.0 && p.top_damp > 0.0, || format!("eddy_time ({}), eddy_size ({}) and top_damp ({}) must be above 0", p.eddy_time, p.eddy_size, p.top_damp))?;
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
