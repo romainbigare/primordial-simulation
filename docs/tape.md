@@ -27,7 +27,9 @@ the rows the snapshot's day holds. A snapshot and the viewer's file go to a `.pa
 a run killed during a write leaves its `.part` file, which nothing reads. A stopped run keeps the tape up to its last
 write, and resumes only from a snapshot.
 
-**Raw events** (`core/src/event.rs`): the first time a substance appears; the viewer shows them.
+**Raw events** (`core/src/event.rs`): the first time a substance appears, and each edit (`World::edit`, `EventKind::Edit`:
+the edit, the cell it acted on, and whether it was made); the viewer's file logs them in `events` (an edit as
+`edit: <what it did>`, `Edit::line`) and the viewer shows them on its timeline.
 
 **The months** (in the viewer's file): a row a month, its year and month, which a resumed run checks its tape by.
 
