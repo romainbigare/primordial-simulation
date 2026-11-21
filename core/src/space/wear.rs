@@ -104,8 +104,9 @@ impl Bed<'_> {
 /// shelf at the low stand (`space::shelf`) and what the high stand's lobes lay at the mouths, what leaves the map where
 /// a shelf fills the open low ground, and the load the lobes found no room for (it lies at the mouth, not laid out); the
 /// first is the sum of the others. Apart from them, what the catchments held back of what the yield law asked of them
-/// (`held`: their ground stood no higher than their outlets or their mouths' tops; not taken), and what the yield law
-/// asks of the high stand's mouths in a year, m³ a year (`stand::yields`: the running world's load is held to it).
+/// (`held`: their ground stood no higher than their outlets or their mouths' tops; not taken), and what the high stand's
+/// mouths got of what the yield law asked a year, m³ a year (`stand::yields`, less `held`: the running world's load is
+/// held to it).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Books {
     pub taken: f64,
