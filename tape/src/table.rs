@@ -74,6 +74,15 @@ impl Table {
         out
     }
 
+    /// What the liquid running through each of the terrain's samples carries, g/m³, row by row: of a sample that carries
+    /// liquid (`q`, its discharge, `discharge`), what the main channel of its cell carried in the last month
+    /// (`Counters::load_month`); none where it carries none, or before the first month. A shell colours a channel's
+    /// water by it.
+    pub fn load(&self, w: &World, q: &[f32]) -> Vec<f32> {
+        let month = &w.counts.load_month;
+        q.iter().zip(&self.cell).map(|(&q, &i)| if q > 0.0 { month.get(i as usize).map_or(0.0, |c| c[0]) } else { 0.0 }).collect()
+    }
+
     /// The present state of world `w` as one tape frame, as a tape would keep it (`frame`), and its table: the melting point of the frozen
     /// cover, K (`cover_melt`), then `ROW` f32 numbers for each square, row by row (`row`), then the kinds of cover of
     /// each square, row by row (`stands::rows`, `Config::variety` × `KIND_ROW` f32), then the level of each pond of the terrain's

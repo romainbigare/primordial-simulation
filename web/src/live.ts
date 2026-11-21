@@ -4,13 +4,17 @@ import { World, makeWorld, Meta } from './data';
 export interface Stats { cells: number; pace: number }
 
 /** The live world: the core in a Web Worker (worker.ts) that makes a world, steps it and posts a frame as bytes with the
- * cells' table (tape/src/table.rs), and the samples' discharge as 16-bit floats when it changed enough to show (held
- * until the map takes it, `takeDischarge`). Each frame is answered once the page has drawn it (`shown`): while the
+ * cells' table (tape/src/table.rs), the samples' discharge and load as 16-bit floats when they changed enough to show
+ * (held until the map takes them, `takeDischarge`), and where load came into a body of liquid in the last month
+ * (`plumes`). Each frame is answered once the page has drawn it (`shown`): while the
  * world plays, the worker posts the next only then. */
 export class Live {
   world: World | null = null;
   table: Float32Array<ArrayBufferLike> = new Float32Array(0);
   private discharge: Uint16Array | null = null;
+  /** Where load came into a body of liquid in the last month: a sample (u32) and kg/s (f32) each (wasm/src/lib.rs
+   * `plumes`). */
+  plumes: Uint8Array = new Uint8Array(0);
   stats: Stats = { cells: 0, pace: 0 };
   private worker: Worker;
   private url: string;
@@ -23,10 +27,11 @@ export class Live {
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message);
     this.worker.onmessage = e => {
-      const m = e.data as { kind: string; meta: string; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
+      const m = e.data as { kind: string; meta: string; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; plumes: Uint8Array; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
       if (m.kind === 'ready') return on.ready();
       if (m.kind === 'error') return on.error(m.text);
       if (m.discharge) this.discharge = m.discharge;
+      if (m.plumes) this.plumes = m.plumes;
       if (m.kind === 'world') {
         const meta = JSON.parse(m.meta) as Meta;
         meta.frames = [{ day: m.day, year: m.year }];
@@ -61,7 +66,7 @@ export class Live {
   private answer(): void {
     if (this.unanswered > 0) { this.worker.postMessage({ cmd: 'shown', frames: this.unanswered }); this.unanswered = 0; }
   }
-  /** The samples' discharge come since it was last taken, or null. */
+  /** The samples' discharge and load come since they were last taken, or null. */
   takeDischarge(): Uint16Array | null { const d = this.discharge; this.discharge = null; return d; }
   /** A new island of `seed` and `size` between the latitudes `band` (south, north; NaN: the core's default band), its
    * large shape drawn from the seed if `drawn`, else one rise in the middle, its cells holding at most `variety` kinds

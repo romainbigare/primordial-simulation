@@ -183,8 +183,9 @@ struct Spot {
   // Its loose ground's grain: the shares of coarse and of fine grain, of organic matter, and how slowly its pores pass
   // liquid (the decimal logarithm of 1 m/s over their conductivity; tape/src/ground/rock.rs); and the share of its
   // pores the soil's liquid fills, 0..1 (land.wgsl `State`); how deep the load the liquid laid lies on it, m, and the
-  // decimal logarithm of the years its loose ground has lain (rock.wgsl `soil_at`).
-  grain: vec4f, filled: f32, deposit: vec2f,
+  // decimal logarithm of the years its loose ground has lain (rock.wgsl `soil_at`); and the load its liquid carries,
+  // g/m³ (rock.wgsl `load_of`, `load_at`).
+  grain: vec4f, filled: f32, deposit: vec2f, load: f32,
   // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
   // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
   // plants cover there on their mean (cover_field.wgsl `CoverAt.low`).
@@ -397,9 +398,9 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
       // its open water past the band deeper; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
       let seen = standing_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
       let waves = max(waves_of(p.sea, p.fetch).x / SEA_WAVE.x, 1e-3);
-      water = mix(standing_painted(BED_SHOWN * bed, seen, ripple, p.sea), FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, p.slope / earth.look.x, p.e, p.at));
+      water = mix(standing_painted(BED_SHOWN * bed, seen, ripple, p.sea, p.load), FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, p.slope / earth.look.x, p.e, p.at));
     } else {
-      water = water_over(bed, p.depth, ripple);
+      water = water_over(bed, p.depth, ripple, p.load);
     }
     // What floats on still water (afloat.wgsl), and the plants that stand in it down to their line
     // (draw.wgsl `stands_in`), over it as on land, as far as its waves leave them (`waves_strip`).
@@ -444,7 +445,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
   var kind = g.kind;
   // A river: its water over its own bed. Running water carries the fine soil away: its bed is washed sand and gravel,
   // soaked.
-  if (river > 0.0) { rgb = mix(rgb, water_over(SAND * (1.0 - WET_DARK) * lit, p.river_depth, ripple), river); }
+  if (river > 0.0) { rgb = mix(rgb, water_over(SAND * (1.0 - WET_DARK) * lit, p.river_depth, ripple, p.load), river); }
   if (river > 0.5) { kind = RIVER; }
   return Shaded(rgb, lit, kind);
 }
