@@ -178,8 +178,8 @@ fn moved(w: &World, s: &Scratch, i: usize) -> bool {
     s.shift[i] >= SURFACE_SHARE * (w.cfg.phys.hide[0] + (s.head[i] - s.pd[i] - s.z[i]).max(0.0))
 }
 
-/// The heat capacity of the skin of the bed of each ground node of `cells` and its own, J/K (`ground::skin_cap`, then
-/// its loose amounts in order), summed substance by substance over the nodes.
+/// The heat capacity of the skin of the bed of each ground node of `cells` and its own, J/K (`ground::skin_cap`, and
+/// that with its loose amounts, `ground::ground_cap`), summed substance by substance over the nodes.
 fn capacities(w: &World, s: &Scratch, cells: impl Iterator<Item = usize> + Clone) -> Vec<[f64; 2]> {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
     // Per node the heat capacity of its bonded amounts, J/K, and their volume, m³.
@@ -188,12 +188,15 @@ fn capacities(w: &World, s: &Scratch, cells: impl Iterator<Item = usize> + Clone
         let (cp, v, b) = (w.chem.subs[k].cp, w.chem.molar_volume(k, Phase::Solid), &w.store.amounts(Class::Bed)[k * n..(k + 1) * n]);
         cells.clone().zip(&mut bed).for_each(|(i, x)| (x[0], x[1]) = (x[0] + b[i] * cp, x[1] + b[i] * v));
     }
-    let mut caps: Vec<[f64; 2]> = cells.clone().zip(&bed).map(|(i, x)| [skin_of(&w.cfg, area[i], x[0], x[1]); 2]).collect();
+    let mut loose = vec![0.0; bed.len()];
     for &k in &s.state.loose {
         let (cp, a) = (s.sp[k].cp, &w.store.amounts(Class::Ground)[k * n..(k + 1) * n]);
-        cells.clone().zip(&mut caps).for_each(|(i, c)| c[1] += a[i] * cp);
+        cells.clone().zip(&mut loose).for_each(|(i, c)| *c += a[i] * cp);
     }
-    caps
+    cells.zip(bed.iter().zip(loose)).map(|(i, (x, c))| {
+        let skin = skin_of(&w.cfg, area[i], x[0], x[1]);
+        [skin, skin + c]
+    }).collect()
 }
 
 /// Ground node `i` takes its heat capacities `[skin, own]` (`capacities`) and its temperature by its energy and the

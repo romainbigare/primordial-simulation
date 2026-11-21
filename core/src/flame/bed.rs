@@ -209,7 +209,7 @@ fn leaf_per_kg(w: &World, p: &Parts, i: usize) -> f64 {
 fn layer(w: &World, p: &Parts, i: usize, t: f64) -> Option<Layer> {
     let ph = &w.cfg.phys;
     let near = (w.near_ground(i, p.liquid)? / w.chem.p_sat(p.liquid, t)).clamp(0.0, 1.0);
-    let (held, plateau) = (w.g(p.liquid, i).max(0.0), w.thaw_last(i).1);
+    let held = w.g(p.liquid, i).max(0.0);
     // Snow lying hides the remains from a flame (`contract::place`); the key liquid frozen in the ground's pores fills
     // them as the liquid does.
     if crate::contract::place(w, i).snow > 0.0 {
@@ -218,7 +218,7 @@ fn layer(w: &World, p: &Parts, i: usize, t: f64) -> Option<Layer> {
     let soak = crate::cover::soak(w, p, i, held).1;
     let share = crate::inside::saturated_share(w, i);
     let pores = w.scratch.land_pores(i).max(1e-9);
-    let frozen = held * (1.0 - w.molten(p.liquid, i, t, plateau)) * w.chem.molar_volume(p.liquid, Phase::Solid) / w.mesh.cells().area()[i];
+    let frozen = held * (1.0 - w.molten_last(p.liquid, i)) * w.chem.molar_volume(p.liquid, Phase::Solid) / w.mesh.cells().area()[i];
     let wet = soak.pores.available(crate::inside::rest(share, soak.filled.min(1.0)) + frozen / pores);
     let at = |c: [f64; 2]| c[0] + c[1] * (t - SORB_T);
     let bottom = near + wet * (1.0 - near);

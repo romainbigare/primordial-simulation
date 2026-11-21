@@ -17,7 +17,9 @@ const SPECK: f64 = 1e-12;
 const NODES_PER_ITEM: usize = 8;
 
 /// A node's row holds this many numbers per substance: what its reactions made less what they used, mol; the gas it
-/// gives its air node (+) or takes, mol, its heat, J, and its lift paid by the air, J; then how long it sleeps, s.
+/// gives its cell's aside node (+, which the air's next step empties into the air with its lift, as life's gas) or
+/// takes from its air node (-), mol, its heat, J, and the lift the air gives back for what it takes, J; then how long it
+/// sleeps, s.
 const ROW: usize = 4;
 
 /// The rows of the nodes of one class that were due, ordered by block, then by index. A ground node is in the block of
@@ -158,7 +160,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     // side is 100 times faster or more, left out).
     (rc.film, rc.moist) = (nodes.standing(i).0 / w.cfg.dissolve, nodes.moist(i, &w.cfg.phys));
     // Its decomposers breathe in the share of it that the oxidising gas reaches (`inside::aired`).
-    rc.aired = crate::inside::aired(w, i, rc.film, nodes.filled(i));
+    rc.aired = crate::inside::aired(w, i, rc.film, crate::inside::land_filled(w, i).unwrap_or_else(|| nodes.filled(i)));
     rc.shelter = w.soil[i].texture.shelters();
     let cap = |amt: &[f64]| ground_cap(nodes.skin[i], 0..chem.ns(), |k| amt[k], |k| chem.subs[k].cp);
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
@@ -179,6 +181,6 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     for (k, m) in (0..ns).map(|k| (k, gas(k))).filter(|e| e.1 != 0.0) {
         let (s, m) = (&chem.subs[k], if m > 0.0 { m * paid } else { m });
         let heat = m * s.carried_gas(if m > 0.0 { per_c } else { nodes.ta[j] });
-        (out[k], out[ns + k], out[2 * ns + k]) = (m, heat, m * s.molar_mass * lift);
+        (out[k], out[ns + k], out[2 * ns + k]) = (m, heat, if m > 0.0 { 0.0 } else { m * s.molar_mass * lift });
     }
 }

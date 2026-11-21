@@ -93,7 +93,7 @@ pub(crate) fn heat_above_floor(e: f64, cap: f64) -> f64 {
 }
 
 impl World {
-    /// Heat capacity of a ground node's active layer, J/K: its bed's skin, then its loose amounts in order.
+    /// Heat capacity of a ground node's active layer, J/K: its bed's skin and its loose amounts (`ground_cap`).
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
         self.heat_cap_of(i, self.stock(Node::ground(i)), self.stock(Node::new(Class::Bed, i)))
     }
@@ -101,7 +101,7 @@ impl World {
     pub(crate) fn heat_cap_of(&self, i: usize, g: impl Fn(usize) -> f64, bed: impl Fn(usize) -> f64) -> f64 {
         let ns = self.chem.ns();
         let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, bed);
-        (0..ns).fold(skin, |c, k| c + g(k) * self.chem.subs[k].cp)
+        ground_cap(skin, 0..ns, g, |k| self.chem.subs[k].cp)
     }
     /// Melting point of substance `k` in ground node `i`, lowered by what is dissolved in its liquid (`Chemistry::melt_in`).
     pub fn melt(&self, k: usize, i: usize) -> f64 {
@@ -121,6 +121,15 @@ impl World {
     /// has run, `thaw`.
     pub fn thaw_last(&self, i: usize) -> (f64, Option<(usize, f64)>) {
         self.scratch.land(i).unwrap_or_else(|| self.thaw(i))
+    }
+    /// Molten share of substance `k` in the ground of cell `i` as life reads it, with its temperature (`thaw_last`): Flow's
+    /// solve at its last step (`Scratch::molten_land`); for a substance Flow does not let melt there, or before Flow has
+    /// run, `molten` at `thaw_last`.
+    pub fn molten_last(&self, k: usize, i: usize) -> f64 {
+        self.scratch.molten_land(k, i).unwrap_or_else(|| {
+            let (t, plateau) = self.thaw_last(i);
+            self.molten(k, i, t, plateau)
+        })
     }
     /// Temperature of the ground of cell `i` as life and the shell read it, K (`thaw_last`).
     pub fn t_ground_last(&self, i: usize) -> f64 {
@@ -166,9 +175,13 @@ impl World {
     pub fn t_air(&self, j: usize) -> f64 {
         crate::flow::air_temp(self.store.heat(Class::Air)[j], self.heat_cap_air(j))
     }
-    /// Height of the solid surface (bonded and loose solids), m, at the node's temperature now, with the solid share of a
-    /// substance on its plateau.
+    /// Height of the solid surface (bonded and loose solids) of ground node `i`, m: Flow's (`Scratch::surface`, kept as
+    /// matter moves), once Flow has built its state; before, from its amounts at its temperature now (`thaw`), with the
+    /// solid share of a substance on its plateau.
     pub fn surface_z(&self, i: usize) -> f64 {
+        if let Some([z, _]) = self.scratch.surface(i) {
+            return z;
+        }
         let (t, pl) = self.thaw(i);
         let solid = |k: usize| (self.b(k, i) + self.g(k, i) * (1.0 - self.molten(k, i, t, pl))) * self.chem.molar_volume(k, chem::Phase::Solid);
         let v: f64 = (0..self.chem.ns()).map(solid).sum();
