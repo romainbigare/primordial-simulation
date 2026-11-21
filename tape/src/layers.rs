@@ -193,8 +193,8 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: how wet its ground is, 0..1 (`Physics::wetness` of the liquid in its pores and standing over
     /// them, `flow::means`; none before Flow first built its state)
     pub wet: Vec<f64>,
-    /// Per ground cell: the share of its loose ground's pores its liquid fills, 0..1 (`flow::means`; none (NaN) where it
-    /// holds no pores or before Flow first built its state)
+    /// Per ground cell: the share of its land's pores its key liquid fills, 0..1, as the laws found it at the start of
+    /// life's month (`inside::WetGround::filled`; none (NaN) where none was found)
     pub filled: Vec<f64>,
     /// Per ground cell: the share of its area that is land, 0..1: its land (`contract::lands`, which its cover lives
     /// on) over its area
@@ -218,11 +218,11 @@ impl<'a> Ctx<'a> {
         let none = vec![Means::default(); n];
         let each = means.as_deref().unwrap_or(&none);
         let wet = each.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
-        let filled = each.iter().map(|m| if m.pores > 0.0 { m.pore / m.pores } else { f64::NAN }).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
         let land: Vec<f64> = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
-        let saturated = (0..n).map(|i| w.life.wet.get(i).copied().flatten()).collect();
+        let saturated: Vec<Option<pcore::inside::WetGround>> = (0..n).map(|i| w.life.wet.get(i).copied().flatten()).collect();
+        let filled = saturated.iter().map(|g| g.map_or(f64::NAN, |g| g.filled.min(1.0))).collect();
         let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: means.as_deref().map(|m| pcore::soil::holdings(w, m)), saturated, means };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c

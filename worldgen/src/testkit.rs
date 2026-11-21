@@ -169,7 +169,6 @@ pub fn garden(w: &World, c: &pcore::cover::Cover, (t, moist, sun, tick): (f64, f
         t,
         liquid: if wet { GARDEN_MOL } else { 0.0 },
         soak: pcore::cover::Soak { moist, filled: pores.wilt + moist * (pores.field - pores.wilt), saturated: 0.0, loose: GARDEN_LOOSE_M, pores, breath: 0.0, pond: 0.0 },
-        reach: 1.0,
         light: c.mark + sun * month,
         gas: 1.0,
         thirst: 0.0,

@@ -473,7 +473,7 @@ mod tests {
         let latent = Latent { held: phi * fusion, span: [f64::MIN, f64::MAX], lat: [0.0; 2], molten: 1 };
         Surf {
             area: 1.0, j: 0, seen_area: 1.0, sun: 0.0, gam: 0.0, zair: 0.0, head: 0.0, tg: tm, pk, phi, cap: CAP,
-            latent, cover, alb: 0.0, pd: 0.0, field_wilt: [0.0; 2], wet: 0.0, heat: 0.0, amt: [0.0; MAX_SUBSTANCES], fusion, canopy: 0.0,
+            latent, cover, alb: 0.0, pd: 0.0, field_wilt: [0.0; 2], wet: 0.0, heat: 0.0, amt: [0.0; MAX_SUBSTANCES], fusion, canopy: 0.0, catch: 0.0,
             absorb: 0.0, keep: 0.0, second: None, cell: 0, part: None, share: 1.0,
         }
     }
