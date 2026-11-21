@@ -194,7 +194,11 @@ impl World {
     }
     /// The cell that holds the centre of square (`x`, `y`) of its map.
     pub fn cell_of(&self, (x, y): (usize, usize)) -> usize {
-        self.mesh.tree().cell_at(self.map.point_at(x as f64 + 0.5, y as f64 + 0.5))
+        self.cell_under([x as f64 + 0.5, y as f64 + 0.5])
+    }
+    /// The cell under the place `[x, y]` in squares from the map's north-west corner.
+    pub fn cell_under(&self, [x, y]: [f64; 2]) -> usize {
+        self.mesh.tree().cell_at(self.map.point_at(x, y))
     }
     /// The pores of the loose ground of ground node `i` (`soil::Pores`).
     #[inline]

@@ -1,12 +1,14 @@
 //! Inside a cell (handover 5.2, laws.md 0): a cell holds means (its cover, the liquid in its soil, the liquid that stands
 //! on it), and a shell draws them inside the cell by general laws at each point of its ground: the soil's liquid by how
 //! much liquid gathers there (`soil_level`, `soil_held`, on a `Grid` of samples), and where that saturates its land
-//! (`wet_ground`), which the laws read. The ground inside a cell is the
-//! terrain's worn samples inside it, on which its liquid stands (`flow::curve`).
+//! (`wet_ground`), which the laws read; and where each patch of its cover lies (`patch_ground`). The ground inside a cell
+//! is the terrain's worn samples inside it, on which its liquid stands (`flow::curve`).
 
+mod places;
 mod shares;
 mod wet;
 
+pub use places::{patch_ground, PatchGround};
 pub use shares::{deficit_at, soil_held, soil_level, Means};
 pub use wet::{aired, airless, channel_share, drains_source, flowing, land_filled, rest, saturated, saturated_share, wet_ground, wet_land, WetGround};
 
