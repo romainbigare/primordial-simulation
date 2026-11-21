@@ -535,7 +535,7 @@ impl Default for Config {
             rain_time: 86400.0,
             moist_min: 0.5,
             rain_drift_s: 2000.0,
-            carry: 1.75e-10,
+            carry: 4.7e-11,
             wear: 1.4e-11,
             creep: 6.3e-11,
             hard_min: 0.05,
