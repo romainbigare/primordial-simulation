@@ -2,7 +2,8 @@
 //! the north-south displacement of the air they bring to each place, keyed by the seed, the day and the place, so it
 //! holds no state and is the same on any count of threads. It acts in two places with no amplitude of its own: across
 //! the map's open edges the planet's air is read where the eddies bring it from (`Edges::weather`), and the air an
-//! eddy moves slides along the surfaces of equal warmth, so it rises or sinks, which the rain law reads (`Weather::lift`).
+//! eddy moves slides along the surfaces of equal warmth, so it rises or sinks (`Weather::lift`), drawing the low air of
+//! the nodes about it in, or spreading its own out (`draw`).
 
 use super::super::Scratch;
 use super::cell::top_layer;
@@ -63,11 +64,11 @@ impl Weather {
         Some(Weather { origin, size, days, field, per_m, reach: (w.cfg.mix * phys.eddy_time).sqrt(), lift })
     }
 
-    /// Each air node's rise on day `d` of the step, mol/s: `rise` (the ground's, `rise::rise`) and what the weather lifts
-    /// it by (`lift`) times the air's displacement at its centre (`shift`).
-    pub(super) fn rise(&self, w: &World, rise: &[f64], d: usize) -> Vec<f64> {
+    /// What the weather lifts each air node's air by on day `d` of the step, mol/s (sinking below 0): what it lifts it by
+    /// per m (`lift`) times the air's displacement at its centre (`shift`).
+    pub(super) fn lift(&self, w: &World, d: usize) -> Vec<f64> {
         let air = w.mesh.level(AIR);
-        rise.iter().zip(&self.lift).enumerate().map(|(j, (r, l))| r + l * self.shift(air.centre()[j], d)).collect()
+        self.lift.iter().enumerate().map(|(j, l)| l * self.shift(air.centre()[j], d)).collect()
     }
 
     /// The displacement of the air at a point of the map, m [east, south] from its north-west corner, on day `d` of the
