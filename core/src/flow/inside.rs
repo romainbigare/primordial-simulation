@@ -72,21 +72,13 @@ pub fn levels(w: &World, cells: &[usize]) -> Option<Vec<[f64; 2]>> {
 }
 
 /// Of each of `cells`: the share of its area that is land, its own ground out of the liquid that stands over its pores
-/// (1 − `curve::Fill::wet`), 0..1, by Flow's state of the ground. None before Flow first built the state.
+/// (1 − `curve::Fill::wet`), 0..1, by Flow's state of the ground (`shores`). None before Flow first built the state.
 pub fn land_shares(w: &World, cells: &[usize]) -> Option<Vec<f64>> {
-    if !stated(w) {
-        return None;
-    }
-    let x = wet(w, &scratch_of(w), cells);
-    let one = |c: usize| {
-        let stands = (x.vol[c] - x.vol[c].min(x.pores[c])).max(0.0);
-        1.0 - with_fill(w, &w.scratch, cells[c], |f| f.wet(stands))
-    };
-    Some((0..cells.len()).map(one).collect())
+    shores(w, cells).map(|v| v.into_iter().map(|(land, _)| land).collect())
 }
 
-/// Of each of `cells`: the share of its area that is land (as `land_shares`), and the level of each of its parts over
-/// its mean surface, m (`curve::Fill::levels`: the lowest floor of a part that holds none), by which `shore::Shore`
+/// Of each of `cells`: the share of its area that is land (1 − `curve::Fill::wet`), and the level of each of its parts
+/// over its mean surface, m (`curve::Fill::levels`: the lowest floor of a part that holds none), by which `shore::Shore`
 /// finds its ground under the liquid by height. By Flow's state of the ground; None before Flow first built the state.
 pub fn shores(w: &World, cells: &[usize]) -> Option<Vec<(f64, Vec<f64>)>> {
     if !stated(w) {
