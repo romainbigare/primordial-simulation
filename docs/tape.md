@@ -199,8 +199,9 @@ the level of the wetness index its soil's liquid departs about (`inside::soil_le
 month's start found it, the land its cover lives on). Before Flow built its state the level and
 lowest ground are its solid surface, the depth that stands is its liquid's, and a land cell is all land and any other
 none. Then for each square row by row its
-cell's kinds of cover (`tape/src/stands.rs`), the world's `Config::variety` (the header's `tiles.kinds`, 8 unless the
-start chose other) of `KIND_ROW` (41) f32 each, the heaviest first: the slots of
+cell's kinds of cover (`tape/src/stands.rs`), as many as the table's last number says (`stands::kinds`: the world's
+`Config::variety`, 8 unless the start chose other, or as many as the cell that holds the most slots, a cell of
+patches holding up to `cover::SLOTS`, 16) of `KIND_ROW` (42) f32 each, the heaviest first: the slots of
 its cover that stand on any of its ground, each as the law holds it, per m² of the ground it stands on (its share of
 the cell, `Cover::stands`: its land, and its ground under the liquid where its roots work, `cover::footing`); of each its starting kind (-1: none); its built cover, kg/m²; its large plants (`stands::plants` of the slot's group of the largest plants, `cover::Sizes::large`, with that group's built cover and share of the capture area): the stem's width, m, plants a m² (that group's count), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-their leaf area; plants with no capture area stand bare, their crowns of no width, covering none, which the page draws by their stems as a crown that has shed its leaves); its walls' share of its built cover; its
@@ -214,7 +215,8 @@ the loose ground their roots need, m (`Cover::need`; all of the land and 0 while
 seeds is not found); its walls gene (`WALLS`, log10 kg of walls per kg of matter), by which the page draws a woody
 kind as woody plants while they are young (web/src/style.ts `designOf`); and its slot in its cell's cover, which it keeps
 while it lives (where two slots join, the heavier keeps its own), by which the page keeps the places of each slot's
-plants apart from another slot's of the same starting kind (web/shaders/lib/mark.wgsl `pick_kind`). Then of each of its groups of plants
+plants apart from another slot's of the same starting kind (web/shaders/lib/mark.wgsl `pick_kind`); and the patch of
+its cell's cover it stands in (`Cover::patch`), on whose ground alone the page draws it (laws.md 3). Then of each of its groups of plants
 (`cover::GROUPS`, 4; laws.md 3), the large plants first and the empty groups last (all 0), four numbers: plants a m²,
 and a plant's height, stem's width and crown's width, m (`stands::plants` of that group), by which the page draws each
 kind's plants along a smooth curve of sizes through its groups, the large plants on the lowest draws of the kind's own
@@ -232,8 +234,8 @@ ground (land.wgsl `saturated_at`, by the law's level of the wetness index) takes
 kind at each point by the cover's own rule (`cover::stand::rooted`) with these and `rooted_from`, which the live
 world's header gives with the laws' numbers (wasm `meta`). A kind stands on the share of the cell that holds its roots
 alone (laws.md 3): there its crowns cover the share of the ground whose light its leaves stop, 1 - e^-(leaf area /
-that share), the cover's own light law, in patches where they close, each crown the ground it holds there; a plant's stem and height are the cover's own (`cover::stem`, `cover::height`, laws.md 3). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
-less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. Then the fetch of each pond, m: the side of a square as large as its liquid's surface (`Pool::area`), the length of open water a wind blows over, by which the page sizes a lake's waves (0 where it holds none). **The samples' rock** (`Ground::rock`,
+that share), the cover's own light law, in patches where they close, each crown the ground it holds there; a plant's stem and height are the cover's own (`cover::stem`, `cover::height`, laws.md 3). Then for each square row by row the places of its cell's patches past the first (`stands::places`, `PLACE_ROW`, 6): of each, its point, x and y in squares from the map's north-west corner, and its reach in squares (all 0 for a patch not in use), from the ground the core finds for it (`inside::patch_ground`): the page draws a point of the square in the first whose reach holds it, the edge ragged by noise (cover_field.wgsl `cell_patch_at`), else in the first patch, and there the kinds of that patch alone, its own square's, not blended with its neighbours' (canopy.ts `patchOf`). Then the level of each pond, m (`World::pond_levels`, NaN where no body holds it, or where its body holds
+less than `DRY_M` (0.1 m) of liquid on its mean over its surface: a basin soaked, drawn as ground), at which the page draws the pond's liquid flat over the ground that lies under it, the pond each texel names. Then the fetch of each pond, m: the side of a square as large as its liquid's surface (`Pool::area`), the length of open water a wind blows over, by which the page sizes a lake's waves (0 where it holds none). Last the kinds a square holds in this frame (`stands::kinds`). **The samples' rock** (`Ground::rock`,
 `tape/src/ground/rock.rs`), made once with the ground: of each of the terrain's samples, row by row, four 16-bit floats:
 the depth of its loose ground, m (`Samples::loose`), the largest stone its channel moves, m: `STONE_M` (0.001) ×
 √(the area it drains, m²) × the slope of its reach, 2 samples up and down it (the stream power the wear reads, K √A S; Bagnold 1966),
@@ -265,7 +267,7 @@ over the square's width, how wet the ground is, the share of the ground the cove
 ground's colour), coloured by the same rules; with no kinds in a tape, its cover is one foliage colour as closed as its
 capture area closes the ground.
 Close up the live viewer also asks for the slots of cover of the cells in view (`tape::things`, the record layout in
-`tape/src/things.rs`: the names and units of the genes it holds, then each slot's kind, built cover and capture area per m² and genes); they are drawn as plants, and
+`tape/src/things.rs`: the names and units of the genes it holds, then of each cell the share and age of each patch of its cover, and each slot's kind, built cover and capture area per m², genes and patch), which its panel shows (web/src/slots.ts: a patch's share and how many years ago it was made); they are drawn as plants, and
 are not recorded.
 
 ## `series.csv`: the world
@@ -292,7 +294,7 @@ are not recorded.
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) that are rivers (`tape::is_river`): a liquid flux over `tape::RIVER_FLOOR` and over `tape::RIVER_CATCH` times what the cell's own area sheds (`catch`). The report counts the same way |
 | `river_flux` | mol/s | the liquid flux of those river cells, summed (`tape::river_flux`): the water the count stands for |
 | `cells` | | the cells of the map |
-| `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`Config::variety` a cell at most), and its mass |
+| `cover_slots`, `cover_kg` | , kg | slots of cover in the world (`Config::variety` a cell at most, `cover::SLOTS` in a cell of patches), and its mass |
 | `cover_died_<cause>` | kg/yr | cover that died in the year by cause: `spent` (upkeep unpaid), `age`, `phase` (frost), `taken` (by a taker, `contract::take`), `broken` (pressed loose, `contract::press`), `drowned` (its ground went under the standing liquid, `cover::live`), `flame` (burnt or scorched to death, `flame`); `lack` is never written to |
 | `cover_budget_<flow>` | J/yr | the flows of the cover's budget in the year, + into the cover (`cover::BUDGET`): what its parts and the seeds lying on the ground hold as fuel changes by their sum. `stored` (light reaction); the upkeep's parts `basal`, `capacity`, `firmness`, `leaves`, `sapwood`, `root_breath`, `root_renew`; `building` (its work and fixing); `shed`, `died`, `exuded` (fuel its roots give the ground), `seeds` (out and landed), `seeds_died` (seeds lying that wore out or froze), `takers` (taken or pressed loose through the contract), `placed`, `rounded`, `burnt` (burnt or killed by flames, `flame`) |
 | `burnt_land` | 1/yr | the share of the land's area flames burnt in the last year's months (`flame::burnt_year` over every cell's land, `contract::land`, the land flames burn on): a cell burnt twice counts twice |

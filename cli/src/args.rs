@@ -38,12 +38,15 @@ pub const USAGE: &str = "usage:
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
     --variety N           kinds of cover a cell may hold, a setting of the world from 1 to 16 (cover::SLOTS) (8)
     --clear YEAR:X,Y:SHARE
-                          an edit at the start of that year: the share SHARE of the cell at square X,Y made a new
-                          patch whose plants die above the ground (World::clear); may be given more than once
+                          an edit at the start of that year: the share SHARE of the cell at the place X,Y (in
+                          squares from the map's north-west corner, fractions allowed: 3.5,2.5 is the middle of
+                          square 3,2) made a new patch about that place whose plants die above the ground
+                          (World::clear); may be given more than once
     --split YEAR:X,Y:SHARE
                           as --clear, the new patch alike to the rest, nothing dying: a control (World::split)
     --plant YEAR:X,Y:KIND an edit at the start of that year: the starting kind of row KIND of worldgen::life::KINDS
-                          placed in the newest patch of the cell at square X,Y (cover::place); may be given more than once
+                          placed in the newest patch of the cell at the place X,Y (cover::place); may be given more
+                          than once
     --chunks N            a speed setting: the cells cut into N runs for the cover's parallel passes (64; any count
                           gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
@@ -56,7 +59,8 @@ pub const USAGE: &str = "usage:
     --window X,Y,W,H      the window from column X and row Y, W x H squares, fractions allowed (the whole map)
     --px N                pixels across; the height follows the window (512)
     --layer NAME          map, temperature, rain, life, depth, land (the map with no rivers), kinds (the starting
-                          kind whose cover leads each cell), or of the loose ground: conductivity, water (what it
+                          kind whose cover leads each cell; life and kinds draw each patch of a cell's cover on
+                          its own ground), or of the loose ground: conductivity, water (what it
                           holds for roots), yield (rain less what rises), wetness (of its pores), rise (what rises
                           from it), soil (the cell's texture), organic (its organic share), minerals (it holds),
                           erodibility, slow (its slow organic matter), rot (how fast its dead frame rots), texture
@@ -229,7 +233,7 @@ impl Args {
                 let due = || {
                     let [y, at, what]: [&str; 3] = text.split(':').collect::<Vec<_>>().try_into().ok()?;
                     let (x, z) = at.split_once(',')?;
-                    Some(Due { year: y.parse().ok()?, square: (x.parse().ok()?, z.parse().ok()?), edit: make(what)? })
+                    Some(Due { year: y.parse().ok()?, place: [x.parse().ok()?, z.parse().ok()?], edit: make(what)? })
                 };
                 out.push(due().ok_or(format!("{flag} {text}: want YEAR:X,Y:SHARE (a share from 0 to 1) or, for --plant, YEAR:X,Y:KIND (a row of the starting kinds)"))?);
             }

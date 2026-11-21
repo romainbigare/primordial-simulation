@@ -14,6 +14,6 @@ pub use ground::{depths, half, unhalf, Ground, ALONG_WRAP_M, FLOOD, GUTTER, LINE
 pub use layers::{fields, means, pixels, raster, quantise, Fields, is_river, river_count, LAYERS, RIVER_CATCH, RIVER_FLOOR, STANDING_M};
 pub use rec::{read_viewer_file, Kept, Recorder, Spent, TapeFiles, Written, TAPE};
 pub use things::things;
-pub use stands::KIND_ROW;
+pub use stands::{KIND_ROW, PLACE_ROW};
 pub use table::{Table, ROW};
 pub use snapshot::{fingerprint, load_snapshot, open_snapshot, read_snapshot, snapshot_bytes, write_snapshot};

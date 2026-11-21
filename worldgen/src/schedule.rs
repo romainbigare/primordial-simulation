@@ -20,18 +20,20 @@ pub struct Schedule {
     pub edits: Vec<Due>,
 }
 
-/// An edit due in a year: the square of the map whose centre's cell it acts on (`World::cell_of`), and what it does.
+/// An edit due in a year: the place it is made at, in squares from the map's north-west corner (x east, y south: 3.5,
+/// 2.5 is the middle of square 3, 2), whose cell it acts on (`World::cell_under`), and what it does.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Due {
     pub year: u64,
-    pub square: (usize, usize),
+    pub place: [f64; 2],
     pub edit: Edit,
 }
 
 /// An edit of a cell's cover (`Schedule::edits`).
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Edit {
-    /// The share of the cell made a new patch whose plants die above the ground (`World::clear`)
+    /// The share of the cell made a new patch whose plants die above the ground (`World::clear`), about the cell's
+    /// sample under the edit's place (`World::sample_in`)
     Clear(f64),
     /// The share of the cell made a new patch alike to the rest, a control that changes nothing (`World::split`)
     Split(f64),
@@ -41,12 +43,12 @@ pub enum Edit {
 }
 
 impl Edit {
-    /// Make the edit on the cell `i` of `w`; returns what it did, in a line.
-    fn make(&self, w: &mut World, i: usize) -> String {
+    /// Make the edit on the cell `i` of `w` at its sample `at`; returns what it did, in a line.
+    fn make(&self, w: &mut World, i: usize, at: usize) -> String {
         let c = w.life.cover(i);
         let newest = (0..c.patch_count()).rev().min_by(|&a, &b| c.patches[a].age.total_cmp(&c.patches[b].age)).unwrap_or(0);
         let (done, what) = match *self {
-            Edit::Clear(s) => (w.clear(i, s), format!("cleared {s} of the cover of cell {i} as a new patch")),
+            Edit::Clear(s) => (w.clear(i, s, Some(at)), format!("cleared {s} of the cover of cell {i} as a new patch")),
             Edit::Split(s) => (w.split(i, s), format!("split {s} of the cover of cell {i} off as a new patch alike to the rest")),
             Edit::Plant(row) => {
                 let kind = &KINDS[row];
@@ -86,7 +88,8 @@ impl Schedule {
             pcore::month_start(w);
         }
         for d in due {
-            said.push(d.edit.make(w, w.cell_of(d.square)));
+            let i = w.cell_under(d.place);
+            said.push(d.edit.make(w, i, w.sample_in(i, d.place)));
         }
         said
     }

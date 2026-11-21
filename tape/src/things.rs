@@ -4,8 +4,10 @@
 //!
 //! The list is little-endian: `u16` genes, then each gene's name and unit (`cover::GENES`), each a `u8` length and
 //! its UTF-8 bytes; `u32` cells, then for each cell `u32` its index, `f32` its west, north, east and south
-//! edges in squares and its area in m², `u16` its slots of cover, then each slot: `u32` starting kind, `f32` built cover
-//! kg/m², capture area m²/m², its genes in the order the list names them, `u8` full (1) or not, then 3 zeros.
+//! edges in squares and its area in m², `u8` the patches of its cover in use, then of each `f32` its share of the cell
+//! and its age, years since it was made (`cover::Patch`), `u16` its slots of cover, then each slot: `u32` starting
+//! kind, `f32` built cover kg/m², capture area m²/m², its genes in the order the list names them, `u8` full (1) or not,
+//! `u8` its patch (`Cover::patch`), then 2 zeros.
 
 use pcore::cover::{Parts, GENES, NG};
 use pcore::World;
@@ -36,6 +38,9 @@ fn cell(w: &World, i: usize, out: &mut Out) {
     let slots: Vec<usize> = if parts.is_some() { cover.held().collect() } else { vec![] };
     out.u32(i as u32);
     w.map.bounds(i).into_iter().chain([area]).for_each(|v| out.f32(v));
+    let patches = &cover.patches[..cover.patch_count()];
+    out.0.push(patches.len() as u8);
+    patches.iter().for_each(|p| [p.share, p.age as f64].into_iter().for_each(|v| out.f32(v)));
     out.u16(slots.len().min(u16::MAX as usize) as u16);
     if let Some(p) = parts {
         let mm = p.mm(&w.chem);
@@ -44,7 +49,7 @@ fn cell(w: &World, i: usize, out: &mut Out) {
             out.f32(cover.built(&mm, x) / area);
             out.f32(cover.leaf(&mm, x) / area);
             cover.genes[x][..NG].iter().for_each(|&g| out.f32(g as f64));
-            out.0.extend([cover.full[x] as u8, 0, 0, 0]);
+            out.0.extend([cover.full[x] as u8, cover.patch[x], 0, 0]);
         }
     }
 }

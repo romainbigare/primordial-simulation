@@ -298,8 +298,10 @@ share and, of the drier rest, the share its liquid fills from the bottom up over
 the share the cell's mean fill gives; where it holds less it adds the wet strips of a drier cell. What stands where the ground lies under the cells' level; each channel as wide as
 the channel law makes its own sample's discharge (`World::discharge`, 1.2); each mark of cover by
 the activity of each kind of the squares about it at the mark's foot (`cover::activity`), with the cell's pores half full and
-the liquid departing about its samples' mean index, so where a plant stands is the place's, not the month's. A picture need not keep a cell's mean
-exactly (the core keeps the books).
+the liquid departing about its samples' mean index, so where a plant stands is the place's, not the month's. Each
+patch of a cell's cover (3) stands on its own ground (`inside::patch_ground`): a kind's marks and its field only on
+its patch's ground, the patch's edge drawn smooth through its samples and ragged, its plants per m² of that ground. A
+picture need not keep a cell's mean exactly (the core keeps the books).
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step: the cover its
@@ -1415,8 +1417,13 @@ seeds fill it:
   its plants shade (`canopy::shade`, `Cover::growth`), crowd (`stand::thin`), fill their crowns over (`Cover::crown`)
   and join (`merge_alike`) the plants of their own patch alone. The soil, its liquid and minerals and the air stay the
   cell's: each patch draws the key liquid (`canopy::drawn`) and the minerals (`grow::grow`) of its share of the cell's
-  ground. The light its leaves catch is found per patch (1.4). A patch has no place in its cell: it lies over the
-  cell's ground as the cell does, so the seeds lying are one pool. A cell of one patch is the cell above, using its
+  ground. The light its leaves catch is found per patch (1.4). The laws know no place of a patch in its cell: it
+  lies over the cell's ground as the cell does, so the seeds lying are one pool. For the pictures a patch past the
+  first keeps one point, the sample of its cell where it was made (`Patch::at`, saved), and its ground is found, never
+  stored (`inside::patch_ground`): each patch past the first in turn takes the share of the cell's samples it holds
+  (rounded, at least one), those nearest its point by the distance between their centres in metres (ties by their
+  order) of the samples the patches before it left, so no two overlap; the rest of the cell is the first patch. The
+  tape, the page and `ew view` all read it there. A cell of one patch is the cell above, using its
   first `variety` slots. Once a year (`patches::year`, after the year's last month) each patch ages a year, and two
   **alike** patches fuse, the younger into the older (their shares added, the age the mean by share): the same
   starting kinds hold them (a kind holds a patch where its slots hold at least `HOLDS`, 0.1, of the patch's built
@@ -1424,11 +1431,13 @@ seeds fill it:
   `APART` is. Its slots that meet slots of their kind join them (`merge_alike`), a patch of more than `variety` slots
   joins its nearest two until it holds `variety` (`seed::room`), and a cell back to one patch moves its slots into its
   first `variety`. **Edits** make patches (handover.md 11: an action is a physics edit): `World::clear` makes the share
-  s of a cell a new patch of age 0, every patch giving the share s of its ground, and kills the plants above the
+  s of a cell a new patch of age 0 about a sample of the cell (the edit's place, `World::sample_in`; else the cell's
+  centre), every patch giving the share s of its ground, and kills the plants above the
   ground there: the share s of every slot's amounts and plants goes to the cell's ground with its heat (`Cover::cut`,
   as a press breaks it, booked as the cover's deaths), its seeds lying, cured leaves and dead walls staying; where
-  `PATCHES` are in use the new patch joins the one most alike to bare ground, whose tallest plants stand lowest.
-  `World::split` makes the share s of a cell of one patch a new patch alike to it, each slot giving it the share s of
+  `PATCHES` are in use the new patch joins the one most alike to bare ground, whose tallest plants stand lowest, and
+  that patch keeps its own point.
+  `World::split` makes the share s of a cell of one patch a new patch alike to it at the cell's centre, each slot giving it the share s of
   its amounts and plants, nothing dying: a control, as each patch stands per m² as the cell did
   (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). `ew run`
   makes them at the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Edit`).

@@ -286,7 +286,7 @@ fn a_clearing_keeps_the_books_and_fuses_back() {
     let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
     let kg = |w: &World| w.life.cover(i).held().map(|x| w.life.cover(i).kg(&mm, x)).sum::<f64>();
     let before = kg(&w);
-    assert!(w.clear(i, CLEARED));
+    assert!(w.clear(i, CLEARED, None));
     println!("cover {before} kg, cleared {} kg; patches {:?}", kg(&w), w.life.cover(i).patches);
     assert!((kg(&w) / before - (1.0 - CLEARED)).abs() < 1e-12, "the clearing took {} of the cover", 1.0 - kg(&w) / before);
     books.assert_kept(&w, 1e-9);
@@ -300,4 +300,33 @@ fn a_clearing_keeps_the_books_and_fuses_back() {
     let c = w.life.cover(i);
     assert!(c.held().all(|x| x < w.cfg.variety), "slots past the world's variety: {:?}", c.root);
     books.assert_kept(&w, 1e-9);
+}
+
+/// A patch lies on its ground (laws.md 3, `inside::patch_ground`): of two clearings made at their places, one at the
+/// cell's edge and one at its middle over it, each holds its share of the cell's samples to within one, the nearest to
+/// its point of those the patches before it left (the later clearing's share taken from the earlier one's too), no
+/// sample in two, and the first patch holds the rest.
+#[test]
+fn a_patch_holds_its_share_of_the_samples_nearest_its_point() {
+    let (mut w, i) = grown(LIGHT_ROW, 0.1, 8);
+    let [w0, n0, e0, s0] = w.map.bounds(i);
+    let edge = w.sample_in(i, [w0, (n0 + s0) / 2.0]);
+    assert!(w.clear(i, 0.1, Some(edge)) && w.clear(i, 0.2, None));
+    let (g, c) = (pcore::inside::patch_ground(&w, i), w.life.cover(i));
+    let n = g.side * g.side;
+    assert!(n > 100 && e0 > w0 && c.patch_count() == 3, "a cell of {n} samples, {} patches", c.patch_count());
+    let at = |p: usize| [(p % g.side) as f64, (p / g.side) as f64];
+    for k in 0..c.patch_count() {
+        let mine: Vec<usize> = (0..n).filter(|&p| g.of[p] as usize == k).collect();
+        let off = mine.len() as f64 - c.patches[k].share * n as f64;
+        assert!(off.abs() <= (if k == 0 { c.patch_count() - 1 } else { 1 }) as f64, "patch {k}: {} samples for a share {}", mine.len(), c.patches[k].share);
+        if k == 0 {
+            continue;
+        }
+        let point = at(c.patches[k].at as usize);
+        let far = |p: usize| (at(p)[0] - point[0]).hypot(at(p)[1] - point[1]);
+        let farthest = mine.iter().map(|&p| far(p)).fold(0.0, f64::max);
+        let left = (0..n).filter(|&p| g.of[p] == 0 || g.of[p] as usize > k).map(far).fold(f64::INFINITY, f64::min);
+        assert!(farthest <= left, "patch {k}: a sample {farthest} samples from its point, one it left {left}");
+    }
 }

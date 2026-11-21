@@ -11,9 +11,9 @@ const K = { root: 0, kg: 1, height: 4, cover: 6, walls: 19 };
 export function kinds(page, [x, y]) {
   return page.evaluate(({ x, y, K }) => {
     const e = window.__ew, m = e.world.meta, t = m.tiles, rows = e.live.table, i = Math.floor(y) * m.w + Math.floor(x);
-    const land = rows[1 + t.row * i + 10], at = 1 + m.w * m.h * t.row, out = [];
-    for (let k = 0; k < t.kinds; k++) {
-      const o = at + (i * t.kinds + k) * t.kind_row;
+    const land = rows[1 + t.row * i + 10], at = 1 + m.w * m.h * t.row, kinds = rows[rows.length - 1], out = [];
+    for (let k = 0; k < kinds; k++) {
+      const o = at + (i * kinds + k) * t.kind_row;
       if (rows[o + K.root] < 0 || rows[o + K.kg] <= 0) continue;
       const walls = 10 ** rows[o + K.walls] / (1 + 10 ** rows[o + K.walls]);
       out.push(`kind ${rows[o + K.root]} ${rows[o + K.height].toFixed(1)} m, crowns ${(100 * rows[o + K.cover]).toFixed(0)} %, walls ${(100 * walls).toFixed(0)} %`);
