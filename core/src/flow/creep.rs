@@ -1,6 +1,6 @@
 //! The yearly part of Flow: creep of loose solids.
 
-use super::{bare_share, land::{lift, molten, rise, wet_now}, on_land, potential::apply, range, Scratch};
+use super::{bare_share, land::{lift, molten, rise, shares_now}, on_land, potential::apply, range, Scratch};
 use crate::{store::{Batch, Class}, World};
 
 /// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
@@ -40,7 +40,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             if x > 0.0 {
                 let (p, m) = (&s.sp[k], (x * r * f * soft[q]).min(x));
                 (amt[q * n + a], amt[q * n + b], out[q]) = (amt[q * n + a] - m, amt[q * n + b] + m, m);
-                let (da, db) = (rise(p, ta, wet_now(s, k, a), -m, area[a]), rise(p, tb, wet_now(s, k, b), m, area[b]));
+                let (da, db) = (rise(p, ta, shares_now(s, k, a), -m, area[a]), rise(p, tb, shares_now(s, k, b), m, area[b]));
                 (c, slid) = (c + m * p.cp, slid + m * p.v[0] * soft[q]);
                 (ua, ub) = ([ua[0] + da[0], ua[1] + da[1]], [ub[0] + db[0], ub[1] + db[1]]);
             }

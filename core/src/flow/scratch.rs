@@ -35,8 +35,7 @@ pub(super) struct Sp {
 impl Sp {
     /// Its liquid share in ground at `t` K where the share `molten` of it is molten and the minerals of growth stay
     /// dissolved by the share `free` (`State::dissolved`): none at or over its boiling point; of a mineral only what
-    /// stays dissolved, the rest held on the exchange sites, a solid of the ground that neither moves nor fills
-    /// (laws.md 4).
+    /// stays dissolved, the rest held on the exchange sites, which neither moves, nor fills, nor takes room (laws.md 4).
     #[inline]
     pub(super) fn liquid(&self, t: f64, molten: f64, free: f64) -> f64 {
         if t >= self.boil {
@@ -48,11 +47,11 @@ impl Sp {
         }
     }
     /// The volume a mol of it takes in ground at `t` K (as `liquid`), m³: its liquid share at its liquid's molar volume,
-    /// the rest at its solid's; none as a gas.
+    /// what is not molten at its solid's; none as a gas, nor what the exchange sites hold.
     #[inline]
     pub(super) fn volume(&self, t: f64, molten: f64, free: f64) -> f64 {
         let l = self.liquid(t, molten, free);
-        if t >= self.boil { 0.0 } else { (1.0 - l) * self.v[0] + l * self.v[1] }
+        if t >= self.boil { 0.0 } else { (1.0 - molten) * self.v[0] + l * self.v[1] }
     }
 }
 

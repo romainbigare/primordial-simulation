@@ -11,6 +11,7 @@ mod edge;
 mod exchange;
 mod radiation;
 mod rise;
+mod draw;
 mod drift;
 mod planet;
 mod outs;
@@ -22,6 +23,7 @@ mod step;
 mod stretch;
 mod surf;
 mod together;
+mod weather;
 mod wind;
 
 pub(super) use corners::Corners;

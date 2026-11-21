@@ -65,24 +65,24 @@ pub(super) fn reconcile(w: &World, s: &Scratch, i: usize, p: &mut Parts) {
     }
 }
 
-/// The liquid over the pores of the land of `p` in cell `i` (found as `f`, porosity `por`) runs down to the liquid's top,
+/// The liquid over the pores of the land of `p` (found as `f`, porosity `por`) runs down to the liquid's top,
 /// as the ground inside a cell drains to its lowest, each liquid (`Sp::liquid`) with its heat at the land's
 /// temperature; the land keeps what its pores hold, its own soil's liquid. Whether any moved.
-pub(super) fn settle(s: &Scratch, i: usize, p: &mut Parts, f: &[Found; PARTS], por: f64) -> bool {
+pub(super) fn settle(s: &Scratch, p: &mut Parts, f: &[Found; PARTS], por: f64) -> bool {
     let over = f[LAND].over(por);
     if over <= 0.0 {
         return false;
     }
-    land_to_top(s, i, p, (f[LAND].th.t, &|k| f[LAND].th.molten(k)), over / f[LAND].l[2]);
+    land_to_top(s, p, (f[LAND].th.t, f[LAND].free, &|k| f[LAND].th.molten(k)), over / f[LAND].l[2]);
     true
 }
 
-/// The share `part` of the liquid of the land of `p` in cell `i` goes to the liquid's top: of each liquid (`Sp::liquid`,
-/// at `t` K, the share `molten(k)` of it molten), with its heat at `t`.
-fn land_to_top(s: &Scratch, i: usize, p: &mut Parts, (t, molten): (f64, &dyn Fn(usize) -> f64), part: f64) {
+/// The share `part` of the liquid of the land of `p` goes to the liquid's top: of each liquid (`Sp::liquid`, at `t` K,
+/// the share `molten(k)` of it molten, of a mineral the share `free` dissolved), with its heat at `t`.
+fn land_to_top(s: &Scratch, p: &mut Parts, (t, free, molten): (f64, f64, &dyn Fn(usize) -> f64), part: f64) {
     let mut heat = 0.0;
     for &k in s.state.vary.iter().filter(|&&k| t < s.sp[k].boil) {
-        let m = p.amt[k][LAND] * s.sp[k].liquid(t, molten(k), s.state.dissolved[i]) * part;
+        let m = p.amt[k][LAND] * s.sp[k].liquid(t, molten(k), free) * part;
         p.amt[k][LAND] -= m;
         p.amt[k][TOP] += m;
         heat += m * (s.sp[k].cp * t + s.sp[k].lf);
@@ -98,7 +98,7 @@ pub(in crate::flow) fn drain_land(s: &mut Scratch, i: usize, part: f64) {
     let Some(land) = s.mixed(i).map(|m| m.piece[LAND].clone()) else { return };
     let mut parts = std::mem::take(&mut s.state.parts);
     if let Some(Some(p)) = parts.get_mut(i) {
-        land_to_top(s, i, p, (land.tg, &|k| land.molten(k)), part);
+        land_to_top(s, p, (land.tg, land.free, &|k| land.molten(k)), part);
     }
     s.state.parts = parts;
 }
@@ -124,7 +124,7 @@ pub(super) fn strip(s: &Scratch, i: usize, p: &mut Parts, (f, por): (&Found, f64
         let pore = if f.l[2] > 0.0 { f.pores(por).min(f.l[2]) / f.l[2] } else { 0.0 };
         // Of each substance it gives, the share of what the bottom holds and the heat of a mol.
         let solids = s.state.fixed.iter().map(|&k| (k, y, s.sp[k].cp * t));
-        let liquids = s.state.vary.iter().filter(|&&k| t < s.sp[k].boil).map(|&k| (k, s.sp[k].liquid(t, f.th.molten(k), s.state.dissolved[i]) * pore * y, s.sp[k].cp * t + s.sp[k].lf));
+        let liquids = s.state.vary.iter().filter(|&&k| t < s.sp[k].boil).map(|&k| (k, s.sp[k].liquid(t, f.th.molten(k), f.free) * pore * y, s.sp[k].cp * t + s.sp[k].lf));
         let mut h = -d * s.skin[i] * t;
         for (k, x, per) in solids.chain(liquids) {
             let m = p.amt[k][b] * x;
@@ -162,17 +162,20 @@ pub(in crate::flow) enum Leaves {
 
 /// What Flow's liquid laws moved of the cells of parts among `cells` (`liquid::book`): what came in gathers in the
 /// liquid's top; what left, as `leaves` says: of the top and the deep by their shares of their liquid and of the land
-/// only what they lack (only liquid moves), or of a land all of it; and the heat that left by the share of the mol
-/// each gave. Of each of `ks` what each cell holds now less `before` (`[q * cells.len() + c]`), mol, and of its heat
-/// now less `heat`, J.
+/// only what they lack (only liquid moves), or of a land all of it; the land and the deep give the heat of what they
+/// gave at their own temperature and phases (`Piece::heat_of`), and the top takes the rest of the node's change of heat,
+/// as it takes what came in. Of each of `ks` what each cell holds now less `before` (`[q * cells.len() + c]`), mol, and
+/// of its heat now less `heat`, J.
 pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks, before): (&[usize], &[f64]), heat: &[f64], leaves: Leaves) {
     let (n, len) = (w.mesh.cells().n(), cells.len());
     for (c, &i) in cells.iter().enumerate() {
         // Each part's liquid of each substance, mol, as its last solve found it.
         let liquid = s.mixed(i as usize).map(|m| m.piece.each_ref().map(|q| ks.iter().map(|&k| q.liquid(k, &s.sp[k])).collect::<Vec<f64>>()));
+        // The heat a mol of each of `ks` holds in the land and in the deep, J.
+        let per_mol = s.mixed(i as usize).map(|m| [LAND, DEEP].map(|x| ks.iter().map(|&k| m.piece[x].heat_of(k, &s.sp[k])).collect::<Vec<f64>>()));
         let Some(Some(p)) = s.state.parts.get_mut(i as usize) else { continue };
-        // What left, mol, and of it what the land and the deep gave.
-        let (mut left, mut land, mut deep) = (0.0, 0.0, 0.0);
+        // The heat of what the land and the deep gave, J.
+        let (mut land, mut deep) = (0.0, 0.0);
         for (q, &k) in ks.iter().enumerate() {
             let d = w.store.amounts(Class::Ground)[k * n + i as usize] - before[q * len + c];
             if d >= 0.0 {
@@ -196,11 +199,12 @@ pub(in crate::flow) fn to_liquid(w: &World, s: &mut Scratch, cells: &[u32], (ks,
             gain(p, k, LAND, d * by_land);
             gain(p, k, TOP, d * (1.0 - by_land - by_deep));
             gain(p, k, DEEP, d * by_deep);
-            (left, land, deep) = (left - d, land + was[0] - p.amt[k][LAND], deep + was[1] - p.amt[k][DEEP]);
+            if let Some(h) = &per_mol {
+                (land, deep) = (land + (was[0] - p.amt[k][LAND]) * h[0][q], deep + (was[1] - p.amt[k][DEEP]) * h[1][q]);
+            }
         }
         let e = w.store.heat(Class::Ground)[i as usize] - heat[c];
-        let (by_land, by_deep) = if left > 0.0 { (land / left, deep / left) } else { (0.0, 0.0) };
-        p.heat = [p.heat[LAND] + e * by_land, p.heat[TOP] + e * (1.0 - by_land - by_deep), p.heat[DEEP] + e * by_deep];
+        p.heat = [p.heat[LAND] - land, p.heat[TOP] + e + land + deep, p.heat[DEEP] - deep];
     }
 }
 

@@ -40,6 +40,9 @@ const LIVE_VARIETY = 8, VARIETY_MOST = 12;
 const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['Warm: 5° to 50°', '5,50']];
 /** The large shapes a live island may have: a name, and the URL's word for it. The first is the page's. */
 const SHAPES: string[][] = [['Drawn from the seed', 'drawn'], ['One island', 'one']];
+/** The weathers a live island may have: a name, and the URL's word for it (`ew run --weather`). The first is the
+ * page's: strong, the eddies' measured speed; soft, the speed their diffusion alone gives (the core's `soft_weather`). */
+const WEATHERS: string[][] = [['Strong', 'strong'], ['Soft', 'soft']];
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
 
@@ -306,6 +309,10 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
   const shapes = $<HTMLSelectElement>('shape');
   shapes.innerHTML = SHAPES.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
   shapes.value = SHAPES.some(s => s[1] === q.get('shape')) ? (q.get('shape') as string) : SHAPES[0][1];
+  // The weather: from the URL's `weather=strong|soft` or the first (`WEATHERS`).
+  const weathers = $<HTMLSelectElement>('weather');
+  weathers.innerHTML = WEATHERS.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
+  weathers.value = WEATHERS.some(s => s[1] === q.get('weather')) ? (q.get('weather') as string) : WEATHERS[0][1];
   live?.stop();
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
@@ -375,7 +382,7 @@ function newWorld(): void {
   playing = false; saved = null;
   say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
   banded ||= band[0] < band[1];
-  live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn', variety);
+  live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn', variety, $<HTMLSelectElement>('weather').value === 'soft');
 }
 /** Stand the live world on the saved world `gz` (the gzip of a snapshot of `ew run`). */
 function openSaved(gz: ArrayBuffer): void {
@@ -387,6 +394,7 @@ $<HTMLInputElement>('saved').onchange = e => { const f = (e.target as HTMLInputE
 $('live').onsubmit = e => { e.preventDefault(); newWorld(); };
 $('band').onchange = () => newWorld();
 $('shape').onchange = () => newWorld();
+$('weather').onchange = () => newWorld();
 
 requestAnimationFrame(loop);
 const embedded = document.getElementById('world-data')?.textContent?.trim();
