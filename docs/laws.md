@@ -1640,9 +1640,9 @@ dissolved: sites of 1,060 mol of charge a m³ of fine particles and 2,800 a m³ 
 in the V m³ of the cell's other liquids (`soil::dissolved`), found when Flow builds the state of its ground in full
 (each month's start) and kept until the next (`State::dissolved`). Only that share is liquid (`Sp::liquid`): it moves
 with the liquid that sinks, flows through the pores and runs off (`flow::liquid::mobile`, `basin::movable`) and takes
-its liquid volume in the pores and over them. The rest is part of the ground everywhere Flow reads it: a solid at the
-solid's volume in the solid surface, in no pores and no cover, that neither moves nor fills (`land::layers`,
-`stack::ground_layers`, `land::rise`); roots take from all of it (the sites give back to the liquid as fast as roots
+its liquid volume in the pores and over them. The rest is part of the ground everywhere Flow reads it: ions held on
+the faces of the particles, with the solids' mass but taking no room, in no pores and no cover, that neither move nor
+fill (`land::layers`, `stack::ground_layers`, `land::rise`); roots take from all of it (the sites give back to the liquid as fast as roots
 take from it). So coarse ground lets the rain wash its
 minerals away and fine and organic ground keeps them: a loam's 2 m of loose ground holds some 97% of its minerals
 on its sites at field capacity, a coarse ground some 90%, so the coarse loses them three to four times as fast. **Nitrogen mineral (12)**: placed when life starts (`worldgen::life::soil`)
