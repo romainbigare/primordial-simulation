@@ -69,7 +69,7 @@ pub(super) fn most_plants(ph: &Physics, kg: f64) -> f64 {
 
 /// The ground a plant of `mass` kg of built cover holds where its stand is as dense as the self-thinning law allows, m²:
 /// (mass / `thin_kg`)^(2/3) (`most_plants`: n plants a m² of mean mass m fill the ground at n (m / thin_kg)^(2/3) = 1).
-pub(super) fn plant_ground(ph: &Physics, mass: f64) -> f64 {
+pub fn plant_ground(ph: &Physics, mass: f64) -> f64 {
     (mass / ph.thin_kg).powf(2.0 / 3.0)
 }
 

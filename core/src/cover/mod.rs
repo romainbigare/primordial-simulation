@@ -25,6 +25,7 @@ mod upkeep;
 
 pub use around::{dimmed, over, pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
+pub use gaps::GAP_LEAST;
 pub use grow::{live, step, Books};
 pub use groups::Sizes;
 pub(crate) use build::per_input;
@@ -35,7 +36,7 @@ pub use patches::{Patch, PATCHES};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use soak::{aired, breath, fill_now, footing, gains, moist, soak, strips_share, working, Footing, Soak};
-pub use stand::{height, loose_bins, stem, BINS};
+pub use stand::{height, loose_bins, plant_ground, stem, BINS};
 
 use crate::life::WET_TISSUE;
 use crate::chem::Chemistry;
@@ -163,8 +164,7 @@ pub struct Cover {
     pub(crate) seeds: Vec<Seed>,
     /// Per slot: the patch of its cell it stands in (`patches`)
     pub patch: [u8; SLOTS],
-    /// Per slot: the ground the crowns of its large plants that died uncrowded held since its patch last opened a gap,
-    /// m² (`Cover::fell`, `gaps`)
+    /// Per slot: the ground the crowns of its large plants that died uncrowded this year held, m² (`Cover::fell`, `gaps`)
     pub fell: [f64; SLOTS],
     /// Its patches, those in use first (`Patch::share` above zero): each a share of its cell and an age
     pub patches: [Patch; PATCHES],

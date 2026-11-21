@@ -283,6 +283,10 @@ fn a_split_that_changes_nothing_changes_nothing() {
     panic!("no year's end in a year");
 }
 
+/// Years a clearing of herbs is given to fuse back: until its cover per m² is near the rest's (`ALIKE_COVER`), which
+/// takes this world's thinning herb stand 67 years (seen).
+const CLEARING_YEARS: usize = 70;
+
 /// A clearing keeps the books (laws.md 3): `CLEARED` of a cell of herbs made a patch whose plants die (`World::clear`)
 /// loses that share of its cover to its ground, the elements and energy kept; the herbs fill the clearing again from
 /// the seeds lying, and once the two patches are alike they fuse back into one, its slots in the world's first
@@ -300,7 +304,7 @@ fn a_clearing_keeps_the_books_and_fuses_back() {
     books.assert_kept(&w, 1e-9);
     let mut years = 0;
     while w.life.cover(i).patch_count() > 1 {
-        assert!(years < 10, "the clearing did not fuse back in {years} years: {:?}", per_patch(&w, i));
+        assert!(years < CLEARING_YEARS, "the clearing did not fuse back in {years} years: {:?}", per_patch(&w, i));
         (0..w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
         years += 1;
         println!("year {years}: kg per m2 of each patch {:?}", per_patch(&w, i));
@@ -339,36 +343,42 @@ fn a_patch_holds_its_share_of_the_samples_nearest_its_point() {
     }
 }
 
-/// Years a stand of trees is given to open a gap.
-const GAP_YEARS: usize = 5;
-/// How much more ground a gap opens than its canopy's fallen crowns held a month before, a share: the deaths of the
-/// year's last month (seen: 0.08).
-const LAST_MONTH: f64 = 0.2;
+/// How much the repair gene of a stand's trees falls for the last month of a year (log10), a die-off: their wear life
+/// a thousandth of theirs, so about half of them die in that month (seen: 0.49).
+const DIE_OFF: f32 = 3.0;
+/// How near a gap's share of its cell is to the crown ground of the canopy that died in its year, a share: the masses
+/// of the dead trees move within the month.
+const CROWNS: f64 = 0.02;
 
-/// Canopy trees that fall open a gap (laws.md 3, `cover::gaps`): in a stand of trees, the year's end makes the ground
-/// the crowns of the dead trees of its first patch held a patch of its own, of their share of the cell (`Cover::fell`
-/// of its slots taller than `surface_m` over `cover::ground` a month before, and the deaths of the year's last month),
-/// the stand's tallest plants all left in the first patch; the books are kept.
+/// Fallen trees open a gap at a die-off (laws.md 3, `cover::gaps`): in a stand of trees, a year of the canopy's own
+/// deaths opens none; a year whose last month kills a large share of its trees (`DIE_OFF`) makes the ground their
+/// crowns held (`cover::plant_ground` of each, with the year's earlier deaths, `Cover::fell`) a patch of its own, to
+/// `CROWNS`, the stand's living trees all left in the first patch; the books are kept.
 #[test]
-fn fallen_trees_open_a_gap_of_their_crowns() {
+fn a_die_off_opens_a_gap_of_its_crowns() {
     let (mut w, i) = grown(TREE_ROW, 5.0, 8);
     let books = testkit::Books::now(&w);
     let p = cover::Parts::of(&w.chem).expect("cover parts");
     let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
-    let tallest = |w: &World, k: usize| w.life.cover(i).held_in(k).map(|x| w.life.cover(i).height(&w.cfg.phys, &mm, rho, x)).fold(0.0, f64::max);
-    for _ in 0..GAP_YEARS * w.cfg.months_per_year as usize {
-        let (c, ph) = (w.life.cover(i), &w.cfg.phys);
-        let fell = c.held_in(0).filter(|&x| c.height(ph, &mm, rho, x) > ph.surface_m).map(|x| c.fell[x]).sum::<f64>() / cover::ground(&w, i);
-        let n = c.patch_count();
+    let year = w.cfg.months_per_year as u64;
+    // A year of the stand's own deaths, then all but the last month of the next.
+    (0..year).for_each(|_| pcore::step(&mut w));
+    assert_eq!(w.life.cover(i).patch_count(), 1, "a year of the canopy's own deaths opened a gap");
+    while w.month() % year != year - 1 {
         pcore::step(&mut w);
-        if w.life.cover(i).patch_count() > n {
-            let s = w.life.cover(i).patches[n].share;
-            println!("a gap of {s} of the cell opened; the canopy's fallen crowns held {fell} a month before; tallest {} m, in the gap {} m", tallest(&w, 0), tallest(&w, n));
-            assert!(s >= fell && s <= fell * (1.0 + LAST_MONTH), "a gap of {s} for fallen crowns of {fell}");
-            assert!(tallest(&w, n) < tallest(&w, 0), "the gap holds the canopy's large plants");
-            books.assert_kept(&w, 1e-9);
-            return;
-        }
     }
-    panic!("no gap opened in {GAP_YEARS} years");
+    let (c, ph) = (w.life.cover(i), &w.cfg.phys);
+    let x = c.held().max_by(|&a, &b| c.height(ph, &mm, rho, a).total_cmp(&c.height(ph, &mm, rho, b))).expect("trees");
+    let (was, fell) = (c.sizes(ph, &mm, x), c.fell[x]);
+    w.in_cell(i, |_, d| d.cover(i).genes[x][cover::REPAIR] -= DIE_OFF);
+    pcore::step(&mut w);
+    let (c, ph, ground) = (w.life.cover(i), &w.cfg.phys, cover::ground(&w, i));
+    let now = c.sizes(ph, &mm, x);
+    let (l, dead) = (was.large(), was.count[was.large()] - now.count[now.large()]);
+    let crowns = (fell + dead * cover::plant_ground(ph, was.mass[l])) / ground;
+    println!("{} of the trees died in the month; gaps {:?} for their crowns' {crowns}", dead / was.count[l], c.patches);
+    assert!(c.patch_count() == 2 && crowns >= cover::GAP_LEAST, "no gap for a die-off of {crowns} of the cell");
+    assert!((c.patches[1].share / crowns - 1.0).abs() < CROWNS, "a gap of {} for crowns of {crowns}", c.patches[1].share);
+    assert!(c.patch[x] == 0 && c.held_in(1).all(|q| c.height(ph, &mm, rho, q) < c.height(ph, &mm, rho, x)), "the gap holds the canopy's trees");
+    books.assert_kept(&w, 1e-9);
 }

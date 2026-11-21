@@ -1,17 +1,18 @@
 //! Gaps (laws.md 3): a closed forest is a mosaic of gaps, each opened where a canopy tree died and its crown left its
 //! ground to the light, and of the stands that grow back in them (Watt 1947; the gap models, Shugart 1984). The large
 //! plants of a slot that die uncrowded leave the ground their crowns held (`Cover::fell`); once a year, where the
-//! canopy of a patch left at least `GAP_LEAST` of its cell, that share of the patch becomes a patch of its own: the
-//! plants under the fallen trees, in full light.
+//! canopy of a patch left at least `GAP_LEAST` of the patch's ground in that year (a die-off: frost, drowning, flame,
+//! a year its upkeep went unpaid), that share of the patch becomes a patch of its own: the plants under the fallen
+//! trees, in full light. A canopy's yearly turnover stays spread over its stand, as its size groups and thinning hold it.
 
 use super::patches::{carve, fold};
 use super::{stand, Cover, Parts, GROUPS, NO_ROOT, NP, SLOTS, WALL};
 use crate::rng::{Purpose, Rng};
 use crate::{Physics, World};
 
-/// The least share of a cell's ground the fallen crowns of a patch's canopy open as a gap: less, they gather over the
-/// years.
-pub const GAP_LEAST: f64 = 0.01;
+/// The least share of a patch's ground the crowns of its canopy that fell in one year must have held to open a gap: a
+/// die-off, far above the canopy's yearly deaths, which stay spread over the stand.
+pub const GAP_LEAST: f64 = 0.15;
 
 /// A gap to open: of patch `k`, the share `s` of its cell, about its sample `point` (`Patch::at`).
 struct Gap {
@@ -32,26 +33,25 @@ fn canopy(c: &Cover, (ph, mm, rho): (&Physics, &[f64; NP], f64), ground: f64, k:
     top
 }
 
-/// What the year's end does to the cover of cell `i` of `w`: the slots whose fallen crowns gather on (those of the
-/// canopy of a patch whose fall is under `GAP_LEAST`), the gaps it opens, and its ground, m² (`cover::ground`). A
-/// patch whose canopy fell over all its ground opens none: it is a gap whole.
-fn plan(w: &World, i: usize, at: (&Physics, &[f64; NP], f64)) -> ([bool; SLOTS], Vec<Gap>, f64) {
+/// The gaps the year's end opens in the cover of cell `i` of `w`, and its ground, m² (`cover::ground`): of each patch
+/// whose canopy's crowns that fell this year (`canopy`, `Cover::fell`) held at least `GAP_LEAST` of its ground, that
+/// share of the cell. A patch whose canopy fell over all its ground opens none: it is a gap whole.
+fn plan(w: &World, i: usize, at: (&Physics, &[f64; NP], f64)) -> (Vec<Gap>, f64) {
     let c = w.life.cover(i);
-    let mut out = ([false; SLOTS], Vec::new(), 0.0);
     if !c.fell.iter().any(|&f| f > 0.0) {
-        return out;
+        return (Vec::new(), 0.0);
     }
-    out.2 = super::ground(w, i);
-    for k in (0..c.patch_count()).filter(|_| out.2 > 0.0) {
-        let top = canopy(c, at, out.2, k);
-        let s = (0..SLOTS).filter(|&x| top[x]).map(|x| c.fell[x]).sum::<f64>() / out.2;
-        if s < GAP_LEAST {
-            (0..SLOTS).for_each(|x| out.0[x] |= top[x]);
-        } else if s < c.patches[k].share {
-            out.1.push(Gap { k, s, point: point(w, i, k) });
+    let ground = super::ground(w, i);
+    let mut gaps = Vec::new();
+    for k in (0..c.patch_count()).filter(|_| ground > 0.0) {
+        let top = canopy(c, at, ground, k);
+        let s = (0..SLOTS).filter(|&x| top[x]).map(|x| c.fell[x]).sum::<f64>() / ground;
+        let share = c.patches[k].share;
+        if s >= GAP_LEAST * share && s < share {
+            gaps.push(Gap { k, s, point: point(w, i, k) });
         }
     }
-    out
+    (gaps, ground)
 }
 
 /// Where in patch `k` of the cover of cell `i` of `w` a gap opens this year: one of its samples (`inside::patch_ground`),
@@ -87,17 +87,17 @@ fn open_gap(c: &mut Cover, at: (&Physics, &[f64; NP], f64), (variety, ground): (
     }
 }
 
-/// The gaps of every cell at the year's end (`patches::year`): each patch whose canopy's fallen crowns hold at least
-/// `GAP_LEAST` of its cell opens them as a gap (`open_gap`); the fallen crowns of all other slots are forgotten but
-/// those of the canopy of a patch whose fall is still under it (`plan`).
+/// The gaps of every cell at the year's end (`patches::year`): each patch whose canopy's crowns that fell this year
+/// held at least `GAP_LEAST` of its ground opens them as a gap (`plan`, `open_gap`); then every slot's fallen crowns
+/// are forgotten, the next year counting its own.
 pub(super) fn year(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
     let plans = crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| plan(w, i, (&w.cfg.phys, &mm, rho)));
     let (ph, variety) = (&w.cfg.phys, w.cfg.variety);
-    for (cell, (keep, gaps, ground)) in w.life.cells.iter_mut().zip(plans) {
+    for (cell, (gaps, ground)) in w.life.cells.iter_mut().zip(plans) {
         let c = &mut cell.cover;
-        (0..SLOTS).filter(|&x| !keep[x]).for_each(|x| c.fell[x] = 0.0);
+        c.fell = [0.0; SLOTS];
         gaps.into_iter().for_each(|g| open_gap(c, (ph, &mm, rho), (variety, ground), g));
     }
 }
