@@ -426,7 +426,9 @@ the liquid standing on it (`land::ground_state`). As matter moves, its heat capa
 (`Scratch::note`). The state is brought up to date after each of the air's steps, whose heat melts and freezes, before
 the sink into the bed's store and the liquid read it; and a node on a plateau that liquid left or reached finds its
 molten share again from its heat (`liquid::book`): what moved of the plateau's substance was liquid, and what stays is
-what the heat holds molten, as every law and the shell then read it.
+what the heat holds molten, as every law and the shell then read it. Life reads the ground it stands on as Flow's last
+solve left it: its temperature (`World::thaw_last`) and the share of each substance molten there
+(`World::molten_last`), so what it takes from its ground or gives it carries the fusion enthalpy of that share.
 
 ### 1.2 Liquid
 `flow::liquid`, once a month, after the air's steps; last, gases dissolve in the liquid (1.5). The sink into the bed's store ends each of the air's steps

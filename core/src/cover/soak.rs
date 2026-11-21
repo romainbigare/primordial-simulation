@@ -30,8 +30,7 @@ pub struct Soak {
 /// ground). Of a cell of parts with land, its land part's own (`flow::parts`) over that part's area, no more than the
 /// cell holds; else the cell's over its area.
 pub fn soak(w: &crate::World, p: &Parts, i: usize, held: f64) -> (f64, Soak) {
-    let (t, plateau) = w.thaw_last(i);
-    let molten = w.molten(p.liquid, i, t, plateau);
+    let (t, molten) = (w.t_ground_last(i), w.molten_last(p.liquid, i));
     let area = w.mesh.cells().area()[i];
     let (liquid, over) = match w.scratch.land_part(i, p.liquid) {
         Some((mol, share)) => (mol.min(held) * molten, area * share),

@@ -122,6 +122,15 @@ impl World {
     pub fn thaw_last(&self, i: usize) -> (f64, Option<(usize, f64)>) {
         self.scratch.land(i).unwrap_or_else(|| self.thaw(i))
     }
+    /// Molten share of substance `k` in the ground of cell `i` as life reads it, with its temperature (`thaw_last`): Flow's
+    /// solve at its last step (`Scratch::molten_land`); for a substance Flow does not let melt there, or before Flow has
+    /// run, `molten` at `thaw_last`.
+    pub fn molten_last(&self, k: usize, i: usize) -> f64 {
+        self.scratch.molten_land(k, i).unwrap_or_else(|| {
+            let (t, plateau) = self.thaw_last(i);
+            self.molten(k, i, t, plateau)
+        })
+    }
     /// Temperature of the ground of cell `i` as life and the shell read it, K (`thaw_last`).
     pub fn t_ground_last(&self, i: usize) -> f64 {
         self.thaw_last(i).0

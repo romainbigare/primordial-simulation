@@ -21,7 +21,7 @@ pub struct Liquid {
 }
 
 /// The key liquid of cell `i` as the cell's view in chunk `d` holds it now (`Liquid`): of what its ground holds, the
-/// share molten at its temperature (`World::molten`) is liquid, open as far as the depth standing on it at the month's
+/// share molten at its temperature (`World::molten_last`) is liquid, open as far as the depth standing on it at the month's
 /// start (`place`) holds, the rest in its pores; of the frozen, the soft solid lying on it as far as its depth at the
 /// month's start holds, the rest in its pores; what ran through its main channel in the month's runoff pass over the
 /// month. None without a key liquid in the chemistry.
@@ -29,8 +29,7 @@ pub fn liquid(w: &World, d: &Chunk, i: usize) -> Liquid {
     let Some(p) = Parts::of(&w.chem) else { return Liquid::default() };
     let (k, area, at) = (p.liquid, w.mesh.cells().area()[i], place(w, i));
     let held = d.moves.amount(w, Node::ground(i), k).max(0.0);
-    let (t, plateau) = w.thaw_last(i);
-    let molten = held * w.molten(k, i, t, plateau);
+    let molten = held * w.molten_last(k, i);
     let open = molten.min(at.liquid * area / w.chem.molar_volume(k, crate::chem::Phase::Liquid));
     let soft = (held - molten).min(at.snow * area / w.chem.molar_volume(k, crate::chem::Phase::Solid));
     let running = w.liquid_month.get(i).map_or(0.0, |&f| f as f64 * w.cfg.calendar().month as f64);
@@ -83,8 +82,7 @@ pub fn fetched(w: &mut World, asks: &[(usize, usize, f64)]) {
     let s = &w.chem.subs[k];
     let (mut moves, mut sent) = (Vec::with_capacity(2 * asks.len()), vec![[0.0; 2]; n]);
     for &(from, to, mol) in asks.iter().filter(|a| a.2 > 0.0) {
-        let (t, plateau) = w.thaw_last(from);
-        let liquid = w.store.amounts(Class::Ground)[k * n + from].max(0.0) * w.molten(k, from, t, plateau);
+        let liquid = w.store.amounts(Class::Ground)[k * n + from].max(0.0) * w.molten_last(k, from);
         let got = mol * (liquid / asked[&from]).min(1.0);
         let heat = got * s.carried(w.t_ground_last(from), 1.0);
         // It goes from the far cell's ground into the walkers there, over to their cell's head, and into its ground.

@@ -36,6 +36,23 @@ impl Scratch {
             _ => self.plateau(i),
         }
     }
+    /// The molten share of substance `k` in the ground of cell `i` as life feels it, as Flow's last solve found it: of a
+    /// cell of parts its land's (its liquid's top's where it has no land, as `land`), else the node's (`molten_node`).
+    /// None for a substance Flow does not let melt there (`State::vary`), or a cell of parts not solved since a load.
+    pub(crate) fn molten_land(&self, k: usize, i: usize) -> Option<f64> {
+        match self.state.parts.get(i) {
+            Some(Some(p)) => {
+                let q = if p.land() { LAND } else { TOP };
+                self.mixed(i).filter(|_| self.state.vary.contains(&k)).map(|m| m.piece[q].molten(k))
+            }
+            _ => self.molten_node(k, i),
+        }
+    }
+    /// The molten share of substance `k` in ground node `i` as Flow's last solve found it (`land::molten`), for a
+    /// substance it lets melt there (`State::vary`); None for the others, or before Flow first built the state.
+    pub(crate) fn molten_node(&self, k: usize, i: usize) -> Option<f64> {
+        (i < self.latent.len() && self.state.vary.contains(&k)).then(|| crate::flow::land::molten(self, k, i))
+    }
     /// The depth of the liquid standing on the ground of cell `i` as life stands on it, m, and its solid surface, m
     /// (`FlowView::standing`): none on the land of a cell of parts, whose liquid runs down to the part under the liquid.
     pub(crate) fn standing_land(&self, i: usize) -> (f64, f64) {
