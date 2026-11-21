@@ -83,7 +83,7 @@ impl<'de> Deserialize<'de> for Relief {
 
 /// The heights of the samples built from the seed's samples `seed` of `map` (its rows between latitudes `lat`) and the
 /// relief `r` as last built (`Relief::built`, `Relief::offset`), m: each the seed's height with what was laid on it,
-/// raised by its cell's offset, which lies on one plane through the cell's centre whose slope each way is the smaller
+/// raised by its cell's offset, which lies on one ramp through the cell's centre whose slope each way is the smaller
 /// of the slopes to the neighbours on its two sides, none where they differ in sign (minmod: the reconstruction of the
 /// finite volumes, van Leer 1979), round a globe's rows where `map` wraps; then each cell raised by the constant it
 /// lacks, so that its samples' mean by area is its ground exactly. A cell finer than a sample shares it: the sample
@@ -112,14 +112,14 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
             (target[k], group[k]) = (target[k] / weight[k].max(f64::MIN_POSITIVE), (cells + k) as u32);
         }
     }
-    let planes = planes(seed, map, (&target, &group));
+    let ramps = ramps(seed, map, (&target, &group));
     let at = |k: usize| {
         let g = group[k] as usize;
         let (x, y) = ((k % seed.across) as f64, (k / seed.across) as f64);
-        planes.get(g).copied().flatten().map_or(target[k], |p| p[0] + p[1] * (x - p[3]) + p[2] * (y - p[4]))
+        ramps.get(g).copied().flatten().map_or(target[k], |p| p[0] + p[1] * (x - p[3]) + p[2] * (y - p[4]))
     };
     let f: Vec<f64> = (0..n).map(at).collect();
-    // What each group's mean by area of the planes lacks of its own offset.
+    // What each group's mean by area of the ramps lacks of its own offset.
     let mut sums = vec![[0.0; 2]; cells + n];
     for k in 0..n {
         let (g, a) = (group[k] as usize, map.place_of(&seed.leaf(k), south, north).0);
@@ -128,10 +128,10 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
     (0..n).map(|k| base[k] + f[k] + sums[group[k] as usize][1] / sums[group[k] as usize][0]).collect()
 }
 
-/// Of each cell of `map` of a sample or coarser, its plane over the samples `seed` (`heights`): its offset, its slopes
+/// Of each cell of `map` of a sample or coarser, its ramp over the samples `seed` (`heights`): its offset, its slopes
 /// along the rows and the columns, m a sample, and its centre (column, row); of the samples' offsets `target` and
 /// groups `group`. A cell finer than a sample has none (its sample keeps its offset).
-fn planes(seed: &Samples, map: &Square, (target, group): (&[f64], &[u32])) -> Vec<Option<[f64; 5]>> {
+fn ramps(seed: &Samples, map: &Square, (target, group): (&[f64], &[u32])) -> Vec<Option<[f64; 5]>> {
     let (across, down) = (seed.across as i64, seed.down as i64);
     let side = super::tree::BLOCK >> SAMPLE_DEPTH;
     let box_of = |l: &super::Leaf| ((l.x / side) as i64, (l.y / side) as i64, 1i64 << (SAMPLE_DEPTH - l.depth));
