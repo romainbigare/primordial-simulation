@@ -203,8 +203,8 @@ metre under its level (`GRADED_M`) is filled to it, as the floods that spread a 
 one basin under its level are **a pond** (`Samples::pond`, `Samples::ponds`): its pass is the first sample out of it
 on the way its liquid leaves by, and its level that pass's height. Every cell's height is a mean over the samples. So
 is the way a cell faces the sun (1.4): its mean rise toward the south, each sample's central difference north to south
-(one-sided at the map's edge) by area (`Terrain::rise_south`), found once when the world is built and kept
-(`World::rise_south`). **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs where the
+(one-sided at the map's edge) by area (`Terrain::rise_south_on`), found when the world is built and again at each
+build of the samples (`World::rise_south`). **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs where the
 flood sends it (from every sample of land a way leads to the open low ground), and the area that drains through a
 sample is its own and all that runs to it; the runoff runs down these ways (1.2). Below the samples the ground goes on as one function of the
 seed and the map that every cell and every pixel a shell draws read (`space::below`, `Terrain::heights`): the means of
@@ -600,7 +600,10 @@ too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flo
 such basins; the build fills none). Then each cell's ground as liquid stands on it, the bodies, the key samples and
 their rooms are found again; what a cell's parts of the bodies held follows each part's pond (a new pond comes from the
 old pond that held most of its samples, one to one; a cell whose parts do not all match shares its liquid at one
-level, as at the start). `World::is_land` stays the cell's own: its surface over the level (`surface_z`, with its snow and
+level, as at the start). What the relief laid is the samples' loose ground too, settled there (`Samples::loose`,
+`settled`), its age the mean by volume of the seed's and the relief's, the relief laid evenly since the start (half as
+old as the world on its mean; the running world keeps no age of it); the cells' bins of loose depth and the way they
+face are found again from the samples as built. `World::is_land` stays the cell's own: its surface over the level (`surface_z`, with its snow and
 ice), so a cell can be land while its samples, built at its ground without them (`ground_z`), lie under the level.
 
 The load is booked apart from the liquid (`runoff::Crossings`), each with its own heat. Each key sample's pool (mol of
@@ -1214,7 +1217,7 @@ seeds fill it:
   with a plant's size; Schenk and Jackson 2002), and hold a point of the cell where its loose ground reaches that need
   (none below `rooted_from` of it, all from it, smoothly between: bare bed anchors nothing and holds no liquid in
   pores). Each cell keeps the share of its area in each of 24 bins of loose depth, from its terrain's samples, found
-  when the world is built (`World::loose_bins`, `cover::loose_bins`), and a kind holds the share s of the cell their
+  when the world is built and at each build of the samples (`World::loose_bins`, `cover::loose_bins`), and a kind holds the share s of the cell their
   mean gives (`Cover::rooted`, found again only when its need has moved by more than a bin). It stands on that share
   alone, its capture area x / s per unit of it; the shares are nested, as ground that holds deep roots holds shallow
   ones, so the cell's ground falls into rings (`canopy::rings`), each held by the kinds of a share at least its own, and

@@ -34,6 +34,9 @@ pub fn build(w: &mut World) {
         s.state.held = held_by_pond(s, (&old, &new), (&was, held));
         ground_now(w, s, true);
     });
+    // The ground the cells' plants root in and the way they face, from the samples as built.
+    w.loose_bins = crate::cover::loose_bins(w);
+    w.rise_south = w.rise_at_build();
 }
 
 /// The load piled at the mouths since the last build (what was laid on the samples of the bodies since, `Relief::since`)
