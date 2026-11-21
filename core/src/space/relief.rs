@@ -92,7 +92,7 @@ const SMOOTH_ROUNDS: usize = 8;
 /// The heights of the samples built from the seed's samples `seed` of `map` (its rows between latitudes `lat`) and the
 /// relief `r` as last built (`Relief::built`, `Relief::offset`), m: each the seed's height with what was laid on it,
 /// raised by its cell's offset; the offsets spread smoothly between the cells (`SMOOTH_SHARE` of a square each way,
-/// `SMOOTH_PASSES` passes of a box filter), what the cells' means then lack spread the same way `SMOOTH_ROUNDS` times,
+/// `SMOOTH_PASSES` passes of a box filter, round a globe's rows), what the cells' means then lack spread the same way `SMOOTH_ROUNDS` times,
 /// and each cell's raised by the constant it still lacks, so that its samples' mean by area is its ground exactly. A cell finer than a sample shares it: the sample takes their offsets' mean by area.
 pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), r: &Relief) -> Vec<f64> {
     let n = seed.h.len();
@@ -132,9 +132,10 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
     };
     // The offsets smoothed, what the groups' means then lack smoothed and added, `SMOOTH_ROUNDS` times; then each group
     // raised by what it still lacks, so its mean is exact.
-    let mut smooth = blur(&target, (seed.across, seed.down), radius);
+    let grid = (seed.across, seed.down, map.wrap);
+    let mut smooth = blur(&target, grid, radius);
     for _ in 0..SMOOTH_ROUNDS {
-        let more = blur(&lacks(&smooth), (seed.across, seed.down), radius);
+        let more = blur(&lacks(&smooth), grid, radius);
         smooth.iter_mut().zip(more).for_each(|(f, m)| *f += m);
     }
     let last = lacks(&smooth);
@@ -142,27 +143,45 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
 }
 
 /// Values `v` on a grid `across` x `down` smoothed by `SMOOTH_PASSES` passes of a box filter `radius` samples each way
-/// along the rows and then the columns (shorter at the grid's edges).
-fn blur(v: &[f64], (across, down): (usize, usize), radius: usize) -> Vec<f64> {
+/// along the rows and then the columns: shorter at the grid's edges, but round the rows where they `wrap` (a globe's).
+fn blur(v: &[f64], (across, down, wrap): (usize, usize, bool), radius: usize) -> Vec<f64> {
     let mut x = v.to_vec();
-    let line = |x: &mut [f64], at: &dyn Fn(usize) -> usize, len: usize| {
+    let line = |x: &mut [f64], at: &dyn Fn(usize) -> usize, (len, round): (usize, bool)| {
         let mut prefix = vec![0.0; len + 1];
         (0..len).for_each(|q| prefix[q + 1] = prefix[q] + x[at(q)]);
+        // The sum over samples `lo` to `hi` (not `hi`), round the line past its ends.
+        let sum = |lo: i64, hi: i64| {
+            let (n, whole) = (len as i64, prefix[len]);
+            let upto = |q: i64| q.div_euclid(n) as f64 * whole + prefix[q.rem_euclid(n) as usize];
+            upto(hi) - upto(lo)
+        };
         (0..len).for_each(|q| {
-            let (lo, hi) = (q.saturating_sub(radius), (q + radius + 1).min(len));
-            x[at(q)] = (prefix[hi] - prefix[lo]) / (hi - lo) as f64;
+            let (q, r) = (q as i64, radius as i64);
+            let (lo, hi) = if round && 2 * r < len as i64 { (q - r, q + r + 1) } else if round { (0, len as i64) } else { ((q - r).max(0), (q + r + 1).min(len as i64)) };
+            x[at(q as usize)] = sum(lo, hi) / (hi - lo) as f64;
         });
     };
     for _ in 0..SMOOTH_PASSES {
-        (0..down).for_each(|r| line(&mut x, &|q| r * across + q, across));
-        (0..across).for_each(|c| line(&mut x, &|q| q * across + c, down));
+        (0..down).for_each(|r| line(&mut x, &|q| r * across + q, (across, wrap)));
+        (0..across).for_each(|c| line(&mut x, &|q| q * across + c, (down, false)));
     }
     x
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Relief;
+    use super::{blur, Relief};
+
+    /// Round a wrapped grid's rows the box filter has no seam: a step at the seam is smoothed as one inside the rows.
+    #[test]
+    fn the_blur_has_no_seam_round_a_globe() {
+        let (across, down) = (16, 2);
+        let v: Vec<f64> = (0..across * down).map(|k| if (k % across + 4) % across < 8 { 1.0 } else { 0.0 }).collect();
+        let shifted: Vec<f64> = (0..across * down).map(|k| v[(k / across) * across + (k % across + 4) % across]).collect();
+        let (a, b) = (blur(&v, (across, down, true), 2), blur(&shifted, (across, down, true), 2));
+        let back: Vec<f64> = (0..across * down).map(|k| b[(k / across) * across + (k % across + across - 4) % across]).collect();
+        assert!(a.iter().zip(&back).all(|(x, y)| (x - y).abs() < 1e-12), "the filter moves with the rows");
+    }
 
     /// A relief saved and read again is the same, also where a list holds only none.
     #[test]

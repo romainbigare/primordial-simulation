@@ -568,7 +568,7 @@ every class settles by the share the room takes and the rest passes on; a sample
 room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`): the
 samples stand at the seed's heights with what was laid on each, each cell's raised to its ground (`World::ground_z`,
 its solids that stay solid at the surface: snow and ice do not raise it): the cells' offsets spread smoothly between
-their centres (a box filter half a square each way, three passes), what their means then lack spread the same way
+their centres (a box filter half a square each way, three passes, round a globe's rows), what their means then lack spread the same way
 eight times, and each raised by the constant it still lacks, so each cell's samples' mean is its ground exactly
 (`space::relief::heights`). Over them the flood finds the ways, the ponds and the wetness index again
 (`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level; a closed basin
