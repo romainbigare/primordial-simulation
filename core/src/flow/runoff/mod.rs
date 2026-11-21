@@ -124,6 +124,10 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     (w.counts.load_month, w.counts.plumes) = (carried.loads, carried.plumes);
     w.counts.load.iter_mut().zip(carried.volumes.counts()).for_each(|(a, v)| *a += v);
     load::mix(w, s, &carried.settled, &sol);
+    let n = w.terrain_samples().h.len();
+    for &(k, m) in &carried.relief {
+        if m > 0.0 { w.relief.lay(k as usize, m, n) } else { w.relief.take(k as usize, -m); }
+    }
     apply(w, s, &[], &carried.broke);
     for (l, row) in x.rows.chunks_exact(x.width).enumerate() {
         off.moved((x.a[l] as usize, x.b[l] as usize), row[..x.width - 1].iter().sum());

@@ -555,7 +555,11 @@ up; what was picked up above it comes in at its top. A sample where each class p
 sample. What leaves a key sample reaches the next by the product of the passes of the samples between
 (`Carriage::skip`); the rest settles in the next one's cell. The load picked up between two key samples skips that
 product (it would lose less than 1e-10 of it, measured). What reaches a body, or a sample whose liquid runs to none,
-settles in the cell that holds it. The form is tuned: the shares are fixed by the flood, not by the month's flow.
+settles in the cell that holds it. The form is tuned: the shares are fixed by the flood, not by the month's flow. What settles at a key sample whose
+way runs on or ends on land lies on that sample as its **relief** (`space::relief::Relief`: solid volume per area, m,
+as `surface_z`; saved, sparse); a cell's pick-up takes first from the relief of its samples, each its share by its work
+and at most what lies on it, the rest from the cell's loose ground at large. The relief says where in a cell its
+matter lies; the matter is the cell's.
 
 The load is booked apart from the liquid (`runoff::Crossings`), each with its own heat. Each key sample's pool (mol of
 each substance and the heat) leaves by the share of its volume that passes, so in a pool the substances and the

@@ -20,14 +20,17 @@ use crate::{space::network::NONE, store::Move, units::G_PER_KG, World};
 
 /// What the load did in a month: the moves of the bed into loose ground (`wear`); of each cell what its main channel
 /// carried, g per m³ of its liquid, and the depth that settled on it, m; the plumes: each sample where a way entered a
-/// body, with the load that came in there, kg/s; the volumes of the month (`Volumes`); and of each cell the volume of
-/// each class that settled on it, m³ (`mix`).
+/// body, with the load that came in there, kg/s; the volumes of the month (`Volumes`); of each cell the volume of
+/// each class that settled on it, m³ (`mix`); and what the month laid on the samples' relief (taken where under none),
+/// m (`Relief`): what settles at a key sample whose way runs on or ends on land lies on it; what reaches a body lies
+/// over its entry cell's ground at large.
 pub(super) struct Carried {
     pub(super) broke: Vec<Move>,
     pub(super) loads: Vec<[f32; 2]>,
     pub(super) plumes: Vec<(u32, f32)>,
     pub(super) volumes: Volumes,
     pub(super) settled: Vec<[f64; CLASS_COUNT]>,
+    pub(super) relief: Vec<(u32, f64)>,
 }
 
 /// The volumes of the load in a month, m³: picked up, carried into the open low ground, carried into the other bodies,
@@ -104,7 +107,8 @@ impl Links {
 pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64; 2]], &[usize]), x: &mut Crossings, dt: f64) -> Carried {
     let (c, n, width) = (&b.carriage, w.mesh.cells().n(), sol.len() + 1);
     let mut picked = std::mem::take(&mut s.spare.picked);
-    let (work, broke) = pick_up(w, s, b, (flux, sol), &mut picked);
+    let (work, broke, taken) = pick_up(w, s, b, (flux, sol), &mut picked);
+    let mut relief: Vec<(u32, f64)> = taken.into_iter().map(|(k, m)| (k, -m)).collect();
     let sol_v: Vec<f64> = sol.iter().map(|&k| s.sp[k].v[0]).collect();
     let mut volumes = Volumes { worn: broke.iter().map(|m| m.mol * s.sp[m.k as usize].v[0]).sum(), ..Volumes::default() };
     let mm: Vec<f64> = sol.iter().map(|&k| s.sp[k].mm).collect();
@@ -133,6 +137,9 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
         let all: f64 = came.iter().chain(&own).chain(&dropped).sum();
         let on: f64 = out.iter().sum();
         (0..CLASS_COUNT).for_each(|l| settled[i][l] += came[l] + own[l] + dropped[l] - out[l]);
+        if matches!(c.end[q], End::On | End::Land) && all > on {
+            relief.push((k, (all - on) / (b.share[k as usize] * w.mesh.cells().area()[i])));
+        }
         let gone = all - on;
         match c.end[q] {
             End::Open => volumes.open += gone,
@@ -162,7 +169,7 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     let area = w.mesh.cells().area();
     loads.iter_mut().zip(&settled).zip(area).for_each(|((l, v), a)| l[1] = (v.iter().sum::<f64>() / a) as f32);
     (s.spare.picked, s.spare.pools) = (picked, pools);
-    Carried { broke, loads, plumes, volumes, settled }
+    Carried { broke, loads, plumes, volumes, settled, relief }
 }
 
 /// Each cell's pick-up (`picked`, rows of the solids of molar volumes `sol_v`, then the heat) to its pairs by their

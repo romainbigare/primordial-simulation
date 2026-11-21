@@ -161,6 +161,8 @@ pub struct World {
     /// The soil of each cell (`soil::Soil`): its texture, the terrain's samples', and its pores, found when the world is
     /// built (`soil::of_world`)
     pub soil: Vec<crate::soil::Soil>,
+    /// What the running world's load laid on each of the terrain's samples (`space::relief::Relief`)
+    pub relief: crate::space::relief::Relief,
     /// The planet's air beyond the map's edges by row of latitude and month (`flow::Planet`), where they are open
     pub planet: Option<crate::flow::Planet>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)

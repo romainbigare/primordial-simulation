@@ -9,10 +9,11 @@ use crate::{space::network::NONE, store::{Class, Move, Node}, World};
 const STRENGTH_MIN: f64 = 0.05;
 
 /// The work of the month's runoff, J: of each pair of `Carriage`, on the samples above its key sample and on the key
-/// sample's own reach, and of each cell.
+/// sample's own reach, and of each cell; and of each sample that holds relief, its cell and work.
 pub(super) struct Work {
     pub(super) pairs: Vec<[f64; 2]>,
     pub(super) cells: Vec<f64>,
+    on_relief: Vec<(u32, u32, f64)>,
 }
 
 /// What each land cell picks up (laws.md 1.3): the head the liquid loses down the samples' ways in it does work, g
@@ -20,10 +21,11 @@ pub(super) struct Work {
 /// loose solids up to `carry` m³ per J times its loose ground's erodibility (`Texture::erodibility`) and its bare share
 /// (`bare_share`), at most all that lies loose, with their heat at its temperature; the work its load leaves free (the
 /// cover effect, Sklar and Dietrich 2004) breaks bonded ground into loose (`wear`). Returns the work (`Work`), what each
-/// cell picked up (rows of `sol`, mol, then the heat, J, into `picked`), and the moves of the bed into loose ground.
-pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64; 2]], &[usize]), picked: &mut Vec<f64>) -> (Work, Vec<Move>) {
+/// cell picked up (rows of `sol`, mol, then the heat, J, into `picked`), the moves of the bed into loose ground, and
+/// what the pick-up took from the samples' relief (`taken`).
+pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64; 2]], &[usize]), picked: &mut Vec<f64>) -> (Work, Vec<Move>, Vec<(u32, f64)>) {
     let (samples, n, width, c) = (w.terrain_samples(), w.mesh.cells().n(), sol.len() + 1, &b.carriage);
-    let mut work = Work { pairs: vec![[0.0; 2]; c.pairs.len()], cells: vec![0.0; n] };
+    let mut work = Work { pairs: vec![[0.0; 2]; c.pairs.len()], cells: vec![0.0; n], on_relief: Vec::new() };
     for &k in b.land.iter().filter(|&&k| flux[k as usize][1] > 0.0) {
         let (k, f) = (k as usize, flux[k as usize]);
         let (i, j) = (b.cell_of[k] as usize, samples.to[k]);
@@ -32,11 +34,15 @@ pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f
             work.cells[i] += done;
             debug_assert!(c.pair_of[k] != NONE, "a land sample whose way reaches no key sample");
             work.pairs[c.pair_of[k] as usize][usize::from(c.place[k] != NONE)] += done;
+            if w.relief.at(k) > 0.0 {
+                work.on_relief.push((k as u32, i as u32, done));
+            }
         }
     }
     picked.clear();
     picked.resize(n * width, 0.0);
     let mut broke = Vec::new();
+    let mut volume = vec![0.0; n];
     for i in (0..n).filter(|&i| work.cells[i] > 0.0) {
         let cap = w.cfg.carry * work.cells[i] * bare_share(w, i) * w.soil[i].texture.erodibility();
         let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
@@ -45,12 +51,25 @@ pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f
             picked[i * width + r] = solid(w, s, k, i) * f;
             picked[(i + 1) * width - 1] += solid(w, s, k, i) * f * s.sp[k].cp * s.state.tg[i];
         }
+        volume[i] = f * avail;
         let worn = work.cells[i] * (1.0 - f * avail / cap).max(0.0);
         if worn > 0.0 {
             wear(w, s, i, worn, &mut broke);
         }
     }
-    (work, broke)
+    let taken = taken(w, b, &work, &volume);
+    (work, broke, taken)
+}
+
+/// What the pick-up of each cell, `volume` m³, takes from its samples' relief (`Relief`): each sample that does work
+/// (`Work::on_relief`) gives its share of the cell's pick-up by its work, at most the relief it holds, m; the rest
+/// comes from the cell's loose ground at large.
+fn taken(w: &World, b: &Bodies, work: &Work, volume: &[f64]) -> Vec<(u32, f64)> {
+    let area = w.mesh.cells().area();
+    work.on_relief.iter().map(|&(k, i, done)| {
+        let a = b.share[k as usize] * area[i as usize];
+        (k, (volume[i as usize] * done / work.cells[i as usize] / a).min(w.relief.at(k as usize)))
+    }).collect()
 }
 
 /// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each substance by its share of

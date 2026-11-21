@@ -985,6 +985,21 @@ fn liquid_wears_its_bed_with_the_work_its_load_leaves_free() {
     }
 }
 
+/// What the load settles on land lies on the samples it settles at (`space::relief::Relief`): from no relief, a liquid
+/// step lays on the samples, summed by their area, what it counts as settled on land (`Counters::load`), to 1e-9.
+#[test]
+fn the_relief_is_what_the_load_laid_on_land() {
+    let mut w = worldgen::testkit::squares(1, 16, 16);
+    (0..3).for_each(|_| pcore::step(&mut w));
+    w.relief = Default::default();
+    let land = w.counts.load[3];
+    flow_step(&mut w, LIQUID_STEP);
+    let (s, lat) = (w.terrain_samples(), (w.cfg.lat_south, w.cfg.lat_north));
+    let laid: f64 = w.map.leaves().iter().flat_map(|l| l.split(pcore::space::terrain::SAMPLE_DEPTH.max(l.depth))).map(|f| w.relief.at(s.index(&f)) * w.map.place_of(&f, lat.0, lat.1).0).sum();
+    let settled = w.counts.load[3] - land;
+    assert!(settled > 0.0 && (laid - settled).abs() <= 1e-9 * settled, "{laid} m3 on the samples, {settled} m3 settled on land");
+}
+
 /// A small island, ten years: the land loses rock (the rock-making solids of its loose ground and bed, over its
 /// cells) at the real rate of denudation, 0.01 to 1 mm a year.
 #[test]
