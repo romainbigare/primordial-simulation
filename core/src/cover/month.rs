@@ -4,12 +4,50 @@
 
 use crate::store::{apply, Batch, Class};
 use crate::World;
+use serde::{Deserialize, Serialize};
 
-/// After the month of every chunk (`life::month`): the cover's seeds land (`cover::land`), and what each cell's cover
-/// built is counted into its year (`grown`).
+/// What a slot of cover ran at in its cell's month, as the law used it, for the tape (`Counters::ran_month`; no law
+/// reads it): its activity (`cover::activity` of its footing, under the liquid full), the share of it frozen
+/// (`cover::frozen`), and the share of its ground under the liquid (`Footing::wet`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Ran {
+    pub act: f32,
+    pub frozen: f32,
+    pub wet: f32,
+}
+
+/// What a cell's cover ran at in its month, for the tape (`Counters::ran_month`; no law reads it): the share of what
+/// the drier rest of its land holds for roots that it held, as its roots read it (`cover::moist` off the strips; on
+/// the saturated strips they read all of it; none where it holds no land), and what each slot ran at (`Ran`).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CellRan {
+    pub roots: f32,
+    pub slots: [Ran; super::SLOTS],
+}
+
+impl Default for CellRan {
+    fn default() -> Self {
+        CellRan { roots: f32::NAN, slots: [Ran::default(); super::SLOTS] }
+    }
+}
+
+/// After the month of every chunk (`life::month`): the cover's seeds land (`cover::land`), what each cell's cover
+/// built is counted into its year (`grown`), and what its slots ran at becomes its last month's (`ran`).
 pub fn landed(w: &mut World) {
     super::land(w);
     grown(w);
+    ran(w);
+}
+
+/// What each cell's cover ran at in the month (`Counters::ran`) becomes its last month's (`Counters::ran_month`); a
+/// cell whose cover did not run holds none.
+fn ran(w: &mut World) {
+    let (n, c) = (w.mesh.cells().n(), &mut w.counts);
+    c.ran_month.clear();
+    c.ran_month.resize(n, CellRan::default());
+    for (i, r) in std::mem::take(&mut c.ran) {
+        c.ran_month[i as usize] = r;
+    }
 }
 
 /// What each cell's cover built in the month is added to its year (`Counters::grown_year`); after the year's last

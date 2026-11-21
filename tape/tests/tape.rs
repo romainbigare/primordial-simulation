@@ -141,7 +141,9 @@ fn a_resumed_run_places_the_kinds_still_due() {
 #[test]
 fn frames_file_round_trip() {
     let dir = tmp("frames");
+    // (Flow's state of its ground first, as `ew run` builds a new world's: the frames draw the ground by it.)
     let mut w = world();
+    pcore::flow::state(&mut w, true);
     let mut rec = tape::Recorder::new(&w, 1, 1);
     common::record(&mut rec, &mut w);
     run(&mut w, 1);
@@ -159,8 +161,9 @@ fn frames_file_round_trip() {
     // Layer "z" of frame 0 is the first layer: check one square, which shows the cell that holds it.
     let z = &tape::LAYERS[0];
     assert_eq!(z.name, meta["layers"][0]["name"].as_str().unwrap());
-    let w0 = world();
-    let first = tape::quantise(z, w0.surface_z(tape::pixels(&w0)[100]));
+    let mut w0 = world();
+    pcore::flow::state(&mut w0, true);
+    let first = tape::quantise(z, w0.scratch.surface(tape::pixels(&w0)[100]).expect("Flow's state")[0]);
     assert_eq!(raw[8 + n + 100], first);
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
 }
@@ -195,7 +198,7 @@ fn a_globe_file_names_its_shape_and_its_means_are_by_area() {
     let meta: serde_json::Value = serde_json::from_slice(&raw[8..8 + n]).unwrap();
     assert_eq!((meta["globe"].as_bool(), meta["w"].as_u64(), meta["h"].as_u64()), (Some(true), Some(2 * rows), Some(rows)));
     assert_eq!((meta["lat_north"].as_f64(), meta["lat_south"].as_f64()), (Some(90.0), Some(-90.0)));
-    let (t, area) = (tape::fields(&w).t, w.mesh.cells().area());
+    let (t, area) = (tape::fields(&w, tape::means(&w).as_deref()).t, w.mesh.cells().area());
     let by_area = t.iter().zip(area).map(|(t, a)| t * a).sum::<f64>() / area.iter().sum::<f64>();
     assert!((rec.last("t_ground") - by_area).abs() < 1e-9, "{} against {by_area}", rec.last("t_ground"));
 }

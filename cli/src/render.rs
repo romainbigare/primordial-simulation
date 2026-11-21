@@ -65,11 +65,12 @@ struct Look<'a> {
 impl<'a> Look<'a> {
     fn new(w: &'a World) -> Self {
         let cells: Vec<usize> = (0..w.mesh.cells().n()).collect();
-        let wet = pcore::flow::means(w, &cells).map_or(vec![0.0; cells.len()], |m| m.iter().map(|m| m.pore / m.pores.max(1e-9)).collect());
+        let means = tape::means(w);
+        let wet = means.as_ref().map_or(vec![0.0; cells.len()], |m| m.iter().map(|m| m.pore / m.pores.max(1e-9)).collect());
         let liquid = pcore::life::Parts::of(&w.chem).map_or(0, |p| p.liquid);
         let liquid_m3 = w.chem.molar_volume(liquid, pcore::chem::Phase::Liquid);
-        let ground = pcore::soil::holdings(w).unwrap_or_else(|| vec![Default::default(); cells.len()]);
-        Look { w, f: fields(w), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3, ground, lead: lead(w) }
+        let ground = means.as_deref().map_or_else(|| vec![Default::default(); cells.len()], |m| pcore::soil::holdings(w, m));
+        Look { w, f: fields(w, means.as_deref()), green: pcore::cover::per_m2(w, pcore::cover::Cover::kg), wet, liquid_m3, ground, lead: lead(w) }
     }
 
     /// The minerals the ground of cell `i` holds (`Chemistry::minerals`), mol/m².

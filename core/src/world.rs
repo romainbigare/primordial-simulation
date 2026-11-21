@@ -31,6 +31,11 @@ pub struct Counters {
     /// Per cell, what its cover built in the year so far, and in the last whole year, kg of dry matter
     pub grown_year: Vec<f64>,
     pub grown_last: Vec<f64>,
+    /// What a cell's cover ran at in a month (cell, `cover::CellRan`), until its month ends (`cover::landed`)
+    #[serde(skip)]
+    pub ran: Vec<(u32, crate::cover::CellRan)>,
+    /// Per cell, what its cover ran at in its last month (`cover::CellRan`)
+    pub ran_month: Vec<crate::cover::CellRan>,
     /// What flames did on a cell in a month (cell, `flame::Flamed`), until the month's flames end (`flame::month`)
     #[serde(skip)]
     pub flamed: Vec<(u32, crate::flame::Flamed)>,
@@ -69,7 +74,7 @@ impl Counters {
     /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
     /// cannot be left out.
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, flamed, flame_month, burnt_months, burnt_age, flame, flame_air, edges, edge_liquid, load_month, plumes, load } = std::mem::take(c);
+        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, ran, ran_month, flamed, flame_month, burnt_months, burnt_age, flame, flame_air, edges, edge_liquid, load_month, plumes, load } = std::mem::take(c);
         self.clamped_heat += clamped_heat;
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
@@ -77,8 +82,9 @@ impl Counters {
         self.seeds.iter_mut().zip(seeds).for_each(|(a, b)| *a += b);
         self.takers_died.iter_mut().zip(takers_died).for_each(|(a, b)| *a += b);
         self.grown.extend(grown);
+        self.ran.extend(ran);
         // (A chunk's counts hold no year: the world's are its own.)
-        debug_assert!(grown_year.is_empty() && grown_last.is_empty() && flame_month.is_empty() && burnt_months.is_empty() && burnt_age.is_empty(), "a chunk counted a year");
+        debug_assert!(grown_year.is_empty() && grown_last.is_empty() && ran_month.is_empty() && flame_month.is_empty() && burnt_months.is_empty() && burnt_age.is_empty(), "a chunk counted a year");
         debug_assert!(load_month.is_empty() && plumes.is_empty(), "a chunk counted the month's load");
         self.flamed.extend(flamed);
         self.flame.iter_mut().zip(flame).for_each(|(a, b)| *a += b);
