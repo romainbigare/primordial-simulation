@@ -32,6 +32,18 @@ pub(super) struct Sp {
     pub(super) mineral: bool,
 }
 
+impl crate::chem::Heat for Sp {
+    fn cp(&self) -> f64 {
+        self.cp
+    }
+    fn lf(&self) -> f64 {
+        self.lf
+    }
+    fn lv(&self) -> f64 {
+        self.lv
+    }
+}
+
 impl Sp {
     /// Its liquid share in ground at `t` K where the share `molten` of it is molten and the minerals of growth stay
     /// dissolved by the share `free` (`State::dissolved`): none at or over its boiling point; of a mineral only what

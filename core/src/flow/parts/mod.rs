@@ -20,7 +20,7 @@ pub(super) use view::{amounts, liquid_movable, pores_first, under_liquid};
 use super::land::{column, dissolved_in, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
 use node::{conductance, row};
 use super::scratch::{Latent, Scratch};
-use crate::{ground::{amounts_cap, skin_cap, Melting}, store::Class, units::MAX_SUBSTANCES, World};
+use crate::{chem::Heat, ground::{amounts_cap, skin_cap, Melting}, store::Class, units::MAX_SUBSTANCES, World};
 use serde::{Deserialize, Serialize};
 
 /// The land part, the liquid's top layer and its deep, in `Parts` and `Mixed`, and how many parts there are.
@@ -114,7 +114,7 @@ impl Piece {
     /// The heat a mol of substance `k` (`sp`) holds in it, J: its heat capacity times its temperature and the fusion
     /// enthalpy of its molten share.
     pub(super) fn heat_of(&self, k: usize, sp: &super::scratch::Sp) -> f64 {
-        sp.cp * self.tg + sp.lf * self.molten(k)
+        sp.carried(self.tg, self.molten(k))
     }
 }
 

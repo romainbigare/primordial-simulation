@@ -4,7 +4,7 @@
 //! (`Rows::book`).
 
 use super::Reactor;
-use crate::{flow::FlowView, ground::{amounts_cap, share}, store::Class, World, AIR};
+use crate::{chem::Heat, flow::FlowView, ground::{amounts_cap, share}, store::Class, World, AIR};
 
 /// A node sleeps until its reactions would use this share of their inputs (but for those on a `SPECK` of what it
 /// holds) or warm it `CALM_K` kelvin: for so little, one long span is as good as many steps.
@@ -175,11 +175,11 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     // Gas given to the air takes the node's heat by heat capacity, shared with the node as it is after its reactions.
     let c_out = (0..chem.ns()).map(|k| gas(k).max(0.0) * chem.subs[k].cp).sum::<f64>();
     let per_c = e.max(0.0) / (cap(&h.amt) + c_out).max(1e-9);
-    let pay = (0..chem.ns()).map(|k| gas(k).max(0.0) * (chem.subs[k].latent_gas() + chem.subs[k].cp * per_c)).sum::<f64>();
+    let pay = (0..chem.ns()).map(|k| gas(k).max(0.0) * chem.subs[k].carried_gas(per_c)).sum::<f64>();
     let (paid, lift) = (share(e.max(0.0), pay), nodes.lift(i, j, w.cfg.gravity));
     for (k, m) in (0..ns).map(|k| (k, gas(k))).filter(|e| e.1 != 0.0) {
         let (s, m) = (&chem.subs[k], if m > 0.0 { m * paid } else { m });
-        let heat = if m > 0.0 { m * (s.latent_gas() + s.cp * per_c) } else { m * (s.cp * nodes.ta[j] + s.latent_gas()) };
+        let heat = m * s.carried_gas(if m > 0.0 { per_c } else { nodes.ta[j] });
         (out[k], out[ns + k], out[2 * ns + k]) = (m, heat, m * s.molar_mass * lift);
     }
 }

@@ -3,7 +3,7 @@
 
 use super::cells::{Ctx, GAINS, GAS, LINK, SPACE, TO_AIR, TO_SPACE, UP};
 use super::surf::Surf;
-use crate::units::T_FLOOR;
+use crate::{chem::Heat, units::T_FLOOR};
 
 /// The air a cell sees moves in a step by up to this, K, as its slopes are held to what it holds (`hold`).
 const AIR_SWING_K: f64 = 60.0;
@@ -47,8 +47,8 @@ pub(super) fn hold(cx: &Ctx, g: &Surf, (seen, sun): (&[f64], f64), carry: &[[f64
 /// heat and its lift from its head to its air node's mean ground, which its air pays, `FlowView::lift`).
 pub(super) fn carried(cx: &Ctx, g: &Surf, k: usize) -> [f64; 2] {
     let sp = cx.s.sp[k];
-    let (heat, lift) = (sp.cp * g.tg, sp.mm * (cx.w.cfg.gravity * (cx.s.za[g.j] - g.head)));
-    [heat + sp.lf + sp.lv, heat - lift]
+    let lift = sp.mm * (cx.w.cfg.gravity * (cx.s.za[g.j] - g.head));
+    [sp.carried(g.tg, 1.0) + sp.lv, sp.carried(g.tg, 0.0) - lift]
 }
 
 /// A cell's changing outputs (`out`) from its parts (`p`), each a row of its value and its slopes, with what each mol of

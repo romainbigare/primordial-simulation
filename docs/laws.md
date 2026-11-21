@@ -997,7 +997,7 @@ the ideal-solution law (`Chemistry::melt_in`): 1/T = 1/Tm − R · ln(x) / Lf, x
 its solutes. Only the solvent (the most abundant liquid) is lowered; solutes are liquids melting below it (the salts 11
 and 12, the fat 6); ice and liquid count together, so it freezes at one point. One law for ground plateaus, ice cover
 (`World::thaw`) and Change. **Latent heat**: a gas in the air holds its melting and boiling heat
-(`Substance::latent_gas`), paid or got as it enters or leaves, and liquid taken or given carries
+(`chem::Heat::latent_gas`), paid or got as it enters or leaves, and liquid taken or given carries
 it. **The densest temperature** of a liquid (`Chemistry::dense_in`, what overturns a liquid's top and
 deep, 1.1) is its pure liquid's (`Substance::dense`) lowered in proportion to the mass of its solutes per mass of it
 (Despretz's law, `Substance::dense_drop`), and no lower than its melting point there: a liquid salty enough is densest

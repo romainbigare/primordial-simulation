@@ -3,7 +3,7 @@
 use crate::chemistry::{chemistry0, Init};
 
 use pcore::change::Reactor;
-use pcore::chem::{Chemistry, Phase};
+use pcore::chem::{Chemistry, Heat, Phase};
 use pcore::flow::scale_height;
 use pcore::life::Life;
 use pcore::space::square::Square;
@@ -119,7 +119,7 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
     for j in 0..w.mesh.level(AIR).n() {
         let t = w.t_air(j);
         let more: Vec<(usize, f64)> = (0..w.chem.ns()).filter(|&k| w.chem.absorbs_heat(k)).map(|k| (k, w.a(k, j) * (factor - 1.0))).collect();
-        let heat = more.iter().map(|&(k, m)| m * (w.chem.subs[k].cp * t + w.chem.subs[k].latent_gas())).sum();
+        let heat = more.iter().map(|&(k, m)| m * w.chem.subs[k].carried_gas(t)).sum();
         w.cross((Boundary::Outside, Node::air(j)), more, heat);
     }
 }

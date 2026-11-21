@@ -4,6 +4,7 @@
 mod planck;
 mod roles;
 mod thermo;
+pub use thermo::Heat;
 
 use crate::{params::require, units::{MAX_REACTIONS, MAX_SUBSTANCES}};
 use serde::{Deserialize, Serialize};

@@ -2,6 +2,7 @@
 //! to the nearest open liquid (`ways_to_liquid`, `to_liquid`).
 
 use super::place;
+use crate::chem::Heat;
 use crate::life::{Chunk, Parts};
 use crate::store::{apply, Class, Move, Node};
 use crate::World;
@@ -54,7 +55,7 @@ pub fn vapour(w: &World, d: &mut Chunk, i: usize, [liquid, solid]: [f64; 2]) -> 
     let got = d.moves.take_from_ground(w, i, (0, 0.0, 0.0), mol * s.cp * t + liquid * s.lf, cap).1;
     d.moves.gas(w, k, mol, w.lift(i));
     d.moves.give(w, Node::aside(i), 0, 0.0, mol * s.cp * t);
-    mol * (s.cp * t + s.latent_gas()) - got
+    mol * s.carried_gas(t) - got
 }
 
 /// The fields of ways (`ways_to_liquid`) are found for open liquid of at least 10^k mol over the month, k from 0 to this less
@@ -85,7 +86,7 @@ pub fn fetched(w: &mut World, asks: &[(usize, usize, f64)]) {
         let (t, plateau) = w.thaw_last(from);
         let liquid = w.store.amounts(Class::Ground)[k * n + from].max(0.0) * w.molten(k, from, t, plateau);
         let got = mol * (liquid / asked[&from]).min(1.0);
-        let heat = got * (s.cp * w.t_ground_last(from) + s.lf);
+        let heat = got * s.carried(w.t_ground_last(from), 1.0);
         // It goes from the far cell's ground into the walkers there, over to their cell's head, and into its ground.
         moves.push(Move { from: Node::ground(from), to: Node::new(Class::Life, from), k: k as u16, mol: got, heat });
         moves.push(Move { from: Node::new(Class::Life, to), to: Node::ground(to), k: k as u16, mol: got, heat });

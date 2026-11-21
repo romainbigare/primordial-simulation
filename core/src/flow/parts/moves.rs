@@ -5,7 +5,7 @@
 
 use super::{Found, Parts, DEEP, LAND, PARTS, TOP};
 use crate::flow::Scratch;
-use crate::{ground::amounts_cap, math::one_minus_exp, store::Class, units::T_FLOOR, World};
+use crate::{chem::Heat, ground::amounts_cap, math::one_minus_exp, store::Class, units::T_FLOOR, World};
 
 /// A number and the sum of its parts that differ by no more than this share of it differ by the rounding of that sum
 /// alone: nothing moved.
@@ -85,7 +85,7 @@ fn land_to_top(s: &Scratch, p: &mut Parts, (t, free, molten): (f64, f64, &dyn Fn
         let m = p.amt[k][LAND] * s.sp[k].liquid(t, molten(k), free) * part;
         p.amt[k][LAND] -= m;
         p.amt[k][TOP] += m;
-        heat += m * (s.sp[k].cp * t + s.sp[k].lf);
+        heat += m * s.sp[k].carried(t, 1.0);
     }
     p.heat[LAND] -= heat;
     p.heat[TOP] += heat;
@@ -123,8 +123,8 @@ pub(super) fn strip(s: &Scratch, i: usize, p: &mut Parts, (f, por): (&Found, f64
         // The share of its liquid its pores hold.
         let pore = if f.l[2] > 0.0 { f.pores(por).min(f.l[2]) / f.l[2] } else { 0.0 };
         // Of each substance it gives, the share of what the bottom holds and the heat of a mol.
-        let solids = s.state.fixed.iter().map(|&k| (k, y, s.sp[k].cp * t));
-        let liquids = s.state.vary.iter().filter(|&&k| t < s.sp[k].boil).map(|&k| (k, s.sp[k].liquid(t, f.th.molten(k), f.free) * pore * y, s.sp[k].cp * t + s.sp[k].lf));
+        let solids = s.state.fixed.iter().map(|&k| (k, y, s.sp[k].carried(t, 0.0)));
+        let liquids = s.state.vary.iter().filter(|&&k| t < s.sp[k].boil).map(|&k| (k, s.sp[k].liquid(t, f.th.molten(k), f.free) * pore * y, s.sp[k].carried(t, 1.0)));
         let mut h = -d * s.skin[i] * t;
         for (k, x, per) in solids.chain(liquids) {
             let m = p.amt[k][b] * x;

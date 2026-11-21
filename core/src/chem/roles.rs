@@ -1,7 +1,7 @@
 //! What the reactions and conversions do for life: their heat, which burn, which keep their energy, what life builds
 //! of, and the roles the first life is placed with (`life_roles`, `matter_roles`, `fixing`).
 
-use super::{Chemistry, Phase, Reaction};
+use super::{Chemistry, Heat, Phase, Reaction};
 use crate::units::T_SURF;
 
 /// A reaction keeps energy (`keeps`) only where a burning gets more than this share more heat out of the same input:
