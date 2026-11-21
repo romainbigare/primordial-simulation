@@ -58,9 +58,19 @@ impl Scratch {
         }
     }
     /// The depth of the soft solid lying on the land of cell `i`, m, at its solid's density: of a cell of parts its
-    /// land's, else the node's (`Scratch::cover`).
+    /// land's, else the node's (`soft`).
     pub(crate) fn soft_land(&self, i: usize) -> f64 {
-        self.mixed(i).map_or_else(|| self.cover.get(i).map_or(0.0, |c| c[2]), |m| m.piece[LAND].cover[2])
+        self.mixed(i).map_or_else(|| self.soft(i), |m| m.piece[LAND].cover[2])
+    }
+    /// The depth of the soft solid lying on ground node `i`, on its land and on its liquid, m over its area, at its
+    /// solid's density (`Scratch::cover`): the snow and ice of the law. None before Flow first built its state.
+    pub fn soft(&self, i: usize) -> f64 {
+        self.cover.get(i).map_or(0.0, |c| c[2])
+    }
+    /// Whether the solid of substance `k` lies as soft cover at `t` K (`Sp::soft_at`); none before Flow first built
+    /// its tables of substances.
+    pub fn lies_soft(&self, k: usize, t: f64) -> bool {
+        self.sp.get(k).is_some_and(|p| p.soft_at(t))
     }
     /// The temperature of the surface of cell `i`, K: of a cell of parts its land's and its liquid's top's mean by
     /// area, else the node's.

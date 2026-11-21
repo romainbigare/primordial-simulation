@@ -13,9 +13,9 @@ use crate::World;
 /// Slot `x` pays its upkeep over `dt` at `t` K by burning its fuel (its plants without the oxidising gas at the yield
 /// of their fuel without it, `FERMENT_YIELD`), then loses to its cell's remains the plants on its
 /// ground under the liquid past its roots' reach whose store is spent (`airless`, `DROWNED`), the share unpaid
-/// (`SPENT`), the share its wear gives (`AGE`) and the share frozen (`PHASE`). Returns the kg lost by cause, and the
-/// upkeep, J.
-pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t, dt): (f64, f64), b: &mut Books) -> ([f64; crate::life::DEATHS], f64) {
+/// (`SPENT`), the share its wear gives (`AGE`) and the share frozen (`PHASE`, kept in `Slot::frozen`). Returns the kg
+/// lost by cause, and the upkeep, J.
+pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &mut Slot, (t, dt): (f64, f64), b: &mut Books) -> ([f64; crate::life::DEATHS], f64) {
     let (chem, ph, g) = (&w.chem, &w.cfg.phys, c.genes[x]);
     let (burn, days) = (&chem.reactions[p.burn], dt / DAY);
     let pace = burn.relative_rate(t, ph.t_cat);
@@ -51,7 +51,8 @@ pub(super) fn upkeep(w: &World, c: &mut Cover, p: &Parts, x: usize, s: &Slot, (t
     // Members of a field wear out at the rate of living (Rubner 1908), a dormant one at least at `Physics::dormant` of
     // the active rate; below its frost gene, hardened by its dormancy, its frozen share dies (laws.md 3).
     let worn = active * s.act.max(ph.dormant) / (s.living * ph.e_life * dec(g[REPAIR])).max(1e-300);
-    let frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
+    s.frozen = super::frozen(ph, chem.subs[p.liquid].melt, g[FROST] as f64, (t, s.act));
+    let frozen = s.frozen;
     let drowned = airless(c, x, s, burnt / held_fuel.max(1e-300) / (FERMENT_YIELD * dear));
     let mut lost = [0.0; crate::life::DEATHS];
     let mut left = 1.0;

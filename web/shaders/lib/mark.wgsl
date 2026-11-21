@@ -36,11 +36,12 @@ fn kind(k: i32, c: vec2i) -> vec4f {
 fn kinds_n() -> i32 { return i32(cover.walls.w); }
 fn groups() -> i32 { return (kinds_n() + 3) / 4; }
 fn chance_plane(l: i32, t: i32) -> i32 { return l * kinds_n() + t; }
-fn need_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + q; }
-fn roots_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + groups() + q; }
-fn label_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 2 * groups() + q; }
-fn reach_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 3 * groups() + q; }
-fn kind_plane(at: i32, t: i32) -> i32 { return COVER_LATTICES * kinds_n() + 4 * groups() + at * kinds_n() + t; }
+fn strips_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + q; }
+fn rest_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + groups() + q; }
+fn roots_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 2 * groups() + q; }
+fn label_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 3 * groups() + q; }
+fn reach_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 4 * groups() + q; }
+fn kind_plane(at: i32, t: i32) -> i32 { return COVER_LATTICES * kinds_n() + 5 * groups() + at * kinds_n() + t; }
 fn form_plane(t: i32) -> i32 { return kind_plane(0, t); }
 fn from_plane(t: i32) -> i32 { return kind_plane(1, t); }
 fn to_plane(t: i32) -> i32 { return kind_plane(2, t); }
@@ -75,14 +76,14 @@ fn along(v: vec4f, z: f32, held: i32) -> f32 {
 // other's size (`along`).
 const NEAR_SIZES = 3.0;
 
-// What the ground at `at` leaves a plant: the depth of the liquid over its roots, m (land.wgsl `state_at`), its
-// wetness index (where its soil's liquid gathers), the snow there (lib/land.wgsl `snow_at`, 1 where it lies) and its
-// cells' snow's depth, m.
-struct Foot { depth: f32, twi: f32, snow: f32, snow_m: f32 }
+// What the ground at `at` leaves a plant: the depth of the liquid over its roots, m (land.wgsl `state_at`), how
+// saturated it is (land.wgsl `saturated_at`: the law's strips), the snow there (lib/land.wgsl `snow_at`, 1 where it
+// lies) and its cells' snow's depth, m.
+struct Foot { depth: f32, saturated: f32, snow: f32, snow_m: f32 }
 fn foot(at: vec2f) -> Foot {
   let g = ground_at(at, false);
   let st = state_at(at, g, corners(at / land.map.x));
-  return Foot(st.depth, g.twi, select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
+  return Foot(st.depth, saturated_of(g, at), select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
 }
 
 // Of each of four kinds that stand in liquid as deep as `reach` m (canopy.ts: down to the core's `Cover::line`), 1 where
@@ -97,33 +98,21 @@ fn holds(loose: f32, need: vec4f) -> vec4f {
   return select(vec4f(rooted(loose, need.x, 0.0), rooted(loose, need.y, 0.0), rooted(loose, need.z, 0.0), rooted(loose, need.w, 0.0)), vec4f(1.0), need <= vec4f(0.0));
 }
 
-// The share of a kind that needs `need` that stands at a point of wetness index `twi` in the square at c: its activity
-// there over its activity at the square's mean (land.wgsl `activity`), at most 1, with the square's pores filled
-// `HELD_FILL` (its liquid departing about its samples' mean index, land.wgsl `soil_held`). A plant lives through the
-// year: where it stands is the place's (wet hollows, dry knobs), not the month's, so a stand keeps its trees as its
-// soil dries and wets with the seasons.
-const HELD_FILL = 0.5;
-fn thrive(twi: f32, c: vec2i, need: vec4f) -> vec4f {
-  let soil = cell(SOIL, c);
-  let mean = HELD_FILL * soil.x;
-  let half = land.soil.y;
-  let here = soil_held(mean, soil.x, cell(TERRAIN, c).x, twi);
-  var out = vec4f(1.0);
-  for (var s = 0; s < 4; s++) {
-    if (need[s] <= 0.0) { continue; }
-    let whole = activity(mean / (mean + half), need[s]);
-    if (whole > 0.0) { out[s] = min(activity(here / (here + half), need[s]) / whole, 1.0); }
-  }
-  return out;
+// How dense the four kinds from 4q stand at a point of the square at c that is saturated by `saturated` (land.wgsl
+// `saturated_at`), over their mean on its land: the core's split of each kind's plants between its land's saturated
+// strips and its drier rest (tape/src/stands.rs `dense`, canopy.ts), the strips' where the point is saturated, the
+// rest's where it is dry, and between the two over the edge of the wet ground. The law knows no other place in a land.
+fn dense_at(saturated: f32, c: vec2i, q: i32) -> vec4f {
+  return mix(kind(rest_plane(q), c), kind(strips_plane(q), c), saturated);
 }
 
 // What the four kinds from 4q of square s count for at a foot of ground `f` where `loose` m of loose ground lies,
-// `thick` over the patches: its share there, how well each thrives, how much of it its roots hold and whether they
-// reach through the liquid there (`stand_in`); or, not `exact`,
-// the most they may count for there, before the ground is read (`pick_kind`).
+// `thick` over the patches: its share there, how dense each stands on that ground (`dense_at`), how much of it its roots
+// hold and whether they reach through the liquid there (`stand_in`); or, not `exact`, the most they may count for
+// there, before the ground is read (`pick_kind`): the denser of the two grounds.
 fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32, exact: bool) -> vec4f {
-  if (!exact) { return vec4f(cs.w[s] * (1.0 + PATCH)); }
-  return cs.w[s] * thick * thrive(f.twi, cs.at[s], kind(need_plane(q), cs.at[s])) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
+  if (!exact) { return cs.w[s] * (1.0 + PATCH) * max(kind(strips_plane(q), cs.at[s]), kind(rest_plane(q), cs.at[s])); }
+  return cs.w[s] * thick * dense_at(f.saturated, cs.at[s], q) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
 }
 
 // Where two plants would stand in one cell, one `h` m tall stands over one `under` m tall with this chance: a race whose

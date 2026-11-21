@@ -20,8 +20,10 @@ const LEFT_STEPS = 100;
 /** The planes of the kinds' table (lib/mark.wgsl `kind`) for squares of `kinds` kinds (the world's variety, the core's
  * `Config::variety`): of each lattice and each kind, the chance a cell holds a mark of each of its groups (kind_row.ts `GROUPS`, the
  * large plants first) where its roots hold (over the share of its square that holds it, the core's `Cover::rooted`; on
- * the lattice of stands, `STANDS`, negated for its square's first kind, `Paint`); how wet each kind needs its ground and
- * how deep its loose ground, m (the core's `Cover::need`; 0: its square holds it everywhere, `ROOTED_ALL`); its slot in
+ * the lattice of stands, `STANDS`, negated for its square's first kind, `Paint`); how dense each kind stands on its
+ * land's saturated strips and on its drier rest, over its mean (kind_row.ts `K.strips`, `K.rest`, the core's split of
+ * its plants), and how deep its loose ground its roots need, m (the core's `Cover::need`; 0: its square holds it
+ * everywhere, `ROOTED_ALL`); its slot in
  * its cell's cover (a label it keeps, so its marks keep their places as the kinds' order and shares change, mark.wgsl
  * `pick_kind`), and the depth of liquid it stands in, m (how deep its line lies under the level, the core's
  * `Cover::line`); then of each kind its
@@ -33,9 +35,9 @@ const LEFT_STEPS = 100;
  * (lattices.ts `marksOf`). A plane holds four numbers: one for each kind of a group of four of a square
  * (`groups` such planes for each such number), or one of each group of a kind. */
 export function planesOf(kinds: number) {
-  const g = Math.ceil(kinds / 4), lat = LATTICES.length, need = lat * kinds, form = need + 4 * g;
+  const g = Math.ceil(kinds / 4), lat = LATTICES.length, strips = lat * kinds, form = strips + 5 * g;
   return {
-    kinds, groups: g, chance: 0, need, roots: need + g, label: need + 2 * g, reach: need + 3 * g, form, from: form + kinds, to: form + 2 * kinds,
+    kinds, groups: g, chance: 0, strips, rest: strips + g, roots: strips + 2 * g, label: strips + 3 * g, reach: strips + 4 * g, form, from: form + kinds, to: form + 2 * kinds,
     height: form + 3 * kinds, width: form + 4 * kinds, count: form + (4 + lat) * kinds,
   };
 }
@@ -220,7 +222,8 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
       const packed = Math.round(left * LEFT_STEPS) + Math.min(leafy ? leafy[K.crown] : 1, 1 - 1e-3);
       const shape = formOf({ leaf: r[K.leaf], frost: r[K.frost], moist: r[K.moist], seed: r[K.seed] });
       const ofGroups = (plane: number, v: (g: number) => number) => groups.forEach((_, g) => put(plane + k, i, g, v(g)));
-      put(group(P.need, k), i, k & 3, 10 ** r[K.moist]);
+      put(group(P.strips, k), i, k & 3, r[K.strips]);
+      put(group(P.rest, k), i, k & 3, r[K.rest]);
       put(group(P.roots, k), i, k & 3, mean >= ROOTED_ALL ? 0 : r[K.need]);
       put(group(P.label, k), i, k & 3, r[K.slot]);
       put(group(P.reach, k), i, k & 3, wades);

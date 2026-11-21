@@ -39,7 +39,8 @@ fn remember(c: &mut Cover, moist: f64, year: f32) {
 /// What a slot is in a month: its built cover and its living cover (`Cover::living`), kg; its capture area and what of
 /// it absorbs, m²; its light per unit of absorbing area over the cover's mean, and at the bottom of its layer (its
 /// crown's base), and the capture area per unit of ground the light passes through its crown (`canopy::shade`); its
-/// activity (`cover::activity`), the share of its roots that work (`cover::working`), the share of its ground under the
+/// activity (`cover::activity`) and the share of it frozen (`cover::frozen`, set by `upkeep`), the share of its roots
+/// that work (`cover::working`), the share of its ground under the
 /// liquid, and the share of its plants on ground under the liquid past its roots' reach with the line over which none
 /// lies (`Footing`); what one more kg of it would
 /// store in the month at the bottom of its layer, J (`light`); its conducting walls, kg (`stand::sapwood`), and the key
@@ -55,6 +56,7 @@ pub(super) struct Slot {
     pub(super) bottom: f64,
     pub(super) layer: f64,
     pub(super) act: f64,
+    pub(super) frozen: f64,
     pub(super) work: f64,
     pub(super) wet: f64,
     pub(super) airless: f64,
@@ -160,6 +162,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     let order = &*order;
     let (pays, season) = super::season::pay(w, c, (p, &e), (&mut s, &stored), order, (t, dt), (&mut b, counts));
     grow(w, c, (p, &e), (&s, pays, season), order, (i, a, dt), (&mut b, counts));
+    ran(&s, order, i, counts);
     // Its plants grow where their roots gain (`soak::strips_share`): of what each slot holds now, what it stored this
     // month went to its strips and its rest by what a plant gains on each; the rest stands where it stood.
     for &q in order {
@@ -177,6 +180,15 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     fall(&mut c.snag, (p, &e), (ph.snag_life, dt), (&mut b, DIED));
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
     (b, caught)
+}
+
+/// What the slots `order` of cell `i`, `s` in the month, ran at (`cover::Ran`), counted for the tape.
+fn ran(s: &[Slot; SLOTS], order: &[usize], i: usize, counts: &mut Counters) {
+    let mut out = [super::Ran::default(); SLOTS];
+    for &q in order {
+        out[q] = super::Ran { act: s[q].act as f32, frozen: s[q].frozen as f32, wet: s[q].wet as f32 };
+    }
+    counts.ran.push((i as u32, out));
 }
 
 /// Where each of the `n` slots in use of cover `c` of cell `i` stands this month (`cover::footing` above its line, a
