@@ -4,6 +4,7 @@
 use pcore::par;
 use pcore::cover::{lying, per_m2, Cover};
 use pcore::chem::{Phase, Substance};
+use pcore::inside::Means;
 use pcore::{World, AIR};
 
 /// Thinnest cover (m) that hides what lies below it.
@@ -55,19 +56,17 @@ pub struct Fields {
 /// surface and of the ground.
 type Cell = (f64, f64, f64, f64, f64, [f64; 3], [f64; 3]);
 
-/// Of each cell of `w`, its liquid in its pores and over them (`flow::means`; none before Flow first built its state).
-fn liquid_of(w: &World) -> Vec<pcore::inside::Means> {
-    let n = w.mesh.cells().n();
-    pcore::flow::means(w, &(0..n).collect::<Vec<usize>>()).unwrap_or_else(|| vec![Default::default(); n])
+/// Of each cell of `w`, its liquid in its pores and over them (`flow::means`); none before Flow first built its state.
+/// A frame works it out once and hands it to all that read it.
+pub fn means(w: &World) -> Option<Vec<Means>> {
+    pcore::flow::means(w, &(0..w.mesh.cells().n()).collect::<Vec<usize>>())
 }
 
-pub fn fields(w: &World) -> Fields {
-    fields_of(w, &liquid_of(w))
-}
-
-/// The fields of `w` whose cells hold the liquid `liquid` (`liquid_of`).
-fn fields_of(w: &World, liquid: &[pcore::inside::Means]) -> Fields {
-    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i, liquid[i].stands));
+/// The fields of `w` whose cells hold the liquid `means` (`means`; none before Flow first built its state: then no
+/// liquid in or over the pores).
+pub fn fields(w: &World, means: Option<&[Means]>) -> Fields {
+    let stands = |i: usize| means.map_or(0.0, |m| m[i].stands);
+    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i, stands(i)));
     let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], rgb: vec![], ground: vec![] };
     for (z, depth, ice, loose, t, rgb, ground) in cells {
         f.z.push(z);
@@ -203,21 +202,25 @@ pub(crate) struct Ctx<'a> {
     /// Per ground cell: where its soil's liquid saturated its land at the month's start, as the laws read it
     /// (`World::life`'s `wet`; none where it holds no land, life has no key liquid, or before the month's start built it)
     pub saturated: Vec<Option<pcore::inside::WetGround>>,
+    /// Per ground cell: what it holds as the shares read it (`means`; none before Flow first built its state)
+    pub means: Option<Vec<Means>>,
 }
 
 impl<'a> Ctx<'a> {
     pub(crate) fn new(w: &'a World) -> Self {
         let n = w.mesh.cells().n();
         let t_air = (0..w.mesh.level(AIR).n()).map(|j| w.t_air(j)).collect();
-        let means = liquid_of(w);
-        let f = fields_of(w, &means);
-        let wet = means.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
-        let filled = means.iter().map(|m| if m.pores > 0.0 { m.pore / m.pores } else { f64::NAN }).collect();
+        let means = means(w);
+        let f = fields(w, means.as_deref());
+        let none = vec![Means::default(); n];
+        let each = means.as_deref().unwrap_or(&none);
+        let wet = each.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
+        let filled = each.iter().map(|m| if m.pores > 0.0 { m.pore / m.pores } else { f64::NAN }).collect();
         let area = w.mesh.cells().area();
         let grown = (0..n).map(|i| w.counts.grown_last.get(i).map_or(0.0, |kg| kg / area[i])).collect();
         let land: Vec<f64> = pcore::contract::lands(w).iter().zip(area).map(|(m2, a)| m2 / a).collect();
         let saturated = (0..n).map(|i| w.life.wet.get(i).copied().flatten()).collect();
-        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: pcore::soil::holdings(w), saturated };
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: per_m2(w, Cover::kg), wood: per_m2(w, Cover::walls), leaf: per_m2(w, Cover::leaf), seeds: lying(w), grown, takers: pcore::fauna::per_km2(w), wet, filled, land, dead: means.as_deref().map(|m| pcore::soil::holdings(w, m)), saturated, means };
         (c.absorber, c.vapor) = par::map_n(w.mesh.level(AIR).n(), par::UNCOUNTED, |j| air_column(w, j)).into_iter().unzip();
         c
     }

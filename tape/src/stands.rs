@@ -134,8 +134,10 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
 }
 
 /// The kinds of cell `i` of `w`, a row of `KIND_ROW` numbers (`row`) for each slot its world uses (`Config::variety`):
-/// its slots that stand on any of its ground, the heaviest first; an empty kind is all 0 with its starting kind -1.
-pub fn rows(w: &World, i: usize) -> Vec<f64> {
+/// its slots that stand on any of its ground, the heaviest first; an empty kind is all 0 with its starting kind -1. Its
+/// liquid's level stands `level` m over its lowest ground (`flow::levels`, which a frame finds for all cells at once;
+/// 0 before Flow first built its state).
+pub fn rows(w: &World, i: usize, level: f64) -> Vec<f64> {
     let mut out = vec![0.0; w.cfg.variety * KIND_ROW];
     out.iter_mut().step_by(KIND_ROW).for_each(|r| *r = -1.0);
     let Some(p) = Parts::of(&w.chem) else { return out };
@@ -143,7 +145,7 @@ pub fn rows(w: &World, i: usize) -> Vec<f64> {
     let g = Ground {
         i,
         soak: cover::soak(w, &p, i, w.g(p.liquid, i)).1,
-        level: pcore::flow::levels(w, &[i]).map_or(0.0, |l| l[0][1] - l[0][0]),
+        level,
         t: w.t_ground_last(i),
         melt: w.chem.subs[p.liquid].melt,
         rho: w.chem.subs[p.sub[cover::WALL]].density[0],
@@ -177,7 +179,7 @@ mod tests {
         let (mm, area, c) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.life.cover(i));
         let own = |x: usize| area * c.stands[x] as f64;
         let all: f64 = c.held().map(|x| c.built(&mm, x) / own(x)).sum::<f64>();
-        let r = rows(&w, i);
+        let r = rows(&w, i, 0.0);
         let kind = |k: usize| &r[k * KIND_ROW..(k + 1) * KIND_ROW];
         assert!(kind(0)[1] > kind(1)[1] && kind(1)[1] > 0.0 && kind(2)[0] == -1.0, "two rows, the heaviest first");
         assert!(((kind(0)[1] + kind(1)[1]) / all - 1.0).abs() < 1e-12, "{} and {} against {all}", kind(0)[1], kind(1)[1]);

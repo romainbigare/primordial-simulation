@@ -95,13 +95,12 @@ impl Table {
         let mut bytes = Vec::with_capacity(w.map.n() * crate::LAYERS.len());
         frame(&c, &mut bytes);
         let n = w.mesh.cells().n();
-        let all: Vec<usize> = (0..n).collect();
-        let means = pcore::flow::means(w, &all);
-        let levels = pcore::flow::levels(w, &all);
-        let rows: Vec<[f64; ROW]> = (0..n).map(|i| self.row(&c, i, means.as_ref().map(|m| m[i]), levels.as_ref().map(|l| l[i]))).collect();
+        let levels = pcore::flow::levels(w, &(0..n).collect::<Vec<usize>>());
+        let rows: Vec<[f64; ROW]> = (0..n).map(|i| self.row(&c, i, c.means.as_ref().map(|m| m[i]), levels.as_ref().map(|l| l[i]))).collect();
         let mut table = vec![cover_melt(w) as f32];
         table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
-        let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i)).collect();
+        let stands = |i: usize| levels.as_ref().map_or(0.0, |l| l[i][1] - l[i][0]);
+        let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i, stands(i))).collect();
         table.extend(self.square.iter().flat_map(|&i| kinds[i].iter().map(|&v| v as f32)));
         let mut ponds = w.pond_levels();
         let mut fetch = vec![0.0; ponds.len()];

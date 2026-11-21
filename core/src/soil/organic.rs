@@ -1,6 +1,7 @@
 //! What the cells' ground holds of dead matter and of minerals, and how fast their dead frame rots there, read for the
 //! shells' maps (laws.md 4): no law reads it.
 
+use crate::inside::Means;
 use crate::World;
 
 /// What the ground of a cell holds, kg/m²: its fresh dead matter (of the substances life's parts are made of), its slow
@@ -16,15 +17,14 @@ pub struct Holdings {
     pub rot: f64,
 }
 
-/// What the ground of each cell of `w` holds (`Holdings`), by Flow's state of it (`flow::means`); none before Flow first
-/// built it.
-pub fn holdings(w: &World) -> Option<Vec<Holdings>> {
+/// What the ground of each cell of `w` holds (`Holdings`), by what each holds as the shares read it, `means` (of all
+/// its cells, `flow::means`).
+pub fn holdings(w: &World, means: &[Means]) -> Vec<Holdings> {
     let n = w.mesh.cells().n();
-    let means = crate::flow::means(w, &(0..n).collect::<Vec<usize>>())?;
     let parts = crate::life::Parts::of(&w.chem);
     let frame = parts.and_then(|p| w.chem.reactions.iter().find(|rx| rx.open > 1.0 && rx.inputs.iter().any(|q| q.0 as usize == p.sub[crate::life::WALL])));
     let year = w.cfg.calendar().year as f64;
-    Some((0..n).map(|i| {
+    (0..n).map(|i| {
         let area = w.mesh.cells().area()[i];
         let kg = |k: usize| w.g(k, i) * w.chem.subs[k].molar_mass / area;
         let litter = parts.map_or(0.0, |p| p.sub.iter().map(|&k| kg(k)).sum());
@@ -37,5 +37,5 @@ pub fn holdings(w: &World) -> Option<Vec<Holdings>> {
         let moist = w.cfg.phys.wetness(depth);
         let rot = frame.map_or(0.0, |rx| crate::change::open_catalyst(rx.open, moist) * rx.arrhenius(w.t_ground_last(i)) * aired * year);
         Holdings { litter, slow, minerals: [mineral * dissolved, mineral * (1.0 - dissolved)], rot }
-    }).collect())
+    }).collect()
 }
