@@ -665,7 +665,8 @@ middle latitudes, which the eddies drive (Vallis 2017, 15), so there the wet sid
 like ours it is its west; and the wind is some five times weaker than the measured trades (5 to 10 m/s), as the
 overturning it is part of carries about a fifth of the measured flux (1.6). Where it climbs the ground's rise along it (the surface the air touches, the
 liquid's on the liquid, fitted to the bordering cells) it lifts the air at the ground's density, and where it
-descends lets it sink; summed per node, a rising (or sinking) mass flux. In `rain_time` the share f = min(1, |that| ×
+descends lets it sink; summed per node, a rising (or sinking) mass flux, to which the weather adds its own each day
+(1.6). In `rain_time` the share f = min(1, |that| ×
 `rain_time` / the lower half's mol) of the node's lower air changes places with its upper half's, which holds
 ρ = split / (1 − split) of the vapour per mol the lower holds (`Scratch::split`, the column's profile): rising air
 condenses down to the upper half's cold, so the node saturates at what saturates it times 1 − f (1 − ρ); sinking air
@@ -818,7 +819,7 @@ lengths): its eddies and its overturning, the lower half outward where it is war
 its own air, turned by the rotation; across the east and west edges the turned overturning of the planet's gradient
 is its mean wind along the row, in at one side and out at the other in the lower half and back in the upper; its
 pressure is the planet's, so no evening crosses. Each day, after the wind, each such link is one implicit step with
-the column beyond held. What crosses comes from and goes to the boundary node for outside, with its heat and the
+the column beyond held, read where the weather brings its air from (below). What crosses comes from and goes to the boundary node for outside, with its heat and the
 latent heat its gases hold in the air; mass that enters pays its lift from 0 m, mass that leaves takes its potential
 energy there (`potential::Lifts`). The heat that comes in at each edge is counted (`Counters::edges`, printed by
 `ew run`). **The planet's low liquid**: where the edges are open (`World::edges_open`), the part of the open low ground
@@ -830,6 +831,39 @@ planet's strip holds only air). So what the island's air gains or loses through 
 liquid, and its level holds each month. Lakes and closed basins, and the open low ground of a world alone, are not
 joined; a cell of land at the map's edge opens nothing, only the cells of the open low ground there. What crosses is
 counted (`Counters::edge_liquid`, m³ and its heat; the series' `edge_liquid`, `ew run`'s line of the edges).
+
+**The weather** (`air::weather`). The air's step of 15 days, with its eddies a smooth mixing, cannot hold the weather
+systems of the middle latitudes, which last a few days; without them each year repeats the last. They enter as one
+random field: η, the north-south distance the eddies have moved the air that is at a place, m on the planet, toward the
+north for air that came from the south. On a lattice of points `eddy_size` apart on the planet (the map's metres times
+its stretch, one node beyond the edges), each point draws a unit normal each day, keyed by the seed, the day since the
+start and the point (`rng::Purpose::Weather`): the field holds no state, and is the same on any count of threads.
+Its fast part is the sum of a point's draws of the past days, each weighted by e^(-age / `eddy_time`), over the last 5
+of those e-folds (`weather::FOLDS`), scaled to a spread of one: a red noise of the eddies' time. Its slow part is what a
+liquid's top layer sums of the same weather and lets go in τ = its heat per K (`h_mix` of the key liquid) over
+`top_damp` (about 4 months with chemistry 0): the same draws weighted by e^(-age / τ), with sqrt(`eddy_time` / τ) of
+the fast part's spread, as a top layer that the fast weather forces holds it (Hasselmann 1976; Frankignoul and
+Hasselmann 1977). A point of the map reads the four points of the lattice about it bilinearly, the weights over their
+root sum of squares, so its spread is the same everywhere. A unit of the field is the eddies' mixing length,
+sqrt(`mix` × `eddy_time`), 525 km: a diffusivity is a speed times the length an eddy moves air in its time (Taylor
+1922). So the field has no size of its own. It acts in two places. **Across the open edges**, each day each link's
+column beyond is read again (`Edges::weather`) at its latitude less η at the column, in degrees: the air the eddies
+bring from there. **On the rise the rain law reads**: air that an eddy moves along the warmth's gradient slides along
+the surfaces of equal warmth (the baroclinic eddy, Holton 2004, 8.4). Moving η in `eddy_time`, at η / `eddy_time`
+(its spread sqrt(`mix` / `eddy_time`), 2 m/s), it rises by that speed times their slope: the warmth's gradient toward
+the south that the node feels (`rise::felt`, as the low wind reads it: the planet's where the edges are open, the
+node's own where it is a block alone, else none) over how fast the warmth rises with height (the dry air's fall with
+height less the node's, `wind::End::rise`; none where it does not rise). That lifts the node's air at the ground's
+density, and the mass flux is added each day to the ground's rise (`rise::saturates`, 1.5). It is the size of the
+weather's vertical speed in the middle latitudes, about 1 cm/s (Holton 2004, 2.4). The weather acts nowhere on a
+globe: the planet's strip is one, and the edges read its last year as the climate, which one year of weather would
+stand in for. On a world alone whose air is one block (a small island) the air feels no gradient and the edges are
+closed, so it has no weather. **Known limits:** the field moves no air itself: the eddies' mixing inside the map stays
+smooth, so the weather brings a place no more vapour, except across the edges. The rain answers it only as the rise
+moves the ratio at which a node saturates, and the vapour the node holds bounds that: a wet spell takes the vapour
+the next spell would rain. Rain inside a step is as smooth as the rise, not the few strong storms of a real month. The
+field is one number: the air's displacement east or west is not drawn. Its slow part stands for a top layer's memory
+on every world and over land too.
 
 ### 1.7 Each law takes one step
 An explicit step is safe while `dt Σ g / cap` of each node stays within 1/2 (no pattern changes sign in a step,
