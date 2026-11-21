@@ -1,9 +1,10 @@
 //! The weather (laws.md 1.6): the synoptic eddies, which the air's step of 15 days cannot hold, as one random field of
 //! the north-south displacement of the air they bring to each place, keyed by the seed, the day and the place, so it
-//! holds no state and is the same on any count of threads. It acts in two places with no amplitude of its own: across
-//! the map's open edges the planet's air is read where the eddies bring it from (`Edges::weather`), and the air an
-//! eddy moves slides along the surfaces of equal warmth, so it rises or sinks (`Weather::lift`), drawing the low air of
-//! the nodes about it in, or spreading its own out (`draw`).
+//! holds no state and is the same on any count of threads. Its value is of spread one; the eddies' two measured moments
+//! give it its size where it acts: across the map's open edges the planet's air is read where the eddies' displacement
+//! brings it from (`Edges::weather`), and the air an eddy moves at its speed slides along the surfaces of equal warmth,
+//! so it rises or sinks (`Weather::lift`), drawing the low air of the nodes about it in, or spreading its own out
+//! (`draw`).
 
 use super::super::Scratch;
 use super::cell::top_layer;
@@ -19,8 +20,8 @@ use crate::{World, AIR};
 const FOLDS: f64 = 5.0;
 
 /// The weather of one air step (`Weather::of`): on a lattice of points `eddy_size` apart on the planet, per point and
-/// day of the step the field (`series`), and what a unit of it is: the displacement `reach`, m of the planet; and per
-/// air node what the weather lifts its air by (`lift`).
+/// day of the step the field (`series`), of spread one; what a unit of it is: the air's displacement `reach`, m of the
+/// planet, and its speed `speed`, m/s; and per air node what the weather lifts its air by per m/s (`lift`).
 pub(super) struct Weather {
     /// The lattice's first point [east, south] and its count of points each way
     origin: [i64; 2],
@@ -31,17 +32,16 @@ pub(super) struct Weather {
     /// Lattice units per m of the map
     per_m: f64,
     reach: f64,
+    speed: f64,
     lift: Vec<f64>,
 }
 
 impl Weather {
     /// The weather of the step of `days` days that starts now in `w`, its air nodes' ends `ends` (`wind::ends`), over
-    /// the map and one node beyond its edges. Its unit is the eddies' speed times their time, `eddy_speed` ×
-    /// `eddy_time`: the air an eddy moves at η / `eddy_time` (`lift`) then moves at the eddies' measured speed, and that
-    /// length is the eddies' mixing length (Taylor 1922: a wind of spread v' that keeps for a time τ moves air as a
-    /// diffusion v'² τ = v' × v'τ; over one τ its parcels go sqrt(2 / e) v'τ, 0.86 of it). The eddies' mean heat flux is
-    /// a share of that motion only (`mix`, laws.md 1.6). None on a
-    /// globe: the planet's strip is one (`worldgen::planet`), and the edges read its last year as the climate
+    /// the map and one node beyond its edges. A unit of it is two measured moments of the same eddies: the air's
+    /// displacement, their mixing length sqrt(`mix` × `eddy_time`) (a diffusivity is a speed times the length an eddy
+    /// moves air, Taylor 1922), and its speed `eddy_speed`. Their ratio is the eddy's 1 / ω, about a day: a wave of
+    /// about 6 days' period, inside the band the field's time `eddy_time` keeps (laws.md 1.6). None on a globe: the planet's strip is one (`worldgen::planet`), and the edges read its last year as the climate
     /// (`Planet`), which a year of its weather would stand for; and none where it acts on nothing, the map's edges closed
     /// and no node feeling a gradient (`lift`).
     pub(super) fn of(w: &World, s: &Scratch, ends: &[End], days: usize) -> Option<Weather> {
@@ -62,32 +62,38 @@ impl Weather {
         let points = size[0] * size[1];
         let work = points.saturating_sub(1) * (parts.longest() + days) * DRAW_WORK;
         let field = crate::par::map_n(points, work, |i| parts.series(w.seed, [origin[0] + (i % size[0]) as i64, origin[1] + (i / size[0]) as i64], first, days)).concat();
-        Some(Weather { origin, size, days, field, per_m, reach: phys.eddy_speed * phys.eddy_time, lift })
+        Some(Weather { origin, size, days, field, per_m, reach: (w.cfg.mix * phys.eddy_time).sqrt(), speed: phys.eddy_speed, lift })
     }
 
     /// What the weather lifts each air node's air by on day `d` of the step, mol/s (sinking below 0): what it lifts it by
-    /// per m (`lift`) times the air's displacement at its centre (`shift`).
+    /// per m/s (`lift`) times the speed of the air at its centre toward the north, the field there times `speed`.
     pub(super) fn lift(&self, w: &World, d: usize) -> Vec<f64> {
         let air = w.mesh.level(AIR);
-        self.lift.iter().enumerate().map(|(j, l)| l * self.shift(air.centre()[j], d)).collect()
+        self.lift.iter().enumerate().map(|(j, l)| l * self.speed * self.at(air.centre()[j], d)).collect()
     }
 
-    /// The displacement of the air at a point of the map, m [east, south] from its north-west corner, on day `d` of the
-    /// step, m of the planet to the north it came from the south: the field of the four points of the lattice about it,
-    /// bilinearly, its weights over their root sum of squares, so its spread is the same everywhere.
+    /// The displacement of the air at a point of the map on day `d` of the step, m of the planet to the north it came
+    /// from the south: the field there times `reach`.
     pub(super) fn shift(&self, xy: [f64; 2], d: usize) -> f64 {
+        self.reach * self.at(xy, d)
+    }
+
+    /// The field at a point of the map, m [east, south] from its north-west corner, on day `d` of the step: the four
+    /// points of the lattice about it, bilinearly, the weights over their root sum of squares, so its spread is one
+    /// everywhere.
+    fn at(&self, xy: [f64; 2], d: usize) -> f64 {
         let (u, v) = (xy[0] * self.per_m - self.origin[0] as f64, xy[1] * self.per_m - self.origin[1] as f64);
         let (ix, iy) = (u.floor() as usize, v.floor() as usize);
         let (fx, fy) = (u - ix as f64, v - iy as f64);
         let weights = [((0, 0), (1.0 - fx) * (1.0 - fy)), ((1, 0), fx * (1.0 - fy)), ((0, 1), (1.0 - fx) * fy), ((1, 1), fx * fy)];
         let norm = weights.iter().map(|e| e.1 * e.1).sum::<f64>().sqrt();
         let at = |(dx, dy): (usize, usize)| self.field[((iy + dy) * self.size[0] + ix + dx) * self.days + d];
-        self.reach * weights.iter().map(|&(p, wt)| wt * at(p)).sum::<f64>() / norm
+        weights.iter().map(|&(p, wt)| wt * at(p)).sum::<f64>() / norm
     }
 }
 
-/// What the weather lifts each air node's air by, mol/s per m of its displacement (`Weather::shift`): the air an eddy
-/// moves in its time `eddy_time` slides along the surfaces of equal warmth, which rise toward the cold side by the slope
+/// What the weather lifts each air node's air by, mol/s per m/s of its speed toward the north (`Weather::lift`): the air
+/// an eddy moves slides along the surfaces of equal warmth, which rise toward the cold side by the slope
 /// of the warmth's gradient the node feels (`rise::felt`, its part toward the south) over the warmth's rise with height
 /// (`End::rise` over a mol's heat capacity: the dry air's fall with height less the node's), so air brought from the
 /// warm side rises (the baroclinic eddy, Holton 2004, 8.4), at the ground's density (the column's mol over its scale
@@ -97,7 +103,7 @@ fn lift(w: &World, s: &Scratch, ends: &[End]) -> Vec<f64> {
     (0..ends.len())
         .map(|j| {
             let up = ends[j].rise * s.nt[j] / s.capa[j].max(f64::MIN_POSITIVE);
-            if up > 0.0 { s.nt[j] / super::node_scale_height(s, j, w.cfg.gravity) * felt[j][1] / up / w.cfg.phys.eddy_time } else { 0.0 }
+            if up > 0.0 { s.nt[j] / super::node_scale_height(s, j, w.cfg.gravity) * felt[j][1] / up } else { 0.0 }
         })
         .collect()
 }

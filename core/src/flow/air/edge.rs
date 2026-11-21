@@ -10,7 +10,7 @@ use super::planet::Beyond;
 use super::stretch::Stretch;
 use super::cell::Cell;
 use super::draw::conductance;
-use super::wind::{column, halves_heat, push, End};
+use super::wind::{column, eddies_left, halves_heat, push, End};
 use crate::{World, AIR};
 
 /// The edges that are open, as the side of the map beyond them [east, south] from a node of that edge: north, south,
@@ -79,14 +79,14 @@ impl Edges {
     /// its own air (vapour crowding low, `Scratch::split`), heat by mol, the halves carrying `contrast` more inward, the
     /// eddies' mol each its column's near-ground energy (`wind::push`, `stir`); with the lower half's flow the weather
     /// draws outward, `drawn` per link (mol/s, `draw::Draw::flows`; none where empty), added to the overturning's, its
-    /// halves carrying its heat (`per_flux`). The column beyond lies over low open ground at 0 m: the node pays the lift
+    /// halves carrying its heat (`per_flux`), and the eddies' mixing the rest of theirs (`wind::eddies_left`). The column beyond lies over low open ground at 0 m: the node pays the lift
     /// of the mass that enters it (`wind::lift`).
     pub(super) fn day(&mut self, s: &Scratch, (x, e): (&mut [f64], &mut [f64]), (dd, g): (f64, f64), drawn: &[f64]) {
         let (na, ng, links) = (e.len(), s.state.gas.len(), self.node.len());
         for l in 0..links {
             let (j, [mix, o, contrast, stir]) = (self.node[l] as usize, self.push[l]);
             let f = drawn.get(l).copied().unwrap_or(0.0);
-            let (o, contrast) = (o + f, contrast + f * self.per_flux[l]);
+            let ((mix, stir), o, contrast) = (eddies_left(mix, stir, f), o + f, contrast + f * self.per_flux[l]);
             let split = |q: usize| s.split[q * na + j];
             let nt: f64 = (0..ng).map(|q| x[q * na + j]).sum::<f64>().max(f64::MIN_POSITIVE);
             let upper: f64 = (0..ng).map(|q| x[q * na + j] * split(q)).sum();
