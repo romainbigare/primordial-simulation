@@ -14,6 +14,8 @@ pub const USAGE: &str = "usage:
                           that band, its edges open on the planet's air (laws.md 1.6)
     --shape NAME          an island's large shape: drawn (one to several rises drawn from the seed: several lands, a
                           ring, a long land) or one (one rise in the middle of the map) (drawn)
+    --weather NAME        an island's weather: strong (the eddies' measured speed, 6 m/s) or soft (the speed their
+                          diffusion alone gives, 2 m/s: worldgen::terrain::soft_weather) (strong)
     --fine X,Y,W,H        on a globe, the W x H air blocks from column X and row Y in squares, the rest one cell an
                           air block (none)
     --years N             years to run (10)
@@ -103,13 +105,19 @@ impl Args {
     }
 
     /// The settings of a new island: those of the band of `--band S,N` (`worldgen::terrain::banded`; the default's if
-    /// it is not there); an error if it does not parse or the band is not one (`Config::validate`).
+    /// it is not there) with the weather of `--weather NAME`; an error if one does not parse or the band is not one
+    /// (`Config::validate`).
     pub fn island(&self) -> Result<Config, String> {
         let mut cfg = Config::default();
         if let Some(text) = self.value::<String>("--band") {
             let v: Result<Vec<f64>, _> = text.split(',').map(str::parse).collect();
             let [south, north] = v.ok().and_then(|v| v.try_into().ok()).ok_or(format!("--band {text}: want S,N in degrees"))?;
             cfg = worldgen::terrain::banded((south, north));
+        }
+        match self.value::<String>("--weather").as_deref() {
+            None | Some("strong") => {}
+            Some("soft") => cfg = worldgen::terrain::soft_weather(cfg),
+            Some(other) => return Err(format!("--weather {other}: want strong or soft")),
         }
         cfg.validate().map(|_| cfg)
     }

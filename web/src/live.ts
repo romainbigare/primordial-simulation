@@ -70,8 +70,8 @@ export class Live {
   takeDischarge(): Uint16Array | null { const d = this.discharge; this.discharge = null; return d; }
   /** A new island of `seed` and `size` between the latitudes `band` (south, north; NaN: the core's default band), its
    * large shape drawn from the seed if `drawn`, else one rise in the middle, its cells holding at most `variety` kinds
-   * of cover. */
-  newWorld(seed: number, size: number, band: [number, number], drawn: boolean, variety: number): void { this.worker.postMessage({ cmd: 'new', seed, size, band, drawn, variety }); }
+   * of cover, its weather soft if `soft` (the core's `soft_weather`), else strong. */
+  newWorld(seed: number, size: number, band: [number, number], drawn: boolean, variety: number, soft: boolean): void { this.worker.postMessage({ cmd: 'new', seed, size, band, drawn, variety, soft }); }
   /** The saved world `saved` (the gzip of a snapshot of `ew run`), which then steps on as a new world does. */
   open(saved: ArrayBuffer): void { this.worker.postMessage({ cmd: 'open', saved }); }
   play(on: boolean): void { this.worker.postMessage({ cmd: 'play', on }); }

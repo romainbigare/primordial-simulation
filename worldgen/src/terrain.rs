@@ -122,6 +122,14 @@ pub fn banded((south, north): (f64, f64)) -> Config {
     Config { lat_south: south, lat_north: north, ..Config::default() }
 }
 
+/// The settings `cfg` with soft weather: the eddies' speed the one their diffusion alone gives, sqrt(`mix` /
+/// `eddy_time`) (about 2 m/s), their mixing length over their time, so all their motion carries heat; the default's
+/// `eddy_speed` is the measured one, its weather strong (laws.md 1.6).
+pub fn soft_weather(mut cfg: Config) -> Config {
+    cfg.phys.eddy_speed = (cfg.mix / cfg.phys.eddy_time).sqrt();
+    cfg
+}
+
 /// The map of an island of `w × h` cells.
 pub fn island(w: usize, h: usize) -> Square {
     Square::new(w, h, CELL_M, false, AIR_SCALE)
