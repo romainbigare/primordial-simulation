@@ -65,7 +65,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
         if fixes {
             genes[cover::FIX] = FIX_GENE;
         }
-        if cover::place(w, i, genes, which as u32, kind.kg) {
+        if w.sow(i, 0, genes, which as u32, kind.kg) {
             (cells, fixers, kg) = (cells + 1, fixers + fixes as usize, kg + kind.kg * m2);
         }
     }

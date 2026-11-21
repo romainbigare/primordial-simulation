@@ -48,7 +48,11 @@ fn main() {
                 worldgen::planet::stand(&mut w);
             }
             args.apply(&mut w);
-            drive(w, &args, args.schedule(), None);
+            let plan = args.schedule().unwrap_or_else(|e| {
+                eprintln!("ew: {e}");
+                std::process::exit(2);
+            });
+            drive(w, &args, plan, None);
         }
         "resume" => {
             // The snapshot carries the plan of its run (what is still due is placed when it is due) and what its

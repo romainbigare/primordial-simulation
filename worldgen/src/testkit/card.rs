@@ -123,11 +123,6 @@ const WET: f64 = 0.8;
 /// The month of the year the card is set in: late summer, as the look's other scenes (9 of 12 months).
 const MONTH: u64 = 9;
 
-/// The cell of square (`x`, `y`) of `w`'s map: the one that holds its centre.
-fn cell_of(w: &World, (x, y): (usize, usize)) -> usize {
-    w.mesh.tree().cell_at(w.map.point_at(x as f64 + 0.5, y as f64 + 0.5))
-}
-
 /// The test card: the island of `SEED` with its soil, set in late summer (`MONTH`), each square of `SQUARES` holding
 /// its stands, its ground at `WARM_K` and wet (`wet`), or in the cold season at `COLD_K` with `SNOW_KG` of snow where
 /// asked; and Flow's state of it.
@@ -137,7 +132,7 @@ pub fn card() -> World {
     w.time = MONTH * w.cfg.calendar().month;
     for (r, row) in SQUARES.iter().enumerate() {
         for (c, sq) in row.iter().enumerate() {
-            let i = cell_of(&w, (FROM.0 + c, FROM.1 + r));
+            let i = w.cell_of((FROM.0 + c, FROM.1 + r));
             assert!(w.is_land(i), "square {} {} of the card is land", FROM.0 + c, FROM.1 + r);
             sq.stands.iter().for_each(|s| stand(&mut w, i, s));
         }
@@ -146,7 +141,7 @@ pub fn card() -> World {
     wet(&mut w);
     for (r, row) in SQUARES.iter().enumerate() {
         for (c, sq) in row.iter().enumerate() {
-            let i = cell_of(&w, (FROM.0 + c, FROM.1 + r));
+            let i = w.cell_of((FROM.0 + c, FROM.1 + r));
             if sq.snow {
                 put_kg_m2(&mut w, LIQUID, i, SNOW_KG);
             }
@@ -163,7 +158,7 @@ pub fn card() -> World {
 fn wet(w: &mut World) {
     let wetted = |&(c, r): &(usize, usize)| !SQUARES[r][c].cold && !SQUARES[r][c].stands.is_empty();
     let squares = (0..CARD.1).flat_map(|r| (0..CARD.0).map(move |c| (c, r))).filter(wetted);
-    let cells: Vec<usize> = squares.map(|(c, r)| cell_of(w, (FROM.0 + c, FROM.1 + r))).collect();
+    let cells: Vec<usize> = squares.map(|(c, r)| w.cell_of((FROM.0 + c, FROM.1 + r))).collect();
     let means = pcore::flow::means(w, &cells).expect("Flow's state of the card");
     let per_m = w.chem.molar_volume(LIQUID, pcore::chem::Phase::Liquid);
     for (&i, m) in cells.iter().zip(means) {
@@ -171,11 +166,11 @@ fn wet(w: &mut World) {
     }
 }
 
-/// Stand `s` placed in cell `i`: its kind's genes at `kg` per m² (`cover::place`), then its plants set in its groups,
+/// Stand `s` placed in cell `i`: its kind's genes at `kg` per m² (`World::sow`), then its plants set in its groups,
 /// the large ones `tall` m (`size_to`).
 fn stand(w: &mut World, i: usize, s: &Stand) {
     let k = &KINDS[s.row];
-    assert!(pcore::cover::place(w, i, k.genes, s.row as u32, s.kg), "no room for row {} in cell {i}", s.row);
+    assert!(w.sow(i, 0, k.genes, s.row as u32, s.kg), "no room for row {} in cell {i}", s.row);
     if let Some(tall) = s.tall {
         size_to(w, i, s.row as u32, s.groups, tall);
     }

@@ -40,8 +40,9 @@ pub fn together<G>(genes: &[G], root: &[u32], (a, z): (usize, usize), within: f3
     root[a] != NO_ROOT && root[z] != NO_ROOT && distance(&genes[a], &genes[z]) <= within
 }
 
-/// The two entries nearest each other by their genes (`distance`), of any starting kind.
-pub fn nearest<G>(genes: &[G], distance: impl Fn(&G, &G) -> f32) -> (usize, usize) {
-    let pairs = (0..genes.len()).flat_map(|a| (a + 1..genes.len()).map(move |z| (a, z)));
-    pairs.min_by(|p, q| distance(&genes[p.0], &genes[p.1]).total_cmp(&distance(&genes[q.0], &genes[q.1]))).expect("two entries")
+/// Of the pairs of entries `may` lets join, the two nearest each other by their genes (`distance`), of any starting
+/// kind; none where it lets no two.
+pub fn nearest<G>(genes: &[G], distance: impl Fn(&G, &G) -> f32, may: impl Fn(usize, usize) -> bool) -> Option<(usize, usize)> {
+    let pairs = (0..genes.len()).flat_map(|a| (a + 1..genes.len()).map(move |z| (a, z))).filter(|&(a, z)| may(a, z));
+    pairs.min_by(|p, q| distance(&genes[p.0], &genes[p.1]).total_cmp(&distance(&genes[q.0], &genes[q.1])))
 }

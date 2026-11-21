@@ -1761,7 +1761,7 @@ read a kind.
 - **Open land**: a cell that holds land (`flow::land_shares`: the share of its area out of the liquid that stands over
   its pores, as the page draws the cover on it; the land part of a cell of parts among them, also where the cell's
   mean ground lies under the level). Its soil and its takers start per m² of its land; each kind of cover starts per m²
-  of the ground it stands on (`cover::place`, `cover::footing`), out into the liquid as far as its roots work.
+  of the ground it stands on (`World::sow`, `cover::footing`), out into the liquid as far as its roots work.
 - **Life** at year 2 (`--life-year`): the cover (`worldgen::life::KINDS`: kg per m² of land and genes, on every open land cell
   by its chance, each kind's draws keyed by its own key, its label its row, `Cover::root`); without `--roster` the herb
   (`ONE`), with it the six kinds in their order (`ROSTER`): a small fast herb, a herb, a big slow cover with walls, the same of wet ground (fully active only near saturation, more capacity), a woody

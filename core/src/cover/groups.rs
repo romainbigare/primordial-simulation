@@ -109,35 +109,39 @@ impl Cover {
     }
     /// The share of what each slot of cover `c` in `order` (on its ground of `area` m², its walls of density `rho`)
     /// builds in a month that goes to each of its groups: each group's capture area times the light its leaves get under
-    /// the leaves of all the cell's plants taller than they are, whatever slot holds them: the light falls by e^-(the
-    /// capture area per unit of ground it passed, each slot's over the share its plants hold, `Cover::on`) (Beer's law, as
+    /// the leaves of all the plants of its patch taller than they are, whatever slot holds them: the light falls by e^-(the
+    /// capture area per unit of ground it passed, each slot's over the ground its plants hold, `Cover::holds`) (Beer's law, as
     /// `canopy::shade`), and the leaves of plants as tall (to `SAME`) get the mean over theirs together
     /// (`math::mean_decay`). So the large plants take the most light a leaf, the asymmetry of the competition for light
     /// by size (Weiner 1990), and seedlings, all leaf, grow fast where light reaches them. A slot with no leaves gets
     /// none (`Cover::grew`).
     pub(super) fn growth(&self, ph: &Physics, (mm, rho): (&[f64; NP], f64), area: f64, order: &[usize]) -> [[f64; GROUPS]; SLOTS] {
-        let (mut all, mut k, mut out) = ([(0, 0, 0.0, 0.0); SLOTS * GROUPS], 0, [[0.0; GROUPS]; SLOTS]);
+        let (mut all, mut out) = ([(0, 0, 0.0, 0.0); SLOTS * GROUPS], [[0.0; GROUPS]; SLOTS]);
         // (Slots of one group each take all they build.)
         if order.iter().all(|&x| self.held_groups(x) <= 1) {
             order.iter().for_each(|&x| out[x][0] = 1.0);
             return out;
         }
-        for &x in order {
-            let s = self.sizes(ph, mm, x);
-            let per = self.leaf(mm, x) / (area * self.on(x)).max(1e-300);
-            for g in 0..s.held {
-                (all[k], k) = ((x, g, s.height(ph, rho, g), per * s.leaf[g]), k + 1);
+        // The light passes down through the plants of each patch alone.
+        for patch in 0..self.patch_count() {
+            let mut k = 0;
+            for &x in order.iter().filter(|&&x| self.patch[x] as usize == patch) {
+                let s = self.sizes(ph, mm, x);
+                let per = self.leaf(mm, x) / self.holds(area, x).max(1e-300);
+                for g in 0..s.held {
+                    (all[k], k) = ((x, g, s.height(ph, rho, g), per * s.leaf[g]), k + 1);
+                }
             }
-        }
-        let all = &mut all[..k];
-        all.sort_by(|a, b| b.2.total_cmp(&a.2));
-        let (mut above, mut i) = (0.0f64, 0);
-        while i < k {
-            let j = i + all[i..].iter().take_while(|e| e.2 >= all[i].2 * (1.0 - SAME)).count();
-            let y: f64 = all[i..j].iter().map(|e| e.3).sum();
-            let lit = (-above).exp() * crate::math::mean_decay(y);
-            all[i..j].iter().for_each(|&(x, g, _, leaf)| out[x][g] = leaf * lit);
-            (above, i) = (above + y, j);
+            let all = &mut all[..k];
+            all.sort_by(|a, b| b.2.total_cmp(&a.2));
+            let (mut above, mut i) = (0.0f64, 0);
+            while i < k {
+                let j = i + all[i..].iter().take_while(|e| e.2 >= all[i].2 * (1.0 - SAME)).count();
+                let y: f64 = all[i..j].iter().map(|e| e.3).sum();
+                let lit = (-above).exp() * crate::math::mean_decay(y);
+                all[i..j].iter().for_each(|&(x, g, _, leaf)| out[x][g] = leaf * lit);
+                (above, i) = (above + y, j);
+            }
         }
         for &x in order {
             let sum: f64 = out[x].iter().sum();
@@ -174,11 +178,11 @@ impl Cover {
         (self.plants[x], self.share[x]) = ([0.0; GROUPS], [0.0; GROUPS]);
         (self.plants[x][0], self.share[x][0]) = (n, 1.0);
     }
-    /// Slot `x` empties: no amounts, genes of no kind, no plants.
+    /// Slot `x` empties: no amounts, genes of no kind, no plants, in the first patch.
     pub(super) fn clear(&mut self, x: usize) {
         (self.mol[x], self.root[x], self.full[x], self.net[x], self.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
         (self.line[x], self.stands[x], self.airless[x], self.drained[x], self.strip[x]) = (0.0, 0.0, 0.0, 0.0, 0.0);
-        (self.plants[x], self.share[x]) = ([0.0; GROUPS], [0.0; GROUPS]);
+        (self.plants[x], self.share[x], self.patch[x]) = ([0.0; GROUPS], [0.0; GROUPS], 0);
     }
     /// `n` plants of `kg` of built cover take hold in slot `x` (seeds of its kind, before their amounts join it): a
     /// group of their own, or, where every group is held, the group of its smallest plants.

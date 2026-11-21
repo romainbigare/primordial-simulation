@@ -192,6 +192,10 @@ impl World {
         let lat = (self.cfg.lat_south, self.cfg.lat_north);
         crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain.rise_south(self.terrain.seed, &self.map, self.map.leaves()[i], lat))
     }
+    /// The cell that holds the centre of square (`x`, `y`) of its map.
+    pub fn cell_of(&self, (x, y): (usize, usize)) -> usize {
+        self.mesh.tree().cell_at(self.map.point_at(x as f64 + 0.5, y as f64 + 0.5))
+    }
     /// The pores of the loose ground of ground node `i` (`soil::Pores`).
     #[inline]
     pub fn pores(&self, i: usize) -> &crate::soil::Pores {

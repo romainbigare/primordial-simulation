@@ -65,7 +65,7 @@ fn grown(row: usize, kg: f64) -> (World, usize) {
     w.cfg.variety = cover::SLOTS;
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
     let i = dry_lands(&w).into_iter().filter(|&i| w.rain[i] > 0.0).max_by(|&a, &b| w.rain[a].total_cmp(&w.rain[b])).expect("dry land with rain");
-    assert!(cover::place(&mut w, i, KINDS[row].genes, row as u32, kg));
+    assert!(w.sow(i, 0, KINDS[row].genes, row as u32, kg));
     (0..12).for_each(|_| pcore::step(&mut w));
     (w, i)
 }
@@ -131,7 +131,7 @@ fn moist(m: u64) -> f64 {
 fn a_stand_cut_into_slots_keeps_its_seasons_as_the_whole() {
     let (mut w, i) = testkit::start();
     w.cfg.variety = cover::SLOTS;
-    assert!(cover::place(&mut w, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 2.0));
+    assert!(w.sow(i, 0, KINDS[TREE_ROW].genes, TREE_ROW as u32, 2.0));
     let p = cover::Parts::of(&w.chem).expect("cover parts");
     let (mm, dt) = (p.mm(&w.chem), w.cfg.calendar().month as f64);
     let mut c = w.life.cover(i).clone();
@@ -186,7 +186,7 @@ fn a_flush_of_seedlings_leaves_the_large_plants_as_they_were() {
     let (w, i) = grown(TREE_ROW, 5.0);
     let (x, tall, plants, sizes) = tallest(&w, i);
     let mut own = w.clone();
-    assert!(cover::place(&mut own, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 0.01));
+    assert!(own.sow(i, 0, KINDS[TREE_ROW].genes, TREE_ROW as u32, 0.01));
     let (y, now, joined, with) = tallest(&own, i);
     println!("height {tall} m, then {now} m; plants {plants}, then {joined}; groups {sizes:?}, then {with:?}");
     assert!(y == x && joined > 2.0 * plants && with.count[with.large()] == sizes.count[sizes.large()], "the seeds did not join the slot beside its large plants");
@@ -194,7 +194,7 @@ fn a_flush_of_seedlings_leaves_the_large_plants_as_they_were() {
     let mut other = w.clone();
     let mut herb = KINDS[LIGHT_ROW].genes;
     herb[cover::FROST] -= 30.0;
-    assert!(cover::place(&mut other, i, herb, LIGHT_ROW as u32, 0.01));
+    assert!(other.sow(i, 0, herb, LIGHT_ROW as u32, 0.01));
     let alone = large_after_a_month(w, i);
     for (what, flushed) in [("its own", own), ("another kind's", other)] {
         let after = large_after_a_month(flushed, i);

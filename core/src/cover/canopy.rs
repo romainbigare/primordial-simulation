@@ -1,6 +1,6 @@
-//! What the slots of a cell's cover share (laws.md 3): the ground they stand on, as rings of the shares their roots hold
-//! (`rings`); the light, passing down through their crowns over those rings (`shade`); and the key liquid of each ring
-//! (`drawn`). Each formula acts on the stand, so a kind cut into slots catches and draws as the whole.
+//! What the slots of a patch of a cell's cover share (laws.md 3): the ground they stand on, as rings of the shares their
+//! roots hold (`rings`); the light, passing down through their crowns over those rings (`shade`); and the key liquid of
+//! each ring (`drawn`). Each formula acts on the stand, so a kind cut into slots catches and draws as the whole.
 
 use super::{Cover, SLOTS};
 use crate::math::mean_decay;
@@ -29,8 +29,9 @@ pub(super) fn rings(shares: &[f64]) -> ([(f64, f64); SLOTS], usize) {
 }
 
 /// The rings of ground that slots of capture area `leaf` m² on shares `on` of it make (`rings`, over the slots with
-/// capture area): of each its share of the ground and the capture area over the shares of all the slots that stand
-/// on it, m², and how many rings: what the light passing down through it meets (`shade`, `contract::Stand::catch`).
+/// capture area, of one patch): of each its share of the ground and the capture area over the shares of all the slots
+/// that stand on it, m², and how many rings: what the light passing down through it meets (`shade`,
+/// `contract::Stand::catch`).
 pub(super) fn catch_rings(slots: &[(f64, f64)]) -> ([[f64; 2]; SLOTS], usize) {
     let mut shares = [0.0; SLOTS];
     slots.iter().zip(shares.iter_mut()).for_each(|(m, s)| *s = share(m.1));
@@ -48,18 +49,39 @@ fn share(s: f64) -> f64 {
     s.max(1e-300)
 }
 
-/// Light passing down through the crowns of slots over the ground they share (Beer's law): `l` holds per slot its
-/// crown's base and top, m, its capture area per ground area x, the share s of the ground it stands on, and the slot. A
-/// slot stands on its share s, the shares nested (a kind stands where the loose ground holds its roots, and ground that
-/// holds deep roots holds shallow ones), with capture area x / s per unit of it spread evenly through its crown (a crown of
-/// no depth a sheet at its top); so the ground falls into rings (`rings`), each held by the slots of a share at least
-/// its own, and in each the light passes down through the capture area of all the crowns at each height, whatever slot
-/// holds it, absorbing 1 - exp(-y) of what reaches it over capture area y per unit of ground (with every s 1, Beer's law
-/// through the canopy). `set(slot, f, bottom, depth)` gets each slot's light per unit of capture area over the mean of
-/// all (weighted by capture area, the factors have mean 1), the light at its crown's base per unit of capture area over
-/// the same mean, and the capture area per unit of ground the light passes through its crown (ln of the light at its top
-/// over that at its base): each the mean over its rings by its capture area in each.
-pub(super) fn shade(l: &[(f64, f64, f64, f64, usize)], mut set: impl FnMut(usize, f64, f64, f64)) {
+/// Light passing down through the crowns of the slots of cover `c` over the ground they share (Beer's law): `l` holds
+/// per slot its crown's base and top, m, its capture area per unit of its patch's ground x, the share s of that ground
+/// it stands on, and the slot. The light passes through the slots of each patch over the patch's own ground alone
+/// (`passing`): slots of another patch do not shade it. `set(slot, f, bottom, depth)` gets each slot's light per unit of
+/// capture area over the mean of all (weighted by capture area, the factors have mean 1), the light at its crown's base
+/// per unit of capture area over the same mean, and the capture area per unit of ground the light passes through its
+/// crown (ln of the light at its top over that at its base).
+pub(super) fn shade(c: &Cover, l: &[(f64, f64, f64, f64, usize)], mut set: impl FnMut(usize, f64, f64, f64)) {
+    let mut got = [[0.0; 3]; SLOTS];
+    for k in 0..c.patch_count() {
+        let (mut mine, mut at, mut n) = ([(0.0, 0.0, 0.0, 0.0, 0); SLOTS], [0; SLOTS], 0);
+        for (q, m) in l.iter().enumerate().filter(|(_, m)| c.patch[m.4] as usize == k) {
+            (mine[n], at[n], n) = (*m, q, n + 1);
+        }
+        at[..n].iter().zip(passing(&mine[..n])).for_each(|(&q, g)| got[q] = g);
+    }
+    // Capture area by its ground: of each slot over its patch's ground times the patch's share of the cell.
+    let x = |m: &(f64, f64, f64, f64, usize)| m.2 * c.patch_share(m.4);
+    let (sum_x, sum_a) = got.iter().zip(l.iter()).fold((0.0, 0.0), |(sx, sa), (g, m)| (sx + x(m), sa + x(m) * g[0]));
+    let all = if sum_x > 0.0 { sum_a / sum_x } else { 1.0 };
+    got.iter().zip(l.iter()).for_each(|(g, m)| set(m.4, g[0] / all.max(1e-300), g[1] / all.max(1e-300), g[2]));
+}
+
+/// Light passing down through the crowns of the slots of one patch over its ground (`shade`): `l` as there. A slot
+/// stands on its share s of the ground, the shares nested (a kind stands where the loose ground holds its roots, and
+/// ground that holds deep roots holds shallow ones), with capture area x / s per unit of it spread evenly through its
+/// crown (a crown of no depth a sheet at its top); so the ground falls into rings (`rings`), each held by the slots of a
+/// share at least its own, and in each the light passes down through the capture area of all the crowns at each
+/// height, whatever slot holds it, absorbing 1 - exp(-y) of what reaches it over capture area y per unit of ground (with
+/// every s 1, Beer's law through the canopy). Returns, in the order of `l`, each slot's light per unit of capture area
+/// and at its crown's base, of the light at the top, and the capture area per unit of ground the light passes through
+/// its crown: each the mean over its rings by its capture area in each.
+fn passing(l: &[(f64, f64, f64, f64, usize)]) -> [[f64; 3]; SLOTS] {
     let mut got = [[0.0; 3]; SLOTS];
     // The slots on a ring, the heights of their crowns, and the light each slot's capture area gets and what the light
     // has passed at each one's top and base there.
@@ -115,26 +137,29 @@ pub(super) fn shade(l: &[(f64, f64, f64, f64, usize)], mut set: impl FnMut(usize
             got[q] = [got[q][0] + part * lit[q], got[q][1] + part * (-base[q]).exp(), got[q][2] + part * (base[q] - top[q])];
         }
     }
-    let (sum_x, sum_a) = got.iter().zip(l.iter()).fold((0.0, 0.0), |(sx, sa), (g, m)| (sx + m.2, sa + m.2 * g[0]));
-    let all = if sum_x > 0.0 { sum_a / sum_x } else { 1.0 };
-    got.iter().zip(l.iter()).for_each(|(g, m)| set(m.4, g[0] / all.max(1e-300), g[1] / all.max(1e-300), g[2]));
+    got
 }
 
 /// The units of the light reaction `x` the slots in use of cover `c` would run, cut to the key liquid their roots reach:
-/// the liquid of each ring of its ground (`rings`, by the shares the slots' plants hold, `Cover::on`) is the slots'
-/// that stand on it, `units` of the reaction a unit of the ground in all; where they would draw more there, each draws
-/// it in proportion to what it would draw there. So the slots of a cell draw on the ground they share, whatever slots
-/// hold them.
+/// each patch draws on its share of the ground's liquid, `units` of the reaction a unit of the cell's ground in all, and
+/// the liquid of each ring of its ground (`rings`, by the shares the slots' plants hold of it, `Cover::on`) is the
+/// slots' that stand on it; where they would draw more there, each draws it in proportion to what it would draw there.
+/// So the slots of a patch draw on the ground they share, whatever slots hold them.
 pub(super) fn drawn(c: &Cover, x: &mut [f64], units: f64) {
     let rooted = |q: usize| share(c.on(q));
-    let mut shares = [0.0; SLOTS];
-    (0..x.len()).for_each(|q| shares[q] = rooted(q));
     let mut got = [0.0; SLOTS];
-    let (rings, count) = rings(&shares[..x.len()]);
-    for &(at_least, ring) in &rings[..count] {
-        let on = || (0..x.len()).filter(|&q| rooted(q) >= at_least);
-        let f = (units * ring / on().map(|q| x[q] * ring / rooted(q)).sum::<f64>().max(1e-300)).min(1.0);
-        on().for_each(|q| got[q] += x[q] * ring / rooted(q) * f);
+    for k in 0..c.patch_count() {
+        let (mut shares, mut at, mut n) = ([0.0; SLOTS], [0; SLOTS], 0);
+        for q in (0..x.len()).filter(|&q| c.patch[q] as usize == k) {
+            (shares[n], at[n], n) = (rooted(q), q, n + 1);
+        }
+        let (at, units) = (&at[..n], units * c.patches[k].share);
+        let (rings, count) = rings(&shares[..n]);
+        for &(at_least, ring) in &rings[..count] {
+            let on = || at.iter().copied().filter(|&q| rooted(q) >= at_least);
+            let f = (units * ring / on().map(|q| x[q] * ring / rooted(q)).sum::<f64>().max(1e-300)).min(1.0);
+            on().for_each(|q| got[q] += x[q] * ring / rooted(q) * f);
+        }
     }
     x.copy_from_slice(&got[..x.len()]);
 }
