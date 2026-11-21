@@ -9,7 +9,7 @@
 
 use super::delta::{exposures, lobes, Liquid, Mouth};
 use super::drain::{draws, flood, open_low, starts};
-use super::fill::offset;
+use super::fill::heading;
 use super::relief::Relief;
 use super::grid::Grid;
 use super::network::{accumulate, NONE};
@@ -153,8 +153,7 @@ impl Terrain {
 
     /// The lobes the running world's mouths lay at a build of the samples `s` of `map` (`delta::lobes`, one call on the
     /// whole grid): the liquid stands on the samples of a body `body` (`NONE` for none) at each one's `level`, m; each mouth an entry sample, the
-    /// load it brings, m³, and its top, m, its way in along its channel from the sample upstream the most drains
-    /// through (`Samples::main`); over `years`, nothing behind them. Returns each sample each lobe laid on, with the
+    /// load it brings, m³, and its top, m, its way in along its main channel (`Samples::main`, `fill::heading`); over `years`, nothing behind them. Returns each sample each lobe laid on, with the
     /// volume, m³, and the mouth's place in `mouths`; and the load they found no room for, m³. The ages of the layers are
     /// not read (the running world keeps no age of its relief).
     pub fn lobes_of(&self, map: &Square, lat: (f64, f64), s: &Samples, (body, level): (&[u32], &[f64]), mouths: &[(usize, f64, f64)], years: f64) -> (Vec<(usize, f64, u32)>, f64) {
@@ -162,12 +161,7 @@ impl Terrain {
         let open: Vec<bool> = body.iter().map(|&b| b != NONE).collect();
         let exposed = exposures(&grid, &open);
         let liquid = Liquid::new(&grid, (&open, &exposed), (level, body));
-        let heading = |k: usize| {
-            let from = s.main[k];
-            let v = if from == NONE { [0.0; 2] } else { offset(&grid, from as usize, k) };
-            let len = v[0].hypot(v[1]);
-            if len > 0.0 { [v[0] / len, v[1] / len] } else { [0.0; 2] }
-        };
+        let heading = |k: usize| if s.main[k] == NONE { [0.0; 2] } else { heading(&grid, |j| s.main[j], (s.main[k] as usize, k)) };
         let mut order: Vec<usize> = (0..mouths.len()).collect();
         order.sort_by(|&a, &b| mouths[b].1.total_cmp(&mouths[a].1).then(mouths[a].0.cmp(&mouths[b].0)));
         let laid_out: Vec<Mouth> = order.iter().map(|&m| Mouth { entry: mouths[m].0, load: mouths[m].1, top: mouths[m].2, heading: heading(mouths[m].0) }).collect();

@@ -104,6 +104,24 @@ pub(super) fn fill(g: &Grid, built: &mut [f64], (liquid, mouth, m): (&Liquid, &M
     Lobe { top: filled, front }
 }
 
+/// The samples of a channel a mouth's heading is read along, upstream of its mouth.
+const HEADING_SAMPLES: usize = 4;
+
+/// The way the channel at sample `k` comes into sample `entry` of grid `g`, a unit vector east and south: from the
+/// sample `HEADING_SAMPLES` up its main channel (`up` of each sample, `NONE` for none) to the entry.
+pub(super) fn heading(g: &Grid, up: impl Fn(usize) -> u32, (k, entry): (usize, usize)) -> [f64; 2] {
+    let mut from = k;
+    for _ in 0..HEADING_SAMPLES {
+        if up(from) == super::network::NONE {
+            break;
+        }
+        from = up(from) as usize;
+    }
+    let v = offset(g, from, entry);
+    let len = v[0].hypot(v[1]);
+    if len > 0.0 { [v[0] / len, v[1] / len] } else { [0.0; 2] }
+}
+
 /// The east and south of a step of grid `g` from sample `k` to sample `j`, m: across a globe's seam the short way.
 pub(super) fn offset(g: &Grid, k: usize, j: usize) -> [f64; 2] {
     let (rk, ck, rj, cj) = ((k / g.across) as i64, (k % g.across) as i64, (j / g.across) as i64, (j % g.across) as i64);

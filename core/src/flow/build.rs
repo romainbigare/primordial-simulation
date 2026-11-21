@@ -10,9 +10,6 @@ use super::{bodies::Bodies, curve, ground_now, land::solid, range, runoff, scrat
 use crate::space::{delta::flood_depth, network::NONE, samples::Samples, terrain::SAMPLE_DEPTH};
 use crate::World;
 
-/// The particle classes of the soil's texture a move mixes in (`runoff::mix`).
-const CLASSES: usize = crate::soil::CLASSES.len();
-
 /// Is a build of the samples due at the world's time now: a year's start, every `Config::build_years` years (none at the
 /// start)?
 pub fn due(w: &World) -> bool {
@@ -109,24 +106,28 @@ fn move_out(w: &mut World, s: &mut Scratch, out: &[((u32, u32), f64)]) {
     let n = w.mesh.cells().n();
     let t = range(&s.state.tg);
     let sol = s.solids(t.0, &s.liquids(&w.chem, t, true));
-    let loose = |i: usize| sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum::<f64>();
     let mut leaving = vec![0.0; n];
     out.iter().for_each(|&((from, _), v)| leaving[from as usize] += v);
     let mut rows = Vec::with_capacity(out.len());
-    let mut mixed = vec![[0.0; CLASSES]; n];
-    for &((from, to), v) in out {
-        let (i, held) = (from as usize, loose(from as usize));
-        let gives = if leaving[i] > held { v * held / leaving[i] } else { v };
-        if gives <= 0.0 || held <= 0.0 {
-            continue;
+    let mut mixed = vec![[0.0; runoff::CLASS_COUNT]; n];
+    {
+        let s: &Scratch = s;
+        // (The loose ground: its solids that are not soft cover lying on it at its land's temperature, `Sp::soft_at`.)
+        let ground = |i: usize| {
+            let t = runoff::land_t(s, i);
+            move |k: usize| !s.sp[k].soft_at(t)
+        };
+        let loose = |i: usize| sol.iter().filter(|&&k| ground(i)(k)).map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum::<f64>();
+        for &((from, to), v) in out {
+            let (i, held) = (from as usize, loose(from as usize));
+            let gives = if leaving[i] > held { v * held / leaving[i] } else { v };
+            if gives <= 0.0 || held <= 0.0 {
+                continue;
+            }
+            rows.push((from, to, runoff::loose_share(w, s, (&sol, ground(i)), i, gives / held)));
+            let tx = &w.soil[i].texture;
+            mixed[to as usize].iter_mut().zip([tx.fine, tx.middle(), tx.coarse]).for_each(|(m, c)| *m += gives * c);
         }
-        let share = gives / held;
-        let mut row: Vec<f64> = sol.iter().map(|&k| solid(w, s, k, i) * share).collect();
-        let heat: f64 = sol.iter().zip(&row).map(|(&k, m)| m * s.sp[k].cp * s.state.tg[i]).sum();
-        row.push(heat);
-        rows.push((from, to, row));
-        let tx = &w.soil[i].texture;
-        mixed[to as usize].iter_mut().zip([tx.fine, tx.middle(), tx.coarse]).for_each(|(m, c)| *m += gives * c);
     }
     runoff::book_solids(w, s, &sol, &rows);
     runoff::mix(w, s, &mixed, &sol);

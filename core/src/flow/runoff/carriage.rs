@@ -8,7 +8,7 @@ use crate::World;
 use std::collections::HashMap;
 
 /// The particle classes of the load: fine, middle, coarse (`soil::CLASSES`).
-pub(super) const CLASS_COUNT: usize = crate::soil::CLASSES.len();
+pub(in crate::flow) const CLASS_COUNT: usize = crate::soil::CLASSES.len();
 /// A sample that lets each class pass to within this share is no key sample: what settles there is taken at the next
 /// key sample down its way, by the product of the passes of the samples on the way (`Carriage::skip`).
 const PASS_TOLERANCE: f64 = 1e-4;
