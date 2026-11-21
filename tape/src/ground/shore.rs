@@ -20,9 +20,8 @@
 use super::bends::ease;
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
+use pcore::space::wear::STAND_M;
 
-/// The level of the open low ground (the sea), m: the shelf is laid about it (`space::shelf`).
-const SEA_M: f64 = 0.0;
 /// A sample's offset is held within this height either side of the level, m: the samples nearer the level than this
 /// decide where the shore runs by their height, those farther by their side alone.
 const SHORE_M: f64 = 4.0;
@@ -100,7 +99,7 @@ pub(super) struct Shore {
 /// The level of pond `q` of `s`, m: the sea's for the open low ground.
 fn level_of(s: &Samples, q: u32) -> f64 {
     let p = &s.ponds[q as usize];
-    if p.pass == NONE { SEA_M } else { p.level }
+    if p.pass == NONE { STAND_M } else { p.level }
 }
 
 /// The pond beside a point (`Shore::beside`; `NONE`: none) and its level, m (NaN: none), and the share of the point's

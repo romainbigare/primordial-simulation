@@ -106,17 +106,18 @@ pub fn ways_to_liquid(w: &mut World) {
     let n = cells.n();
     let volume = Parts::of(&w.chem).map_or(f64::INFINITY, |p| w.chem.molar_volume(p.liquid, crate::chem::Phase::Liquid));
     let open: Vec<f64> = (0..n).map(|i| place(w, i).liquid * cells.area()[i] / volume + w.liquid_month.get(i).map_or(0.0, |&f| f as f64 * month)).collect();
+    let land: Vec<bool> = (0..n).map(|i| w.is_land(i)).collect();
     let mut field = vec![[(f64::INFINITY, 0); LEVELS]; n];
     for k in 0..LEVELS {
-        let way = shortest(w, (0..n).filter(|&i| open[i] >= 10f64.powi(k as i32)));
+        let way = shortest(w, &land, (0..n).filter(|&i| open[i] >= 10f64.powi(k as i32)));
         field.iter_mut().zip(way).for_each(|(f, d)| f[k] = d);
     }
     w.life.to_liquid = field;
 }
 
-/// The shortest way of each cell over land to the nearest of `sources`, m (infinite where none is reached), and that
-/// source.
-fn shortest(w: &World, sources: impl Iterator<Item = usize>) -> Vec<(f64, u32)> {
+/// The shortest way of each cell over the cells that are `land` to the nearest of `sources`, m (infinite where none is
+/// reached), and that source.
+fn shortest(w: &World, land: &[bool], sources: impl Iterator<Item = usize>) -> Vec<(f64, u32)> {
     let cells = w.mesh.cells();
     let mut way = vec![(f64::INFINITY, 0); cells.n()];
     let mut next = std::collections::BinaryHeap::new();
@@ -131,7 +132,7 @@ fn shortest(w: &World, sources: impl Iterator<Item = usize>) -> Vec<(f64, u32)> 
         let (links, around) = cells.around(i);
         for (&l, &j) in links.iter().zip(around) {
             let (j, there) = (j as usize, d + cells.dist()[l as usize]);
-            if there < way[j].0 && w.is_land(j) {
+            if there < way[j].0 && land[j] {
                 way[j] = (there, way[i].1);
                 next.push(std::cmp::Reverse((Far(there), j)));
             }

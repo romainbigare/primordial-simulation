@@ -303,11 +303,11 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
     };
     world.soil = pcore::soil::of_world(&world);
     let (amounts, heat) = (|w: &World, c: Class| w.store.amounts(c).to_vec(), |w: &World, c: Class| w.store.heat(c).to_vec());
-    // The low basin's liquid at 0 m and each body of standing liquid full to its pass: each cell whose own ground dips
+    // The low basin's liquid at its level (`STAND_M`, 0 m) and each body of standing liquid full to its pass: each cell whose own ground dips
     // under them holds the liquid that fills its pores and stands over its ground up to them (`World::full_bodies`), as
     // Flow's pass stands it.
     let v_low = world.chem.molar_volume(init.low, Phase::Liquid);
-    let low = world.full_bodies(0.0);
+    let low = world.full_bodies(pcore::space::wear::STAND_M);
     let mut ground = amounts(&world, Class::Ground);
     for (i, &under) in low.iter().enumerate().filter(|p| *p.1 > 0.0) {
         ground[init.low * n + i] += (world.pores(i).porosity * loose[i] * world.mesh.cells().area()[i] + under) / v_low;
