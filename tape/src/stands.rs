@@ -55,15 +55,12 @@ pub fn plants(ph: &Physics, (kg, leaf, per_m2): (f64, f64, f64), rooted: f64, wa
     Plants { per_m2, mass, height, stem, width, cover, crown: -(-leaf / cover).exp_m1() }
 }
 
-/// What a slot's row reads of its cell `i`: how its roots meet its ground's liquid (`cover::soak`), the height of its
-/// liquid's level over its lowest ground, m (`flow::levels`), its temperature and the melting point of its key liquid,
-/// K, the density of its walls, kg/m³, and its area, m².
-struct Ground {
-    i: usize,
-    soak: cover::Soak,
+/// What a slot's row reads of its cell `i`: the height of its liquid's level over its lowest ground, m
+/// (`flow::levels`), what its cover's slots ran at in its last month (`Counters::ran_month`; none before its first),
+/// the density of its walls, kg/m³, and its area, m².
+struct Ground<'a> {
     level: f64,
-    t: f64,
-    melt: f64,
+    ran: Option<&'a [cover::Ran; cover::SLOTS]>,
     rho: f64,
     area: f64,
 }
@@ -76,8 +73,8 @@ struct Ground {
 /// closed a crown is; its walls' share; its capture
 /// area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s (more
 /// pigment per area); its moisture gene (`MOIST`) and frost gene, K (`FROST`); its fuel over its reserve (`STORE`); its
-/// activity there (`cover::activity`, its drought's, by which it wears and hardens); the share of it frozen this month
-/// (`cover::frozen`); the share of what it builds
+/// activity there and the share of it frozen in its cell's last month, as the law used them (`cover::Ran`; a slot that
+/// has not run since it took hold, its `Cover::need` not found yet, is active and not frozen); the share of what it builds
 /// that goes to seeds (`SEED`); the share of the ground it stands on whose loose ground holds its plants (`Cover::rooted`, a share of the
 /// ground its cover lives on) and the loose ground their roots need, m (`Cover::need`; all of the land and 0 for a slot
 /// whose need is not found yet: seeds that landed since its cell's last month); and its walls gene, log10 kg of walls
@@ -87,18 +84,17 @@ struct Ground {
 /// groups, the large plants first (empty groups last, all 0): how many a m², and a plant's height, stem's width and
 /// crown's width, m (`plants` of that group). Then where it stands: how deep under its cell's level its line lies, m
 /// (`Cover::line`: it stands on the ground above it, on land and under the liquid as deep as that; plants do not move,
-/// so as the level rises by a metre this deepens by a metre, and a viewer draws them on the same ground), and the share
-/// of its ground that lies under the liquid (`Footing::wet`).
+/// so as the level rises by a metre this deepens by a metre, and a viewer draws them on the same ground; 0 before its
+/// line is found), and the share of its ground that lies under the liquid in its last month (`cover::Ran`).
 fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND_ROW] {
     let ph = &w.cfg.phys;
     let (built, genes) = (c.built(mm, x), c.genes[x]);
     let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x] as f64, c.need[x]) } else { (1.0, 0.0) };
     let per_ground = |v: f64| per_land(v / g.area, c.stands[x] as f64);
-    let foot = cover::footing(w, g.i, &genes, (need as f64).max(ph.root_least), &g.soak, (c.line[x] >= 0.0).then_some((c.line[x] as f64, c.strip[x] as f64)));
+    let ran = g.ran.filter(|_| c.need[x] > 0.0).map_or(cover::Ran { act: 1.0, ..Default::default() }, |r| r[x]);
     let s = c.sizes(ph, mm, x);
     let group = |k: usize| plants(ph, (per_ground(s.mass[k] * s.count[k]), per_ground(c.leaf(mm, x) * s.leaf[k]), per_ground(s.count[k])), rooted, s.walls[k], g.rho);
     let p = group(s.large());
-    let act = cover::activity(&genes, g.soak.moist);
     let reserve = dec(genes[STORE]) * built;
     let gene = |k: usize| genes[k] as f64;
     let mut out = [0.0; KIND_ROW];
@@ -117,8 +113,8 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
         gene(MOIST),
         gene(FROST),
         c.mol[x][FUEL] * mm[FUEL] / reserve.max(1e-300),
-        act,
-        cover::frozen(ph, g.melt, gene(FROST), (g.t, act)),
+        ran.act as f64,
+        ran.frozen as f64,
         gene(SEED),
         rooted,
         need as f64,
@@ -129,7 +125,8 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
         let q = group(k);
         out[at..at + GROUP_ROW].copy_from_slice(&[q.per_m2, q.height, q.stem, q.width]);
     }
-    out[KIND_ROW - KIND_TAIL..].copy_from_slice(&[g.level - foot.line, foot.wet]);
+    let deep = if c.line[x] >= 0.0 { g.level - c.line[x] as f64 } else { 0.0 };
+    out[KIND_ROW - KIND_TAIL..].copy_from_slice(&[deep, ran.wet as f64]);
     out
 }
 
@@ -142,15 +139,7 @@ pub fn rows(w: &World, i: usize, level: f64) -> Vec<f64> {
     out.iter_mut().step_by(KIND_ROW).for_each(|r| *r = -1.0);
     let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
-    let g = Ground {
-        i,
-        soak: cover::soak(w, &p, i, w.g(p.liquid, i)).1,
-        level,
-        t: w.t_ground_last(i),
-        melt: w.chem.subs[p.liquid].melt,
-        rho: w.chem.subs[p.sub[cover::WALL]].density[0],
-        area: w.mesh.cells().area()[i],
-    };
+    let g = Ground { level, ran: w.counts.ran_month.get(i), rho: w.chem.subs[p.sub[cover::WALL]].density[0], area: w.mesh.cells().area()[i] };
     let mut slots: Vec<usize> = c.held().filter(|&x| c.stands[x] > 0.0).collect();
     slots.sort_by(|&a, &b| c.built(&mm, b).total_cmp(&c.built(&mm, a)));
     for (k, &x) in slots.iter().enumerate() {

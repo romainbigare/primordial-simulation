@@ -1245,7 +1245,9 @@ seeds fill it:
   building, what it sheds, what dies, the fuel its roots give its ground, seeds out and landed, the seeds lying that
   die, what takers take or break, what is placed, rounding, and what flames burn or kill (3c). The seeds' flows in kg (landed, sprouted, worn, frozen,
   taken: `Counters::seeds`) and what each cell's cover built in the last whole year (`Counters::grown_last`) are counted
-  for the tape. The tape records them each year.
+  for the tape. The tape records them each year. What each slot ran at in its cell's last month (its activity, its
+  frozen share and the share of its ground under the liquid, `cover::Ran` in `Counters::ran_month`) is kept for the
+  page, which draws a slot by the numbers the law used.
 - **Growth**: the fuel over its reserve (10^`STORE` kg per kg of built cover) and the minerals of its ground (shared
   out over the slots, `grow::shares`: where the ground holds what they would take, `build::wants`, each gets its share
   of all of it by that; where it is short, by their fine roots (as many as the liquid each drew needs, the minerals
