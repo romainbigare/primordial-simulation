@@ -32,10 +32,16 @@ pub(super) fn exposures(g: &Grid, open: &[bool]) -> Vec<f64> {
 }
 
 /// The height a deposit builds up to in liquid standing at `level`, m, where a channel that drains `drains` m² comes in:
-/// the surface of the channel's flood there, as deep as a channel of the law `channel` (the depth at 1 m³/s, m, and its
-/// power of the discharge; Leopold and Maddock 1953) carries `FLOOD_RUNOFF` from that area.
+/// the surface of the channel's flood there (`flood_depth`).
 pub(super) fn top(level: f64, (drains, channel): (f64, [f64; 2])) -> f64 {
-    level + channel[0] * (FLOOD_RUNOFF * drains).powf(channel[1])
+    level + flood_depth(drains, channel)
+}
+
+/// How deep the flood runs in a channel that drains `drains` m², m: as deep as a channel of the terrain's law `channel`
+/// (`Terrain::channel`: the depth at 1 m³/s, m, and its power of the discharge, `Physics::channel`; Leopold and Maddock
+/// 1953) carries `FLOOD_RUNOFF` from that area.
+pub(crate) fn flood_depth(drains: f64, channel: [f64; 2]) -> f64 {
+    channel[0] * (FLOOD_RUNOFF * drains).powf(channel[1])
 }
 
 /// What the lobes read of the open low ground: which samples are open, how open to the waves each lies, the way out

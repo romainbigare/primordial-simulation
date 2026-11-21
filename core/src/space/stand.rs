@@ -107,6 +107,7 @@ pub(super) fn high_stand(seed: u64, g: &Grid, (h, loose): (&mut [f64], &mut [f64
     let mouth = mouths_of(&f, &c, &open);
     let given = take(g, h, (&f, &c, &mouth), (lowers, &load, &mouth_top));
     books.held += load.iter().sum::<f64>() - given.iter().sum::<f64>();
+    books.yields = given.iter().sum::<f64>() / HIGH_STAND_YEARS;
     let highest = ends.iter().map(|&k| mouth_top(k)).fold(STAND_M, f64::max);
     let behind: Vec<bool> = (0..n).map(|k| c.free[k] && h[k] < highest).collect();
     let mut mouths: Vec<Mouth> = ends.iter().filter(|&&k| given[k] > 0.0).map(|&k| {

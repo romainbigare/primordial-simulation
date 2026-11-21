@@ -11,7 +11,7 @@
 
 use super::Texture;
 use crate::space::network::NONE;
-use crate::space::delta::FLOOD_RUNOFF;
+use crate::space::delta::flood_depth;
 use crate::space::samples::Samples;
 use crate::space::terrain::Make;
 use crate::units::LIQUID_VISCOSITY;
@@ -20,7 +20,7 @@ use crate::World;
 /// The particle classes, fine, middle and coarse, by their least and most diameter, m (fine under 2 µm, middle to
 /// 50 µm, coarse to 2 mm; Soil Survey Staff 1993); within a class the particles spread evenly over the logarithm of
 /// their size.
-const CLASSES: [[f64; 2]; 3] = [[2e-7, 2e-6], [2e-6, 5e-5], [5e-5, 2e-3]];
+pub(crate) const CLASSES: [[f64; 2]; 3] = [[2e-7, 2e-6], [2e-6, 5e-5], [5e-5, 2e-3]];
 const FINE: usize = 0;
 const MIDDLE: usize = 1;
 const COARSE: usize = 2;
@@ -43,13 +43,10 @@ pub fn samples(w: &World) -> Vec<Texture> {
 /// (`Make::coarse`), weathered over the time its loose ground has lain, and the share of it that settled there sorted
 /// by the flow that laid it (the module's doc). A sample under standing liquid (in a pond, or the open low ground) was
 /// laid by still liquid. The flow at a sample is the flood's (`FLOOD_RUNOFF` from the area that drains through it), as
-/// deep as a channel of the terrain's law carries it (`Samples::channel`), down its slope; the load that reaches it is
+/// deep as a channel of the terrain's law carries it (`delta::flood_depth`), down its slope; the load that reaches it is
 /// what the flow at its main sample upstream (`Samples::main`) carried on, all particles where none runs to it.
 pub fn textures(s: &Samples, makes: &[Make], g: f64) -> Vec<Texture> {
-    let shear = |k: usize| {
-        let depth = s.channel[0] * (FLOOD_RUNOFF * s.up[k]).powf(s.channel[1]);
-        if s.pond[k] != NONE { 0.0 } else { (g * depth * s.slope[k]).sqrt() }
-    };
+    let shear = |k: usize| flood_shear(s, k, g, flood_depth(s.up[k], s.channel));
     crate::par::map_n(s.h.len(), crate::par::UNCOUNTED, |k| {
         let m = makes.get(s.make[k] as usize).copied().unwrap_or_default();
         let laid = if s.loose[k] > 0.0 { s.settled[k] / s.loose[k] } else { 0.0 };
@@ -62,6 +59,33 @@ pub fn textures(s: &Samples, makes: &[Make], g: f64) -> Vec<Texture> {
         }
         Texture { coarse: x[COARSE], fine: x[FINE], organic: 0.0 }
     })
+}
+
+/// The shear velocity of the flood at sample `k` of samples `s` at gravity `g`, m/s, where it runs `depth` m deep down
+/// the sample's slope, u* = √(g H S); none under standing liquid (in a pond, or the open low ground).
+pub(crate) fn flood_shear(s: &Samples, k: usize, g: f64, depth: f64) -> f64 {
+    if s.pond[k] != NONE { 0.0 } else { (g * depth * s.slope(k)).sqrt() }
+}
+
+/// What of a load passes a reach `run` m long under a flow of shear velocity `u` m/s that carries `q` m³/s a m of its
+/// width, its particles `buoyant` times the liquid's weight at gravity `g`: of each class (fine, middle, coarse), the
+/// share of what came in at the reach's top (`P`) and of what was picked up evenly along it (`R`). The share φ of the
+/// class's log-sizes that sink faster than `u` (`settles`, Bagnold 1966) settles at the speed V of their mean log-size
+/// (`sinking`) over the length ξ = q / V the flow carries it before it settles (Davy and Lague 2009); the rest passes:
+/// P = 1 − φ (1 − e^(−L/ξ)) and R = 1 − φ + φ (ξ/L)(1 − e^(−L/ξ)), the exact step over a reach of length L.
+pub(crate) fn passes(u: f64, q: f64, run: f64, buoyant: f64, g: f64) -> [[f64; 3]; 2] {
+    let least = settles(u, buoyant, g);
+    let mut shares = [[1.0; 3]; 2];
+    for (c, &[a, b]) in CLASSES.iter().enumerate() {
+        let lo = least.max(a);
+        let phi = ((b / lo).ln() / (b / a).ln()).max(0.0);
+        if phi > 0.0 && q > 0.0 && run > 0.0 {
+            let x = run * sinking((lo * b).sqrt(), buoyant, g) / q;
+            let gone = -(-x).exp_m1();
+            (shares[0][c], shares[1][c]) = (1.0 - phi * gone, 1.0 - phi + phi * gone / x);
+        }
+    }
+    shares
 }
 
 /// Particle shares `x` (fine, middle, coarse) of which the share `weathers` weathers, after `years`: that share of the

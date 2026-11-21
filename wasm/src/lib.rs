@@ -241,6 +241,14 @@ pub extern "C" fn discharge() -> *const u8 {
     give(bytes)
 }
 
+/// Where load came into a body of standing liquid in the last month (`Counters::plumes`): each the terrain's sample
+/// (u32) and how much, kg/s (f32), little-endian.
+#[no_mangle]
+pub extern "C" fn plumes() -> *const u8 {
+    let bytes = with(|l| l.world.counts.plumes.iter().flat_map(|&(k, kg)| k.to_le_bytes().into_iter().chain(kg.to_le_bytes())).collect());
+    give(bytes)
+}
+
 /// What lies in each cell of the window from column `x` and row `y`, `w` x `h` squares: its slots of cover
 /// (`tape::things`), for the page to show.
 #[no_mangle]

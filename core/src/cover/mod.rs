@@ -31,7 +31,7 @@ pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
-pub use soak::{aired, breath, footing, soak, working, Footing, Soak};
+pub use soak::{aired, breath, footing, gains, moist, soak, strips_share, working, Footing, Soak};
 pub use stand::{height, loose_bins, stem, BINS};
 
 use crate::life::WET_TISSUE;
@@ -128,6 +128,10 @@ pub struct Cover {
     pub stands: [f32; SLOTS],
     pub airless: [f32; SLOTS],
     pub drained: [f32; SLOTS],
+    /// Per slot: the share of its plants on its cell's land that stand on the land's saturated strips (`cover::footing`,
+    /// `inside::wet_ground`): where its seedlings take hold and its plants grow as their roots gain there
+    /// (`soak::strips_share`, `grow::live`, `seed::lodge`)
+    pub strip: [f32; SLOTS],
     /// The film its leaves' pores were open to the key liquid's vapour over its last month, mol K/(Pa s) per m² of the
     /// cell (`around::pores`), and the share of its ground's liquid their roots reach
     pub film: f32,
@@ -158,7 +162,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new() }
     }
 }
 

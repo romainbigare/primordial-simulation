@@ -48,16 +48,28 @@ pub struct Counters {
     /// Heat that crossed into the map at its open north, south, east and west edges since the start, J: sensible and
     /// latent
     pub edges: [f64; 4],
+    /// Per cell, the load the liquid in its main channel carried in the last month, g per m³ of that liquid, and the
+    /// depth of load that settled on its ground in the month, m (`flow::runoff`): what a shell draws turbid channels
+    /// and fresh deposits by
+    #[serde(skip)]
+    pub load_month: Vec<[f32; 2]>,
+    /// The samples where load came into a body of standing liquid in the last month, each with how much, kg/s (a
+    /// shell's plumes)
+    #[serde(skip)]
+    pub plumes: Vec<(u32, f32)>,
     /// The liquid that crossed into the map's open low ground at its open edges since the start (`flow::runoff`): m³,
     /// and its heat, J
     pub edge_liquid: [f64; 2],
+    /// The load of the running liquid since the start (`flow::runoff::load`), m³: picked up, carried into the open low
+    /// ground, carried into the other bodies, settled on land, and the bed worn into loose ground
+    pub load: [f64; 5],
 }
 
 impl Counters {
     /// The counts `c` of a chunk are added (`World::take_chunks`), and start again. Every field is named, so a new one
     /// cannot be left out.
     pub(crate) fn add(&mut self, c: &mut Counters) {
-        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, flamed, flame_month, burnt_months, burnt_age, flame, flame_air, edges, edge_liquid } = std::mem::take(c);
+        let Counters { clamped_heat, rounded, cover_lost, cover_budget, seeds, takers_died, grown, grown_year, grown_last, flamed, flame_month, burnt_months, burnt_age, flame, flame_air, edges, edge_liquid, load_month, plumes, load } = std::mem::take(c);
         self.clamped_heat += clamped_heat;
         self.add_rounded(rounded);
         self.cover_lost.iter_mut().zip(cover_lost).for_each(|(a, b)| *a += b);
@@ -67,6 +79,7 @@ impl Counters {
         self.grown.extend(grown);
         // (A chunk's counts hold no year: the world's are its own.)
         debug_assert!(grown_year.is_empty() && grown_last.is_empty() && flame_month.is_empty() && burnt_months.is_empty() && burnt_age.is_empty(), "a chunk counted a year");
+        debug_assert!(load_month.is_empty() && plumes.is_empty(), "a chunk counted the month's load");
         self.flamed.extend(flamed);
         self.flame.iter_mut().zip(flame).for_each(|(a, b)| *a += b);
         if self.flame_air.len() < flame_air.len() {
@@ -75,6 +88,7 @@ impl Counters {
         self.flame_air.iter_mut().zip(flame_air).for_each(|(a, b)| *a += b);
         self.edges.iter_mut().zip(edges).for_each(|(a, b)| *a += b);
         self.edge_liquid.iter_mut().zip(edge_liquid).for_each(|(a, b)| *a += b);
+        self.load.iter_mut().zip(load).for_each(|(a, b)| *a += b);
     }
     /// What a booking set from just below zero to zero is added (`Counters::rounded`): mol, and J.
     pub(crate) fn add_rounded(&mut self, [mol, heat]: [f64; 2]) {
@@ -123,9 +137,9 @@ pub struct World {
     /// (`contract::liquid`). Not saved: the runoff's pass writes it each month before life reads it
     #[serde(skip)]
     pub liquid_month: Vec<f32>,
-    /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what runs over the
-    /// surface of each land cell into cells that are not land (`is_land`), mol/s: moving averages over about a year,
-    /// for the tape
+    /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what leaves each land
+    /// cell for the cells that are not land (`is_land`), over its surface and under it (`flow::drain`), mol/s: moving averages over about a
+    /// year, for the tape
     pub evap: Vec<f32>,
     pub off_land: Vec<f32>,
     pub counts: Counters,
