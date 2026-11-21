@@ -36,8 +36,11 @@ pub(super) struct Weather {
 
 impl Weather {
     /// The weather of the step of `days` days that starts now in `w`, its air nodes' ends `ends` (`wind::ends`), over
-    /// the map and one node beyond its edges. Its unit is the eddies' mixing length sqrt(`mix` × `eddy_time`) (a
-    /// diffusivity is a speed times the length an eddy moves air in its time, Taylor 1922; Prandtl 1925). None on a
+    /// the map and one node beyond its edges. Its unit is the eddies' speed times their time, `eddy_speed` ×
+    /// `eddy_time`: the air an eddy moves at η / `eddy_time` (`lift`) then moves at the eddies' measured speed, and that
+    /// length is the eddies' mixing length (Taylor 1922: a wind of spread v' that keeps for a time τ moves air as a
+    /// diffusion v'² τ = v' × v'τ; over one τ its parcels go sqrt(2 / e) v'τ, 0.86 of it). The eddies' mean heat flux is
+    /// a share of that motion only (`mix`, laws.md 1.6). None on a
     /// globe: the planet's strip is one (`worldgen::planet`), and the edges read its last year as the climate
     /// (`Planet`), which a year of its weather would stand for; and none where it acts on nothing, the map's edges closed
     /// and no node feeling a gradient (`lift`).
@@ -59,7 +62,7 @@ impl Weather {
         let points = size[0] * size[1];
         let work = points.saturating_sub(1) * (parts.longest() + days) * DRAW_WORK;
         let field = crate::par::map_n(points, work, |i| parts.series(w.seed, [origin[0] + (i % size[0]) as i64, origin[1] + (i / size[0]) as i64], first, days)).concat();
-        Some(Weather { origin, size, days, field, per_m, reach: (w.cfg.mix * phys.eddy_time).sqrt(), lift })
+        Some(Weather { origin, size, days, field, per_m, reach: phys.eddy_speed * phys.eddy_time, lift })
     }
 
     /// What the weather lifts each air node's air by on day `d` of the step, mol/s (sinking below 0): what it lifts it by

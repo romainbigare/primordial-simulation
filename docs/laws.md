@@ -861,13 +861,16 @@ liquid's top layer sums of the same weather and lets go in τ = its heat per K (
 `top_damp` (about 4 months with chemistry 0): the same draws weighted by e^(-age / τ), with sqrt(`eddy_time` / τ) of
 the fast part's spread, as a top layer that the fast weather forces holds it (Hasselmann 1976; Frankignoul and
 Hasselmann 1977). A point of the map reads the four points of the lattice about it bilinearly, the weights over their
-root sum of squares, so its spread is the same everywhere. A unit of the field is the eddies' mixing length,
-sqrt(`mix` × `eddy_time`), 525 km: a diffusivity is a speed times the length an eddy moves air in its time (Taylor
-1922). So the field has no size of its own. It acts in two places. **Across the open edges**, each day each link's
+root sum of squares, so its spread is the same everywhere. A unit of the field is the length an eddy moves air at its
+speed in its time, `eddy_speed` × `eddy_time`, 1,560 km: a wind of spread v' that keeps for a time τ mixes as a
+diffusion v'² τ, a speed times the mixing length v'τ (Taylor 1922), and over one τ its parcels go sqrt(2 / e) v'τ, 0.86
+of it. So the field has no size of its own. The eddies' motion is mostly reversible sloshing, and only a share of it
+carries heat: the mean flux of the eddies is the smooth mixing `mix` (1.6), r v' ℓ with r = `mix` / (`eddy_speed`²
+`eddy_time`) = 0.11. The weather's lift and the air it brings across the edges are its whole motion. It acts in two places. **Across the open edges**, each day each link's
 column beyond is read again (`Edges::weather`) at its latitude less η at the column, in degrees: the air the eddies
 bring from there. **On the air it lifts**: air that an eddy moves along the warmth's gradient slides along
 the surfaces of equal warmth (the baroclinic eddy, Holton 2004, 8.4). Moving η in `eddy_time`, at η / `eddy_time`
-(its spread sqrt(`mix` / `eddy_time`), 2 m/s), it rises by that speed times their slope: the warmth's gradient toward
+(its spread `eddy_speed`, 6 m/s), it rises by that speed times their slope: the warmth's gradient toward
 the south that the node feels (`rise::felt`, as the low wind reads it: the planet's where the edges are open, the
 node's own where it is a block alone, else none) over how fast the warmth rises with height (the dry air's fall with
 height less the node's, `wind::End::rise`; none where it does not rise). That lifts the node's air at the ground's
