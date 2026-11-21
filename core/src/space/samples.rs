@@ -7,7 +7,9 @@
 //! them (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
 //! terrain, not saved.
 
+use super::delta::{exposures, lobes, Liquid, Mouth};
 use super::drain::{draws, flood, open_low, starts};
+use super::fill::heading;
 use super::relief::Relief;
 use super::grid::Grid;
 use super::network::{accumulate, NONE};
@@ -147,6 +149,25 @@ impl Terrain {
             *kept = Some((r.builds, found.clone()));
             found
         })
+    }
+
+    /// The lobes the running world's mouths lay at a build of the samples `s` of `map` (`delta::lobes`, one call on the
+    /// whole grid): the liquid stands on the samples of a body `body` (`NONE` for none) at each one's `level`, m; each mouth an entry sample, the
+    /// load it brings, m³, and its top, m, its way in along its main channel (`Samples::main`, `fill::heading`); over `years`, nothing behind them. Returns each sample each lobe laid on, with the
+    /// volume, m³, and the mouth's place in `mouths`; and the load they found no room for, m³. The ages of the layers are
+    /// not read (the running world keeps no age of its relief).
+    pub fn lobes_of(&self, map: &Square, lat: (f64, f64), s: &Samples, (body, level): (&[u32], &[f64]), mouths: &[(usize, f64, f64)], years: f64) -> (Vec<(usize, f64, u32)>, f64) {
+        let (grid, _) = grid_of(map, lat);
+        let open: Vec<bool> = body.iter().map(|&b| b != NONE).collect();
+        let exposed = exposures(&grid, &open);
+        let liquid = Liquid::new(&grid, (&open, &exposed), (level, body));
+        let heading = |k: usize| if s.main[k] == NONE { [0.0; 2] } else { heading(&grid, |j| s.main[j], (s.main[k] as usize, k)) };
+        let mut order: Vec<usize> = (0..mouths.len()).collect();
+        order.sort_by(|&a, &b| mouths[b].1.total_cmp(&mouths[a].1).then(mouths[a].0.cmp(&mouths[b].0)));
+        let laid_out: Vec<Mouth> = order.iter().map(|&m| Mouth { entry: mouths[m].0, load: mouths[m].1, top: mouths[m].2, heading: heading(mouths[m].0) }).collect();
+        let (mut h, mut loose) = (s.h.clone(), s.loose.clone());
+        let laid = lobes(&grid, (&mut h, &mut loose), (&liquid, &vec![false; grid.n()]), &laid_out, years);
+        (laid.parts.into_iter().map(|(k, v, m)| (k, v, order[m as usize] as u32)).collect(), laid.unlaid)
     }
 
     /// The mean rise of the ground toward the south over leaf `l` of `map` for `seed` (its rows between latitudes `south`

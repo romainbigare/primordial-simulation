@@ -14,6 +14,7 @@ mod grow;
 mod groups;
 mod lying;
 mod month;
+mod patches;
 mod seed;
 mod season;
 mod show;
@@ -21,7 +22,7 @@ mod soak;
 mod stand;
 mod upkeep;
 
-pub use around::{pores, thirst, Around};
+pub use around::{dimmed, over, pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
 pub use grow::{live, step, Books};
 pub use groups::Sizes;
@@ -29,6 +30,7 @@ pub(crate) use build::per_input;
 pub(crate) use budget::{BURNT, ROUNDED};
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release, CellRan, Ran};
+pub use patches::{Patch, PATCHES};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use soak::{aired, breath, fill_now, footing, gains, moist, soak, strips_share, working, Footing, Soak};
@@ -39,9 +41,10 @@ use crate::chem::Chemistry;
 use crate::units::MAX_SUBSTANCES;
 use serde::{Deserialize, Serialize};
 
-/// Kinds of cover a cell's arrays hold: the most a world's `Config::variety` may be. A cell uses its first `variety`
-/// slots; the rest stay empty.
-pub const SLOTS: usize = 12;
+/// Kinds of cover a cell's arrays hold: the most a world's `Config::variety` may be. A cell of one patch uses its first
+/// `variety` slots and the rest stay empty; a cell of more patches uses all of them, each patch at most `variety`
+/// (`patches`).
+pub const SLOTS: usize = 16;
 /// Size groups a slot keeps its plants in (`groups`): the resolution of plant sizes a slot holds, as `SLOTS` is of kinds
 /// (seedlings, young plants, plants under the canopy and plants of the canopy).
 pub const GROUPS: usize = 4;
@@ -157,12 +160,16 @@ pub struct Cover {
     /// Seeds made in its last step, landed after every cell had its step (`land`); not saved
     #[serde(skip)]
     pub(crate) seeds: Vec<Seed>,
+    /// Per slot: the patch of its cell it stands in (`patches`)
+    pub patch: [u8; SLOTS],
+    /// Its patches, those in use first (`Patch::share` above zero): each a share of its cell and an age
+    pub patches: [Patch; PATCHES],
 }
 
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], patches: patches::whole() }
     }
 }
 
@@ -195,14 +202,19 @@ impl Cover {
     pub fn on(&self, x: usize) -> f64 {
         self.rooted[x] as f64 * self.stands[x] as f64
     }
+    /// The ground the plants of slot `x` hold on a cell's ground of `ground` m², m²: the share of it its patch holds
+    /// (`Cover::patch_share`), and of that the share its plants hold (`Cover::on`).
+    pub fn holds(&self, ground: f64, x: usize) -> f64 {
+        ground * self.patch_share(x) * self.on(x)
+    }
     /// The crown of the plants of slot `x`, `top` m tall (`Cover::height`, its large plants'), on a cell's ground of
     /// `ground` m², from its base to its top, m: its leaves, and the thin stems that carry them, stand where the light is,
     /// over the depth their capture area fills at the density of a crown's leaves: its capture area over the ground its
-    /// plants hold (`Cover::on`), over `crown_density` m² a m³, down from its top, and no lower than the ground: a sward is
+    /// plants hold in its patch (`Cover::holds`), over `crown_density` m² a m³, down from its top, and no lower than the ground: a sward is
     /// as dense as that over its whole height.
     pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], ground: f64, x: usize, top: f64) -> (f64, f64) {
-        let patch = ground * self.on(x).max(f32::MIN_POSITIVE as f64);
-        let depth = self.leaf(mm, x) / patch.max(1e-300) / ph.crown_density;
+        let held = ground * self.patch_share(x) * self.on(x).max(f32::MIN_POSITIVE as f64);
+        let depth = self.leaf(mm, x) / held.max(1e-300) / ph.crown_density;
         ((top - depth).max(0.0), top)
     }
     /// All the cover of slot `x`, kg.
@@ -319,7 +331,7 @@ pub fn per_m2(w: &crate::World, of: impl Fn(&Cover, &[f64; NP], usize) -> f64) -
     let Some(p) = Parts::of(&w.chem) else { return out };
     let (mm, area) = (p.mm(&w.chem), w.mesh.cells().area());
     for (i, c) in w.life.cells.iter().enumerate() {
-        out[i] = (0..w.cfg.variety).map(|x| of(&c.cover, &mm, x)).sum::<f64>() / area[i];
+        out[i] = (0..c.cover.slots(w.cfg.variety)).map(|x| of(&c.cover, &mm, x)).sum::<f64>() / area[i];
     }
     out
 }

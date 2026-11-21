@@ -22,8 +22,8 @@ use crate::{space::network::NONE, store::Move, units::G_PER_KG, World};
 /// carried, g per m³ of its liquid, and the depth that settled on it, m; the plumes: each sample where a way entered a
 /// body, with the load that came in there, kg/s; the volumes of the month (`Volumes`); of each cell the volume of
 /// each class that settled on it, m³ (`mix`); and what the month laid on the samples' relief (taken where under none),
-/// m (`Relief`): what settles at a key sample whose way runs on or ends on land lies on it; what reaches a body lies
-/// over its entry cell's ground at large.
+/// m (`Relief`): what settles at a key sample lies on it; what reaches a body piles on its entry sample, until the next
+/// build lays it out (`flow::build`).
 pub(super) struct Carried {
     pub(super) broke: Vec<Move>,
     pub(super) loads: Vec<[f32; 2]>,
@@ -141,7 +141,7 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
         let all: f64 = came.iter().chain(&own).chain(&dropped).sum();
         let on: f64 = out.iter().sum();
         (0..CLASS_COUNT).for_each(|l| settled[i][l] += came[l] + own[l] + dropped[l] - out[l]);
-        if matches!(c.end[q], End::On | End::Land) && all > on {
+        if all > on {
             relief.push((k, (all - on) / a));
         }
         let gone = all - on;
@@ -204,7 +204,7 @@ fn gather(w: &World, (c, work): (&super::Carriage, &Work), (picked, sol_v): (&[f
 /// ground (the solids `sol`) up to `skin_m` deep, as the texture of a cell is found (`soil::of_world`): the load booked,
 /// what it held before is what it holds less what settled. Its pores are found again at the month's start where they
 /// moved (`soil::month`).
-pub(super) fn mix(w: &mut World, s: &Scratch, settled: &[[f64; CLASS_COUNT]], sol: &[usize]) {
+pub(in crate::flow) fn mix(w: &mut World, s: &Scratch, settled: &[[f64; CLASS_COUNT]], sol: &[usize]) {
     let area = w.mesh.cells().area();
     for (i, v) in settled.iter().enumerate().filter(|(_, v)| v.iter().sum::<f64>() > 0.0) {
         let came: f64 = v.iter().sum();

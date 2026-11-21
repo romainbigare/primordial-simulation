@@ -332,15 +332,11 @@ pub(super) fn layers(w: &World, s: &Scratch, (i, part, ground): (usize, f64, f64
     let mut l = [0.0, 0.0, 0.0, 0.0, fix[0], fix[1]];
     let (mut z, mut cover) = (w.base_z + (s.state.bed[i].vol * ground + fix[0]) / area, [0.0; 2]);
     for &k in &s.state.vary {
-        let (p, a) = (&s.sp[k], amt(k));
-        if a <= 0.0 || t >= p.boil {
-            continue;
-        }
-        let (m, liq) = (molten(k), p.liquid(t, molten(k), free));
-        let vs = a * (1.0 - m) * p.v[0];
-        let o = if p.soft_at(t) { 0 } else { 4 };
+        let p = &s.sp[k];
+        let Some([soft, liquid, loose]) = p.volumes(t, amt(k), molten(k), free) else { continue };
+        let (o, vs) = if p.soft_at(t) { (0, soft) } else { (4, loose) };
         (l[o], l[o + 1]) = (l[o] + vs, l[o + 1] + vs * p.refl[0]);
-        (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
+        (l[2], l[3]) = (l[2] + liquid, l[3] + liquid * p.refl[1]);
         z += vs / area;
         if o == 0 {
             (cover[0], cover[1]) = (cover[0] + vs / area / p.cond, cover[1] + vs * melt(k));

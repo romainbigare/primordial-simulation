@@ -7,7 +7,7 @@
 //! (`space::delta`).
 
 use super::delta::{exposures, lobes, top, Liquid, Mouth};
-use super::fill::offset;
+use super::fill::heading;
 use super::drain::{draws, flood, open_low, starts, Flood};
 use super::grid::Grid;
 use super::network::NONE;
@@ -26,8 +26,6 @@ const YIELD_A_EXP: f64 = 0.5;
 const YIELD_T0_K: f64 = 273.15;
 /// The liquid that runs off a catchment in a year, m (its discharge over its area).
 const RUNOFF_M: f64 = 0.3;
-/// The samples of a channel a mouth's heading is read along, upstream of its mouth.
-const HEADING_SAMPLES: usize = 4;
 
 /// The load a catchment of `area` m² whose highest ground stands `relief` m over the mouth yields in a year, m³ of bed
 /// (Syvitski and Milliman 2007, at the typical surface temperature `T_SURF`).
@@ -72,21 +70,6 @@ fn catchments(g: &Grid, h: &[f64], f: &Flood, open: &[bool]) -> Catchments {
     Catchments { free, area, high, up }
 }
 
-/// The way the channel at mouth `k` comes into sample `entry` of grid `g`, a unit vector east and south: from the
-/// sample `HEADING_SAMPLES` up its main channel (`Catchments::up`) to the entry.
-fn heading(g: &Grid, c: &Catchments, (k, entry): (usize, usize)) -> [f64; 2] {
-    let mut from = k;
-    for _ in 0..HEADING_SAMPLES {
-        if c.up[from] == NONE {
-            break;
-        }
-        from = c.up[from] as usize;
-    }
-    let v = offset(g, from, entry);
-    let len = v[0].hypot(v[1]);
-    if len > 0.0 { [v[0] / len, v[1] / len] } else { [0.0; 2] }
-}
-
 /// The high stand on grid `g` of heights `h` (the module's doc) under the channel law `channel`, the wear's last stage
 /// having lowered each sample at `lowers`, m a year: lowers each catchment by its load where it lowered fastest, builds
 /// the lobes at the mouths (adding them to the loose ground `loose`, m), and books both in `books`. Returns what it
@@ -112,11 +95,13 @@ pub(super) fn high_stand(seed: u64, g: &Grid, (h, loose): (&mut [f64], &mut [f64
     let behind: Vec<bool> = (0..n).map(|k| c.free[k] && h[k] < highest).collect();
     let mut mouths: Vec<Mouth> = ends.iter().filter(|&&k| given[k] > 0.0).map(|&k| {
         let entry = f.to[k] as usize;
-        Mouth { entry, load: given[k], top: mouth_top(k), heading: heading(g, &c, (k, entry)) }
+        Mouth { entry, load: given[k], top: mouth_top(k), heading: heading(g, |j| c.up[j], (k, entry)) }
     }).collect();
     mouths.sort_by(|a, b| b.load.total_cmp(&a.load).then(a.entry.cmp(&b.entry)));
     let taken: f64 = given.iter().sum();
-    let liquid = Liquid::new(g, (&open, &exposed), STAND_M);
+    let level = vec![STAND_M; n];
+    let body = super::hollows::parts(g, &open).0;
+    let liquid = Liquid::new(g, (&open, &exposed), (&level, &body));
     let laid = lobes(g, (h, loose), (&liquid, &behind), &mouths, HIGH_STAND_YEARS);
     (books.taken, books.high, books.unlaid) = (books.taken + taken, laid.volume, laid.unlaid);
     books.beyond += taken - laid.volume - laid.unlaid;

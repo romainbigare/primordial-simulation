@@ -66,8 +66,10 @@ pub struct Counters {
     /// and its heat, J
     pub edge_liquid: [f64; 2],
     /// The load of the running liquid since the start (`flow::runoff::load`), m³: picked up, carried into the open low
-    /// ground, carried into the other bodies, settled on land, and the bed worn into loose ground
-    pub load: [f64; 5],
+    /// ground, carried into the other bodies, settled on land, the bed worn into loose ground; and at the builds, what the
+    /// mouths' lobes found no room for, and what their moves to other cells lacked of the entry cells' loose ground
+    /// (`flow::build`)
+    pub load: [f64; 7],
 }
 
 impl Counters {
@@ -191,6 +193,10 @@ impl World {
     pub fn rise_at_build(&self) -> Vec<f64> {
         let lat = (self.cfg.lat_south, self.cfg.lat_north);
         crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain.rise_south(self.terrain.seed, &self.map, self.map.leaves()[i], lat))
+    }
+    /// The cell that holds the centre of square (`x`, `y`) of its map.
+    pub fn cell_of(&self, (x, y): (usize, usize)) -> usize {
+        self.mesh.tree().cell_at(self.map.point_at(x as f64 + 0.5, y as f64 + 0.5))
     }
     /// The pores of the loose ground of ground node `i` (`soil::Pores`).
     #[inline]

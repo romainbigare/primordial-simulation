@@ -159,7 +159,7 @@ fn a_low_plant_burnt_to_its_base_keeps_its_plants_and_store() {
     let (mut w, i) = start();
     liquid_to(&mut w, i, 0.0);
     let tree = KINDS.iter().position(|k| k.name == "big slow light-eaters").unwrap();
-    assert!(pcore::cover::place(&mut w, i, KINDS[tree].genes, tree as u32, KINDS[tree].kg));
+    assert!(pcore::cover::place(&mut w, i, 0, KINDS[tree].genes, tree as u32, KINDS[tree].kg));
     let slot = |w: &World, row: usize| w.life.cover(i).held().find(|&x| w.life.cover(i).root[x] == row as u32).unwrap();
     let (low, tall) = (slot(&w, LIGHT_ROW), slot(&w, tree));
     // All of the tall slot's mass in one plant: a tree.

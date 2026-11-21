@@ -47,10 +47,7 @@ pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f
         let cap = w.cfg.carry * work.cells[i] * bare_share(w, i) * w.soil[i].texture.erodibility();
         let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
         let f = if avail > 0.0 { (cap / avail).min(1.0) } else { 0.0 };
-        for (r, &k) in sol.iter().enumerate() {
-            picked[i * width + r] = solid(w, s, k, i) * f;
-            picked[(i + 1) * width - 1] += solid(w, s, k, i) * f * s.sp[k].cp * s.state.tg[i];
-        }
+        picked[i * width..(i + 1) * width].copy_from_slice(&loose_share(w, s, (sol, |_| true), i, f));
         volume[i] = f * avail;
         let worn = work.cells[i] * (1.0 - f * avail / cap).max(0.0);
         if worn > 0.0 {
@@ -59,6 +56,21 @@ pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f
     }
     let taken = taken(w, &work, &volume);
     (work, broke, taken)
+}
+
+/// The share `share` of the loose solids `sol` of ground node `i` that `take` takes: mol of each (none of the others),
+/// then their heat at the temperature of its land (its land part's in a cell of parts), J.
+pub(in crate::flow) fn loose_share(w: &World, s: &Scratch, (sol, take): (&[usize], impl Fn(usize) -> bool), i: usize, share: f64) -> Vec<f64> {
+    let t = land_t(s, i);
+    let mut row: Vec<f64> = sol.iter().map(|&k| if take(k) { solid(w, s, k, i) * share } else { 0.0 }).collect();
+    let heat = sol.iter().zip(&row).fold(0.0, |h, (&k, m)| h + m * s.sp[k].cp * t);
+    row.push(heat);
+    row
+}
+
+/// The temperature of the land of ground node `i`, K: its land part's in a cell of parts.
+pub(in crate::flow) fn land_t(s: &Scratch, i: usize) -> f64 {
+    s.mixed(i).filter(|_| super::super::parts::has(s, i)).map_or(s.state.tg[i], |m| m.piece[super::super::parts::LAND].tg)
 }
 
 /// What the pick-up of each cell, `volume` m³, takes from its samples' relief (`Relief`): each sample that does work

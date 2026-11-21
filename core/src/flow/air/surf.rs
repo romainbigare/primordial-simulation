@@ -19,7 +19,8 @@ use crate::{store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 /// its head, m (`touching`); its temperature, K, plateau's substance and molten share; heat capacity, J/K; fusion
 /// enthalpy held and the energies it holds it between (`Latent`); soft cover (`Scratch::cover`); reflectance; pore
 /// space as a depth, m; heat, J; what it holds of each active gas, mol (`amt[k]`); the fusion enthalpy of its
-/// plateau's substance, J; its cover's capture area per m² (`Stand::canopy`) and the share of light it absorbs and keeps; and a
+/// plateau's substance, J; its cover's capture area per m² (`Stand::canopy`), the share of the light its leaves catch
+/// (`cover::over`, under the liquid standing on it `cover::dimmed`) and the share of that it absorbs and keeps; and a
 /// cell of it, whose other numbers (its layers, for a soft cover's end reflectance) it is, with the part of that cell it
 /// is (`parts`; none: the whole cell) and that part's share of the cell's area.
 pub(super) struct Surf {
@@ -46,6 +47,7 @@ pub(super) struct Surf {
     pub(super) amt: [f64; MAX_SUBSTANCES],
     pub(super) fusion: f64,
     pub(super) canopy: f64,
+    pub(super) catch: f64,
     pub(super) absorb: f64,
     pub(super) keep: f64,
     /// A second film over it beside the air's (`World::second_film`): its substance, mol K/(Pa s), and the share of
@@ -73,6 +75,8 @@ impl Surf {
         let mut amt = [0.0; MAX_SUBSTANCES];
         cx.act.iter().for_each(|ac| amt[ac.k] = ground[ac.k * n + i]);
         let pk = s.state.pk[i];
+        // Its cover: the cover's ground over it, under the liquid standing over it.
+        let (cover, reach) = (crate::cover::over(w, i, (0.0, w.mesh.cells().area()[i])), crate::cover::dimmed(&w.cfg.phys, s.view().standing(i).0));
         Surf {
             area: w.mesh.cells().area()[i],
             j: w.mesh.cells().parent()[i] as usize,
@@ -94,7 +98,8 @@ impl Surf {
             heat: w.store.heat(Class::Ground)[i],
             amt,
             fusion: if pk != NONE { ground[pk * n + i] * s.sp[pk].lf } else { 0.0 },
-            canopy: crate::contract::stand(w, i).canopy(w.mesh.cells().area()[i]),
+            canopy: cover[0],
+            catch: cover[1] * reach,
             absorb: crate::contract::stand(w, i).absorb(),
             keep: crate::contract::stand(w, i).keep(),
             second: w.second_film(i).map(|(k, film, reach)| (k, film * w.mesh.cells().area()[i], reach)),
@@ -110,6 +115,8 @@ impl Surf {
         let mut amt = [0.0; MAX_SUBSTANCES];
         cx.act.iter().for_each(|ac| amt[ac.k] = p.amt[ac.k]);
         let g = Surf::node(cx, i, sun);
+        // Its cover: the cover's ground over its land part, then over its liquid's top, under the liquid standing there.
+        let (cover, reach) = part_cover(cx, i, (q, p.share), g.area);
         Surf {
             area: g.area * p.share,
             tg: p.tg,
@@ -124,10 +131,10 @@ impl Surf {
             heat: p.heat,
             amt,
             fusion: if p.pk != NONE { p.amt[p.pk] * cx.s.sp[p.pk].lf } else { 0.0 },
-            // The second film stands over its land: all of the cell's over its land part, none over its liquid's top;
-            // so does its cover, whose capture area spreads over the land part's area.
+            // The second film stands over its land: all of the cell's over its land part, none over its liquid's top.
             second: g.second.filter(|_| q == LAND),
-            canopy: if q == LAND { crate::contract::stand(cx.w, i).canopy(g.area * p.share) } else { 0.0 },
+            canopy: cover[0],
+            catch: cover[1] * reach,
             part: Some(q),
             share: p.share,
             ..g
@@ -177,6 +184,7 @@ impl Surf {
             amt,
             fusion: 0.0,
             canopy: 0.0,
+            catch: 0.0,
             absorb: 0.0,
             keep: 0.0,
             second: None,
@@ -369,6 +377,16 @@ pub(super) fn parts_respond(cx: &Ctx, i: usize, air: &[f64]) -> [Vec<f64>; 2] {
         row[..FIXED].copy_from_slice(&fixed);
         row
     })
+}
+
+/// The cover over part `q` of ground cell `i` of `area` m², the share `share` of it (`cover::over`: its land first, then
+/// its liquid's top), and the share of the light that reaches it there: all on the land, under the liquid's top that
+/// through the mean depth standing over the top (`cover::dimmed`).
+pub(super) fn part_cover(cx: &Ctx, i: usize, (q, share): (usize, f64), area: f64) -> ([f64; 2], f64) {
+    let land = if q == LAND { 0.0 } else { area * (1.0 - share) };
+    let cover = crate::cover::over(cx.w, i, (land, area * share));
+    let reach = if q == LAND { 1.0 } else { crate::cover::dimmed(&cx.w.cfg.phys, cx.s.view().standing(i).0 / share.max(1e-9)) };
+    (cover, reach)
 }
 
 /// The reflectance of the surface of the ground `g` (a soft cover's: never a patch's, `surf::patches`; a cell's or a

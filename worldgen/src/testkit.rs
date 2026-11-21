@@ -147,7 +147,7 @@ pub fn start() -> (World, usize) {
 /// `kg` per m² of the cover of the light-eaters (their genes and label, `life::LIGHT_ROW`) placed in cell `i`
 /// (`cover::place`).
 pub fn cover(w: &mut World, i: usize, kg: f64) {
-    assert!(pcore::cover::place(w, i, crate::life::KINDS[crate::life::LIGHT_ROW].genes, crate::life::LIGHT_ROW as u32, kg), "no room for cover in cell {i}");
+    assert!(pcore::cover::place(w, i, 0, crate::life::KINDS[crate::life::LIGHT_ROW].genes, crate::life::LIGHT_ROW as u32, kg), "no room for cover in cell {i}");
 }
 
 /// What a garden's ground holds of each mineral and of the key liquid, mol: far more than a cover takes in a month.
@@ -169,7 +169,6 @@ pub fn garden(w: &World, c: &pcore::cover::Cover, (t, moist, sun, tick): (f64, f
         t,
         liquid: if wet { GARDEN_MOL } else { 0.0 },
         soak: pcore::cover::Soak { moist, filled: pores.wilt + moist * (pores.field - pores.wilt), saturated: 0.0, loose: GARDEN_LOOSE_M, pores, breath: 0.0, pond: 0.0 },
-        reach: 1.0,
         light: c.mark + sun * month,
         gas: 1.0,
         thirst: 0.0,

@@ -58,14 +58,14 @@ fn assert_same(what: &str, cut: &[f64], whole: &[f64]) {
     }
 }
 
-/// A world whose cells hold every slot, with a stand of kind `row` grown a year from `kg` per m² on the dry land cell
-/// rain reaches most, and that cell.
-fn grown(row: usize, kg: f64) -> (World, usize) {
+/// A world whose cells hold `variety` kinds, with a stand of kind `row` grown a year from `kg` per m² on the dry land
+/// cell rain reaches most, and that cell.
+fn grown(row: usize, kg: f64, variety: usize) -> (World, usize) {
     let mut w = small_world();
-    w.cfg.variety = cover::SLOTS;
+    w.cfg.variety = variety;
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
     let i = dry_lands(&w).into_iter().filter(|&i| w.rain[i] > 0.0).max_by(|&a, &b| w.rain[a].total_cmp(&w.rain[b])).expect("dry land with rain");
-    assert!(cover::place(&mut w, i, KINDS[row].genes, row as u32, kg));
+    assert!(pcore::cover::place(&mut w, i, 0, KINDS[row].genes, row as u32, kg));
     (0..12).for_each(|_| pcore::step(&mut w));
     (w, i)
 }
@@ -76,7 +76,7 @@ fn grown(row: usize, kg: f64) -> (World, usize) {
 /// world are the uncut world's to `SAME` (what is left is rounding: of sums taken in another order, and of the genes,
 /// kept in 32 bits, of seeds that join a lot one packet at a time).
 fn cut_stands_as_whole(row: usize, kg: f64) {
-    let (mut w, i) = grown(row, kg);
+    let (mut w, i) = grown(row, kg, cover::SLOTS);
     let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
     let month = |mut w: World| {
         pcore::step(&mut w);
@@ -131,7 +131,7 @@ fn moist(m: u64) -> f64 {
 fn a_stand_cut_into_slots_keeps_its_seasons_as_the_whole() {
     let (mut w, i) = testkit::start();
     w.cfg.variety = cover::SLOTS;
-    assert!(cover::place(&mut w, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 2.0));
+    assert!(pcore::cover::place(&mut w, i, 0, KINDS[TREE_ROW].genes, TREE_ROW as u32, 2.0));
     let p = cover::Parts::of(&w.chem).expect("cover parts");
     let (mm, dt) = (p.mm(&w.chem), w.cfg.calendar().month as f64);
     let mut c = w.life.cover(i).clone();
@@ -183,10 +183,10 @@ fn large_after_a_month(mut w: World, i: usize) -> (f64, f64) {
 /// which stand as tall when they come, to `SEEDS_WALLS`.
 #[test]
 fn a_flush_of_seedlings_leaves_the_large_plants_as_they_were() {
-    let (w, i) = grown(TREE_ROW, 5.0);
+    let (w, i) = grown(TREE_ROW, 5.0, cover::SLOTS);
     let (x, tall, plants, sizes) = tallest(&w, i);
     let mut own = w.clone();
-    assert!(cover::place(&mut own, i, KINDS[TREE_ROW].genes, TREE_ROW as u32, 0.01));
+    assert!(pcore::cover::place(&mut own, i, 0, KINDS[TREE_ROW].genes, TREE_ROW as u32, 0.01));
     let (y, now, joined, with) = tallest(&own, i);
     println!("height {tall} m, then {now} m; plants {plants}, then {joined}; groups {sizes:?}, then {with:?}");
     assert!(y == x && joined > 2.0 * plants && with.count[with.large()] == sizes.count[sizes.large()], "the seeds did not join the slot beside its large plants");
@@ -194,7 +194,7 @@ fn a_flush_of_seedlings_leaves_the_large_plants_as_they_were() {
     let mut other = w.clone();
     let mut herb = KINDS[LIGHT_ROW].genes;
     herb[cover::FROST] -= 30.0;
-    assert!(cover::place(&mut other, i, herb, LIGHT_ROW as u32, 0.01));
+    assert!(pcore::cover::place(&mut other, i, 0, herb, LIGHT_ROW as u32, 0.01));
     let alone = large_after_a_month(w, i);
     for (what, flushed) in [("its own", own), ("another kind's", other)] {
         let after = large_after_a_month(flushed, i);
@@ -216,7 +216,7 @@ fn group_walls(c: &Cover, mm: &[f64; cover::NP], ph: &pcore::Physics, x: usize) 
 /// where it has shed nearly all its living cover; and the books are kept.
 #[test]
 fn a_slot_keeps_its_groups_whole() {
-    let (mut w, _) = grown(TREE_ROW, 5.0);
+    let (mut w, _) = grown(TREE_ROW, 5.0, cover::SLOTS);
     let books = testkit::Books::now(&w);
     let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
     let mut most = 0;
@@ -240,5 +240,64 @@ fn a_slot_keeps_its_groups_whole() {
         }
     }
     assert!(most > 1, "no slot held more than one group");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// The share of a cell split off as a second patch alike to the first, and the share cleared.
+const SPLIT: f64 = 0.3;
+const CLEARED: f64 = 0.2;
+
+/// The kg per m² of cover of each patch of cell `i` of world `w` (`Cover::kg` over its share of the cell's area).
+fn per_patch(w: &World, i: usize) -> Vec<f64> {
+    let (c, area) = (w.life.cover(i), w.mesh.cells().area()[i]);
+    let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
+    (0..c.patch_count()).map(|k| c.held_in(k).map(|x| c.kg(&mm, x)).sum::<f64>() / (area * c.patches[k].share)).collect()
+}
+
+/// A split that changes nothing changes nothing (laws.md 3): a stand of trees with herbs under them, split into two
+/// alike patches (`World::split`, `SPLIT` of the cell in the second), stands in each patch per m² of its ground as the
+/// unsplit cell stands through the months of a year, to `SAME`; at the year's end the two fuse back into one, which
+/// stands as the unsplit cell.
+#[test]
+fn a_split_that_changes_nothing_changes_nothing() {
+    let (mut whole, i) = grown(TREE_ROW, 5.0, 8);
+    assert!(pcore::cover::place(&mut whole, i, 0, KINDS[LIGHT_ROW].genes, LIGHT_ROW as u32, 0.1));
+    let mut split = whole.clone();
+    assert!(split.split(i, SPLIT));
+    let year = whole.cfg.months_per_year as u64;
+    for m in 0..year {
+        pcore::step(&mut whole);
+        pcore::step(&mut split);
+        let (one, two) = (per_patch(&whole, i), per_patch(&split, i));
+        println!("month {m}: kg per m2 of each patch {two:?}, unsplit {one:?}");
+        assert_same(&format!("month {m}, split"), &two, &vec![one[0]; two.len()]);
+    }
+    assert_eq!(split.life.cover(i).patch_count(), 1, "the alike patches did not fuse");
+}
+
+/// A clearing keeps the books (laws.md 3): `CLEARED` of a cell of herbs made a patch whose plants die (`World::clear`)
+/// loses that share of its cover to its ground, the elements and energy kept; the herbs fill the clearing again from
+/// the seeds lying, and once the two patches are alike they fuse back into one, its slots in the world's first
+/// `Config::variety`.
+#[test]
+fn a_clearing_keeps_the_books_and_fuses_back() {
+    let (mut w, i) = grown(LIGHT_ROW, 0.1, 8);
+    let books = testkit::Books::now(&w);
+    let mm = cover::Parts::of(&w.chem).expect("cover parts").mm(&w.chem);
+    let kg = |w: &World| w.life.cover(i).held().map(|x| w.life.cover(i).kg(&mm, x)).sum::<f64>();
+    let before = kg(&w);
+    assert!(w.clear(i, CLEARED));
+    println!("cover {before} kg, cleared {} kg; patches {:?}", kg(&w), w.life.cover(i).patches);
+    assert!((kg(&w) / before - (1.0 - CLEARED)).abs() < 1e-12, "the clearing took {} of the cover", 1.0 - kg(&w) / before);
+    books.assert_kept(&w, 1e-9);
+    let mut years = 0;
+    while w.life.cover(i).patch_count() > 1 {
+        assert!(years < 10, "the clearing did not fuse back in {years} years: {:?}", per_patch(&w, i));
+        (0..w.cfg.months_per_year).for_each(|_| pcore::step(&mut w));
+        years += 1;
+        println!("year {years}: kg per m2 of each patch {:?}", per_patch(&w, i));
+    }
+    let c = w.life.cover(i);
+    assert!(c.held().all(|x| x < w.cfg.variety), "slots past the world's variety: {:?}", c.root);
     books.assert_kept(&w, 1e-9);
 }
