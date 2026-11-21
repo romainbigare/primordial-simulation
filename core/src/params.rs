@@ -462,9 +462,9 @@ impl Config {
         require(p.duff_hold >= 0.0 && p.smoulder_moist >= 0.0, || format!("duff_hold ({}) and smoulder_moist ({}) must not be below 0", p.duff_hold, p.smoulder_moist))?;
         require(p.t_burn > p.t_light, || format!("t_burn ({}) must be above t_light ({})", p.t_burn, p.t_light))?;
         require(p.t_light > 0.0 && p.strikes >= 0.0 && p.fine_d > 0.0 && p.front_life >= 0.0, || format!("t_light ({}) and fine_d ({}) must be above 0, strikes ({}) and front_life ({}) not below", p.t_light, p.fine_d, p.strikes, p.front_life))?;
-        // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         // The weather's field divides by its time, its size and the damping of the top layer (`flow::air::weather`).
         require(p.eddy_time > 0.0 && p.eddy_size > 0.0 && p.top_damp > 0.0, || format!("eddy_time ({}), eddy_size ({}) and top_damp ({}) must be above 0", p.eddy_time, p.eddy_size, p.top_damp))?;
+        // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
         // The moistest air of a node saturates before the node does, and not when it holds nothing (`seen::saturated`).
