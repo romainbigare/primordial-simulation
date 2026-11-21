@@ -58,8 +58,12 @@ impl Planet {
         (lat, sum, share)
     }
     /// The air at latitude `lat`, degrees, at the share `season` of the year: between the two rows about it and the two
-    /// months about it, linearly (the poles' rows hold beyond them; the months round the year).
+    /// months about it, linearly (the months round the year). Past a pole lies the other meridian, the same strip's air
+    /// (it is zonal) at the latitude folded back, its south this side's north. Between a pole and its row's middle that
+    /// row holds, as the air across the pole is the same row's. Across the equator it is the other half's air in its own
+    /// season.
     pub(super) fn at(&self, lat: f64, season: f64) -> Beyond {
+        let (lat, turn) = if lat > 90.0 { (180.0 - lat, -1.0) } else if lat < -90.0 { (-180.0 - lat, -1.0) } else { (lat, 1.0) };
         let (rows, ns) = (self.lat.len(), self.share.len() / (self.lat.len() * self.months).max(1));
         // The rows run north to south: the row at or north of `lat`, and how far toward the next.
         let r = self.lat.iter().rposition(|&l| l >= lat).unwrap_or(0).min(rows.saturating_sub(2));
@@ -70,7 +74,7 @@ impl Planet {
         let weights = [(r, m, (1.0 - f) * (1.0 - g)), (r, (m + 1) % self.months, (1.0 - f) * g), (r + 1, m, f * (1.0 - g)), (r + 1, (m + 1) % self.months, f * g)];
         let of = |v: &[f64]| weights.iter().map(|&(r, m, x)| x * v[r * self.months + m]).sum::<f64>();
         // The warmth's gradient toward the south at those months, between the two rows.
-        let south = weights.iter().map(|&(r0, m, x)| x * (self.warmth[(r0 + 1).min(rows - 1) * self.months + m] - self.warmth[r0.min(rows - 2) * self.months + m])).sum::<f64>()
+        let south = turn * weights.iter().map(|&(r0, m, x)| x * (self.warmth[(r0 + 1).min(rows - 1) * self.months + m] - self.warmth[r0.min(rows - 2) * self.months + m])).sum::<f64>()
             / self.row_m;
         let share = (0..ns).map(|k| weights.iter().map(|&(r, m, x)| x * self.share[(r * self.months + m) * ns + k]).sum()).collect();
         Beyond { t: of(&self.t), warmth: of(&self.warmth), south, mol: of(&self.mol), share }
