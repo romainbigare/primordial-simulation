@@ -104,7 +104,7 @@ export class GroundTiles {
         if (m.kind === 'error') return error(m.text);
         if (m.kind === 'ready') { w.ready = true; if (!this.rock) { this.rock = m.rock; this.rockVersion++; } this.changed(true); return this.next(); }
         if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data, m.gen); }
-        if (m.kind === 'rebuilt' && m.gen === this.gen && k === 0) this.rebuilt(m.squares, m.rock);
+        if (m.kind === 'rebuilt' && k === 0) this.rebuilt(m.squares, m.rock);
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
       w.worker.postMessage({ cmd: 'init', wasm: copy, ground }, [copy]);
@@ -122,8 +122,9 @@ export class GroundTiles {
     }
   }
 
-  /** The first worker's ground made again: the rock again, and each tile kept over a square whose tiles changed
-   * (`squares`, a byte a square row by row) stale, asked for again and drawn until it comes. */
+  /** The first worker's ground made again, each build in its order: the rock of the latest, and each tile kept over a
+   * square whose tiles changed (`squares`, a byte a square row by row) stale, asked for again and drawn until it comes
+   * (so builds that come before the first is answered mark the union of their squares). */
   private rebuilt(squares: Uint8Array, rock: Uint16Array): void {
     this.rock = rock;
     this.rockVersion++;
@@ -219,6 +220,7 @@ export class GroundTiles {
     const key = keyOf(depth, x, y), had = this.kept.get(key);
     this.making.delete(key);
     if (gen === this.gen) this.stale.delete(key);
+    else this.stale.add(key);
     let layer = had ? had.layer : this.free.pop();
     if (layer === undefined) {
       const old = this.oldest();

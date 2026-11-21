@@ -55,8 +55,10 @@ struct Land {
 // about, the share of its area that is land and the wetness index from which its land is saturated (the core's
 // `inside::wet_ground`); the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
 // its loose ground; and in the last numbers of the true colour's and the layer's planes, the land's ice, m, its ground
-// temperature, K, and its mean height, m. (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
-const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const PLANES = 6;
+// temperature, K, and its mean height, m; and its cell's shares of coarse and fine grain over those of its samples as
+// drawn (rock.wgsl `soil_at`). (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
+const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const GRAIN_SHIFT = 6;
+const PLANES = 7;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
 // Between texels of one channel its signed distance changes by at most the distance between them (√2 texels across a

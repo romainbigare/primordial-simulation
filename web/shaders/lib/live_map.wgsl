@@ -144,7 +144,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
-  let soil = soil_at(at, e, blended(VIEW, cs).y);
+  let soil = soil_at(at, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy);
   p.grain = soil.grain;
   p.deposit = soil.deposit;
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.

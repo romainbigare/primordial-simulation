@@ -17,9 +17,9 @@ export interface Laws { soil_m: number; wet_depth: number; rooted_from: number; 
 /** The terrain's samples: across, down, and their depth. */
 export interface SamplesOf { across: number; down: number; depth: number }
 
-/** Planes of four numbers a square of the table (land.wgsl `GROUND` to `VIEW`): the core's row (`TileMeta.row`
- * numbers) with the wetness index of saturation (`SATURATED_AT`), then the page's three. */
-const PLANES = 6;
+/** Planes of four numbers a square of the table (land.wgsl `GROUND` to `GRAIN_SHIFT`): the core's row (`TileMeta.row`
+ * numbers) with the wetness index of saturation (`SATURATED_AT`), then the page's four. */
+const PLANES = 7;
 /** The number of the table a square's wetness index of saturation goes in (land.wgsl `saturated_at`): the last of its
  * soil's plane, past the core's numbers. */
 const SATURATED_AT = 4 * 2 + 3;
@@ -88,6 +88,9 @@ export class Land {
    * `rockVersion`; before it came: loose ground of `NO_ROCK_YET_M` everywhere). */
   private rock: Texture | null = null;
   private rockAt = -1;
+  /** Of each square, the mean of its samples' shares of coarse and fine grain (the rock's third plane), and the version
+   * of the rock they are of (`grainShift`). */
+  private grainOf: { version: number; coarse: Float32Array; fine: Float32Array } | null = null;
   /** The time the flow's signs stand at while one picture is drawn in tiles (performance.now, ms; null: each draw's
    * own), so all its tiles show the signs at one place along the channels. */
   flowAt: number | null = null;
@@ -153,6 +156,11 @@ export class Land {
     const truth = fromLand(['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name)), Uint8Array.from(wet.wet, v => 1 - v), W, H);
     // The share of organic matter of each square's loose ground, which the Earth view darkens it by (land.wgsl).
     const organic = w.index.has('organic') ? decode(w, 0, 'organic') : new Float32Array(n);
+    // The soil's grain the laws read, each cell's (`World::soil`), over its samples' as the rock draws them: what the
+    // page adds to the samples' grain (land.wgsl `GRAIN_SHIFT`), so the ground drawn has the world's soil on its mean
+    // and the samples' pattern inside a square.
+    const coarse = w.index.has('coarse') ? decode(w, 0, 'coarse') : new Float32Array(n), fine = w.index.has('fine') ? decode(w, 0, 'fine') : new Float32Array(n);
+    const samplesGrain = this.grainShift(W, H, coarse, fine);
     // The wetness index from which each square's land is saturated (the core's `inside::wet_ground`).
     const saturated = decode(w, 0, 'lambda_sat');
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
@@ -164,6 +172,7 @@ export class Land {
       put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
       put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, landIce[i]]);
       put(5, i, [shown ? shown[i] / 255 : 0, organic[i], landT[i], landZ[i]]);
+      put(6, i, [coarse[i] - samplesGrain.coarse[i], fine[i] - samplesGrain.fine[i], 0, 0]);
       data[4 * n * Math.floor(SATURATED_AT / 4) + 4 * i + SATURATED_AT % 4] = saturated[i];
     }
     blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
@@ -172,6 +181,23 @@ export class Land {
     for (let i = 0; i < n; i++) if (wet.sea[i]) data[4 * i + 2] = -(data[4 * i + 2] + 1);
     this.data = data;
     this.due = true;
+  }
+
+  /** Of each square of a map `W` x `H`, the mean of its samples' shares of coarse and fine grain as the rock draws
+   * them; before the rock came, the cells' own (`coarse`, `fine`: no shift). */
+  private grainShift(W: number, H: number, coarse: Float32Array, fine: Float32Array): { coarse: Float32Array; fine: Float32Array } {
+    const r = this.tiles.rock, s = this.samples;
+    if (!r) return { coarse, fine };
+    if (this.grainOf?.version !== this.tiles.rockVersion) {
+      const per = s.across / W, plane = 2 * 4 * s.across * s.down, out = { version: this.tiles.rockVersion, coarse: new Float32Array(W * H), fine: new Float32Array(W * H) };
+      for (let y = 0; y < s.down; y++) for (let x = 0; x < s.across; x++) {
+        const i = Math.floor(y / per) * W + Math.floor(x / per), t = plane + 4 * (y * s.across + x);
+        out.coarse[i] += unhalf(r[t]) / (per * per);
+        out.fine[i] += unhalf(r[t + 1]) / (per * per);
+      }
+      this.grainOf = out;
+    }
+    return this.grainOf;
   }
 
   /** The bindings land.wgsl reads on `gpu` in view `look` (`lawBinds` and colour.wgsl's), for a draw whose pixels lie as
