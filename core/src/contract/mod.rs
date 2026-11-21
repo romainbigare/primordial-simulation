@@ -101,9 +101,18 @@ pub fn surroundings(w: &mut World) {
         crate::flow::state(w, true);
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
         (w.life.land, w.life.levels) = grounds_now(w);
-        let p = Parts::of(&w.chem);
-        w.life.wet = crate::par::map_n(n, crate::par::UNCOUNTED, |i| p.as_ref().filter(|_| land(w, i) > 0.0).map(|p| crate::inside::wet_land(w, p, i)));
     }
+}
+
+/// At the start of life's month, after Flow's: where the soil's liquid saturates the land of each cell and how full its
+/// pores are (`inside::wet_land`), by Flow's state as its month left it, its land's share of its area found by that
+/// state too (`flow::land_shares`), so the cover, the flames, Change's decomposers and the shells read one moment.
+/// None where a cell holds no land or life has no key liquid.
+pub fn wet_grounds(w: &mut World) {
+    let (all, area): (Vec<usize>, _) = ((0..w.mesh.cells().n()).collect(), w.mesh.cells().area());
+    let shares = crate::flow::land_shares(w, &all).unwrap_or_else(|| all.iter().map(|&i| land(w, i) / area[i]).collect());
+    let p = Parts::of(&w.chem);
+    w.life.wet = crate::par::map_n(all.len(), crate::par::UNCOUNTED, |i| p.as_ref().filter(|_| shares[i] > 0.0).map(|p| crate::inside::wet_land(w, p, i, shares[i])));
 }
 
 /// The land of every cell, m², and the levels of its parts (`flow::shores`), by which its ground under the liquid is

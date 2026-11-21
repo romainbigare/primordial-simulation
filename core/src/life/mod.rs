@@ -46,8 +46,9 @@ pub struct Life {
     /// Per cell, from the month's start (`contract::surroundings`): the levels of its parts (`contract::levels`). Not
     /// saved: built with the places
     pub(crate) levels: Vec<Vec<f64>>,
-    /// Per cell, from the month's start (`contract::surroundings`): where its soil's liquid saturates its land
-    /// (`inside::wet_land`; none where it holds no land or life has no key liquid). Not saved: built with the places
+    /// Per cell, from the start of life's month (`contract::wet_grounds`): where its soil's liquid saturates its land and
+    /// how full its pores are (`inside::wet_land`; none where it holds no land or life has no key liquid). Not saved:
+    /// life's month finds it before any law reads it
     pub wet: Vec<Option<crate::inside::WetGround>>,
     /// Per cell, from the start of life's month (`contract::ways_to_liquid`): the way over land to the nearest cell with open
     /// liquid of at least each decade over the month, m, and that cell (`contract::to_liquid`). Not saved: life's month finds it before any
@@ -59,10 +60,13 @@ pub struct Life {
     pub(crate) air_seen: Vec<std::sync::OnceLock<Vec<f64>>>,
 }
 
-/// Once a month, after Flow's state is built in full: the month of each cell's life, one task per chunk on the pool;
+/// Once a month, after Flow's state is built in full: where the soil's liquid saturates each cell's land
+/// (`contract::wet_grounds`) and the ways to liquid (`contract::ways_to_liquid`); the month of each cell's life, one
+/// task per chunk on the pool;
 /// then the flames in what it left on the ground (`flame::month`); the cover's seeds land (`cover::landed`), and what
 /// the takers sent (`fauna::land`).
 pub fn month(w: &mut World) {
+    crate::contract::wet_grounds(w);
     crate::contract::ways_to_liquid(w);
     let load = w.life.cells.iter().filter(|c| c.cover.any() || c.fauna.any()).count();
     run(w, load, |w, d| {

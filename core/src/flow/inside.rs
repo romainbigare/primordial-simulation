@@ -19,7 +19,7 @@ fn wet(w: &World, s: &Scratch, cells: &[usize]) -> Wet {
     let (tmin, tmax) = range(&s.state.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let at: Vec<u32> = cells.iter().map(|&i| i as u32).collect();
-    let molten = |k: usize, i: usize| s.plateau(i).map_or(0.0, |(t, on)| w.molten(k, i, t, on));
+    let molten = |k: usize, i: usize| s.molten_node(k, i).unwrap_or_else(|| s.plateau(i).map_or(0.0, |(t, on)| w.molten(k, i, t, on)));
     let liquid = |k: usize, i: usize| s.sp[k].liquid(s.state.tg[i], molten(k, i), s.state.dissolved[i]);
     let (_, vol) = movable(w, s, &liq, &at, tmin, (liquid, |i, mol| liquid_heat_at(s, &liq, s.state.tg[i], mol)));
     let (mut z, mut pores) = (Vec::new(), Vec::new());

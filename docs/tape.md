@@ -51,7 +51,7 @@ the most that runs through one of its samples, `World::liquid_flux`; the law dra
 own discharge, in the wet ground, `inside::channel_share`; a tape's map draws its rivers by these two), loose ground (its loose solids in Flow's phases, `Scratch::phases`),
 `wet` (how wet the cell's ground is, 0..1: `Physics::wetness` of the liquid in its pores and standing over them),
 `filled` (the share of its loose ground's pores its liquid fills, 0..1, `flow::means`; 0 where it holds no pores),
-`wet_share` (the share of its land whose pores its soil's liquid fills, 0..1, `inside::wet_land`, as the month's start
+`wet_share` (the share of its land whose pores its soil's liquid fills, 0..1, `inside::wet_land`, as the start of life's month
 found it for the laws, `World::life`) and `lambda_sat` (the wetness index ln(a / tan β) at and over which its land is
 saturated this month, lin from 0 to 30; `space::samples::sample_index`
 gives each terrain sample's), both none where the cell holds no land,
