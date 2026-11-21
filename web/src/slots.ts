@@ -1,8 +1,10 @@
 // The slots of cover of the cells in view, from the list the core hands out when the map is close (tape/src/things.rs):
 // hovering a cell shows each slot's numbers (handover 10.8). The cover itself is drawn as a texture (vegetation.ts).
 
-interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean }
-interface CellSlots { index: number; box: [number, number, number, number]; area: number; slots: Slot[] }
+interface Slot { root: number; kg: number; leaf: number; genes: number[]; full: boolean; patch: number }
+/** A patch of a cell's cover: its share of the cell and its age, years since it was made (the core's `cover::Patch`). */
+interface Patch { share: number; age: number }
+interface CellSlots { index: number; box: [number, number, number, number]; area: number; patches: Patch[]; slots: Slot[] }
 
 /** Pixels a map square takes from which the slots of the window in view are asked for. */
 export const THINGS_PX = 64;
@@ -22,8 +24,9 @@ function readSlots(data: Uint8Array): { genes: Genes; cells: CellSlots[] } {
   const cells: CellSlots[] = [];
   for (let n = u32(); n > 0; n--) {
     const index = u32(), box = f32s(4) as [number, number, number, number], area = f32();
-    const slots = Array.from({ length: u16() }, (): Slot => { const root = u32(), kg = f32(), leaf = f32(), genes = f32s(named.length), full = u8() === 1; at += 3; return { root, kg, leaf, genes, full }; });
-    cells.push({ index, box, area, slots });
+    const patches = Array.from({ length: u8() }, (): Patch => ({ share: f32(), age: f32() }));
+    const slots = Array.from({ length: u16() }, (): Slot => { const root = u32(), kg = f32(), leaf = f32(), genes = f32s(named.length), full = u8() === 1, patch = u8(); at += 2; return { root, kg, leaf, genes, full, patch }; });
+    cells.push({ index, box, area, patches, slots });
   }
   return { genes: named, cells };
 }
@@ -74,8 +77,18 @@ function slotLine(sl: Slot, genes: Genes): string {
   return `${num(sl.kg)} <u>kg/m²</u>, ${num(sl.leaf)} <u>m²/m²</u>${sl.full ? ', full' : ''}<br><small>${genes.map(([n, u], k) => `${n} ${num(sl.genes[k])} ${u}`).join('; ')}</small>`;
 }
 
-/** The cover of cell `c`: each slot in a line, the heaviest first. */
+/** Patch `k` of a cell in a line: its share of the cell and how long ago it was made (the first: the rest of the cell). */
+function patchLine(p: Patch, k: number): string {
+  const years = Math.round(p.age);
+  const made = k === 0 ? 'the rest of the cell' : years < 1 ? 'made this year' : `made ${years} year${years === 1 ? '' : 's'} ago`;
+  return `<tr><td colspan="2"><b>Patch ${k}</b>: ${num(100 * p.share, 2)}% of the cell, ${made}</td></tr>`;
+}
+
+/** The cover of cell `c`: each slot in a line, the heaviest first, kg/m² of the cell's area; in a cell of patches,
+ * under the patch it stands in. */
 function coverText(c: CellSlots, genes: Genes): string {
   const slots = [...c.slots].sort((a, b) => b.kg - a.kg);
-  return `<div class="cell"><b>Plant cover</b><span>cell ${c.index}</span></div><table>` + slots.map(sl => row(`Kind ${sl.root}`, slotLine(sl, genes))).join('') + '</table>';
+  const lines = (k: number) => slots.filter(sl => sl.patch === k).map(sl => row(`Kind ${sl.root}`, slotLine(sl, genes))).join('');
+  const body = c.patches.length > 1 ? c.patches.map((p, k) => patchLine(p, k) + lines(k)).join('') : lines(0);
+  return `<div class="cell"><b>Plant cover</b><span>cell ${c.index}</span></div><table>` + body + '</table>';
 }

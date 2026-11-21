@@ -41,7 +41,8 @@ fn rest_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + groups() + q;
 fn roots_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 2 * groups() + q; }
 fn label_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 3 * groups() + q; }
 fn reach_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 4 * groups() + q; }
-fn kind_plane(at: i32, t: i32) -> i32 { return COVER_LATTICES * kinds_n() + 5 * groups() + at * kinds_n() + t; }
+fn patch_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + 5 * groups() + q; }
+fn kind_plane(at: i32, t: i32) -> i32 { return COVER_LATTICES * kinds_n() + 6 * groups() + at * kinds_n() + t; }
 fn form_plane(t: i32) -> i32 { return kind_plane(0, t); }
 fn from_plane(t: i32) -> i32 { return kind_plane(1, t); }
 fn to_plane(t: i32) -> i32 { return kind_plane(2, t); }
@@ -107,12 +108,27 @@ fn dense_at(saturated: f32, c: vec2i, q: i32) -> vec4f {
 }
 
 // What the four kinds from 4q of square s count for at a foot of ground `f` where `loose` m of loose ground lies,
-// `thick` over the patches: its share there, how dense each stands on that ground (`dense_at`), how much of it its roots
+// `thick` over the patches: its share there (`patch_corners`), none for a kind of another patch of its cell's cover
+// than the foot's (`cell_patch`), how dense each stands on that ground (`dense_at`), how much of it its roots
 // hold and whether they reach through the liquid there (`stand_in`); or, not `exact`, the most they may count for
 // there, before the ground is read (`pick_kind`): the denser of the two grounds.
 fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32, exact: bool) -> vec4f {
-  if (!exact) { return cs.w[s] * (1.0 + PATCH) * max(kind(strips_plane(q), cs.at[s]), kind(rest_plane(q), cs.at[s])); }
-  return cs.w[s] * thick * dense_at(f.saturated, cs.at[s], q) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
+  let here = select(vec4f(0.0), vec4f(cs.w[s]), kind(patch_plane(q), cs.at[s]) == vec4f(f32(cell_patch)));
+  if (!exact) { return here * (1.0 + PATCH) * max(kind(strips_plane(q), cs.at[s]), kind(rest_plane(q), cs.at[s])); }
+  return here * thick * dense_at(f.saturated, cs.at[s], q) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
+}
+
+// The squares `cs` about the point `at` as their kinds count there: in a patch past the first of its cell's cover
+// (`cell_patch`), its own square alone and whole, as a patch is its cell's alone; else as they are.
+fn patch_corners(cs: Corners, at: vec2f) -> Corners {
+  if (cell_patch == 0) { return cs; }
+  let q = vec2i(floor(at / land.map.x));
+  var out = cs;
+  out.w = vec4f(0.0);
+  for (var s = 0; s < 4; s++) {
+    if (all(cs.at[s] == q)) { out.w[s] = 1.0; break; }
+  }
+  return out;
 }
 
 // Where two plants would stand in one cell, one `h` m tall stands over one `under` m tall with this chance: a race whose
@@ -292,7 +308,8 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   let none = vec4f(-1.0, 0.0, 0.0, 0.0);
   let id = cover.base[l].xy + vec2i(k);
   let at = cover.corner.xy + mark_foot(l, k);
-  let cs = corners(at / land.map.x);
+  cell_patch = cell_patch_at(at);
+  let cs = patch_corners(corners(at / land.map.x), at);
   // Whether any kind of the four squares has marks on the lattice.
   var all = 0.0;
   for (var s = 0; s < 4; s++) {

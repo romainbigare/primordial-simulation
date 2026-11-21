@@ -7,7 +7,7 @@
 // shows them at once.
 import { Draw, Format, Gpu, Made, Pass, Texture, Uniforms, notMade } from './gpu';
 import { MAP_TARGET } from './map';
-import { FIELD, Kinds, PLANES_DOWN, half } from './canopy';
+import { Kinds, PLANES_DOWN, half, patchLayer } from './canopy';
 import { LATTICES, REACH, ROWS_MOST, STAND } from './lattices';
 import { groundDetail } from './detail';
 
@@ -62,12 +62,12 @@ export class CoverMarks {
   /** Send what waits to the GPU. */
   private upload(gpu: Gpu): void {
     if (!this.due && this.fieldTex) return;
-    const k = this.kinds, w = k?.w ?? 1, h = k?.h ?? 1, tw = (k?.cols ?? 1) * w, th = Math.min(k?.planes.count ?? 1, PLANES_DOWN) * h;
-    if (this.fieldTex?.w !== w || this.fieldTex.h !== h || this.tableTex?.w !== tw || this.tableTex.h !== th) {
+    const k = this.kinds, w = k?.w ?? 1, h = k?.h ?? 1, tw = (k?.cols ?? 1) * w, th = Math.min(k?.planes.count ?? 1, PLANES_DOWN) * h, layers = k?.field.layers ?? patchLayer(1);
+    if (this.fieldTex?.w !== w || this.fieldTex.h !== h || this.fieldTex.layers !== layers || this.tableTex?.w !== tw || this.tableTex.h !== th) {
       if (this.tableTex) gpu.drop(this.tableTex);
       if (this.fieldTex) gpu.drop(this.fieldTex);
       this.tableTex = gpu.texture(tw, th, 'rgba32float');
-      this.fieldTex = gpu.texture(w, h, 'rgba16float', FIELD.count);
+      this.fieldTex = gpu.texture(w, h, 'rgba16float', layers);
     }
     if (k) {
       gpu.write(this.tableTex!, k.table);

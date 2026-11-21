@@ -38,7 +38,8 @@ export class Vegetation implements GpuLayer {
     const m = w.meta, n = m.w * m.h;
     this.cellM = m.cell_m; this.mapW = m.w; this.mapH = m.h;
     const falling = cooling(w.meta.frames[0].year, (m.lat_north + m.lat_south) / 2);
-    this.marks.set(kindsOf(m.w, m.h, rows, t.row, 1 + n * t.row, t.kinds, t.kind_row, t.walls, falling));
+    // The kinds a square holds this frame: the table's last number (tape/src/table.rs).
+    this.marks.set(kindsOf(m.w, m.h, rows, t.row, 1 + n * t.row, rows[rows.length - 1], t.kind_row, t.walls, falling));
   }
 
   /** The bindings the live map's ground draws the cover's field with (cover_field.wgsl), a square taking `s` css px and a

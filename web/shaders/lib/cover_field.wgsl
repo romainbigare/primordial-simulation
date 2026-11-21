@@ -40,6 +40,15 @@ const SWARD_REST = 14; const STANDS_REST = 15;
 // on the ground under liquid there, the depth they stand in (down to their line), m, and the herbs' depth and height, m.
 const WET_LAYER = 16;
 const STANDS = 2;
+// The patches of a cell's cover (the core's `cover::PATCHES`, laws.md 3): a square's field above is its cell's first
+// patch's, made of that patch's kinds; the field has `FIELD_LAYERS` layers a patch. Then two layers of where its
+// cell's other patches lie (canopy.ts `PLACES`), and from `PATCH_FIELDS` the field of each other patch, made of its own
+// kinds, `FIELD_LAYERS` layers each (canopy.ts `patchLayer`).
+const FIELD_LAYERS = 17; const PLACES_LAYER = 17; const PATCH_FIELDS = 19;
+// A patch's edge is ragged: its reach longer and shorter by up to `PATCH_EDGE` of it, at most `PATCH_EDGE_M` m, over
+// noise `PATCH_EDGE_SIZE_M` across, and a third of that again over noise a third as large (a gap in a forest is
+// bounded by the crowns about it, tens of metres across: from memory).
+const PATCH_EDGE = 0.3; const PATCH_EDGE_M = 30.0; const PATCH_EDGE_SIZE_M = 90.0;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -200,8 +209,39 @@ fn on_land(v: vec4f, held: f32) -> vec4f { return select(vec4f(0.0), v / held, h
 var<private> land_plain: f32 = 1.0;
 var<private> land_smooth: f32 = 1.0;
 
-// Set `land_plain` and `land_smooth` at `at`, m from the map's north-west corner.
+// The patch of its cell's cover the point a pixel or a mark's foot reads the field at stands in (`cell_patch_at`; 0:
+// the first, the rest of its cell): set once with `land_weights`, as every layer read there shares it.
+var<private> cell_patch: i32 = 0;
+
+// The patch of its cell's cover the point `at`, m from the map's north-west corner, stands in: the first past the first
+// (tape/src/stands.rs `places`, canopy.ts `PLACES`: of its square's cell) whose reach, ragged (`PATCH_EDGE`), holds it
+// (the core's samples of the patch, `inside::patch_ground`, their edge drawn smooth); else 0.
+fn cell_patch_at(at: vec2f) -> i32 {
+  let s = at / land.map.x;
+  let q = vec2i(floor(s));
+  if (any(q < vec2i(0)) || any(q >= vec2i(land.map.yz))) { return 0; }
+  let a = textureLoad(cover_field_tex, q, PLACES_LAYER, 0);
+  if (a.z <= 0.0) { return 0; }
+  let b = textureLoad(cover_field_tex, q, PLACES_LAYER + 1, 0);
+  let o = (s - vec2f(q)) * land.map.x;
+  let ragged = 0.75 * noise(at / PATCH_EDGE_SIZE_M, 211).x + 0.25 * noise(3.0 * at / PATCH_EDGE_SIZE_M, 212).x;
+  let reach = vec2f(a.z, b.y) * land.map.x;
+  let edge = ragged * min(PATCH_EDGE * reach, vec2f(PATCH_EDGE_M));
+  if (length(o - a.xy * land.map.x) < reach.x + edge.x) { return 1; }
+  if (reach.y > 0.0 && length(o - vec2f(a.w, b.x) * land.map.x) < reach.y + edge.y) { return 2; }
+  return 0;
+}
+
+// Layer l of the field of the patch `cell_patch` of the square at `at` (one past the first: its own, `PATCH_FIELDS`):
+// its square's alone, not blended with its neighbours', whose cells' patches are not its.
+fn patch_field(at: vec2f, l: i32) -> vec4f {
+  let q = clamp(vec2i(floor(at / land.map.x)), vec2i(0), vec2i(land.map.yz) - 1);
+  return textureLoad(cover_field_tex, q, PATCH_FIELDS + (cell_patch - 1) * FIELD_LAYERS + l, 0);
+}
+
+// Set `land_plain`, `land_smooth` and `cell_patch` at `at`, m from the map's north-west corner.
 fn land_weights(at: vec2f) {
+  cell_patch = cell_patch_at(at);
   let uv = at / (land.map.x * land.map.yz);
   land_plain = select(field_tap(uv, LAND_LAYER).x, 0.0, any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)));
   land_smooth = spline_field(at, LAND_LAYER).x;
@@ -221,10 +261,12 @@ fn spline_field(at: vec2f, l: i32) -> vec4f {
 }
 
 // The field of lattice l at `at`, m from the map's north-west corner: the colour its marks cover the ground with (a
-// reflectance, premultiplied) and the share they cover, blended over the squares with land (`on_land`, `land_plain`).
+// reflectance, premultiplied) and the share they cover, blended over the squares with land (`on_land`, `land_plain`);
+// in a patch past the first of its cell's cover (`cell_patch`), that patch's (`patch_field`).
 fn field_at(at: vec2f, l: i32) -> vec4f {
   let uv = at / (land.map.x * land.map.yz);
   if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec4f(0.0); }
+  if (cell_patch > 0) { return patch_field(at, l); }
   return on_land(field_tap(uv, l), land_plain);
 }
 
@@ -232,8 +274,12 @@ fn field_at(at: vec2f, l: i32) -> vec4f {
 fn field_tap(uv: vec2f, l: i32) -> vec4f { return textureSampleLevel(cover_field_tex, cover_field_sampler, uv, l, 0.0); }
 
 // The field of lattice l at `at` through its texels' centres as a B-spline read texel by texel (draw.wgsl `b_spline`)
-// over the squares with land (`on_land`, `land_smooth`): no square shows in it, and no staircase of the GPU's blend.
-fn field_smooth(at: vec2f, l: i32) -> vec4f { return on_land(spline_field(at, l), land_smooth); }
+// over the squares with land (`on_land`, `land_smooth`): no square shows in it, and no staircase of the GPU's blend. In a
+// patch past the first of its cell's cover (`cell_patch`), that patch's (`patch_field`).
+fn field_smooth(at: vec2f, l: i32) -> vec4f {
+  if (cell_patch > 0) { return patch_field(at, l); }
+  return on_land(spline_field(at, l), land_smooth);
+}
 
 // How much thicker than their mean the plants stand at `at` (`PATCH`).
 fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
