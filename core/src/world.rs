@@ -161,10 +161,10 @@ pub struct World {
     /// The terrain the world was built on (`space::terrain`)
     pub terrain: crate::space::terrain::Terrain,
     /// The mean rise of the ground of each cell toward the south, m per m, which the sun on it reads (`flow::on_slope`):
-    /// the terrain's, found when the world is built (`World::rise_at_build`)
+    /// the terrain's, found when the world is built and at each build of its samples (`World::rise_at_build`)
     pub rise_south: Vec<f64>,
     /// The loose ground of each cell, the share of its area in each bin of depth, which its cover's roots read
-    /// (`cover::loose_bins`): the terrain's samples', found when the world is built
+    /// (`cover::loose_bins`): the terrain's samples', found when the world is built and at each build of its samples
     pub loose_bins: Vec<[f32; crate::cover::BINS]>,
     /// The soil of each cell (`soil::Soil`): its texture, the terrain's samples', and its pores, found when the world is
     /// built (`soil::of_world`)

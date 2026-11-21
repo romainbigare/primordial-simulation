@@ -3,7 +3,7 @@
 //! (`space::wear`), so valleys branch between ridges and the closed basins the cutting left stay. A
 //! flood over the worn heights (`space::drain`) finds where each sample's liquid runs, and the ponds: the samples
 //! under a closed basin's level, each pond with its pass and the level of the pass. Every cell's height is a mean over
-//! these samples (`Terrain::inside`); so is the way it faces the sun (`Terrain::rise_south`); and the liquid runs down
+//! these samples (`Terrain::inside`); so is the way it faces the sun (`Terrain::rise_south_on`); and the liquid runs down
 //! them (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
 //! terrain, not saved.
 
@@ -192,14 +192,10 @@ impl Terrain {
         (laid.parts.into_iter().map(|(k, v, m)| (k, v, order[m as usize] as u32)).collect(), laid.unlaid)
     }
 
-    /// The mean rise of the ground toward the south over leaf `l` of `map` for `seed` (its rows between latitudes `south`
-    /// and `north`), m per m: by area over the samples it covers, each its central difference north to south
+    /// The mean rise of the ground toward the south over leaf `l` of `map` (its rows between latitudes `south` and
+    /// `north`) on the samples `s` (the seed's, or as built: `Terrain::built`), m per m: by area over the samples it covers, each its central difference north to south
     /// (one-sided at the map's edge); a leaf finer than a sample takes its sample's. So a leaf's is its quarters' mean by
     /// area at every depth. It is what the sun on a cell reads of the way the cell faces (`flow::on_slope`).
-    pub fn rise_south(&self, seed: u64, map: &Square, l: Leaf, lat: (f64, f64)) -> f64 {
-        self.rise_south_on(&self.samples(seed, map, lat), map, l, lat)
-    }
-    /// The same over the samples `s` (the seed's, or as built: `Terrain::built`).
     pub fn rise_south_on(&self, s: &Samples, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
         let dy = map.length(SAMPLE_DEPTH);
         let at = |f: &Leaf| {

@@ -1,5 +1,5 @@
 //! The ground below the terrain's samples (laws.md 0 and 8): one function of the seed and the map that every cell's
-//! height and level-volume curve and every pixel a shell draws read (`Terrain::heights`, `Terrain::inside`).
+//! height and level-volume curve and every pixel a shell draws read (`Terrain::heights_on`, `Terrain::inside`).
 //!
 //! Each leaf finer than `SAMPLE_DEPTH` departs from its parent's mean by a smooth continuation of the coarser heights
 //! that keeps that mean: the parent's quarters lean as the quartic through the parent and two neighbours each way on
@@ -98,12 +98,9 @@ fn cover([x0, y0, x1, y1]: [i64; 4], of: u8, depth: u8, (across, down): (i64, i6
 
 impl Terrain {
     /// The terrain's mean height over each leaf of `depth` (no shallower than a square) of the window `win` (from column
-    /// `x0` and row `y0` to `x1` and `y1`, inclusive, in those leaves), m, row by row: at or above `SAMPLE_DEPTH` the
-    /// mean by area of the samples it covers, finer the ground below them (the module's doc).
-    pub fn heights(&self, seed: u64, map: &Square, lat: (f64, f64), win: [i64; 4], depth: u8) -> Vec<f64> {
-        self.heights_on(&self.samples(seed, map, lat), map, lat, win, depth)
-    }
-    /// The same over the samples `s` (the seed's, or as built: `Terrain::built`).
+    /// `x0` and row `y0` to `x1` and `y1`, inclusive, in those leaves), m, row by row, over the samples `s` (the seed's,
+    /// or as built: `Terrain::built`): at or above `SAMPLE_DEPTH` the mean by area of the samples it covers, finer the
+    /// ground below them (the module's doc).
     pub fn heights_on(&self, s: &Samples, map: &Square, lat: (f64, f64), win: [i64; 4], depth: u8) -> Vec<f64> {
         let (across, down) = ((win[2] - win[0] + 1) as usize, (win[3] - win[1] + 1) as usize);
         let pixel = |p: usize| (win[0] + (p % across) as i64, win[1] + (p / across) as i64);

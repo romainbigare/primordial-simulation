@@ -207,7 +207,7 @@ is the way a cell faces the sun (1.4): its mean rise toward the south, each samp
 build of the samples (`World::rise_south`). **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs where the
 flood sends it (from every sample of land a way leads to the open low ground), and the area that drains through a
 sample is its own and all that runs to it; the runoff runs down these ways (1.2). Below the samples the ground goes on as one function of the
-seed and the map that every cell and every pixel a shell draws read (`space::below`, `Terrain::heights`): the means of
+seed and the map that every cell and every pixel a shell draws read (`space::below`, `Terrain::heights_on`): the means of
 the quarters of a leaf of side ℓ depart from its mean by a smooth continuation of the coarser heights that keeps it:
 the quarters lean as the quartic through the leaf and two neighbours each way on each axis does (average
 interpolation, Donoho 1993), so the ground has no steps and its slope no kinks at the leaves' edges and a slope across

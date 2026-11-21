@@ -1289,7 +1289,7 @@ fn the_sun_on_a_slope_is_lamberts_law_over_the_day() {
 }
 
 /// The sun on a square of an island is the sum of the sun on its 16 cells (`on_slope`, at one latitude, so only the
-/// slopes tell them apart): a square's rise toward the south is its cells' mean by area (`Terrain::rise_south`), and
+/// slopes tell them apart): a square's rise toward the south is its cells' mean by area (`Terrain::rise_south_on`), and
 /// the sun is linear in it, so the two differ only by what a cell, or the square, whose day sums below zero does not
 /// take: at most the sum of those parts below zero, by area, at every latitude and season.
 #[test]
@@ -1297,7 +1297,8 @@ fn the_sun_on_a_square_is_the_sum_over_its_cells() {
     use pcore::flow::{declination, on_slope, sun_by_latitude};
     let w = worldgen::testkit::squares(1, 16, 16);
     let (lat, map) = ((w.cfg.lat_south, w.cfg.lat_north), &w.map);
-    let rise = |l: pcore::space::Leaf| w.terrain.rise_south(w.seed, map, l, lat);
+    let s = w.terrain_samples();
+    let rise = |l: pcore::space::Leaf| w.terrain.rise_south_on(&s, map, l, lat);
     let (mut turned, mut steepest) = (0, 0.0f64);
     for &square in map.leaves() {
         let cells: Vec<(f64, f64)> = square.split(square.depth + 2).map(|l| (map.place_of(&l, lat.0, lat.1).0, rise(l))).collect();
