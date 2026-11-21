@@ -151,6 +151,19 @@ fn lose(c: &mut Cover, mm: &[f64; NP], x: usize, (mut dead, most): (f64, f64)) {
     c.set_groups(x, &mut g[..held]);
 }
 
+impl Cover {
+    /// The share `dead` of the large plants of slot `x` (its last group) died where no crowding killed them (wear,
+    /// upkeep unpaid, frost, flame): the ground their crowns held where their stand is closed (`plant_ground`) adds to
+    /// its fallen crowns (`Cover::fell`), the opening a gap is made of (`gaps`). Plants crowded out (`thin`) open no
+    /// ground: the crowns of the living fill it as it frees (Yoda and others 1963).
+    pub(super) fn fell(&mut self, ph: &Physics, mm: &[f64; NP], x: usize, dead: f64) {
+        let (g, held) = self.groups(mm, x);
+        if let Some(l) = held.checked_sub(1).map(|l| g[l]) {
+            self.fell[x] += l.n * dead * plant_ground(ph, l.plant());
+        }
+    }
+}
+
 /// The share of the crown from `b` to `t` m that the crown from `b2` to `t2` shares; of a crown of no depth, whether the
 /// other holds its height.
 fn shared((b, t): (f64, f64), (b2, t2): (f64, f64)) -> f64 {
@@ -234,6 +247,7 @@ pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
     let lines = (c.line[big], c.line[small]);
     c.line[big] = if lines.0 < 0.0 || lines.1 < 0.0 { lines.0.max(lines.1) } else { lines.0.min(lines.1) };
     c.join_groups(mm, big, small);
+    c.fell[big] += c.fell[small];
     (0..NP).for_each(|q| c.mol[big][q] += ms[q]);
     c.clear(small);
 }

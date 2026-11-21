@@ -43,7 +43,8 @@ pub const USAGE: &str = "usage:
                           square 3,2) made a new patch about that place whose plants die above the ground
                           (World::clear); may be given more than once
     --split YEAR:X,Y:SHARE
-                          as --clear, the new patch alike to the rest, nothing dying: a control (World::split)
+                          the share SHARE of the first patch of the cell at the place X,Y made a new patch alike
+                          to it at the cell's centre, nothing dying: a control (World::split)
     --plant YEAR:X,Y:KIND an edit at the start of that year: the starting kind of row KIND of worldgen::life::KINDS
                           placed in the newest patch of the cell at the place X,Y (cover::place); may be given more
                           than once

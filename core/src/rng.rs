@@ -31,6 +31,8 @@ pub enum Purpose {
     Flame,
     /// The weather's daily draws at each point of its lattice (`flow::air::weather`)
     Weather,
+    /// Where in a patch of a cell's cover a gap opens (`cover::gaps`)
+    Gap,
 }
 
 /// The number of values of a 16-bit uniform.

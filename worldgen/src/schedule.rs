@@ -35,7 +35,7 @@ pub enum Edit {
     /// The share of the cell made a new patch whose plants die above the ground (`World::clear`), about the cell's
     /// sample under the edit's place (`World::sample_in`)
     Clear(f64),
-    /// The share of the cell made a new patch alike to the rest, a control that changes nothing (`World::split`)
+    /// The share of the cell's first patch made a new patch alike to it, a control that changes nothing (`World::split`)
     Split(f64),
     /// The cover of a starting kind (a row of `KINDS`), its genes as they start and `Kind::kg` per m², placed in the
     /// cell's newest patch (`cover::place`)

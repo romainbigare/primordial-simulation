@@ -130,7 +130,7 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], s: &Seed, cfg: &crate::Config, (area
             None => return Landed::Refused,
         },
     };
-    c.patch[x] = k as u8;
+    (c.patch[x], c.fell[x]) = (k as u8, 0.0);
     (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, 0.0);
     (c.line[x], c.stands[x], c.airless[x], c.drained[x], c.strip[x]) = (super::UNSET, share as f32, 0.0, 0.0, strip as f32);
     c.found(x, plants);

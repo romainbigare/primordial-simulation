@@ -1438,10 +1438,28 @@ seeds fill it:
   as a press breaks it, booked as the cover's deaths), its seeds lying, cured leaves and dead walls staying; where
   `PATCHES` are in use the new patch joins the one most alike to bare ground, whose tallest plants stand lowest, and
   that patch keeps its own point.
-  `World::split` makes the share s of a cell of one patch a new patch alike to it at the cell's centre, each slot giving it the share s of
-  its amounts and plants, nothing dying: a control, as each patch stands per m² as the cell did
-  (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). `ew run`
+  `World::split` makes the share s of a cell's first patch a new patch alike to it at the cell's centre, each slot of
+  the first patch giving it the share s of its amounts and plants, nothing dying: a control, as each patch stands per
+  m² as the cell did (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). `ew run`
   makes them at the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Edit`).
+- **Gaps** (`cover/gaps.rs`): a closed forest is a mosaic of gaps, each opened where a canopy tree died and its crown
+  left its ground to the light (Watt 1947; Shugart 1984). When the large plants of a slot (its last group) die
+  uncrowded, of wear, unpaid upkeep, frost, drowning or flame (`upkeep`, `Cover::die_under`), the ground their crowns
+  held where their stand is closed (`stand::plant_ground` of each, the self-thinning law's measure) adds to the slot's
+  fallen crowns (`Cover::fell`, m², saved); plants crowded out (`stand::thin`) add none, as the crowns of the living
+  fill the room they free. Once a year, after the patches fuse (`patches::year`), each patch sums the fallen crowns of
+  its canopy, the slots whose large plants stand taller than `surface_m` and reach the base of the crown of its
+  tallest (`Cover::crown`), over the cell's ground. Where that is at least `GAP_LEAST` (0.01) of the cell and less
+  than the patch's share, that share of the patch becomes a new patch of age 0 (`patches::carve`): every slot of the
+  patch gives it the share of its plants that stood there, group by group (`Cover::part`: body matter and walls as
+  each group holds them, fuel and fallen crowns by built cover), but the canopy's slots none of their large plants,
+  the trees whose fall opened it, already dead; so the gap holds the plants that stood under them, in full light. Its
+  point is a sample of the patch's ground (`inside::patch_ground`) drawn from the world's seed by the month, the cell
+  and the patch (`rng::Purpose::Gap`). Room for its slots is made first, the patch's two nearest slots joining
+  (`seed::room`); where `PATCHES` are in use the gap joins the patch most alike to bare ground (`open`), its slots
+  meeting slots of their kind joining them and the patch folding to `variety`. Under `GAP_LEAST` the canopy's fallen
+  crowns gather over the years; all other slots' are forgotten at the year's end, and a patch whose canopy fell over
+  all its ground opens none: it is a gap whole.
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's aside node (with theirs), as living things
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,

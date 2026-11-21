@@ -254,25 +254,33 @@ fn per_patch(w: &World, i: usize) -> Vec<f64> {
     (0..c.patch_count()).map(|k| c.held_in(k).map(|x| c.kg(&mm, x)).sum::<f64>() / (area * c.patches[k].share)).collect()
 }
 
-/// A split that changes nothing changes nothing (laws.md 3): a stand of trees with herbs under them, split into two
-/// alike patches (`World::split`, `SPLIT` of the cell in the second), stands in each patch per m² of its ground as the
-/// unsplit cell stands through the months of a year, to `SAME`; at the year's end the two fuse back into one, which
-/// stands as the unsplit cell.
+/// A split that changes nothing changes nothing (laws.md 3): a stand of trees with herbs under them, its first patch
+/// split into two alike patches (`World::split`, `SPLIT` of it in the new one), stands in each of the two per m² of its
+/// ground as the unsplit first patch stands through the months of a year, to `SAME`, its other patches as the unsplit
+/// cell's; at the year's end the two fuse back into one, and the cell stands as the unsplit cell, its new gaps too.
 #[test]
 fn a_split_that_changes_nothing_changes_nothing() {
     let (mut whole, i) = grown(TREE_ROW, 5.0, 8);
     assert!(pcore::cover::place(&mut whole, i, 0, KINDS[LIGHT_ROW].genes, LIGHT_ROW as u32, 0.1));
     let mut split = whole.clone();
+    let n = whole.life.cover(i).patch_count();
     assert!(split.split(i, SPLIT));
     let year = whole.cfg.months_per_year as u64;
     for m in 0..year {
         pcore::step(&mut whole);
         pcore::step(&mut split);
-        let (one, two) = (per_patch(&whole, i), per_patch(&split, i));
+        let (mut one, two) = (per_patch(&whole, i), per_patch(&split, i));
         println!("month {m}: kg per m2 of each patch {two:?}, unsplit {one:?}");
-        assert_same(&format!("month {m}, split"), &two, &vec![one[0]; two.len()]);
+        let fused = whole.month() % year == 0;
+        if !fused {
+            one.insert(n, one[0]);
+        }
+        assert_same(&format!("month {m}, split"), &two, &one);
+        if fused {
+            return;
+        }
     }
-    assert_eq!(split.life.cover(i).patch_count(), 1, "the alike patches did not fuse");
+    panic!("no year's end in a year");
 }
 
 /// A clearing keeps the books (laws.md 3): `CLEARED` of a cell of herbs made a patch whose plants die (`World::clear`)
@@ -329,4 +337,38 @@ fn a_patch_holds_its_share_of_the_samples_nearest_its_point() {
         let left = (0..n).filter(|&p| g.of[p] == 0 || g.of[p] as usize > k).map(far).fold(f64::INFINITY, f64::min);
         assert!(farthest <= left, "patch {k}: a sample {farthest} samples from its point, one it left {left}");
     }
+}
+
+/// Years a stand of trees is given to open a gap.
+const GAP_YEARS: usize = 5;
+/// How much more ground a gap opens than its canopy's fallen crowns held a month before, a share: the deaths of the
+/// year's last month (seen: 0.08).
+const LAST_MONTH: f64 = 0.2;
+
+/// Canopy trees that fall open a gap (laws.md 3, `cover::gaps`): in a stand of trees, the year's end makes the ground
+/// the crowns of the dead trees of its first patch held a patch of its own, of their share of the cell (`Cover::fell`
+/// of its slots taller than `surface_m` over `cover::ground` a month before, and the deaths of the year's last month),
+/// the stand's tallest plants all left in the first patch; the books are kept.
+#[test]
+fn fallen_trees_open_a_gap_of_their_crowns() {
+    let (mut w, i) = grown(TREE_ROW, 5.0, 8);
+    let books = testkit::Books::now(&w);
+    let p = cover::Parts::of(&w.chem).expect("cover parts");
+    let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
+    let tallest = |w: &World, k: usize| w.life.cover(i).held_in(k).map(|x| w.life.cover(i).height(&w.cfg.phys, &mm, rho, x)).fold(0.0, f64::max);
+    for _ in 0..GAP_YEARS * w.cfg.months_per_year as usize {
+        let (c, ph) = (w.life.cover(i), &w.cfg.phys);
+        let fell = c.held_in(0).filter(|&x| c.height(ph, &mm, rho, x) > ph.surface_m).map(|x| c.fell[x]).sum::<f64>() / cover::ground(&w, i);
+        let n = c.patch_count();
+        pcore::step(&mut w);
+        if w.life.cover(i).patch_count() > n {
+            let s = w.life.cover(i).patches[n].share;
+            println!("a gap of {s} of the cell opened; the canopy's fallen crowns held {fell} a month before; tallest {} m, in the gap {} m", tallest(&w, 0), tallest(&w, n));
+            assert!(s >= fell && s <= fell * (1.0 + LAST_MONTH), "a gap of {s} for fallen crowns of {fell}");
+            assert!(tallest(&w, n) < tallest(&w, 0), "the gap holds the canopy's large plants");
+            books.assert_kept(&w, 1e-9);
+            return;
+        }
+    }
+    panic!("no gap opened in {GAP_YEARS} years");
 }
