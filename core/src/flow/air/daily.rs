@@ -208,7 +208,7 @@ pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Groun
             continue;
         };
         // The overturning's halves with the day's drawn flow, at the rates per mol of the step's start, as all of it.
-        let today = push.drawn(&ends, &links, &border, &draw.flows(&wx.lift(w, d)), &w.cfg);
+        let today = push.drawn(&border, &draw.flows(&wx.lift(w, d)));
         let imp = Implicit::of(s, (&today, &border, &lines), (&out.moved.a, &out.moved.b), &start, dd);
         wind(w, s, (&today, &border, &lines, &imp), (&mut x, &mut e), dd, &mut out.moved);
         out.edges.weather(w, s, (&ends, &cell), |xy| wx.shift(xy, d));

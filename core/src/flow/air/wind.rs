@@ -31,7 +31,8 @@ impl Links {
 /// The pushes on each link (`Links`): mixing by eddies, mol/s each way, and the heat they carry from its `a` to its
 /// `b` over what the two columns' mean heat per mol carries, W (`stir`); overturning, mol/s of the lower half from its
 /// `a` to its `b` (the upper half comes back), and the heat its halves carry from its `b` to its `a` over what their
-/// mean heat per mol carries, W (`contrast`); and the conductance of the evening of pressure, mol/(Pa s).
+/// mean heat per mol carries, W (`contrast`); the conductance of the evening of pressure, mol/(Pa s); and the
+/// weather's drawn flow, mol/s of the lower half from its `a` to its `b` (`draw::Draw::flows`, none outside its days).
 #[derive(Clone)]
 pub(super) struct Pushes {
     pub(super) mix: Vec<f64>,
@@ -39,6 +40,7 @@ pub(super) struct Pushes {
     pub(super) over: Vec<f64>,
     pub(super) contrast: Vec<f64>,
     pub(super) even: Vec<f64>,
+    pub(super) drawn: Vec<f64>,
 }
 
 /// One end of a link as its pushes read it (`push`): its air's mol per m³, the mean height of its ground, m, its
@@ -126,17 +128,13 @@ pub(super) fn halves_heat(flux: f64, (a, b): (&End, &End), depth: f64) -> f64 {
 }
 
 impl Pushes {
-    /// These pushes with the lower halves' flows `drawn` (`draw::Draw::flows`) on the links between blocks (`border`,
-    /// by their place, mol/s from each link's `a` to its `b`) added to the overturning's, and the heat their halves carry
-    /// (`halves_heat`) to its contrast. The eddies' mixing stays whole: it is their net flux down the gradient, and the
-    /// drawn flow, whose sign follows the weather's lift, is not a part of it (laws.md 1.6).
-    pub(super) fn drawn(&self, ends: &[End], links: &Links, border: &[usize], drawn: &[f64], cfg: &Config) -> Pushes {
+    /// These pushes with the weather's drawn flow `drawn` (`draw::Draw::flows`) on the links between blocks (`border`,
+    /// by their place, mol/s of the lower half from each link's `a` to its `b`). The eddies' mixing stays whole: it is
+    /// their net flux down the gradient, and the drawn flow, whose sign follows the weather's lift, is not a part of it
+    /// (laws.md 1.6).
+    pub(super) fn drawn(&self, border: &[usize], drawn: &[f64]) -> Pushes {
         let mut p = self.clone();
-        for (&l, &f) in border.iter().zip(drawn) {
-            let (a, b) = (&ends[links.a[l] as usize], &ends[links.b[l] as usize]);
-            p.over[l] += f;
-            p.contrast[l] += halves_heat(f, (a, b), column(cfg, a, b).1);
-        }
+        border.iter().zip(drawn).for_each(|(&l, &f)| p.drawn[l] = f);
         p
     }
 }
@@ -149,7 +147,7 @@ impl Pushes {
 /// node as the last state left it (`ends`).
 pub(super) fn pushes(cfg: &Config, st: Stretch, ends: &[End], air: &Level, (links, cell): (&Links, &Cell)) -> Pushes {
     let v = || Vec::with_capacity(links.id.len());
-    let mut p = Pushes { mix: v(), stir: v(), over: v(), contrast: v(), even: v() };
+    let mut p = Pushes { mix: v(), stir: v(), over: v(), contrast: v(), even: v(), drawn: vec![0.0; links.id.len()] };
     for &l in &links.id {
         let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, st.length(air.width()[l]), st.length(air.dist()[l]));
         let [mix, over, contrast, even, stir] = push(cfg, st, (&ends[a], &ends[b]), (wd, d, air.offset(a, b)), cell);
@@ -263,25 +261,31 @@ pub(super) struct Implicit {
     groups: Vec<(Vec<usize>, [Flows; 2])>,
 }
 
-/// The flows of the links of a class of lines for a group (`Implicit`): per link `ca`, `cb`, `k`, and their step.
+/// The flows of the links of a class of lines for a group (`Implicit`): per link `ca`, `cb`, `k`, and their step; and
+/// the part of `ca`, `cb` that the weather's drawn flow adds (`da`, `db`).
 struct Flows {
     ca: Vec<f64>,
     cb: Vec<f64>,
     k: Vec<f64>,
+    da: Vec<f64>,
+    db: Vec<f64>,
     step: line::Step,
 }
 
 impl Implicit {
-    /// The eddies and the overturning (`Pushes`) over the links between blocks (`border`, their `lines`, their ends
-    /// `a`, `b`), for days of `dd` seconds, from the air `x` (`[gi * na + j]`).
+    /// The eddies, the overturning and the weather's drawn flow (`Pushes`) over the links between blocks (`border`,
+    /// their `lines`, their ends `a`, `b`), for days of `dd` seconds, from the air `x` (`[gi * na + j]`). The drawn flow
+    /// moves the gases by halves as the overturning does, and none of the heat: that moves with its gases (`wind`).
     pub(super) fn of(s: &Scratch, (push, border, lines): (&Pushes, &[usize], &[Lines; 2]), (a, b): (&[u32], &[u32]), x: &[f64], dd: f64) -> Implicit {
         let (na, ng, nb) = (s.nt.len(), s.state.gas.len(), border.len());
         let [nt, upper, lower] = halves(s, x, na);
         let flows = |q: usize, class: &Lines| {
             let (mut ca, mut cb, mut k) = (vec![0.0; nb], vec![0.0; nb], vec![0.0; nb]);
+            let (mut da, mut db) = (vec![0.0; nb], vec![0.0; nb]);
             for p in class.links.iter().map(|&p| p as usize) {
                 let (ia, ib, l) = (a[p] as usize, b[p] as usize, border[p]);
-                let (mix, o) = (push.mix[l], push.over[l]);
+                let (mix, over) = (push.mix[l], push.over[l]);
+                let o = if q < ng { over + push.drawn[l] } else { over };
                 // The share of what a node holds that leaves it in a half of its column (its upper half, `up`): the
                 // lower half of the colder node, the upper half of the warmer; the heat by mol.
                 let half = |j: usize, up: bool| match (q < ng, up) {
@@ -291,10 +295,12 @@ impl Implicit {
                 };
                 ca[p] = mix / nt[ia] + o.abs() * half(ia, o < 0.0);
                 cb[p] = mix / nt[ib] + o.abs() * half(ib, o > 0.0);
+                da[p] = o.abs() * half(ia, o < 0.0) - over.abs() * half(ia, over < 0.0);
+                db[p] = o.abs() * half(ib, o > 0.0) - over.abs() * half(ib, over > 0.0);
                 k[p] = if q < ng { 0.0 } else { push.stir[l] - push.contrast[l] };
             }
             let step = line::factor(class, a, (&ca, &cb), dd);
-            Flows { ca, cb, k, step }
+            Flows { ca, cb, k, da, db, step }
         };
         let (cond, dry): (Vec<usize>, Vec<usize>) = (0..ng).partition(|&q| s.cond[q]);
         let groups = cond.iter().map(|&q| vec![q]).chain([dry, vec![ng]]).filter(|g| !g.is_empty());
@@ -303,16 +309,17 @@ impl Implicit {
 }
 
 /// A gas of the air, or the heat where it is the number of gases, in a day of the wind (`wind`): its flows along each
-/// class of lines (`Implicit`) and what crosses their links.
-type Job<'a> = (usize, [&'a Flows; 2], [Vec<f64>; 2]);
+/// class of lines (`Implicit`), what crosses their links, and the part of it the weather's drawn flow moves.
+type Job<'a> = (usize, [&'a Flows; 2], [Vec<f64>; 2], [Vec<f64>; 2]);
 
 /// One day of `dd` seconds of the wind over the links between blocks (`border`, their `lines`). First the evening of
 /// pressure (`pressure`); then the eddies and the overturning, each implicit along the lines east and west, then along
 /// those north and south (`Implicit`, `solve::line`), so the day is stable and keeps its rates on any grid; each gas
 /// and the heat on its own task of the pool. What crosses is the sender's air, each mol with its node's heat per mol,
 /// a mol of the eddies with its node's near-ground energy (`Pushes::stir`); for the overturning by halves, the lower
-/// half to the warmer node and the upper half back, as many mol each way, the halves carrying `Pushes::contrast`. The
-/// node the mass enters pays its lift.
+/// half to the warmer node and the upper half back, as many mol each way, the halves carrying `Pushes::contrast`; the
+/// weather's drawn flow likewise, but its halves carry no heat of their own, only what the gases that cross hold
+/// (`draw::heat`). The node the mass enters pays its lift.
 pub(super) fn wind(w: &World, s: &Scratch, (push, border, lines, imp): (&Pushes, &[usize], &[Lines; 2], &Implicit), (x, e): (&mut [f64], &mut [f64]), dd: f64, moved: &mut Moved) {
     if border.is_empty() {
         return;
@@ -324,20 +331,31 @@ pub(super) fn wind(w: &World, s: &Scratch, (push, border, lines, imp): (&Pushes,
     pressure(s, (push, border), (x, e), dd, (moved, &mm, &mut kg));
     let (a, b) = (&moved.a[..nb], &moved.b[..nb]);
     // Per gas and the heat (`q`, the heat at `ng`), what crosses the links of each class of lines.
-    let mut jobs: Vec<Job> = imp.groups.iter().flat_map(|(g, f)| g.iter().map(move |&q| (q, [&f[0], &f[1]], [Vec::new(), Vec::new()]))).collect();
+    let mut jobs: Vec<Job> = imp.groups.iter().flat_map(|(g, f)| g.iter().map(move |&q| (q, [&f[0], &f[1]], [Vec::new(), Vec::new()], [Vec::new(), Vec::new()]))).collect();
     let (xs, es) = (&*x, &*e);
-    crate::par::each_init(&mut jobs, na * (ng + 1), || (), |_, (q, flows, out)| {
+    crate::par::each_init(&mut jobs, na * (ng + 1), || (), |_, (q, flows, out, drawn)| {
         let mut y = if *q < ng { xs[*q * na..(*q + 1) * na].to_vec() } else { es.to_vec() };
-        for ((class, f), out) in lines.iter().zip(flows.iter()).zip(out.iter_mut()) {
+        for (((class, f), out), drawn) in lines.iter().zip(flows.iter()).zip(out.iter_mut()).zip(drawn.iter_mut()) {
             let start = y.clone();
             line::solve(class, &f.step, a, (*q == ng).then_some(&f.k[..]), &start, &mut y);
-            *out = class.links.iter().map(|&p| p as usize).map(|p| dd * (f.ca[p] * y[a[p] as usize] - f.cb[p] * y[b[p] as usize] + f.k[p])).collect();
+            let links = || class.links.iter().map(|&p| p as usize);
+            *out = links().map(|p| dd * (f.ca[p] * y[a[p] as usize] - f.cb[p] * y[b[p] as usize] + f.k[p])).collect();
+            *drawn = links().map(|p| dd * (f.da[p] * y[a[p] as usize] - f.db[p] * y[b[p] as usize])).collect();
         }
     });
-    for (q, _, out) in &jobs {
-        for (class, d) in lines.iter().zip(out) {
+    // Per gas and link between blocks, what the drawn flow moves of it, + from its `a` to its `b`.
+    let mut gases = vec![vec![0.0; nb]; ng];
+    for (q, _, out, drawn) in &jobs {
+        for ((class, d), dr) in lines.iter().zip(out).zip(drawn) {
             cross((*q, class.links.iter().map(|&p| p as usize).zip(d.iter().copied())), (x, e), (moved, &mm, &mut kg));
+            if *q < ng {
+                class.links.iter().zip(dr).for_each(|(&p, &v)| gases[*q][p as usize] = v);
+            }
         }
+    }
+    if push.drawn.iter().any(|&f| f != 0.0) {
+        let heat = super::draw::heat(s, (x, e), (&moved.a[..nb], &moved.b[..nb]), &gases);
+        cross((ng, heat.into_iter().enumerate()), (x, e), (moved, &mm, &mut kg));
     }
     for (p, &kg) in kg.iter().enumerate() {
         lift((moved.a[p] as usize, moved.b[p] as usize), kg, (s, w.cfg.gravity), e);

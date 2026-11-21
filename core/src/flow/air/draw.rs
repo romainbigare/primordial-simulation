@@ -8,8 +8,10 @@
 //! own, and a weather system's convergence and the sinking that pays for it close within a few thousand km, inside the
 //! map's air (laws.md 1.6).
 
+use super::super::Scratch;
+use super::daily::temps;
 use super::wind::{column, End, Links};
-use crate::{space::Level, Config};
+use crate::{solve::sweep::HALF_WAY, space::Level, Config};
 
 /// The conjugate gradients stop where the residual is below this share of the lift's (`Draw::flows`): far below what
 /// the books or the rain could feel, as the flows are booked whatever they are.
@@ -104,6 +106,33 @@ impl Draw {
         }
         phi
     }
+}
+
+/// The heat that the gases the weather's drawn flow moves over a day carry across the links between blocks (`gases`,
+/// per gas and link, mol, + from its `a` to its `b`), J, + from `a` to `b`, from the air `x` (`[gi * na + j]`) and heat
+/// `e`: each mol at its gas's heat per mol at the link's mean temperature, the mean of its ends' (as the air holds a
+/// gas's heat, cp T, `air_temp`; the latent heat of the vapour is the air's to hold, so it moves with the vapour's mol).
+/// The drawn flow is the weather's divergent circulation, whose sign follows the random lift: as many mol of its halves
+/// cross each way, so a reversible circulation carries no heat of its own, only that of the net gas that converges.
+/// No node gives more than `HALF_WAY` of its heat so: where it would, its own outgoing links are cut in proportion.
+pub(super) fn heat(s: &Scratch, (x, e): (&[f64], &[f64]), (a, b): (&[u32], &[u32]), gases: &[Vec<f64>]) -> Vec<f64> {
+    let t = temps(s, x, e);
+    let mut heat: Vec<f64> = (0..a.len())
+        .map(|p| {
+            let mean = (t[a[p] as usize] + t[b[p] as usize]) / 2.0;
+            s.state.gas.iter().zip(gases).map(|(&k, mol)| mol[p] * s.sp[k].cp * mean).sum()
+        })
+        .collect();
+    let sender = |p: usize, q: f64| if q > 0.0 { a[p] as usize } else { b[p] as usize };
+    let mut gives = vec![0.0; e.len()];
+    heat.iter().enumerate().for_each(|(p, &q)| gives[sender(p, q)] += q.abs());
+    for (p, q) in heat.iter_mut().enumerate() {
+        let j = sender(p, *q);
+        if gives[j] > HALF_WAY * e[j] {
+            *q *= HALF_WAY * e[j].max(0.0) / gives[j];
+        }
+    }
+    heat
 }
 
 /// The conductance of a link between ends `a` and `b` for the drawn flow (`Draw`), its width over its length `shape`:
