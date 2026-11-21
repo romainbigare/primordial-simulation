@@ -84,8 +84,8 @@ pub(super) struct Worn {
 
 /// The bed a stage wears on its grid: of each sample how high the top of the bed's stack stands, m (it rises with the
 /// land and floats back up with it, so what lies under it less the height is how deep the wear has cut into the
-/// stack), the fold of its layers, m, and the shares of a body and of a body's rim there (`Strata::at`); and the
-/// strata.
+/// stack), the fold of its layers, m, and the shares of a body and of a body's rim there (`Strata::at`,
+/// `Strata::rim`); and the strata.
 struct Bed<'a> {
     top: Vec<f64>,
     fold: Vec<f64>,
@@ -132,9 +132,10 @@ struct Marks {
 }
 
 /// The ground worn on grid `g` (`Worn`), where the terrain's noise stands at `rise`, m, on the grid `by` times coarser
-/// (`noise_grid`), and its bed's layers are folded `fold`, m, its bodies and their rims stand over the shares `body` and
-/// `rim` of each sample (on that grid too) and the strata are `strata`: flowing liquid wears each sample's bed as fast as its make at the
-/// height it stands at (`Strata::make`, `Strata::cut`) times `CUT`, the top of the stack rising with the land.
+/// (`noise_grid`), and its bed's layers are folded `fold`, m, its bodies stand over the share `body` of each sample (on
+/// that grid too) and their rims over the share `rim` (on `g`), and the strata are `strata`: flowing liquid wears each
+/// sample's bed as fast as its make at the height it stands at (`Strata::make`, `Strata::cut`) times `CUT`, the top of
+/// the stack rising with the land.
 /// Each stage's grid takes the noise's mean over each of its samples (a grid finer than the noise's, the noise carried
 /// to it); the first starts from the low stand on land (`LOW_STAND_M`; the noise's heights under it) and a roughness of
 /// `ROUGH_M` drawn from the seed, each later one from the last carried to it, down to the samples'. On every grid the
@@ -157,7 +158,7 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, [bod
             Some((from, z, _, _)) => held(&g.carried((*from, z), to), &rise_s, &open_s),
         };
         let top = last.as_ref().map_or_else(|| h.clone(), |(from, _, top, _)| g.carried((*from, top), to));
-        let mut bed = Bed { top, fold: on(fold, to), body: on(body, to), rim: on(rim, to), strata };
+        let mut bed = Bed { top, fold: on(fold, to), body: on(body, to), rim: g.mean_over(rim, to), strata };
         offshore = last.as_ref().map_or(vec![0.0; stage.n()], |(from, _, _, _)| g.carried((*from, &offshore), to));
         let marks = run(&stage, &mut h, (&rate(&rise_s, &open_s), &open_s, &draws(seed, to, stage.n())), (&mut bed, WEAR_YEARS * share, steps), &mut books);
         offshore.iter_mut().zip(&marks.offshore).for_each(|(s, m)| *s += m);
@@ -167,7 +168,7 @@ pub(super) fn wear(seed: u64, g: &Grid, (by, rise): (usize, &[f64]), (fold, [bod
     let rise_g = on(rise, 1);
     let low = open_low(g, &rise_g, LOW_STAND_M);
     let mut h = held(&g.carried((from, &z), 1), &rise_g, &low);
-    let bed = Bed { top: g.carried((from, &top), 1), fold: on(fold, 1), body: on(body, 1), rim: on(rim, 1), strata };
+    let bed = Bed { top: g.carried((from, &top), 1), fold: on(fold, 1), body: on(body, 1), rim: rim.to_vec(), strata };
     let make = (0..g.n()).map(|k| bed.make(k, h[k])).collect();
     let last_years = WEAR_YEARS * STAGES[STAGES.len() - 1].1;
     let soil = mantle(&g.coarser(from), (&z, &marks.drained), (&marks.settled, &marks.lowers), (CREEP, last_years));

@@ -96,9 +96,9 @@ fn balances(c: &Chemistry, init: &worldgen::Init) {
                 .map(|&t| {
                     let mut n = vec![0.0; ns];
                     n[init.low] = depth / c.molar_volume(init.low, Phase::Liquid);
-                    // The loose ground of the start, by volume (`worldgen::terrain`).
-                    let all: f64 = init.loose.iter().map(|p| p.1).sum();
-                    for &(k, share) in &init.loose {
+                    // The loose ground of the start over a bed of the first make, by volume (`worldgen::terrain`).
+                    let all: f64 = init.makes[0].iter().map(|p| p.1).sum();
+                    for &(k, share) in &init.makes[0] {
                         n[k] = share / all * LOOSE_M / c.molar_volume(k, Phase::Solid);
                     }
                     let x = rc.balance(c, &mut n, &gas, t).iter().find(|p| p.0 == u).map_or(0.0, |p| p.1);

@@ -18,6 +18,9 @@ const SHORE_RISE_LEAST = 1e-3;
 const RELIEF_EDGE_SLOPE = 0.1;
 // Cells nearly all under snow keep their true colour as it is: the ground under it is not found from so little.
 const SNOW_CELLS_ALL = 0.95;
+// A soil takes `SOIL_OF_BED` of its bed's colour where the bed is bare, less as its loose ground deepens, none from
+// `SOIL_OF_BED_M` m on (Earth view only).
+const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0;
 
 // What is at a point: the ground without the channel's water (`dry`: on the bars of its bed washed gravel, bare, as
 // far as they cover the pixel, river.wgsl `river_spots`), the channel's water (`wet`) and the share of the
@@ -137,6 +140,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
   p.snow = select(snow_at(st.snow, st.bares, fwidth(st.bares)), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
+  // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
+  // the cells' soil is a mean over kilometres, the bed's make is the samples'.
+  if (styled() && loose < SOIL_OF_BED_M) { p.ground = mix(p.ground, bed_make_at(at), SOIL_OF_BED * (1.0 - loose / SOIL_OF_BED_M)); }
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);

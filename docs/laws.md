@@ -107,8 +107,8 @@ where fractal noise over four scales from about 4 km down passes 0.66 (`BODY_ABO
 rises through strata. Some makes lie only as **seams** (`Lies::Seam`, `seams` in the chemistry): each repeat of the
 stack holds a set number of seams of a set thickness, each at a depth drawn in its own even slot of the stack, cut over
 the layers drawn before (in chemistry 0: one of make 5, 100 m; three of make 6, 30 m; two of make 7, 40 m; one of
-make 8, 30 m). One make (`rim`, make 9 in chemistry 0) stands round the **rims** of some bodies: where their noise lies
-between 0.63 and 0.66 (`RIM_ABOVE`) and a second noise passes 0.7 (`RIM_GATE`). The top of the stack rises with the
+make 8, 30 m). One make (`rim`, make 9 in chemistry 0) stands round the **rims** of some bodies: where no body stands, their noise read
+at each sample passes 0.63 (`RIM_ABOVE`) and a second noise passes 0.7 (`RIM_GATE`). The top of the stack rises with the
 land and floats back up with it, so how deep the wear has
 cut under it, plus the fold, says which layer a sample's surface is in; at each step the wear cuts each sample at the
 rate of the make it has reached. So a soft layer opens into a wide vale, a hard one stands as a scarp or caps a
@@ -1656,7 +1656,8 @@ read a kind.
   drawn rises or of one rise (`--shape`, 0), or a globe with 29% of its area above 0 m (`LAND_SHARE`, the level it finds kept in
   `World::terrain`); the bed of the chemistry's `makes`, each over the share of the cell's samples whose surface the
   wear left in it (`space::strata`); the loose ground the wear left (0: the mantle on land, the shelf on the open low ground), each cell the
-  mean over its samples of the top `skin_m` of each sample's at most: the ground node is the layer that exchanges with
+  mean over its samples of the top `skin_m` of each sample's at most, each sample's of the make of its bed (a residual
+  soil: the bed broken where it lies; so loose ground over a seam is of the seam's substances): the ground node is the layer that exchanges with
   the surface within a year (its heat, and the pores roots and evaporation draw from), and what the wear left deeper lies
   under it, packed with the bed (the bed's store, `Class::Deep`, its aquifer); the sea's salt at
   balance (2.5); ground and air temperatures falling with latitude and height. The terrain's samples are worn (0):

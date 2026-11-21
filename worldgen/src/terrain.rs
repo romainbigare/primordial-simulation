@@ -212,8 +212,12 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
     let over = |x: &dyn Fn(&Samples, usize) -> f64| map.leaves().iter().map(|&l| terrain.over(seed, &map, l, lat, x)).collect::<Vec<f64>>();
     // A cell's ground node is the layer that exchanges with the surface within a year (`skin_m`): of each sample it takes
     // the top `skin_m` of its loose ground at most; what the wear left deeper lies under it, packed with the bed.
-    // A cell's bed is the mean of its samples' makes: the share of its area each make holds.
-    let shares: Vec<Vec<f64>> = (0..init.makes.len()).map(|m| over(&|s, k| if s.make[k] as usize == m { 1.0 } else { 0.0 })).collect();
+    // A cell's bed is the mean of its samples' makes: the share of its area each make holds. Its loose ground is the bed
+    // broken where it lies (a residual soil, Jenny 1941): of each make, the mean over the cell of the loose ground of
+    // the samples whose bed is of it, m.
+    let of_make = |m: usize, x: &dyn Fn(&Samples, usize) -> f64| over(&|s, k| if s.make[k] as usize == m { x(s, k) } else { 0.0 });
+    let shares: Vec<Vec<f64>> = (0..init.makes.len()).map(|m| of_make(m, &|_, _| 1.0)).collect();
+    let held: Vec<Vec<f64>> = (0..init.makes.len()).map(|m| of_make(m, &|s, k| s.loose[k].min(cfg.skin_m))).collect();
     let loose = over(&|s, k| s.loose[k].min(cfg.skin_m));
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
@@ -227,9 +231,8 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         for &(k, f) in &fr {
             bed[k * n + i] += f / tot * bed_v / mv(k);
         }
-        let ltot: f64 = init.loose.iter().map(|p| p.1).sum();
-        for &(k, f) in &init.loose {
-            ground[k * n + i] += f / ltot * loose[i] * area / mv(k);
+        for (k, v) in bed_of(init, &held.iter().map(|x| x[i]).collect::<Vec<f64>>()) {
+            ground[k * n + i] += v * area / mv(k);
         }
     }
 
