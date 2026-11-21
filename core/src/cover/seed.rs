@@ -165,51 +165,49 @@ pub(super) fn room(c: &mut Cover, mm: &[f64; NP], n: usize, k: usize) -> Option<
     Some(small)
 }
 
-impl World {
-    /// An edit: place `kg` per m² of the ground its kind stands on in patch `k` of cell `i` (`cover::footing` at the
-    /// least root need, of the patch's share of the cell's ground, `cover::ground`) of cover of genes `genes` and
-    /// starting kind `root`, booked from the outside node (`World::cross`): its built cover at the shares of its genes,
-    /// its fuel at its `STORE` gene, at the cell's ground temperature; it lodges as seeds do (`seed::lodge`). False if
-    /// the chemistry has no cover, the cell no such patch, or its kind no ground or no room there (nothing is placed
-    /// then).
-    pub fn sow(&mut self, i: usize, k: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
-        let Some(p) = Parts::of(&self.chem) else { return false };
-        if k >= self.life.cells[i].cover.patch_count() {
-            return false;
-        }
-        let (mm, cell) = (p.mm(&self.chem), super::ground(self, i));
-        let soak = super::soak(self, &p, i, self.g(p.liquid, i)).1;
-        let foot = super::footing(self, i, &genes, self.cfg.phys.root_least, &soak, None);
-        let area = cell * self.life.cells[i].cover.patches[k].share * foot.share;
-        if area <= 0.0 {
-            return false;
-        }
-        let s = sown(&self.chem, &self.cfg.phys, &p, (i, area, self.t_ground_last(i)), genes, root, kg);
-        let (mol, heat) = (s.mol, s.heat);
-        let mut recruits = [0.0; super::SLOTS];
-        let c = &mut self.life.cells[i].cover;
-        let was = c.temp(&self.chem, &p);
-        let landed = lodge(c, &mm, &s, &self.cfg, (cell, foot.share, foot.strip), &mut recruits, k);
-        let to = lines(self, &self.life.cells[i].cover, i, &soak, (&recruits, built_kg(&mm, &mol)), cell * foot.share);
-        let c = &mut self.life.cells[i].cover;
-        c.line = to;
-        match landed {
-            Landed::Refused => return false,
-            Landed::In => {}
-            // The slot in deficit it took goes to the ground as remains, with its heat.
-            Landed::Out(m) => {
-                self.counts.cover_budget[DIED] -= held(&p.content(&self.chem), &m);
-                let q = ((0..NP).map(|q| m[q] * self.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
-                c.e -= q;
-                crate::contract::died_at(self, i, (0..NP).map(|x| (p.sub[x], m[x])), q);
-            }
-        }
-        self.counts.cover_budget[PLACED] += held(&p.content(&self.chem), &mol);
-        // (The cover's side is its own: the store books the outside node's.)
-        self.cross((crate::store::Boundary::Outside, Node::new(Class::Life, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
-        self.life.cells[i].cover.mark = self.light[i];
-        true
+/// An edit: `kg` per m² of the ground its kind stands on in patch `k` of cell `i` (`cover::footing` at the
+/// least root need, of the patch's share of the cell's ground, `cover::ground`) of cover of genes `genes` and
+/// starting kind `root` placed, booked from the outside node (`World::cross`): its built cover at the shares of its genes,
+/// its fuel at its `STORE` gene, at the cell's ground temperature; it lodges as seeds do (`seed::lodge`). False if
+/// the chemistry has no cover, the cell no such patch, or its kind no ground or no room there (nothing is placed
+/// then).
+pub fn place(w: &mut World, i: usize, k: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
+    let Some(p) = Parts::of(&w.chem) else { return false };
+    if k >= w.life.cells[i].cover.patch_count() {
+        return false;
     }
+    let (mm, cell) = (p.mm(&w.chem), super::ground(w, i));
+    let soak = super::soak(w, &p, i, w.g(p.liquid, i)).1;
+    let foot = super::footing(w, i, &genes, w.cfg.phys.root_least, &soak, None);
+    let area = cell * w.life.cells[i].cover.patches[k].share * foot.share;
+    if area <= 0.0 {
+        return false;
+    }
+    let s = sown(&w.chem, &w.cfg.phys, &p, (i, area, w.t_ground_last(i)), genes, root, kg);
+    let (mol, heat) = (s.mol, s.heat);
+    let mut recruits = [0.0; super::SLOTS];
+    let c = &mut w.life.cells[i].cover;
+    let was = c.temp(&w.chem, &p);
+    let landed = lodge(c, &mm, &s, &w.cfg, (cell, foot.share, foot.strip), &mut recruits, k);
+    let to = lines(w, &w.life.cells[i].cover, i, &soak, (&recruits, built_kg(&mm, &mol)), cell * foot.share);
+    let c = &mut w.life.cells[i].cover;
+    c.line = to;
+    match landed {
+        Landed::Refused => return false,
+        Landed::In => {}
+        // The slot in deficit it took goes to the ground as remains, with its heat.
+        Landed::Out(m) => {
+            w.counts.cover_budget[DIED] -= held(&p.content(&w.chem), &m);
+            let q = ((0..NP).map(|q| m[q] * w.chem.subs[p.sub[q]].cp).sum::<f64>() * was).min(c.e);
+            c.e -= q;
+            crate::contract::died_at(w, i, (0..NP).map(|x| (p.sub[x], m[x])), q);
+        }
+    }
+    w.counts.cover_budget[PLACED] += held(&p.content(&w.chem), &mol);
+    // (The cover's side is its own: the store books the outside node's.)
+    w.cross((crate::store::Boundary::Outside, Node::new(Class::Life, i)), (0..NP).map(|q| (p.sub[q], mol[q])), heat);
+    w.life.cells[i].cover.mark = w.light[i];
+    true
 }
 
 /// The plants of the slot of starting kind `root` in cell `i` become `groups`, each its plants (a real count) and its

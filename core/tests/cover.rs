@@ -62,7 +62,7 @@ fn the_cover_grows_by_what_its_budget_books() {
     let (mut w, i) = start();
     worldgen::testkit::set_loam(&mut w);
     let books = Books::now(&w);
-    assert!(w.sow(i, 0, genes(), 0, 0.1));
+    assert!(pcore::cover::place(&mut w, i, 0, genes(), 0, 0.1));
     w.take_counters();
     let (kg0, e0) = (cover_kg(&w), cover::content(&w));
     for _ in 0..12 {
@@ -90,7 +90,7 @@ fn the_cover_grows_by_what_its_budget_books() {
 fn a_thick_cover_does_not_thicken() {
     let (mut w, i) = start();
     let books = Books::now(&w);
-    assert!(w.sow(i, 0, genes(), 0, 20.0));
+    assert!(pcore::cover::place(&mut w, i, 0, genes(), 0, 20.0));
     let (kg0, leaf0) = (cover::per_m2(&w, cover::Cover::kg)[i], cover::per_m2(&w, cover::Cover::leaf)[i]);
     for _ in 0..6 {
         pcore::step(&mut w);
@@ -157,7 +157,7 @@ fn the_cover_dies_in_frost() {
     let mut g = genes();
     g[FROST] = 300.0;
     assert!(w.t_ground_last(i) < 299.0, "the ground is warm: {} K", w.t_ground_last(i));
-    assert!(w.sow(i, 0, g, 0, 1.0));
+    assert!(pcore::cover::place(&mut w, i, 0, g, 0, 1.0));
     let kg0 = cover_kg(&w);
     w.take_counters();
     pcore::step(&mut w);
@@ -178,7 +178,7 @@ fn shown(w: &pcore::World, i: usize, layer: Layer) -> contract::Shown {
 #[test]
 fn what_a_taker_takes_its_slot_loses() {
     let (mut w, i) = start();
-    assert!(w.sow(i, 0, genes(), 0, 1.0));
+    assert!(pcore::cover::place(&mut w, i, 0, genes(), 0, 1.0));
     let mut left = vec![];
     for share in [0.05, 0.25] {
         let mut w = w.clone();
@@ -214,7 +214,7 @@ fn what_a_taker_takes_its_slot_loses() {
 #[test]
 fn what_is_pressed_loose_the_ground_gains() {
     let (mut w, i) = start();
-    assert!(w.sow(i, 0, genes(), 0, 1.0));
+    assert!(pcore::cover::place(&mut w, i, 0, genes(), 0, 1.0));
     let (n, books) = (w.mesh.cells().n(), Books::now(&w));
     let ground = |w: &World, k: usize| w.store.amounts(Class::Ground)[k * n + i];
     // (In the open: no snow hides any of it.)
@@ -253,16 +253,16 @@ fn seeds_join_their_kind_or_found_a_slot() {
     let books = Books::now(&w);
     let (g, step) = (genes(), cover::RANGE[FROST].0);
     assert!(slots_of(&w, i).is_empty(), "the cell starts bare");
-    assert!(w.sow(i, 0, g, 0, 0.1));
+    assert!(pcore::cover::place(&mut w, i, 0, g, 0, 0.1));
     let mut near = g;
     near[FROST] -= step;
-    assert!(w.sow(i, 0, near, 0, 0.1));
+    assert!(pcore::cover::place(&mut w, i, 0, near, 0, 0.1));
     let one = slots_of(&w, i);
     assert_eq!(one.len(), 1, "a seed one step away joins: {one:?}");
     assert!((one[0].0[FROST] - (g[FROST] - 0.5 * step)).abs() < 1e-3 * step, "the joined frost gene {} is not the mean", one[0].0[FROST]);
     let mut far = g;
     far[FROST] -= 4.0 * step;
-    assert!(w.sow(i, 0, far, 0, 0.1));
+    assert!(pcore::cover::place(&mut w, i, 0, far, 0, 0.1));
     assert_eq!(slots_of(&w, i).len(), 2, "a seed farther than {} steps founds its own slot", cover::APART * w.cfg.phys.alike);
     pcore::step(&mut w);
     let two = slots_of(&w, i);
@@ -281,11 +281,11 @@ fn a_new_kind_enters_a_full_cell() {
     for k in 0..w.cfg.variety {
         let mut v = g;
         v[FROST] -= 3.0 * step * k as f32;
-        assert!(w.sow(i, 0, v, 0, 0.1));
+        assert!(pcore::cover::place(&mut w, i, 0, v, 0, 0.1));
     }
     let before: f64 = slots_of(&w, i).iter().map(|s| s.1).sum();
     assert_eq!(slots_of(&w, i).len(), w.cfg.variety, "the variants hold every slot");
-    assert!(w.sow(i, 0, g, 1, 0.01), "seeds of a second kind find no room");
+    assert!(pcore::cover::place(&mut w, i, 0, g, 1, 0.01), "seeds of a second kind find no room");
     assert_eq!(slots_of(&w, i).len(), w.cfg.variety, "the cell holds more slots than its world's setting");
     let c = w.life.cover(i);
     assert_eq!(c.held().filter(|&x| c.root[x] == 1).count(), 1, "the new kind holds a slot");
@@ -300,7 +300,7 @@ fn a_new_kind_enters_a_full_cell() {
 fn a_stand_never_passes_the_thinning_law_as_it_grows_tall() {
     let (mut w, i) = start();
     let books = Books::now(&w);
-    assert!(w.sow(i, 0, TREE.genes, TREE_ROW as u32, 0.001));
+    assert!(pcore::cover::place(&mut w, i, 0, TREE.genes, TREE_ROW as u32, 0.001));
     let p = cover::Parts::of(&w.chem).expect("cover parts");
     let (mm, area, rho) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.chem.subs[p.sub[cover::WALL]].density[0]);
     let stand = |w: &pcore::World| {
@@ -328,7 +328,7 @@ fn tall_plants_hold_less_of_thin_ground() {
     let (mut w, _) = start();
     let mean = |b: &[f32; cover::BINS]| b.iter().enumerate().map(|(k, &s)| s as f64 * k as f64).sum::<f64>();
     let i = dry_lands(&w).into_iter().min_by(|&a, &b| mean(&w.loose_bins[a]).total_cmp(&mean(&w.loose_bins[b]))).expect("dry land");
-    assert!(w.sow(i, 0, genes(), 0, 0.1) && w.sow(i, 0, TREE.genes, TREE_ROW as u32, 10.0));
+    assert!(pcore::cover::place(&mut w, i, 0, genes(), 0, 0.1) && pcore::cover::place(&mut w, i, 0, TREE.genes, TREE_ROW as u32, 10.0));
     pcore::step(&mut w);
     let c = w.life.cover(i);
     let held = |root: u32| c.held().find(|&x| c.root[x] == root).map(|x| c.rooted[x]).expect("the kind lives");
@@ -380,8 +380,8 @@ fn frost_selects_the_hardy_where_it_kills_the_tender() {
     (tender[FROST], hardy[FROST]) = (FROST_GENES[0], FROST_GENES[1]);
     let land: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
     for &i in &land {
-        w.sow(i, 0, tender, 0, 0.05);
-        w.sow(i, 0, hardy, 0, 0.05);
+        pcore::cover::place(&mut w, i, 0, tender, 0, 0.05);
+        pcore::cover::place(&mut w, i, 0, hardy, 0, 0.05);
     }
     let parts = cover::Parts::of(&w.chem).expect("cover parts");
     let mm = parts.mm(&w.chem);
@@ -565,7 +565,7 @@ fn the_cover_lives_on_its_cells_land() {
     let whole = (0..area.len()).find(|&i| land(&w, i) == area[i]).expect("a whole land cell");
     let shore = (0..area.len()).find(|&i| land(&w, i) > 0.0 && land(&w, i) < 0.9 * area[i]).expect("a shore cell with land");
     for i in [whole, shore] {
-        assert!(w.sow(i, 0, genes(), 0, 0.1));
+        assert!(pcore::cover::place(&mut w, i, 0, genes(), 0, 0.1));
     }
     let kg = cover::per_m2(&w, |c, mm, x| c.kg(mm, x));
     let [a, b] = [whole, shore].map(|i| kg[i] * area[i] / land(&w, i));
@@ -584,7 +584,7 @@ fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_
     let area = w.mesh.cells().area().to_vec();
     let p = cover::Parts::of(&w.chem).expect("cover parts");
     let shore = (0..area.len()).find(|&j| (0.3..0.9).contains(&(contract::land(&w, j) / area[j])) && cover::soak(&w, &p, j, w.g(p.liquid, j)).1.loose > 0.0).expect("a shore cell");
-    assert!(w.sow(shore, 0, TREE.genes, TREE_ROW as u32, 2.0));
+    assert!(pcore::cover::place(&mut w, shore, 0, TREE.genes, TREE_ROW as u32, 2.0));
     let (mm, month, drowned) = (p.mm(&w.chem), w.cfg.calendar().month as f64, pcore::life::DROWNED as usize);
     let mut c = w.life.cover(shore).clone();
     let x = c.held().next().expect("the stand");
@@ -665,7 +665,7 @@ fn plants_under_the_liquid_live_on_their_store_and_seedlings_take_the_ground_it_
 #[test]
 fn a_stand_drops_its_leaves_for_a_long_dry_season_but_not_for_a_frozen_one() {
     let (mut w, i) = start();
-    assert!(w.sow(i, 0, TREE.genes, TREE_ROW as u32, 2.0));
+    assert!(pcore::cover::place(&mut w, i, 0, TREE.genes, TREE_ROW as u32, 2.0));
     let p = cover::Parts::of(&w.chem).expect("cover parts");
     let (mm, area) = (p.mm(&w.chem), cover::ground(&w, i));
     let (sun, month) = (200.0, w.cfg.calendar().month as f64);

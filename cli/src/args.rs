@@ -42,8 +42,8 @@ pub const USAGE: &str = "usage:
                           patch whose plants die above the ground (World::clear); may be given more than once
     --split YEAR:X,Y:SHARE
                           as --clear, the new patch alike to the rest, nothing dying: a control (World::split)
-    --sow YEAR:X,Y:KIND   an edit at the start of that year: the starting kind of row KIND of worldgen::life::KINDS
-                          sown in the newest patch of the cell at square X,Y (World::sow); may be given more than once
+    --plant YEAR:X,Y:KIND an edit at the start of that year: the starting kind of row KIND of worldgen::life::KINDS
+                          placed in the newest patch of the cell at square X,Y (cover::place); may be given more than once
     --chunks N            a speed setting: the cells cut into N runs for the cover's parallel passes (64; any count
                           gives one world)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
@@ -206,7 +206,7 @@ impl Args {
     }
 
     /// The run's plan: what is placed when (`--life-year`, `--roster`, and the seeding flags), and its edits
-    /// (`--clear`, `--split`, `--sow`); an error if an edit does not parse.
+    /// (`--clear`, `--split`, `--plant`); an error if an edit does not parse.
     pub fn schedule(&self) -> Result<Schedule, String> {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
         let rows: &[usize] = if self.has("--roster") { &worldgen::life::ROSTER } else { &worldgen::life::ONE };
@@ -214,16 +214,16 @@ impl Args {
         Ok(Schedule { takers: year("--fauna-year", -1), edits: self.edits()?, ..Schedule::new(life, rows, self.seeding()) })
     }
 
-    /// The edits of `--clear`, `--split` and `--sow`, each YEAR:X,Y:WHAT, in that order; an error if one does not parse.
+    /// The edits of `--clear`, `--split` and `--plant`, each YEAR:X,Y:WHAT, in that order; an error if one does not parse.
     fn edits(&self) -> Result<Vec<Due>, String> {
         let share = |v: &str| v.parse::<f64>().ok().filter(|s| *s > 0.0 && *s < 1.0);
         let kind = |v: &str| v.parse::<usize>().ok().filter(|&k| k < worldgen::life::KINDS.len());
         let mut out = Vec::new();
-        for flag in ["--clear", "--split", "--sow"] {
+        for flag in ["--clear", "--split", "--plant"] {
             let make = |what: &str| match flag {
                 "--clear" => share(what).map(Edit::Clear),
                 "--split" => share(what).map(Edit::Split),
-                _ => kind(what).map(Edit::Sow),
+                _ => kind(what).map(Edit::Plant),
             };
             for text in self.values(flag) {
                 let due = || {
@@ -231,7 +231,7 @@ impl Args {
                     let (x, z) = at.split_once(',')?;
                     Some(Due { year: y.parse().ok()?, square: (x.parse().ok()?, z.parse().ok()?), edit: make(what)? })
                 };
-                out.push(due().ok_or(format!("{flag} {text}: want YEAR:X,Y:SHARE (a share from 0 to 1) or, for --sow, YEAR:X,Y:KIND (a row of the starting kinds)"))?);
+                out.push(due().ok_or(format!("{flag} {text}: want YEAR:X,Y:SHARE (a share from 0 to 1) or, for --plant, YEAR:X,Y:KIND (a row of the starting kinds)"))?);
             }
         }
         Ok(out)

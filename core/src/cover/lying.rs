@@ -9,7 +9,7 @@ use super::seed::{lodge, Landed, Seed};
 use super::{built_kg, dec, distance, frozen, Around, APART, Cover, Parts, FROST, MOIST, NG, NO_ROOT, NP, REPAIR, SLOTS};
 
 /// Lots of seeds a cell's ground holds, whatever the kinds its cover may hold.
-pub const GROUND_LOTS: usize = 12;
+const GROUND_LOTS: usize = 12;
 use crate::life::kin;
 use crate::units::DAY;
 use crate::{Counters, World};

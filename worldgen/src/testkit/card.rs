@@ -166,11 +166,11 @@ fn wet(w: &mut World) {
     }
 }
 
-/// Stand `s` placed in cell `i`: its kind's genes at `kg` per m² (`World::sow`), then its plants set in its groups,
+/// Stand `s` placed in cell `i`: its kind's genes at `kg` per m² (`cover::place`), then its plants set in its groups,
 /// the large ones `tall` m (`size_to`).
 fn stand(w: &mut World, i: usize, s: &Stand) {
     let k = &KINDS[s.row];
-    assert!(w.sow(i, 0, k.genes, s.row as u32, s.kg), "no room for row {} in cell {i}", s.row);
+    assert!(pcore::cover::place(w, i, 0, k.genes, s.row as u32, s.kg), "no room for row {} in cell {i}", s.row);
     if let Some(tall) = s.tall {
         size_to(w, i, s.row as u32, s.groups, tall);
     }

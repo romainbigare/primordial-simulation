@@ -183,7 +183,7 @@ mod tests {
         worldgen::testkit::cover(&mut w, i, 0.4);
         let mut far = worldgen::life::KINDS[worldgen::life::LIGHT_ROW].genes;
         far[FROST] -= 30.0;
-        assert!(w.sow(i, 0, far, worldgen::life::LIGHT_ROW as u32, 0.2), "no room for the second slot");
+        assert!(pcore::cover::place(&mut w, i, 0, far, worldgen::life::LIGHT_ROW as u32, 0.2), "no room for the second slot");
         let p = Parts::of(&w.chem).expect("chemistry 0 has cover");
         let (mm, area, c) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.life.cover(i));
         let own = |x: usize| area * c.stands[x] as f64;

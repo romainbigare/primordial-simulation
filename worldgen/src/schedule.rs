@@ -36,8 +36,8 @@ pub enum Edit {
     /// The share of the cell made a new patch alike to the rest, a control that changes nothing (`World::split`)
     Split(f64),
     /// The cover of a starting kind (a row of `KINDS`), its genes as they start and `Kind::kg` per m², placed in the
-    /// cell's newest patch (`World::sow`)
-    Sow(usize),
+    /// cell's newest patch (`cover::place`)
+    Plant(usize),
 }
 
 impl Edit {
@@ -48,9 +48,9 @@ impl Edit {
         let (done, what) = match *self {
             Edit::Clear(s) => (w.clear(i, s), format!("cleared {s} of the cover of cell {i} as a new patch")),
             Edit::Split(s) => (w.split(i, s), format!("split {s} of the cover of cell {i} off as a new patch alike to the rest")),
-            Edit::Sow(row) => {
+            Edit::Plant(row) => {
                 let kind = &KINDS[row];
-                (w.sow(i, newest, kind.genes, row as u32, kind.kg), format!("sowed {} kg per m2 of {} in patch {newest} of cell {i}", kind.kg, kind.name))
+                (pcore::cover::place(w, i, newest, kind.genes, row as u32, kind.kg), format!("placed {} kg per m2 of {} in patch {newest} of cell {i}", kind.kg, kind.name))
             }
         };
         format!("year {:.1}: {what}{}", w.year(), if done { "" } else { ": nothing done" })

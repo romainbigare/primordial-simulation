@@ -31,7 +31,7 @@ pub(crate) use budget::{BURNT, ROUNDED};
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release, CellRan, Ran};
 pub use patches::{Patch, PATCHES};
-pub use seed::{land, lodge, set_plants, sown, Landed, Seed};
+pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use soak::{aired, breath, fill_now, footing, gains, moist, soak, strips_share, working, Footing, Soak};
 pub use stand::{height, loose_bins, stem, BINS};
@@ -210,7 +210,7 @@ impl Cover {
     /// The crown of the plants of slot `x`, `top` m tall (`Cover::height`, its large plants'), on a cell's ground of
     /// `ground` m², from its base to its top, m: its leaves, and the thin stems that carry them, stand where the light is,
     /// over the depth their capture area fills at the density of a crown's leaves: its capture area over the ground its
-    /// plants hold (`Cover::on`), over `crown_density` m² a m³, down from its top, and no lower than the ground: a sward is
+    /// plants hold in its patch (`Cover::holds`), over `crown_density` m² a m³, down from its top, and no lower than the ground: a sward is
     /// as dense as that over its whole height.
     pub fn crown(&self, ph: &crate::Physics, mm: &[f64; NP], ground: f64, x: usize, top: f64) -> (f64, f64) {
         let held = ground * self.patch_share(x) * self.on(x).max(f32::MIN_POSITIVE as f64);
