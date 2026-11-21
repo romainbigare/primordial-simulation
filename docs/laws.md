@@ -467,7 +467,10 @@ what the heat holds molten, as every law and the shell then read it.
   (`basin::share_out`), and what the body holds over its pass leaves, mixed, to the part its pass's way reaches, in
   the same month. What liquid comes to a cell or leaves it moves what stands there by its volume, of a mineral of
   growth only its share that stays dissolved: the cell's exchange sites take the rest of what comes and give the rest
-  of what leaves at once (`basin::gain`), and the pass's shares and levels count it so. Each part then holds what its samples hold under its body's level; a cell that was one node becomes
+  of what leaves at once (`basin::gain`), and the pass's shares and levels count it so. Of a cell of parts the pass moves
+  its liquid's liquid alone, over the pores under its liquid, at the temperatures of its top and deep
+  (`parts::liquid_movable`): its land keeps its own pores' liquid, and what runs through a body's cell mixes in its
+  liquid, not in its land's soil. Each part then holds what its samples hold under its body's level; a cell that was one node becomes
   a cell of parts (1.1) whose liquid holds what its part holds over its pores, the pores under it full, its land
   keeping the rest of its pores' liquid (`parts::create`). What a cell sends from its
   samples in no pond and what a body lets over its pass go into the samples' ways at each sample and at the pass, and

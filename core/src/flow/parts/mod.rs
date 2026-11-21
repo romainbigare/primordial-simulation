@@ -15,7 +15,7 @@ mod view;
 
 pub(super) use deep::mix;
 pub(super) use moves::{after_air, drain_land, to_liquid, Leaves};
-pub(super) use view::{amounts, pores_first, under_liquid};
+pub(super) use view::{amounts, liquid_movable, pores_first, under_liquid};
 
 use super::land::{column, layers, melts, node_state, take_row, thaw_at, NONE, STATE_ROW};
 use node::{conductance, row};

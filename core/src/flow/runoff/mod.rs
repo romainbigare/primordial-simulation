@@ -17,7 +17,7 @@ pub(super) use carriage::Carriage;
 pub(super) use load::Pools;
 use edge::come_in;
 use super::{curve::Part, level::{level_with, Level}};
-use super::{drain::{liquid_heat, to_channels, OffLand}, follow, land::standing, liquid::book, parts::{pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
+use super::{drain::{liquid_heat, to_channels, OffLand}, follow, land::standing, liquid::book, parts::{liquid_movable, pores_first, under_liquid, Leaves}, potential::apply, year_weight, Scratch};
 use crate::{space::{network::NONE, wear::STAND_M}, store::{Boundary, Class, LinkFlux}, World};
 
 /// The moves of the pass, each from a node of the class `class[0]` to one of `class[1]` (a cell to another, or the
@@ -87,7 +87,14 @@ struct Held {
 pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs, mut off): (&[f64], &[f64], OffLand), dt: f64) {
     let n = w.mesh.cells().n();
     let all: Vec<u32> = (0..n as u32).collect();
-    let (q, vol) = movable(w, s, liq, &all, tmin, (|k, i| super::land::wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
+    let (mut q, mut vol) = movable(w, s, liq, &all, tmin, (|k, i| super::land::wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
+    // Of a cell of parts, its liquid's liquid alone, over the pores under it (`parts::liquid_movable`).
+    let mut pores: Vec<f64> = (0..n).map(|i| s.pd[i] * w.mesh.cells().area()[i]).collect();
+    for i in 0..n {
+        if let Some([v, p]) = liquid_movable(s, (liq, tmin), i, &mut q[i * (liq.len() + 1)..(i + 1) * (liq.len() + 1)]) {
+            (vol[i], pores[i]) = (v, p);
+        }
+    }
     let b = std::mem::take(&mut s.bodies);
     let mut x = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1, class: [Class::Ground; 2] };
     let mut edge = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1, class: [Class::Boundary, Class::Ground] };
@@ -97,7 +104,7 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     into.resize(b.cell_of.len(), [0.0; 2]);
     let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.len()]).collect(), into };
     let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
-    send(w, s, &b, &mut h, &mut x, (liq, slope, runs, &mm), dt);
+    send(w, s, &b, &mut h, &mut x, (liq, slope, runs, &mm), (&pores, dt));
     let (levels, came) = stand(s, &b, &mut h, (&mut x, &mut edge), (liq, &mm, w.edges_open()));
     s.basin.level = levels;
     s.state.held = std::mem::take(&mut h.part);
@@ -135,11 +142,11 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
 /// `drain::land_drains`, and under a body its pores lie full); and what stands over its pores over what its parts of the bodies held at the last
 /// pass (`State::held`; they keep the rest, each by what it held, in `Held::part`); the share of the liquids `liq` that
 /// takes as much from what stands (`gains`).
-fn runs_off(w: &World, s: &Scratch, h: &mut Held, (liq, slope, runs): (&[usize], &[f64], &[f64]), dt: f64) -> Vec<f64> {
+fn runs_off(w: &World, s: &Scratch, h: &mut Held, (liq, slope, runs): (&[usize], &[f64], &[f64]), (room, dt): (&[f64], f64)) -> Vec<f64> {
     let (area, ph) = (w.mesh.cells().area(), w.cfg.phys);
     let mut off = vec![0.0; area.len()];
     for i in (0..area.len()).filter(|&i| h.vol[i] > 0.0) {
-        let (pores, own) = (s.pd[i] * area[i], h.vol[i] - runs[i]);
+        let (pores, own) = (room[i], h.vol[i] - runs[i]);
         let (lp, stands) = (own.min(pores), (own - pores).max(0.0));
         let soil = w.pores(i);
         let free = if s.head[i] > s.z[i] { lp - soil.field * pores } else { 0.0 };
@@ -157,9 +164,9 @@ fn runs_off(w: &World, s: &Scratch, h: &mut Held, (liq, slope, runs): (&[usize],
 /// cell's area, to the cells and the bodies' parts the ways reach, with that share of its heat (`Bodies::ways`; what
 /// reaches its own ground stays, its own part's where it reaches one). All leave as the pass starts; what stands in a
 /// cell moves by what the liquids `liq` that come or go give or take of it (`gains`).
-fn send(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (liq, slope, runs, mm): (&[usize], &[f64], &[f64], &[f64]), dt: f64) {
+fn send(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (liq, slope, runs, mm): (&[usize], &[f64], &[f64], &[f64]), (room, dt): (&[f64], f64)) {
     let (n, width) = (w.mesh.cells().n(), h.width);
-    let off = runs_off(w, s, h, (liq, slope, runs), dt);
+    let off = runs_off(w, s, h, (liq, slope, runs), (room, dt));
     // What each cell sends, mol and kg, as the pass starts, into the ways of its samples in no pond.
     let sent: Vec<[f64; 2]> = (0..n).map(|i| {
         let row = &h.q[i * width..(i + 1) * width - 1];
