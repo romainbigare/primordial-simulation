@@ -218,9 +218,9 @@ impl World {
     pub fn season(&self) -> f64 {
         self.cfg.calendar().season(self.time)
     }
-    /// Whether ground node `i` is land in the sense of the sea: its mean solid surface (`surface_z`) above the open low
-    /// liquid's level (`STAND_M`), as Flow asks it (`flow::on_land`). What drains from it reaches the sea, and the tape
-    /// counts its area as land. The land out of the liquid standing on a cell, which life lives and walks on, is
+    /// Whether ground node `i` is land against the open low liquid: its mean solid surface (`surface_z`) above that
+    /// liquid's level (`STAND_M`), as Flow asks it (`flow::on_land`). What drains from it reaches the open low liquid,
+    /// and the tape counts its area as land. The land out of the liquid standing on a cell, which life lives and walks on, is
     /// `contract::land`.
     pub fn is_land(&self, i: usize) -> bool {
         self.surface_z(i) > crate::space::wear::STAND_M
