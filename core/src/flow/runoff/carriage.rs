@@ -128,7 +128,10 @@ impl Carriage {
         c.main = main.iter().map(|&k| if k == NONE { NONE } else { c.place[k as usize] }).collect();
         // Of each sample, the lowest of the samples whose liquid runs to it (infinite for none).
         let mut feeds = vec![f64::INFINITY; s.h.len()];
-        b.down.iter().for_each(|&k| feeds[s.to[k as usize] as usize] = feeds[s.to[k as usize] as usize].min(s.h[k as usize]));
+        for j in (0..s.h.len()).filter(|&j| s.to[j] != NONE) {
+            let k = s.to[j] as usize;
+            feeds[k] = feeds[k].min(s.h[j]);
+        }
         c.room = order.iter().zip(&c.keys).zip(&c.end).map(|((&old, &k), &end)| {
             let (k, slope) = (k as usize, grade[old as usize]);
             let top = if end == End::On { (s.h[s.to[k] as usize] + slope * s.run[k]).min(feeds[k]) } else { s.h[k] };

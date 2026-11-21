@@ -561,8 +561,9 @@ as `surface_z`; saved, sparse); a cell's pick-up takes first from the relief of 
 and at most what lies on it, the rest from the cell's loose ground at large. The relief says where in a cell its
 matter lies; the matter is the cell's. **A sample holds load up to its room**, a cap: the volume that lifts it to the
 threshold slope over the sample its liquid runs to, the slope at which the flood stirs every class (u* reaches the
-coarsest's sinking speed, S = w² / (g H), `soil::threshold_slope`; the threshold channel, Parker 1978), as the samples
-were last built, less what was laid on it since. Where what would settle at a key sample fills more than its room,
+coarsest's sinking speed, S = w² / (g H), `soil::threshold_slope`; the threshold channel, Parker 1978), and no higher
+than the lowest sample whose liquid runs to it (a pond's too: a deposit dams no way that feeds it and raises no lake
+over its outlet), as the samples were last built, less what was laid on it since. Where what would settle at a key sample fills more than its room,
 every class settles by the share the room takes and the rest passes on; a sample whose liquid runs to none has no
 room to fill (all settles there). So a plain builds forward sample by sample. **The build** (`flow::build`, at a year's start every `build_years`): the
 samples stand at the seed's heights with what was laid on each, each cell's raised to its ground (`World::ground_z`,
@@ -575,7 +576,8 @@ too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flo
 such basins; a build moves no ground). Then each cell's ground as liquid stands on it, the bodies, the key samples and
 their rooms are found again; what a cell's parts of the bodies held follows each part's pond (matched by its pass, the
 open low ground by its one part; a cell whose parts do not all match shares its liquid at one level, as at the start),
-and no matter moves. `World::is_land` stays the cell's own: its surface over the level.
+and no matter moves. `World::is_land` stays the cell's own: its surface over the level (`surface_z`, with its snow and
+ice), so a cell can be land while its samples, built at its ground without them (`ground_z`), lie under the level.
 
 The load is booked apart from the liquid (`runoff::Crossings`), each with its own heat. Each key sample's pool (mol of
 each substance and the heat) leaves by the share of its volume that passes, so in a pool the substances and the
