@@ -13,7 +13,7 @@ use super::outs::{carried, column, hold, put};
 use super::soak::{cols, Soak, SOAK};
 use super::surf::{end_reflectance, parts_respond, Patch, Surf, Vapour};
 use super::{at_height, lerp};
-use crate::{math::one_minus_exp, World, AIR};
+use crate::{World, AIR};
 
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
 /// moves by less than `SURFACE_STILL_K`, K.
@@ -285,8 +285,9 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
     let (w, s, dt, act) = (cx.w, cx.s, cx.dt, cx.act);
     let (na, area) = (w.mesh.level(AIR).n(), g.area);
     let (adt, tl, top) = (area * dt, at_height(air[0], g.gam, g.head, g.zair), g.sun);
-    let a = g.canopy;
-    let cover = if a > 0.0 { one_minus_exp(a) } else { 0.0 };
+    // What its cover's law finds its leaves catch (`Stand::catch`, under the liquid standing on it `cover::reach`), and
+    // its capture area per m², over which that light is shared.
+    let (a, cover) = (g.canopy, g.catch);
     let caught = cover * g.absorb;
     // Under the reflectance `alb` of its ground, with the share its cover and ground reflect and its air's shares of
     // the light at the top, clear and under its cloud (`Light::shares`): [the sunlight that reaches it, in all its

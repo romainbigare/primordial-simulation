@@ -19,7 +19,8 @@ use crate::{store::Class, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 /// its head, m (`touching`); its temperature, K, plateau's substance and molten share; heat capacity, J/K; fusion
 /// enthalpy held and the energies it holds it between (`Latent`); soft cover (`Scratch::cover`); reflectance; pore
 /// space as a depth, m; heat, J; what it holds of each active gas, mol (`amt[k]`); the fusion enthalpy of its
-/// plateau's substance, J; its cover's capture area per m² (`Stand::canopy`) and the share of light it absorbs and keeps; and a
+/// plateau's substance, J; its cover's capture area per m² (`Stand::canopy`), the share of the light its leaves catch
+/// (`Stand::catch` under the liquid standing on it, `cover::reach`) and the share of that it absorbs and keeps; and a
 /// cell of it, whose other numbers (its layers, for a soft cover's end reflectance) it is, with the part of that cell it
 /// is (`parts`; none: the whole cell) and that part's share of the cell's area.
 pub(super) struct Surf {
@@ -46,6 +47,7 @@ pub(super) struct Surf {
     pub(super) amt: [f64; MAX_SUBSTANCES],
     pub(super) fusion: f64,
     pub(super) canopy: f64,
+    pub(super) catch: f64,
     pub(super) absorb: f64,
     pub(super) keep: f64,
     /// A second film over it beside the air's (`World::second_film`): its substance, mol K/(Pa s), and the share of
@@ -95,6 +97,7 @@ impl Surf {
             amt,
             fusion: if pk != NONE { ground[pk * n + i] * s.sp[pk].lf } else { 0.0 },
             canopy: crate::contract::stand(w, i).canopy(w.mesh.cells().area()[i]),
+            catch: crate::contract::stand(w, i).catch(w.mesh.cells().area()[i]) * crate::cover::reach(w, i),
             absorb: crate::contract::stand(w, i).absorb(),
             keep: crate::contract::stand(w, i).keep(),
             second: w.second_film(i).map(|(k, film, reach)| (k, film * w.mesh.cells().area()[i], reach)),
@@ -128,6 +131,7 @@ impl Surf {
             // so does its cover, whose capture area spreads over the land part's area.
             second: g.second.filter(|_| q == LAND),
             canopy: if q == LAND { crate::contract::stand(cx.w, i).canopy(g.area * p.share) } else { 0.0 },
+            catch: if q == LAND { crate::contract::stand(cx.w, i).catch(g.area * p.share) * crate::cover::reach(cx.w, i) } else { 0.0 },
             part: Some(q),
             share: p.share,
             ..g
@@ -177,6 +181,7 @@ impl Surf {
             amt,
             fusion: 0.0,
             canopy: 0.0,
+            catch: 0.0,
             absorb: 0.0,
             keep: 0.0,
             second: None,

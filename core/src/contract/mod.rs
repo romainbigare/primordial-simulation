@@ -20,6 +20,7 @@ use crate::cover::{Parts, NP, SLOTS, TAKEN_LYING, TAKERS};
 use crate::life::{Cell, Chunk, BROKEN, TAKEN};
 use crate::store::Node;
 use crate::units::MAX_SUBSTANCES;
+use crate::math::one_minus_exp;
 use crate::World;
 
 mod liquid;
@@ -36,11 +37,22 @@ pub struct Stand {
     /// reaction, m²
     pub absorbed: f64,
     pub kept: f64,
+    /// The rings of the ground its slots stand on (`cover::canopy::catch_rings`): each its share of the ground and the capture
+    /// area of the slots that stand on it over their shares, m²; and how many
+    pub rings: [[f64; 2]; SLOTS],
+    pub n_rings: usize,
 }
 
 impl Stand {
-    /// Its capture area per m² of a cell of `area` m² (in single precision): the shade it casts, as a layer stops
-    /// 1 - e^-this of the light.
+    /// The share of the light reaching the ground of `area` m² it stands on that its leaves catch (each ring's capture
+    /// area per m² in single precision): of each ring its share times 1 - e^-(that capture area per m² of it), the
+    /// light passing down through all the crowns that stand on it (Beer's law, as the cover's own law shares it among
+    /// them, `cover::canopy::shade`). None where it holds no capture area.
+    pub fn catch(&self, area: f64) -> f64 {
+        self.rings[..self.n_rings].iter().map(|&[ring, leaf]| ring * one_minus_exp((leaf / area) as f32 as f64)).sum()
+    }
+    /// Its capture area per m² of a cell of `area` m² (in single precision), by which the light its leaves catch
+    /// (`catch`) is shared out per m² of capture area.
     pub fn canopy(&self, area: f64) -> f64 {
         (self.leaf / area) as f32 as f64
     }

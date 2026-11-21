@@ -28,6 +28,21 @@ pub(super) fn rings(shares: &[f64]) -> ([(f64, f64); SLOTS], usize) {
     (out, r)
 }
 
+/// The rings of ground that slots of capture area `leaf` m² on shares `on` of it make (`rings`, over the slots with
+/// capture area): of each its share of the ground and the capture area over the shares of all the slots that stand
+/// on it, m², and how many rings: what the light passing down through it meets (`shade`, `contract::Stand::catch`).
+pub(super) fn catch_rings(slots: &[(f64, f64)]) -> ([[f64; 2]; SLOTS], usize) {
+    let mut shares = [0.0; SLOTS];
+    slots.iter().zip(shares.iter_mut()).for_each(|(m, s)| *s = share(m.1));
+    let (rings, count) = rings(&shares[..slots.len()]);
+    let mut out = [[0.0; 2]; SLOTS];
+    for (o, &(at_least, ring)) in out.iter_mut().zip(&rings[..count]) {
+        let leaf: f64 = slots.iter().filter(|m| share(m.1) >= at_least).map(|m| m.0 / share(m.1)).sum();
+        *o = [ring, leaf];
+    }
+    (out, count)
+}
+
 /// The share of the ground a slot of rooted share `s` stands on (no less than a tiny one).
 fn share(s: f64) -> f64 {
     s.max(1e-300)
