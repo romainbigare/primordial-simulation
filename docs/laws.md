@@ -552,7 +552,8 @@ of a snowpack picks up the ground under it); a fixed share per class ignores tha
 class settles a little faster than it would; the heights do not move by what settles (it is matter of the cell, its
 surface rises evenly). The heat of the liquid's fall lands with the liquid, not along its
 way. **Creep** (`flow::creep`, yearly, out of land cells):
-loose ground slides downhill as a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
+loose ground slides downhill as a slow diffusion (its solids, `Scratch::solids`, as the load's: snow and ice, a liquid's
+frozen solid, do not creep), `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope,
 across each border by its width (none across a corner). What stands on a cell holds the ground: carrying and creep
 are cut by 1 / (1 + its mass per area / `hold`) (`contract::Stand`). Most rock leaving the land is lime dissolved by
 reaction 8.
