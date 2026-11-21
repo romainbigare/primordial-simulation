@@ -127,18 +127,22 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     for (q, &k) in c.keys.iter().enumerate() {
         let i = c.cell[q] as usize;
         let [came, own, dropped] = pools.take(q, &mut row);
+        let a = b.share[k as usize] * w.mesh.cells().area()[i];
         if c.main[i] == q as u32 {
             loads[i][0] = main_load(w, i, kg(&row[..width - 1]), flux[k as usize][0]);
         }
         if came.iter().chain(&own).chain(&dropped).all(|&v| v == 0.0) {
             continue;
         }
-        let out = step(came, own, &c.shares[q]);
+        let mut out = step(came, own, &c.shares[q]);
+        if c.end[q] == End::On {
+            fill_room(&mut out, [came, own, dropped], c.room[q] - w.relief.since(k as usize) * a);
+        }
         let all: f64 = came.iter().chain(&own).chain(&dropped).sum();
         let on: f64 = out.iter().sum();
         (0..CLASS_COUNT).for_each(|l| settled[i][l] += came[l] + own[l] + dropped[l] - out[l]);
         if matches!(c.end[q], End::On | End::Land) && all > on {
-            relief.push((k, (all - on) / (b.share[k as usize] * w.mesh.cells().area()[i])));
+            relief.push((k, (all - on) / a));
         }
         let gone = all - on;
         match c.end[q] {
@@ -211,6 +215,19 @@ pub(super) fn mix(w: &mut World, s: &Scratch, settled: &[[f64; CLASS_COUNT]], so
     }
 }
 
+/// What leaves a key sample, `out` m³ of each class, when what would settle there fills more than its room `room`, m³
+/// (`Carriage::room`), of what came in, was picked up along its reach and settled from above (`dropped`): every class
+/// settles by the share of what it would that the room takes, the rest passes on (the threshold channel, Parker 1978:
+/// a sample rises no steeper than the slope at which nothing settles).
+fn fill_room(out: &mut [f64; CLASS_COUNT], [came, own, dropped]: [[f64; CLASS_COUNT]; 3], room: f64) {
+    let wanted: [f64; CLASS_COUNT] = std::array::from_fn(|l| came[l] + own[l] + dropped[l] - out[l]);
+    let all: f64 = wanted.iter().sum();
+    if all > room.max(0.0) {
+        let share = room.max(0.0) / all;
+        out.iter_mut().zip(wanted).for_each(|(o, x)| *o += x * (1.0 - share));
+    }
+}
+
 /// What of a pool leaves a key sample of shares `sh`, m³ of each class: of what came in at the top of its reach,
 /// `came`, the share that passes, and of what was picked up along it, `own`, the share of that (`Shares`).
 fn step(came: [f64; CLASS_COUNT], own: [f64; CLASS_COUNT], sh: &Shares) -> [f64; CLASS_COUNT] {
@@ -226,8 +243,8 @@ fn main_load(w: &World, i: usize, kg: f64, mol: f64) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{step, Shares, CLASS_COUNT};
-    use crate::soil::{passes, CLASSES};
+    use super::{fill_room, step, Shares, CLASS_COUNT};
+    use crate::soil::{passes, threshold_slope, CLASSES};
 
     /// A reach of a channel in which a flood of `q` m³/s a m of width runs `depth` m deep down `slope`, `run` m long,
     /// over particles 1.65 times the liquid's weight (a common rock's particles), at 9.81 m/s²: its shares.
@@ -277,5 +294,36 @@ mod tests {
         let mean: Vec<f64> = settled.iter().filter(|x| x.iter().sum::<f64>() > 0.0).map(|x| x.iter().zip(size).map(|(v, s)| v * s).sum::<f64>() / x.iter().sum::<f64>()).collect();
         let falls = mean.windows(2).all(|m| m[1] <= m[0] + 1e-9) && mean[mean.len() - 1] < mean[0] - 1.0;
         assert!(falls, "the mean size of what settles falls: {mean:?}");
+    }
+
+    /// The threshold slope (`soil::threshold_slope`) is where `passes` lets every class pass: the room and the shares
+    /// read one rule.
+    #[test]
+    fn nothing_settles_down_the_threshold_slope() {
+        let (depth, q, run, buoyant, g) = (1.9, 1.4, 125.0, 1.65, 9.81);
+        let u = (g * depth * threshold_slope(depth, buoyant, g)).sqrt();
+        let shares = passes(u, q, run, buoyant, g).map(|r| r.map(|x| x as f32));
+        assert_eq!(shares, [[1.0; CLASS_COUNT]; 2], "at the threshold slope");
+    }
+
+    /// A load comes month after month into a plain of samples, each with the same room: each settles no more than its
+    /// room, and the deposit grows forward: the first samples full, what lies below them less the farther down.
+    #[test]
+    fn a_sample_holds_load_up_to_its_room() {
+        let (rooms, months) = ([1.0; 10], 12);
+        let mut laid = [0.0; 10];
+        for _ in 0..months {
+            let mut came = [0.0, 0.2, 0.3];
+            for (k, &room) in rooms.iter().enumerate() {
+                let mut out = step(came, [0.0; CLASS_COUNT], &reach(1e-5));
+                fill_room(&mut out, [came, [0.0; CLASS_COUNT], [0.0; CLASS_COUNT]], room - laid[k]);
+                laid[k] += came.iter().sum::<f64>() - out.iter().sum::<f64>();
+                came = out;
+            }
+        }
+        assert!(laid.iter().all(|&x| x <= 1.0 + 1e-12), "a sample over its room: {laid:?}");
+        let full = laid.iter().take_while(|&&x| x > 1.0 - 1e-12).count();
+        let falls = laid.windows(2).all(|p| p[1] <= p[0]);
+        assert!(full >= 3 && falls, "the deposit grows forward from full samples: {laid:?}");
     }
 }

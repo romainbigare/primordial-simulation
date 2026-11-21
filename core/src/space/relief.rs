@@ -6,11 +6,12 @@
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// The relief of the samples (the module's doc): of each sample what the load laid on it, m (none at all before the
-/// first).
+/// The relief of the samples (the module's doc): of each sample what the load laid on it, m, now and when the samples
+/// were last built from it (`built`; none at all before the first lay or build).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Relief {
     pub laid: Vec<f64>,
+    pub built: Vec<f64>,
 }
 
 impl Relief {
@@ -32,13 +33,18 @@ impl Relief {
     pub fn at(&self, k: usize) -> f64 {
         self.laid.get(k).copied().unwrap_or(0.0)
     }
+    /// What was laid on sample `k` since the samples were last built, m (less what was taken).
+    pub fn since(&self, k: usize) -> f64 {
+        self.at(k) - self.built.get(k).copied().unwrap_or(0.0)
+    }
 }
 
-/// The relief as saved: the samples that hold some, each with what it holds, and the number of samples.
+/// The relief as saved: of each list the samples that hold some, each with what it holds, and the number of samples.
 #[derive(Serialize, Deserialize)]
 struct Sparse {
     n: u32,
     laid: Vec<(u32, f64)>,
+    built: Vec<(u32, f64)>,
 }
 
 /// The samples of `v` that hold some, in their order.
@@ -58,13 +64,13 @@ fn dense(n: usize, v: &[(u32, f64)]) -> Vec<f64> {
 
 impl Serialize for Relief {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        Sparse { n: self.laid.len() as u32, laid: sparse(&self.laid) }.serialize(to)
+        Sparse { n: self.laid.len().max(self.built.len()) as u32, laid: sparse(&self.laid), built: sparse(&self.built) }.serialize(to)
     }
 }
 
 impl<'de> Deserialize<'de> for Relief {
     fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Relief, D::Error> {
         let s = Sparse::deserialize(from)?;
-        Ok(Relief { laid: dense(s.n as usize, &s.laid) })
+        Ok(Relief { laid: dense(s.n as usize, &s.laid), built: dense(s.n as usize, &s.built) })
     }
 }

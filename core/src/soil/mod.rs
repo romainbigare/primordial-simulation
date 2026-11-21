@@ -12,7 +12,7 @@ pub(crate) use exchange::dissolved;
 pub use organic::{holdings, Holdings};
 pub use pores::Pores;
 pub use texture::{samples, textures};
-pub(crate) use texture::{flood_shear, passes, CLASSES};
+pub(crate) use texture::{flood_shear, passes, threshold_slope, CLASSES};
 
 use crate::chem::Phase;
 use crate::space::samples::Samples;

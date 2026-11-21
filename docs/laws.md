@@ -559,12 +559,18 @@ settles in the cell that holds it. The form is tuned: the shares are fixed by th
 way runs on or ends on land lies on that sample as its **relief** (`space::relief::Relief`: solid volume per area, m,
 as `surface_z`; saved, sparse); a cell's pick-up takes first from the relief of its samples, each its share by its work
 and at most what lies on it, the rest from the cell's loose ground at large. The relief says where in a cell its
-matter lies; the matter is the cell's.
+matter lies; the matter is the cell's. **A sample holds load up to its room**, a cap: the volume that lifts it to the
+threshold slope over the sample its liquid runs to, the slope at which the flood stirs every class (u* reaches the
+coarsest's sinking speed, S = w² / (g H), `soil::threshold_slope`; the threshold channel, Parker 1978), as the samples
+were last built, less what was laid on it since. Where what would settle at a key sample fills more than its room,
+every class settles by the share the room takes and the rest passes on; a sample whose liquid runs to none has no
+room to fill (all settles there). So a plain builds forward sample by sample.
 
 The load is booked apart from the liquid (`runoff::Crossings`), each with its own heat. Each key sample's pool (mol of
 each substance and the heat) leaves by the share of its volume that passes, so in a pool the substances and the
 particle classes are independent. The load is the loose ground's solids (`Scratch::solids`), never the liquids' (a
-frozen liquid is no load). **Known limits:** the load is booked after the liquid's pass, so the liquid in the pores of
+frozen liquid is no load). **Known limits:** between builds of the samples a fan or a plain builds forward, but does not
+fill back up its valley (the rooms are of the slopes as last built); the load is booked after the liquid's pass, so the liquid in the pores of
 the ground it picks up stays in its cell and stands over its pores until the next pass. Snow or ice on a cell does not
 shield its ground (the meltwater of a snowpack picks up the ground under it). What the skip product takes settles in
 the next key sample's cell, which may not be the cell of the sample where it settled. A fixed share per class ignores
