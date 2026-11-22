@@ -1,6 +1,7 @@
 import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
 import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
+import type { Gpu } from './gpu';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats } from './live';
@@ -76,12 +77,12 @@ const god = new God($('god'), { probe: (x, y) => live?.probe(x, y), edit: (a, x,
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live) god.draw(ctx, ox, oy, s); };
 map.tap = (x, y) => live !== null && god.tap(x, y);
-/** Which GPU draws the map (none: the page cannot draw it). */
-let drawnWith = '';
+/** The GPU that draws the map (null: none yet, or the page cannot draw it). */
+let drawing: Gpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
 // The GPU's loss, said on the page (gpu-webgl2.ts, gpu-webgpu.ts), is over once it draws again.
 map.onRestored = () => say('');
-map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
+map.ready.then(g => { drawing = g; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
 slots.listen($<HTMLCanvasElement>('cv'), () => inspect());
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 
@@ -380,7 +381,7 @@ function showStats(s: Stats): void {
   el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
     ['cells', String(s.cells)],
     ...(land ? [['ground', `${land.tiles.count()} tiles of ${fmt(m.cell_m / 2 ** (land.tiles.depth - (m.square_depth ?? 0)))} m, ${land.tiles.toCome()} to come`]] : []),
-    ...(drawnWith ? [['map', `drawn with ${drawnWith} at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+    ...(drawing ? [['map', `drawn with ${drawing.kind} at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
 /** The band of latitudes `S,N`, degrees, south first; [NaN, NaN] (the core's default band, its edges closed) for none,

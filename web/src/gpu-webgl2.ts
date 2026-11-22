@@ -1,7 +1,7 @@
 // The map's renderer on WebGL2 (gpu.ts): the programs' GLSL ES 3.00 as naga wrote it from their WGSL (web/shade),
 // each uniform block bound to its WGSL binding's number, each GLSL sampler on a texture unit of its own. A texture the
 // renderer draws into is drawn upside down (the draw header's `flip`), so its first row is its top, as on WebGPU.
-import { Gpu, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, drawHeader } from './gpu';
+import { Back, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, drawHeader } from './gpu';
 
 /** A linked program: where each binding of its WGSL lies. */
 interface Linked { prog: WebGLProgram; units: { unit: number; texture: number; sampler: number | null }[] }
@@ -14,14 +14,11 @@ class WebGl2Texture implements Texture {
   /** The framebuffer that draws into this texture and `with` after it, at once (`pass` of several targets). */
   fbWith: WebGLFramebuffer | null = null;
   with: WebGl2Texture[] = [];
-  /** What each mip level was last filled with, to fill it again after the context is lost (a layer filled alone is
-   * not kept). */
-  levels: TexelData[] = [];
   constructor(readonly w: number, readonly h: number, readonly layers: number, readonly mips: number, readonly format: Format, readonly target: boolean) {}
   get array(): boolean { return this.layers > 1; }
 }
 
-class WebGl2 implements Gpu {
+class WebGl2 implements Back {
   readonly kind = 'WebGL2';
   private linked = new Map<string, Linked>();
   /** Programs sent to compile and link and not yet looked at (`build`, `finish`). */
@@ -31,7 +28,6 @@ class WebGl2 implements Gpu {
   private samplers!: Record<Sampler | 'texel', WebGLSampler>;
   /** A uniform buffer a binding number. */
   private buffers: WebGLBuffer[] = [];
-  private textures = new Set<WebGl2Texture>();
 
   constructor(private gl: WebGL2RenderingContext, private canvas: HTMLCanvasElement, restored: () => void) {
     this.parallel = gl.getExtension('KHR_parallel_shader_compile') as Parallel | null;
@@ -42,7 +38,6 @@ class WebGl2 implements Gpu {
     canvas.addEventListener('webglcontextrestored', () => {
       this.linked.clear(); this.built.clear(); this.warming.clear(); this.buffers = [];
       this.setUp();
-      for (const t of this.textures) { this.make(t); t.levels.forEach((d, k) => d && this.write(t, d, k)); }
       restored();
     });
   }
@@ -61,7 +56,6 @@ class WebGl2 implements Gpu {
   texture(w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
     const t = new WebGl2Texture(w, h, layers, mips, format, target);
     this.make(t);
-    this.textures.add(t);
     return t;
   }
 
@@ -104,7 +98,6 @@ class WebGl2 implements Gpu {
   write(t: Texture, data: TexelData, level = 0, layer?: number): void {
     const gl = this.gl, g = t as WebGl2Texture, w = Math.max(1, t.w >> level), h = Math.max(1, t.h >> level);
     const [, format, type] = this.formats()[t.format];
-    if (layer === undefined) g.levels[level] = data;
     if (gl.isContextLost()) return;
     if (g.array) { gl.bindTexture(gl.TEXTURE_2D_ARRAY, g.tex); gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, level, 0, 0, layer ?? 0, w, h, layer === undefined ? t.layers : 1, format, type, data); }
     else { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.texSubImage2D(gl.TEXTURE_2D, level, 0, 0, w, h, format, type, data); }
@@ -113,7 +106,6 @@ class WebGl2 implements Gpu {
   drop(t: Texture): void {
     const g = t as WebGl2Texture;
     this.gl.deleteTexture(g.tex); this.gl.deleteFramebuffer(g.fb); this.gl.deleteFramebuffer(g.fbWith);
-    this.textures.delete(g);
   }
 
   pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
@@ -156,6 +148,13 @@ class WebGl2 implements Gpu {
   }
 
   submit(): void { this.gl.flush(); }
+
+  making(): string { return this.warming.pending(); }
+
+  about(): string {
+    const gl = this.gl, info = gl.getExtension('WEBGL_debug_renderer_info');
+    return info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : String(gl.getParameter(gl.RENDERER));
+  }
 
   done(): Promise<void> {
     const gl = this.gl, sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -264,7 +263,7 @@ const idle = (f: () => void) => ('requestIdleCallback' in window ? requestIdleCa
 const FENCE_POLL_MS = 4;
 
 /** WebGL2 on `canvas`, or null where the browser has none; `restored` redraws after a lost context comes back. */
-export function openWebGl2(canvas: HTMLCanvasElement, restored: () => void): Gpu | null {
+export function openWebGl2(canvas: HTMLCanvasElement, restored: () => void): Back | null {
   const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, premultipliedAlpha: true });
   return gl ? new WebGl2(gl, canvas, restored) : null;
 }
