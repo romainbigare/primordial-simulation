@@ -48,9 +48,6 @@ struct Live {
 thread_local! {
     static LIVE: RefCell<Option<Live>> = const { RefCell::new(None) };
     static GROUND: RefCell<Option<tape::Ground>> = const { RefCell::new(None) };
-    /// The planet's air of the first banded world of the session (`worldgen::planet::planet`): the same for every island
-    /// of the one chemistry, so it is made once.
-    static PLANET: RefCell<Option<pcore::flow::Planet>> = const { RefCell::new(None) };
     /// The bytes last handed to the page (it reads them until the next call that returns bytes).
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     /// The bytes the page last handed in (`input`), until a call reads them.
@@ -89,7 +86,7 @@ fn shape_of(drawn: u32) -> Shape {
 
 /// Make an island of `size` x `size` cells and the large shape of `drawn` (`shape_of`) from `seed` between the latitudes
 /// `south` and `north` (`island`), its cells holding at most `variety` kinds of cover (`Config::variety`), standing in
-/// the planet's air where they are given (`worldgen::planet::planet`, made once, `PLANET`), its weather soft where `soft`
+/// the planet's air where they are given (`worldgen::planet::stand`, the table the build ships), its weather soft where `soft`
 /// is not 0 (`worldgen::terrain::soft_weather`, `ew run --weather soft`), with the schedule of `ew run --roster`: the
 /// starting kinds of cover. Its cells stay those as built: the map draws every zoom from the ground's
 /// tiles and the cells' table. Returns 0, or 1 if the world is refused.
@@ -99,7 +96,7 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
     let cfg = Config { variety: variety as usize, ..if soft != 0 { worldgen::terrain::soft_weather(band) } else { band } };
     let mut world = worldgen::terrain::new_island(seed as u64, (size as usize, size as usize), shape_of(drawn), cfg);
     if south < north {
-        world.planet = Some(PLANET.with(|p| p.borrow_mut().get_or_insert_with(worldgen::planet::planet).clone()));
+        worldgen::planet::stand(&mut world);
     }
     if world.cfg.validate().is_err() {
         return 1;

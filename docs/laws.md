@@ -904,9 +904,11 @@ closed at the map's edges, it makes its own climate from its own sun, sea and li
 `band=`), it holds the planet's table (`flow::Planet`) and, its band longer than its own span (`stretch` above 1), its
 edges open to the air of its latitudes, and its air's sideways laws take the band's stretch (alone, the map's own
 metres: a closed box stretched over a wide band freezes over). The table's presence is the state. The planet's air comes from a strip of the planet from pole to pole, run by
-these laws when the world is built (`worldgen::planet`): three air blocks round, rows of 5°, all of it low open ground
-(liquid over all of it), for 10 years from its starting state (an island of 32 x 32 on the band 20° to 65° feels a run of
-20 years within 0.2 K in every row), the same strip for every island (the page makes it once a session);
+these laws (`worldgen::planet`): three air blocks round, rows of 5°, all of it low open ground (liquid over all of it),
+for 10 years from its starting state (an island of 32 x 32 on the band 20° to 65° feels a run of 20 years within 0.2 K
+in every row). It reads only chemistry 0, the default laws and its own seed, so it is the same strip for every island:
+the build ships its table (`worldgen/src/planet.bin`, written by `ew planet`), and a test runs the strip again and
+holds the table to it bit for bit, so a change of the laws that moves it fails until the table is written again;
 its last year's air per row and month (its temperature, warmth, mol per m² and each gas's share) is saved with the
 world.
 Beyond each air node of the map's edges lies a column of that air, north and south at the latitude one row of nodes
