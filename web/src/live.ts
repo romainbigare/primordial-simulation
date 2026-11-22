@@ -72,15 +72,20 @@ export class Live {
     document.addEventListener('visibilitychange', this.onHide);
   }
 
+  /** Once the card has drawn what was sent to it (main.ts sets it to the map's GPU, gpu.ts `HeldGpu.idle`). */
+  drawn: () => Promise<void> = () => Promise.resolve();
+
   /** Tell the worker the frames taken are drawn, so it may post the next: at the next animation frame, after the map's
    * own draw (which asked for that frame first), or after `ANSWER_MS` where no animation frame comes (a browser that
-   * holds them back in a frame it deems out of view or idle, as Safari does in an iframe); at once in a hidden page,
+   * holds them back in a frame it deems out of view or idle, as Safari does in an iframe), and once the card has drawn
+   * it (so a slow card slows the world's frames, and never gets more than it can draw); at once in a hidden page,
    * which draws nothing. */
   private shown(): void {
     this.unanswered++;
     if (document.hidden) return this.answer();
-    const timer = setTimeout(() => this.answer(), ANSWER_MS);
-    requestAnimationFrame(() => { clearTimeout(timer); this.answer(); });
+    const then = () => { clearTimeout(timer); this.drawn().then(() => this.answer()); };
+    const timer = setTimeout(then, ANSWER_MS);
+    requestAnimationFrame(then);
   }
   private answer(): void {
     if (this.unanswered > 0) { this.worker.postMessage({ cmd: 'shown', frames: this.unanswered }); this.unanswered = 0; }

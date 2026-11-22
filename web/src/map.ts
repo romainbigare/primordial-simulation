@@ -58,7 +58,7 @@ export class MapView {
   hover = -1;
   pick = -1;
   /** The GPU once it is open (null: none yet, or the browser has none). */
-  private gpu: Gpu | null = null;
+  private gpu: HeldGpu | null = null;
   readonly ready: Promise<HeldGpu | null>;
   /** The canvas the GPU draws on, under the map's canvas (none before the GPU opens). */
   private gpuCv: HTMLCanvasElement | null = null;
@@ -84,8 +84,6 @@ export class MapView {
   private scale = 1;
   /** Told the share the map is drawn at whenever it changes. */
   onScale: () => void = () => {};
-  /** Told when the GPU draws again after it lost what it held. */
-  onRestored: () => void = () => {};
   private fullMs = 0;
   private timing = false;
   private picture: Texture | null = null;
@@ -97,6 +95,8 @@ export class MapView {
   private fireTimer = 0;
   private sharpening: Sharpening | null = null;
   private sharp: Texture | null = null;
+  /** Whether a frame waits for the card to finish the last (`draw`). */
+  private waitingCard = false;
   /** The timer that looks whether the programs the last frame went without are made (`drawWhenMade`). */
   private madeTimer = 0;
   /** Drawn by another module on the GPU over the map, and on the 2D canvas over it at each redraw: its context, where
@@ -121,7 +121,7 @@ export class MapView {
       this.resize();
       return c;
     };
-    const restored = () => { this.timing = false; this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); this.onRestored(); };
+    const restored = () => { this.timing = false; this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
     this.ready = openGpu(fresh, restored).then(g => {
       this.gpu = g;
       if (g) sendDetail(g, () => this.invalidate());
@@ -243,7 +243,11 @@ export class MapView {
     if (wrap) for (let x = ox + span; x < W; x += span) xs.push(x);
     ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    if (this.gpu && this.gpuDue) {
+    // A frame is sent only once the card has drawn the last, so frames never pile up in its queue; till then the
+    // frame stays due and is drawn as soon as the card is free.
+    if (this.gpu && this.gpuDue && this.gpu.busy) {
+      if (!this.waitingCard) { this.waitingCard = true; this.gpu.idle().then(() => { this.waitingCard = false; this.redraw(); }); }
+    } else if (this.gpu && this.gpuDue) {
       this.gpuDue = false;
       clearTimeout(this.sharpTimer);
       this.sharpening = null;

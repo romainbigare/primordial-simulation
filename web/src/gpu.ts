@@ -255,6 +255,12 @@ export class HeldGpu implements Gpu {
   private finished = 0;
   private lastMs = 0;
   private drewDone = new Set<string>();
+  /** The frames sent to the back end and those it finished (`busy`), and what waits for it to finish all (`idle`). */
+  private sentAll = 0;
+  private doneAll = 0;
+  private waiters: (() => void)[] = [];
+  /** Whether the back end is gone and its replacement not yet open: nothing is drawn meanwhile. */
+  private down = false;
 
   /** `canvas` puts a fresh canvas in the map in place of the last and gives it. */
   constructor(private canvas: () => HTMLCanvasElement, private restored: () => void) {}
@@ -272,14 +278,19 @@ export class HeldGpu implements Gpu {
   /** Draw with `back` from now on (`close` ends it): the textures made on it and filled again, and the page told so
    * if it held any (`rebuilt`). */
   private use(back: Back, close: (() => void) | null, rebuilt: boolean): void {
-    this.back = back; this.close = close; this.watching = false; this.finished = 0; this.drewDone.clear();
+    this.back = back; this.close = close; this.watching = false; this.finished = 0; this.drewDone.clear(); this.down = false;
+    this.sentAll = this.doneAll = 0;
+    this.wake();
     for (const t of this.held) { t.inner = back.texture(t.label, t.w, t.h, t.format, t.layers, t.mips, t.target); t.levels.forEach((d, k) => d && back.write(t.inner, d, k)); }
     if (rebuilt) this.restored();
   }
 
   /** The WebGPU device was lost: a new one, or after `LOSSES_MOST` losses WebGL2. */
   private async lost(why: string): Promise<void> {
+    this.down = true;
+    this.wake();
     if (++this.losses < LOSSES_MOST) {
+      reportError(new Error(`gpu: the WebGPU device was lost (${why || 'no reason given'}); a new one is opened`));
       const g = await openWebGpu(this.canvas(), next => this.lost(next));
       if (g) return this.use(g.gpu, g.close, true);
     }
@@ -315,6 +326,7 @@ export class HeldGpu implements Gpu {
   }
   drop(t: Texture): void { this.back.drop((t as HeldTexture).inner); this.held.delete(t as HeldTexture); }
   pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
+    if (this.down) return { draw: () => {}, end: () => {} };
     const inner = (t: Texture) => (t as HeldTexture).inner;
     const p = this.back.pass(target === null ? null : Array.isArray(target) ? target.map(inner) : inner(target), clear, clip);
     return {
@@ -337,8 +349,14 @@ export class HeldGpu implements Gpu {
   /** Send what was drawn, and watch that the card finishes it: WebGPU that has not within `FIRST_FRAME_MS` (before any
    * frame finished) or `STUCK_MS` leaves the map to WebGL2; WebGL2 that has not within `STALL_MS` is said on the page. */
   submit(): void {
-    const back = this.back;
+    if (this.down) return;
+    const back = this.back, n = ++this.sentAll;
     back.submit();
+    back.done().then(() => {
+      if (this.back !== back || n <= this.doneAll) return;
+      this.doneAll = n;
+      if (!this.busy) this.wake();
+    });
     this.sent++;
     if (this.watching) return;
     this.watching = true; this.sent = 1;
@@ -355,6 +373,22 @@ export class HeldGpu implements Gpu {
       for (const name of this.drawn) this.drewDone.add(name);
       this.drawn.clear();
     });
+  }
+
+  /** Whether frames sent are still being drawn by the card: the map sends no new one meanwhile (map.ts `draw`), so
+   * frames never pile up in the card's queue, where they hold memory and hold back the programs it makes. */
+  get busy(): boolean { return this.down || this.doneAll < this.sentAll; }
+
+  /** Once the card has drawn all the frames sent (or its back end was replaced, or is gone). */
+  idle(): Promise<void> {
+    return this.busy && !this.down ? new Promise(go => this.waiters.push(go)) : Promise.resolve();
+  }
+
+  /** Tell what waits for the card that it may go on. */
+  private wake(): void {
+    const w = this.waiters;
+    this.waiters = [];
+    w.forEach(go => go());
   }
 
   /** What a card that has not finished the frames sent in `ms` leaves undone, in a line or two: the card, the frames

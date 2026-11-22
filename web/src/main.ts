@@ -82,8 +82,6 @@ map.tap = (x, y) => live !== null && god.tap(x, y);
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
 let drawing: HeldGpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
-// The GPU's loss, said on the page (gpu-webgl2.ts, gpu-webgpu.ts), is over once it draws again.
-map.onRestored = () => say('');
 map.ready.then(g => { drawing = g; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
 slots.listen($<HTMLCanvasElement>('cv'), () => inspect());
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
@@ -101,10 +99,20 @@ async function load(buf: ArrayBuffer): Promise<void> {
   setup(world);
 }
 const say = (t: string) => { $('msg').textContent = t; $('msg').hidden = !t; };
-// The page's own errors are shown on it (a phone has no console to read them in). Those without an error object are
-// the browser's notes (a ResizeObserver's loop), not failures.
-addEventListener('error', e => { if (e.error) say(`The page failed: ${e.error instanceof Error ? e.error.message : String(e.error)}`); });
-addEventListener('unhandledrejection', e => say(`The page failed: ${e.reason instanceof Error ? e.reason.message : String(e.reason)}`));
+/** The page's own errors, each with the time it came, shown on it (a phone has no console to read them in): the first
+ * `ERRORS_FIRST`, which say what went wrong first, and the last `ERRORS_LAST`, with how many came between. Those
+ * without an error object are the browser's notes (a ResizeObserver's loop), not failures. */
+const ERRORS_FIRST = 3, ERRORS_LAST = 3;
+const errors: string[] = [];
+function failed(text: string): void {
+  errors.push(`${new Date().toLocaleTimeString()} ${text}`);
+  const shown = errors.length <= ERRORS_FIRST + ERRORS_LAST ? errors
+    : [...errors.slice(0, ERRORS_FIRST), `(${errors.length - ERRORS_FIRST - ERRORS_LAST} more)`, ...errors.slice(-ERRORS_LAST)];
+  $('errors').textContent = shown.join('\n');
+  $('errors').hidden = false;
+}
+addEventListener('error', e => { if (e.error) failed(e.error instanceof Error ? e.error.message : String(e.error)); });
+addEventListener('unhandledrejection', e => failed(e.reason instanceof Error ? e.reason.message : String(e.reason)));
 
 /** The live world or a tape: what only one of them has is shown, and the speeds are its own. */
 function setMode(isLive: boolean): void {
@@ -346,6 +354,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     edited: r => { if (live === l) god.edited(r); },
     error: text => { playing = false; syncUi(); say(text); },
   });
+  l.drawn = () => drawing?.idle() ?? Promise.resolve();
   setMode(true);
   say('Making the world…');
 }

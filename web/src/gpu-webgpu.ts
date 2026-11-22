@@ -33,6 +33,8 @@ class WebGpu implements Back {
   /** Whether the device is gone: lost, or ended by the page (`close`, whose loss is no news). What it was still
    * making or reading then fails with it, and is no news either. */
   private gone = false;
+  /** Whether a render pass failed to begin (said once). */
+  private passFailed = false;
   private encoder: GPUCommandEncoder | null = null;
   /** The canvas's texture this frame (until the frame is sent). */
   private frame: GPUTexture | null = null;
@@ -46,7 +48,8 @@ class WebGpu implements Back {
     const tile: GPUSamplerDescriptor = { magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat', maxAnisotropy: TILE_ANISOTROPY };
     this.samplers = { smooth: device.createSampler(smooth), mip: device.createSampler({ ...smooth, mipmapFilter: 'nearest' }), tile: device.createSampler(tile) };
     device.lost.then(info => { const ended = this.gone; this.gone = true; if (!ended) lost(info.message); });
-    device.addEventListener('uncapturederror', e => reportError(new Error(`gpu: ${(e as GPUUncapturedErrorEvent).error.message}`)));
+    // An error the card gives without words (an out-of-memory error has none) is named by its kind.
+    device.addEventListener('uncapturederror', e => { const err = (e as GPUUncapturedErrorEvent).error; reportError(new Error(`gpu: ${err.constructor.name}${err.message ? `: ${err.message}` : ''}`)); });
   }
 
   /** End the device: what it holds is let go, and nothing it was still making or drawing is heard of. */
@@ -79,7 +82,16 @@ class WebGpu implements Back {
     if (!t) this.frame ??= this.ctx.getCurrentTexture();
     const tex = t ? t.tex : this.frame!, size: [number, number] = [tex.width, tex.height], format = t ? t.format : this.format;
     const views = t ? all.map(a => a!.view) : [tex.createView()];
-    const enc = this.encoder.beginRenderPass({ colorAttachments: views.map(view => ({ view, loadOp: clear ? 'clear' : 'load', clearValue: clear, storeOp: 'store' })) });
+    let enc: GPURenderPassEncoder;
+    try {
+      enc = this.encoder.beginRenderPass({ colorAttachments: views.map(view => ({ view, loadOp: clear ? 'clear' : 'load', clearValue: clear, storeOp: 'store' })) });
+    } catch (e) {
+      // A device being lost refuses its passes before it says it is lost (`lost`): its frame is not drawn, and the
+      // failure is said once a back end.
+      if (!this.gone && !this.passFailed) reportError(new Error(`gpu: a render pass could not begin (${e instanceof Error ? e.message : e})`));
+      this.passFailed = true;
+      return { draw: () => {}, end: () => {} };
+    }
     if (clip) enc.setScissorRect(clip[0], clip[1], clip[2], clip[3]);
     return {
       draw: (name: string, d: Draw, blend: boolean) => {
