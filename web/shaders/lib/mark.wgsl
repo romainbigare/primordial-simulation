@@ -34,6 +34,10 @@ fn kind(k: i32, c: vec2i) -> vec4f {
 // that of the four kinds from 4q; of the planes of a kind's four numbers (one a group of its plants), that of kind t
 // (and of lattice l).
 fn kinds_n() -> i32 { return i32(cover.walls.w); }
+// `n`, as a bound the compiler cannot take for a fixed one (the kinds are never fewer than none), so it keeps the loop
+// rolled: Apple's Metal compiler unrolls fixed loops nested in fixed loops, and over this program it took minutes on a
+// phone, holding back every frame behind it.
+fn rolled(n: i32) -> i32 { return n + min(kinds_n(), 0); }
 fn groups() -> i32 { return (kinds_n() + 3) / 4; }
 fn chance_plane(l: i32, t: i32) -> i32 { return l * kinds_n() + t; }
 fn strips_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + q; }
@@ -125,7 +129,7 @@ fn patch_corners(cs: Corners, at: vec2f) -> Corners {
   let q = vec2i(floor(at / land.map.x));
   var out = cs;
   out.w = vec4f(0.0);
-  for (var s = 0; s < 4; s++) {
+  for (var s = 0; s < rolled(4); s++) {
     if (all(cs.at[s] == q)) { out.w[s] = 1.0; break; }
   }
   return out;
@@ -152,7 +156,7 @@ const RACE_STREAM = 175;
 // drawn), read only where a kind's roots may want more than lies there.
 fn foot_loose(at: vec2f, cs: Corners) -> f32 {
   var deepest = 0.0;
-  for (var s = 0; s < 4; s++) {
+  for (var s = 0; s < rolled(4); s++) {
     for (var q = 0; q < groups(); q++) {
       let needs = kind(roots_plane(q), cs.at[s]);
       deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
@@ -179,16 +183,16 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
   if (exact) { loose = foot_loose(at, cs); }
   // The weights by height, and of each bin the weight from it up.
   var bins: array<f32, TALL_BINS>;
-  for (var s = 0; s < 4; s++) {
+  for (var s = 0; s < rolled(4); s++) {
     if (cs.w[s] <= 0.0) { continue; }
     for (var q = 0; q < groups(); q++) {
       let m = counts(cs, s, q, thick, f, loose, exact);
-      for (var c = 0; c < 4; c++) {
+      for (var c = 0; c < rolled(4); c++) {
         let t = 4 * q + c;
         if (t >= n || m[c] <= 0.0) { continue; }
         let w = abs(kind(chance_plane(l, t), cs.at[s])) * m[c];
         let h = kind(height_plane(t), cs.at[s]);
-        for (var g = 0; g < GROUPS; g++) {
+        for (var g = 0; g < rolled(GROUPS); g++) {
           if (w[g] <= 0.0) { continue; }
           let x = tall_bin(h[g]);
           let b = min(i32(x), TALL_BINS - 2);
@@ -200,34 +204,34 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
   }
   var up: array<f32, TALL_BINS>;
   var sum = 0.0;
-  for (var b = TALL_BINS - 1; b >= 0; b--) { sum += bins[b]; up[b] = sum; }
+  for (var b = rolled(TALL_BINS) - 1; b >= 0; b--) { sum += bins[b]; up[b] = sum; }
   // Each kind's claim, and of those that claim the cell, the tallest plant by the race.
   var best = vec3i(-1);
   var first_at = 1e30;
-  for (var s = 0; s < 4; s++) {
+  for (var s = 0; s < rolled(4); s++) {
     if (cs.w[s] <= 0.0) { continue; }
     for (var q = 0; q < groups(); q++) {
       let m = counts(cs, s, q, thick, f, loose, exact);
       let slots = kind(label_plane(q), cs.at[s]);
-      for (var c = 0; c < 4; c++) {
+      for (var c = 0; c < rolled(4); c++) {
         let t = 4 * q + c;
         if (t >= n || m[c] <= 0.0) { continue; }
         let chance = kind(chance_plane(l, t), cs.at[s]);
         let w = abs(chance) * m[c];
         let h = kind(height_plane(t), cs.at[s]);
         var claim = vec4f(0.0);
-        for (var g = 0; g < GROUPS; g++) {
+        for (var g = 0; g < rolled(GROUPS); g++) {
           if (w[g] <= 0.0) { continue; }
           // The plants of the bins about its height that stand over it, all of those past them, less its own groups'
           // (they share its draw, not its cells).
           let b = i32(round(tall_bin(h[g])));
           var over = select(0.0, up[min(b + OVER_BINS, TALL_BINS - 1)], b + OVER_BINS < TALL_BINS);
-          for (var d = 1 - OVER_BINS; d < OVER_BINS; d++) {
+          for (var d = 1 - OVER_BINS; d < rolled(OVER_BINS); d++) {
             let o = b + d;
             if (o >= 0 && o < TALL_BINS && bins[o] > 0.0) { over += bins[o] * over_bins(d); }
           }
           var mine = 0.0;
-          for (var o = 0; o < GROUPS; o++) { mine += w[o] * over_one(h[o], h[g]); }
+          for (var o = 0; o < rolled(GROUPS); o++) { mine += w[o] * over_one(h[o], h[g]); }
           claim[g] = w[g] / max(1.0 - max(over - mine, 0.0), FREE_LEAST);
         }
         let draws = vec3f(pcg3d(vec3u(vec2u(id), u32(RACE_STREAM + 4 * i32(slots[c] + 0.5) + s)))) * (1.0 / 4294967296.0);
@@ -237,7 +241,7 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
         // Its place among its groups, the large first.
         var z = 0.0;
         var below = 0.0;
-        for (var g = 0; g < GROUPS; g++) {
+        for (var g = 0; g < rolled(GROUPS); g++) {
           if (claim[g] > 0.0 && key < below + claim[g]) { z = f32(g) + (key - below) / claim[g]; break; }
           below += claim[g];
         }
@@ -305,32 +309,52 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
 // A function of the cell alone, so it is decided once a frame for each cell in view (marks.wgsl) and read by every
 // pixel the mark may cover (cover.wgsl `lattice`).
 fn decide(l: i32, k: vec2f) -> vec4f {
-  let none = vec4f(-1.0, 0.0, 0.0, 0.0);
   let id = cover.base[l].xy + vec2i(k);
   let at = cover.corner.xy + mark_foot(l, k);
   cell_patch = cell_patch_at(at);
   let cs = patch_corners(corners(at / land.map.x), at);
   // Whether any kind of the four squares has marks on the lattice.
   var all = 0.0;
-  for (var s = 0; s < 4; s++) {
+  for (var s = 0; s < rolled(4); s++) {
     for (var t = 0; t < kinds_n(); t++) { all += cs.w[s] * dot(abs(kind(chance_plane(l, t), cs.at[s])), vec4f(1.0)); }
   }
+  let living = living_decided(l, k, id, at, cs, all);
+  // (One call where no living plant claims the cell, so the program holds `dead_decided` once.)
+  if (!living.claimed) { return dead_decided(l, k, id, at, cs, all); }
+  return living.mark;
+}
+
+// The mark of a living plant of cell k of lattice l (`decide`), or that none claims the cell (its dead tree is decided
+// then, `dead_decided`).
+struct Living { mark: vec4f, claimed: bool }
+fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32) -> Living {
+  let none = Living(vec4f(-1.0, 0.0, 0.0, 0.0), true);
+  let unclaimed = Living(vec4f(0.0), false);
   let thing = as_thing(field_at(at, WIDE_LAYER)[l], cover.seen.x);
-  if (thing <= 0.0 || all <= 0.0) { return dead_decided(l, k, id, at, cs, all); }
-  // Whether any kind may claim the cell, before its ground is read.
+  if (thing <= 0.0 || all <= 0.0) { return unclaimed; }
+  // First whether any kind may claim the cell, before its ground is read; then, on open ground (`ground_open`), the
+  // kind its ground lets claim it. (Both by one call, so the program holds `pick_kind` once.)
   let own = rand3(id, l).y;
-  let most = Foot(0.0, 0.0, 0.0, 0.0);
-  if (pick_kind(l, at, cs, 1.0 + PATCH, most, own, id, false).x < 0) { return dead_decided(l, k, id, at, cs, all); }
-  let f = foot(at);
-  let pick = ground_pick(l, at, cs, f, own, id);
-  if (pick.x < 0) { return dead_decided(l, k, id, at, cs, all); }
+  var f = Foot(0.0, 0.0, 0.0, 0.0);
+  var thick = 1.0 + PATCH;
+  var pick = vec3i(-1);
+  for (var look = 0; look < rolled(2); look++) {
+    let exact = look == 1;
+    if (exact) {
+      if (!ground_open(at)) { return unclaimed; }
+      f = foot(at);
+      thick = patchy(at);
+    }
+    pick = pick_kind(l, at, cs, thick, f, own, id, exact);
+    if (pick.x < 0) { return unclaimed; }
+  }
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
   let wades = select(0.0, f.depth, f.depth > FILM_M);
   let q = mark_plant(l, k, sq, pick.y, place_of(pick.z), wades);
   let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
-  return vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), f.snow, mark_box(l, q));
+  return Living(vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), f.snow, mark_box(l, q)), true);
 }
 
 // Whether a plant may stand on the ground at `at`: not in a channel's water (rock.wgsl `channel_at`, its water's
@@ -344,20 +368,16 @@ fn ground_open(at: vec2f) -> bool {
 // The rule of the ground for every mark of lattice l at `at` (its squares `cs`, its foot `f`), living and dead: open
 // ground (`ground_open`), where the squares' kinds' own rules (`counts`: liquid no deeper than its line, roots in deep
 // enough loose ground, wet enough) let a kind with marks on the lattice stand. A living mark's kind is picked among
-// those there (`pick_kind`, by the draw `own`); a dead tree stands where any of them could (`ground_holds`).
-fn ground_pick(l: i32, at: vec2f, cs: Corners, f: Foot, own: f32, id: vec2i) -> vec3i {
-  if (!ground_open(at)) { return vec3i(-1); }
-  return pick_kind(l, at, cs, patchy(at), f, own, id, true);
-}
+// those there (`pick_kind`, by the draw `own`, `living_decided`); a dead tree stands where any of them could.
 fn ground_holds(l: i32, at: vec2f, cs: Corners, f: Foot) -> bool {
   if (!ground_open(at)) { return false; }
   let loose = foot_loose(at, cs);
   let thick = patchy(at);
-  for (var s = 0; s < 4; s++) {
+  for (var s = 0; s < rolled(4); s++) {
     if (cs.w[s] <= 0.0) { continue; }
     for (var q = 0; q < groups(); q++) {
       let m = counts(cs, s, q, thick, f, loose, true);
-      for (var c = 0; c < 4; c++) {
+      for (var c = 0; c < rolled(4); c++) {
         let t = 4 * q + c;
         if (t < kinds_n() && m[c] > 0.0 && any(kind(chance_plane(l, t), cs.at[s]) != vec4f(0.0))) { return true; }
       }

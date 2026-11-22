@@ -39,7 +39,7 @@ const LEAST_SPARE = 0.99;
 /** Of program `name`, those that may draw where a pixel of the draw takes `e` metres, the best first: those made for
  * draws whose pixels take at least no more than `e` metres (`programs`), the most first, and `name` itself last. Each
  * draws the same picture there (draw.wgsl `LEAST_E`: what one leaves out cannot show at `e`); the first does least. */
-export function madeFor(name: string, e: number): string[] {
+function madeFor(name: string, e: number): string[] {
   const fit = Object.keys(programs()).map(key => [key, key.split(':')] as const)
     .filter(([, [base, m]]) => base === name && m !== undefined && +m <= e * LEAST_SPARE)
     .sort((x, y) => +y[1][1] - +x[1][1]).map(([key]) => key);
@@ -65,9 +65,9 @@ export function seenFrom(gpu: Gpu, name: string, e: number, target: Format | nul
   const size = (key: string) => Math.abs(Math.log(Math.max(+(key.split(':')[1] ?? 0), EVERY_SIZE_M) / e));
   return madeFor(name, Infinity).filter(key => gpu.ready(key, target, blend)).sort((x, y) => size(x) - size(y))[0] ?? null;
 }
-/** Where programs are sorted by the sizes of a pixel they are made for (`seenFrom`, map.ts `warmAhead`), the one made
+/** Where programs are sorted by the sizes of a pixel they are made for (`seenFrom`), the one made
  * for every size counts as made for this many metres. */
-export const EVERY_SIZE_M = 0.25;
+const EVERY_SIZE_M = 0.25;
 
 /** Of `programs`, those not made (`Gpu.ready`), each asked to be made before all others (`Gpu.warm`). */
 export function notMade(gpu: Gpu, programs: Made[]): Made[] {

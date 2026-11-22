@@ -218,11 +218,11 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
 }
 
 // The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); where
-// the edge of standing liquid crosses the pixel, the other side of it (`LAYER_EDGE`); then a channel's water. One loop
-// draws the first two, so their colour's code is compiled once. A graphics card that runs both sides of every branch
-// runs each layer's code at every pixel: so the layers are few (a channel's bars are part of the ground's), and the
-// water's own colour (`river_on`) stands after the loop, run once a pixel.
-const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYERS = 2;
+// the edge of standing liquid crosses the pixel, the other side of it (`LAYER_EDGE`); then a channel's water
+// (`LAYER_RIVER`). One loop draws all three, so the ground's colour (`ground_for`, the largest part of the program) is
+// compiled once. A graphics card that runs both sides of every branch runs each layer's code at every pixel: so the
+// layers are few (a channel's bars are part of the ground's).
+const LAYER_GROUND = 0; const LAYER_EDGE = 1; const LAYER_RIVER = 2; const LAYERS = 3;
 
 fn live_map(v: Varying) -> vec4f {
   // The pixel's place from its own pixel (not from the map's whole rectangle, whose steps a float shows at a
@@ -242,13 +242,12 @@ fn live_map(v: Varying) -> vec4f {
       share = select(0.0, select(1.0 - spots.pool, spots.pool, spots.dry.depth <= 0.0), spots.pool > 0.0 && spots.pool < 1.0);
       p.depth = select(FILM_M, 0.0, spots.dry.depth > 0.0);
     }
+    if (k == LAYER_RIVER) { p = spots.wet; share = spots.share; }
     if (share <= 0.0) { continue; }
-    let o = colour_on(p, ground_for(p, false));
+    let g = ground_for(p, k == LAYER_RIVER);
+    var o: Shaded;
+    if (k == LAYER_RIVER) { o = river_on(p, g, spots.flow, spots.water, spots.down); } else { o = colour_on(p, g); }
     c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, share > 0.5));
-  }
-  if (spots.share > 0.0) {
-    let o = river_on(spots.wet, ground_for(spots.wet, true), spots.flow, spots.water, spots.down);
-    c = Shaded(mix(c.rgb, o.rgb, spots.share), mix(c.m, o.m, spots.share), select(c.kind, o.kind, spots.share > 0.5));
   }
   // The true colour: of a point no liquid stands on, its ground's (the cells' `SURFACE`, the sea's squares taking the
   // land's nearest, so the sea's colour does not run onto the land past the shore drawn) and the bed's where it shows,
