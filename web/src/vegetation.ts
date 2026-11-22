@@ -8,7 +8,7 @@ import { World } from './data';
 import { kindsOf } from './canopy';
 import { cooling } from './style';
 import { CoverMarks, Marks } from './textures';
-import { Draw, Format, Gpu, Made, Pass } from './gpu';
+import { Draw, Gpu, Made, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
 import type { Fire } from './fire';
@@ -64,8 +64,6 @@ export class Vegetation implements GpuLayer {
     this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land };
     this.marks.prepare(gpu, this.drawn, waiting);
   }
-
-  warm(gpu: Gpu, targets: (Format | null)[]): void { this.marks.warm(gpu, targets); }
 
   /** Draw the cover in pass `p`, as `prepare` decided it. */
   draw(p: Pass): void {
