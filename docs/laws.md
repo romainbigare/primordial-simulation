@@ -203,7 +203,7 @@ metre under its level (`GRADED_M`) is filled to it, as the floods that spread a 
 one basin under its level are **a pond** (`Samples::pond`, `Samples::ponds`): its pass is the first sample out of it
 on the way its liquid leaves by, and its level that pass's height. Every cell's height is a mean over the samples. So
 is the way a cell faces the sun (1.4): its mean rise toward the south, each sample's central difference north to south
-(one-sided at the map's edge) by area (`Terrain::rise_south_on`), found when the world is built and again at each
+(one-sided at the map's edge) by area (`Samples::rise_south`), found when the world is built and again at each
 build of the samples (`World::rise_south`). **The terrain's channels** (`space::network`, found with the samples): each sample's liquid runs where the
 flood sends it (from every sample of land a way leads to the open low ground), and the area that drains through a
 sample is its own and all that runs to it; the runoff runs down these ways (1.2). Below the samples the ground goes on as one function of the
@@ -904,9 +904,11 @@ closed at the map's edges, it makes its own climate from its own sun, sea and li
 `band=`), it holds the planet's table (`flow::Planet`) and, its band longer than its own span (`stretch` above 1), its
 edges open to the air of its latitudes, and its air's sideways laws take the band's stretch (alone, the map's own
 metres: a closed box stretched over a wide band freezes over). The table's presence is the state. The planet's air comes from a strip of the planet from pole to pole, run by
-these laws when the world is built (`worldgen::planet`): three air blocks round, rows of 5°, all of it low open ground
-(liquid over all of it), for 10 years from its starting state (an island of 32 x 32 on the band 20° to 65° feels a run of
-20 years within 0.2 K in every row), the same strip for every island (the page makes it once a session);
+these laws (`worldgen::planet`): three air blocks round, rows of 5°, all of it low open ground (liquid over all of it),
+for 10 years from its starting state (an island of 32 x 32 on the band 20° to 65° feels a run of 20 years within 0.2 K
+in every row). It reads only chemistry 0, the default laws and its own seed, so it is the same strip for every island:
+the build holds its table (`worldgen/src/planet.bin`, written by `ew planet`), and a test runs the strip again and
+holds the table to it bit for bit, so a change of the laws that moves it fails until the table is written again;
 its last year's air per row and month (its temperature, warmth, mol per m² and each gas's share) is saved with the
 world.
 Beyond each air node of the map's edges lies a column of that air, north and south at the latitude one row of nodes

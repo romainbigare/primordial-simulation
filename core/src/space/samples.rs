@@ -3,7 +3,7 @@
 //! (`space::wear`), so valleys branch between ridges and the closed basins the cutting left stay. A
 //! flood over the worn heights (`space::drain`) finds where each sample's liquid runs, and the ponds: the samples
 //! under a closed basin's level, each pond with its pass and the level of the pass. Every cell's height is a mean over
-//! these samples (`Terrain::inside`); so is the way it faces the sun (`Terrain::rise_south_on`); and the liquid runs down
+//! these samples (`Terrain::inside`); so is the way it faces the sun (`Samples::rise_south`); and the liquid runs down
 //! them (`space::network`). They are a function of the seed and the map alone, found when first read and kept with the
 //! terrain, not saved.
 
@@ -53,6 +53,8 @@ pub struct Samples {
     pub books: Books,
     pub twi: Vec<f64>,
     pub channel: [f64; 2],
+    /// The area of a sample of each row, m² (`Square::place_of`, found with the samples): a sample's is its row's.
+    pub rows: Vec<f64>,
 }
 
 /// A pond: the samples of one closed basin that lie under its level, where liquid stands at one level before it runs
@@ -66,6 +68,35 @@ pub struct Pond {
 }
 
 impl Samples {
+    /// The area of sample `k`, m² (its row's, `rows`).
+    #[inline]
+    pub fn area(&self, k: usize) -> f64 {
+        self.rows[k / self.across]
+    }
+
+    /// The mean by area of `x(samples, k)` over the samples `k` of leaf `l` (of `SAMPLE_DEPTH` or coarser).
+    pub fn over(&self, l: Leaf, x: impl Fn(&Samples, usize) -> f64) -> f64 {
+        let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| self.index(&f)).map(|k| (self.area(k), x(self, k))).fold((0.0, 0.0), |(a, sum), (da, v)| (a + da, sum + da * v));
+        sum / area
+    }
+
+    /// The mean rise of the ground toward the south over leaf `l` of `map`, m per m: by area over the samples it covers,
+    /// each its central difference north to south (one-sided at the map's edge); a leaf finer than a sample takes its
+    /// sample's. So a leaf's is its quarters' mean by area at every depth. It is what the sun on a cell reads of the way
+    /// the cell faces (`flow::on_slope`).
+    pub fn rise_south(&self, map: &Square, l: Leaf) -> f64 {
+        let dy = map.length(SAMPLE_DEPTH);
+        let at = |f: &Leaf| {
+            let k = self.index(f);
+            central(k / self.across, self.down, |r| self.h[r * self.across + k % self.across], dy)
+        };
+        if l.depth <= SAMPLE_DEPTH {
+            let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| (self.area(self.index(&f)), at(&f))).fold((0.0, 0.0), |(a, by), (da, r)| (a + da, by + da * r));
+            return sum / area;
+        }
+        at(&l)
+    }
+
     /// The slope of sample `k` to the sample its liquid runs to, rise over run (none where it runs to none or uphill).
     pub fn slope(&self, k: usize) -> f64 {
         if self.to[k] == NONE { 0.0 } else { (self.h[k] - self.h[self.to[k] as usize]).max(0.0) / self.run[k] }
@@ -160,11 +191,11 @@ impl Terrain {
         if let Some(s) = known(&self.kept.1.lock().expect("the built samples")) {
             return s;
         }
-        let (grid, _) = grid_of(map, lat);
+        let (grid, rows, _) = grid_of(map, lat);
         let h = super::relief::heights(&s0, map, lat, r);
         let open = open_low(&grid, &h, STAND_M);
         let ground = laid_ground(&s0, r, years);
-        let found = Arc::new(self.found(seed, &grid, (h, &open, false), ground));
+        let found = Arc::new(self.found(seed, (&grid, rows), (h, &open, false), ground));
         let mut kept = self.kept.1.lock().expect("the built samples");
         known(&kept).unwrap_or_else(|| {
             *kept = Some((r.builds, found.clone()));
@@ -178,7 +209,7 @@ impl Terrain {
     /// volume, m³, and the mouth's place in `mouths`; and the load they found no room for, m³. The ages of the layers are
     /// not read (the running world keeps no age of its relief).
     pub fn lobes_of(&self, map: &Square, lat: (f64, f64), s: &Samples, (body, level): (&[u32], &[f64]), mouths: &[(usize, f64, f64)], years: f64) -> (Vec<(usize, f64, u32)>, f64) {
-        let (grid, _) = grid_of(map, lat);
+        let (grid, _, _) = grid_of(map, lat);
         let open: Vec<bool> = body.iter().map(|&b| b != NONE).collect();
         let exposed = exposures(&grid, &open);
         let liquid = Liquid::new(&grid, (&open, &exposed), (level, body));
@@ -191,30 +222,13 @@ impl Terrain {
         (laid.parts.into_iter().map(|(k, v, m)| (k, v, order[m as usize] as u32)).collect(), laid.unlaid)
     }
 
-    /// The mean rise of the ground toward the south over leaf `l` of `map` (its rows between latitudes `south` and
-    /// `north`) on the samples `s` (the seed's, or as built: `Terrain::built`), m per m: by area over the samples it covers, each its central difference north to south
-    /// (one-sided at the map's edge); a leaf finer than a sample takes its sample's. So a leaf's is its quarters' mean by
-    /// area at every depth. It is what the sun on a cell reads of the way the cell faces (`flow::on_slope`).
-    pub fn rise_south_on(&self, s: &Samples, map: &Square, l: Leaf, (south, north): (f64, f64)) -> f64 {
-        let dy = map.length(SAMPLE_DEPTH);
-        let at = |f: &Leaf| {
-            let k = s.index(f);
-            central(k / s.across, s.down, |r| s.h[r * s.across + k % s.across], dy)
-        };
-        if l.depth <= SAMPLE_DEPTH {
-            let (area, sum) = l.split(SAMPLE_DEPTH).map(|f| (map.place_of(&f, south, north).0, at(&f))).fold((0.0, 0.0), |(a, by), (da, r)| (a + da, by + da * r));
-            return sum / area;
-        }
-        at(&l)
-    }
-
     /// The samples of `map` for `seed` (`Samples`): the noise's heights (`Terrain::sample`) at the centres of the
     /// samples of the grid the wear reads it on (`wear::noise_grid`), worn (`space::wear`) with the open low ground
     /// held; then the flood over them from all the open low ground, the closed basins too shallow to hold a pond graded
     /// (`ponds::grade`), the area that drains through each sample, and the ponds; the folds of the bed's layers and its
     /// bodies are read on the noise's grid too, their rims at each sample (`Strata::at`).
     fn worn(&self, seed: u64, map: &Square, (south, north): (f64, f64)) -> Samples {
-        let (grid, leaf) = grid_of(map, (south, north));
+        let (grid, rows, leaf) = grid_of(map, (south, north));
         let (across, down) = (grid.across, grid.down);
         let side = BLOCK >> SAMPLE_DEPTH;
         // The noise at the centres of the samples of the grid the wear reads it on: leaves `by` samples a side.
@@ -227,14 +241,14 @@ impl Terrain {
         let rim = crate::par::map_n(grid.n(), crate::par::UNCOUNTED, |k| Strata::rim(seed, map, map.place_of(&leaf(k), south, north).1));
         let worn = wear(seed, &grid, (by, &rise), (&fold, [&body, &rim], &Strata::of(seed, &self.makes)), self.channel);
         let ground = Ground { make: worn.make, loose: worn.loose, settled: worn.settled, age: worn.age, books: worn.books };
-        self.found(seed, &grid, (worn.h, &worn.open, true), ground)
+        self.found(seed, (&grid, rows), (worn.h, &worn.open, true), ground)
     }
 
     /// The samples of heights `h` on grid `g` for `seed`, the open low ground `open` (`drain::open_low`), and their
     /// ground `ground`: the flood over them from all the open low ground, the closed basins too shallow to hold a pond
     /// (`ponds::shallow`) with `graded` filled (`ponds::grade`), else left as they lie but no ponds (the floods flow
     /// through them), the area that drains through each sample, the ponds, and the wetness index (`sample_index`).
-    fn found(&self, seed: u64, grid: &Grid, (mut h, open, graded): (Vec<f64>, &[bool], bool), ground: Ground) -> Samples {
+    fn found(&self, seed: u64, (grid, rows): (&Grid, Vec<f64>), (mut h, open, graded): (Vec<f64>, &[bool], bool), ground: Ground) -> Samples {
         let f = flood(grid, &h, open, (&starts(grid, open, false), &draws(seed, 1, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
         if graded {
@@ -252,7 +266,7 @@ impl Terrain {
         open_parts(grid, open, (&mut pond, &mut ponds));
         let twi = sample_index(grid.across, grid.down, grid.dy, &up, &h);
         let Ground { make, loose, settled, age, books } = ground;
-        Samples { seed, across: grid.across, down: grid.down, h, to: f.to, order: f.order, up, main, run: f.apart, pond, ponds, make, loose, settled, age, books, twi, channel: self.channel }
+        Samples { seed, across: grid.across, down: grid.down, h, to: f.to, order: f.order, up, main, run: f.apart, pond, ponds, make, loose, settled, age, books, twi, channel: self.channel, rows }
     }
 }
 
@@ -267,14 +281,15 @@ struct Ground {
 }
 
 /// The grid of the samples of `map` (its rows between latitudes `south` and `north`): each row's samples as wide as
-/// they lie there; and the leaf of each sample.
-fn grid_of(map: &Square, (south, north): (f64, f64)) -> (Grid, impl Fn(usize) -> Leaf) {
+/// they lie there; the area of a sample of each row, m² (`Square::place_of`); and the leaf of each sample.
+fn grid_of(map: &Square, (south, north): (f64, f64)) -> (Grid, Vec<f64>, impl Fn(usize) -> Leaf) {
     let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
     let (across, down) = (map.w * per, map.h * per);
     let leaf = move |k: usize| leaf_at(across, k);
     let dy = map.length(SAMPLE_DEPTH);
-    let grid = Grid::new(across, down, map.wrap, dy, (0..down).map(|r| map.place_of(&leaf(r * across), south, north).0 / dy).collect());
-    (grid, leaf)
+    let rows: Vec<f64> = (0..down).map(|r| map.place_of(&leaf(r * across), south, north).0).collect();
+    let grid = Grid::new(across, down, map.wrap, dy, rows.iter().map(|a| a / dy).collect());
+    (grid, rows, leaf)
 }
 
 /// The leaf of sample `k` of samples `across` a row.

@@ -7,6 +7,8 @@ version.workspace = true
 pcore = { path = "../core" }
 serde.workspace = true
 toml = "0.8"
+# The planet's table shipped with the build (`planet::table`)
+bincode = "1.3"
 
 [features]
 # The shared setup of the tests (`testkit`): turned on by the dev-dependencies of the crates that test with it, and by

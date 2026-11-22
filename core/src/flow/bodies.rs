@@ -72,7 +72,8 @@ impl Bodies {
             let whole = w.mesh.cells().area()[i];
             for f in l.split(SAMPLE_DEPTH.max(l.depth)) {
                 let k = s.index(&f);
-                (cell_of[k], share[k]) = (i as u32, w.map.place_of(&f, lat.0, lat.1).0 / whole);
+                let area = if f.depth == SAMPLE_DEPTH { s.area(k) } else { w.map.place_of(&f, lat.0, lat.1).0 };
+                (cell_of[k], share[k]) = (i as u32, area / whole);
             }
         }
         let mut list: Vec<Body> = s.ponds.iter().enumerate().map(|(p, pond)| {

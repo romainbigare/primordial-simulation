@@ -73,6 +73,17 @@ impl Part {
         let k = self.floors.partition_point(|f| f.0 < x);
         (k, self.sums[k])
     }
+    /// `below`, where `from` of its floors are known to lie under `x`: the count found from there up, in steps that
+    /// double, then halved (the same count, found in fewer steps where `x` lies a few floors above them).
+    pub(super) fn below_from(&self, x: f64, from: usize) -> (usize, [f64; 3]) {
+        let under = |k: usize| self.floors[k].0 < x;
+        let (mut lo, mut step) = (from, 1);
+        while lo + step <= self.floors.len() && under(lo + step - 1) {
+            (lo, step) = (lo + step, 2 * step);
+        }
+        let k = lo + self.floors[lo..(lo + step).min(self.floors.len())].partition_point(|f| f.0 < x);
+        (k, self.sums[k])
+    }
     /// The first moment about the cell's mean surface of what stands on it under the level `x`, m⁴: Σ area × (x² -
     /// departure²) / 2 over the floors under it.
     fn moment(&self, x: f64) -> f64 {
@@ -275,7 +286,9 @@ pub(super) fn first_held_at(s: &Scratch, i: usize) -> Holding {
 fn of(w: &World, i: usize) -> Curve {
     let (s, l, lat) = (w.terrain_samples(), w.map.leaves()[i], (w.cfg.lat_south, w.cfg.lat_north));
     let depth = SAMPLE_DEPTH.max(l.depth);
-    let ks: Vec<(usize, f64)> = l.split(depth).map(|f| (s.index(&f), w.map.place_of(&f, lat.0, lat.1).0)).collect();
+    // (A cell as fine as a sample or finer holds one sample, at its own area.)
+    let area_of = |f: &crate::space::tree::Leaf, k: usize| if f.depth == SAMPLE_DEPTH { s.area(k) } else { w.map.place_of(f, lat.0, lat.1).0 };
+    let ks: Vec<(usize, f64)> = l.split(depth).map(|f| (s.index(&f), f)).map(|(k, f)| (k, area_of(&f, k))).collect();
     let (all, area) = (ks.iter().map(|k| k.1).sum::<f64>(), w.mesh.cells().area()[i]);
     let mean = ks.iter().map(|&(k, a)| s.h[k] * a).sum::<f64>() / all;
     let mut ponds: Vec<u32> = ks.iter().map(|k| s.pond[k.0]).filter(|&p| p != NONE).collect();

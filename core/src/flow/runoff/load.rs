@@ -12,7 +12,7 @@
 //! **Known limit:** in a pool the substances and the particle classes are independent: what leaves takes the pool's
 //! mixture of substances by the share of its volume that leaves.
 
-use super::carriage::{sample_area, End, Shares, CLASS_COUNT};
+use super::carriage::{End, Shares, CLASS_COUNT};
 use super::pick::{pick_up, Work};
 use super::super::land::solid;
 use super::{Bodies, Crossings, Scratch};
@@ -127,7 +127,7 @@ pub(super) fn carry(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64
     for (q, &k) in c.keys.iter().enumerate() {
         let i = c.cell[q] as usize;
         let [came, own, dropped] = pools.take(q, &mut row);
-        let a = sample_area(w, &samples, k as usize);
+        let a = samples.area(k as usize);
         if c.main[i] == q as u32 {
             loads[i][0] = main_load(w, i, kg(&row[..width - 1]), flux[k as usize][0]);
         }

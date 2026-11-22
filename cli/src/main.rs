@@ -69,6 +69,7 @@ fn main() {
         "view" => view(&args),
         "cells" => cells(&args),
         "card" => card(&args),
+        "planet" => planet(&args),
         "chem" => chem::run(),
         "numbers" => numbers::run(&args.0),
         _ => unreachable!("`Args::check` passes only the commands of the usage"),
@@ -111,6 +112,15 @@ fn card(a: &Args) {
     let plan = (Schedule::new(None, &[], worldgen::life::Seeding::default()), Recorder::new(&w, FRAMES_EVERY, 0).kept());
     let (out, mut bytes) = (a.get("--out", String::from("card.bin.gz")), Vec::new());
     if let Err(e) = tape::snapshot_bytes(&w, &plan, &mut bytes).and_then(|_| tape::write_snapshot(&bytes, &out)) {
+        eprintln!("ew: {out}: {e}");
+        std::process::exit(2);
+    }
+}
+
+/// `ew planet`: run the planet's strip (`worldgen::planet::planet`) and write its table where the build ships it from.
+fn planet(a: &Args) {
+    let out = a.get("--out", String::from(worldgen::planet::TABLE_FILE));
+    if let Err(e) = std::fs::write(&out, worldgen::planet::table_bytes(&worldgen::planet::planet())) {
         eprintln!("ew: {out}: {e}");
         std::process::exit(2);
     }

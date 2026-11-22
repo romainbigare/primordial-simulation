@@ -27,9 +27,10 @@ pub(super) enum Level {
     Step(f64, f64),
 }
 
-/// What the floors of parts under a level sum to (`level_with`): of each part, how many of its floors lie under it; over
-/// all parts, their area, m², their Σ area × height, m³, and what `extra` takes, m³.
+/// What the floors of parts under a level sum to (`level_with`): the level, m; of each part, how many of its floors lie
+/// under it; over all parts, their area, m², their Σ area × height, m³, and what `extra` takes, m³.
 struct Under {
+    at: f64,
     count: Vec<usize>,
     area: f64,
     moment: f64,
@@ -46,10 +47,12 @@ struct Under {
 /// the line through the floors under `lo` meets `vol` over the level, as what they take only grows faster above.
 pub(super) fn level_with(parts: &[(&Part, f64)], vol: f64, extra: impl Fn(usize, f64) -> f64) -> Level {
     let (low, high) = parts.iter().map(|&(p, z)| p.span(z)).fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), s| (l.min(s[0]), h.max(s[1])));
-    let under = |x: f64| {
-        let mut u = Under { count: Vec::with_capacity(parts.len()), area: 0.0, moment: 0.0, extra: 0.0 };
+    // What the floors under `x` sum to, `from` the counts of floors under a level at or under `x` (none: count all).
+    let under = |x: f64, from: Option<&Under>| {
+        debug_assert!(from.is_none_or(|f| f.at <= x), "a level read under the one its counts start from");
+        let mut u = Under { at: x, count: Vec::with_capacity(parts.len()), area: 0.0, moment: 0.0, extra: 0.0 };
         for (q, &(p, z)) in parts.iter().enumerate() {
-            let (k, s) = p.below(x - z);
+            let (k, s) = from.map_or_else(|| p.below(x - z), |f| p.below_from(x - z, f.count[q]));
             u.count.push(k);
             (u.area, u.moment, u.extra) = (u.area + s[0], u.moment + s[1] + z * s[0], u.extra + extra(q, s[0]));
         }
@@ -59,8 +62,8 @@ pub(super) fn level_with(parts: &[(&Part, f64)], vol: f64, extra: impl Fn(usize,
     if vol <= 0.0 || parts.is_empty() {
         return Level::At(low);
     }
-    let (mut lo, mut at_lo) = (low, under(low));
-    let mut hi = high + vol / under(f64::INFINITY).area;
+    let (mut lo, mut at_lo) = (low, under(low, None));
+    let mut hi = high + vol / under(f64::INFINITY, Some(&at_lo)).area;
     loop {
         // The lowest level at which a floor not under `lo` comes under (`entry`): the line through the floors under `lo`
         // holds up to there.
@@ -73,15 +76,16 @@ pub(super) fn level_with(parts: &[(&Part, f64)], vol: f64, extra: impl Fn(usize,
             hi = hi.min(x);
         }
         // The floors that come under at `next` taken in: where what they take steps over `vol` there, the level stands
-        // at them.
-        let at_next = under(next);
+        // at them. Every level read from here on lies over `lo` (`next` is the lowest one over it at which a floor comes
+        // under, and `mid` lies between `lo` and `hi`), so the floors under `lo` lie under it too.
+        let at_next = under(next, Some(&at_lo));
         if takes(&at_next, next) > vol {
             return Level::Step(next.next_down(), next);
         }
         (lo, at_lo) = (next, at_next);
         let mid = 0.5 * (lo + hi);
         if mid > lo && mid < hi {
-            let at_mid = under(mid);
+            let at_mid = under(mid, Some(&at_lo));
             if takes(&at_mid, mid) <= vol {
                 (lo, at_lo) = (mid, at_mid);
             } else {

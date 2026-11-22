@@ -135,7 +135,7 @@ impl Carriage {
         c.room = order.iter().zip(&c.keys).zip(&c.end).map(|((&old, &k), &end)| {
             let (k, slope) = (k as usize, grade[old as usize]);
             let top = if end == End::On { (s.h[s.to[k] as usize] + slope * s.run[k]).min(feeds[k]) } else { s.h[k] };
-            (top - s.h[k]).max(0.0) * sample_area(w, &s, k)
+            (top - s.h[k]).max(0.0) * s.area(k)
         }).collect();
         c
     }
@@ -209,10 +209,7 @@ impl Carriage {
     }
 }
 
-/// The area of sample `k` of samples `s` of world `w`, m² (its own, also where finer cells share it).
-pub(super) fn sample_area(w: &World, s: &Samples, k: usize) -> f64 {
-    w.map.place_of(&s.leaf(k), w.cfg.lat_south, w.cfg.lat_north).0
-}
+
 
 /// An order of the key samples whose next key samples are `next` (`NONE` for an end): each after all those whose ways
 /// lead to it, and each way's key samples together (the ends in their order, each after the tree of ways above it,

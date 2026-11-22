@@ -93,24 +93,27 @@ impl Shore<'_> {
         let mut f = Feet { ground: self.above(h), land: self.c.apart, rise: h, ..Feet::default() };
         for (q, p) in self.c.parts.iter().enumerate() {
             let x = self.level(q, p);
-            let (a, s) = (|z: f64| p.under_x(z)[0], |z: f64| p.under_x(z)[1]);
+            // The part's sums under the heights read below, each found once (`Part::under_x`).
+            let (at_x, at_y, at_reach) = (p.under_x(x), p.under_x(y), p.under_x(x - reach));
+            let a = |z: f64| if z == x { at_x[0] } else if z == y { at_y[0] } else { p.under_x(z)[0] };
             f.land += p.area() - a(x.max(y));
-            f.wet += (a(x) - a(y)).max(0.0);
+            f.wet += (at_x[0] - at_y[0]).max(0.0);
             let lo = y.max(x - reach);
             if lo < x {
                 // Of its floors under the liquid where the roots get the gas: from `mid` up they work in full, under it
                 // as far as the depth leaves them.
                 let mid = (x - reach + roots).clamp(lo, x);
-                let (part, sum) = (a(mid) - a(lo), s(mid) - s(lo));
-                f.aired += a(x) - a(lo);
-                f.work += a(x) - a(mid) + ((reach - x) * part + sum) / roots.max(1e-9);
+                let (at_lo, at_mid) = (if lo == y { at_y } else { at_reach }, p.under_x(mid));
+                let (part, sum) = (at_mid[0] - at_lo[0], at_mid[1] - at_lo[1]);
+                f.aired += at_x[0] - at_lo[0];
+                f.work += at_x[0] - at_mid[0] + ((reach - x) * part + sum) / roots.max(1e-9);
             }
-            if y < x - reach && a(x - reach) > a(y) {
-                f.airless += a(x - reach) - a(y);
+            if y < x - reach && at_reach[0] > at_y[0] {
+                f.airless += at_reach[0] - at_y[0];
                 f.rise = f.rise.max(x - reach - self.c.low);
             }
             if y > x - reach {
-                f.free += (a(y) - a(x - reach)).max(0.0);
+                f.free += (at_y[0] - at_reach[0]).max(0.0);
             }
         }
         f
