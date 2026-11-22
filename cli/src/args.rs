@@ -3,7 +3,8 @@
 use pcore::space::terrain::Shape;
 use pcore::{Config, World};
 use worldgen::life::{Seeding, FIXERS};
-use worldgen::schedule::{Due, Edit, Schedule};
+use pcore::edit::{Act, Edit};
+use worldgen::schedule::{plant, Due, Schedule};
 
 pub const USAGE: &str = "usage:
   ew run      simulate a new world, write the tape and a snapshot at the end to --out
@@ -226,15 +227,15 @@ impl Args {
         let mut out = Vec::new();
         for flag in ["--clear", "--split", "--plant"] {
             let make = |what: &str| match flag {
-                "--clear" => share(what).map(Edit::Clear),
-                "--split" => share(what).map(Edit::Split),
-                _ => kind(what).map(Edit::Plant),
+                "--clear" => share(what).map(Act::Clear),
+                "--split" => share(what).map(Act::Split),
+                _ => kind(what).map(plant),
             };
             for text in self.values(flag) {
                 let due = || {
                     let [y, at, what]: [&str; 3] = text.split(':').collect::<Vec<_>>().try_into().ok()?;
                     let (x, z) = at.split_once(',')?;
-                    Some(Due { year: y.parse().ok()?, place: [x.parse().ok()?, z.parse().ok()?], edit: make(what)? })
+                    Some(Due { year: y.parse().ok()?, edit: Edit { place: [x.parse().ok()?, z.parse().ok()?], act: make(what)? } })
                 };
                 out.push(due().ok_or(format!("{flag} {text}: want YEAR:X,Y:SHARE (a share from 0 to 1) or, for --plant, YEAR:X,Y:KIND (a row of the starting kinds)"))?);
             }

@@ -173,11 +173,33 @@ fn a_low_plant_burnt_to_its_base_keeps_its_plants_and_store() {
     let mm = p.mm(&w.chem);
     let built = |w: &World| w.life.cover(i).built(&mm, low);
     let (low0, tall0, built0, fuel0) = (plants(&w, low), plants(&w, tall), built(&w), w.life.cover(i).mol[low][FUEL]);
-    let share = flame::shares(&w, &(0..w.mesh.cells().n()).map(|j| flame::bed(&w, &p, j)).collect::<Vec<_>>(), w.cfg.calendar().month as f64)[i];
+    let share = flame::shares(&w, &(0..w.mesh.cells().n()).map(|j| flame::bed(&w, &p, j).ok()).collect::<Vec<_>>(), w.cfg.calendar().month as f64)[i];
     assert!(share > 0.0, "the cell burns");
     flame::month(&mut w);
     assert_eq!((plants(&w, low), w.life.cover(i).mol[low][FUEL]), (low0, fuel0), "the low slot lost plants or store");
     let base = w.cfg.phys.base_share;
     assert!(built(&w) < built0 && built(&w) >= built0 * (1.0 - share * (1.0 - base)) - 1e-12, "built {} of {built0}, burnt {share}", built(&w));
     assert_eq!(plants(&w, tall), tall0, "the tall slot lost plants");
+}
+
+/// Every edit keeps the books (handover.md 11: an action is a physics edit): a split, a clearing, a planting and a
+/// strike on the test's dry cell, made through `World::edit`, are made and told as events, and keep every element and
+/// the energy; with no strikes drawn (`strikes` 0) the strike alone lights the cell in the flames' month.
+#[test]
+fn every_edit_keeps_the_books_and_a_strike_lights_its_cell() {
+    use pcore::edit::{Act, Edit};
+    let (mut w, i) = start();
+    liquid_to(&mut w, i, 0.0);
+    w.cfg.phys.strikes = 0.0;
+    let [w0, n0, e0, s0] = w.map.bounds(i);
+    let place = [(w0 + e0) / 2.0, (n0 + s0) / 2.0];
+    let books = Books::now(&w);
+    let acts = [Act::Split(0.2), Act::Clear(0.1), worldgen::schedule::plant(LIGHT_ROW), Act::Strike];
+    assert_eq!(w.edit(&acts.map(|act| Edit { place, act })), [true; 4], "the edits on cell {i}");
+    let told = w.drain_events().iter().filter(|e| matches!(e.kind, pcore::event::EventKind::Edit(_)) && e.node == i as u32).count();
+    assert_eq!((told, w.life.cover(i).patch_count()), (4, 3), "the edits told, and the patches");
+    books.assert_kept(&w, 1e-9);
+    flame::month(&mut w);
+    assert!(w.counts.flame[flame::REMAINS] > 0.0 && w.strikes.is_empty(), "the strike burnt {} kg", w.counts.flame[flame::REMAINS]);
+    books.assert_kept(&w, 1e-9);
 }

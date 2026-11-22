@@ -352,8 +352,56 @@ pub extern "C" fn rock() -> *const u8 {
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 
-/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile`, `rock`, `open_world` or
-/// `ground_of_world` last returned.
+/// What the page's edits read of the cell under the place `x`, `y` (squares from the map's north-west corner), as JSON:
+/// the cell, its edges in squares [west, north, east, south], its area and its land, m², the patches of its cover, the
+/// centre in squares of its sample under the place, about which a clearing makes its patch (`World::sample_in`), and
+/// whether a strike there lights it (`flame::lights`: "yes", or the reason it does not, `flame::Unlit`).
+#[no_mangle]
+pub extern "C" fn probe(x: f64, y: f64) -> *const u8 {
+    let out = with(|l| {
+        let w = &l.world;
+        let i = w.cell_under([x, y]);
+        let fire = pcore::flame::lights(w, i).map_or_else(|why| format!("{why:?}"), |_| String::from("yes"));
+        let ([w0, n0, e0, s0], side) = (w.map.bounds(i), pcore::inside::patch_ground(w, i).side);
+        let k = w.sample_in(i, [x, y]);
+        let at = [w0 + ((k % side) as f64 + 0.5) / side as f64 * (e0 - w0), n0 + ((k / side) as f64 + 0.5) / side as f64 * (s0 - n0)];
+        json!({"cell": i, "bounds": w.map.bounds(i), "at": at, "area": w.mesh.cells().area()[i], "land": pcore::contract::land(w, i), "patches": w.life.cover(i).patch_count(), "fire": fire})
+    });
+    give(out.to_string().into_bytes())
+}
+
+/// The starting kinds the world's plan places, as JSON: each its row of `worldgen::life::KINDS`, its name and the kg
+/// per m² an edit places of it (`worldgen::schedule::plant`).
+#[no_mangle]
+pub extern "C" fn kinds() -> *const u8 {
+    let out = with(|l| {
+        let rows: Vec<_> = l.plan.kinds.iter().map(|&(row, _)| json!({"row": row, "name": worldgen::life::KINDS[row].name, "kg": worldgen::life::KINDS[row].kg})).collect();
+        serde_json::Value::Array(rows)
+    });
+    give(out.to_string().into_bytes())
+}
+
+/// The page's edits, between two months (a step boundary; `World::edit`), at the place `x`, `y` in squares: `act` 0
+/// clears the share `share` of the cell there, 1 clears it and places the starting kind of row `row` in it, 2 strikes
+/// it in the coming month. Returns, as JSON, the cell and whether each edit was made.
+#[no_mangle]
+pub extern "C" fn edit(act: u32, x: f64, y: f64, share: f64, row: u32) -> *const u8 {
+    use pcore::edit::{Act, Edit};
+    let place = [x, y];
+    let acts = match act {
+        0 => vec![Act::Clear(share)],
+        1 => vec![Act::Clear(share), worldgen::schedule::plant((row as usize).min(worldgen::life::KINDS.len() - 1))],
+        _ => vec![Act::Strike],
+    };
+    let out = with(|l| {
+        let done = l.world.edit(&acts.iter().map(|&act| Edit { place, act }).collect::<Vec<_>>());
+        json!({"cell": l.world.cell_under(place), "done": done})
+    });
+    give(out.to_string().into_bytes())
+}
+
+/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile`, `rock`, `open_world`,
+/// `ground_of_world`, `probe`, `kinds` or `edit` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())

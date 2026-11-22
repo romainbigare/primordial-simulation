@@ -83,8 +83,8 @@ struct Ground<'a> {
 }
 
 /// The numbers a viewer draws slot `x` of cover `c` of world `w` from, `KIND_ROW` of them, on the ground of its cell `g`
-/// it stands on (each per m² of that ground, its share of the cell `Cover::stands`: its land, and its ground under the
-/// liquid where its roots work, `cover::footing`): its starting kind; its built cover,
+/// it stands on (each per m² of that ground: its patch's share of the cell, `Cover::patch_share`, and of that its share
+/// `Cover::stands`: its land, and its ground under the liquid where its roots work, `cover::footing`): its starting kind; its built cover,
 /// kg/m²; its large plants (`plants` of its large group, `cover::Sizes::large`, with that group's built cover and capture
 /// area): the stem's width, m, how many a m², height and crown's width, m, the share of the ground they cover, how
 /// closed a crown is; its walls' share; its capture
@@ -109,7 +109,7 @@ fn row(w: &World, c: &Cover, mm: &[f64; NP], x: usize, g: &Ground) -> [f64; KIND
     let ph = &w.cfg.phys;
     let (built, genes) = (c.built(mm, x), c.genes[x]);
     let (rooted, need) = if c.need[x] > 0.0 { (c.rooted[x] as f64, c.need[x]) } else { (1.0, 0.0) };
-    let per_ground = |v: f64| per_land(v / g.area, c.stands[x] as f64);
+    let per_ground = |v: f64| per_land(v / g.area, c.patch_share(x) * c.stands[x] as f64);
     let ran = g.ran.filter(|_| c.need[x] > 0.0).map_or(cover::Ran { act: 1.0, ..Default::default() }, |r| r[x]);
     let s = c.sizes(ph, mm, x);
     let group = |k: usize| plants(ph, (per_ground(s.mass[k] * s.count[k]), per_ground(c.leaf(mm, x) * s.leaf[k]), per_ground(s.count[k])), rooted, s.walls[k], g.rho);
@@ -215,7 +215,7 @@ mod tests {
         assert!(pcore::cover::place(&mut w, i, 0, far, worldgen::life::LIGHT_ROW as u32, 0.2), "no room for the second slot");
         let p = Parts::of(&w.chem).expect("chemistry 0 has cover");
         let (mm, area, c) = (p.mm(&w.chem), w.mesh.cells().area()[i], w.life.cover(i));
-        let own = |x: usize| area * c.stands[x] as f64;
+        let own = |x: usize| area * c.patch_share(x) * c.stands[x] as f64;
         let all: f64 = c.held().map(|x| c.built(&mm, x) / own(x)).sum::<f64>();
         let r = rows(&w, i, 0.0, w.cfg.variety);
         let kind = |k: usize| &r[k * KIND_ROW..(k + 1) * KIND_ROW];
@@ -228,5 +228,23 @@ mod tests {
         let (bare, leafy) = (stand(0.0), stand(1e-12));
         assert!(bare.per_m2 == leafy.per_m2 && bare.mass == leafy.mass && bare.height == leafy.height && bare.stem == leafy.stem, "{bare:?} against {leafy:?}");
         assert!(bare.height > 0.0 && bare.width == 0.0 && bare.cover == 0.0 && bare.crown == 0.0 && leafy.width < 1e-5, "bare: {bare:?}");
+    }
+
+    /// A slot of a patch is drawn per m² of its patch's ground: cover placed in a clearing of a quarter of a cell at
+    /// `PLACED` kg per m² of the ground it stands on there (`cover::place`, its built cover that less its store) reads as
+    /// that in its row, not a quarter of it.
+    #[test]
+    fn a_patchs_slot_is_per_m2_of_its_patch() {
+        const PLACED: f64 = 0.1;
+        let mut w = worldgen::testkit::small_world();
+        let i = worldgen::testkit::mild_land(&w);
+        worldgen::testkit::cover(&mut w, i, 0.4);
+        assert!(w.clear(i, 0.25, None), "the clearing");
+        let (row, genes) = (worldgen::life::LIGHT_ROW, worldgen::life::KINDS[worldgen::life::LIGHT_ROW].genes);
+        assert!(pcore::cover::place(&mut w, i, 1, genes, row as u32, PLACED), "the cover in the clearing");
+        let built = PLACED / (1.0 + dec(genes[STORE]));
+        let r = rows(&w, i, 0.0, cover::SLOTS);
+        let kg = (0..cover::SLOTS).map(|k| &r[k * KIND_ROW..(k + 1) * KIND_ROW]).find(|k| k[KIND_HEAD - 1] == 1.0).expect("a row in the clearing")[1];
+        assert!((kg / built - 1.0).abs() < 1e-6, "{kg} kg/m2 drawn of {built} built");
     }
 }

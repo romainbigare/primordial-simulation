@@ -6,6 +6,7 @@ pub mod chem;
 pub mod clock;
 pub mod contract;
 pub mod cover;
+pub mod edit;
 pub mod event;
 pub mod fauna;
 pub mod flame;

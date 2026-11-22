@@ -106,14 +106,42 @@ pub struct Flamed {
 /// old.
 pub const AGE_MOST: f32 = 120.0;
 
+/// Why a cell's remains carry no flame (`lights`, `bed`, `Bed::unlit`): it holds no land; the chemistry has no
+/// cover; nothing lies on it that burns; its remains cover too little of its ground to join across it (`CARRY_SHARE`);
+/// they are too few to hold a flame's heat even dry (`Bed::least`); snow lies over them; the air near its ground is
+/// not read yet; its ground is too wet, so much of its land saturated that its remains on the rest no longer join;
+/// or they hold so much liquid that too little of them is dry enough to flame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unlit {
+    NoLand,
+    Lifeless,
+    Bare,
+    Sparse,
+    Thin,
+    Snow,
+    Unread,
+    Wet,
+    Damp,
+}
+
+/// Whether a strike on cell `i` lights it, by the test the flames' month uses (`bed`, `Bed::carries`); else why not.
+pub fn lights(w: &World, i: usize) -> Result<(), Unlit> {
+    let p = Parts::of(&w.chem).ok_or(Unlit::Lifeless)?;
+    if crate::contract::land(w, i) <= 0.0 {
+        return Err(Unlit::NoLand);
+    }
+    bed(w, &p, i)?.unlit().map_or(Ok(()), Err)
+}
+
 /// The flames' month, after the cover's (`life::month`): each land cell's bed (`bed`), the share of each cell that burns
-/// (`shares`) and the burning of it (`burn`), on the chunks of `life` only where some burns; what each cell's flames did
-/// is kept for the tape (`tally`).
+/// (`shares`, the strikes of edits with the drawn ones, which it then forgets) and the burning of it (`burn`), on the
+/// chunks of `life` only where some burns; what each cell's flames did is kept for the tape (`tally`).
 pub fn month(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let n = w.mesh.cells().n();
-    let beds = crate::par::map_n(n, n * BED_WORK, |i| if crate::contract::land(w, i) > 0.0 { bed(w, &p, i) } else { None });
+    let beds = crate::par::map_n(n, n * BED_WORK, |i| if crate::contract::land(w, i) > 0.0 { bed(w, &p, i).ok() } else { None });
     let share = shares(w, &beds, w.cfg.calendar().month as f64);
+    w.strikes.clear();
     let load = share.iter().filter(|&&f| f > 0.0).count();
     if load > 0 {
         crate::life::run(w, load, |w, d| {

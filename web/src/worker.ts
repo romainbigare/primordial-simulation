@@ -25,6 +25,9 @@ interface Core {
   relief(): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
+  probe(x: number, y: number): number;
+  kinds(): number;
+  edit(act: number, x: number, y: number, share: number, row: number): number;
   out_len(): number;
 }
 type Command =
@@ -34,6 +37,8 @@ type Command =
   | { cmd: 'play'; on: boolean }
   | { cmd: 'rate'; rate: number }
   | { cmd: 'things'; at: [number, number, number, number] | null }
+  | { cmd: 'probe'; at: [number, number] }
+  | { cmd: 'edit'; act: number; at: [number, number]; share: number; row: number }
   | { cmd: 'shown'; frames: number };
 
 /** Longest time a tick steps before it lets messages in, ms. */
@@ -79,9 +84,17 @@ function handIn(data: ArrayBuffer, use: () => number): string {
   return new TextDecoder().decode(bytes(at, c.out_len()));
 }
 
-function postFrame(kind: 'world' | 'frame'): void {
+/** The text the core last returned at `at`. */
+function text(at: number): string {
+  return new TextDecoder().decode(bytes(at, core!.out_len()));
+}
+
+/** Post the world's frame: a new world's with its header and starting kinds; `edited`, a frame of the same date that
+ * an edit changed. */
+function postFrame(kind: 'world' | 'frame', edited = false): void {
   const c = core!;
-  const head = kind === 'world' ? new TextDecoder().decode(bytes(c.meta(), c.out_len())) : '';
+  const head = kind === 'world' ? text(c.meta()) : '';
+  const kinds = kind === 'world' ? text(c.kinds()) : '';
   const frame = bytes(c.frame(), c.out_len());
   const table = new Float32Array(bytes(c.table(), c.out_len()).buffer);
   const flows = c.discharge(), discharge = c.out_len() > 0 ? new Uint16Array(bytes(flows, c.out_len()).buffer) : null;
@@ -96,7 +109,7 @@ function postFrame(kind: 'world' | 'frame'): void {
   if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
   const stats = { cells: c.cells(), pace };
   const moved = [frame.buffer, table.buffer, plumes.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : []), ...(relief ? [relief.buffer] : [])];
-  host.postMessage({ kind, meta: head, frame, table, discharge, plumes, relief, year: c.year(), day: c.day(), stats, things }, moved);
+  host.postMessage({ kind, meta: head, kinds, edited, frame, table, discharge, plumes, relief, year: c.year(), day: c.day(), stats, things }, moved);
   posted = now; owed = false; unshown++;
 }
 
@@ -154,6 +167,12 @@ host.onmessage = async e => {
     }
     else if (m.cmd === 'rate') rate = m.rate;
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
+    else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
+    else if (m.cmd === 'edit' && core) {
+      // Between two months: a tick never runs while a message is handled.
+      host.postMessage({ kind: 'edited', text: text(core.edit(m.act, m.at[0], m.at[1], m.share, m.row)) }, []);
+      postFrame('frame', true);
+    }
     else if (m.cmd === 'things' && core) {
       thingsAt = m.at;
       if (!playing) postFrame('frame');

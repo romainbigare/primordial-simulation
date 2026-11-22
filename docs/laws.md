@@ -1443,8 +1443,13 @@ seeds fill it:
   that patch keeps its own point.
   `World::split` makes the share s of a cell's first patch a new patch alike to it at the cell's centre, each slot of
   the first patch giving it the share s of its amounts and plants, nothing dying: a control, as each patch stands per
-  m² as the cell did (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). `ew run`
-  makes them at the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Edit`).
+  m² as the cell did (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). Every edit goes
+  through one entry, `World::edit` (`core/src/edit.rs`, `edit::Act`): it runs the passes of a month's start once, so
+  the edits read the world as the laws do, then makes each in its order on the cell under its place (`World::cell_under`):
+  `Clear` about the sample under the place, `Split`, `Plant` in the cell's newest patch (the least age), and `Strike`
+  (3c); each is told as an event. `ew run` makes them at the start of a year (`--clear`, `--split`, `--plant`;
+  `worldgen::schedule::Due`), the live page between two months (wasm `edit`: a clearing, a clearing planted with a
+  starting kind, a strike).
 - **Gaps** (`cover/gaps.rs`): a patch is made for an event, a die-off of a stand's canopy that opens its ground to
   the light (Watt 1947; Shugart 1984), not for one tree: a canopy's own yearly deaths, a share of a crown each, stay
   spread over its stand, as its size groups and thinning hold it. When the large plants of a slot (its last group) die
@@ -1514,7 +1519,12 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   that share an edge join into a region of A m² of covered ground (each cell's land times its cover). A region expects
   `strikes` × A × the month's share of a year of strikes that light it; their count is a Poisson draw and each lights
   a cell drawn by its covered ground, from the world's seed by the month and the region's first cell
-  (`rng::Purpose::Flame`; the same draws for any number of threads). Each flame runs from the cell it lit over the
+  (`rng::Purpose::Flame`; the same draws for any number of threads). An edit's strike (`edit::Act::Strike`) lights its
+  cell in the coming month, after the drawn ones (`World::strikes`, forgotten once the month's shares are found); it is
+  made only where the cell's bed carries a flame now (`flame::lights`, by the same `bed` and `Bed::carries`), and
+  `flame::Unlit` says why not: no land, no cover in the chemistry, nothing lying that burns, remains too sparse to join
+  across the ground or too few to hold a flame's heat, snow over them, the air near the ground not read yet, ground so
+  wet that its saturated share breaks them apart, or remains too damp. Each flame runs from the cell it lit over the
   region's cells for `front_life`, crossing half the way between two cells' centres at each one's speed R (below),
   the earliest first (`flame::run`). Every cell it reaches burns all of its land that its remains cover (f = its
   cover): a patch burns whole, keeps no remains to carry a flame, and burns again only once its cover's leaves have
