@@ -128,6 +128,9 @@ impl Ground {
     /// build moves the samples of every cell. Returns the squares whose tiles changed (`rebuild`), row by row, true for
     /// each.
     pub fn rebuild(&mut self, new: Arc<Samples>) -> Vec<bool> {
+        // What a tile reads of the old ground stays while the new one is made (`read`); the rest goes first, so the two
+        // grounds are not held whole at once: a page's worker has little memory, and a wasm memory never shrinks.
+        (self.bends, self.shore, self.grain) = Default::default();
         let made = Ground::on(self.seed, (self.map.clone(), self.terrain.clone(), self.lat), (&self.phys, self.gravity), new);
         let changed = rebuild::readers(&made.samples, &rebuild::changed(&self.read(), &made.read()));
         let squares = rebuild::squares(&self.map, &made.samples, &changed);

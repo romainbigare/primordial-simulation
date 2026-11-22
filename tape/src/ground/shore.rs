@@ -86,6 +86,7 @@ pub(super) fn drowned(width: f64, depth: f64, off: f64) -> [f64; 2] {
 
 /// Of each sample of the terrain: the pond it lies in or the nearest within `NEAR_SAMPLES` (`NONE`: none), and its
 /// offset and its depth under that pond's level, blurred (the module's doc), m; and the level of each pond, m.
+#[derive(Default)]
 pub(super) struct Shore {
     across: usize,
     down: usize,

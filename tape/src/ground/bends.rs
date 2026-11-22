@@ -268,6 +268,7 @@ impl Reaches<'_> {
 /// How each sample's piece starts (`Start`): the lengths along the lines of those that start straight, m, and the
 /// walks of the others; and of each sample's wander: the most it leans from its curve, m, the sample its line began
 /// at, and how far down the valley its piece starts, in the wander's lattice.
+#[derive(Default)]
 pub(super) struct Bends {
     straight: Vec<f64>,
     bent: HashMap<u32, Entry>,
