@@ -7,6 +7,7 @@
 use super::groups::Group;
 use super::{Cover, NO_ROOT, NP, SLOTS};
 use crate::life::kin;
+use crate::space::terrain::SAMPLE_DEPTH;
 use crate::Physics;
 use std::f64::consts::FRAC_PI_4;
 
@@ -207,8 +208,14 @@ pub(super) fn moved(was: f32, now: f64) -> bool {
 pub fn loose_bins(w: &crate::World) -> Vec<[f32; BINS]> {
     let s = w.terrain_samples();
     let bin = |m: f64| (((m.max(LEAST_M) / LEAST_M).ln() / bin_width()) as usize).min(BINS - 1);
+    // Each cell's samples once: their area in all, and in each bin.
     crate::par::map_n(w.mesh.cells().n(), crate::par::UNCOUNTED, |i| {
-        std::array::from_fn(|b| s.over(w.map.leaves()[i], |s, k| if bin(s.loose[k]) == b { 1.0 } else { 0.0 }) as f32)
+        let (mut all, mut by) = (0.0, [0.0; BINS]);
+        for k in w.map.leaves()[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)) {
+            let b = bin(s.loose[k]);
+            (all, by[b]) = (all + s.area(k), by[b] + s.area(k));
+        }
+        by.map(|a| (a / all) as f32)
     })
 }
 /// The plants that `kg` of seeds found on ground of `area` m²: one for each `seed_kg`, as many as the self-thinning
