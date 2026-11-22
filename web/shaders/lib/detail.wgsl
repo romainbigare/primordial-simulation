@@ -43,6 +43,7 @@ fn carpet_patch(t: i32, l: Lat, x: u32, flat: bool, g: f32) -> vec3f {
 // repeat shows and a pixel shows one patch's grass and stones, not the mean of two.
 fn carpet(c: i32, e: f32) -> vec3f {
   let s = carpet_m(c);
+  if (unseen(s)) { return vec3f(1.0); }
   let t = CARPETS_FROM + c;
   let pa = lat_axes(CARPET_PATCH * s, vec2f(0.0));
   let pb = lat_axes(CARPET_PATCH * s, vec2f(0.5));
@@ -67,8 +68,11 @@ fn carpet(c: i32, e: f32) -> vec3f {
 fn detail(t: i32, e: f32) -> vec3f { return detail_turned(t, e, 0.0, 2.0 * PI); }
 // The same, each hexagon turned by its own draw within `spread` radians about a way that swings by up to a half turn
 // along noise `swing_m` m across (0: none), read at the hexagon (a turn is one for all its pixels).
+// A photograph finer than any pixel of the program's draws shows (draw.wgsl `unseen`) gives its mean: no change, read
+// from no texel.
 fn detail_turned(t: i32, e: f32, swing_m: f32, spread: f32) -> vec3f {
   let s = detail_m(t);
+  if (unseen(s)) { return vec3f(1.0); }
   var h = hexes(DETAIL_HEX * s, DETAIL_EDGE);
   let least = hex_least(h);
   let mean = max(dot(photo_mean(t), LUMA), 1e-3);
@@ -179,6 +183,8 @@ const LAID_SOAKED = vec2f(0.6, 0.85);
 // its sand, pebbles or mud (colour.wgsl `shore_grain`), the mud of a fresh deposit rippled silt, the sand bare up to
 // the storms' swash and with its tufts and drift above; and channels' pebbles where they lie.
 fn soil_detail(p: Spot) -> vec3f {
+  // (Where the largest of its images, the dry sand, is finer than any pixel of the program's draws, none shows.)
+  if (unseen(detail_m(DRY_SAND_TEX))) { return vec3f(1.0); }
   let canopy = min(p.canopy, 1.0);
   let dry = ease(0.45, 0.1, p.wet);
   let sandy = sandy_of(p.grain);

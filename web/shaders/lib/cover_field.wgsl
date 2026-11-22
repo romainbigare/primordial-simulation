@@ -226,10 +226,20 @@ fn cell_patch_at(at: vec2f) -> i32 {
   let o = (s - vec2f(q)) * land.map.x;
   let ragged = 0.75 * noise(at / PATCH_EDGE_SIZE_M, 211).x + 0.25 * noise(3.0 * at / PATCH_EDGE_SIZE_M, 212).x;
   let reach = vec2f(a.z, b.y) * land.map.x;
-  let edge = ragged * min(PATCH_EDGE * reach, vec2f(PATCH_EDGE_M));
-  if (length(o - a.xy * land.map.x) < reach.x + edge.x) { return 1; }
-  if (reach.y > 0.0 && length(o - vec2f(a.w, b.x) * land.map.x) < reach.y + edge.y) { return 2; }
+  let edge = min(PATCH_EDGE * reach, vec2f(PATCH_EDGE_M));
+  if (in_patch(o, a.xy * land.map.x, reach.x, edge.x, ragged)) { return 1; }
+  if (reach.y > 0.0 && in_patch(o, vec2f(a.w, b.x) * land.map.x, reach.y, edge.y, ragged)) { return 2; }
   return 0;
+}
+
+// Whether the point `o`, m from its cell's corner, lies in the patch about `c` of reach `reach` m, ragged by up to
+// `edge` m (`ragged`, -1..1, of it). A patch is its cell's alone, so it is drawn whole inside its cell, with no straight
+// edge along the cell's: its centre moved in as far as that asks, and a patch wider than the cell drawn as the widest
+// that fits (the cell's other cover in its corners).
+fn in_patch(o: vec2f, c: vec2f, reach: f32, edge: f32, ragged: f32) -> bool {
+  let fit = min(1.0, 0.5 * land.map.x / (reach + edge));
+  let m = fit * (reach + edge);
+  return length(o - clamp(c, vec2f(m), vec2f(land.map.x - m))) < fit * (reach + ragged * edge);
 }
 
 // Layer l of the field of the patch `cell_patch` of the square at `at` (one past the first: its own, `PATCH_FIELDS`):
