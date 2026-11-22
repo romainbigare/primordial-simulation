@@ -192,10 +192,10 @@ impl World {
         map.mesh(cfg.lat_south, cfg.lat_north)
     }
     /// The rise toward the south of each cell of a world as built, m per m: the terrain's samples' (as last built,
-    /// `World::terrain_samples`) inside it (`Terrain::rise_south_on`).
+    /// `World::terrain_samples`) inside it (`Samples::rise_south`).
     pub fn rise_at_build(&self) -> Vec<f64> {
-        let (lat, s) = ((self.cfg.lat_south, self.cfg.lat_north), self.terrain_samples());
-        crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| self.terrain.rise_south_on(&s, &self.map, self.map.leaves()[i], lat))
+        let s = self.terrain_samples();
+        crate::par::map_n(self.mesh.cells().n(), crate::par::UNCOUNTED, |i| s.rise_south(&self.map, self.map.leaves()[i]))
     }
     /// The cell that holds the centre of square (`x`, `y`) of its map.
     pub fn cell_of(&self, (x, y): (usize, usize)) -> usize {

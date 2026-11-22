@@ -120,13 +120,12 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
     }
     let side = (1usize << (SAMPLE_DEPTH - map.square_depth())) as f64;
     let radius = (SMOOTH_SHARE * side).round() as usize;
-    let area: Vec<f64> = (0..n).map(|k| map.place_of(&seed.leaf(k), south, north).0).collect();
     // What each group's mean by area of `f` lacks of its own offset, at each of its samples.
     let lacks = |f: &[f64]| {
         let mut sums = vec![[0.0; 2]; (cells as usize) + n];
         (0..n).for_each(|k| {
             let g = group[k] as usize;
-            sums[g] = [sums[g][0] + area[k], sums[g][1] + area[k] * (target[k] - f[k])];
+            sums[g] = [sums[g][0] + seed.area(k), sums[g][1] + seed.area(k) * (target[k] - f[k])];
         });
         (0..n).map(|k| sums[group[k] as usize][1] / sums[group[k] as usize][0]).collect::<Vec<f64>>()
     };

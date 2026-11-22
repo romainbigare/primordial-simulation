@@ -58,7 +58,6 @@ fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
         let held: f64 = body.cells.iter().zip(&body.part).map(|(&i, &q)| s.state.held[i as usize].m3[q]).sum();
         super::level::level_over(&parts, held).min(body.level)
     }).collect();
-    let area = |k: usize| w.map.place_of(&samples.leaf(k), w.cfg.lat_south, w.cfg.lat_north).0;
     let body: Vec<u32> = (0..n).map(|k| b.at.get(k).copied().unwrap_or(NONE)).collect();
     let level: Vec<f64> = body.iter().map(|&x| if x == NONE { f64::NEG_INFINITY } else { levels[x as usize] }).collect();
     let mut mouths = Vec::new();
@@ -66,7 +65,7 @@ fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
     for k in piled {
         let pond = samples.ponds[samples.pond[k] as usize];
         let pass = if pond.pass == NONE { f64::INFINITY } else { pond.level };
-        mouths.push((k, w.relief.since(k) * area(k), (level[k] + flood_depth(samples.up[k], samples.channel)).min(pass)));
+        mouths.push((k, w.relief.since(k) * samples.area(k), (level[k] + flood_depth(samples.up[k], samples.channel)).min(pass)));
         w.relief.laid[k] = w.relief.built.get(k).copied().unwrap_or(0.0);
     }
     if mouths.is_empty() {
@@ -79,7 +78,7 @@ fn lay(w: &mut World, s: &mut Scratch, samples: &Samples) {
     let mut out: Vec<((u32, u32), f64)> = Vec::new();
     let mut index = std::collections::HashMap::new();
     for &(k, v, m) in &parts {
-        w.relief.lay(k, v / area(k), n);
+        w.relief.lay(k, v / samples.area(k), n);
         let from = b.cell_of[mouths[m as usize].0];
         for &(to, share) in &cells[k] {
             if to != from {
@@ -104,7 +103,7 @@ fn cells_of(w: &World, samples: &Samples) -> Vec<Vec<(u32, f64)>> {
             l.split(SAMPLE_DEPTH).for_each(|f| cells[samples.index(&f)] = vec![(i as u32, 1.0)]);
         } else {
             let k = samples.index(l);
-            cells[k].push((i as u32, w.map.place_of(l, lat.0, lat.1).0 / w.map.place_of(&samples.leaf(k), lat.0, lat.1).0));
+            cells[k].push((i as u32, w.map.place_of(l, lat.0, lat.1).0 / samples.area(k)));
         }
     }
     cells

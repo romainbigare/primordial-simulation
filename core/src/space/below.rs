@@ -105,7 +105,7 @@ impl Terrain {
         let (across, down) = ((win[2] - win[0] + 1) as usize, (win[3] - win[1] + 1) as usize);
         let pixel = |p: usize| (win[0] + (p % across) as i64, win[1] + (p / across) as i64);
         if depth <= SAMPLE_DEPTH {
-            return (0..across * down).map(pixel).map(|(x, y)| self.over_on(s, map, leaf_at(depth, x, y), lat, |s, k| s.h[k])).collect();
+            return (0..across * down).map(pixel).map(|(x, y)| s.over(leaf_at(depth, x, y), |s, k| s.h[k])).collect();
         }
         let p = patch(s, map, lat, win, depth);
         (0..across * down).map(pixel).map(|(x, y)| p.z[p.near(x, y)]).collect()

@@ -2,7 +2,7 @@
 //! (`runoff::load`).
 
 use super::super::{bare_share, land::{lift, solid}, on_land};
-use super::{carriage::sample_area, Bodies, Scratch};
+use super::{Bodies, Scratch};
 use crate::{space::network::NONE, store::{Class, Move, Node}, World};
 
 /// Least bond strength wear divides by.
@@ -79,7 +79,7 @@ pub(in crate::flow) fn land_t(s: &Scratch, i: usize) -> f64 {
 fn taken(w: &World, work: &Work, volume: &[f64]) -> Vec<(u32, f64)> {
     let samples = w.terrain_samples();
     work.on_relief.iter().map(|&(k, i, done)| {
-        let a = sample_area(w, &samples, k as usize);
+        let a = samples.area(k as usize);
         (k, (volume[i as usize] * done / work.cells[i as usize] / a).min(w.relief.at(k as usize)))
     }).collect()
 }

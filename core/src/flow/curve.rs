@@ -275,7 +275,9 @@ pub(super) fn first_held_at(s: &Scratch, i: usize) -> Holding {
 fn of(w: &World, i: usize) -> Curve {
     let (s, l, lat) = (w.terrain_samples(), w.map.leaves()[i], (w.cfg.lat_south, w.cfg.lat_north));
     let depth = SAMPLE_DEPTH.max(l.depth);
-    let ks: Vec<(usize, f64)> = l.split(depth).map(|f| (s.index(&f), w.map.place_of(&f, lat.0, lat.1).0)).collect();
+    // (A cell as fine as a sample or finer holds one sample, at its own area.)
+    let area_of = |f: &crate::space::tree::Leaf, k: usize| if f.depth == SAMPLE_DEPTH { s.area(k) } else { w.map.place_of(f, lat.0, lat.1).0 };
+    let ks: Vec<(usize, f64)> = l.split(depth).map(|f| (s.index(&f), f)).map(|(k, f)| (k, area_of(&f, k))).collect();
     let (all, area) = (ks.iter().map(|k| k.1).sum::<f64>(), w.mesh.cells().area()[i]);
     let mean = ks.iter().map(|&(k, a)| s.h[k] * a).sum::<f64>() / all;
     let mut ponds: Vec<u32> = ks.iter().map(|k| s.pond[k.0]).filter(|&p| p != NONE).collect();
