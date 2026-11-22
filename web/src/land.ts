@@ -237,12 +237,12 @@ export class Land {
     if (!this.data) return null;
     const m = this.tiles.map;
     if (this.tex && this.tex.h !== this.rows) { gpu.drop(this.tex); this.tex = null; }
-    this.tex ??= gpu.texture(m.w, this.rows, 'rgba32float');
+    this.tex ??= gpu.texture('land', m.w, this.rows, 'rgba32float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const s = this.samples;
-    this.flows ??= gpu.texture(s.across, s.down, 'rg16float');
+    this.flows ??= gpu.texture('land', s.across, s.down, 'rg16float');
     if (this.flowsDue) { gpu.write(this.flows, this.flowsOf()); this.flowsDue = false; }
-    this.rock ??= gpu.texture(s.across, ROCK_PLANES * s.down, 'rgba16float');
+    this.rock ??= gpu.texture('land', s.across, ROCK_PLANES * s.down, 'rgba16float');
     if (this.rockAt !== this.tiles.rockVersion) {
       const r = this.tiles.rock;
       gpu.write(this.rock, r ?? Uint16Array.from({ length: 4 * ROCK_PLANES * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));

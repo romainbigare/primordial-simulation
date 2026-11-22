@@ -7,6 +7,7 @@
 // The page keeps no copy of a tile: after a lost context the card's are empty, and it asks for them again (`lost`).
 import { Gpu, Texture } from './gpu';
 import type { View } from './map';
+import { spend, timed } from './cost';
 
 /** The tiles of the ground as the core makes them (wasm/src/lib.rs `meta`): texels a side inside the gutter, texels of
  * the gutter along each edge, the depths from the coarsest to the finest, the most steps along each axis by which a
@@ -54,7 +55,7 @@ const keyOf = (depth: number, x: number, y: number) => depth * KEY_DEPTH + y * K
 interface Kept { depth: number; x: number; y: number; layer: number; came: number; asked: number }
 
 export class GroundTiles {
-  private workers: { worker: Worker; ready: boolean; making: number }[] = [];
+  private workers: { worker: Worker; ready: boolean; making: number; memory: number }[] = [];
   private url: string;
   private kept = new Map<number, Kept>();
   /** The tiles the view asks for and has not, in order; those being made. */
@@ -97,13 +98,13 @@ export class GroundTiles {
     this.makePage();
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     for (let k = 0; k < WORKERS; k++) {
-      const w = { worker: new Worker(this.url), ready: false, making: 0 };
+      const w = { worker: new Worker(this.url), ready: false, making: 0, memory: 0 };
       w.worker.onerror = e => error(e.message || 'The worker of the ground\'s tiles failed.');
       w.worker.onmessage = e => {
-        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock: Uint16Array; text: string; gen: number; squares: Uint8Array };
+        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock: Uint16Array; text: string; gen: number; squares: Uint8Array; ms: number; memory: number };
         if (m.kind === 'error') return error(m.text);
         if (m.kind === 'ready') { w.ready = true; if (!this.rock) { this.rock = m.rock; this.rockVersion++; } this.changed(true); return this.next(); }
-        if (m.kind === 'tile') { w.making--; this.took(m.depth, m.x, m.y, m.data, m.gen); }
+        if (m.kind === 'tile') { w.making--; w.memory = m.memory; spend('tile ms', m.ms); timed('tiles', () => this.took(m.depth, m.x, m.y, m.data, m.gen)); }
         if (m.kind === 'rebuilt' && k === 0) this.rebuilt(m.squares, m.rock);
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
@@ -175,6 +176,8 @@ export class GroundTiles {
   toCome(): number { let n = 0; for (const k of this.inView) if (!this.kept.has(k)) n++; return n; }
   /** The tiles kept. */
   count(): number { return this.kept.size; }
+  /** The bytes of each worker's core's memory, as it last said. */
+  memory(): number[] { return this.workers.map(w => w.memory); }
   /** Whether a tile still fades in at `now` (performance.now, ms). */
   fading(now: number): boolean { return now - this.start - this.lastCame < TILE_FADE_MS; }
 
@@ -278,19 +281,19 @@ export class GroundTiles {
    * column, row, when it came), sent to `gpu` as they change; and the time since the tiles started, ms. */
   textures(gpu: Gpu): { atlas: Texture; areas: Texture; pages: Texture; tiles: Texture; now: number } {
     const side = this.meta.size + 2 * this.meta.gutter, n = side * side;
-    this.atlas ??= gpu.texture(side, side, 'rgba16float', MOST_TILES);
-    this.areas ??= gpu.texture(side, side, 'rgba16float', MOST_TILES);
+    this.atlas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
+    this.areas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
     for (const c of this.come) {
       gpu.write(this.atlas, c.data.subarray(0, PLANE_A * n), 0, c.layer);
       gpu.write(this.areas, c.data.subarray(PLANE_A * n, (PLANE_A + PLANE_B) * n), 0, c.layer);
     }
     this.come = [];
     if (this.pageDue) {
-      if (this.pages?.w !== this.page.w || this.pages.h !== this.page.h) { if (this.pages) gpu.drop(this.pages); this.pages = gpu.texture(this.page.w, this.page.h, 'rgba32float'); }
+      if (this.pages?.w !== this.page.w || this.pages.h !== this.page.h) { if (this.pages) gpu.drop(this.pages); this.pages = gpu.texture('tiles', this.page.w, this.page.h, 'rgba32float'); }
       gpu.write(this.pages, this.page.data);
       this.pageDue = false;
     }
-    this.tilesTex ??= gpu.texture(MOST_TILES, 1, 'rgba32float');
+    this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 1, 'rgba32float');
     if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; }
     return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now: performance.now() - this.start };
   }

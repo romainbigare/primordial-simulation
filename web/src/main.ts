@@ -1,7 +1,9 @@
 import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
 import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
-import type { Gpu } from './gpu';
+import type { HeldGpu } from './gpu';
+import { spent } from './cost';
+import { detailSent } from './detail';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats } from './live';
@@ -78,7 +80,7 @@ god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live) god.draw(ctx, ox, oy, s); };
 map.tap = (x, y) => live !== null && god.tap(x, y);
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
-let drawing: Gpu | null = null;
+let drawing: HeldGpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
 // The GPU's loss, said on the page (gpu-webgl2.ts, gpu-webgpu.ts), is over once it draws again.
 map.onRestored = () => say('');
@@ -381,7 +383,36 @@ function showStats(s: Stats): void {
   el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
     ['cells', String(s.cells)],
     ...(land ? [['ground', `${land.tiles.count()} tiles of ${fmt(m.cell_m / 2 ** (land.tiles.depth - (m.square_depth ?? 0)))} m, ${land.tiles.toCome()} to come`]] : []),
-    ...(drawing ? [['map', `drawn with ${drawing.kind} at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+    ...(drawing ? [['map', `drawn with ${drawing.kind} at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')
+    + `<button class="costs" id="costs">${costShown ? 'hide cost' : 'cost'}</button>`;
+  showCost(s);
+}
+/** Whether the cost line shows (`showCost`). */
+let costShown = false;
+$('stats').onclick = e => { if ((e.target as HTMLElement).id === 'costs') { costShown = !costShown; if (live) showStats(live.stats); } };
+/** The cost line: where the time and the memory go, over the last whole second, so a screenshot of it tells where a
+ * slow device spends: the world's worker (its months, the time a month takes, the share of its time it steps), the
+ * page's thread (the world's frames taken, the map's draws), the GPU's time a frame, the ground's tiles (made in their
+ * worker, taken on the page), the detail sent to the GPU, and the memory of the GPU's textures by what they hold, of
+ * each worker's core and of the page's script where the browser says it. */
+function showCost(s: Stats): void {
+  const el = $('cost');
+  el.hidden = !costShown;
+  if (!costShown) return;
+  const ms = (v: number) => v.toFixed(v < 10 ? 1 : 0), mb = (bytes: number) => (bytes / 2 ** 20).toFixed(bytes < 2 ** 23 ? 1 : 0);
+  const per = (key: string) => `${ms(spent(key))} ms on ${spent(`${key} n`).toFixed(1)}`;
+  const [sent, layers] = detailSent(), gpuN = spent('gpu n');
+  const heap = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
+  const cards = drawing?.memory() ?? [], cardAll = cards.reduce((n, [, b]) => n + b, 0);
+  el.innerHTML = [
+    ['world', `${fmt(s.pace)} months/s, ${ms(s.monthMs)} ms a month, worker busy ${Math.round(100 * s.busy)}%`],
+    ['page /s', `world frames ${per('world frames')}, draws ${per('draw')}`],
+    ['gpu', `${gpuN > 0 ? ms(spent('gpu') / gpuN) : '-'} ms a frame`],
+    ['tiles /s', `${ms(spent('tile ms'))} ms in the worker, ${per('tiles')} on the page`],
+    ['detail', `${sent} of ${layers} layers sent, ${per('detail')} frames /s`],
+    ['gpu MB', `${mb(cardAll)}: ${cards.map(([label, b]) => `${label} ${mb(b)}`).join(', ')}`],
+    ['wasm MB', `world ${mb(s.memory)}${land ? `, tiles ${land.tiles.memory().map(mb).join(' + ')}` : ''}${heap ? `; js ${mb(heap)}` : ''}`],
+  ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
 /** The band of latitudes `S,N`, degrees, south first; [NaN, NaN] (the core's default band, its edges closed) for none,

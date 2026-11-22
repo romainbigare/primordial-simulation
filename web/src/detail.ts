@@ -5,6 +5,7 @@
 // real size as a change around the colour the world gives the ground (the image over its mean), so from afar, where the
 // mips average it, the colour is the world's alone.
 import { Gpu, Texture } from './gpu';
+import { timed } from './cost';
 
 /** The rendered models' strip files, each list in its layers' order (web/textures/strips.json, written by the bake tool
  * and put in the page by build.mjs). */
@@ -63,6 +64,9 @@ function fetchDetail(): void {
 }
 fetchDetail();
 
+/** The detail's layers sent to the GPU, and all it has (none known before the strips are fetched). */
+export function detailSent(): [number, number] { return [sending?.filled ?? 0, groundLayers]; }
+
 /** Send the detail to `gpu` as its layers come, `LAYERS_A_FRAME` a frame; `sent` hears once all are. */
 export function sendDetail(gpu: Gpu, sent: () => void): void {
   sending = { gpu, t: null, filled: 0, frame: 0, sent };
@@ -83,16 +87,16 @@ export function detailLost(): void {
 function sendSoon(): void {
   const s = sending;
   if (!s || s.frame || !layersMade.length) return;
-  s.frame = requestAnimationFrame(() => {
+  s.frame = requestAnimationFrame(() => timed('detail', () => {
     s.frame = 0;
-    s.t ??= s.gpu.texture(PHOTO_SIDE, PHOTO_SIDE, 'rgba8unorm', groundLayers, PHOTO_MIPS);
+    s.t ??= s.gpu.texture('detail', PHOTO_SIDE, PHOTO_SIDE, 'rgba8unorm', groundLayers, PHOTO_MIPS);
     for (const { layer, levels } of layersMade.splice(0, LAYERS_A_FRAME)) {
       levels.forEach((d, k) => s.gpu.write(s.t!, d, k, layer));
       s.filled++;
     }
     if (s.filled === groundLayers) s.sent();
     else sendSoon();
-  });
+  }));
 }
 
 /** The ground's detail on `gpu`: the strips' texture once all its layers are sent, else one white texel a layer (no
@@ -101,7 +105,7 @@ export function groundDetail(gpu: Gpu): Texture {
   if (sending?.gpu === gpu && sending.t && sending.filled === groundLayers) return sending.t;
   let t = photoBlank.get(gpu);
   if (!t) {
-    t = gpu.texture(1, 1, 'rgba8unorm', BLANK_LAYERS, 1);
+    t = gpu.texture('detail', 1, 1, 'rgba8unorm', BLANK_LAYERS, 1);
     gpu.write(t, new Uint8Array(4 * BLANK_LAYERS).fill(255));
     photoBlank.set(gpu, t);
   }
