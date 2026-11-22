@@ -48,7 +48,7 @@ export class FieldWindow {
     const f = this.fields, n = f.w * f.h;
     if (!this.textures) {
       this.textures = {};
-      for (const t of FIELD_TEXTURES) { const tex = gpu.texture(f.w, f.h, t.format); gpu.write(tex, f[t.field]); this.textures[t.binding] = tex; }
+      for (const t of FIELD_TEXTURES) { const tex = gpu.texture('fields', f.w, f.h, t.format); gpu.write(tex, f[t.field]); this.textures[t.binding] = tex; }
     }
     // The layer drawn, the first byte of the texel's four (none where the window does not hold it).
     const key = `${look.mode} ${look.layer}`;
@@ -58,7 +58,7 @@ export class FieldWindow {
         if (k >= 0) for (let i = 0; i < n; i++) data[4 * i + ch] = f.layers[k * n + i];
       };
       if (look.mode === 'layer') plane(look.layer, 0);
-      this.view ??= gpu.texture(f.w, f.h, 'rgba8unorm');
+      this.view ??= gpu.texture('fields', f.w, f.h, 'rgba8unorm');
       gpu.write(this.view, data);
       this.viewKey = key;
     }

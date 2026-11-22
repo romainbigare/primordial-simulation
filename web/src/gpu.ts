@@ -116,6 +116,9 @@ export function bindingsOf(p: Program): { uniforms: number[]; textures: number[]
   return { uniforms: [...u], textures: [...t], samplers: [...s] };
 }
 
+/** Bytes of a texel of each format. */
+export const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float: 16, rgba16float: 8, rg16float: 4, r16float: 2 };
+
 /** What a texel holds: four bytes (read as 0..1), or four 32-bit floats, or four or one 16-bit floats (the floats read
  * whole texels at a time). */
 export type Format = 'rgba8unorm' | 'rgba32float' | 'rgba16float' | 'rg16float' | 'r16float';
@@ -141,8 +144,9 @@ export interface Pass {
 
 export interface Gpu {
   readonly kind: 'WebGPU' | 'WebGL2';
-  /** A texture of `w` x `h` texels of `format`, `layers` deep with `mips` levels; `target`: it can be drawn into. */
-  texture(w: number, h: number, format: Format, layers?: number, mips?: number, target?: boolean): Texture;
+  /** A texture of `w` x `h` texels of `format`, `layers` deep with `mips` levels; `target`: it can be drawn into. Its
+   * `label` says what it holds (the cost line sums the GPU's memory by it). */
+  texture(label: string, w: number, h: number, format: Format, layers?: number, mips?: number, target?: boolean): Texture;
   /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone,
    * which the renderer does not keep: after a lost context it is empty). */
   write(t: Texture, data: TexelData, level?: number, layer?: number): void;
@@ -208,13 +212,19 @@ const LOSSES_MOST = 2;
  * `restored`). */
 class HeldTexture implements Texture {
   levels: TexelData[] = [];
-  constructor(readonly w: number, readonly h: number, readonly layers: number, readonly mips: number, readonly format: Format, readonly target: boolean, public inner: Texture) {}
+  constructor(readonly label: string, readonly w: number, readonly h: number, readonly layers: number, readonly mips: number, readonly format: Format, readonly target: boolean, public inner: Texture) {}
+  /** Bytes it takes on the card: each of its levels, a texel `TEXEL_BYTES`. */
+  get bytes(): number {
+    let n = 0;
+    for (let k = 0; k < this.mips; k++) n += Math.max(1, this.w >> k) * Math.max(1, this.h >> k);
+    return n * this.layers * TEXEL_BYTES[this.format];
+  }
 }
 
 /** The page's GPU: a back end and the textures the page holds on it. Where the back end loses what it held, or WebGPU
  * does not finish its frames or loses its device twice, the textures are made anew on the same back end or on WebGL2
  * on a fresh canvas, filled again, and the page is told (`restored`) to fill the rest. */
-class HeldGpu implements Gpu {
+export class HeldGpu implements Gpu {
   private back!: Back;
   /** Ends the WebGPU back end (its device), so a back end left behind holds nothing. */
   private close: (() => void) | null = null;
@@ -247,7 +257,7 @@ class HeldGpu implements Gpu {
    * if it held any (`rebuilt`). */
   private use(back: Back, close: (() => void) | null, rebuilt: boolean): void {
     this.back = back; this.close = close; this.watching = false; this.finished = 0; this.drewDone.clear();
-    for (const t of this.held) { t.inner = back.texture(t.w, t.h, t.format, t.layers, t.mips, t.target); t.levels.forEach((d, k) => d && back.write(t.inner, d, k)); }
+    for (const t of this.held) { t.inner = back.texture(t.label, t.w, t.h, t.format, t.layers, t.mips, t.target); t.levels.forEach((d, k) => d && back.write(t.inner, d, k)); }
     if (rebuilt) this.restored();
   }
 
@@ -271,10 +281,16 @@ class HeldGpu implements Gpu {
     return g !== null;
   }
 
-  texture(w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
-    const t = new HeldTexture(w, h, layers, mips, format, target, this.back.texture(w, h, format, layers, mips, target));
+  texture(label: string, w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
+    const t = new HeldTexture(label, w, h, layers, mips, format, target, this.back.texture(label, w, h, format, layers, mips, target));
     this.held.add(t);
     return t;
+  }
+  /** The bytes the textures held take on the card, by label, the most first. */
+  memory(): [string, number][] {
+    const by = new Map<string, number>();
+    for (const t of this.held) by.set(t.label, (by.get(t.label) ?? 0) + t.bytes);
+    return [...by].sort((a, b) => b[1] - a[1]);
   }
   write(t: Texture, data: TexelData, level = 0, layer?: number): void {
     const h = t as HeldTexture;
@@ -334,7 +350,7 @@ class HeldGpu implements Gpu {
 
 /** The page's GPU (`HeldGpu`) on the canvases `canvas` gives, or null where the browser has neither WebGPU nor WebGL2;
  * `restored` fills again what the textures held after they were made anew. */
-export async function openGpu(canvas: () => HTMLCanvasElement, restored: () => void): Promise<Gpu | null> {
+export async function openGpu(canvas: () => HTMLCanvasElement, restored: () => void): Promise<HeldGpu | null> {
   const g = new HeldGpu(canvas, restored);
   return (await g.open()) ? g : null;
 }

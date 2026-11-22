@@ -53,7 +53,7 @@ class WebGl2 implements Back {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   }
 
-  texture(w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
+  texture(_label: string, w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
     const t = new WebGl2Texture(w, h, layers, mips, format, target);
     this.make(t);
     return t;

@@ -29,6 +29,8 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .stats { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; color: var(--muted); font-size: 13px; }
 .stats b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats button.costs { padding: 0 6px; font-size: 12px; border-radius: 6px; border: 1px solid var(--line); background: none; color: var(--muted); }
+.stats.cost { font-size: 12px; gap: 2px 12px; }
 .classes { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--muted); }
 .classes li { display: flex; align-items: center; gap: 5px; }
 .open { margin-left: auto; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; cursor: pointer; }

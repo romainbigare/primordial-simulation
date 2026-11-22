@@ -62,8 +62,9 @@ let lastTick = 0;
 let timer = 0;
 /** The window (x, y, w, h in squares) whose things the page draws one by one (null: none). */
 let thingsAt: [number, number, number, number] | null = null;
-/** The months stepped since `since` (ms), and the pace measured over the last whole second, months per second. */
-let stepped = 0, since = 0, pace = 0;
+/** The months stepped since `since` (ms) and the time stepping them took, ms, and of the last whole second: the pace,
+ * months per second, the time a month took, ms, and the share of the time spent stepping. */
+let stepped = 0, since = 0, pace = 0, steppingMs = 0, monthMs = 0, busy = 0;
 /** The build of the samples (`builds`) whose relief the page has: it is sent with the first frame after the next. */
 let sentBuilds = 0;
 /** When the last frame was posted (ms), whether months were stepped since, and how many frames posted the page has not
@@ -106,8 +107,11 @@ function postFrame(kind: 'world' | 'frame', edited = false): void {
   sentBuilds = c.builds();
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   const now = performance.now();
-  if (now - since >= PACE_MS) { pace = (stepped * 1000) / (now - since); stepped = 0; since = now; }
-  const stats = { cells: c.cells(), pace };
+  if (now - since >= PACE_MS) {
+    pace = (stepped * 1000) / (now - since); monthMs = stepped ? steppingMs / stepped : 0; busy = steppingMs / (now - since);
+    stepped = 0; steppingMs = 0; since = now;
+  }
+  const stats = { cells: c.cells(), pace, monthMs, busy, memory: c.memory.buffer.byteLength };
   const moved = [frame.buffer, table.buffer, plumes.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : []), ...(relief ? [relief.buffer] : [])];
   host.postMessage({ kind, meta: head, kinds, edited, frame, table, discharge, plumes, relief, year: c.year(), day: c.day(), stats, things }, moved);
   posted = now; owed = false; unshown++;
@@ -129,6 +133,7 @@ function tick(): void {
       if (bounded) due -= 1;
     }
     stepped += made;
+    steppingMs += performance.now() - t0;
     owed ||= made > 0;
     if (owed && unshown === 0 && performance.now() - posted >= FRAME_MS) postFrame('frame');
   } catch (e) {
@@ -142,7 +147,7 @@ function tick(): void {
 function start(on: boolean): void {
   clearTimeout(timer);
   playing = on && core !== null;
-  if (playing) { lastTick = since = performance.now(); stepped = pace = unshown = 0; timer = setTimeout(tick, 0); }
+  if (playing) { lastTick = since = performance.now(); stepped = pace = steppingMs = unshown = 0; timer = setTimeout(tick, 0); }
 }
 
 host.onmessage = async e => {

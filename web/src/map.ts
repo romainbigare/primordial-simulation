@@ -4,12 +4,13 @@
 // The page's map canvas lies over the GPU's own canvas (which the GPU may replace, gpu.ts `HeldGpu`), takes the
 // pointer, and holds in 2D what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
 // picked, and the scale bar.
-import { Draw, Format, Gpu, Made, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
+import { Draw, Format, Gpu, HeldGpu, Made, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
 import { Box, FIRE_FPS, Fire } from './fire';
 import { detailLost, sendDetail } from './detail';
+import { spend, timed } from './cost';
 
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -58,7 +59,7 @@ export class MapView {
   pick = -1;
   /** The GPU once it is open (null: none yet, or the browser has none). */
   private gpu: Gpu | null = null;
-  readonly ready: Promise<Gpu | null>;
+  readonly ready: Promise<HeldGpu | null>;
   /** The canvas the GPU draws on, under the map's canvas (none before the GPU opens). */
   private gpuCv: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D;
@@ -247,7 +248,7 @@ export class MapView {
       clearTimeout(this.sharpTimer);
       this.sharpening = null;
       if (this.land) this.land.flowAt = null;
-      this.drawGpu(this.gpu, xs, this.drawnDpr());
+      timed('draw', () => this.drawGpu(this.gpu!, xs, this.drawnDpr()));
     }
     this.overlay?.(ctx, ox, oy, s);
     if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
@@ -271,7 +272,7 @@ export class MapView {
     const r = this.scale, k = d * r, tw = Math.max(1, Math.round(W * r)), th = Math.max(1, Math.round(H * r));
     if (r < 1 && (this.picture?.w !== tw || this.picture.h !== th)) {
       if (this.picture) gpu.drop(this.picture);
-      this.picture = gpu.texture(tw, th, MAP_TARGET, 1, 1, true);
+      this.picture = gpu.texture('picture', tw, th, MAP_TARGET, 1, 1, true);
     }
     const waiting: Made[] = [];
     this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
@@ -337,7 +338,7 @@ export class MapView {
     for (let y = 0; y < H; y += side) for (let x = 0; x < W; x += side) tiles.push([x, y, Math.min(side, W - x), Math.min(side, H - y)]);
     if (this.sharp?.w !== W || this.sharp.h !== H) {
       if (this.sharp) gpu.drop(this.sharp);
-      this.sharp = gpu.texture(W, H, MAP_TARGET, 1, 1, true);
+      this.sharp = gpu.texture('picture', W, H, MAP_TARGET, 1, 1, true);
     }
     const q = gpu.pass(this.sharp);
     q.draw('picture', { rect: [0, 0, W, H], binds: { 1: this.picture!, 2: 'smooth' } }, false);
@@ -447,6 +448,7 @@ export class MapView {
     gpu.done().then(() => {
       this.timing = false;
       const ms = performance.now() - t0;
+      spend('gpu', ms); spend('gpu n', 1);
       this.fullMs = ms / (r * r);
       const was = this.scale;
       this.scale = SCALES.find(k => this.fullMs * k * k <= FRAME_BUDGET_MS) ?? SCALES[SCALES.length - 1];
@@ -460,7 +462,7 @@ export class MapView {
     this.asked = [];
     if (this.classes?.w !== this.w || this.classes.h !== this.h) {
       if (this.classes) gpu.drop(this.classes);
-      this.classes = gpu.texture(this.w, this.h, 'rgba8unorm', 1, 1, true);
+      this.classes = gpu.texture('classes', this.w, this.h, 'rgba8unorm', 1, 1, true);
     }
     const p = gpu.pass(this.classes);
     p.draw('class', { rect: [0, 0, this.w, this.h], binds: map.binds(gpu, this.look) }, false);

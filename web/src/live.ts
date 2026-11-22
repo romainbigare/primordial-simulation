@@ -1,8 +1,10 @@
 import { World, makeWorld, Meta } from './data';
+import { timed } from './cost';
 import type { Probe, StartKind, Edited } from './god';
 
-/** What the core reports with each frame: its cells and the months stepped per second of real time. */
-export interface Stats { cells: number; pace: number }
+/** What the core reports with each frame: its cells, the months stepped per second of real time, the time a month
+ * took to step, ms, the share of the time the worker stepped, and the bytes of its memory. */
+export interface Stats { cells: number; pace: number; monthMs: number; busy: number; memory: number }
 
 /** The longest time a frame waits for its answer when no animation frame comes, ms: the worker's frames come every
  * `FRAME_MS` (worker.ts, 250 ms), so where the page's animation frames stop the world still steps a fifth of the time. */
@@ -22,7 +24,7 @@ export class Live {
   plumes: Uint8Array = new Uint8Array(0);
   /** The relief the world last built its samples from, come since it was last taken (wasm/src/lib.rs `relief`). */
   private relief: Uint8Array | null = null;
-  stats: Stats = { cells: 0, pace: 0 };
+  stats: Stats = { cells: 0, pace: 0, monthMs: 0, busy: 0, memory: 0 };
   /** The starting kinds the world's plan places (wasm/src/lib.rs `kinds`). */
   kinds: StartKind[] = [];
   private worker: Worker;
@@ -53,7 +55,7 @@ export class Live {
         this.kinds = JSON.parse(m.kinds) as StartKind[];
         // The frame is answered even where the page fails to show it (the error goes to the page's error handler), so
         // the world never waits on it.
-        try { on.world(this.world); } finally { this.shown(); }
+        try { timed('world frames', () => on.world(this.world!)); } finally { this.shown(); }
         return;
       }
       if (!this.world) return this.shown();
@@ -64,7 +66,7 @@ export class Live {
       this.table = m.table;
       this.world.meta.frames[0] = { day: m.day, year: m.year };
       this.stats = m.stats;
-      try { on.things(m.things); on.frame(m.stats, !same || m.edited); } finally { this.shown(); }
+      try { timed('world frames', () => { on.things(m.things); on.frame(m.stats, !same || m.edited); }); } finally { this.shown(); }
     };
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);
     document.addEventListener('visibilitychange', this.onHide);

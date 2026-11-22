@@ -99,7 +99,7 @@ export class Fire {
   binds(gpu: Gpu, look: MapLook, frame: number[], now: number): Draw['binds'] | null {
     if (!this.data) return null;
     if (this.tex && (this.tex.w !== this.w || this.tex.h !== FIRE_PLANES * this.h)) { gpu.drop(this.tex); this.tex = null; }
-    this.tex ??= gpu.texture(this.w, FIRE_PLANES * this.h, 'rgba16float');
+    this.tex ??= gpu.texture('fire', this.w, FIRE_PLANES * this.h, 'rgba16float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const mode = look.mode === 'earth' ? 0 : 1;
     const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h, mode).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
@@ -112,7 +112,7 @@ export class Fire {
   plantBinds(gpu: Gpu): Draw['binds'] {
     const u = new Uniforms(FIRE_VEC4S);
     if (!this.data || !this.snags) {
-      if (!this.blank) { this.blank = gpu.texture(1, 1, 'rgba16float'); gpu.write(this.blank, new Uint16Array(4)); }
+      if (!this.blank) { this.blank = gpu.texture('fire', 1, 1, 'rgba16float'); gpu.write(this.blank, new Uint16Array(4)); }
       return { 25: this.blank, 26: 'smooth', 27: u.vec4(0, 1, 1).buffer };
     }
     const b = this.binds(gpu, { mode: 'earth', layer: '', ramp: [], ground: 0 }, [0, 0, 0, 0, 0, 0, 0, 0], 0)!;

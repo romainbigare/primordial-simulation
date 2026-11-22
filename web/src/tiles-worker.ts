@@ -48,9 +48,10 @@ async function handle(m: Command): Promise<void> {
       const rock = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
       host.postMessage({ kind: 'ready', rock }, [rock.buffer]);
     } else if (m.cmd === 'tile' && core) {
-      const at = core.tile(m.depth, m.x, m.y);
+      const t0 = performance.now(), at = core.tile(m.depth, m.x, m.y);
       const data = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
-      host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data, gen: m.gen }, [data.buffer]);
+      // With the time it took, ms, and the bytes of the core's memory, for the page's cost line.
+      host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data, gen: m.gen, ms: performance.now() - t0, memory: core.memory.buffer.byteLength }, [data.buffer]);
     } else if (m.cmd === 'built' && core) {
       // The ground made again on the samples the world built (`ground_built`): a byte a square, 1 where its tiles
       // changed, or why the relief was refused; then the rock again.

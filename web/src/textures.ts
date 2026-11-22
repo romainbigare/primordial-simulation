@@ -66,8 +66,8 @@ export class CoverMarks {
     if (this.fieldTex?.w !== w || this.fieldTex.h !== h || this.fieldTex.layers !== layers || this.tableTex?.w !== tw || this.tableTex.h !== th) {
       if (this.tableTex) gpu.drop(this.tableTex);
       if (this.fieldTex) gpu.drop(this.fieldTex);
-      this.tableTex = gpu.texture(tw, th, 'rgba32float');
-      this.fieldTex = gpu.texture(w, h, 'rgba16float', layers);
+      this.tableTex = gpu.texture('cover', tw, th, 'rgba32float');
+      this.fieldTex = gpu.texture('cover', w, h, 'rgba16float', layers);
     }
     if (k) {
       gpu.write(this.tableTex!, k.table);
@@ -114,7 +114,7 @@ export class CoverMarks {
     const cols = Math.max(...grids.map(g => g.cells.cols)), was = this.marksTex[0];
     if (!was || was.w < cols || was.h < row) {
       [...this.marksTex, ...(this.reachTex ? [this.reachTex] : [])].forEach(t => gpu.drop(t));
-      const made = () => gpu.texture(Math.max(cols, was?.w ?? 0), Math.max(row, was?.h ?? 0), MARKS_FORMAT, 1, 1, true);
+      const made = () => gpu.texture('cover', Math.max(cols, was?.w ?? 0), Math.max(row, was?.h ?? 0), MARKS_FORMAT, 1, 1, true);
       this.marksTex = MARK_BINDINGS.map(made);
       this.reachTex = made();
     }

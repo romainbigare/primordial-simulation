@@ -1,14 +1,12 @@
 // The map's renderer on WebGPU (gpu.ts): the programs' WGSL as it is, a pipeline for each program, target format and
 // blend, and a bind group a draw.
-import { Back, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, bindingsOf, drawHeader } from './gpu';
+import { Back, TEXEL_BYTES, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, bindingsOf, drawHeader } from './gpu';
 
 // WebGPU's flags, as the browser defines them.
 declare const GPUTextureUsage: { COPY_SRC: number; COPY_DST: number; TEXTURE_BINDING: number; RENDER_ATTACHMENT: number };
 declare const GPUBufferUsage: { MAP_READ: number; COPY_DST: number; UNIFORM: number };
 declare const GPUMapMode: { READ: number };
 
-/** Bytes of a texel of each format. */
-const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float: 16, rgba16float: 8, rg16float: 4, r16float: 2 };
 /** The size of each uniform buffer, bytes: no program's uniforms are larger. */
 const UNIFORM_BYTES = 1024;
 /** A texture laid on the ground is read along the view's slant this many texels at a time at most (anisotropic). */
@@ -54,9 +52,9 @@ class WebGpu implements Back {
   /** End the device: what it holds is let go, and nothing it was still making or drawing is heard of. */
   close(): void { this.gone = true; this.device.destroy(); }
 
-  texture(w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
+  texture(label: string, w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
     const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | (target ? GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC : 0);
-    const tex = this.device.createTexture({ size: [w, h, layers], format, mipLevelCount: mips, usage });
+    const tex = this.device.createTexture({ label, size: [w, h, layers], format, mipLevelCount: mips, usage });
     return new WebGpuTexture(w, h, layers, mips, format, tex, tex.createView({ dimension: layers > 1 ? '2d-array' : '2d' }));
   }
 
