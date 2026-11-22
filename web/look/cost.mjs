@@ -1,8 +1,8 @@
 // The cost of a pixel as a count: the page's programs built again (variant.mjs) so that each pixel counts what it reads,
 // every texture read (each call of textureSample* and textureLoad), each gradient noise (draw.wgsl `gradient_noise`)
 // and each read of a photograph (tex.wgsl `photo`), and draws the counts as its colour (red, green, blue: a level of
-// 255 two texture reads, a noise, a photograph). One build counts the ground's programs (land.wgsl, and burnt.wgsl over
-// burn scars: lib/live_map.wgsl) and draws no marks; the other counts the marks' (cover.wgsl) over a black ground. The
+// 255 two texture reads, a noise, a photograph). One build counts the ground's program (land.wgsl:
+// lib/live_map.wgsl) and draws no marks; the other counts the marks' (cover.wgsl) over a black ground. The
 // count is the same on every machine and from run to run.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

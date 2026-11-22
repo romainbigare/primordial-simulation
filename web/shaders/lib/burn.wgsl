@@ -1,4 +1,4 @@
-// Burn scars and cured grass on the live map's dry ground (burnt.wgsl), from what fire did on each square (fire.wgsl):
+// Burn scars and cured grass on the live map's dry ground (land.wgsl), from what fire did on each square (fire.wgsl):
 // in the patches of a square's scar, the ground is black with char and grey with ash where the flames left it, the char
 // fades to the scorched brown of bare burnt soil and that to the ground's own colour as the months pass, under the
 // plants that come back by the core's own numbers (the cover's field, drawn as it is). The Earth view draws the cured
@@ -39,7 +39,8 @@ const DEAD_SPECK_M = 2.2; const DEAD_BARK = vec3f(0.035, 0.032, 0.03);
 // the dead trees seen from afar.
 fn burnt_spot(p: Spot) -> Spot {
   var q = p;
-  if (p.depth > 0.0) { return q; }
+  // (Squares of side 0: the page knows no fire, or draws none, fire.ts `groundBinds`.)
+  if (p.depth > 0.0 || fire.map.x <= 0.0) { return q; }
   let f = fire_at(p.at);
   if (styled() && f.cured > 0.0) {
     // (The cured leaves stand in the low plants: the share of the cover that is theirs takes the tint.)

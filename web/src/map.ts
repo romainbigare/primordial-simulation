@@ -51,8 +51,12 @@ export interface GpuLayer {
 export const MAP_TARGET: Format = 'rgba8unorm';
 
 /** The sharp picture being drawn once the view rests: its tiles to draw (x, y, w, h device px), the copies' places
- * (css px) and the device pixels a css pixel. */
-interface Sharpening { tiles: number[][]; xs: number[]; d: number }
+ * (css px), the device pixels a css pixel, the view it is of (`viewKey`), the texture it is drawn into, and whether it
+ * takes the place of a sharp picture of the same view (`MapView.sharpenSoon`). */
+interface Sharpening { tiles: number[][]; xs: number[]; d: number; key: string; into: Texture; over: boolean }
+/** How long the world's next frame waits at most for the sharp picture of the last, ms (`shown`), and how often it
+ * looks whether that picture is whole, ms. */
+const SHOWN_MOST_MS = 1500, SHOWN_POLL_MS = 30;
 
 export class MapView {
   hover = -1;
@@ -95,6 +99,15 @@ export class MapView {
   private fireTimer = 0;
   private sharpening: Sharpening | null = null;
   private sharp: Texture | null = null;
+  /** Whether the view rests before its sharp picture is begun (`sharpTimer` runs) and the view that rests, and the
+   * view the sharp picture's
+   * texture holds sharp all over ('': none, while it holds a stretched picture in part), which a new frame of the
+   * same view is drawn over, tile by tile, with no picture at fewer pixels between (`draw`). */
+  private resting = false;
+  private restOf = '';
+  private sharpOf = '';
+  /** The texture the next sharp picture of the same view is drawn into, out of sight, till it is whole. */
+  private sharpNext: Texture | null = null;
   /** Whether a frame waits for the card to finish the last (`draw`). */
   private waitingCard = false;
   /** The timer that looks whether the programs the last frame went without are made (`drawWhenMade`). */
@@ -121,7 +134,7 @@ export class MapView {
       this.resize();
       return c;
     };
-    const restored = () => { this.timing = false; this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
+    const restored = () => { this.timing = false; this.sharpOf = ''; this.sharpening = null; this.resting = false; clearTimeout(this.sharpTimer); this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
     this.ready = openGpu(fresh, restored).then(g => {
       this.gpu = g;
       if (g) sendDetail(g, () => this.invalidate());
@@ -243,16 +256,25 @@ export class MapView {
     if (wrap) for (let x = ox + span; x < W; x += span) xs.push(x);
     ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.clearRect(0, 0, W, H);
+    // While the sharp picture of this same view is being drawn or about to be (the world stepped or a tile came
+    // meanwhile: the camera did not move), it is left to finish, and the frame stays due till it is whole (`sharpen`):
+    // tiles that come one after another never keep the map from getting sharp.
+    const viewed = this.viewKey(xs);
+    const held = this.scale < 1 && !this.asked.length && (this.sharpening?.key === viewed || (this.resting && this.restOf === viewed));
     // A frame is sent only once the card has drawn the last, so frames never pile up in its queue; till then the
     // frame stays due and is drawn as soon as the card is free.
-    if (this.gpu && this.gpuDue && this.gpu.busy) {
+    if (held) { /* (stays due) */ } else if (this.gpu && this.gpuDue && this.gpu.busy) {
       if (!this.waitingCard) { this.waitingCard = true; this.gpu.idle().then(() => { this.waitingCard = false; this.redraw(); }); }
     } else if (this.gpu && this.gpuDue) {
       this.gpuDue = false;
       clearTimeout(this.sharpTimer);
+      this.resting = false;
       this.sharpening = null;
       if (this.land) this.land.flowAt = null;
-      timed('draw', () => this.drawGpu(this.gpu!, xs, this.drawnDpr()));
+      // A view whose sharp picture is whole (the world stepped, a tile came: the camera did not move) is drawn sharp
+      // again over it, so a playing world's map stays sharp on a slow card; else the frame is drawn whole first.
+      const again = this.scale < 1 && this.sharpOf === viewed && !this.asked.length;
+      timed('draw', () => (again ? this.sharpenSoon(xs, this.drawnDpr(), true) : this.drawGpu(this.gpu!, xs, this.drawnDpr())));
     }
     this.overlay?.(ctx, ox, oy, s);
     if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
@@ -282,7 +304,9 @@ export class MapView {
     this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
     this.fire?.prepare(gpu, waiting);
     const target = r < 1 ? this.picture : null, p = gpu.pass(target);
-    // While a tile of the ground fades in, the map is drawn again at each frame.
+    // While a tile of the ground fades in, the map is drawn again at each frame; none fades where the card cannot
+    // draw a frame at the screen's pixels in time (it would draw nothing but fades while tiles come).
+    if (this.land) this.land.tiles.fades = r >= 1;
     const fading = this.land?.tiles.fading(performance.now()) ?? false;
     if (fading) this.invalidate();
     this.drawMap(gpu, p, target, xs, k, d, [tw, th], waiting);
@@ -295,7 +319,11 @@ export class MapView {
     this.time(gpu, r);
     // The ground's detail is held only while the view is close enough to show it.
     detailSeen(this.cellM / (s * d));
-    if (r < 1 && !fading && !waiting.length) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
+    if (r < 1 && !fading && !waiting.length) {
+      this.resting = true;
+      this.restOf = this.viewKey(xs);
+      this.sharpTimer = window.setTimeout(() => { this.resting = false; this.sharpenSoon(xs, d, false); }, REST_MS);
+    }
     this.drawWhenMade(gpu, waiting);
     this.flowSoon();
     this.fireSoon();
@@ -335,28 +363,60 @@ export class MapView {
     this.fireTimer = window.setTimeout(() => this.invalidate(), step - (performance.now() % step) + 1);
   }
 
-  /** Start drawing the map at the screen's own pixels, in tiles each of about `SHARPEN_MS` on the GPU, into the sharp
-   * picture's texture, which first holds the map drawn at fewer pixels, stretched: so each frame shows that one texture,
-   * the tiles drawn so far over the stretched picture. */
-  private sharpenSoon(xs: number[], d: number): void {
+  /** The view the map is drawn in, as text: the camera, the canvas, the copies and the look. */
+  private viewKey(xs: number[]): string {
+    const { cam, look } = this;
+    return [cam.s, cam.ox, cam.oy, this.gpuCv?.width, this.gpuCv?.height, xs.length, look.mode, look.layer, look.ground].join();
+  }
+
+  /** Once the frame the map was last asked for is whole on the screen: drawn, and where the map is drawn at fewer
+   * pixels than the screen's, its sharp picture drawn too; or after `SHOWN_MOST_MS` where the view moved (a view that
+   * moves is never sharp). The world's worker posts its next frame then (live.ts `drawn`). */
+  async shown(): Promise<void> {
+    const t0 = performance.now();
+    for (;;) {
+      await this.gpu?.idle();
+      // (A picture that takes a sharp one's place is waited for whole, however long its card takes: it shows nothing
+      // till then.)
+      const over = this.sharpening?.over ?? false;
+      if (!(this.gpuDue || this.resting || this.sharpening) || (!over && performance.now() - t0 > SHOWN_MOST_MS)) return;
+      await new Promise(go => setTimeout(go, SHOWN_POLL_MS));
+    }
+  }
+
+  /** Start drawing the map at the screen's own pixels, in tiles each of about `SHARPEN_MS` on the GPU: into the sharp
+   * picture's texture, which first holds the map drawn at fewer pixels, stretched, so each frame shows that one
+   * texture, the tiles drawn so far over the stretched picture; or, `over` (the screen shows the sharp picture of the
+   * same view), into a second texture out of sight, shown in its place once whole, so the picture on the screen is of
+   * one date all over. */
+  private sharpenSoon(xs: number[], d: number, over: boolean): void {
     const gpu = this.gpu, W = this.gpuCv!.width, H = this.gpuCv!.height, tiles: number[][] = [];
     if (!gpu) return;
     const side = Math.max(TILE_LEAST, Math.floor(Math.sqrt((SHARPEN_MS / Math.max(this.fullMs, SHARPEN_MS)) * W * H)));
     for (let y = 0; y < H; y += side) for (let x = 0; x < W; x += side) tiles.push([x, y, Math.min(side, W - x), Math.min(side, H - y)]);
-    if (this.sharp?.w !== W || this.sharp.h !== H) {
-      if (this.sharp) gpu.drop(this.sharp);
-      this.sharp = gpu.texture('picture', W, H, MAP_TARGET, 1, 1, true);
+    const sized = (t: Texture | null) => {
+      if (t?.w === W && t.h === H) return t;
+      if (t) gpu.drop(t);
+      return gpu.texture('picture', W, H, MAP_TARGET, 1, 1, true);
+    };
+    if (this.sharp?.w !== W || this.sharp.h !== H) this.sharpOf = '';
+    this.sharp = sized(this.sharp);
+    if (over) this.sharpNext = sized(this.sharpNext);
+    else {
+      this.sharpOf = '';
+      const q = gpu.pass(this.sharp);
+      q.draw('picture', { rect: [0, 0, W, H], binds: { 1: this.picture!, 2: 'smooth' } }, false);
+      q.end();
     }
-    const q = gpu.pass(this.sharp);
-    q.draw('picture', { rect: [0, 0, W, H], binds: { 1: this.picture!, 2: 'smooth' } }, false);
-    q.end();
     // All the sharp picture's tiles show the flow's signs where they stood as it began.
     if (this.land) this.land.flowAt = performance.now();
     // What the layer works out before its draws holds for the whole view, so it is worked out once for all the tiles
-    // (a new frame stops them); the frame it sharpens went without no program, so none is waited for here.
-    const { cam: { s, ox, oy } } = this;
-    this.layer?.prepare(gpu, ox, oy, s, d, d, this.cv.clientWidth, this.cv.clientHeight, []);
-    const job = { tiles, xs, d };
+    // (a new frame stops them); a program it goes without is waited for as a whole frame's is (`drawWhenMade`).
+    const { cam: { s, ox, oy } } = this, waiting: Made[] = [];
+    this.layer?.prepare(gpu, ox, oy, s, d, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
+    this.fire?.prepare(gpu, waiting);
+    this.drawWhenMade(gpu, waiting);
+    const job = { tiles, xs, d, key: this.viewKey(xs), into: over ? this.sharpNext! : this.sharp, over };
     this.sharpening = job;
     this.sharpen(job);
   }
@@ -369,19 +429,24 @@ export class MapView {
   }
 
   /** Draw the next tile of the sharp picture `job` once the GPU has finished the last, and show each tile as soon as it
-   * is drawn; a new frame stops it. */
+   * is drawn (a picture that takes a sharp one's place: once all are); a new frame stops it. */
   private sharpen(job: Sharpening): void {
     const gpu = this.gpu, tile = job.tiles.shift(), W = this.gpuCv!.width, H = this.gpuCv!.height;
-    if (this.sharpening !== job || !gpu || !tile || this.sharp?.w !== W || this.sharp.h !== H) return;
-    const p = gpu.pass(this.sharp, undefined, tile);
-    this.drawMap(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
+    if (this.sharpening !== job || !gpu || !tile || job.into.w !== W || job.into.h !== H) return;
+    const p = gpu.pass(job.into, undefined, tile);
+    this.drawMap(gpu, p, job.into, job.xs, job.d, job.d, [W, H], []);
     this.layer?.draw(p);
-    this.drawFire(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);
+    this.drawFire(gpu, p, job.into, job.xs, job.d, job.d, [W, H], []);
     p.end();
-    this.show(this.sharp!);
-    if (!job.tiles.length) this.sharpening = null;
+    if (!job.tiles.length) {
+      this.sharpening = null; this.sharpOf = job.key;
+      if (job.over) [this.sharp, this.sharpNext] = [this.sharpNext, this.sharp];
+    }
+    if (!job.over || !job.tiles.length) this.show(this.sharp!);
     gpu.submit();
-    if (job.tiles.length) gpu.done().then(() => requestAnimationFrame(() => this.sharpen(job)));
+    // A frame that came due meanwhile is drawn now, over this picture.
+    if (!job.tiles.length && this.gpuDue) this.redraw();
+    if (job.tiles.length) gpu.done().then(() => nextFrame(() => this.sharpen(job)));
   }
 
   /** Draw into pass `p` (`target`, null: the canvas; of `size` px, `k` px a css px, on a screen of `d` px a css px) the
@@ -403,24 +468,13 @@ export class MapView {
     // runs over more than the target's pixels.
     const frames = xs.map((_, c) => frameOf(edge(c), oy * k, mpp, seen));
     const lands = frames.map(f => this.land?.binds(gpu, look, f));
-    // Over the squares that hold a burn scar, the ground's program made with them for the same size of a pixel as the
-    // ground's drawn about them, once it is made (till then the ground's own, without them), so no edge shows between
-    // the two; in a layer's view none.
-    const scars = this.fire?.scars && look.mode !== 'layer' ? this.fire.scars : null;
-    const burnt = scars && program ? program.replace(/^land/, 'burnt') : null;
-    if (burnt && !gpu.ready(burnt, target?.format ?? null, false)) { gpu.warm(burnt, target?.format ?? null, false, true); waiting.push([burnt, target?.format ?? null, false]); }
-    const burning = burnt && gpu.ready(burnt, target?.format ?? null, false) ? burnt : null;
     if (lands[0] && under) {
       if (program) xs.forEach((_, c) => {
         const x0 = Math.max(edge(c), 0), x1 = Math.min(edge(c + 1), size[0]), y0 = Math.max(oy * k, 0), y1 = Math.min((oy + h * s) * k, size[1]);
         if (x1 <= x0 || y1 <= y0) return;
-        const binds = { ...lands[c]!, ...under }, fire = burning ? this.fire!.binds(gpu, look, frames[c], this.fireTime()) : null;
-        p.draw(program, { rect: [x0, y0, x1 - x0, y1 - y0], binds }, false);
-        // The scars' blocks drawn again over it with their program (the same picture outside the scars).
-        if (fire) for (const b of scars!) {
-          const inner = clip(boxRect(b, edge(c), oy * k, s * k), [x0, y0, x1, y1]);
-          if (inner) p.draw(burning!, { rect: [inner[0], inner[1], inner[2] - inner[0], inner[3] - inner[1]], binds: { ...binds, ...fire } }, false);
-        }
+        // With the marks of fire on the ground (none in a layer's view, or where no fire is known).
+        const fire = this.fire?.groundBinds(gpu, look, frames[c], this.fireTime());
+        p.draw(program, { rect: [x0, y0, x1 - x0, y1 - y0], binds: { ...lands[c]!, ...under, ...fire } }, false);
       });
     } else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
   }
@@ -516,6 +570,15 @@ export class MapView {
     ctx.fillText(m >= 1000 ? `${m / 1000} km` : `${m} m`, x, y - 7);
     ctx.globalAlpha = 1;
   }
+}
+
+/** The longest wait for an animation frame, ms (`nextFrame`). */
+const FRAME_MOST_MS = 500;
+/** Run `f` at the next animation frame, or after `FRAME_MOST_MS` where none comes (a browser holds them back in a
+ * frame it deems out of view or idle, as Safari does in an iframe). */
+function nextFrame(f: () => void): void {
+  const go = () => { clearTimeout(timer); cancelAnimationFrame(frame); f(); };
+  const timer = setTimeout(go, FRAME_MOST_MS), frame = requestAnimationFrame(go);
 }
 
 /** A rectangle of the target, px: x0, y0, x1, y1. */

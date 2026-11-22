@@ -105,7 +105,7 @@ The tool builds the page's programs again from a copy of `web/shaders` (`cost.mj
 pixel counts what it does and draws the counts as its colour: every texture read (each `textureSample*` and
 `textureLoad`, red, two reads a level), each gradient noise (`draw.wgsl` `gradient_noise`, green) and each read of a
 photograph (`tex.wgsl` `photo`, blue). Two builds: `ground` counts the ground's
-programs (`land.wgsl`, and `burnt.wgsl` over burn scars: `lib/live_map.wgsl`, the far field of the plants in it) and
+program (`land.wgsl`: `lib/live_map.wgsl`, the far field of the plants in it) and
 draws no marks; `marks` counts the marks' program (`cover.wgsl`) over a black ground. The marks decided once a frame
 for each cell (`marks.wgsl`) are not counted: they are not a pixel's work, nor are the flames and smoke over the map
 (`flames.wgsl`, drawn only where a fire burns); the dead trees are the marks' (`lib/snag.wgsl`).

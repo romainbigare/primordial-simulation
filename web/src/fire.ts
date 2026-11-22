@@ -1,9 +1,8 @@
 // Fire on the live map: what the core's layers say fire did on each square (tape/src/layers.rs), sent to the GPU as a
-// texture of three planes (web/shaders/lib/fire.wgsl), and the boxes of squares the map draws it in: the burn scars and
-// the cured grass in the ground's program made with them (burnt.wgsl, over the squares that hold either; land.wgsl
-// elsewhere), the dead trees standing among the plant cover's marks (cover.wgsl, lib/snag.wgsl, where dead walls
+// texture of three planes (web/shaders/lib/fire.wgsl): the burn scars and the cured grass on the ground (land.wgsl,
+// lib/burn.wgsl), the dead trees standing among the plant cover's marks (cover.wgsl, lib/snag.wgsl, where dead walls
 // stand), the flames and the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach).
-// Where nothing burns, has burnt or stands dead or cured, nothing of it is drawn and no pixel pays for it.
+// Where no fire is known the ground reads none of it (`groundBinds`).
 import { World, decode } from './data';
 import { Draw, Gpu, Made, Texture, Uniforms, notMade } from './gpu';
 import { half } from './canopy';
@@ -34,8 +33,6 @@ const SPREAD_BOX = 2.5;
 const BLEND_SQUARES = 1;
 /** The smoke's texels a square's side (lib/smoke.wgsl `SMOKE_PER_SQUARE`), worked out once a world frame. */
 const SMOKE_PER_SQUARE = 8;
-/** The side of the blocks of squares the burn scars are drawn in, squares (`blocksOf`). */
-const SCAR_BLOCK = 4;
 /** The texture's planes (fire.wgsl `FIRE_PLANES`). */
 const FIRE_PLANES = 3;
 /** The format of the smoke's texture: four bytes (lib/smoke.wgsl `smoke_packed`). */
@@ -59,10 +56,7 @@ export class Fire {
   private cellM = 1;
   /** The months since a burn that mean none (the layer's top). */
   private never = 0;
-  /** The boxes the burn scars and the cured grass lie in (`blocksOf`), and the box the flames and their smoke reach
-   * (null: none); and
-   * whether dead walls stand on any square. */
-  scars: Box[] | null = null;
+  /** The box the flames and their smoke reach (null: none); and whether dead walls stand on any square. */
   flames: Box | null = null;
   private snags = false;
   /** The texture of the plant cover's draws where nothing of fire is known: one texel of nothing. */
@@ -90,10 +84,9 @@ export class Fire {
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
     // (Saturated ground does not burn: a scar lies on the dry land alone.)
     const n = w * h, scar = (i: number) => (!p ? 0 : Math.min(p.age[i] < never ? 1 : p.burnt[i], 1 - p.wet[i]));
-    this.scars = p ? blocksOf(w, h, i => scar(i) > 0 || p.ash[i] > 0 || p.cured[i] > 0, BLEND_SQUARES) : null;
     this.snags = p !== null && p.snag.some(x => x > 0);
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
-    if (!p || (!this.scars && !this.flames && !this.snags)) { this.data = null; return; }
+    if (!p || !(this.flames || this.snags || p.ash.some((a, i) => a > 0 || p.cured[i] > 0 || scar(i) > 0))) { this.data = null; return; }
     const data = new Uint16Array(4 * FIRE_PLANES * n);
     for (let i = 0; i < n; i++) {
       const s = scar(i), f = p.flame[i];
@@ -138,14 +131,24 @@ export class Fire {
     return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer, 28: this.smoke && !this.smokeDue ? this.smoke : this.noSmoke };
   }
 
+  /** The bindings fire.wgsl reads on `gpu` in the ground's draws (land.wgsl, lib/burn.wgsl), as `binds`; where no fire
+   * is known, or in a layer's view, a texture of one texel and squares of side 0: the ground reads none of it. */
+  groundBinds(gpu: Gpu, look: MapLook, frame: number[], now: number): Draw['binds'] {
+    const b = look.mode === 'layer' ? null : this.binds(gpu, look, frame, now);
+    if (b) return { 25: b[25], 26: b[26], 27: b[27] };
+    return { 25: this.none(gpu), 26: 'smooth', 27: new Uniforms(FIRE_VEC4S).vec4(0, 1, 1).buffer };
+  }
+
+  /** A texture of one texel of nothing, where no fire is known. */
+  private none(gpu: Gpu): Texture {
+    if (!this.blank) { this.blank = gpu.texture('fire', 1, 1, 'rgba16float'); gpu.write(this.blank, new Uint16Array(4)); }
+    return this.blank;
+  }
+
   /** The bindings fire.wgsl reads on `gpu` in the plant cover's draws (cover.wgsl `lattice`): the texture and the
    * squares, its first number 0 where no dead walls stand (then the texture is one texel of nothing). */
   plantBinds(gpu: Gpu): Draw['binds'] {
-    const u = new Uniforms(FIRE_VEC4S);
-    if (!this.data || !this.snags) {
-      if (!this.blank) { this.blank = gpu.texture('fire', 1, 1, 'rgba16float'); gpu.write(this.blank, new Uint16Array(4)); }
-      return { 25: this.blank, 26: 'smooth', 27: u.vec4(0, 1, 1).buffer };
-    }
+    if (!this.data || !this.snags) return { 25: this.none(gpu), 26: 'smooth', 27: new Uniforms(FIRE_VEC4S).vec4(0, 1, 1).buffer };
     const b = this.binds(gpu, { mode: 'earth', layer: '', ramp: [], ground: 0 }, [0, 0, 0, 0, 0, 0, 0, 0], 0)!;
     return { 25: b[25], 26: b[26], 27: b[27] };
   }
@@ -156,31 +159,6 @@ export class Fire {
     this.due = this.data !== null;
     this.smokeDue = this.flames !== null && this.data !== null;
   }
-}
-
-/** The boxes of the squares `has` holds on a `w` x `h` map, each grown by `grow` squares: the blocks of `SCAR_BLOCK`
- * squares a side that hold one, a box for each run of them along a row, so the ground's program with the scars draws
- * over them alone, not over all the land between two fires; null: none. */
-function blocksOf(w: number, h: number, has: (i: number) => boolean, grow: number): Box[] | null {
-  const bw = Math.ceil(w / SCAR_BLOCK), bh = Math.ceil(h / SCAR_BLOCK), held = new Uint8Array(bw * bh);
-  for (let i = 0; i < w * h; i++) {
-    if (!has(i)) continue;
-    const x = i % w, y = (i / w) | 0;
-    for (let by = Math.max(y - grow, 0) / SCAR_BLOCK | 0; by <= Math.min(y + grow, h - 1) / SCAR_BLOCK; by++) {
-      for (let bx = Math.max(x - grow, 0) / SCAR_BLOCK | 0; bx <= Math.min(x + grow, w - 1) / SCAR_BLOCK; bx++) held[by * bw + bx] = 1;
-    }
-  }
-  // Each row's runs of held blocks, one box a run.
-  const out: Box[] = [];
-  for (let by = 0; by < bh; by++) {
-    for (let bx = 0; bx < bw; bx++) {
-      if (!held[by * bw + bx]) continue;
-      const from = bx;
-      while (bx + 1 < bw && held[by * bw + bx + 1]) bx++;
-      out.push([from * SCAR_BLOCK, by * SCAR_BLOCK, Math.min((bx + 1) * SCAR_BLOCK, w), Math.min((by + 1) * SCAR_BLOCK, h)]);
-    }
-  }
-  return out.length ? out : null;
 }
 
 /** The box of the squares that burn or send gas to the air on a `w` x `h` map of `cellM` m squares, each grown by the

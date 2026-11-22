@@ -92,6 +92,9 @@ export class GroundTiles {
   private stale = new Set<number>();
   private start = performance.now();
   private lastCame = -Infinity;
+  /** Whether a new tile fades in (else it shows at once): the map says so, and lets none fade while its card is too
+   * slow to draw a frame at each step of a fade (map.ts `drawGpu`). */
+  fades = true;
 
   constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
@@ -182,7 +185,7 @@ export class GroundTiles {
   /** The bytes of each worker's core's memory, as it last said. */
   memory(): number[] { return this.workers.map(w => w.memory); }
   /** Whether a tile still fades in at `now` (performance.now, ms). */
-  fading(now: number): boolean { return now - this.start - this.lastCame < TILE_FADE_MS; }
+  fading(now: number): boolean { return this.fades && now - this.start - this.lastCame < TILE_FADE_MS; }
 
   /** Ask the workers for the next tiles of the queue, up to `MAKING` each at once (the least busy first), while a layer
    * is free or can be freed. */
@@ -306,7 +309,8 @@ export class GroundTiles {
     }
     this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 1, 'rgba32float');
     if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; }
-    return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now: performance.now() - this.start };
+    // (Where no tile fades, the time is past every fade's end.)
+    return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now: performance.now() - this.start + (this.fades ? 0 : TILE_FADE_MS) };
   }
 
   stop(gpu: Gpu | null): void {
