@@ -98,7 +98,7 @@ export class Warming {
     while (key !== undefined && this.made(key)) key = this.queue.shift();
     if (key === undefined) return;
     this.making = key;
-    this.make(key).catch(e => console.error(`gpu: ${key}: ${e}`)).finally(() => { this.making = null; this.next(); });
+    this.make(key).catch(e => reportError(new Error(`gpu: ${key}: ${e}`))).finally(() => { this.making = null; this.next(); });
   }
 }
 
@@ -181,7 +181,8 @@ export class Uniforms {
   ivec4(...v: number[]): this { this.i.set(v, 4 * this.at++); return this; }
 }
 
-/** The GPU of `canvas`: WebGPU where the browser offers it, else WebGL2; null with neither. */
+/** The GPU of `canvas`: WebGPU where the browser offers it, else WebGL2; null with neither. `restored` redraws once the
+ * GPU lost what it held and is drawing again (its textures made anew, those filled whole filled again). */
 export async function openGpu(canvas: HTMLCanvasElement, restored: () => void): Promise<Gpu | null> {
-  return (await openWebGpu(canvas)) ?? openWebGl2(canvas, restored);
+  return (await openWebGpu(canvas, restored)) ?? openWebGl2(canvas, restored);
 }

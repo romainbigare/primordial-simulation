@@ -98,7 +98,7 @@ export class GroundTiles {
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     for (let k = 0; k < WORKERS; k++) {
       const w = { worker: new Worker(this.url), ready: false, making: 0 };
-      w.worker.onerror = e => error(e.message);
+      w.worker.onerror = e => error(e.message || 'The worker of the ground\'s tiles failed.');
       w.worker.onmessage = e => {
         const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock: Uint16Array; text: string; gen: number; squares: Uint8Array };
         if (m.kind === 'error') return error(m.text);
