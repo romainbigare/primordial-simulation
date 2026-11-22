@@ -32,6 +32,8 @@ const SPREAD_BOX = 2.5;
 /** A square's numbers are blended into the squares about it (fire.wgsl `fire_plane`): the boxes reach one square
  * farther. */
 const BLEND_SQUARES = 1;
+/** The side of the blocks of squares the burn scars are drawn in, squares (`blocksOf`). */
+const SCAR_BLOCK = 4;
 /** The texture's planes (fire.wgsl `FIRE_PLANES`). */
 const FIRE_PLANES = 3;
 /** Frames a second while a fire in view burns and the world plays. */
@@ -53,9 +55,10 @@ export class Fire {
   private cellM = 1;
   /** The months since a burn that mean none (the layer's top). */
   private never = 0;
-  /** The squares the burn scars and the cured grass lie in, and those the flames and their smoke reach (null: none); and
+  /** The boxes the burn scars and the cured grass lie in (`blocksOf`), and the box the flames and their smoke reach
+   * (null: none); and
    * whether dead walls stand on any square. */
-  scars: Box | null = null;
+  scars: Box[] | null = null;
   flames: Box | null = null;
   private snags = false;
   /** The texture of the plant cover's draws where nothing of fire is known: one texel of nothing. */
@@ -78,7 +81,7 @@ export class Fire {
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
     // (Saturated ground does not burn: a scar lies on the dry land alone.)
     const n = w * h, scar = (i: number) => (!p ? 0 : Math.min(p.age[i] < never ? 1 : p.burnt[i], 1 - p.wet[i]));
-    this.scars = p ? boxOf(w, h, i => scar(i) > 0 || p.ash[i] > 0 || p.cured[i] > 0, BLEND_SQUARES) : null;
+    this.scars = p ? blocksOf(w, h, i => scar(i) > 0 || p.ash[i] > 0 || p.cured[i] > 0, BLEND_SQUARES) : null;
     this.snags = p !== null && p.snag.some(x => x > 0);
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
     if (!p || (!this.scars && !this.flames && !this.snags)) { this.data = null; return; }
@@ -127,17 +130,29 @@ export class Fire {
   }
 }
 
-/** The box of the squares of a `w` x `h` map where `has` holds, `grow` squares wider each way within the map; null:
- * none. */
-function boxOf(w: number, h: number, has: (i: number) => boolean, grow: number): Box | null {
-  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+/** The boxes of the squares `has` holds on a `w` x `h` map, each grown by `grow` squares: the blocks of `SCAR_BLOCK`
+ * squares a side that hold one, a box for each run of them along a row, so the ground's program with the scars draws
+ * over them alone, not over all the land between two fires; null: none. */
+function blocksOf(w: number, h: number, has: (i: number) => boolean, grow: number): Box[] | null {
+  const bw = Math.ceil(w / SCAR_BLOCK), bh = Math.ceil(h / SCAR_BLOCK), held = new Uint8Array(bw * bh);
   for (let i = 0; i < w * h; i++) {
     if (!has(i)) continue;
     const x = i % w, y = (i / w) | 0;
-    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    for (let by = Math.max(y - grow, 0) / SCAR_BLOCK | 0; by <= Math.min(y + grow, h - 1) / SCAR_BLOCK; by++) {
+      for (let bx = Math.max(x - grow, 0) / SCAR_BLOCK | 0; bx <= Math.min(x + grow, w - 1) / SCAR_BLOCK; bx++) held[by * bw + bx] = 1;
+    }
   }
-  if (x1 < 0) return null;
-  return [Math.max(x0 - grow, 0), Math.max(y0 - grow, 0), Math.min(x1 + 1 + grow, w), Math.min(y1 + 1 + grow, h)];
+  // Each row's runs of held blocks, one box a run.
+  const out: Box[] = [];
+  for (let by = 0; by < bh; by++) {
+    for (let bx = 0; bx < bw; bx++) {
+      if (!held[by * bw + bx]) continue;
+      const from = bx;
+      while (bx + 1 < bw && held[by * bw + bx + 1]) bx++;
+      out.push([from * SCAR_BLOCK, by * SCAR_BLOCK, Math.min((bx + 1) * SCAR_BLOCK, w), Math.min((by + 1) * SCAR_BLOCK, h)]);
+    }
+  }
+  return out.length ? out : null;
 }
 
 /** The box of the squares that burn or send gas to the air on a `w` x `h` map of `cellM` m squares, each grown by the

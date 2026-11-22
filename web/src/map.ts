@@ -402,18 +402,24 @@ export class MapView {
     // runs over more than the target's pixels.
     const frames = xs.map((_, c) => frameOf(edge(c), oy * k, mpp, seen));
     const lands = frames.map(f => this.land?.binds(gpu, look, f));
-    // Over the squares that hold a burn scar, the ground's program made with them, once it is made (till then the
-    // ground's own, without them); in a layer's view none.
+    // Over the squares that hold a burn scar, the ground's program made with them for the same size of a pixel as the
+    // ground's drawn about them, once it is made (till then the ground's own, without them), so no edge shows between
+    // the two; in a layer's view none.
     const scars = this.fire?.scars && look.mode !== 'layer' ? this.fire.scars : null;
-    const burnt = scars && program ? seenFrom(gpu, 'burnt', seen, target?.format ?? null, false, waiting) : null;
+    const burnt = scars && program ? program.replace(/^land/, 'burnt') : null;
+    if (burnt && !gpu.ready(burnt, target?.format ?? null, false)) { gpu.warm(burnt, target?.format ?? null, false, true); waiting.push([burnt, target?.format ?? null, false]); }
+    const burning = burnt && gpu.ready(burnt, target?.format ?? null, false) ? burnt : null;
     if (lands[0] && under) {
       if (program) xs.forEach((_, c) => {
         const x0 = Math.max(edge(c), 0), x1 = Math.min(edge(c + 1), size[0]), y0 = Math.max(oy * k, 0), y1 = Math.min((oy + h * s) * k, size[1]);
         if (x1 <= x0 || y1 <= y0) return;
-        const binds = { ...lands[c]!, ...under }, fire = burnt ? this.fire!.binds(gpu, look, frames[c], this.fireTime()) : null;
-        const inner = fire ? clip(boxRect(scars!, edge(c), oy * k, s * k), [x0, y0, x1, y1]) : null;
-        for (const r of inner ? around([x0, y0, x1, y1], inner) : [[x0, y0, x1, y1]]) p.draw(program, { rect: [r[0], r[1], r[2] - r[0], r[3] - r[1]], binds }, false);
-        if (inner) p.draw(burnt!, { rect: [inner[0], inner[1], inner[2] - inner[0], inner[3] - inner[1]], binds: { ...binds, ...fire! } }, false);
+        const binds = { ...lands[c]!, ...under }, fire = burning ? this.fire!.binds(gpu, look, frames[c], this.fireTime()) : null;
+        p.draw(program, { rect: [x0, y0, x1 - x0, y1 - y0], binds }, false);
+        // The scars' blocks drawn again over it with their program (the same picture outside the scars).
+        if (fire) for (const b of scars!) {
+          const inner = clip(boxRect(b, edge(c), oy * k, s * k), [x0, y0, x1, y1]);
+          if (inner) p.draw(burning!, { rect: [inner[0], inner[1], inner[2] - inner[0], inner[3] - inner[1]], binds: { ...binds, ...fire } }, false);
+        }
       });
     } else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
   }
@@ -524,10 +530,4 @@ function boxRect(b: Box, left: number, top: number, side: number): Rect {
 function clip(r: Rect, within: Rect): Rect | null {
   const out: Rect = [Math.max(r[0], within[0]), Math.max(r[1], within[1]), Math.min(r[2], within[2]), Math.min(r[3], within[3])];
   return out[2] > out[0] && out[3] > out[1] ? out : null;
-}
-
-/** The rectangles of `r` about `inner` (inside it): the rows above and below it, and the columns beside it. */
-function around(r: Rect, inner: Rect): Rect[] {
-  const parts: Rect[] = [[r[0], r[1], r[2], inner[1]], [r[0], inner[3], r[2], r[3]], [r[0], inner[1], inner[0], inner[3]], [inner[2], inner[1], r[2], inner[3]]];
-  return parts.filter(q => q[2] > q[0] && q[3] > q[1]);
 }

@@ -58,6 +58,8 @@ export type Made = [name: string, target: Format | null, blend: boolean];
 export function seenFrom(gpu: Gpu, name: string, e: number, target: Format | null, blend: boolean, waiting: Made[]): string | null {
   const may = madeFor(name, e), made = may.find(key => gpu.ready(key, target, blend));
   gpu.warm(may[0], target, blend, made === undefined);
+  // The one a zoom in needs next is made after all others asked, so a zoom finds it made.
+  gpu.warm(madeFor(name, e / ZOOM_AHEAD)[0], target, blend);
   if (made !== undefined) return made;
   waiting.push([may[0], target, blend]);
   // Till one is made, the one made for the nearest size of a pixel draws (a little more or less detail for a moment),
@@ -65,6 +67,8 @@ export function seenFrom(gpu: Gpu, name: string, e: number, target: Format | nul
   const size = (key: string) => Math.abs(Math.log(Math.max(+(key.split(':')[1] ?? 0), EVERY_SIZE_M) / e));
   return madeFor(name, Infinity).filter(key => gpu.ready(key, target, blend)).sort((x, y) => size(x) - size(y))[0] ?? null;
 }
+/** The program made ahead is the one for pixels this many times finer than the view's (`seenFrom`). */
+const ZOOM_AHEAD = 3;
 /** Where programs are sorted by the sizes of a pixel they are made for (`seenFrom`), the one made
  * for every size counts as made for this many metres. */
 const EVERY_SIZE_M = 0.25;
