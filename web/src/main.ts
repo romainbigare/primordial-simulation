@@ -96,6 +96,10 @@ async function load(buf: ArrayBuffer): Promise<void> {
   setup(world);
 }
 const say = (t: string) => { $('msg').textContent = t; $('msg').hidden = !t; };
+// The page's own errors are shown on it (a phone has no console to read them in). Those without an error object are
+// the browser's notes (a ResizeObserver's loop), not failures.
+addEventListener('error', e => { if (e.error) say(`The page failed: ${e.error instanceof Error ? e.error.message : String(e.error)}`); });
+addEventListener('unhandledrejection', e => say(`The page failed: ${e.reason instanceof Error ? e.reason.message : String(e.reason)}`));
 
 /** The live world or a tape: what only one of them has is shown, and the speeds are its own. */
 function setMode(isLive: boolean): void {
@@ -114,6 +118,10 @@ function setMode(isLive: boolean): void {
 function setup(w: World): void {
   const m = w.meta;
   say('');
+  // A new live world plays at once, before the page is set up for it and draws it, so a failure there does not hold it;
+  // a saved one opens paused at its date, to be looked at.
+  playing = false; layer = null;
+  if (live && !saved) togglePlay();
   cls = new Uint8Array(m.w * m.h);
   map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
   $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ...(m.globe ? [] : [['band', `${fmt(m.lat_south)}° to ${fmt(m.lat_north)}°`]]), ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
@@ -134,10 +142,7 @@ function setup(w: World): void {
     el.onclick = () => { setFrame(i); tip(el, text); };
     return el;
   }));
-  playing = false; layer = null;
   setFrame(0); setLayer(null); syncUi();
-  // A new live world plays at once; a saved one opens paused at its date, to be looked at.
-  if (live && !saved) togglePlay();
 }
 
 function nearestFrame(year: number): number {
@@ -415,4 +420,4 @@ const fetched = (u: string) => fetch(u).then(r => (r.ok ? r.arrayBuffer() : Prom
 if (embedded) load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer);
 else if (url) fetched(url).then(load, waiting);
 else if (savedUrl) fetched(savedUrl).then(startLive).catch(e => say(String(e instanceof Error ? e.message : e)));
-else startLive(null).catch(waiting);
+else startLive(null).catch(e => say(`${String(e instanceof Error ? e.message : e)}. Drop a .ewf.gz file here, or use “Open file”.`));
