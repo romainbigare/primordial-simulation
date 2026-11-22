@@ -45,10 +45,11 @@ const STANDS = 2;
 // cell's other patches lie (canopy.ts `PLACES`), and from `PATCH_FIELDS` the field of each other patch, made of its own
 // kinds, `FIELD_LAYERS` layers each (canopy.ts `patchLayer`).
 const FIELD_LAYERS = 17; const PLACES_LAYER = 17; const PATCH_FIELDS = 19;
-// A patch's edge is ragged: its reach longer and shorter by up to `PATCH_EDGE` of it, at most `PATCH_EDGE_M` m, over
-// noise `PATCH_EDGE_SIZE_M` across, and a third of that again over noise a third as large (a gap in a forest is
-// bounded by the crowns about it, tens of metres across: from memory).
-const PATCH_EDGE = 0.3; const PATCH_EDGE_M = 30.0; const PATCH_EDGE_SIZE_M = 90.0;
+// A patch's edge is ragged at every size: its reach longer and shorter by up to `PATCH_EDGE` of it, over noise
+// `PATCH_LOBES` of its reach across (its lobes), and less over noise a quarter and a sixteenth as large (`PATCH_OCTAVES`,
+// their shares), so a patch of any size is a ragged shape and no disc (the edge of a burn or of a gap follows the
+// ground and the stands about it, not a circle).
+const PATCH_EDGE = 0.35; const PATCH_LOBES = 0.9; const PATCH_OCTAVES = vec3f(0.6, 0.28, 0.12);
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -224,22 +225,22 @@ fn cell_patch_at(at: vec2f) -> i32 {
   if (a.z <= 0.0) { return 0; }
   let b = textureLoad(cover_field_tex, q, PLACES_LAYER + 1, 0);
   let o = (s - vec2f(q)) * land.map.x;
-  let ragged = 0.75 * noise(at / PATCH_EDGE_SIZE_M, 211).x + 0.25 * noise(3.0 * at / PATCH_EDGE_SIZE_M, 212).x;
   let reach = vec2f(a.z, b.y) * land.map.x;
-  let edge = min(PATCH_EDGE * reach, vec2f(PATCH_EDGE_M));
-  if (in_patch(o, a.xy * land.map.x, reach.x, edge.x, ragged)) { return 1; }
-  if (reach.y > 0.0 && in_patch(o, vec2f(a.w, b.x) * land.map.x, reach.y, edge.y, ragged)) { return 2; }
+  if (in_patch(at, o, a.xy * land.map.x, reach.x)) { return 1; }
+  if (reach.y > 0.0 && in_patch(at, o, vec2f(a.w, b.x) * land.map.x, reach.y)) { return 2; }
   return 0;
 }
 
-// Whether the point `o`, m from its cell's corner, lies in the patch about `c` of reach `reach` m, ragged by up to
-// `edge` m (`ragged`, -1..1, of it). A patch is its cell's alone, so it is drawn whole inside its cell, with no straight
-// edge along the cell's: its centre moved in as far as that asks, and a patch wider than the cell drawn as the widest
-// that fits (the cell's other cover in its corners).
-fn in_patch(o: vec2f, c: vec2f, reach: f32, edge: f32, ragged: f32) -> bool {
-  let fit = min(1.0, 0.5 * land.map.x / (reach + edge));
-  let m = fit * (reach + edge);
-  return length(o - clamp(c, vec2f(m), vec2f(land.map.x - m))) < fit * (reach + ragged * edge);
+// Whether the point `at` (m from the map's north-west corner; `o` m from its cell's corner) lies in the patch about
+// `c` (m from the cell's corner) of reach `reach` m, its edge ragged (`PATCH_EDGE`). A patch is its cell's alone, so
+// it is drawn whole inside its cell, with no straight edge along the cell's: its centre moved in as far as that asks,
+// and a patch wider than the cell drawn as the widest that fits (the cell's other cover in its corners).
+fn in_patch(at: vec2f, o: vec2f, c: vec2f, reach: f32) -> bool {
+  let most = (1.0 + PATCH_EDGE) * reach;
+  let fit = min(1.0, 0.5 * land.map.x / most);
+  let lobes = PATCH_LOBES * fit * reach;
+  let ragged = PATCH_OCTAVES.x * noise(at / lobes, 211).x + PATCH_OCTAVES.y * noise(4.0 * at / lobes, 212).x + PATCH_OCTAVES.z * noise(16.0 * at / lobes, 213).x;
+  return length(o - clamp(c, vec2f(fit * most), vec2f(land.map.x - fit * most))) < fit * reach * (1.0 + PATCH_EDGE * ragged);
 }
 
 // Layer l of the field of the patch `cell_patch` of the square at `at` (one past the first: its own, `PATCH_FIELDS`):
