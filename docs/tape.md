@@ -204,8 +204,8 @@ none. Then for each square row by row its
 cell's kinds of cover (`tape/src/stands.rs`), as many as the table's last number says (`stands::kinds`: the world's
 `Config::variety`, 8 unless the start chose other, or as many as the cell that holds the most slots, a cell of
 patches holding up to `cover::SLOTS`, 16) of `KIND_ROW` (42) f32 each, the heaviest first: the slots of
-its cover that stand on any of its ground, each as the law holds it, per m² of the ground it stands on (its share of
-the cell, `Cover::stands`: its land, and its ground under the liquid where its roots work, `cover::footing`); of each its starting kind (-1: none); its built cover, kg/m²; its large plants (`stands::plants` of the slot's group of the largest plants, `cover::Sizes::large`, with that group's built cover and share of the capture area): the stem's width, m, plants a m² (that group's count), height and crown's width, m, the share of the
+its cover that stand on any of its ground, each as the law holds it, per m² of the ground it stands on (its patch's share of
+the cell, `Cover::patch_share`, and of that its share `Cover::stands`: its land, and its ground under the liquid where its roots work, `cover::footing`); of each its starting kind (-1: none); its built cover, kg/m²; its large plants (`stands::plants` of the slot's group of the largest plants, `cover::Sizes::large`, with that group's built cover and share of the capture area): the stem's width, m, plants a m² (that group's count), height and crown's width, m, the share of the
 ground their crowns cover and how closed a crown is (1 - e^-their leaf area; plants with no capture area stand bare, their crowns of no width, covering none, which the page draws by their stems as a crown that has shed its leaves); its walls' share of its built cover; its
 capture area per kg of living cover, log10 m²/kg (`LEAF`); its light capacity per m² of capture area, log10 mol/m²/s;
 its moisture gene and frost gene, K; its fuel over its reserve; its activity and the share of it frozen in its cell's
