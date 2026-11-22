@@ -108,17 +108,19 @@ impl Ground {
         Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), w.terrain_samples())
     }
 
-    /// The relief a world built its samples from (`World::relief`) and the years since its start at its last build, as
-    /// bytes (bincode), for a shell's ground to build the same samples (`rebuild_from`).
+    /// The relief a world built its samples from (`World::relief`), the years since its start at its last build and the
+    /// world's map, whose cells the relief's offsets are of (`Relief::offset`), as bytes (bincode), for a shell's ground
+    /// to build the same samples (`rebuild_from`): the ground's own map may cut the island into other cells (a page's
+    /// ground is made of its squares, `worldgen::terrain::island_ground`).
     pub fn relief_bytes(w: &World) -> Vec<u8> {
-        bincode::serialize(&(&w.relief, w.built_years())).expect("a relief serializes")
+        bincode::serialize(&(&w.relief, w.built_years(), &w.map)).expect("a relief serializes")
     }
 
-    /// The ground made again on the samples the relief `bytes` builds (`relief_bytes`, `Terrain::built`; `rebuild`).
-    /// Returns the squares whose tiles changed, or why the bytes are refused.
+    /// The ground made again on the samples the relief `bytes` builds on the world's cells (`relief_bytes`,
+    /// `Terrain::built`; `rebuild`). Returns the squares whose tiles changed, or why the bytes are refused.
     pub fn rebuild_from(&mut self, bytes: &[u8]) -> Result<Vec<bool>, String> {
-        let (r, years): (Relief, f64) = bincode::deserialize(bytes).map_err(|e| format!("a relief: {e}"))?;
-        let s = self.terrain.built(self.seed, &self.map, self.lat, &r, years);
+        let (r, years, cells): (Relief, f64, Square) = bincode::deserialize(bytes).map_err(|e| format!("a relief: {e}"))?;
+        let s = self.terrain.built(self.seed, &cells, self.lat, &r, years);
         Ok(self.rebuild(s))
     }
 

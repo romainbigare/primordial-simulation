@@ -194,3 +194,19 @@ fn a_rebuilt_ground_draws_as_one_made_anew() {
     let fresh = Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), s);
     check(&ground, &before, &changed, &fresh);
 }
+
+/// A shell's ground of the island's squares (`worldgen::terrain::island_ground`, as the page makes it) made again from
+/// the relief of a world whose cells are coarser (`Ground::relief_bytes`, `rebuild_from`) draws as the ground of that
+/// world: the relief's offsets are of the world's cells, not of the squares.
+#[test]
+fn a_ground_of_squares_rebuilt_from_a_world_draws_as_the_world() {
+    let mut w = worldgen::testkit::one_rise(1, 16, 16);
+    let (map, terrain) = worldgen::terrain::island_ground(1, (16, 16), pcore::space::terrain::Shape::One, &w.cfg.phys);
+    assert!(map.leaves().len() > w.map.leaves().len(), "the world's cells are coarser than its squares");
+    let mut ground = Ground::new(1, map, terrain, (w.cfg.lat_south, w.cfg.lat_north), &w.cfg.phys, w.cfg.gravity);
+    pcore::step(&mut w);
+    pcore::flow::build::build(&mut w);
+    ground.rebuild_from(&Ground::relief_bytes(&w)).expect("the relief is read");
+    let (made, finest) = (Ground::of(&w), *tape::depths(&w.map).end());
+    assert!((0..2).all(|t| ground.tile(finest, t, t) == made.tile(finest, t, t)), "drawn as the world's ground");
+}
