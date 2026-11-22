@@ -4,7 +4,7 @@
 // The page's map canvas lies over the GPU's own canvas (which the GPU may replace, gpu.ts `HeldGpu`), takes the
 // pointer, and holds in 2D what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
 // picked, and the scale bar.
-import { Draw, EVERY_SIZE_M, Format, Gpu, Made, Pass, Texture, Uniforms, madeFor, openGpu, seenFrom } from './gpu';
+import { Draw, Format, Gpu, Made, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
@@ -43,8 +43,6 @@ const MADE_POLL_MS = 50;
 export interface GpuLayer {
   prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: Made[]): void;
   draw(p: Pass): void;
-  /** Make its programs ahead (`Gpu.warm`) for draws into the map's targets (null: the canvas; `MAP_TARGET`). */
-  warm(gpu: Gpu, targets: (Format | null)[]): void;
   under(gpu: Gpu, s: number, seen: number): Draw['binds'];
 }
 
@@ -98,8 +96,6 @@ export class MapView {
   private fireTimer = 0;
   private sharpening: Sharpening | null = null;
   private sharp: Texture | null = null;
-  /** Whether the programs the map may draw next are being made ahead (`warmAhead`). */
-  private warmed = false;
   /** The timer that looks whether the programs the last frame went without are made (`drawWhenMade`). */
   private madeTimer = 0;
   /** Drawn by another module on the GPU over the map, and on the 2D canvas over it at each redraw: its context, where
@@ -291,7 +287,6 @@ export class MapView {
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
     gpu.submit();
     this.time(gpu, r);
-    if (!this.warmed) { this.warmed = true; this.warmAhead(gpu, this.cellM / (s * d)); }
     if (r < 1 && !fading && !waiting.length) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
     this.drawWhenMade(gpu, waiting);
     this.flowSoon();
@@ -379,21 +374,6 @@ export class MapView {
     if (!job.tiles.length) this.sharpening = null;
     gpu.submit();
     if (job.tiles.length) gpu.done().then(() => requestAnimationFrame(() => this.sharpen(job)));
-  }
-
-  /** Make ahead, after the first frame, the programs the map may draw next (`Gpu.warm`): the live map's made for the
-   * sizes of a pixel nearest the first frame's `seen` m first, the layer's after the nearest two, then the rest; each
-   * for the canvas and for the textures the map is drawn into (`MAP_TARGET`). So zooming in or out first does not wait
-   * for a program to be made. */
-  private warmAhead(gpu: Gpu, seen: number): void {
-    const lands = madeFor('land', Infinity), m = (key: string) => +(key.split(':')[1] ?? 0) || EVERY_SIZE_M;
-    lands.sort((a, b) => Math.abs(Math.log(m(a) / seen)) - Math.abs(Math.log(m(b) / seen)));
-    const targets = [null, MAP_TARGET];
-    lands.forEach((key, i) => {
-      targets.forEach(t => gpu.warm(key, t, false));
-      if (i === 1) this.layer?.warm(gpu, targets);
-    });
-    gpu.warm('picture', null, false);
   }
 
   /** Draw into pass `p` (`target`, null: the canvas; of `size` px, `k` px a css px, on a screen of `d` px a css px) the

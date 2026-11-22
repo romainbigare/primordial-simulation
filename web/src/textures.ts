@@ -135,13 +135,6 @@ export class CoverMarks {
     this.decided = { ...decided, [REACH_BINDING]: this.reachTex! };
   }
 
-  /** Make ahead (`Gpu.warm`) the programs that decide the marks (into their textures) and draw them (over the map's
-   * `targets`). */
-  warm(gpu: Gpu, targets: (Format | null)[]): void {
-    for (const name of ['marks', 'reach']) gpu.warm(name, MARKS_FORMAT, false);
-    for (const t of targets) gpu.warm('cover', t, true);
-  }
-
   /** Draw marks `m` in pass `p` on `gpu`, as decided before the pass (`prepare`). */
   draw(p: Pass, m: Marks): void {
     if (this.decided) p.draw('cover', { rect: m.rect, binds: this.decided }, true);
