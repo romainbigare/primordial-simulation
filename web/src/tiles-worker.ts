@@ -19,15 +19,20 @@ interface Core {
 type Command =
   | { cmd: 'init'; wasm: ArrayBuffer; ground: GroundOf }
   | { cmd: 'tile'; depth: number; x: number; y: number; gen: number }
-  | { cmd: 'built'; relief: ArrayBuffer; gen: number };
+  | { cmd: 'built'; relief: ArrayBuffer; gen: number; answer: boolean };
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Command>) => void) | null };
 let core: Core | null = null;
 
 /** The messages, each handled once the one before is done: a tile or a build asked while the core is still starting
- * waits for it. */
+ * waits for it. Of builds that wait, only the latest is made (it holds the samples whole; the squares it says changed
+ * are those that differ from the ground before, so they hold those of the builds skipped). */
 let handled: Promise<void> = Promise.resolve();
-host.onmessage = e => { handled = handled.then(() => handle(e.data)); };
+let latestBuild = 0;
+host.onmessage = e => {
+  if (e.data.cmd === 'built') latestBuild = e.data.gen;
+  handled = handled.then(() => handle(e.data));
+};
 
 async function handle(m: Command): Promise<void> {
   try {
@@ -52,15 +57,16 @@ async function handle(m: Command): Promise<void> {
       const data = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
       // With the time it took, ms, and the bytes of the core's memory, for the page's cost line.
       host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data, gen: m.gen, ms: performance.now() - t0, memory: core.memory.buffer.byteLength }, [data.buffer]);
-    } else if (m.cmd === 'built' && core) {
+    } else if (m.cmd === 'built' && core && m.gen === latestBuild) {
       // The ground made again on the samples the world built (`ground_built`): a byte a square, 1 where its tiles
       // changed, or why the relief was refused; then the rock again.
       const n = m.relief.byteLength, into = core.input(n);
       new Uint8Array(core.memory.buffer, into, n).set(new Uint8Array(m.relief));
-      const t0 = performance.now(), at = core.ground_built(), out = new Uint8Array(core.memory.buffer.slice(at, at + core.out_len()));
+      const at = core.ground_built(), out = new Uint8Array(core.memory.buffer.slice(at, at + core.out_len()));
       if (out.some(v => v > 1)) throw new Error(new TextDecoder().decode(out));
-      const ms = performance.now() - t0, r = core.rock(), rock = new Uint16Array(core.memory.buffer.slice(r, r + core.out_len()));
-      host.postMessage({ kind: 'rebuilt', squares: out, rock, gen: m.gen, ms }, [out.buffer, rock.buffer]);
+      if (!m.answer) return;
+      const r = core.rock(), rock = new Uint16Array(core.memory.buffer.slice(r, r + core.out_len()));
+      host.postMessage({ kind: 'rebuilt', squares: out, rock, gen: m.gen }, [out.buffer, rock.buffer]);
     }
   } catch (err) {
     host.postMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) }, []);

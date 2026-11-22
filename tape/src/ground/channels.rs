@@ -202,6 +202,13 @@ pub(super) fn to_segment(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> (f64, f64, f6
     (side, x * x + y * y, t)
 }
 
+/// Whether the lines of the strips carry their wetness index across their banks on texels `k` samples wide: only on
+/// texels finer than the samples (`wetness::field` reads the samples' own index on coarser ones), so coarser tiles
+/// neither find those lines nor lay their banks.
+fn banks_read(k: f64) -> bool {
+    k < 1.0
+}
+
 impl<'a> Channels<'a> {
     /// The channels `r`, their pieces starting as `bends` holds, the lines of `strips` carrying their wetness index.
     pub(super) fn new(r: Reaches<'a>, bends: &'a Bends, strips: &'a [bool]) -> Channels<'a> {
@@ -240,14 +247,15 @@ impl<'a> Channels<'a> {
             for c in lo(win.x0).max(0)..=hi(win.x0, win.wide).min(s.across as i64 - 1) {
                 let q = r as usize * s.across + c as usize;
                 let shown = s.up[q] >= least;
-                if !shown && !self.strips[q] {
+                let strip = banks_read(k) && self.strips[q];
+                if !shown && !strip {
                     continue;
                 }
                 let Some(b) = base(s, self.r.at, q) else { continue };
                 let (own, reach) = reach_of(s.up[q]);
                 let carves = reach_valley > 0.0 && super::valley::carves(s, q);
                 let widest = if carves { reach.max(reach_valley) } else { reach };
-                let widest = if self.strips[q] { widest.max(super::wetness::BANK) } else { widest };
+                let widest = if strip { widest.max(super::wetness::BANK) } else { widest };
                 // The box the line lies in: its curve's points and, where a tributary joins, the next sample's centre,
                 // widened by its sway, by how far the next sample's line lies from its centre and by its reach: none
                 // of the window's texels in it, and the line is not drawn.
@@ -290,7 +298,7 @@ impl<'a> Channels<'a> {
         let mut f = self.laid(&all, &near, reach_valley);
         self.mend(&mut f, &all, &near);
         let heads = |q: usize| self.r.s.main[q] == NONE || !self.strips[self.r.s.main[q] as usize];
-        let bank = super::wetness::bank_lines(&all, near.iter().filter(|l| self.strips[l.q]).map(|l| (l.q, heads(l.q), l.drawn.line.iter().map(|v| v.p).collect())));
+        let bank = super::wetness::bank_lines(&all, near.iter().filter(|l| banks_read(all.k) && self.strips[l.q]).map(|l| (l.q, heads(l.q), l.drawn.line.iter().map(|v| v.p).collect())));
         fn cut<T: Copy>(v: &[T], high: usize, m: usize, wide: usize) -> Vec<T> {
             (0..high).flat_map(|y| v[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect()
         }

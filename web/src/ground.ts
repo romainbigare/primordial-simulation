@@ -117,10 +117,11 @@ export class GroundTiles {
    * (`ground_built`), and the tiles asked after are of it. */
   rebuild(relief: Uint8Array): void {
     this.gen++;
-    for (const w of this.workers) {
+    this.workers.forEach((w, k) => {
       const copy = relief.slice();
-      w.worker.postMessage({ cmd: 'built', relief: copy.buffer, gen: this.gen }, [copy.buffer]);
-    }
+      // (Only the first sends back the rock and the squares changed.)
+      w.worker.postMessage({ cmd: 'built', relief: copy.buffer, gen: this.gen, answer: k === 0 }, [copy.buffer]);
+    });
   }
 
   /** The first worker's ground made again, each build in its order: the rock of the latest, and each tile kept over a
@@ -153,7 +154,7 @@ export class GroundTiles {
     const tiles = (d: number) => { const s = this.squaresOf(d); return (Math.ceil(v.w / s) + 1) * (Math.ceil(v.h / s) + 1); };
     let depth = Math.min(Math.max(sq + Math.ceil(Math.log2(Math.max((v.s * devicePixelRatio) / TEXEL_PX, 1))), d0), d1);
     while (depth > d0 && tiles(depth) > VIEW_TILES) depth--;
-    const cx = v.x + v.w / 2, cy = v.y + v.h / 2, asked = ++this.views, wanted: { depth: number; x: number; y: number; far: number }[] = [];
+    const cx = v.x + v.w / 2, cy = v.y + v.h / 2, asked = ++this.views, wanted: { depth: number; x: number; y: number; stale: boolean; far: number }[] = [];
     this.inView.clear();
     for (const d of new Set([d0, Math.max(depth - 1, d0), depth])) {
       const s = this.squaresOf(d), [nx, ny] = this.across(d), ahead = d === depth ? AHEAD : 0;
@@ -164,10 +165,12 @@ export class GroundTiles {
         if (d === depth && inside) this.inView.add(keyOf(d, x, y));
         const key = keyOf(d, x, y), k = this.kept.get(key);
         if (k) k.asked = asked;
-        if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, far: (inside ? 0 : 1e9) + Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
+        if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, stale: k !== undefined, far: (inside ? 0 : 1e9) + Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
       }
     }
-    this.queue = wanted.sort((a, b) => a.depth - b.depth || a.far - b.far);
+    // Tiles not kept come before those kept stale (which are drawn meanwhile), so a zoom's tiles never wait behind the
+    // ground a build changed; then coarse before fine, nearest the view's middle first.
+    this.queue = wanted.sort((a, b) => +a.stale - +b.stale || a.depth - b.depth || a.far - b.far);
     if (depth !== this.depth) { this.depth = depth; this.makePage(); }
     this.next();
   }
@@ -231,17 +234,25 @@ export class GroundTiles {
     }
     if (layer !== undefined) {
       const came = performance.now() - this.start;
-      this.kept.set(keyOf(depth, x, y), { depth, x, y, layer, came, asked: this.views });
+      this.kept.set(keyOf(depth, x, y), { depth, x, y, layer, came: had ? had.came : came, asked: this.views });
       this.come.push({ layer, data });
-      this.numbers.set([depth, x, y, came], 4 * layer);
+      this.numbers.set([depth, x, y, had ? had.came : came], 4 * layer);
       this.numbersDue = true;
       const before = this.page;
       this.makePage();
-      const shown = this.showsOtherThan(before);
-      if (shown) this.lastCame = came;
+      // A tile that takes a stale one's place shows at once, with no fade (the ground under it barely moved), so a
+      // playing world's builds do not keep the map drawing frame after frame.
+      const shown = this.showsOtherThan(before) || (had !== undefined && this.seen(depth, x, y));
+      if (shown && !had) this.lastCame = came;
       this.changed(shown);
     }
     this.next();
+  }
+
+  /** Whether the tile of `depth` at column `x` and row `y` lies in the last view. */
+  private seen(depth: number, x: number, y: number): boolean {
+    const v = this.last, s = this.squaresOf(depth);
+    return v !== null && (x + 1) * s > v.x && x * s < v.x + v.w && (y + 1) * s > v.y && y * s < v.y + v.h;
   }
 
   /** Whether the page shows another layer than page `before` anywhere in the last view. */
