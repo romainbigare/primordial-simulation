@@ -350,7 +350,7 @@ fn blades(e: f32) -> vec2f {
   var tone = 0.0;
   var cover = 0.0;
   var nearest = -99.0;
-  for (var j = 3; j >= 0; j--) {
+  for (var j = rolled(3); j >= 0; j--) {
     for (var i = -1; i <= 1; i++) {
       let cell = l.i + vec2i(i, j);
       for (var b = 0u; b < 2u; b++) {
@@ -400,7 +400,7 @@ fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32, t: Tufts, depth: f32) -> v
   // From the nearest (south) to the farthest, each under those already drawn: a tuft no wider than two cells reaches
   // the pixel from the cells beside its own, from up to `t.south` cells south (its height), and its shadow from the cell
   // north.
-  for (var j = t.south; j >= -1; j--) {
+  for (var j = t.south; j >= rolled(-1); j--) {
     for (var i = -1; i <= 1; i++) {
       let cell = l.i + vec2i(i, j);
       let x = lowbias(cell, t.k);

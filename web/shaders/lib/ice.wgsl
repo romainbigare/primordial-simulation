@@ -87,7 +87,7 @@ fn floes(at: vec2f, e: f32, cover: f32, size: f32, k: i32) -> f32 {
   var d1 = 1e9;
   var d2 = 1e9;
   var id = 0u;
-  for (var j = -1; j <= 1; j++) {
+  for (var j = -1; j <= rolled(1); j++) {
     for (var i = -1; i <= 1; i++) {
       let cell = c + vec2f(f32(i), f32(j));
       let x = lowbias(vec2i(cell), k);
@@ -131,7 +131,7 @@ fn segments(at: vec2f, e: f32, cell: f32, held: f32, longest: f32, width: f32, k
   let c = floor(q);
   var best = 0.0;
   var lit = 0.5;
-  for (var j = -1; j <= 1; j++) {
+  for (var j = -1; j <= rolled(1); j++) {
     for (var i = -1; i <= 1; i++) {
       let id = c + vec2f(f32(i), f32(j));
       let x = lowbias(vec2i(id), k);

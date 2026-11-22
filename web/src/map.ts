@@ -9,7 +9,7 @@ import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
 import { Box, FIRE_FPS, Fire } from './fire';
-import { detailLost, sendDetail } from './detail';
+import { detailLost, detailSeen, sendDetail } from './detail';
 import { spend, timed } from './cost';
 
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
@@ -288,6 +288,8 @@ export class MapView {
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
     gpu.submit();
     this.time(gpu, r);
+    // The ground's detail is held only while the view is close enough to show it.
+    detailSeen(this.cellM / (s * d));
     if (r < 1 && !fading && !waiting.length) this.sharpTimer = window.setTimeout(() => this.sharpenSoon(xs, d), REST_MS);
     this.drawWhenMade(gpu, waiting);
     this.flowSoon();

@@ -34,10 +34,6 @@ fn kind(k: i32, c: vec2i) -> vec4f {
 // that of the four kinds from 4q; of the planes of a kind's four numbers (one a group of its plants), that of kind t
 // (and of lattice l).
 fn kinds_n() -> i32 { return i32(cover.walls.w); }
-// `n`, as a bound the compiler cannot take for a fixed one (the kinds are never fewer than none), so it keeps the loop
-// rolled: Apple's Metal compiler unrolls fixed loops nested in fixed loops, and over this program it took minutes on a
-// phone, holding back every frame behind it.
-fn rolled(n: i32) -> i32 { return n + min(kinds_n(), 0); }
 fn groups() -> i32 { return (kinds_n() + 3) / 4; }
 fn chance_plane(l: i32, t: i32) -> i32 { return l * kinds_n() + t; }
 fn strips_plane(q: i32) -> i32 { return COVER_LATTICES * kinds_n() + q; }

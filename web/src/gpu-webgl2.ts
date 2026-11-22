@@ -256,8 +256,11 @@ class WebGl2 implements Back {
 
 /** How often a program made ahead is looked at for whether it is done, ms. */
 const WARM_POLL_MS = 16;
-/** Run `f` when the page is idle (at once where the browser cannot say). */
-const idle = (f: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(() => f()) : setTimeout(f, 0));
+/** The longest wait for the page to be idle before a program is made anyway, ms: a page that draws while the world
+ * plays may never be idle, and the views that need the program would wait for it for ever. */
+const IDLE_MOST_MS = 1000;
+/** Run `f` when the page is idle, or after `IDLE_MOST_MS` (at once where the browser cannot say). */
+const idle = (f: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(() => f(), { timeout: IDLE_MOST_MS }) : setTimeout(f, 0));
 
 /** How often a wait for the GPU looks whether it has finished, ms. */
 const FENCE_POLL_MS = 4;

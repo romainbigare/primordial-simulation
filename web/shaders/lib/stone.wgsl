@@ -82,7 +82,7 @@ fn stones(e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
   let snow_m = s.snow * s.snow_m;
   var size = s.size / pow(STONE_STEP, f32(STONE_OCTAVES - 1));
   // The smallest first, the larger over them.
-  for (var o = STONE_OCTAVES - 1; o >= 0; o--) {
+  for (var o = rolled(STONE_OCTAVES) - 1; o >= 0; o--) {
     let density = stones_held(s, o);
     // Out of the water, where it stands in a channel's.
     var stands = 1.0;
@@ -122,7 +122,7 @@ fn wake(e: f32, s: Stony, least: f32, down: vec2f, k: i32) -> f32 {
   var white = 0.0;
   if (least <= 0.0) { return white; }
   var size = s.size;
-  for (var o = 0; o < STONE_OCTAVES; o++) {
+  for (var o = 0; o < rolled(STONE_OCTAVES); o++) {
     let stands = ease(least, 1.5 * least, s.small * size) * as_thing(s.small * size, e);
     let density = stones_held(s, o);
     if (stands > 0.0 && density > 0.0) {

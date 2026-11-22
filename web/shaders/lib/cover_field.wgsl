@@ -469,7 +469,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
     sward_read = true;
     dst = sward(at, e, b, swarded, trees.a, thick, hold.w);
     // A lattice no square holds adds nothing: its field is not read.
-    for (var l = 0; l < STANDS; l++) {
+    for (var l = 0; l < rolled(STANDS); l++) {
       if (cover_look.sides[l] > 0.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
     }
   }

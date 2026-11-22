@@ -45,7 +45,7 @@ fn floating_pads(water: vec3f, held: f32, blooms: f32, e: f32) -> vec3f {
   if (seen <= 0.0 || !models_ready()) { return mean; }
   let l = lat_axes(PAD_CELL_M, vec2f(0.0));
   var out = water;
-  for (var j = -1; j <= 1; j++) {
+  for (var j = -1; j <= rolled(1); j++) {
     for (var i = -1; i <= 1; i++) {
       let cell = l.i + vec2i(i, j);
       let x = lowbias(cell, 151);
@@ -82,7 +82,7 @@ fn floating_leaves(water: vec3f, cover: f32, e: f32) -> vec3f {
   if (seen <= 0.0) { return mean; }
   let l = lat_axes(LEAF_CELL_M, vec2f(0.0));
   var out = water;
-  for (var j = -1; j <= 1; j++) {
+  for (var j = -1; j <= rolled(1); j++) {
     for (var i = -1; i <= 1; i++) {
       let cell = l.i + vec2i(i, j);
       let x = lowbias(cell, 153);

@@ -72,7 +72,7 @@ fn marks_over(v: Varying) -> vec4f {
   let e = cover.seen.x;
   var dst = vec4f(0.0);
   var shade = 0.0;
-  for (var l = 0; l < COVER_LATTICES; l++) { lattice(&dst, &shade, p, l, e); }
+  for (var l = 0; l < rolled(COVER_LATTICES); l++) { lattice(&dst, &shade, p, l, e); }
   // Linear light turned into the screen's share once (draw.wgsl `srgb`), in the style (style.wgsl `painted`),
   // premultiplied.
   if (dst.a <= 0.0) { return vec4f(0.0); }

@@ -407,7 +407,7 @@ function showCost(s: Stats): void {
   el.innerHTML = [
     ['world', `${fmt(s.pace)} months/s, ${ms(s.monthMs)} ms a month, worker busy ${Math.round(100 * s.busy)}%`],
     ['page /s', `world frames ${per('world frames')}, draws ${per('draw')}`],
-    ['gpu', `${gpuN > 0 ? ms(spent('gpu') / gpuN) : '-'} ms a frame`],
+    ['gpu', `${gpuN > 0 ? ms(spent('gpu') / gpuN) : '-'} ms a frame; programs: ${drawing?.making() ?? '-'}`],
     ['tiles /s', `${ms(spent('tile ms'))} ms in the worker, ${per('tiles')} on the page`],
     ['detail', `${sent} of ${layers} layers sent, ${per('detail')} frames /s`],
     ['gpu MB', `${mb(cardAll)}: ${cards.map(([label, b]) => `${label} ${mb(b)}`).join(', ')}`],
