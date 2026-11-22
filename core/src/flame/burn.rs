@@ -1,11 +1,13 @@
-//! The third stage of the flames' month (laws.md 3c): each cell burns its own share, the remains on its ground and
-//! what of its cover stands in the flame, and scorches what stands under the height its plume kills at; booked through
-//! the cell's view as the cover's books are (`life::book`), the heat freed to its air.
+//! The third stage of the flames' month (laws.md 3c): each cell burns its own share on each patch of its cover whose
+//! remains carry a flame, the remains on that patch and what of its cover stands in the flame, and scorches what stands
+//! under the height its plume kills at; the ground it burnt on a patch is a patch (`burnings`); booked through the cell's
+//! view as the cover's books are (`life::book`), the heat freed to its air.
 
 use super::{Bed, FLAME_EXP, FLAME_K, KILLED, KILLED_WALLS, LIVING, PLANTS, REMAINS, SCORCHED, SMOULDERED, CURED, SCORCH_EXP, SCORCH_K, W_PER_KW};
 use crate::chem::{Chemistry, Phase};
-use crate::cover::{per_input, soft_in, Books, Cover, Parts, BUDGET, BURNT, FUEL, MATTER, NP, ROUNDED, SOFT, WALL};
+use crate::cover::{hit, open_event, per_input, point, settle, soft_in, Books, Cover, Hit, Parts, BUDGET, BURNT, FUEL, GROUPS, MATTER, NP, ROUNDED, SLOTS, SOFT, WALL};
 use crate::life::{Chunk, FLAME};
+use crate::rng::Purpose;
 use crate::store::{Class, Node};
 use crate::{World, AIR};
 
@@ -99,36 +101,101 @@ fn break_down(chem: &Chemistry, ph: &crate::Physics, b: &mut Books) {
     }
 }
 
-/// Cell `i` of chunk `d` burns the share `f` of its land, its remains lying as `bed`: there the part of its remains dry
-/// enough to flame burns, and the part under it dry enough to smoulder after the flame (`Bed::flaming`, `smoulder`); of
-/// each slot of its cover the body matter of its crown (`contract::crown`, spread evenly over it) that stands in the
-/// flame burns, what stands between the flame and the scorch height dies to its remains, and a slot whose whole crown
-/// stands under the scorch height loses its plants there (a young plant must outgrow the flame between flames; Bond and
-/// Midgley 2001; a slot left with no built cover is emptied in the cover's next month); its seeds lying survive (they
-/// lie in the top of the ground, which a passing flame barely warms). Gases go to its air, what is not a gas to its ground (`life::book`), and the heat the burning frees to its air node.
-pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)) {
+/// A flame on patch `k` of a cell's cover, its remains lying as `bed`: on the share of the patch's ground they cover
+/// (`Bed::cover`) it burns what an event burns (`cover::hit`): a part of the patch, which becomes a patch of its own
+/// about the sample `point`; or the patch whole; or, under `EVENT_LEAST`, that share of the patch, spread over it.
+pub struct Burning {
+    k: usize,
+    bed: Bed,
+    hit: Option<Hit>,
+    point: u32,
+}
+
+/// The flames on the patches of cell `i` of `w`, whose patches' beds are `beds` (`Burning`): one on each patch whose bed
+/// carries a flame, the point of the patch a part burnt opens about drawn in the patch (`cover::point`).
+pub fn burnings(w: &World, i: usize, beds: &[Option<Bed>]) -> Vec<Burning> {
+    let on = beds.iter().enumerate().filter_map(|(k, b)| b.filter(|b| b.carries()).map(|b| (k, b)));
+    on.map(|(k, bed)| {
+        let hit = hit(bed.cover);
+        Burning { k, bed, hit, point: if hit == Some(Hit::Part) { point(w, i, k, Purpose::Burn) } else { 0 } }
+    })
+    .collect()
+}
+
+/// The slots of the cover of cell `i` of chunk `d` each flame of `burnings` burns, with the share of each slot's plants
+/// it burns and the flame's reach: the part a flame burns of a patch becomes a patch of its own (`cover::open_event`),
+/// each slot of the patch giving it that share of its plants, and the flame burns all of the new patch's slots; where
+/// none opens, and for a patch burnt whole or under `EVENT_LEAST`, it burns that share of each slot of the patch. The
+/// slots of a patch a flame made or burnt whole forget their fallen crowns (`Cover::fell`): the flame made their patch,
+/// and no gap opens for it. Returns them, and whether a new patch joined one in use, so its slots settle after the
+/// flame (`cover::settle`).
+fn burnt_slots(w: &World, d: &mut Chunk, p: &Parts, i: usize, burnings: &[Burning]) -> (Vec<(usize, f64, Reach)>, Vec<usize>, bool) {
+    let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
+    let c = d.cover(i);
+    let (n, mut joined) = (c.patch_count(), false);
+    let own: Vec<Vec<usize>> = burnings.iter().map(|f| c.held_in(f.k).collect()).collect();
+    let (mut slots, mut events) = (Vec::new(), Vec::new());
+    for (on, own) in burnings.iter().zip(own) {
+        let (f, r) = (on.bed.cover, reach(&w.cfg.phys, &on.bed));
+        let carve = (f * c.patches[on.k].share, on.point);
+        let opened = if on.hit == Some(Hit::Part) { open_event(c, (&w.cfg.phys, &mm, rho), (on.k, carve.0, carve.1), |_| [[f; GROUPS]; SLOTS]) } else { None };
+        match opened {
+            Some((into, new)) => {
+                joined |= into < n;
+                slots.extend(new.iter().map(|&x| (x, 1.0, r)));
+                events.extend(new);
+            }
+            None => {
+                if on.hit == Some(Hit::Whole) {
+                    c.patches[on.k].age = 0.0;
+                    events.extend(own.iter().copied());
+                }
+                slots.extend(own.into_iter().map(|x| (x, f, r)));
+            }
+        }
+    }
+    (slots, events, joined)
+}
+
+/// Cell `i` of chunk `d` burns on each patch of its cover that its flames `burnings` reach (`Burning`), on the share of the
+/// patch's ground its remains cover: there the part of the patch's remains (`Bed::part`) dry enough to flame burns, and
+/// the part under it dry enough to smoulder after the flame (`Bed::flaming`, `smoulder`), with its share of the cured
+/// leaves where they flame; of each slot it burns (`burnt_slots`) the body matter of its crown (`contract::crown`,
+/// spread evenly over it) that stands in the flame burns, what stands between the flame and the scorch height dies to
+/// its remains, and a slot whose whole crown stands under the scorch height loses its plants there (a young plant must
+/// outgrow the flame between flames; Bond and Midgley 2001; a slot left with no built cover is emptied in the cover's
+/// next month); its seeds lying survive (they lie in the top of the ground, which a passing flame barely warms). Gases
+/// go to its air, what is not a gas to its ground (`life::book`), and the heat the burning frees to its air node.
+pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, burnings: &[Burning]) {
     let (chem, mm, e) = (&w.chem, p.mm(&w.chem), p.content(&w.chem));
-    let r = reach(&w.cfg.phys, bed);
-    let crowns: Vec<(usize, (f64, f64))> = d.at(i).cover.held().map(|x| (x, crate::contract::crown(w, i, d.at(i), p, x))).collect();
+    let (slots, events, joined) = burnt_slots(w, d, p, i, burnings);
+    let crowns: Vec<(usize, f64, Reach, (f64, f64))> = slots.into_iter().filter(|s| d.at(i).cover.root[s.0] != crate::cover::NO_ROOT).map(|(x, f, r)| (x, f, r, crate::contract::crown(w, i, d.at(i), p, x))).collect();
     let air = crate::contract::air(w, d, i);
     let t = w.thaw_last(i).0;
     let (c, moves, counts) = d.cover_with(i);
     moves.open(w, i, Node::new(Class::Life, i));
     let mut b = Books::new(air, [0.0; BUDGET.len()]);
     let mut flows = [0.0; super::FLOWS.len()];
-    for q in [MATTER, WALL] {
-        let held = moves.amount(w, Node::ground(i), p.sub[q]).max(0.0) * f;
-        flows[REMAINS] += burn_up(chem, &mut b, (&[], &mut []), p.sub[q], held * bed.flaming) * mm[q];
-        flows[SMOULDERED] += burn_up(chem, &mut b, (&[], &mut []), p.sub[q], held * (bed.smoulder - bed.flaming)) * mm[q];
-    }
+    let cured = c.cured;
     let before = c.content(&e);
-    let lit = if bed.standing > 0.0 { f } else { 0.0 };
-    for q in [MATTER, WALL] {
-        let mol = c.cured[q] * lit;
-        flows[CURED] += burn_up(chem, &mut b, (&p.sub, &mut c.cured), p.sub[q], mol) * mm[q];
+    for Burning { bed, .. } in burnings {
+        let f = bed.part * bed.cover;
+        for q in [MATTER, WALL] {
+            let held = moves.amount(w, Node::ground(i), p.sub[q]).max(0.0) * f;
+            flows[REMAINS] += burn_up(chem, &mut b, (&[], &mut []), p.sub[q], held * bed.flaming) * mm[q];
+            flows[SMOULDERED] += burn_up(chem, &mut b, (&[], &mut []), p.sub[q], held * (bed.smoulder - bed.flaming)) * mm[q];
+        }
+        let lit = if bed.standing > 0.0 { f } else { 0.0 };
+        for q in [MATTER, WALL] {
+            flows[CURED] += burn_up(chem, &mut b, (&p.sub, &mut c.cured), p.sub[q], cured[q] * lit) * mm[q];
+        }
     }
-    for (x, crown) in crowns {
+    for (x, f, r, crown) in crowns {
         crown_burns(w, p, (c, x, crown), (f, &r), (&mut b, &mut flows));
+    }
+    events.into_iter().for_each(|x| c.fell[x] = 0.0);
+    if joined {
+        settle(c, (&w.cfg.phys, &mm), w.cfg.variety);
     }
     break_down(chem, &w.cfg.phys, &mut b);
     b.budget[BURNT] += c.content(&e) - before;
@@ -154,7 +221,10 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, (f, bed): (f64, &Bed)
     let given = |k: usize| (-b.ext[k]).max(0.0) * chem.subs[k].molar_mass / crate::contract::land(w, i).max(f64::MIN_POSITIVE);
     let air: f64 = (0..chem.ns()).filter(|&k| chem.phase(k, t) == Phase::Gas).map(given).sum();
     let ash: f64 = (0..chem.ns()).filter(|&k| k != p.liquid && chem.phase(k, t) != Phase::Gas).map(given).sum();
-    counts.flamed.push((i as u32, super::Flamed { share: f as f32, length: r.flame as f32, ash: ash as f32, air: air as f32 }));
+    // The share of the cell's land burnt, and the flames' mean length over it.
+    let share: f64 = burnings.iter().map(|x| x.bed.cover * x.bed.share).sum();
+    let length = burnings.iter().map(|x| x.bed.cover * x.bed.share * reach(&w.cfg.phys, &x.bed).flame).sum::<f64>() / share.max(f64::MIN_POSITIVE);
+    counts.flamed.push((i as u32, super::Flamed { share: share as f32, length: length as f32, ash: ash as f32, air: air as f32 }));
     // The heat the burning frees goes to the air over the cell (its plume); the rest closes with the ground as the
     // cover's books close (`life::book`).
     let freed = std::mem::take(&mut b.heat);

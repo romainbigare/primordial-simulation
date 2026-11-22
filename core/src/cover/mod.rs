@@ -25,14 +25,14 @@ mod upkeep;
 
 pub use around::{dimmed, over, pores, thirst, Around};
 pub use budget::{content, BUDGET, TAKERS};
-pub use gaps::GAP_LEAST;
 pub use grow::{live, step, Books};
 pub use groups::Sizes;
 pub(crate) use build::per_input;
 pub(crate) use budget::{BURNT, ROUNDED};
 pub use lying::{Lying, FROZEN, LANDED, SEED_FLOWS, SPROUTED, TAKEN_LYING, WORN};
 pub use month::{landed, release, CellRan, Ran};
-pub use patches::{Patch, PATCHES};
+pub use patches::{Patch, EVENT_LEAST, PATCHES};
+pub(crate) use patches::{hit, open_event, point, settle, Hit};
 pub use seed::{land, lodge, place, set_plants, sown, Landed, Seed};
 pub(crate) use show::lose;
 pub use soak::{aired, breath, fill_now, footing, gains, moist, soak, strips_share, working, Footing, Soak};

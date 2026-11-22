@@ -48,7 +48,7 @@ fn liquid_to(w: &mut World, i: usize, mol: f64) {
 
 /// The bed of cell `i` as the flames read it now.
 fn bed_of(w: &World, i: usize) -> Bed {
-    flame::bed(w, &Parts::of(&w.chem).unwrap(), i).expect("a bed")
+    flame::beds(w, &Parts::of(&w.chem).unwrap(), i)[0].expect("a bed")
 }
 
 /// The remains of cell `i` (body matter and walls), mol.
@@ -173,7 +173,8 @@ fn a_low_plant_burnt_to_its_base_keeps_its_plants_and_store() {
     let mm = p.mm(&w.chem);
     let built = |w: &World| w.life.cover(i).built(&mm, low);
     let (low0, tall0, built0, fuel0) = (plants(&w, low), plants(&w, tall), built(&w), w.life.cover(i).mol[low][FUEL]);
-    let share = flame::shares(&w, &(0..w.mesh.cells().n()).map(|j| flame::bed(&w, &p, j).ok()).collect::<Vec<_>>(), w.cfg.calendar().month as f64)[i];
+    let beds: Vec<Vec<_>> = (0..w.mesh.cells().n()).map(|j| flame::beds(&w, &p, j).into_iter().map(Result::ok).collect()).collect();
+    let share = flame::shares(&w, &beds, w.cfg.calendar().month as f64)[i];
     assert!(share > 0.0, "the cell burns");
     flame::month(&mut w);
     assert_eq!((plants(&w, low), w.life.cover(i).mol[low][FUEL]), (low0, fuel0), "the low slot lost plants or store");
@@ -201,5 +202,32 @@ fn every_edit_keeps_the_books_and_a_strike_lights_its_cell() {
     books.assert_kept(&w, 1e-9);
     flame::month(&mut w);
     assert!(w.counts.flame[flame::REMAINS] > 0.0 && w.strikes.is_empty(), "the strike burnt {} kg", w.counts.flame[flame::REMAINS]);
+    books.assert_kept(&w, 1e-9);
+}
+
+/// A flame burns each patch of a cell's cover on its own bed (`flame::beds`): the remains lie on the patches by the body
+/// matter of their plants, so a young clearing, whose plants all died above the ground, holds none and carries no
+/// flame, a firebreak, while the rest of the cell burns, its remains on it burnt by the share they cover; the clearing
+/// keeps its share and its age, the burnt patch is burnt whole and made new (age 0); the books are kept.
+#[test]
+fn a_flame_leaves_a_young_clearing_and_burns_the_rest() {
+    let (mut w, i) = start();
+    liquid_to(&mut w, i, 0.0);
+    let [w0, n0, e0, s0] = w.map.bounds(i);
+    let edit = pcore::edit::Edit { place: [(w0 + e0) / 2.0, (n0 + s0) / 2.0], act: pcore::edit::Act::Clear(0.3) };
+    assert_eq!(w.edit(&[edit]), [true]);
+    w.in_cell(i, |_, d| d.cover(i).patches[0].age = 5.0);
+    let p = Parts::of(&w.chem).unwrap();
+    let beds = flame::beds(&w, &p, i);
+    let (rest, clearing) = (beds[0].expect("a bed on the rest"), beds[1]);
+    assert!(rest.carries() && clearing.is_err(), "the rest {rest:?}, the clearing {clearing:?}");
+    let (books, load, was) = (Books::now(&w), remains(&w, i), w.life.cover(i).patches);
+    flame::month(&mut w);
+    let mm = p.mm(&w.chem);
+    let burnt = (w.counts.flame[flame::REMAINS] + w.counts.flame[flame::SMOULDERED]) / (load[0] * mm[MATTER] + load[1] * mm[WALL]);
+    assert!((burnt - rest.part * rest.cover * rest.smoulder).abs() < 1e-9, "burnt {burnt} of the remains: {rest:?}");
+    let now = w.life.cover(i).patches;
+    assert_eq!((now[1].share, now[1].age), (was[1].share, was[1].age), "the clearing changed: {now:?}");
+    assert_eq!(now[0].age, 0.0, "the burnt patch is not new: {now:?}");
     books.assert_kept(&w, 1e-9);
 }

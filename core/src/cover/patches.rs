@@ -4,12 +4,15 @@
 //! draw the key liquid and the minerals on it alone; the soil, its liquid and minerals and the air stay the cell's,
 //! each patch drawing on its share. The laws know no place of a patch in its cell; a patch past the first keeps the
 //! sample of its cell where it was made (`Patch::at`), about which its ground lies (`inside::patch_ground`), for the
-//! pictures. Edits make patches (`World::clear`, `World::split`); once a year alike patches fuse (`year`).
+//! pictures. Events make patches, each where it hits a share of a patch at once (`hit`, `open_event`: a die-off,
+//! `gaps`; a flame, `flame::burn`), and so do edits (`World::clear`, `World::split`); once a year alike patches fuse
+//! (`year`).
 
 use super::budget::{held, DIED};
 use super::groups::Group;
 use super::{stand, Cover, Parts, FUEL, GROUPS, NO_ROOT, NP, SLOTS, WALL};
 use crate::life::kin;
+use crate::rng::{Purpose, Rng};
 use crate::{Physics, World};
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +27,39 @@ pub const ALIKE_HEIGHT: f64 = 0.2;
 pub const ALIKE_COVER: f64 = 0.2;
 /// A starting kind holds a patch when its slots there hold at least this share of the patch's built cover.
 pub const HOLDS: f64 = 0.1;
+/// An event makes a patch of the ground it hits on a patch only where that is at least this share of the patch's
+/// ground, and the patch's own where it leaves less than this share (`hit`): a patch is for an event that hits a share
+/// of a stand at once, never for one plant.
+pub const EVENT_LEAST: f64 = 0.15;
+
+/// What an event is to a patch (`hit`): it hits a share of its ground, which becomes a patch of its own
+/// (`open_event`), or all of it but less than `EVENT_LEAST`, and the patch is the event's whole.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Hit {
+    Part,
+    Whole,
+}
+
+/// What an event that hits the share `s` of a patch's own ground is to it (`Hit`): none under `EVENT_LEAST`.
+pub(crate) fn hit(s: f64) -> Option<Hit> {
+    if s >= 1.0 - EVENT_LEAST {
+        Some(Hit::Whole)
+    } else if s >= EVENT_LEAST {
+        Some(Hit::Part)
+    } else {
+        None
+    }
+}
+
+/// Where in patch `k` of the cover of cell `i` of `w` the new patch of an event opens: one of its samples
+/// (`inside::patch_ground`), drawn from the world's seed by the month, the cell and the patch for the event's
+/// `purpose`.
+pub(crate) fn point(w: &World, i: usize, k: usize, purpose: Purpose) -> u32 {
+    let g = crate::inside::patch_ground(w, i);
+    let mine: Vec<usize> = (0..g.of.len()).filter(|&p| g.of[p] as usize == k).collect();
+    let mut r = Rng::new(w.seed, w.month(), (i * PATCHES + k) as u64, purpose);
+    mine.get(r.below(mine.len())).map_or_else(|| w.centre_sample(i), |&p| p) as u32
+}
 
 /// A patch of a cell's cover: its share of the cell's ground (0: not in use), its age, years since it was made, and the
 /// sample of its cell where it was made, row by row from the cell's north-west corner (`inside::PatchGround`; the first
@@ -195,6 +231,26 @@ pub(super) fn carve(c: &mut Cover, at: (&Physics, &[f64; NP], f64), (k, s, point
         c.patch[q] = into as u8;
     }
     Some(into)
+}
+
+/// Patch `k` of cover `c` opens the share `s` of its cell as a new patch of an event about its sample `point`
+/// (`carve`), each of its slots `x` giving it the share `by(c)[x][g]` of the plants of each group `g`. Room for its slots
+/// is made first: while the arrays hold fewer empty slots than the patch holds slots, its two nearest join
+/// (`seed::room`), and `by` reads the cover after that. Returns the patch it is and the slots it took, which the
+/// event's law acts on before they settle (`settle`); none where `carve` makes none.
+pub(crate) fn open_event(c: &mut Cover, at: (&Physics, &[f64; NP], f64), (k, s, point): (usize, f64, u32), by: impl Fn(&Cover) -> [[f64; GROUPS]; SLOTS]) -> Option<(usize, Vec<usize>)> {
+    let empty = |c: &Cover| c.root.iter().filter(|&&r| r == NO_ROOT).count();
+    while empty(c) < c.held_in(k).count() && super::seed::room(c, at.1, SLOTS, k).is_some() {}
+    let free: Vec<usize> = (0..SLOTS).filter(|&x| c.root[x] == NO_ROOT).collect();
+    let into = carve(c, at, (k, s, point), &by(c))?;
+    Some((into, free.into_iter().filter(|&x| c.root[x] != NO_ROOT).collect()))
+}
+
+/// The slots of cover `c` meeting slots of their kind in their patch join them (`stand::merge_alike`), and a patch of
+/// more than `variety` slots folds (`fold`): after an event's new patch joined one in use.
+pub(crate) fn settle(c: &mut Cover, (ph, mm): (&Physics, &[f64; NP]), variety: usize) {
+    stand::merge_alike(c, mm, (ph, SLOTS));
+    fold(c, (ph, mm), variety);
 }
 
 /// A patch of cover `c` holds no more than `variety` slots: while it holds more, its two nearest slots join

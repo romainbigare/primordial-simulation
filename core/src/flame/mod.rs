@@ -3,15 +3,16 @@
 //! sends ahead dries and lights the next kg (Rothermel 1972); a strike lights the joined remains of a region, and the
 //! flame runs over them. What burns goes through the chemistry's own burning reactions; the speed comes from the heat
 //! balance, not from the reactions' rates (theirs are those of rot). Three stages, each number with one writer: each
-//! cell finds its own bed (`bed`, in parallel), the cells that carry a flame join into regions in the order of the cells
-//! (`join`, serial), and each cell burns its own share (`burn`, one task per chunk of cells).
+//! cell finds the bed of each patch of its cover (`bed`, in parallel), the cells that carry a flame join into regions in
+//! the order of the cells (`join`, serial), and each cell burns its own share on each patch (`burn`, one task per chunk
+//! of cells).
 
 mod bed;
 mod burn;
 mod join;
 
-pub use bed::{bed, Bed};
-pub use burn::{burn, reach, Reach};
+pub use bed::{beds, Bed};
+pub use burn::{burn, burnings, reach, Burning, Reach};
 pub use join::shares;
 
 use crate::cover::Parts;
@@ -124,31 +125,38 @@ pub enum Unlit {
     Damp,
 }
 
-/// Whether a strike on cell `i` lights it, by the test the flames' month uses (`bed`, `Bed::carries`); else why not.
+/// Whether a strike on cell `i` lights it, by the test the flames' month uses (`beds`, `Bed::carries`): where the bed
+/// of some patch of its cover carries a flame; else why the largest patch's does not.
 pub fn lights(w: &World, i: usize) -> Result<(), Unlit> {
     let p = Parts::of(&w.chem).ok_or(Unlit::Lifeless)?;
     if crate::contract::land(w, i) <= 0.0 {
         return Err(Unlit::NoLand);
     }
-    bed(w, &p, i)?.unlit().map_or(Ok(()), Err)
+    let beds = beds(w, &p, i);
+    if beds.iter().flatten().any(Bed::carries) {
+        return Ok(());
+    }
+    let c = w.life.cover(i);
+    let largest = (0..beds.len()).max_by(|&a, &b| c.patches[a].share.total_cmp(&c.patches[b].share)).ok_or(Unlit::Bare)?;
+    Err(beds[largest].map_or_else(|why| why, |b| b.unlit().unwrap_or(Unlit::Damp)))
 }
 
-/// The flames' month, after the cover's (`life::month`): each land cell's bed (`bed`), the share of each cell that burns
-/// (`shares`, the strikes of edits with the drawn ones, which it then forgets) and the burning of it (`burn`), on the
-/// chunks of `life` only where some burns; what each cell's flames did is kept for the tape (`tally`).
+/// The flames' month, after the cover's (`life::month`): the bed of each patch of each land cell (`beds`), the share of
+/// each cell that burns (`shares`, the strikes of edits with the drawn ones, which it then forgets), the flames on its
+/// patches (`burnings`, serial) and the burning of them (`burn`), on the chunks of `life` only where some burns; what each
+/// cell's flames did is kept for the tape (`tally`).
 pub fn month(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let n = w.mesh.cells().n();
-    let beds = crate::par::map_n(n, n * BED_WORK, |i| if crate::contract::land(w, i) > 0.0 { bed(w, &p, i).ok() } else { None });
+    let beds: Vec<Vec<Option<Bed>>> = crate::par::map_n(n, n * BED_WORK, |i| if crate::contract::land(w, i) > 0.0 { beds(w, &p, i).into_iter().map(Result::ok).collect() } else { Vec::new() });
     let share = shares(w, &beds, w.cfg.calendar().month as f64);
     w.strikes.clear();
-    let load = share.iter().filter(|&&f| f > 0.0).count();
+    let on: Vec<Vec<Burning>> = (0..n).map(|i| if share[i] > 0.0 { burnings(w, i, &beds[i]) } else { Vec::new() }).collect();
+    let load = on.iter().filter(|f| !f.is_empty()).count();
     if load > 0 {
         crate::life::run(w, load, |w, d| {
-            for i in d.cells() {
-                if let Some(b) = beds[i].filter(|_| share[i] > 0.0) {
-                    burn(w, d, &p, i, (share[i], &b));
-                }
+            for i in d.cells().filter(|&i| !on[i].is_empty()) {
+                burn(w, d, &p, i, &on[i]);
             }
         });
     }

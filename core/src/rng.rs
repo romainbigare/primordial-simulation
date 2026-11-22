@@ -33,6 +33,8 @@ pub enum Purpose {
     Weather,
     /// Where in a patch of a cell's cover a gap opens (`cover::gaps`)
     Gap,
+    /// Where in a patch of a cell's cover the share a flame burnt lies (`flame::burn`)
+    Burn,
 }
 
 /// The number of values of a 16-bit uniform.

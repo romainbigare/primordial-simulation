@@ -1476,25 +1476,30 @@ seeds fill it:
   (3c); each is told as an event. `ew run` makes them at the start of a year (`--clear`, `--split`, `--plant`;
   `worldgen::schedule::Due`), the live page between two months (wasm `edit`: a clearing, a clearing planted with a
   starting kind, a strike).
-- **Gaps** (`cover/gaps.rs`): a patch is made for an event, a die-off of a stand's canopy that opens its ground to
-  the light (Watt 1947; Shugart 1984), not for one tree: a canopy's own yearly deaths, a share of a crown each, stay
+- **Events** (`patches::hit`, `open_event`): a patch is made for an event that hits a share of a stand at once (a
+  die-off, a flame), never for one plant. An event that hits at least `EVENT_LEAST` (0.15) of a patch's own ground and
+  leaves at least that share of it makes the ground it hit a new patch of age 0 (`patches::carve`), about a sample of the
+  patch's ground (`inside::patch_ground`) drawn from the world's seed by the month, the cell, the patch and the event
+  (`patches::point`, `rng::Purpose`); one that leaves less hits the patch whole. Room for the new patch's slots is made
+  first, the patch's two nearest slots joining (`seed::room`); where `PATCHES` are in use the new patch joins the patch
+  most alike to bare ground (`open`), and once the event's law has acted on its slots they meet slots of their kind and
+  join them, the patch folding to `variety` (`patches::settle`). One path makes every event's patch.
+- **Gaps** (`cover/gaps.rs`): a die-off of a stand's canopy opens its ground to
+  the light (Watt 1947; Shugart 1984), not one tree: a canopy's own yearly deaths, a share of a crown each, stay
   spread over its stand, as its size groups and thinning hold it. When the large plants of a slot (its last group) die
   of an event, unpaid upkeep, frost, drowning or flame (`upkeep`, `Cover::die_under`), the ground their crowns held
   where their stand is closed (`stand::plant_ground` of each, the self-thinning law's measure) adds to the slot's
   fallen crowns (`Cover::fell`, m², saved); plants worn out (`upkeep`) or crowded out (`stand::thin`) add none: they
   are the stand's own turnover, and the crowns of the living fill the room they free. Once a year, after the patches fuse (`patches::year`), each patch sums the fallen crowns of
   its canopy that year, the slots whose large plants stand taller than `surface_m` and reach the base of the crown of
-  its tallest (`Cover::crown`), over the cell's ground. Where that is at least `GAP_LEAST` (0.15) of the patch's own
-  ground and less than all of it, that share of the patch becomes a new patch of age 0 (`patches::carve`): every slot of the
+  its tallest (`Cover::crown`), over the cell's ground. Where that share of the patch's own ground is an event's part
+  of it (**Events**), that share of the patch becomes a gap (`rng::Purpose::Gap`): every slot of the
   patch gives it the share of its plants that stood there, group by group (`Cover::part`: body matter and walls as
   each group holds them, fuel and fallen crowns by built cover), but the canopy's slots none of their large plants,
-  the trees whose fall opened it, already dead; so the gap holds the plants that stood under them, in full light. Its
-  point is a sample of the patch's ground (`inside::patch_ground`) drawn from the world's seed by the month, the cell
-  and the patch (`rng::Purpose::Gap`). Room for its slots is made first, the patch's two nearest slots joining
-  (`seed::room`); where `PATCHES` are in use the gap joins the patch most alike to bare ground (`open`), its slots
-  meeting slots of their kind joining them and the patch folding to `variety`. Every slot's fallen crowns are
-  forgotten at the year's end, so a canopy's yearly deaths never add up to a gap, and a patch whose canopy fell over
-  all its ground opens none: it is a gap whole.
+  the trees whose fall opened it, already dead; so the gap holds the plants that stood under them, in full light. Every
+  slot's fallen crowns are forgotten at the year's end, so a canopy's yearly deaths never add up to a gap, and a patch
+  whose canopy fell over all of its ground but less than `EVENT_LEAST` opens none: it is a gap whole, made new (age 0). A flame that made
+  a patch or burnt one whole forgets the fallen crowns of its slots (3c): it made their patch, and no gap opens for it.
 - **What it takes and gives**: liquids and minerals from and to its ground with their heat; gases from the air (with
   their heat at the air's temperature and their latent heat) and to its cell's aside node (with theirs), as living things
   breathe; its dead (remains) to its ground as those substances, where the open world's rot runs (reactions 1, 7,
@@ -1516,9 +1521,13 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   its plants that die (`upkeep`; their fuel goes to the ground), as the dead leaves and stems of herbs stand through a
   dry season; they fall to the ground's remains with a mean life of `cured_life` (`grow::fall`, booked
   as shed). Taller plants drop theirs at once.
-- **The bed** (`flame::bed`, each land cell its own, in parallel): the load w of its remains, kg a m² of land, and of
-  the cured leaves standing over them; the share of its ground they cover, 1 − e^(−a w), a the capture area its leaves held per kg dry (its cover's `LEAF` gene over the dry share
-  of living tissue, its slots' mean by built cover; none without cover). **The layer** (`flame::bed`, `Layer`): vapour diffuses through
+- **The bed** (`flame::beds`, each land cell its own, in parallel), one for each patch of its cover (3): the remains on
+  the cell's ground and its cured leaves are one pool, and each patch holds the share of them its plants shed, its
+  share of the body matter of the cell's cover (a stand sheds its leaves' turnover; by its share of the cell where the
+  cover holds none; `Bed::part`), so a young patch whose plants hold little holds few remains. Of each patch: the load
+  w of its remains, kg a m² of its land, and of the cured leaves standing over them; the share of its ground they
+  cover, 1 − e^(−a w), a the capture area its leaves held per kg dry (the `LEAF` gene of its slots over the dry share
+  of living tissue, their mean by built cover; none without cover). **The layer** (`flame::bed`, `Layer`, the cell's, read once for all its patches): vapour diffuses through
   it, so in a steady state its relative vapour h runs in a straight line from its top, the air near the ground
   (`World::near_ground`, its vapour over saturation at the ground's temperature), to its bottom, between that and
   saturation by the share s of what its ground holds for roots that it holds (`cover::soak`, `Pores::available`, the
@@ -1541,21 +1550,24 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   Q), τ the flaming time of its particles (below): a bed thinner than that frees less heat while it flames than its top
   sends to the open sky at the flaming bed's temperature, so its flame cools and goes out (0.15 kg/m² of dry remains at
   295 K; real grass fires stop under 0.1 to 0.2).
-- **Strikes and runs** (`flame::shares`, serial, over the cells that carry a flame, in the order of the cells): cells
-  that share an edge join into a region of A m² of covered ground (each cell's land times its cover). A region expects
+- **Strikes and runs** (`flame::shares`, serial, over the cells that carry a flame on some patch, in the order of the
+  cells): cells that share an edge join into a region of A m² of covered ground (each cell's land times the share of it
+  its remains cover on the patches that carry a flame). A region expects
   `strikes` × A × the month's share of a year of strikes that light it; their count is a Poisson draw and each lights
   a cell drawn by its covered ground, from the world's seed by the month and the region's first cell
   (`rng::Purpose::Flame`; the same draws for any number of threads). An edit's strike (`edit::Act::Strike`) lights its
   cell in the coming month, after the drawn ones (`World::strikes`, forgotten once the month's shares are found); it is
-  made only where the cell's bed carries a flame now (`flame::lights`, by the same `bed` and `Bed::carries`), and
-  `flame::Unlit` says why not: no land, no cover in the chemistry, nothing lying that burns, remains too sparse to join
+  made only where the bed of a patch of the cell carries a flame now (`flame::lights`, by the same `beds` and
+  `Bed::carries`), and `flame::Unlit` says why the largest patch's does not: no land, no cover in the chemistry, nothing lying that burns, remains too sparse to join
   across the ground or too few to hold a flame's heat, snow over them, the air near the ground not read yet, ground so
   wet that its saturated share breaks them apart, or remains too damp. Each flame runs from the cell it lit over the
-  region's cells for `front_life`, crossing half the way between two cells' centres at each one's speed R (below),
-  the earliest first (`flame::run`). Every cell it reaches burns all of its land that its remains cover (f = its
-  cover): a patch burns whole, keeps no remains to carry a flame, and burns again only once its cover's leaves have
-  built them back. So the land burnt is a mosaic of patches of different ages, from that feedback alone (no rule keeps
-  a cell from burning). The wind stretches a run downwind: along the way between two cells a bed's speed is R (1 + φ_w),
+  region's cells for `front_life`, crossing half the way between two cells' centres at each one's speed R (below) on
+  the bed of its patch that carries a flame over the most of its ground, the earliest first (`flame::run`). Every cell
+  it reaches burns, on each patch whose bed carries a flame, all of the patch's ground its remains cover (f = that
+  patch's cover). A burnt patch keeps few remains and its plants little body matter, so it carries no flame until its
+  cover's leaves have built them back: a firebreak to the flames of the cells around and of its own cell's other
+  patches. So the land burnt is a mosaic of patches of different ages, from that feedback alone (no rule keeps a cell
+  from burning). The wind stretches a run downwind: along the way between two cells a bed's speed is R (1 + φ_w),
   φ_w Rothermel's (1972) wind factor of the wind's speed along that way at mid-flame: the low wind (`World::low_wind`,
   the air's at its last step) times Albini and Baughman's (1979) share of it that reaches the flame (`flame::sheltered`,
   Andrews 2012): over open ground by the depth of what flames (about 0.3 for a cured bed), under a canopy by its height
@@ -1563,12 +1575,17 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   slots taller than `surface_m` cover, 1 − e^(−their capture area a m²); the shade itself reaches the bed through the
   ground's temperature and the air near the ground, which its layer reads (`World::near_ground`, `thaw_last`), the particles' surface to volume ratio 4 / `fine_d` and the packing of what flames (`flame::downwind`); none
   against the wind.
-- **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0): on f the cured leaves and the
-  part of its remains that flames burn, and after them the part that smoulders; a flame through what flames, its depth
+- **The burn** (`flame::burn`, each cell its own, one task per chunk, only where f > 0), on each patch a flame reaches
+  (`flame::fires`): the share f of the patch's ground it burns is an event (3, **Events**): where it is a part of the
+  patch it becomes a patch of its own (`rng::Purpose::Burn`, its point drawn in the serial stage), each slot of the patch
+  giving it the share f of its plants, and the flame burns all of the new patch's slots (f = 1 on them), the rest of the
+  patch keeping its cover whole; where it is the patch whole the patch is made new (age 0) and its slots burn on f;
+  under `EVENT_LEAST`, or where no patch opens, its slots burn on f. On f of the patch the cured leaves and its part of
+  the cell's remains that flames burn, and after them the part that smoulders; a flame through what flames, its depth
   the cured leaves at `cured_rho` and the remains at `litter_rho`, moves at R = `flux_ahead` h_c δ / (τ Q), δ its depth, τ = 8 minutes an inch of
   `fine_d` its particles' flaming time (Anderson 1969); its intensity is I = h_c w R (Byram 1959), its flame
   0.0775 I^0.46 m long (Byram 1959), and its plume kills leaves up to 0.1483 I^(2/3) m (Van Wagner 1973), I in kW a m.
-  Of each slot on f (`flame::crown_burns`): each of its size groups (`Cover::sizes`) whose plants stand no taller than
+  Of each slot it burns, on its share (`flame::crown_burns`): each of its size groups (`Cover::sizes`) whose plants stand no taller than
   the scorch height dies above the ground on f (`Cover::die_under`): a group of plants no taller than `surface_m` keeps
   its plants, its store and its part below the ground (`base_share` of its built cover) and sprouts again from it, as
   burnt herbs and shrubs do, what stood above its base burning by its burning reactions; a group of taller plants loses the share f of its plants and of its built cover, their fuel by their share of
