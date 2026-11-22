@@ -6,8 +6,8 @@ import type { Probe, StartKind, Edited } from './god';
  * took to step, ms, the share of the time the worker stepped, and the bytes of its memory. */
 export interface Stats { cells: number; pace: number; monthMs: number; busy: number; memory: number }
 
-/** The longest time a frame waits for its answer when no animation frame comes, ms: the worker's frames come every
- * `FRAME_MS` (worker.ts, 250 ms), so where the page's animation frames stop the world still steps a fifth of the time. */
+/** The longest time a frame waits for its answer when no animation frame comes, ms: the worker posts its next frame
+ * only once the last is answered, so where the page's animation frames stop the date shown still moves each second. */
 const ANSWER_MS = 1000;
 
 /** The live world: the core in a Web Worker (worker.ts) that makes a world, steps it and posts a frame as bytes with the

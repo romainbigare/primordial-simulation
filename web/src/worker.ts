@@ -4,9 +4,9 @@
 // cells' table (tape/src/table.rs), from which the page draws the state of the ground, the samples' discharge and load when
 // they changed enough to show (wasm/src/lib.rs `discharge`), where load came into a body of liquid (`plumes`), and the
 // relief once the world built its samples anew (`relief`); it makes no pictures. The page answers each frame once it has
-// drawn it ('shown'). While the world plays, the next frame waits for that answer, and once it is due the world waits
-// too: the world is never more than a frame's time ahead of the picture, so the date and the picture shown are the
-// world's within about `FRAME_MS`, and a pause stops it there, even where the page draws slowly.
+// drawn it ('shown'). While the world plays, the next frame waits for that answer and the world steps on at the pace
+// asked: a page that draws slowly shows fewer frames (each the world's latest state), and never holds the world. A
+// pause stops the world at once, and its frame shows the date it stopped at.
 
 interface Core {
   memory: WebAssembly.Memory;
@@ -46,7 +46,8 @@ const TICK_MS = 50;
 /** Pause between ticks, ms. */
 const GAP_MS = 4;
 /** Real time between two world frames posted to the page while the world plays, at least, ms: each costs the page's
- * main thread a repaint of the map (its fields, its table and textures, a read back of the classes, the cover's field). */
+ * main thread a repaint of the map (its fields, its table and textures, a read back of the classes, the cover's field),
+ * and one is posted only once the page drew the last. */
 const FRAME_MS = 250;
 /** Real time the pace of the world is measured over, ms. */
 const PACE_MS = 1000;
@@ -117,18 +118,13 @@ function postFrame(kind: 'world' | 'frame', edited = false): void {
   posted = now; owed = false; unshown++;
 }
 
-/** Is a frame due that waits for the page to draw the last one? Then the world waits with it. */
-function waiting(): boolean {
-  return unshown > 0 && performance.now() - posted >= FRAME_MS;
-}
-
 function tick(): void {
   const c = core!, t0 = performance.now(), bounded = Number.isFinite(rate);
   due = bounded ? Math.min(due + ((t0 - lastTick) / 1000) * rate, rate * 2) : 0;
   lastTick = t0;
   let made = 0;
   try {
-    while (performance.now() - t0 < TICK_MS && (!bounded || due >= 1) && !waiting()) {
+    while (performance.now() - t0 < TICK_MS && (!bounded || due >= 1)) {
       c.step_month(); made++;
       if (bounded) due -= 1;
     }
