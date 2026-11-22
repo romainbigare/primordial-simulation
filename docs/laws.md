@@ -1418,14 +1418,16 @@ seeds fill it:
   month (seeds of temperate plants sprout in days to weeks once warm and wet; Bewley 1997, from memory), on frozen or dry
   ground none. What wakes takes hold (`seed::lodge`) in each patch by the patch's share of the cell (what a patch has
   no room for stays lying): it joins the stand of its starting kind in the patch, the slots
-  of it within `APART` (0.5) × `alike` steps (in every gene, `cover::distance`), shared over them by their built cover
+  of it within `APART` (0.5) × `alike` steps (in every gene, `cover::distance`; the genes of a dose, `SPLIT_CURBS` and `BURN_CURBS`, in decades, `cover::UNIT`), shared over them by their built cover
   (the genes of each the mean by built cover; in each a group of plants of their own, or the group of its smallest
   plants where all are held, `Cover::recruit`);
   else they found a slot of their own: an empty one, while the patch holds fewer than `variety`; else the patch's slot
   **in deficit**, whose balance over about its last
   year (`Cover::net`: what its light reaction stored less its upkeep, per kg, a running mean over a year's months) is
   below zero, the worst first (its cover dies as remains); else the two slots of the patch nearest each other by their
-  genes (where it holds fewer than two, of another patch), of any starting kind, join (`seed::room`: the slots are a
+  niche genes (`cover::NICHE`: all but the genes of a dose, which say what a plant's tissue holds, not how it lives;
+  `cover::niche_distance`; where it holds fewer than two, of another patch), of any starting kind, join (their genes
+  the mean by mass, but of two kinds the genes of a dose stay the heavier's, `cover::mix`) (`seed::room`: the slots are a
   limit of the bookkeeping, and the two hold the same niche
   to within what it resolves) and they found the slot it frees (a world of one kind a cell, `Config::variety` 1, has
   no two to join: the seeds stay lying). So a cell of more slots is never closed to seeds and a holder that pays its

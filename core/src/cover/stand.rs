@@ -5,7 +5,7 @@
 //! (`grow`), the seeds (`seed`) and the page's drawing (`tape::stands`) read them.
 
 use super::groups::Group;
-use super::{Cover, NG, NO_ROOT, NP, SLOTS};
+use super::{Cover, NO_ROOT, NP, SLOTS};
 use crate::life::kin;
 use crate::Physics;
 use std::f64::consts::FRAC_PI_4;
@@ -232,7 +232,7 @@ pub(super) fn merge_alike(c: &mut Cover, mm: &[f64; NP], (ph, n): (&Physics, usi
 }
 
 /// Slot `small` joins slot `big` of the same cover: amounts added, and their groups of plants together
-/// (`Cover::join_groups`; the stand thins at its month, `thin`), genes, balance and the store its plants under the
+/// (`Cover::join_groups`; the stand thins at its month, `thin`), genes (`cover::mix`), balance and the store its plants under the
 /// liquid burnt and its share in the strips the mean by built cover, its line the lower of the two (the ground of both; the one set where the other
 /// is not, `UNSET`), its starting kind the
 /// heavier's; `small` is empty after.
@@ -240,7 +240,7 @@ pub(super) fn join(c: &mut Cover, mm: &[f64; NP], big: usize, small: usize) {
     let (wb, ws) = (c.built(mm, big), c.built(mm, small));
     let f = (ws / (wb + ws).max(1e-300)) as f32;
     let (gs, ms) = (c.genes[small], c.mol[small]);
-    (0..NG).for_each(|g| c.genes[big][g] += f * (gs[g] - c.genes[big][g]));
+    super::mix(&mut c.genes[big], &gs, f, c.root[big] == c.root[small]);
     c.net[big] += f * (c.net[small] - c.net[big]);
     c.airless[big] += f * (c.airless[small] - c.airless[big]);
     c.drained[big] += f * (c.drained[small] - c.drained[big]);

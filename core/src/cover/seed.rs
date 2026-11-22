@@ -152,14 +152,14 @@ pub(super) fn lines(w: &World, c: &Cover, i: usize, soak: &super::Soak, (recruit
 }
 
 /// Room in patch `k` of cover `c` whose `n` slots in use hold cover that pays its way: the two of the patch nearest each
-/// other by their genes (`distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the
+/// other by their niche genes (`niche_distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the
 /// slots are a limit of the bookkeeping, and the two hold the same niche to within what it resolves; where the patch
 /// holds fewer than two, the two nearest of another patch. Returns the slot it leaves empty (none where no patch holds
 /// two).
 pub(super) fn room(c: &mut Cover, mm: &[f64; NP], n: usize, k: usize) -> Option<usize> {
     let held = |x: usize| c.root[x] != NO_ROOT;
-    let pair = kin::nearest(&c.genes[..n], distance, |a, z| held(a) && held(z) && c.patch[a] == c.patch[z] && c.patch[a] as usize == k);
-    let (a, z) = pair.or_else(|| kin::nearest(&c.genes[..n], distance, |a, z| held(a) && held(z) && c.patch[a] == c.patch[z]))?;
+    let pair = kin::nearest(&c.genes[..n], super::niche_distance, |a, z| held(a) && held(z) && c.patch[a] == c.patch[z] && c.patch[a] as usize == k);
+    let (a, z) = pair.or_else(|| kin::nearest(&c.genes[..n], super::niche_distance, |a, z| held(a) && held(z) && c.patch[a] == c.patch[z]))?;
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
     super::stand::join(c, mm, big, small);
     Some(small)

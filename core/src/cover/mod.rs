@@ -114,6 +114,26 @@ fn level(v: &[f32; NG], g: usize) -> f32 {
 
 /// Mutation step (times `Physics::mut_size`) and range of each gene.
 pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6), (0.3, -8.0, -0.5), (0.3, -8.0, -0.5)];
+/// Each gene's unit of likeness (`distance`): by how much it differs where its effect differs. A gene's mutation step,
+/// but a decade for the shares of the solids that slow a reaction, whose dose acts by its ratio to the inhibition
+/// constant (`Reaction::inhibited`).
+pub const UNIT: [f32; NG] = {
+    let mut u = [0.0; NG];
+    let mut g = 0;
+    while g < NG {
+        u[g] = RANGE[g].0;
+        g += 1;
+    }
+    (u[SPLIT_CURBS], u[BURN_CURBS]) = (1.0, 1.0);
+    u
+};
+/// Whether each gene says how a kind lives in its niche: all but the shares of the solids that slow a reaction, which
+/// say what its soft tissue holds, not how it lives (`niche_distance`, `mix`).
+pub const NICHE: [bool; NG] = {
+    let mut n = [true; NG];
+    (n[SPLIT_CURBS], n[BURN_CURBS]) = (false, false);
+    n
+};
 /// The line of a slot before its first month (`Cover::line`): it takes then the line of all the ground its kind may
 /// hold (`footing`), found by the same month's start as every other slot's.
 pub const UNSET: f32 = -1.0;
@@ -435,8 +455,26 @@ impl crate::World {
     }
 }
 
-/// How far apart two gene vectors are, in steps: the largest gap of a gene over its step. An off gene counts as its
-/// off level (`OFF`), where differences do nothing.
+/// How far apart two gene vectors are, in units of likeness: the largest gap of a gene over its unit (`UNIT`). An off
+/// gene counts as its off level (`OFF`), where differences do nothing. Whether a kind's seeds join a stand of it.
 pub fn distance(a: &[f32; NG], b: &[f32; NG]) -> f32 {
-    (0..NG).map(|g| (level(a, g) - level(b, g)).abs() / RANGE[g].0).fold(0.0, f32::max)
+    gap(a, b, |_| true)
+}
+
+/// How far apart two gene vectors are in their niche genes alone (`NICHE`), as `distance`: whether two slots of any
+/// kinds hold the same niche (`seed::room`, `Lying`).
+pub fn niche_distance(a: &[f32; NG], b: &[f32; NG]) -> f32 {
+    gap(a, b, |g| NICHE[g])
+}
+
+/// The largest gap of the genes `of` keeps over their units (`UNIT`), off genes at their off level.
+fn gap(a: &[f32; NG], b: &[f32; NG], of: impl Fn(usize) -> bool) -> f32 {
+    (0..NG).filter(|&g| of(g)).map(|g| (level(a, g) - level(b, g)).abs() / UNIT[g]).fold(0.0, f32::max)
+}
+
+/// The genes `into` of the heavier of two that join take the share `f` (the lighter's of their mass) of the lighter's
+/// genes `from`, each gene the mean by mass; but where the two are of other starting kinds (`same` false) the genes
+/// outside the niche (`NICHE`) stay the heavier's, so a kind keeps what its tissue holds.
+pub fn mix(into: &mut [f32; NG], from: &[f32; NG], f: f32, same: bool) {
+    (0..NG).filter(|&g| same || NICHE[g]).for_each(|g| into[g] += f * (from[g] - into[g]));
 }
