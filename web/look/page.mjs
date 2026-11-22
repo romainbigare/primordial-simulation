@@ -22,7 +22,7 @@ function playwright() {
  * the cover, the world, its worker and its ground, play and pause, the speed, the view and the layer, opening a saved world by URL, and the numbers the marks' textures are laid out by (textures.ts `prepare`, read.mjs `marks`).
  * The shipped page holds none of this. */
 const HOOKS = `
-window.__ew = { map, vegetation, fire,
+window.__ew = { map, vegetation, fire, detailComing,
   get world() { return world; }, get live() { return live; }, get land() { return land; }, get playing() { return playing; },
   setView, setLayer, togglePlay, setSpeed(s) { speed = s; live && live.rate(s); syncUi(); },
   open: u => fetch(u).then(r => r.arrayBuffer()).then(openSaved),
@@ -102,12 +102,13 @@ export async function reopen(page, url) {
   await page.waitForFunction(() => { const e = window.__ew; return e.world && e.world !== window.__ewWas && e.land && e.land.tiles.rock; }, null, { timeout: 300000, polling: 250 });
 }
 
-/** Wait until the picture is whole: no tile to come, no frame due, the sharp picture drawn; the ms waited, or -1. */
+/** Wait until the picture is whole: no tile and no detail to come, no frame due, the sharp picture drawn; the ms
+ * waited, or -1. */
 export async function settle(page, most = 120000) {
   const t0 = Date.now(); let calm = 0;
   while (Date.now() - t0 < most) {
     const busy = await page.evaluate(() => { const e = window.__ew, m = e.map;
-      return (e.land ? e.land.tiles.toCome() : 0) > 0 || m.gpuDue || !!m.sharpening || !!m.raf || m.timing || (e.land && e.land.tiles.fading(performance.now())); });
+      return (e.land ? e.land.tiles.toCome() : 0) > 0 || e.detailComing() || m.gpuDue || !!m.sharpening || !!m.raf || m.timing || (e.land && e.land.tiles.fading(performance.now())); });
     calm = busy ? 0 : calm + 1;
     if (calm >= 4) return Date.now() - t0;
     await sleep(250);

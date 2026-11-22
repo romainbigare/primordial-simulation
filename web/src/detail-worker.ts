@@ -1,11 +1,14 @@
 // The ground's detail's strips (detail.ts) made into the levels of one texture array, off the page's thread: a Web
-// Worker of its own, built into the page as text (build.mjs) and started from a Blob by detail.ts. It takes the strips'
-// images, one after another, how many of the last layers are the trees', the side of their layers and the cover a
-// cut-out texel shows from, and answers layer by layer with its number and its levels (`photoMips`): one layer is read
-// from its strip at a time, so neither a canvas nor what is kept grows with the strips (a phone's browser draws no
-// canvas past a few million pixels).
+// Worker of its own, built into the page as text (build.mjs) and started from a Blob by detail.ts. It takes one strip's
+// image at a time with the number of its first layer, whether its layers are cut-outs (the trees'), the side of their
+// layers and the cover a cut-out texel shows from, and answers layer by layer with its number and its levels
+// (`photoMips`), then that the strip is done (so the page decodes the next only then): one layer is read from its
+// strip at a time, so neither a canvas nor what is kept grows with the strips (a phone's browser draws no canvas past
+// a few million pixels).
 
-const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<{ strips: ImageBitmap[]; trees: number; side: number; cut: number }>) => void) | null };
+/** A strip handed in. */
+interface Strip { strip: ImageBitmap; first: number; cutOut: boolean; side: number; cut: number }
+const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Strip>) => void) | null };
 
 /** The strips' levels (layers `side` texels a side), each of its `layers` after the last: level 0 as the image holds
  * it, each next one the mean of four texels (their colour weighted by their cover); of the layers from `cutFrom` on
@@ -48,19 +51,16 @@ function keepShown(level: Uint8Array, l: number, n: number, shown: number, cut: 
 }
 
 host.onmessage = e => {
-  const { strips, trees, side, cut } = e.data;
-  const layers = strips.reduce((n, s) => n + s.height / side, 0);
+  const { strip, first, cutOut, side, cut } = e.data;
   const c = new OffscreenCanvas(side, side), g = c.getContext('2d')!;
-  let layer = 0;
-  for (const s of strips) {
-    for (let y = 0; y < s.height; y += side, layer++) {
-      g.clearRect(0, 0, side, side);
-      g.drawImage(s, 0, -y);
-      const levels = photoMips(new Uint8Array(g.getImageData(0, 0, side, side).data.buffer), 1, layer >= layers - trees ? 0 : 1, side, cut);
-      host.postMessage({ layer, levels }, levels.map(l => l.buffer));
-    }
-    s.close();
+  for (let y = 0, layer = first; y < strip.height; y += side, layer++) {
+    g.clearRect(0, 0, side, side);
+    g.drawImage(strip, 0, -y);
+    const levels = photoMips(new Uint8Array(g.getImageData(0, 0, side, side).data.buffer), 1, cutOut ? 0 : 1, side, cut);
+    host.postMessage({ layer, levels }, levels.map(l => l.buffer));
   }
+  strip.close();
+  host.postMessage({ layer: -1, levels: [] }, []);
 };
 
 export {};
