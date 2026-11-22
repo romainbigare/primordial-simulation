@@ -5,7 +5,7 @@
 // stand), the flames and the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach).
 // Where nothing burns, has burnt or stands dead or cured, nothing of it is drawn and no pixel pays for it.
 import { World, decode } from './data';
-import { Draw, Gpu, Texture, Uniforms } from './gpu';
+import { Draw, Gpu, Made, Texture, Uniforms, notMade } from './gpu';
 import { half } from './canopy';
 import { groundDetail } from './detail';
 import type { MapLook } from './field-window';
@@ -24,18 +24,22 @@ const LAYERS: Record<keyof FirePlanes, string> = {
   east: 'wind_u', north: 'wind_v', snag: 'snag', cured: 'cured', wet: 'wet_share',
 };
 
-/** The smoke reaches this far downwind, m, and spreads this share of the way gone to each side (flames.wgsl
- * `PLUME_M`, `SPREAD`). */
+/** The smoke reaches this far downwind, m, and spreads this share of the way gone to each side (lib/smoke.wgsl
+ * `PLUME_M`, smoke.wgsl `SPREAD`). */
 const PLUME_M = 8000, SPREAD = 0.5;
 /** The box of a plume reaches this many times its spread to each side, so its soft edge is not cut. */
 const SPREAD_BOX = 2.5;
 /** A square's numbers are blended into the squares about it (fire.wgsl `fire_plane`): the boxes reach one square
  * farther. */
 const BLEND_SQUARES = 1;
+/** The smoke's texels a square's side (lib/smoke.wgsl `SMOKE_PER_SQUARE`), worked out once a world frame. */
+const SMOKE_PER_SQUARE = 8;
 /** The side of the blocks of squares the burn scars are drawn in, squares (`blocksOf`). */
 const SCAR_BLOCK = 4;
 /** The texture's planes (fire.wgsl `FIRE_PLANES`). */
 const FIRE_PLANES = 3;
+/** The format of the smoke's texture: four bytes (lib/smoke.wgsl `smoke_packed`). */
+const SMOKE_FORMAT = 'rgba8unorm';
 /** Frames a second while a fire in view burns and the world plays. */
 export const FIRE_FPS = 8;
 /** The time the flames are drawn at, s, wraps round after this many seconds (a float keeps its steps fine). */
@@ -63,6 +67,11 @@ export class Fire {
   private snags = false;
   /** The texture of the plant cover's draws where nothing of fire is known: one texel of nothing. */
   private blank: Texture | null = null;
+  /** The smoke worked out for the frame shown (smoke.wgsl), till then one texel of none, and whether it is still to
+   * work out. */
+  private smoke: Texture | null = null;
+  private noSmoke: Texture | null = null;
+  private smokeDue = false;
 
   /** What fire did on world `w`'s squares, from its layers (none on a world whose tape has no fire). */
   set(w: World | null): void {
@@ -94,6 +103,24 @@ export class Fire {
     }
     this.data = data;
     this.due = true;
+    this.smokeDue = this.flames !== null;
+  }
+
+  /** Work out the smoke of this frame on `gpu` once, before the map's pass (smoke.wgsl), once its program is made
+   * (till then, added to `waiting`, no smoke is drawn). */
+  prepare(gpu: Gpu, waiting: Made[]): void {
+    if (!this.smokeDue || !this.data) return;
+    const missing = notMade(gpu, [['smoke', SMOKE_FORMAT, false]]);
+    if (missing.length) { waiting.push(...missing); return; }
+    const w = this.w * SMOKE_PER_SQUARE, h = this.h * SMOKE_PER_SQUARE;
+    if (this.smoke?.w !== w || this.smoke.h !== h) {
+      if (this.smoke) gpu.drop(this.smoke);
+      this.smoke = gpu.texture('fire', w, h, SMOKE_FORMAT, 1, 1, true);
+    }
+    const p = gpu.pass(this.smoke);
+    p.draw('smoke', { rect: [0, 0, w, h], binds: this.binds(gpu, { mode: 'earth', layer: '', ramp: [], ground: 0 }, [0, 0, 0, 0, 0, 0, 0, 0], 0)! }, false);
+    p.end();
+    this.smokeDue = false;
   }
 
   /** The bindings fire.wgsl (and the sprites and photograph of tex.wgsl) read on `gpu` for a draw in view `look` whose
@@ -107,7 +134,8 @@ export class Fire {
     const mode = look.mode === 'earth' ? 0 : 1;
     const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h, mode).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
       .vec4((now / 1000) % TIME_WRAP_S, this.never);
-    return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer };
+    if (!this.noSmoke) { this.noSmoke = gpu.texture('fire', 1, 1, SMOKE_FORMAT); gpu.write(this.noSmoke, new Uint8Array(4)); }
+    return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer, 28: this.smoke && !this.smokeDue ? this.smoke : this.noSmoke };
   }
 
   /** The bindings fire.wgsl reads on `gpu` in the plant cover's draws (cover.wgsl `lattice`): the texture and the
@@ -123,10 +151,10 @@ export class Fire {
   }
 
   stop(gpu: Gpu | null): void {
-    if (gpu) for (const t of [this.tex, this.blank]) if (t) gpu.drop(t);
-    this.tex = null;
-    this.blank = null;
+    if (gpu) for (const t of [this.tex, this.blank, this.smoke, this.noSmoke]) if (t) gpu.drop(t);
+    this.tex = this.blank = this.smoke = this.noSmoke = null;
     this.due = this.data !== null;
+    this.smokeDue = this.flames !== null && this.data !== null;
   }
 }
 

@@ -280,6 +280,7 @@ export class MapView {
     }
     const waiting: Made[] = [];
     this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
+    this.fire?.prepare(gpu, waiting);
     const target = r < 1 ? this.picture : null, p = gpu.pass(target);
     // While a tile of the ground fades in, the map is drawn again at each frame.
     const fading = this.land?.tiles.fading(performance.now()) ?? false;
