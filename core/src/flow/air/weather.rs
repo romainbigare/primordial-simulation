@@ -132,11 +132,11 @@ impl Draws {
     /// Hold the draws of each point of the lattice `(origin, size)` of seed `seed` on the `count` days from day `lo`:
     /// those of the days held already are kept, the days before `lo` let go, and the rest drawn.
     fn keep(&mut self, seed: u64, (origin, size): ([i64; 2], [usize; 2]), (lo, count): (i64, usize)) {
-        let held = self.at.first().map_or(0, |v| v.len()) as i64;
-        if self.seed != seed || self.lattice != (origin, size) || lo < self.from || lo > self.from + held {
+        let days = |d: &Draws| d.at.first().map_or(0, |v| v.len()) as i64;
+        if self.seed != seed || self.lattice != (origin, size) || lo < self.from || lo > self.from + days(self) {
             *self = Draws { seed, lattice: (origin, size), from: lo, at: vec![Vec::new(); size[0] * size[1]] };
         }
-        let (gone, held) = ((lo - self.from) as usize, (self.from + held - lo) as usize);
+        let (gone, held) = ((lo - self.from) as usize, (self.from + days(self) - lo) as usize);
         let new = count.saturating_sub(held);
         let first = lo + held.min(count) as i64;
         let points = size[0] * size[1];
@@ -244,10 +244,13 @@ mod tests {
     fn the_weather_of_a_day_is_the_same_in_any_step() {
         let parts = Parts::new((-1.0f64 / 3.0).exp(), Some(((-1.0f64 / 120.0).exp(), (3.0f64 / 120.0).sqrt())));
         assert!(drawn(&parts, [2, -1], 100, 30)[15..] == drawn(&parts, [2, -1], 115, 15)[..], "a day reads only its own draws");
+        // Steps one after the other, a jump of days past all that is held, a step back, and another lattice.
         let mut kept = Draws::default();
-        for first in [100, 115, 130, 160] {
-            kept.keep(7, ([2, -1], [1, 1]), parts.window(first, 15));
-            assert!(parts.series(&kept.at[0], 15) == drawn(&parts, [2, -1], first, 15), "the kept draws are those drawn anew");
+        for (first, origin) in [(100, [2, -1]), (115, [2, -1]), (130, [2, -1]), (160, [2, -1]), (2000, [2, -1]), (1000, [2, -1]), (1015, [1, 0])] {
+            kept.keep(7, (origin, [2, 1]), parts.window(first, 15));
+            for (x, p) in [origin, [origin[0] + 1, origin[1]]].into_iter().enumerate() {
+                assert!(parts.series(&kept.at[x], 15) == drawn(&parts, p, first, 15), "the kept draws are those drawn anew, day {first}");
+            }
         }
         let x = drawn(&Parts::new((-1.0f64 / 3.0).exp(), None), [0, 0], 0, 100_000);
         let mean = x.iter().sum::<f64>() / x.len() as f64;
