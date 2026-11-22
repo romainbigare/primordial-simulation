@@ -32,8 +32,9 @@ class WebGpu implements Back {
   private pipelines = new Map<string, GPURenderPipeline>();
   private warming = new Warming(key => this.makeAhead(key), key => this.pipelines.has(key));
   private samplers: Record<Sampler, GPUSampler>;
-  /** Whether the page ended this device (`close`): its loss is then no news. */
-  private closed = false;
+  /** Whether the device is gone: lost, or ended by the page (`close`, whose loss is no news). What it was still
+   * making or reading then fails with it, and is no news either. */
+  private gone = false;
   private encoder: GPUCommandEncoder | null = null;
   /** The canvas's texture this frame (until the frame is sent). */
   private frame: GPUTexture | null = null;
@@ -46,12 +47,12 @@ class WebGpu implements Back {
     const smooth: GPUSamplerDescriptor = { magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' };
     const tile: GPUSamplerDescriptor = { magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat', maxAnisotropy: TILE_ANISOTROPY };
     this.samplers = { smooth: device.createSampler(smooth), mip: device.createSampler({ ...smooth, mipmapFilter: 'nearest' }), tile: device.createSampler(tile) };
-    device.lost.then(info => { if (!this.closed) lost(info.message); });
+    device.lost.then(info => { const ended = this.gone; this.gone = true; if (!ended) lost(info.message); });
     device.addEventListener('uncapturederror', e => reportError(new Error(`gpu: ${(e as GPUUncapturedErrorEvent).error.message}`)));
   }
 
   /** End the device: what it holds is let go, and nothing it was still making or drawing is heard of. */
-  close(): void { this.closed = true; this.device.destroy(); }
+  close(): void { this.gone = true; this.device.destroy(); }
 
   texture(w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
     const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | (target ? GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC : 0);
@@ -109,7 +110,8 @@ class WebGpu implements Back {
     this.used = 0;
   }
 
-  done(): Promise<void> { return this.device.queue.onSubmittedWorkDone(); }
+  /** (It fails only with the device, whose loss `lost` hears: then it never comes.) */
+  done(): Promise<void> { return this.device.queue.onSubmittedWorkDone().catch(() => new Promise<void>(() => {})); }
 
   async read(t: Texture): Promise<Uint8Array> {
     const tex = (t as WebGpuTexture).tex, row = Math.ceil((4 * t.w) / ROW_ALIGN) * ROW_ALIGN;
@@ -117,7 +119,8 @@ class WebGpu implements Back {
     this.encoder ??= this.device.createCommandEncoder();
     this.encoder.copyTextureToBuffer({ texture: tex }, { buffer: buf, bytesPerRow: row }, [t.w, t.h]);
     this.submit();
-    await buf.mapAsync(GPUMapMode.READ);
+    // A read the device took with it is never answered: the map asks again at its next draw.
+    if (!await buf.mapAsync(GPUMapMode.READ).then(() => true, e => { if (this.gone) return false; throw e; })) return new Promise(() => {});
     const all = new Uint8Array(buf.getMappedRange()), out = new Uint8Array(4 * t.w * t.h);
     for (let y = 0; y < t.h; y++) out.set(all.subarray(y * row, y * row + 4 * t.w), 4 * t.w * y);
     buf.destroy();
@@ -149,8 +152,7 @@ class WebGpu implements Back {
       const made = await this.device.createRenderPipelineAsync(this.describe(name, format as GPUTextureFormat, blend === 'true'));
       if (!this.pipelines.has(key)) this.pipelines.set(key, made);
     } catch (e) {
-      // One being made as the page ended the device fails with it, and is no news.
-      if (!this.closed) throw e;
+      if (!this.gone) throw e;
     }
   }
 
