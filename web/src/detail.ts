@@ -1,15 +1,21 @@
 // The ground's detail up close (web/shaders/lib/detail.wgsl): photographs of ground seen from above, tiles of ground
 // cover rendered from 3D models as the map sees them, and rendered plants (CC0, Poly Haven;
-// web/textures/SOURCES.md), strip images beside the page (`ground.jpg`, `carpets.jpg`, `fire.jpg`, `snags.png`, then the rendered models' files
-// that `STRIPS` names: `models.png`, `heights.png`, `trees.png`, `trees2.png`, ...), each square of them a layer of one texture array with its mip levels down to one texel, which is its mean. The map draws each at its
+// web/textures/SOURCES.md), strip images beside the page that `STRIPS` names by group (`ground.jpg`, `ground2.jpg`, ...,
+// a few layers a file), each square of them a layer of one texture array with its mip levels down to one texel, which
+// is its mean. The map draws each at its
 // real size as a change around the colour the world gives the ground (the image over its mean), so from afar, where the
 // mips average it, the colour is the world's alone.
 import { Gpu, Texture } from './gpu';
 import { timed } from './cost';
 
-/** The rendered models' strip files, each list in its layers' order (web/textures/strips.json, written by the bake tool
- * and put in the page by build.mjs). */
-declare const STRIPS: { models: string[]; heights: string[]; trees: string[] };
+/** The strips' files of each group, in its layers' order (web/textures/strips.json, written by the bake tools,
+ * bake/split.py and bake/sprites.cjs, and put in the page by build.mjs). */
+declare const STRIPS: Record<StripGroup, string[]>;
+/** The groups of the strips in their layers' order in the texture array (tex.wgsl's `*_FROM`): the photographs, the
+ * ground cover, the fire's, the snags, the rendered models, the heights of those that stand in water, and the trees
+ * last (cut-outs). */
+const STRIP_GROUPS = ['ground', 'carpets', 'fire', 'snags', 'models', 'heights', 'trees'] as const;
+type StripGroup = typeof STRIP_GROUPS[number];
 
 /** The side of each layer of the strips, texels: the photographs (tex.wgsl's `*_TEX`), the ground cover after them
  * (tex.wgsl `CARPETS_FROM`), the fire's sprites and its photograph (tex.wgsl `FIRE_FROM`), the snags (tex.wgsl
@@ -52,8 +58,7 @@ const CUT = 128;
 
 /** The strips' files beside the page, in their layers' order, and whether each is the trees' (cut-outs). */
 function stripFiles(): [string, boolean][] {
-  return [...['ground.jpg', 'carpets.jpg', 'fire.jpg', 'snags.png', ...STRIPS.models, ...STRIPS.heights].map(f => [f, false] as [string, boolean]),
-    ...STRIPS.trees.map(f => [f, true] as [string, boolean])];
+  return STRIP_GROUPS.flatMap(g => STRIPS[g].map(f => [f, g === 'trees'] as [string, boolean]));
 }
 
 /** The height of the image in `bytes`, px, read from its head (a PNG's IHDR, a JPEG's start of frame), so the layers
@@ -68,32 +73,45 @@ function imageHeight(bytes: Uint8Array): number {
   throw new Error('an image with no height in its head');
 }
 
-/** Fetch the strips, and decode one at a time and make its levels off the page's thread (detail-worker.ts), the next
- * once the worker is done with it, so the page holds one decoded strip at most and does not stop for them; each layer
- * is sent to the GPU as it comes. A failed fetch leaves the ground without its detail. */
+/** Strips decoded and handed to the worker that it has not finished, at most: a few, so the worker always has the
+ * next while the page holds a few small decoded files (4 MB each) and never all of them. */
+const STRIPS_AHEAD = 3;
+
+/** Fetch the strips, decode them on the page (`STRIPS_AHEAD` ahead of the worker at most) and make their levels off
+ * the page's thread (detail-worker.ts), so the page does not stop for them; each layer is sent to the GPU as it comes.
+ * A failed fetch, decode or worker leaves the ground without its detail and says why (`detailFailure`). */
 async function fetchDetail(number: number): Promise<void> {
   const files = stripFiles(), current = () => detailLoad?.number === number;
   const bytes = await Promise.all(files.map(([f]) => fetch(f).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${f}: ${r.status}`))))));
   if (!current()) return;
-  const layers = bytes.map(b => imageHeight(new Uint8Array(b)) / PHOTO_SIDE);
+  const layers = bytes.map((b, k) => { try { return imageHeight(new Uint8Array(b)) / PHOTO_SIDE; } catch (e) { throw new Error(`${files[k][0]}: ${e instanceof Error ? e.message : e}`); } });
   groundLayers = layers.reduce((n, k) => n + k, 0);
   const source = document.getElementById('detail-src')?.textContent ?? '';
   const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' })), w = new Worker(url);
   URL.revokeObjectURL(url);
   detailLoad!.worker = w;
-  let stripDone = () => {};
+  // The strips the worker has not finished, and what waits for one to finish (or for the worker to fail).
+  let ahead = 0, finished = () => {}, failed = (_: Error) => {};
+  const one = () => {
+    const p = new Promise<void>((go, fail) => { finished = go; failed = fail; });
+    p.catch(() => {}); // (a failure is thrown where it is awaited, not reported before)
+    return p;
+  };
   w.onmessage = (e: MessageEvent<{ layer: number; levels: Uint8Array[] }>) => {
-    if (e.data.layer < 0) return stripDone();
+    if (e.data.layer < 0) { ahead--; return finished(); }
     layersMade.push(e.data);
     sendSoon();
   };
+  w.onerror = e => failed(new Error(e.message || 'its worker failed'));
+  let waiting = one();
   for (let k = 0, first = 0; k < files.length; first += layers[k++]) {
-    const strip = await createImageBitmap(new Blob([bytes[k]]));
+    while (ahead >= STRIPS_AHEAD) { await waiting; waiting = one(); }
+    const strip = await createImageBitmap(new Blob([bytes[k]])).catch(e => Promise.reject(new Error(`${files[k][0]}: ${e}`)));
     if (!current()) { strip.close(); return; }
-    const done = new Promise<void>(go => (stripDone = go));
     w.postMessage({ strip, first, cutOut: files[k][1], side: PHOTO_SIDE, cut: CUT }, [strip]);
-    await done;
+    ahead++;
   }
+  while (ahead > 0) { await waiting; waiting = one(); }
   w.terminate();
   if (current()) detailLoad!.worker = null;
 }
@@ -109,7 +127,13 @@ export function detailSeen(e: number): void {
 function loadDetail(): void {
   detailLoad = { number: ++detailLoads, worker: null };
   groundLayers = 0;
-  fetchDetail(detailLoad.number).catch(e => console.error(`detail: ${e}`));
+  const number = detailLoad.number;
+  fetchDetail(number).catch(e => {
+    if (detailLoad?.number !== number) return;
+    // Said on the page once, and kept for the cost line: the ground is drawn without its detail.
+    if (!detailFailed) reportError(new Error(`detail: ${e instanceof Error ? e.message : e}`));
+    detailFailed = String(e instanceof Error ? e.message : e);
+  });
 }
 
 /** Let the detail go: its load stops, and its texture and the levels not yet sent are dropped. */
@@ -124,6 +148,10 @@ function letDetailGo(): void {
 
 /** The detail's layers sent to the GPU, and all it has (none known before the strips' heads are read). */
 export function detailSent(): [number, number] { return [detailHeld.filled, groundLayers]; }
+
+/** Why the detail last failed to load (null: it did not). */
+let detailFailed: string | null = null;
+export function detailFailure(): string | null { return detailFailed; }
 
 /** Whether detail the view asked for is still to come (look/page.mjs waits for it). */
 export function detailComing(): boolean { return detailLoad !== null && (groundLayers === 0 || detailHeld.filled < groundLayers); }

@@ -3,7 +3,7 @@ import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
 import type { HeldGpu } from './gpu';
 import { spent } from './cost';
-import { detailSent } from './detail';
+import { detailFailure, detailSent } from './detail';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats } from './live';
@@ -409,7 +409,7 @@ function showCost(s: Stats): void {
     ['page /s', `world frames ${per('world frames')}, draws ${per('draw')}`],
     ['gpu', `${gpuN > 0 ? ms(spent('gpu') / gpuN) : '-'} ms a frame; programs: ${drawing?.making() ?? '-'}`],
     ['tiles /s', `${ms(spent('tile ms'))} ms in the worker, ${per('tiles')} on the page`],
-    ['detail', `${sent} of ${layers} layers sent, ${per('detail')} frames /s`],
+    ['detail', `${sent} of ${layers} layers sent, ${per('detail')} frames /s${detailFailure() ? `; failed: ${detailFailure()}` : ''}`],
     ['gpu MB', `${mb(cardAll)}: ${cards.map(([label, b]) => `${label} ${mb(b)}`).join(', ')}`],
     ['wasm MB', `world ${mb(s.memory)}${land ? `, tiles ${land.tiles.memory().map(mb).join(' + ')}` : ''}${heap ? `; js ${mb(heap)}` : ''}`],
   ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');

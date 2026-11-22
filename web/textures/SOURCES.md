@@ -3,7 +3,8 @@
 Every image here is CC0 (no rights reserved; free for any use) from Poly Haven (polyhaven.com), ambientCG (ambientcg.com) and Kenney (kenney.nl), but for the trees
 rendered from PlantCatalog's models, which are CC BY 4.0 (credited below): the ground photographs resized and packed for
 the page by hand, each with its large-scale light divided out (so its repeat does not show); the carpets and the sprites
-rendered from 3D models by the tool in `bake/`. Each file is a strip of 512 x 512 layers, top first.
+rendered from 3D models by the tool in `bake/`. Each is a strip of 512 x 512 layers, top first, kept in files of at most
+four layers (`ground.jpg`, `ground2.jpg`, ...; `bake/split.py`, `strips.json` names them), as a phone decodes a file whole.
 
 ## ground.jpg
 

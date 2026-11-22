@@ -1,12 +1,55 @@
 {
  "models": [
-  "models.png"
+  "models.png",
+  "models2.png",
+  "models3.png",
+  "models4.png",
+  "models5.png",
+  "models6.png",
+  "models7.png",
+  "models8.png"
  ],
  "trees": [
   "trees.png",
-  "trees2.png"
+  "trees2.png",
+  "trees3.png",
+  "trees4.png",
+  "trees5.png",
+  "trees6.png",
+  "trees7.png",
+  "trees8.png",
+  "trees9.png",
+  "trees10.png",
+  "trees11.png",
+  "trees12.png",
+  "trees13.png",
+  "trees14.png",
+  "trees15.png",
+  "trees16.png"
  ],
  "heights": [
-  "heights.png"
+  "heights.png",
+  "heights2.png"
+ ],
+ "ground": [
+  "ground.jpg",
+  "ground2.jpg",
+  "ground3.jpg",
+  "ground4.jpg",
+  "ground5.jpg"
+ ],
+ "carpets": [
+  "carpets.jpg",
+  "carpets2.jpg",
+  "carpets3.jpg",
+  "carpets4.jpg"
+ ],
+ "fire": [
+  "fire.jpg"
+ ],
+ "snags": [
+  "snags.png",
+  "snags2.png",
+  "snags3.png"
  ]
 }
