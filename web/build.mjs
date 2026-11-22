@@ -8,7 +8,7 @@ const plain = n => readFileSync(`dist/.js/${n}.js`, 'utf8').replace(/^import .*$
 // The live world's two workers (the world's and the ground's tiles') and the detail's (its strips' levels) run on
 // their own: the page holds their scripts as text and starts them from Blobs.
 const worker = plain('worker'), tiles = plain('tiles-worker'), detail = plain('detail-worker');
-// The rendered models' strip files in their layers' order (textures/strips.json, written by the bake tool).
+// The strips' files of the ground's detail, by group (textures/strips.json, written by the bake tools).
 const strips = JSON.parse(readFileSync('textures/strips.json', 'utf8'));
 // The shaders as `SHADERS` (gpu.ts) and the strips' files as `STRIPS` (detail.ts), ahead of the modules.
 const js = [`const SHADERS = ${readFileSync('dist/.shaders.json', 'utf8')};`, `const STRIPS = ${JSON.stringify(strips)};`, ...order.map(plain)].join('\n');
@@ -23,11 +23,7 @@ const embed = process.argv[2];
 if (embed) writeFileSync('dist/standalone.html',
   page(`<script type="application/octet-stream" id="world-data">${readFileSync(embed).toString('base64')}</script>\n`));
 // The ground's photographs and plants, beside the page (detail.ts).
-copyFileSync('textures/ground.jpg', 'dist/ground.jpg');
-copyFileSync('textures/carpets.jpg', 'dist/carpets.jpg');
-copyFileSync('textures/fire.jpg', 'dist/fire.jpg');
-copyFileSync('textures/snags.png', 'dist/snags.png');
-for (const f of [...strips.models, ...strips.heights, ...strips.trees]) copyFileSync(`textures/${f}`, `dist/${f}`);
+for (const f of Object.values(strips).flat()) copyFileSync(`textures/${f}`, `dist/${f}`);
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
 console.log(`dist/index.html ${(html.length / 1024).toFixed(1)} KB`);

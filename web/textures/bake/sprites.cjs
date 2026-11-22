@@ -1,6 +1,6 @@
 // node sprites.cjs sprites.json outdir [model...]: renders the sprites that sprites.json names (sprite.html) and writes
-// the strips, as web/textures/ holds them: outdir/models.png and outdir/trees.png, each split into more files of whole
-// layers (models2.png, trees2.png, ...) where it would be over `STRIP_BYTES`, outdir/strips.json naming them in their
+// the strips, as web/textures/ holds them: outdir/models.png and outdir/trees.png, each split into files of at most
+// `STRIP_LAYERS` layers (models2.png, trees2.png, ..., as split.py splits), outdir/strips.json naming them in their
 // layers' order (the page loads them so, detail.ts), and outdir/sprites.wgsl (the table the page reads:
 // web/shaders/lib/sprites.wgsl); with models named, each of their sprites alone to outdir/<model>_<k>.png (and its
 // bare twin to outdir/<model>_<k>_bare.png, its heights to outdir/<model>_<k>_height.png), and their table's rows in
@@ -27,8 +27,8 @@ const heightsOnly = process.argv[4] === '--heights', only = heightsOnly ? [] : p
 // The heights' strip: its layers' side and its cells a layer (half a tree's side: a texel's height is read only against
 // the water's surface).
 const HEIGHT_SIDE = 512, HEIGHT_PER = 4;
-// A strip's file holds at most this many bytes, so it stays well under what the owner's page host takes (15 MB).
-const STRIP_BYTES = 12e6;
+// A strip's file holds at most this many layers (split.py `STRIP_LAYERS`): a phone's browser decodes a picture whole.
+const STRIP_LAYERS = 4;
 // The sprites of an entry, part by part and turn by turn.
 const expand = e => (e.parts || [null]).flatMap(nodes => (e.turns || [0]).map(turn => ({ ...e, nodes, turn })));
 // A table as one array of the program's (made once, not again at each call: a copy in each function that reads it is
@@ -87,21 +87,15 @@ const wgslArray = (name, rows, doc, digits = 3) => `${doc ? doc + '\n' : ''}${wg
   strips.trees.done.forEach(d => d.set && sets.set(d.set.name, [d.set.from, d.set.n]));
   strips.models.done.forEach(d => d.set && sets.set(d.set.name, [trees + d.set.from, d.set.n]));
   const models = [...strips.models.done.map(d => [d.i, 'leafy']), ...bares.map(d => [d.i, 'bare'])];
-  // A strip in as few files of at most `STRIP_BYTES` as it fits, each of whole layers: `<name>.png`, `<name>2.png`, ...
+  // A strip in files of at most `STRIP_LAYERS` layers: `<name>.png`, `<name>2.png`, ...
   const files = async (name, list, side, per) => {
-    const layers = Math.ceil(list.length / per);
-    for (let parts = 1; parts <= layers; parts++) {
-      const each = Math.ceil(layers / parts) * per, pngs = [];
-      for (let at = 0; at < list.length; at += each) {
-        pngs.push(Buffer.from((await p.evaluate(([l, side, per]) => window.strip(l, side, per), [list.slice(at, at + each), side, per])).split(',')[1], 'base64'));
-      }
-      if (pngs.every(b => b.length <= STRIP_BYTES)) {
-        const names = pngs.map((b, k) => `${name}${k ? k + 1 : ''}.png`);
-        names.forEach((n, k) => fs.writeFileSync(`${OUT}/${n}`, pngs[k]));
-        return names;
-      }
+    const each = STRIP_LAYERS * per, names = [];
+    for (let at = 0; at < list.length; at += each) {
+      const png = Buffer.from((await p.evaluate(([l, side, per]) => window.strip(l, side, per), [list.slice(at, at + each), side, per])).split(',')[1], 'base64');
+      names.push(`${name}${names.length ? names.length + 1 : ''}.png`);
+      fs.writeFileSync(`${OUT}/${names[names.length - 1]}`, png);
     }
-    throw new Error(`${name}: a layer's file is over ${STRIP_BYTES} bytes`);
+    return names;
   };
   // The heights: their strip, named in strips.json, and their table (the runs of sprites with heights, so the page holds
   // no row for each sprite).
@@ -134,6 +128,7 @@ const wgslArray = (name, rows, doc, digits = 3) => `${doc ? doc + '\n' : ''}${wg
     await b.close(); return;
   }
   fs.writeFileSync(`${OUT}/strips.json`, JSON.stringify({
+    ...named,
     models: await files('models', models, specs.models.side, 4),
     trees: await files('trees', strips.trees.done.map(d => [d.i, 'leafy']), specs.trees.side, 1),
     heights: named.heights,
