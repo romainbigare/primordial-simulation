@@ -73,6 +73,17 @@ impl Part {
         let k = self.floors.partition_point(|f| f.0 < x);
         (k, self.sums[k])
     }
+    /// `below`, where `from` of its floors are known to lie under `x`: the count found from there up, in steps that
+    /// double, then halved (the same count, found in fewer steps where `x` lies a few floors above them).
+    pub(super) fn below_from(&self, x: f64, from: usize) -> (usize, [f64; 3]) {
+        let under = |k: usize| self.floors[k].0 < x;
+        let (mut lo, mut step) = (from, 1);
+        while lo + step <= self.floors.len() && under(lo + step - 1) {
+            (lo, step) = (lo + step, 2 * step);
+        }
+        let k = lo + self.floors[lo..(lo + step).min(self.floors.len())].partition_point(|f| f.0 < x);
+        (k, self.sums[k])
+    }
     /// The first moment about the cell's mean surface of what stands on it under the level `x`, m⁴: Σ area × (x² -
     /// departure²) / 2 over the floors under it.
     fn moment(&self, x: f64) -> f64 {
