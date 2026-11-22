@@ -144,28 +144,51 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
 
 /// Values `v` on a grid `across` x `down` smoothed by `SMOOTH_PASSES` passes of a box filter `radius` samples each way
 /// along the rows and then the columns: shorter at the grid's edges, but round the rows where they `wrap` (a globe's).
+/// Each line's running sums are found first, then its values from them; the columns all at once, row by row, so the
+/// grid is read in its order.
 fn blur(v: &[f64], (across, down, wrap): (usize, usize, bool), radius: usize) -> Vec<f64> {
     let mut x = v.to_vec();
-    let line = |x: &mut [f64], at: &dyn Fn(usize) -> usize, (len, round): (usize, bool)| {
-        let mut prefix = vec![0.0; len + 1];
-        (0..len).for_each(|q| prefix[q + 1] = prefix[q] + x[at(q)]);
-        // The sum over samples `lo` to `hi` (not `hi`), round the line past its ends.
-        let sum = |lo: i64, hi: i64| {
-            let (n, whole) = (len as i64, prefix[len]);
-            let upto = |q: i64| q.div_euclid(n) as f64 * whole + prefix[q.rem_euclid(n) as usize];
-            upto(hi) - upto(lo)
-        };
-        (0..len).for_each(|q| {
-            let (q, r) = (q as i64, radius as i64);
-            let (lo, hi) = if round && 2 * r < len as i64 { (q - r, q + r + 1) } else if round { (0, len as i64) } else { ((q - r).max(0), (q + r + 1).min(len as i64)) };
-            x[at(q as usize)] = sum(lo, hi) / (hi - lo) as f64;
-        });
-    };
+    // The running sums of a row; of the columns, `[q * across + c]` the sum of column c over its first q samples.
+    let (mut row, mut col) = (vec![0.0; across + 1], vec![0.0; (down + 1) * across]);
     for _ in 0..SMOOTH_PASSES {
-        (0..down).for_each(|r| line(&mut x, &|q| r * across + q, (across, wrap)));
-        (0..across).for_each(|c| line(&mut x, &|q| q * across + c, (down, false)));
+        for line in x.chunks_exact_mut(across) {
+            (0..across).for_each(|q| row[q + 1] = row[q] + line[q]);
+            for (q, out) in line.iter_mut().enumerate() {
+                let (lo, hi) = span(q, (across, wrap), radius);
+                let upto = |q: i64| upto(q, across, row[across], |m| row[m]);
+                *out = (upto(hi) - upto(lo)) / (hi - lo) as f64;
+            }
+        }
+        for q in 0..down {
+            for c in 0..across {
+                col[(q + 1) * across + c] = col[q * across + c] + x[q * across + c];
+            }
+        }
+        for q in 0..down {
+            let (lo, hi) = span(q, (down, false), radius);
+            for c in 0..across {
+                let upto = |q: i64| upto(q, down, col[down * across + c], |m| col[m * across + c]);
+                x[q * across + c] = (upto(hi) - upto(lo)) / (hi - lo) as f64;
+            }
+        }
     }
     x
+}
+
+/// The samples a box filter of `radius` sums for sample `q` of a line of `len` (round it where `round`): from `lo` up
+/// to `hi` (not `hi`), shorter at the line's ends, past them round it.
+fn span(q: usize, (len, round): (usize, bool), radius: usize) -> (i64, i64) {
+    let (q, r, len) = (q as i64, radius as i64, len as i64);
+    if round && 2 * r < len { (q - r, q + r + 1) } else if round { (0, len) } else { ((q - r).max(0), (q + r + 1).min(len)) }
+}
+
+/// The sum of a line of `len` samples over its first `q` (past its ends, round it: `whole` for each time round), its
+/// running sums `prefix`.
+#[inline]
+fn upto(q: i64, len: usize, whole: f64, prefix: impl Fn(usize) -> f64) -> f64 {
+    let n = len as i64;
+    let (turns, at) = if (0..n).contains(&q) { (0, q) } else { (q.div_euclid(n), q.rem_euclid(n)) };
+    turns as f64 * whole + prefix(at as usize)
 }
 
 #[cfg(test)]
