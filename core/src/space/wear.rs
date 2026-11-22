@@ -217,7 +217,9 @@ fn run(g: &Grid, h: &mut [f64], (up, open, draw): (&[f64], &[bool], &[f64]), (be
     let mut marks = Marks { offshore: vec![0.0; g.n()], settled: vec![0.0; g.n()], lowers: vec![0.0; g.n()], drained: Vec::new() };
     let volume = |x: &dyn Fn(usize) -> f64| (0..g.n()).filter(|&i| !open[i]).map(|i| x(i) * g.area(i)).sum::<f64>();
     let start = starts(g, open, true);
-    for _ in 0..steps {
+    // A grid with no land neither rises, is cut, settles nor creeps: each step is the first, which finds the area that
+    // drains through each sample.
+    for _ in 0..if open.contains(&false) { steps } else { 1 } {
         let f = flood(g, h, open, (&start, draw));
         let was = h.to_vec();
         let k: Vec<f64> = (0..g.n()).map(|i| CUT * bed.strata.cut(bed.make(i, was[i]))).collect();
