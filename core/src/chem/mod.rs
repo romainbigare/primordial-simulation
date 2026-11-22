@@ -204,6 +204,22 @@ impl Chemistry {
         if b < HEAT_BANDS - 1 { one(b) } else { 1.0 - (0..HEAT_BANDS - 1).map(one).sum::<f64>() }
     }
 
+    /// `heat_share` with its slope with the temperature, per K: the table's own between the whole K about `t` (none
+    /// past the table's ends, where the share holds).
+    pub fn heat_share_slope(&self, t: f64, b: usize) -> [f64; 2] {
+        let table = &self.derived().heat_shares;
+        let at = t.clamp(0.0, planck::TABLE_K as f64);
+        let (k, frac) = ((at as usize).min(planck::TABLE_K - 1), at - (at as usize).min(planck::TABLE_K - 1) as f64);
+        let within = if at == t { 1.0 } else { 0.0 };
+        let one = |b: usize| [table[k][b] + frac * (table[k + 1][b] - table[k][b]), within * (table[k + 1][b] - table[k][b])];
+        if b < HEAT_BANDS - 1 {
+            one(b)
+        } else {
+            let [s, d] = (0..HEAT_BANDS - 1).map(one).fold([0.0; 2], |[s, d], [x, y]| [s + x, d + y]);
+            [1.0 - s, -d]
+        }
+    }
+
     /// Does substance `k` absorb heat radiation in any band?
     pub fn absorbs_heat(&self, k: usize) -> bool {
         let s = &self.subs[k];
