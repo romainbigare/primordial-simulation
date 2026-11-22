@@ -31,6 +31,8 @@ const FRAME_BUDGET_MS = 16, SCALES = [1, 0.75, 0.5];
  * each of about `SHARPEN_MS` on the GPU (the view rests, so a frame may take longer) and no less than `TILE_LEAST` px a
  * side. */
 const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
+/** The time a frame may take on the GPU, ms, before the page says the GPU does not draw (`time`). */
+const STALL_MS = 30000;
 /** How often a frame drawn without a program not made yet looks whether it is made, ms (`drawWhenMade`). */
 const MADE_POLL_MS = 50;
 
@@ -83,6 +85,8 @@ export class MapView {
   private scale = 1;
   /** Told the share the map is drawn at whenever it changes. */
   onScale: () => void = () => {};
+  /** Told when the GPU draws again after it lost what it held. */
+  onRestored: () => void = () => {};
   private fullMs = 0;
   private timing = false;
   private picture: Texture | null = null;
@@ -112,7 +116,7 @@ export class MapView {
     this.over.className = 'over';
     cv.after(this.over);
     this.ctx = this.over.getContext('2d')!;
-    this.ready = openGpu(cv, () => { this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); }).then(g => {
+    this.ready = openGpu(cv, () => { this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); this.onRestored(); }).then(g => {
       this.gpu = g;
       if (g) sendDetail(g, () => this.invalidate());
       this.invalidate();
@@ -451,7 +455,10 @@ export class MapView {
     if (this.timing) return;
     this.timing = true;
     const t0 = performance.now();
+    // A frame the GPU has not finished long after is said on the page: the map stays as it was (the world steps on).
+    const stalled = setTimeout(() => reportError(new Error(`gpu: the ${gpu.kind} card has not finished a frame of the map in ${STALL_MS / 1000} s`)), STALL_MS);
     gpu.done().then(() => {
+      clearTimeout(stalled);
       this.timing = false;
       const ms = performance.now() - t0;
       this.fullMs = ms / (r * r);

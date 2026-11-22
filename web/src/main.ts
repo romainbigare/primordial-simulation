@@ -79,6 +79,8 @@ map.tap = (x, y) => live !== null && god.tap(x, y);
 /** Which GPU draws the map (none: the page cannot draw it). */
 let drawnWith = '';
 map.onScale = () => { if (live) showStats(live.stats); };
+// The GPU's loss, said on the page (gpu-webgl2.ts, gpu-webgpu.ts), is over once it draws again.
+map.onRestored = () => say('');
 map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
 slots.listen($<HTMLCanvasElement>('cv'), () => inspect());
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
