@@ -23,6 +23,7 @@ use super::slopes::{creep, rebound};
 use super::strata::Strata;
 use crate::math::spread_down;
 use crate::rng::{Purpose, Rng};
+use serde::{Deserialize, Serialize};
 
 /// The years the land rises and is worn.
 const WEAR_YEARS: f64 = 2.0e6;
@@ -109,7 +110,7 @@ impl Bed<'_> {
 /// (`held`: their ground stood no higher than their outlets or their mouths' tops; not taken), and what the high stand's
 /// mouths got of what the yield law asked a year, m³ a year (`stand::yields`, less `held`: the running world's load is
 /// held to it).
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Books {
     pub taken: f64,
     pub settled: f64,

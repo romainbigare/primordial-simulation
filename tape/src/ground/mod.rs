@@ -29,7 +29,6 @@ pub use valley::{VALLEY_FROM, VALLEY_M};
 pub use half::{half, unhalf};
 
 use pcore::space::network::NONE;
-use pcore::space::relief::Relief;
 use pcore::space::samples::{Pond, Samples};
 use pcore::space::square::Square;
 use pcore::space::terrain::{Terrain, SAMPLE_DEPTH};
@@ -59,6 +58,10 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
     sq + whole.min(finest)..=sq + finest
 }
 
+/// What a ground is made of, as `Ground::bytes_of` writes it: the seed, map, terrain, latitudes, laws, gravity and
+/// samples.
+type Makings = (u64, Square, Terrain, (f64, f64), Physics, f64, Samples);
+
 /// The ground of an island: its seed, map and terrain, the latitudes of its rows, the terrain's samples (with the
 /// wetness index of each, `space::samples::sample_index`), the channel law (`Physics::channel`), by which the channel nearest a texel is found,
 /// the point each sample's line runs through (`stems::points`), how each sample's piece of its line starts
@@ -84,13 +87,8 @@ pub struct Ground {
 
 impl Ground {
     /// The ground of `terrain` on the island `map` for `seed`, its rows between latitudes `lat`, under the laws `phys`
-    /// at gravity `gravity`: its channels sized by them (`Law`), and its samples' texture (`pcore::soil::textures`).
-    pub fn new(seed: u64, map: Square, terrain: Terrain, lat: (f64, f64), phys: &Physics, gravity: f64) -> Ground {
-        let samples = terrain.samples(seed, &map, lat);
-        Ground::on(seed, (map, terrain, lat), (phys, gravity), samples)
-    }
-
-    /// The same on the terrain's samples `samples` (the seed's, or as a world built them: `Terrain::built`).
+    /// at gravity `gravity`, on the terrain's samples `samples` (the seed's, or as a world built them: `Terrain::built`):
+    /// its channels sized by them (`Law`), and its samples' texture (`pcore::soil::textures`).
     pub fn on(seed: u64, (map, terrain, lat): (Square, Terrain, (f64, f64)), (phys, gravity): (&Physics, f64), samples: Arc<Samples>) -> Ground {
         let law = Law::of(phys);
         assert!(!map.wrap, "tiles of the ground are made for an island");
@@ -108,20 +106,34 @@ impl Ground {
         Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), w.terrain_samples())
     }
 
-    /// The relief a world built its samples from (`World::relief`), the years since its start at its last build and the
-    /// world's map, whose cells the relief's offsets are of (`Relief::offset`), as bytes (bincode), for a shell's ground
-    /// to build the same samples (`rebuild_from`): the ground's own map may cut the island into other cells (a page's
-    /// ground is made of its squares, `worldgen::terrain::island_ground`).
-    pub fn relief_bytes(w: &World) -> Vec<u8> {
-        bincode::serialize(&(&w.relief, w.built_years(), &w.map)).expect("a relief serializes")
+    /// What the ground of world `w` is made of (`of`), as bytes (bincode), for a shell's ground in another place (a
+    /// page's worker) to make it without the world (`from_bytes`, `rebuild_from`): its seed, map, terrain, latitudes,
+    /// laws and gravity, and its terrain's samples as last built (`World::terrain_samples`), which the world found once.
+    pub fn bytes_of(w: &World) -> Vec<u8> {
+        let lat = (w.cfg.lat_south, w.cfg.lat_north);
+        bincode::serialize(&(w.terrain.seed, &w.map, &w.terrain, lat, &w.cfg.phys, w.cfg.gravity, &*w.terrain_samples())).expect("a ground serializes")
     }
 
-    /// The ground made again on the samples the relief `bytes` builds on the world's cells (`relief_bytes`,
-    /// `Terrain::built`; `rebuild`). Returns the squares whose tiles changed, or why the bytes are refused.
-    pub fn rebuild_from(&mut self, bytes: &[u8]) -> Result<Vec<bool>, String> {
-        let (r, years, cells): (Relief, f64, Square) = bincode::deserialize(bytes).map_err(|e| format!("a relief: {e}"))?;
-        let s = self.terrain.built(self.seed, &cells, self.lat, &r, years);
-        Ok(self.rebuild(s))
+    /// The bytes of `bytes_of` read: the ground's makings, or why they are refused.
+    fn makings(bytes: &[u8]) -> Result<Makings, String> {
+        bincode::deserialize(bytes).map_err(|e| format!("a ground: {e}"))
+    }
+
+    /// The ground of the world whose makings `bytes` hold (`bytes_of`), as `of` makes it; or why they are refused. The
+    /// bytes go before the ground is made, so the two are not held at once (a page's worker has little memory).
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Ground, String> {
+        let (seed, map, terrain, lat, phys, gravity, samples) = Ground::makings(&bytes)?;
+        drop(bytes);
+        Ok(Ground::on(seed, (map, terrain, lat), (&phys, gravity), Arc::new(samples)))
+    }
+
+    /// The ground made again on the samples of the world whose makings `bytes` hold (`bytes_of`, after the world built
+    /// its samples anew; `rebuild`), the bytes gone first as in `from_bytes`. Returns the squares whose tiles changed,
+    /// or why the bytes are refused.
+    pub fn rebuild_from(&mut self, bytes: Vec<u8>) -> Result<Vec<bool>, String> {
+        let samples = Ground::makings(&bytes)?.6;
+        drop(bytes);
+        Ok(self.rebuild(Arc::new(samples)))
     }
 
     /// The ground made again on the samples `new` (as a world built them again, `Terrain::built`): all of it, as a

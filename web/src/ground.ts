@@ -14,10 +14,6 @@ import { spend, timed } from './cost';
  * texel names its channel's sample, the length its place along its channel is kept modulo, m, numbers of a row of the
  * cells' table, and the reflectance of the walls the cover builds. */
 export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; along_wrap: number; row: number; kind_row: number; place_row: number; walls: [number, number, number] }
-/** Whose ground the tiles are of: a new island's, made from its seed, size, band of latitudes (south, north) and
- * whether its large shape is drawn from the seed (wasm/src/lib.rs `ground`); or a saved world's, the gzip of its
- * snapshot (`ground_of_world`). */
-export type GroundOf = { seed: number; size: number; band: [number, number]; drawn: boolean } | { saved: ArrayBuffer };
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
 export interface MapOf { w: number; h: number; cell_m: number; square_depth: number }
 
@@ -93,7 +89,9 @@ export class GroundTiles {
   private start = performance.now();
   private lastCame = -Infinity;
 
-  constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
+  /** `ground`: what the world's ground is made of, its terrain's samples too (wasm/src/lib.rs `ground_bytes`), from
+   * which each worker makes its ground (`ground_from`). */
+  constructor(source: string, wasm: ArrayBuffer, ground: Uint8Array, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
     this.makePage();
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
@@ -107,20 +105,20 @@ export class GroundTiles {
         if (m.kind === 'tile') { w.making--; w.memory = m.memory; spend('tile ms', m.ms); timed('tiles', () => this.took(m.depth, m.x, m.y, m.data, m.gen)); }
         if (m.kind === 'rebuilt' && k === 0) this.rebuilt(m.squares, m.rock);
       };
-      const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
-      w.worker.postMessage({ cmd: 'init', wasm: copy, ground }, [copy]);
+      const [core, makings] = k === WORKERS - 1 ? [wasm, ground] : [wasm.slice(0), ground.slice()];
+      w.worker.postMessage({ cmd: 'init', wasm: core, ground: makings.buffer }, [core, makings.buffer]);
       this.workers.push(w);
     }
   }
 
-  /** The world built its samples anew from `relief` (wasm/src/lib.rs `relief`): each worker makes its ground again
-   * (`ground_built`), and the tiles asked after are of it. */
-  rebuild(relief: Uint8Array): void {
+  /** The world built its samples anew, `ground` what its ground is now made of (wasm/src/lib.rs `ground_bytes`): each
+   * worker makes its ground again (`ground_built`), and the tiles asked after are of it. */
+  rebuild(ground: Uint8Array): void {
     this.gen++;
-    for (const w of this.workers) {
-      const copy = relief.slice();
-      w.worker.postMessage({ cmd: 'built', relief: copy.buffer, gen: this.gen }, [copy.buffer]);
-    }
+    this.workers.forEach((w, k) => {
+      const makings = k === this.workers.length - 1 ? ground : ground.slice();
+      w.worker.postMessage({ cmd: 'built', ground: makings.buffer, gen: this.gen }, [makings.buffer]);
+    });
   }
 
   /** The first worker's ground made again, each build in its order: the rock of the latest, and each tile kept over a

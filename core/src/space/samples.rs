@@ -21,6 +21,7 @@ use super::strata::Strata;
 use super::terrain::{Terrain, SAMPLE_DEPTH};
 use super::tree::BLOCK;
 use super::Leaf;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
 /// The samples of a map for one seed: its width and height in samples, and of each sample row by row its height, m;
@@ -33,7 +34,7 @@ use std::sync::{Arc, Mutex};
 /// the wear's last stage, m (all of it on the open low ground), and how long it has lain, years (`mantle::age`); and
 /// the volumes the wear moved (`wear::Books`); and how much liquid gathers at each, its topographic wetness index
 /// ln(a / tan β) (`sample_index`); and the channel law of the terrain (`Terrain::channel`).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Samples {
     pub seed: u64,
     pub across: usize,
@@ -61,7 +62,7 @@ pub struct Samples {
 /// over the basin's lowest pass. Its pass is the first sample out of it on the way its liquid leaves by, and the level
 /// is that of the pass, m. The open low ground is ponds too, one for each part of it joined through its samples (an
 /// island's one): its liquid leaves by no pass (`network::NONE`) and stands at any level (infinite).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Pond {
     pub pass: u32,
     pub level: f64,

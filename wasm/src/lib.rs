@@ -3,9 +3,10 @@
 //! results from the instance's memory. One steps the world: `meta` is JSON in the form of a tape's header, `frame` is
 //! the bytes of one tape frame and `table` the cells' table made with it (`tape::Table`), `discharge` what runs through
 //! each of the terrain's samples when it changed enough to show, `things` the list of what lies in the cells of a
-//! window (`tape::things`). The other makes
-//! the ground's tiles (`ground`, `tile`: `tape::Ground`), which need no world. Either may instead stand on a saved world
-//! the page hands in (`input`): a snapshot of `ew run` (`open_world`, `ground_of_world`).
+//! window (`tape::things`); the world may instead stand on a saved world the page hands in (`input`): a snapshot of
+//! `ew run` (`open_world`). The other makes the ground's tiles (`ground_from`, `tile`: `tape::Ground`) from what the
+//! world's ground is made of, its terrain's samples too (`ground_bytes`, which the page hands it): it makes no world and
+//! finds no samples of its own.
 
 use pcore::space::terrain::Shape;
 use pcore::{Config, World};
@@ -168,28 +169,42 @@ pub extern "C" fn step_month() {
     })
 }
 
-/// How many times the world built its samples anew (`Relief::builds`): the page asks its ground for the samples as
-/// built (`relief`) when it moved.
+/// How many times the world built its samples anew (`Relief::builds`): the page hands its ground the world's makings
+/// again (`ground_bytes`) when it moved.
 #[no_mangle]
 pub extern "C" fn builds() -> u32 {
     with(|l| l.world.relief.builds)
 }
 
-/// The relief the world last built its samples from, the years since its start then and the world's cells
-/// (`tape::Ground::relief_bytes`), for the ground's worker (`ground_built`).
+/// What the world's ground is made of, with its terrain's samples as last built (`tape::Ground::bytes_of`), for the
+/// ground's worker (`ground_from`, `ground_built`): the world found its samples once, and the worker makes none.
 #[no_mangle]
-pub extern "C" fn relief() -> *const u8 {
-    let bytes = with(|l| tape::Ground::relief_bytes(&l.world));
+pub extern "C" fn ground_bytes() -> *const u8 {
+    let bytes = with(|l| tape::Ground::bytes_of(&l.world));
     give(bytes)
 }
 
-/// The ground made by `ground` made again on the samples the relief handed in (`input`, from `relief`) builds
-/// (`tape::Ground::rebuild_from`): returns a byte for each square of the map, row by row, 1 where its tiles changed;
-/// or, past them, why the relief was refused, as text.
+/// Make the ground of the world whose makings are handed in (`input`, from `ground_bytes`; `tape::Ground::from_bytes`).
+/// Returns nothing (`out_len` 0), or why they are refused, as text.
+#[no_mangle]
+pub extern "C" fn ground_from() -> *const u8 {
+    let bytes = IN.with(|i| std::mem::take(&mut *i.borrow_mut()));
+    give(match tape::Ground::from_bytes(bytes) {
+        Ok(g) => {
+            GROUND.with(|c| *c.borrow_mut() = Some(g));
+            Vec::new()
+        }
+        Err(e) => e.into_bytes(),
+    })
+}
+
+/// The ground made by `ground_from` made again on the samples of the world's makings handed in (`input`, from
+/// `ground_bytes` after the world built its samples anew; `tape::Ground::rebuild_from`): returns a byte for each square
+/// of the map, row by row, 1 where its tiles changed; or, past them, why the makings were refused, as text.
 #[no_mangle]
 pub extern "C" fn ground_built() -> *const u8 {
     let bytes = IN.with(|i| std::mem::take(&mut *i.borrow_mut()));
-    let out = GROUND.with(|c| c.borrow_mut().as_mut().expect("no ground: call ground first").rebuild_from(&bytes));
+    let out = GROUND.with(|c| c.borrow_mut().as_mut().expect("no ground: call ground_from first").rebuild_from(bytes));
     give(match out {
         Ok(squares) => squares.iter().map(|&c| c as u8).collect(),
         Err(e) => e.into_bytes(),
@@ -299,29 +314,7 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     give(bytes)
 }
 
-/// Make the ground of the island `new_world` makes from `seed`, `size`, the latitudes `south` and `north` and `drawn`
-/// (`tape::Ground`): its terrain and its map's squares (`worldgen::terrain::island_ground`; how its cells are cut does
-/// not change the ground), with the default laws.
-#[no_mangle]
-pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64, drawn: u32) {
-    let (seed, cfg) = (seed as u64, island((south, north)));
-    let (map, terrain) = worldgen::terrain::island_ground(seed, (size as usize, size as usize), shape_of(drawn), &cfg.phys);
-    let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), &cfg.phys, cfg.gravity);
-    GROUND.with(|c| *c.borrow_mut() = Some(g));
-}
 
-/// Make the ground of the saved world handed in (`input`; `tape::Ground::of`). Returns nothing (`out_len` 0), or why it
-/// is refused (`saved`), as text.
-#[no_mangle]
-pub extern "C" fn ground_of_world() -> *const u8 {
-    give(match saved() {
-        Ok((world, _)) => {
-            GROUND.with(|c| *c.borrow_mut() = Some(tape::Ground::of(&world)));
-            Vec::new()
-        }
-        Err(e) => e.into_bytes(),
-    })
-}
 
 /// The tile of `depth` at column `x` and row `y` of tiles of the ground made by `ground`, 16-bit floats little-endian
 /// (`tape::Ground::tile`).

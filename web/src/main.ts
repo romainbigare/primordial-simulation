@@ -7,7 +7,7 @@ import { detailSent } from './detail';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats } from './live';
-import { GroundTiles, GroundOf } from './ground';
+import { GroundTiles } from './ground';
 import { Land } from './land';
 import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
@@ -60,9 +60,8 @@ const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspe
 let land: Land | null = null;
 /** The core's WebAssembly, for the worker that makes the ground's tiles of each new world. */
 let coreWasm: ArrayBuffer | null = null;
-/** The saved world the live world stands on (the gzip of a snapshot of `ew run`), kept for the ground's tiles; null for
- * a new world. */
-let saved: ArrayBuffer | null = null;
+/** Whether the live world stands on a saved world (a snapshot of `ew run`), which opens paused. */
+let saved = false;
 let viewTimer = 0;
 /** The slots of cover of the window in view, asked for when the map is close (live world only), and the window asked for. */
 const slots = new CoverSlots();
@@ -175,8 +174,8 @@ function repaint(): void {
   map.setMap(squares.fields);
   if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
   if (land && live) land.plumesIn(live.plumes);
-  const relief = live?.takeRelief();
-  if (land && relief) land.tiles.rebuild(relief);
+  const ground = live?.takeGround();
+  if (land && ground) land.tiles.rebuild(ground);
   vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
   fire.set(land && live ? w : null);
   map.setLook(look);
@@ -356,12 +355,12 @@ function viewSoon(v: View): void {
   clearTimeout(viewTimer);
   viewTimer = window.setTimeout(() => thingsOf(v), ASK_MS);
 }
-/** The live map of world `w`: its ground's tiles, made by a worker of their own from the world's seed and size, or from
- * the saved world it stands on. */
+/** The live map of world `w`: its ground's tiles, made by a worker of their own from what the world's ground is made of
+ * (`Live::takeGround`, with the world's first frame). */
 function landOf(w: World): Land | null {
   const m = w.meta;
-  if (!coreWasm || !m.tiles || !m.laws || !m.samples || m.square_depth === undefined) return null;
-  const ground: GroundOf = saved ? { saved } : { seed: m.seed, size: m.w, band: [m.lat_south, m.lat_north], drawn: m.shape === 'Drawn' };
+  const ground = live?.takeGround();
+  if (!coreWasm || !ground || !m.tiles || !m.laws || !m.samples || m.square_depth === undefined) return null;
   const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), ground, { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, shown => { if (shown) map.invalidate(); if (live) showStats(live.stats); }, say);
   return new Land(tiles, m.laws, m.samples);
 }
@@ -421,21 +420,18 @@ function bandOf(text: string | null): [number, number] {
   const v = (text ?? '').split(',').map(Number);
   return v.length === 2 && v[0] < v[1] ? [v[0], v[1]] : [NaN, NaN];
 }
-/** Whether a banded world was made in this session: the first one makes the planet's air too, which takes a while. */
-let banded = false;
 function newWorld(): void {
   const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
   const size = Math.min(SIZE_MOST, Math.max(SIZE_LEAST, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
   const variety = Math.min(VARIETY_MOST, Math.max(1, Math.floor(+$<HTMLInputElement>('variety').value) || LIVE_VARIETY));
   const band = bandOf($<HTMLSelectElement>('band').value);
-  playing = false; saved = null;
-  say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
-  banded ||= band[0] < band[1];
+  playing = false; saved = false;
+  say('Making the world…');
   live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn', variety, $<HTMLSelectElement>('weather').value === 'soft');
 }
 /** Stand the live world on the saved world `gz` (the gzip of a snapshot of `ew run`). */
 function openSaved(gz: ArrayBuffer): void {
-  playing = false; saved = gz;
+  playing = false; saved = true;
   say('Opening the saved world…');
   live?.open(gz.slice(0));
 }

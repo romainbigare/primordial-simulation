@@ -2,8 +2,9 @@
 // is new, or a saved one the page hands in (a snapshot of `ew run`), and steps on the same way. It runs as
 // a separate script, built into the page as text (build.mjs), and started from a Blob. With each frame it posts the
 // cells' table (tape/src/table.rs), from which the page draws the state of the ground, the samples' discharge and load when
-// they changed enough to show (wasm/src/lib.rs `discharge`), where load came into a body of liquid (`plumes`), and the
-// relief once the world built its samples anew (`relief`); it makes no pictures. The page answers each frame once it has
+// they changed enough to show (wasm/src/lib.rs `discharge`), where load came into a body of liquid (`plumes`), and what
+// its ground is made of, its terrain's samples too, with its first frame and once the world built its samples anew
+// (`ground_bytes`), for the ground's tiles; it makes no pictures. The page answers each frame once it has
 // drawn it ('shown'). While the world plays, the next frame waits for that answer and the world steps on at the pace
 // asked: a page that draws slowly shows fewer frames (each the world's latest state), and never holds the world. A
 // pause stops the world at once, and its frame shows the date it stopped at.
@@ -22,7 +23,7 @@ interface Core {
   discharge(): number;
   plumes(): number;
   builds(): number;
-  relief(): number;
+  ground_bytes(): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   probe(x: number, y: number): number;
@@ -66,7 +67,7 @@ let thingsAt: [number, number, number, number] | null = null;
 /** The months stepped since `since` (ms) and the time stepping them took, ms, and of the last whole second: the pace,
  * months per second, the time a month took, ms, and the share of the time spent stepping. */
 let stepped = 0, since = 0, pace = 0, steppingMs = 0, monthMs = 0, busy = 0;
-/** The build of the samples (`builds`) whose relief the page has: it is sent with the first frame after the next. */
+/** The build of the samples (`builds`) whose ground the page has: the next is sent with the first frame after it. */
 let sentBuilds = 0;
 /** When the last frame was posted (ms), whether months were stepped since, and how many frames posted the page has not
  * yet drawn. */
@@ -95,17 +96,16 @@ function text(at: number): string {
  * an edit changed. */
 function postFrame(kind: 'world' | 'frame', edited = false): void {
   const c = core!;
+  // The ground's makings with a world's first frame, and again once the world builds its samples anew: first, so the
+  // core's next answer frees their room for the rest.
+  const ground = kind === 'world' || c.builds() !== sentBuilds ? bytes(c.ground_bytes(), c.out_len()) : null;
+  sentBuilds = c.builds();
   const head = kind === 'world' ? text(c.meta()) : '';
   const kinds = kind === 'world' ? text(c.kinds()) : '';
   const frame = bytes(c.frame(), c.out_len());
   const table = new Float32Array(bytes(c.table(), c.out_len()).buffer);
   const flows = c.discharge(), discharge = c.out_len() > 0 ? new Uint16Array(bytes(flows, c.out_len()).buffer) : null;
   const plumes = bytes(c.plumes(), c.out_len());
-  // A new world's ground is the seed's, a saved one's as last built: the relief goes to the ground once the world builds
-  // its samples anew.
-  if (kind === 'world') sentBuilds = c.builds();
-  const relief = c.builds() !== sentBuilds ? bytes(c.relief(), c.out_len()) : null;
-  sentBuilds = c.builds();
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   const now = performance.now();
   if (now - since >= PACE_MS) {
@@ -113,8 +113,8 @@ function postFrame(kind: 'world' | 'frame', edited = false): void {
     stepped = 0; steppingMs = 0; since = now;
   }
   const stats = { cells: c.cells(), pace, monthMs, busy, memory: c.memory.buffer.byteLength };
-  const moved = [frame.buffer, table.buffer, plumes.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : []), ...(relief ? [relief.buffer] : [])];
-  host.postMessage({ kind, meta: head, kinds, edited, frame, table, discharge, plumes, relief, year: c.year(), day: c.day(), stats, things }, moved);
+  const moved = [frame.buffer, table.buffer, plumes.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : []), ...(ground ? [ground.buffer] : [])];
+  host.postMessage({ kind, meta: head, kinds, edited, frame, table, discharge, plumes, ground, year: c.year(), day: c.day(), stats, things }, moved);
   posted = now; owed = false; unshown++;
 }
 

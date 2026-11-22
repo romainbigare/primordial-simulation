@@ -16,8 +16,9 @@ const SIDE_SQUARES: usize = 24;
 fn ground() -> (Ground, std::ops::RangeInclusive<u8>) {
     let cfg = Config::default();
     let (map, terrain) = worldgen::terrain::island_ground(SEED, (SIDE_SQUARES, SIDE_SQUARES), pcore::space::terrain::Shape::One, &cfg.phys);
-    let depths = tape::depths(&map);
-    (Ground::new(SEED, map, terrain, (cfg.lat_south, cfg.lat_north), &cfg.phys, cfg.gravity), depths)
+    let (depths, lat) = (tape::depths(&map), (cfg.lat_south, cfg.lat_north));
+    let samples = terrain.samples(SEED, &map, lat);
+    (Ground::on(SEED, (map, terrain, lat), (&cfg.phys, cfg.gravity), samples), depths)
 }
 
 /// The samples about a pond in which its shore is drawn smooth (`tape/src/ground/shore.rs`: the nearest pond within 2,
@@ -195,18 +196,17 @@ fn a_rebuilt_ground_draws_as_one_made_anew() {
     check(&ground, &before, &changed, &fresh);
 }
 
-/// A shell's ground of the island's squares (`worldgen::terrain::island_ground`, as the page makes it) made again from
-/// the relief of a world whose cells are coarser (`Ground::relief_bytes`, `rebuild_from`) draws as the ground of that
-/// world: the relief's offsets are of the world's cells, not of the squares.
+/// A shell's ground made elsewhere from what a world's ground is made of (`Ground::bytes_of`, `from_bytes`, as the
+/// page's worker makes it), and made again from it after the world built its samples anew (`rebuild_from`), draws as
+/// the world's own ground: on an island whose cells are coarser away from land.
 #[test]
-fn a_ground_of_squares_rebuilt_from_a_world_draws_as_the_world() {
+fn a_ground_made_from_a_worlds_makings_draws_as_the_world() {
     let mut w = worldgen::testkit::one_rise(1, 16, 16);
-    let (map, terrain) = worldgen::terrain::island_ground(1, (16, 16), pcore::space::terrain::Shape::One, &w.cfg.phys);
-    assert!(map.leaves().len() > w.map.leaves().len(), "the world's cells are coarser than its squares");
-    let mut ground = Ground::new(1, map, terrain, (w.cfg.lat_south, w.cfg.lat_north), &w.cfg.phys, w.cfg.gravity);
+    assert!(w.map.leaves().len() < 16 * 16, "the world's cells are coarser than its squares away from land");
+    let mut ground = Ground::from_bytes(Ground::bytes_of(&w)).expect("the makings are read");
     pcore::step(&mut w);
     pcore::flow::build::build(&mut w);
-    ground.rebuild_from(&Ground::relief_bytes(&w)).expect("the relief is read");
+    ground.rebuild_from(Ground::bytes_of(&w)).expect("the makings are read");
     let (made, finest) = (Ground::of(&w), *tape::depths(&w.map).end());
     assert!((0..2).all(|t| ground.tile(finest, t, t) == made.tile(finest, t, t)), "drawn as the world's ground");
 }
