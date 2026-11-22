@@ -77,10 +77,16 @@ export function notMade(gpu: Gpu, programs: Made[]): Made[] {
 }
 
 /** The programs a back end makes in the background (`Gpu.warm`): one at a time, in the order asked, each by `make`
- * (done when its promise is), none that is made already (`made`). */
+ * (done when its promise is), none that is made already (`made`), each begun only once the task that asked for it is
+ * over (the frame that went without it is sent first: Safari makes a program in the card's queue, ahead of what is
+ * sent after it). */
 export class Warming {
   private queue: string[] = [];
   private making: string | null = null;
+  /** When the program being made was begun, ms, and the last made with the time it took. */
+  private begun = 0;
+  private last: [string, number] | null = null;
+  private soon = 0;
   constructor(private make: (key: string) => Promise<void>, private made: (key: string) => boolean) {}
   /** Make `key` after those asked before it, or before all (`first`). */
   ask(key: string, first = false): void {
@@ -93,15 +99,25 @@ export class Warming {
   }
   /** Forget all asked (a lost context). */
   clear(): void { this.queue = []; }
-  /** The program being made and how many wait, as text. */
-  pending(): string { return `${this.making ?? 'none'} being made, ${this.queue.length} waiting`; }
+  /** The program being made (for how long) and how many wait, and the last made (in how long), as text. */
+  pending(): string {
+    const s = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+    const now = this.making === null ? 'none being made' : `${this.making} being made for ${s(performance.now() - this.begun)}`;
+    return `${now}, ${this.queue.length} waiting${this.last ? `; the last, ${this.last[0]}, in ${s(this.last[1])}` : ''}`;
+  }
   private next(): void {
-    if (this.making !== null) return;
-    let key = this.queue.shift();
-    while (key !== undefined && this.made(key)) key = this.queue.shift();
-    if (key === undefined) return;
-    this.making = key;
-    this.make(key).catch(e => reportError(new Error(`gpu: ${key}: ${e}`))).finally(() => { this.making = null; this.next(); });
+    if (this.making !== null || this.soon) return;
+    this.soon = window.setTimeout(() => {
+      this.soon = 0;
+      let key = this.queue.shift();
+      while (key !== undefined && this.made(key)) key = this.queue.shift();
+      if (key === undefined) return;
+      this.making = key; this.begun = performance.now();
+      this.make(key).catch(e => reportError(new Error(`gpu: ${key}: ${e}`))).finally(() => {
+        this.last = [key, performance.now() - this.begun];
+        this.making = null; this.next();
+      });
+    }, 0);
   }
 }
 
@@ -315,6 +331,8 @@ export class HeldGpu implements Gpu {
   ready(name: string, target: Format | null, blend: boolean): boolean { return this.back.ready(name, target, blend); }
   done(): Promise<void> { return this.back.done(); }
   read(t: Texture): Promise<Uint8Array> { return this.back.read((t as HeldTexture).inner); }
+  /** The programs being made (`Warming.pending`), as text. */
+  making(): string { return this.back.making(); }
 
   /** Send what was drawn, and watch that the card finishes it: WebGPU that has not within `FIRST_FRAME_MS` (before any
    * frame finished) or `STUCK_MS` leaves the map to WebGL2; WebGL2 that has not within `STALL_MS` is said on the page. */
