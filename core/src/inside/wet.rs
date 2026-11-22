@@ -5,6 +5,7 @@
 use super::{deficit_at, soil_level, Means};
 use crate::space::terrain::SAMPLE_DEPTH;
 use crate::World;
+use std::sync::Arc;
 
 /// The land of a cell as its soil's liquid lies over it (`wet_ground`): the share of its land saturated; the wetness
 /// index at and over which a sample is saturated (infinite where none is, minus infinite where all are); and the share
@@ -21,15 +22,32 @@ pub struct WetGround {
 
 /// The land of cell `i` of means `m` (`Means`, over its land): its samples (`World::terrain_samples`) but the lowest,
 /// which the liquid that stands over the cell covers, by its land's share `land` of its area (the liquid stands over
-/// the lowest first, `flow::curve`), where its liquid table lies (`saturated`).
-pub fn wet_ground(w: &World, i: usize, m: Means, land: f64) -> WetGround {
-    let s = w.terrain_samples();
-    let mut at: Vec<(f64, usize)> = w.map.leaves()[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], k)).collect();
-    at.sort_by(|a, b| b.0.total_cmp(&a.0));
-    at.truncate((land * at.len() as f64).round() as usize);
-    let ks: Vec<usize> = at.iter().map(|p| p.1).collect();
+/// the lowest first, `flow::curve`), where its liquid table lies (`saturated`). Its samples from the highest down are
+/// those `by_height` keeps.
+pub(crate) fn wet_ground(w: &World, i: usize, m: Means, land: f64) -> WetGround {
+    let (s, (of, order)) = (w.terrain_samples(), w.life.by_height.as_ref().expect("the samples by height (`by_height`)"));
+    assert!(Arc::ptr_eq(of, &s), "the samples by height are of the samples now (`by_height`)");
+    let all = &order[i];
+    let ks: Vec<usize> = all[..(land * all.len() as f64).round() as usize].iter().map(|&k| k as usize).collect();
     let (twi, area) = parts_now(w, &s, i, &ks);
     saturated(&w.cfg.phys, (&twi, &area), m)
+}
+
+/// Each cell's samples (`World::terrain_samples`) from the highest down, the order of equal heights theirs inside the
+/// cell, kept with the samples they are of (`Life::by_height`): found again only where those are not the samples now
+/// (a build of the terrain, a cell's ground made level, a world loaded), as the order changes with nothing else.
+pub(crate) fn by_height(w: &mut World) {
+    let s = w.terrain_samples();
+    if w.life.by_height.as_ref().is_some_and(|(of, _)| Arc::ptr_eq(of, &s)) {
+        return;
+    }
+    let leaves = w.map.leaves();
+    let order = crate::par::map_n(leaves.len(), crate::par::UNCOUNTED, |i| {
+        let mut at: Vec<(f64, u32)> = leaves[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], k as u32)).collect();
+        at.sort_by(|a, b| b.0.total_cmp(&a.0));
+        at.into_iter().map(|p| p.1).collect()
+    });
+    w.life.by_height = Some((s, order));
 }
 
 /// The terrain samples `ks` of cell `i` as the table reads them now, each of equal area: of each, the part its channel's
@@ -105,7 +123,7 @@ pub fn land_filled(w: &World, i: usize) -> Option<f64> {
 /// Where the liquid table of the land of cell `i`, the share `land` of its area, reaches its surface (`wet_ground`),
 /// its key liquid (that of `p`) as the cover's roots meet it now (`cover::fill_now`): its pores as Flow has them
 /// (`Scratch::land_pores`) over the bed's store under the cell (`Class::Deep`).
-pub fn wet_land(w: &World, p: &crate::cover::Parts, i: usize, land: f64) -> WetGround {
+pub(crate) fn wet_land(w: &World, p: &crate::cover::Parts, i: usize, land: f64) -> WetGround {
     let filled = crate::cover::fill_now(w, p, i, w.g(p.liquid, i).max(0.0))[1];
     let pores = w.scratch.land_pores(i).max(1e-9);
     let m = Means { pore: filled.min(1.0) * pores, pores, stands: 0.0, store: crate::flow::store_depth(w, i), field: w.pores(i).field };

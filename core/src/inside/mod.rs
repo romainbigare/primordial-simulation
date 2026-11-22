@@ -10,7 +10,8 @@ mod wet;
 
 pub use places::{patch_ground, PatchGround};
 pub use shares::{deficit_at, soil_held, soil_level, Means};
-pub use wet::{aired, airless, channel_share, drains_source, flowing, land_filled, rest, saturated, saturated_share, wet_ground, wet_land, WetGround};
+pub use wet::{aired, airless, channel_share, drains_source, flowing, land_filled, rest, saturated, saturated_share, WetGround};
+pub(crate) use wet::{by_height, wet_land};
 
 use crate::math::central;
 use crate::World;
