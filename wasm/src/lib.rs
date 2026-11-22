@@ -86,7 +86,7 @@ fn shape_of(drawn: u32) -> Shape {
 
 /// Make an island of `size` x `size` cells and the large shape of `drawn` (`shape_of`) from `seed` between the latitudes
 /// `south` and `north` (`island`), its cells holding at most `variety` kinds of cover (`Config::variety`), standing in
-/// the planet's air where they are given (`worldgen::planet::stand`, the table the build ships), its weather soft where `soft`
+/// the planet's air where they are given (`worldgen::planet::stand`, the table the build holds), its weather soft where `soft`
 /// is not 0 (`worldgen::terrain::soft_weather`, `ew run --weather soft`), with the schedule of `ew run --roster`: the
 /// starting kinds of cover. Its cells stay those as built: the map draws every zoom from the ground's
 /// tiles and the cells' table. Returns 0, or 1 if the world is refused.

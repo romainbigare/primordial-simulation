@@ -78,7 +78,7 @@ pub const USAGE: &str = "usage:
   ew card     write the test card, a small island whose squares are set by hand (worldgen::testkit::card), as a
               snapshot the page opens; nothing is placed later
     --out FILE            the snapshot (card.bin.gz)
-  ew planet   run the planet's strip (worldgen::planet::planet) and write its table, which the build ships (run it
+  ew planet   run the planet's strip (worldgen::planet::planet) and write its table, which the build holds (run it
               from the repository's root after a change of the laws or of chemistry 0)
     --out FILE            the table (worldgen/src/planet.bin)
   ew chem     print chemistry 0 as a table

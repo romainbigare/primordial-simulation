@@ -1,7 +1,7 @@
 //! The planet's air for an island that stands in it (laws.md 1.6, `pcore::flow::Planet`): a strip of the planet from
 //! pole to pole, `COLUMNS` air blocks round, all of it low open ground, run by the laws from its starting state for
 //! `YEARS` years, the air of its last year by row and month (`planet`). It reads only chemistry 0, the default laws and
-//! its own seed, so one table serves every island: the build ships it (`table`, written by `ew planet`), and a test
+//! its own seed, so one table serves every island: the build holds it (`table`, written by `ew planet`), and a test
 //! holds it to the strip run again, bit for bit.
 
 use crate::chemistry::chemistry0;
@@ -31,15 +31,15 @@ pub fn stand(w: &mut World) {
     w.planet = Some(table());
 }
 
-/// The file the build ships the planet's table in (`ew planet` writes it).
+/// The file the build holds the planet's table in (`ew planet` writes it).
 pub const TABLE_FILE: &str = "worldgen/src/planet.bin";
 
-/// The planet's table (`planet`) as the build ships it (`TABLE_FILE`).
+/// The planet's table (`planet`) as the build holds it (`TABLE_FILE`).
 pub fn table() -> Planet {
     bincode::deserialize(include_bytes!("planet.bin")).expect("the planet's table reads (`ew planet` writes it)")
 }
 
-/// The bytes of a planet's table as the build ships it (bincode).
+/// The bytes of a planet's table as the build holds it (bincode).
 pub fn table_bytes(p: &Planet) -> Vec<u8> {
     bincode::serialize(p).expect("a planet's table serializes")
 }
@@ -77,10 +77,10 @@ pub fn planet() -> Planet {
 
 #[cfg(test)]
 mod tests {
-    /// The table the build ships is the strip run again now, bit for bit: a change of the laws or of chemistry 0 that
+    /// The table the build holds is the strip run again now, bit for bit: a change of the laws or of chemistry 0 that
     /// moves it fails here (a few seconds).
     #[test]
-    fn the_shipped_table_is_the_planet_now() {
+    fn the_held_table_is_the_planet_now() {
         let now = super::table_bytes(&super::planet());
         assert!(now == include_bytes!("planet.bin"), "the planet's table is stale: run `cargo run --release -p cli --bin ew -- planet` (it writes {})", super::TABLE_FILE);
     }
