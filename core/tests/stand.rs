@@ -380,7 +380,7 @@ fn a_die_off_opens_a_gap_of_its_crowns() {
     let (l, dead) = (was.large(), was.count[was.large()] - now.count[now.large()]);
     let crowns = (fell + dead * cover::plant_ground(ph, was.mass[l])) / ground;
     println!("{} of the trees died in the month; gaps {:?} for their crowns' {crowns}", dead / was.count[l], c.patches);
-    assert!(c.patch_count() == 2 && crowns >= cover::GAP_LEAST, "no gap for a die-off of {crowns} of the cell");
+    assert!(c.patch_count() == 2 && crowns >= cover::EVENT_LEAST, "no gap for a die-off of {crowns} of the cell");
     assert!((c.patches[1].share / crowns - 1.0).abs() < CROWNS, "a gap of {} for crowns of {crowns}", c.patches[1].share);
     assert!(c.patch[x] == 0 && c.held_in(1).all(|q| c.height(ph, &mm, rho, q) < c.height(ph, &mm, rho, x)), "the gap holds the canopy's trees");
     books.assert_kept(&w, 1e-9);

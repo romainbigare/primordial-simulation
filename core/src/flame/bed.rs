@@ -1,5 +1,5 @@
-//! The first stage of the flames' month (laws.md 3c): what the remains lying on each land cell are to a flame (`Bed`),
-//! read by each cell of its own numbers alone.
+//! The first stage of the flames' month (laws.md 3c): what the remains lying on each patch of each land cell's cover
+//! are to a flame (`Bed`), read by each cell of its own numbers alone.
 
 use super::{Unlit, CARRY_SHARE, SORB_HIGHEST, SORB_T};
 use crate::chem::Phase;
@@ -8,15 +8,18 @@ use crate::life::WET_TISSUE;
 use crate::units::SIGMA;
 use crate::World;
 
-/// What the remains lying on a land cell and the cured leaves standing over them (`Cover::cured`) are to a flame this
-/// month: the load of the remains, kg a m² of land; the load of the cured leaves dry enough to flame, kg a m²; the share
-/// of the ground they cover; the mean liquid per kg dry of what flames (its moisture) and the most a kg could hold and
-/// still carry a flame (their moisture of extinction); what a kg of them frees burning, J, and what lighting a kg of
-/// them takes, J; the least load whose flame holds its heat (`least`), kg a m²; and the shares of the remains' load dry
-/// enough to flame and to smoulder (`layer`); the density of its particles, kg/m³ (the frame's); and the share of the
-/// low wind that reaches the height of its flame (`sheltered`).
+/// What the remains lying on a patch of a land cell's cover and the cured leaves standing over them (`Cover::cured`)
+/// are to a flame this month: the patch's share of the cell, and the share of the cell's remains and cured leaves that
+/// lie on it (`parts`); the load of the remains, kg a m² of the patch's land; the load of the cured leaves dry enough to
+/// flame, kg a m²; the share of the patch's ground they cover; the mean liquid per kg dry of what flames (its moisture)
+/// and the most a kg could hold and still carry a flame (their moisture of extinction); what a kg of them frees burning,
+/// J, and what lighting a kg of them takes, J; the least load whose flame holds its heat (`least`), kg a m²; and the
+/// shares of the remains' load dry enough to flame and to smoulder (`layer`); the density of its particles, kg/m³ (the
+/// frame's); and the share of the low wind that reaches the height of its flame (`sheltered`).
 #[derive(Clone, Copy, Debug)]
 pub struct Bed {
+    pub share: f64,
+    pub part: f64,
     pub load: f64,
     pub standing: f64,
     pub cover: f64,
@@ -39,8 +42,8 @@ impl Bed {
         self.unlit().is_none()
     }
     /// Why it carries no flame (`carries`), or none where it does: a bed covers the ground past the threshold before
-    /// its saturated share is taken off (`bed`), so short of it here its ground is too wet (`Unlit::Wet`); a part dry
-    /// enough to flame short of the least load is too damp (`Unlit::Damp`).
+    /// its saturated share is taken off (`patch_bed`), so short of it here its ground is too wet (`Unlit::Wet`); a part
+    /// dry enough to flame short of the least load is too damp (`Unlit::Damp`).
     pub fn unlit(&self) -> Option<Unlit> {
         if self.cover < CARRY_SHARE {
             Some(Unlit::Wet)
@@ -61,19 +64,39 @@ impl Bed {
     }
 }
 
-/// The remains lying on land cell `i` and the cured leaves standing over them as a flame meets them this month (`Bed`);
-/// or why there is none (`Unlit`): nothing that burns, remains that cover too little of the ground to join across it,
-/// less than the least load even dry, snow over them, or no air read yet.
-pub fn bed(w: &World, p: &Parts, i: usize) -> Result<Bed, Unlit> {
+/// The share of the remains and the cured leaves of a cell that lie on each of its cover's patches in use: their
+/// plants shed them, and what a stand sheds is its leaves' turnover, so each patch holds its share of the body matter
+/// of the cell's cover (`MATTER`); by its share of the cell where the cover holds none.
+fn parts(c: &crate::cover::Cover) -> Vec<f64> {
+    let n = c.patch_count();
+    let matter: Vec<f64> = (0..n).map(|k| c.held_in(k).map(|x| c.mol[x][MATTER].max(0.0)).sum()).collect();
+    let all: f64 = matter.iter().sum();
+    (0..n).map(|k| if all > 0.0 { matter[k] / all } else { c.patches[k].share }).collect()
+}
+
+/// The remains lying on each patch in use of land cell `i`'s cover and the cured leaves standing over them as a flame
+/// meets them this month (`Bed`, `patch_bed`), or why there are none (`Unlit`); the layer they lie in is the cell's
+/// (`layer`), read once.
+pub fn beds(w: &World, p: &Parts, i: usize) -> Vec<Result<Bed, Unlit>> {
+    let mut layer = None;
+    parts(w.life.cover(i)).into_iter().enumerate().map(|(k, part)| patch_bed(w, p, (i, k, part), &mut layer)).collect()
+}
+
+/// The remains lying on patch `k` of land cell `i`'s cover, the share `part` of the cell's (`parts`), and the cured
+/// leaves standing over them as a flame meets them this month (`Bed`); or why there is none: nothing that burns,
+/// remains that cover too little of the ground to join across it, less than the least load even dry, snow over them,
+/// or no air read yet. The cell's layer (`layer`) is read into `layer_of` where it is first needed.
+fn patch_bed(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), layer_of: &mut Option<Result<Layer, Unlit>>) -> Result<Bed, Unlit> {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
-    let load = crate::contract::remains_in(w, i, |k| w.g(k, i));
+    let share = w.life.cover(i).patches[k].share;
+    let load = crate::contract::remains_in(w, i, |k| w.g(k, i)) * part / share;
     let land = crate::contract::land(w, i);
     let standing_dead = w.life.cover(i).cured.map(|m| m.max(0.0));
-    let cured = if land > 0.0 { (standing_dead[MATTER] * mm[MATTER] + standing_dead[WALL] * mm[WALL]) / land } else { 0.0 };
+    let cured = if land > 0.0 { (standing_dead[MATTER] * mm[MATTER] + standing_dead[WALL] * mm[WALL]) / land * part / share } else { 0.0 };
     if load + cured <= 0.0 {
         return Err(Unlit::Bare);
     }
-    let cover = 1.0 - (-leaf_per_kg(w, p, i) * (load + cured)).exp();
+    let cover = 1.0 - (-leaf_per_kg(w, p, i, k) * (load + cured)).exp();
     if cover < CARRY_SHARE {
         return Err(Unlit::Sparse);
     }
@@ -98,7 +121,7 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Result<Bed, Unlit> {
     if load + cured < least(ph, t, heat - dry) {
         return Err(Unlit::Thin);
     }
-    let l = layer(w, p, i, t)?;
+    let l = layer_of.get_or_insert_with(|| layer(w, p, i, t)).clone()?;
     // The remains on saturated ground are too wet to carry a flame (`inside::wet_ground`).
     let cover = cover * (1.0 - l.saturated);
     // The cured leaves stand in the air near the ground and hold what the curve holds at its vapour.
@@ -108,14 +131,16 @@ pub fn bed(w: &World, p: &Parts, i: usize) -> Result<Bed, Unlit> {
     let moist = (standing * top + lying * l.sorbed(l.h(flaming / 2.0))) / (standing + lying).max(f64::MIN_POSITIVE);
     let light = dry + moist * per_liquid;
     let smoulder = l.share(ph.smoulder_moist, ph.duff_hold).max(flaming);
-    let mut bed = Bed { load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder, particle_rho: chem.subs[p.sub[WALL]].density[0], waf: 0.0 };
-    bed.waf = sheltered(w, p, i, bed.depth(ph));
+    let particle_rho = chem.subs[p.sub[WALL]].density[0];
+    let mut bed = Bed { share, part, load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder, particle_rho, waf: 0.0 };
+    bed.waf = sheltered(w, p, (i, k), bed.depth(ph));
     Ok(bed)
 }
 
 /// The layer of remains on the drier ground of a cell: the relative vapour of the air in it at its top and at its
 /// bottom, the share of what its ground holds for roots that its ground holds, and its sorption curve's scale and power
 /// at its temperature; and the share of the cell's land saturated, where no flame runs (`inside::wet_ground`).
+#[derive(Clone)]
 struct Layer {
     top: f64,
     bottom: f64,
@@ -179,20 +204,21 @@ const CROWN_FILL: f64 = 3.0;
 /// Metres in a foot, for the fits in feet.
 const M_PER_FT: f64 = 0.3048;
 
-/// The share of the low wind that reaches the flame of a bed `depth` m deep on cell `i` (`Bed::waf`): Albini and
-/// Baughman's (1979) for open ground and for ground under a canopy, by the share of the ground the canopy covers,
-/// 1 − e^(−its capture area a m²), of the cover's slots taller than `surface_m`; the canopy's height and its crowns'
-/// depth are those of its tallest slot (`Cover::crown`).
-fn sheltered(w: &World, p: &Parts, i: usize, depth: f64) -> f64 {
+/// The share of the low wind that reaches the flame of a bed `depth` m deep on patch `k` of cell `i` (`Bed::waf`):
+/// Albini and Baughman's (1979) for open ground and for ground under a canopy, by the share of the patch's ground the
+/// canopy covers, 1 − e^(−its capture area a m²), of its slots taller than `surface_m`; the canopy's height and its
+/// crowns' depth are those of its tallest slot (`Cover::crown`).
+fn sheltered(w: &World, p: &Parts, (i, k): (usize, usize), depth: f64) -> f64 {
     let (ph, mm, c) = (&w.cfg.phys, p.mm(&w.chem), w.life.cover(i));
     let (ground, rho) = (crate::cover::ground(w, i).max(f64::MIN_POSITIVE), w.chem.subs[p.sub[WALL]].density[0]);
+    let own = ground * c.patches[k].share;
     let log = |h: f64| ((WAF_A + WAF_B * h) / (WAF_C * h)).ln();
     let bed = (depth / M_PER_FT).max(f64::MIN_POSITIVE);
     let open = (OPEN_K / log(bed)).min(1.0);
-    let tall = c.held().map(|x| (x, c.height(ph, &mm, rho, x))).filter(|&(_, h)| h > ph.surface_m);
+    let tall = c.held_in(k).map(|x| (x, c.height(ph, &mm, rho, x))).filter(|&(_, h)| h > ph.surface_m);
     let (leaf, top) = tall.fold((0.0, None), |(l, t): (f64, Option<(usize, f64)>), (x, h)| (l + c.leaf(&mm, x), if t.is_none_or(|t| h > t.1) { Some((x, h)) } else { t }));
     let Some((x, h)) = top else { return open };
-    let cover = 1.0 - (-leaf / ground).exp();
+    let cover = 1.0 - (-leaf / own).exp();
     let (base, h) = c.crown(ph, &mm, ground, x, h);
     let fill = cover * (h - base) / h / CROWN_FILL;
     let feet = h / M_PER_FT;
@@ -200,12 +226,12 @@ fn sheltered(w: &World, p: &Parts, i: usize, depth: f64) -> f64 {
     (1.0 - cover) * open + cover * under
 }
 
-/// The capture area a kg of the remains of cell `i` held as leaves, m² per kg dry: its cover's `LEAF` gene over the
-/// dry share of living tissue, its slots' mean by their built cover (their leaves fall as its remains); none with no
-/// cover.
-fn leaf_per_kg(w: &World, p: &Parts, i: usize) -> f64 {
+/// The capture area a kg of the remains on patch `k` of cell `i` held as leaves, m² per kg dry: the `LEAF` gene of its
+/// slots over the dry share of living tissue, their mean by their built cover (their leaves fall as its remains); none
+/// with no cover.
+fn leaf_per_kg(w: &World, p: &Parts, i: usize, k: usize) -> f64 {
     let (c, mm) = (w.life.cover(i), p.mm(&w.chem));
-    let (sum, all) = c.held().fold((0.0, 0.0), |(s, a), x| {
+    let (sum, all) = c.held_in(k).fold((0.0, 0.0), |(s, a), x| {
         let b = c.built(&mm, x);
         (s + b * dec(c.genes[x][LEAF]) / (1.0 - WET_TISSUE), a + b)
     });
