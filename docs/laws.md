@@ -1349,8 +1349,10 @@ seeds fill it:
   −6, off as `FIX` is: `cover::OFF`, `cover::on`, and off genes are alike to `distance`) as the solids 23 and 24
   (`cover::built_shares`: so they are that share of its leaves whatever its walls), by the
   conversions of growth (`Chemistry::build`, `builds`: 24 takes the mineral 12 too, so it is shared out with the
-  minerals as body matter is), paying `c_copy` per kg by burning fuel. They count in its built cover and its plants'
-  mass, as its tissue holds them. A fixer (`FIX` above its off level, `cover::OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
+  minerals as body matter is), paying `c_copy` per kg by burning fuel. They are stores, as the fuel is: no part of its
+  built cover (`cover::built_kg`, body matter and walls), by which its plants' mass, height, crowns and room go, nor of
+  its living cover, so they catch no light and need no upkeep; they count in its books, in what a bite takes and in
+  what is shed, dies or burns. A fixer (`FIX` above its off level, `cover::OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
   most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. Then it builds
   walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (each group's by its share,
   `Cover::walled_held`; `grow::frame`): walls are

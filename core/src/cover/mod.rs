@@ -220,11 +220,7 @@ impl Cover {
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
         (0..SLOTS).filter(|&x| self.root[x] != NO_ROOT)
     }
-    /// The soft tissue of slot `x` (`life::SOFT`: its body matter and what it holds with it), kg.
-    pub fn soft(&self, mm: &[f64; NP], x: usize) -> f64 {
-        SOFT.iter().map(|&q| self.mol[x][q] * mm[q]).sum()
-    }
-    /// The built cover of slot `x` (body matter and solids), kg.
+    /// The built cover of slot `x` (its body matter and walls, `built_kg`), kg.
     pub fn built(&self, mm: &[f64; NP], x: usize) -> f64 {
         built_kg(mm, &self.mol[x])
     }
@@ -249,9 +245,9 @@ impl Cover {
         let depth = self.leaf(mm, x) / held.max(1e-300) / ph.crown_density;
         ((top - depth).max(0.0), top)
     }
-    /// All the cover of slot `x`, kg.
+    /// All the cover of slot `x`, kg (`all_kg`).
     pub fn kg(&self, mm: &[f64; NP], x: usize) -> f64 {
-        self.built(mm, x) + self.mol[x][FUEL] * mm[FUEL]
+        all_kg(mm, &self.mol[x])
     }
     /// The living cover of slot `x`, kg: its body matter with the liquid of living tissue (`life::WET_TISSUE`); its walls
     /// are a frame, which neither works nor wears (laws.md 3).
@@ -299,33 +295,41 @@ impl Cover {
     }
 }
 
-/// The built cover of amounts `m` (mol of each part): all but the fuel, kg.
+/// The built cover of amounts `m` (mol of each part), kg: the working tissue and the frame of its plants, its body
+/// matter and walls, by which the laws of the stand weigh a plant (its mass, height, crown and room). The solids that
+/// slow a reaction (`life::CURBS`) are held in its soft tissue as stores, as the fuel is: they catch no light, run no
+/// reaction and need no upkeep, so they are no part of it.
 pub fn built_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
-    (0..NP).filter(|&q| q != FUEL).map(|q| m[q] * mm[q]).sum()
+    m[MATTER] * mm[MATTER] + m[WALL] * mm[WALL]
 }
 
-/// The mol of each part of the soft tissue (`life::SOFT`) in `kg` of soft tissue as amounts `m` (mol of each part) hold
-/// it, no more than they hold: its body matter, and with each mol of it what `m` holds of each other soft part a mol of
-/// its body matter; none of the other parts.
+/// All of amounts `m` (mol of each part), kg: its built cover (`built_kg`), its fuel and the solids it holds.
+pub fn all_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
+    built_kg(mm, m) + m[FUEL] * mm[FUEL] + CURBS.iter().map(|&q| m[q] * mm[q]).sum::<f64>()
+}
+
+/// The mol of each part of the soft tissue (`life::SOFT`) that holds `kg` of body matter as amounts `m` (mol of each
+/// part) hold it, no more than they hold: its body matter, and with each mol of it what `m` holds of each solid that
+/// slows a reaction a mol of its body matter; none of the other parts.
 pub fn soft_in(mm: &[f64; NP], m: &[f64; NP], kg: f64) -> [f64; NP] {
     let with = |q: usize| if m[MATTER] > 0.0 { m[q].max(0.0) / m[MATTER] } else { 0.0 };
-    let tissue = mm[MATTER] + CURBS.iter().map(|&q| with(q) * mm[q]).sum::<f64>();
     let mut out = [0.0; NP];
-    out[MATTER] = (kg / tissue).min(m[MATTER]).max(0.0);
+    out[MATTER] = (kg / mm[MATTER]).min(m[MATTER]).max(0.0);
     CURBS.iter().for_each(|&q| out[q] = with(q) * out[MATTER]);
     out
 }
 
-/// What a kg that a kind of genes `g` builds holds of each part, kg, where its walls are `walls` kg per kg of its body
-/// matter: of its soft tissue (`life::SOFT`) the shares its genes `SPLIT_CURBS` and `BURN_CURBS` set are the solids that
-/// slow a reaction (none where the gene is off, `on`), the rest body matter; no fuel.
+/// What a kind of genes `g` builds with each kg of built cover (`built_kg`), kg of each part, where its walls are
+/// `walls` kg per kg of its body matter: its body matter and walls, and the solids that slow a reaction its soft tissue
+/// holds with that matter, the shares of the soft tissue its genes `SPLIT_CURBS` and `BURN_CURBS` set (none where the
+/// gene is off, `on`); no fuel.
 pub fn built_shares(g: &[f32; NG], walls: f64) -> [f64; NP] {
     let curbs = [SPLIT_CURBS, BURN_CURBS].map(|q| if on(g, q) { dec(g[q]) } else { 0.0 });
-    let of_soft = 1.0 - curbs[0] - curbs[1];
-    let soft = 1.0 / (1.0 + walls * of_soft);
     let mut kg = [0.0; NP];
-    (kg[MATTER], kg[SPLIT_CURB], kg[BURN_CURB]) = (soft * of_soft, soft * curbs[0], soft * curbs[1]);
+    kg[MATTER] = 1.0 / (1.0 + walls);
     kg[WALL] = kg[MATTER] * walls;
+    let per_matter = 1.0 / (1.0 - curbs[0] - curbs[1]);
+    (kg[SPLIT_CURB], kg[BURN_CURB]) = (kg[MATTER] * curbs[0] * per_matter, kg[MATTER] * curbs[1] * per_matter);
     kg
 }
 

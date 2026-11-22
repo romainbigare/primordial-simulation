@@ -105,7 +105,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         let worn = crate::math::one_minus_exp(dt / DAY * rate * ph.dormant / (ph.e_life * dec(g[REPAIR])));
         let cold = frozen(ph, melt, g[FROST] as f64, (a.t, 0.0));
         let lot = c.lying.mol[x];
-        let kg = built_kg(&mm, &lot) + lot[super::FUEL] * mm[super::FUEL];
+        let kg = super::all_kg(&mm, &lot);
         counts.seeds[WORN] += worn * kg;
         counts.seeds[FROZEN] += (1.0 - worn) * cold * kg;
         let dies = 1.0 - (1.0 - worn) * (1.0 - cold);
