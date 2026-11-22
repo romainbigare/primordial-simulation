@@ -458,7 +458,7 @@ as real as possible, with features dramatised for the game: textures, details, r
     grass, straw, leaf litter with sticks, ferns, dry stony soil, cracked mud, sand, wind-rippled snow, reeds and a
     tile of petals that the world colours. Each is laid in patches shifted by their own draw so no repeat shows.
     A thin sward is drawn as grass tufts (rendered sprites) standing on bare ground (`sward_tufts`), not a veil;
-  - rendered model sprites (`models.png`): the trees and bushes, and things on the ground scattered by
+  - rendered model sprites (the `models` group of `strips.json`): the trees and bushes, and things on the ground scattered by
     `objects` in `detail.wgsl` (rocks large and small, fallen trunks and branches, dead bushes on dry ground),
     each as many as the ground's numbers suit them. Shadows of plants are as wide as their drawn sprite.
   - Fast pictures (scratch only, `scratchpad/looks/me/bench/`, driven through the eval server on 8831): `open.js`
@@ -975,13 +975,14 @@ The slow tests of bodies that were skipped once (`core/tests/choose.rs`, `lots.r
 The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (private to them). It shows main
 (the version label says what it shows). To update it after a push to main:
 1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html`, `web/dist/ew.wasm` and the pictures beside
-   the page: `ground.jpg`, `carpets.jpg` and the strips `web/textures/strips.json` names, today `models.png`,
-   `trees.png`, `trees2.png`; each under 12 MB, as the host takes no file over 15 MB).
+   the page: the detail's picture files `web/textures/strips.json` names (about 40 files of at most four layers, each
+   a few MB: a phone's browser fails to decode very tall pictures), and `fire.jpg`, `snags.png`).
 2. Copy `ew.wasm` and the pictures to a scratch folder, and the page with these removed (regexes,
    case-insensitive, with `\b` after the tag names): the doctype, the `html`, `head` and `body` tags, the `meta
    charset` and `meta viewport` tags, the `link rel=icon`.
 3. Publish with the Artifact tool to that URL, the page as `file_path` and `files`: `ew.wasm` (`{"from": <the copied
-   wasm>, "contentType": "application/wasm"}`) and each picture under its own name. If it refuses because the
+   wasm>, "contentType": "application/wasm"}`) and each picture under its own name (a republish keeps files left out,
+   so only changed files need sending; `null` removes one). If it refuses because the
    published version was not read in this session, read it first (`action: read`), then publish.
 
 A grown world need not be grown in the page (where a pause lands some months past the date asked): `ew run --seed 1
