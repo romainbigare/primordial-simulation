@@ -2,8 +2,8 @@
 // (web/shaders/); at build time naga writes them as GLSL ES 3.00 too, with where each binding lies (web/shade, put on
 // the page as `SHADERS`). A pass draws rectangles of a target (the canvas, or a texture the renderer draws into to read
 // back) with a program, its uniforms, textures and samplers given by binding. WebGPU draws where the browser has it
-// (gpu-webgpu.ts), else WebGL2 (gpu-webgl2.ts); the page holds its textures through `HeldGpu`, which moves them to
-// WebGL2 where WebGPU does not draw.
+// (gpu-webgpu.ts), else WebGL2 (gpu-webgl2.ts), and on WebKit WebGL2 first (`WEBGL2_FIRST`); the page holds its
+// textures through `HeldGpu`, which moves them to WebGL2 where WebGPU does not draw.
 import { openWebGpu } from './gpu-webgpu';
 import { openWebGl2 } from './gpu-webgl2';
 
@@ -227,6 +227,11 @@ const STALL_MS = 30000;
  * drops a device to free memory); one lost again is lost for a cause a new one meets too. */
 const LOSSES_MOST = 2;
 
+/** Whether the map is drawn with WebGL2 where the browser has both: on WebKit (Safari, and every browser of an iPhone
+ * or an iPad; only WebKit knows gesture events). WebKit's WebGPU holds the card for minutes at the first draw with one
+ * of the map's large programs, and runs a phone's card out of memory; its WebGL2 makes the same program in seconds. */
+const WEBGL2_FIRST = 'GestureEvent' in window;
+
 /** A texture as the page holds it: the back end's texture, and what each of its mip levels was last filled with whole,
  * to fill it again on a new back end or after a lost one (a layer filled alone is not kept: its owner fills it again,
  * `restored`). */
@@ -269,10 +274,11 @@ export class HeldGpu implements Gpu {
   /** `canvas` puts a fresh canvas in the map in place of the last and gives it. */
   constructor(private canvas: () => HTMLCanvasElement, private restored: () => void) {}
 
-  /** Open WebGPU, else WebGL2; false with neither. */
+  /** Open WebGPU, else WebGL2 (on WebKit WebGL2, else WebGPU: `WEBGL2_FIRST`); false with neither. */
   async open(): Promise<boolean> {
+    if (WEBGL2_FIRST && this.toWebGl2(null)) return true;
     const g = await openWebGpu(this.canvas(), why => this.lost(why));
-    if (!g) return this.toWebGl2(null);
+    if (!g) return !WEBGL2_FIRST && this.toWebGl2(null);
     this.use(g.gpu, g.close, false);
     return true;
   }

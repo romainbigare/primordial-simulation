@@ -831,8 +831,9 @@ Click anything to see:
 
 ### 10.9 Technology (suggested)
 
-- The map is drawn on the graphics card: **WebGPU first, WebGL2 where WebGPU is missing**, from one description of
-  what is drawn. The worker hands over fields (height, water, wetness, materials, plants); the card draws them at the
+- The map is drawn on the graphics card: **WebGPU first, WebGL2 where WebGPU is missing or does not draw; on WebKit
+  (Safari, and every browser of an iPhone) WebGL2 first**, as WebKit's WebGPU holds the card for minutes at the first
+  draw with one of the map's large programs; from one description of what is drawn. The worker hands over fields (height, water, wetness, materials, plants); the card draws them at the
   screen's own resolution, with light on the slopes and a texture for each material mixed by its share.
 - Budget: about 50,000 visible sprites. Above that, show density instead.
 
