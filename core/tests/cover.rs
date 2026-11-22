@@ -65,7 +65,7 @@ fn the_cover_grows_by_what_its_budget_books() {
     worldgen::testkit::set_loam(&mut w);
     let books = Books::now(&w);
     let mut g = genes();
-    (g[cover::SPLIT_CURBS], g[cover::BURN_CURBS]) = (0.1, 0.1);
+    (g[cover::SPLIT_CURBS], g[cover::BURN_CURBS]) = (-1.0, -1.0);
     assert!(pcore::cover::place(&mut w, i, 0, g, 0, 0.1));
     w.take_counters();
     let p = pcore::life::Parts::of(&w.chem).expect("life's parts");

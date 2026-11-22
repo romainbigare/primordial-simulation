@@ -67,13 +67,15 @@ pub const MOIST: usize = 5;
 pub const SEED: usize = 6;
 /// Repair, log10: its wear life is 10^REPAIR times the rate of living's (laws.md 3)
 pub const REPAIR: usize = 7;
-/// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below `FIX_OFF`
+/// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below its level in `OFF`
 pub const FIX: usize = 8;
 /// The share of its roots' volume that is gas space (`cover::working`)
 pub const GAS: usize = 9;
-/// Share of its soft tissue (`life::SOFT`) it builds as the solid that slows the splitting of walls (`life::SPLIT_CURB`)
+/// Share of its soft tissue (`life::SOFT`) it builds as the solid that slows the splitting of walls (`life::SPLIT_CURB`),
+/// log10; none at or below its level in `OFF`
 pub const SPLIT_CURBS: usize = 10;
-/// Share of its soft tissue it builds as the solid that slows the burning of fuel (`life::BURN_CURB`)
+/// Share of its soft tissue it builds as the solid that slows the burning of fuel (`life::BURN_CURB`), log10; none at or
+/// below its level in `OFF`
 pub const BURN_CURBS: usize = 11;
 pub const NG: usize = 12;
 /// Each gene's name and unit, in the order of their indices: what the tape and a viewer call it.
@@ -88,14 +90,30 @@ pub const GENES: [(&str, &str); NG] = [
     ("repair", "log10"),
     ("fix", "log10 mol/kg/s"),
     ("gas", "share"),
-    ("split_curbs", "share"),
-    ("burn_curbs", "share"),
+    ("split_curbs", "log10 share"),
+    ("burn_curbs", "log10 share"),
 ];
-/// A fixing gene at or below this is off.
-pub const FIX_OFF: f32 = -10.0;
+/// The genes that switch what they make off at or below a level, each with that level: the fixing reaction (`FIX`) and
+/// the two solids that slow a reaction (`SPLIT_CURBS`, `BURN_CURBS`). Below it differences do nothing (`distance`).
+pub const OFF: [(usize, f32); 3] = [(FIX, -10.0), (SPLIT_CURBS, -6.0), (BURN_CURBS, -6.0)];
+
+/// Gene `g`'s off level (`OFF`; none for a gene that is always on).
+fn off(g: usize) -> f32 {
+    OFF.iter().find(|o| o.0 == g).map_or(f32::NEG_INFINITY, |o| o.1)
+}
+
+/// Whether gene `g` of genes `v` is on: above its off level (`OFF`).
+pub fn on(v: &[f32; NG], g: usize) -> bool {
+    v[g] > off(g)
+}
+
+/// Gene `g` of genes `v` as the laws tell it apart: an off gene at its off level, as all off genes are alike.
+fn level(v: &[f32; NG], g: usize) -> f32 {
+    v[g].max(off(g))
+}
 
 /// Mutation step (times `Physics::mut_size`) and range of each gene.
-pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6), (0.015, 0.0, 0.3), (0.015, 0.0, 0.3)];
+pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6), (0.3, -8.0, -0.5), (0.3, -8.0, -0.5)];
 /// The line of a slot before its first month (`Cover::line`): it takes then the line of all the ground its kind may
 /// hold (`footing`), found by the same month's start as every other slot's.
 pub const UNSET: f32 = -1.0;
@@ -300,9 +318,9 @@ pub fn soft_in(mm: &[f64; NP], m: &[f64; NP], kg: f64) -> [f64; NP] {
 
 /// What a kg that a kind of genes `g` builds holds of each part, kg, where its walls are `walls` kg per kg of its body
 /// matter: of its soft tissue (`life::SOFT`) the shares its genes `SPLIT_CURBS` and `BURN_CURBS` set are the solids that
-/// slow a reaction, the rest body matter; no fuel.
+/// slow a reaction (none where the gene is off, `on`), the rest body matter; no fuel.
 pub fn built_shares(g: &[f32; NG], walls: f64) -> [f64; NP] {
-    let curbs = [g[SPLIT_CURBS] as f64, g[BURN_CURBS] as f64];
+    let curbs = [SPLIT_CURBS, BURN_CURBS].map(|q| if on(g, q) { dec(g[q]) } else { 0.0 });
     let of_soft = 1.0 - curbs[0] - curbs[1];
     let soft = 1.0 / (1.0 + walls * of_soft);
     let mut kg = [0.0; NP];
@@ -413,9 +431,8 @@ impl crate::World {
     }
 }
 
-/// How far apart two gene vectors are, in steps: the largest gap of a gene over its step.
-/// A fixing gene that is off counts as `FIX_OFF`, where differences do nothing.
+/// How far apart two gene vectors are, in steps: the largest gap of a gene over its step. An off gene counts as its
+/// off level (`OFF`), where differences do nothing.
 pub fn distance(a: &[f32; NG], b: &[f32; NG]) -> f32 {
-    let at = |v: &[f32; NG], g: usize| if g == FIX { v[g].max(FIX_OFF) } else { v[g] };
-    (0..NG).map(|g| (at(a, g) - at(b, g)).abs() / RANGE[g].0).fold(0.0, f32::max)
+    (0..NG).map(|g| (level(a, g) - level(b, g)).abs() / RANGE[g].0).fold(0.0, f32::max)
 }

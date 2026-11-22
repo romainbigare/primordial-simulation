@@ -1345,11 +1345,12 @@ seeds fill it:
   scarce mineral, not a share by how fast it could grow; whatever slots hold the kinds) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
   and others 2012; of each group of its plants by its share of what the slot builds, `Cover::walled_new`), and of the
-  soft tissue it builds the shares `SPLIT_CURBS` and `BURN_CURBS` (0 to 0.3) as the solids 23 and 24
+  soft tissue it builds the shares 10^`SPLIT_CURBS` and 10^`BURN_CURBS` (log10 from −8 to −0.5; none at or below
+  −6, off as `FIX` is: `cover::OFF`, `cover::on`, and off genes are alike to `distance`) as the solids 23 and 24
   (`cover::built_shares`: so they are that share of its leaves whatever its walls), by the
   conversions of growth (`Chemistry::build`, `builds`: 24 takes the mineral 12 too, so it is shared out with the
   minerals as body matter is), paying `c_copy` per kg by burning fuel. They count in its built cover and its plants'
-  mass, as its tissue holds them. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
+  mass, as its tissue holds them. A fixer (`FIX` above its off level, `cover::OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
   most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. Then it builds
   walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (each group's by its share,
   `Cover::walled_held`; `grow::frame`): walls are

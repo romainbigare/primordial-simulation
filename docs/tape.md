@@ -320,4 +320,4 @@ out reads 0 (its means `NaN`). Means are by its built cover.
 | Column | Unit | Meaning |
 |---|---|---|
 | `slots`, `cover_kg`, `cover_area` | , kg, m²/m² | its slots, its mass, its capture area per m² of land |
-| `cover_<gene>` | the gene's | the mean of each of its genes, one column a gene, named and in the unit `cover::GENES` gives (`light`, `leaf`, `walls`, `store`, `frost`, `moist`, `seed`, `repair`, `fix`, `gas`, `split_curbs`, `burn_curbs`: the shares of its soft tissue that are the solids that slow a reaction) |
+| `cover_<gene>` | the gene's | the mean of each of its genes, one column a gene, named and in the unit `cover::GENES` gives (`light`, `leaf`, `walls`, `store`, `frost`, `moist`, `seed`, `repair`, `fix`, `gas`, `split_curbs`, `burn_curbs`: log10 of the shares of its soft tissue that are the solids that slow a reaction, none at or below `cover::OFF`) |

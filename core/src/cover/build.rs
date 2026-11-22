@@ -3,7 +3,7 @@
 //! upkeep, up to those its plants hold (`frame`).
 
 use super::grow::{Books, Slot};
-use super::{dec, Cover, Parts, BURN_CURB, FIX, FIX_OFF, FUEL, GROUPS, MATTER, NP, SEED, SPLIT_CURB, STORE, WALL, WALLS};
+use super::{dec, Cover, Parts, BURN_CURB, FIX, FUEL, GROUPS, MATTER, NP, SEED, SPLIT_CURB, STORE, WALL, WALLS};
 use crate::chem::Reaction;
 use crate::rng::{Purpose, Rng};
 use crate::units::MAX_SUBSTANCES;
@@ -81,7 +81,7 @@ pub(super) fn build(w: &World, (c, k): (&mut Cover, &PerKg), p: &Parts, x: usize
     let minerals = || (0..chem.ns()).filter(|&k| need[k] > 0.0 && k != p.sub[FUEL]);
     let by = |k: usize| ground[k] / need[k];
     // (Fixing takes its gas from the cell's share of the air node, as far as that still offers it.)
-    let fixed = p.fix.filter(|_| g[FIX] > FIX_OFF).and_then(|r| {
+    let fixed = p.fix.filter(|_| super::on(&g, FIX)).and_then(|r| {
         let rx = &chem.reactions[r];
         let &(m, out) = rx.outputs.iter().find(|o| need[o.0 as usize] > 0.0)?;
         let most = (dec(g[FIX]) * s.living * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt).min(b.room(&p.sub, rx));
