@@ -237,8 +237,6 @@ pub fn band_depths(chem: &Chemistry, gases: &[(usize, f64, f64)], (t, big): (f64
 /// The parts of each band of heat radiation (`Heat`): its core and its wings.
 const PARTS: usize = 2;
 const SUBS: usize = HEAT_BANDS * PARTS;
-/// The step of temperature over which the slope of a band's share is taken, K.
-const SHARE_STEP_K: f64 = 0.5;
 
 /// What the air over a place does to heat radiation (laws.md 1.4): per band of it (`Chemistry::heat_spans`), its
 /// absorbers' optical depth and the height they fill near the ground; each band in two parts, its core `spread` times
@@ -284,8 +282,7 @@ impl Heat {
             let (b, k) = (q / PARTS, SIGMA * self.f[q] / (LAYERS * PARTS) as f64);
             for &d in &self.lay[q][side] {
                 let t = (tl + d).max(1.0);
-                let s = chem.heat_share(t, b);
-                let ds = (chem.heat_share(t + SHARE_STEP_K, b) - chem.heat_share(t - SHARE_STEP_K, b)) / (2.0 * SHARE_STEP_K);
+                let [s, ds] = chem.heat_share_slope(t, b);
                 out[0] += k * s * t.powi(4);
                 out[1] += k * (4.0 * s + t * ds) * t.powi(3);
             }
