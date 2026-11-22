@@ -102,7 +102,8 @@ export class Land {
   /** Where load came into a body of liquid in the last month, `bytes` (a sample, u32, and kg/s, f32, each: wasm/src/lib.rs
    * `plumes`): spread into the flows the GPU reads when they are new (`flowsOf`). */
   plumesIn(bytes: Uint8Array): void {
-    if (bytes === this.plumes) return;
+    // (Each frame brings its own bytes: only new plumes make the flows again.)
+    if (bytes.length === this.plumes.length && bytes.every((b, i) => b === this.plumes[i])) return;
     this.plumes = bytes;
     this.flowsDue = true;
   }

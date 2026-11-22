@@ -54,6 +54,9 @@ let world: World | null = null;
 let live: Live | null = null;
 let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null;
 let cls: Uint8Array = new Uint8Array(0);
+/** The frames drawn, and the one whose classes `cls` were last asked for: they are read back from the GPU only when a
+ * square is inspected (`inspect`), not at every frame. */
+let paints = 0, classesOf = -1;
 
 const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => viewSoon(v));
 /** The live map: the ground's tiles and the cells' table (live world only). */
@@ -188,13 +191,10 @@ function repaint(): void {
   vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
   fire.set(land && live ? w : null);
   map.setLook(look);
-  map.mapClasses().then(c => {
-    if (world !== w) return;
-    cls = c;
-    inspect();
-  });
+  paints++;
   inspect();
 }
+
 
 /** What the map draws: the view or the layer shown. */
 function mapLook(): MapLook {
@@ -238,6 +238,11 @@ function inspect(): void {
   const cover = slots.inspect();
   if (cover) { el.innerHTML = cover; return; }
   if (!world || i < 0) { el.innerHTML = '<p class="hint">Hover or tap the map.</p>'; return; }
+  if (classesOf !== paints) {
+    const w = world;
+    classesOf = paints;
+    map.mapClasses().then(c => { if (world === w) { cls = c; inspect(); } });
+  }
   const { meta } = world, [name, color] = CLASSES[cls[i]];
   const share = (n: string) => world!.lut[world!.index.get(n)!][plane(world!, frame, n)[i]];
   const grain: [number, number] | null = world.index.has('coarse') ? [share('coarse'), share('fine')] : null;
