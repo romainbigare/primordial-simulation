@@ -1,7 +1,8 @@
 // The map, drawn on the GPU (gpu.ts) at the screen's own pixels: under it the page's background and the map's shadow,
 // then the live map from the ground's tiles and the cells' table (land.ts), or a tape's map of squares (fields.ts, a
 // texel a square), then what others draw on the GPU (the plant cover, vegetation.ts).
-// Over it a 2D canvas holds what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
+// The page's map canvas lies over the GPU's own canvas (which the GPU may replace, gpu.ts `HeldGpu`), takes the
+// pointer, and holds in 2D what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
 // picked, and the scale bar.
 import { Draw, EVERY_SIZE_M, Format, Gpu, Made, Pass, Texture, Uniforms, madeFor, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
@@ -60,7 +61,8 @@ export class MapView {
   /** The GPU once it is open (null: none yet, or the browser has none). */
   private gpu: Gpu | null = null;
   readonly ready: Promise<Gpu | null>;
-  private over = document.createElement('canvas');
+  /** The canvas the GPU draws on, under the map's canvas (none before the GPU opens). */
+  private gpuCv: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D;
   private cam = { s: 1, ox: 0, oy: 0 };
   private fitted = true;
@@ -83,6 +85,8 @@ export class MapView {
   private scale = 1;
   /** Told the share the map is drawn at whenever it changes. */
   onScale: () => void = () => {};
+  /** Told when the GPU draws again after it lost what it held. */
+  onRestored: () => void = () => {};
   private fullMs = 0;
   private timing = false;
   private picture: Texture | null = null;
@@ -109,10 +113,19 @@ export class MapView {
   tap: ((x: number, y: number) => boolean) | null = null;
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
-    this.over.className = 'over';
-    cv.after(this.over);
-    this.ctx = this.over.getContext('2d')!;
-    this.ready = openGpu(cv, () => { this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); }).then(g => {
+    this.ctx = cv.getContext('2d')!;
+    // A fresh canvas for the GPU, under the map's canvas, in place of the last.
+    const fresh = () => {
+      const c = document.createElement('canvas');
+      c.className = 'gpu';
+      this.gpuCv?.remove();
+      cv.before(c);
+      this.gpuCv = c;
+      this.resize();
+      return c;
+    };
+    const restored = () => { this.timing = false; this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); this.onRestored(); };
+    this.ready = openGpu(fresh, restored).then(g => {
       this.gpu = g;
       if (g) sendDetail(g, () => this.invalidate());
       this.invalidate();
@@ -203,7 +216,7 @@ export class MapView {
   private drawnDpr = () => Math.min(this.dpr(), MOST_DRAWN_PX);
 
   private resize(): void {
-    for (const [c, d] of [[this.cv, this.drawnDpr()], [this.over, this.dpr()]] as const) { c.width = Math.round(this.cv.clientWidth * d); c.height = Math.round(this.cv.clientHeight * d); }
+    for (const [c, d] of [[this.gpuCv, this.drawnDpr()], [this.cv, this.dpr()]] as const) if (c) { c.width = Math.round(this.cv.clientWidth * d); c.height = Math.round(this.cv.clientHeight * d); }
     if (this.fitted && this.w) this.fit();
   }
 
@@ -258,7 +271,7 @@ export class MapView {
    * softer, as every program chooses its detail by the screen's pixel; once the view rests it is drawn anew at the
    * screen's pixels (`sharpen`). */
   private drawGpu(gpu: Gpu, xs: number[], d: number): void {
-    const { cam: { s, ox, oy } } = this, W = this.cv.width, H = this.cv.height;
+    const { cam: { s, ox, oy } } = this, W = this.gpuCv!.width, H = this.gpuCv!.height;
     const r = this.scale, k = d * r, tw = Math.max(1, Math.round(W * r)), th = Math.max(1, Math.round(H * r));
     if (r < 1 && (this.picture?.w !== tw || this.picture.h !== th)) {
       if (this.picture) gpu.drop(this.picture);
@@ -323,7 +336,7 @@ export class MapView {
    * picture's texture, which first holds the map drawn at fewer pixels, stretched: so each frame shows that one texture,
    * the tiles drawn so far over the stretched picture. */
   private sharpenSoon(xs: number[], d: number): void {
-    const gpu = this.gpu, W = this.cv.width, H = this.cv.height, tiles: number[][] = [];
+    const gpu = this.gpu, W = this.gpuCv!.width, H = this.gpuCv!.height, tiles: number[][] = [];
     if (!gpu) return;
     const side = Math.max(TILE_LEAST, Math.floor(Math.sqrt((SHARPEN_MS / Math.max(this.fullMs, SHARPEN_MS)) * W * H)));
     for (let y = 0; y < H; y += side) for (let x = 0; x < W; x += side) tiles.push([x, y, Math.min(side, W - x), Math.min(side, H - y)]);
@@ -348,14 +361,14 @@ export class MapView {
   /** Show on the screen the picture `t` drawn before, stretched over it. */
   private show(t: Texture): void {
     const gpu = this.gpu!, q = gpu.pass(null);
-    q.draw('picture', { rect: [0, 0, this.cv.width, this.cv.height], binds: { 1: t, 2: 'smooth' } }, false);
+    q.draw('picture', { rect: [0, 0, this.gpuCv!.width, this.gpuCv!.height], binds: { 1: t, 2: 'smooth' } }, false);
     q.end();
   }
 
   /** Draw the next tile of the sharp picture `job` once the GPU has finished the last, and show each tile as soon as it
    * is drawn; a new frame stops it. */
   private sharpen(job: Sharpening): void {
-    const gpu = this.gpu, tile = job.tiles.shift(), W = this.cv.width, H = this.cv.height;
+    const gpu = this.gpu, tile = job.tiles.shift(), W = this.gpuCv!.width, H = this.gpuCv!.height;
     if (this.sharpening !== job || !gpu || !tile || this.sharp?.w !== W || this.sharp.h !== H) return;
     const p = gpu.pass(this.sharp, undefined, tile);
     this.drawMap(gpu, p, this.sharp, job.xs, job.d, job.d, [W, H], []);

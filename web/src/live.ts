@@ -4,6 +4,10 @@ import type { Probe, StartKind, Edited } from './god';
 /** What the core reports with each frame: its cells and the months stepped per second of real time. */
 export interface Stats { cells: number; pace: number }
 
+/** The longest time a frame waits for its answer when no animation frame comes, ms: the worker's frames come every
+ * `FRAME_MS` (worker.ts, 250 ms), so where the page's animation frames stop the world still steps a fifth of the time. */
+const ANSWER_MS = 1000;
+
 /** The live world: the core in a Web Worker (worker.ts) that makes a world, steps it and posts a frame as bytes with the
  * cells' table (tape/src/table.rs), the samples' discharge and load as 16-bit floats when they changed enough to show
  * (held until the map takes them, `takeDischarge`), and where load came into a body of liquid in the last month
@@ -30,7 +34,7 @@ export class Live {
   constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; probe: (p: Probe) => void; edited: (r: Edited) => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
     this.worker = new Worker(this.url);
-    this.worker.onerror = e => on.error(e.message);
+    this.worker.onerror = e => on.error(e.message || 'The world\'s worker failed.');
     this.worker.onmessage = e => {
       const m = e.data as { kind: string; meta: string; kinds: string; edited: boolean; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; plumes: Uint8Array; relief: Uint8Array | null; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
       if (m.kind === 'ready') return on.ready();
@@ -47,8 +51,10 @@ export class Live {
         this.table = m.table;
         this.stats = m.stats;
         this.kinds = JSON.parse(m.kinds) as StartKind[];
-        on.world(this.world);
-        return this.shown();
+        // The frame is answered even where the page fails to show it (the error goes to the page's error handler), so
+        // the world never waits on it.
+        try { on.world(this.world); } finally { this.shown(); }
+        return;
       }
       if (!this.world) return this.shown();
       // The world changes only as it steps: a frame of the date shown (a pause, or the things of another window)
@@ -58,19 +64,21 @@ export class Live {
       this.table = m.table;
       this.world.meta.frames[0] = { day: m.day, year: m.year };
       this.stats = m.stats;
-      on.things(m.things);
-      on.frame(m.stats, !same || m.edited);
-      this.shown();
+      try { on.things(m.things); on.frame(m.stats, !same || m.edited); } finally { this.shown(); }
     };
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);
     document.addEventListener('visibilitychange', this.onHide);
   }
 
   /** Tell the worker the frames taken are drawn, so it may post the next: at the next animation frame, after the map's
-   * own draw (which asked for that frame first); at once in a hidden page, which draws nothing. */
+   * own draw (which asked for that frame first), or after `ANSWER_MS` where no animation frame comes (a browser that
+   * holds them back in a frame it deems out of view or idle, as Safari does in an iframe); at once in a hidden page,
+   * which draws nothing. */
   private shown(): void {
     this.unanswered++;
-    if (document.hidden) this.answer(); else requestAnimationFrame(() => this.answer());
+    if (document.hidden) return this.answer();
+    const timer = setTimeout(() => this.answer(), ANSWER_MS);
+    requestAnimationFrame(() => { clearTimeout(timer); this.answer(); });
   }
   private answer(): void {
     if (this.unanswered > 0) { this.worker.postMessage({ cmd: 'shown', frames: this.unanswered }); this.unanswered = 0; }

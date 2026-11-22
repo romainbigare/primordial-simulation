@@ -1,6 +1,7 @@
 import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
 import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
+import type { Gpu } from './gpu';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats } from './live';
@@ -76,10 +77,12 @@ const god = new God($('god'), { probe: (x, y) => live?.probe(x, y), edit: (a, x,
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live) god.draw(ctx, ox, oy, s); };
 map.tap = (x, y) => live !== null && god.tap(x, y);
-/** Which GPU draws the map (none: the page cannot draw it). */
-let drawnWith = '';
+/** The GPU that draws the map (null: none yet, or the page cannot draw it). */
+let drawing: Gpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
-map.ready.then(g => { drawnWith = g ? g.kind : ''; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
+// The GPU's loss, said on the page (gpu-webgl2.ts, gpu-webgpu.ts), is over once it draws again.
+map.onRestored = () => say('');
+map.ready.then(g => { drawing = g; if (!g) say('This browser has neither WebGPU nor WebGL2, so the map cannot be drawn.'); });
 slots.listen($<HTMLCanvasElement>('cv'), () => inspect());
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 
@@ -96,6 +99,10 @@ async function load(buf: ArrayBuffer): Promise<void> {
   setup(world);
 }
 const say = (t: string) => { $('msg').textContent = t; $('msg').hidden = !t; };
+// The page's own errors are shown on it (a phone has no console to read them in). Those without an error object are
+// the browser's notes (a ResizeObserver's loop), not failures.
+addEventListener('error', e => { if (e.error) say(`The page failed: ${e.error instanceof Error ? e.error.message : String(e.error)}`); });
+addEventListener('unhandledrejection', e => say(`The page failed: ${e.reason instanceof Error ? e.reason.message : String(e.reason)}`));
 
 /** The live world or a tape: what only one of them has is shown, and the speeds are its own. */
 function setMode(isLive: boolean): void {
@@ -114,6 +121,10 @@ function setMode(isLive: boolean): void {
 function setup(w: World): void {
   const m = w.meta;
   say('');
+  // A new live world plays at once, before the page is set up for it and draws it, so a failure there does not hold it;
+  // a saved one opens paused at its date, to be looked at.
+  playing = false; layer = null;
+  if (live && !saved) togglePlay();
   cls = new Uint8Array(m.w * m.h);
   map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
   $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ...(m.globe ? [] : [['band', `${fmt(m.lat_south)}° to ${fmt(m.lat_north)}°`]]), ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
@@ -134,10 +145,7 @@ function setup(w: World): void {
     el.onclick = () => { setFrame(i); tip(el, text); };
     return el;
   }));
-  playing = false; layer = null;
   setFrame(0); setLayer(null); syncUi();
-  // A new live world plays at once; a saved one opens paused at its date, to be looked at.
-  if (live && !saved) togglePlay();
 }
 
 function nearestFrame(year: number): number {
@@ -373,7 +381,7 @@ function showStats(s: Stats): void {
   el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
     ['cells', String(s.cells)],
     ...(land ? [['ground', `${land.tiles.count()} tiles of ${fmt(m.cell_m / 2 ** (land.tiles.depth - (m.square_depth ?? 0)))} m, ${land.tiles.toCome()} to come`]] : []),
-    ...(drawnWith ? [['map', `drawn with ${drawnWith} at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+    ...(drawing ? [['map', `drawn with ${drawing.kind} at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
 /** The band of latitudes `S,N`, degrees, south first; [NaN, NaN] (the core's default band, its edges closed) for none,
@@ -415,4 +423,4 @@ const fetched = (u: string) => fetch(u).then(r => (r.ok ? r.arrayBuffer() : Prom
 if (embedded) load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer);
 else if (url) fetched(url).then(load, waiting);
 else if (savedUrl) fetched(savedUrl).then(startLive).catch(e => say(String(e instanceof Error ? e.message : e)));
-else startLive(null).catch(waiting);
+else startLive(null).catch(e => say(`${String(e instanceof Error ? e.message : e)}. Drop a .ewf.gz file here, or use “Open file”.`));

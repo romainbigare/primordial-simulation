@@ -1,6 +1,6 @@
 // The map's renderer on WebGPU (gpu.ts): the programs' WGSL as it is, a pipeline for each program, target format and
 // blend, and a bind group a draw.
-import { Gpu, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, bindingsOf, drawHeader } from './gpu';
+import { Back, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, bindingsOf, drawHeader } from './gpu';
 
 // WebGPU's flags, as the browser defines them.
 declare const GPUTextureUsage: { COPY_SRC: number; COPY_DST: number; TEXTURE_BINDING: number; RENDER_ATTACHMENT: number };
@@ -18,18 +18,23 @@ const ROW_ALIGN = 256;
 /** The canvas's format: that of the textures the map is drawn into below the screen's pixels (map.ts `MAP_TARGET`),
  * which every WebGPU canvas takes, so one pipeline of a program draws into both and none is made twice. */
 const CANVAS_FORMAT: GPUTextureFormat = 'rgba8unorm';
+/** The longest wait for the browser's adapter and device, ms: past it the map is drawn with WebGL2. */
+const OPEN_MS = 5000;
 
 class WebGpuTexture implements Texture {
   constructor(readonly w: number, readonly h: number, readonly layers: number, readonly mips: number, readonly format: Format,
     readonly tex: GPUTexture, readonly view: GPUTextureView) {}
 }
 
-class WebGpu implements Gpu {
+class WebGpu implements Back {
   readonly kind = 'WebGPU';
   private modules = new Map<string, GPUShaderModule>();
   private pipelines = new Map<string, GPURenderPipeline>();
   private warming = new Warming(key => this.makeAhead(key), key => this.pipelines.has(key));
   private samplers: Record<Sampler, GPUSampler>;
+  /** Whether the device is gone: lost, or ended by the page (`close`, whose loss is no news). What it was still
+   * making or reading then fails with it, and is no news either. */
+  private gone = false;
   private encoder: GPUCommandEncoder | null = null;
   /** The canvas's texture this frame (until the frame is sent). */
   private frame: GPUTexture | null = null;
@@ -37,13 +42,17 @@ class WebGpu implements Gpu {
   private pool: GPUBuffer[] = [];
   private used = 0;
 
-  constructor(readonly adapter: GPUAdapter, private device: GPUDevice, private ctx: GPUCanvasContext, private format: GPUTextureFormat) {
+  constructor(private adapter: GPUAdapter, private device: GPUDevice, private ctx: GPUCanvasContext, private format: GPUTextureFormat, lost: (why: string) => void) {
+    ctx.configure({ device, format, alphaMode: 'opaque' });
     const smooth: GPUSamplerDescriptor = { magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' };
     const tile: GPUSamplerDescriptor = { magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat', maxAnisotropy: TILE_ANISOTROPY };
     this.samplers = { smooth: device.createSampler(smooth), mip: device.createSampler({ ...smooth, mipmapFilter: 'nearest' }), tile: device.createSampler(tile) };
-    device.lost.then(info => console.error(`gpu: the WebGPU device was lost: ${info.message}`));
-    device.addEventListener('uncapturederror', e => console.error(`gpu: ${(e as GPUUncapturedErrorEvent).error.message}`));
+    device.lost.then(info => { const ended = this.gone; this.gone = true; if (!ended) lost(info.message); });
+    device.addEventListener('uncapturederror', e => reportError(new Error(`gpu: ${(e as GPUUncapturedErrorEvent).error.message}`)));
   }
+
+  /** End the device: what it holds is let go, and nothing it was still making or drawing is heard of. */
+  close(): void { this.gone = true; this.device.destroy(); }
 
   texture(w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
     const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | (target ? GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC : 0);
@@ -58,6 +67,13 @@ class WebGpu implements Gpu {
   }
 
   drop(t: Texture): void { (t as WebGpuTexture).tex.destroy(); }
+
+  making(): string { return this.warming.pending(); }
+
+  about(): string {
+    const i = this.adapter.info, l = this.adapter.limits;
+    return `${i.vendor} ${i.architecture}${i.description ? ` ${i.description}` : ''}; adapter limits: 2D ${l.maxTextureDimension2D}, layers ${l.maxTextureArrayLayers}, buffer ${Math.round(l.maxBufferSize / 2 ** 20)} MB`;
+  }
 
   pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
     this.encoder ??= this.device.createCommandEncoder();
@@ -94,7 +110,8 @@ class WebGpu implements Gpu {
     this.used = 0;
   }
 
-  done(): Promise<void> { return this.device.queue.onSubmittedWorkDone(); }
+  /** (It fails only with the device, whose loss `lost` hears: then it never comes.) */
+  done(): Promise<void> { return this.device.queue.onSubmittedWorkDone().catch(() => new Promise<void>(() => {})); }
 
   async read(t: Texture): Promise<Uint8Array> {
     const tex = (t as WebGpuTexture).tex, row = Math.ceil((4 * t.w) / ROW_ALIGN) * ROW_ALIGN;
@@ -102,7 +119,8 @@ class WebGpu implements Gpu {
     this.encoder ??= this.device.createCommandEncoder();
     this.encoder.copyTextureToBuffer({ texture: tex }, { buffer: buf, bytesPerRow: row }, [t.w, t.h]);
     this.submit();
-    await buf.mapAsync(GPUMapMode.READ);
+    // A read the device took with it is never answered: the map asks again at its next draw.
+    if (!await buf.mapAsync(GPUMapMode.READ).then(() => true, e => { if (this.gone) return false; throw e; })) return new Promise(() => {});
     const all = new Uint8Array(buf.getMappedRange()), out = new Uint8Array(4 * t.w * t.h);
     for (let y = 0; y < t.h; y++) out.set(all.subarray(y * row, y * row + 4 * t.w), 4 * t.w * y);
     buf.destroy();
@@ -130,8 +148,12 @@ class WebGpu implements Gpu {
   /** Make the pipeline of `key` (`pipelineKey`) ahead, without the page waiting for it. */
   private async makeAhead(key: string): Promise<void> {
     const [name, format, blend] = key.split(' ');
-    const made = await this.device.createRenderPipelineAsync(this.describe(name, format as GPUTextureFormat, blend === 'true'));
-    if (!this.pipelines.has(key)) this.pipelines.set(key, made);
+    try {
+      const made = await this.device.createRenderPipelineAsync(this.describe(name, format as GPUTextureFormat, blend === 'true'));
+      if (!this.pipelines.has(key)) this.pipelines.set(key, made);
+    } catch (e) {
+      if (!this.gone) throw e;
+    }
   }
 
   /** The pipeline of program `name` drawing into `format`, over what is there or not, as WebGPU is asked for it. */
@@ -152,13 +174,20 @@ class WebGpu implements Gpu {
 /** The key of program `name`'s pipeline drawing into `format`, over what is there or not. */
 const pipelineKey = (name: string, format: GPUTextureFormat, blend: boolean) => `${name} ${format} ${blend}`;
 
-/** WebGPU on `canvas`, or null where the browser has none. */
-export async function openWebGpu(canvas: HTMLCanvasElement): Promise<Gpu | null> {
+/** The browser's WebGPU adapter and a device of it, or null where it has none or gives none within `OPEN_MS`. */
+async function deviceOf(): Promise<[GPUAdapter, GPUDevice] | null> {
   if (!navigator.gpu) return null;
-  const adapter = await navigator.gpu.requestAdapter().catch(() => null);
-  const device = adapter && await adapter.requestDevice().catch(() => null);
-  const ctx = device && canvas.getContext('webgpu') as GPUCanvasContext | null;
-  if (!device || !ctx) return null;
-  ctx.configure({ device, format: CANVAS_FORMAT, alphaMode: 'opaque' });
-  return new WebGpu(adapter!, device, ctx, CANVAS_FORMAT);
+  const late = new Promise<null>(none => setTimeout(() => none(null), OPEN_MS));
+  const asked = navigator.gpu.requestAdapter().then(async a => (a ? [a, await a.requestDevice()] as [GPUAdapter, GPUDevice] : null)).catch(() => null);
+  return Promise.race([asked, late]);
+}
+
+/** WebGPU on `canvas` and what ends it, or null where the browser has none (`deviceOf`); `lost` hears that its device
+ * was lost. */
+export async function openWebGpu(canvas: HTMLCanvasElement, lost: (why: string) => void): Promise<{ gpu: Back; close: () => void } | null> {
+  const opened = await deviceOf();
+  const ctx = opened && canvas.getContext('webgpu') as GPUCanvasContext | null;
+  if (!opened || !ctx) return null;
+  const gpu = new WebGpu(opened[0], opened[1], ctx, CANVAS_FORMAT, lost);
+  return { gpu, close: () => gpu.close() };
 }
