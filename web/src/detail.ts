@@ -23,14 +23,17 @@ type StripGroup = typeof STRIP_GROUPS[number];
  * those (tex.wgsl `MODELS_FROM`), the heights of those that stand
  * in water (tex.wgsl `HEIGHTS_FROM`) and the trees last (tex.wgsl `TREES_FROM`), as many layers as each strip holds. */
 const PHOTO_SIDE = 512;
-/** The mip levels of a layer: from `PHOTO_SIDE` texels down to one (detail-worker.ts makes them). */
-const PHOTO_MIPS = Math.log2(PHOTO_SIDE) + 1;
+/** The side the layers are kept at on the GPU: on a screen touched with a finger (a phone's or a tablet's, whose
+ * browser gives a page little memory) half the files' (a quarter of the memory: 50 MB, not 200), else theirs. The
+ * shaders read the side from the texture. */
+const KEPT_SIDE = matchMedia('(pointer: coarse)').matches ? PHOTO_SIDE / 2 : PHOTO_SIDE;
+/** The mip levels of a layer: from `KEPT_SIDE` texels down to one (detail-worker.ts makes them). */
+const PHOTO_MIPS = Math.log2(KEPT_SIDE) + 1;
 
-/** The view needs the detail where a pixel of the screen takes less than `DETAIL_LOAD_E` m, and lets it go where one
- * takes more than `DETAIL_FREE_E` m: past that no layer is read finer than its mean, which the blank texture gives too
- * (the image over its mean is 1), so the picture is the same without it; the gap between them keeps a zoom about one
- * size from loading it and letting it go over and over. */
-const DETAIL_LOAD_E = 25, DETAIL_FREE_E = 40;
+/** The view needs the detail where a pixel of the screen takes less than `DETAIL_LOAD_E` m (farther no layer is read
+ * finer than its mean, which the blank texture gives too); once loaded it is kept, so a zoom in and out does not load
+ * it again. */
+const DETAIL_LOAD_E = 25;
 
 /** The layers of the strips, once their files' heads are read; and the layers' levels made (detail-worker.ts) and not
  * yet sent to the GPU, each with its layer. */
@@ -38,7 +41,7 @@ let groundLayers = 0;
 let layersMade: { layer: number; levels: Uint8Array[] }[] = [];
 /** The blank texture's layers: an array of white texels (one layer would make a plain texture, not an array). */
 const BLANK_LAYERS = 2;
-/** Layers sent to the GPU a frame at most (each 1.4 MB with its levels): the strips go over some frames, so no frame
+/** Layers sent to the GPU a frame at most (each 1.4 MB with its levels at 512 texels a side): the strips go over some frames, so no frame
  * stops long for them, and each layer's levels are let go once sent. */
 const LAYERS_A_FRAME = 4;
 /** The GPU the detail is sent to (`sendDetail`) and what hears that all its layers are sent; the detail's texture there,
@@ -108,7 +111,7 @@ async function fetchDetail(number: number): Promise<void> {
     while (ahead >= STRIPS_AHEAD) { await waiting; waiting = one(); }
     const strip = await createImageBitmap(new Blob([bytes[k]])).catch(e => Promise.reject(new Error(`${files[k][0]}: ${e}`)));
     if (!current()) { strip.close(); return; }
-    w.postMessage({ strip, first, cutOut: files[k][1], side: PHOTO_SIDE, cut: CUT }, [strip]);
+    w.postMessage({ strip, first, cutOut: files[k][1], from: PHOTO_SIDE, side: KEPT_SIDE, cut: CUT }, [strip]);
     ahead++;
   }
   while (ahead > 0) { await waiting; waiting = one(); }
@@ -116,11 +119,9 @@ async function fetchDetail(number: number): Promise<void> {
   if (current()) detailLoad!.worker = null;
 }
 
-/** The view's pixels take `e` m of the screen's: load the detail where they are fine enough, let it go where they are
- * not (`DETAIL_LOAD_E`, `DETAIL_FREE_E`). */
+/** The view's pixels take `e` m of the screen's: load the detail where they are fine enough (`DETAIL_LOAD_E`). */
 export function detailSeen(e: number): void {
   if (e < DETAIL_LOAD_E && !detailLoad) loadDetail();
-  else if (e > DETAIL_FREE_E && detailLoad) letDetailGo();
 }
 
 /** Load the detail anew. */
@@ -176,7 +177,7 @@ function sendSoon(): void {
   h.frame = requestAnimationFrame(() => timed('detail', () => {
     h.frame = 0;
     if (detailHeld !== h) return;
-    h.t ??= s.gpu.texture('detail', PHOTO_SIDE, PHOTO_SIDE, 'rgba8unorm', groundLayers, PHOTO_MIPS);
+    h.t ??= s.gpu.texture('detail', KEPT_SIDE, KEPT_SIDE, 'rgba8unorm', groundLayers, PHOTO_MIPS);
     for (const { layer, levels } of layersMade.splice(0, LAYERS_A_FRAME)) {
       levels.forEach((d, k) => s.gpu.write(h.t!, d, k, layer));
       h.filled++;

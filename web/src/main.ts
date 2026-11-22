@@ -34,8 +34,10 @@ const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 /** The live world's first size and its least and most, squares a side: the first shows a land with its valleys, a
- * lake and an outlier; the most is the largest island the laws are run on. */
-const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = 128;
+ * lake and an outlier; the most is the largest island the laws are run on, or on a screen touched with a finger (a
+ * phone's, whose browser gives a page a few hundred MB) the largest whose workers fit there (each of the ground's
+ * workers holds about 0.4 kB a sample: 110 MB at 32, 250 MB at 48). */
+const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = matchMedia('(pointer: coarse)').matches ? 48 : 128;
 /** The live world's kinds of cover a cell may hold, a setting of the world (the core's `Config::variety`), and its
  * most (the core's `cover::SLOTS`). */
 const LIVE_VARIETY = 8, VARIETY_MOST = 12;

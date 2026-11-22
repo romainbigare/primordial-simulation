@@ -17,8 +17,8 @@ const MOSS_MUD_TEX = 9; const LEAF_MAT_TEX = 10; const LOAM_TEX = 11; const CLAY
 const RIPPLE_FLAT_TEX = 14; const RIPPLE_SILT_TEX = 15; const ALGAL_MUD_TEX = 16; const WET_GRAVEL_TEX = 17;
 // The photographs' layers, the carpets' first.
 const PHOTOS = 18;
-// The mip level of one texel (512 texels a side).
-const DETAIL_TOP = 9.0;
+// A mip level past the last of any layer's side (512 texels at most): the sampler reads the last, of one texel.
+const DETAIL_TOP = 16.0;
 
 // Photograph t at `uv` (repeating), its step over a pixel along the screen's axes `gx` and `gy` (for its mip): linear.
 fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {
@@ -76,7 +76,7 @@ fn model_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
   let size = vec2f(model_w(s), model_h(s));
   var t: vec4f;
   if (s < TREES) {
-    let at = vec2f(0.5 - 0.5 * size.x, 1.0 - size.y - 2.0 / 512.0) + uv * size;
+    let at = vec2f(0.5 - 0.5 * size.x, 1.0 - size.y - 2.0 / f32(textureDimensions(detail_tex).x)) + uv * size;
     t = textureSampleGrad(detail_tex, detail_sampler, at, TREES_FROM + s, vec2f(g * size.x, 0.0), vec2f(0.0, g * size.y));
   } else {
     let k = s - TREES;
