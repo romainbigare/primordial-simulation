@@ -3,7 +3,7 @@
 //! upkeep, up to those its plants hold (`frame`).
 
 use super::grow::{Books, Slot};
-use super::{dec, Cover, Parts, FIX, FIX_OFF, FUEL, GROUPS, MATTER, NP, SEED, STORE, WALL, WALLS};
+use super::{dec, Cover, Parts, BURN_CURB, FIX, FUEL, GROUPS, MATTER, NP, SEED, SPLIT_CURB, STORE, WALL, WALLS};
 use crate::chem::Reaction;
 use crate::rng::{Purpose, Rng};
 use crate::units::MAX_SUBSTANCES;
@@ -25,18 +25,17 @@ const KEY_STEPS: f32 = 1024.0;
 /// substance, mol, and the fuel a kg costs with the work of building (`c_copy`), mol. None where the chemistry builds no
 /// cover.
 pub(super) struct PerKg<'a> {
-    units: [(&'a Reaction, f64); 2],
+    units: [(&'a Reaction, f64); NP - 1],
     need: [f64; MAX_SUBSTANCES],
     fpk: f64,
 }
 
 pub(super) fn per_kg<'a>(w: &'a World, c: &Cover, p: &Parts, x: usize, (s, growth): (&Slot, &[f64; GROUPS])) -> Option<PerKg<'a>> {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
-    let bl = chem.build.as_ref()?;
-    let wall = chem.builds.iter().find(|r| r.outputs[0].0 as usize == p.sub[WALL])?;
     let walls = if s.living > 0.0 { dec(c.genes[x][WALLS]) * c.walled_new(ph, &mm, x, growth) } else { 0.0 };
-    let fm = 1.0 / (1.0 + walls);
-    let units = [(bl, fm / mm[MATTER] / bl.outputs[0].1 as f64), (wall, walls * fm / mm[WALL] / wall.outputs[0].1 as f64)];
+    let shares = super::built_shares(&c.genes[x], walls);
+    let made = |q: usize| chem.build.iter().chain(&chem.builds).find(|r| r.outputs[0].0 as usize == p.sub[q]).map(|rx| (rx, shares[q] / mm[q] / rx.outputs[0].1 as f64));
+    let units = [made(MATTER)?, made(WALL)?, made(SPLIT_CURB)?, made(BURN_CURB)?];
     let mut need = [0.0; MAX_SUBSTANCES];
     units.iter().for_each(|(rx, u)| rx.inputs.iter().for_each(|&(k, n)| need[k as usize] += n as f64 * u));
     let burn = &chem.reactions[p.burn];
@@ -82,7 +81,7 @@ pub(super) fn build(w: &World, (c, k): (&mut Cover, &PerKg), p: &Parts, x: usize
     let minerals = || (0..chem.ns()).filter(|&k| need[k] > 0.0 && k != p.sub[FUEL]);
     let by = |k: usize| ground[k] / need[k];
     // (Fixing takes its gas from the cell's share of the air node, as far as that still offers it.)
-    let fixed = p.fix.filter(|_| g[FIX] > FIX_OFF).and_then(|r| {
+    let fixed = p.fix.filter(|_| super::on(&g, FIX)).and_then(|r| {
         let rx = &chem.reactions[r];
         let &(m, out) = rx.outputs.iter().find(|o| need[o.0 as usize] > 0.0)?;
         let most = (dec(g[FIX]) * s.living * rx.arrhenius(t.max(1.0)) / rx.arrhenius(ph.t_cat) * s.act * dt).min(b.room(&p.sub, rx));
@@ -118,13 +117,12 @@ pub(super) fn build(w: &World, (c, k): (&mut Cover, &PerKg), p: &Parts, x: usize
     let store = dec(g[STORE]) / mm[FUEL];
     let seed = (if pays { g[SEED].clamp(0.0, 1.0) as f64 } else { 1.0 }).min(c.mol[x][FUEL].max(0.0) / (store * new).max(1e-300));
     if seed > 0.0 {
-        // Seeds are body matter first (an embryo and its store, little wall), then walls.
-        let (mut mol, mut left) = ([0.0; NP], seed * new);
-        for q in [MATTER, WALL] {
-            mol[q] = (left / mm[q]).min(grew[q]).max(0.0);
-            left -= mol[q] * mm[q];
-            c.mol[x][q] -= mol[q];
-        }
+        // Seeds are soft tissue first (an embryo and its store, with what that tissue holds as it grew, little wall),
+        // then walls.
+        let mut mol = super::soft_in(&mm, &grew, seed * new);
+        let left = seed * new - super::built_kg(&mm, &mol);
+        mol[WALL] = (left / mm[WALL]).min(grew[WALL]).max(0.0);
+        (0..NP).filter(|&q| q != FUEL).for_each(|q| c.mol[x][q] -= mol[q]);
         mol[FUEL] = (store * super::built_kg(&mm, &mol)).min(c.mol[x][FUEL].max(0.0));
         c.mol[x][FUEL] -= mol[FUEL];
         let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp * t).sum::<f64>();

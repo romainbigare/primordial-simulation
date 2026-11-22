@@ -67,11 +67,17 @@ pub const MOIST: usize = 5;
 pub const SEED: usize = 6;
 /// Repair, log10: its wear life is 10^REPAIR times the rate of living's (laws.md 3)
 pub const REPAIR: usize = 7;
-/// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below `FIX_OFF`
+/// Capacity of the fixing reaction, log10 mol per kg of living cover per s at `t_cat`; off at or below its level in `OFF`
 pub const FIX: usize = 8;
 /// The share of its roots' volume that is gas space (`cover::working`)
 pub const GAS: usize = 9;
-pub const NG: usize = 10;
+/// Share of its soft tissue (`life::SOFT`) it builds as the solid that slows the splitting of walls (`life::SPLIT_CURB`),
+/// log10; none at or below its level in `OFF`
+pub const SPLIT_CURBS: usize = 10;
+/// Share of its soft tissue it builds as the solid that slows the burning of fuel (`life::BURN_CURB`), log10; none at or
+/// below its level in `OFF`
+pub const BURN_CURBS: usize = 11;
+pub const NG: usize = 12;
 /// Each gene's name and unit, in the order of their indices: what the tape and a viewer call it.
 pub const GENES: [(&str, &str); NG] = [
     ("light", "log10 mol/kg/s"),
@@ -84,19 +90,57 @@ pub const GENES: [(&str, &str); NG] = [
     ("repair", "log10"),
     ("fix", "log10 mol/kg/s"),
     ("gas", "share"),
+    ("split_curbs", "log10 share"),
+    ("burn_curbs", "log10 share"),
 ];
-/// A fixing gene at or below this is off.
-pub const FIX_OFF: f32 = -10.0;
+/// The genes that switch what they make off at or below a level, each with that level: the fixing reaction (`FIX`) and
+/// the two solids that slow a reaction (`SPLIT_CURBS`, `BURN_CURBS`). Below it differences do nothing (`distance`).
+pub const OFF: [(usize, f32); 3] = [(FIX, -10.0), (SPLIT_CURBS, -6.0), (BURN_CURBS, -6.0)];
+
+/// Gene `g`'s off level (`OFF`; none for a gene that is always on).
+fn off(g: usize) -> f32 {
+    OFF.iter().find(|o| o.0 == g).map_or(f32::NEG_INFINITY, |o| o.1)
+}
+
+/// Whether gene `g` of genes `v` is on: above its off level (`OFF`).
+pub fn on(v: &[f32; NG], g: usize) -> bool {
+    v[g] > off(g)
+}
+
+/// Gene `g` of genes `v` as the laws tell it apart: an off gene at its off level, as all off genes are alike.
+fn level(v: &[f32; NG], g: usize) -> f32 {
+    v[g].max(off(g))
+}
 
 /// Mutation step (times `Physics::mut_size`) and range of each gene.
-pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6)];
+pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6), (0.3, -8.0, -0.5), (0.3, -8.0, -0.5)];
+/// Each gene's unit of likeness (`distance`): by how much it differs where its effect differs. A gene's mutation step,
+/// but a decade for the shares of the solids that slow a reaction, whose dose acts by its ratio to the inhibition
+/// constant (`Reaction::inhibited`).
+pub const UNIT: [f32; NG] = {
+    let mut u = [0.0; NG];
+    let mut g = 0;
+    while g < NG {
+        u[g] = RANGE[g].0;
+        g += 1;
+    }
+    (u[SPLIT_CURBS], u[BURN_CURBS]) = (1.0, 1.0);
+    u
+};
+/// Whether each gene says how a kind lives in its niche: all but the shares of the solids that slow a reaction, which
+/// say what its soft tissue holds, not how it lives (`niche_distance`, `mix`).
+pub const NICHE: [bool; NG] = {
+    let mut n = [true; NG];
+    (n[SPLIT_CURBS], n[BURN_CURBS]) = (false, false);
+    n
+};
 /// The line of a slot before its first month (`Cover::line`): it takes then the line of all the ground its kind may
 /// hold (`footing`), found by the same month's start as every other slot's.
 pub const UNSET: f32 = -1.0;
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
 pub use crate::life::kin::APART;
-pub use crate::life::{Parts, FUEL, MATTER, NO_ROOT, NP, WALL};
+pub use crate::life::{Parts, BURN_CURB, CURBS, FUEL, MATTER, NO_ROOT, NP, SOFT, SPLIT_CURB, WALL};
 pub use crate::math::dec;
 
 /// The cover of one ground cell, in `SLOTS` slots, of which its world uses the first `Config::variety`.
@@ -196,7 +240,7 @@ impl Cover {
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
         (0..SLOTS).filter(|&x| self.root[x] != NO_ROOT)
     }
-    /// The built cover of slot `x` (body matter and solids), kg.
+    /// The built cover of slot `x` (its body matter and walls, `built_kg`), kg.
     pub fn built(&self, mm: &[f64; NP], x: usize) -> f64 {
         built_kg(mm, &self.mol[x])
     }
@@ -221,9 +265,9 @@ impl Cover {
         let depth = self.leaf(mm, x) / held.max(1e-300) / ph.crown_density;
         ((top - depth).max(0.0), top)
     }
-    /// All the cover of slot `x`, kg.
+    /// All the cover of slot `x`, kg (`all_kg`).
     pub fn kg(&self, mm: &[f64; NP], x: usize) -> f64 {
-        self.built(mm, x) + self.mol[x][FUEL] * mm[FUEL]
+        all_kg(mm, &self.mol[x])
     }
     /// The living cover of slot `x`, kg: its body matter with the liquid of living tissue (`life::WET_TISSUE`); its walls
     /// are a frame, which neither works nor wears (laws.md 3).
@@ -271,9 +315,42 @@ impl Cover {
     }
 }
 
-/// The built cover of amounts `m` (mol of each part): body matter and walls, kg.
+/// The built cover of amounts `m` (mol of each part), kg: the working tissue and the frame of its plants, its body
+/// matter and walls, by which the laws of the stand weigh a plant (its mass, height, crown and room). The solids that
+/// slow a reaction (`life::CURBS`) are held in its soft tissue as stores, as the fuel is: they catch no light, run no
+/// reaction and need no upkeep, so they are no part of it.
 pub fn built_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
     m[MATTER] * mm[MATTER] + m[WALL] * mm[WALL]
+}
+
+/// All of amounts `m` (mol of each part), kg: its built cover (`built_kg`), its fuel and the solids it holds.
+pub fn all_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
+    built_kg(mm, m) + m[FUEL] * mm[FUEL] + CURBS.iter().map(|&q| m[q] * mm[q]).sum::<f64>()
+}
+
+/// The mol of each part of the soft tissue (`life::SOFT`) that holds `kg` of body matter as amounts `m` (mol of each
+/// part) hold it, no more than they hold: its body matter, and with each mol of it what `m` holds of each solid that
+/// slows a reaction a mol of its body matter; none of the other parts.
+pub fn soft_in(mm: &[f64; NP], m: &[f64; NP], kg: f64) -> [f64; NP] {
+    let with = |q: usize| if m[MATTER] > 0.0 { m[q].max(0.0) / m[MATTER] } else { 0.0 };
+    let mut out = [0.0; NP];
+    out[MATTER] = (kg / mm[MATTER]).min(m[MATTER]).max(0.0);
+    CURBS.iter().for_each(|&q| out[q] = with(q) * out[MATTER]);
+    out
+}
+
+/// What a kind of genes `g` builds with each kg of built cover (`built_kg`), kg of each part, where its walls are
+/// `walls` kg per kg of its body matter: its body matter and walls, and the solids that slow a reaction its soft tissue
+/// holds with that matter, the shares of the soft tissue its genes `SPLIT_CURBS` and `BURN_CURBS` set (none where the
+/// gene is off, `on`); no fuel.
+pub fn built_shares(g: &[f32; NG], walls: f64) -> [f64; NP] {
+    let curbs = [SPLIT_CURBS, BURN_CURBS].map(|q| if on(g, q) { dec(g[q]) } else { 0.0 });
+    let mut kg = [0.0; NP];
+    kg[MATTER] = 1.0 / (1.0 + walls);
+    kg[WALL] = kg[MATTER] * walls;
+    let per_matter = 1.0 / (1.0 - curbs[0] - curbs[1]);
+    (kg[SPLIT_CURB], kg[BURN_CURB]) = (kg[MATTER] * curbs[0] * per_matter, kg[MATTER] * curbs[1] * per_matter);
+    kg
 }
 
 /// The cover of one starting kind (`Cover::root`), summed over the world for the shell: its slots, its cover (kg), its
@@ -378,9 +455,26 @@ impl crate::World {
     }
 }
 
-/// How far apart two gene vectors are, in steps: the largest gap of a gene over its step.
-/// A fixing gene that is off counts as `FIX_OFF`, where differences do nothing.
+/// How far apart two gene vectors are, in units of likeness: the largest gap of a gene over its unit (`UNIT`). An off
+/// gene counts as its off level (`OFF`), where differences do nothing. Whether a kind's seeds join a stand of it.
 pub fn distance(a: &[f32; NG], b: &[f32; NG]) -> f32 {
-    let at = |v: &[f32; NG], g: usize| if g == FIX { v[g].max(FIX_OFF) } else { v[g] };
-    (0..NG).map(|g| (at(a, g) - at(b, g)).abs() / RANGE[g].0).fold(0.0, f32::max)
+    gap(a, b, |_| true)
+}
+
+/// How far apart two gene vectors are in their niche genes alone (`NICHE`), as `distance`: whether two slots of any
+/// kinds hold the same niche (`seed::room`, `Lying`).
+pub fn niche_distance(a: &[f32; NG], b: &[f32; NG]) -> f32 {
+    gap(a, b, |g| NICHE[g])
+}
+
+/// The largest gap of the genes `of` keeps over their units (`UNIT`), off genes at their off level.
+fn gap(a: &[f32; NG], b: &[f32; NG], of: impl Fn(usize) -> bool) -> f32 {
+    (0..NG).filter(|&g| of(g)).map(|g| (level(a, g) - level(b, g)).abs() / UNIT[g]).fold(0.0, f32::max)
+}
+
+/// The genes `into` of the heavier of two that join take the share `f` (the lighter's of their mass) of the lighter's
+/// genes `from`, each gene the mean by mass; but where the two are of other starting kinds (`same` false) the genes
+/// outside the niche (`NICHE`) stay the heavier's, so a kind keeps what its tissue holds.
+pub fn mix(into: &mut [f32; NG], from: &[f32; NG], f: f32, same: bool) {
+    (0..NG).filter(|&g| same || NICHE[g]).for_each(|g| into[g] += f * (from[g] - into[g]));
 }

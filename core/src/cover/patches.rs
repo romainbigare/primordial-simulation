@@ -8,7 +8,7 @@
 
 use super::budget::{held, DIED};
 use super::groups::Group;
-use super::{stand, Cover, Parts, FUEL, GROUPS, MATTER, NO_ROOT, NP, SLOTS, WALL};
+use super::{stand, Cover, Parts, FUEL, GROUPS, NO_ROOT, NP, SLOTS, WALL};
 use crate::life::kin;
 use crate::{Physics, World};
 use serde::{Deserialize, Serialize};
@@ -91,8 +91,8 @@ impl Cover {
             self.clear(x);
         }
     }
-    /// The share of each of the amounts of slot `x` (fuel, body matter, walls) that the share `s[g]` of the plants of
-    /// each of its groups `g` hold (`Cover::part`): of its body matter and walls each group's (`Cover::sizes`), of its
+    /// The share of each of the amounts of slot `x` that the share `s[g]` of the plants of each of its groups `g` hold
+    /// (`Cover::part`): of its soft tissue (`life::SOFT`) and walls each group's (`Cover::sizes`), of its
     /// fuel its built cover's.
     fn shares_of(&self, ph: &Physics, mm: &[f64; NP], x: usize, s: &[f64; GROUPS]) -> [f64; NP] {
         let z = self.sizes(ph, mm, x);
@@ -100,9 +100,12 @@ impl Cover {
             let all: f64 = (0..z.held).map(|g| z.count[g] * z.mass[g] * part(g)).sum();
             (0..z.held).map(|g| s[g] * z.count[g] * z.mass[g] * part(g)).sum::<f64>() / all.max(1e-300)
         };
-        let mut by = [0.0; NP];
-        (by[FUEL], by[MATTER], by[WALL]) = (of(&|_| 1.0), of(&|g| 1.0 - z.walls[g]), of(&|g| z.walls[g]));
-        by
+        let (fuel, soft, walls) = (of(&|_| 1.0), of(&|g| 1.0 - z.walls[g]), of(&|g| z.walls[g]));
+        std::array::from_fn(|q| match q {
+            FUEL => fuel,
+            WALL => walls,
+            _ => soft,
+        })
     }
 }
 

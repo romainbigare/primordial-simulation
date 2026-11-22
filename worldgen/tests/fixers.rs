@@ -21,7 +21,7 @@ fn a_tenth_of_the_cover_starts_with_the_fixing_gene() {
     assert!(all > 1000 && (share - FIXERS).abs() < 4.0 * (FIXERS * (1.0 - FIXERS) / all as f64).sqrt(), "{on} of {all} carry the gene");
     assert!(line.contains(&format!("{on} cells")) && line.contains("fixing gene"), "{line}");
     // The others start with it off, whatever the spray did.
-    let off = cover::slots(&w).filter(|x| x.1[FIX] != FIX_GENE).all(|x| x.1[FIX] <= cover::FIX_OFF);
+    let off = cover::slots(&w).filter(|x| x.1[FIX] != FIX_GENE).all(|x| !cover::on(x.1, FIX));
     assert!(off, "a gene turned on by the spray");
 }
 

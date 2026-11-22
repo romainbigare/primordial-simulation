@@ -3,7 +3,7 @@
 //! flows.
 
 use super::build::per_input;
-use super::{Cover, Parts, FUEL, MATTER, NP, WALL};
+use super::{Cover, Parts, FUEL, NP};
 use crate::chem::Chemistry;
 
 /// The flows of the budget, J, + into the cover: the light reaction's fuel; its upkeep, each part of it (basal,
@@ -30,8 +30,8 @@ pub const ROUNDED: usize = 16;
 pub const BURNT: usize = 17;
 
 impl Parts {
-    /// What a mol of each part holds, J: the fuel what its burning (reaction 1) frees, body matter and walls the fuel
-    /// their conversions (`Chemistry::build`, `builds`) take to make a mol of them.
+    /// What a mol of each part holds, J: the fuel what its burning (reaction 1) frees, each other part the fuel its
+    /// conversion (`Chemistry::build`, `builds`) takes to make a mol of it.
     pub fn content(&self, chem: &Chemistry) -> [f64; NP] {
         let burn = &chem.reactions[self.burn];
         let fuel = -chem.dh(self.burn) / per_input(burn, self.sub[FUEL]).unwrap_or(1.0);
@@ -39,9 +39,7 @@ impl Parts {
             let rx = chem.build.iter().chain(&chem.builds).find(|r| r.outputs[0].0 as usize == k);
             rx.map_or(0.0, |r| per_input(r, self.sub[FUEL]).unwrap_or(0.0) / r.outputs[0].1 as f64 * fuel)
         };
-        let mut e = [0.0; NP];
-        (e[FUEL], e[MATTER], e[WALL]) = (fuel, made(self.sub[MATTER]), made(self.sub[WALL]));
-        e
+        std::array::from_fn(|q| if q == FUEL { fuel } else { made(self.sub[q]) })
     }
 }
 

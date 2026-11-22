@@ -20,8 +20,7 @@ impl Gut {
     /// The gut of life of parts `p` in `chem`.
     pub(super) fn of(chem: &Chemistry, p: &Parts) -> Gut {
         let has = |v: &[(u16, u16)], k: usize| v.iter().find(|q| q.0 as usize == k).map(|q| q.1 as f64);
-        let split = chem.reactions.iter().position(|r| has(&r.inputs, p.sub[WALL]).is_some() && has(&r.outputs, p.sub[FUEL]).is_some());
-        let split = split.map(|k| (k, has(&chem.reactions[k].outputs, p.sub[FUEL]).unwrap_or(0.0) / has(&chem.reactions[k].inputs, p.sub[WALL]).unwrap_or(1.0)));
+        let split = chem.split().map(|k| (k, has(&chem.reactions[k].outputs, p.sub[FUEL]).unwrap_or(0.0) / has(&chem.reactions[k].inputs, p.sub[WALL]).unwrap_or(1.0)));
         let burn = (p.burn, has(&chem.reactions[p.burn].inputs, p.sub[FUEL]).unwrap_or(1.0));
         Gut { split, burn, matter: chem.matter_roles().map(|r| r.1) }
     }
@@ -46,17 +45,21 @@ pub(super) struct Digested {
     pub(super) balance: f64,
 }
 
-/// Group `x` of `f` digests `took` (mol of life's parts) over the month: its gut splits up to `most` mol of walls, each
+/// Group `x` of `f` digests `took` (mol of life's parts) over the month: its gut splits up to `most` mol of walls,
+/// slowed by what it took that slows the splitting (`Reaction::inhibited`, by its mol per kg of what it took), each
 /// unit taking the key liquid the cell's ground still holds (`liquid`, mol, lessened by it); it burns for `energy` J the
 /// fuel it took and split, then the body matter it took, then its store, each no more than the gas the cell's share of
-/// its air node offers; the fuel it took and did not burn goes to its store; the walls it did not split go to the
-/// remains (`Books::dead`). The body matter left is for growth (`grow`).
+/// its air node offers; the fuel it took and did not burn goes to its store; the walls it did not split and the other
+/// solids it took go to the remains (`Books::dead`). The body matter left is for growth (`grow`).
 pub(super) fn digest(chem: &Chemistry, (p, gut): (&Parts, &Gut), (f, x): (&mut Fauna, usize), (mut took, most, liquid): ([f64; NP], f64, &mut f64), energy: f64, b: &mut Books<0>) -> Digested {
     if let Some((k, _)) = gut.split {
         let rx = &chem.reactions[k];
         let per_liquid = rx.inputs.iter().find(|q| q.0 as usize == p.liquid).map_or(0.0, |q| q.1 as f64);
         let per_wall = rx.inputs.iter().find(|q| q.0 as usize == p.sub[WALL]).map_or(1.0, |q| q.1 as f64);
-        let units = (took[WALL].min(most) / per_wall).min(if per_liquid > 0.0 { *liquid / per_liquid } else { f64::INFINITY }).max(0.0);
+        let mm = p.mm(chem);
+        let kg: f64 = (0..NP).map(|q| took[q].max(0.0) * mm[q]).sum();
+        let slowed = rx.inhibited(|k| p.sub.iter().position(|&s| s == k).map_or(0.0, |q| took[q].max(0.0) / kg.max(1e-300)));
+        let units = (took[WALL].min(most * slowed) / per_wall).min(if per_liquid > 0.0 { *liquid / per_liquid } else { f64::INFINITY }).max(0.0);
         b.run(chem, &p.sub, &mut took, rx, units);
         *liquid -= units * per_liquid;
     }
@@ -75,7 +78,7 @@ pub(super) fn digest(chem: &Chemistry, (p, gut): (&Parts, &Gut), (f, x): (&mut F
     let before = f.mol[x][STORE];
     f.mol[x][STORE] += eaten[STORE];
     let unpaid = burn(chem, gut, (&sub, &mut f.mol[x]), left, b);
-    b.dead[p.sub[WALL]] += took[WALL].max(0.0);
+    (0..NP).filter(|&q| q != FUEL && q != MATTER).for_each(|q| b.dead[p.sub[q]] += took[q].max(0.0));
     let (change, matter) = (f.mol[x][STORE] - before, took[MATTER].max(0.0));
     let balance = change * gut.fuel(chem) + matter * per_matter - unpaid;
     Digested { unpaid: if energy > 0.0 { unpaid / energy } else { 0.0 }, matter, gained: change.max(0.0), balance }

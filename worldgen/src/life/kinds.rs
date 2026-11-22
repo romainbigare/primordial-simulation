@@ -32,8 +32,9 @@ const fn with<const N: usize>(mut s: [f32; N], d: &[(usize, f32)]) -> [f32; N] {
 /// dry mass), a tenth of its built cover kept as fuel, frozen below 268 K, fully active until its roots have drawn half
 /// the liquid its ground holds for them (`MOIST` -0.3: FAO-56's depletion fraction of 0.5), a tenth of what it builds
 /// to seeds, the fixing reaction off (`FIXERS` of the cells turn it on), a twentieth of its roots' volume gas space (`GAS`:
-/// plants of drained ground hold 2 to 7%; Justin and Armstrong 1987); 0.1 kg per m² on every land cell.
-const COVER_GENES: [f32; cover::NG] = [-5.0, 0.4, 0.0, -1.0, 268.0, -0.3, 0.1, -1.0, -11.0, 0.05];
+/// plants of drained ground hold 2 to 7%; Justin and Armstrong 1987), the solids that slow a reaction off (`SPLIT_CURBS`,
+/// `BURN_CURBS` at -8, 2 below their off level, `cover::OFF`); 0.1 kg per m² on every land cell.
+const COVER_GENES: [f32; cover::NG] = [-5.0, 0.4, 0.0, -1.0, 268.0, -0.3, 0.1, -1.0, -11.0, 0.05, -8.0, -8.0];
 
 /// The genes of the big slow cover, a tree: walls ten times its matter (its matter holds 2.5% of the fixed element, so
 /// the whole about 0.23%, as a forest stand's mean of 0.2 to 0.4%; Cole and Rapp 1981, from memory), the herb's light
@@ -55,14 +56,18 @@ const WET_TREE: [f32; cover::NG] = with(TREE, &[(cover::MOIST, -0.05), (cover::L
 /// The genes of a woody slow cover of dry ground: walls three times its matter, thick leaves (0.5 m² of capture area
 /// per kg of living cover), fully active down to a tenth of what its ground holds for roots (`MOIST` -1: its capacity
 /// per kg the herb's at that need only with a light gene 0.6 higher, so it is slower where the ground is wet), a fifth
-/// of its built cover kept as fuel, slower repair, and frozen below 266 K. Plants of dry ground have thick, long-lived
-/// leaves and slow growth (the leaf economics spectrum, Wright and others 2004).
-const DRY_WOODY: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.4), (cover::LEAF, -0.3), (cover::WALLS, 0.5), (cover::STORE, -0.7), (cover::FROST, 266.0), (cover::MOIST, -1.0), (cover::SEED, 0.08), (cover::REPAIR, -0.5)]);
+/// of its built cover kept as fuel, slower repair, frozen below 266 K, and 15% of its soft tissue as the solid that
+/// slows the splitting of walls (`SPLIT_CURBS`). Plants of dry ground have thick, long-lived leaves and slow growth (the
+/// leaf economics spectrum, Wright and others 2004), and the evergreen shrubs of dry ground hold 10 to 20% of their dry
+/// leaf mass as such solids (docs/numbers.md, "substances 23 and 24").
+const DRY_WOODY: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.4), (cover::LEAF, -0.3), (cover::WALLS, 0.5), (cover::STORE, -0.7), (cover::FROST, 266.0), (cover::MOIST, -1.0), (cover::SEED, 0.08), (cover::REPAIR, -0.5), (cover::SPLIT_CURBS, -0.824)]);
 
 /// The genes of a tall fast cover: walls 2.5 times its matter in thin stems, thin leaves (3.2 m² of capture area per kg
 /// of living cover), a light capacity a quarter above the herb's, fully active down to a third of what its ground holds
-/// for roots, a quarter of what it builds to seeds, and a short life (repair -1).
-const TALL_FAST: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.9), (cover::LEAF, 0.5), (cover::WALLS, 0.4), (cover::MOIST, -0.5), (cover::SEED, 0.25)]);
+/// for roots, a quarter of what it builds to seeds, a short life (repair -1), and 3% of its soft tissue as the solid
+/// that slows the burning of fuel (`BURN_CURBS`): plants that make such a solid hold about 1 to 5% of their
+/// dry leaf mass so (from memory), and a bite of it slows the burning of a body that eats it (laws.md 2.1).
+const TALL_FAST: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.9), (cover::LEAF, 0.5), (cover::WALLS, 0.4), (cover::MOIST, -0.5), (cover::SEED, 0.25), (cover::BURN_CURBS, -1.523)]);
 
 /// Starting kinds of cover, in the order the roster places them. A row sets only what the laws read (genes, and where,
 /// when and how much): kinds are initial conditions, never rules.

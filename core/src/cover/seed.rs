@@ -5,7 +5,7 @@
 
 use super::budget::{held, DIED, PLACED, SEEDS};
 use super::lying::LANDED;
-use super::{built_kg, dec, distance, Cover, APART, Parts, FUEL, MATTER, NG, NO_ROOT, NP, STORE, WALL, WALLS};
+use super::{built_kg, dec, distance, Cover, APART, Parts, FUEL, NG, NO_ROOT, NP, STORE, WALLS};
 use crate::chem::Chemistry;
 use crate::life::kin;
 use crate::store::{Class, Node};
@@ -152,14 +152,14 @@ pub(super) fn lines(w: &World, c: &Cover, i: usize, soak: &super::Soak, (recruit
 }
 
 /// Room in patch `k` of cover `c` whose `n` slots in use hold cover that pays its way: the two of the patch nearest each
-/// other by their genes (`distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the
+/// other by their niche genes (`niche_distance`), of any starting kind, join, the lighter into the heavier (`stand::join`): the
 /// slots are a limit of the bookkeeping, and the two hold the same niche to within what it resolves; where the patch
 /// holds fewer than two, the two nearest of another patch. Returns the slot it leaves empty (none where no patch holds
 /// two).
 pub(super) fn room(c: &mut Cover, mm: &[f64; NP], n: usize, k: usize) -> Option<usize> {
     let held = |x: usize| c.root[x] != NO_ROOT;
-    let pair = kin::nearest(&c.genes[..n], distance, |a, z| held(a) && held(z) && c.patch[a] == c.patch[z] && c.patch[a] as usize == k);
-    let (a, z) = pair.or_else(|| kin::nearest(&c.genes[..n], distance, |a, z| held(a) && held(z) && c.patch[a] == c.patch[z]))?;
+    let pair = kin::nearest(&c.genes[..n], super::niche_distance, |a, z| held(a) && held(z) && c.patch[a] == c.patch[z] && c.patch[a] as usize == k);
+    let (a, z) = pair.or_else(|| kin::nearest(&c.genes[..n], super::niche_distance, |a, z| held(a) && held(z) && c.patch[a] == c.patch[z]))?;
     let (big, small) = if c.built(mm, z) > c.built(mm, a) { (z, a) } else { (a, z) };
     super::stand::join(c, mm, big, small);
     Some(small)
@@ -228,8 +228,13 @@ pub fn sown(chem: &Chemistry, ph: &crate::Physics, p: &Parts, (i, area, t): (usi
     let mm = p.mm(chem);
     let built = kg * area / (1.0 + dec(genes[STORE]));
     let walls = dec(genes[WALLS]) * super::stand::walled(ph, built / super::stand::founded(ph, built, area));
-    let fm = 1.0 / (1.0 + walls);
-    let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * walls / mm[WALL]];
+    let shares = super::built_shares(&genes, walls);
+    // (Its walls as `walls` kg a kg of its body matter.)
+    let mol: [f64; NP] = std::array::from_fn(|q| match q {
+        FUEL => built * dec(genes[STORE]) / mm[FUEL],
+        super::WALL => built * shares[super::MATTER] * walls / mm[q],
+        _ => built * shares[q] / mm[q],
+    });
     let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp).sum::<f64>() * t;
     Seed { to: i as u32, mol, genes, root, heat }
 }

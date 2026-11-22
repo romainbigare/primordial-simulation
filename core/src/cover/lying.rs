@@ -64,14 +64,14 @@ impl Lying {
         let x = kin::empty(&self.root).unwrap_or_else(|| self.join(mm));
         (self.mol[x], self.genes[x], self.root[x]) = (s.mol, s.genes, s.root);
     }
-    /// The two lots nearest each other by their genes join, the lighter into the heavier: amounts added, genes the mean
-    /// by built matter, its starting kind the heavier's. Returns the lot left empty.
+    /// The two lots nearest each other by their niche genes (`cover::niche_distance`) join, the lighter into the
+    /// heavier: amounts added, genes the mean by built matter (`cover::mix`), its starting kind the heavier's. Returns the lot left empty.
     fn join(&mut self, mm: &[f64; NP]) -> usize {
-        let (a, z) = kin::nearest(&self.genes, distance, |_, _| true).expect("two lots");
+        let (a, z) = kin::nearest(&self.genes, super::niche_distance, |_, _| true).expect("two lots");
         let (big, small) = if built_kg(mm, &self.mol[z]) > built_kg(mm, &self.mol[a]) { (z, a) } else { (a, z) };
         let f = (built_kg(mm, &self.mol[small]) / (built_kg(mm, &self.mol[big]) + built_kg(mm, &self.mol[small])).max(1e-300)) as f32;
         let (gs, ms) = (self.genes[small], self.mol[small]);
-        (0..NG).for_each(|g| self.genes[big][g] += f * (gs[g] - self.genes[big][g]));
+        super::mix(&mut self.genes[big], &gs, f, self.root[big] == self.root[small]);
         (0..NP).for_each(|q| self.mol[big][q] += ms[q]);
         (self.mol[small], self.root[small]) = ([0.0; NP], NO_ROOT);
         small
@@ -105,7 +105,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
         let worn = crate::math::one_minus_exp(dt / DAY * rate * ph.dormant / (ph.e_life * dec(g[REPAIR])));
         let cold = frozen(ph, melt, g[FROST] as f64, (a.t, 0.0));
         let lot = c.lying.mol[x];
-        let kg = built_kg(&mm, &lot) + lot[super::FUEL] * mm[super::FUEL];
+        let kg = super::all_kg(&mm, &lot);
         counts.seeds[WORN] += worn * kg;
         counts.seeds[FROZEN] += (1.0 - worn) * cold * kg;
         let dies = 1.0 - (1.0 - worn) * (1.0 - cold);

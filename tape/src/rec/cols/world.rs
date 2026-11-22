@@ -110,8 +110,8 @@ impl Recorder {
 }
 
 /// Each mineral (`Chemistry::minerals`): its mass in the ground per m² of land and of sea, and where it is in all, in
-/// 10^9 mol of it (matter counted at its share of it, and what particles hold, `Substance::bound`, at what its rot
-/// gives back of it, `held_mineral`): dead matter on the ground of land and of the sea, the cover, and the stores of
+/// 10^9 mol of it (matter counted at its share of it, and what particles hold, `Substance::bound`, and the solids life
+/// builds, `Chemistry::materials`, at what their rot gives back of it, `held_mineral`): dead matter on the ground of land and of the sea, the cover, and the stores of
 /// the bed (`World::deep`).
 fn minerals(c: &Ctx, row: &mut Row) {
     let w = c.w;
@@ -133,15 +133,16 @@ fn minerals(c: &Ctx, row: &mut Row) {
         row.push(format!("min{q}_sea"), "kg/m2", t[0][1] * mm / areas[1].max(f64::MIN_POSITIVE));
         row.push(format!("min{q}_dead_land"), "1e9 mol", t[1][0] / GIGA);
         row.push(format!("min{q}_dead_sea"), "1e9 mol", t[1][1] / GIGA);
-        row.push(format!("min{q}_cover"), "1e9 mol", (cover[k] + matter.map_or(0.0, |m| cover[m]) * per) / GIGA);
+        let in_cover = cover[k] + matter.map_or(0.0, |m| cover[m]) * per + held.iter().map(|&(b, per_b)| cover[b] * per_b).sum::<f64>();
+        row.push(format!("min{q}_cover"), "1e9 mol", in_cover / GIGA);
         row.push(format!("min{q}_deep"), "1e9 mol", w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) / GIGA);
     }
 }
 
-/// Of each substance particles hold (`Substance::bound`), the mol of mineral `k` its rot gives back per mol: the first
-/// reaction that takes it and gives the mineral.
+/// Of each substance particles hold (`Substance::bound`) and each solid life builds (`Chemistry::materials`), the mol of
+/// mineral `k` its rot gives back per mol: the first reaction that takes it and gives the mineral.
 fn held_mineral(w: &World, k: usize) -> Vec<(usize, f64)> {
-    let bound = (0..w.chem.ns()).filter(|&b| w.chem.subs[b].bound);
+    let bound = (0..w.chem.ns()).filter(|&b| w.chem.subs[b].bound).chain(w.chem.materials());
     let back = |b: usize| w.chem.reactions.iter().find_map(|r| {
         let took = r.inputs.iter().find(|p| p.0 as usize == b)?.1 as f64;
         Some(r.outputs.iter().find(|p| p.0 as usize == k)?.1 as f64 / took)

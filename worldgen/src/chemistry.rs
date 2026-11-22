@@ -18,7 +18,17 @@ struct File {
     r: Vec<R>,
     build: B,
     builds: Vec<B>,
+    inhibit: Vec<I>,
     init: Init,
+}
+
+/// A substance that slows a reaction where a node holds it (`pcore::chem::Reaction::inhibit`): the substance, the
+/// reaction and its inhibition constant, mol per kg of the node's matter.
+#[derive(Deserialize)]
+struct I {
+    s: u16,
+    r: usize,
+    ki: f64,
 }
 
 /// A conversion: what bodies make of what they hold (`pcore::chem::Chemistry::build`, `builds`).
@@ -148,7 +158,11 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             bound: s.bound,
         })
         .collect();
-    let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, open: r.open.unwrap_or(1.0), ord: r.ord }).collect();
+    let mut reactions: Vec<Reaction> = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, open: r.open.unwrap_or(1.0), ord: r.ord, inhibit: Vec::new() }).collect();
+    for i in &f.inhibit {
+        let n = reactions.len();
+        reactions.get_mut(i.r).ok_or_else(|| format!("substance {} slows reaction {}, but there are {n} reactions", i.s, i.r))?.inhibit.push((i.s, i.ki));
+    }
     let conversion = |b: &B| Reaction::conversion(pair(&b.i), pair(&b.o));
     let chem = Chemistry::new(f.element_masses.len(), subs, reactions, (Some(conversion(&f.build)), f.builds.iter().map(conversion).collect()), &f.init.air, f.heat_bands);
     chem.validate()?;

@@ -97,12 +97,15 @@ pub struct Reaction {
     /// The power of each input's share in the rate law; empty: the counts (mass action). A big molecule is not a
     /// meeting of 40 molecules: the rate law keeps the power it was measured at.
     pub ord: Vec<u16>,
+    /// The substances that slow it, each with its inhibition constant, mol per kg of the matter of the node that holds
+    /// them (`Reaction::inhibited`)
+    pub inhibit: Vec<(u16, f64)>,
 }
 
 impl Reaction {
     /// A conversion (`Chemistry::build`, `builds`): balanced in elements like a reaction, with no rate.
     pub fn conversion(inputs: Vec<(u16, u16)>, outputs: Vec<(u16, u16)>) -> Self {
-        Reaction { inputs, outputs, k: 0.0, ea: 0.0, light: false, open: 1.0, ord: Vec::new() }
+        Reaction { inputs, outputs, k: 0.0, ea: 0.0, light: false, open: 1.0, ord: Vec::new(), inhibit: Vec::new() }
     }
 
     /// Its rate constant at `t` K (Arrhenius): k exp(-Ea / T), per second.
@@ -116,6 +119,14 @@ impl Reaction {
     #[inline]
     pub fn relative_rate(&self, t: f64, t_ref: f64) -> f64 {
         self.arrhenius(t.max(1.0)) / self.arrhenius(t_ref)
+    }
+
+    /// The share of its rate left where the substances that slow it are at `per_kg` mol per kg of the node's matter: the
+    /// product over them of 1 / (1 + c / K_i), the Michaelis–Menten form of an inhibitor that binds its catalyst
+    /// apart from what it works on (non-competitive inhibition; Segel 1975). 1 where none slows it.
+    #[inline]
+    pub fn inhibited(&self, per_kg: impl Fn(usize) -> f64) -> f64 {
+        self.inhibit.iter().fold(1.0, |f, &(k, ki)| f / (1.0 + per_kg(k as usize) / ki))
     }
 
     /// The power of the share of input `q` in the rate law (`ord`, else its count).
@@ -270,6 +281,8 @@ impl Chemistry {
             require(known, || format!("{name}: a substance beyond the {ns}"))?;
             require(rx.ord.len() <= rx.inputs.len(), || format!("{name}: more orders than inputs"))?;
             require(rx.open > 0.0, || format!("{name}: its speed in the open world must be above 0"))?;
+            let slows = rx.inhibit.iter().all(|&(k, ki)| (k as usize) < ns && ki > 0.0 && ki.is_finite());
+            require(slows && (!conversion || rx.inhibit.is_empty()), || format!("{name}: what slows it must be a substance of the {ns} with an inhibition constant above 0 (a conversion: none)"))?;
             let balanced = self.side_elems(&rx.inputs) == self.side_elems(&rx.outputs);
             require(balanced, || format!("{name} does not balance"))?;
             let (m_in, m_out) = (mass(&rx.inputs), mass(&rx.outputs));
