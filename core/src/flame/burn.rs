@@ -4,7 +4,7 @@
 
 use super::{Bed, FLAME_EXP, FLAME_K, KILLED, KILLED_WALLS, LIVING, PLANTS, REMAINS, SCORCHED, SMOULDERED, CURED, SCORCH_EXP, SCORCH_K, W_PER_KW};
 use crate::chem::{Chemistry, Phase};
-use crate::cover::{per_input, Books, Cover, Parts, BUDGET, BURNT, FUEL, MATTER, NP, ROUNDED, WALL};
+use crate::cover::{per_input, soft_in, Books, Cover, Parts, BUDGET, BURNT, FUEL, MATTER, NP, ROUNDED, SOFT, WALL};
 use crate::life::{Chunk, FLAME};
 use crate::store::{Class, Node};
 use crate::{World, AIR};
@@ -41,22 +41,24 @@ fn burn_up(chem: &Chemistry, b: &mut Books, (sub, m): (&[usize], &mut [f64]), k:
 
 /// Slot `x` of cover `c`, its crown from `base` to `top` m (`contract::crown`), on the share `f` of its cell that a
 /// flame of reach `r` burns. Its plants no taller than the scorch height die above the ground (`Cover::die_under`):
-/// what of them stood above their base burns in the flame, those that die whole leave their body matter and the fuel
+/// what of them stood above their base burns in the flame, those that die whole leave their soft tissue and the fuel
 /// in them by their share of the built cover to the ground and their walls standing dead (`Cover::snag`). Of a slot
-/// taller than `surface_m` the body matter of its crown that lives and stands in the flame burns, and what stands
+/// taller than `surface_m` the soft tissue of its crown that lives and stands in the flame burns, and what stands
 /// between the flame and the scorch height dies to the ground. What burns and dies is counted in `flows`.
 fn crown_burns(w: &World, p: &Parts, (c, x, (base, top)): (&mut Cover, usize, (f64, f64)), (f, r): (f64, &Reach), (b, flows): (&mut Books, &mut [f64; super::FLOWS.len()])) {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
     let rho = chem.subs[p.sub[WALL]].density[0];
     let [lit, under] = [r.flame, r.scorch].map(|h| f * crate::contract::reached((0.0, h), 0.0, (base, top)));
-    let (built, matter) = (c.built(&mm, x), c.mol[x][MATTER]);
+    let (built, soft) = (c.built(&mm, x), c.mol[x]);
     let ([tops, whole], died) = c.die_under(ph, (&mm, rho), x, (f, r.scorch));
-    for (q, kg) in [(MATTER, tops[0]), (WALL, tops[1])] {
-        let mol = (kg / mm[q]).min(c.mol[x][q]);
+    // What stood above their base burns: its soft tissue as the slot holds it (`cover::soft_in`), and its walls.
+    let mut above = soft_in(&mm, &c.mol[x], tops[0]);
+    above[WALL] = (tops[1] / mm[WALL]).min(c.mol[x][WALL]);
+    for q in (0..NP).filter(|&q| q != FUEL) {
+        let mol = above[q].min(c.mol[x][q]);
         flows[LIVING] += burn_up(chem, b, (&p.sub, &mut c.mol[x]), p.sub[q], mol) * mm[q];
     }
-    let mut dead = [0.0; NP];
-    dead[MATTER] = (whole[0] / mm[MATTER]).min(c.mol[x][MATTER]);
+    let mut dead = soft_in(&mm, &c.mol[x], whole[0]);
     dead[FUEL] = c.mol[x][FUEL].max(0.0) * (whole[0] + whole[1]) / built.max(f64::MIN_POSITIVE);
     let standing = (whole[1] / mm[WALL]).min(c.mol[x][WALL]);
     (c.mol[x][WALL], c.snag[WALL]) = (c.mol[x][WALL] - standing, c.snag[WALL] + standing);
@@ -64,12 +66,16 @@ fn crown_burns(w: &World, p: &Parts, (c, x, (base, top)): (&mut Cover, usize, (f
     flows[KILLED_WALLS] += standing * mm[WALL];
     flows[PLANTS] += died;
     if top > ph.surface_m {
-        // Of the leaves of the plants that live, those in the flame burn and those under the scorch height die.
+        // Of the leaves of the plants that live, with what their tissue holds, those in the flame burn and those under
+        // the scorch height die.
+        let matter = soft[MATTER];
         let alive = if matter > 0.0 { ((c.mol[x][MATTER] - dead[MATTER]) / matter).max(0.0) } else { 0.0 };
-        flows[LIVING] += burn_up(chem, b, (&p.sub, &mut c.mol[x]), p.sub[MATTER], matter * lit * alive) * mm[MATTER];
-        let scorched = (matter * (under - lit) * alive).clamp(0.0, (c.mol[x][MATTER] - dead[MATTER]).max(0.0));
-        dead[MATTER] += scorched;
-        flows[SCORCHED] += scorched * mm[MATTER];
+        for q in SOFT {
+            flows[LIVING] += burn_up(chem, b, (&p.sub, &mut c.mol[x]), p.sub[q], soft[q] * lit * alive) * mm[q];
+            let scorched = (soft[q] * (under - lit) * alive).clamp(0.0, (c.mol[x][q] - dead[q]).max(0.0));
+            dead[q] += scorched;
+            flows[SCORCHED] += scorched * mm[q];
+        }
     }
     // (Shares of the slot taken one after another may pass what it holds by rounding: no more than it holds dies.)
     for (q, &d) in dead.iter().enumerate() {

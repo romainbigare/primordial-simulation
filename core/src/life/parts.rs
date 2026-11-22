@@ -1,15 +1,24 @@
 //! The substances life is made of and the reactions it runs, found from the chemistry's numbers
-//! (`Chemistry::life_roles`): the fuel its light reaction makes, its body matter, and the solid it builds of the fuel
-//! alone (its walls). The cover holds all three (`cover::Cover::mol`); a taker holds the fuel and the body matter.
+//! (`Chemistry::life_roles`): the fuel its light reaction makes, its body matter, the solid it builds of the fuel
+//! alone (its walls), and the solids it builds that slow the splitting of the walls and the burning of the fuel where
+//! they are held (`Chemistry::curb`). The cover holds all five (`cover::Cover::mol`); a taker holds the fuel and the
+//! body matter.
 
 use super::WET_TISSUE;
 use crate::chem::Chemistry;
 
-/// The parts of life (`Parts`), by their place in its amounts: the fuel, the body matter, the walls.
-pub const NP: usize = 3;
+/// The parts of life (`Parts`), by their place in its amounts: the fuel, the body matter, the walls, the solid that
+/// slows the splitting of the walls and the solid that slows the burning of the fuel.
+pub const NP: usize = 5;
 pub const FUEL: usize = 0;
 pub const MATTER: usize = 1;
 pub const WALL: usize = 2;
+pub const SPLIT_CURB: usize = 3;
+pub const BURN_CURB: usize = 4;
+/// The solids that slow a reaction where they are held (`Chemistry::curb`).
+pub const CURBS: [usize; 2] = [SPLIT_CURB, BURN_CURB];
+/// The parts held in the living tissue: the body matter and the solids that slow a reaction, which leave with it.
+pub const SOFT: [usize; 3] = [MATTER, SPLIT_CURB, BURN_CURB];
 
 /// The substances of life's parts and the reactions it runs.
 #[derive(Clone, Copy, Debug)]
@@ -24,11 +33,13 @@ pub struct Parts {
 }
 
 impl Parts {
-    /// The parts in `chem`: none unless it has the roles of life, body matter and a solid built of the fuel alone
-    /// (`Chemistry::wall`).
+    /// The parts in `chem`: none unless it has the roles of life, body matter, a solid built of the fuel alone
+    /// (`Chemistry::wall`) and the solids life builds that slow the splitting of the walls and the burning of the fuel
+    /// (`Chemistry::curb`).
     pub fn of(chem: &Chemistry) -> Option<Parts> {
         let ((light, rich, liquid, burn), matter, wall) = (chem.life_roles()?, chem.matter()?, chem.wall()?);
-        Some(Parts { sub: [rich, matter, wall], light, burn, fix: chem.fixing(), liquid })
+        let curbs = (chem.curb(chem.split()?)?, chem.curb(burn)?);
+        Some(Parts { sub: [rich, matter, wall, curbs.0, curbs.1], light, burn, fix: chem.fixing(), liquid })
     }
     /// The molar mass of each part, kg/mol.
     pub fn mm(&self, chem: &Chemistry) -> [f64; NP] {

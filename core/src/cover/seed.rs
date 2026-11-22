@@ -5,7 +5,7 @@
 
 use super::budget::{held, DIED, PLACED, SEEDS};
 use super::lying::LANDED;
-use super::{built_kg, dec, distance, Cover, APART, Parts, FUEL, MATTER, NG, NO_ROOT, NP, STORE, WALL, WALLS};
+use super::{built_kg, dec, distance, Cover, APART, Parts, FUEL, NG, NO_ROOT, NP, STORE, WALLS};
 use crate::chem::Chemistry;
 use crate::life::kin;
 use crate::store::{Class, Node};
@@ -228,8 +228,8 @@ pub fn sown(chem: &Chemistry, ph: &crate::Physics, p: &Parts, (i, area, t): (usi
     let mm = p.mm(chem);
     let built = kg * area / (1.0 + dec(genes[STORE]));
     let walls = dec(genes[WALLS]) * super::stand::walled(ph, built / super::stand::founded(ph, built, area));
-    let fm = 1.0 / (1.0 + walls);
-    let mol = [built * dec(genes[STORE]) / mm[FUEL], built * fm / mm[MATTER], built * fm * walls / mm[WALL]];
+    let shares = super::built_shares(&genes, walls);
+    let mol: [f64; NP] = std::array::from_fn(|q| if q == FUEL { built * dec(genes[STORE]) / mm[FUEL] } else { built * shares[q] / mm[q] });
     let heat = (0..NP).map(|q| mol[q] * chem.subs[p.sub[q]].cp).sum::<f64>() * t;
     Seed { to: i as u32, mol, genes, root, heat }
 }

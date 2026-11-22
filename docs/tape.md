@@ -278,7 +278,7 @@ are not recorded.
 | `elem_<j>` | mol | element j in the world (must not change) |
 | `energy` | J | heat and chemical energy in the world |
 | `min<q>_land`, `min<q>_sea` | kg/m² | mineral q in the ground of land and of the sea floor |
-| `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_cover`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea (the slow organic pool among it), in the cover, in the bed's stores |
+| `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_cover`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea (the slow organic pool and the solids life builds among it, at what their rot gives back), in the cover (the same), in the bed's stores |
 | `t_ground`, `t_air` | K | mean ground and air temperature (by area; of a cell of parts its land's and its liquid's top's mean by area, `World::t_surface_last`) |
 | `t_land`, `t_land_summer`, `t_land_winter` | K | the land's ground as life feels it (of a cell of parts its land, `World::t_ground_last`): the mean of the year's months, the warmest month and the coldest |
 | `absorber` | | mean absorption of the heat-absorbing gases |
@@ -320,4 +320,4 @@ out reads 0 (its means `NaN`). Means are by its built cover.
 | Column | Unit | Meaning |
 |---|---|---|
 | `slots`, `cover_kg`, `cover_area` | , kg, m²/m² | its slots, its mass, its capture area per m² of land |
-| `cover_<gene>` | the gene's | the mean of each of its genes, one column a gene, named and in the unit `cover::GENES` gives (`light`, `leaf`, `walls`, `store`, `frost`, `moist`, `seed`, `repair`, `fix`, `gas`) |
+| `cover_<gene>` | the gene's | the mean of each of its genes, one column a gene, named and in the unit `cover::GENES` gives (`light`, `leaf`, `walls`, `store`, `frost`, `moist`, `seed`, `repair`, `fix`, `gas`, `split_curbs`, `burn_curbs`: the shares of its soft tissue that are the solids that slow a reaction) |

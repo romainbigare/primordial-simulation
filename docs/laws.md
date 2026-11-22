@@ -1019,7 +1019,7 @@ Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its phy
 
 ### 2.1 The rate law
 ```
-rate    = catalyst · k · exp(−Ea / T) · contact · Π over inputs (share of its phase ^ order)
+rate    = catalyst · k · exp(−Ea / T) · contact · Π over inputs (share of its phase ^ order) · Π over inhibitors 1 / (1 + c / Ki)
 lim     = the least, over the inputs, of (amount / count)      (the scarce input)
 contact = what lim would be if each input were all of its phase
 extent  = lim · (1 − (1 + p·z)^(−1/p)),   z = rate / lim · time   (1 − exp(−z) when p = 0)
@@ -1037,7 +1037,13 @@ feel it: d / (d + `wet_depth`), d the depth of its liquid in its pores and stand
 `Physics::wetness`), so decomposers work on dry land too, slower; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
 week); 5 for 7 (body matter rots 3.8 times faster than the frame); 10^6 for 12 (the frame rots by the decomposers
 only: bare, a millionth of that).
-`change::rate` (catalyst × k exp(−Ea/T) × the shares and contact of `pace`) is the one rate of all nodes. **Frozen**: a bare reaction whose rate constant k exp(−Ea/T) would
+**Inhibitors** (`Reaction::inhibit`, the chemistry's `[[inhibit]]` list, checked by `Chemistry::validate`): a
+substance may slow a reaction wherever it is held. The reaction's rate is divided by 1 + c / Ki, c the inhibitor's mol
+per kg of all the matter of the node (its rock, liquid and the rest), Ki its inhibition constant, mol/kg: the
+Michaelis–Menten form of an inhibitor that binds the catalyst apart from what it works on (non-competitive
+inhibition; Segel 1975), one factor for each inhibitor (`Reaction::inhibited`). At c = Ki the reaction runs at half
+its pace. No rule names a body or a food: the same factor slows a gut's splitting of what it ate (3b).
+`change::rate` (catalyst × k exp(−Ea/T) × the shares and contact of `pace` × the inhibitors' factor) is the one rate of all nodes. **Frozen**: a bare reaction whose rate constant k exp(−Ea/T) would
 use under 1e-12 of an input over the world's year is skipped in every node (`frozen_below`, `NEGLIGIBLE`), a speed
 tolerance.
 
@@ -1080,7 +1086,7 @@ gas and the liquid; 9 turns it back. Wet cells start at that balance (`worldgen:
 times the air's carbon and gives it back when the air thins, with no rule for the sea.
 
 ### 2.6 Chemistry 0 in short
-One fixed Earth-like chemistry until M7 (handover 6.0): 11 elements, 23 substances, 22 reactions, numbers only in
+One fixed Earth-like chemistry until M7 (handover 6.0): 11 elements, 25 substances, 24 reactions, numbers only in
 `core` and `worldgen`; Earth names in `library/chem0.toml`. Molar masses are sums over elements, so reactions keep mass.
 
 | Number | Role (≈ Earth name, for reading only) |
@@ -1101,6 +1107,8 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 11 elements, 23 substanc
 | 19 | the solid of element 1 alone (≈ charcoal, and coal as a rock) |
 | 20 | a crystal of elements 8 and 9 (≈ rock salt, NaCl); nothing dissolves it, so it stays where it is laid |
 | 21, 22 | a clay mineral and the clay baked dry (≈ kaolinite, metakaolin) |
+| 23 | a solid built of the fuel alone that slows the splitting of the frame (reaction 13, Ki 0.1 mol/kg): C15H12O6 (≈ a condensed tannin unit) |
+| 24 | a solid built of the fuel and the nitrogen mineral that slows the burnings that power a body (1, 2 and 7, Ki 1e-5 mol/kg): C20H27NO11 (≈ amygdalin, a cyanogenic glycoside) |
 
 Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 2 and 3 burning and making fat; 4 burning
 methane; 5 rotting to methane; 6 rock weathering; 7 rotting or burning body matter (gives back the nitrogen mineral and the salt 11); 8 and 9 the lime–salt pair; 10 fixing nitrogen; 11 the nitrogen mineral breaking down when hot; 12 rotting
@@ -1109,10 +1117,12 @@ of the frame; 13 splitting the frame into sugar (needs an enzyme); 14 body matte
 nitrogen, its salt 11 back to the ground); 15 the slow organic matter rotting (25 times slower than 7, its nitrogen back as the mineral). 16 to 21 run fast only in a flame's or a kiln's heat and are frozen at the ground's warmth (`frozen_below`): 16
 charring the frame into the solid 19 and the liquid, with no gas; 17 burning 19; 18 and 19, the solid 19 freeing the
 elements 6 and 7 from their oxides (at about 1300 K and 1100 K); 20 baking the clay (about 800 K); and 21, the free
-element 6 turning back to its oxide in the air, about 1% a year at 290 K. Dead matter rots in moist open ground at a litter
+element 6 turning back to its oxide in the air, about 1% a year at 290 K; 22 and 23 the rot of the solids 23 and 24 at the
+pace of the free fuel's (reaction 1, about a week in moist ground), 24 giving its nitrogen back as the mineral 12. Dead matter rots in moist open ground at a litter
 constant (12: about a quarter a year at 290 K; 7: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
-work): matter from 118 sugar + 3 nitrogen mineral + 1 salt 11; frame from 6 sugar.
-`Chemistry::minerals` are growth's inputs no reaction burns (12 and 11), `materials` the solids bodies build (13).
+work): matter from 118 sugar + 3 nitrogen mineral + 1 salt 11; frame from 6 sugar; 23 from 15 sugar (and 9 of the
+liquid back); two of 24 from 43 sugar and one nitrogen mineral (and 3 of the carbon gas and 18 of the liquid back).
+`Chemistry::minerals` are growth's inputs no reaction burns (12 and 11), `materials` the solids bodies build (13, 23, 24).
 The air's carbon gas (3) settles where the cover's light reaction takes it up as fast as rot and burning give it back:
 the world has no source of it (an input from below, as volcanoes give, would be an edit from outside the laws, and is
 not built).
@@ -1121,10 +1131,17 @@ not built).
 `core/src/cover/`. Each cell holds up to its world's `Config::variety` kinds of **cover** (a setting of a world, 8
 unless a start chooses other, at most `cover::SLOTS`, 16, the size of its arrays; a cell of more than one patch,
 below, uses all 16, each patch at most `variety`), each the
-amounts of three substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10 and its walls
-13: `cover::Parts`, found from the chemistry's roles) and 10 genes (`cover::LIGHT`, `LEAF`, `WALLS`,
-`STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`, `GAS`; ranges in `cover::RANGE`). Its **living cover** is its body
-matter with the liquid of living tissue (matter / (1 − `WET_TISSUE`), `Cover::living`);
+amounts of five substances of chemistry 0 per cell (the fuel 5 its light reaction makes, body matter 10, its walls
+13, and the two solids that slow a reaction where they are held, 23 that slows the splitting of its walls and 24 that
+slows the burning of fuel: `cover::Parts`, found from the chemistry's roles, `Chemistry::curb`) and 12 genes
+(`cover::LIGHT`, `LEAF`, `WALLS`, `STORE`, `FROST`, `MOIST`, `SEED`, `REPAIR`, `FIX`, `GAS`, `SPLIT_CURBS`,
+`BURN_CURBS`; ranges in `cover::RANGE`). Its **living cover** is its body
+matter with the liquid of living tissue (matter / (1 − `WET_TISSUE`), `Cover::living`); its **soft tissue** is its
+body matter with the two solids that slow a reaction (`life::SOFT`): they are held in its living tissue and leave
+with it (shed leaves, leaves burnt or scorched, seeds), in the share of the matter that leaves (`cover::soft_in`), pay
+no upkeep and do not wear. Its own burning does not read them (its upkeep goes by `relative_rate`, not by Change): a
+plant keeps such stores apart from the catalysts they would slow, as plants hold their cyanogenic glycosides in the
+cell's vacuole, apart from the enzyme that frees the cyanide (Poulton 1990, from memory);
 its walls are a frame, which pays no upkeep and does not wear, so its capacity, capture area,
 upkeep, wear and fixing go by its living cover, as the maintenance breathing of wood goes by its living cells (Ryan
 1990, from memory). The cover of a cell is a node of the
@@ -1327,8 +1344,12 @@ seeds fill it:
   ground in proportion to their size, Casper and Jackson 1997, so a flush of seedlings takes a seedling's share of a
   scarce mineral, not a share by how fast it could grow; whatever slots hold the kinds) build body matter and walls (10^`WALLS` kg per kg of matter, times m / (m +
   `wall_kg`) for a plant of m kg: a seedling is mostly leaf and the share of stem grows with a plant's size, Poorter
-  and others 2012; of each group of its plants by its share of what the slot builds, `Cover::walled_new`) by the conversions of growth (`Chemistry::build`,
-  `builds`), paying `c_copy` per kg by burning fuel. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
+  and others 2012; of each group of its plants by its share of what the slot builds, `Cover::walled_new`), and of the
+  soft tissue it builds the shares `SPLIT_CURBS` and `BURN_CURBS` (0 to 0.3) as the solids 23 and 24
+  (`cover::built_shares`: so they are that share of its leaves whatever its walls), by the
+  conversions of growth (`Chemistry::build`, `builds`: 24 takes the mineral 12 too, so it is shared out with the
+  minerals as body matter is), paying `c_copy` per kg by burning fuel. They count in its built cover and its plants'
+  mass, as its tissue holds them. A fixer (`FIX` above `FIX_OFF`) makes the mineral its growth lacks by the fixing reaction (10), at
   most 10^`FIX` mol per kg of living cover per s at the reaction's pace, paid by the reaction's fuel. Then it builds
   walls alone of the fuel past its reserve, up to the walls its plants hold for their mass (each group's by its share,
   `Cover::walled_held`; `grow::frame`): walls are
@@ -1341,7 +1362,7 @@ seeds fill it:
   kernel of two scales, a near and a far one, each an isotropic Gaussian, `kernel_near` and `kernel_far`: most within
   tens of metres, a long tail to km, Clark et al. 1999); the lots of a cell make a packet each (`seed::send`; what lands
   in its own cell or off the map stays there), with one generation's mutation of its genes (noise × each gene's step ×
-  `mut_size`), of body matter first and then walls (an embryo and its store); where its lots land and how they vary are
+  `mut_size`), of soft tissue first (body matter with the solids it holds, as it grew) and then walls (an embryo and its store); where its lots land and how they vary are
   drawn by the cell and the slot's genes, rounded to 1/1024 of each gene's step (`rng::Purpose::Cover`, `KEY_STEPS`),
   not by its place among the cell's slots; all of it where one more kg would not pay and its plants hold their walls (short of them it builds walls alone, above): what a kg more would store with the light at the bottom of
   its layer (`canopy::shade`) is less than a kg's upkeep, so the slot is **full** (`Cover::full`) and stops thickening
@@ -1538,7 +1559,7 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   burnt herbs and shrubs do, what stood above its base burning by its burning reactions; a group of taller plants loses the share f of its plants and of its built cover, their fuel by their share of
   the slot's built cover to the ground and their walls standing dead (`Cover::snag`, part of the cover's node), which
   fall to the ground with a mean life of `snag_life` (`grow::fall`, booked as died). Of a slot taller than `surface_m`
-  the body matter of its crown (`contract::crown`, spread evenly over it) of the plants that live burns where it stands
+  the soft tissue of its crown (body matter with what it holds, `life::SOFT`; `contract::crown`, spread evenly over it) of the plants that live burns where it stands
   in the flame, and dies to the ground between the flame and the scorch height: a young tree must outgrow the flame between fires
   (Bond and Midgley 2001). Seeds lying survive. Gases go to the cell's
   aside node and so to the air, what is not a gas (the liquid of the reactions, the nitrogen mineral of body matter, as
@@ -1594,7 +1615,7 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   pace and repair, as the cover pays for its light capacity.
 - **What it reaches** (`fauna::take`): each slot of the cover as two layers by the height its plants stand at, its
   soft part and its frame, and the seeds lying (`contract::slots`, `contract::shown`). The soft part of a slot is its
-  living matter and its fuel (the leaves that capture light, and the living cells of its sapwood); the frame is its
+  soft tissue (`life::SOFT`) and its fuel (the leaves that capture light, and the living cells of its sapwood); the frame is its
   walls (its stems and branches, and the walls of its leaves). **A mouth breaks what its jaw can rupture**
   (`contract::cut`): a jaw closes with `jaw` × m^`jaw_exp` N and cuts an axis of width d where that force is the frame's
   stress for a cut (`Substance::shear`) over the solid wall of its section (`stem_solid` of π d² / 4); a stand whose
@@ -1660,7 +1681,8 @@ young member is a body of its own mass, with its own band, floor, upkeep and hea
   burns for its upkeep and heat first the fuel it took and split, then the body matter it took (the burning of body
   matter, which gives its mineral to the ground at once), then its store, each no more than the gas the cell's share of
   its air node offers (`Books::room`); the fuel it took and did not burn goes to its store; the walls it did not split
-  pass to the ground; the body matter it did not burn is for growth.
+  and the other solids it took pass to the ground; the body matter it did not burn is for growth. Its capacity is slowed
+  by what it took that slows the splitting (`Reaction::inhibited`, by its mol per kg of all it took, 2.1).
 - **Deaths**, each cause a share of the members on what the one before left (as the cover's): the share of the energy
   unpaid (`SPENT`); 1 − e^-wear (`AGE`), wear the energy a member burns per kg over `e_life` × 10^REPAIR (Rubner 1908);
   the frozen share at its body's temperature (`Physics::frozen`, the key liquid's melting point lowered by `harden` ×

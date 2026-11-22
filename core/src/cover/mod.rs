@@ -71,7 +71,11 @@ pub const REPAIR: usize = 7;
 pub const FIX: usize = 8;
 /// The share of its roots' volume that is gas space (`cover::working`)
 pub const GAS: usize = 9;
-pub const NG: usize = 10;
+/// Share of its soft tissue (`life::SOFT`) it builds as the solid that slows the splitting of walls (`life::SPLIT_CURB`)
+pub const SPLIT_CURBS: usize = 10;
+/// Share of its soft tissue it builds as the solid that slows the burning of fuel (`life::BURN_CURB`)
+pub const BURN_CURBS: usize = 11;
+pub const NG: usize = 12;
 /// Each gene's name and unit, in the order of their indices: what the tape and a viewer call it.
 pub const GENES: [(&str, &str); NG] = [
     ("light", "log10 mol/kg/s"),
@@ -84,19 +88,21 @@ pub const GENES: [(&str, &str); NG] = [
     ("repair", "log10"),
     ("fix", "log10 mol/kg/s"),
     ("gas", "share"),
+    ("split_curbs", "share"),
+    ("burn_curbs", "share"),
 ];
 /// A fixing gene at or below this is off.
 pub const FIX_OFF: f32 = -10.0;
 
 /// Mutation step (times `Physics::mut_size`) and range of each gene.
-pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6)];
+pub const RANGE: [(f32, f32, f32); NG] = [(0.3, -8.0, -2.0), (0.3, -2.0, 2.0), (0.2, -2.0, 2.0), (0.2, -3.0, 0.0), (5.0, 200.0, 300.0), (0.1, -2.0, 0.0), (0.05, 0.0, 1.0), (0.2, -3.0, 3.0), (0.3, -12.0, -6.0), (0.05, 0.02, 0.6), (0.015, 0.0, 0.3), (0.015, 0.0, 0.3)];
 /// The line of a slot before its first month (`Cover::line`): it takes then the line of all the ground its kind may
 /// hold (`footing`), found by the same month's start as every other slot's.
 pub const UNSET: f32 = -1.0;
 /// A slot whose built cover is under this, kg, is empty.
 pub const EMPTY_KG: f64 = 1e-9;
 pub use crate::life::kin::APART;
-pub use crate::life::{Parts, FUEL, MATTER, NO_ROOT, NP, WALL};
+pub use crate::life::{Parts, BURN_CURB, CURBS, FUEL, MATTER, NO_ROOT, NP, SOFT, SPLIT_CURB, WALL};
 pub use crate::math::dec;
 
 /// The cover of one ground cell, in `SLOTS` slots, of which its world uses the first `Config::variety`.
@@ -196,6 +202,10 @@ impl Cover {
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
         (0..SLOTS).filter(|&x| self.root[x] != NO_ROOT)
     }
+    /// The soft tissue of slot `x` (`life::SOFT`: its body matter and what it holds with it), kg.
+    pub fn soft(&self, mm: &[f64; NP], x: usize) -> f64 {
+        SOFT.iter().map(|&q| self.mol[x][q] * mm[q]).sum()
+    }
     /// The built cover of slot `x` (body matter and solids), kg.
     pub fn built(&self, mm: &[f64; NP], x: usize) -> f64 {
         built_kg(mm, &self.mol[x])
@@ -271,9 +281,34 @@ impl Cover {
     }
 }
 
-/// The built cover of amounts `m` (mol of each part): body matter and walls, kg.
+/// The built cover of amounts `m` (mol of each part): all but the fuel, kg.
 pub fn built_kg(mm: &[f64; NP], m: &[f64; NP]) -> f64 {
-    m[MATTER] * mm[MATTER] + m[WALL] * mm[WALL]
+    (0..NP).filter(|&q| q != FUEL).map(|q| m[q] * mm[q]).sum()
+}
+
+/// The mol of each part of the soft tissue (`life::SOFT`) in `kg` of soft tissue as amounts `m` (mol of each part) hold
+/// it, no more than they hold: its body matter, and with each mol of it what `m` holds of each other soft part a mol of
+/// its body matter; none of the other parts.
+pub fn soft_in(mm: &[f64; NP], m: &[f64; NP], kg: f64) -> [f64; NP] {
+    let with = |q: usize| if m[MATTER] > 0.0 { m[q].max(0.0) / m[MATTER] } else { 0.0 };
+    let tissue = mm[MATTER] + CURBS.iter().map(|&q| with(q) * mm[q]).sum::<f64>();
+    let mut out = [0.0; NP];
+    out[MATTER] = (kg / tissue).min(m[MATTER]).max(0.0);
+    CURBS.iter().for_each(|&q| out[q] = with(q) * out[MATTER]);
+    out
+}
+
+/// What a kg that a kind of genes `g` builds holds of each part, kg, where its walls are `walls` kg per kg of its body
+/// matter: of its soft tissue (`life::SOFT`) the shares its genes `SPLIT_CURBS` and `BURN_CURBS` set are the solids that
+/// slow a reaction, the rest body matter; no fuel.
+pub fn built_shares(g: &[f32; NG], walls: f64) -> [f64; NP] {
+    let curbs = [g[SPLIT_CURBS] as f64, g[BURN_CURBS] as f64];
+    let of_soft = 1.0 - curbs[0] - curbs[1];
+    let soft = 1.0 / (1.0 + walls * of_soft);
+    let mut kg = [0.0; NP];
+    (kg[MATTER], kg[SPLIT_CURB], kg[BURN_CURB]) = (soft * of_soft, soft * curbs[0], soft * curbs[1]);
+    kg[WALL] = kg[MATTER] * walls;
+    kg
 }
 
 /// The cover of one starting kind (`Cover::root`), summed over the world for the shell: its slots, its cover (kg), its

@@ -14,7 +14,7 @@ pub use chunk::Chunk;
 pub(crate) use chunk::run;
 pub use disperse::lot;
 pub use kin::NO_ROOT;
-pub use parts::{Parts, FUEL, MATTER, NP, WALL};
+pub use parts::{Parts, BURN_CURB, CURBS, FUEL, MATTER, NP, SOFT, SPLIT_CURB, WALL};
 pub use shared::{breaking, AGE, BROKEN, DEATHS, DROWNED, FLAME, LACK, PHASE, SPENT, TAKEN, WET_TISSUE};
 
 use crate::cover::Cover;

@@ -5,7 +5,7 @@ use std::path::Path;
 const BANNED: &str = "farm, crop, harvest, sow, herd, livestock, domestic, tame, pasture, house, home, hut, village, town, city, settlement, road, route, trail, river, lake, ocean, sea, market, trade, money, price, coin, wage, debt, loan, property, owner, king, queen, lord, council, kingdom, empire, nation, war, army, weapon, church, temple, religion, god, tool, axe, plough, wheel, cart, car, boat, ship, plane, engine, metal, iron, copper, bronze, steel, gold, wood, stone, coal, oil, fire, food, grain, meat, water, medicine, disease, tribe, family, household, culture";
 
 /// The Earth names of chemistry 0's substances and reactions (`library/chem0.toml`) that are not already above.
-const SUBSTANCES: &str = "nitrogen, oxygen, carbon, dioxide, monoxide, methane, sugar, fat, charcoal, sand, quartz, limestone, quicklime, lime, ore, tin, calcium, bicarbonate, carbonate, calcite, nitrate, ammonium, fertiliser, salt, cellulose, cellulase, mortar, smelt";
+const SUBSTANCES: &str = "nitrogen, oxygen, carbon, dioxide, monoxide, methane, sugar, fat, charcoal, sand, quartz, limestone, quicklime, lime, ore, tin, calcium, bicarbonate, carbonate, calcite, nitrate, ammonium, fertiliser, salt, cellulose, cellulase, mortar, smelt, tannin, glycoside, cyanide, alkaloid, amygdalin";
 
 /// Words that look like an inflection of a banned word but are not one: Rust's own names (`u64::trailing_zeros`).
 const ALLOWED: [&str; 1] = ["trailing"];

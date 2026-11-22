@@ -96,6 +96,19 @@ impl Chemistry {
         Some(self.builds.iter().find(|b| b.inputs.iter().all(|p| p.0 as usize == rich))?.outputs[0].0 as usize)
     }
 
+    /// The reaction that splits life's walls (`wall`) into its energy-rich solid (`life_roles`): the first that takes
+    /// the one and makes the other (a gut's, `fauna::gut`).
+    pub fn split(&self) -> Option<usize> {
+        let (rich, wall) = (self.life_roles()?.1, self.wall()?);
+        let has = |v: &[(u16, u16)], k: usize| v.iter().any(|q| q.0 as usize == k);
+        (0..self.reactions.len()).find(|&r| has(&self.reactions[r].inputs, wall) && has(&self.reactions[r].outputs, rich))
+    }
+
+    /// The first solid life builds (`materials`) that slows reaction `r` where it is held (`Reaction::inhibit`).
+    pub fn curb(&self, r: usize) -> Option<usize> {
+        self.materials().find(|&k| self.reactions[r].inhibit.iter().any(|q| q.0 as usize == k))
+    }
+
     /// Body matter and the reaction that burns it with a gas (none where life does not grow).
     pub fn matter_roles(&self) -> Option<(usize, usize)> {
         let m = self.matter()?;

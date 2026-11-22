@@ -362,6 +362,37 @@ sol = 0.0
 cond = 1.5
 hf = -3340
 
+# 23 and 24: solids life may build to slow a reaction in whatever holds them (`inhibit`, below): docs/numbers.md,
+# "substances 23 and 24".
+# 23: of the fuel alone, as the frame is; it slows the splitting of the frame (reaction 13).
+[[s]] # 23
+e = [12,15,0,6,0,0,0,0,0,0,0]
+cp = 375
+melt = 1500
+boil = 3000
+rho = [1500, 1300]
+hard = 0.2
+str = 0.3
+refl = [[0.30,0.22,0.15],[0.25,0.18,0.12]]
+sol = 0.0
+cond = 0.2
+hf = -552
+
+# 24: of the fuel and the mineral 12, holding the fixed element; it slows the burnings that power a body (reactions 1, 2
+# and 7) at a small amount.
+[[s]] # 24
+e = [27,20,1,11,0,0,0,0,0,0,0]
+cp = 590
+melt = 1500
+boil = 3000
+rho = [1500, 1300]
+hard = 0.2
+str = 0.3
+refl = [[0.80,0.78,0.72],[0.60,0.60,0.60]]
+sol = 0.0
+cond = 0.2
+hf = -1496.6955
+
 # Reactions: i/o = [[substance, count]], k 1/s, ea K, ord the power of each input in the rate law (`Reaction::ord`).
 [[r]] # 0
 i = [[3,1],[0,1]]
@@ -532,6 +563,46 @@ ord = [1,1]
 k = 0.044
 ea = 5000
 
+# 22 and 23: the solids 23 and 24 rot as the free fuel does (reaction 1), back to the gas, the liquid and the mineral
+# 12: docs/numbers.md, "reactions 22 and 23".
+[[r]] # 22
+i = [[23,1],[2,15]]
+o = [[3,15],[0,6]]
+ord = [1,1]
+k = 1.72e4
+ea = 7760
+open = 200
+
+[[r]] # 23
+i = [[24,2],[2,43]]
+o = [[12,1],[3,40],[0,25]]
+ord = [1,1]
+k = 1.72e4
+ea = 7760
+open = 200
+
+# What slows a reaction where a node holds it (`Reaction::inhibit`): the substance s, the reaction r and the inhibition
+# constant ki, mol per kg of the node's matter: docs/numbers.md, "inhibit".
+[[inhibit]]
+s = 23
+r = 13
+ki = 0.1
+
+[[inhibit]]
+s = 24
+r = 1
+ki = 1e-5
+
+[[inhibit]]
+s = 24
+r = 2
+ki = 1e-5
+
+[[inhibit]]
+s = 24
+r = 7
+ki = 1e-5
+
 # Growth (`Chemistry::build`), no reaction of the open world: body matter (the first output) of 5, 12 and 11, paid by work
 # (Copy): docs/numbers.md, "Chemistry::build".
 [build]
@@ -543,6 +614,16 @@ o = [[10,1],[0,26]]
 [[builds]]
 i = [[5,6]]
 o = [[13,1],[0,1]]
+
+# The solid 23 of 15 of the fuel, and the solid 24 of 43 of the fuel and one of the mineral 12, with no heat in or out:
+# docs/numbers.md, "Chemistry::builds".
+[[builds]]
+i = [[5,15]]
+o = [[23,1],[0,9]]
+
+[[builds]]
+i = [[5,43],[12,1]]
+o = [[24,2],[3,3],[0,18]]
 
 # Starting world: [substance, fraction]; soil: [substance, mol per m2 of land] (`Init::soil`): docs/numbers.md, "soil".
 [init]

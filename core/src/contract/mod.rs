@@ -168,8 +168,8 @@ pub fn lands(w: &World) -> Vec<f64> {
 pub enum Layer {
     /// All the cover, each slot giving in proportion to what it holds of what is taken (a bite of the field)
     Cover,
-    /// The soft part of the plants of one slot: its living matter (the leaves that capture light and the living cells of
-    /// its sapwood) and its fuel
+    /// The soft part of the plants of one slot: its soft tissue (the leaves that capture light and the living cells of
+    /// its sapwood, with what that tissue holds) and its fuel
     Soft(usize),
     /// The frame of the plants of one slot: its walls (its stems and branches, and the walls of its leaves)
     Frame(usize),
@@ -178,12 +178,13 @@ pub enum Layer {
 }
 
 impl Layer {
-    /// The share of each part of slot `x` of the cover this layer holds (`life::Parts`: fuel, matter, walls).
+    /// The share of each part of slot `x` of the cover this layer holds (`life::Parts`): the soft part its fuel and its
+    /// soft tissue (`life::SOFT`), the frame its walls.
     fn parts(self, x: usize) -> [f64; NP] {
         match self {
             Layer::Cover => [1.0; NP],
-            Layer::Soft(y) if x == y => [1.0, 1.0, 0.0],
-            Layer::Frame(y) if x == y => [0.0, 0.0, 1.0],
+            Layer::Soft(y) if x == y => std::array::from_fn(|q| (q != crate::life::WALL) as u8 as f64),
+            Layer::Frame(y) if x == y => std::array::from_fn(|q| (q == crate::life::WALL) as u8 as f64),
             _ => [0.0; NP],
         }
     }

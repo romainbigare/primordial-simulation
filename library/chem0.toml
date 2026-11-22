@@ -7,10 +7,12 @@ substances = [
   "humus (stable soil organic matter)",
   "iron", "iron ore (haematite)", "copper", "copper ore (tenorite)", "solid carbon (charcoal / coal)", "rock salt (halite)",
   "clay (kaolinite)", "fired clay (metakaolin)",
+  "tannin (a condensed tannin unit)", "cyanogenic glycoside (amygdalin)",
 ]
 reactions = [
   "light to sugar", "burning sugar", "burning fat", "fat making", "burning methane", "rotting to methane",
   "rock weathering", "burning body matter", "limestone dissolving", "limestone settling", "nitrogen fixation", "fertiliser salt breaking down hot", "rotting of the frame", "splitting the frame (cellulase)",
   "humus forming", "humus rotting",
   "charring wood", "burning charcoal / coal", "smelting iron", "smelting copper", "firing clay", "rusting",
+  "rotting of tannin", "rotting of the glycoside (its nitrogen back as the fertiliser salt)",
 ]

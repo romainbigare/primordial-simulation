@@ -52,19 +52,25 @@ fn start() -> (pcore::World, usize) {
     (w, i)
 }
 
-/// 0.1 kg per m² of the starting cover on one cell grows over a year of light: it builds from its light reaction and
-/// the soil's minerals, and spreads seeds. What the cover's parts hold as fuel (`cover::content`) changes by exactly the
-/// flows its budget books (`cover::BUDGET`): what its light reaction stored, less each part of its upkeep, the work of
-/// building, the layers it shed, what died and what its roots gave its ground; and every element and the energy of
-/// the world are kept. Every cell has a loam's pores.
+/// 0.1 kg per m² of the starting cover on one cell, a tenth of its soft tissue each of the solids that slow a reaction
+/// (`SPLIT_CURBS`, `BURN_CURBS`), grows over a year of light: it builds from its light reaction and the
+/// soil's minerals, the two solids among what it builds, and spreads seeds. What the cover's parts hold as fuel
+/// (`cover::content`, the two solids the fuel their conversions take) changes by exactly the flows its budget books
+/// (`cover::BUDGET`): what its light reaction stored, less each part of its upkeep, the work of building, the layers it
+/// shed, what died and what its roots gave its ground; and every element and the energy of the world are kept. Every
+/// cell has a loam's pores.
 #[test]
 fn the_cover_grows_by_what_its_budget_books() {
     let (mut w, i) = start();
     worldgen::testkit::set_loam(&mut w);
     let books = Books::now(&w);
-    assert!(pcore::cover::place(&mut w, i, 0, genes(), 0, 0.1));
+    let mut g = genes();
+    (g[cover::SPLIT_CURBS], g[cover::BURN_CURBS]) = (0.1, 0.1);
+    assert!(pcore::cover::place(&mut w, i, 0, g, 0, 0.1));
     w.take_counters();
-    let (kg0, e0) = (cover_kg(&w), cover::content(&w));
+    let p = pcore::life::Parts::of(&w.chem).expect("life's parts");
+    let curbs = |w: &World| pcore::life::CURBS.map(|q| cover::totals(w)[p.sub[q]]);
+    let (kg0, e0, held0) = (cover_kg(&w), cover::content(&w), curbs(&w));
     for _ in 0..12 {
         pcore::step(&mut w);
     }
@@ -76,6 +82,9 @@ fn the_cover_grows_by_what_its_budget_books() {
     let booked: f64 = flows.iter().sum();
     println!("cover {kg0:.3e} kg, a year later {kg:.3e} kg; content {e0:.6e} J, a year later {e:.6e} J, booked {booked:+.6e} J");
     assert!(kg > kg0, "the cover did not grow: {kg0} then {kg}");
+    let held = curbs(&w);
+    println!("the solids that slow a reaction: {held0:?} mol, a year later {held:?} mol");
+    assert!(held.iter().zip(&held0).all(|(a, b)| a > b), "it built none of the solids that slow a reaction: {held0:?} then {held:?}");
     let scale = flows.iter().map(|f| f.abs()).sum::<f64>().max(e0);
     assert!((e - e0 - booked).abs() <= 1e-9 * scale, "the cover's content moved by {} J, its budget booked {booked} J", e - e0);
     assert_eq!(pcore::check::broken(&w), None);

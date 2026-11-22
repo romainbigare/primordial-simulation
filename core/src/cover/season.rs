@@ -5,7 +5,7 @@
 use super::budget::SHED;
 use super::grow::{Books, Slot};
 use super::upkeep::{keep_per_kg, upkeep};
-use super::{Cover, Parts, FUEL, MATTER, NP, SLOTS, WALL};
+use super::{Cover, Parts, FUEL, NP, SLOTS, SOFT, WALL};
 use crate::life::SPENT;
 use crate::{Counters, World};
 
@@ -50,17 +50,20 @@ pub(super) fn pay(w: &World, c: &mut Cover, (p, e): (&Parts, &[f64; NP]), (s, st
     (pays, season)
 }
 
-/// What slot `x` of cover `c` shed, `shed` mol of body matter, is counted as spent (`SPENT`). Where its plants stand no
-/// taller than `surface_m` (its walls of density `rho`) the dead leaves stay standing on them, cured, among the cover's
-/// own (`Cover::cured`), as the dead leaves of herbs stay on their stems through a dry season; the leaves of taller
-/// plants fall at once to its remains, booked (`SHED`).
-fn shed_to(ph: &crate::Physics, c: &mut Cover, (x, rho): (usize, f64), (b, counts): (&mut Books, &mut Counters), (p, mm, e): (&Parts, &[f64; NP], &[f64; NP]), shed: f64) {
-    counts.cover_lost[SPENT as usize] += shed * mm[MATTER];
-    if c.height(ph, mm, rho, x) <= ph.surface_m {
-        c.cured[MATTER] += shed;
-    } else {
-        b.dead[p.sub[MATTER]] += shed;
-        b.budget[SHED] -= shed * e[MATTER];
+/// What slot `x` of cover `c` shed, `shed` mol of each part of its soft tissue (`life::SOFT`), is counted as spent
+/// (`SPENT`). Where its plants stand no taller than `surface_m` (its walls of density `rho`) the dead leaves stay
+/// standing on them, cured, among the cover's own (`Cover::cured`), as the dead leaves of herbs stay on their stems
+/// through a dry season; the leaves of taller plants fall at once to its remains, booked (`SHED`).
+fn shed_to(ph: &crate::Physics, c: &mut Cover, (x, rho): (usize, f64), (b, counts): (&mut Books, &mut Counters), (p, mm, e): (&Parts, &[f64; NP], &[f64; NP]), shed: [f64; NP]) {
+    counts.cover_lost[SPENT as usize] += SOFT.iter().map(|&q| shed[q] * mm[q]).sum::<f64>();
+    let stands = c.height(ph, mm, rho, x) <= ph.surface_m;
+    for q in SOFT {
+        if stands {
+            c.cured[q] += shed[q];
+        } else {
+            b.dead[p.sub[q]] += shed[q];
+            b.budget[SHED] -= shed[q] * e[q];
+        }
     }
 }
 
@@ -94,11 +97,12 @@ fn floor(per_kg: f64, (keep, rebuild): (f64, f64), months: Option<f64>) -> f64 {
 /// leaves deeper than where that falls to `floor` goes; of the rest it keeps no more than the share `most` (out of
 /// season, those its fuel can keep through the months it expects: what it cannot pay for it drops as leaves rather than
 /// die of it as whole plants). A slot that gains nothing keeps all its leaves or none by `floor`, as its layers are
-/// alike. Returns the mol of body matter shed (to its remains); its walls, its fuel and its plants stay.
-fn shed(c: &mut Cover, x: usize, s: &Slot, (floor, most): (f64, f64)) -> f64 {
+/// alike. Returns the mol shed of each part of its soft tissue (`life::SOFT`: its body matter and what that holds, to
+/// its remains); its walls, its fuel and its plants stay.
+fn shed(c: &mut Cover, x: usize, s: &Slot, (floor, most): (f64, f64)) -> [f64; NP] {
     let y = s.layer;
     if y <= 0.0 || (floor <= 0.0 && most >= 1.0) {
-        return 0.0;
+        return [0.0; NP];
     }
     let paid = match floor {
         f if f <= 0.0 => 1.0,
@@ -106,7 +110,10 @@ fn shed(c: &mut Cover, x: usize, s: &Slot, (floor, most): (f64, f64)) -> f64 {
         f => ((y + (s.gain / f).ln()) / y).clamp(0.0, 1.0),
     };
     let keep = paid.min(most);
-    let m = c.mol[x][MATTER].max(0.0) * (1.0 - keep);
-    c.mol[x][MATTER] -= m;
+    let mut m = [0.0; NP];
+    for q in SOFT {
+        m[q] = c.mol[x][q].max(0.0) * (1.0 - keep);
+        c.mol[x][q] -= m[q];
+    }
     m
 }

@@ -35,10 +35,15 @@ pub struct Reactor {
     /// catches the light, `cover::step`)? And its inputs, a bit per substance.
     lit: Vec<bool>,
     needs: Vec<u64>,
-    /// Per substance: heat capacity, melting and boiling point.
+    /// Per substance: heat capacity, melting and boiling point, molar mass (kg/mol).
     cp: Vec<f64>,
     melt: Vec<f64>,
     boil: Vec<f64>,
+    mm: Vec<f64>,
+    /// Whether any reaction is slowed by what a node holds (`Reaction::inhibit`), and the node's matter at the current
+    /// sub-step, kg (found only then).
+    slowed: bool,
+    kg: f64,
     /// Phase of each substance at the current temperature (`Phase as usize` indexes the totals of the phases).
     ph: Vec<Phase>,
     /// Amount of each substance that can react now (for a gas, with the gas around), and a bit for each above 0.
@@ -151,11 +156,13 @@ pub(crate) fn open_catalyst(f: f64, a: f64) -> f64 {
 }
 
 /// The rate of reaction `rx` per unit of its scarcest input `lim`, 1/s, at `t` K in a node as moist as `moist`: the
-/// open world's catalyst (`open_catalyst`) · k · exp(−Ea/T) · `pace` of the amounts `a` in their phases `whole`
-/// (laws.md 2.1). The one rate of Change, of nodes and of a part's walls (`bond/month.rs`).
+/// open world's catalyst (`open_catalyst`) · k · exp(−Ea/T) · `pace` of the amounts `a` in their phases `whole`, slowed
+/// by what inhibits it at `per_kg` mol per kg of the node's matter (`Reaction::inhibited`) (laws.md 2.1). The one rate
+/// of Change.
 #[inline]
-pub(crate) fn rate(rx: &Reaction, lim: f64, (t, moist): (f64, f64), a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64) -> f64 {
-    open_catalyst(rx.open, moist) * rx.arrhenius(t) * pace(rx, lim, a, whole)
+pub(crate) fn rate(rx: &Reaction, lim: f64, (t, moist): (f64, f64), a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64, per_kg: impl Fn(usize) -> f64) -> f64 {
+    let r = open_catalyst(rx.open, moist) * rx.arrhenius(t) * pace(rx, lim, a, whole);
+    if rx.inhibit.is_empty() { r } else { r * rx.inhibited(per_kg) }
 }
 
 /// 1 - exp(-z), cheap when small.
@@ -184,6 +191,8 @@ impl Reactor {
             cp: chem.subs.iter().map(|s| s.cp).collect(),
             melt: chem.subs.iter().map(|s| s.melt).collect(),
             boil: chem.subs.iter().map(|s| s.boil).collect(),
+            mm: chem.subs.iter().map(|s| s.molar_mass).collect(),
+            slowed: chem.reactions.iter().any(|rx| !rx.inhibit.is_empty()),
             ph: vec![Phase::Solid; ns],
             minor: vec![false; nr],
             aired: 1.0,
@@ -253,10 +262,11 @@ impl Reactor {
 
     /// `rate` of `rx` at `t` with the amounts and phases of the last `phases`.
     pub(super) fn rate(&self, rx: &Reaction, lim: f64, tot: &[f64; 3], t: f64) -> f64 {
-        rate(rx, lim, (t, self.moist), |k| self.av[k], |k| if self.ph[k] != Phase::Solid { tot[self.ph[k] as usize] } else { self.av[k] })
+        rate(rx, lim, (t, self.moist), |k| self.av[k], |k| if self.ph[k] != Phase::Solid { tot[self.ph[k] as usize] } else { self.av[k] }, |k| self.av[k] / self.kg.max(1e-300))
     }
 
-    /// Phase and available amount of each substance at `t`, and the total of each phase (a solid is a phase of its own).
+    /// Phase and available amount of each substance at `t`, and the total of each phase (a solid is a phase of its own);
+    /// where a reaction may be slowed, the node's matter (`kg`).
     pub(super) fn phases(&mut self, chem: &Chemistry, n: &[f64], gas: Option<&[f64]>, t: f64) -> [f64; 3] {
         let (mut tot, mut held) = ([0.0; 3], 0);
         for k in 0..n.len() {
@@ -267,6 +277,9 @@ impl Reactor {
             tot[p] += a;
         }
         self.held = held;
+        if self.slowed {
+            self.kg = n.iter().zip(&self.mm).map(|(a, m)| a * m).sum();
+        }
         tot
     }
 

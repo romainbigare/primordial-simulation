@@ -209,6 +209,40 @@ fn litter_goes_first_order_at_its_constant() {
     assert!(dry < 1e-5, "share of the frame lost dry in a year {dry}");
 }
 
+/// A node that holds a substance that slows a reaction (`Reaction::inhibit`) runs it slower by exactly 1 / (1 + c /
+/// Ki), c its mol per kg of the node's matter: the free solid burns (reaction 1, in moist open ground, in one span, so
+/// at the rate its start sets) beside the solid that slows the burning (`life::BURN_CURB`) at its inhibition constant
+/// and four times it. What the burning made is the liquid it gives, less the liquid of the slowing solid's own rot
+/// (two of it a unit, so its loss tells its rot's extent).
+#[test]
+fn what_a_node_holds_slows_a_reaction_by_its_inhibition_constant() {
+    let (chem, _) = worldgen::chemistry0();
+    let p = pcore::life::Parts::of(&chem).expect("life's parts");
+    let curb = p.sub[pcore::life::BURN_CURB];
+    let rot = chem.reactions.iter().position(|r| r.inputs.iter().any(|q| q.0 as usize == curb)).expect("its rot");
+    let ki = chem.reactions[BURN].inhibit.iter().find(|q| q.0 as usize == curb).expect("it slows the burning").1;
+    let gives = |r: usize| chem.reactions[r].outputs.iter().find(|q| q.0 as usize == LIQUID).map_or(0.0, |q| q.1 as f64) / chem.reactions[r].inputs[0].1 as f64;
+    let mut rc = Reactor::new(&chem, &cfg());
+    rc.moist = 1.0;
+    // The burning's rate times the day, from the share of the free solid it burnt (`1 - e^-z`).
+    let mut burnt = |c: f64| {
+        let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(&chem, 400.0));
+        (n[RICH], n[ROCK]) = (100.0, 500.0);
+        let rest: f64 = n.iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum();
+        n[curb] = c * rest / (1.0 - c * chem.subs[curb].molar_mass);
+        let (held, mut e) = (n[curb], 290.0 * OPEN_CAP);
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, DAY);
+        let made = n[LIQUID] - gives(rot) * (held - n[curb]);
+        -(-made / 100.0).ln_1p()
+    };
+    let free = burnt(0.0);
+    for c in [ki, 4.0 * ki] {
+        let (slowed, want) = (burnt(c), 1.0 / (1.0 + c / ki));
+        println!("at {c:e} mol/kg the burning runs at {:.12} of its pace (1 / (1 + c / Ki) = {want:.12})", slowed / free);
+        assert!((slowed / free - want).abs() <= 1e-9, "at {c:e} mol/kg: {} of its pace, the law {want}", slowed / free);
+    }
+}
+
 /// 1 m² of wet land (0.4 m of liquid in its pores) under the air at 400 ppm, with `rock` mol of the rock; the
 /// reactions run for `dt` at 288 K. Returns the dissolved mineral made per second, and whether the books closed and
 /// no amount went negative.
