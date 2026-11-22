@@ -50,7 +50,9 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     // The low wind over each node, which lifts the air over the ground and carries the drifting rain (`rise::low_wind`).
     let wind = low_wind(w, s);
     let ground = response.ground(&cx, wet(w, s, (&act, &wind), &t0, &patches));
-    let mean = run(w, s, (&act, &ground, &wind), dt);
+    let mut draws = std::mem::take(&mut s.draws);
+    let mean = run(w, s, (&act, &ground, &wind), dt, &mut draws);
+    s.draws = draws;
     let rain = landed(&act, ground.wet(), &mean);
     book(w, s, (&act, &response, &rain, &ground.soaks), &mean, dt);
     s.spare.response = response.rows();

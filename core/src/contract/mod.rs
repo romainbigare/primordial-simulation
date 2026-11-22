@@ -121,6 +121,7 @@ pub fn surroundings(w: &mut World) {
 /// state too (`flow::land_shares`), so the cover, the flames, Change's decomposers and the shells read one moment.
 /// None where a cell holds no land or life has no key liquid.
 pub fn wet_grounds(w: &mut World) {
+    crate::inside::sort_samples(w);
     let (all, area): (Vec<usize>, _) = ((0..w.mesh.cells().n()).collect(), w.mesh.cells().area());
     let shares = crate::flow::land_shares(w, &all).unwrap_or_else(|| all.iter().map(|&i| land(w, i) / area[i]).collect());
     let p = Parts::of(&w.chem);

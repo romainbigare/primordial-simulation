@@ -33,6 +33,7 @@ pub(super) use exchange::{dissolve, henry, Sat};
 pub use radiation::{band_depths, column, declination, insolation, on_slope, sun_by_latitude, Heat, DOWN, UP};
 pub(super) use radiation::Skies;
 pub(super) use step::step;
+pub(super) use weather::Draws;
 
 use super::Scratch;
 use crate::{store::Class, units::R_GAS, World, AIR};

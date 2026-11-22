@@ -77,6 +77,12 @@ fn catchments(g: &Grid, h: &[f64], f: &Flood, open: &[bool]) -> Catchments {
 pub(super) fn high_stand(seed: u64, g: &Grid, (h, loose): (&mut [f64], &mut [f64]), (lowers, channel): (&[f64], [f64; 2]), books: &mut Books) -> (Vec<f64>, Vec<f64>) {
     let n = g.n();
     let open = open_low(g, h, STAND_M);
+    // Ground with no land has no catchment and no mouth: it lays nothing and takes nothing.
+    if !open.contains(&false) {
+        books.yields = 0.0;
+        (books.high, books.unlaid) = (0.0, 0.0);
+        return (vec![0.0; n], vec![0.0; n]);
+    }
     let f = flood(g, h, &open, (&starts(g, &open, false), &draws(seed, 1, n)));
     let c = catchments(g, h, &f, &open);
     let exposed = exposures(g, &open);

@@ -54,6 +54,9 @@ pub struct Life {
     /// liquid of at least each decade over the month, m, and that cell (`contract::to_liquid`). Not saved: life's month finds it before any
     /// law reads it
     pub(crate) to_liquid: Vec<[(f64, u32); crate::contract::LEVELS]>,
+    /// Per cell, its samples sorted (`inside::Sorted`), with the samples they are of (`inside::sort_samples`). Not
+    /// saved: sorted again where they are not the samples now
+    pub(crate) sorted: Option<(std::sync::Arc<crate::space::samples::Samples>, Vec<crate::inside::Sorted>)>,
     /// While a parallel pass runs (`life::run`): what the cells see in each air node as the store held it at the
     /// pass's start (`World::a_seen`, of each substance), the same for every cell under it, worked out where first read;
     /// else empty

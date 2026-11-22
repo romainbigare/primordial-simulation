@@ -178,8 +178,8 @@ pub extern "C" fn builds() -> u32 {
     with(|l| l.world.relief.builds)
 }
 
-/// The relief the world last built its samples from, and the years since its start then (`tape::Ground::relief_bytes`),
-/// for the ground's worker (`ground_built`).
+/// The relief the world last built its samples from, the years since its start then and the world's cells
+/// (`tape::Ground::relief_bytes`), for the ground's worker (`ground_built`).
 #[no_mangle]
 pub extern "C" fn relief() -> *const u8 {
     let bytes = with(|l| tape::Ground::relief_bytes(&l.world));
