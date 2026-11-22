@@ -11,7 +11,7 @@ use super::cell::Cell;
 use super::rise::{rise, saturates};
 use super::edge::Edges;
 use super::draw::Draw;
-use super::weather::Weather;
+use super::weather::{Draws, Weather};
 use super::wind::{ends, even, lines, pushes, wind, Implicit, Links};
 use super::{air_temp, at_height, radiation::UP, step::Active};
 use crate::{math::mean_passed, store::Class, units::{DAY, R_GAS}, World, AIR};
@@ -164,7 +164,7 @@ pub(in crate::flow) fn blocks(w: &World) -> Vec<Vec<u32>> {
 /// The air level over a step of `dt` seconds, in days: each node's exchange with its ground and its rain (`exchange`, by
 /// the law `ground` of its cells), then each block evened out (`even`) and the wind across the links between blocks
 /// (`wind`).
-pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Ground, &[[f64; 2]]), dt: f64) -> Mean {
+pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Ground, &[[f64; 2]]), dt: f64, draws: &mut Draws) -> Mean {
     let (air, ng, nx) = (w.mesh.level(AIR), s.state.gas.len(), act.len());
     let na = air.n();
     let days = (dt / DAY).ceil().max(1.0);
@@ -198,7 +198,7 @@ pub(super) fn run(w: &World, s: &Scratch, (act, ground, low): (&[Active], &Groun
     let mut soaks = Soaks::new(ground.soaks.clone(), ground.wet(), nx);
     // The weather of the step: each day it lifts the nodes' air, drawing their lower halves' air toward where it lifts
     // and their upper halves' away (`Draw`), and moves where the edges' air comes from (`Weather`).
-    let weather = Weather::of(w, s, &ends, days as usize).map(|wx| (Draw::of(&w.cfg, air, (&links, &border, &block), &ends), wx));
+    let weather = Weather::of(w, s, &ends, days as usize, draws).map(|wx| (Draw::of(&w.cfg, air, (&links, &border, &block), &ends), wx));
     for d in 0..days as usize {
         exchange(w, s, (act, ground), (&blocks, &one, &rise), (&mut x, &mut e), (dd, dt), (&mut out, &mut rooms, &mut soaks));
         even(w, s, &blocks, (&mut x, &mut e), border.len(), &mut out.moved);

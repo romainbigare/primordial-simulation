@@ -44,7 +44,7 @@ impl Weather {
     /// about 6 days' period, inside the band the field's time `eddy_time` keeps (laws.md 1.6). None on a globe: the planet's strip is one (`worldgen::planet`), and the edges read its last year as the climate
     /// (`Planet`), which a year of its weather would stand for; and none where it acts on nothing, the map's edges closed
     /// and no node feeling a gradient (`lift`).
-    pub(super) fn of(w: &World, s: &Scratch, ends: &[End], days: usize) -> Option<Weather> {
+    pub(super) fn of(w: &World, s: &Scratch, ends: &[End], days: usize, kept: &mut Draws) -> Option<Weather> {
         let lift = lift(w, s, ends);
         if w.map.wrap || (!w.edges_open() && lift.iter().all(|&l| l == 0.0)) {
             return None;
@@ -57,11 +57,12 @@ impl Weather {
         let end = [((wide + beyond) * per_m).floor() as i64 + 1, ((high + beyond) * per_m).floor() as i64 + 1];
         let size = [(end[0] - origin[0] + 1) as usize, (end[1] - origin[1] + 1) as usize];
         let parts = Parts::of(w);
-        let first = (w.time / DAY_S) as i64;
+        let (lo, count) = parts.window((w.time / DAY_S) as i64, days);
+        kept.keep(w.seed, (origin, size), (lo, count));
         // Each point of the lattice on the pool, in the order of the points (`par::map_n`).
         let points = size[0] * size[1];
-        let work = points.saturating_sub(1) * (parts.longest() + days) * DRAW_WORK;
-        let field = crate::par::map_n(points, work, |i| parts.series(w.seed, [origin[0] + (i % size[0]) as i64, origin[1] + (i / size[0]) as i64], first, days)).concat();
+        let work = points.saturating_sub(1) * parts.longest() * days * SUM_WORK;
+        let field = crate::par::map_n(points, work, |i| parts.series(&kept.at[i], days)).concat();
         Some(Weather { origin, size, days, field, per_m, reach: (w.cfg.mix * phys.eddy_time).sqrt(), speed: phys.eddy_speed, lift })
     }
 
@@ -109,8 +110,54 @@ fn lift(w: &World, s: &Scratch, ends: &[End]) -> Vec<f64> {
 }
 
 /// Instructions of a point's keyed draw of a day (`Rng::new`, `Rng::normal`: a logarithm, a root and a cosine), as
-/// `Weather::of` shares its points over the pool (`par::map_n`).
+/// `Draws::keep` shares its points over the pool (`par::map_n`).
 const DRAW_WORK: usize = 100;
+/// Instructions of a multiply-add of a part's window (`summed`), as `Weather::of` shares its points over the pool.
+const SUM_WORK: usize = 2;
+
+/// The keyed daily draws (unit normals) of each point of the weather's lattice over the days the last step's windows
+/// read (`Parts::window`), kept from step to step: a draw is keyed by the seed, the day and the point alone, so a step
+/// draws only its new days and reads the same numbers as if it drew all. Not saved: a world loaded draws them again.
+#[derive(Clone, Debug, Default)]
+pub(in crate::flow) struct Draws {
+    /// The seed, the lattice's first point and its size, and the first day held
+    seed: u64,
+    lattice: ([i64; 2], [usize; 2]),
+    from: i64,
+    /// Per point of the lattice (`[y * size[0] + x]`), its draws from day `from` on
+    at: Vec<Vec<f64>>,
+}
+
+impl Draws {
+    /// Hold the draws of each point of the lattice `(origin, size)` of seed `seed` on the `count` days from day `lo`:
+    /// those of the days held already are kept, the days before `lo` let go, and the rest drawn.
+    fn keep(&mut self, seed: u64, (origin, size): ([i64; 2], [usize; 2]), (lo, count): (i64, usize)) {
+        let held = self.at.first().map_or(0, |v| v.len()) as i64;
+        if self.seed != seed || self.lattice != (origin, size) || lo < self.from || lo > self.from + held {
+            *self = Draws { seed, lattice: (origin, size), from: lo, at: vec![Vec::new(); size[0] * size[1]] };
+        }
+        let (gone, held) = ((lo - self.from) as usize, (self.from + held - lo) as usize);
+        let new = count.saturating_sub(held);
+        let first = lo + held.min(count) as i64;
+        let points = size[0] * size[1];
+        let drawn = crate::par::map_n(points, points.saturating_sub(1) * new * DRAW_WORK, |i| {
+            let p = [origin[0] + (i % size[0]) as i64, origin[1] + (i / size[0]) as i64];
+            (0..new as i64).map(|d| draw(seed, p, first + d)).collect::<Vec<f64>>()
+        });
+        for (v, d) in self.at.iter_mut().zip(drawn) {
+            v.drain(..gone);
+            v.truncate(count);
+            v.extend(d);
+        }
+        self.from = lo;
+    }
+}
+
+/// The keyed draw of lattice point `p` on day `day` (a unit normal).
+fn draw(seed: u64, p: [i64; 2], day: i64) -> f64 {
+    let node = ((p[0] as i32 as u32 as u64) << 32) | p[1] as i32 as u32 as u64;
+    Rng::new(seed, day as u64, node, Purpose::Weather).normal()
+}
 
 /// The parts of the field (`Parts::of`): a fast one of the eddies' time and a slow one that a liquid's top layer sums,
 /// with its gain.
@@ -156,16 +203,20 @@ impl Parts {
         self.slow.as_ref().map_or(0, |(s, _)| s.weights.len()).max(self.fast.weights.len())
     }
 
-    /// The field at lattice point `p` on each of the `days` days from day `first`: per part the sum of the point's keyed
-    /// daily draws (unit normals) over its window (`Window`), over its spread, so the part's spread is one and each day's
-    /// value reads only that day's draws; the fast part plus the slow part times its gain.
-    fn series(&self, seed: u64, p: [i64; 2], first: i64, days: usize) -> Vec<f64> {
+    /// The days whose draws the field reads on each of the `days` days from day `first`: the first of them and how many.
+    fn window(&self, first: i64, days: usize) -> (i64, usize) {
         let longest = self.longest();
-        let node = ((p[0] as i32 as u32 as u64) << 32) | p[1] as i32 as u32 as u64;
-        let draws: Vec<f64> = (0..longest + days - 1).map(|k| Rng::new(seed, (first - longest as i64 + 1 + k as i64) as u64, node, Purpose::Weather).normal()).collect();
-        let mut out = summed(&draws, &self.fast, days);
+        (first - longest as i64 + 1, longest + days - 1)
+    }
+
+    /// The field at a lattice point on each of the last `days` days of `draws`, the point's keyed daily draws (`draw`)
+    /// over the days of the `window` of the first: per part the sum of the draws over its window (`Window`), over its
+    /// spread, so the part's spread is one and each day's value reads only that day's draws; the fast part plus the slow
+    /// part times its gain.
+    fn series(&self, draws: &[f64], days: usize) -> Vec<f64> {
+        let mut out = summed(draws, &self.fast, days);
         if let Some((window, gain)) = &self.slow {
-            out.iter_mut().zip(summed(&draws, window, days)).for_each(|(v, s)| *v += gain * s);
+            out.iter_mut().zip(summed(draws, window, days)).for_each(|(v, s)| *v += gain * s);
         }
         out
     }
@@ -179,15 +230,26 @@ fn summed(draws: &[f64], window: &Window, days: usize) -> Vec<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::Parts;
+    use super::{draw, Draws, Parts};
 
-    /// The field holds no state: a day's value is the same whichever step reads it, and its fast part is a red noise of
-    /// mean zero and spread one.
+    /// The field of a point on the `days` days from day `first`, each draw drawn anew.
+    fn drawn(parts: &Parts, p: [i64; 2], first: i64, days: usize) -> Vec<f64> {
+        let (lo, count) = parts.window(first, days);
+        parts.series(&(0..count as i64).map(|d| draw(7, p, lo + d)).collect::<Vec<f64>>(), days)
+    }
+
+    /// The field holds no state: a day's value is the same whichever step reads it, whether the draws are kept from
+    /// step to step or drawn anew; and its fast part is a red noise of mean zero and spread one.
     #[test]
     fn the_weather_of_a_day_is_the_same_in_any_step() {
         let parts = Parts::new((-1.0f64 / 3.0).exp(), Some(((-1.0f64 / 120.0).exp(), (3.0f64 / 120.0).sqrt())));
-        assert!(parts.series(7, [2, -1], 100, 30)[15..] == parts.series(7, [2, -1], 115, 15)[..], "a day reads only its own draws");
-        let x = Parts::new((-1.0f64 / 3.0).exp(), None).series(7, [0, 0], 0, 100_000);
+        assert!(drawn(&parts, [2, -1], 100, 30)[15..] == drawn(&parts, [2, -1], 115, 15)[..], "a day reads only its own draws");
+        let mut kept = Draws::default();
+        for first in [100, 115, 130, 160] {
+            kept.keep(7, ([2, -1], [1, 1]), parts.window(first, 15));
+            assert!(parts.series(&kept.at[0], 15) == drawn(&parts, [2, -1], first, 15), "the kept draws are those drawn anew");
+        }
+        let x = drawn(&Parts::new((-1.0f64 / 3.0).exp(), None), [0, 0], 0, 100_000);
         let mean = x.iter().sum::<f64>() / x.len() as f64;
         let spread = (x.iter().map(|v| v * v).sum::<f64>() / x.len() as f64).sqrt();
         assert!(mean.abs() < 0.03 && (spread - 1.0).abs() < 0.02, "mean {mean}, spread {spread}");

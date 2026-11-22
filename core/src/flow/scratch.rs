@@ -286,6 +286,8 @@ pub struct Scratch {
     pub(super) split: Vec<f64>,
     /// Room the passes keep from step to step (`spare::Spare`).
     pub(super) spare: super::spare::Spare,
+    /// The weather's daily draws kept from step to step (`air::Draws`).
+    pub(super) draws: air::Draws,
     /// The ground of each cell as liquid stands on it, its parts of the bodies (`curve::Curve`, `curve::build`).
     pub(super) curves: Vec<super::curve::Curve>,
     /// Of each mixed ground node, its parts as its last solve found them (`parts::Mixed`).
