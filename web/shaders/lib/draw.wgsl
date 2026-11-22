@@ -13,6 +13,11 @@ struct Draw {
 }
 @group(0) @binding(0) var<uniform> draw: Draw;
 
+// `n`, as a bound of a loop the compiler cannot take for a fixed one (a target is never narrower than none), so it
+// keeps the loop rolled: Apple's Metal compiler unrolls fixed loops, and a large body unrolled (the live map's layers,
+// the marks' kinds) took it minutes on a phone, holding back every frame behind it.
+fn rolled(n: i32) -> i32 { return n + min(i32(draw.size.x), 0); }
+
 struct Varying {
   @builtin(position) pos: vec4f,
   // The point of the source, uv, and of the target, px from its top-left corner.

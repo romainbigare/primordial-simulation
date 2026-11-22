@@ -235,7 +235,7 @@ fn live_map(v: Varying) -> vec4f {
   // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.
   let spots = land_spots(at, earth.frame.w);
   var c = Shaded(vec3f(0.0), 1.0, BARE);
-  for (var k = LAYER_GROUND; k < LAYERS; k++) {
+  for (var k = LAYER_GROUND; k < rolled(LAYERS); k++) {
     var p = spots.dry;
     var share = 1.0;
     if (k == LAYER_EDGE) {

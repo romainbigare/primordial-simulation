@@ -94,7 +94,7 @@ fn scatter(g: vec3f, p: Spot, t: Strewn) -> vec3f {
   var out = g;
   // From the farthest (north) to the nearest; a thing reaches up into the cell north of its foot, its shadow into the
   // cell south of it.
-  for (var j = -1; j <= 1; j++) {
+  for (var j = -1; j <= rolled(1); j++) {
     for (var i = -1; i <= 1; i++) {
       let c = l.i + vec2i(i, j);
       let x = lowbias(c, k);
@@ -144,7 +144,7 @@ fn objects(g: vec3f, p: Spot, bare: f32) -> vec3f {
     bed_rocks(p, free, soaked(p)),
     Strewn(COBBLE_SORT, COBBLE_CELL_M, COBBLE_FILL, COBBLE_SIZE_M, max(p.sand, 0.0) * grain.x * free, grain.z, 162));
   var out = g;
-  for (var i = 0; i < 7; i++) { out = scatter(out, p, sorts[i]); }
+  for (var i = 0; i < rolled(7); i++) { out = scatter(out, p, sorts[i]); }
   return out;
 }
 
