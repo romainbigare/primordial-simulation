@@ -280,8 +280,8 @@ as in TOPMODEL, the cell's liquid table departs from its mean at each point by `
 level (Beven and Kirkby 1979; Beven 1997). The table is where Flow keeps the liquid: with the loose ground over field
 capacity, in it (its room what its pores lack); else under it in the bed's store (its room the loose ground's pores over
 field capacity and what the store lacks of `bed_porosity` × `bed_depth`) (`Means::deficit`). The room at a point is the
-cell's less `soil_m` (λ − c), within none and the most, the level c found by halving so the mean room is the cell's: it
-moves no liquid, only shares it out (`inside::soil_level`, `deficit_at`). A sample where liquid flows in its channel
+cell's less `soil_m` (λ − c), within none and the most, the level c found exactly so the mean room is the cell's (the
+mean room grows piece by piece in a line with c, so c lies on one piece): it moves no liquid, only shares it out (`inside::soil_level`, `deficit_at`). A sample where liquid flows in its channel
 (its yearly discharge above none, and it drains a channel's source, the square of the channels' spacing, 2 `hill` a
 side; Horton 1945) is the table at the surface over its channel's width (the channel law on its discharge,
 `World::channel`): that share of its area counts at an infinite index, its room none, the rest at its own

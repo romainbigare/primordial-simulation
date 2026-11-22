@@ -22,42 +22,54 @@ pub struct WetGround {
 
 /// The land of cell `i` of means `m` (`Means`, over its land): its samples (`World::terrain_samples`) but the lowest,
 /// which the liquid that stands over the cell covers, by its land's share `land` of its area (the liquid stands over
-/// the lowest first, `flow::curve`), where its liquid table lies (`saturated`). Its samples from the highest down are
-/// those `by_height` keeps.
+/// the lowest first, `flow::curve`), where its liquid table lies (`saturated`), its parts in the order of their wetness
+/// index (`Sorted`).
 pub(crate) fn wet_ground(w: &World, i: usize, m: Means, land: f64) -> WetGround {
-    let (s, (of, order)) = (w.terrain_samples(), w.life.by_height.as_ref().expect("the samples by height (`by_height`)"));
-    assert!(Arc::ptr_eq(of, &s), "the samples by height are of the samples now (`by_height`)");
-    let all = &order[i];
-    let ks: Vec<usize> = all[..(land * all.len() as f64).round() as usize].iter().map(|&k| k as usize).collect();
-    let (twi, area) = parts_now(w, &s, i, &ks);
+    let (s, (of, sorted)) = (w.terrain_samples(), w.life.sorted.as_ref().expect("the cells' samples sorted (`sort_samples`)"));
+    assert!(Arc::ptr_eq(of, &s), "the cells' samples are sorted for the samples now (`sort_samples`)");
+    let c = &sorted[i];
+    let count = (land * c.high.len() as f64).round() as usize;
+    let ks = c.wettest.iter().filter(|&&q| (q as usize) < count).map(|&q| c.high[q as usize] as usize);
+    let (twi, area) = parts_now(w, &s, i, (ks, count));
     saturated(&w.cfg.phys, (&twi, &area), m)
 }
 
-/// Each cell's samples (`World::terrain_samples`) from the highest down, the order of equal heights theirs inside the
-/// cell, kept with the samples they are of (`Life::by_height`): found again only where those are not the samples now
-/// (a build of the terrain, a cell's ground made level, a world loaded), as the order changes with nothing else.
-pub(crate) fn by_height(w: &mut World) {
+/// The samples of a cell (`World::terrain_samples`) sorted as its wet ground reads them (`wet_ground`): from the
+/// highest down (its land is the highest of them), and their places in that order from the lowest wetness index up
+/// (`Samples::twi`, as `soil_level` reads its parts); each order keeps the cell's order of equal values.
+#[derive(Clone, Debug)]
+pub struct Sorted {
+    high: Vec<u32>,
+    wettest: Vec<u32>,
+}
+
+/// Each cell's samples sorted (`Sorted`), kept with the samples they are of (`Life::sorted`): sorted again only where
+/// those are not the samples now (a build of the terrain, a cell's ground made level, a world loaded), as the orders
+/// change with nothing else.
+pub(crate) fn sort_samples(w: &mut World) {
     let s = w.terrain_samples();
-    if w.life.by_height.as_ref().is_some_and(|(of, _)| Arc::ptr_eq(of, &s)) {
+    if w.life.sorted.as_ref().is_some_and(|(of, _)| Arc::ptr_eq(of, &s)) {
         return;
     }
     let leaves = w.map.leaves();
-    let order = crate::par::map_n(leaves.len(), crate::par::UNCOUNTED, |i| {
-        let mut at: Vec<(f64, u32)> = leaves[i].split(SAMPLE_DEPTH).map(|f| s.index(&f)).map(|k| (s.h[k], k as u32)).collect();
-        at.sort_by(|a, b| b.0.total_cmp(&a.0));
-        at.into_iter().map(|p| p.1).collect()
+    let sorted = crate::par::map_n(leaves.len(), crate::par::UNCOUNTED, |i| {
+        let mut high: Vec<u32> = leaves[i].split(SAMPLE_DEPTH).map(|f| s.index(&f) as u32).collect();
+        high.sort_by(|&a, &b| s.h[b as usize].total_cmp(&s.h[a as usize]));
+        let mut wettest: Vec<u32> = (0..high.len() as u32).collect();
+        wettest.sort_by(|&a, &b| s.twi[high[a as usize] as usize].total_cmp(&s.twi[high[b as usize] as usize]));
+        Sorted { high, wettest }
     });
-    w.life.by_height = Some((s, order));
+    w.life.sorted = Some((s, sorted));
 }
 
-/// The terrain samples `ks` of cell `i` as the table reads them now, each of equal area: of each, the part its channel's
-/// flowing liquid covers (`channel_share`) at an infinite wetness index, its room none, and the rest at its own index
-/// (`Samples::twi`). Returns the indices and the shares of the area, summing to 1.
-fn parts_now(w: &World, s: &crate::space::samples::Samples, i: usize, ks: &[usize]) -> (Vec<f64>, Vec<f64>) {
-    let each = 1.0 / ks.len().max(1) as f64;
-    let (mut twi, mut area) = (Vec::with_capacity(2 * ks.len()), Vec::with_capacity(2 * ks.len()));
+/// The terrain samples `ks` of cell `i` as the table reads them now, each of equal area, `count` of them: of each, the
+/// part its channel's flowing liquid covers (`channel_share`) at an infinite wetness index, its room none, and the rest
+/// at its own index (`Samples::twi`). Returns the indices and the shares of the area, summing to 1.
+fn parts_now(w: &World, s: &crate::space::samples::Samples, i: usize, (ks, count): (impl Iterator<Item = usize>, usize)) -> (Vec<f64>, Vec<f64>) {
+    let each = 1.0 / count.max(1) as f64;
+    let (mut twi, mut area) = (Vec::with_capacity(2 * count), Vec::with_capacity(2 * count));
     let per_m3 = carried(w, i);
-    for &k in ks {
+    for k in ks {
         let wet = share_of(w, s, per_m3, k);
         if wet > 0.0 {
             twi.push(f64::INFINITY);
