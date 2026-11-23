@@ -323,12 +323,30 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { ch
 $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"></s>${n}</li>`).join('');
 
 // ---- start
+/** A download the network cut is tried this many times in all, the wait before each try again doubling from
+ * `FETCH_WAIT_MS` (a phone's connection drops for a moment; a site being published swaps its files). */
+const FETCH_TRIES = 3, FETCH_WAIT_MS = 1000;
+/** The bytes at `url` (with `init`), tried again where the network cut the download; an error that names the file. */
+async function fetchBytes(url: string, init?: RequestInit): Promise<ArrayBuffer> {
+  for (let n = 1; ; n++) {
+    try {
+      const r = await fetch(url, init);
+      if (!r.ok) throw new Error(`${url}: ${r.status}`);
+      return await r.arrayBuffer();
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith(`${url}: `)) throw e;
+      if (n >= FETCH_TRIES) throw new Error(`${url}: ${e instanceof Error ? e.message : e}`);
+      await new Promise(go => setTimeout(go, FETCH_WAIT_MS * 2 ** (n - 1)));
+    }
+  }
+}
+
 /** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the saved world `from`, or a new one
  * of the seed, size and variety from the page. */
 async function startLive(from: ArrayBuffer | null): Promise<void> {
   // (Asked of the server each time, never from the browser's cache: a page of one build on the core of another reads
   // layers the core does not make, and draws nothing.)
-  const wasm = await fetch('ew.wasm', { cache: 'no-cache' }).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`ew.wasm: ${r.status}`))));
+  const wasm = await fetchBytes('ew.wasm', { cache: 'no-cache' });
   coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
   $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
@@ -470,8 +488,7 @@ const embedded = document.getElementById('world-data')?.textContent?.trim();
 // A tape (`?f=URL`), or the live world: on a saved world (`?world=URL`, a snapshot of `ew run`) or a new one.
 const asked = new URLSearchParams(location.search), url = asked.get('f'), savedUrl = asked.get('world');
 const waiting = () => say('Drop a .ewf.gz file here, or use “Open file”.');
-const fetched = (u: string) => fetch(u).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${u}: ${r.status}`))));
 if (embedded) load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer);
-else if (url) fetched(url).then(load, waiting);
-else if (savedUrl) fetched(savedUrl).then(startLive).catch(e => say(String(e instanceof Error ? e.message : e)));
+else if (url) fetchBytes(url).then(load, waiting);
+else if (savedUrl) fetchBytes(savedUrl).then(startLive).catch(e => say(String(e instanceof Error ? e.message : e)));
 else startLive(null).catch(e => say(`${String(e instanceof Error ? e.message : e)}. Drop a .ewf.gz file here, or use “Open file”.`));
