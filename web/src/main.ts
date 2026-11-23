@@ -212,7 +212,7 @@ function loop(now: number): void {
       setFrame(frame + n);
     }
   }
-  if (fire.step(now)) map.invalidate();
+  if (fire.step(now)) map.showNow();
   requestAnimationFrame(loop);
 }
 function togglePlay(): void {
@@ -273,9 +273,10 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     ready: () => (from ? openSaved(from) : newWorld()),
     world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); god.reset(); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) slots.set(data); },
-    frame: (stats, changed) => {
+    frame: (stats, changed, edited) => {
       if (live !== l) return;
       if (changed) setFrame(0);
+      if (edited) map.showNow();
       if (world) front.frame(world);
       showStats(stats);
     },

@@ -292,6 +292,14 @@ export class MapView {
   /** Draw the map anew at the next frame, on the GPU and over it. */
   invalidate(): void { this.gpuDue = true; this.redraw(); }
 
+  /** Draw the map anew at the next frame though a sharp picture of this same view is being drawn (`sharpen`, which a
+   * playing world's frames leave to finish): the player changed the world, and sees it at once. */
+  showNow(): void {
+    this.sharpening = null; this.resting = false;
+    clearTimeout(this.sharpTimer);
+    this.invalidate();
+  }
+
   /** Draw what lies over the map anew at the next frame (the GPU's picture stays). */
   redraw(): void { if (!this.raf) this.raf = requestAnimationFrame(() => { this.raf = 0; this.draw(); }); }
 
