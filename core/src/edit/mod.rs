@@ -6,6 +6,7 @@
 //! on the world's clock (`World::settle`).
 
 mod brush;
+mod heat;
 mod shape;
 
 pub use brush::{Brush, Under};
@@ -31,6 +32,9 @@ pub enum Act {
     /// One strike that lights the cell in the coming month (`World::strikes`, `flame::shares`), where its remains
     /// carry a flame (`flame::lights`)
     Strike,
+    /// `joules_m2` J a m² of heat added to the remains under a brush of radius `radius_m` m about the place at its
+    /// centre, less toward its edge (`World::heat`): it dries and lights them when the edits settle (`flame::heated`)
+    Heat { radius_m: f64, joules_m2: f64 },
     /// The ground under a brush of radius `radius_m` m about the place raised by `height_m` m at its centre (lowered
     /// where under none), less toward its edge; a stroke that has raised `stroke_m` m there before lays the loose ground
     /// of its top (`Config::edit_top_m`) of the terrain's make `make` (`World::shape`)
@@ -62,6 +66,7 @@ impl Edit {
             Act::Plant { root, kg, .. } => format!("placed {kg} kg per m2 of starting kind {root} in the newest patch of cell {i}"),
             Act::Grown { root, .. } => format!("placed a grown stand of starting kind {root} in the newest patch of cell {i}"),
             Act::Strike => format!("a strike lights cell {i} in the coming month"),
+            Act::Heat { radius_m, joules_m2 } => format!("{joules_m2} J per m2 of heat added within {radius_m} m of a place in cell {i}"),
             Act::Ground { radius_m, height_m, .. } => format!("the ground within {radius_m} m of a place in cell {i} raised by {height_m} m at its middle"),
         };
         format!("{what}{}", if done { "" } else { ": nothing done" })
@@ -91,7 +96,8 @@ impl World {
     /// Run at once what the edits since the month began start that takes no time, with no time on the world's clock
     /// (laws.md 0): where edits shaped the ground (`Relief::due`), the samples are built again over it
     /// (`flow::build::reshape`), the passes of a month's start find the state of the ground from them, and the liquid
-    /// settles over it (`flow::settle`); then the strikes of edits burn (`flame::now`). Returns what it did (`Settled`).
+    /// settles over it (`flow::settle`); then the strikes of edits and the heat they added burn (`flame::now`). Returns
+/// what it did (`Settled`).
     pub fn settle(&mut self) -> Settled {
         let ground = self.relief.due;
         if ground {
@@ -99,7 +105,7 @@ impl World {
             crate::month_start(self);
             crate::flow::settle(self);
         }
-        let burnt = if self.strikes.is_empty() { Vec::new() } else { crate::flame::now(self) };
+        let burnt = if self.strikes.is_empty() && self.heated.is_empty() { Vec::new() } else { crate::flame::now(self) };
         Settled { ground, burnt }
     }
 
@@ -129,6 +135,7 @@ impl World {
                 }
                 lit
             }
+            Act::Heat { radius_m, joules_m2 } => self.heat(Brush { centre: e.place, radius_m }, joules_m2),
             Act::Ground { radius_m, height_m, stroke_m, make } => self.shape(Brush { centre: e.place, radius_m }, (height_m, stroke_m), make as usize),
         }
     }

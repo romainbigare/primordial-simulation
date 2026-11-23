@@ -116,9 +116,9 @@ pub struct Burning {
 }
 
 /// The flames on the patches of cell `i` of `w`, whose patches' beds are `beds` (`Burning`): one on each patch whose bed
-/// carries a flame, the point of the patch a part burnt opens about drawn in the patch (`cover::point`).
+/// carries a flame or whose flame added heat keeps (`Bed::kept`), the point of the patch a part burnt opens about drawn in the patch (`cover::point`).
 pub fn burnings(w: &World, i: usize, beds: &[Option<Bed>]) -> Vec<Burning> {
-    let on = beds.iter().enumerate().filter_map(|(k, b)| b.filter(|b| b.carries()).map(|b| (k, b)));
+    let on = beds.iter().enumerate().filter_map(|(k, b)| b.filter(|b| (b.carries() || b.kept) && b.cover > 0.0).map(|b| (k, b)));
     on.map(|(k, bed)| {
         let hit = hit(bed.cover);
         Burning { k, bed, hit, point: if hit == Some(Hit::Part) { point(w, i, k, Purpose::Burn) } else { 0 } }

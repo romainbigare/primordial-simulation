@@ -302,6 +302,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         light: vec![0.0; n],
         events: Vec::new(),
         strikes: Vec::new(),
+        heated: Vec::new(),
         scratch: Default::default(),
     };
     world.soil = pcore::soil::of_world(&world);

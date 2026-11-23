@@ -239,7 +239,8 @@ it as a build builds them, without the lobes and without counting a build of the
 version of the relief, `Relief::version`, by which built samples are kept), the passes of a month's start find the
 ground's state from them, and the liquid settles over the ground in the runoff's pass over a span of none
 (`flow::settle`: what stands runs to the bodies and each stands at one level; nothing drains, seeps or mixes, it
-carries no load, and the yearly means of what runs do not move); then the flames of the strikes of edits burn (3c).
+carries no load, and the yearly means of what runs do not move); then the flames of the strikes of edits and of the
+heat they added burn (3c).
 This is honest because a month's step already treats these processes as one event inside the month (the runoff's pass
 moves a month's runoff at once; a flame's run lasts at most `front_life`, 4 days), and every move goes through the
 store, so the books close; what needs time (sun, rain, growth, rot) does not run, and no strike is drawn over no time.
@@ -1595,7 +1596,20 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   made only where the bed of a patch of the cell carries a flame now (`flame::lights`, by the same `beds` and
   `Bed::carries`), and `flame::Unlit` says why the largest patch's does not: no land, no cover in the chemistry, nothing lying that burns, remains too sparse to join
   across the ground or too few to hold a flame's heat, snow over them, the air near the ground not read yet, ground so
-  wet that its saturated share breaks them apart, or remains too damp. Each flame runs from the cell it lit over the
+  wet that its saturated share breaks them apart, or remains too damp. **Heat added** by an edit (`edit::Act::Heat`,
+  handover.md 11.1 "Set on fire": from the outside node into the ground node of each land cell under a brush, kept with
+  the share of the cell it was added over, `World::heated`) dries and lights the remains there in the flames of the
+  coming month or at once when the edits settle (`flame::heated`): on each patch it first warms and boils off the
+  liquid the remains and the cured leaves hold, their layer's whole depth (what the sorption curve holds and, as duff,
+  what they draw from the ground, summed over 16 steps of depth), then warms them dry to `t_light`; that is q J a m² of
+  the patch's land, and heat of e J a m² over the share s of the cell lights the share s min(1, e/q) of it, off the
+  saturated share, on the share its remains cover. Its bed burns whole and dry (`Bed::kept`), where it would carry no
+  flame of its own too (the heat keeps it: sparse or thin remains, damp ones), and its flame runs on from the cell where
+  its dry bed carries one. The heat the lit beds took leaves their ground for the air over them, as the heat of their
+  burning does; the rest stays in the ground. `flame::needed` is the heat that lights all of a cell's remains over a
+  share of it. With no heat added nothing of this runs. **Known limit:** the liquid the remains hold is not matter of
+  their own (its sorption is read from the air and the ground), so boiling it off moves no matter, only its heat. Each
+  flame runs from the cell it lit over the
   region's cells for `front_life`, crossing half the way between two cells' centres at each one's speed R (below) on
   the bed of its patch that carries a flame over the most of its ground, the earliest first (`flame::run`). Every cell
   it reaches burns, on each patch whose bed carries a flame, all of the patch's ground its remains cover (f = that

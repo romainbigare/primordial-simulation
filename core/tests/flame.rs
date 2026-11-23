@@ -18,6 +18,10 @@ const ALL_STRIKES: f64 = 1.0;
 const WARMER: f64 = 15.0;
 /// The share either side of the flux at which the remains' moisture is their moisture of extinction.
 const NEAR: f64 = 1e-3;
+/// The share of the test's remains left to make them too thin to carry a flame (under the least load).
+const THIN: f64 = 0.001;
+/// How many times the heat that lights them a heated test adds: enough over the brush's weights falling off its centre.
+const HEAT_OVER: f64 = 10.0;
 /// The rounding of the liquid set to field capacity: the moisture share it gives is 1 to within it.
 const ROUNDING: f64 = 1e-12;
 
@@ -174,7 +178,7 @@ fn a_low_plant_burnt_to_its_base_keeps_its_plants_and_store() {
     let built = |w: &World| w.life.cover(i).built(&mm, low);
     let (low0, tall0, built0, fuel0) = (plants(&w, low), plants(&w, tall), built(&w), w.life.cover(i).mol[low][FUEL]);
     let beds: Vec<Vec<_>> = (0..w.mesh.cells().n()).map(|j| flame::beds(&w, &p, j).into_iter().map(Result::ok).collect()).collect();
-    let share = flame::shares(&w, &beds, w.cfg.calendar().month as f64).share[i];
+    let share = flame::shares(&w, &beds, w.cfg.calendar().month as f64, &[]).share[i];
     assert!(share > 0.0, "the cell burns");
     flame::month(&mut w);
     assert_eq!((plants(&w, low), w.life.cover(i).mol[low][FUEL]), (low0, fuel0), "the low slot lost plants or store");
@@ -252,4 +256,32 @@ fn a_settled_strike_burns_at_once_with_no_time() {
     flame::month(&mut w);
     assert_eq!(w.counts.flame[flame::REMAINS], burnt, "the month burnt again");
     assert!(w.counts.flame_month[i].share > 0.0 && flame::since(&w, i) == 0.0, "the month took the burn as its own: {:?}", w.counts.flame_month[i]);
+}
+
+/// Heat added under a brush dries and lights remains too thin to carry a flame of their own (handover.md 11.1, "Set on
+/// fire"; `flame::heated`): a strike does not light them, the heat that lights them (`flame::needed`) does, at once when
+/// the edits settle; the heat they took leaves their ground for the air, and the books are kept.
+#[test]
+fn heat_lights_remains_too_thin_to_carry_a_flame() {
+    use pcore::edit::{Act, Brush, Edit};
+    let (mut w, i) = start();
+    w.cfg.phys.strikes = 0.0;
+    let p = Parts::of(&w.chem).unwrap();
+    for q in [MATTER, WALL] {
+        let m = w.g(p.sub[q], i);
+        testkit::set_amount(&mut w, Node::ground(i), p.sub[q], m * THIN);
+    }
+    liquid_to(&mut w, i, 0.0);
+    assert!(flame::lights(&w, i).is_err(), "a strike lights the thin remains");
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let brush = Brush { centre: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], radius_m: 0.5 * w.map.side };
+    let over = w.under(brush).iter().find(|u| u.cell == i).expect("the cell under the brush").share;
+    let need = flame::needed(&w, i, over).expect("heat lights them");
+    let books = Books::now(&w);
+    let joules_m2 = HEAT_OVER * need / (over * pcore::contract::land(&w, i));
+    assert_eq!(w.edit(&[Edit { place: brush.centre, act: Act::Heat { radius_m: brush.radius_m, joules_m2 } }]), [true]);
+    let reached = w.settle().burnt;
+    assert!(reached.contains(&(i as u32, 0.0)) && w.heated.is_empty(), "reached {reached:?}");
+    assert!(w.counts.flame[flame::REMAINS] > 0.0 && w.counts.flame_month[i].share > 0.0, "burnt {} kg, {:?}", w.counts.flame[flame::REMAINS], w.counts.flame_month[i]);
+    books.assert_kept(&w, 1e-9);
 }
