@@ -18,17 +18,24 @@ fn root(up: &mut [u32], mut i: u32) -> u32 {
     i
 }
 
+/// What the flames of a span do to each cell (`shares`): the share of its land that burns, and when the first flame
+/// reaches it, s after the strike that lit that flame (infinite where none does).
+pub struct Lit {
+    pub share: Vec<f64>,
+    pub at: Vec<f64>,
+}
+
 /// Of the cells whose remains carry a flame on some patch of their cover (`beds`, by cell and patch; `Bed::carries`):
-/// the share of each cell's land that burns this month of `month` s. Cells that share an edge (a link of some width)
+/// what the flames of a span of `span` s do to each (`Lit`). Cells that share an edge (a link of some width)
 /// join into a region (union by the lower cell, in the order of the cells), of A m² covered by its remains (each cell's
 /// land times the share its remains cover on the patches that carry a flame, `covered`). Each region expects `strikes`
-/// × A × the month's share of a year of strikes that light it; their count is a Poisson draw, and each lights a cell
+/// × A × the span's share of a year of strikes that light it; their count is a Poisson draw, and each lights a cell
 /// drawn by its covered ground, from the world's seed by the month and the region's first cell (`Purpose::Flame`), so
 /// the draws do not depend on the threads. Each flame runs over its region for `front_life` (`run`), and every cell it
 /// reaches burns all of the ground its remains cover on each patch that carries a flame. Each strike of an edit
 /// (`World::strikes`) lights its cell too, after them, where its remains carry a flame. A patch that burnt keeps no
 /// remains to carry a flame until its cover's leaves build them again.
-pub fn shares(w: &World, beds: &[Vec<Option<Bed>>], month: f64) -> Vec<f64> {
+pub fn shares(w: &World, beds: &[Vec<Option<Bed>>], span: f64) -> Lit {
     let (cells, n) = (w.mesh.cells(), beds.len());
     let carries = |i: usize| beds[i].iter().flatten().any(|b| b.carries());
     let mut up: Vec<u32> = (0..n as u32).collect();
@@ -48,28 +55,29 @@ pub fn shares(w: &World, beds: &[Vec<Option<Bed>>], month: f64) -> Vec<f64> {
         members[root(&mut up, i as u32) as usize].push(i as u32);
     }
     let ph = &w.cfg.phys;
-    let strikes = ph.strikes * month / w.cfg.calendar().year as f64;
-    let mut share = vec![0.0; n];
+    let strikes = ph.strikes * span / w.cfg.calendar().year as f64;
+    let mut lit = Lit { share: vec![0.0; n], at: vec![f64::INFINITY; n] };
+    let reach = |from: usize, lit: &mut Lit| {
+        for (i, t) in run(w, beds, from) {
+            (lit.share[i], lit.at[i]) = (covered(&beds[i]), lit.at[i].min(t));
+        }
+    };
     for (r, region) in members.iter().enumerate().filter(|(_, m)| !m.is_empty()) {
         let area: f64 = region.iter().map(|&i| area_of(i as usize)).sum();
         let mut draw = Rng::new(w.seed, w.month(), r as u64, Purpose::Flame);
         for _ in 0..draw.poisson(strikes * area) {
             let mut at = draw.f64() * area;
-            let lit = region.iter().copied().find(|&i| {
+            let at_cell = region.iter().copied().find(|&i| {
                 at -= area_of(i as usize);
                 at < 0.0
             });
-            for i in run(w, beds, lit.unwrap_or(region[region.len() - 1]) as usize) {
-                share[i] = covered(&beds[i]);
-            }
+            reach(at_cell.unwrap_or(region[region.len() - 1]) as usize, &mut lit);
         }
     }
-    for &lit in w.strikes.iter().filter(|&&i| carries(i as usize)) {
-        for i in run(w, beds, lit as usize) {
-            share[i] = covered(&beds[i]);
-        }
+    for &struck in w.strikes.iter().filter(|&&i| carries(i as usize)) {
+        reach(struck as usize, &mut lit);
     }
-    share
+    lit
 }
 
 /// The share of a cell's ground the remains cover on the patches of its cover whose beds `beds` carry a flame.
@@ -102,9 +110,9 @@ impl PartialOrd for Reached {
 /// The cells a flame lit in cell `from` reaches within `front_life`: it crosses half the way between two cells' centres
 /// at the speed of each one's bed (`lead`, `reach`) along the way between them, the push of its wind at mid-flame added
 /// (`Bed::waf`, `super::downwind`), through
-/// cells whose remains carry a flame, the earliest first (Dijkstra's way over the times). Returns them, the lit one
-/// first.
-fn run(w: &World, beds: &[Vec<Option<Bed>>], from: usize) -> Vec<usize> {
+/// cells whose remains carry a flame, the earliest first (Dijkstra's way over the times). Returns them with when the
+/// flame reaches each, s, the lit one first.
+fn run(w: &World, beds: &[Vec<Option<Bed>>], from: usize) -> Vec<(usize, f64)> {
     let (cells, ph) = (w.mesh.cells(), &w.cfg.phys);
     let speed = |i: usize, way: [f64; 2]| {
         let wind = w.low_wind.get(w.mesh.up(i, 0, crate::AIR)).map_or([0.0; 2], |v| v.map(|x| x as f64));
@@ -114,10 +122,10 @@ fn run(w: &World, beds: &[Vec<Option<Bed>>], from: usize) -> Vec<usize> {
     let mut heap = BinaryHeap::from([Reached(0.0, from)]);
     let mut out = Vec::new();
     while let Some(Reached(t, i)) = heap.pop() {
-        if when.iter().any(|&(c, s)| c == i && s < t) || out.contains(&i) {
+        if when.iter().any(|&(c, s)| c == i && s < t) || out.iter().any(|&(c, _)| c == i) {
             continue;
         }
-        out.push(i);
+        out.push((i, t));
         let (links, others) = cells.around(i);
         for (&l, &j) in links.iter().zip(others) {
             let j = j as usize;
