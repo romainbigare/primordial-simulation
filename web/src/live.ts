@@ -1,6 +1,6 @@
 import { World, makeWorld, Meta } from './data';
 import { timed } from './cost';
-import type { Probe, StartKind, Edited } from './god';
+import type { Probe, StartKind, Brushed, Settled } from './god';
 
 /** What the core reports with each frame: its cells, the months stepped per second of real time, the time a month
  * took to step, ms, the share of the time the worker stepped, and the bytes of its memory. */
@@ -28,12 +28,14 @@ export class Live {
   /** The starting kinds the world's plan places (wasm/src/lib.rs `kinds`). */
   kinds: StartKind[] = [];
   private worker: Worker;
+  /** The answers awaited about places, in the order asked (the worker answers in turn). */
+  private answers: ((p: Probe) => void)[] = [];
   private url: string;
   /** The frames taken that wait for their answer (`shown`), and the listener that answers them when the page is hidden. */
   private unanswered = 0;
   private onHide = () => { if (document.hidden) this.answer(); };
 
-  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; probe: (p: Probe) => void; edited: (r: Edited) => void }) {
+  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; brushed: (r: Brushed) => void; settled: (r: Settled) => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message || 'The world\'s worker failed.');
@@ -41,8 +43,9 @@ export class Live {
       const m = e.data as { kind: string; meta: string; kinds: string; edited: boolean; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; plumes: Uint8Array; relief: Uint8Array | null; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null };
       if (m.kind === 'ready') return on.ready();
       if (m.kind === 'error') return on.error(m.text);
-      if (m.kind === 'probe') return on.probe(JSON.parse(m.text) as Probe);
-      if (m.kind === 'edited') return on.edited(JSON.parse(m.text) as Edited);
+      if (m.kind === 'probe') return this.answers.shift()?.(JSON.parse(m.text) as Probe);
+      if (m.kind === 'brushed') return on.brushed(JSON.parse(m.text) as Brushed);
+      if (m.kind === 'settled') return on.settled(JSON.parse(m.text) as Settled);
       if (m.discharge) this.discharge = m.discharge;
       if (m.plumes) this.plumes = m.plumes;
       if (m.relief) this.relief = m.relief;
@@ -105,9 +108,12 @@ export class Live {
   rate(monthsPerSecond: number): void { this.worker.postMessage({ cmd: 'rate', rate: monthsPerSecond }); }
   /** Ask with every frame for the things of a window (x, y, w, h in squares) to draw one by one, or for none. */
   things(at: [number, number, number, number] | null): void { this.worker.postMessage({ cmd: 'things', at }); }
-  /** Ask what lies under the place (x, y) in squares (`probe`, answered by `on.probe`). */
-  probe(x: number, y: number): void { this.worker.postMessage({ cmd: 'probe', at: [x, y] }); }
-  /** Edit the world at (x, y) in squares between two months (god.ts `TOOLS`; answered by `on.edited`). */
-  edit(act: number, x: number, y: number, share: number, row: number): void { this.worker.postMessage({ cmd: 'edit', act, at: [x, y], share, row }); }
+  /** Ask what lies under the place (x, y) in squares (`probe`), the core's answer to `answer`. */
+  probe(x: number, y: number, answer: (p: Probe) => void): void { this.answers.push(answer); this.worker.postMessage({ cmd: 'probe', at: [x, y] }); }
+  /** Paint with brush tool `tool` (god-tools.ts) a circle of `radius` m about (x, y) in squares, planting the starting
+   * kind of `row` (answered by `on.brushed`); each cell once a stroke. */
+  brush(tool: number, x: number, y: number, radius: number, row: number): void { this.worker.postMessage({ cmd: 'brush', tool, at: [x, y], radius, row }); }
+  /** End the stroke: what its edits start that takes no time runs at once (answered by `on.settled`). */
+  settle(): void { this.worker.postMessage({ cmd: 'settle' }); }
   stop(): void { this.worker.terminate(); URL.revokeObjectURL(this.url); document.removeEventListener('visibilitychange', this.onHide); }
 }

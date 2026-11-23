@@ -174,8 +174,10 @@ export class MapView {
   fire: Fire | null = null;
   playing = false;
   overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
-  /** Told of a tap at a place (squares) before the map picks its square: true takes the tap (a tool's edit). */
-  tap: ((x: number, y: number) => boolean) | null = null;
+  /** A tool that paints with the pointer (god mode): told where a press of the main button starts (squares), true
+   * takes the press and its drag in place of a pan; then told of each move and of the end. A second finger, or another
+   * button, still moves the map. */
+  paint: { start(x: number, y: number): boolean; move(x: number, y: number): void; end(): void } | null = null;
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
     this.ctx = cv.getContext('2d')!;
@@ -195,8 +197,22 @@ export class MapView {
     new ResizeObserver(() => { this.resize(); this.invalidate(); }).observe(cv);
     const ptrs = new Map<number, { x: number; y: number }>();
     let moved = 0;
-    cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY }); if (ptrs.size === 1) moved = 0; });
+    /** The pointer that paints (-1: none), and where it is. */
+    let painter = -1, painterAt = { x: 0, y: 0 };
+    const at = (e: PointerEvent): [number, number] => [(e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s];
+    const stopPainting = () => { if (painter >= 0) { painter = -1; this.paint?.end(); } };
+    cv.addEventListener('pointerdown', e => {
+      cv.setPointerCapture(e.pointerId);
+      if (painter >= 0) {
+        // A second finger: the stroke ends, and the two move the map.
+        ptrs.set(painter, painterAt); stopPainting(); moved = 99;
+      } else if (!ptrs.size && e.button === 0 && this.paint?.start(...at(e))) { painter = e.pointerId; painterAt = { x: e.offsetX, y: e.offsetY }; return; }
+      ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+      if (ptrs.size === 1) moved = 0;
+    });
+    cv.addEventListener('contextmenu', e => { if (this.paint) e.preventDefault(); });
     cv.addEventListener('pointermove', e => {
+      if (e.pointerId === painter) { painterAt = { x: e.offsetX, y: e.offsetY }; this.setHover(this.cellAt(e.offsetX, e.offsetY)); return this.paint?.move(...at(e)); }
       const p = ptrs.get(e.pointerId);
       if (!p) return this.setHover(this.cellAt(e.offsetX, e.offsetY));
       const before = [...ptrs.values()].map(q => ({ ...q }));
@@ -209,8 +225,8 @@ export class MapView {
       this.cam.ox += m1.x - m0.x; this.cam.oy += m1.y - m0.y; this.fitted = false; this.moved(); this.invalidate();
     });
     const up = (e: PointerEvent) => {
-      const taken = () => this.tap?.((e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s) ?? false;
-      if (ptrs.size === 1 && moved < 6 && e.type === 'pointerup' && !taken()) { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
+      if (e.pointerId === painter) return stopPainting();
+      if (ptrs.size === 1 && moved < 6 && e.type === 'pointerup') { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
       ptrs.delete(e.pointerId);
     };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);

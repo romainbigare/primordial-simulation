@@ -11,6 +11,8 @@ import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
 import { Fire } from './fire';
 import { God } from './god';
+import { FireFront } from './front';
+import { nearestFrame, setTimeline } from './timeline';
 import { godTools } from './god-tools';
 import { Panels, watchCovered } from './panels';
 import { fillIcons, iconSvg } from './icons';
@@ -54,11 +56,15 @@ map.layer = vegetation;
 const fire = new Fire();
 map.fire = fire;
 /** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
-const editor = { probe: (x: number, y: number) => live?.probe(x, y), edit: (a: number, x: number, y: number, s: number, r: number) => live?.edit(a, x, y, s, r) };
-const god = new God($('god-strip'), $('god'), $('toast'), editor, godTools(editor, () => live?.kinds ?? []), () => map.redraw());
+const front = new FireFront((x, y, answer) => live?.probe(x, y, answer), fire);
+const editor = { probe: (x: number, y: number) => live?.probe(x, y, p => god.probed(p)), brush: (t: number, x: number, y: number, r: number, row: number) => live?.brush(t, x, y, r, row), settle: () => live?.settle() };
+const god = new God({
+  strip: $('god-strip'), card: $('god'), toast: $('toast'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
+  picked: () => { if (playing) togglePlay(); }, burnt: b => front.burnt(b),
+}, editor, godTools(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live && godOn()) god.draw(ctx, ox, oy, s); };
-map.tap = (x, y) => live !== null && godOn() && god.tap(x, y);
+map.paint = { start: (x, y) => live !== null && godOn() && god.start(x, y), move: (x, y) => god.move(x, y), end: () => god.end() };
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
 let drawing: HeldGpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
@@ -72,7 +78,7 @@ function showStats(s: Stats): void {
   const m = world?.meta;
   numbers.show(s, live && m ? { meta: m, playing, speed, land, drawing, drawnAt: map.drawnAt } : null);
 }
-const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
+const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(world.meta, year)));
 
 // ---- loading
 async function load(buf: ArrayBuffer): Promise<void> {
@@ -113,25 +119,10 @@ function setup(w: World): void {
   const names = m.layers.map(l => l.name).filter(n => !/^(true|ground)_[rgb]$/.test(n));
   const sorted = [...names.filter(n => LAYER_ORDER.includes(n)).sort((a, b) => LAYER_ORDER.indexOf(a) - LAYER_ORDER.indexOf(b)), ...names.filter(n => !LAYER_ORDER.includes(n))];
   $('layers').replaceChildren(...sorted.map(n => button(layerLabel(n), () => setLayer(layer === n ? null : n), n)));
-  const years = m.frames.map(f => f.year), last = years.length - 1;
+  const years = m.frames.map(f => f.year);
   if (!live) charts.set(m.series, m.series_units, years);
-  const tl = $<HTMLInputElement>('tl');
-  tl.max = String(last); tl.disabled = last < 1;
-  $('y0').textContent = `year ${fmtYear(years[0])}`; $('y1').textContent = `year ${fmtYear(years[last])}`;
-  $('marks').replaceChildren(...m.events.map(ev => {
-    const i = nearestFrame(ev.year), el = document.createElement('i');
-    el.style.setProperty('--p', String(last ? i / last : 0));
-    const text = `Year ${fmtYear(ev.year)}: ${ev.text}`;
-    el.onmouseenter = () => tip(el, text); el.onmouseleave = () => ($('tip').hidden = true);
-    el.onclick = () => { setFrame(i); tip(el, text); };
-    return el;
-  }));
+  setTimeline(m, setFrame);
   setFrame(0); setLayer(null); syncUi();
-}
-
-function nearestFrame(year: number): number {
-  const ys = world!.meta.frames.map(f => f.year);
-  return ys.reduce((best, y, i) => (Math.abs(y - year) < Math.abs(ys[best] - year) ? i : best), 0);
 }
 
 // ---- state changes
@@ -209,13 +200,6 @@ function button(text: string, fn: () => void, layerName?: string): HTMLButtonEle
 }
 
 
-function tip(at: HTMLElement, text: string): void {
-  const t = $('tip'), r = at.getBoundingClientRect();
-  t.textContent = text; t.hidden = false;
-  t.style.left = `${Math.min(Math.max(r.left + r.width / 2 - t.offsetWidth / 2, 8), innerWidth - t.offsetWidth - 8)}px`;
-  t.style.top = `${r.top - t.offsetHeight - 8}px`;
-}
-
 // ---- playback
 let last = 0, acc = 0;
 function loop(now: number): void {
@@ -228,6 +212,7 @@ function loop(now: number): void {
       setFrame(frame + n);
     }
   }
+  if (fire.step(now)) map.invalidate();
   requestAnimationFrame(loop);
 }
 function togglePlay(): void {
@@ -291,10 +276,11 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     frame: (stats, changed) => {
       if (live !== l) return;
       if (changed) setFrame(0);
+      if (world) front.frame(world);
       showStats(stats);
     },
-    probe: p => { if (live === l) god.probed(p); },
-    edited: r => { if (live === l) god.edited(r); },
+    brushed: r => { if (live === l) god.brushed(r); },
+    settled: r => { if (live === l) god.settled(r); },
     error: text => { playing = false; syncUi(); say(text); },
   });
   l.drawn = () => map.shown();
