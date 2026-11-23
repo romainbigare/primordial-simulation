@@ -243,7 +243,7 @@ fn a_settled_strike_burns_at_once_with_no_time() {
     let [w0, n0, e0, s0] = w.map.bounds(i);
     let (books, time) = (Books::now(&w), w.time);
     assert_eq!(w.edit(&[Edit { place: [(w0 + e0) / 2.0, (n0 + s0) / 2.0], act: Act::Strike }]), [true]);
-    let reached = w.settle();
+    let reached = w.settle().burnt;
     let burnt = w.counts.flame[flame::REMAINS];
     assert!(reached.contains(&(i as u32, 0.0)) && w.time == time && w.strikes.is_empty(), "reached {reached:?}, time {} for {time}", w.time);
     assert!(burnt > 0.0 && w.counts.flame_month[i].share > 0.0 && flame::since(&w, i) == 0.0, "burnt {burnt} kg, shown {:?}", w.counts.flame_month[i]);

@@ -1,8 +1,9 @@
 //! What the running world laid on the terrain's samples (laws.md 0 and 1.3): the samples' ground is the seed's
 //! (`Terrain::samples`) plus the relief, the solid volume per area the load laid on each sample, m (as
-//! `World::surface_z`), never under none. Only the load writes it (`flow::runoff`): what settles at a sample lies on
-//! it, and what a cell's runoff picks up comes first from its samples' relief. The relief says where in a cell its
-//! matter lies; the matter is booked in the cell's ground node.
+//! `World::surface_z`), never under none, and what edits raised or lowered there (`shaped`, under none where they
+//! lowered it). The load writes what it laid (`flow::runoff`): what settles at a sample lies on it, and what a cell's
+//! runoff picks up comes first from its samples' relief; the edits write what they shaped (`World::shape`). The relief
+//! says where in a cell its matter lies; the matter is booked in the cell's ground and bed nodes.
 
 use super::samples::Samples;
 use super::square::Square;
@@ -10,15 +11,22 @@ use super::terrain::SAMPLE_DEPTH;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// The relief of the samples (the module's doc): of each sample what the load laid on it, m, now and when the samples
-/// were last built from it (`built`; none at all before the first lay or build); of each cell how far its ground stood
-/// over the mean of its samples, the seed's with what had been laid, at the last build, m (`offset`, `heights`); and how
-/// many builds there were.
+/// were last built from it (`built`; none at all before the first lay or build), and what edits shaped of it, m
+/// (`shaped`); of each cell how far its ground stood over the mean of its samples, the seed's with what had been laid
+/// and shaped, at the last build, m (`offset`, `heights`); how many builds there were (`builds`, one each
+/// `Config::build_years`, which the years of the build are read from); the version of the samples built from it, one
+/// more at every build and every reshape after edits (`version`, by which built samples are kept, `Terrain::built`;
+/// none: the seed's samples); and whether edits shaped it since the samples were last built (`due`, not saved: a world
+/// read from a snapshot builds them from it).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Relief {
     pub laid: Vec<f64>,
     pub built: Vec<f64>,
+    pub shaped: Vec<f64>,
     pub offset: Vec<f64>,
     pub builds: u32,
+    pub version: u32,
+    pub due: bool,
 }
 
 impl Relief {
@@ -44,16 +52,36 @@ impl Relief {
     pub fn since(&self, k: usize) -> f64 {
         self.at(k) - self.built.get(k).copied().unwrap_or(0.0)
     }
+    /// `m` m shaped of sample `k` of `n` samples by an edit (raised; lowered where under none): the samples are due to
+    /// be built again.
+    pub fn shape(&mut self, k: usize, m: f64, n: usize) {
+        if self.shaped.len() != n {
+            self.shaped.resize(n, 0.0);
+        }
+        self.shaped[k] += m;
+        self.due = true;
+    }
+    /// What edits shaped of sample `k`, m.
+    pub fn shaped_at(&self, k: usize) -> f64 {
+        self.shaped.get(k).copied().unwrap_or(0.0)
+    }
+    /// What the samples were last built with on sample `k` over the seed's height: what was laid by then and what edits
+    /// shaped, m.
+    pub fn ground(&self, k: usize) -> f64 {
+        self.built.get(k).copied().unwrap_or(0.0) + self.shaped_at(k)
+    }
 }
 
 /// The relief as saved: of each list its length and the samples that hold some, each with what it holds; the cells'
-/// offsets and the builds.
+/// offsets, the builds and the version.
 #[derive(Serialize, Deserialize)]
 struct Sparse {
     laid: (u32, Vec<(u32, f64)>),
     built: (u32, Vec<(u32, f64)>),
+    shaped: (u32, Vec<(u32, f64)>),
     offset: Vec<f64>,
     builds: u32,
+    version: u32,
 }
 
 /// The length of `v` and its samples that hold some, in their order.
@@ -70,14 +98,14 @@ fn dense((n, v): (u32, Vec<(u32, f64)>)) -> Vec<f64> {
 
 impl Serialize for Relief {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        Sparse { laid: sparse(&self.laid), built: sparse(&self.built), offset: self.offset.clone(), builds: self.builds }.serialize(to)
+        Sparse { laid: sparse(&self.laid), built: sparse(&self.built), shaped: sparse(&self.shaped), offset: self.offset.clone(), builds: self.builds, version: self.version }.serialize(to)
     }
 }
 
 impl<'de> Deserialize<'de> for Relief {
     fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Relief, D::Error> {
         let s = Sparse::deserialize(from)?;
-        Ok(Relief { laid: dense(s.laid), built: dense(s.built), offset: s.offset, builds: s.builds })
+        Ok(Relief { laid: dense(s.laid), built: dense(s.built), shaped: dense(s.shaped), offset: s.offset, builds: s.builds, version: s.version, due: false })
     }
 }
 
@@ -90,13 +118,13 @@ const SMOOTH_PASSES: usize = 3;
 const SMOOTH_ROUNDS: usize = 8;
 
 /// The heights of the samples built from the seed's samples `seed` of `map` (its rows between latitudes `lat`) and the
-/// relief `r` as last built (`Relief::built`, `Relief::offset`), m: each the seed's height with what was laid on it,
+/// relief `r` as last built (`Relief::ground`, `Relief::offset`), m: each the seed's height with what was laid on it and shaped,
 /// raised by its cell's offset; the offsets spread smoothly between the cells (`SMOOTH_SHARE` of a square each way,
 /// `SMOOTH_PASSES` passes of a box filter, round a globe's rows), what the cells' means then lack spread the same way `SMOOTH_ROUNDS` times,
 /// and each cell's raised by the constant it still lacks, so that its samples' mean by area is its ground exactly. A cell finer than a sample shares it: the sample takes their offsets' mean by area.
 pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), r: &Relief) -> Vec<f64> {
     let n = seed.h.len();
-    let base: Vec<f64> = (0..n).map(|k| seed.h[k] + r.built.get(k).copied().unwrap_or(0.0)).collect();
+    let base: Vec<f64> = (0..n).map(|k| seed.h[k] + r.ground(k)).collect();
     // Of each sample, the offset it takes and the group it is held to the mean of (its cell; or itself, under cells
     // finer than it).
     let (mut target, mut weight, mut group) = (vec![0.0; n], vec![0.0; n], vec![u32::MAX; n]);
@@ -208,7 +236,7 @@ mod tests {
     /// A relief saved and read again is the same, also where a list holds only none.
     #[test]
     fn a_relief_reads_back_the_same() {
-        let r = Relief { laid: vec![0.0; 4], built: vec![0.0, 1.5, 0.0], offset: vec![0.25], builds: 2 };
+        let r = Relief { laid: vec![0.0; 4], built: vec![0.0, 1.5, 0.0], shaped: vec![-2.0, 0.0], offset: vec![0.25], builds: 2, version: 3, due: false };
         let back: Relief = serde_json::from_str(&serde_json::to_string(&r).expect("saved")).expect("read");
         assert_eq!(back, r);
     }

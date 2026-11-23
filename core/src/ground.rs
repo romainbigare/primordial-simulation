@@ -152,9 +152,13 @@ impl World {
     }
     /// Thermal energy of a ground node at temperature `t` with the fusion enthalpy molten there: the inverse of `thaw`.
     pub fn energy_ground(&self, i: usize, t: f64) -> f64 {
-        let g = self.stock(Node::ground(i));
+        self.energy_of(i, t, self.stock(Node::ground(i)), self.stock(Node::new(Class::Bed, i)))
+    }
+    /// Thermal energy of ground node `i` at temperature `t` were its loose amounts `g` and its bonded amounts `bed`, mol
+    /// of each, with the fusion enthalpy molten there (`energy_ground`).
+    pub(crate) fn energy_of(&self, i: usize, t: f64, g: impl Fn(usize) -> f64, bed: impl Fn(usize) -> f64) -> f64 {
         let held: f64 = (0..self.chem.ns()).map(|k| g(k) * self.chem.fused_heat(k, t, &g)).sum();
-        self.heat_cap_ground(i) * t + held
+        self.heat_cap_of(i, &g, bed) * t + held
     }
     /// Molten share of substance `k` in ground node `i` at temperature `t` (from `thaw`).
     pub fn molten(&self, k: usize, i: usize, t: f64, plateau: Option<(usize, f64)>) -> f64 {
@@ -179,8 +183,12 @@ impl World {
     /// the frozen liquids that lie on it (the ground the terrain's samples stand at, `flow::build`).
     pub fn ground_z(&self, i: usize) -> f64 {
         let solid = |k: usize| (self.b(k, i) + self.g(k, i)) * self.chem.molar_volume(k, chem::Phase::Solid);
-        let v: f64 = (0..self.chem.ns()).filter(|&k| self.chem.subs[k].melt > crate::units::T_SURF).map(solid).sum();
+        let v: f64 = (0..self.chem.ns()).filter(|&k| self.holds_up(k)).map(solid).sum();
         self.base_z + v / self.mesh.cells().area()[i]
+    }
+    /// Whether substance `k` stays solid at the surface (`T_SURF`), so it holds the ground up (`ground_z`).
+    pub fn holds_up(&self, k: usize) -> bool {
+        self.chem.subs[k].melt > crate::units::T_SURF
     }
     /// Height of the solid surface (bonded and loose solids) of ground node `i`, m: Flow's (`Scratch::surface`, kept as
     /// matter moves), once Flow has built its state; before, from its amounts at its temperature now (`thaw`), with the
