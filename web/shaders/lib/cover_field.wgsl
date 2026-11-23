@@ -567,7 +567,7 @@ fn speck_lattice(at_m: vec2f, side: f32, turn: f32, share: f32, e: f32, k: i32) 
   return vec2f(on + (1.0 - on) * even, lit * on);
 }
 
-// Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_thing`
+// Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_crown`
 // by the width of its marks there, as each mark shows, mark.wgsl `decide`), thicker and thinner by `thick`, holding
 // `hold` of its plants there, over `dst` (premultiplied): its shadows darken what lies below, its crowns cover their
 // share at their mean; the trees' in their stands, in groups of lighter and darker crowns, and snowy as the ground under
@@ -579,7 +579,7 @@ const DOME_LIT = 0.35; const DOME_SHADOW = 0.6;
 fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, hold: f32, dst: vec4f) -> vec4f {
   if (cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
   var unshown = 1.0;
-  if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_thing(field_at(at, WIDE_LAYER)[l], e); }
+  if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_crown(field_at(at, WIDE_LAYER)[l], e); }
   let crowns = min(f.a * hold * thick, 1.0);
   if (crowns * unshown <= 0.0) { return dst; }
   var c = f.rgb / f.a;

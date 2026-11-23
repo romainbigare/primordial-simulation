@@ -298,7 +298,7 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
 // among the kind's groups packed as ((row x squares across + column) x the kinds a square holds (`kinds_n`) + kind) x
 // `GROUPS` x `PLACE_STEPS` + its place in steps (-1:
 // none stands there, or the snow buries it, or its lattice's marks there take too few pixels to show), the share of it
-// that shows (over the snow, and as a thing by the width of its lattice's marks at its foot, draw.wgsl `as_thing`: the
+// that shows (over the snow, and as a crown by the width of its lattice's marks at its foot, draw.wgsl `as_crown`: the
 // field far away, cover_field.wgsl `lattice_field`, is drawn by the same width where they do not) with the depth of the
 // liquid over its foot (`wade_word`), and the share of the ground snow covers at its foot.
 // A function of the cell alone, so it is decided once a frame for each cell in view (marks.wgsl) and read by every
@@ -325,7 +325,7 @@ struct Living { mark: vec4f, claimed: bool }
 fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32) -> Living {
   let none = Living(vec4f(-1.0, 0.0, 0.0, 0.0), true);
   let unclaimed = Living(vec4f(0.0), false);
-  let thing = as_thing(field_at(at, WIDE_LAYER)[l], cover.seen.x);
+  let thing = as_crown(field_at(at, WIDE_LAYER)[l], cover.seen.x);
   if (thing <= 0.0 || all <= 0.0) { return unclaimed; }
   // First whether any kind may claim the cell, before its ground is read; then, on open ground (`ground_open`), the
   // kind its ground lets claim it. (Both by one call, so the program holds `pick_kind` once.)
@@ -395,7 +395,7 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f) -> vec4f {
   let f = foot(at);
   if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
   // (They show as things by the stems' height, as their specks far away give way to them, burn.wgsl `dead_far`.)
-  let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_thing(dead.tall, cover.seen.x);
+  let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead.tall, cover.seen.x);
   if (shows <= 0.0) { return none; }
   return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q));
 }

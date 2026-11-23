@@ -20,9 +20,9 @@ const MARK_MARGIN = Math.max(...REACH), MARK_SPARE = 1;
 const MARK_BINDINGS = [5, 6, 7, 22], REACH_BINDING = 23;
 /** The format of the textures the marks are decided into (a byte a channel: lib/cells.wgsl `mark_word`). */
 const MARKS_FORMAT: Format = 'rgba8unorm';
-/** A mark narrower than this many pixels of the screen is not drawn as a thing (lib/draw.wgsl `THING_PX`): a lattice
- * none of whose marks is as wide is not drawn as marks. */
-const THING_LEAST_PX = 4;
+/** A mark narrower than this many pixels of the screen is not drawn (lib/draw.wgsl `CROWN_PX`): a lattice none of whose
+ * marks is as wide is not drawn as marks. */
+const CROWN_LEAST_PX = 2.5;
 
 /** A draw of the marks: its rectangle of the target, px; the metres a pixel of the target and of the screen (which the
  * detail drawn is chosen by); the world's point at its corner, m; and the live map's bindings (land.ts `lawBinds`). */
@@ -55,7 +55,7 @@ export class CoverMarks {
   /** Of each lattice, 1 where a pixel of the screen takes `mpp` m and its widest marks take enough pixels to show as
    * things (each shows by its own width, lib/mark.wgsl `decide`), else 0: none of its marks is drawn. */
   private shown(mpp: number): number[] {
-    return LATTICES.map((_, l) => (this.made && (this.kinds?.widest[l] ?? 0) >= THING_LEAST_PX * mpp ? 1 : 0));
+    return LATTICES.map((_, l) => (this.made && (this.kinds?.widest[l] ?? 0) >= CROWN_LEAST_PX * mpp ? 1 : 0));
   }
 
   /** Send what waits to the GPU. */

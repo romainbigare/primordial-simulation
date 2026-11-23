@@ -48,7 +48,7 @@ fn dead_far(p: Spot) -> Spot {
   if (p.depth > 0.0 || !styled()) { return q; }
   let dead = patch_dead(vec3i(cell_patch, patch_cell));
   if (dead.x <= 0.0 || dead.y <= 0.0) { return q; }
-  let near = cover_look.shown[STANDS] * as_thing(dead.y, p.e);
+  let near = cover_look.shown[STANDS] * as_crown(dead.y, p.e);
   if (near >= 1.0) { return q; }
   let w = DEAD_SPECK * dead.y;
   let seen = specks(p.at, w, dead.x / snag_kg(dead.y) * 0.25 * PI * w * w, p.e, 89);
