@@ -189,6 +189,9 @@ export class GroundTiles {
         const key = keyOf(d, x, y), k = this.kept.get(key);
         if (k) k.asked = asked;
         if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, stale: k !== undefined, far: (inside ? 0 : 1e9) + Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
+        // A tile in view not kept is drawn from its nearest kept ancestor till it comes: that one is asked too, so it
+        // is not let go first (the view would fall back to a coarser tile, then come back).
+        if (!k && inside) this.keepAncestor(d, x, y, asked);
       }
     }
     // Tiles not kept come before those kept stale (which are drawn meanwhile), so a zoom's tiles never wait behind the
@@ -196,6 +199,15 @@ export class GroundTiles {
     this.queue = wanted.sort((a, b) => +a.stale - +b.stale || a.depth - b.depth || a.far - b.far);
     if (depth !== this.depth) { this.depth = depth; this.makePage(); }
     this.next();
+  }
+
+  /** Mark the nearest kept ancestor of the tile of `depth` at column `x` and row `y` as asked by view `asked`. */
+  private keepAncestor(depth: number, x: number, y: number, asked: number): void {
+    for (let d = depth - 1; d >= this.meta.depths[0]; d--) {
+      x >>= 1; y >>= 1;
+      const k = this.kept.get(keyOf(d, x, y));
+      if (k) { k.asked = asked; return; }
+    }
   }
 
   /** The tiles in view at its own depth still to come. */
@@ -328,9 +340,23 @@ export class GroundTiles {
       this.pageDue = false;
     }
     this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 1, 'rgba32float');
+    const now = performance.now() - this.start;
+    if (!this.fades) this.faded(now);
     if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; }
-    // (Where no tile fades, the time is past every fade's end.)
-    return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now: performance.now() - this.start + (this.fades ? 0 : TILE_FADE_MS) };
+    return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now };
+  }
+
+  /** End at `now` (ms since the tiles started) the fade of every tile still fading in: a frame drawn with no fade shows
+   * each whole, and a later frame that fades (the map drawn at the screen's pixels again) must not show the tile it
+   * replaced once more. */
+  private faded(now: number): void {
+    for (const k of this.kept.values()) {
+      if (now - k.came >= TILE_FADE_MS) continue;
+      k.came = now - TILE_FADE_MS;
+      this.numbers[4 * k.layer + 3] = k.came;
+      this.numbersDue = true;
+    }
+    this.lastCame = Math.min(this.lastCame, now - TILE_FADE_MS);
   }
 
   stop(gpu: Gpu | null): void {
