@@ -401,12 +401,21 @@ function showStats(s: Stats): void {
     ['cells', String(s.cells)],
     ...(land ? [['ground', `${land.tiles.count()} tiles of ${fmt(m.cell_m / 2 ** (land.tiles.depth - (m.square_depth ?? 0)))} m, ${land.tiles.toCome()} to come`]] : []),
     ...(drawing ? [['map', `drawn with ${drawing.kind} at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')
-    + `<button class="costs" id="costs">${costShown ? 'hide cost' : 'cost'}</button>`;
+    + `<button class="costs" id="costs">${costShown ? 'hide cost' : 'cost'}</button>`
+    + (drawing ? `<button class="costs" id="gpu-switch" title="Draw the map with the other card's interface (kept in this browser)">use ${drawing.kind === 'WebGPU' ? 'WebGL2' : 'WebGPU'}</button>` : '');
   showCost(s);
 }
 /** Whether the cost line shows (`showCost`). */
 let costShown = false;
-$('stats').onclick = e => { if ((e.target as HTMLElement).id === 'costs') { costShown = !costShown; if (live) showStats(live.stats); } };
+$('stats').onclick = e => {
+  const id = (e.target as HTMLElement).id;
+  if (id === 'costs') { costShown = !costShown; if (live) showStats(live.stats); }
+  // The other back end: the map is drawn anew with it, or the page says the browser has none.
+  if (id === 'gpu-switch' && drawing) {
+    const to = drawing.kind === 'WebGPU' ? 'WebGL2' : 'WebGPU';
+    drawing.switchTo(to).then(ok => { if (!ok) reportError(new Error(`gpu: this browser has no ${to}`)); if (live) showStats(live.stats); map.invalidate(); });
+  }
+};
 /** The cost line: where the time and the memory go, over the last whole second, so a screenshot of it tells where a
  * slow device spends: the world's worker (its months, the time a month takes, the share of its time it steps), the
  * page's thread (the world's frames taken, the map's draws), the GPU's time a frame, the ground's tiles (made in their

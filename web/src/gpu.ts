@@ -232,6 +232,19 @@ const LOSSES_MOST = 2;
  * of the map's large programs, and runs a phone's card out of memory; its WebGL2 makes the same program in seconds. */
 const WEBGL2_FIRST = 'GestureEvent' in window;
 
+/** Where this browser keeps the back end the viewer chose (`HeldGpu.switchTo`). */
+const CHOICE_KEY = 'ew-gpu';
+/** The back end the viewer chose in this browser, or none (a browser that keeps nothing: none). */
+function chosen(): Gpu['kind'] | null {
+  try {
+    const v = localStorage.getItem(CHOICE_KEY);
+    return v === 'WebGL2' || v === 'WebGPU' ? v : null;
+  } catch { return null; }
+}
+function remember(kind: Gpu['kind']): void {
+  try { localStorage.setItem(CHOICE_KEY, kind); } catch { /* (kept for this visit alone) */ }
+}
+
 /** A texture as the page holds it: the back end's texture, and what each of its mip levels was last filled with whole,
  * to fill it again on a new back end or after a lost one (a layer filled alone is not kept: its owner fills it again,
  * `restored`). */
@@ -274,12 +287,31 @@ export class HeldGpu implements Gpu {
   /** `canvas` puts a fresh canvas in the map in place of the last and gives it. */
   constructor(private canvas: () => HTMLCanvasElement, private restored: () => void) {}
 
-  /** Open WebGPU, else WebGL2 (on WebKit WebGL2, else WebGPU: `WEBGL2_FIRST`); false with neither. */
+  /** Open the back end the viewer chose last (`chosen`), else WebGPU, else WebGL2 (on WebKit WebGL2, else WebGPU:
+   * `WEBGL2_FIRST`); false with neither. */
   async open(): Promise<boolean> {
-    if (WEBGL2_FIRST && this.toWebGl2(null)) return true;
+    const first = chosen() ?? (WEBGL2_FIRST ? 'WebGL2' : 'WebGPU');
+    if (first === 'WebGL2' && this.toWebGl2(null)) return true;
     const g = await openWebGpu(this.canvas(), why => this.lost(why));
-    if (!g) return !WEBGL2_FIRST && this.toWebGl2(null);
+    if (!g) return first !== 'WebGL2' && this.toWebGl2(null);
     this.use(g.gpu, g.close, false);
+    return true;
+  }
+
+  /** Draw with back end `kind` from now on, on a fresh canvas, its textures made anew and filled again, and remember
+   * the choice in this browser (`chosen`); false (nothing changes) where the browser has no such back end. */
+  async switchTo(kind: Gpu['kind']): Promise<boolean> {
+    if (kind === this.back.kind) return true;
+    remember(kind);
+    if (kind === 'WebGL2') return this.toWebGl2(null);
+    // (Asked first on a canvas of its own: a fresh canvas takes the map's place, and the one drawn on is gone.)
+    const tried = await openWebGpu(document.createElement('canvas'), () => {});
+    if (!tried) return false;
+    tried.close();
+    const g = await openWebGpu(this.canvas(), why => this.lost(why));
+    if (!g) return this.toWebGl2('WebGPU did not open');
+    this.losses = 0;
+    this.use(g.gpu, g.close, true);
     return true;
   }
 
