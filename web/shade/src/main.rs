@@ -1,13 +1,13 @@
-//! The page's shaders, written once in WGSL (`web/shaders/`), checked and translated for both of the map's back ends
-//! (`web/src/gpu/`): WebGPU reads the WGSL as it is, WebGL2 reads GLSL ES 3.00 that naga (the shader translator of the
-//! wgpu project) writes from it. A program is `web/shaders/<name>.wgsl` with the files of `web/shaders/lib/` its first
+//! The page's shaders, written in WGSL (`web/shaders/`), checked and translated for the map's renderer
+//! (`web/src/gpu.ts`, `gpu-webgl2.ts`): WebGL2 reads the GLSL ES 3.00 that naga (the shader translator of the wgpu
+//! project) writes from it. A program is `web/shaders/<name>.wgsl` with the files of `web/shaders/lib/` its first
 //! line names (`// uses: a.wgsl b.wgsl`) before it, and the entry points `vs` and `fs`. Every program starts with
 //! `const LEAST_E` (draw.wgsl): the least metres a pixel takes in its draws, 0. A program with a line that names more
 //! of them (`// least metres a pixel: 1 3`) is made once more for each, so the detail that cannot show at those sizes
 //! of a pixel is compiled out of it (draw.wgsl `shows_at`); those differ from it in that constant alone, which the page
 //! sets (`web/src/gpu.ts` `programs`, named `<name>:<metres>`).
 //!
-//! `ew-shade SHADERS_DIR OUT.json` writes, for each program: its WGSL; its GLSL vertex and fragment shaders; the least
+//! `ew-shade SHADERS_DIR OUT.json` writes, for each program: its GLSL vertex and fragment shaders; the least
 //! metres a pixel takes for which it is made once more; the targets its fragment stage draws into at once; and where
 //! WebGL2 finds each of its bindings (group, binding): the name of each uniform block, and of each sampler with the
 //! texture and the sampler it pairs (GLSL has no separate samplers).
@@ -80,10 +80,10 @@ fn leasts(dir: &Path, name: &str) -> Result<Vec<f32>, String> {
     line.split_whitespace().map(|m| m.parse::<f32>().map_err(|e| format!("{name}: {m}: {e}"))).collect()
 }
 
-/// Text of a program made for no least size of a pixel, made for `m` metres: its declaration of `LEAST_E` (WGSL
-/// `LEAST_E: f32 = 0.0;`, GLSL `LEAST_E = 0.0;`) given that value, as the page does (web/src/gpu.ts `programs`).
+/// GLSL of a program made for no least size of a pixel, made for `m` metres: its declaration of `LEAST_E`
+/// (`LEAST_E = 0.0;`) given that value, as the page does (web/src/gpu.ts `programs`).
 fn made_for(text: &str, m: &str) -> String {
-    text.replacen("LEAST_E: f32 = 0.0;", &format!("LEAST_E: f32 = {m};"), 1).replacen("LEAST_E = 0.0;", &format!("LEAST_E = {m};"), 1)
+    text.replacen("LEAST_E = 0.0;", &format!("LEAST_E = {m};"), 1)
 }
 
 /// Program `name` for pixels of at least `least` metres, checked and translated.
@@ -97,7 +97,7 @@ fn translated(dir: &Path, name: &str, least: f32) -> Result<Value, String> {
     let vertex = glsl_of(&module, &info, ShaderStage::Vertex, "vs", &mut binds)?;
     let fragment = glsl_of(&module, &info, ShaderStage::Fragment, "fs", &mut binds)?;
     let targets = targets_of(&module).map_err(|e| format!("{name}: {e}"))?;
-    Ok(json!({ "wgsl": wgsl, "vertex": vertex, "fragment": fragment, "binds": binds, "targets": targets }))
+    Ok(json!({ "vertex": vertex, "fragment": fragment, "binds": binds, "targets": targets }))
 }
 
 /// One program, checked and translated, with the least metres a pixel takes for which it is made once more (`least`,
@@ -109,7 +109,7 @@ fn program(dir: &Path, name: &str) -> Result<Value, String> {
     for m in leasts(dir, name)? {
         let made = translated(dir, name, m)?;
         let written = format!("{m:?}");
-        for part in ["wgsl", "vertex", "fragment"] {
+        for part in ["vertex", "fragment"] {
             if made[part].as_str() != Some(made_for(base[part].as_str().unwrap_or(""), &written).as_str()) {
                 return Err(format!("{name}: its {part} made for {written} m a pixel differs in more than LEAST_E"));
             }

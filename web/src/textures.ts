@@ -5,8 +5,7 @@
 // marks over the map (`draw`), each plant standing up from its foot, drawn from its rendered model.
 // Each lattice lies fixed in the world, one mark a cell, so the marks hold while the camera moves, and a pan or a zoom
 // shows them at once.
-import { Draw, Format, Gpu, Made, Pass, Texture, Uniforms, notMade } from './gpu';
-import { MAP_TARGET } from './map';
+import { Draw, Format, Gpu, Pass, Texture, Uniforms, notMade } from './gpu';
 import { Kinds, PLANES_DOWN, half, patchLayer } from './canopy';
 import { LATTICES, REACH, ROWS_MOST, STAND } from './lattices';
 import { groundDetail } from './detail';
@@ -88,12 +87,12 @@ export class CoverMarks {
    * shows, its rows below the last's (web/shaders/marks.wgsl). None before the rendered models are loaded (the marks
    * are drawn from them), nor before the programs that decide and draw them are made for the map's targets (those not
    * made are added to `waiting`, and made first). */
-  prepare(gpu: Gpu, m: Marks, waiting: Made[]): void {
+  prepare(gpu: Gpu, m: Marks, waiting: string[]): void {
     this.decided = null;
     this.made = true;
     const k = this.kinds, detail = groundDetail(gpu);
     if (!k || this.shown(m.seenMpp).every(s => s <= 0) || detail.w <= 1) return;
-    const missing = notMade(gpu, [['marks', MARKS_FORMAT, false], ['reach', MARKS_FORMAT, false], ['cover', null, true], ['cover', MAP_TARGET, true]]);
+    const missing = notMade(gpu, ['marks', 'reach', 'cover']);
     waiting.push(...missing);
     this.made = !missing.length;
     if (!this.made) return;

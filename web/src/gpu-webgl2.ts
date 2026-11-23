@@ -1,6 +1,6 @@
 // The map's renderer on WebGL2 (gpu.ts): the programs' GLSL ES 3.00 as naga wrote it from their WGSL (web/shade),
 // each uniform block bound to its WGSL binding's number, each GLSL sampler on a texture unit of its own. A texture the
-// renderer draws into is drawn upside down (the draw header's `flip`), so its first row is its top, as on WebGPU.
+// renderer draws into is drawn upside down (the draw header's `flip`), so its first row is its top, as the canvas's.
 import { Back, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, drawHeader } from './gpu';
 
 /** A linked program: where each binding of its WGSL lies. */
@@ -19,7 +19,6 @@ class WebGl2Texture implements Texture {
 }
 
 class WebGl2 implements Back {
-  readonly kind = 'WebGL2';
   private linked = new Map<string, Linked>();
   /** Programs sent to compile and link and not yet looked at (`build`, `finish`). */
   private built = new Map<string, WebGLProgram>();
@@ -137,7 +136,7 @@ class WebGl2 implements Back {
     };
   }
 
-  warm(name: string, _target: Format | null, _blend: boolean, first = false): void { this.warming.ask(name, first); }
+  warm(name: string, first = false): void { this.warming.ask(name, first); }
 
   ready(name: string): boolean {
     if (this.linked.has(name)) return true;

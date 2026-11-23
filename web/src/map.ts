@@ -1,10 +1,9 @@
 // The map, drawn on the GPU (gpu.ts) at the screen's own pixels: under it the page's background and the map's shadow,
 // then the live map from the ground's tiles and the cells' table (land.ts), or a tape's map of squares (fields.ts, a
 // texel a square), then what others draw on the GPU (the plant cover, vegetation.ts).
-// The page's map canvas lies over the GPU's own canvas (which the GPU may replace, gpu.ts `HeldGpu`), takes the
-// pointer, and holds in 2D what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
+// The page's map canvas lies over the GPU's own canvas, takes the pointer, and holds in 2D what is drawn by hand: a globe's lines of latitude, the squares under the pointer and
 // picked, and the scale bar.
-import { Draw, Format, Gpu, HeldGpu, Made, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
+import { Draw, Format, Gpu, HeldGpu, Pass, Texture, Uniforms, openGpu, seenFrom } from './gpu';
 import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
@@ -42,13 +41,13 @@ const MADE_POLL_MS = 50;
  * the programs it goes without as they are not made yet (`prepare`); its draw in the pass; and what the live map's
  * ground draws of it, with a square taking `s` css px and a css px `seen` px of the screen (`under`, its bindings). */
 export interface GpuLayer {
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: Made[]): void;
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: string[]): void;
   draw(p: Pass): void;
   under(gpu: Gpu, s: number, seen: number): Draw['binds'];
 }
 
 /** The format of the textures the map is drawn into below the screen's pixels and for its sharp picture. */
-export const MAP_TARGET: Format = 'rgba8unorm';
+const MAP_TARGET: Format = 'rgba8unorm';
 
 /** The sharp picture being drawn once the view rests: its tiles to draw (x, y, w, h device px), the copies' places
  * (css px), the device pixels a css pixel, the view it is of (`viewKey`), the texture it is drawn into, whether it
@@ -127,18 +126,14 @@ export class MapView {
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
     this.ctx = cv.getContext('2d')!;
-    // A fresh canvas for the GPU, under the map's canvas, in place of the last.
-    const fresh = () => {
-      const c = document.createElement('canvas');
-      c.className = 'gpu';
-      this.gpuCv?.remove();
-      cv.before(c);
-      this.gpuCv = c;
-      this.resize();
-      return c;
-    };
+    // The GPU's canvas, under the map's canvas.
+    const c = document.createElement('canvas');
+    c.className = 'gpu';
+    cv.before(c);
+    this.gpuCv = c;
+    this.resize();
     const restored = () => { this.timing = false; this.sharpOf = ''; this.sharpening = null; this.resting = false; clearTimeout(this.sharpTimer); this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
-    this.ready = openGpu(fresh, restored).then(g => {
+    this.ready = Promise.resolve(openGpu(c, restored)).then(g => {
       this.gpu = g;
       if (g) sendDetail(g, () => { this.sharpOf = ''; this.invalidate(); });
       this.invalidate();
@@ -305,7 +300,7 @@ export class MapView {
       if (this.picture) gpu.drop(this.picture);
       this.picture = gpu.texture('picture', tw, th, MAP_TARGET, 1, 1, true);
     }
-    const waiting: Made[] = [];
+    const waiting: string[] = [];
     this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
     this.fire?.prepare(gpu, waiting);
     const target = r < 1 ? this.picture : null, p = gpu.pass(target);
@@ -314,9 +309,9 @@ export class MapView {
     if (this.land) this.land.tiles.fades = r >= 1;
     const fading = this.land?.tiles.fading(performance.now()) ?? false;
     if (fading) this.invalidate();
-    this.drawMap(gpu, p, target, xs, k, d, [tw, th], waiting);
+    this.drawMap(gpu, p, xs, k, d, [tw, th], waiting);
     this.layer?.draw(p);
-    this.drawFire(gpu, p, target, xs, k, d, [tw, th], waiting);
+    this.drawFire(gpu, p, xs, k, d, [tw, th], waiting);
     p.end();
     if (target) this.show(target);
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
@@ -336,13 +331,13 @@ export class MapView {
 
   /** Draw the map anew once the programs `waiting` that the frame just drawn went without are made (looked at every
    * `MADE_POLL_MS`); till then it stays due. So no frame waits for a program to be made: it draws without it. */
-  private drawWhenMade(gpu: Gpu, waiting: Made[]): void {
+  private drawWhenMade(gpu: Gpu, waiting: string[]): void {
     clearTimeout(this.madeTimer);
     this.wentWithout = waiting.length > 0;
     if (!waiting.length) return;
     this.gpuDue = true;
     const look = () => {
-      if (waiting.every(([name, target, blend]) => gpu.ready(name, target, blend))) this.redraw();
+      if (waiting.every(name => gpu.ready(name))) this.redraw();
       else this.madeTimer = window.setTimeout(look, MADE_POLL_MS);
     };
     this.madeTimer = window.setTimeout(look, MADE_POLL_MS);
@@ -418,7 +413,7 @@ export class MapView {
     if (this.land) this.land.flowAt = performance.now();
     // What the layer works out before its draws holds for the whole view, so it is worked out once for all the tiles
     // (a new frame stops them); a program it goes without is waited for as a whole frame's is (`drawWhenMade`).
-    const { cam: { s, ox, oy } } = this, waiting: Made[] = [];
+    const { cam: { s, ox, oy } } = this, waiting: string[] = [];
     this.layer?.prepare(gpu, ox, oy, s, d, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
     this.fire?.prepare(gpu, waiting);
     this.drawWhenMade(gpu, waiting);
@@ -440,9 +435,9 @@ export class MapView {
     const gpu = this.gpu, tile = job.tiles.shift(), W = this.gpuCv!.width, H = this.gpuCv!.height;
     if (this.sharpening !== job || !gpu || !tile || job.into.w !== W || job.into.h !== H) return;
     const p = gpu.pass(job.into, undefined, tile);
-    this.drawMap(gpu, p, job.into, job.xs, job.d, job.d, [W, H], []);
+    this.drawMap(gpu, p, job.xs, job.d, job.d, [W, H], []);
     this.layer?.draw(p);
-    this.drawFire(gpu, p, job.into, job.xs, job.d, job.d, [W, H], []);
+    this.drawFire(gpu, p, job.xs, job.d, job.d, [W, H], []);
     p.end();
     if (!job.tiles.length) {
       this.sharpening = null; this.sharpOf = job.key;
@@ -461,10 +456,10 @@ export class MapView {
     });
   }
 
-  /** Draw into pass `p` (`target`, null: the canvas; of `size` px, `k` px a css px, on a screen of `d` px a css px) the
+  /** Draw into pass `p` (of `size` px, `k` px a css px, on a screen of `d` px a css px) the
    * background and the map's shadow, and the live map or the map's squares (a copy at each of `xs`, css px); the live
    * map only once a program for it is made (`seenFrom`, else it adds the one it waits for to `waiting`). */
-  private drawMap(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
+  private drawMap(gpu: Gpu, p: Pass, xs: number[], k: number, d: number, size: number[], waiting: string[]): void {
     const { cam: { s, ox, oy }, w, h, look } = this;
     this.ctx.fillStyle = css('--map-bg');
     const bg = (this.ctx.fillStyle as string).match(/[0-9a-f]{2}/gi)?.map(c => parseInt(c, 16) / 255) ?? [1, 1, 1];
@@ -475,7 +470,7 @@ export class MapView {
     if (this.land) this.land.drawn = d;
     // The live map's program made for the screen's pixels (gpu.ts `seenFrom`): its detail is chosen by them.
     const mpp = this.cellM / (s * k), seen = this.cellM / (s * d), under = this.layer?.under(gpu, s, d);
-    const program = this.land ? seenFrom(gpu, 'land', seen, target?.format ?? null, false, waiting) : null;
+    const program = this.land ? seenFrom(gpu, 'land', seen, waiting) : null;
     // Each copy is drawn over the part of the target it covers, so what a pixel reads of its place (`frameOf`) never
     // runs over more than the target's pixels.
     const frames = xs.map((_, c) => frameOf(edge(c), oy * k, mpp, seen));
@@ -493,17 +488,17 @@ export class MapView {
 
   /** Draw into pass `p` (as `drawMap`) over the plants the flames and the smoke of the fires burning in view, over the
    * squares they reach, once their program is made; none in a layer's view. */
-  private drawFire(gpu: Gpu, p: Pass, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
+  private drawFire(gpu: Gpu, p: Pass, xs: number[], k: number, d: number, size: number[], waiting: string[]): void {
     if (!this.fire || this.look.mode === 'layer') return;
-    this.drawOver(gpu, p, 'flames', this.fire.flames, target, xs, k, d, size, waiting);
+    this.drawOver(gpu, p, 'flames', this.fire.flames, xs, k, d, size, waiting);
   }
 
   /** Draw into pass `p` (as `drawMap`) program `name` over the map's squares in `box` (null: none), once it is made. */
-  private drawOver(gpu: Gpu, p: Pass, name: string, box: Box | null, target: Texture | null, xs: number[], k: number, d: number, size: number[], waiting: Made[]): void {
+  private drawOver(gpu: Gpu, p: Pass, name: string, box: Box | null, xs: number[], k: number, d: number, size: number[], waiting: string[]): void {
     const { cam: { s, oy }, w, h, look } = this;
     if (!box || !this.land) return;
     const mpp = this.cellM / (s * k), seen = this.cellM / (s * d);
-    const program = seenFrom(gpu, name, seen, target?.format ?? null, true, waiting);
+    const program = seenFrom(gpu, name, seen, waiting);
     if (!program) return;
     const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
     xs.forEach((_, c) => {

@@ -3,7 +3,7 @@
 // lib/burn.wgsl), the flames and the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach).
 // Where no fire is known the ground reads none of it (`groundBinds`).
 import { World, decode } from './data';
-import { Draw, Gpu, Made, Texture, Uniforms, notMade } from './gpu';
+import { Draw, Gpu, Texture, Uniforms, notMade } from './gpu';
 import { half } from './canopy';
 import { groundDetail } from './detail';
 import type { MapLook } from './field-window';
@@ -98,9 +98,9 @@ export class Fire {
 
   /** Work out the smoke of this frame on `gpu` once, before the map's pass (smoke.wgsl), once its program is made
    * (till then, added to `waiting`, no smoke is drawn). */
-  prepare(gpu: Gpu, waiting: Made[]): void {
+  prepare(gpu: Gpu, waiting: string[]): void {
     if (!this.smokeDue || !this.data) return;
-    const missing = notMade(gpu, [['smoke', SMOKE_FORMAT, false]]);
+    const missing = notMade(gpu, ['smoke']);
     if (missing.length) { waiting.push(...missing); return; }
     const w = this.w * SMOKE_PER_SQUARE, h = this.h * SMOKE_PER_SQUARE;
     if (this.smoke?.w !== w || this.smoke.h !== h) {

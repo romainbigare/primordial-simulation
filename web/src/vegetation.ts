@@ -8,7 +8,7 @@ import { World } from './data';
 import { kindsOf } from './canopy';
 import { cooling } from './style';
 import { CoverMarks, Marks } from './textures';
-import { Draw, Gpu, Made, Pass } from './gpu';
+import { Draw, Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
 
@@ -48,7 +48,7 @@ export class Vegetation implements GpuLayer {
   /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` px of the
    * target and `seen` px of the screen a css px, in a view `W` x `H` css px, before the map's pass, adding to
    * `waiting` the programs it goes without (textures.ts `prepare`). */
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number, waiting: Made[]): void {
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number, waiting: string[]): void {
     this.drawn = null;
     const laws = this.land?.lawBinds(gpu);
     if (!laws) return;
