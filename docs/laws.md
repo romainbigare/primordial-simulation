@@ -1494,13 +1494,18 @@ seeds fill it:
   that patch keeps its own point.
   `World::split` makes the share s of a cell's first patch a new patch alike to it at the cell's centre, each slot of
   the first patch giving it the share s of its amounts and plants, nothing dying: a control, as each patch stands per
-  m² as the cell did (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). Every edit goes
+  m² as the cell did (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`),
+  as seedlings; `cover::place_grown` places the world's grown stand of a kind (`cover::grown`: of the slots of that
+  starting kind in every cell, the one holding the most built cover per m² of the ground it stands on), its amounts and
+  its plants by size per m² of the ground the kind stands on in the patch, from the outside node, so planted trees
+  stand as the world grows them. Every edit goes
   through one entry, `World::edit` (`core/src/edit/`, `edit::Act`): it runs the passes of a month's start once, so
   the edits read the world as the laws do, then makes each in its order on the cell under its place (`World::cell_under`):
-  `Clear` about the sample under the place, `Split`, `Plant` in the cell's newest patch (the least age), and `Strike`
+  `Clear` about the sample under the place, `Split`, `Plant` in the cell's newest patch (the least age), `Grown` there
+  (the world's grown stand of the kind; as `Plant` where none stands), and `Strike`
   (3c), and `Ground` on the cells under a brush about the place (0); each is told as an event. `ew run` makes them at
   the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Due`), the live page between two months
-  (wasm `brush`: the ground under a round brush raised or lowered; or a clearing planted with a starting kind, or a
+  (wasm `brush`: the ground under a round brush raised or lowered; or a clearing planted with a grown stand of a starting kind, or a
   strike, on each cell under it, `World::under`, which covers the terrain's samples whose centres lie within its radius,
   each cell by the share of its samples covered, about its sample nearest the brush's centre, each cell once a
   stroke).

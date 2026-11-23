@@ -35,6 +35,13 @@ pub fn plant(row: usize) -> Act {
     Act::Plant { genes: kind.genes, root: row as u32, kg: kind.kg }
 }
 
+/// The edit that places the starting kind of row `row` as the world's grown stand of it (`Act::Grown`), as seedlings
+/// where none stands yet.
+pub fn grown(row: usize) -> Act {
+    let kind = &KINDS[row];
+    Act::Grown { genes: kind.genes, root: row as u32, kg: kind.kg }
+}
+
 impl Schedule {
     /// Life from year `life` on: the soil, then the starting kinds `rows` (rows of `KINDS`: `life::ONE` or `life::ROSTER`),
     /// each at its `Kind::year` after the first life; no takers (a run that wants them sets `takers`).

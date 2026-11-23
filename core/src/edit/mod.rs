@@ -25,6 +25,9 @@ pub enum Act {
     /// `kg` per m² of the cover of genes `genes` and starting kind `root` placed in the cell's newest patch, the one of
     /// the least age (`cover::place`)
     Plant { genes: [f32; crate::cover::NG], root: u32, kg: f64 },
+    /// The grown stand of starting kind `root` the world holds (`cover::grown`) placed in the cell's newest patch, its
+    /// amounts and plants per m² (`cover::place_grown`); where none stands, as `Plant`
+    Grown { genes: [f32; crate::cover::NG], root: u32, kg: f64 },
     /// One strike that lights the cell in the coming month (`World::strikes`, `flame::shares`), where its remains
     /// carry a flame (`flame::lights`)
     Strike,
@@ -57,6 +60,7 @@ impl Edit {
             Act::Clear(s) => format!("cleared {s} of the cover of cell {i} as a new patch"),
             Act::Split(s) => format!("split {s} of the cover of cell {i} off as a new patch alike to the rest"),
             Act::Plant { root, kg, .. } => format!("placed {kg} kg per m2 of starting kind {root} in the newest patch of cell {i}"),
+            Act::Grown { root, .. } => format!("placed a grown stand of starting kind {root} in the newest patch of cell {i}"),
             Act::Strike => format!("a strike lights cell {i} in the coming month"),
             Act::Ground { radius_m, height_m, .. } => format!("the ground within {radius_m} m of a place in cell {i} raised by {height_m} m at its middle"),
         };
@@ -99,6 +103,12 @@ impl World {
         Settled { ground, burnt }
     }
 
+    /// The newest patch of cell `i`'s cover, the one of the least age (the last of those).
+    fn newest(&self, i: usize) -> usize {
+        let c = self.life.cover(i);
+        (0..c.patch_count()).rev().min_by(|&a, &b| c.patches[a].age.total_cmp(&c.patches[b].age)).unwrap_or(0)
+    }
+
     /// Make the edit `e` on cell `i`; whether it was made.
     fn make(&mut self, i: usize, e: &Edit) -> bool {
         match e.act {
@@ -107,11 +117,11 @@ impl World {
                 self.clear(i, s, Some(at))
             }
             Act::Split(s) => self.split(i, s),
-            Act::Plant { genes, root, kg } => {
-                let c = self.life.cover(i);
-                let newest = (0..c.patch_count()).rev().min_by(|&a, &b| c.patches[a].age.total_cmp(&c.patches[b].age)).unwrap_or(0);
-                crate::cover::place(self, i, newest, genes, root, kg)
-            }
+            Act::Plant { genes, root, kg } => crate::cover::place(self, i, self.newest(i), genes, root, kg),
+            Act::Grown { genes, root, kg } => match crate::cover::grown(self, root) {
+                Some(g) => crate::cover::place_grown(self, i, self.newest(i), &g),
+                None => crate::cover::place(self, i, self.newest(i), genes, root, kg),
+            },
             Act::Strike => {
                 let lit = crate::flame::lights(self, i).is_ok();
                 if lit {

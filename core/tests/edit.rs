@@ -99,3 +99,34 @@ fn a_lowering_takes_the_loose_ground_first() {
     assert!(v > 0.0 && v < loose0 && rock == rock0 && ((loose0 - loose) / v - 1.0).abs() < 1e-9, "took {} loose of {v} m3, rock {rock0} -> {rock}", loose0 - loose);
     books.assert_kept(&w, 1e-9);
 }
+
+/// Trees planted show as the world grows them: an edit that plants a kind places the world's grown stand of it
+/// (`Act::Grown`, `cover::grown`), the same built cover per m² of the ground it stands on and the same plants by size,
+/// its matter from the outside node, so the books are kept; a kind no cell holds yet has no grown stand.
+#[test]
+fn a_planted_kind_stands_as_the_worlds_grown_stand_of_it() {
+    use pcore::cover::{self, Parts};
+    use worldgen::life::LIGHT_ROW;
+    let mut w = small_world();
+    worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
+    let lands = worldgen::testkit::dry_lands(&w);
+    let (from, to) = (lands[0], lands[lands.len() / 2]);
+    assert!(cover::grown(&w, LIGHT_ROW as u32).is_none(), "no stand yet");
+    worldgen::testkit::cover(&mut w, from, 2.0);
+    let mm = Parts::of(&w.chem).unwrap().mm(&w.chem);
+    let source = cover::grown(&w, LIGHT_ROW as u32).expect("the stand placed");
+    let books = Books::now(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(to);
+    let place = [(x0 + x1) / 2.0, (y0 + y1) / 2.0];
+    assert_eq!(w.edit(&[Edit { place, act: Act::Clear(0.5) }, Edit { place, act: worldgen::schedule::grown(LIGHT_ROW) }]), [true, true]);
+    books.assert_kept(&w, 1e-9);
+    let c = w.life.cover(to);
+    let x = c.held().find(|&x| c.root[x] == LIGHT_ROW as u32).expect("a slot of the kind");
+    let area = cover::ground(&w, to) * c.patch_share(x) * c.stands[x] as f64;
+    let per: f64 = source.groups.iter().map(|g| g.kg).sum();
+    assert!((c.built(&mm, x) / area / per - 1.0).abs() < 1e-9, "{} kg/m2 for {per}", c.built(&mm, x) / area);
+    let mass = |n: f64, share: f64| share * c.built(&mm, x) / n;
+    for (k, g) in source.groups.iter().enumerate() {
+        assert!((mass(c.plants[x][k], c.share[x][k]) / (g.kg / g.n) - 1.0).abs() < 1e-9, "group {k}: {:?} {:?} for {g:?}", c.plants[x], c.share[x]);
+    }
+}

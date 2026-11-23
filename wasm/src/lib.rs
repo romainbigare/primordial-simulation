@@ -429,7 +429,8 @@ const BURN: u32 = 3;
 /// at its centre, less toward its edge (lowers it where under none; `Act::Ground`): the page calls it again and again
 /// while the brush is held, each time with what the time held since adds; the page shows it from `preview` until the
 /// stroke settles. `PLANT` clears the share of each cell under it that it covers about the place there nearest its
-/// centre and places the starting kind of row `row` in it; `BURN` strikes each cell under it (`flame::lights`), which
+/// centre and places the starting kind of row `row` in it as the world's grown stand of it (`Act::Grown`; `grown`
+/// false: none stands yet, it is placed as seedlings); `BURN` strikes each cell under it (`flame::lights`), which
 /// burns at `settle`; each cell once a stroke. Returns, as JSON: for `SHAPE`, the cells under the brush; else each
 /// cell newly under it, the share it covers, whether each of its edits was made (`World::edit`), and why not (""
 /// where all were: for a strike the flames' `Unlit`, for a planting "NoLand" or "NoRoom"); whether any edit was made;
@@ -457,7 +458,9 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
         }
         let under: Vec<_> = l.world.under(b).into_iter().filter(|u| !stroke.cells.contains(&(u.cell as u32))).collect();
         stroke.cells.extend(under.iter().map(|u| u.cell as u32));
-        let acts = |share: f64| if tool == PLANT { vec![Act::Clear(share), worldgen::schedule::plant((row as usize).min(worldgen::life::KINDS.len() - 1))] } else { vec![Act::Strike] };
+        let row = (row as usize).min(worldgen::life::KINDS.len() - 1);
+        let grown = tool == PLANT && pcore::cover::grown(&l.world, row as u32).is_some();
+        let acts = |share: f64| if tool == PLANT { vec![Act::Clear(share), worldgen::schedule::grown(row)] } else { vec![Act::Strike] };
         let edits: Vec<Edit> = under.iter().flat_map(|u| acts(u.share).into_iter().map(move |act| Edit { place: u.place, act })).collect();
         let done = l.world.edit(&edits);
         let w = &l.world;
@@ -473,7 +476,7 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
             };
             json!({"cell": u.cell, "share": u.share, "done": d, "why": why})
         }).collect();
-        json!({"cells": cells, "changed": done.iter().any(|&d| d)})
+        json!({"cells": cells, "changed": done.iter().any(|&d| d), "grown": grown})
     });
     give(out.to_string().into_bytes())
 }

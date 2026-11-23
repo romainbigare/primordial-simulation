@@ -128,7 +128,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
             let f = c.patches[k].share;
             let part: [f64; NP] = std::array::from_fn(|q| if k == last { left[q] } else { (up[q] * f).min(left[q]) });
             (0..NP).for_each(|q| left[q] -= part[q]);
-            match lodge(c, &mm, &Seed { to: i as u32, mol: part, genes: g, root, heat: 0.0 }, &w.cfg, (area, foot.share, foot.strip), &mut recruits, k) {
+            match lodge(c, &mm, (&Seed { to: i as u32, mol: part, genes: g, root, heat: 0.0 }, None), &w.cfg, (area, foot.share, foot.strip), &mut recruits, k) {
                 Landed::In => {}
                 Landed::Out(m) => {
                     budget[DIED] -= held(&e, &m);
