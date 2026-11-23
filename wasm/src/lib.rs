@@ -34,8 +34,9 @@ const LOAD_SHOWS: f64 = 0.25;
 
 /// The world, the build of its samples what the shell keeps of its cells is of (`Relief::builds`), what is placed when,
 /// what the shell keeps of its cells (`tape::Table`), the table made with the last
-/// frame, and the samples' discharge, m³/s, and load, g/m³, last sent to the page (`tape::Table::discharge`,
-/// `tape::Table::load`; none before the first).
+/// frame, the samples' discharge, m³/s, and load, g/m³, last sent to the page (`tape::Table::discharge`,
+/// `tape::Table::load`; none before the first), and the cells the brush's stroke under way has edited (`brush`; a
+/// stroke ends at `settle`).
 struct Live {
     world: World,
     built: u32,
@@ -43,6 +44,7 @@ struct Live {
     cells: tape::Table,
     table: Vec<f32>,
     sent: Vec<[f32; 2]>,
+    stroke: Vec<u32>,
 }
 
 thread_local! {
@@ -106,7 +108,7 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
     pcore::flow::state(&mut world, true);
     let plan = Schedule { takers: Some(TAKERS_YEAR), ..Schedule::new(Some(LIFE_YEAR), &worldgen::life::ROSTER, Seeding { rounds: SPRAY_ROUNDS, fixers: FIXERS }) };
     let cells = tape::Table::new(&world);
-    LIVE.with(|c| *c.borrow_mut() = Some(Live { built: world.relief.builds, world, plan, cells, table: Vec::new(), sent: Vec::new() }));
+    LIVE.with(|c| *c.borrow_mut() = Some(Live { built: world.relief.builds, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: Vec::new() }));
     0
 }
 
@@ -144,7 +146,7 @@ pub extern "C" fn open_world() -> *const u8 {
             // start finds them, so the page draws the world at its date as one it played into, its rivers too.
             pcore::contract::surroundings(&mut world);
             let cells = tape::Table::new(&world);
-            LIVE.with(|c| *c.borrow_mut() = Some(Live { built: world.relief.builds, world, plan, cells, table: Vec::new(), sent: Vec::new() }));
+            LIVE.with(|c| *c.borrow_mut() = Some(Live { built: world.relief.builds, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: Vec::new() }));
             Vec::new()
         }
         Err(e) => e.into_bytes(),
@@ -398,8 +400,62 @@ pub extern "C" fn edit(act: u32, x: f64, y: f64, share: f64, row: u32) -> *const
     give(out.to_string().into_bytes())
 }
 
+/// The brush's tools (`brush`): plant (a clearing about the place nearest the brush's centre in each cell, planted with
+/// a starting kind) and burn (a strike on each cell).
+const PLANT: u32 = 2;
+const BURN: u32 = 3;
+
+/// The brush of radius `radius` m about the place `x`, `y` in squares (`World::under`), with the tool `tool`: `PLANT`
+/// clears the share of each cell under it that it covers about the place there nearest its centre and places the
+/// starting kind of row `row` in it; `BURN` strikes each cell under it (`flame::lights`), which burns at `settle`. Each
+/// cell is edited once a stroke (until `settle`). Returns, as JSON: each cell newly under the brush, the share it
+/// covers, whether each of its edits was made (`World::edit`), and why not ("" where all were: for a strike the
+/// flames' `Unlit`, for a planting "NoLand" or "NoRoom"); whether any edit was made; or, for another tool, why it is
+/// refused.
+#[no_mangle]
+pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, row: u32) -> *const u8 {
+    use pcore::edit::{Act, Brush, Edit};
+    if tool != PLANT && tool != BURN {
+        return give(json!({"refused": format!("no brush tool {tool}")}).to_string().into_bytes());
+    }
+    let out = with(|l| {
+        let under: Vec<_> = l.world.under(Brush { centre: [x, y], radius_m: radius }).into_iter().filter(|u| !l.stroke.contains(&(u.cell as u32))).collect();
+        let acts = |share: f64| if tool == PLANT { vec![Act::Clear(share), worldgen::schedule::plant((row as usize).min(worldgen::life::KINDS.len() - 1))] } else { vec![Act::Strike] };
+        let edits: Vec<Edit> = under.iter().flat_map(|u| acts(u.share).into_iter().map(move |act| Edit { place: u.place, act })).collect();
+        let done = l.world.edit(&edits);
+        let w = &l.world;
+        let cells: Vec<_> = under.iter().zip(done.chunks(acts(1.0).len())).map(|(u, d)| {
+            let why = if d.iter().all(|&ok| ok) {
+                String::new()
+            } else if tool == BURN {
+                pcore::flame::lights(w, u.cell).err().map_or_else(String::new, |why| format!("{why:?}"))
+            } else if pcore::contract::land(w, u.cell) <= 0.0 {
+                String::from("NoLand")
+            } else {
+                String::from("NoRoom")
+            };
+            json!({"cell": u.cell, "share": u.share, "done": d, "why": why})
+        }).collect();
+        l.stroke.extend(under.iter().map(|u| u.cell as u32));
+        json!({"cells": cells, "changed": done.iter().any(|&d| d)})
+    });
+    give(out.to_string().into_bytes())
+}
+
+/// End the brush's stroke and run at once, with no time on the world's clock, what its edits start that takes no time
+/// (`World::settle`: the strikes burn). Returns, as JSON, each cell the flames reached and when, s after its strike
+/// (`burnt`: [cell, s] pairs).
+#[no_mangle]
+pub extern "C" fn settle() -> *const u8 {
+    let out = with(|l| {
+        l.stroke.clear();
+        json!({"burnt": l.world.settle()})
+    });
+    give(out.to_string().into_bytes())
+}
+
 /// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile`, `rock`, `open_world`,
-/// `ground_of_world`, `probe`, `kinds` or `edit` last returned.
+/// `ground_of_world`, `probe`, `kinds`, `edit`, `brush` or `settle` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())
