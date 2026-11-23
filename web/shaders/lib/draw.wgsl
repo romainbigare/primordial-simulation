@@ -108,11 +108,15 @@ fn lat_turned(size: f32, off: vec2f) -> Lat {
   return lat(mat2x2f(cos(TURN_A), sin(TURN_A), -sin(TURN_A), cos(TURN_A)) * (1.0 / size), off);
 }
 
-// The gradient at lattice point c of stream k: two 16-bit halves of its random word, each -1..1 (no trigonometry: the
-// gradients need not be of one length for the noise to show no grid).
+// The gradient at lattice point c of stream k, each of its two numbers -1..1 (no trigonometry: the gradients need not
+// be of one length for the noise to show no grid): read from a table of `NOISE_SIDE` lattice points a side the renderer
+// makes from the random words of stream 0 (web/src/gpu-webgl2.ts `noiseTable`: two 16-bit halves of `lowbias` each),
+// stream k reading it shifted by k times `NOISE_STREAM` points. One read of a small texture, where the word took some
+// tens of integer operations; the noise repeats every `NOISE_SIDE` of its cells (256 times its size).
+@group(0) @binding(29) var noise_gradients: texture_2d<f32>;
+const NOISE_SIDE = 256; const NOISE_STREAM = vec2i(97, 61);
 fn gradient(c: vec2i, k: i32) -> vec2f {
-  let x = lowbias(c, k);
-  return vec2f(f32(x & 0xffffu), f32(x >> 16u)) * (2.0 / 65535.0) - 1.0;
+  return textureLoad(noise_gradients, (c + k * NOISE_STREAM) & vec2i(NOISE_SIDE - 1), 0).xy;
 }
 
 // Gradient noise at the lattice point `l` of stream k (Perlin 2002; quintic easing; the slope as Quilez 2017): about

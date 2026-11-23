@@ -28,6 +28,9 @@ class WebGl2 implements Back {
   /** A uniform buffer a binding number. */
   private buffers: WebGLBuffer[] = [];
 
+  /** The noise's gradients every program that draws noise reads (`NOISE_BINDING`), made with the context. */
+  private noise!: WebGl2Texture;
+
   constructor(private gl: WebGL2RenderingContext, private canvas: HTMLCanvasElement, restored: () => void) {
     this.parallel = gl.getExtension('KHR_parallel_shader_compile') as Parallel | null;
     this.setUp();
@@ -50,6 +53,8 @@ class WebGl2 implements Back {
     };
     this.samplers = { smooth: sampler(gl.LINEAR, gl.LINEAR), mip: sampler(gl.LINEAR_MIPMAP_NEAREST, gl.LINEAR), texel: sampler(gl.NEAREST, gl.NEAREST), tile: sampler(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR, gl.REPEAT) };
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    this.noise = this.texture('noise', NOISE_SIDE, NOISE_SIDE, 'rgba32float') as WebGl2Texture;
+    this.write(this.noise, noiseTable());
   }
 
   texture(_label: string, w: number, h: number, format: Format, layers = 1, mips = 1, target = false): Texture {
@@ -125,7 +130,8 @@ class WebGl2 implements Back {
         for (const [n, v] of Object.entries(d.binds)) if (v instanceof ArrayBuffer) this.uniform(+n, v);
         for (const u of l.units) {
           gl.activeTexture(gl.TEXTURE0 + u.unit);
-          const tex = d.binds[u.texture] as WebGl2Texture;
+          // (The noise's gradients are the renderer's own: no draw gives them.)
+          const tex = (u.texture === NOISE_BINDING ? this.noise : d.binds[u.texture]) as WebGl2Texture;
           gl.bindTexture(tex.array ? gl.TEXTURE_2D_ARRAY : gl.TEXTURE_2D, tex.tex);
           gl.bindSampler(u.unit, this.samplers[u.sampler === null ? 'texel' : d.binds[u.sampler] as Sampler]);
         }
@@ -251,6 +257,21 @@ class WebGl2 implements Back {
       if (this.parallel) look(); else idle(look);
     });
   }
+}
+
+/** The binding of the noise's gradients (draw.wgsl `noise_gradients`) and the lattice points a side of its table
+ * (draw.wgsl `NOISE_SIDE`). */
+const NOISE_BINDING = 29, NOISE_SIDE = 256;
+/** The noise's gradients (draw.wgsl `gradient`): of each lattice point of the table, row by row, the two 16-bit halves
+ * of its random word of stream 0 (draw.wgsl `lowbias`, lowbias32, Wellons 2018), each -1..1, four floats a texel. */
+function noiseTable(): Float32Array {
+  const out = new Float32Array(4 * NOISE_SIDE * NOISE_SIDE);
+  for (let y = 0; y < NOISE_SIDE; y++) for (let x = 0; x < NOISE_SIDE; x++) {
+    let h = (Math.imul(x, 0x9e3779b1) ^ Math.imul(y, 0x85ebca77)) >>> 0;
+    h ^= h >>> 16; h = Math.imul(h, 0x7feb352d) >>> 0; h ^= h >>> 15; h = Math.imul(h, 0x846ca68b) >>> 0; h ^= h >>> 16;
+    out.set([((h & 0xffff) * 2) / 65535 - 1, ((h >>> 16) * 2) / 65535 - 1], 4 * (y * NOISE_SIDE + x));
+  }
+  return out;
 }
 
 /** How often a program made ahead is looked at for whether it is done, ms. */
