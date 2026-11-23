@@ -178,6 +178,7 @@ pub fn place(w: &mut World, i: usize, k: usize, genes: [f32; NG], root: u32, kg:
     }
     let (mm, cell) = (p.mm(&w.chem), super::ground(w, i));
     let soak = super::soak(w, &p, i, w.g(p.liquid, i)).1;
+    w.life.cells[i].cover.follow_wet(soak.saturated);
     let foot = super::footing(w, i, &genes, w.cfg.phys.root_least, &soak, None);
     let area = cell * w.life.cells[i].cover.patches[k].share * foot.share;
     if area <= 0.0 {

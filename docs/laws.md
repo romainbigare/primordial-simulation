@@ -1285,7 +1285,10 @@ seeds fill it:
   of its roots that work times its activity): so a kind takes the strips only where its roots get the gas and the
   liquid there. Its plants grow where they gain: of what a slot holds after its month, what it stored in the month
   goes to the two grounds by what a plant gains on each, the rest stands where it stood, so plants die back where
-  their roots fail. Its plants stand over all its land (`Cover::stands`), so no denser on the strips than on the land
+  their roots fail. Its plants keep their ground as the table rises and falls under them (`Cover::follow_wet`,
+  `strips_moved`): first in each month the strips are the share the month found, and the ground that turned saturated
+  (the wettest of the rest) or drained (the least wet of the strips) takes its plants with it, as dense as they stood
+  on it; so a wet month puts a kind's plants on the strips where they stand, not on the last dry ground. Its plants stand over all its land (`Cover::stands`), so no denser on the strips than on the land
   as a whole: its share there is at most the strips' share of the land. A kind of many gas spaces keeps the wet strips
   of a dry cell and a kind of drained ground leaves them. A seed wakes as far as its first roots (`root_least`) work. Both the light
   and the capacity limit go with the air's share x of the reaction's gas as (x − `gas_floor`) / (x + 2 `gas_floor`)
