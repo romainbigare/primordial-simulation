@@ -117,10 +117,10 @@ class WebGl2 implements Back {
     const size: [number, number] = t ? [t.w, t.h] : [this.canvas.width, this.canvas.height];
     gl.bindFramebuffer(gl.FRAMEBUFFER, all.length > 1 ? this.framebufferOf(all as WebGl2Texture[]) : t ? t.fb : null);
     gl.viewport(0, 0, size[0], size[1]);
-    if (clear) { gl.clearColor(clear[0], clear[1], clear[2], clear[3]); gl.clear(gl.COLOR_BUFFER_BIT); }
-    // A texture's rows are kept top first (`flip`), the canvas's bottom first.
+    // A texture's rows are kept top first (`flip`), the canvas's bottom first. (The clip holds for the clear too.)
     if (clip) { gl.enable(gl.SCISSOR_TEST); gl.scissor(clip[0], t ? clip[1] : size[1] - clip[1] - clip[3], clip[2], clip[3]); }
     else gl.disable(gl.SCISSOR_TEST);
+    if (clear) { gl.clearColor(clear[0], clear[1], clear[2], clear[3]); gl.clear(gl.COLOR_BUFFER_BIT); }
     return {
       draw: (name: string, d: Draw, blend: boolean) => {
         if (gl.isContextLost()) return;
