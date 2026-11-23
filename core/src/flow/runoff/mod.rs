@@ -131,10 +131,31 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
         (w.counts.edge_liquid[0], w.counts.edge_liquid[1]) = (w.counts.edge_liquid[0] + came, w.counts.edge_liquid[1] + heat);
     }
     // What the liquid carries is booked apart from the liquid, so the heat of each lands with its own matter in a cell
-    // of parts (`parts::to_liquid`): the loose ground's solids (`Scratch::solids`).
+    // of parts (`parts::to_liquid`): the loose ground's solids (`Scratch::solids`). Over no time (a settle, `settle`)
+    // the liquid carries none, and the yearly means of what runs do not move.
+    if dt > 0.0 {
+        carry_load(w, s, &b, (&flux, liq, tmin), dt);
+    }
+    for (l, row) in x.rows.chunks_exact(x.width).enumerate() {
+        off.moved((x.a[l] as usize, x.b[l] as usize), row[..x.width - 1].iter().sum());
+    }
+    // (What leaves over the planet's level goes from the open low ground's hub, `stand`.)
+    for (l, row) in edge.rows.chunks_exact(edge.width).enumerate() {
+        off.left(edge.b[l] as usize, -row[..edge.width - 1].iter().sum::<f64>());
+    }
+    if dt > 0.0 {
+        follow_flux(w, &b, (&flux, &off.mol), dt);
+    }
+    (s.bodies, s.spare.samples) = (b, flux);
+}
+
+/// The load the liquid that ran through each sample (`flux`) carries in a month of `dt` s (`load::carry`), of the solids
+/// of the loose ground at the liquids `liq`'s lowest temperature `tmin`: booked through the store, mixed into the
+/// texture where it settles, laid on the relief or taken from it, and the bed it wore broken.
+fn carry_load(w: &mut World, s: &mut Scratch, b: &Bodies, (flux, liq, tmin): (&[[f64; 2]], &[usize], f64), dt: f64) {
     let sol = s.solids(tmin, liq);
     let mut load = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: sol.len() + 1, class: [Class::Ground; 2] };
-    let carried = load::carry(w, s, &b, (&flux, &sol), &mut load, dt);
+    let carried = load::carry(w, s, b, (flux, &sol), &mut load, dt);
     book_all(w, s, &sol, &[&load]);
     (w.counts.load_month, w.counts.plumes) = (carried.loads, carried.plumes);
     w.counts.load.iter_mut().zip(carried.volumes.counts()).for_each(|(a, v)| *a += v);
@@ -144,15 +165,6 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
         if m > 0.0 { w.relief.lay(k as usize, m, n) } else { w.relief.take(k as usize, -m); }
     }
     apply(w, s, &[], &carried.broke);
-    for (l, row) in x.rows.chunks_exact(x.width).enumerate() {
-        off.moved((x.a[l] as usize, x.b[l] as usize), row[..x.width - 1].iter().sum());
-    }
-    // (What leaves over the planet's level goes from the open low ground's hub, `stand`.)
-    for (l, row) in edge.rows.chunks_exact(edge.width).enumerate() {
-        off.left(edge.b[l] as usize, -row[..edge.width - 1].iter().sum::<f64>());
-    }
-    follow_flux(w, &b, (&flux, &off.mol), dt);
-    (s.bodies, s.spare.samples) = (b, flux);
 }
 
 /// What runs off each cell, as a share of the liquid that may move in it: what came up from the store; the pores'

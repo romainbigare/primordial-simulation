@@ -79,6 +79,7 @@ pub fn makes_of(chem: &Chemistry, init: &Init) -> Vec<Make> {
         weathers: mean(fr, &|k| if weathers(chem, init, k) { 1.0 } else { 0.0 }),
         buoyant: mean(fr, &|k| chem.subs[k].density[0]) / liquid - 1.0,
         lies: lies(m),
+        of: fr.clone(),
     };
     init.makes.iter().enumerate().map(make).collect()
 }

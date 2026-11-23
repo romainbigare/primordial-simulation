@@ -224,12 +224,26 @@ days, two a month, each at its own time in the month), after each the sink of th
 bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: where
 the soil's liquid saturates each cell's land, by Flow's state as its month left it, `contract::wet_grounds`; the cover's,
 then the takers') and Change.
-**Edits and their settling** (`core/src/edit.rs`). Edits are made between two months (3, **Edits**). What an edit
-starts that the laws treat as instant within a month runs at once when the edits settle (`World::settle`), with no time
-on the world's clock: the flames of the strikes of edits (3c). This is honest because a month's step already treats
-such a process as one event inside the month (a flame's run lasts at most `front_life`, 4 days), and every move it
-makes goes through the store, so the books close; what needs time (sun, rain, growth, rot) does not run, and no strike
-is drawn over no time. The live page settles when a stroke of its brush ends, while the world is paused.
+**Edits and their settling** (`core/src/edit/`). Edits are made between two months (3, **Edits**). **The ground under
+a brush** is raised or lowered (`edit::Act::Ground`, `World::shape`): over the terrain's samples the brush covers, by
+(1 − (d/r)²)² of its height at the centre at a distance d from it (r its radius), each cell taking the volume its
+samples move by from the outside node, with the heat that keeps its ground at its temperature and the potential energy
+of where it lies. A raise lays the cell's own rock (its bed's mixture) and, at the top of a stroke, `edit_top_m` of
+loose ground of one of the terrain's makes drawn from the seed for the stroke (`Make::of`, `World::draw_make`); a
+lowering takes the loose ground first, then the rock, never more than the cell holds (its samples move by the share it
+took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **Known limit:** the samples' loose
+ground and the make of their bed (what the tiles and the textures read) do not follow an edit; the cell's soil keeps
+its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
+(`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
+it as a build builds them, without the lobes and without counting a build of the years (`flow::build::reshape`; a new
+version of the relief, `Relief::version`, by which built samples are kept), the passes of a month's start find the
+ground's state from them, and the liquid settles over the ground in the runoff's pass over a span of none
+(`flow::settle`: what stands runs to the bodies and each stands at one level; nothing drains, seeps or mixes, it
+carries no load, and the yearly means of what runs do not move); then the flames of the strikes of edits burn (3c).
+This is honest because a month's step already treats these processes as one event inside the month (the runoff's pass
+moves a month's runoff at once; a flame's run lasts at most `front_life`, 4 days), and every move goes through the
+store, so the books close; what needs time (sun, rain, growth, rot) does not run, and no strike is drawn over no time.
+The live page settles when a stroke of its brush ends, while the world is paused.
 **Chunks and the parallel pass** (`life::run`). The cells are cut into `Config::chunks` runs of neighbouring indices,
 the same for any number of threads. Each chunk is one task on the pool, its cells' life taken out of the world, the
 world read only; in each cell in order the cover's month and then the takers' run on the cell's **view of the store** (`store::Moves`): its
@@ -598,7 +612,7 @@ level, and a lobe and its front step only over the samples of its mouth's body. 
 over it. What a lobe laid in another cell moves there from the entry cell's loose ground, by its mixture, with its heat
 and its potential energy (`runoff::book_solids`), each entry cell giving at most what it holds loose (its solids that stay solid at its land's temperature; the rest stays,
 for the offsets), and mixes into the texture it reaches (`runoff::mix`): the only matter a build moves. Then the
-samples stand at the seed's heights with what was laid on each, each cell's raised to its ground (`World::ground_z`,
+samples stand at the seed's heights with what was laid on each and what edits shaped of it (0), each cell's raised to its ground (`World::ground_z`,
 its solids that stay solid at the surface: snow and ice do not raise it): the cells' offsets spread smoothly between
 their centres (a box filter half a square each way, three passes, round a globe's rows), what their means then lack spread the same way
 eight times, and each raised by the constant it still lacks, so each cell's samples' mean is its ground exactly
@@ -1481,14 +1495,15 @@ seeds fill it:
   `World::split` makes the share s of a cell's first patch a new patch alike to it at the cell's centre, each slot of
   the first patch giving it the share s of its amounts and plants, nothing dying: a control, as each patch stands per
   m² as the cell did (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). Every edit goes
-  through one entry, `World::edit` (`core/src/edit.rs`, `edit::Act`): it runs the passes of a month's start once, so
+  through one entry, `World::edit` (`core/src/edit/`, `edit::Act`): it runs the passes of a month's start once, so
   the edits read the world as the laws do, then makes each in its order on the cell under its place (`World::cell_under`):
   `Clear` about the sample under the place, `Split`, `Plant` in the cell's newest patch (the least age), and `Strike`
-  (3c); each is told as an event. `ew run` makes them at the start of a year (`--clear`, `--split`, `--plant`;
-  `worldgen::schedule::Due`), the live page between two months (wasm `edit`: a clearing, a clearing planted with a
-  starting kind, a strike; wasm `brush`: the same over each cell under a round brush, `World::under`, which covers the
-  terrain's samples whose centres lie within its radius, each cell by the share of its samples covered, about its
-  sample nearest the brush's centre, each cell once a stroke).
+  (3c), and `Ground` on the cells under a brush about the place (0); each is told as an event. `ew run` makes them at
+  the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Due`), the live page between two months
+  (wasm `brush`: the ground under a round brush raised or lowered; or a clearing planted with a starting kind, or a
+  strike, on each cell under it, `World::under`, which covers the terrain's samples whose centres lie within its radius,
+  each cell by the share of its samples covered, about its sample nearest the brush's centre, each cell once a
+  stroke).
 - **Events** (`patches::hit`, `open_event`): a patch is made for an event that hits a share of a stand at once (a
   die-off, a flame), never for one plant. An event that hits at least `EVENT_LEAST` (0.15) of a patch's own ground and
   leaves at least that share of it makes the ground it hit a new patch of age 0 (`patches::carve`), about a sample of the

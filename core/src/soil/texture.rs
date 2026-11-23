@@ -47,8 +47,9 @@ pub fn samples(w: &World) -> Vec<Texture> {
 /// what the flow at its main sample upstream (`Samples::main`) carried on, all particles where none runs to it.
 pub fn textures(s: &Samples, makes: &[Make], g: f64) -> Vec<Texture> {
     let shear = |k: usize| flood_shear(s, k, g, flood_depth(s.up[k], s.channel));
+    let none = Make::default();
     crate::par::map_n(s.h.len(), crate::par::UNCOUNTED, |k| {
-        let m = makes.get(s.make[k] as usize).copied().unwrap_or_default();
+        let m = makes.get(s.make[k] as usize).unwrap_or(&none);
         let laid = if s.loose[k] > 0.0 { s.settled[k] / s.loose[k] } else { 0.0 };
         let mut x = weathered([0.0, 1.0 - m.coarse, m.coarse], m.weathers, s.age[k]);
         if laid > 0.0 {

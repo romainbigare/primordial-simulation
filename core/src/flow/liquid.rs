@@ -116,6 +116,16 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     super::air::dissolve(w, s, dt);
 }
 
+/// The liquid settled over the ground as it stands now, in no time (`World::settle`, laws.md 0): the runoff's pass alone
+/// (`runoff::surface`) over a span of none, so what stands runs to the bodies and each stands at one level, and what a
+/// body holds over its pass runs on; nothing drains, seeps or mixes, and the yearly means of what runs do not move.
+pub(super) fn settle(w: &mut World, s: &mut Scratch) {
+    let (tmin, tmax) = range(&s.state.tg);
+    let liq = s.liquids(&w.chem, (tmin, tmax), true);
+    let (slope, none_up) = (slopes(w, s), vec![0.0; w.mesh.cells().n()]);
+    surface(w, s, (&liq, tmin), (&slope, &none_up, OffLand::new(w)), 0.0);
+}
+
 /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
 /// more than `still`), 0 for none: the slope its hillsides drain down to the channels inside it. The surface is the
 /// cell's mean ground, or the liquid standing over its pores if higher; of a cell of parts or under a body, its solid

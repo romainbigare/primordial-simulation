@@ -44,14 +44,16 @@ const MOST: f64 = 0.5;
 /// What the ground reads of one make of the bed, from the chemistry's numbers of its substances (`worldgen`): how fast
 /// flowing liquid wears it against the first make; the share of the particles it breaks into that are coarse (`soil`);
 /// the share of it that weathers into fine particles; and its particles' density over the key liquid's, less one (their
-/// submerged weight, which their settling reads); and where it lies (`Lies`).
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+/// submerged weight, which their settling reads); where it lies (`Lies`); and its substances, each with its share by
+/// volume (what an edit lays of it, `World::shape`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Make {
     pub cut: f64,
     pub coarse: f64,
     pub weathers: f64,
     pub buoyant: f64,
     pub lies: Lies,
+    pub of: Vec<(usize, f64)>,
 }
 
 /// Where a make lies: in the layers of the stack drawn from the seed; as `per_stack` seams of `m` m in each repeat of

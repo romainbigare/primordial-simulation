@@ -4,7 +4,8 @@
 //! (`Terrain::built`), and with them each cell's ground as liquid stands on it (`curve`), the bodies, the key samples
 //! of the load and their rooms (`bodies::Bodies::of`). First the load piled at the mouths since the last build is laid
 //! out as lobes (`lay`): the only matter a build moves. What a cell's parts of the bodies held follows each part's pond
-//! (`held`), and the state of the ground nodes is found again.
+//! (`held`), and the state of the ground nodes is found again. After edits shaped the ground the same is done at once,
+//! without the lobes (`reshape`).
 
 use super::{bodies::Bodies, curve, ground_now, land::solid, range, runoff, scratch::Holding, with, Scratch};
 use crate::space::{delta::flood_depth, network::NONE, samples::Samples, terrain::SAMPLE_DEPTH};
@@ -23,18 +24,41 @@ pub fn build(w: &mut World) {
     with(w, true, |w, s| {
         let old = w.terrain_samples();
         lay(w, s, &old);
-        w.relief.offset = offsets(w);
         w.relief.built = w.relief.laid.clone();
         w.relief.builds += 1;
-        let held = std::mem::take(&mut s.state.held);
-        let was: Vec<Vec<u32>> = s.curves.iter().map(|c| c.ponds().iter().map(|p| p.pond).collect()).collect();
-        curve::build(w, s);
-        s.bodies = Bodies::of(w, &s.curves);
-        let new = w.terrain_samples();
-        s.state.held = held_by_pond(s, (&old, &new), (&was, held));
-        ground_now(w, s, true);
+        anew(w, s, &old);
     });
-    // The ground the cells' plants root in and the way they face, from the samples as built.
+    after(w);
+}
+
+/// The samples built anew after edits shaped the relief (`Relief::due`, `World::settle`): as a build, but no lobes are
+/// laid and no build of the years is counted (`Relief::builds`); only the samples' version moves.
+pub fn reshape(w: &mut World) {
+    with(w, true, |w, s| {
+        let old = w.terrain_samples();
+        anew(w, s, &old);
+    });
+    after(w);
+}
+
+/// The samples of a new version of the relief (`Relief::version`) over the cells' grounds now (`offsets`), and with
+/// them each cell's ground as liquid stands on it, the bodies, what each cell's parts of them hold (`held_by_pond`; the
+/// samples `old` before) and the state of the ground nodes.
+fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
+    w.relief.offset = offsets(w);
+    w.relief.version += 1;
+    w.relief.due = false;
+    let held = std::mem::take(&mut s.state.held);
+    let was: Vec<Vec<u32>> = s.curves.iter().map(|c| c.ponds().iter().map(|p| p.pond).collect()).collect();
+    curve::build(w, s);
+    s.bodies = Bodies::of(w, &s.curves);
+    let new = w.terrain_samples();
+    s.state.held = held_by_pond(s, (old, &new), (&was, held));
+    ground_now(w, s, true);
+}
+
+/// The ground the cells' plants root in and the way they face, from the samples as built.
+fn after(w: &mut World) {
     w.loose_bins = crate::cover::loose_bins(w);
     w.rise_south = w.rise_at_build();
 }
@@ -146,16 +170,17 @@ fn move_out(w: &mut World, s: &mut Scratch, out: &[((u32, u32), f64)]) -> f64 {
 }
 
 /// Of each cell, how far its ground (`World::ground_z`) stands over the mean by area of its samples as the seed made
-/// them with what was laid on each (`Relief::laid`), m; a cell finer than a sample reads its sample.
+/// them with what was laid on each by the build and what edits shaped (`Relief::ground`), m; a cell finer than a sample
+/// reads its sample.
 fn offsets(w: &World) -> Vec<f64> {
     let (seed, lat) = (w.terrain.seed, (w.cfg.lat_south, w.cfg.lat_north));
     let s0 = w.terrain.samples(seed, &w.map, lat);
     w.map.leaves().iter().enumerate().map(|(i, &l)| {
         let mean = if l.depth <= SAMPLE_DEPTH {
-            w.terrain.over(seed, &w.map, l, lat, |s, k| s.h[k] + w.relief.at(k))
+            w.terrain.over(seed, &w.map, l, lat, |s, k| s.h[k] + w.relief.ground(k))
         } else {
             let k = s0.index(&l);
-            s0.h[k] + w.relief.at(k)
+            s0.h[k] + w.relief.ground(k)
         };
         w.ground_z(i) - mean
     }).collect()

@@ -35,6 +35,8 @@ pub enum Purpose {
     Gap,
     /// Where in a patch of a cell's cover the share a flame burnt lies (`flame::burn`)
     Burn,
+    /// The make of the loose ground a stroke of an edit lays (`World::draw_make`)
+    Edit,
 }
 
 /// The number of values of a 16-bit uniform.

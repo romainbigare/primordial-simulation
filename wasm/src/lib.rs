@@ -32,11 +32,13 @@ const DISCHARGE_SHOWS: f64 = 0.1;
 /// page is sent the samples' load again once one has changed by more than this share since it was last sent.
 const LOAD_SHOWS: f64 = 0.25;
 
-/// The world, the build of its samples what the shell keeps of its cells is of (`Relief::builds`), what is placed when,
-/// what the shell keeps of its cells (`tape::Table`), the table made with the last
-/// frame, the samples' discharge, m³/s, and load, g/m³, last sent to the page (`tape::Table::discharge`,
-/// `tape::Table::load`; none before the first), and the cells the brush's stroke under way has edited (`brush`; a
-/// stroke ends at `settle`).
+/// The world; the version of its samples what the shell keeps of its cells is of (`Relief::version`); what is placed
+/// when; what the shell keeps of its cells (`tape::Table`); the table made with the last frame; the samples' discharge,
+/// m³/s, and load, g/m³, last sent to the page (`tape::Table::discharge`, `tape::Table::load`; none before the first);
+/// the brush's stroke under way (`Stroke`; none between strokes: a stroke ends at `settle`) and the strokes begun; the
+/// world as it was before the last stroke began (`undo`); and what edits had shaped of each of the terrain's samples
+/// (`Relief::shaped`) when the samples of the version the cells' table is of were built (`version`), and in the samples
+/// of the ground the page shows (`shown`, `ground_shown`), from which `preview` tells it what edits moved since.
 struct Live {
     world: World,
     built: u32,
@@ -44,7 +46,44 @@ struct Live {
     cells: tape::Table,
     table: Vec<f32>,
     sent: Vec<[f32; 2]>,
-    stroke: Vec<u32>,
+    stroke: Option<Stroke>,
+    strokes: u64,
+    before: Option<World>,
+    version: Vec<f64>,
+    shown: Vec<f64>,
+}
+
+/// A stroke of the brush under way: the cells it planted or struck (each once a stroke), how far it has raised the
+/// ground at its centre, m (`Act::Ground`), and the make of the loose ground it lays (`World::draw_make`).
+struct Stroke {
+    cells: Vec<u32>,
+    raised: f64,
+    make: u8,
+}
+
+impl Live {
+    /// The live world `world` and its plan, the cells' table made for it; the page shows its ground as it is.
+    fn new(world: World, plan: Schedule) -> Live {
+        let cells = tape::Table::new(&world);
+        let shaped = world.relief.shaped.clone();
+        Live { built: world.relief.version, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, before: None, version: shaped.clone(), shown: shaped }
+    }
+    /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table made again, as the cells'
+    /// ground and the shore moved, and what edits had shaped kept as the new version's.
+    fn follow(&mut self) {
+        if self.world.relief.version != self.built {
+            self.cells = tape::Table::new(&self.world);
+            self.built = self.world.relief.version;
+            self.version = self.world.relief.shaped.clone();
+        }
+    }
+    /// End the stroke under way and settle the world's edits (`World::settle`).
+    fn settle(&mut self) -> pcore::edit::Settled {
+        self.stroke = None;
+        let done = self.world.settle();
+        self.follow();
+        done
+    }
 }
 
 thread_local! {
@@ -107,8 +146,7 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
     // same world in the page as on the command line.
     pcore::flow::state(&mut world, true);
     let plan = Schedule { takers: Some(TAKERS_YEAR), ..Schedule::new(Some(LIFE_YEAR), &worldgen::life::ROSTER, Seeding { rounds: SPRAY_ROUNDS, fixers: FIXERS }) };
-    let cells = tape::Table::new(&world);
-    LIVE.with(|c| *c.borrow_mut() = Some(Live { built: world.relief.builds, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: Vec::new() }));
+    LIVE.with(|c| *c.borrow_mut() = Some(Live::new(world, plan)));
     0
 }
 
@@ -145,36 +183,35 @@ pub extern "C" fn open_world() -> *const u8 {
             // place of each cell (its liquid, by which the samples' discharge is drawn) are found again as a month's
             // start finds them, so the page draws the world at its date as one it played into, its rivers too.
             pcore::contract::surroundings(&mut world);
-            let cells = tape::Table::new(&world);
-            LIVE.with(|c| *c.borrow_mut() = Some(Live { built: world.relief.builds, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: Vec::new() }));
+            LIVE.with(|c| *c.borrow_mut() = Some(Live::new(world, plan)));
             Vec::new()
         }
         Err(e) => e.into_bytes(),
     })
 }
 
-/// Step one month: at a year's start, first place what the schedule says is due.
+/// Step one month: first a stroke of the brush still under way ends (`Live::settle`); at a year's start, the schedule
+/// places what is due.
 #[no_mangle]
 pub extern "C" fn step_month() {
     with(|l| {
+        if l.stroke.is_some() {
+            l.settle();
+        }
         if l.world.month() % l.world.cfg.months_per_year as u64 == 0 {
             l.plan.place(&mut l.world);
         }
         pcore::step(&mut l.world);
         l.world.drain_events();
-        // A build of the samples moves the cells' ground and the shore: what the shell keeps of the cells, again.
-        if l.world.relief.builds != l.built {
-            l.cells = tape::Table::new(&l.world);
-            l.built = l.world.relief.builds;
-        }
+        l.follow();
     })
 }
 
-/// How many times the world built its samples anew (`Relief::builds`): the page asks its ground for the samples as
-/// built (`relief`) when it moved.
+/// The version of the world's samples (`Relief::version`: one more at each build and each reshape after edits, and at
+/// an undo): the page asks its ground for the samples of a new version (`relief`) when it moved.
 #[no_mangle]
-pub extern "C" fn builds() -> u32 {
-    with(|l| l.world.relief.builds)
+pub extern "C" fn ground_version() -> u32 {
+    with(|l| l.world.relief.version)
 }
 
 /// The relief the world last built its samples from, the years since its start then and the world's cells
@@ -381,45 +418,45 @@ pub extern "C" fn kinds() -> *const u8 {
     give(out.to_string().into_bytes())
 }
 
-/// The page's edits, between two months (a step boundary; `World::edit`), at the place `x`, `y` in squares: `act` 0
-/// clears the share `share` of the cell there, 1 clears it and places the starting kind of row `row` in it, 2 strikes
-/// it in the coming month. Returns, as JSON, the cell and whether each edit was made.
-#[no_mangle]
-pub extern "C" fn edit(act: u32, x: f64, y: f64, share: f64, row: u32) -> *const u8 {
-    use pcore::edit::{Act, Edit};
-    let place = [x, y];
-    let acts = match act {
-        0 => vec![Act::Clear(share)],
-        1 => vec![Act::Clear(share), worldgen::schedule::plant((row as usize).min(worldgen::life::KINDS.len() - 1))],
-        _ => vec![Act::Strike],
-    };
-    let out = with(|l| {
-        let done = l.world.edit(&acts.iter().map(|&act| Edit { place, act }).collect::<Vec<_>>());
-        json!({"cell": l.world.cell_under(place), "done": done})
-    });
-    give(out.to_string().into_bytes())
-}
-
-/// The brush's tools (`brush`): plant (a clearing about the place nearest the brush's centre in each cell, planted with
-/// a starting kind) and burn (a strike on each cell).
+/// The brush's tools (`brush`): raise or lower the ground, plant (a clearing about the place nearest the brush's centre
+/// in each cell, planted with a starting kind) and burn (a strike on each cell).
+const SHAPE: u32 = 0;
 const PLANT: u32 = 2;
 const BURN: u32 = 3;
 
-/// The brush of radius `radius` m about the place `x`, `y` in squares (`World::under`), with the tool `tool`: `PLANT`
-/// clears the share of each cell under it that it covers about the place there nearest its centre and places the
-/// starting kind of row `row` in it; `BURN` strikes each cell under it (`flame::lights`), which burns at `settle`. Each
-/// cell is edited once a stroke (until `settle`). Returns, as JSON: each cell newly under the brush, the share it
-/// covers, whether each of its edits was made (`World::edit`), and why not ("" where all were: for a strike the
-/// flames' `Unlit`, for a planting "NoLand" or "NoRoom"); whether any edit was made; or, for another tool, why it is
-/// refused.
+/// The brush of radius `radius` m about the place `x`, `y` in squares (`World::under`), with the tool `tool`, between
+/// two months. The first call of a stroke keeps the world as it was (`undo`). `SHAPE` raises the ground by `amount` m
+/// at its centre, less toward its edge (lowers it where under none; `Act::Ground`): the page calls it again and again
+/// while the brush is held, each time with what the time held since adds; the page shows it from `preview` until the
+/// stroke settles. `PLANT` clears the share of each cell under it that it covers about the place there nearest its
+/// centre and places the starting kind of row `row` in it; `BURN` strikes each cell under it (`flame::lights`), which
+/// burns at `settle`; each cell once a stroke. Returns, as JSON: for `SHAPE`, the cells under the brush; else each
+/// cell newly under it, the share it covers, whether each of its edits was made (`World::edit`), and why not (""
+/// where all were: for a strike the flames' `Unlit`, for a planting "NoLand" or "NoRoom"); whether any edit was made;
+/// or, for another tool, why it is refused.
 #[no_mangle]
-pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, row: u32) -> *const u8 {
+pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row: u32) -> *const u8 {
     use pcore::edit::{Act, Brush, Edit};
-    if tool != PLANT && tool != BURN {
+    if ![SHAPE, PLANT, BURN].contains(&tool) {
         return give(json!({"refused": format!("no brush tool {tool}")}).to_string().into_bytes());
     }
     let out = with(|l| {
-        let under: Vec<_> = l.world.under(Brush { centre: [x, y], radius_m: radius }).into_iter().filter(|u| !l.stroke.contains(&(u.cell as u32))).collect();
+        if l.stroke.is_none() {
+            l.before = Some(l.world.clone());
+            l.strokes += 1;
+            l.stroke = Some(Stroke { cells: Vec::new(), raised: 0.0, make: l.world.draw_make(l.strokes) });
+        }
+        let stroke = l.stroke.as_mut().expect("a stroke under way");
+        let b = Brush { centre: [x, y], radius_m: radius };
+        if tool == SHAPE {
+            let act = Act::Ground { radius_m: radius, height_m: amount, stroke_m: stroke.raised.max(0.0), make: stroke.make };
+            stroke.raised += amount;
+            let cells: Vec<usize> = l.world.under(b).iter().map(|u| u.cell).collect();
+            let done = l.world.edit(&[Edit { place: [x, y], act }]);
+            return json!({"cells": cells, "changed": done[0]});
+        }
+        let under: Vec<_> = l.world.under(b).into_iter().filter(|u| !stroke.cells.contains(&(u.cell as u32))).collect();
+        stroke.cells.extend(under.iter().map(|u| u.cell as u32));
         let acts = |share: f64| if tool == PLANT { vec![Act::Clear(share), worldgen::schedule::plant((row as usize).min(worldgen::life::KINDS.len() - 1))] } else { vec![Act::Strike] };
         let edits: Vec<Edit> = under.iter().flat_map(|u| acts(u.share).into_iter().map(move |act| Edit { place: u.place, act })).collect();
         let done = l.world.edit(&edits);
@@ -436,26 +473,73 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, row: u32) -> *co
             };
             json!({"cell": u.cell, "share": u.share, "done": d, "why": why})
         }).collect();
-        l.stroke.extend(under.iter().map(|u| u.cell as u32));
         json!({"cells": cells, "changed": done.iter().any(|&d| d)})
     });
     give(out.to_string().into_bytes())
 }
 
 /// End the brush's stroke and run at once, with no time on the world's clock, what its edits start that takes no time
-/// (`World::settle`: the strikes burn). Returns, as JSON, each cell the flames reached and when, s after its strike
-/// (`burnt`: [cell, s] pairs).
+/// (`World::settle`): the samples built again over the ground it shaped and the liquid settled over them (`ground`
+/// true: the page asks for the new version's relief), and the strikes burnt. Returns, as JSON, whether the ground was
+/// built again and each cell the flames reached and when, s after its strike (`burnt`: [cell, s] pairs).
 #[no_mangle]
 pub extern "C" fn settle() -> *const u8 {
+    let out = with(|l| json!(l.settle()));
+    give(out.to_string().into_bytes())
+}
+
+/// Put the world back as it was before the last stroke of the brush began, once (one level). Its samples take a new
+/// version (`Relief::version`, above every one before, so no version names two grounds), and the page asks for its
+/// relief as after a build. Returns, as JSON, whether there was a stroke to undo.
+#[no_mangle]
+pub extern "C" fn undo() -> *const u8 {
     let out = with(|l| {
-        l.stroke.clear();
-        json!({"burnt": l.world.settle()})
+        let Some(mut before) = l.before.take() else { return json!({"done": false}) };
+        before.relief.version = l.world.relief.version + 1;
+        l.world = before;
+        l.stroke = None;
+        l.follow();
+        json!({"done": true})
     });
     give(out.to_string().into_bytes())
 }
 
+/// The page's ground now shows the samples of version `version` (`ground_version`; its tiles made again from that
+/// version's relief): `preview` tells it what edits moved since. A version other than the latest built is ignored.
+#[no_mangle]
+pub extern "C" fn ground_shown(version: u32) {
+    with(|l| {
+        if version == l.built {
+            l.shown = l.version.clone();
+        }
+    })
+}
+
+/// What edits moved the ground since the samples of the ground the page shows (`ground_shown`), for the page to add to
+/// the heights it draws until its ground is made again: the window of the terrain's samples that moved, its west
+/// column, north row, width and height in samples (four u32), then of each sample of the window, row by row, how far
+/// its ground moved, m (f32), little-endian; an empty window (all 0) where none moved.
+#[no_mangle]
+pub extern "C" fn preview() -> *const u8 {
+    let bytes = with(|l| {
+        let (now, shown) = (&l.world.relief.shaped, &l.shown);
+        let at = |v: &[f64], k: usize| v.get(k).copied().unwrap_or(0.0);
+        let across = l.world.terrain_samples().across;
+        let moved = |k: usize| at(now, k) != at(shown, k);
+        let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+        for k in (0..now.len().max(shown.len())).filter(|&k| moved(k)) {
+            let (x, y) = (k % across, k / across);
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+        }
+        let window: [u32; 4] = if x0 == usize::MAX { [0; 4] } else { [x0, y0, x1 - x0, y1 - y0].map(|v| v as u32) };
+        let dh = (y0..y1).flat_map(|y| (x0..x1).map(move |x| y * across + x)).map(|k| (at(now, k) - at(shown, k)) as f32);
+        window.iter().flat_map(|v| v.to_le_bytes()).chain(dh.flat_map(|v| v.to_le_bytes())).collect()
+    });
+    give(bytes)
+}
+
 /// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile`, `rock`, `open_world`,
-/// `ground_of_world`, `probe`, `kinds`, `edit`, `brush` or `settle` last returned.
+/// `ground_of_world`, `probe`, `kinds`, `brush`, `settle`, `undo` or `preview` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())

@@ -115,7 +115,7 @@ impl Samples {
 }
 
 /// The samples a terrain found, kept with it (not saved: found again when first read): the seed's, and those last built
-/// from what the running world laid (`Terrain::built`), with the build they are of.
+/// from what the running world laid and edits shaped (`Terrain::built`), with the version of the relief they are of.
 #[derive(Debug, Default)]
 pub(super) struct Kept(Mutex<Option<Arc<Samples>>>, Mutex<Option<(u32, Arc<Samples>)>>);
 
@@ -181,13 +181,13 @@ impl Terrain {
     /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
     /// stands over the liquid's level (`wear::STAND_M`). What the relief laid on a sample is loose ground that settled
     /// there (`laid_ground`), laid over `years` since the start. The seed's samples where there was no build; found
-    /// once for each build and kept.
+    /// once for each version of the relief (`Relief::version`) and kept.
     pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief, years: f64) -> Arc<Samples> {
         let s0 = self.samples(seed, map, lat);
-        if r.builds == 0 {
+        if r.version == 0 {
             return s0;
         }
-        let known = |kept: &Option<(u32, Arc<Samples>)>| kept.as_ref().filter(|b| b.0 == r.builds && b.1.seed == seed).map(|b| b.1.clone());
+        let known = |kept: &Option<(u32, Arc<Samples>)>| kept.as_ref().filter(|b| b.0 == r.version && b.1.seed == seed).map(|b| b.1.clone());
         if let Some(s) = known(&self.kept.1.lock().expect("the built samples")) {
             return s;
         }
@@ -198,7 +198,7 @@ impl Terrain {
         let found = Arc::new(self.found(seed, (&grid, rows), (h, &open, false), ground));
         let mut kept = self.kept.1.lock().expect("the built samples");
         known(&kept).unwrap_or_else(|| {
-            *kept = Some((r.builds, found.clone()));
+            *kept = Some((r.version, found.clone()));
             found
         })
     }

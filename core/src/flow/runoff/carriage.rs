@@ -252,7 +252,7 @@ fn shares(w: &World, s: &Samples, k: usize) -> (Shares, f64) {
     let g = w.cfg.gravity;
     let flood = FLOOD_RUNOFF * s.up[k];
     let channel = w.cfg.phys.channel(flood);
-    let buoyant = w.terrain.makes.get(s.make[k] as usize).copied().unwrap_or_default().buoyant;
+    let buoyant = w.terrain.makes.get(s.make[k] as usize).map_or(0.0, |m| m.buoyant);
     let shares = passes(flood_shear(s, k, g, channel.depth), flood / channel.width, s.run[k], buoyant, g);
     (shares.map(|r| r.map(|x| x as f32)), threshold_slope(channel.depth, buoyant, g))
 }

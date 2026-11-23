@@ -97,6 +97,11 @@ pub fn liquid(w: &mut World, dt: f64) {
     with(w, true, |w, s| liquid::liquid(w, s, dt));
 }
 
+/// The liquid settled over the ground as it stands now, in no time (`liquid::settle`).
+pub fn settle(w: &mut World) {
+    with(w, true, liquid::settle);
+}
+
 /// Heat conducted sideways through the ground (`land::conduct`), then creep (`creep::creep`), for `dt` seconds.
 pub fn creep(w: &mut World, dt: f64) {
     with(w, true, |w, s| {
