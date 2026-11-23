@@ -45,11 +45,13 @@ const STANDS = 2;
 // cell's other patches lie (canopy.ts `PLACES`), and from `PATCH_FIELDS` the field of each other patch, made of its own
 // kinds, `FIELD_LAYERS` layers each (canopy.ts `patchLayer`).
 const FIELD_LAYERS = 17; const PLACES_LAYER = 17; const PATCH_FIELDS = 19;
-// A patch's edge is ragged at every size: its reach longer and shorter by up to `PATCH_EDGE` of it, over noise
-// `PATCH_LOBES` of its reach across (its lobes), and less over noise a quarter and a sixteenth as large (`PATCH_OCTAVES`,
-// their shares), so a patch of any size is a ragged shape and no disc (the edge of a burn or of a gap follows the
-// ground and the stands about it, not a circle).
-const PATCH_EDGE = 0.35; const PATCH_LOBES = 0.9; const PATCH_OCTAVES = vec3f(0.6, 0.28, 0.12);
+// A patch is the ground of its cell nearest its point (the core's `inside::patch_ground`): a disc about the point, cut by
+// its cell's edges. It is drawn on ground warped by up to `PATCH_WARP` of a square's side along the slope of noise
+// `PATCH_LOBES` of a side across, and a share `PATCH_FINE.x` of that along noise `PATCH_FINE.y` times finer, each way
+// no farther than `PATCH_WARP_MOST` of a side (under half: the cell a point is drawn in is one of the four about it):
+// so a patch's edge and its cell's are winding lines, its size its own (the edge of a burn or of a gap follows the
+// ground and the stands about it, not a circle or a square), and on the mean each patch keeps its share of the ground.
+const PATCH_WARP = 0.16; const PATCH_LOBES = 0.55; const PATCH_FINE = vec2f(0.35, 4.0); const PATCH_WARP_MOST = 0.4;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -213,41 +215,34 @@ var<private> land_smooth: f32 = 1.0;
 // The patch of its cell's cover the point a pixel or a mark's foot reads the field at stands in (`cell_patch_at`; 0:
 // the first, the rest of its cell): set once with `land_weights`, as every layer read there shares it.
 var<private> cell_patch: i32 = 0;
+// The square of the cell whose patch `cell_patch` is (`cell_patch_at`).
+var<private> patch_cell: vec2i = vec2i(0);
 
-// The patch of its cell's cover the point `at`, m from the map's north-west corner, stands in: the first past the first
-// (tape/src/stands.rs `places`, canopy.ts `PLACES`: of its square's cell) whose reach, ragged (`PATCH_EDGE`), holds it
-// (the core's samples of the patch, `inside::patch_ground`, their edge drawn smooth); else 0.
+// The patch of a cell's cover the point `at`, m from the map's north-west corner, is drawn in, and sets that cell
+// (`patch_cell`): of the cell its warped place lies in (`PATCH_WARP`), the first patch past the first
+// (tape/src/stands.rs `places`, canopy.ts `PLACES`) whose reach holds that place; else 0. Where no cell holds a patch
+// (the field has no patch's layers) no noise is read.
 fn cell_patch_at(at: vec2f) -> i32 {
-  let s = at / land.map.x;
+  if (i32(textureNumLayers(cover_field_tex)) <= PATCH_FIELDS) { return 0; }
+  let side = land.map.x;
+  let lobes = noise(at / (PATCH_LOBES * side), 211).yz + PATCH_FINE.x * noise(PATCH_FINE.y * at / (PATCH_LOBES * side), 212).yz;
+  let s = (at + side * clamp(PATCH_WARP * lobes, vec2f(-PATCH_WARP_MOST), vec2f(PATCH_WARP_MOST))) / side;
   let q = vec2i(floor(s));
   if (any(q < vec2i(0)) || any(q >= vec2i(land.map.yz))) { return 0; }
   let a = textureLoad(cover_field_tex, q, PLACES_LAYER, 0);
   if (a.z <= 0.0) { return 0; }
+  patch_cell = q;
   let b = textureLoad(cover_field_tex, q, PLACES_LAYER + 1, 0);
-  let o = (s - vec2f(q)) * land.map.x;
-  let reach = vec2f(a.z, b.y) * land.map.x;
-  if (in_patch(at, o, a.xy * land.map.x, reach.x)) { return 1; }
-  if (reach.y > 0.0 && in_patch(at, o, vec2f(a.w, b.x) * land.map.x, reach.y)) { return 2; }
+  let o = s - vec2f(q);
+  if (length(o - a.xy) < a.z) { return 1; }
+  if (b.y > 0.0 && length(o - vec2f(a.w, b.x)) < b.y) { return 2; }
   return 0;
 }
 
-// Whether the point `at` (m from the map's north-west corner; `o` m from its cell's corner) lies in the patch about
-// `c` (m from the cell's corner) of reach `reach` m, its edge ragged (`PATCH_EDGE`). A patch is its cell's alone, so
-// it is drawn whole inside its cell, with no straight edge along the cell's: its centre moved in as far as that asks,
-// and a patch wider than the cell drawn as the widest that fits (the cell's other cover in its corners).
-fn in_patch(at: vec2f, o: vec2f, c: vec2f, reach: f32) -> bool {
-  let most = (1.0 + PATCH_EDGE) * reach;
-  let fit = min(1.0, 0.5 * land.map.x / most);
-  let lobes = PATCH_LOBES * fit * reach;
-  let ragged = PATCH_OCTAVES.x * noise(at / lobes, 211).x + PATCH_OCTAVES.y * noise(4.0 * at / lobes, 212).x + PATCH_OCTAVES.z * noise(16.0 * at / lobes, 213).x;
-  return length(o - clamp(c, vec2f(fit * most), vec2f(land.map.x - fit * most))) < fit * reach * (1.0 + PATCH_EDGE * ragged);
-}
-
-// Layer l of the field of the patch `cell_patch` of the square at `at` (one past the first: its own, `PATCH_FIELDS`):
-// its square's alone, not blended with its neighbours', whose cells' patches are not its.
-fn patch_field(at: vec2f, l: i32) -> vec4f {
-  let q = clamp(vec2i(floor(at / land.map.x)), vec2i(0), vec2i(land.map.yz) - 1);
-  return textureLoad(cover_field_tex, q, PATCH_FIELDS + (cell_patch - 1) * FIELD_LAYERS + l, 0);
+// Layer l of the field of the patch `cell_patch` of its cell `patch_cell` (one past the first: its own,
+// `PATCH_FIELDS`): its square's alone, not blended with its neighbours', whose cells' patches are not its.
+fn patch_field(l: i32) -> vec4f {
+  return textureLoad(cover_field_tex, patch_cell, PATCH_FIELDS + (cell_patch - 1) * FIELD_LAYERS + l, 0);
 }
 
 // Set `land_plain`, `land_smooth` and `cell_patch` at `at`, m from the map's north-west corner.
@@ -277,7 +272,7 @@ fn spline_field(at: vec2f, l: i32) -> vec4f {
 fn field_at(at: vec2f, l: i32) -> vec4f {
   let uv = at / (land.map.x * land.map.yz);
   if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec4f(0.0); }
-  if (cell_patch > 0) { return patch_field(at, l); }
+  if (cell_patch > 0) { return patch_field(l); }
   return on_land(field_tap(uv, l), land_plain);
 }
 
@@ -288,7 +283,7 @@ fn field_tap(uv: vec2f, l: i32) -> vec4f { return textureSampleLevel(cover_field
 // over the squares with land (`on_land`, `land_smooth`): no square shows in it, and no staircase of the GPU's blend. In a
 // patch past the first of its cell's cover (`cell_patch`), that patch's (`patch_field`).
 fn field_smooth(at: vec2f, l: i32) -> vec4f {
-  if (cell_patch > 0) { return patch_field(at, l); }
+  if (cell_patch > 0) { return patch_field(l); }
   return on_land(spline_field(at, l), land_smooth);
 }
 

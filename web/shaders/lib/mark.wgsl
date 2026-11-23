@@ -119,14 +119,13 @@ fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32, exact: b
 }
 
 // The squares `cs` about the point `at` as their kinds count there: in a patch past the first of its cell's cover
-// (`cell_patch`), its own square alone and whole, as a patch is its cell's alone; else as they are.
-fn patch_corners(cs: Corners, at: vec2f) -> Corners {
+// (`cell_patch`), that patch's square alone and whole (`patch_cell`), as a patch is its cell's alone; else as they are.
+fn patch_corners(cs: Corners) -> Corners {
   if (cell_patch == 0) { return cs; }
-  let q = vec2i(floor(at / land.map.x));
   var out = cs;
   out.w = vec4f(0.0);
   for (var s = 0; s < rolled(4); s++) {
-    if (all(cs.at[s] == q)) { out.w[s] = 1.0; break; }
+    if (all(cs.at[s] == patch_cell)) { out.w[s] = 1.0; break; }
   }
   return out;
 }
@@ -308,7 +307,7 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   let id = cover.base[l].xy + vec2i(k);
   let at = cover.corner.xy + mark_foot(l, k);
   cell_patch = cell_patch_at(at);
-  let cs = patch_corners(corners(at / land.map.x), at);
+  let cs = patch_corners(corners(at / land.map.x));
   // Whether any kind of the four squares has marks on the lattice.
   var all = 0.0;
   for (var s = 0; s < rolled(4); s++) {
