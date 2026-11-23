@@ -8,7 +8,7 @@ import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
 import { Box, FIRE_FPS, Fire } from './fire';
-import { detailLost, detailSeen, sendDetail } from './detail';
+import { detailHeld, detailLost, detailSeen, sendDetail } from './detail';
 import { spend, timed } from './cost';
 import { Camera, Gesture } from './gesture';
 
@@ -38,9 +38,9 @@ const FRAME_BUDGET_MS = 16, SCALES = [1, 0.75, 0.5];
  * side. */
 const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
 /** While the view moves (a pan, a pinch, a wheel: the last within `MOVE_REST_MS`), the last picture drawn is shown
- * moved and scaled as the camera did, at once (`showMoved`), and the map is drawn anew no sooner than `MOVE_REDRAW_MS`
- * after the card finished the last (to fill what the moved picture leaves bare); once the view rests it is drawn anew. */
-const MOVE_REST_MS = 200, MOVE_REDRAW_MS = 400;
+ * moved and scaled as the camera did, at each frame (`showMoved`), and nothing heavy is begun on the card: no map drawn
+ * anew, no ground's tile nor layer of its detail sent; once the view rests the map is drawn anew. */
+const MOVE_REST_MS = 200;
 /** The pictures of the area about a view at rest (`MapView.rings`) are these many times its width, each at the screen's
  * pixels: so a view that moves out meets one at most three times softer than the last, and the whole map's picture (one
  * colour where the view is close) only once it is far. They are drawn once the view has rested `AROUND_REST_MS`, the
@@ -126,8 +126,8 @@ export class MapView {
   private picture: Texture | null = null;
   private pictureNext: Texture | null = null;
   /** The last picture shown whole on the screen (`picture` or `sharp`) and the camera and look it was drawn with,
-   * which a moving view shows moved (`showMoved`); when the view last moved, when the card finished the map drawn
-   * anew last, ms (Infinity while it draws it), and the timer that draws it once the view rests. */
+   * which a moving view shows moved (`showMoved`); when the view last moved, ms, and the timer that draws the map anew
+   * once the view rests. */
   private last: Pic | null = null;
   /** Pictures shown under the last as the view moves, so it moves over less detail, never over nothing: the area about
    * the view at rest, `RINGS` times its width, and the whole map at `WHOLE_PX` px across, each in its texture (and the
@@ -147,7 +147,6 @@ export class MapView {
   private fadeFrame = 0;
   private wholeAt = -Infinity;
   private movedAt = -Infinity;
-  private lastDrawn = -Infinity;
   private moveTimer = 0;
   private sharpTimer = 0;
   /** Whether the GPU's picture is to be drawn anew at the next frame. */
@@ -310,13 +309,8 @@ export class MapView {
     return x >= 0 && y >= 0 && x < this.w && y < this.h ? y * this.w + x : -1;
   }
 
-  /** The view moved now: a move that starts after it rested shows the last picture moved first (the map is drawn
-   * anew `MOVE_REDRAW_MS` on, as if the card had just finished it). */
-  private moved(): void {
-    const now = performance.now();
-    if (now - this.movedAt >= MOVE_REST_MS) this.lastDrawn = now;
-    this.movedAt = now;
-  }
+  /** The view moved now. */
+  private moved(): void { this.movedAt = performance.now(); }
 
   private setHover(i: number): void { if (i !== this.hover) { this.hover = i; this.onHover(i); this.redraw(); } }
 
@@ -327,6 +321,13 @@ export class MapView {
     const c = this.cam, s = this.limit(c.s * k);
     c.ox = px - ((px - c.ox) / c.s) * s; c.oy = py - ((py - c.oy) / c.s) * s; c.s = s;
     this.fitted = false; this.moved(); this.invalidate();
+  }
+
+  /** Hold back what is sent to the card (the ground's tiles, the layers of its detail) while the view moves (`held`),
+   * so the moved picture's frames find the card free; once it rests they are sent. */
+  private hold(held: boolean): void {
+    if (this.land) this.land.tiles.held = held;
+    detailHeld(held);
   }
 
   /** Draw the map: on the GPU if it is due, and what lies over it. */
@@ -346,22 +347,21 @@ export class MapView {
     // tiles that come one after another never keep the map from getting sharp.
     const viewed = this.viewKey(xs);
     const held = this.scale < 1 && !this.asked.length && (this.sharpening?.key === viewed || (this.resting && this.restOf === viewed));
-    // A frame is sent only once the card has drawn the last, so frames never pile up in its queue; till then the
-    // frame stays due and is drawn as soon as the card is free.
-    const now = performance.now(), moving = now - this.movedAt < MOVE_REST_MS && now - this.lastDrawn < MOVE_REDRAW_MS;
-    if (held) { /* (stays due) */ } else if (this.gpu && this.gpuDue && this.gpu.busy) {
-      if (!this.waitingCard) { this.waitingCard = true; this.gpu.idle().then(() => { this.waitingCard = false; this.redraw(); }); }
-    } else if (this.gpu && this.gpuDue && moving && this.last?.look === this.lookKey()) {
+    const now = performance.now(), moving = now - this.movedAt < MOVE_REST_MS && this.last?.look === this.lookKey();
+    this.hold(moving);
+    if (held) { /* (stays due) */ } else if (this.gpu && this.gpuDue && moving) {
       // The view moves: the last picture moved with it, over those of the area about it (the widest lowest) and of the
-      // whole map, and the map drawn anew once it rests (or `MOVE_REDRAW_MS` on).
+      // whole map, at every frame (a few textured rectangles: it does not wait for the card), and the map drawn anew
+      // once it rests.
       this.showMoved(this.gpu, [this.whole, ...[...this.rings].reverse(), this.last]);
       clearTimeout(this.moveTimer);
-      this.moveTimer = window.setTimeout(() => this.redraw(), Math.min(this.movedAt + MOVE_REST_MS, this.lastDrawn + MOVE_REDRAW_MS) - now + 1);
+      this.moveTimer = window.setTimeout(() => this.redraw(), this.movedAt + MOVE_REST_MS - now + 1);
+    } else if (this.gpu && this.gpuDue && this.gpu.busy) {
+      // A frame is sent only once the card has drawn the last, so frames never pile up in its queue; till then the
+      // frame stays due and is drawn as soon as the card is free.
+      if (!this.waitingCard) { this.waitingCard = true; this.gpu.idle().then(() => { this.waitingCard = false; this.redraw(); }); }
     } else if (this.gpu && this.gpuDue) {
       this.gpuDue = false;
-      // (Counted from when the card has drawn it: a slow card's frame is not drawn again at once while the view moves.)
-      this.lastDrawn = Infinity;
-      this.gpu.idle().then(() => { this.lastDrawn = performance.now(); });
       clearTimeout(this.sharpTimer);
       this.resting = false;
       this.sharpening = null;
@@ -534,6 +534,7 @@ export class MapView {
     this.resting = false;
     this.sharpening = null;
     this.fade = null;
+    cancelAnimationFrame(this.fadeFrame);
     const look = this.lookKey();
     this.movedShown = pics.filter((p): p is Pic => p?.look === look);
     this.compose(gpu, this.movedShown, 1);
