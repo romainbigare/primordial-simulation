@@ -27,7 +27,6 @@ interface Core {
   cells(): number;
   probe(x: number, y: number): number;
   kinds(): number;
-  edit(act: number, x: number, y: number, share: number, row: number): number;
   brush(tool: number, x: number, y: number, radius: number, row: number): number;
   settle(): number;
   out_len(): number;
@@ -40,7 +39,6 @@ type Command =
   | { cmd: 'rate'; rate: number }
   | { cmd: 'things'; at: [number, number, number, number] | null }
   | { cmd: 'probe'; at: [number, number] }
-  | { cmd: 'edit'; act: number; at: [number, number]; share: number; row: number }
   | { cmd: 'brush'; tool: number; at: [number, number]; radius: number; row: number }
   | { cmd: 'settle' }
   | { cmd: 'shown'; frames: number };
@@ -173,13 +171,9 @@ host.onmessage = async e => {
     else if (m.cmd === 'rate') rate = m.rate;
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
-    else if (m.cmd === 'edit' && core) {
-      // Between two months: a tick never runs while a message is handled.
-      host.postMessage({ kind: 'edited', text: text(core.edit(m.act, m.at[0], m.at[1], m.share, m.row)) }, []);
-      postFrame('frame', true);
-    }
     else if (m.cmd === 'brush' && core) {
-      // The brush between two months (wasm/src/lib.rs `brush`): a frame of the same date where it edited a cell.
+      // The brush between two months, as a tick never runs while a message is handled (wasm/src/lib.rs `brush`): a
+      // frame of the same date where it edited a cell.
       const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.row));
       host.postMessage({ kind: 'brushed', text: answer }, []);
       if ((JSON.parse(answer) as { changed?: boolean }).changed) postFrame('frame', true);

@@ -52,6 +52,8 @@ const SEA_BLUR = 1.5, SEA_REACH = 4, OPEN_SEA_M = 20;
  * shader's streaks fade out there) on water at least `FLOW_PX` pixels wide. */
 export const FLOW_FPS = 6;
 const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
+/** Seconds in a day. */
+export const DAY_S = 86400;
 /** A plume (drawing only: the core moves no currents in a body of liquid): what a river brings into standing liquid,
  * kg/s, is in the river's own water at its mouth, its discharge (no less than `MUD_Q_LEAST` m³/s): its load there, g/m³,
  * held to `MUD_PLUME_MOST_G`. That water spreads over the body as a layer `MUD_PLUME_DEEP_M` thick for
@@ -60,7 +62,7 @@ const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
  * area the river fills in that time, no more than `MUD_PLUME_MOST_M`, out to where it falls to `MUD_CLEAR_G` g/m³; a
  * plume narrower than a sample (125 m) is drawn as its mean over the sample. So a river's plume is as wide as its
  * discharge makes it, and it shows the farther the more load it brings. */
-const MUD_Q_LEAST = 0.01, MUD_PLUME_MOST_G = 2e4, DAY_S = 86400, MUD_PLUME_DEEP_M = 1, MUD_PLUME_DAYS = 1, MUD_PLUME_MOST_M = 8000, MUD_CLEAR_G = 1;
+const MUD_Q_LEAST = 0.01, MUD_PLUME_MOST_G = 2e4, MUD_PLUME_DEEP_M = 1, MUD_PLUME_DAYS = 1, MUD_PLUME_MOST_M = 8000, MUD_CLEAR_G = 1;
 
 export class Land {
   /** The screen's pixels a css pixel, which the detail drawn is chosen by (map.ts `drawMap`): a picture drawn at fewer
