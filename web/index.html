@@ -2,76 +2,90 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Emergent World</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%232f6f9f'/%3E%3Cpath d='M7 20c4-9 9-3 12-9 3 3 5 6 6 9z' fill='%239cc16c'/%3E%3C/svg%3E">
 <!--CSS-->
 </head>
 <body>
-<header class="top">
-  <h1>Emergent World</h1>
-  <div class="meta" id="meta"></div>
-  <ul class="classes" id="classes"></ul>
-  <form class="live" id="live" hidden>
-    <label>seed <input id="seed" type="number" min="0" step="1" value="1"></label>
-    <label>size <input id="size" type="number" step="1"></label>
-    <label>variety <input id="variety" type="number" step="1"></label>
-    <label>climate <select id="band"></select></label>
-    <label>shape <select id="shape"></select></label>
-    <label>weather <select id="weather"></select></label>
-    <button type="submit">New world</button>
-    <label class="saved" title="A snapshot of ew run (snap_….bin.gz)">Open a saved world<input id="saved" type="file" accept=".gz,application/gzip" hidden></label>
-  </form>
-  <label class="open">Open file<input id="file" type="file" accept=".gz,.ewf,application/gzip" hidden></label>
-</header>
-<main>
-  <section class="stage">
-    <div class="map" id="map">
-      <canvas id="cv"></canvas>
-      <div class="msg" id="msg">Loading world…</div>
-      <div class="errors" id="errors" hidden></div>
-      <button class="fit" id="fit" title="Fit map (double-click)" aria-label="Fit map">
-        <svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-      </button>
+<div class="map" id="map">
+  <canvas id="cv"></canvas>
+  <div class="msg" id="msg">Loading world…</div>
+</div>
+<div id="ui">
+  <header class="bar glass" id="bar">
+    <div class="grp">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#2f6f9f"/><path d="M7 20c4-9 9-3 12-9 3 3 5 6 6 9z" fill="#9cc16c"/></svg>
+      <h1>Emergent World</h1>
+      <button class="ib" data-panel="world" data-icon="globe" aria-label="World" title="World: this world, a new one, open a file"></button>
     </div>
-    <div class="time">
-      <div class="bar">
-        <button id="play" class="play" aria-label="Play"><svg viewBox="0 0 16 16"><path class="p" d="M4 2l10 6-10 6z"/><path class="q" d="M3 2h4v12H3zM9 2h4v12H9z"/></svg></button>
-        <div class="seg speeds" id="speeds"></div>
-        <span class="year" id="year"></span>
-      </div>
-      <div class="stats" id="stats" hidden></div>
-      <div class="stats cost" id="cost" hidden></div>
-      <input id="chartfind" class="find tape-only" type="search" placeholder="Search charts (name or section)" aria-label="Search charts" autocomplete="off">
-      <div class="charts tape-only" id="charts"></div>
-      <div class="tl tape-only">
-        <div class="marks" id="marks"></div>
-        <input id="tl" type="range" min="0" max="0" value="0" aria-label="Timeline">
-        <div class="ends"><span id="y0"></span><span id="y1"></span></div>
-      </div>
+    <div class="grp">
+      <button class="ib play" id="play" aria-label="Play" title="Play or pause (space)"></button>
+      <select class="speed" id="speeds" aria-label="Speed" title="Speed"></select>
+      <span class="date" id="year"></span>
+    </div>
+    <div class="grp">
+      <button class="ib" data-panel="map" data-icon="layers" aria-label="Map view and layers" title="Map view and layers (T: Earth or True)"></button>
+      <button class="ib" id="inspect-btn" data-icon="inspect" aria-label="Inspect" aria-pressed="false" title="Inspect: what lies under the cursor"></button>
+      <button class="ib live-only" id="god-btn" data-icon="wand" aria-label="God mode" aria-pressed="false" title="God mode: change the world"></button>
+    </div>
+  </header>
+
+  <section class="panel glass" id="panel-world" aria-label="World">
+    <div class="head"><h2>World</h2><button class="ib sm" data-close data-icon="close" aria-label="Close" title="Close (Esc)"></button></div>
+    <div class="meta" id="meta"></div>
+    <div class="stats live-only" id="stats" hidden></div>
+    <div class="stats cost" id="cost" hidden></div>
+    <div class="tape-only">
+      <h3>Charts</h3>
+      <input id="chartfind" class="find" type="search" placeholder="Search charts (name or section)" aria-label="Search charts" autocomplete="off">
+      <div class="charts" id="charts"></div>
+    </div>
+    <form class="live live-only" id="live">
+      <h3>New world</h3>
+      <label>Seed <input id="seed" type="number" min="0" step="1" value="1"></label>
+      <label>Size <input id="size" type="number" step="1"></label>
+      <label>Variety <input id="variety" type="number" step="1"></label>
+      <label>Climate <select id="band"></select></label>
+      <label>Shape <select id="shape"></select></label>
+      <label>Weather <select id="weather"></select></label>
+      <button class="primary" type="submit">New world</button>
+    </form>
+    <h3>Open</h3>
+    <div class="row">
+      <label class="pill live-only" title="A snapshot of ew run (snap_….bin.gz)">Open a saved world<input id="saved" type="file" accept=".gz,application/gzip" hidden></label>
+      <label class="pill" title="A tape of ew run (.ewf.gz)">Open file<input id="file" type="file" accept=".gz,.ewf,application/gzip" hidden></label>
     </div>
   </section>
-  <aside>
-    <div class="group">
-      <h2>View</h2>
-      <div class="seg" id="views"><button data-view="earth">Earth</button><button data-view="true">True</button></div>
-    </div>
-    <div class="group" id="god-group" hidden>
-      <h2>Change the world</h2>
-      <div id="god" class="god"></div>
-    </div>
-    <div class="group">
-      <h2>Layers</h2>
-      <div class="chips" id="layers"></div>
-      <div class="ramp" id="ramp" hidden><div class="grad" id="rampbar"></div><div class="lbl"><span></span><span></span><span></span></div><div class="unit" id="rampunit"></div></div>
-      <div class="tri" id="texture" hidden></div>
-    </div>
-    <div class="group">
-      <h2>Inspect</h2>
-      <div id="inspect" class="inspect"><p class="hint">Hover or tap the map.</p></div>
-    </div>
+
+  <section class="panel glass" id="panel-map" aria-label="Map view and layers">
+    <div class="head"><h2>Map</h2><button class="ib sm" data-close data-icon="close" aria-label="Close" title="Close (Esc)"></button></div>
+    <div class="seg" id="views"><button data-view="earth">Earth</button><button data-view="true">True</button></div>
+    <h3>Layers</h3>
+    <div class="chips" id="layers"></div>
+    <div class="ramp" id="ramp" hidden><div class="grad" id="rampbar"></div><div class="lbl"><span></span><span></span><span></span></div><div class="unit" id="rampunit"></div></div>
+    <div class="tri" id="texture" hidden></div>
+    <h3>Legend</h3>
+    <ul class="classes" id="classes"></ul>
+  </section>
+
+  <aside class="card glass" id="inspect-card" aria-label="Inspect" hidden>
+    <div id="inspect" class="inspect"><p class="hint">Hover or tap the map.</p></div>
   </aside>
-</main>
+
+  <nav class="strip glass" id="god-strip" aria-label="God tools" hidden></nav>
+  <div class="god glass" id="god" hidden></div>
+
+  <div class="tl glass tape-only">
+    <div class="track">
+      <div class="marks" id="marks"></div>
+      <input id="tl" type="range" min="0" max="0" value="0" aria-label="Timeline">
+    </div>
+    <div class="ends"><span id="y0"></span><span id="y1"></span></div>
+  </div>
+  <button class="ib fit glass" id="fit" data-icon="fit" aria-label="Fit map" title="Fit map (F, or double-click)"></button>
+  <div class="errors glass" id="errors" hidden></div>
+</div>
 <div id="tip" class="tip" hidden></div>
 <div id="drop" class="dropzone" hidden>Drop a .ewf.gz file</div>
 <!--JS-->

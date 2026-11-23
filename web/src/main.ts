@@ -13,6 +13,9 @@ import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
 import { Fire } from './fire';
 import { God } from './god';
+import { godTools } from './god-tools';
+import { Panels } from './panels';
+import { fillIcons, iconSvg } from './icons';
 import { textureClass, textureLegend } from './soil';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -49,6 +52,8 @@ const SHAPES: string[][] = [['Drawn from the seed', 'drawn'], ['One island', 'on
 /** The weathers a live island may have: a name, and the URL's word for it (`ew run --weather`). The first is the
  * page's: strong, the eddies' measured speed; soft, the speed their diffusion alone gives (the core's `soft_weather`). */
 const WEATHERS: string[][] = [['Strong', 'strong'], ['Soft', 'soft']];
+/** Months in a year, for the date on the bar. */
+const MONTHS = 12;
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
 
@@ -78,11 +83,12 @@ map.layer = vegetation;
 /** Fire on the live map: its scars, flames and smoke. */
 const fire = new Fire();
 map.fire = fire;
-/** God mode: the tools that edit the live world (live world only). */
-const god = new God($('god'), { probe: (x, y) => live?.probe(x, y), edit: (a, x, y, s, r) => live?.edit(a, x, y, s, r) }, () => map.redraw());
+/** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
+const editor = { probe: (x: number, y: number) => live?.probe(x, y), edit: (a: number, x: number, y: number, s: number, r: number) => live?.edit(a, x, y, s, r) };
+const god = new God($('god-strip'), $('god'), editor, godTools(editor, () => live?.kinds ?? []), () => map.redraw());
 god.listen($<HTMLCanvasElement>('cv'));
-map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live) god.draw(ctx, ox, oy, s); };
-map.tap = (x, y) => live !== null && god.tap(x, y);
+map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live && godOn()) god.draw(ctx, ox, oy, s); };
+map.tap = (x, y) => live !== null && godOn() && god.tap(x, y);
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
 let drawing: HeldGpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
@@ -122,15 +128,11 @@ addEventListener('unhandledrejection', e => failed(e.reason instanceof Error ? e
 
 /** The live world or a tape: what only one of them has is shown, and the speeds are its own. */
 function setMode(isLive: boolean): void {
-  $('live').hidden = !isLive;
-  $('god-group').hidden = !isLive;
+  document.querySelectorAll<HTMLElement>('.live-only').forEach(el => (el.hidden = !isLive));
   document.querySelectorAll<HTMLElement>('.tape-only').forEach(el => (el.hidden = isLive));
+  if (!isLive) setGod(false);
   speed = isLive ? LIVE_SPEEDS[1] : 4;
-  $('speeds').replaceChildren(...(isLive ? LIVE_SPEEDS : SPEEDS).map(s => {
-    const b = button(isLive ? (s === Infinity ? 'max' : `${s} mo/s`) : `×${s}`, () => { speed = s; live?.rate(s); syncUi(); });
-    b.dataset.speed = String(s);
-    return b;
-  }));
+  $('speeds').innerHTML = (isLive ? LIVE_SPEEDS : SPEEDS).map(s => `<option value="${s}">${isLive ? (s === Infinity ? 'max' : `${s} mo/s`) : `×${s}`}</option>`).join('');
   live?.rate(speed);
 }
 
@@ -175,7 +177,7 @@ function setFrame(f: number): void {
   frame = Math.min(Math.max(f, 0), world.meta.frames.length - 1);
   const y = world.meta.frames[frame].year;
   $<HTMLInputElement>('tl').value = String(frame);
-  $('year').textContent = `Year ${fmtYear(y)}`;
+  $('year').innerHTML = `<b>Year ${fmtYear(Math.floor(y))}</b><small>month ${Math.floor((y - Math.floor(y)) * MONTHS) + 1}</small>`;
   document.body.dataset.year = String(y);
   const hy = document.getElementById('hy'); if (hy) hy.textContent = fmtYear(y);
   if (!live) charts.setYear(y);
@@ -220,9 +222,18 @@ function setLayer(n: string | null): void {
 function syncUi(): void {
   document.querySelectorAll<HTMLElement>('#views button').forEach(b => b.classList.toggle('on', !layer && b.dataset.view === view));
   document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
-  document.querySelectorAll<HTMLElement>('#speeds button').forEach(b => b.classList.toggle('on', b.dataset.speed === String(speed)));
+  $<HTMLSelectElement>('speeds').value = String(speed);
   $('play').classList.toggle('playing', playing);
+  $('play').setAttribute('aria-label', playing ? 'Pause' : 'Play');
   map.playing = playing && live !== null;
+}
+
+/** Whether god mode is on: its strip and card shown. */
+function godOn(): boolean { return !$('god-strip').hidden; }
+function setGod(on: boolean): void {
+  $('god-strip').hidden = $('god').hidden = !on;
+  $('god-btn').setAttribute('aria-pressed', String(on));
+  if (!on) god.reset();
 }
 
 function setView(v: string): void { view = v; layer = null; setLayer(null); }
@@ -298,7 +309,14 @@ function togglePlay(): void {
 }
 
 // ---- wiring
+$('play').innerHTML = iconSvg('play', 'go') + iconSvg('pause', 'pause');
+fillIcons(document);
 $('play').onclick = togglePlay;
+$<HTMLSelectElement>('speeds').onchange = e => { speed = +(e.target as HTMLSelectElement).value; live?.rate(speed); syncUi(); };
+const panels = new Panels($('bar'), $('cv'));
+/** Inspect's card, shown while its button is pressed. */
+$('inspect-btn').onclick = () => { const on = $('inspect-card').hidden; $('inspect-card').hidden = !on; $('inspect-btn').setAttribute('aria-pressed', String(on)); };
+$('god-btn').onclick = () => setGod(!godOn());
 $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
@@ -311,7 +329,7 @@ addEventListener('keydown', e => {
   else if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'INPUT') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'ArrowLeft' && tag !== 'INPUT') setFrame(frame - (e.shiftKey ? 10 : 1));
   else if (e.key === 'ArrowRight' && tag !== 'INPUT') setFrame(frame + (e.shiftKey ? 10 : 1));
-  else if (e.key === 'Escape') { setLayer(null); map.pick = -1; inspect(); map.invalidate(); }
+  else if (e.key === 'Escape' && !panels.close() && !god.putAway()) { setLayer(null); map.pick = -1; inspect(); map.invalidate(); }
   else if (e.key === 'f') map.fit();
 });
 let depth = 0;
@@ -369,7 +387,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => (from ? openSaved(from) : newWorld()),
-    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); god.setKinds(l.kinds); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
+    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); god.reset(); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) slots.set(data); },
     frame: (stats, changed) => {
       if (live !== l) return;
