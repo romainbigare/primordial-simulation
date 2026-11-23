@@ -57,8 +57,12 @@ const PLACE = 3;
  * `patch_of`): of patch 1 its point from the square's north-west corner, x and y, in squares, and its reach in squares,
  * then patch 2's point's x; then patch 2's y and reach (16-bit floats hold a place within a square to a 2,000th). */
 const PLACES = FIELD.count;
+/** The layers after those that hold where a square's patches lie that hold, of each of its cell's patches (x, y, z:
+ * the first, then the others), the dead walls flames left standing on it, kg a m² of its land, the height they stood
+ * to, m, and the years since they died (tape/src/stands.rs `dead`; mark.wgsl `dead_at`). */
+const DEAD = PLACES + 2;
 /** The first layer of the field of patch `p` (from 1) of a square's cell's cover (cover_field.wgsl `PATCH_FIELDS`). */
-export const patchLayer = (p: number) => FIELD.count + 2 + (p - 1) * FIELD.count;
+export const patchLayer = (p: number) => DEAD + 3 + (p - 1) * FIELD.count;
 
 /** A field of the cover: `w` x `h` texels over the map, a texel a square, of each of `layers` layers (`FIELD`, then the
  * patches') a reflectance times the share of the ground it covers, and that share, RGBA layer by layer. */
@@ -75,30 +79,32 @@ const SHADOW_WIDTHS = 0.9 * (Math.PI / 4);
 
 /** Where a frame's kinds come from in the core's table (tape/src/table.rs) and what they are set out into
  * (`kindsOf`): the table `rows`, `row` numbers a square; `kinds` kinds a square of `kindRow` numbers from `at` on, and
- * the places of its patches from `places` on; the reflectance of the walls; the ground cooling by `falling`; the
+ * the places of its patches from `places` on and their dead walls from `dead` on; the reflectance of the walls; the ground cooling by `falling`; the
  * kinds' table and the field being made, of `n` squares (`texel` the place of a plane of a square); the tallest plant
  * and the widest mark of each lattice. */
 interface Sheet {
-  rows: Float32Array; row: number; at: number; kinds: number; kindRow: number; places: number; walls: Rgb; falling: number;
+  rows: Float32Array; row: number; at: number; kinds: number; kindRow: number; places: number; dead: number; walls: Rgb; falling: number;
   P: Planes; n: number; table: Float32Array; texel: (plane: number, i: number) => number; field: Float32Array; tallest: number[]; widest: number[];
 }
 
 /** The kinds of the core's table `rows` for a map of `w` x `h` squares (`row` numbers a square, tape/src/table.rs):
- * `kinds` kinds a square of `kindRow` numbers, from `at` on, then the places of each square's patches; while the
+ * `kinds` kinds a square of `kindRow` numbers, from `at` on, then the places of each square's patches, then their dead
+ * walls; while the
  * ground cools by `falling` (style.ts `cooling`). */
 export function kindsOf(w: number, h: number, rows: Float32Array, row: number, at: number, kinds: number, kindRow: number, walls: Rgb, falling: number): Kinds {
   const P = planesOf(kinds), cols = Math.ceil(P.count / PLANES_DOWN), down = Math.min(P.count, PLANES_DOWN), n = w * h;
-  const places = at + n * kinds * kindRow;
+  const places = at + n * kinds * kindRow, dead = places + n * (PATCHES - 1) * PLACE;
   const patched = Array.from({ length: n }, (_, i) => placeOf(rows, places, i, 1)[2] > 0).some(Boolean);
   const layers = patchLayer(patched ? PATCHES : 1);
   // Plane `plane` of square `i`: in column plane / `PLANES_DOWN`, row plane % `PLANES_DOWN`.
   const texel = (plane: number, i: number) => 4 * ((((plane % PLANES_DOWN) * h + Math.floor(i / w)) * cols + Math.floor(plane / PLANES_DOWN)) * w + (i % w));
-  const s: Sheet = { rows, row, at, kinds, kindRow, places, walls, falling, P, n, table: new Float32Array(4 * cols * down * n), texel, field: new Float32Array(4 * layers * n), tallest: LATTICES.map(() => 0), widest: LATTICES.map(() => 0) };
+  const s: Sheet = { rows, row, at, kinds, kindRow, places, dead, walls, falling, P, n, table: new Float32Array(4 * cols * down * n), texel, field: new Float32Array(4 * layers * n), tallest: LATTICES.map(() => 0), widest: LATTICES.map(() => 0) };
   for (let i = 0; i < n; i++) {
     // A square whose cell holds no land and no kind (tape/src/stands.rs: a kind may stand on its ponds' ground) holds
     // 0 in every layer of the field.
     if (!(rows[1 + row * i + LAND_AT] > 0) && !Array.from({ length: kinds }, (_, k) => holdsKind(s, i, k)).some(Boolean)) continue;
     placesOf(s, i, w);
+    for (let c = 0; c < 3; c++) for (let p = 0; p < PATCHES; p++) s.field[4 * ((DEAD + c) * s.n + i) + p] = rows[dead + (i * 3 + c) * PATCHES + p];
     for (let p = 0; p < PATCHES; p++) if (p === 0 || placeOf(rows, places, i, p)[2] > 0) patchOf(s, i, p, p === 0 ? 0 : patchLayer(p));
   }
   return { w, h, planes: P, cols, table: s.table, field: { w, h, layers, data: s.field }, tallest: s.tallest, widest: s.widest, walls };

@@ -30,14 +30,35 @@ const CURED_HIDES_KG = 0.15; const STRAW = vec3f(0.62, 0.50, 0.22);
 const CHAR_PHOTO_M = 1.0; const UNBURNT = 0.07; const UNBURNT_M = 0.6; const UNBURNT_OCTAVES = 2;
 
 // Far away, where they are not drawn one by one (cover.wgsl, snag.wgsl: from a few pixels tall), the Earth view draws the
-// dead trees standing in the burnt patch as specks of their bark and shadow (cover_field.wgsl `specks`), as many as
-// their walls make (`SNAG_KG` a tree), each `DEAD_SPECK_M` m across (a trunk and its shadow cover about 4 m² of the map).
-const DEAD_SPECK_M = 2.2; const DEAD_BARK = vec3f(0.035, 0.032, 0.03);
+// dead trees standing on a patch as specks of their bark and shadow (cover_field.wgsl `specks`), as many as their walls
+// make (fire.wgsl `snag_kg`), each `DEAD_SPECK` of their height across (a 10 m trunk and its shadow cover about 4 m² of
+// the map).
+const DEAD_SPECK = 0.22; const DEAD_BARK = vec3f(0.035, 0.032, 0.03);
 
 // Spot p with the marks of fire on it: where it lies dry, the share of it under a scar (`Spot.scar.x`), how much of it
 // is char, ash and scorched soil (`.yzw`); in the Earth view its cover tinted by the cured leaves standing in it, under
-// the dead trees seen from afar.
-fn burnt_spot(p: Spot) -> Spot {
+// the dead trees of its patch seen from afar (`dead_far`).
+fn burnt_spot(p: Spot) -> Spot { return dead_far(scarred(p)); }
+
+// The dead trees standing on spot p's patch (the patch the point's field was read in, cover_field.wgsl `land_weights`:
+// `patch_dead`) seen from afar, in the Earth view, where it lies dry: specks as many as their walls make, as far as the
+// marks do not draw them one by one.
+fn dead_far(p: Spot) -> Spot {
+  var q = p;
+  if (p.depth > 0.0 || !styled()) { return q; }
+  let dead = patch_dead(vec3i(cell_patch, patch_cell));
+  if (dead.x <= 0.0 || dead.y <= 0.0) { return q; }
+  let near = cover_look.shown[STANDS] * as_thing(dead.y, p.e);
+  if (near >= 1.0) { return q; }
+  let w = DEAD_SPECK * dead.y;
+  let seen = specks(p.at, w, dead.x / snag_kg(dead.y) * 0.25 * PI * w * w, p.e, 89);
+  let share = seen.x * (1.0 - near);
+  q.cover = vec4f(DEAD_BARK * (1.0 + DOME_LIT * seen.y) * share + q.cover.rgb * (1.0 - share), share + q.cover.a * (1.0 - share));
+  return q;
+}
+
+// Spot p with the scar and the cured leaves of fire on it (`burnt_spot`).
+fn scarred(p: Spot) -> Spot {
   var q = p;
   // (Squares of side 0: the page knows no fire, or draws none, fire.ts `groundBinds`.)
   if (p.depth > 0.0 || fire.map.x <= 0.0) { return q; }
@@ -52,14 +73,6 @@ fn burnt_spot(p: Spot) -> Spot {
   let scar = under_share(rank, f.burnt);
   let age = scar_age(p.at, rank.x);
   q.scar = vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-f.ash / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
-  // (The dead trees' marks stand only in the drawn burnt patch, as many there as the square's walls make.)
-  let near = cover_look.shown[STANDS] * as_thing(TRUNK_TALL_M, p.e);
-  if (styled() && f.snag > 0.0 && scar > 0.0 && near < 1.0) {
-    let many = f.snag / SNAG_KG / min(f.burnt, 1.0);
-    let dead = specks(p.at, DEAD_SPECK_M, many * 0.25 * PI * DEAD_SPECK_M * DEAD_SPECK_M, p.e, 89);
-    let share = dead.x * scar * (1.0 - near);
-    q.cover = vec4f(DEAD_BARK * (1.0 + DOME_LIT * dead.y) * share + q.cover.rgb * (1.0 - share), share + q.cover.a * (1.0 - share));
-  }
   return q;
 }
 

@@ -306,7 +306,7 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
 fn decide(l: i32, k: vec2f) -> vec4f {
   let id = cover.base[l].xy + vec2i(k);
   let at = cover.corner.xy + mark_foot(l, k);
-  cell_patch = cell_patch_at(at);
+  cell_patch_at(at);
   let cs = patch_corners(corners(at / land.map.x));
   // Whether any kind of the four squares has marks on the lattice.
   var all = 0.0;
@@ -315,7 +315,7 @@ fn decide(l: i32, k: vec2f) -> vec4f {
   }
   let living = living_decided(l, k, id, at, cs, all);
   // (One call where no living plant claims the cell, so the program holds `dead_decided` once.)
-  if (!living.claimed) { return dead_decided(l, k, id, at, cs, all); }
+  if (!living.claimed) { return dead_decided(l, k, id, at); }
   return living.mark;
 }
 
@@ -360,66 +360,42 @@ fn ground_open(at: vec2f) -> bool {
   return ch.water <= 0.0 || abs(g.sd - ch.middle) >= ch.water;
 }
 
-// The rule of the ground for every mark of lattice l at `at` (its squares `cs`, its foot `f`), living and dead: open
-// ground (`ground_open`), where the squares' kinds' own rules (`counts`: liquid no deeper than its line, roots in deep
-// enough loose ground, wet enough) let a kind with marks on the lattice stand. A living mark's kind is picked among
-// those there (`pick_kind`, by the draw `own`, `living_decided`); a dead tree stands where any of them could.
-fn ground_holds(l: i32, at: vec2f, cs: Corners, f: Foot) -> bool {
-  if (!ground_open(at)) { return false; }
-  let loose = foot_loose(at, cs);
-  let thick = patchy(at);
-  for (var s = 0; s < rolled(4); s++) {
-    if (cs.w[s] <= 0.0) { continue; }
-    for (var q = 0; q < groups(); q++) {
-      let m = counts(cs, s, q, thick, f, loose, true);
-      for (var c = 0; c < rolled(4); c++) {
-        let t = 4 * q + c;
-        if (t < kinds_n() && m[c] > 0.0 && any(kind(chance_plane(l, t), cs.at[s]) != vec4f(0.0))) { return true; }
-      }
-    }
-  }
-  return false;
-}
-
 // The code of a dead tree's mark (`dead_decided`): past every living mark's.
 fn dead_code() -> f32 { return f32(i32(land.map.y) * i32(land.map.z) * kinds_n() * GROUPS * PLACE_STEPS); }
 
-// The dead tree cell k of lattice l may hold (snag.wgsl; its kind -1: none) and the dead trees its cells hold on the
-// mean (0: none): on the trees' lattice where fire left dead walls standing (fire.wgsl), only in the burnt patch the
-// scar is drawn with (`burn_rank`, `under_share`; its age the scar's, `scar_age`), so as many as its walls make
-// (`SNAG_KG`) over the patch's share of the land, in clumps (`DEAD_CLUMP_M` across) inside it.
+// The dead tree cell k of lattice l may hold (snag.wgsl; its kind -1: none), the dead trees its cells hold on the
+// mean (0: none) and the height of the stems that died, m: on the trees' lattice, on the ground of the patch whose plants flames killed whole and whose walls
+// still stand there (the patch the fire made: cover_field.wgsl `patch_of`, `patch_dead`), as many as those walls make
+// (`snag_kg`, each as heavy as a stem of its height), in clumps (`DEAD_CLUMP_M` across) inside it; as tall as the plants
+// that died, broken down by the years since they died (`snag_of`).
 const DEAD_CLUMP_M = 40.0;
-struct Dead { q: Snag, mean: f32 }
+struct Dead { q: Snag, mean: f32, tall: f32 }
 fn dead_at(l: i32, k: vec2f) -> Dead {
-  var out = Dead(Snag(-1, 0, 0.0, 0.0, 1.0, vec3f(1.0)), 0.0);
-  if (l != STANDS || fire.map.x <= 0.0) { return out; }
+  var out = Dead(Snag(-1, 0, 0.0, 0.0, 1.0, vec3f(1.0), 0.0), 0.0, 0.0);
+  if (l != STANDS) { return out; }
   let at = cover.corner.xy + mark_foot(l, k);
-  let fa = fire_at(at);
-  if (fa.snag <= 0.0 || fa.burnt <= 0.0) { return out; }
-  let rank = burn_rank(at, cover.seen.x);
-  if (under_share(rank, fa.burnt) <= 0.5) { return out; }
+  let dead = patch_dead(patch_of(at));
+  if (dead.x <= 0.0 || dead.y <= 0.0) { return out; }
   let side = cover.grid[l].z;
   let clump = 2.0 * smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / DEAD_CLUMP_M, 97));
-  out.q = snag_of(cover.base[l].xy + vec2i(k), clamp(scar_age(at, rank.x) / max(fire.air.y, 1.0), 0.0, 1.0), cover.reach[l].x * side, (cover.grid[l].w + cover.reach[l].x) * side);
-  out.mean = clump * fa.snag * side * side / SNAG_KG / min(fa.burnt, 1.0);
+  out.q = snag_of(cover.base[l].xy + vec2i(k), dead.z, dead.y, cover.reach[l].x * side, (cover.grid[l].w + cover.reach[l].x) * side);
+  out.mean = clump * dead.x * side * side / snag_kg(dead.y);
+  out.tall = dead.y;
   return out;
 }
 
-// The dead tree of cell k (`id` in the world, its foot at `at`, its squares `cs`) of lattice l where no living plant
-// claims it (`decide`), whose living kinds have the chance `all` that a cell holds one of their marks (`dead_at`: with
-// the chance of its own stream its mean makes over the share of cells no living mark takes, at least `EMPTY_LEAST`), on
-// ground the living marks' rule lets a tree of the squares' kinds stand on (`ground_holds`; where the squares hold
-// no kinds of trees, open ground with no liquid over `FILM_M` and loose ground over the bed), as deep in snow as shows
-// it: a mark of `dead_code` and its box (`dead_box`).
-fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32) -> vec4f {
+// The dead tree of cell k (`id` in the world, its foot at `at`) of lattice l where no living plant claims it
+// (`decide`): with the chance its mean makes (`dead_at`; its own draw, fixed in the world, so a cell's dead tree stays
+// as long as the walls that make it stand), on open ground (`ground_open`) with no liquid over `FILM_M` and loose ground
+// over the bed, as deep in snow as shows it: a mark of `dead_code` and its box (`dead_box`).
+fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f) -> vec4f {
   let none = vec4f(-1.0, 0.0, 0.0, 0.0);
   let dead = dead_at(l, k);
-  if (dead.q.kind < 0 || snag_unit(id, 41) >= dead.mean / max(1.0 - all, EMPTY_LEAST)) { return none; }
+  if (dead.q.kind < 0 || snag_unit(id, 41) >= dead.mean) { return none; }
   let f = foot(at);
-  if (all > 0.0) {
-    if (!ground_holds(l, at, cs, f)) { return none; }
-  } else if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
-  let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_thing(dead.q.h, cover.seen.x);
+  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
+  // (They show as things by the stems' height, as their specks far away give way to them, burn.wgsl `dead_far`.)
+  let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_thing(dead.tall, cover.seen.x);
   if (shows <= 0.0) { return none; }
   return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q));
 }

@@ -12,8 +12,8 @@ import { spend, timed } from './cost';
 /** The tiles of the ground as the core makes them (wasm/src/lib.rs `meta`): texels a side inside the gutter, texels of
  * the gutter along each edge, the depths from the coarsest to the finest, the most steps along each axis by which a
  * texel names its channel's sample, the length its place along its channel is kept modulo, m, numbers of a row of the
- * cells' table, and the reflectance of the walls the cover builds. */
-export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; along_wrap: number; row: number; kind_row: number; place_row: number; walls: [number, number, number] }
+ * cells' table (of a square, of a kind, of its patches' places and of their dead walls), and the reflectance of the walls the cover builds. */
+export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; along_wrap: number; row: number; kind_row: number; place_row: number; dead_row: number; walls: [number, number, number] }
 /** Whose ground the tiles are of: a new island's, made from its seed, size, band of latitudes (south, north) and
  * whether its large shape is drawn from the seed (wasm/src/lib.rs `ground`); or a saved world's, the gzip of its
  * snapshot (`ground_of_world`). */

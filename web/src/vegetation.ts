@@ -11,7 +11,6 @@ import { CoverMarks, Marks } from './textures';
 import { Draw, Gpu, Made, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
-import type { Fire } from './fire';
 
 /** How strongly the marks cover the map, so its hill shading still shows through them (the field in the ground is lit
  * by it). */
@@ -25,8 +24,6 @@ export class Vegetation implements GpuLayer {
   private mapH = 0;
   /** The live map, whose laws mask each mark at its foot (none: a tape's map, no cover drawn over it). */
   land: Land | null = null;
-  /** Fire on the live map, whose dead trees stand among the marks (none: none known). */
-  fire: Fire | null = null;
   /** The draw of the marks `prepare` decided last (none: no cover drawn). */
   private drawn: Marks | null = null;
 
@@ -54,14 +51,13 @@ export class Vegetation implements GpuLayer {
   prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number, waiting: Made[]): void {
     this.drawn = null;
     const laws = this.land?.lawBinds(gpu);
-    if (!laws || !this.fire) return;
-    const land = { ...laws, ...this.fire.plantBinds(gpu) };
+    if (!laws) return;
     const mpp = this.cellM / s;
     // The map's part of the view, on whole device pixels.
     const x0 = Math.floor(Math.max(ox, 0) * d), y0 = Math.floor(Math.max(oy, 0) * d);
     const x1 = Math.ceil(Math.min(ox + this.mapW * s, W) * d), y1 = Math.ceil(Math.min(oy + this.mapH * s, H) * d);
     if (x1 <= x0 || y1 <= y0) return;
-    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land };
+    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land: laws };
     this.marks.prepare(gpu, this.drawn, waiting);
   }
 

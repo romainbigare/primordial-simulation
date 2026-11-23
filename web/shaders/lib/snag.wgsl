@@ -6,24 +6,29 @@
 // leaves gone (its bare twin, models.png) weathered grey: a fresh burn's are mostly charred, older ones more often grey,
 // bare or broken to stumps, and leaning. Each is mirrored, sized, leaned and tinted by its own draw. Colours linear.
 
-// One dead tree holds `SNAG_KG` of walls (fire.wgsl). A square's dead trees stand in its empty cells, each with the
-// chance its walls make over the share of cells its living kinds leave empty, so their number is the walls' however
-// full the living stand is (none more than one a cell).
-// The kinds: charred trunks, charred stumps (snags.png, snag_sprites.wgsl: each stands on its foot, the row where its
-// trunk meets the ground) and bare trees; each one's height drawn, m (its tallest part), `SNAG_VARY` either way, no
-// taller and no wider than its lattice lets a mark reach (`snag_of`).
+// A dead stem breaks down as the years pass: it stands whole, its twigs and branches gone (a bare tree of the map's own
+// forms, models.png), then broken off to a trunk (snags.png: `TRUNK_SHARE` of its height), then to a stump
+// (`STUMP_SHARE`, no taller than `STUMP_MOST_M`). Each does so at its own time: its stage is the years since it died over
+// `BREAK_YEARS` (dead trees lose their crowns within years and break within one or two decades: from memory), moved by
+// up to `BREAK_DRAW` by its own draw; whole below `BROKEN_FROM`, a stump from `STUMP_FROM_STAGE`. So a dead tree only
+// ever breaks further, never stands again. A dead stem under `SHRUB_M` (a shrub's) stays whole till it falls.
+const BREAK_YEARS = 8.0; const BREAK_DRAW = 0.6; const BROKEN_FROM = 0.6; const STUMP_FROM_STAGE = 1.3;
+const TRUNK_SHARE = 0.5; const STUMP_SHARE = 0.15; const STUMP_MOST_M = 1.4; const SHRUB_M = 4.0;
+// The kinds: bare whole trees and shrubs, charred trunks and charred stumps (snags.png, snag_sprites.wgsl: each stands
+// on its foot, the row where its trunk meets the ground); each one's height `SNAG_VARY` either way of its share of the
+// stem's, no taller and no wider than its lattice lets a mark reach (`snag_of`).
 const KIND_TRUNK = 0; const KIND_STUMP = 1; const KIND_BARE = 2;
 var<private> KIND_FROM: array<i32, 2> = array<i32, 2>(TRUNK_FROM, STUMP_FROM);
 var<private> KIND_N: array<i32, 2> = array<i32, 2>(TRUNK_N, STUMP_N);
-var<private> KIND_TALL: array<f32, 3> = array<f32, 3>(TRUNK_TALL_M, 1.4, 10.0);
-const SNAG_VARY = 0.3;
-// The longer since the burn (`old`, its share of the most months the core tells apart), the more dead trees are bare
-// grey trees (`BARE_FRESH` of them at once, `BARE_OLD` more when old) and stumps (`STUMP_OLD` when old) and the more
-// they lean, by up to `LEAN_MOST` radians, more on the burnt than on the bare.
-const BARE_FRESH = 0.15; const BARE_OLD = 0.5; const STUMP_OLD = 0.35; const LEAN_MOST = 0.6;
-// Dead wood weathers grey: a bare tree's bark is drawn `GREYED` of the way to its own grey, lit to `GREY_LIGHT` times as
-// light. Each dead tree's tone is moved by up to `TINT` either way, warmer or cooler, by its own draw.
-const GREYED = 0.65; const GREY_LIGHT = 1.35; const TINT = 0.12;
+const SNAG_VARY = 0.2;
+// The older (`old`, its stage over `STUMP_FROM_STAGE`, at most 1), the more a dead tree leans, by up to `LEAN_MOST`
+// radians, more on the broken than on the whole.
+const LEAN_MOST = 0.6;
+// A fresh whole dead tree is charred: its bark drawn `CHARRED` of the way to char (burn.wgsl `CHAR`) at once, weathering
+// grey over `GREY_YEARS` (charcoal flakes off within a few years: from memory), drawn `GREYED` of the way to its own
+// grey, lit to `GREY_LIGHT` times as light. Each dead tree's tone is moved by up to `TINT` either way, warmer or cooler,
+// by its own draw.
+const CHARRED = 0.8; const SNAG_CHAR = vec3f(0.04, 0.035, 0.03); const GREY_YEARS = 4.0; const GREYED = 0.65; const GREY_LIGHT = 1.35; const TINT = 0.12;
 // A charred trunk's or stump's sprite is all stem, its base about `SNAG_STEM` of its width from its foot (its contact
 // shade's reach, models.wgsl `contact_shade`).
 const SNAG_STEM = 0.4;
@@ -35,36 +40,39 @@ const CHAR_TONE = vec3f(1.1, 1.0, 0.85);
 // their frame, and a horse chestnut whose fine twigs blur into a haze.
 const BARE_TREES_N = 21;
 var<private> BARE_TREES: array<i32, 21> = array<i32, 21>(0, 1, 2, 4, 6, 7, 8, 10, 11, 12, 13, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28);
-// The empty share of the cells is never taken under `EMPTY_LEAST`, so a full stand's few gaps do not take all its dead
-// trees.
-const EMPTY_LEAST = 0.1;
 
 fn snag_unit(c: vec2i, k: i32) -> f32 { return f32(lowbias(c, k)) * (1.0 / 4294967296.0); }
 
 // A dead tree: its kind (-1: none) and sprite (of snags.png, or the tree whose bare twin it is), its height, m, its
-// lean, radians, whether it is mirrored (-1) or not (1), and its tint.
-struct Snag { kind: i32, s: i32, h: f32, lean: f32, mirror: f32, tint: vec3f }
+// lean, radians, whether it is mirrored (-1) or not (1), its tint, and how charred it is (0..1, a whole tree's).
+struct Snag { kind: i32, s: i32, h: f32, lean: f32, mirror: f32, tint: vec3f, char: f32 }
 
-// The dead tree of the cell `id` (fixed in the world) where the burn's age is `old`, on a lattice whose marks reach
-// `side` m east, west and south of their foot and `north` m north: its sprite with its lean within that box.
-fn snag_of(id: vec2i, old: f32, side: f32, north: f32) -> Snag {
+// The dead tree of the cell `id` (fixed in the world), dead for `years`, of plants `tall` m tall, on a
+// lattice whose marks reach `side` m east, west and south of their foot and `north` m north: its kind by how far it
+// has broken down (`BREAK_YEARS`), its sprite, its height and its lean within that box.
+fn snag_of(id: vec2i, years: f32, tall: f32, side: f32, north: f32) -> Snag {
   var q: Snag;
-  let pick = snag_unit(id, 42);
-  let bare = BARE_FRESH + BARE_OLD * old;
+  let stage = select(years / BREAK_YEARS + BREAK_DRAW * snag_unit(id, 42), 0.0, tall < SHRUB_M);
+  let old = min(stage / STUMP_FROM_STAGE, 1.0);
   let r = snag_unit(id, 43);
-  if (pick < bare) {
+  var share = 1.0;
+  if (stage < BROKEN_FROM) {
     q.kind = KIND_BARE;
     q.s = BARE_TREES[min(i32(r * f32(BARE_TREES_N)), BARE_TREES_N - 1)];
   } else {
-    q.kind = select(KIND_TRUNK, KIND_STUMP, pick < bare + STUMP_OLD * old);
+    q.kind = select(KIND_TRUNK, KIND_STUMP, stage >= STUMP_FROM_STAGE);
     q.s = KIND_FROM[q.kind] + min(i32(r * f32(KIND_N[q.kind])), KIND_N[q.kind] - 1);
+    share = select(TRUNK_SHARE, STUMP_SHARE, q.kind == KIND_STUMP);
   }
   q.lean = LEAN_MOST * old * (2.0 * snag_unit(id, 47) - 1.0) * select(1.0, 0.5, q.kind == KIND_BARE);
   let size = snag_size(q);
   let wide = side / (0.5 * size.x / size.y + abs(sin(q.lean)));
-  q.h = min(KIND_TALL[q.kind] * mix(1.0 - SNAG_VARY, 1.0 + SNAG_VARY, snag_unit(id, 44)), min(north / MAP_VIEW.y, wide));
+  var h = tall * share * mix(1.0 - SNAG_VARY, 1.0 + SNAG_VARY, snag_unit(id, 44));
+  if (q.kind == KIND_STUMP) { h = min(h, STUMP_MOST_M); }
+  q.h = min(h, min(north / MAP_VIEW.y, wide));
   q.mirror = select(1.0, -1.0, snag_unit(id, 49) < 0.5);
   q.tint = 1.0 + TINT * (2.0 * snag_unit(id, 50) - 1.0) * vec3f(1.0, 0.4, -0.6);
+  q.char = CHARRED * exp(-years / GREY_YEARS);
   return q;
 }
 
@@ -80,8 +88,8 @@ fn snag_texel(q: Snag, uv: vec2f, g: vec2f) -> vec4f {
   if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec4f(0.0); }
   if (q.kind == KIND_BARE) {
     let t = model_texel(bare_of(q.s), uv, max(g.x, g.y));
-    let grey = vec3f(dot(t.rgb, LUMA));
-    return vec4f(mix(t.rgb, grey, GREYED) * GREY_LIGHT * q.tint, t.a);
+    let grey = mix(t.rgb, vec3f(dot(t.rgb, LUMA)), GREYED) * GREY_LIGHT * q.tint;
+    return vec4f(mix(grey, SNAG_CHAR * q.tint, q.char), t.a);
   }
   let size = snag_size(q);
   // Its cell: a whole layer, or a quarter of one.

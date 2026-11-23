@@ -1,7 +1,6 @@
 // Fire on the live map: what the core's layers say fire did on each square (tape/src/layers.rs), sent to the GPU as a
 // texture of three planes (web/shaders/lib/fire.wgsl): the burn scars and the cured grass on the ground (land.wgsl,
-// lib/burn.wgsl), the dead trees standing among the plant cover's marks (cover.wgsl, lib/snag.wgsl, where dead walls
-// stand), the flames and the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach).
+// lib/burn.wgsl), the flames and the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach).
 // Where no fire is known the ground reads none of it (`groundBinds`).
 import { World, decode } from './data';
 import { Draw, Gpu, Made, Texture, Uniforms, notMade } from './gpu';
@@ -12,15 +11,15 @@ import type { MapLook } from './field-window';
 /** What fire did on each square, a number a square (the core's layers, `LAYERS`). */
 export interface FirePlanes {
   burnt: Float32Array; age: Float32Array; flame: Float32Array; length: Float32Array; ash: Float32Array; air: Float32Array;
-  east: Float32Array; north: Float32Array; snag: Float32Array; cured: Float32Array; wet: Float32Array;
+  east: Float32Array; north: Float32Array; cured: Float32Array; wet: Float32Array;
 }
 /** The core's layers of fire, by the planes' names: the share of the land burnt in the last 12 months, the months since
  * the square last burnt (at most the layer's top: never), the share burning this month, its flames' mean length (m),
  * the ash on the ground and the gas the flames sent to the air this month (kg/m²), the low wind east and north (m/s),
- * the dead walls standing and the cured leaves standing (kg/m²), the share of the land saturated. */
+ * the cured leaves standing (kg/m²), the share of the land saturated. */
 const LAYERS: Record<keyof FirePlanes, string> = {
   burnt: 'burnt', age: 'burnt_age', flame: 'flame', length: 'flame_len', ash: 'ash', air: 'flame_air',
-  east: 'wind_u', north: 'wind_v', snag: 'snag', cured: 'cured', wet: 'wet_share',
+  east: 'wind_u', north: 'wind_v', cured: 'cured', wet: 'wet_share',
 };
 
 /** The smoke reaches this far downwind, m, and spreads this share of the way gone to each side (lib/smoke.wgsl
@@ -58,7 +57,6 @@ export class Fire {
   private never = 0;
   /** The box the flames and their smoke reach (null: none); and whether dead walls stand on any square. */
   flames: Box | null = null;
-  private snags = false;
   /** The texture of the plant cover's draws where nothing of fire is known: one texel of nothing. */
   private blank: Texture | null = null;
   /** The smoke worked out for the frame shown (smoke.wgsl), till then one texel of none, and whether it is still to
@@ -79,20 +77,19 @@ export class Fire {
    * means none. A square burns whole, so its land is under a scar while it is younger than that, else its share burnt
    * this year. The texture's first plane holds that share, the months since the burn times it, the burning share and
    * the flames' length times that share (so the blend between squares gives each its share's mean); its second the
-   * ash, the gas sent to the air and the wind east and south; its third the dead walls and the cured leaves standing and the share of the land saturated. */
+   * ash, the gas sent to the air and the wind east and south; its third the cured leaves standing and the share of the land saturated. */
   put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number): void {
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
     // (Saturated ground does not burn: a scar lies on the dry land alone.)
     const n = w * h, scar = (i: number) => (!p ? 0 : Math.min(p.age[i] < never ? 1 : p.burnt[i], 1 - p.wet[i]));
-    this.snags = p !== null && p.snag.some(x => x > 0);
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
-    if (!p || !(this.flames || this.snags || p.ash.some((a, i) => a > 0 || p.cured[i] > 0 || scar(i) > 0))) { this.data = null; return; }
+    if (!p || !(this.flames || p.ash.some((a, i) => a > 0 || p.cured[i] > 0 || scar(i) > 0))) { this.data = null; return; }
     const data = new Uint16Array(4 * FIRE_PLANES * n);
     for (let i = 0; i < n; i++) {
       const s = scar(i), f = p.flame[i];
       data.set([s, s * Math.min(p.age[i], never), f, f * p.length[i]].map(half), 4 * i);
       data.set([p.ash[i], p.air[i], p.east[i], -p.north[i]].map(half), 4 * (n + i));
-      data.set([p.snag[i], p.cured[i], p.wet[i], 0].map(half), 4 * (2 * n + i));
+      data.set([p.cured[i], p.wet[i], 0, 0].map(half), 4 * (2 * n + i));
     }
     this.data = data;
     this.due = true;
@@ -143,14 +140,6 @@ export class Fire {
   private none(gpu: Gpu): Texture {
     if (!this.blank) { this.blank = gpu.texture('fire', 1, 1, 'rgba16float'); gpu.write(this.blank, new Uint16Array(4)); }
     return this.blank;
-  }
-
-  /** The bindings fire.wgsl reads on `gpu` in the plant cover's draws (cover.wgsl `lattice`): the texture and the
-   * squares, its first number 0 where no dead walls stand (then the texture is one texel of nothing). */
-  plantBinds(gpu: Gpu): Draw['binds'] {
-    if (!this.data || !this.snags) return { 25: this.none(gpu), 26: 'smooth', 27: new Uniforms(FIRE_VEC4S).vec4(0, 1, 1).buffer };
-    const b = this.binds(gpu, { mode: 'earth', layer: '', ramp: [], ground: 0 }, [0, 0, 0, 0, 0, 0, 0, 0], 0)!;
-    return { 25: b[25], 26: b[26], 27: b[27] };
   }
 
   stop(gpu: Gpu | null): void {

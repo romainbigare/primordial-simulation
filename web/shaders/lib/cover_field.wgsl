@@ -42,9 +42,10 @@ const WET_LAYER = 16;
 const STANDS = 2;
 // The patches of a cell's cover (the core's `cover::PATCHES`, laws.md 3): a square's field above is its cell's first
 // patch's, made of that patch's kinds; the field has `FIELD_LAYERS` layers a patch. Then two layers of where its
-// cell's other patches lie (canopy.ts `PLACES`), and from `PATCH_FIELDS` the field of each other patch, made of its own
+// cell's other patches lie (canopy.ts `PLACES`), three of the dead walls standing on each of its patches, their height
+// and the years since they died (canopy.ts `DEAD`, `patch_dead`), and from `PATCH_FIELDS` the field of each other patch, made of its own
 // kinds, `FIELD_LAYERS` layers each (canopy.ts `patchLayer`).
-const FIELD_LAYERS = 17; const PLACES_LAYER = 17; const PATCH_FIELDS = 19;
+const FIELD_LAYERS = 17; const PLACES_LAYER = 17; const DEAD_LAYER = 19; const PATCH_FIELDS = 22;
 // A patch is the ground of its cell nearest its point (the core's `inside::patch_ground`): a disc about the point, cut by
 // its cell's edges. It is drawn on ground warped by up to `PATCH_WARP` of a square's side along the slope of noise
 // `PATCH_LOBES` of a side across, and a share `PATCH_FINE.x` of that along noise `PATCH_FINE.y` times finer, each way
@@ -218,25 +219,41 @@ var<private> cell_patch: i32 = 0;
 // The square of the cell whose patch `cell_patch` is (`cell_patch_at`).
 var<private> patch_cell: vec2i = vec2i(0);
 
-// The patch of a cell's cover the point `at`, m from the map's north-west corner, is drawn in, and sets that cell
-// (`patch_cell`): of the cell its warped place lies in (`PATCH_WARP`), the first patch past the first
-// (tape/src/stands.rs `places`, canopy.ts `PLACES`) whose reach holds that place; else 0. Where no cell holds a patch
-// (the field has no patch's layers) no noise is read.
-fn cell_patch_at(at: vec2f) -> i32 {
-  if (i32(textureNumLayers(cover_field_tex)) <= PATCH_FIELDS) { return 0; }
+// Of the point `at`, m from the map's north-west corner, the patch of a cell's cover it is drawn in and that cell's
+// square (x, y, z; its patch -1 off the map): of the cell its warped place lies in (`PATCH_WARP`), the first patch
+// past the first (tape/src/stands.rs `places`, canopy.ts `PLACES`) whose reach holds that place; else 0, the first.
+// Where no cell holds a patch (the field has no patch's layers) no noise is read: the square the point lies in, 0.
+fn patch_of(at: vec2f) -> vec3i {
   let side = land.map.x;
-  let lobes = noise(at / (PATCH_LOBES * side), 211).yz + PATCH_FINE.x * noise(PATCH_FINE.y * at / (PATCH_LOBES * side), 212).yz;
-  let s = (at + side * clamp(PATCH_WARP * lobes, vec2f(-PATCH_WARP_MOST), vec2f(PATCH_WARP_MOST))) / side;
+  var s = at / side;
+  if (i32(textureNumLayers(cover_field_tex)) > PATCH_FIELDS) {
+    let lobes = noise(at / (PATCH_LOBES * side), 211).yz + PATCH_FINE.x * noise(PATCH_FINE.y * at / (PATCH_LOBES * side), 212).yz;
+    s += clamp(PATCH_WARP * lobes, vec2f(-PATCH_WARP_MOST), vec2f(PATCH_WARP_MOST));
+  }
   let q = vec2i(floor(s));
-  if (any(q < vec2i(0)) || any(q >= vec2i(land.map.yz))) { return 0; }
+  if (any(q < vec2i(0)) || any(q >= vec2i(land.map.yz))) { return vec3i(-1, 0, 0); }
   let a = textureLoad(cover_field_tex, q, PLACES_LAYER, 0);
-  if (a.z <= 0.0) { return 0; }
-  patch_cell = q;
+  if (a.z <= 0.0) { return vec3i(0, q); }
   let b = textureLoad(cover_field_tex, q, PLACES_LAYER + 1, 0);
   let o = s - vec2f(q);
-  if (length(o - a.xy) < a.z) { return 1; }
-  if (b.y > 0.0 && length(o - vec2f(a.w, b.x)) < b.y) { return 2; }
-  return 0;
+  if (length(o - a.xy) < a.z) { return vec3i(1, q); }
+  if (b.y > 0.0 && length(o - vec2f(a.w, b.x)) < b.y) { return vec3i(2, q); }
+  return vec3i(0, q);
+}
+
+// Set `cell_patch` and `patch_cell` at `at` (`patch_of`; off the map: the first patch).
+fn cell_patch_at(at: vec2f) {
+  let p = patch_of(at);
+  cell_patch = max(p.x, 0);
+  patch_cell = p.yz;
+}
+
+// Of patch `p` of the cell of square `q` (`patch_of`): the dead walls flames left standing on it, kg a m² of its land,
+// the height they stood to, m, and the years since they died (tape/src/stands.rs `dead`); none off the map.
+fn patch_dead(p: vec3i) -> vec3f {
+  if (p.x < 0) { return vec3f(0.0); }
+  let q = p.yz;
+  return vec3f(textureLoad(cover_field_tex, q, DEAD_LAYER, 0)[p.x], textureLoad(cover_field_tex, q, DEAD_LAYER + 1, 0)[p.x], textureLoad(cover_field_tex, q, DEAD_LAYER + 2, 0)[p.x]);
 }
 
 // Layer l of the field of the patch `cell_patch` of its cell `patch_cell` (one past the first: its own,
@@ -247,7 +264,7 @@ fn patch_field(l: i32) -> vec4f {
 
 // Set `land_plain`, `land_smooth` and `cell_patch` at `at`, m from the map's north-west corner.
 fn land_weights(at: vec2f) {
-  cell_patch = cell_patch_at(at);
+  cell_patch_at(at);
   let uv = at / (land.map.x * land.map.yz);
   land_plain = select(field_tap(uv, LAND_LAYER).x, 0.0, any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)));
   land_smooth = spline_field(at, LAND_LAYER).x;

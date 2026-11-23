@@ -78,7 +78,6 @@ map.layer = vegetation;
 /** Fire on the live map: its scars, flames and smoke. */
 const fire = new Fire();
 map.fire = fire;
-vegetation.fire = fire;
 /** God mode: the tools that edit the live world (live world only). */
 const god = new God($('god'), { probe: (x, y) => live?.probe(x, y), edit: (a, x, y, s, r) => live?.edit(a, x, y, s, r) }, () => map.redraw());
 god.listen($<HTMLCanvasElement>('cv'));

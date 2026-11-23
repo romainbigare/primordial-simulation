@@ -21,13 +21,16 @@ fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 
 // What fire did at a point, blended between the squares' centres: the share of the land under a scar (burnt within the
 // months the core tells apart, fire.ts), the months since its last burn (the scar's mean), the share burning this
 // month, its flames' mean length, m (the burning share's mean), the ash on the ground and the gas the flames sent to the
-// air this month, kg/m²; the low wind, m/s east and south; the dead walls standing and the cured leaves standing, kg/m².
-// (Its third plane's third number is the share of its land saturated, `burn_rank`.)
-struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32, wind: vec2f, snag: f32, cured: f32 }
+// air this month, kg/m²; the low wind, m/s east and south; the cured leaves standing, kg/m². (Its third plane's second
+// number is the share of its land saturated, `burn_rank`.)
+struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32, wind: vec2f, cured: f32 }
 
-// One dead tree holds `SNAG_KG` of walls, from memory (a stem of about 20 cm and 10 m); a charred trunk broken off stands
-// `TRUNK_TALL_M` m (snag.wgsl, burn.wgsl).
-const SNAG_KG = 150.0; const TRUNK_TALL_M = 5.0;
+// A dead stem as tall as the plants that died (`Patch::snag_h`) holds `snag_kg` of walls (snag.wgsl, burn.wgsl):
+// `SNAG_KG` at `SNAG_KG_TALL_M` (a stem of about 20 cm and 10 m, from memory), its mass growing with the fourth power
+// of its height (a stem's width grows with its height to the 3/2, McMahon 1973, so its mass with height times width
+// squared).
+const SNAG_KG = 150.0; const SNAG_KG_TALL_M = 10.0;
+fn snag_kg(h: f32) -> f32 { return SNAG_KG * pow(max(h, 0.5) / SNAG_KG_TALL_M, 4.0); }
 
 // The planes of the fire's texture (fire.ts), one under the other.
 const FIRE_PLANES = 3.0;
@@ -49,7 +52,7 @@ fn fire_at(at: vec2f) -> FireAt {
   let a = fire_plane(0, at);
   let b = fire_plane(1, at);
   let c = fire_plane(2, at);
-  return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y, b.zw, c.x, c.y);
+  return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y, b.zw, c.x);
 }
 
 // The months since the burn of the scar at `at`, a point of rank `rank` among the patches (`burn_rank`, 0..1): of one
@@ -89,7 +92,7 @@ const BURN_EDGE = 0.02;
 // square's burnt share fills its dry ground alone, as much of it as the core burnt.
 fn burn_rank(at: vec2f, e: f32) -> vec2f {
   let n = smoothstep(-EVEN_ONE, EVEN_ONE, ragged(at, e, BURN_PATCH_M, BURN_OCTAVES, BURN_NOISE));
-  let dry = 1.0 - fire_plane(2, at).z;
+  let dry = 1.0 - fire_plane(2, at).y;
   return vec2f(mix(n * dry, dry + n * (1.0 - dry), saturated_at(at)), BURN_EDGE + 0.25 * ragged_hidden(e, BURN_PATCH_M, BURN_OCTAVES));
 }
 
