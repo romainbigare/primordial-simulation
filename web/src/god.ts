@@ -1,62 +1,77 @@
-// God mode on the live map (handover 11): the player picks a tool on the strip, then a place, and the world is edited
-// there between two months (wasm/src/lib.rs `edit`, the core's `World::edit`). The tools themselves are a list
-// (god-tools.ts `godTools`); this is what they share: the strip of their buttons, the card of the tool on (its brush
-// size, its choices, what it does or why it cannot), a toast of what an edit did, the question to the core about the
-// place under the cursor (`probe`), the tap that edits, and the brush drawn over the map with the reason beside it
-// where the tool cannot be used there.
+// God mode on the live map (handover 11): the player picks a tool on the strip and paints the world with a round
+// brush: while the pointer is down, each cell under the brush is edited once (wasm/src/lib.rs `brush`, the core's
+// `World::edit`), and when it lifts the stroke settles (`settle`: strikes burn at once). The tools themselves are a list
+// (god-tools.ts `godTools`); this is what they share: the strip of their buttons, the card of the tool on (the brush's
+// radius, its choices, what it does or why it cannot), the stroke, a toast of what a stroke did, the question to the
+// core about the place under the cursor (`probe`), and the brush drawn over the map at its true size with the reason
+// beside it where the tool cannot act.
 import { IconName, iconSvg } from './icons';
 
 /** What the core says of the cell under a place (wasm/src/lib.rs `probe`): the cell, its edges in squares (west, north,
- * east, south), the centre of its sample under the place (squares), about which a clearing makes its patch, its area
- * and land (m²), its patches, and whether a strike lights it ("yes", or the core's reason). */
+ * east, south), the centre of its sample under the place (squares), its area and land (m²), its patches, and whether a
+ * strike lights it ("yes", or the core's reason). */
 export interface Probe { cell: number; bounds: [number, number, number, number]; at: [number, number]; area: number; land: number; patches: number; fire: string }
 /** A starting kind the world's plan places (wasm/src/lib.rs `kinds`): its row, the core's name, kg per m² placed. */
 export interface StartKind { row: number; name: string; kg: number }
-/** What an edit did (wasm/src/lib.rs `edit`): the cell, and whether each of its edits was made. */
-export interface Edited { cell: number; done: boolean[] }
-/** The worker's side of the tools: ask what lies under a place, and edit there. */
-export interface Editor { probe(x: number, y: number): void; edit(act: number, x: number, y: number, share: number, row: number): void }
+/** What a brush did (wasm/src/lib.rs `brush`): each cell under it not yet edited in the stroke, the share of it under
+ * the brush, whether each of its edits was made and the core's reason where not; whether any cell changed. */
+export interface Brushed { cells: { cell: number; share: number; done: boolean[]; why: string }[]; changed: boolean }
+/** What a stroke's settling did (wasm/src/lib.rs `settle`): each cell the flames of its strikes reached, and when, s
+ * after the strike. */
+export interface Settled { burnt: [number, number][] }
+/** The worker's side of the tools: ask what lies under a place, paint, and end a stroke. */
+export interface Editor { probe(x: number, y: number): void; brush(tool: number, x: number, y: number, radius: number, row: number): void; settle(): void }
 
-/** A tool's brush sizes: the stops of the size slider, the stop it starts at, and the words for a size at the place
- * probed. */
-export interface Sizes { stops: number[]; first: number; text: (size: number, p: Probe | null) => string }
-/** Where a tool's brush is drawn: the map's corner (css px) and the pixels a square takes, the place under the cursor
- * (squares), the core's answer about it, the size chosen, whether the tool cannot be used there, and the ink to draw
- * in (grey where it cannot). */
-export interface Brush { ox: number; oy: number; s: number; at: [number, number]; probe: Probe | null; size: number; no: boolean; ink: string }
 /** A tool of god mode. The strip shows the tools in the order of their list; a new tool is one more entry. */
 export interface GodTool {
   /** Its key (its button's `data-tool`), its icon, its short name, and its colour on the map. */
   key: string; icon: IconName; label: string; ink: string;
-  /** What a click on the map does, in a line. */
+  /** How to use it, in a line. */
   hint: string;
-  /** Its brush sizes, where the size slider applies to it. */
-  sizes?: Sizes;
-  /** Why it cannot be used at the place the core answered about (null: none yet), or ''. */
+  /** The core's brush tool it paints with (wasm/src/lib.rs `brush`), and the starting kind it places (-1: none). */
+  code: number; row(): number;
+  /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
   why(p: Probe | null): string;
-  /** Its own choices, shown under the size (`show` draws the card anew after one is picked). */
+  /** The core's reason a cell was not edited (`Brushed`), in plain words. */
+  reason(why: string): string;
+  /** Its own choices, shown under the radius (`show` draws the card anew after one is picked). */
   choices?(show: () => void): HTMLElement;
-  /** Edit the world at (x, y), squares, with the brush size `size`. */
-  edit(x: number, y: number, size: number): void;
-  /** What its last edit did, in a line, from the core's answer. */
-  edited(r: Edited): string;
-  /** Draw its brush over the map. */
-  draw(ctx: CanvasRenderingContext2D, b: Brush): void;
+  /** What a stroke did, in a line: the cells it edited, and the plain reason most of the others were not. */
+  told(done: number, why: string): string;
+}
+/** What the page gives god mode: its strip, card and toast; the map drawn anew; that a tool was picked (the world
+ * pauses); the side of a square, m; and the cells a stroke burnt with when (`Settled`). */
+export interface GodPage {
+  strip: HTMLElement; card: HTMLElement; toast: HTMLElement;
+  redraw(): void; picked(): void; squareM(): number; burnt(burnt: [number, number][]): void;
 }
 
-/** The ink of a tool's brush where it cannot be used. */
+/** The brush's radii, m (the slider's stops), and the one it starts at. */
+const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
+/** The least time between two paints of a stroke, ms, and the least move of the brush's centre between them, a share
+ * of its radius: cells are edited once a stroke, so a paint where the brush has not moved adds nothing. */
+const PAINT_MS = 90, PAINT_MOVE = 0.25;
+/** The ink of the brush where the tool cannot act. */
 const NO_INK = 'rgba(120,120,120,.95)';
-/** The widest line of the box that says beside the cursor why a tool cannot be used there, css px. */
+/** The widest line of the box that says beside the cursor why a tool cannot act there, css px. */
 const LABEL_PX = 220;
-/** How long the toast of an edit shows, ms. */
-const TOAST_MS = 4000;
+/** How long the toast of a stroke shows, ms. */
+const TOAST_MS = 5000;
 /** Least time between two questions about the place under the cursor, ms. */
 const PROBE_MS = 80;
 
+const radiusText = (m: number) => (m >= 1000 ? `${m / 1000} km` : `${m} m`);
+
+/** A stroke under way: the cells it edited, its reasons for those it did not, the place and time of its last paint
+ * (squares, ms), and where the brush is now. */
+interface Stroke { tool: GodTool; done: number; whys: Map<string, number>; last: [number, number, number]; now: [number, number] }
+
 export class God {
   private tool: GodTool | null = null;
-  /** The size slider's stop of each tool that has sizes, by key. */
-  private stop = new Map<string, number>();
+  private radius = RADII_M[FIRST_RADIUS];
+  private stroke: Stroke | null = null;
+  /** The plain reason the last paint edited none of the cells under it ('': it did, or none was asked). */
+  private lastWhy = '';
   /** The place under the cursor (squares), and the probe of the place last answered. */
   private at: [number, number] | null = null;
   private probe: Probe | null = null;
@@ -65,30 +80,35 @@ export class God {
   private asked = 0;
   /** The map's corner and the pixels a square takes, as last drawn. */
   private drawnAt: [number, number, number] | null = null;
-  /** When the toast of the last edit goes. */
+  /** When the toast of the last stroke goes. */
   private toastTimer = 0;
-  /** The tool of the edit last sent, for its answer (`edited`). */
-  private pending: GodTool | null = null;
 
-  constructor(private strip: HTMLElement, private card: HTMLElement, private toast: HTMLElement, private editor: Editor, private tools: GodTool[], private redraw: () => void) {
-    strip.replaceChildren(...tools.map(t => {
+  constructor(private page: GodPage, private editor: Editor, private tools: GodTool[]) {
+    page.strip.replaceChildren(...tools.map(t => {
       const b = document.createElement('button');
       b.className = 'ib'; b.dataset.tool = t.key; b.innerHTML = iconSvg(t.icon);
       b.setAttribute('aria-label', t.label);
-      b.onclick = () => { this.tool = this.tool === t ? null : t; this.show(); this.redraw(); };
+      b.onclick = () => { this.pick(this.tool === t ? null : t); };
       return b;
     }));
     this.show();
   }
 
   /** Put the tool away and forget the place: a new world, or god mode closed. */
-  reset(): void { this.tool = null; this.probe = null; this.toast.classList.remove('on'); this.show(); this.redraw(); }
+  reset(): void { this.stroke = null; this.probe = null; this.asking = false; this.page.toast.classList.remove('on'); this.pick(null); }
 
   /** Put the tool on away: true if one was on. */
   putAway(): boolean {
     if (!this.tool) return false;
-    this.tool = null; this.show(); this.redraw();
+    this.pick(null);
     return true;
+  }
+
+  /** Take tool `t` (null: none); the world pauses while one is on. */
+  private pick(t: GodTool | null): void {
+    this.tool = t; this.lastWhy = '';
+    if (t) this.page.picked();
+    this.show(); this.page.redraw();
   }
 
   /** Follow the pointer on `cv`: the place under it is asked of the core. */
@@ -98,9 +118,9 @@ export class God {
       if (!v) return;
       this.at = [(e.offsetX - v[0]) / v[2], (e.offsetY - v[1]) / v[2]];
       this.ask();
-      if (this.tool) this.redraw();
+      if (this.tool) this.page.redraw();
     });
-    cv.addEventListener('pointerleave', () => { this.at = null; if (this.tool) this.redraw(); });
+    cv.addEventListener('pointerleave', () => { this.at = null; if (this.tool) this.page.redraw(); });
   }
 
   /** Ask the core about the place under the cursor, at most once every `PROBE_MS` and one question at a time. */
@@ -117,51 +137,87 @@ export class God {
     this.asking = false;
     const was = this.probe;
     this.probe = p;
-    if (this.tool) this.redraw();
-    if (!was || was.cell !== p.cell || was.fire !== p.fire || was.land !== p.land || was.patches !== p.patches) { this.show(); this.redraw(); }
+    if (this.tool) this.page.redraw();
+    if (!was || was.cell !== p.cell || was.fire !== p.fire || was.land !== p.land || was.patches !== p.patches) { this.show(); this.page.redraw(); }
   }
 
-  /** The core's answer to an edit. */
-  edited(r: Edited): void {
-    if (this.pending) this.say(this.pending.edited(r));
-    this.probe = null;
-    this.ask();
-    this.show();
-  }
-
-  /** The brush size of tool `t` (0 for a tool without sizes). */
-  private size(t: GodTool): number {
-    return t.sizes ? t.sizes.stops[this.stop.get(t.key) ?? t.sizes.first] : 0;
-  }
-
-  /** A tap at (x, y) squares: the tool's edit there, true; false if no tool is on (the map picks the square). */
-  tap(x: number, y: number): boolean {
+  /** A press at (x, y) squares: the stroke of the tool on starts there, true; false if no tool is on (the map moves). */
+  start(x: number, y: number): boolean {
     const t = this.tool;
     if (!t) return false;
-    const why = this.probe ? t.why(this.probe) : '';
-    if (why) { this.say(why); return true; }
-    this.pending = t;
-    t.edit(x, y, this.size(t));
+    this.at = [x, y];
+    this.stroke = { tool: t, done: 0, whys: new Map(), last: [x, y, 0], now: [x, y] };
+    this.paint();
     return true;
   }
 
-  /** Over the map, with its corner at (ox, oy) and a square `s` pixels: the tool's brush under the cursor, its mark at
-   * the cursor, and the reason beside it where the tool cannot be used there. */
+  /** The pointer of the stroke moved to (x, y) squares: a paint there, once it moved far and long enough. */
+  move(x: number, y: number): void {
+    const st = this.stroke;
+    if (!st) return;
+    st.now = [x, y];
+    const [lx, ly, lt] = st.last, far = Math.hypot(x - lx, y - ly) >= (PAINT_MOVE * this.radius) / this.page.squareM();
+    if (far && performance.now() - lt >= PAINT_MS) this.paint();
+  }
+
+  /** The stroke ends: a last paint where the brush moved since, and it settles. */
+  end(): void {
+    const st = this.stroke;
+    if (!st) return;
+    if (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]) this.paint();
+    this.editor.settle();
+  }
+
+  /** Paint with the stroke's tool where its brush is now. */
+  private paint(): void {
+    const st = this.stroke!, [x, y] = st.now;
+    st.last = [x, y, performance.now()];
+    this.editor.brush(st.tool.code, x, y, this.radius, st.tool.row());
+  }
+
+  /** The core's answer to a paint: its cells counted to the stroke; the reason, where it edited none of them. */
+  brushed(r: Brushed): void {
+    const st = this.stroke;
+    if (!st) return;
+    const whys = new Map<string, number>();
+    for (const c of r.cells) {
+      if (c.done.every(d => d)) st.done++;
+      else if (c.why) whys.set(c.why, (whys.get(c.why) ?? 0) + 1);
+    }
+    for (const [why, n] of whys) st.whys.set(why, (st.whys.get(why) ?? 0) + n);
+    if (r.cells.length) this.lastWhy = r.cells.some(c => c.done.every(d => d)) ? '' : st.tool.reason(most(whys));
+    this.page.redraw();
+  }
+
+  /** The core's answer to the stroke's end: what it did, in the toast; the cells it burnt, to the page. */
+  settled(r: Settled): void {
+    const st = this.stroke;
+    this.stroke = null;
+    if (!st) return;
+    this.say(st.tool.told(st.done, st.tool.reason(most(st.whys))));
+    if (r.burnt.length) this.page.burnt(r.burnt);
+  }
+
+  /** Over the map, with its corner at (ox, oy) and a square `s` pixels: the brush at the cursor at its true size, and
+   * the reason beside it where the tool cannot act there. */
   draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number): void {
     this.drawnAt = [ox, oy, s];
     const t = this.tool, at = this.at;
     if (!t || !at) return;
-    const why = t.why(this.probe), ink = why ? NO_INK : t.ink;
+    const why = this.lastWhy || t.why(this.probe), ink = why ? NO_INK : t.ink;
+    const [cx, cy] = [ox + at[0] * s, oy + at[1] * s], r = (this.radius / this.page.squareM()) * s;
     ctx.save();
-    t.draw(ctx, { ox, oy, s, at, probe: this.probe, size: this.size(t), no: why !== '', ink });
-    ctx.restore();
-    const [cx, cy] = [ox + at[0] * s, oy + at[1] * s];
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.globalAlpha = this.stroke ? 0.3 : 0.15; ctx.fillStyle = ink; ctx.fill();
+    ctx.globalAlpha = 1; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = ink; ctx.stroke();
     ctx.fillStyle = ink; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    ctx.restore();
     if (why) this.label(ctx, cx, cy, why);
   }
 
-  /** The reason a tool cannot be used, in a box beside the cursor at (x, y), its words wrapped at `LABEL_PX`. */
+  /** The reason a tool cannot act, in a box beside the cursor at (x, y), its words wrapped at `LABEL_PX`. */
   private label(ctx: CanvasRenderingContext2D, x: number, y: number, text: string): void {
     ctx.font = '12px system-ui, sans-serif';
     const lines: string[] = [];
@@ -178,51 +234,59 @@ export class God {
     lines.forEach((l, k) => ctx.fillText(l, bx + 8, by + 18 + 16 * k));
   }
 
-  /** The strip's buttons (the tool on pressed, a tool that cannot be used here greyed with the reason), and the card:
-   * the tool's name, its size, its choices, and a line of what it does here or why it cannot. */
+  /** The strip's buttons (the tool on pressed, a tool that cannot act here greyed with the reason), and the card: the
+   * tool's name, the brush's radius, its choices, and a line of how to use it or why it cannot act here. */
   private show(): void {
     const t = this.tool;
-    for (const b of this.strip.querySelectorAll<HTMLElement>('button')) {
+    for (const b of this.page.strip.querySelectorAll<HTMLElement>('button')) {
       const tool = this.tools.find(d => d.key === b.dataset.tool)!, why = tool.why(this.probe);
       b.setAttribute('aria-pressed', String(tool === t));
       b.classList.toggle('no', why !== '');
       b.title = why ? `${tool.label}: ${why}` : tool.label;
     }
-    const el = this.card;
+    const el = this.page.card;
     el.replaceChildren();
     const line = (cls: string, text: string) => { const d = document.createElement('p'); d.className = cls; d.textContent = text; el.append(d); };
-    if (!t) { line('hint', 'Pick a tool, then click the map.'); return; }
+    if (!t) { line('hint', 'Pick a tool, then drag on the map.'); return; }
     const head = document.createElement('div'), size = document.createElement('b');
     head.className = 'top';
     head.innerHTML = '<h2></h2>';
     head.querySelector('h2')!.textContent = t.label;
     head.append(size);
     el.append(head);
-    if (t.sizes) this.slider(t, t.sizes, size);
+    this.slider(size);
     if (t.choices) el.append(t.choices(() => this.show()));
     const why = t.why(this.probe);
     line(why ? 'why' : 'hint', why || t.hint);
   }
 
-  /** The size slider of tool `t` on the card, with the words for the size chosen at the place probed in `words`. */
-  private slider(t: GodTool, sizes: Sizes, words: HTMLElement): void {
+  /** The brush's radius slider on the card, the radius in `words`. */
+  private slider(words: HTMLElement): void {
     const input = document.createElement('input');
-    words.textContent = sizes.text(this.size(t), this.probe);
-    Object.assign(input, { type: 'range', min: '0', max: String(sizes.stops.length - 1), step: '1', value: String(this.stop.get(t.key) ?? sizes.first) });
-    input.setAttribute('aria-label', 'Brush size'); input.title = 'Brush size';
+    words.textContent = `radius ${radiusText(this.radius)}`;
+    Object.assign(input, { type: 'range', min: '0', max: String(RADII_M.length - 1), step: '1', value: String(RADII_M.indexOf(this.radius)) });
+    input.setAttribute('aria-label', 'Brush radius'); input.title = 'Brush radius';
     input.oninput = () => {
-      this.stop.set(t.key, +input.value);
-      words.textContent = sizes.text(this.size(t), this.probe);
-      this.redraw();
+      this.radius = RADII_M[+input.value];
+      words.textContent = `radius ${radiusText(this.radius)}`;
+      this.page.redraw();
     };
-    this.card.append(input);
+    this.page.card.append(input);
   }
 
-  /** What an edit did, or why it was not made, in a toast that fades after `TOAST_MS`. */
+  /** What a stroke did in a toast that fades after `TOAST_MS`. */
   private say(text: string): void {
-    this.toast.textContent = text;
-    this.toast.classList.add('on');
+    const toast = this.page.toast;
+    toast.textContent = text;
+    toast.classList.add('on');
     clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => this.toast.classList.remove('on'), TOAST_MS);
+    this.toastTimer = window.setTimeout(() => toast.classList.remove('on'), TOAST_MS);
   }
+}
+
+/** The key counted most in `counts` ('' for none). */
+function most(counts: Map<string, number>): string {
+  let best = '', n = 0;
+  for (const [k, c] of counts) if (c > n) { best = k; n = c; }
+  return best;
 }

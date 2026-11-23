@@ -1,11 +1,14 @@
 //! Edits of a world (handover.md 11: an action is a physics edit, made at a step boundary): the one way a run's plan
 //! and the live page change a world from the outside. Each edit acts on the cell under its place, through the law it
 //! belongs to (`World::clear`, `World::split`, `cover::place`, the flames' strikes), and is told to the shell as a raw
-//! event (`EventKind::Edit`).
+//! event (`EventKind::Edit`). A round brush finds the cells under it and the share of each it covers (`World::under`);
+//! what the edits start that takes no time runs at once, with no time on the world's clock (`World::settle`).
 
 use crate::event::{Event, EventKind};
+use crate::space::terrain::SAMPLE_DEPTH;
 use crate::World;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// What an edit does to the cell under its place.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -29,6 +32,22 @@ pub enum Act {
 pub struct Edit {
     pub place: [f64; 2],
     pub act: Act,
+}
+
+/// A round brush: its centre, in squares from the map's north-west corner (as `Edit::place`), and its radius, m.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Brush {
+    pub centre: [f64; 2],
+    pub radius_m: f64,
+}
+
+/// A cell under a brush (`World::under`): the cell, the share of it the brush covers, and the place in it nearest the
+/// brush's centre, in squares (the centre of its sample the brush covers nearest that centre).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Under {
+    pub cell: usize,
+    pub share: f64,
+    pub place: [f64; 2],
 }
 
 impl Edit {
@@ -62,6 +81,51 @@ impl World {
                 done
             })
             .collect()
+    }
+
+    /// The cells under the brush `b`, in the order of the cells (`Under`). The brush covers the terrain's samples
+    /// (`SAMPLE_DEPTH`, the finest the ground is held at) whose centres lie within its radius, measured in samples from
+    /// north to south (`Square::length`), and the sample under its centre always (a brush finer than a sample covers
+    /// it); a cell's share is the share of its samples it covers.
+    pub fn under(&self, b: Brush) -> Vec<Under> {
+        let map = &self.map;
+        let per = (1u64 << SAMPLE_DEPTH.saturating_sub(map.square_depth())) as f64;
+        let r = b.radius_m / map.length(SAMPLE_DEPTH);
+        let [cx, cy] = b.centre.map(|v| v * per);
+        let span = |c: f64, n: usize| {
+            let most = n * per as usize;
+            (((c - r).floor().max(0.0) as usize).min(most - 1), ((c + r).ceil().max(0.0) as usize).min(most))
+        };
+        let ((x0, x1), (y0, y1)) = (span(cx, map.w), span(cy, map.h));
+        let (mid_x, mid_y) = (cx.floor(), cy.floor());
+        // Of each cell: the samples covered, and the place of the one nearest the centre with its distance.
+        let mut cells: BTreeMap<usize, (f64, f64, [f64; 2])> = BTreeMap::new();
+        for sy in y0..y1.max(y0 + 1) {
+            for sx in x0..x1.max(x0 + 1) {
+                let (x, y) = (sx as f64 + 0.5, sy as f64 + 0.5);
+                let d = (x - cx).hypot(y - cy);
+                if d > r && !(sx as f64 == mid_x && sy as f64 == mid_y) {
+                    continue;
+                }
+                let place = [x / per, y / per];
+                let at = cells.entry(self.cell_under(place)).or_insert((0.0, f64::INFINITY, place));
+                at.0 += 1.0;
+                if d < at.1 {
+                    (at.1, at.2) = (d, place);
+                }
+            }
+        }
+        cells.into_iter().map(|(cell, (count, _, place))| Under { cell, share: (count / (map.squares(cell) * per * per)).min(1.0), place }).collect()
+    }
+
+    /// Run at once what the edits since the month began start that takes no time, with no time on the world's clock
+    /// (laws.md 0): the strikes of edits burn now (`flame::now`). Returns each cell their flames reached and when, s
+    /// after its strike; none where no edit struck.
+    pub fn settle(&mut self) -> Vec<(u32, f64)> {
+        if self.strikes.is_empty() {
+            return Vec::new();
+        }
+        crate::flame::now(self)
     }
 
     /// Make the edit `e` on cell `i`; whether it was made.

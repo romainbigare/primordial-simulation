@@ -138,7 +138,6 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 .god .top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap); }
 .god .top b { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .god p { margin: 8px 0 0; }
-.god .lbl { margin: 8px 0 4px; color: var(--muted); font-size: 12px; }
 .god .hint { color: var(--muted); }
 .god .why { color: var(--warn); }
 /* What an edit did: a toast at the bottom middle that fades. */
@@ -177,7 +176,6 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   #inspect-card { --covers: none; left: var(--edge); width: auto; max-height: 40dvh; }
   .strip { --covers: bottom; top: auto; bottom: calc(var(--edge) + env(safe-area-inset-bottom)); max-width: calc(100vw - 3 * var(--edge) - var(--btn)); flex-direction: row; overflow-x: auto; }
   .god { --covers: bottom; top: auto; left: var(--edge); right: var(--edge); width: auto; bottom: calc(var(--edge) + env(safe-area-inset-bottom) + 70px); max-height: 24dvh; padding: 8px 12px; }
-  .god .about, .god .lbl { display: none; }
   .god input[type=range] { height: 20px; }
   .god p { margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .god .chips { margin-top: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }

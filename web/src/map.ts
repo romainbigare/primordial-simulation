@@ -179,8 +179,10 @@ export class MapView {
   fire: Fire | null = null;
   playing = false;
   overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
-  /** Told of a tap at a place (squares) before the map picks its square: true takes the tap (a tool's edit). */
-  tap: ((x: number, y: number) => boolean) | null = null;
+  /** A tool that paints with the pointer (god mode): told where a press of the main button starts (squares), true
+   * takes the press and its drag in place of a pan; then told of each move and of the end. A second finger, or another
+   * button, still moves the map. */
+  paint: { start(x: number, y: number): boolean; move(x: number, y: number): void; end(): void } | null = null;
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
     this.ctx = cv.getContext('2d')!;
@@ -198,14 +200,27 @@ export class MapView {
       return g;
     });
     new ResizeObserver(() => { this.resize(); this.invalidate(); }).observe(cv);
-    cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); this.gesture.down(e.pointerId, e.offsetX, e.offsetY); });
+    /** The pointer that paints (-1: none), and where it is. */
+    let painter = -1, painterAt = { x: 0, y: 0 };
+    const at = (e: PointerEvent): [number, number] => [(e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s];
+    const stopPainting = () => { if (painter >= 0) { painter = -1; this.paint?.end(); } };
+    cv.addEventListener('pointerdown', e => {
+      cv.setPointerCapture(e.pointerId);
+      if (painter >= 0) {
+        // A second finger: the stroke ends, and the two move the map.
+        this.gesture.down(painter, painterAt.x, painterAt.y); stopPainting();
+      } else if (!this.gesture.size && e.button === 0 && this.paint?.start(...at(e))) { painter = e.pointerId; painterAt = { x: e.offsetX, y: e.offsetY }; return; }
+      this.gesture.down(e.pointerId, e.offsetX, e.offsetY);
+    });
+    cv.addEventListener('contextmenu', e => { if (this.paint) e.preventDefault(); });
     cv.addEventListener('pointermove', e => {
+      if (e.pointerId === painter) { painterAt = { x: e.offsetX, y: e.offsetY }; this.setHover(this.cellAt(e.offsetX, e.offsetY)); return this.paint?.move(...at(e)); }
       if (this.gesture.move(e.pointerId, e.offsetX, e.offsetY)) this.redraw();
       else this.setHover(this.cellAt(e.offsetX, e.offsetY));
     });
     const up = (e: PointerEvent) => {
-      const taken = () => this.tap?.((e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s) ?? false;
-      if (this.gesture.size === 1 && this.gesture.moved < TAP_PX && e.type === 'pointerup' && !taken()) { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
+      if (e.pointerId === painter) return stopPainting();
+      if (this.gesture.size === 1 && this.gesture.moved < TAP_PX && e.type === 'pointerup') { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
       this.gesture.up(e.pointerId);
       this.redraw();
     };
