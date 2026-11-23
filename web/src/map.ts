@@ -21,7 +21,7 @@ const MOST_PX_PER_M = 80;
 /** The most pixels of the map's canvas a css pixel takes: a screen with more (a phone's, 3) is drawn at this many and
  * stretched onto it, 2.25 times fewer pixels for a picture a little softer (what is drawn over it, the lines and the
  * text, keeps the screen's own). */
-const MOST_DRAWN_PX = 2;
+export const MOST_DRAWN_PX = 2;
 /** The map's shadow on the page: it falls this far south and is blurred this much (a Gaussian's deviation), css px, and
  * darkens the background this much at most. */
 const SHADOW_DROP = 5, SHADOW_BLUR = 11, SHADOW_DARK = 0.28;

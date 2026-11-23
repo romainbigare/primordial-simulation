@@ -6,7 +6,7 @@
 // nearest kept ancestor (stretched, softer), and a new one fades in over that one. The coarsest tiles are kept always.
 // The page keeps no copy of a tile: after a lost context the card's are empty, and it asks for them again (`lost`).
 import { Gpu, Texture } from './gpu';
-import type { View } from './map';
+import { MOST_DRAWN_PX, type View } from './map';
 import { spend, timed } from './cost';
 
 /** The tiles of the ground as the core makes them (wasm/src/lib.rs `meta`): texels a side inside the gutter, texels of
@@ -35,7 +35,7 @@ const PLANE_A = 4, PLANE_B = 4;
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
 const AHEAD = 0.25;
-/** The view is drawn at the depth whose texels take no more than this many of the screen's pixels, so its ground and
+/** The view is drawn at the depth whose texels take no more than this many of the pixels the map is drawn at, so its ground and
  * its shores are read between texels no larger than a pixel; where that asks for more than `VIEW_TILES` tiles, a depth
  * coarser (each halving of a texel costs four times the tiles). */
 const TEXEL_PX = 1;
@@ -174,7 +174,8 @@ export class GroundTiles {
     this.last = v;
     const [d0, d1] = this.meta.depths, sq = this.map.square_depth;
     const tiles = (d: number) => { const s = this.squaresOf(d); return (Math.ceil(v.w / s) + 1) * (Math.ceil(v.h / s) + 1); };
-    let depth = Math.min(Math.max(sq + Math.ceil(Math.log2(Math.max((v.s * devicePixelRatio) / TEXEL_PX, 1))), d0), d1);
+    // (By the pixels the map is drawn at, map.ts `MOST_DRAWN_PX`, not the screen's: a finer tile shows nothing more.)
+    let depth = Math.min(Math.max(sq + Math.ceil(Math.log2(Math.max((v.s * Math.min(devicePixelRatio, MOST_DRAWN_PX)) / TEXEL_PX, 1))), d0), d1);
     while (depth > d0 && tiles(depth) > VIEW_TILES) depth--;
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, asked = ++this.views, wanted: { depth: number; x: number; y: number; stale: boolean; far: number }[] = [];
     this.inView.clear();
