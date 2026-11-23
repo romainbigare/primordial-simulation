@@ -11,6 +11,12 @@ const worker = plain('worker'), tiles = plain('tiles-worker'), detail = plain('d
 // The strips' files of the ground's detail, by group (textures/strips.json, written by the bake tools).
 const strips = JSON.parse(readFileSync('textures/strips.json', 'utf8'));
 // The shaders as `SHADERS` (gpu.ts) and the strips' files as `STRIPS` (detail.ts), ahead of the modules.
+// The modules share one scope, so no two may declare the same name (one would take the other's place unseen).
+const declared = new Map();
+for (const n of order) for (const [, name] of readFileSync(`dist/.js/${n}.js`, 'utf8').matchAll(/^(?:export )?(?:async )?(?:function\*?|const|let|var|class) ([\w$]+)/gm)) {
+  if (declared.has(name)) throw new Error(`${name} is declared in both ${declared.get(name)}.ts and ${n}.ts: the page's modules share one scope`);
+  declared.set(name, n);
+}
 const js = [`const SHADERS = ${readFileSync('dist/.shaders.json', 'utf8')};`, `const STRIPS = ${JSON.stringify(strips)};`, ...order.map(plain)].join('\n');
 // The page with `before` ahead of the modules' script (which reads what comes before it as it runs).
 const page = before => readFileSync('index.html', 'utf8')

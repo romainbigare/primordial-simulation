@@ -130,11 +130,11 @@ async function fetchDetail(l: Loading): Promise<void> {
  * enough to show (`DETAIL_LOAD_E`): a larger set as it comes close, a smaller one once it needs `SHRINK` times less. */
 export function detailSeen(e: number): void {
   const want = sideFor(e), have = loading?.side ?? shown?.side;
-  if (have === undefined ? e < DETAIL_LOAD_E : want > have || want * SHRINK <= have) load(want);
+  if (have === undefined ? e < DETAIL_LOAD_E : want > have || want * SHRINK <= have) loadSide(want);
 }
 
 /** Load the layers at `side` texels a side; the set drawn from stays till they are whole (`sendSoon`). */
-function load(side: number): void {
+function loadSide(side: number): void {
   stopLoading();
   const l: Loading = { number: ++loads, side, worker: null, t: null, layers: 0, filled: 0, made: [], frame: 0 };
   loading = l;
@@ -182,7 +182,7 @@ export function detailLost(): void {
   stopLoading();
   if (shown) sending?.gpu.drop(shown.t);
   shown = null;
-  if (side !== undefined) load(side);
+  if (side !== undefined) loadSide(side);
 }
 
 /** Send the next layers of load `l` that came, at the next frame; once all are, draw from them. */
