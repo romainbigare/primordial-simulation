@@ -224,6 +224,12 @@ days, two a month, each at its own time in the month), after each the sink of th
 bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: where
 the soil's liquid saturates each cell's land, by Flow's state as its month left it, `contract::wet_grounds`; the cover's,
 then the takers') and Change.
+**Edits and their settling** (`core/src/edit.rs`). Edits are made between two months (3, **Edits**). What an edit
+starts that the laws treat as instant within a month runs at once when the edits settle (`World::settle`), with no time
+on the world's clock: the flames of the strikes of edits (3c). This is honest because a month's step already treats
+such a process as one event inside the month (a flame's run lasts at most `front_life`, 4 days), and every move it
+makes goes through the store, so the books close; what needs time (sun, rain, growth, rot) does not run, and no strike
+is drawn over no time. The live page settles when a stroke of its brush ends, while the world is paused.
 **Chunks and the parallel pass** (`life::run`). The cells are cut into `Config::chunks` runs of neighbouring indices,
 the same for any number of threads. Each chunk is one task on the pool, its cells' life taken out of the world, the
 world read only; in each cell in order the cover's month and then the takers' run on the cell's **view of the store** (`store::Moves`): its
@@ -1480,7 +1486,9 @@ seeds fill it:
   `Clear` about the sample under the place, `Split`, `Plant` in the cell's newest patch (the least age), and `Strike`
   (3c); each is told as an event. `ew run` makes them at the start of a year (`--clear`, `--split`, `--plant`;
   `worldgen::schedule::Due`), the live page between two months (wasm `edit`: a clearing, a clearing planted with a
-  starting kind, a strike).
+  starting kind, a strike; wasm `brush`: the same over each cell under a round brush, `World::under`, which covers the
+  terrain's samples whose centres lie within its radius, each cell by the share of its samples covered, about its
+  sample nearest the brush's centre, each cell once a stroke).
 - **Events** (`patches::hit`, `open_event`): a patch is made for an event that hits a share of a stand at once (a
   die-off, a flame), never for one plant. An event that hits at least `EVENT_LEAST` (0.15) of a patch's own ground and
   leaves at least that share of it makes the ground it hit a new patch of age 0 (`patches::carve`), about a sample of the
@@ -1561,7 +1569,9 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   `strikes` × A × the month's share of a year of strikes that light it; their count is a Poisson draw and each lights
   a cell drawn by its covered ground, from the world's seed by the month and the region's first cell
   (`rng::Purpose::Flame`; the same draws for any number of threads). An edit's strike (`edit::Act::Strike`) lights its
-  cell in the coming month, after the drawn ones (`World::strikes`, forgotten once the month's shares are found); it is
+  cell in the coming month, after the drawn ones (`World::strikes`, forgotten once the month's shares are found), or at
+  once when the edits settle (`World::settle`, `flame::now`, 0): the same flames over a span of no time, so no strike is
+  drawn, their burn shown as the coming month's and kept in it (its tally takes it); it is
   made only where the bed of a patch of the cell carries a flame now (`flame::lights`, by the same `beds` and
   `Bed::carries`), and `flame::Unlit` says why the largest patch's does not: no land, no cover in the chemistry, nothing lying that burns, remains too sparse to join
   across the ground or too few to hold a flame's heat, snow over them, the air near the ground not read yet, ground so

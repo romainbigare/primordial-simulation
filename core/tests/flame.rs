@@ -174,7 +174,7 @@ fn a_low_plant_burnt_to_its_base_keeps_its_plants_and_store() {
     let built = |w: &World| w.life.cover(i).built(&mm, low);
     let (low0, tall0, built0, fuel0) = (plants(&w, low), plants(&w, tall), built(&w), w.life.cover(i).mol[low][FUEL]);
     let beds: Vec<Vec<_>> = (0..w.mesh.cells().n()).map(|j| flame::beds(&w, &p, j).into_iter().map(Result::ok).collect()).collect();
-    let share = flame::shares(&w, &beds, w.cfg.calendar().month as f64)[i];
+    let share = flame::shares(&w, &beds, w.cfg.calendar().month as f64).share[i];
     assert!(share > 0.0, "the cell burns");
     flame::month(&mut w);
     assert_eq!((plants(&w, low), w.life.cover(i).mol[low][FUEL]), (low0, fuel0), "the low slot lost plants or store");
@@ -230,4 +230,26 @@ fn a_flame_leaves_a_young_clearing_and_burns_the_rest() {
     assert_eq!((now[1].share, now[1].age), (was[1].share, was[1].age), "the clearing changed: {now:?}");
     assert_eq!(now[0].age, 0.0, "the burnt patch is not new: {now:?}");
     books.assert_kept(&w, 1e-9);
+}
+
+/// An edit's strike burns at once when the edits settle (`World::settle`, laws.md 0), with no time on the world's clock
+/// and no strike drawn: its flame reaches its cell at once, and the burn is shown as the coming month's; the books are
+/// kept. The month's own flames then take that burn as theirs and burn nothing again.
+#[test]
+fn a_settled_strike_burns_at_once_with_no_time() {
+    use pcore::edit::{Act, Edit};
+    let (mut w, i) = start();
+    liquid_to(&mut w, i, 0.0);
+    let [w0, n0, e0, s0] = w.map.bounds(i);
+    let (books, time) = (Books::now(&w), w.time);
+    assert_eq!(w.edit(&[Edit { place: [(w0 + e0) / 2.0, (n0 + s0) / 2.0], act: Act::Strike }]), [true]);
+    let reached = w.settle();
+    let burnt = w.counts.flame[flame::REMAINS];
+    assert!(reached.contains(&(i as u32, 0.0)) && w.time == time && w.strikes.is_empty(), "reached {reached:?}, time {} for {time}", w.time);
+    assert!(burnt > 0.0 && w.counts.flame_month[i].share > 0.0 && flame::since(&w, i) == 0.0, "burnt {burnt} kg, shown {:?}", w.counts.flame_month[i]);
+    books.assert_kept(&w, 1e-9);
+    w.cfg.phys.strikes = 0.0;
+    flame::month(&mut w);
+    assert_eq!(w.counts.flame[flame::REMAINS], burnt, "the month burnt again");
+    assert!(w.counts.flame_month[i].share > 0.0 && flame::since(&w, i) == 0.0, "the month took the burn as its own: {:?}", w.counts.flame_month[i]);
 }

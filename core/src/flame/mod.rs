@@ -13,7 +13,7 @@ mod join;
 
 pub use bed::{beds, Bed};
 pub use burn::{burn, burnings, reach, Burning, Reach};
-pub use join::shares;
+pub use join::{shares, Lit};
 
 use crate::cover::Parts;
 use crate::World;
@@ -141,17 +141,38 @@ pub fn lights(w: &World, i: usize) -> Result<(), Unlit> {
     Err(beds[largest].map_or_else(|why| why, |b| b.unlit().unwrap_or(Unlit::Damp)))
 }
 
-/// The flames' month, after the cover's (`life::month`): the bed of each patch of each land cell (`beds`), the share of
-/// each cell that burns (`shares`, the strikes of edits with the drawn ones, which it then forgets), the flames on its
-/// patches (`burnings`, serial) and the burning of them (`burn`), on the chunks of `life` only where some burns; what each
-/// cell's flames did is kept for the tape (`tally`).
+/// The flames' month, after the cover's (`life::month`): the flames of the month (`flames`), and what each cell's flames
+/// did kept for the tape (`tally`).
 pub fn month(w: &mut World) {
-    let Some(p) = Parts::of(&w.chem) else { return };
+    if flames(w, w.cfg.calendar().month as f64).is_some() {
+        tally(w, w.mesh.cells().n());
+    }
+}
+
+/// The flames of the strikes of edits alone, burnt at once with no time on the world's clock (`World::settle`, laws.md
+/// 0 and 3c): over no time no strike is drawn. They burn in the coming month: what they did is shown as its own now
+/// (`show`) and kept in it (`Counters::flamed`, which its tally takes). Returns each cell their flames reached and
+/// when, s after its strike.
+pub fn now(w: &mut World) -> Vec<(u32, f64)> {
+    let reached = flames(w, 0.0).unwrap_or_default();
+    let flamed = w.counts.flamed.clone();
+    let (n, (months, of_year)) = (w.mesh.cells().n(), of_year(w));
+    sized(&mut w.counts, n, months);
+    show(&mut w.counts, &flamed, (months, of_year));
+    reached
+}
+
+/// The flames over `span` s: the bed of each patch of each land cell (`beds`), the share of each cell that burns
+/// (`shares`, the strikes of edits with those drawn over the span, which it then forgets), the flames on its patches
+/// (`burnings`, serial) and the burning of them (`burn`), on the chunks of `life` only where some burns. Returns each
+/// cell the flames reached and when, s after its strike (`Lit::at`); none where the chemistry has no cover.
+fn flames(w: &mut World, span: f64) -> Option<Vec<(u32, f64)>> {
+    let p = Parts::of(&w.chem)?;
     let n = w.mesh.cells().n();
     let beds: Vec<Vec<Option<Bed>>> = crate::par::map_n(n, n * BED_WORK, |i| if crate::contract::land(w, i) > 0.0 { beds(w, &p, i).into_iter().map(Result::ok).collect() } else { Vec::new() });
-    let share = shares(w, &beds, w.cfg.calendar().month as f64);
+    let lit = shares(w, &beds, span);
     w.strikes.clear();
-    let on: Vec<Vec<Burning>> = (0..n).map(|i| if share[i] > 0.0 { burnings(w, i, &beds[i]) } else { Vec::new() }).collect();
+    let on: Vec<Vec<Burning>> = (0..n).map(|i| if lit.share[i] > 0.0 { burnings(w, i, &beds[i]) } else { Vec::new() }).collect();
     let load = on.iter().filter(|f| !f.is_empty()).count();
     if load > 0 {
         crate::life::run(w, load, |w, d| {
@@ -160,25 +181,43 @@ pub fn month(w: &mut World) {
             }
         });
     }
-    tally(w, n);
+    Some(lit.at.iter().enumerate().filter(|p| p.1.is_finite()).map(|(i, &t)| (i as u32, t)).collect())
+}
+
+/// The months of a year and this month's place in it.
+fn of_year(w: &World) -> (usize, usize) {
+    let months = w.cfg.months_per_year as usize;
+    (months, (w.month() % months as u64) as usize)
+}
+
+/// The tape's records of the flames sized for `n` cells and `months` a year: a cell new to them never burnt.
+fn sized(c: &mut crate::Counters, n: usize, months: usize) {
+    c.flame_month.resize(n, Flamed::default());
+    c.burnt_months.resize(n * months, 0.0);
+    c.burnt_age.resize(n, AGE_MOST);
 }
 
 /// What each cell's flames did in the month (`Counters::flamed`) becomes its last month's (`Counters::flame_month`,
 /// one a cell of `n`) and the share it burnt that month of the year's (`burnt_months`); its months since it last burnt
 /// (`burnt_age`) grow by the month, at most `AGE_MOST`, and start again from none where it burns. For the tape.
 fn tally(w: &mut World, n: usize) {
-    let months = w.cfg.months_per_year as usize;
-    let of_year = (w.month() % months as u64) as usize;
+    let (months, of_year) = of_year(w);
     let c = &mut w.counts;
     c.flame_month.clear();
-    c.flame_month.resize(n, Flamed::default());
-    c.burnt_months.resize(n * months, 0.0);
-    c.burnt_age.resize(n, AGE_MOST);
+    sized(c, n, months);
     for i in 0..n {
         c.burnt_months[i * months + of_year] = 0.0;
         c.burnt_age[i] = (c.burnt_age[i] + 1.0).min(AGE_MOST);
     }
-    for (i, f) in std::mem::take(&mut c.flamed) {
+    let flamed = std::mem::take(&mut c.flamed);
+    show(c, &flamed, (months, of_year));
+}
+
+/// What the flames `flamed` did on each cell shown as this month's: its last month's (`Counters::flame_month`), the
+/// share it burnt this month of the year's (`burnt_months`, of `months` a cell, this month `of_year`), and none since
+/// it last burnt (`burnt_age`).
+fn show(c: &mut crate::Counters, flamed: &[(u32, Flamed)], (months, of_year): (usize, usize)) {
+    for &(i, f) in flamed {
         let i = i as usize;
         (c.flame_month[i], c.burnt_months[i * months + of_year]) = (f, f.share);
         c.burnt_age[i] = 0.0;
