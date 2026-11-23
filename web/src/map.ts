@@ -51,9 +51,10 @@ export interface GpuLayer {
 export const MAP_TARGET: Format = 'rgba8unorm';
 
 /** The sharp picture being drawn once the view rests: its tiles to draw (x, y, w, h device px), the copies' places
- * (css px), the device pixels a css pixel, the view it is of (`viewKey`), the texture it is drawn into, and whether it
- * takes the place of a sharp picture of the same view (`MapView.sharpenSoon`). */
-interface Sharpening { tiles: number[][]; xs: number[]; d: number; key: string; into: Texture; over: boolean }
+ * (css px), the device pixels a css pixel, the view it is of (`viewKey`), the texture it is drawn into, whether it
+ * takes the place of a sharp picture of the same view (`MapView.sharpenSoon`), and the time its tiles drawn so far
+ * took the GPU, ms. */
+interface Sharpening { tiles: number[][]; xs: number[]; d: number; key: string; into: Texture; over: boolean; ms: number }
 /** How long the world's next frame waits at most for the sharp picture of the last, ms (`shown`), and how often it
  * looks whether that picture is whole, ms. */
 const SHOWN_MOST_MS = 1500, SHOWN_POLL_MS = 30;
@@ -108,6 +109,8 @@ export class MapView {
   private sharpOf = '';
   /** The texture the next sharp picture of the same view is drawn into, out of sight, till it is whole. */
   private sharpNext: Texture | null = null;
+  /** Whether the frame last drawn went without a program not made yet (`drawWhenMade`). */
+  private wentWithout = false;
   /** Whether a frame waits for the card to finish the last (`draw`). */
   private waitingCard = false;
   /** The timer that looks whether the programs the last frame went without are made (`drawWhenMade`). */
@@ -137,7 +140,7 @@ export class MapView {
     const restored = () => { this.timing = false; this.sharpOf = ''; this.sharpening = null; this.resting = false; clearTimeout(this.sharpTimer); this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
     this.ready = openGpu(fresh, restored).then(g => {
       this.gpu = g;
-      if (g) sendDetail(g, () => this.invalidate());
+      if (g) sendDetail(g, () => { this.sharpOf = ''; this.invalidate(); });
       this.invalidate();
       return g;
     });
@@ -273,7 +276,9 @@ export class MapView {
       if (this.land) this.land.flowAt = null;
       // A view whose sharp picture is whole (the world stepped, a tile came: the camera did not move) is drawn sharp
       // again over it, so a playing world's map stays sharp on a slow card; else the frame is drawn whole first.
-      const again = this.scale < 1 && this.sharpOf === viewed && !this.asked.length;
+      // (A frame that draws with programs the last went without may cost far more than the last one timed: it is
+      // drawn whole at fewer pixels first, and timed, as a frame after the ground's detail came is, `sendDetail`.)
+      const again = this.scale < 1 && this.sharpOf === viewed && !this.asked.length && !this.wentWithout;
       timed('draw', () => (again ? this.sharpenSoon(xs, this.drawnDpr(), true) : this.drawGpu(this.gpu!, xs, this.drawnDpr())));
     }
     this.overlay?.(ctx, ox, oy, s);
@@ -333,6 +338,7 @@ export class MapView {
    * `MADE_POLL_MS`); till then it stays due. So no frame waits for a program to be made: it draws without it. */
   private drawWhenMade(gpu: Gpu, waiting: Made[]): void {
     clearTimeout(this.madeTimer);
+    this.wentWithout = waiting.length > 0;
     if (!waiting.length) return;
     this.gpuDue = true;
     const look = () => {
@@ -416,7 +422,7 @@ export class MapView {
     this.layer?.prepare(gpu, ox, oy, s, d, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
     this.fire?.prepare(gpu, waiting);
     this.drawWhenMade(gpu, waiting);
-    const job = { tiles, xs, d, key: this.viewKey(xs), into: over ? this.sharpNext! : this.sharp, over };
+    const job = { tiles, xs, d, key: this.viewKey(xs), into: over ? this.sharpNext! : this.sharp, over, ms: 0 };
     this.sharpening = job;
     this.sharpen(job);
   }
@@ -446,7 +452,13 @@ export class MapView {
     gpu.submit();
     // A frame that came due meanwhile is drawn now, over this picture.
     if (!job.tiles.length && this.gpuDue) this.redraw();
-    if (job.tiles.length) gpu.done().then(() => nextFrame(() => this.sharpen(job)));
+    // The time the whole picture took the GPU is that of a frame at the screen's pixels: the next one's tiles are
+    // sized by it (`sharpenSoon`), as the frames drawn whole are timed (`time`).
+    const t0 = performance.now(), last = !job.tiles.length;
+    gpu.done().then(() => {
+      job.ms += performance.now() - t0;
+      if (last) this.fullMs = job.ms; else nextFrame(() => this.sharpen(job));
+    });
   }
 
   /** Draw into pass `p` (`target`, null: the canvas; of `size` px, `k` px a css px, on a screen of `d` px a css px) the
