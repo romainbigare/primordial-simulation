@@ -44,7 +44,8 @@ fn burn_up(chem: &Chemistry, b: &mut Books, (sub, m): (&[usize], &mut [f64]), k:
 /// Slot `x` of cover `c`, its crown from `base` to `top` m (`contract::crown`), on the share `f` of its cell that a
 /// flame of reach `r` burns. Its plants no taller than the scorch height die above the ground (`Cover::die_under`):
 /// what of them stood above their base burns in the flame, those that die whole leave their soft tissue and the fuel
-/// in them by their share of the built cover to the ground and their walls standing dead (`Cover::snag`). Of a slot
+/// in them by their share of the built cover to the ground and their walls standing dead on its patch (`Patch::snag`,
+/// as tall as they stood). Of a slot
 /// taller than `surface_m` the soft tissue of its crown that lives and stands in the flame burns, and what stands
 /// between the flame and the scorch height dies to the ground. What burns and dies is counted in `flows`.
 fn crown_burns(w: &World, p: &Parts, (c, x, (base, top)): (&mut Cover, usize, (f64, f64)), (f, r): (f64, &Reach), (b, flows): (&mut Books, &mut [f64; super::FLOWS.len()])) {
@@ -52,7 +53,7 @@ fn crown_burns(w: &World, p: &Parts, (c, x, (base, top)): (&mut Cover, usize, (f
     let rho = chem.subs[p.sub[WALL]].density[0];
     let [lit, under] = [r.flame, r.scorch].map(|h| f * crate::contract::reached((0.0, h), 0.0, (base, top)));
     let (built, soft) = (c.built(&mm, x), c.mol[x]);
-    let ([tops, whole], died) = c.die_under(ph, (&mm, rho), x, (f, r.scorch));
+    let ([tops, whole], died, tall) = c.die_under(ph, (&mm, rho), x, (f, r.scorch));
     // What stood above their base burns: its soft tissue as the slot holds it (`cover::soft_in`), and its walls.
     let mut above = soft_in(&mm, &c.mol[x], tops[0]);
     above[WALL] = (tops[1] / mm[WALL]).min(c.mol[x][WALL]);
@@ -63,7 +64,10 @@ fn crown_burns(w: &World, p: &Parts, (c, x, (base, top)): (&mut Cover, usize, (f
     let mut dead = soft_in(&mm, &c.mol[x], whole[0]);
     dead[FUEL] = c.mol[x][FUEL].max(0.0) * (whole[0] + whole[1]) / built.max(f64::MIN_POSITIVE);
     let standing = (whole[1] / mm[WALL]).min(c.mol[x][WALL]);
-    (c.mol[x][WALL], c.snag[WALL]) = (c.mol[x][WALL] - standing, c.snag[WALL] + standing);
+    c.mol[x][WALL] -= standing;
+    let mut walls = [0.0; NP];
+    walls[WALL] = standing;
+    c.patches[c.patch[x] as usize].stand_dead(&walls, tall, 0.0);
     flows[KILLED] += dead.iter().zip(&mm).map(|(m, kg)| m * kg).sum::<f64>() + standing * mm[WALL];
     flows[KILLED_WALLS] += standing * mm[WALL];
     flows[PLANTS] += died;

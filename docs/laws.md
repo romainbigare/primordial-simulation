@@ -1591,8 +1591,11 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   the scorch height dies above the ground on f (`Cover::die_under`): a group of plants no taller than `surface_m` keeps
   its plants, its store and its part below the ground (`base_share` of its built cover) and sprouts again from it, as
   burnt herbs and shrubs do, what stood above its base burning by its burning reactions; a group of taller plants loses the share f of its plants and of its built cover, their fuel by their share of
-  the slot's built cover to the ground and their walls standing dead (`Cover::snag`, part of the cover's node), which
-  fall to the ground with a mean life of `snag_life` (`grow::fall`, booked as died). Of a slot taller than `surface_m`
+  the slot's built cover to the ground and their walls standing dead on the slot's patch (`Patch::snag`, part of the
+  cover's node, with the height they stood to and the years since they died, `Patch::snag_h`, `snag_age`, their means
+  by amount), which fall to the ground with a
+  mean life of `snag_life` (`grow::fall`, booked as died). The dead walls stand on their patch's ground: a new patch takes
+  those of the ground it is made of, and two patches that join add theirs (`patches::open`, `join`). Of a slot taller than `surface_m`
   the soft tissue of its crown (body matter with what it holds, `life::SOFT`; `contract::crown`, spread evenly over it) of the plants that live burns where it stands
   in the flame, and dies to the ground between the flame and the scorch height: a young tree must outgrow the flame between fires
   (Bond and Midgley 2001). Seeds lying survive. Gases go to the cell's

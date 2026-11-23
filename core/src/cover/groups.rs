@@ -209,12 +209,12 @@ impl Cover {
     /// `surface_m` keeps its part below the ground, the share `base_share` of its built cover, and its plants: they grow
     /// again from it and their store, as herbs and shrubs burnt to the ground sprout from their base (Bond and Midgley
     /// 2001). A group of taller plants loses that share of its plants and of its built cover. Returns what they lost, kg:
-    /// of the plants that sprout and of those that died, their body matter and their walls; and how many died. The caller
-    /// takes those amounts from the slot.
-    pub fn die_under(&mut self, ph: &Physics, (mm, rho): (&[f64; NP], f64), x: usize, (f, height): (f64, f64)) -> ([[f64; 2]; 2], f64) {
+    /// of the plants that sprout and of those that died, their body matter and their walls; how many died; and the
+    /// height of those that died, m (the mean by their walls; 0: none). The caller takes those amounts from the slot.
+    pub fn die_under(&mut self, ph: &Physics, (mm, rho): (&[f64; NP], f64), x: usize, (f, height): (f64, f64)) -> ([[f64; 2]; 2], f64, f64) {
         let s = self.sizes(ph, mm, x);
         let (mut g, held) = self.groups(mm, x);
-        let (mut kg, mut died) = ([[0.0; 2]; 2], 0.0);
+        let (mut kg, mut died, mut tall) = ([[0.0; 2]; 2], 0.0, 0.0);
         for k in (0..held).filter(|&k| s.height(ph, rho, k) <= height) {
             let sprouts = s.height(ph, rho, k) <= ph.surface_m;
             if !sprouts && k + 1 == held {
@@ -223,13 +223,16 @@ impl Cover {
             let dead = g[k].kg * f * if sprouts { 1.0 - ph.base_share } else { 1.0 };
             let lost = &mut kg[(!sprouts) as usize];
             (lost[0], lost[1]) = (lost[0] + dead * (1.0 - s.walls[k]), lost[1] + dead * s.walls[k]);
+            if !sprouts {
+                tall += dead * s.walls[k] * s.height(ph, rho, k);
+            }
             let gone = if sprouts { 0.0 } else { g[k].n * f };
             (g[k], died) = (Group { n: g[k].n - gone, kg: g[k].kg - dead }, died + gone);
         }
         if kg.iter().flatten().any(|&m| m > 0.0) {
             self.set_groups(x, &mut g[..held]);
         }
-        (kg, died)
+        (kg, died, if kg[1][1] > 0.0 { tall / kg[1][1] } else { 0.0 })
     }
     /// Slot `x`, whose built cover went from `made` to `now` kg in its growth, shares what it built over its groups by
     /// `growth` (`Cover::growth`; by their shares where that is none, a slot with no leaves); what it lost goes from each

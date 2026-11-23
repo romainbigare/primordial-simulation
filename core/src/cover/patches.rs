@@ -61,14 +61,38 @@ pub(crate) fn point(w: &World, i: usize, k: usize, purpose: Purpose) -> u32 {
     mine.get(r.below(mine.len())).map_or_else(|| w.centre_sample(i), |&p| p) as u32
 }
 
-/// A patch of a cell's cover: its share of the cell's ground (0: not in use), its age, years since it was made, and the
+/// A patch of a cell's cover: its share of the cell's ground (0: not in use), its age, years since it was made, the
 /// sample of its cell where it was made, row by row from the cell's north-west corner (`inside::PatchGround`; the first
-/// patch, the rest of the cell, has none: 0).
+/// patch, the rest of the cell, has none: 0), the walls of its plants flames killed whole that still stand dead on its
+/// ground until they fall (`flame::burn`, `grow::fall`), mol of each part, the height they stood to, m, and the years
+/// since they died (each the mean of theirs by amount).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Patch {
     pub share: f64,
     pub age: f32,
     pub at: u32,
+    pub snag: [f64; NP],
+    pub snag_h: f32,
+    pub snag_age: f32,
+}
+
+impl Patch {
+    /// The amounts `mol` of walls of plants `h` m tall, dead for `age` years, now stand dead on its ground (`snag`).
+    pub(crate) fn stand_dead(&mut self, mol: &[f64; NP], h: f64, age: f64) {
+        let (was, add) = (self.snag.iter().sum::<f64>(), mol.iter().sum::<f64>());
+        if add <= 0.0 {
+            return;
+        }
+        let mean = |a: f32, b: f64| ((a as f64 * was + b * add) / (was + add)) as f32;
+        (self.snag_h, self.snag_age) = (mean(self.snag_h, h), mean(self.snag_age, age));
+        self.snag.iter_mut().zip(mol).for_each(|(a, &m)| *a += m);
+    }
+    /// The share `f` of its dead walls standing, taken from it (they stand on that share of its ground).
+    fn take_dead(&mut self, f: f64) -> [f64; NP] {
+        let out = self.snag.map(|m| m * f);
+        self.snag.iter_mut().zip(&out).for_each(|(a, m)| *a -= m);
+        out
+    }
 }
 
 /// One patch that holds all of its cell.
@@ -166,12 +190,13 @@ fn alike(a: &(f64, f64, Vec<u32>), b: &(f64, f64, Vec<u32>)) -> bool {
     a.2 == b.2 && near(a.0, b.0, ALIKE_HEIGHT) && near(a.1, b.1, ALIKE_COVER)
 }
 
-/// Patch `from` of cover `c` joins patch `into`: their shares add, its age the mean of theirs by share, its slots
-/// stand in `into`. The patches after `from` move down a place.
+/// Patch `from` of cover `c` joins patch `into`: their shares add, its age the mean of theirs by share, its dead walls
+/// standing join `into`'s, its slots stand in `into`. The patches after `from` move down a place.
 fn join(c: &mut Cover, into: usize, from: usize) {
     let (a, b) = (c.patches[into], c.patches[from]);
     let share = a.share + b.share;
-    c.patches[into] = Patch { share, age: ((a.age as f64 * a.share + b.age as f64 * b.share) / share) as f32, at: a.at };
+    c.patches[into] = Patch { share, age: ((a.age as f64 * a.share + b.age as f64 * b.share) / share) as f32, ..a };
+    c.patches[into].stand_dead(&b.snag, b.snag_h as f64, b.snag_age as f64);
     c.patches.copy_within(from + 1.., from);
     c.patches[PATCHES - 1] = Patch::default();
     for x in 0..SLOTS {
@@ -186,7 +211,7 @@ fn join(c: &mut Cover, into: usize, from: usize) {
 
 /// A new patch of the share `s` of the cell of cover `c`, age 0, made at its sample `point` (`Patch::at`), its ground
 /// given by patch `from` (a gap, `gaps`), or where none by each patch in use, the share `s` of its own (the laws know no
-/// place of a patch in its cell). Where `PATCHES` are in use the new one joins the one most alike to bare ground: the
+/// place of a patch in its cell), with the dead walls standing on that ground. Where `PATCHES` are in use the new one joins the one most alike to bare ground: the
 /// one whose tallest plants stand lowest, which keeps its sample. Returns the patch it is; none where that is `from`
 /// (nothing changes then).
 pub(super) fn open(c: &mut Cover, s: f64, point: u32, from: Option<usize>, at: (&Physics, &[f64; NP], f64)) -> Option<usize> {
@@ -195,21 +220,40 @@ pub(super) fn open(c: &mut Cover, s: f64, point: u32, from: Option<usize>, at: (
     if low.is_some() && low == from {
         return None;
     }
+    let mut dead = [0.0; NP];
+    let mut gives = |p: &mut Patch, f: f64| p.take_dead(f).iter().zip(&mut dead).for_each(|(m, d)| *d += m);
+    // (The height and the age of what moves: of the patch that gives it, or the mean of all by amount.)
+    let (mut h, mut age, mut of) = (0.0, 0.0, 0.0);
+    let mut weigh = |p: &Patch, f: f64| {
+        let m = f * p.snag.iter().sum::<f64>();
+        (h, age, of) = (h + m * p.snag_h as f64, age + m * p.snag_age as f64, of + m);
+    };
     match from {
-        Some(k) => c.patches[k].share -= s,
-        None => c.patches[..n].iter_mut().for_each(|p| p.share *= 1.0 - s),
+        Some(k) => {
+            let f = s / c.patches[k].share;
+            weigh(&c.patches[k], f);
+            gives(&mut c.patches[k], f);
+            c.patches[k].share -= s;
+        }
+        None => c.patches[..n].iter_mut().for_each(|p| {
+            weigh(p, s);
+            gives(p, s);
+            p.share *= 1.0 - s;
+        }),
     }
+    let (h, age) = if of > 0.0 { (h / of, age / of) } else { (0.0, 0.0) };
     let k = match low {
         None => {
-            c.patches[n] = Patch { share: s, age: 0.0, at: point };
+            c.patches[n] = Patch { share: s, age: 0.0, at: point, ..Patch::default() };
             n
         }
         Some(low) => {
             let p = c.patches[low];
-            c.patches[low] = Patch { share: p.share + s, age: (p.age as f64 * p.share / (p.share + s)) as f32, at: p.at };
+            c.patches[low] = Patch { share: p.share + s, age: (p.age as f64 * p.share / (p.share + s)) as f32, ..p };
             low
         }
     };
+    c.patches[k].stand_dead(&dead, h, age);
     let all: f64 = c.patches.iter().map(|p| p.share).sum();
     c.patches.iter_mut().for_each(|p| p.share /= all);
     Some(k)
@@ -269,13 +313,16 @@ pub(super) fn fold(c: &mut Cover, (ph, mm): (&Physics, &[f64; NP]), variety: usi
     }
 }
 
-/// A year of the patches of every cell: each ages a year, and while two are alike (`alike`) the younger joins the
-/// older (`join`), its slots meeting slots of their kind joining them (`stand::merge_alike`), and a patch of more than
+/// A year of the patches of every cell: each ages a year, and so do the dead walls standing on every patch; while two
+/// are alike (`alike`) the younger joins the older (`join`), its slots meeting slots of their kind joining them (`stand::merge_alike`), and a patch of more than
 /// `variety` slots folding (`fold`); then the canopy that fell over the year opens gaps (`gaps::year`).
 pub(super) fn year(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
     let (ph, variety) = (&w.cfg.phys, w.cfg.variety);
+    for p in w.life.cells.iter_mut().flat_map(|x| x.cover.patches.iter_mut()) {
+        p.snag_age += 1.0;
+    }
     for c in w.life.cells.iter_mut().map(|x| &mut x.cover).filter(|c| c.patch_count() > 1) {
         let n = c.patch_count();
         c.patches[..n].iter_mut().for_each(|p| p.age += 1.0);

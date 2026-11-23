@@ -181,7 +181,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
     remember(c, a.soak.moist, w.cfg.months_per_year as f32);
     empty(c, (p, &mm, &e, n), &mut b);
     fall(&mut c.cured, (p, &e), (ph.cured_life, dt), (&mut b, SHED));
-    fall(&mut c.snag, (p, &e), (ph.snag_life, dt), (&mut b, DIED));
+    c.patches.iter_mut().for_each(|k| fall(&mut k.snag, (p, &e), (ph.snag_life, dt), (&mut b, DIED)));
     counts.cover_budget.iter_mut().zip(b.budget).for_each(|(a, f)| *a += f);
     (b, caught)
 }
@@ -211,7 +211,7 @@ fn feet(w: &World, c: &mut Cover, (mm, rho, n): (&[f64; NP], f64, usize), i: usi
     out
 }
 
-/// What stands dead in a cover, `standing` (its cured leaves, `Cover::cured`, or its dead walls, `Cover::snag`), falls
+/// What stands dead in a cover, `standing` (its cured leaves, `Cover::cured`, or a patch's dead walls, `Patch::snag`), falls
 /// to its remains over `dt` s, the share 1 − e^(−dt / `life`) of it, booked as the budget's flow `flow` (its parts `p`
 /// hold `e` J a mol).
 fn fall(standing: &mut [f64; NP], (p, e): (&Parts, &[f64; NP]), (life, dt): (f64, f64), (b, flow): (&mut Books, usize)) {

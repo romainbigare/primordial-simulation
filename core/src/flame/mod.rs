@@ -190,9 +190,25 @@ pub fn cured(w: &World, i: usize) -> f64 {
     per_land(w, i, &w.life.cover(i).cured)
 }
 
-/// The dead walls flames left standing on cell `i` (`Cover::snag`), kg a m² of its land (none where it holds no land).
+/// The dead walls flames left standing on cell `i` (`Patch::snag`, of all its patches), kg a m² of its land (none where
+/// it holds no land).
 pub fn snag(w: &World, i: usize) -> f64 {
-    per_land(w, i, &w.life.cover(i).snag)
+    let mut all = [0.0; crate::cover::NP];
+    w.life.cover(i).patches.iter().for_each(|p| all.iter_mut().zip(&p.snag).for_each(|(a, m)| *a += m));
+    per_land(w, i, &all)
+}
+
+/// Of each patch of cell `i`'s cover, the dead walls flames left standing on it (`Patch::snag`), kg a m² of its own
+/// land, and the height they stood to, m (0 and 0 for a patch not in use, or where the cell holds no land).
+pub fn snag_of_patches(w: &World, i: usize) -> [(f64, f64); crate::cover::PATCHES] {
+    let c = w.life.cover(i);
+    std::array::from_fn(|k| {
+        let p = &c.patches[k];
+        if p.share <= 0.0 {
+            return (0.0, 0.0);
+        }
+        (per_land(w, i, &p.snag) / p.share, p.snag_h as f64)
+    })
 }
 
 /// The mass of the amounts `mol` of the cover's parts on cell `i`, kg a m² of its land (none where it holds no land).

@@ -200,9 +200,6 @@ pub struct Cover {
     /// died, that still stand, cured, until they fall to the ground (`season::shed_to`, `upkeep`, `grow::fall`): mol of
     /// each part
     pub cured: [f64; NP],
-    /// The walls of its plants flames killed whole that still stand, dead, until they fall to the ground
-    /// (`flame::burn`, `grow::fall`): mol of each part
-    pub snag: [f64; NP],
     /// Seeds made in its last step, landed after every cell had its step (`land`); not saved
     #[serde(skip)]
     pub(crate) seeds: Vec<Seed>,
@@ -217,7 +214,7 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], snag: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], fell: [0.0; SLOTS], patches: patches::whole() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], fell: [0.0; SLOTS], patches: patches::whole() }
     }
 }
 
@@ -231,10 +228,10 @@ impl Cover {
     pub fn any(&self) -> bool {
         self.root.iter().chain(&self.lying.root).any(|&r| r != NO_ROOT)
     }
-    /// The amounts of each of its slots, then of each lot of seeds lying, then of its cured leaves and its dead walls
-    /// standing (mol of each part).
+    /// The amounts of each of its slots, then of each lot of seeds lying, then of its cured leaves and of the dead walls
+    /// standing on each patch (mol of each part).
     pub fn all_mol(&self) -> impl Iterator<Item = &[f64; NP]> + '_ {
-        self.mol.iter().chain(&self.lying.mol).chain([&self.cured, &self.snag])
+        self.mol.iter().chain(&self.lying.mol).chain([&self.cured]).chain(self.patches.iter().map(|p| &p.snag))
     }
     /// Its slots that hold cover.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
