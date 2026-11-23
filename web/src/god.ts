@@ -51,8 +51,8 @@ const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
 /** The least time between two paints of a stroke, ms, and the least move of the brush's centre between them, a share
  * of its radius: cells are edited once a stroke, so a paint where the brush has not moved adds nothing. */
 const PAINT_MS = 90, PAINT_MOVE = 0.25;
-/** The ink of the brush where the tool cannot act. */
-const NO_INK = 'rgba(120,120,120,.95)';
+/** The ink of the brush where the tool cannot act: a dull red. */
+const NO_INK = 'rgba(196,76,60,.95)';
 /** The widest line of the box that says beside the cursor why a tool cannot act there, css px. */
 const LABEL_PX = 220;
 /** How long the toast of a stroke shows, ms. */

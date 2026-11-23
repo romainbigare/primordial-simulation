@@ -22,6 +22,9 @@ const ASH_HIDES_KG = 0.25;
 // of a kg/m² of standing dead leaf, from memory); the Earth view tints the low plants' cover towards straw by that share
 // (`STRAW`, the pale yellow of dry grass in the style).
 const CURED_HIDES_KG = 0.15; const STRAW = vec3f(0.62, 0.50, 0.22);
+// The Earth view darkens the plants standing on a fresh scar towards the char by this much (scorched leaves and
+// stems, black with soot; they fade with the char as the months pass).
+const SCORCHED_COVER = 0.75;
 // The char's photograph (fire.jpg's second layer, burnt ground: char, ash, needles and stalks left) is this many metres
 // across; up close it gives the char its own colours about the char's (its colour over its mean, squared: the photograph
 // is of a weathered burn, a fresh one's grey ash and pale stalks stand out of blacker char). A fire leaves `UNBURNT` of
@@ -73,6 +76,8 @@ fn scarred(p: Spot) -> Spot {
   let scar = under_share(rank, f.burnt);
   let age = scar_age(p.at, rank.x);
   q.scar = vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-f.ash / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
+  // The Earth view draws the plants standing on a fresh scar scorched: as dark as the char under them.
+  if (styled()) { q.cover = vec4f(mix(q.cover.rgb, CHAR * q.cover.a, SCORCHED_COVER * scar * q.scar.y), q.cover.a); }
   return q;
 }
 
