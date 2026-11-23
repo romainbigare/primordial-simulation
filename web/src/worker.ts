@@ -3,7 +3,7 @@
 // a separate script, built into the page as text (build.mjs), and started from a Blob. With each frame it posts the
 // cells' table (tape/src/table.rs), from which the page draws the state of the ground, the samples' discharge and load when
 // they changed enough to show (wasm/src/lib.rs `discharge`), where load came into a body of liquid (`plumes`), and the
-// relief once the world built its samples anew (`relief`); it makes no pictures. The page answers each frame once it has
+// relief once the world built its samples anew (`relief`, with its version `reliefVersion`); it makes no pictures. The page answers each frame once it has
 // drawn it ('shown'). While the world plays, the next frame waits for that answer and the world steps on at the pace
 // asked: a page that draws slowly shows fewer frames (each the world's latest state), and never holds the world. A
 // pause stops the world at once, and its frame shows the date it stopped at.
@@ -21,15 +21,17 @@ interface Core {
   table(): number;
   discharge(): number;
   plumes(): number;
-  builds(): number;
+  ground_version(): number;
   relief(): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
   probe(x: number, y: number): number;
   kinds(): number;
-  edit(act: number, x: number, y: number, share: number, row: number): number;
-  brush(tool: number, x: number, y: number, radius: number, row: number): number;
+  brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): number;
   settle(): number;
+  undo(): number;
+  ground_shown(version: number): void;
+  preview(): number;
   out_len(): number;
 }
 type Command =
@@ -40,9 +42,10 @@ type Command =
   | { cmd: 'rate'; rate: number }
   | { cmd: 'things'; at: [number, number, number, number] | null }
   | { cmd: 'probe'; at: [number, number] }
-  | { cmd: 'edit'; act: number; at: [number, number]; share: number; row: number }
-  | { cmd: 'brush'; tool: number; at: [number, number]; radius: number; row: number }
+  | { cmd: 'brush'; tool: number; at: [number, number]; radius: number; amount?: number; row: number }
   | { cmd: 'settle' }
+  | { cmd: 'undo' }
+  | { cmd: 'groundShown'; version: number }
   | { cmd: 'shown'; frames: number };
 
 /** Longest time a tick steps before it lets messages in, ms. */
@@ -70,7 +73,7 @@ let thingsAt: [number, number, number, number] | null = null;
 /** The months stepped since `since` (ms) and the time stepping them took, ms, and of the last whole second: the pace,
  * months per second, the time a month took, ms, and the share of the time spent stepping. */
 let stepped = 0, since = 0, pace = 0, steppingMs = 0, monthMs = 0, busy = 0;
-/** The build of the samples (`builds`) whose relief the page has: it is sent with the first frame after the next. */
+/** The version of the samples (`ground_version`) whose relief the page has: a new one's is sent with the next frame. */
 let sentBuilds = 0;
 /** When the last frame was posted (ms), whether months were stepped since, and how many frames posted the page has not
  * yet drawn. */
@@ -90,6 +93,14 @@ function handIn(data: ArrayBuffer, use: () => number): string {
   return new TextDecoder().decode(bytes(at, c.out_len()));
 }
 
+/** What edits moved the ground since the ground the page shows (wasm/src/lib.rs `preview`): the window of the
+ * terrain's samples (west column, north row, width, height) and how far each of its samples moved, m, row by row. */
+function preview(): { window: [number, number, number, number]; dh: Float32Array } {
+  const c = core!, raw = bytes(c.preview(), c.out_len());
+  const head = new Uint32Array(raw.buffer, 0, 4);
+  return { window: [head[0], head[1], head[2], head[3]], dh: new Float32Array(raw.buffer.slice(16)) };
+}
+
 /** The text the core last returned at `at`. */
 function text(at: number): string {
   return new TextDecoder().decode(bytes(at, core!.out_len()));
@@ -107,9 +118,9 @@ function postFrame(kind: 'world' | 'frame', edited = false): void {
   const plumes = bytes(c.plumes(), c.out_len());
   // A new world's ground is the seed's, a saved one's as last built: the relief goes to the ground once the world builds
   // its samples anew.
-  if (kind === 'world') sentBuilds = c.builds();
-  const relief = c.builds() !== sentBuilds ? bytes(c.relief(), c.out_len()) : null;
-  sentBuilds = c.builds();
+  if (kind === 'world') sentBuilds = c.ground_version();
+  const relief = c.ground_version() !== sentBuilds ? bytes(c.relief(), c.out_len()) : null;
+  sentBuilds = c.ground_version();
   const things = thingsAt ? bytes(c.things(...thingsAt), c.out_len()) : null;
   const now = performance.now();
   if (now - since >= PACE_MS) {
@@ -118,7 +129,7 @@ function postFrame(kind: 'world' | 'frame', edited = false): void {
   }
   const stats = { cells: c.cells(), pace, monthMs, busy, memory: c.memory.buffer.byteLength };
   const moved = [frame.buffer, table.buffer, plumes.buffer, ...(things ? [things.buffer] : []), ...(discharge ? [discharge.buffer] : []), ...(relief ? [relief.buffer] : [])];
-  host.postMessage({ kind, meta: head, kinds, edited, frame, table, discharge, plumes, relief, year: c.year(), day: c.day(), stats, things }, moved);
+  host.postMessage({ kind, meta: head, kinds, edited, frame, table, discharge, plumes, relief, reliefVersion: sentBuilds, year: c.year(), day: c.day(), stats, things }, moved);
   posted = now; owed = false; unshown++;
 }
 
@@ -173,21 +184,32 @@ host.onmessage = async e => {
     else if (m.cmd === 'rate') rate = m.rate;
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
-    else if (m.cmd === 'edit' && core) {
-      // Between two months: a tick never runs while a message is handled.
-      host.postMessage({ kind: 'edited', text: text(core.edit(m.act, m.at[0], m.at[1], m.share, m.row)) }, []);
-      postFrame('frame', true);
-    }
     else if (m.cmd === 'brush' && core) {
-      // The brush between two months (wasm/src/lib.rs `brush`): a frame of the same date where it edited a cell.
-      const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.row));
-      host.postMessage({ kind: 'brushed', text: answer }, []);
-      if ((JSON.parse(answer) as { changed?: boolean }).changed) postFrame('frame', true);
+      // The brush between two months (wasm/src/lib.rs `brush`). Tool 0 moves the ground: the page draws it from the
+      // preview until the stroke settles. The others: a frame of the same date where they edited a cell.
+      const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
+      if (m.tool === 0) host.postMessage({ kind: 'brushed', text: answer, preview: preview() }, []);
+      else {
+        host.postMessage({ kind: 'brushed', text: answer }, []);
+        if ((JSON.parse(answer) as { changed?: boolean }).changed) postFrame('frame', true);
+      }
     }
     else if (m.cmd === 'settle' && core) {
-      // The stroke ends; what its edits start that takes no time runs at once (`settle`), and its frame shows it.
+      // The stroke ends; what its edits start that takes no time runs at once (`settle`), and its frame shows it, with
+      // the relief of the ground's new version where it was built again.
       host.postMessage({ kind: 'settled', text: text(core.settle()) }, []);
       postFrame('frame', true);
+    }
+    else if (m.cmd === 'undo' && core) {
+      // The world as before the last stroke (`undo`): its frame, the relief of its ground's new version, and the preview
+      // of what moved since the ground the page shows.
+      host.postMessage({ kind: 'undone', text: text(core.undo()), preview: preview() }, []);
+      postFrame('frame', true);
+    }
+    else if (m.cmd === 'groundShown' && core) {
+      // The page's ground shows the samples of this version now: what edits moved since (`preview`).
+      core.ground_shown(m.version);
+      host.postMessage({ kind: 'preview', preview: preview() }, []);
     }
     else if (m.cmd === 'things' && core) {
       thingsAt = m.at;
