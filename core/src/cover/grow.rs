@@ -18,6 +18,8 @@ pub fn step(w: &World, d: &mut Chunk) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let dt = w.cfg.calendar().month as f64;
     for i in d.cells() {
+        // Its plants keep their ground as the liquid table moves under them, before anything reads where they stand.
+        d.cover(i).follow_wet(crate::inside::saturated_share(w, i));
         if d.cover(i).any() {
             cell(w, d, &p, i, dt);
         } else {
