@@ -590,14 +590,16 @@ export class MapView {
     return gpu.texture('picture', w, h, MAP_TARGET, 1, 1, true);
   }
 
-  /** Draw the map (its ground, without the marks over it) into texture `t` with camera `cam`, `k` of its pixels a css
-   * pixel, inside `clip` (x, y, w, h px) where given; false where a program it needs is not made yet (then it is drawn
-   * without it). */
+  /** Draw the map and the layer over it (the plants, seen at its own pixels) into texture `t` with camera `cam`, `k` of
+   * its pixels a css pixel, inside `clip` (x, y, w, h px) where given; false where a program it needs is not made yet
+   * (then it is drawn without it). The layer is decided for this draw; the next frame decides it for the view again. */
   private drawInto(gpu: Gpu, t: Texture, cam: { s: number; ox: number; oy: number }, k: number, clip?: number[]): boolean {
     const was = this.cam, drawn = this.land?.drawn, waiting: string[] = [];
     this.cam = { ...cam };
+    this.layer?.prepare(gpu, cam.ox, cam.oy, cam.s, k, k, t.w / k, t.h / k, waiting);
     const p = gpu.pass(t, [...this.background(), 1], clip);
     this.drawMap(gpu, p, [cam.ox], k, k, [t.w, t.h], waiting);
+    this.layer?.draw(p);
     p.end();
     this.cam = was;
     if (this.land && drawn !== undefined) this.land.drawn = drawn;
