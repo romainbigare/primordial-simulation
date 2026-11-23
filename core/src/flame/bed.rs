@@ -166,7 +166,7 @@ fn patch_bed(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), layer_of: 
 const DEPTH_STEPS: usize = 16;
 
 /// Heat added from outside to the remains of each patch in use of land cell `i` and the cured leaves over them, `e` J a
-/// m² over the share `over` of the cell (handover.md 11, "Set on fire"): on each patch it first warms and boils off the
+/// m² over the share `over` of the cell (handover.md 11.1): on each patch it first warms and boils off the
 /// liquid they hold, their layer's whole depth (what its sorption curve holds and, as duff, what it draws from the
 /// ground, `Layer::share`), then warms them dry to `t_light` (`Fuel`): that is `q` J a m² of the patch's land, and the
 /// heat lights the share min(1, e / q) of `over` of it, on the share of its ground the remains cover (off the cell's

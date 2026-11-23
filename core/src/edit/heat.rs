@@ -1,6 +1,6 @@
-//! Heat added under a brush (handover.md 11: "Set on fire: add a lot of heat to nodes in an area; burning comes from
-//! the chemistry"). The heat comes from the outside node into each cell's ground node; the flames take it to dry and
-//! light the remains lying there (`flame::heated`) when the edits settle or the month runs.
+//! Heat added under a brush (handover.md 11.1: an action that adds a lot of heat to nodes in an area, the burning
+//! coming from the chemistry). The heat comes from the outside node into each cell's ground node; the flames take it
+//! to dry and light the remains lying there (`flame::heated`) when the edits settle or the month runs.
 
 use super::Brush;
 use crate::store::{Boundary, Node};

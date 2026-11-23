@@ -258,8 +258,8 @@ fn a_settled_strike_burns_at_once_with_no_time() {
     assert!(w.counts.flame_month[i].share > 0.0 && flame::since(&w, i) == 0.0, "the month took the burn as its own: {:?}", w.counts.flame_month[i]);
 }
 
-/// Heat added under a brush dries and lights remains too thin to carry a flame of their own (handover.md 11.1, "Set on
-/// fire"; `flame::heated`): a strike does not light them, the heat that lights them (`flame::needed`) does, at once when
+/// Heat added under a brush dries and lights remains too thin to carry a flame of their own (handover.md 11.1;
+/// `flame::heated`): a strike does not light them, the heat that lights them (`flame::needed`) does, at once when
 /// the edits settle; the heat they took leaves their ground for the air, and the books are kept.
 #[test]
 fn heat_lights_remains_too_thin_to_carry_a_flame() {
