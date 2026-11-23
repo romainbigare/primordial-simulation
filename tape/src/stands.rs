@@ -167,6 +167,22 @@ pub fn places(w: &World, i: usize) -> [f64; PLACE_ROW] {
     out
 }
 
+/// Numbers of the dead walls standing on a cell's patches (`dead`): three for each patch.
+pub const DEAD_ROW: usize = 3 * cover::PATCHES;
+
+/// Of each patch of the cover of cell `i` of `w`, the dead walls flames left standing on it, kg a m² of its own land;
+/// then of each the height they stood to, m (`flame::snag_of_patches`); then of each the years since they died
+/// (`Patch::snag_age`). 0 for a patch not in use. A viewer draws the dead trees of a patch on its ground, as tall as
+/// they stood, broken down by the years.
+pub fn dead(w: &World, i: usize) -> [f64; DEAD_ROW] {
+    let (d, c, n) = (pcore::flame::snag_of_patches(w, i), w.life.cover(i), cover::PATCHES);
+    std::array::from_fn(|k| match k / n {
+        0 => d[k].0,
+        1 => d[k - n].1,
+        _ => c.patches[k - 2 * n].snag_age as f64,
+    })
+}
+
 /// The kinds a square holds in the rows of world `w` (`rows`): the slots its world uses in a cell of one patch
 /// (`Config::variety`), or as many as the cell that holds the most (a cell of patches uses up to `cover::SLOTS`).
 pub fn kinds(w: &World) -> usize {
