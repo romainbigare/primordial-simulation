@@ -72,14 +72,15 @@ export async function launch() {
   return playwright().chromium.launch();
 }
 /** In `browser`, the page of `site` on the saved world `world` (both paths under `out/look`, served at `base`), its map
- * `px` css pixels a side, once it stands on the world. Errors of the page are kept in `page.errors`. */
+ * `px` css pixels a side with the controls that float over it hidden, once it stands on the world. Errors of the page
+ * are kept in `page.errors`. */
 export async function open(browser, base, site, world, { px = 400, scale = 1 } = {}) {
   const page = await browser.newPage({ viewport: { width: px + 340, height: px + 200 }, deviceScaleFactor: scale });
   page.errors = [];
   page.on('console', m => { if (m.type() === 'error' && !/GPU stall|adapter/i.test(m.text())) page.errors.push(m.text()); });
   page.on('pageerror', e => page.errors.push('pageerror: ' + e.message));
   await page.goto(`${base}/${site}/index.html?world=${base}/${world}`);
-  await page.evaluate(px => { const m = document.getElementById('map'); Object.assign(m.style, { width: `${px}px`, height: `${px}px`, flex: 'none', aspectRatio: 'auto' }); }, px);
+  await page.evaluate(px => { Object.assign(document.getElementById('map').style, { width: `${px}px`, height: `${px}px` }); document.getElementById('ui').hidden = true; }, px);
   await opened(page);
   return page;
 }

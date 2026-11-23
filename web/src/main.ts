@@ -17,6 +17,7 @@ import { godTools } from './god-tools';
 import { Panels } from './panels';
 import { fillIcons, iconSvg } from './icons';
 import { textureClass, textureLegend } from './soil';
+import { fillForm, readForm } from './world-form';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const LABELS: Record<string, string> = {
@@ -36,22 +37,6 @@ const label = (n: string) => LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).repla
 const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
-/** The live world's first size and its least and most, squares a side: the first shows a land with its valleys, a
- * lake and an outlier; the most is the largest island the laws are run on, or on a screen touched with a finger (a
- * phone's, whose browser gives a page a few hundred MB) the largest whose workers fit there (each of the ground's
- * workers holds about 0.4 kB a sample: 110 MB at 32, 250 MB at 48). */
-const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = matchMedia('(pointer: coarse)').matches ? 48 : 128;
-/** The live world's kinds of cover a cell may hold, a setting of the world (the core's `Config::variety`), and its
- * most (the core's `cover::SLOTS`). */
-const LIVE_VARIETY = 8, VARIETY_MOST = 12;
-/** The climates a live island may have: a name, and the band of latitudes it stands for (south, north), its air the
- * planet's air over that band. The first is the page's. */
-const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['Warm: 5° to 50°', '5,50']];
-/** The large shapes a live island may have: a name, and the URL's word for it. The first is the page's. */
-const SHAPES: string[][] = [['Drawn from the seed', 'drawn'], ['One island', 'one']];
-/** The weathers a live island may have: a name, and the URL's word for it (`ew run --weather`). The first is the
- * page's: strong, the eddies' measured speed; soft, the speed their diffusion alone gives (the core's `soft_weather`). */
-const WEATHERS: string[][] = [['Strong', 'strong'], ['Soft', 'soft']];
 /** Months in a year, for the date on the bar. */
 const MONTHS = 12;
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
@@ -246,7 +231,10 @@ function button(text: string, fn: () => void, layerName?: string): HTMLButtonEle
 }
 
 // ---- inspect
+/** The square under the cursor, or the one picked, in Inspect's card and on the soil's texture legend: only while one
+ * of them is shown (the map's classes are read back from the GPU for it). */
 function inspect(): void {
+  if ($('inspect-card').hidden && $('texture').hidden) return;
   const el = $('inspect'), i = map.hover >= 0 ? map.hover : map.pick;
   const cover = slots.inspect();
   if (cover) { el.innerHTML = cover; return; }
@@ -315,7 +303,7 @@ $('play').onclick = togglePlay;
 $<HTMLSelectElement>('speeds').onchange = e => { speed = +(e.target as HTMLSelectElement).value; live?.rate(speed); syncUi(); };
 const panels = new Panels($('bar'), $('cv'));
 /** Inspect's card, shown while its button is pressed. */
-$('inspect-btn').onclick = () => { const on = $('inspect-card').hidden; $('inspect-card').hidden = !on; $('inspect-btn').setAttribute('aria-pressed', String(on)); };
+$('inspect-btn').onclick = () => { const on = $('inspect-card').hidden; $('inspect-card').hidden = !on; $('inspect-btn').setAttribute('aria-pressed', String(on)); inspect(); };
 $('god-btn').onclick = () => setGod(!godOn());
 $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
@@ -367,22 +355,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
   const wasm = await fetchBytes('ew.wasm', { cache: 'no-cache' });
   coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
-  $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
-  Object.assign($<HTMLInputElement>('size'), { min: String(SIZE_LEAST), max: String(SIZE_MOST), value: q.get('size') ?? String(LIVE_SIZE) });
-  Object.assign($<HTMLInputElement>('variety'), { min: '1', max: String(VARIETY_MOST), value: q.get('variety') ?? String(LIVE_VARIETY) });
-  // The climate: a band of latitudes the island stands for, from the URL's `band=S,N` or the first preset (`BANDS`).
-  const bands = $<HTMLSelectElement>('band'), asked = q.get('band');
-  const presets = asked && !BANDS.some(b => b[1] === asked) ? [...BANDS, [`${asked.replace(',', '° to ')}°`, asked]] : BANDS;
-  bands.innerHTML = presets.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
-  bands.value = asked ?? BANDS[0][1];
-  // The large shape: from the URL's `shape=one|drawn` or the first (`SHAPES`).
-  const shapes = $<HTMLSelectElement>('shape');
-  shapes.innerHTML = SHAPES.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
-  shapes.value = SHAPES.some(s => s[1] === q.get('shape')) ? (q.get('shape') as string) : SHAPES[0][1];
-  // The weather: from the URL's `weather=strong|soft` or the first (`WEATHERS`).
-  const weathers = $<HTMLSelectElement>('weather');
-  weathers.innerHTML = WEATHERS.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
-  weathers.value = WEATHERS.some(s => s[1] === q.get('weather')) ? (q.get('weather') as string) : WEATHERS[0][1];
+  fillForm(q);
   live?.stop();
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
@@ -471,23 +444,14 @@ function showCost(s: Stats): void {
   ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 }
 
-/** The band of latitudes `S,N`, degrees, south first; [NaN, NaN] (the core's default band, its edges closed) for none,
- * or where S is not below N. */
-function bandOf(text: string | null): [number, number] {
-  const v = (text ?? '').split(',').map(Number);
-  return v.length === 2 && v[0] < v[1] ? [v[0], v[1]] : [NaN, NaN];
-}
 /** Whether a banded world was made in this session: the first one makes the planet's air too, which takes a while. */
 let banded = false;
 function newWorld(): void {
-  const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
-  const size = Math.min(SIZE_MOST, Math.max(SIZE_LEAST, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
-  const variety = Math.min(VARIETY_MOST, Math.max(1, Math.floor(+$<HTMLInputElement>('variety').value) || LIVE_VARIETY));
-  const band = bandOf($<HTMLSelectElement>('band').value);
+  const { seed, size, band, drawn, variety, soft } = readForm();
   playing = false; saved = null;
   say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
   banded ||= band[0] < band[1];
-  live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn', variety, $<HTMLSelectElement>('weather').value === 'soft');
+  live?.newWorld(seed, size, band, drawn, variety, soft);
 }
 /** Stand the live world on the saved world `gz` (the gzip of a snapshot of `ew run`). */
 function openSaved(gz: ArrayBuffer): void {
