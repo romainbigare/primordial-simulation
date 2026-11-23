@@ -89,7 +89,7 @@ export function godTools(editor: Editor, kinds: () => StartKind[]): GodTool[] {
     choices: show => {
       const box = document.createElement('div'), list = document.createElement('div'), on = plantRow();
       list.className = 'chips';
-      box.innerHTML = '<p class="lbl"><span>What to plant</span></p>';
+      box.innerHTML = '<p class="lbl">What to plant</p>';
       for (const k of kinds()) {
         const b = document.createElement('button');
         b.textContent = plainKind(k)[0]; b.title = plainKind(k)[1]; b.classList.toggle('on', k.row === on);
@@ -98,7 +98,7 @@ export function godTools(editor: Editor, kinds: () => StartKind[]): GodTool[] {
       }
       const what = kinds().find(k => k.row === on);
       box.append(list);
-      if (what) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = plainKind(what)[1]; box.append(p); }
+      if (what) { const p = document.createElement('p'); p.className = 'hint about'; p.textContent = plainKind(what)[1]; box.append(p); }
       return box;
     },
     edit: (x, y, share) => { sent = [share, plantRow()]; editor.edit(ACT_PLANT, x, y, share, sent[1]); },

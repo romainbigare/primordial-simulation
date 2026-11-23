@@ -18,6 +18,8 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
 /** The most pixels a metre takes on screen. */
 const MOST_PX_PER_M = 80;
+/** The scale bar's margin from the free area's bottom left corner, css px. */
+const SCALE_MARGIN_PX = 14;
 /** The most pixels of the map's canvas a css pixel takes: a screen with more (a phone's, 3) is drawn at this many and
  * stretched onto it, 2.25 times fewer pixels for a picture a little softer (what is drawn over it, the lines and the
  * text, keeps the screen's own). */
@@ -90,6 +92,9 @@ export class MapView {
   private ctx: CanvasRenderingContext2D;
   private cam = { s: 1, ox: 0, oy: 0 };
   private fitted = true;
+  /** The edges of the map covered by the controls over it, css px (top, right, bottom, left): a fit fills the rest, and
+   * the scale bar stands in its bottom left corner. */
+  private covered: [number, number, number, number] = [0, 0, 0, 0];
   private w = 0; private h = 0; private cellM = 1;
   /** Edge latitudes (degrees) of a globe, whose columns wrap east to west; null for an island. */
   private globe: { north: number; south: number } | null = null;
@@ -252,9 +257,17 @@ export class MapView {
   }
 
   fit(): void {
-    const k = this.fitScale();
-    this.cam = { s: k, ox: (this.cv.clientWidth - this.w * k) / 2, oy: (this.cv.clientHeight - this.h * k) / 2 };
+    const k = this.fitScale(), [top, right, bottom, left] = this.covered;
+    this.cam = { s: k, ox: left + (this.cv.clientWidth - left - right - this.w * k) / 2, oy: top + (this.cv.clientHeight - top - bottom - this.h * k) / 2 };
     this.fitted = true; this.invalidate();
+  }
+
+  /** The controls over the map now cover its edges `covered` (css px: top, right, bottom, left); a fitted map fits
+   * anew. */
+  setCovered(covered: [number, number, number, number]): void {
+    if (covered.every((v, k) => v === this.covered[k])) return;
+    this.covered = covered;
+    if (this.fitted && this.w) this.fit(); else this.redraw();
   }
 
   /** The share of the screen's pixels along each axis the map is drawn at now. */
@@ -266,7 +279,10 @@ export class MapView {
   /** Draw what lies over the map anew at the next frame (the GPU's picture stays). */
   redraw(): void { if (!this.raf) this.raf = requestAnimationFrame(() => { this.raf = 0; this.draw(); }); }
 
-  private fitScale = () => Math.min(this.cv.clientWidth / this.w, this.cv.clientHeight / this.h) * 0.94 || 1;
+  private fitScale = () => {
+    const [top, right, bottom, left] = this.covered;
+    return Math.min((this.cv.clientWidth - left - right) / this.w, (this.cv.clientHeight - top - bottom) / this.h) * 0.94 || 1;
+  };
   private dpr = () => window.devicePixelRatio || 1;
   /** The pixels of the map's canvas a css pixel (`MOST_DRAWN_PX`). */
   private drawnDpr = () => Math.min(this.dpr(), MOST_DRAWN_PX);
@@ -756,7 +772,7 @@ export class MapView {
   private scaleBar(): void {
     const { ctx, cam: { s }, cellM } = this, target = (96 / s) * cellM; // metres for ~96 px
     const p = 10 ** Math.floor(Math.log10(target)), m = [1, 2, 5, 10].map(k => k * p).reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
-    const px = (m / cellM) * s, x = 14, y = this.cv.clientHeight - 14;
+    const px = (m / cellM) * s, x = this.covered[3] + SCALE_MARGIN_PX, y = this.cv.clientHeight - this.covered[2] - SCALE_MARGIN_PX;
     ctx.strokeStyle = ctx.fillStyle = css('--ink'); ctx.lineWidth = 1.5; ctx.globalAlpha = 0.75;
     ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 5); ctx.stroke();
     ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'bottom';

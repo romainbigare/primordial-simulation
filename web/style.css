@@ -48,7 +48,7 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 :focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 1px; }
 
 /* The top bar. */
-.bar { position: fixed; z-index: 3; top: var(--edge); left: var(--edge); right: var(--edge); height: var(--bar); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--gap); padding: 0 var(--gap); }
+.bar { --covers: top; position: fixed; z-index: 3; top: var(--edge); left: var(--edge); right: var(--edge); height: var(--bar); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--gap); padding: 0 var(--gap); }
 .grp { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .grp:last-child { justify-self: end; }
 .logo { width: 24px; height: 24px; margin: 0 4px; flex: none; }
@@ -117,7 +117,7 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 .plot i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ink); opacity: .55; pointer-events: none; }
 
 /* Inspect: a card that stays while the map is used. */
-#inspect-card { position: fixed; z-index: 2; top: calc(var(--edge) + var(--bar) + var(--gap)); right: var(--edge); width: 300px; max-height: calc(100dvh - var(--bar) - 3 * var(--edge) - var(--btn) - var(--gap)); overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px; }
+#inspect-card { --covers: right; position: fixed; z-index: 2; top: calc(var(--edge) + var(--bar) + var(--gap)); right: var(--edge); width: 300px; max-height: calc(100dvh - var(--bar) - 3 * var(--edge) - var(--btn) - var(--gap)); overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px; }
 .inspect .hint { color: var(--muted); margin: 0; font-size: 13px; }
 .cell { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .cell span { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -129,21 +129,24 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 .inspect td s { width: 28px; }
 
 /* God mode: the strip of tools at the left, and the card of the tool on beside it. */
-.strip { position: fixed; z-index: 2; left: var(--edge); top: calc(var(--edge) + var(--bar) + var(--gap)); display: flex; flex-direction: column; gap: 4px; padding: 6px; }
+.strip { --covers: left; position: fixed; z-index: 2; left: var(--edge); top: calc(var(--edge) + var(--bar) + var(--gap)); display: flex; flex-direction: column; gap: 4px; padding: 6px; }
 .strip .ib { width: 48px; height: 48px; }
 .strip .ib .i { width: 24px; height: 24px; }
 .strip .ib.no:not([aria-pressed="true"]) { color: color-mix(in srgb, var(--muted) 60%, transparent); }
 .strip .ib.no[aria-pressed="true"] { background: var(--muted); }
-.god { position: fixed; z-index: 2; left: calc(var(--edge) + 62px + var(--gap)); top: calc(var(--edge) + var(--bar) + var(--gap)); width: 280px; max-height: calc(100dvh - var(--bar) - 3 * var(--edge)); overflow-y: auto; padding: 12px 16px; font-size: 13px; }
-.god h2 { margin-bottom: 4px; }
+.god { --covers: left; position: fixed; z-index: 2; left: calc(var(--edge) + 62px + var(--gap)); top: calc(var(--edge) + var(--bar) + var(--gap)); width: 280px; max-height: calc(100dvh - var(--bar) - 3 * var(--edge)); overflow-y: auto; padding: 12px 16px; font-size: 13px; }
+.god .top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap); }
+.god .top b { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .god p { margin: 8px 0 0; }
-.god .lbl { display: flex; justify-content: space-between; margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.god .lbl { margin: 8px 0 4px; color: var(--muted); font-size: 12px; }
 .god .hint { color: var(--muted); }
 .god .why { color: var(--warn); }
-.god .note { padding: 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+/* What an edit did: a toast at the bottom middle that fades. */
+.toast { position: fixed; z-index: 4; left: 50%; bottom: calc(var(--edge) + var(--btn) + 2 * var(--gap)); transform: translate(-50%, 8px); max-width: min(420px, calc(100vw - 2 * var(--edge))); padding: 8px 16px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
 
 /* The timeline of a tape, the fit button, the errors. */
-.tl { position: fixed; z-index: 2; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: min(720px, calc(100vw - 3 * var(--edge) - var(--btn))); padding: 4px 16px 6px; }
+.tl { --covers: bottom; position: fixed; z-index: 2; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: min(720px, calc(100vw - 3 * var(--edge) - var(--btn))); padding: 4px 16px 6px; }
 .track { position: relative; padding-top: 14px; }
 .marks { position: absolute; top: 0; left: 0; right: 0; height: 14px; }
 .marks i { position: absolute; top: 2px; width: 9px; height: 9px; background: var(--ink); opacity: .7; transform: translateX(-50%) rotate(45deg); left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--p)); cursor: pointer; border-radius: 1px; }
@@ -171,8 +174,14 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   .date small { font-size: 11px; }
   .speed { min-width: 0; max-width: 76px; padding: 0 2px 0 6px; font-size: 12px; }
   .panel { top: auto; bottom: 0; left: 0; width: 100%; max-width: none; max-height: 75dvh; border-radius: 16px 16px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateY(24px); transform-origin: bottom; }
-  #inspect-card { left: var(--edge); width: auto; max-height: 40dvh; }
-  .strip { top: auto; bottom: calc(var(--edge) + env(safe-area-inset-bottom)); max-width: calc(100vw - 3 * var(--edge) - var(--btn)); flex-direction: row; overflow-x: auto; }
-  .god { top: auto; left: var(--edge); right: var(--edge); width: auto; bottom: calc(var(--edge) + env(safe-area-inset-bottom) + 70px); max-height: 38dvh; }
+  #inspect-card { --covers: none; left: var(--edge); width: auto; max-height: 40dvh; }
+  .strip { --covers: bottom; top: auto; bottom: calc(var(--edge) + env(safe-area-inset-bottom)); max-width: calc(100vw - 3 * var(--edge) - var(--btn)); flex-direction: row; overflow-x: auto; }
+  .god { --covers: bottom; top: auto; left: var(--edge); right: var(--edge); width: auto; bottom: calc(var(--edge) + env(safe-area-inset-bottom) + 70px); max-height: 24dvh; padding: 8px 12px; }
+  .god .about, .god .lbl { display: none; }
+  .god input[type=range] { height: 20px; }
+  .god p { margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .god .chips { margin-top: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .god .chips button { flex: none; }
+  .toast { bottom: auto; top: calc(var(--edge) + var(--bar) + var(--gap)); }
   .tl { left: var(--edge); transform: none; }
 }

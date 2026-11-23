@@ -1,9 +1,9 @@
 // God mode on the live map (handover 11): the player picks a tool on the strip, then a place, and the world is edited
 // there between two months (wasm/src/lib.rs `edit`, the core's `World::edit`). The tools themselves are a list
 // (god-tools.ts `godTools`); this is what they share: the strip of their buttons, the card of the tool on (its brush
-// size, its choices, what it does or why it cannot), the question to the core about the place under the cursor
-// (`probe`), the tap that edits, and the brush drawn over the map with the reason beside it where the tool cannot be
-// used there.
+// size, its choices, what it does or why it cannot), a toast of what an edit did, the question to the core about the
+// place under the cursor (`probe`), the tap that edits, and the brush drawn over the map with the reason beside it
+// where the tool cannot be used there.
 import { IconName, iconSvg } from './icons';
 
 /** What the core says of the cell under a place (wasm/src/lib.rs `probe`): the cell, its edges in squares (west, north,
@@ -48,6 +48,8 @@ export interface GodTool {
 const NO_INK = 'rgba(120,120,120,.95)';
 /** The widest line of the box that says beside the cursor why a tool cannot be used there, css px. */
 const LABEL_PX = 220;
+/** How long the toast of an edit shows, ms. */
+const TOAST_MS = 4000;
 /** Least time between two questions about the place under the cursor, ms. */
 const PROBE_MS = 80;
 
@@ -63,23 +65,24 @@ export class God {
   private asked = 0;
   /** The map's corner and the pixels a square takes, as last drawn. */
   private drawnAt: [number, number, number] | null = null;
-  private note = '';
+  /** When the toast of the last edit goes. */
+  private toastTimer = 0;
   /** The tool of the edit last sent, for its answer (`edited`). */
   private pending: GodTool | null = null;
 
-  constructor(private strip: HTMLElement, private card: HTMLElement, private editor: Editor, private tools: GodTool[], private redraw: () => void) {
+  constructor(private strip: HTMLElement, private card: HTMLElement, private toast: HTMLElement, private editor: Editor, private tools: GodTool[], private redraw: () => void) {
     strip.replaceChildren(...tools.map(t => {
       const b = document.createElement('button');
       b.className = 'ib'; b.dataset.tool = t.key; b.innerHTML = iconSvg(t.icon);
       b.setAttribute('aria-label', t.label);
-      b.onclick = () => { this.tool = this.tool === t ? null : t; this.note = ''; this.show(); this.redraw(); };
+      b.onclick = () => { this.tool = this.tool === t ? null : t; this.show(); this.redraw(); };
       return b;
     }));
     this.show();
   }
 
   /** Put the tool away and forget the place: a new world, or god mode closed. */
-  reset(): void { this.tool = null; this.probe = null; this.note = ''; this.show(); this.redraw(); }
+  reset(): void { this.tool = null; this.probe = null; this.toast.classList.remove('on'); this.show(); this.redraw(); }
 
   /** Put the tool on away: true if one was on. */
   putAway(): boolean {
@@ -120,7 +123,7 @@ export class God {
 
   /** The core's answer to an edit. */
   edited(r: Edited): void {
-    if (this.pending) this.note = this.pending.edited(r);
+    if (this.pending) this.say(this.pending.edited(r));
     this.probe = null;
     this.ask();
     this.show();
@@ -136,7 +139,7 @@ export class God {
     const t = this.tool;
     if (!t) return false;
     const why = this.probe ? t.why(this.probe) : '';
-    if (why) { this.note = why; this.show(); return true; }
+    if (why) { this.say(why); return true; }
     this.pending = t;
     t.edit(x, y, this.size(t));
     return true;
@@ -176,7 +179,7 @@ export class God {
   }
 
   /** The strip's buttons (the tool on pressed, a tool that cannot be used here greyed with the reason), and the card:
-   * the tool's name, its size, its choices, a line of what it does here or why it cannot, and what the last edit did. */
+   * the tool's name, its size, its choices, and a line of what it does here or why it cannot. */
   private show(): void {
     const t = this.tool;
     for (const b of this.strip.querySelectorAll<HTMLElement>('button')) {
@@ -189,29 +192,37 @@ export class God {
     el.replaceChildren();
     const line = (cls: string, text: string) => { const d = document.createElement('p'); d.className = cls; d.textContent = text; el.append(d); };
     if (!t) { line('hint', 'Pick a tool, then click the map.'); return; }
-    const title = document.createElement('h2');
-    title.textContent = t.label;
-    el.append(title);
-    if (t.sizes) this.slider(t, t.sizes);
+    const head = document.createElement('div'), size = document.createElement('b');
+    head.className = 'top';
+    head.innerHTML = '<h2></h2>';
+    head.querySelector('h2')!.textContent = t.label;
+    head.append(size);
+    el.append(head);
+    if (t.sizes) this.slider(t, t.sizes, size);
     if (t.choices) el.append(t.choices(() => this.show()));
     const why = t.why(this.probe);
     line(why ? 'why' : 'hint', why || t.hint);
-    if (this.note) line('note', this.note);
   }
 
-  /** The size slider of tool `t` on the card, with the words for the size chosen at the place probed. */
-  private slider(t: GodTool, sizes: Sizes): void {
-    const k = this.stop.get(t.key) ?? sizes.first, lbl = document.createElement('p'), input = document.createElement('input');
-    lbl.className = 'lbl';
-    lbl.innerHTML = '<span>Brush size</span><b></b>';
-    lbl.querySelector('b')!.textContent = sizes.text(sizes.stops[k], this.probe);
-    Object.assign(input, { type: 'range', min: '0', max: String(sizes.stops.length - 1), step: '1', value: String(k) });
-    input.setAttribute('aria-label', 'Brush size');
+  /** The size slider of tool `t` on the card, with the words for the size chosen at the place probed in `words`. */
+  private slider(t: GodTool, sizes: Sizes, words: HTMLElement): void {
+    const input = document.createElement('input');
+    words.textContent = sizes.text(this.size(t), this.probe);
+    Object.assign(input, { type: 'range', min: '0', max: String(sizes.stops.length - 1), step: '1', value: String(this.stop.get(t.key) ?? sizes.first) });
+    input.setAttribute('aria-label', 'Brush size'); input.title = 'Brush size';
     input.oninput = () => {
       this.stop.set(t.key, +input.value);
-      lbl.querySelector('b')!.textContent = sizes.text(this.size(t), this.probe);
+      words.textContent = sizes.text(this.size(t), this.probe);
       this.redraw();
     };
-    this.card.append(lbl, input);
+    this.card.append(input);
+  }
+
+  /** What an edit did, or why it was not made, in a toast that fades after `TOAST_MS`. */
+  private say(text: string): void {
+    this.toast.textContent = text;
+    this.toast.classList.add('on');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => this.toast.classList.remove('on'), TOAST_MS);
   }
 }

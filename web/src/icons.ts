@@ -8,7 +8,7 @@ const ICONS = {
   play: '<path d="M7.5 5v14l11-7z" fill="currentColor"/>',
   pause: '<rect x="6.5" y="5" width="3.5" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="3.5" height="14" rx="1" fill="currentColor"/>',
   layers: '<path d="M12 3.5 3 8.2l9 4.7 9-4.7z"/><path d="m3 12.2 9 4.7 9-4.7"/><path d="m3 16.2 9 4.7 9-4.7"/>',
-  inspect: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.3 15.3 5.2 5.2M10.5 7.5v6M7.5 10.5h6"/>',
+  inspect: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.01"/>',
   wand: '<path d="m4 20 10-10"/><path d="M16 3v2.5M16 10.5V13M11 8h2.5M18.5 8H21M12.5 4.5 14 6M19.5 4.5 18 6M18 10l1.5 1.5"/>',
   fit: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
