@@ -181,6 +181,8 @@ pub struct Cover {
     /// `inside::wet_ground`): where its seedlings take hold and its plants grow as their roots gain there
     /// (`soak::strips_share`, `grow::live`, `seed::lodge`)
     pub strip: [f32; SLOTS],
+    /// The share of its cell's land saturated that `strip` is of: the strips as its last month found them (`follow_wet`)
+    pub wet: f32,
     /// The film its leaves' pores were open to the key liquid's vapour over its last month, mol K/(Pa s) per m² of the
     /// cell (`around::pores`), and the share of its ground's liquid their roots reach
     pub film: f32,
@@ -214,11 +216,19 @@ pub struct Cover {
 impl Default for Cover {
     /// No cover.
     fn default() -> Cover {
-        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], fell: [0.0; SLOTS], patches: patches::whole() }
+        Cover { mol: [[0.0; NP]; SLOTS], genes: [[0.0; NG]; SLOTS], root: [NO_ROOT; SLOTS], full: [false; SLOTS], net: [0.0; SLOTS], plants: [[0.0; GROUPS]; SLOTS], share: [[0.0; GROUPS]; SLOTS], rooted: [0.0; SLOTS], need: [0.0; SLOTS], line: [0.0; SLOTS], stands: [0.0; SLOTS], airless: [0.0; SLOTS], drained: [0.0; SLOTS], strip: [0.0; SLOTS], wet: 0.0, film: 0.0, reach: 0.0, idle: 0.0, e: 0.0, mark: 0.0, keep: 0.0, lying: Lying::default(), cured: [0.0; NP], seeds: Vec::new(), patch: [0; SLOTS], fell: [0.0; SLOTS], patches: patches::whole() }
     }
 }
 
 impl Cover {
+    /// Its slots' plants keep their ground as its land's saturated strips become the share `now` of the land
+    /// (`soak::strips_moved`): first in each month of its cell and before an edit places plants, so `strip` is always
+    /// of the strips the month found.
+    pub fn follow_wet(&mut self, now: f64) {
+        let was = self.wet as f64;
+        self.strip.iter_mut().for_each(|s| *s = soak::strips_moved(*s as f64, was, now) as f32);
+        self.wet = now as f32;
+    }
     /// The seeds made in its last month (`live`), taken from it: where the full world lands them (`land`) or a
     /// nursery does.
     pub fn sent(&mut self) -> Vec<Seed> {

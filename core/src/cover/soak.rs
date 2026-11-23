@@ -122,6 +122,19 @@ pub fn strips_share(on: f64, gain: [f64; 2]) -> f64 {
     if all > 0.0 { on * gain[1] / all } else { on }
 }
 
+/// The share of a kind's plants on a land's saturated strips, of the share `strip` of them there when the strips were
+/// the share `was` of the land, now that they are the share `now`: its plants keep their ground as the liquid table
+/// rises and falls under them. The strips are the land's wettest ground (`inside::wet_ground`), so ground that turns
+/// saturated is the wettest of the rest and ground that drains is the least wet of the strips, and each takes its
+/// plants with it, as dense as they stood on it.
+pub fn strips_moved(strip: f64, was: f64, now: f64) -> f64 {
+    if now >= was {
+        strip + (1.0 - strip) * (now - was) / (1.0 - was).max(1e-9)
+    } else {
+        strip * now / was
+    }
+}
+
 /// Where a kind of cover stands in a cell (`footing`): its line, m over the cell's lowest ground (`Cover::line`), and the
 /// share of the cell's ground (`cover::ground`) above it; the mean share of its roots that work there (`working`); the
 /// share of its plants on its land that stand on the land's saturated strips (`Cover::strip`), what a plant gains on its
