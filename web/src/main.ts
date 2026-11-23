@@ -275,6 +275,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     things: data => { if (live === l && world) slots.set(data); },
     frame: (stats, changed, edited) => {
       if (live !== l) return;
+      if (changed && !edited) fire.still();
       if (changed) setFrame(0);
       if (edited) map.showNow();
       if (world) front.frame(world);
