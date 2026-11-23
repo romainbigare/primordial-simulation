@@ -190,8 +190,7 @@ function repaint(): void {
   map.setMap(squares.fields);
   if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
   if (land && live) land.plumesIn(live.plumes);
-  const relief = live?.takeRelief();
-  if (land && relief) land.tiles.rebuild(relief);
+  if (land && live) land.tiles.rebuild(live.takeRelief(), !playing);
   vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
   fire.set(land && live ? w : null);
   map.setLook(look);
@@ -293,7 +292,8 @@ function loop(now: number): void {
 }
 function togglePlay(): void {
   if (!world) return;
-  if (live) { playing = !playing; live.play(playing); return syncUi(); }
+  // (A paused world's ground is made again at once from its last build, ground.ts `rebuild`.)
+  if (live) { playing = !playing; live.play(playing); if (!playing) land?.tiles.rebuild(null, true); return syncUi(); }
   if (!playing && frame >= world.meta.frames.length - 1) setFrame(0);
   playing = !playing; acc = 0; syncUi();
 }

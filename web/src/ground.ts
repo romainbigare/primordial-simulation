@@ -46,6 +46,11 @@ const SPARE_CORES = 4;
 /** The tiles' workers: two where the browser has cores to spare beside the world's worker and the page (it says how
  * many it has), else one. Each holds its own copy of the core and of the terrain's samples. */
 const WORKERS = (navigator.hardwareConcurrency ?? 1) > SPARE_CORES ? 2 : 1;
+/** While the world plays, the ground's workers make the ground again at most this often, ms: a world at full speed
+ * builds its samples every few seconds, each making of the ground takes a worker seconds and every kept tile is made
+ * again after it, so a worker would do nothing else, on a core the world's own worker needs; ten years' load moves
+ * the ground too little to see between two. */
+const REBUILD_EVERY_MS = 30000;
 /** A tile's key: its depth, row and column, as one number. */
 const KEY_ROW = 1 << 12, KEY_DEPTH = KEY_ROW * KEY_ROW;
 const keyOf = (depth: number, x: number, y: number) => depth * KEY_DEPTH + y * KEY_ROW + x;
@@ -90,6 +95,11 @@ export class GroundTiles {
    * tile made of an older one is stale. The tiles kept that a build changed, drawn until each comes again. */
   private gen = 0;
   private stale = new Set<number>();
+  /** The relief of the latest build not yet handed to the workers (`rebuild`), when the last was handed, ms, and the
+   * timer of the next. */
+  private built: Uint8Array | null = null;
+  private rebuiltAt = -Infinity;
+  private rebuildTimer = 0;
   private start = performance.now();
   private lastCame = -Infinity;
   /** Whether a new tile fades in (else it shows at once): the map says so, and lets none fade while its card is too
@@ -116,12 +126,21 @@ export class GroundTiles {
     }
   }
 
-  /** The world built its samples anew from `relief` (wasm/src/lib.rs `relief`): each worker makes its ground again
-   * (`ground_built`), and the tiles asked after are of it. */
-  rebuild(relief: Uint8Array): void {
+  /** The world built its samples anew from `relief` (wasm/src/lib.rs `relief`; null: no new build): each worker makes
+   * its ground again (`ground_built`), and the tiles asked after are of it. While the world plays (`now` false) at
+   * most once every `REBUILD_EVERY_MS`, of the latest build come; a paused world's ground at once. */
+  rebuild(relief: Uint8Array | null, now: boolean): void {
+    this.built = relief ?? this.built;
+    clearTimeout(this.rebuildTimer);
+    if (!this.built) return;
+    const wait = now ? 0 : this.rebuiltAt + REBUILD_EVERY_MS - performance.now();
+    if (wait > 0) { this.rebuildTimer = window.setTimeout(() => this.rebuild(null, true), wait); return; }
+    const built = this.built;
+    this.built = null;
+    this.rebuiltAt = performance.now();
     this.gen++;
     this.workers.forEach((w, k) => {
-      const copy = relief.slice();
+      const copy = built.slice();
       // (Only the first sends back the rock and the squares changed.)
       w.worker.postMessage({ cmd: 'built', relief: copy.buffer, gen: this.gen, answer: k === 0 }, [copy.buffer]);
     });
@@ -314,6 +333,7 @@ export class GroundTiles {
   }
 
   stop(gpu: Gpu | null): void {
+    clearTimeout(this.rebuildTimer);
     this.workers.forEach(w => w.worker.terminate());
     URL.revokeObjectURL(this.url);
     if (gpu) for (const t of [this.atlas, this.areas, this.pages, this.tilesTex]) if (t) gpu.drop(t);
