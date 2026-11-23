@@ -1,8 +1,9 @@
 // The ground's detail up close (web/shaders/lib/detail.wgsl): photographs of ground seen from above, tiles of ground
 // cover rendered from 3D models as the map sees them, and rendered plants (CC0, Poly Haven;
 // web/textures/SOURCES.md), strip images beside the page that `STRIPS` names by group (`ground.jpg`, `ground2.jpg`, ...,
-// a few layers a file), each square of them a layer of one texture array with its mip levels down to one texel, which
-// is its mean. The map draws each at its
+// a few layers a file; each also at smaller sides, `ground@128.jpg`, ...), each square of them a layer of one texture
+// array with its mip levels down to one texel, which is its mean. Its layers are as large as the view needs
+// (`sideFor`): a set of the next side is loaded as the view comes close, drawn from once whole. The map draws each at its
 // real size as a change around the colour the world gives the ground (the image over its mean), so from afar, where the
 // mips average it, the colour is the world's alone.
 import { Gpu, Texture } from './gpu';
@@ -17,51 +18,57 @@ declare const STRIPS: Record<StripGroup, string[]>;
 const STRIP_GROUPS = ['ground', 'carpets', 'fire', 'snags', 'models', 'heights', 'trees'] as const;
 type StripGroup = typeof STRIP_GROUPS[number];
 
-/** The side of each layer of the strips, texels: the photographs (tex.wgsl's `*_TEX`), the ground cover after them
- * (tex.wgsl `CARPETS_FROM`), the fire's sprites and its photograph (tex.wgsl `FIRE_FROM`), the snags (tex.wgsl
- * `SNAGS_FROM`), the rendered models after
- * those (tex.wgsl `MODELS_FROM`), the heights of those that stand
- * in water (tex.wgsl `HEIGHTS_FROM`) and the trees last (tex.wgsl `TREES_FROM`), as many layers as each strip holds. */
+/** The side of each layer of the strips' files, texels (tex.wgsl's `*_TEX` and the rest: the photographs, the ground
+ * cover, the fire's sprites and its photograph, the snags, the rendered models, the heights of those that stand in
+ * water and the trees, as many layers as each strip holds), and the smaller sides their files are also kept at
+ * (web/textures/bake/sizes.py: the mip levels the page makes from them). */
 const PHOTO_SIDE = 512;
-/** The side the layers are kept at on the GPU: on a screen touched with a finger (a phone's or a tablet's, whose
- * browser gives a page little memory) half the files' (a quarter of the memory: 50 MB, not 200), else theirs. The
- * shaders read the side from the texture. */
-const KEPT_SIDE = matchMedia('(pointer: coarse)').matches ? PHOTO_SIDE / 2 : PHOTO_SIDE;
-/** The mip levels of a layer: from `KEPT_SIDE` texels down to one (detail-worker.ts makes them). */
-const PHOTO_MIPS = Math.log2(KEPT_SIDE) + 1;
+const SIDES = [64, 128, 256, PHOTO_SIDE];
+/** The largest side loaded: on a screen touched with a finger (a phone's or a tablet's, whose browser gives a page
+ * little memory) half the files' (50 MB at most, not 200). The shaders read the side from the texture. */
+const SIDE_MOST = matchMedia('(pointer: coarse)').matches ? PHOTO_SIDE / 2 : PHOTO_SIDE;
+/** The widest a layer lies on the ground, m: the rock's photograph repeats every 50 m (detail.wgsl `detail_m`); every
+ * other layer (a photograph, a tile of cover, a plant) is narrower. A view whose pixel takes `e` m reads no layer
+ * finer than this over `e` texels across (its mip level), so a side of that many shows the same picture. */
+const SPAN_M = 50;
+/** A set of layers is let go for one this many times smaller once the view needs no more (a zoom about one size does
+ * not load the two over and over). */
+const SHRINK = 4;
 
 /** The view needs the detail where a pixel of the screen takes less than `DETAIL_LOAD_E` m (farther no layer is read
- * finer than its mean, which the blank texture gives too); once loaded it is kept, so a zoom in and out does not load
- * it again. */
+ * finer than its mean, which the blank texture gives too). */
 const DETAIL_LOAD_E = 25;
 
-/** The layers of the strips, once their files' heads are read; and the layers' levels made (detail-worker.ts) and not
- * yet sent to the GPU, each with its layer. */
-let groundLayers = 0;
-let layersMade: { layer: number; levels: Uint8Array[] }[] = [];
+/** The side of the layers a view whose pixel takes `e` m needs (`SPAN_M`), of `SIDES`, at most `SIDE_MOST`. */
+function sideFor(e: number): number {
+  return SIDES.find(s => s >= SPAN_M / e && s <= SIDE_MOST) ?? SIDE_MOST;
+}
+
 /** The blank texture's layers: an array of white texels (one layer would make a plain texture, not an array). */
 const BLANK_LAYERS = 2;
-/** Layers sent to the GPU a frame at most (each 1.4 MB with its levels at 512 texels a side): the strips go over some frames, so no frame
- * stops long for them, and each layer's levels are let go once sent. */
+/** Layers sent to the GPU a frame at most (each 1.4 MB with its levels at 512 texels a side): the strips go over some
+ * frames, so no frame stops long for them, and each layer's levels are let go once sent. */
 const LAYERS_A_FRAME = 4;
-/** The GPU the detail is sent to (`sendDetail`) and what hears that all its layers are sent; the detail's texture there,
- * how many of its layers are filled, and the frame that sends the next. None is drawn from till all are
- * (`groundDetail`). */
+/** The GPU the detail is sent to (`sendDetail`) and what hears that a set of its layers is whole. */
 let sending: { gpu: Gpu; sent: () => void } | null = null;
-let detailHeld: { t: Texture | null; filled: number; frame: number } = { t: null, filled: 0, frame: 0 };
-/** The load of the detail under way or done (null: none, or let go): its number (a later load or a letting go ends
- * an earlier one) and its worker. */
-let detailLoad: { number: number; worker: Worker | null } | null = null;
-let detailLoads = 0;
+/** The detail drawn from: its texture, whole, and the side of its layers (none: the blank texture). */
+let shown: { t: Texture; side: number } | null = null;
+/** A set of layers being loaded (`load`): its number (a later load ends it), side, worker, texture, its layers (0 till
+ * the strips' heads are read), those filled, their levels made and not yet sent, and the frame that sends the next. */
+interface Loading { number: number; side: number; worker: Worker | null; t: Texture | null; layers: number; filled: number; made: { layer: number; levels: Uint8Array[] }[]; frame: number }
+let loading: Loading | null = null;
+let loads = 0;
 const photoBlank = new WeakMap<Gpu, Texture>();
 
 /** A cut-out texel shows where its cover is at least this (tex.wgsl `model_texel`, of the trees; detail-worker.ts
  * keeps it so in the mips). */
 const CUT = 128;
 
-/** The strips' files beside the page, in their layers' order, and whether each is the trees' (cut-outs). */
-function stripFiles(): [string, boolean][] {
-  return STRIP_GROUPS.flatMap(g => STRIPS[g].map(f => [f, g === 'trees'] as [string, boolean]));
+/** The strips' files beside the page at layers `side` texels a side (web/textures/bake/sizes.py), in their layers'
+ * order, and whether each is the trees' (cut-outs). */
+function stripFiles(side: number): [string, boolean][] {
+  const at = (f: string) => (side === PHOTO_SIDE ? f : f.replace(/(\.[a-z]+)$/, `@${side}$1`));
+  return STRIP_GROUPS.flatMap(g => STRIPS[g].map(f => [at(f), g === 'trees'] as [string, boolean]));
 }
 
 /** The height of the image in `bytes`, px, read from its head (a PNG's IHDR, a JPEG's start of frame), so the layers
@@ -83,16 +90,16 @@ const STRIPS_AHEAD = 3;
 /** Fetch the strips, decode them on the page (`STRIPS_AHEAD` ahead of the worker at most) and make their levels off
  * the page's thread (detail-worker.ts), so the page does not stop for them; each layer is sent to the GPU as it comes.
  * A failed fetch, decode or worker leaves the ground without its detail and says why (`detailFailure`). */
-async function fetchDetail(number: number): Promise<void> {
-  const files = stripFiles(), current = () => detailLoad?.number === number;
+async function fetchDetail(l: Loading): Promise<void> {
+  const files = stripFiles(l.side), current = () => loading === l;
   const bytes = await Promise.all(files.map(([f]) => fetch(f).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${f}: ${r.status}`))))));
   if (!current()) return;
-  const layers = bytes.map((b, k) => { try { return imageHeight(new Uint8Array(b)) / PHOTO_SIDE; } catch (e) { throw new Error(`${files[k][0]}: ${e instanceof Error ? e.message : e}`); } });
-  groundLayers = layers.reduce((n, k) => n + k, 0);
+  const layers = bytes.map((b, k) => { try { return imageHeight(new Uint8Array(b)) / l.side; } catch (e) { throw new Error(`${files[k][0]}: ${e instanceof Error ? e.message : e}`); } });
+  l.layers = layers.reduce((n, k) => n + k, 0);
   const source = document.getElementById('detail-src')?.textContent ?? '';
   const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' })), w = new Worker(url);
   URL.revokeObjectURL(url);
-  detailLoad!.worker = w;
+  l.worker = w;
   // The strips the worker has not finished, and what waits for one to finish (or for the worker to fail).
   let ahead = 0, finished = () => {}, failed = (_: Error) => {};
   const one = () => {
@@ -102,8 +109,8 @@ async function fetchDetail(number: number): Promise<void> {
   };
   w.onmessage = (e: MessageEvent<{ layer: number; levels: Uint8Array[] }>) => {
     if (e.data.layer < 0) { ahead--; return finished(); }
-    layersMade.push(e.data);
-    sendSoon();
+    l.made.push(e.data);
+    sendSoon(l);
   };
   w.onerror = e => failed(new Error(e.message || 'its worker failed'));
   let waiting = one();
@@ -111,86 +118,96 @@ async function fetchDetail(number: number): Promise<void> {
     while (ahead >= STRIPS_AHEAD) { await waiting; waiting = one(); }
     const strip = await createImageBitmap(new Blob([bytes[k]])).catch(e => Promise.reject(new Error(`${files[k][0]}: ${e}`)));
     if (!current()) { strip.close(); return; }
-    w.postMessage({ strip, first, cutOut: files[k][1], from: PHOTO_SIDE, side: KEPT_SIDE, cut: CUT }, [strip]);
+    w.postMessage({ strip, first, cutOut: files[k][1], side: l.side, cut: CUT }, [strip]);
     ahead++;
   }
   while (ahead > 0) { await waiting; waiting = one(); }
   w.terminate();
-  if (current()) detailLoad!.worker = null;
+  l.worker = null;
 }
 
-/** The view's pixels take `e` m of the screen's: load the detail where they are fine enough (`DETAIL_LOAD_E`). */
+/** The view's pixels take `e` m of the screen's: load the layers of the side it needs (`sideFor`) where they are fine
+ * enough to show (`DETAIL_LOAD_E`): a larger set as it comes close, a smaller one once it needs `SHRINK` times less. */
 export function detailSeen(e: number): void {
-  if (e < DETAIL_LOAD_E && !detailLoad) loadDetail();
+  const want = sideFor(e), have = loading?.side ?? shown?.side;
+  if (have === undefined ? e < DETAIL_LOAD_E : want > have || want * SHRINK <= have) load(want);
 }
 
-/** Load the detail anew. */
-function loadDetail(): void {
-  detailLoad = { number: ++detailLoads, worker: null };
-  groundLayers = 0;
-  const number = detailLoad.number;
-  fetchDetail(number).catch(e => {
-    if (detailLoad?.number !== number) return;
-    // Said on the page once, and kept for the cost line: the ground is drawn without its detail.
+/** Load the layers at `side` texels a side; the set drawn from stays till they are whole (`sendSoon`). */
+function load(side: number): void {
+  stopLoading();
+  const l: Loading = { number: ++loads, side, worker: null, t: null, layers: 0, filled: 0, made: [], frame: 0 };
+  loading = l;
+  fetchDetail(l).catch(e => {
+    if (loading !== l) return;
+    // Said on the page once, and kept for the cost line: the ground is drawn without its detail, or with the set before.
     if (!detailFailed) reportError(new Error(`detail: ${e instanceof Error ? e.message : e}`));
     detailFailed = String(e instanceof Error ? e.message : e);
   });
 }
 
-/** Let the detail go: its load stops, and its texture and the levels not yet sent are dropped. */
-function letDetailGo(): void {
-  detailLoad?.worker?.terminate();
-  detailLoad = null;
-  layersMade = [];
-  if (detailHeld.t) sending?.gpu.drop(detailHeld.t);
-  cancelAnimationFrame(detailHeld.frame);
-  detailHeld = { t: null, filled: 0, frame: 0 };
+/** Stop the load under way: its worker, its texture and its levels not yet sent let go. */
+function stopLoading(): void {
+  const l = loading;
+  if (!l) return;
+  l.worker?.terminate();
+  cancelAnimationFrame(l.frame);
+  if (l.t) sending?.gpu.drop(l.t);
+  loading = null;
 }
 
-/** The detail's layers sent to the GPU, and all it has (none known before the strips' heads are read). */
-export function detailSent(): [number, number] { return [detailHeld.filled, groundLayers]; }
+/** The detail's layers sent to the GPU, and all of the set (none known before the strips' heads are read), and the
+ * side of the layers drawn from (0: none). */
+export function detailSent(): [number, number, number] {
+  const whole = shown?.t.layers ?? 0;
+  return loading ? [loading.filled, loading.layers, shown?.side ?? 0] : [whole, whole, shown?.side ?? 0];
+}
 
 /** Why the detail last failed to load (null: it did not). */
 let detailFailed: string | null = null;
 export function detailFailure(): string | null { return detailFailed; }
 
 /** Whether detail the view asked for is still to come (look/page.mjs waits for it). */
-export function detailComing(): boolean { return detailLoad !== null && (groundLayers === 0 || detailHeld.filled < groundLayers); }
+export function detailComing(): boolean { return loading !== null; }
 
-/** Send the detail to `gpu` as its layers come, `LAYERS_A_FRAME` a frame; `sent` hears once all are. */
+/** Send the detail to `gpu` as its layers come, `LAYERS_A_FRAME` a frame; `sent` hears once a set is whole. */
 export function sendDetail(gpu: Gpu, sent: () => void): void {
   sending = { gpu, sent };
-  sendSoon();
+  if (loading) sendSoon(loading);
 }
 
-/** After the GPU lost what it detailHeld (its textures are empty again): the detail, if loaded, is loaded anew. */
+/** After the GPU lost what it held (its textures are empty again): the set drawn, or being loaded, is loaded anew. */
 export function detailLost(): void {
-  if (!detailLoad) return;
-  letDetailGo();
-  loadDetail();
+  const side = loading?.side ?? shown?.side;
+  stopLoading();
+  if (shown) sending?.gpu.drop(shown.t);
+  shown = null;
+  if (side !== undefined) load(side);
 }
 
-/** Send the next layers that came at the next frame. */
-function sendSoon(): void {
-  const s = sending, h = detailHeld;
-  if (!s || h.frame || !layersMade.length) return;
-  h.frame = requestAnimationFrame(() => timed('detail', () => {
-    h.frame = 0;
-    if (detailHeld !== h) return;
-    h.t ??= s.gpu.texture('detail', KEPT_SIDE, KEPT_SIDE, 'rgba8unorm', groundLayers, PHOTO_MIPS);
-    for (const { layer, levels } of layersMade.splice(0, LAYERS_A_FRAME)) {
-      levels.forEach((d, k) => s.gpu.write(h.t!, d, k, layer));
-      h.filled++;
+/** Send the next layers of load `l` that came, at the next frame; once all are, draw from them. */
+function sendSoon(l: Loading): void {
+  const s = sending;
+  if (!s || l.frame || !l.made.length) return;
+  l.frame = requestAnimationFrame(() => timed('detail', () => {
+    l.frame = 0;
+    if (loading !== l) return;
+    l.t ??= s.gpu.texture('detail', l.side, l.side, 'rgba8unorm', l.layers, Math.log2(l.side) + 1);
+    for (const { layer, levels } of l.made.splice(0, LAYERS_A_FRAME)) {
+      levels.forEach((d, k) => s.gpu.write(l.t!, d, k, layer));
+      l.filled++;
     }
-    if (h.filled === groundLayers) s.sent();
-    else sendSoon();
+    if (l.filled < l.layers) return sendSoon(l);
+    if (shown) s.gpu.drop(shown.t);
+    shown = { t: l.t, side: l.side };
+    loading = null;
+    s.sent();
   }));
 }
 
-/** The ground's detail on `gpu`: the strips' texture once all its layers are sent, else one white texel a layer (no
- * detail). */
+/** The ground's detail on `gpu`: the whole set drawn from, else one white texel a layer (no detail). */
 export function groundDetail(gpu: Gpu): Texture {
-  if (sending?.gpu === gpu && detailHeld.t && detailHeld.filled === groundLayers) return detailHeld.t;
+  if (sending?.gpu === gpu && shown) return shown.t;
   let t = photoBlank.get(gpu);
   if (!t) {
     t = gpu.texture('detail', 1, 1, 'rgba8unorm', BLANK_LAYERS, 1);

@@ -421,7 +421,7 @@ function showCost(s: Stats): void {
   if (!costShown) return;
   const ms = (v: number) => v.toFixed(v < 10 ? 1 : 0), mb = (bytes: number) => (bytes / 2 ** 20).toFixed(bytes < 2 ** 23 ? 1 : 0);
   const per = (key: string) => `${ms(spent(key))} ms on ${spent(`${key} n`).toFixed(1)}`;
-  const [sent, layers] = detailSent(), gpuN = spent('gpu n');
+  const [sent, layers, side] = detailSent(), gpuN = spent('gpu n');
   const heap = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
   const cards = drawing?.memory() ?? [], cardAll = cards.reduce((n, [, b]) => n + b, 0);
   el.innerHTML = [
@@ -429,7 +429,7 @@ function showCost(s: Stats): void {
     ['page /s', `world frames ${per('world frames')}, draws ${per('draw')}`],
     ['gpu', `${gpuN > 0 ? ms(spent('gpu') / gpuN) : '-'} ms a frame; programs: ${drawing?.making() ?? '-'}`],
     ['tiles /s', `${ms(spent('tile ms'))} ms in the worker, ${per('tiles')} on the page`],
-    ['detail', `${sent} of ${layers} layers sent, ${per('detail')} frames /s${detailFailure() ? `; failed: ${detailFailure()}` : ''}`],
+    ['detail', `layers of ${side} texels; ${sent} of ${layers} sent, ${per('detail')} frames /s${detailFailure() ? `; failed: ${detailFailure()}` : ''}`],
     ['gpu MB', `${mb(cardAll)}: ${cards.map(([label, b]) => `${label} ${mb(b)}`).join(', ')}`],
     ['wasm MB', `world ${mb(s.memory)}${land ? `, tiles ${land.tiles.memory().map(mb).join(' + ')}` : ''}${heap ? `; js ${mb(heap)}` : ''}`],
   ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');

@@ -3,6 +3,8 @@ as files of at most `STRIP_LAYERS` layers each, DIR/<GROUP>.<ext>, DIR/<GROUP>2.
 DIR/strips.json (the page loads the groups in their layers' order, web/src/detail.ts). A PNG is written as it is; a
 JPEG with its own quantization tables and sampling, so its pixels change by a level or so at most.
 
+Then bake/sizes.py writes each file again at the smaller sides the page loads where its view needs no finer detail.
+
 A phone's browser decodes a picture whole: a file of a few layers keeps what it holds at once small (a strip of 32
 layers, 512 x 16384 pixels, is 32 MB decoded), and lets the page load the layers it needs.
 """

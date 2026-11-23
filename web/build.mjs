@@ -1,6 +1,6 @@
 // Inlines the compiled modules (dist/.js), the shaders (dist/.shaders.json, written by web/shade from web/shaders) and
 // style.css into one self-contained dist/index.html.
-import { readFileSync, writeFileSync, rmSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync, copyFileSync, readdirSync } from 'node:fs';
 
 const order = ['data', 'cost', 'fields', 'earth', 'style', 'form', 'kind_row', 'lattices', 'paint', 'canopy', 'gpu', 'gpu-webgl2', 'detail', 'field-window', 'ground', 'land', 'fire', 'map', 'charts', 'live', 'textures', 'vegetation', 'slots', 'soil', 'god', 'main'];
 // A module as plain script: its imports and exports taken out (the modules share one scope).
@@ -22,8 +22,12 @@ writeFileSync('dist/index.html', html);
 const embed = process.argv[2];
 if (embed) writeFileSync('dist/standalone.html',
   page(`<script type="application/octet-stream" id="world-data">${readFileSync(embed).toString('base64')}</script>\n`));
-// The ground's photographs and plants, beside the page (detail.ts).
-for (const f of Object.values(strips).flat()) copyFileSync(`textures/${f}`, `dist/${f}`);
+// The ground's photographs and plants, beside the page, with their smaller sides (`name@side.ext`, detail.ts).
+const sized = readdirSync('textures');
+for (const f of Object.values(strips).flat()) {
+  const [stem, ext] = [f.replace(/\.[a-z]+$/, ''), f.slice(f.lastIndexOf('.'))];
+  for (const g of [f, ...sized.filter(n => n.startsWith(`${stem}@`) && n.endsWith(ext))]) copyFileSync(`textures/${g}`, `dist/${g}`);
+}
 rmSync('dist/.js', { recursive: true });
 rmSync('dist/.shaders.json');
 console.log(`dist/index.html ${(html.length / 1024).toFixed(1)} KB`);

@@ -976,7 +976,8 @@ The owner tests an artifact: https://claude.ai/artifact/GKxSQCDfgBAwwL2B8RvEuC (
 (the version label says what it shows). To update it after a push to main:
 1. `cd web && npm run build && npm run wasm` (makes `web/dist/index.html`, `web/dist/ew.wasm` and the pictures beside
    the page: the detail's picture files `web/textures/strips.json` names (about 40 files of at most four layers, each
-   a few MB: a phone's browser fails to decode very tall pictures), and `fire.jpg`, `snags.png`).
+   a few MB: a phone's browser fails to decode very tall pictures), and `fire.jpg`, `snags.png`, each with its smaller
+   sides `name@256`, `@128`, `@64` (`web/textures/bake/sizes.py`), which the page loads by zoom).
 2. Copy `ew.wasm` and the pictures to a scratch folder, and the page with these removed (regexes,
    case-insensitive, with `\b` after the tag names): the doctype, the `html`, `head` and `body` tags, the `meta
    charset` and `meta viewport` tags, the `link rel=icon`.
