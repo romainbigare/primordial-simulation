@@ -96,3 +96,21 @@ export const unitText = (u?: string) => (!u || u === '1' ? '' : u);
 export function fmtYear(y: number): string {
   return y.toLocaleString('en', { maximumFractionDigits: Math.abs(y) < 100 && !Number.isInteger(y) ? 2 : 1 });
 }
+
+/** A download the network cut is tried this many times in all, the wait before each try again doubling from
+ * `FETCH_WAIT_MS` (a phone's connection drops for a moment; a site being published swaps its files). */
+const FETCH_TRIES = 3, FETCH_WAIT_MS = 1000;
+/** The bytes at `url` (with `init`), tried again where the network cut the download; an error that names the file. */
+export async function fetchBytes(url: string, init?: RequestInit): Promise<ArrayBuffer> {
+  for (let n = 1; ; n++) {
+    try {
+      const r = await fetch(url, init);
+      if (!r.ok) throw new Error(`${url}: ${r.status}`);
+      return await r.arrayBuffer();
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith(`${url}: `)) throw e;
+      if (n >= FETCH_TRIES) throw new Error(`${url}: ${e instanceof Error ? e.message : e}`);
+      await new Promise(go => setTimeout(go, FETCH_WAIT_MS * 2 ** (n - 1)));
+    }
+  }
+}

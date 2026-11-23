@@ -1,9 +1,7 @@
-import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
+import { World, gunzip, parse, fmt, fmtYear, unitText, fetchBytes } from './data';
 import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss } from './earth';
 import { MapView, View } from './map';
 import type { HeldGpu } from './gpu';
-import { spent } from './cost';
-import { detailFailure, detailSent } from './detail';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
 import { Live, Stats } from './live';
@@ -13,52 +11,29 @@ import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
 import { Fire } from './fire';
 import { God } from './god';
-import { textureClass, textureLegend } from './soil';
+import { godTools } from './god-tools';
+import { Panels, watchCovered } from './panels';
+import { fillIcons, iconSvg } from './icons';
+import { textureLegend } from './soil';
+import { Inspector, LAYER_ORDER, layerLabel } from './inspect';
+import { Numbers } from './numbers';
+import { fillForm, readForm } from './world-form';
+import { showErrors } from './errors';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const LABELS: Record<string, string> = {
-  t_ground: 'Ground temperature', t_air: 'Air temperature', rain: 'Rain', vapor: 'Vapor', absorber: 'Absorber',
-  depth: 'Liquid depth', flux: 'River flux', catch: 'Catchment', loose: 'Loose sediment', wet: 'Ground wetness', ice: 'Ice', z: 'Elevation',
-  coarse: 'Sand (coarse grain)', fine: 'Clay (fine grain)', organic: 'Organic matter', conduct: 'Soil conductivity',
-  avail: 'Available water', filled: 'Soil water (pores filled)', roots: 'Water for roots (share)',
-  rises: 'Evaporation', sheds: 'Runoff and drainage (rain less evaporation)',
-  litter: 'Fresh litter', slow: 'Humus (slow organic pool)', mineral_free: 'Nitrogen, dissolved', mineral_held: 'Nitrogen, held on the soil',
-  rot: 'Rot speed',
-  seeds: 'Seeds on the ground', grown: 'Growth last year', takers: 'Takers',
-};
-const ORDER = Object.keys(LABELS);
 /** The layers of the soil's grain, shown with the texture classes' legend (soil.ts). */
 const GRAIN_LAYERS = ['coarse', 'fine'];
-const label = (n: string) => LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).replace(/_/g, ' '));
 const SPEEDS = [1, 2, 4, 8, 16, 32];
 /** The live world's speeds, months of the world per second of real time. */
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
-/** The live world's first size and its least and most, squares a side: the first shows a land with its valleys, a
- * lake and an outlier; the most is the largest island the laws are run on, or on a screen touched with a finger (a
- * phone's, whose browser gives a page a few hundred MB) the largest whose workers fit there (each of the ground's
- * workers holds about 0.4 kB a sample: 110 MB at 32, 250 MB at 48). */
-const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = matchMedia('(pointer: coarse)').matches ? 48 : 128;
-/** The live world's kinds of cover a cell may hold, a setting of the world (the core's `Config::variety`), and its
- * most (the core's `cover::SLOTS`). */
-const LIVE_VARIETY = 8, VARIETY_MOST = 12;
-/** The climates a live island may have: a name, and the band of latitudes it stands for (south, north), its air the
- * planet's air over that band. The first is the page's. */
-const BANDS: string[][] = [['Wide: 20° to 65°', '20,65'], ['Mild: 30° to 55°', '30,55'], ['Warm: 5° to 50°', '5,50']];
-/** The large shapes a live island may have: a name, and the URL's word for it. The first is the page's. */
-const SHAPES: string[][] = [['Drawn from the seed', 'drawn'], ['One island', 'one']];
-/** The weathers a live island may have: a name, and the URL's word for it (`ew run --weather`). The first is the
- * page's: strong, the eddies' measured speed; soft, the speed their diffusion alone gives (the core's `soft_weather`). */
-const WEATHERS: string[][] = [['Strong', 'strong'], ['Soft', 'soft']];
+/** Months in a year, for the date on the bar. */
+const MONTHS = 12;
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
 
 let world: World | null = null;
 let live: Live | null = null;
 let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null;
-let cls: Uint8Array = new Uint8Array(0);
-/** The frames drawn, and the one whose classes `cls` were last asked for: they are read back from the GPU only when a
- * square is inspected (`inspect`), not at every frame. */
-let paints = 0, classesOf = -1;
 
 const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => viewSoon(v));
 /** The live map: the ground's tiles and the cells' table (live world only). */
@@ -78,16 +53,25 @@ map.layer = vegetation;
 /** Fire on the live map: its scars, flames and smoke. */
 const fire = new Fire();
 map.fire = fire;
-/** God mode: the tools that edit the live world (live world only). */
-const god = new God($('god'), { probe: (x, y) => live?.probe(x, y), edit: (a, x, y, s, r) => live?.edit(a, x, y, s, r) }, () => map.redraw());
+/** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
+const editor = { probe: (x: number, y: number) => live?.probe(x, y), edit: (a: number, x: number, y: number, s: number, r: number) => live?.edit(a, x, y, s, r) };
+const god = new God($('god-strip'), $('god'), $('toast'), editor, godTools(editor, () => live?.kinds ?? []), () => map.redraw());
 god.listen($<HTMLCanvasElement>('cv'));
-map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live) god.draw(ctx, ox, oy, s); };
-map.tap = (x, y) => live !== null && god.tap(x, y);
+map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live && godOn()) god.draw(ctx, ox, oy, s); };
+map.tap = (x, y) => live !== null && godOn() && god.tap(x, y);
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
 let drawing: HeldGpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
 map.ready.then(g => { drawing = g; if (!g) say('This browser has no WebGL2, so the map cannot be drawn.'); });
 slots.listen($<HTMLCanvasElement>('cv'), () => inspect());
+const inspector = new Inspector($('inspect-card'), $('inspect'), $('texture'), map, slots);
+function inspect(): void { inspector.show(world, frame); }
+const numbers = new Numbers($('stats'), $('cost'), () => { if (live) showStats(live.stats); });
+/** The live world's numbers in the World panel. */
+function showStats(s: Stats): void {
+  const m = world?.meta;
+  numbers.show(s, live && m ? { meta: m, playing, speed, land, drawing, drawnAt: map.drawnAt } : null);
+}
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
 
 // ---- loading
@@ -103,34 +87,15 @@ async function load(buf: ArrayBuffer): Promise<void> {
   setup(world);
 }
 const say = (t: string) => { $('msg').textContent = t; $('msg').hidden = !t; };
-/** The page's own errors, each with the time it came, shown on it (a phone has no console to read them in) until
- * tapped away: the first `ERRORS_FIRST`, which say what went wrong first, and the last `ERRORS_LAST`, with how many
- * came between. Those
- * without an error object are the browser's notes (a ResizeObserver's loop), not failures. */
-const ERRORS_FIRST = 3, ERRORS_LAST = 3;
-const errors: string[] = [];
-function failed(text: string): void {
-  errors.push(`${new Date().toLocaleTimeString()} ${text}`);
-  const shown = errors.length <= ERRORS_FIRST + ERRORS_LAST ? errors
-    : [...errors.slice(0, ERRORS_FIRST), `(${errors.length - ERRORS_FIRST - ERRORS_LAST} more)`, ...errors.slice(-ERRORS_LAST)];
-  $('errors').textContent = `${shown.join('\n')}\n(tap to hide)`;
-  $('errors').hidden = false;
-}
-$('errors').onclick = () => { $('errors').hidden = true; };
-addEventListener('error', e => { if (e.error) failed(e.error instanceof Error ? e.error.message : String(e.error)); });
-addEventListener('unhandledrejection', e => failed(e.reason instanceof Error ? e.reason.message : String(e.reason)));
+showErrors($('errors'));
 
 /** The live world or a tape: what only one of them has is shown, and the speeds are its own. */
 function setMode(isLive: boolean): void {
-  $('live').hidden = !isLive;
-  $('god-group').hidden = !isLive;
+  document.querySelectorAll<HTMLElement>('.live-only').forEach(el => (el.hidden = !isLive));
   document.querySelectorAll<HTMLElement>('.tape-only').forEach(el => (el.hidden = isLive));
+  if (!isLive) setGod(false);
   speed = isLive ? LIVE_SPEEDS[1] : 4;
-  $('speeds').replaceChildren(...(isLive ? LIVE_SPEEDS : SPEEDS).map(s => {
-    const b = button(isLive ? (s === Infinity ? 'max' : `${s} mo/s`) : `×${s}`, () => { speed = s; live?.rate(s); syncUi(); });
-    b.dataset.speed = String(s);
-    return b;
-  }));
+  $('speeds').innerHTML = (isLive ? LIVE_SPEEDS : SPEEDS).map(s => `<option value="${s}">${isLive ? (s === Infinity ? 'max' : `${s} mo/s`) : `×${s}`}</option>`).join('');
   live?.rate(speed);
 }
 
@@ -141,13 +106,13 @@ function setup(w: World): void {
   // a saved one opens paused at its date, to be looked at.
   playing = false; layer = null;
   if (live && !saved) togglePlay();
-  cls = new Uint8Array(m.w * m.h);
+  inspector.newWorld(m.w * m.h);
   map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
   $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ...(m.globe ? [] : [['band', `${fmt(m.lat_south)}° to ${fmt(m.lat_north)}°`]]), ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
     .map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + '<span>year <b id="hy"></b></span>';
   const names = m.layers.map(l => l.name).filter(n => !/^(true|ground)_[rgb]$/.test(n));
-  const sorted = [...names.filter(n => ORDER.includes(n)).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)), ...names.filter(n => !ORDER.includes(n))];
-  $('layers').replaceChildren(...sorted.map(n => button(label(n), () => setLayer(layer === n ? null : n), n)));
+  const sorted = [...names.filter(n => LAYER_ORDER.includes(n)).sort((a, b) => LAYER_ORDER.indexOf(a) - LAYER_ORDER.indexOf(b)), ...names.filter(n => !LAYER_ORDER.includes(n))];
+  $('layers').replaceChildren(...sorted.map(n => button(layerLabel(n), () => setLayer(layer === n ? null : n), n)));
   const years = m.frames.map(f => f.year), last = years.length - 1;
   if (!live) charts.set(m.series, m.series_units, years);
   const tl = $<HTMLInputElement>('tl');
@@ -175,7 +140,7 @@ function setFrame(f: number): void {
   frame = Math.min(Math.max(f, 0), world.meta.frames.length - 1);
   const y = world.meta.frames[frame].year;
   $<HTMLInputElement>('tl').value = String(frame);
-  $('year').textContent = `Year ${fmtYear(y)}`;
+  $('year').innerHTML = `<b>Year ${fmtYear(Math.floor(y))}</b><small>month ${Math.floor((y - Math.floor(y)) * MONTHS) + 1}</small>`;
   document.body.dataset.year = String(y);
   const hy = document.getElementById('hy'); if (hy) hy.textContent = fmtYear(y);
   if (!live) charts.setYear(y);
@@ -193,7 +158,7 @@ function repaint(): void {
   vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
   fire.set(land && live ? w : null);
   map.setLook(look);
-  paints++;
+  inspector.painted();
   inspect();
 }
 
@@ -212,7 +177,7 @@ function setLayer(n: string | null): void {
     const l = world.meta.layers[world.index.get(n)!], lut = world.lut[world.index.get(n)!];
     $('rampbar').style.background = rampCss(rampFor(n));
     [0, 128, 255].forEach((b, k) => ($('ramp').querySelectorAll('.lbl span')[k].textContent = fmt(lut[b])));
-    $('rampunit').textContent = `${label(n)}${unitText(l.unit) ? ` (${unitText(l.unit)})` : ''}${l.scale === 'log' ? ', log scale' : ''}`;
+    $('rampunit').textContent = `${layerLabel(n)}${unitText(l.unit) ? ` (${unitText(l.unit)})` : ''}${l.scale === 'log' ? ', log scale' : ''}`;
   }
   syncUi(); repaint();
 }
@@ -220,9 +185,18 @@ function setLayer(n: string | null): void {
 function syncUi(): void {
   document.querySelectorAll<HTMLElement>('#views button').forEach(b => b.classList.toggle('on', !layer && b.dataset.view === view));
   document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
-  document.querySelectorAll<HTMLElement>('#speeds button').forEach(b => b.classList.toggle('on', b.dataset.speed === String(speed)));
+  $<HTMLSelectElement>('speeds').value = String(speed);
   $('play').classList.toggle('playing', playing);
+  $('play').setAttribute('aria-label', playing ? 'Pause' : 'Play');
   map.playing = playing && live !== null;
+}
+
+/** Whether god mode is on: its strip and card shown. */
+function godOn(): boolean { return !$('god-strip').hidden; }
+function setGod(on: boolean): void {
+  $('god-strip').hidden = $('god').hidden = !on;
+  $('god-btn').setAttribute('aria-pressed', String(on));
+  if (!on) god.reset();
 }
 
 function setView(v: string): void { view = v; layer = null; setLayer(null); }
@@ -234,39 +208,6 @@ function button(text: string, fn: () => void, layerName?: string): HTMLButtonEle
   return b;
 }
 
-// ---- inspect
-function inspect(): void {
-  const el = $('inspect'), i = map.hover >= 0 ? map.hover : map.pick;
-  const cover = slots.inspect();
-  if (cover) { el.innerHTML = cover; return; }
-  if (!world || i < 0) { el.innerHTML = '<p class="hint">Hover or tap the map.</p>'; return; }
-  if (classesOf !== paints) {
-    const w = world;
-    classesOf = paints;
-    map.mapClasses().then(c => { if (world === w) { cls = c; inspect(); } });
-  }
-  const { meta } = world, [name, color] = CLASSES[cls[i]];
-  const share = (n: string) => world!.lut[world!.index.get(n)!][plane(world!, frame, n)[i]];
-  const grain: [number, number] | null = world.index.has('coarse') ? [share('coarse'), share('fine')] : null;
-  if (!$('texture').hidden) $('texture').innerHTML = textureLegend(grain);
-  let rows = grain ? `<tr><td>Soil texture</td><td>${textureClass(...grain)}</td></tr>` : '';
-  meta.layers.forEach((l, k) => {
-    if (/^(true|ground)_[rgb]$/.test(l.name)) return;
-    rows += `<tr><td>${label(l.name)}</td><td>${fmt(world!.lut[k][plane(world!, frame, l.name)[i]])} <u>${unitText(l.unit)}</u></td></tr>`;
-  });
-  const t = ['true_r', 'true_g', 'true_b'].map(n => plane(world!, frame, n)[i]);
-  rows += `<tr><td>True colour</td><td><s style="background:rgb(${t})"></s></td></tr>`;
-  el.innerHTML = `<div class="cell"><s style="background:${color}"></s><b>${name}</b><span>x ${i % meta.w}, y ${(i / meta.w) | 0}</span></div>${where(i)}<table>${rows}</table>`;
-}
-
-/** A globe cell's latitude and longitude, as a line above the table (nothing on an island). */
-function where(i: number): string {
-  const m = world!.meta;
-  if (!m.globe) return '';
-  const lat = latOf(m, (i / m.w) | 0), east = lonOf(m, i % m.w), lon = east > 180 ? east - 360 : east;
-  const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(1)}° ${v < 0 ? neg : pos}`;
-  return `<p class="where">${deg(lat, 'N', 'S')}, ${deg(lon, 'E', 'W')}</p>`;
-}
 
 function tip(at: HTMLElement, text: string): void {
   const t = $('tip'), r = at.getBoundingClientRect();
@@ -298,7 +239,15 @@ function togglePlay(): void {
 }
 
 // ---- wiring
+$('play').innerHTML = iconSvg('play', 'go') + iconSvg('pause', 'pause');
+fillIcons(document);
 $('play').onclick = togglePlay;
+$<HTMLSelectElement>('speeds').onchange = e => { speed = +(e.target as HTMLSelectElement).value; live?.rate(speed); syncUi(); };
+const panels = new Panels($('bar'), $('cv'));
+watchCovered([$('bar'), $('god-strip'), $('god'), $('inspect-card'), $('timebar')], edges => map.setCovered(edges));
+/** Inspect's card, shown while its button is pressed. */
+$('inspect-btn').onclick = () => { const on = $('inspect-card').hidden; $('inspect-card').hidden = !on; $('inspect-btn').setAttribute('aria-pressed', String(on)); inspect(); };
+$('god-btn').onclick = () => setGod(!godOn());
 $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
@@ -311,7 +260,7 @@ addEventListener('keydown', e => {
   else if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'INPUT') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'ArrowLeft' && tag !== 'INPUT') setFrame(frame - (e.shiftKey ? 10 : 1));
   else if (e.key === 'ArrowRight' && tag !== 'INPUT') setFrame(frame + (e.shiftKey ? 10 : 1));
-  else if (e.key === 'Escape') { setLayer(null); map.pick = -1; inspect(); map.invalidate(); }
+  else if (e.key === 'Escape' && !panels.close() && !god.putAway()) { setLayer(null); map.pick = -1; inspect(); map.invalidate(); }
   else if (e.key === 'f') map.fit();
 });
 let depth = 0;
@@ -323,23 +272,6 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { ch
 $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"></s>${n}</li>`).join('');
 
 // ---- start
-/** A download the network cut is tried this many times in all, the wait before each try again doubling from
- * `FETCH_WAIT_MS` (a phone's connection drops for a moment; a site being published swaps its files). */
-const FETCH_TRIES = 3, FETCH_WAIT_MS = 1000;
-/** The bytes at `url` (with `init`), tried again where the network cut the download; an error that names the file. */
-async function fetchBytes(url: string, init?: RequestInit): Promise<ArrayBuffer> {
-  for (let n = 1; ; n++) {
-    try {
-      const r = await fetch(url, init);
-      if (!r.ok) throw new Error(`${url}: ${r.status}`);
-      return await r.arrayBuffer();
-    } catch (e) {
-      if (e instanceof Error && e.message.startsWith(`${url}: `)) throw e;
-      if (n >= FETCH_TRIES) throw new Error(`${url}: ${e instanceof Error ? e.message : e}`);
-      await new Promise(go => setTimeout(go, FETCH_WAIT_MS * 2 ** (n - 1)));
-    }
-  }
-}
 
 /** The live world: the core's WebAssembly (ew.wasm, beside the page) in a worker; the saved world `from`, or a new one
  * of the seed, size and variety from the page. */
@@ -349,27 +281,12 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
   const wasm = await fetchBytes('ew.wasm', { cache: 'no-cache' });
   coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
-  $<HTMLInputElement>('seed').value = q.get('seed') ?? '1';
-  Object.assign($<HTMLInputElement>('size'), { min: String(SIZE_LEAST), max: String(SIZE_MOST), value: q.get('size') ?? String(LIVE_SIZE) });
-  Object.assign($<HTMLInputElement>('variety'), { min: '1', max: String(VARIETY_MOST), value: q.get('variety') ?? String(LIVE_VARIETY) });
-  // The climate: a band of latitudes the island stands for, from the URL's `band=S,N` or the first preset (`BANDS`).
-  const bands = $<HTMLSelectElement>('band'), asked = q.get('band');
-  const presets = asked && !BANDS.some(b => b[1] === asked) ? [...BANDS, [`${asked.replace(',', '° to ')}°`, asked]] : BANDS;
-  bands.innerHTML = presets.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
-  bands.value = asked ?? BANDS[0][1];
-  // The large shape: from the URL's `shape=one|drawn` or the first (`SHAPES`).
-  const shapes = $<HTMLSelectElement>('shape');
-  shapes.innerHTML = SHAPES.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
-  shapes.value = SHAPES.some(s => s[1] === q.get('shape')) ? (q.get('shape') as string) : SHAPES[0][1];
-  // The weather: from the URL's `weather=strong|soft` or the first (`WEATHERS`).
-  const weathers = $<HTMLSelectElement>('weather');
-  weathers.innerHTML = WEATHERS.map(([name, v]) => `<option value="${v}">${name}</option>`).join('');
-  weathers.value = WEATHERS.some(s => s[1] === q.get('weather')) ? (q.get('weather') as string) : WEATHERS[0][1];
+  fillForm(q);
   live?.stop();
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => (from ? openSaved(from) : newWorld()),
-    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); god.setKinds(l.kinds); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
+    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); god.reset(); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) slots.set(data); },
     frame: (stats, changed) => {
       if (live !== l) return;
@@ -409,67 +326,15 @@ function thingsOf(v: View): void {
   if (!at) slots.set(null);
   live.things(at);
 }
-/** The date, the pace, the cells and the ground's tiles kept and still to come in view. */
-function showStats(s: Stats): void {
-  const el = $('stats'), m = world?.meta;
-  if (!live || !m) { el.hidden = true; return; }
-  const y = m.frames[0].year, day = Math.floor((y - Math.floor(y)) * m.days_per_year) + 1;
-  el.hidden = false;
-  el.innerHTML = [['date', `year ${Math.floor(y)}, day ${day}`], ['pace', `${playing ? fmt(s.pace) : '0'} of ${speed === Infinity ? 'max' : speed} months/s`],
-    ['cells', String(s.cells)],
-    ...(land ? [['ground', `${land.tiles.count()} tiles of ${fmt(m.cell_m / 2 ** (land.tiles.depth - (m.square_depth ?? 0)))} m, ${land.tiles.toCome()} to come`]] : []),
-    ...(drawing ? [['map', `drawn at ${fmt(map.drawnAt)}`]] : [])].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')
-    + `<button class="costs" id="costs">${costShown ? 'hide cost' : 'cost'}</button>`
-  showCost(s);
-}
-/** Whether the cost line shows (`showCost`). */
-let costShown = false;
-$('stats').onclick = e => {
-  const id = (e.target as HTMLElement).id;
-  if (id === 'costs') { costShown = !costShown; if (live) showStats(live.stats); }
-};
-/** The cost line: where the time and the memory go, over the last whole second, so a screenshot of it tells where a
- * slow device spends: the world's worker (its months, the time a month takes, the share of its time it steps), the
- * page's thread (the world's frames taken, the map's draws), the GPU's time a frame, the ground's tiles (made in their
- * worker, taken on the page), the detail sent to the GPU, and the memory of the GPU's textures by what they hold, of
- * each worker's core and of the page's script where the browser says it. */
-function showCost(s: Stats): void {
-  const el = $('cost');
-  el.hidden = !costShown;
-  if (!costShown) return;
-  const ms = (v: number) => v.toFixed(v < 10 ? 1 : 0), mb = (bytes: number) => (bytes / 2 ** 20).toFixed(bytes < 2 ** 23 ? 1 : 0);
-  const per = (key: string) => `${ms(spent(key))} ms on ${spent(`${key} n`).toFixed(1)}`;
-  const [sent, layers, side] = detailSent(), gpuN = spent('gpu n');
-  const heap = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
-  const cards = drawing?.memory() ?? [], cardAll = cards.reduce((n, [, b]) => n + b, 0);
-  el.innerHTML = [
-    ['world', `${fmt(s.pace)} months/s, ${ms(s.monthMs)} ms a month, worker busy ${Math.round(100 * s.busy)}%`],
-    ['page /s', `world frames ${per('world frames')}, draws ${per('draw')}`],
-    ['gpu', `${gpuN > 0 ? ms(spent('gpu') / gpuN) : '-'} ms a frame; programs: ${drawing?.making() ?? '-'}`],
-    ['tiles /s', `${ms(spent('tile ms'))} ms in the worker, ${per('tiles')} on the page`],
-    ['detail', `layers of ${side} texels; ${sent} of ${layers} sent, ${per('detail')} frames /s${detailFailure() ? `; failed: ${detailFailure()}` : ''}`],
-    ['gpu MB', `${mb(cardAll)}: ${cards.map(([label, b]) => `${label} ${mb(b)}`).join(', ')}`],
-    ['wasm MB', `world ${mb(s.memory)}${land ? `, tiles ${land.tiles.memory().map(mb).join(' + ')}` : ''}${heap ? `; js ${mb(heap)}` : ''}`],
-  ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
-}
 
-/** The band of latitudes `S,N`, degrees, south first; [NaN, NaN] (the core's default band, its edges closed) for none,
- * or where S is not below N. */
-function bandOf(text: string | null): [number, number] {
-  const v = (text ?? '').split(',').map(Number);
-  return v.length === 2 && v[0] < v[1] ? [v[0], v[1]] : [NaN, NaN];
-}
 /** Whether a banded world was made in this session: the first one makes the planet's air too, which takes a while. */
 let banded = false;
 function newWorld(): void {
-  const seed = Math.max(0, Math.floor(+$<HTMLInputElement>('seed').value) || 0);
-  const size = Math.min(SIZE_MOST, Math.max(SIZE_LEAST, Math.floor(+$<HTMLInputElement>('size').value) || LIVE_SIZE));
-  const variety = Math.min(VARIETY_MOST, Math.max(1, Math.floor(+$<HTMLInputElement>('variety').value) || LIVE_VARIETY));
-  const band = bandOf($<HTMLSelectElement>('band').value);
+  const { seed, size, band, drawn, variety, soft } = readForm();
   playing = false; saved = null;
   say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
   banded ||= band[0] < band[1];
-  live?.newWorld(seed, size, band, $<HTMLSelectElement>('shape').value === 'drawn', variety, $<HTMLSelectElement>('weather').value === 'soft');
+  live?.newWorld(seed, size, band, drawn, variety, soft);
 }
 /** Stand the live world on the saved world `gz` (the gzip of a snapshot of `ew run`). */
 function openSaved(gz: ArrayBuffer): void {
