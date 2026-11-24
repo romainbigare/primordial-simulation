@@ -43,13 +43,13 @@ const DEAD_SPECK = 0.22; const DEAD_BARK = vec3f(0.035, 0.032, 0.03);
 // the dead trees of its patch seen from afar (`dead_far`).
 fn burnt_spot(p: Spot) -> Spot { return dead_far(scarred(p)); }
 
-// The dead trees standing on spot p's patch (the patch the point's field was read in, cover_field.wgsl `land_weights`:
-// `patch_dead`) seen from afar, in the Earth view, where it lies dry: specks as many as their walls make, as far as the
-// marks do not draw them one by one.
+// The dead trees standing at spot p as its field is read (cover_field.wgsl `dead_here`: the rest of the cells' and its
+// patch's over the share of it the patch takes) seen from afar, in the Earth view, where it lies dry: specks as many as
+// their walls make, as far as the marks do not draw them one by one.
 fn dead_far(p: Spot) -> Spot {
   var q = p;
   if (p.depth > 0.0 || !styled()) { return q; }
-  let dead = patch_dead(vec3i(cell_patch, patch_cell));
+  let dead = dead_here();
   if (dead.x <= 0.0 || dead.y <= 0.0) { return q; }
   let near = cover_look.shown[STANDS] * as_crown(dead.y, p.e);
   if (near >= 1.0) { return q; }

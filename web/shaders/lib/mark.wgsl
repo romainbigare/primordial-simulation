@@ -306,7 +306,7 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
 fn decide(l: i32, k: vec2f) -> vec4f {
   let id = cover.base[l].xy + vec2i(k);
   let at = cover.corner.xy + mark_foot(l, k);
-  cell_patch_at(at);
+  foot_patch_at(at);
   let cs = patch_corners(corners(at / land.map.x));
   // Whether any kind of the four squares has marks on the lattice.
   var all = 0.0;
@@ -365,7 +365,7 @@ fn dead_code() -> f32 { return f32(i32(land.map.y) * i32(land.map.z) * kinds_n()
 
 // The dead tree cell k of lattice l may hold (snag.wgsl; its kind -1: none), the dead trees its cells hold on the
 // mean (0: none) and the height of the stems that died, m: on the trees' lattice, on the ground of the patch whose plants flames killed whole and whose walls
-// still stand there (the patch the fire made: cover_field.wgsl `patch_of`, `patch_dead`), as many as those walls make
+// still stand there (the patch the fire made: cover_field.wgsl `foot_patch`, `patch_dead`), as many as those walls make
 // (`snag_kg`, each as heavy as a stem of its height), in clumps (`DEAD_CLUMP_M` across) inside it; as tall as the plants
 // that died, broken down by the years since they died (`snag_of`).
 const DEAD_CLUMP_M = 40.0;
@@ -374,7 +374,7 @@ fn dead_at(l: i32, k: vec2f) -> Dead {
   var out = Dead(Snag(-1, 0, 0.0, 0.0, 1.0, vec3f(1.0), 0.0), 0.0, 0.0);
   if (l != STANDS) { return out; }
   let at = cover.corner.xy + mark_foot(l, k);
-  let dead = patch_dead(patch_of(at));
+  let dead = patch_dead(foot_patch(at));
   if (dead.x <= 0.0 || dead.y <= 0.0) { return out; }
   let side = cover.grid[l].z;
   let clump = 2.0 * smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / DEAD_CLUMP_M, 97));

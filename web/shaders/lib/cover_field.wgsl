@@ -53,6 +53,12 @@ const FIELD_LAYERS = 17; const PLACES_LAYER = 17; const DEAD_LAYER = 19; const P
 // so a patch's edge and its cell's are winding lines, its size its own (the edge of a burn or of a gap follows the
 // ground and the stands about it, not a circle or a square), and on the mean each patch keeps its share of the ground.
 const PATCH_WARP = 0.16; const PATCH_LOBES = 0.55; const PATCH_FINE = vec2f(0.35, 4.0); const PATCH_WARP_MOST = 0.4;
+// A patch meets the rest of its cell over a margin `PATCH_EDGE_M` either way of its edge, and a cell's ground its
+// neighbour's over `CELL_EDGE_M` (ragged.wgsl `meet`, the patches of each from twice that across, noise streams from
+// `PATCH_NOISE`): the stands of a gap or a burn thin into those about it over the whole margin, and a cell's numbers
+// are its mean over its square, its edge no line on the ground. A mark's foot draws its patch and its cell by the
+// share each takes there, with its own draw fixed at its place to `FOOT_DRAW_M`.
+const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; const FOOT_DRAW_M = 0.01;
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
@@ -213,47 +219,121 @@ fn on_land(v: vec4f, held: f32) -> vec4f { return select(vec4f(0.0), v / held, h
 var<private> land_plain: f32 = 1.0;
 var<private> land_smooth: f32 = 1.0;
 
-// The patch of its cell's cover the point a pixel or a mark's foot reads the field at stands in (`cell_patch_at`; 0:
-// the first, the rest of its cell): set once with `land_weights`, as every layer read there shares it.
+// Of the point a pixel or a mark's foot reads the field at (`cell_patch_at`, set once with `land_weights`, as every
+// layer read there shares them): the square of the cell it lies in (`patch_of`), the patch past the first of that
+// cell's cover it lies nearest the inside of (0: none, the rest of its cell) and the share of the point that patch
+// takes; the squares of the cells across the nearest of its cell's edges along x and y, and the share of the point
+// each takes (`PatchAt`).
 var<private> cell_patch: i32 = 0;
-// The square of the cell whose patch `cell_patch` is (`cell_patch_at`).
 var<private> patch_cell: vec2i = vec2i(0);
+var<private> patch_share: f32 = 0.0;
+var<private> cell_across: vec2i = vec2i(0);
+var<private> across_share: vec2f = vec2f(0.0);
 
-// Of the point `at`, m from the map's north-west corner, the patch of a cell's cover it is drawn in and that cell's
-// square (x, y, z; its patch -1 off the map): of the cell its warped place lies in (`PATCH_WARP`), the first patch
-// past the first (tape/src/stands.rs `places`, canopy.ts `PLACES`) whose reach holds that place; else 0, the first.
-// Where no cell holds a patch (the field has no patch's layers) no noise is read: the square the point lies in, 0.
-fn patch_of(at: vec2f) -> vec3i {
+// Of the point `at`, m from the map's north-west corner, seen at `e` m a pixel: the square of the cell its warped place
+// lies in (`PATCH_WARP`; x -1 off the map), the patch past the first of that cell's cover (tape/src/stands.rs `places`,
+// canopy.ts `PLACES`) it lies nearest the inside of (0: none) and the share of the point that patch takes, as it meets
+// the rest of its cell over its margin (`PATCH_EDGE_M`, ragged.wgsl `meet`) and as far as the point is its cell's;
+// the steps to the cells across the nearer of its cell's edges along x and along y, and the share of the point each
+// takes, as the cells meet across their edges over theirs (`CELL_EDGE_M`: so the rest of a cell, and its dead walls,
+// meet its neighbours' over a band, not along a line). Where no cell holds a patch (the field has no patch's layers) no noise is
+// read: the square the point lies in, none of its neighbours'.
+struct PatchAt { cell: vec2i, which: i32, share: f32, step: vec2i, across: vec2f }
+fn patch_of(at: vec2f, e: f32) -> PatchAt {
   let side = land.map.x;
   var s = at / side;
-  if (i32(textureNumLayers(cover_field_tex)) > PATCH_FIELDS) {
+  let patches = i32(textureNumLayers(cover_field_tex)) > PATCH_FIELDS;
+  if (patches) {
     let lobes = noise(at / (PATCH_LOBES * side), 211).yz + PATCH_FINE.x * noise(PATCH_FINE.y * at / (PATCH_LOBES * side), 212).yz;
     s += clamp(PATCH_WARP * lobes, vec2f(-PATCH_WARP_MOST), vec2f(PATCH_WARP_MOST));
   }
   let q = vec2i(floor(s));
-  if (any(q < vec2i(0)) || any(q >= vec2i(land.map.yz))) { return vec3i(-1, 0, 0); }
-  let a = textureLoad(cover_field_tex, q, PLACES_LAYER, 0);
-  if (a.z <= 0.0) { return vec3i(0, q); }
-  let b = textureLoad(cover_field_tex, q, PLACES_LAYER + 1, 0);
+  var out = PatchAt(q, 0, 0.0, vec2i(0), vec2f(0.0));
+  if (any(q < vec2i(0)) || any(q >= vec2i(land.map.yz))) { out.cell.x = -1; return out; }
+  if (!patches) { return out; }
+  // The cells across: how far past the edge between the lower and the higher cell along each axis the point lies, m,
+  // and the higher's share.
   let o = s - vec2f(q);
-  if (length(o - a.xy) < a.z) { return vec3i(1, q); }
-  if (b.y > 0.0 && length(o - vec2f(a.w, b.x)) < b.y) { return vec3i(2, q); }
-  return vec3i(0, q);
+  let up = o >= vec2f(0.5);
+  out.step = vec2i(select(-1, 1, up.x), select(-1, 1, up.y));
+  let past = (o - select(vec2f(0.0), vec2f(1.0), up)) * side;
+  let higher = vec2f(meet(at, e, past.x, CELL_EDGE_M, 1.0, 0.0, 2.0 * CELL_EDGE_M, PATCH_NOISE + 1), meet(at, e, past.y, CELL_EDGE_M, 1.0, 0.0, 2.0 * CELL_EDGE_M, PATCH_NOISE + 2));
+  out.across = select(1.0 - higher, higher, up);
+  let a = textureLoad(cover_field_tex, q, PLACES_LAYER, 0);
+  if (a.z <= 0.0) { return out; }
+  let b = textureLoad(cover_field_tex, q, PLACES_LAYER + 1, 0);
+  // How far inside each patch's reach the point lies, m (the second's where it is the deeper inside).
+  var which = 1;
+  var inside = a.z - length(o - a.xy);
+  if (b.y > 0.0 && b.y - length(o - vec2f(a.w, b.x)) > inside) { which = 2; inside = b.y - length(o - vec2f(a.w, b.x)); }
+  if (inside * side <= -2.0 * PATCH_EDGE_M) { return out; }
+  out.which = which;
+  out.share = meet(at, e, inside * side, PATCH_EDGE_M, 1.0, 0.0, 2.0 * PATCH_EDGE_M, PATCH_NOISE) * (1.0 - out.across.x) * (1.0 - out.across.y);
+  return out;
 }
 
-// Set `cell_patch` and `patch_cell` at `at` (`patch_of`; off the map: the first patch).
-fn cell_patch_at(at: vec2f) {
-  let p = patch_of(at);
+// Set the point's cells and patch (`cell_patch`...) at `at`, seen at `e` m a pixel (`patch_of`; off the map: the
+// first patch of no cell).
+fn cell_patch_at(at: vec2f, e: f32) {
+  let p = patch_of(at, e);
+  cell_patch = p.which;
+  patch_cell = p.cell;
+  patch_share = p.share;
+  cell_across = p.step;
+  across_share = p.across;
+}
+
+// The patch a mark's foot at `at` stands in, and its cell's square (x, y, z; -1 off the map): one look, not a share,
+// so its plants are its patch's or the rest's alone, of one cell; each drawn by the share it takes there (`patch_of` at
+// no size of a pixel, every scale of the margins' patches shown) against the foot's own draws, so the marks thin over a
+// margin as the field does.
+fn foot_patch(at: vec2f) -> vec3i {
+  let p = patch_of(at, 0.0);
+  if (p.cell.x < 0) { return vec3i(-1, 0, 0); }
+  let place = vec2i(floor(at / FOOT_DRAW_M));
+  let draw = vec3f(f32(lowbias(place, PATCH_NOISE) & 1023u), f32(lowbias(place, PATCH_NOISE + 1) & 1023u), f32(lowbias(place, PATCH_NOISE + 2) & 1023u)) / 1024.0;
+  let cell = p.cell + vec2i(select(0, p.step.x, p.across.x > draw.x), select(0, p.step.y, p.across.y > draw.y));
+  // (The patch is its own cell's: its share is of the point and that cell's alone.)
+  let own = all(cell == p.cell) && p.share / max((1.0 - p.across.x) * (1.0 - p.across.y), 1e-6) > draw.z;
+  return vec3i(select(0, p.which, own), cell);
+}
+// Set `cell_patch`, `patch_cell` and `patch_share` at a mark's foot at `at` (`foot_patch`), and no cells across.
+fn foot_patch_at(at: vec2f) {
+  let p = foot_patch(at);
   cell_patch = max(p.x, 0);
   patch_cell = p.yz;
+  patch_share = select(0.0, 1.0, p.x > 0);
+  across_share = vec2f(0.0);
 }
 
-// Of patch `p` of the cell of square `q` (`patch_of`): the dead walls flames left standing on it, kg a m² of its land,
-// the height they stood to, m, and the years since they died (tape/src/stands.rs `dead`); none off the map.
+// Of patch `p` of the cell of square `q` (`foot_patch`): the dead walls flames left standing on it, kg a m² of its
+// land, the height they stood to, m, and the years since they died (tape/src/stands.rs `dead`); none off the map.
 fn patch_dead(p: vec3i) -> vec3f {
   if (p.x < 0) { return vec3f(0.0); }
-  let q = p.yz;
+  let q = clamp(p.yz, vec2i(0), vec2i(land.map.yz) - 1);
   return vec3f(textureLoad(cover_field_tex, q, DEAD_LAYER, 0)[p.x], textureLoad(cover_field_tex, q, DEAD_LAYER + 1, 0)[p.x], textureLoad(cover_field_tex, q, DEAD_LAYER + 2, 0)[p.x]);
+}
+
+// The dead walls standing at the point the field is read at (`land_weights`), as `patch_dead` gives them: of the rest
+// of its cell and of the cells across its edges by the share of the point each takes (`across_share`), and of its
+// patch by its share; the heights and years weighed by the walls.
+fn dead_here() -> vec3f {
+  if (patch_cell.x < 0) { return vec3f(0.0); }
+  var walls = vec3f(0.0);
+  for (var k = 0; k < 4; k++) {
+    let across = vec2<bool>(k % 2 == 1, k / 2 == 1);
+    let w = select(1.0 - across_share.x, across_share.x, across.x) * select(1.0 - across_share.y, across_share.y, across.y);
+    if (w <= 0.0) { continue; }
+    let d = patch_dead(vec3i(0, patch_cell + vec2i(select(0, cell_across.x, across.x), select(0, cell_across.y, across.y))));
+    walls += w * d.x * vec3f(1.0, d.y, d.z);
+  }
+  // The patch takes its share of the point from the rest of its own cell.
+  if (patch_share > 0.0) {
+    let own = patch_dead(vec3i(0, patch_cell));
+    let d = patch_dead(vec3i(cell_patch, patch_cell));
+    walls += patch_share * (d.x * vec3f(1.0, d.y, d.z) - own.x * vec3f(1.0, own.y, own.z));
+  }
+  return vec3f(walls.x, walls.yz / max(walls.x, 1e-9));
 }
 
 // Layer l of the field of the patch `cell_patch` of its cell `patch_cell` (one past the first: its own,
@@ -262,9 +342,17 @@ fn patch_field(l: i32) -> vec4f {
   return textureLoad(cover_field_tex, patch_cell, PATCH_FIELDS + (cell_patch - 1) * FIELD_LAYERS + l, 0);
 }
 
-// Set `land_plain`, `land_smooth` and `cell_patch` at `at`, m from the map's north-west corner.
-fn land_weights(at: vec2f) {
-  cell_patch_at(at);
+// Layer l of the field read as `plain` without the patch, with the patch's (`patch_field`) over the share of the
+// point it takes.
+fn with_patch(plain: vec4f, l: i32) -> vec4f {
+  if (patch_share <= 0.0) { return plain; }
+  return mix(plain, patch_field(l), patch_share);
+}
+
+// Set `land_plain`, `land_smooth` and the patch (`cell_patch_at`) at `at`, m from the map's north-west corner, seen at
+// `e` m a pixel.
+fn land_weights(at: vec2f, e: f32) {
+  cell_patch_at(at, e);
   let uv = at / (land.map.x * land.map.yz);
   land_plain = select(field_tap(uv, LAND_LAYER).x, 0.0, any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)));
   land_smooth = spline_field(at, LAND_LAYER).x;
@@ -285,23 +373,24 @@ fn spline_field(at: vec2f, l: i32) -> vec4f {
 
 // The field of lattice l at `at`, m from the map's north-west corner: the colour its marks cover the ground with (a
 // reflectance, premultiplied) and the share they cover, blended over the squares with land (`on_land`, `land_plain`);
-// in a patch past the first of its cell's cover (`cell_patch`), that patch's (`patch_field`).
+// over the share of the point a patch past the first of its cell's cover takes (`patch_share`), that patch's
+// (`with_patch`).
 fn field_at(at: vec2f, l: i32) -> vec4f {
   let uv = at / (land.map.x * land.map.yz);
   if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec4f(0.0); }
-  if (cell_patch > 0) { return patch_field(l); }
-  return on_land(field_tap(uv, l), land_plain);
+  if (patch_share >= 1.0) { return patch_field(l); }
+  return with_patch(on_land(field_tap(uv, l), land_plain), l);
 }
 
 // The field of lattice l at uv, blended between its texels.
 fn field_tap(uv: vec2f, l: i32) -> vec4f { return textureSampleLevel(cover_field_tex, cover_field_sampler, uv, l, 0.0); }
 
 // The field of lattice l at `at` through its texels' centres as a B-spline read texel by texel (draw.wgsl `b_spline`)
-// over the squares with land (`on_land`, `land_smooth`): no square shows in it, and no staircase of the GPU's blend. In a
-// patch past the first of its cell's cover (`cell_patch`), that patch's (`patch_field`).
+// over the squares with land (`on_land`, `land_smooth`): no square shows in it, and no staircase of the GPU's blend. Over
+// the share of the point a patch past the first of its cell's cover takes, that patch's (`with_patch`).
 fn field_smooth(at: vec2f, l: i32) -> vec4f {
-  if (cell_patch > 0) { return patch_field(l); }
-  return on_land(spline_field(at, l), land_smooth);
+  if (patch_share >= 1.0) { return patch_field(l); }
+  return with_patch(on_land(spline_field(at, l), land_smooth), l);
 }
 
 // How much thicker than their mean the plants stand at `at` (`PATCH`).
@@ -457,7 +546,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
 // (`patchy`), as far as it holds there (`held_at`); far away, where the sward's and the low lattices' detail no longer
 // shows, those three as their one layer (canopy.ts `FIELD.low`).
 fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
-  land_weights(at);
+  land_weights(at, e);
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
   let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
