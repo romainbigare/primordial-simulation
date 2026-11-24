@@ -89,6 +89,20 @@ impl World {
         from_loose + from_rock
     }
 
+    /// `mol` of the liquid `k` put in ground node `i` from the outside node (`put`) as a liquid: where the node's
+    /// temperature holds `k` solid, with its fusion enthalpy too (liquid at its melting point, as the node's heat then
+    /// freezes it or not).
+    pub(super) fn put_liquid(&mut self, i: usize, k: usize, mol: f64) {
+        let (ns, t) = (self.chem.ns(), self.t_ground(i));
+        let mut g = vec![0.0; ns];
+        g[k] = mol;
+        self.put(i, &g, &vec![0.0; ns]);
+        let now = self.stock(Node::ground(i));
+        if self.chem.fused_heat(k, t, now) == 0.0 {
+            self.cross((Boundary::Outside, Node::ground(i)), Vec::new(), mol * self.chem.subs[k].lf);
+        }
+    }
+
     /// `g` mol of each substance put in ground node `i` and `bed` in its bed (taken where under none) from the outside
     /// node, with the heat that keeps the node at its temperature (`energy_of` after less before).
     pub(super) fn put(&mut self, i: usize, g: &[f64], bed: &[f64]) {

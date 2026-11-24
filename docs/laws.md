@@ -236,11 +236,15 @@ took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`
 it covers, and the samples of the ring round it (its rim) that lie lower than that mean are raised to it, cut or
 filled with each cell's own rock; so the floor is a closed basin, that deep under its pass, wherever it is made. The
 samples are built again over it at once; the key liquid fills the pond under its centre to that pond's level, its pass,
-from the outside node at the ground's temperature, poured into each cell's part of that pond's body (`flow::pour`: the
+with what the pores of the ground under it lack to be full (a real body on dry ground soaks the ground under it
+first: of a node that is one, its pores' lack at the cell's mean under the pond's samples alone, `flow::pores_lack`),
+from the outside node at the ground's temperature and liquid (with its fusion enthalpy where that ground is frozen),
+poured into each cell's part of that pond's body (`flow::pour`: in a cell of parts it comes into its liquid, and the
 part holds it, so the runoff's pass keeps it there); where the floor still opens to the open low ground (a rim under
 the sea's level), none (its liquid stands there already), and a brush whose centre lies in the open low ground makes
-none. Then the liquid settles over the ground (below), the pores of a dry cell taking their fill first, so a basin on
-dry ground stands less deep than its pass. An edit moves the bed faster than the slow ground is checked: its caches
+none. Then the liquid settles over the ground (below); what the cells' other liquid and pores took of it is poured
+again, up to three times, until it lacks less than a hundredth of its room, so it stands the asked depth over a dry
+floor. An edit moves the bed faster than the slow ground is checked: its caches
 are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. **Known limit:** the samples' loose
 ground and the make of their bed (what the tiles and the textures read) do not follow an edit; the cell's soil keeps
 its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle

@@ -14,6 +14,12 @@ use std::collections::BTreeMap;
 /// brush has its neighbours across sides and corners under it or on the ring.
 const RIM_SAMPLES: f64 = 1.5;
 
+/// How many times at most a basin pours again what its cells' other liquid and pores took of its liquid as it settled.
+const TOP_UPS: usize = 3;
+
+/// A basin is full once what it still lacks to its pass is under this share of its room over its floor.
+const TOP_UP_SHARE: f64 = 0.01;
+
 impl World {
     /// A basin of liquid `depth` m deep under the brush `b` (the module's doc). Its level is the mean height of the
     /// samples it covers (as built over the cells' grounds now), the ground levelled: every sample it covers moves to its
@@ -22,7 +28,7 @@ impl World {
     /// again over it (`flow::build::reshape`). The key liquid fills the pond under the brush's centre to its level, its
     /// pass, from the outside node at each cell's ground temperature, poured into each cell's part of it
     /// (`pour_pond`); then the passes of a month's start and the liquid settled with no time (`flow::settle`) level
-    /// it (a dry cell's pores take their share first). Whether a basin was made: none whose centre lies in the open low ground (its liquid stands there already).
+    /// it (the pores of the ground it covers were given what they take first). Whether a basin was made: none whose centre lies in the open low ground (its liquid stands there already).
     pub(crate) fn basin(&mut self, b: Brush, depth: f64) -> bool {
         let Some(liquid) = crate::cover::Parts::of(&self.chem).map(|p| p.liquid) else { return false };
         // (The ground is read on the samples as they stand over the cells' grounds: built again first where edits
@@ -55,22 +61,36 @@ impl World {
         let pond = s.pond[centre];
         let filled = pond != NONE && !open(&s, centre);
         drop(s);
-        if filled {
-            self.pour_pond(pond, liquid);
+        // What a cell's other liquid and its ground's pores took of it as it settled is poured again, `TOP_UPS`
+        // times at most.
+        let mut from = f64::NEG_INFINITY;
+        for _ in 0..=TOP_UPS {
+            let more = filled && self.pour_pond(pond, liquid, from);
+            crate::month_start(self);
+            crate::flow::settle(self);
+            if !more {
+                break;
+            }
+            from = self.pond_levels()[pond as usize];
         }
-        crate::month_start(self);
-        crate::flow::settle(self);
         true
     }
 
     /// The key liquid `liquid` poured into each cell's part of pond `pond` (`flow::pour`): over each of its samples to
-    /// the pond's level, m³, from the outside node at each cell's ground temperature.
-    fn pour_pond(&mut self, pond: u32, liquid: usize) {
+    /// the pond's level from its ground or from the level `from` where higher, and what the pores of the ground that
+    /// covers lack to be full, which they take first (`flow::pores_lack`, under the pond's samples in the cell: so it
+    /// stands that deep over a dry floor too), m³, from the outside node at each cell's ground temperature, liquid (`put_liquid`). Whether it
+    /// poured more than `TOP_UP_SHARE` of the pond's room over its floor.
+    fn pour_pond(&mut self, pond: u32, liquid: usize, from: f64) -> bool {
         let s = self.terrain_samples();
         let level = s.ponds[pond as usize].level;
-        let mut by: BTreeMap<usize, f64> = BTreeMap::new();
+        let (mut by, mut room): (BTreeMap<usize, f64>, f64) = (BTreeMap::new(), 0.0);
         for (i, l) in self.map.leaves().iter().enumerate() {
-            let v: f64 = l.split(SAMPLE_DEPTH.max(l.depth)).map(|f| s.index(&f)).filter(|&k| s.pond[k] == pond).map(|k| (level - s.h[k]).max(0.0) * s.area(k)).sum();
+            let members: Vec<usize> = l.split(SAMPLE_DEPTH.max(l.depth)).map(|f| s.index(&f)).filter(|&k| s.pond[k] == pond).collect();
+            room += members.iter().map(|&k| (level - s.h[k]).max(0.0) * s.area(k)).sum::<f64>();
+            let stands: f64 = members.iter().map(|&k| (level - s.h[k].max(from)).max(0.0) * s.area(k)).sum();
+            let covers: f64 = members.iter().filter(|&&k| s.h[k].max(from) < level).map(|&k| s.area(k)).sum();
+            let v = stands + crate::flow::pores_lack(self, i, covers);
             if v > 0.0 {
                 by.insert(i, v);
             }
@@ -79,10 +99,8 @@ impl World {
         let sub = &self.chem.subs[liquid];
         let per_m3 = sub.density[1] / sub.molar_mass;
         for (&i, &v) in &by {
-            let mut g = vec![0.0; self.chem.ns()];
-            g[liquid] = v * per_m3;
-            self.put(i, &g, &vec![0.0; self.chem.ns()]);
-            crate::flow::pour(self, i, pond, v);
+            crate::flow::pour(self, i, pond, (liquid, v), |w| w.put_liquid(i, liquid, v * per_m3));
         }
+        by.values().sum::<f64>() > TOP_UP_SHARE * room
     }
 }

@@ -132,12 +132,14 @@ fn a_planted_kind_stands_as_the_worlds_grown_stand_of_it() {
 }
 
 /// A basin of liquid (`Act::Basin`): the ground under a brush is levelled to a floor `DEPTH` under its mean height, its
-/// rim raised to that height where lower, and the key liquid poured in to its pass, from the outside node, so the books
-/// are kept. The floor is a closed basin, a pond at least that deep to its pass, whose body holds the liquid (less what
-/// the pores of its floor take): it stands over the floor at once and still after a month.
+/// rim raised to that height where lower, and the key liquid poured in to its pass with what the pores under it lack,
+/// from the outside node, so the books are kept. The floor is a closed basin, a pond at least that deep to its pass,
+/// whose body holds the liquid: on dry ground it stands the asked depth over the floor at once, and still after a month.
 #[test]
 fn a_basin_holds_its_liquid() {
     const DEPTH: f64 = 5.0;
+    // A basin pours until it lacks less than a hundredth of its room (`edit::basin`).
+    const FULL_SHARE: f64 = 0.01;
     let mut w = small_world();
     // An inland cell whose samples and its neighbours' lie in no pond: a basin of its own.
     let s0 = w.terrain_samples();
@@ -155,7 +157,7 @@ fn a_basin_holds_its_liquid() {
     assert!(pond != pcore::space::network::NONE, "the floor is no pond");
     let depth = |w: &World| w.pond_levels()[pond as usize] - s.h[k];
     let (now, full) = (depth(&w), s.ponds[pond as usize].level - s.h[k]);
-    assert!(full >= DEPTH - 1e-6 && now > 0.5 * full && now <= full + 1e-6, "the liquid stands {now} m deep, {full} m to its pass");
+    assert!(full >= DEPTH - 1e-6 && now >= (1.0 - FULL_SHARE) * DEPTH && now <= full + 1e-6, "the liquid stands {now} m deep, {full} m to its pass");
     pcore::step(&mut w);
     let later = depth(&w);
     assert!((later - now).abs() < 0.2 * full, "after a month it stands {later} m deep, from {now}");

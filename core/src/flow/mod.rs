@@ -102,16 +102,38 @@ pub fn settle(w: &mut World) {
     with(w, true, liquid::settle);
 }
 
-/// `m3` m³ of liquid an edit put in cell `i`'s ground node poured into its part of the body of standing liquid of pond
-/// `pond` (`Samples::ponds`): that part holds it (`State::held`), so the runoff's pass keeps it in the body
-/// (`runoff::surface`) and levels it there. Whether the cell holds a part of that pond.
-pub fn pour(w: &mut World, i: usize, pond: u32, m3: f64) -> bool {
+/// What the pores under `m2` m² of cell `i`'s ground lack to be full, m³ (`parts::pores_first`): of a cell of parts,
+/// its land's; of a node that is one, its pores' at the cell's mean, as a part of its own that covers that ground
+/// takes its share of them (`parts::create`). None before Flow built its state.
+pub fn pores_lack(w: &World, i: usize, m2: f64) -> f64 {
+    let s = &w.scratch;
+    if s.pd.len() != w.mesh.cells().n() {
+        return 0.0;
+    }
+    let [dry, own] = parts::pores_first(s, i);
+    m2 * (dry - own / s.curves[i].area()).max(0.0)
+}
+
+/// `m3` m³ of the liquid `k` poured into cell `i`'s part of the body of standing liquid of pond `pond`
+/// (`Samples::ponds`), as `book` puts it in the cell's ground node: in a cell of parts it comes into its liquid
+/// (`parts::to_liquid`), and that part holds it (`State::held`), so the runoff's pass keeps it in the body
+/// (`runoff::surface`) and levels it there; the cell's state is found anew (`land::cells_state`), so a dry cell's
+/// liquid stands in a part of its own over the ground it covers (`parts::create`). Whether the cell holds a part of
+/// that pond.
+pub fn pour(w: &mut World, i: usize, pond: u32, (k, m3): (usize, f64), book: impl FnOnce(&mut World)) -> bool {
     let mut done = false;
-    with(w, false, |_, s| {
+    with(w, true, |w, s| {
+        let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
+        let amount = |w: &World| w.store.amounts(Class::Ground)[k * n + i];
+        let (before, heat) = (amount(w), w.store.heat(Class::Ground)[i]);
+        book(w);
+        parts::to_liquid(w, s, &[i as u32], (&[k], &[before]), &[heat], parts::Leaves::Liquid);
+        s.note(k, i, amount(w) - before, area);
         let h = &mut s.state.held[i];
         if let Some(q) = h.ponds.iter().position(|&p| p == pond) {
             (h.m3[q], done) = (h.m3[q] + m3, true);
         }
+        land::cells_state(w, s, &[i as u32], true);
     });
     done
 }
