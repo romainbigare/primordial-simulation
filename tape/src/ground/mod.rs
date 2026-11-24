@@ -73,6 +73,7 @@ pub struct Ground {
     samples: Arc<Samples>,
     law: Law,
     at: Vec<[f64; 2]>,
+    raw: Vec<[f64; 2]>,
     bends: bends::Bends,
     shore: shore::Shore,
     grain: Vec<pcore::soil::Texture>,
@@ -95,12 +96,12 @@ impl Ground {
         let law = Law::of(phys);
         assert!(!map.wrap, "tiles of the ground are made for an island");
         let shore = shore::Shore::new(&samples);
-        let at = stems::points(&samples, &shore);
+        let (at, raw) = stems::points(&samples, &shore);
         let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
         let grain = pcore::soil::textures(&samples, &terrain.makes, gravity);
         let strips = wetness::strips(&samples, phys);
         let hill = wetness::hill(&samples, &strips);
-        Ground { seed, map, terrain, lat, samples, law, at, bends, shore, grain, strips, hill, phys: *phys, gravity }
+        Ground { seed, map, terrain, lat, samples, law, at, raw, bends, shore, grain, strips, hill, phys: *phys, gravity }
     }
 
     /// The ground of world `w`, on its samples as last built (`World::terrain_samples`).
@@ -127,20 +128,27 @@ impl Ground {
     }
 
     /// The ground made again on the samples `new` (as a world built them again, `Terrain::built`): what each sample
-    /// holds of it found again, but the pieces of the channels (`bends::Bends`), found again only where a piece may read
-    /// a sample that changed (`rebuild::near`, `BENDS_READ`; and every piece down the ways from those, whose start they
-    /// set): the rest read what they did. Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
+    /// holds of it found again, but the shore (`shore::Shore::update`), the points the lines run through
+    /// (`stems::update`), the texture (`pcore::soil::texture_at`) and the pieces of the channels (`bends::Bends`), found
+    /// again only where they may read a sample that changed (`rebuild::near`, `BENDS_READ`; and every piece down
+    /// the ways from those, whose start they set): the rest read what they did. Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
     pub fn rebuild(&mut self, new: Arc<Samples>) -> Vec<bool> {
-        let shore = shore::Shore::new(&new);
-        let at = stems::points(&new, &shore);
-        let grain = pcore::soil::textures(&new, &self.terrain.makes, self.gravity);
+        let old = self.samples.clone();
+        let mut shore = std::mem::take(&mut self.shore);
+        let shore_moved = shore.update(&old, &new);
+        let ways: Vec<bool> = (0..new.h.len()).map(|k| old.main[k] != new.main[k] || old.to[k] != new.to[k]).collect();
+        let (mut at, mut raw) = (self.at.clone(), std::mem::take(&mut self.raw));
+        stems::update(&new, &shore, (&mut at, &mut raw), (&ways, &shore_moved));
+        let mut grain = std::mem::take(&mut self.grain);
+        let read = rebuild::near(&new, &rebuild::moved(&old, &new), rebuild::GRAIN_READ);
+        (0..new.h.len()).filter(|&k| read[k]).for_each(|k| grain[k] = pcore::soil::texture_at(&new, &self.terrain.makes, self.gravity, k));
         let strips = wetness::strips(&new, &self.phys);
         let hill = wetness::hill(&new, &strips);
         let changed = rebuild::changed(&self.read(), &rebuild::Read { s: &new, hill: &hill, strips: &strips, at: &at });
         let reaches = bends::Reaches { seed: self.seed, s: &new, at: &at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) };
         self.bends.update(&reaches, &rebuild::readers(&new, &rebuild::near(&new, &changed, rebuild::BENDS_READ)));
         let squares = rebuild::squares(&self.map, &new, &rebuild::readers(&new, &changed));
-        (self.samples, self.at, self.shore, self.grain, self.strips, self.hill) = (new, at, shore, grain, strips, hill);
+        (self.samples, self.at, self.raw, self.shore, self.grain, self.strips, self.hill) = (new, at, raw, shore, grain, strips, hill);
         squares
     }
 

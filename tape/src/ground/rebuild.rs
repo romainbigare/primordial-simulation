@@ -46,6 +46,29 @@ pub(super) fn changed(old: &Read, new: &Read) -> Vec<bool> {
 /// up its main way and down its own, and a sample across them (`Reaches::rise_across`), each step a sample at most.
 pub(super) const BENDS_READ: i64 = REACH_SAMPLES as i64 + 1;
 
+/// The samples round a sample that its texture reads (`pcore::soil::texture_at`): its main sample upstream and the
+/// samples each runs to, a step each.
+pub(super) const GRAIN_READ: i64 = 2;
+
+/// Of each sample, whether one of the numbers its texture reads differs in `new` from `old` (its height, its ways,
+/// what drains through it, its run, its pond, its make and its loose ground), to the last bit.
+pub(super) fn moved(old: &Samples, new: &Samples) -> Vec<bool> {
+    (0..new.h.len())
+        .map(|k| {
+            old.h[k].to_bits() != new.h[k].to_bits()
+                || old.to[k] != new.to[k]
+                || old.main[k] != new.main[k]
+                || old.up[k].to_bits() != new.up[k].to_bits()
+                || old.run[k].to_bits() != new.run[k].to_bits()
+                || old.pond[k] != new.pond[k]
+                || old.make[k] != new.make[k]
+                || old.loose[k].to_bits() != new.loose[k].to_bits()
+                || old.settled[k].to_bits() != new.settled[k].to_bits()
+                || old.age[k].to_bits() != new.age[k].to_bits()
+        })
+        .collect()
+}
+
 /// `marked` with every sample of `s` within `by` samples of a marked one, row and column, marked too.
 pub(super) fn near(s: &Samples, marked: &[bool], by: i64) -> Vec<bool> {
     let mut out = marked.to_vec();

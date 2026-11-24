@@ -11,7 +11,7 @@ mod texture;
 pub(crate) use exchange::dissolved;
 pub use organic::{holdings, Holdings};
 pub use pores::Pores;
-pub use texture::{samples, textures};
+pub use texture::{samples, texture_at, textures};
 pub(crate) use texture::{flood_shear, passes, threshold_slope, CLASSES};
 
 use crate::chem::Phase;

@@ -31,7 +31,7 @@ const TEXEL_SAMPLES: f64 = 1.0 / 128.0;
 #[test]
 fn a_texel_names_the_channel_it_measures() {
     let (s, metres, law) = island();
-    let at = points(&s, &super::super::shore::Shore::new(&s));
+    let at = points(&s, &super::super::shore::Shore::new(&s)).0;
     let r = reaches(&s, &at, metres, law);
     let bends = Bends::new(&r);
     let none = vec![false; s.up.len()];
@@ -63,7 +63,7 @@ fn a_texel_names_the_channel_it_measures() {
 #[test]
 fn a_channels_line_runs_on_from_sample_to_sample() {
     let (s, metres, law) = island();
-    let at = points(&s, &super::super::shore::Shore::new(&s));
+    let at = points(&s, &super::super::shore::Shore::new(&s)).0;
     let r = reaches(&s, &at, metres, law);
     let bends = Bends::new(&r);
     let none = vec![false; s.up.len()];
@@ -124,8 +124,9 @@ fn the_smooth_shore_keeps_the_area_under_the_level() {
 }
 
 /// A ground made again after edits shaped the world's ground (`Ground::rebuild`) is the ground made anew on the same
-/// samples: its tiles are the same to the last bit, though it finds the pieces of the channels again only where they
-/// may read what changed (`Bends::update`). Two strokes, the second made again from the first's ground.
+/// samples: its points, shore, texture and tiles are the same to the last bit, though it finds the shore, the points
+/// and the texture of each sample and the pieces of the channels again only where they may read what changed. Two
+/// strokes, the second made again from the first's ground.
 #[test]
 fn a_ground_made_again_is_the_ground_made_anew() {
     use pcore::edit::{Act, Edit};
@@ -145,6 +146,9 @@ fn a_ground_made_again_is_the_ground_made_anew() {
     stroke(&mut w, -10.0);
     again.rebuild_from(&super::super::Ground::relief_bytes(&w)).expect("the relief");
     let anew = super::super::Ground::of(&w);
+    let colours = vec![[0.5; 3]; w.terrain.makes.len()];
+    assert!(again.at == anew.at && again.raw == anew.raw && again.shore.dry() == anew.shore.dry(), "the points and the shore");
+    assert!(again.rock(&colours) == anew.rock(&colours), "the rock and the texture");
     let depths = super::super::depths(&w.map);
     for depth in [*depths.start(), depths.start() + 2] {
         let tiles = 1i64 << (depth - depths.start());

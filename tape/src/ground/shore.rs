@@ -34,6 +34,8 @@ const SMOOTH_SAMPLES: f64 = 0.9;
 const SMOOTH_REACH: i64 = 3;
 /// The samples about a sample in which its nearest pond is found, each way.
 const NEAR_SAMPLES: i64 = 2;
+/// A sample draws its own ground where its texels' splines read only far ones: two samples each way (`Shore::far_at`).
+const FAR_SAMPLES: i64 = 2;
 /// The ground drawn lies on the offset's side of the level by at least this share of the offset, all of it to
 /// `SIDE_FROM` of `SHORE_M` and none at `SHORE_M`, where the ground lies on that side by itself.
 const SIDE: f64 = 0.5;
@@ -97,6 +99,21 @@ pub(super) struct Shore {
     far: Vec<bool>,
 }
 
+/// The pond sample `k` of `s` lies in or the nearest within `NEAR_SAMPLES` (`NONE`: none); none where it lies out of a
+/// pond and under its level: the ground its liquid spills down below its pass holds none, and its offset is held over
+/// the level, as land's.
+fn pond_near(s: &Samples, k: usize) -> u32 {
+    let (across, down) = (s.across as i64, s.down as i64);
+    let at = |c: i64, r: i64| r.clamp(0, down - 1) as usize * s.across + c.clamp(0, across - 1) as usize;
+    let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
+    let near = (-NEAR_SAMPLES..=NEAR_SAMPLES)
+        .flat_map(|dr| (-NEAR_SAMPLES..=NEAR_SAMPLES).map(move |dc| (dc, dr)))
+        .filter(|&(dc, dr)| s.pond[at(c + dc, r + dr)] != NONE)
+        .min_by_key(|&(dc, dr)| dc * dc + dr * dr);
+    let q = near.map_or(NONE, |(dc, dr)| s.pond[at(c + dc, r + dr)]);
+    if q != NONE && s.pond[k] == NONE && s.h[k] < level_of(s, q) { NONE } else { q }
+}
+
 /// The level of pond `q` of `s`, m: the sea's for the open low ground.
 fn level_of(s: &Samples, q: u32) -> f64 {
     let p = &s.ponds[q as usize];
@@ -114,54 +131,76 @@ pub(super) struct Beside {
 impl Shore {
     /// The shore of the samples `s`.
     pub(super) fn new(s: &Samples) -> Shore {
-        let (across, down) = (s.across as i64, s.down as i64);
-        let at = |c: i64, r: i64| r.clamp(0, down - 1) as usize * s.across + c.clamp(0, across - 1) as usize;
-        let pond: Vec<u32> = (0..s.h.len())
-            .map(|k| {
-                let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
-                let near = (-NEAR_SAMPLES..=NEAR_SAMPLES)
-                    .flat_map(|dr| (-NEAR_SAMPLES..=NEAR_SAMPLES).map(move |dc| (dc, dr)))
-                    .filter(|&(dc, dr)| s.pond[at(c + dc, r + dr)] != NONE)
-                    .min_by_key(|&(dc, dr)| dc * dc + dr * dr);
-                let q = near.map_or(NONE, |(dc, dr)| s.pond[at(c + dc, r + dr)]);
-                // Out of a pond and under its level is the ground its liquid spills down below its pass: it holds none,
-                // and its offset is held over the level, as land's.
-                if q != NONE && s.pond[k] == NONE && s.h[k] < level_of(s, q) { NONE } else { q }
-            })
-            .collect();
+        let n = s.h.len();
+        let pond: Vec<u32> = (0..n).map(|k| pond_near(s, k)).collect();
         let levels: Vec<f64> = (0..s.ponds.len() as u32).map(|q| level_of(s, q)).collect();
-        let level: Vec<f64> = pond.iter().map(|&q| if q == NONE { f64::NAN } else { levels[q as usize] }).collect();
+        let mut shore = Shore { across: s.across, down: s.down, pond, levels, offset: vec![0.0; n], depth: vec![0.0; n], far: vec![false; n] };
+        let all: Vec<usize> = (0..n).collect();
+        shore.smooth(s, &all, &all);
+        shore.far = (0..n).map(|k| shore.far_at(k)).collect();
+        shore
+    }
+
+    /// The same made again on the samples `new` from the samples `old` it was made on: each number found again only
+    /// where it may read a sample whose height or pond, or whose pond's level, differs (each read reaches `NEAR_SAMPLES`,
+    /// then `SMOOTH_REACH` each way, then the spline's two), so it is the shore `new` makes, to the last bit. Returns the
+    /// samples whose offset or depth may differ.
+    pub(super) fn update(&mut self, old: &Samples, new: &Samples) -> Vec<bool> {
+        let level_moved = |q: u32, s: &Samples, t: &Samples| q != NONE && ((q as usize) >= t.ponds.len() || level_of(s, q).to_bits() != level_of(t, q).to_bits());
+        let read: Vec<bool> = (0..new.h.len())
+            .map(|k| old.h[k].to_bits() != new.h[k].to_bits() || old.pond[k] != new.pond[k] || level_moved(new.pond[k], new, old) || level_moved(old.pond[k], old, new))
+            .collect();
+        self.levels = (0..new.ponds.len() as u32).map(|q| level_of(new, q)).collect();
+        let near_pond = super::rebuild::near(new, &read, NEAR_SAMPLES);
+        let pond_at: Vec<usize> = (0..new.h.len()).filter(|&k| near_pond[k]).collect();
+        pond_at.iter().for_each(|&k| self.pond[k] = pond_near(new, k));
+        // (A sample's held height reads its own pond and height alone; the smoothing reads those of its rows and columns.)
+        let rows = super::rebuild::near(new, &near_pond, SMOOTH_REACH);
+        let both = super::rebuild::near(new, &rows, SMOOTH_REACH);
+        let (across, wide): (Vec<usize>, Vec<usize>) = ((0..new.h.len()).filter(|&k| both[k]).collect(), (0..new.h.len()).filter(|&k| rows[k]).collect());
+        self.smooth(new, &across, &wide);
+        let far = super::rebuild::near(new, &rows, FAR_SAMPLES);
+        (0..new.h.len()).filter(|&k| far[k]).for_each(|k| self.far[k] = self.far_at(k));
+        rows
+    }
+
+    /// The offset and the depth of the samples `at` (`new`'s doc), from their heights over their ponds' levels held,
+    /// blurred along the rows at the samples `across` (those whose blur `at` reads down the columns) and then down the
+    /// columns.
+    fn smooth(&mut self, s: &Samples, across: &[usize], at: &[usize]) {
+        let (cols, rows) = (s.across as i64, s.down as i64);
+        let to = |c: i64, r: i64| r.clamp(0, rows - 1) as usize * s.across + c.clamp(0, cols - 1) as usize;
+        let level = |k: usize| if self.pond[k] == NONE { f64::NAN } else { self.levels[self.pond[k] as usize] };
         // Each sample's height over its level, held; a sample with no pond near stands over any.
-        let held = |lo: f64, hi: f64| -> Vec<f64> { (0..s.h.len()).map(|k| if level[k].is_nan() { hi } else { (s.h[k] - level[k]).clamp(lo, hi) }).collect() };
+        let held = |k: usize, lo: f64, hi: f64| if level(k).is_nan() { hi } else { (s.h[k] - level(k)).clamp(lo, hi) };
         let kernel: Vec<f64> = (-SMOOTH_REACH..=SMOOTH_REACH).map(|d| (-0.5 * (d as f64 / SMOOTH_SAMPLES).powi(2)).exp()).collect();
         let sum: f64 = kernel.iter().sum();
-        let blur = |v: &[f64], step: [i64; 2]| -> Vec<f64> {
-            (0..v.len())
-                .map(|k| {
-                    let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
-                    kernel.iter().zip(-SMOOTH_REACH..).map(|(w, d)| w * v[at(c + d * step[0], r + d * step[1])]).sum::<f64>() / sum
-                })
-                .collect()
+        let blur = |v: &dyn Fn(usize) -> f64, k: usize, step: [i64; 2]| {
+            let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
+            kernel.iter().zip(-SMOOTH_REACH..).map(|(w, d)| w * v(to(c + d * step[0], r + d * step[1]))).sum::<f64>() / sum
         };
-        let smooth = |v: Vec<f64>| blur(&blur(&v, [1, 0]), [0, 1]);
-        let mut offset = smooth(held(-SHORE_M, SHORE_M));
-        for (k, o) in offset.iter_mut().enumerate() {
-            let q = s.pond[k];
-            if q != NONE && s.ponds[q as usize].pass != NONE && s.h[k] < level[k] - KEEP_M {
-                *o = o.min(-KEPT * SHORE_M);
-            }
+        let n = s.h.len();
+        let (mut first, mut held_first) = (vec![0.0; n], vec![0.0; n]);
+        for &k in across {
+            (first[k], held_first[k]) = (blur(&|j| held(j, -SHORE_M, SHORE_M), k, [1, 0]), blur(&|j| held(j, -WATER_M, 0.0), k, [1, 0]));
         }
-        let depth = smooth(held(-WATER_M, 0.0));
-        // A sample whose texels' splines read (two samples each way) only offsets held at `SHORE_M`, or only offsets held
-        // at minus it and depths held at `WATER_M`, draws its own ground.
-        let far = (0..s.h.len())
-            .map(|k| {
-                let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
-                let all = |f: &dyn Fn(usize) -> bool| (-2..=2i64).all(|dr| (-2..=2i64).all(|dc| f(at(c + dc, r + dr))));
-                all(&|j| offset[j] >= SHORE_M) || all(&|j| offset[j] <= -SHORE_M && depth[j] <= -WATER_M)
-            })
-            .collect();
-        Shore { across: s.across, down: s.down, pond, levels, offset, depth, far }
+        for &k in at {
+            let mut o = blur(&|j| first[j], k, [0, 1]);
+            let q = s.pond[k];
+            if q != NONE && s.ponds[q as usize].pass != NONE && s.h[k] < level(k) - KEEP_M {
+                o = o.min(-KEPT * SHORE_M);
+            }
+            (self.offset[k], self.depth[k]) = (o, blur(&|j| held_first[j], k, [0, 1]));
+        }
+    }
+
+    /// Whether sample `k` draws its own ground: its texels' splines read (two samples each way) only offsets held at
+    /// `SHORE_M`, or only offsets held at minus it and depths held at `WATER_M`.
+    fn far_at(&self, k: usize) -> bool {
+        let (c, r) = ((k % self.across) as i64, (k / self.across) as i64);
+        let at = |c: i64, r: i64| r.clamp(0, self.down as i64 - 1) as usize * self.across + c.clamp(0, self.across as i64 - 1) as usize;
+        let all = |f: &dyn Fn(usize) -> bool| (-FAR_SAMPLES..=FAR_SAMPLES).all(|dr| (-FAR_SAMPLES..=FAR_SAMPLES).all(|dc| f(at(c + dc, r + dr))));
+        all(&|j| self.offset[j] >= SHORE_M) || all(&|j| self.offset[j] <= -SHORE_M && self.depth[j] <= -WATER_M)
     }
 
     /// The four samples between whose centres the point `p` (samples from the map's corner) lies, each with its weight
