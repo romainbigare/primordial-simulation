@@ -41,12 +41,17 @@ const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
  * moved and scaled as the camera did, at each frame (`showMoved`), and nothing heavy is begun on the card: no map drawn
  * anew, no ground's tile nor layer of its detail sent; once the view rests the map is drawn anew. */
 const MOVE_REST_MS = 120;
+/** Where no picture shown moved covers the map in view at least as sharp as this share of the screen's pixels along
+ * each axis (a zoom out past the pictures of the area about the view), the map is drawn anew at it, at once, as the
+ * view moves (`quick`): a sixteenth of the pixels, a sixteenth of the time. */
+const QUICK_SCALE = 0.25;
 /** The pictures of the area about a view at rest (`MapView.rings`) are these many times its width, each at the screen's
- * pixels: so a view that moves out meets one at most three times softer than the last, and the whole map's picture (one
- * colour where the view is close) only once it is far. They are drawn once the view has rested `AROUND_REST_MS`, the
- * nearest first, a tile each time the card is free; the whole map's picture is `WHOLE_PX` px across, drawn again after
- * them once older than `WHOLE_EVERY_MS` (the world moves on). */
-const RINGS = [2, 6, 18], AROUND_REST_MS = 250, WHOLE_PX = 512, WHOLE_EVERY_MS = 20000;
+ * pixels: so a view that moves out meets one at most three times softer than the last, and the whole map's picture
+ * only once it is far (none is drawn that is no sharper than it). They are drawn once the view has rested
+ * `AROUND_REST_MS`, the nearest first, a tile each time the card is free; the whole map's picture is `WHOLE_PX` px
+ * across (22 MB with its mip levels at most), drawn in tiles too after them, again once older than `WHOLE_EVERY_MS`
+ * (the world moves on). */
+const RINGS = [2, 6, 18, 54], AROUND_REST_MS = 250, WHOLE_PX = 2048, WHOLE_EVERY_MS = 20000;
 /** A picture drawn anew after the view moved, or sharp over the softer picture of its view, comes in over what the
  * screen showed in this long, ms (`present`): it does not jump in. */
 const FADE_MS = 220;
@@ -130,14 +135,14 @@ export class MapView {
    * once the view rests. */
   private last: Pic | null = null;
   /** Pictures shown under the last as the view moves, so it moves over less detail, never over nothing: the area about
-   * the view at rest, `RINGS` times its width, and the whole map at `WHOLE_PX` px across, each in its texture (and the
-   * one the next ring is drawn into); the timer that starts drawing them once the view rests, and the count of those
-   * starts (a move stops the one under way, `aroundSoon`). */
+   * the view at rest, `RINGS` times its width, and the whole map at `WHOLE_PX` px across; the textures they are in,
+   * the whole map's last, and those the next ring and the next whole map's picture are drawn into; the timer that
+   * starts drawing them once the view rests, and the count of those starts (a move stops the one under way,
+   * `aroundSoon`). */
   private rings: (Pic | null)[] = [];
   private whole: Pic | null = null;
-  private ringTex: (Texture | null)[] = [];
-  private ringSpare: Texture | null = null;
-  private wholeTex: Texture | null = null;
+  private aroundTex: (Texture | null)[] = [];
+  private spares: (Texture | null)[] = [null, null];
   private aroundTimer = 0;
   private aroundRun = 0;
   /** What the screen showed that the next picture drawn whole comes in over (`present`): what a moving view showed
@@ -326,6 +331,16 @@ export class MapView {
     this.fitted = false; this.moved(); this.invalidate();
   }
 
+  /** Whether one of pictures `pics` of this look covers the map in view (its copies at `xs`, css px) at least as sharp
+   * as a frame drawn at `QUICK_SCALE`. */
+  private coversView(pics: (Pic | null)[], xs: number[]): boolean {
+    const { s, ox, oy } = this.cam, look = this.lookKey(), least = this.drawnDpr() * QUICK_SCALE;
+    const x0 = Math.max(0, xs[0]), x1 = Math.min(this.cv.clientWidth, xs[0] + xs.length * this.w * s);
+    const y0 = Math.max(0, oy), y1 = Math.min(this.cv.clientHeight, oy + this.h * s);
+    return pics.some(p => p !== null && p.look === look && p.t.w / (p.w * s) >= least
+      && ox + p.x * s <= x0 + 1 && ox + (p.x + p.w) * s >= x1 - 1 && oy + p.y * s <= y0 + 1 && oy + (p.y + p.h) * s >= y1 - 1);
+  }
+
   /** Hold back what is sent to the card (the ground's tiles, the layers of its detail) while the view moves (`held`),
    * so the moved picture's frames find the card free; once it rests they are sent. */
   private hold(held: boolean): void {
@@ -354,9 +369,12 @@ export class MapView {
     this.hold(moving);
     if (held) { /* (stays due) */ } else if (this.gpu && this.gpuDue && moving) {
       // The view moves: the last picture moved with it, over those of the area about it (the widest lowest) and of the
-      // whole map, at every frame (a few textured rectangles: it does not wait for the card), and the map drawn anew
-      // once it rests.
-      this.showMoved(this.gpu, [this.whole, ...[...this.rings].reverse(), this.last]);
+      // whole map, at every frame (a few textured rectangles: it does not wait for the card); where none of them
+      // covers the view sharp enough, the map drawn anew at `QUICK_SCALE` once the card is free (a zoom out past them);
+      // and the map drawn anew once the view rests.
+      const pics = [this.whole, ...[...this.rings].reverse(), this.last];
+      if (!this.gpu.busy && !this.coversView(pics, xs)) { this.stopPictures(); this.drawGpu(this.gpu, xs, this.drawnDpr(), true); }
+      else this.showMoved(this.gpu, pics);
       clearTimeout(this.moveTimer);
       this.moveTimer = window.setTimeout(() => this.redraw(), this.movedAt + MOVE_REST_MS - now + 1);
     } else if (this.gpu && this.gpuDue && this.gpu.busy) {
@@ -392,16 +410,14 @@ export class MapView {
    * `xs`, css px), the layer over them; and the map's classes if they were asked for. While frames take the GPU longer
    * than `FRAME_BUDGET_MS` the map is drawn at fewer pixels than the screen's and stretched onto it: the same picture,
    * softer, as every program chooses its detail by the screen's pixel; once the view rests it is drawn anew at the
-   * screen's pixels (`sharpen`). */
-  private drawGpu(gpu: HeldGpu, xs: number[], d: number): void {
+   * screen's pixels (`sharpen`). A `quick` frame, drawn as the view moves, is drawn at `QUICK_SCALE`, shown at once and
+   * neither timed nor sharpened. */
+  private drawGpu(gpu: HeldGpu, xs: number[], d: number, quick = false): void {
     const { cam: { s, ox, oy } } = this, W = this.gpuCv!.width, H = this.gpuCv!.height;
-    const r = this.scale, k = d * r, tw = Math.max(1, Math.round(W * r)), th = Math.max(1, Math.round(H * r));
+    const r = quick ? QUICK_SCALE : this.scale, k = d * r, tw = Math.max(1, Math.round(W * r)), th = Math.max(1, Math.round(H * r));
     // (Drawn into a texture at the screen's pixels too, so a moving view can show it moved, `showMoved`.)
     [this.picture, this.pictureNext] = [this.pictureNext, this.picture];
-    if (this.picture?.w !== tw || this.picture.h !== th) {
-      if (this.picture) this.dropPicture(gpu, this.picture);
-      this.picture = gpu.texture('picture', tw, th, MAP_TARGET, 1, 1, true);
-    }
+    this.picture = this.sized(gpu, this.picture, tw, th);
     const waiting: string[] = [];
     gpu.begin();
     this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
@@ -416,11 +432,13 @@ export class MapView {
     this.layer?.draw(p);
     this.drawFire(gpu, p, xs, k, d, [tw, th], waiting);
     p.end();
+    gpu.mipmap(target);
     this.last = picOf(target, this.cam, k, this.lookKey());
-    this.present(gpu, this.fadeFrom);
-    this.fadeFrom = null;
+    this.present(gpu, quick ? null : this.fadeFrom);
+    if (!quick) this.fadeFrom = null;
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
     gpu.submit();
+    if (quick) return;
     this.time(gpu, r);
     // The ground's detail is held only while the view is close enough to show it.
     detailSeen(this.cellM / (s * d));
@@ -494,14 +512,9 @@ export class MapView {
   private sharpenSoon(xs: number[], d: number): void {
     const gpu = this.gpu, W = this.gpuCv!.width, H = this.gpuCv!.height, tiles = this.tilesOf(W, H);
     if (!gpu) return;
-    const sized = (t: Texture | null) => {
-      if (t?.w === W && t.h === H) return t;
-      if (t) this.dropPicture(gpu, t);
-      return gpu.texture('picture', W, H, MAP_TARGET, 1, 1, true);
-    };
     if (this.sharp?.w !== W || this.sharp.h !== H) this.sharpOf = '';
-    this.sharp = sized(this.sharp);
-    this.sharpNext = sized(this.sharpNext);
+    this.sharp = this.sized(gpu, this.sharp, W, H);
+    this.sharpNext = this.sized(gpu, this.sharpNext, W, H);
     // All the sharp picture's tiles show the flow's signs where they stood as it began.
     if (this.land) this.land.flowAt = performance.now();
     // What the layer works out before its draws holds for the whole view, so it is worked out once for all the tiles
@@ -597,43 +610,53 @@ export class MapView {
     this.aroundTimer = window.setTimeout(() => this.drawAround(run, 0, null, true), AROUND_REST_MS);
   }
 
-  /** Draw the next tile (`tilesOf`) of picture `i` of those shown under the last as the view moves, then go on once the
-   * card is free: the area about the view `RINGS[i]` times its width at the screen's pixels, the nearest first, then the
-   * whole map where its picture is of another look or older than `WHOLE_EVERY_MS`. `tiles` are those of picture `i`
-   * still to draw (null: none drawn yet), `ok` whether all drawn so far had their programs. Nothing where the view moved
-   * or a sharp picture is being drawn since run `run` began. */
+  /** Draw the next tile (`tilesOf`) of picture `i` of those shown under the last as the view moves (`around`), then go
+   * on once the card is free, each into a spare texture (the picture it replaces is shown till it is whole). `tiles`
+   * are those of picture `i` still to draw (null: none drawn yet), `ok` whether all drawn so far had their programs.
+   * Nothing where the view moved or a sharp picture is being drawn since run `run` began. */
   private drawAround(run: number, i: number, tiles: number[][] | null, ok: boolean): void {
     const gpu = this.gpu, now = performance.now();
-    if (run !== this.aroundRun || !gpu || this.sharpening || now - this.movedAt < AROUND_REST_MS) return;
+    if (run !== this.aroundRun || !gpu || this.sharpening || now - this.movedAt < AROUND_REST_MS || i > RINGS.length) return;
     if (gpu.busy) { gpu.idle().then(() => this.drawAround(run, i, tiles, ok)); return; }
-    const look = this.lookKey();
-    if (i < RINGS.length) {
-      const W = this.gpuCv!.width, H = this.gpuCv!.height, d = this.drawnDpr(), n = RINGS[i];
-      // (Drawn into a spare texture: the picture it replaces is shown till it is whole.)
-      if (!tiles) { this.ringSpare = this.sized(gpu, this.ringSpare, W, H); tiles = this.tilesOf(W, H); }
-      const t = this.ringSpare!;
-      // About the view's middle, `n` times as many squares across.
-      const { s, ox, oy } = this.cam, cw = this.cv.clientWidth / 2, ch = this.cv.clientHeight / 2;
-      const cam = { s: s / n, ox: cw - (cw - ox) / n, oy: ch - (ch - oy) / n };
-      ok = this.drawInto(gpu, t, cam, d, tiles.shift()) && ok;
-      if (!tiles.length && ok) { this.rings[i] = picOf(t, cam, d, look); [this.ringTex[i], this.ringSpare] = [t, this.ringTex[i] ?? null]; }
-    } else if (this.whole?.look !== look || now - this.wholeAt > WHOLE_EVERY_MS) {
-      const wide = Math.max(this.w, this.h), ww = Math.round((WHOLE_PX * this.w) / wide), wh = Math.round((WHOLE_PX * this.h) / wide);
-      this.wholeTex = this.sized(gpu, this.wholeTex, ww, wh);
-      const all = { s: WHOLE_PX / wide, ox: 0, oy: 0 };
-      if (this.drawInto(gpu, this.wholeTex, all, 1)) { this.whole = picOf(this.wholeTex, all, 1, look); this.wholeAt = now; }
+    const a = this.around(i, now);
+    if (!a) { this.drawAround(run, i + 1, null, true); return; }
+    const spare = i < RINGS.length ? 0 : 1;
+    if (!tiles) { this.spares[spare] = this.sized(gpu, this.spares[spare], a.w, a.h); tiles = this.tilesOf(a.w, a.h); }
+    const t = this.spares[spare]!;
+    ok = this.drawInto(gpu, t, a.cam, a.k, tiles.shift()) && ok;
+    if (!tiles.length && ok) {
+      gpu.mipmap(t);
+      const pic = picOf(t, a.cam, a.k, this.lookKey());
+      if (i < RINGS.length) this.rings[i] = pic; else { this.whole = pic; this.wholeAt = now; }
+      [this.aroundTex[i], this.spares[spare]] = [t, this.aroundTex[i] ?? null];
     }
     gpu.submit();
-    if (i >= RINGS.length) return;
-    const more = tiles!.length > 0;
+    const more = tiles.length > 0;
     gpu.idle().then(() => nextFrame(() => this.drawAround(run, more ? i : i + 1, more ? tiles : null, more ? ok : true)));
   }
 
-  /** Texture `t`, or a new one where it is not `w` x `h`, for a picture. */
+  /** Picture `i` of those shown under the last as the view moves, at `now`: its camera, its pixels a css pixel and its
+   * size, px; null where none is drawn. The area about the view `RINGS[i]` times its width at the screen's pixels (none
+   * where the whole map's picture is as sharp: its ring is let go), then the whole map where its picture is of another
+   * look or older than `WHOLE_EVERY_MS`. */
+  private around(i: number, now: number): { cam: Camera; k: number; w: number; h: number } | null {
+    const wide = Math.max(this.w, this.h), d = this.drawnDpr();
+    if (i < RINGS.length) {
+      // About the view's middle, `n` times as many squares across.
+      const n = RINGS[i], { s, ox, oy } = this.cam, cw = this.cv.clientWidth / 2, ch = this.cv.clientHeight / 2;
+      if ((s / n) * d <= WHOLE_PX / wide) { this.rings[i] = null; return null; }
+      return { cam: { s: s / n, ox: cw - (cw - ox) / n, oy: ch - (ch - oy) / n }, k: d, w: this.gpuCv!.width, h: this.gpuCv!.height };
+    }
+    if (this.whole?.look === this.lookKey() && now - this.wholeAt <= WHOLE_EVERY_MS) return null;
+    return { cam: { s: WHOLE_PX / wide, ox: 0, oy: 0 }, k: 1, w: Math.round((WHOLE_PX * this.w) / wide), h: Math.round((WHOLE_PX * this.h) / wide) };
+  }
+
+  /** Texture `t`, or a new one where it is not `w` x `h`, for a picture, with its mip levels (a picture shown smaller
+   * than it was drawn reads them, `compose`). */
   private sized(gpu: Gpu, t: Texture | null, w: number, h: number): Texture {
     if (t?.w === w && t.h === h) return t;
     if (t) this.dropPicture(gpu, t);
-    return gpu.texture('picture', w, h, MAP_TARGET, 1, 1, true);
+    return gpu.texture('picture', w, h, MAP_TARGET, 1, Math.floor(Math.log2(Math.max(w, h))) + 1, true);
   }
 
   /** Draw the map and the layer over it (the plants, seen at its own pixels) into texture `t` with camera `cam`, `k` of
@@ -670,6 +693,7 @@ export class MapView {
     this.drawFire(gpu, p, job.xs, job.d, job.d, [W, H], []);
     p.end();
     if (!job.tiles.length) {
+      gpu.mipmap(job.into);
       this.sharpening = null; this.sharpOf = job.key;
       [this.sharp, this.sharpNext] = [this.sharpNext, this.sharp];
       // (Sharp over the softer picture of the view it replaces, which it comes in over.)

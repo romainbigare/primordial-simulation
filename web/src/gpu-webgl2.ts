@@ -51,7 +51,7 @@ class WebGl2 implements Back {
       gl.samplerParameteri(s, gl.TEXTURE_WRAP_S, wrap); gl.samplerParameteri(s, gl.TEXTURE_WRAP_T, wrap);
       return s;
     };
-    this.samplers = { smooth: sampler(gl.LINEAR, gl.LINEAR), mip: sampler(gl.LINEAR_MIPMAP_NEAREST, gl.LINEAR), texel: sampler(gl.NEAREST, gl.NEAREST), tile: sampler(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR, gl.REPEAT) };
+    this.samplers = { smooth: sampler(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR), mip: sampler(gl.LINEAR_MIPMAP_NEAREST, gl.LINEAR), texel: sampler(gl.NEAREST, gl.NEAREST), tile: sampler(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR, gl.REPEAT) };
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     this.noise = this.texture('noise', NOISE_SIDE, NOISE_SIDE, 'rgba32float') as WebGl2Texture;
     this.write(this.noise, noiseTable());
@@ -105,6 +105,13 @@ class WebGl2 implements Back {
     if (gl.isContextLost()) return;
     if (g.array) { gl.bindTexture(gl.TEXTURE_2D_ARRAY, g.tex); gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, level, 0, 0, layer ?? 0, w, h, layer === undefined ? t.layers : 1, format, type, data); }
     else { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.texSubImage2D(gl.TEXTURE_2D, level, 0, 0, w, h, format, type, data); }
+  }
+
+  mipmap(t: Texture): void {
+    const gl = this.gl, g = t as WebGl2Texture;
+    if (gl.isContextLost() || g.mips < 2) return;
+    gl.bindTexture(gl.TEXTURE_2D, g.tex);
+    gl.generateMipmap(gl.TEXTURE_2D);
   }
 
   drop(t: Texture): void {

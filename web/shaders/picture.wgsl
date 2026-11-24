@@ -26,5 +26,6 @@ fn edge_cover(px: vec2f) -> f32 {
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
   let c = edge_cover(v.px) * draw.alpha;
-  return vec4f(textureSampleLevel(picture, picture_sampler, v.uv, 0.0).rgb * c, c);
+  // (A picture shown smaller than it was drawn reads its mip levels, so it does not shimmer.)
+  return vec4f(textureSample(picture, picture_sampler, v.uv).rgb * c, c);
 }

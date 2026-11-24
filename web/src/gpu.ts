@@ -138,8 +138,9 @@ export const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float:
 export type Format = 'rgba8unorm' | 'rgba32float' | 'rgba16float' | 'rg16float' | 'r16float';
 /** The data a texture of each format is filled with: bytes, 32-bit floats, or 16-bit floats as their bits. */
 export type TexelData = Uint8Array | Float32Array | Uint16Array;
-/** How a sampler reads a texture: blended between its texels' centres, and also between its mip levels' nearest; or
- * repeated across the plane and blended between its mip levels too (`tile`: a texture laid on the ground). */
+/** How a sampler reads a texture: blended between its texels' centres and between its mip levels (`smooth`); blended
+ * between its texels' centres on its nearest mip level (`mip`); or repeated across the plane and blended between its
+ * mip levels too (`tile`: a texture laid on the ground). */
 export type Sampler = 'smooth' | 'mip' | 'tile';
 /** A texture on the GPU: `w` x `h` texels, `layers` of them (more than one: an array), `mips` levels. */
 export interface Texture { readonly w: number; readonly h: number; readonly layers: number; readonly mips: number; readonly format: Format }
@@ -163,6 +164,8 @@ export interface Gpu {
   /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone,
    * which the renderer does not keep: after a lost context it is empty). */
   write(t: Texture, data: TexelData, level?: number, layer?: number): void;
+  /** Make the mip levels of texture `t` from its first (a picture drawn into it, shown smaller later). */
+  mipmap(t: Texture): void;
   /** Let texture `t` go: at once on the back end; on the page's GPU once the next picture begins (`HeldGpu.begin`). */
   drop(t: Texture): void;
   /** Draw into `target` (null: the canvas, sized to its pixels; several textures of one size and format: a program's
@@ -283,6 +286,7 @@ export class HeldGpu implements Gpu {
     if (layer === undefined) h.levels[level] = data;
     this.back.write(h.inner, data, level, layer);
   }
+  mipmap(t: Texture): void { this.back.mipmap((t as HeldTexture).inner); }
   drop(t: Texture): void { this.held.delete(t as HeldTexture); this.dropped.push(t as HeldTexture); }
   /** A picture begins (its bindings are worked out anew, none from before is drawn with again): the textures dropped
    * since the last are let go now, so no draw ever binds one let go (which WebGL reads as black). */
