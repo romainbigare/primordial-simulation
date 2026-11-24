@@ -59,6 +59,8 @@ pub(super) fn level_with(parts: &[(&Part, f64)], vol: f64, extra: impl Fn(usize,
         u
     };
     let takes = |u: &Under, x: f64| x * u.area - u.moment + u.extra;
+    // (Each turn takes a floor in or halves the span: it ends over finite numbers, and over no others.)
+    assert!(vol.is_finite() && parts.iter().all(|&(_, z)| z.is_finite()), "a level over a volume of {vol} m3 or a surface not finite");
     if vol <= 0.0 || parts.is_empty() {
         return Level::At(low);
     }

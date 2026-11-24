@@ -22,7 +22,8 @@ impl World {
     /// pond under the brush's centre to its level, its pass (at least `depth` over the floor), from the outside node at
     /// each cell's ground temperature, poured into each cell's part of it (`flow::pour`); with no pond there (the floor
     /// opens to lower ground), `depth` over the floor, which runs off. Then the passes of a month's start and the liquid
-    /// settled with no time (`flow::settle`) level it. Whether a basin was made.
+    /// settled with no time (`flow::settle`) level it. Whether a basin was made: none whose centre lies in the open low
+    /// ground (its liquid stands there already).
     pub(crate) fn basin(&mut self, b: Brush, depth: f64) -> bool {
         let Some(liquid) = crate::cover::Parts::of(&self.chem).map(|p| p.liquid) else { return false };
         // (The rim is read on the samples as they stand over the cells' grounds: built again first where edits shaped
@@ -36,7 +37,8 @@ impl World {
         let inside = |c: &Covered| c.d * wide.radius_m <= b.radius_m;
         let rim = all.iter().filter(|c| !inside(c)).map(|c| s.h[c.k]).fold(f64::INFINITY, f64::min);
         let Some(centre) = all.iter().filter(|c| inside(c)).min_by(|a, z| a.d.total_cmp(&z.d)).map(|c| c.k) else { return false };
-        if !rim.is_finite() || depth <= 0.0 {
+        let open = |s: &crate::space::samples::Samples, k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
+        if !rim.is_finite() || depth <= 0.0 || open(&s, centre) {
             return false;
         }
         let floor = rim - depth;
@@ -47,10 +49,13 @@ impl World {
         self.move_ground(&cells, 0.0, &[]);
         crate::flow::build::reshape(self);
         // What fills it: of the pond under its centre, each member sample to the pond's level (its pass, the lowest
-        // the liquid leaves by), by cell; with no pond, `depth` over the floor, which runs off.
+        // the liquid leaves by), by cell; with no pond, `depth` over the floor, which runs off; none where its floor
+        // opened to the open low ground, whose liquid stands there already.
         let s = self.terrain_samples();
         let pond = s.pond[centre];
-        let fill: BTreeMap<usize, f64> = if pond == NONE {
+        let fill: BTreeMap<usize, f64> = if open(&s, centre) {
+            BTreeMap::new()
+        } else if pond == NONE {
             area.iter().map(|(&i, &a)| (i, depth * a)).collect()
         } else {
             let level = s.ponds[pond as usize].level;
