@@ -349,7 +349,10 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32)
   let q = mark_plant(l, k, sq, pick.y, place_of(pick.z), wades);
   let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
-  return Living(vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), f.snow, mark_box(l, q)), true);
+  // Scorched where it stands on dry ground under a fresh scar (fire.wgsl `scar_of`, as the field reads it).
+  var fresh = 0.0;
+  if (f.depth <= 0.0 && fire.map.x > 0.0) { fresh = fresh_char(scar_of(fire_at(at), at, cover.seen.x)); }
+  return Living(vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), ground_word(f.snow, fresh), mark_box(l, q)), true);
 }
 
 // Whether a plant may stand on the ground at `at`: not in a channel's water (rock.wgsl `channel_at`, its water's
@@ -397,7 +400,7 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f) -> vec4f {
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }
-  return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q));
+  return vec4f(dead_code(), shows, ground_word(f.snow, 0.0), dead_box(l, dead.q));
 }
 
 // The box dead tree q of lattice l covers about its foot, as `mark_box`: its sprite with its lean, and its shadow.
@@ -411,6 +414,10 @@ fn dead_box(l: i32, q: Snag) -> f32 {
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
+
+// The share of the ground at a mark's foot that snow covers and that lies under fresh char (`fresh_char`), each 0..1,
+// as one number (`decide`): two 16-bit shares in its bits.
+fn ground_word(snow: f32, fresh: f32) -> f32 { return bitcast<f32>(pack2x16unorm(vec2f(snow, fresh))); }
 
 // The share of a mark that shows (0..1, more than 0) and the depth of the liquid over its foot, m (0: on land), as one
 // number (`decide`): on land the share; in liquid, negated, the depth in steps of `WADE_STEP_M` m and half the share.

@@ -41,7 +41,12 @@ fn binding(module: &Module, h: Handle<naga::GlobalVariable>) -> Value {
     module.global_variables[h].binding.as_ref().map_or(Value::Null, |b| json!([b.group, b.binding]))
 }
 
-/// The GLSL ES 3.00 of entry point `entry` (stage `stage`) and where WebGL2 finds its bindings.
+/// The texture units a program may read on every WebGL2 device (`MAX_TEXTURE_IMAGE_UNITS` is at least this by the
+/// standard, and phones give no more): the page puts each GLSL sampler on a unit of its own (web/src/gpu-webgl2.ts).
+const TEXTURE_UNITS_MOST: usize = 16;
+
+/// The GLSL ES 3.00 of entry point `entry` (stage `stage`) and where WebGL2 finds its bindings; refused where it reads
+/// more textures than `TEXTURE_UNITS_MOST`.
 fn glsl_of(module: &Module, info: &naga::valid::ModuleInfo, stage: ShaderStage, entry: &str, binds: &mut Map<String, Value>) -> Result<String, String> {
     let options = glsl::Options {
         version: glsl::Version::Embedded { version: 300, is_webgl: true },
@@ -53,6 +58,9 @@ fn glsl_of(module: &Module, info: &naga::valid::ModuleInfo, stage: ShaderStage, 
     let mut out = String::new();
     let mut writer = glsl::Writer::new(&mut out, module, info, &options, &pipeline, Default::default()).map_err(|e| format!("{entry}: {e}"))?;
     let reflection = writer.write().map_err(|e| format!("{entry}: {e}"))?;
+    if reflection.texture_mapping.len() > TEXTURE_UNITS_MOST {
+        return Err(format!("{entry}: reads {} textures, more than the {TEXTURE_UNITS_MOST} units every WebGL2 device has", reflection.texture_mapping.len()));
+    }
     for (h, name) in &reflection.uniforms {
         binds.insert(name.clone(), json!({ "uniform": binding(module, *h) }));
     }
@@ -94,8 +102,8 @@ fn translated(dir: &Path, name: &str, least: f32) -> Result<Value, String> {
         .validate(&module)
         .map_err(|e| e.emit_to_string_with_path(&wgsl, &format!("{name}.wgsl")))?;
     let mut binds = Map::new();
-    let vertex = glsl_of(&module, &info, ShaderStage::Vertex, "vs", &mut binds)?;
-    let fragment = glsl_of(&module, &info, ShaderStage::Fragment, "fs", &mut binds)?;
+    let vertex = glsl_of(&module, &info, ShaderStage::Vertex, "vs", &mut binds).map_err(|e| format!("{name}: {e}"))?;
+    let fragment = glsl_of(&module, &info, ShaderStage::Fragment, "fs", &mut binds).map_err(|e| format!("{name}: {e}"))?;
     let targets = targets_of(&module).map_err(|e| format!("{name}: {e}"))?;
     Ok(json!({ "vertex": vertex, "fragment": fragment, "binds": binds, "targets": targets }))
 }

@@ -61,7 +61,7 @@ fn scarred(p: Spot) -> Spot {
   }
   q.scar = scar_of(f, p.at, p.e);
   // The Earth view draws the plants standing on a fresh scar scorched (as the marks drawn one by one, cover.wgsl).
-  if (styled()) { q.cover = vec4f(scorched(q.cover.rgb, q.cover.a, q.scar), q.cover.a); }
+  if (styled()) { q.cover = vec4f(scorched(q.cover.rgb, q.cover.a, fresh_char(q.scar)), q.cover.a); }
   return q;
 }
 

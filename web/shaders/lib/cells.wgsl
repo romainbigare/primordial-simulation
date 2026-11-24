@@ -28,8 +28,8 @@ struct Cover {
 // The marks of the cells in view (marks.wgsl): a texel a cell, a lattice's from row `cover.rows` on and from
 // `MARK_MARGIN` cells before its base on, each what `decide` decided of the mark in it as four 32-bit words, a texture
 // of four bytes a texel for each (`MARK_WORDS`; bytes, which every GPU draws into): one more than its square and kind
-// (0: none), the bits of the share that shows and of the snow, so each comes back to the bit, and the box it covers
-// about its foot (`mark_box`).
+// (0: none), the bits of the share that shows and of the ground at its foot (its snow and fresh char, mark.wgsl
+// `ground_word`), so each comes back to the bit, and the box it covers about its foot (`mark_box`).
 @group(0) @binding(5) var marks_kind: texture_2d<f32>;
 @group(0) @binding(6) var marks_shows: texture_2d<f32>;
 @group(0) @binding(7) var marks_snow: texture_2d<f32>;
@@ -129,14 +129,14 @@ fn reach_at(l: i32, k: vec2f) -> Reach {
 }
 
 // The mark lattice l decided for its cell k (`decide`), from the marks' textures, where it covers the point `d` m from
-// its foot within a pixel `e` m (its box, `mark_box`), else none: its share and snow read only where a plant stands
-// there.
+// its foot within a pixel `e` m (its box, `mark_box`), else none: its code, its share, and the shares of the ground at
+// its foot under snow and under fresh char (mark.wgsl `ground_word`), read only where a plant stands there.
 fn decided(l: i32, k: vec2f, d: vec2f, e: f32) -> vec4f {
   let none = vec4f(-1.0, 0.0, 0.0, 0.0);
   let t = mark_texel(l, k);
   let code = word_of(textureLoad(marks_kind, t, 0));
   if (code == 0u || !box_holds(word_of(textureLoad(marks_box, t, 0)), d, cover.grid[l].z, e)) { return none; }
-  return vec4f(f32(code - 1u), bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))), bitcast<f32>(word_of(textureLoad(marks_snow, t, 0))), 0.0);
+  return vec4f(f32(code - 1u), bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))), unpack2x16unorm(word_of(textureLoad(marks_snow, t, 0))));
 }
 
 // A box (mark.wgsl `mark_box`) counts its extents in steps of its cell's side over this.

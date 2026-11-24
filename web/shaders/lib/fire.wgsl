@@ -130,6 +130,10 @@ fn scar_of(f: FireAt, at: vec2f, e: f32) -> vec4f {
   return vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-f.ash / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
 }
 
-// Plants of colour `rgb` (premultiplied by `a`) standing on scar `s` (`scar_of`): scorched, as dark as the char
-// under them while it is fresh (`SCORCHED_COVER`), in the field of the cover (burn.wgsl) and in its marks (cover.wgsl).
-fn scorched(rgb: vec3f, a: f32, s: vec4f) -> vec3f { return mix(rgb, CHAR * a, SCORCHED_COVER * s.x * s.y); }
+// The share of a point under the fresh char of scar `s` (`scar_of`), which scorches the plants standing there.
+fn fresh_char(s: vec4f) -> f32 { return s.x * s.y; }
+
+// Plants of colour `rgb` (premultiplied by `a`) standing where `fresh` of the ground is under fresh char
+// (`fresh_char`): scorched, as dark as the char under them (`SCORCHED_COVER`), in the field of the cover (burn.wgsl)
+// and in its marks (cover.wgsl, decided once for each by mark.wgsl).
+fn scorched(rgb: vec3f, a: f32, fresh: f32) -> vec3f { return mix(rgb, CHAR * a, SCORCHED_COVER * fresh); }

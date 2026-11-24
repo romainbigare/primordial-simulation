@@ -60,7 +60,7 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       let s = kd / kinds_n();
       // Its share that shows and the depth of the liquid over its foot (mark.wgsl `wade_word`).
       let wade = wade_of(m.y);
-      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), wade.y), p, e, fade * wade.x, m.z);
+      plant(dst, shade, mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), wade.y), p, e, fade * wade.x, m.z, m.w);
     }
   }
 }
@@ -81,20 +81,14 @@ fn marks_over(v: Varying) -> vec4f {
   return vec4f(painted(srgb(dst.rgb / dst.a)), 1.0) * dst.a * cover_look.look.y;
 }
 
-// Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground and the deepest shadow
-// laid on the pixel is `shade`: its shadow and its model's sprites (models.wgsl), scorched where it stands on dry ground
-// under a fresh scar (fire.wgsl `scorched`, as the field far away draws it).
-fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
+// Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground, `fresh` of it is
+// under fresh char and the deepest shadow laid on the pixel is `shade`: its shadow and its model's sprites
+// (models.wgsl), scorched as the field far away draws it (fire.wgsl `scorched`).
+fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32, fresh: f32) {
   let fit = model_fit(q);
   shadow(dst, shade, fade * model_shadow(q, fit, p, e));
   let m = clump_plant(q, fit, p, e, snow);
-  if (m.a <= 0.0) { return; }
-  var rgb = m.rgb;
-  if (q.wades <= 0.0 && fire.map.x > 0.0) {
-    let foot = cover.corner.xy + q.at;
-    rgb = scorched(rgb, 1.0, scar_of(fire_at(foot), foot, e));
-  }
-  over(dst, rgb, m.a * fade);
+  if (m.a > 0.0) { over(dst, scorched(m.rgb, 1.0, fresh), m.a * fade); }
 }
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f { return marks_over(v); }
