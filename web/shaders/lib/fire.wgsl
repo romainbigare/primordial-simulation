@@ -22,7 +22,7 @@ fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 
 // months the core tells apart, fire.ts), the months since its last burn (the scar's mean), the share burning this
 // month, its flames' mean length, m (the burning share's mean), the ash on the ground and the gas the flames sent to the
 // air this month, kg/m²; the low wind, m/s east and south; the cured leaves standing, kg/m². (Its third plane's second
-// number is the share of its land saturated, `burn_rank`.)
+// number is the share of its land saturated, `under_share`.)
 struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32, wind: vec2f, cured: f32 }
 
 // A dead stem as tall as the plants that died (`Patch::snag_h`) holds `snag_kg` of walls (snag.wgsl, burn.wgsl):
@@ -55,9 +55,9 @@ fn fire_at(at: vec2f) -> FireAt {
   return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y, b.zw, c.x);
 }
 
-// The months since the burn of the scar at `at`, a point of rank `rank` among the patches (`burn_rank`, 0..1): of one
-// of the four squares whose centres lie about it, drawn by the rank with the chance of each square's blend weight
-// times its scar. So where scars of different ages meet, the point takes one of them, and their meeting is as ragged
+// The months since the burn of the scar at `at`, a point of rank `rank` among the patches (`burn_rank`'s number made
+// even, 0..1): of one of the four squares whose centres lie about it, drawn by the rank with the chance of each
+// square's blend weight times its scar. So where scars of different ages meet, the point takes one of them, and their meeting is as ragged
 // as the patches; a blend of their ages would lay a straight line where the younger one's char fades.
 fn scar_age(at: vec2f, rank: f32) -> f32 {
   let s = at / fire.map.x - 0.5;
@@ -77,27 +77,24 @@ fn scar_age(at: vec2f, rank: f32) -> f32 {
   return t[3].y / max(t[3].x, 1e-6);
 }
 
-// A square's burnt share lies in patches with ragged edges (ragged.wgsl), from `BURN_PATCH_M` across down to the
-// pixel: a fire runs where its fuel joins and stops at gaps, so its scar is a mosaic of burnt and spared ground (Turner
-// and others 1994). The patches are a share of the ground read off the noise, even over 0..1: a point is burnt where
-// that number lies under the burnt share, so the drawn share is the square's at every zoom.
-const BURN_PATCH_M = 600.0; const BURN_OCTAVES = 7; const BURN_NOISE = 91;
-// The edge of a patch is spread over this much of the number besides the swing of the patches too small to show.
-const BURN_EDGE = 0.02;
+// A square's burnt share lies in patches with ragged edges, from `BURN_PATCH_M` across down to the pixel (ragged.wgsl
+// `meet_noise`, noise stream `BURN_NOISE`): a fire runs where its fuel joins and stops at gaps, so its scar is a
+// mosaic of burnt and spared ground (Turner and others 1994). A point is burnt where its patches' number lies under
+// the level of the burnt share of the dry ground (ragged.wgsl `share_level`), so the drawn share is the square's at
+// every zoom and, where it falls to none, thins to none.
+const BURN_PATCH_M = 600.0; const BURN_NOISE = 91;
 
-// The place of point `at` among the patches, 0..1, seen at `e` m a pixel; and how far the number swings over the
-// patches that do not show there (the spread a share read on it takes). Saturated ground does not burn (its fuel is
-// wet; the core's burnt share leaves its wet share out): the patches' number, even over 0..1, places the dry ground in
-// the first (1 - the wet share) of the ranks and the saturated ground (land.wgsl `saturated_at`) in the rest, so a
-// square's burnt share fills its dry ground alone, as much of it as the core burnt.
-fn burn_rank(at: vec2f, e: f32) -> vec2f {
-  let n = smoothstep(-EVEN_ONE, EVEN_ONE, ragged(at, e, BURN_PATCH_M, BURN_OCTAVES, BURN_NOISE));
-  let dry = 1.0 - fire_plane(2, at).y;
-  return vec2f(mix(n * dry, dry + n * (1.0 - dry), saturated_at(at)), BURN_EDGE + 0.25 * ragged_hidden(e, BURN_PATCH_M, BURN_OCTAVES));
-}
+// The patches' number at point `at` seen at `e` m a pixel, and the spread a share read on it takes (`meet_noise`).
+fn burn_rank(at: vec2f, e: f32) -> vec2f { return meet_noise(at, e, BURN_PATCH_M, BURN_NOISE); }
 
-// The share of a point of rank `r` (`burn_rank`) in the first `share` of the ground.
-fn under_share(r: vec2f, share: f32) -> f32 {
+// The level of the burnt share `share` of the land at `at` among the patches (ragged.wgsl `share_level`): saturated
+// ground does not burn (its fuel is wet; the core's burnt share leaves its wet share out), so the share fills the dry
+// ground (`fire_plane`'s wet share) alone, as much of it as the core burnt.
+fn burnt_level(share: f32, at: vec2f) -> f32 { return share_level(share / max(1.0 - fire_plane(2, at).y, 1e-6)); }
+
+// The share of a point of rank `r` (`burn_rank`) in the burnt share `share` of the land at `at` (`burnt_level`), none
+// of it on the saturated ground there (land.wgsl `saturated_at`).
+fn under_share(r: vec2f, share: f32, at: vec2f) -> f32 {
   if (share <= 0.0) { return 0.0; }
-  return 1.0 - smoothstep(share - r.y, share + r.y, r.x);
+  return smoothstep(-r.y, r.y, burnt_level(share, at) - r.x) * (1.0 - saturated_at(at));
 }

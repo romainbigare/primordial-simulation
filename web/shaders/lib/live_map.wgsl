@@ -122,7 +122,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   }
   let mouth = through_band(g, e);
   let ch = channel_of(g, q, banks, mouth);
-  let st = state_on(at, g, cs, depth_in(g, ch), e, fine.h);
+  let st = state_on(at, g, cs, depth_in(g, ch), fine.h);
   let surface = blended(SURFACE, cs);
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
@@ -135,7 +135,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.filled = st.filled;
   p.t = st.t;
   // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
-  p.snow = select(snow_at(st.snow, st.bares, fwidth(st.bares)), st.snow, st.depth > 0.0);
+  let snow_x = snow_past(st.snow, st.bares);
+  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_x)), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
   // the cells' soil is a mean over kilometres, the bed's make is the samples'.

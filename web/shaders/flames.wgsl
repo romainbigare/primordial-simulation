@@ -1,7 +1,7 @@
 // uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl fire.wgsl smoke.wgsl
 // The fires burning this month over the live map, over its plants (web/src/fire.ts; drawn only over the squares they
 // burn and the smoke's reach): the glow of the burning ground, the flames along the front of each burning patch (the
-// outer edge of the square's burnt share, fire.wgsl `burn_rank`, as tall as the core's flame length), the embers behind
+// outer edge of the square's burnt share, fire.wgsl `under_share`, as tall as the core's flame length), the embers behind
 // it, and the smoke drifting down the low wind (the core's, fire.wgsl `FireAt.wind`). Light the flames give is added to the map's colour; smoke covers it. Colours
 // are the screen's shares, 0..1, premultiplied.
 
@@ -110,15 +110,17 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
   // (The front and the band behind it are read without the patches finer than the flames, `FRONT_SMOOTH`.)
   var r = burn_rank(at, e);
   if (FRONT_SMOOTH * f.length > e) { r = burn_rank(at, FRONT_SMOOTH * f.length); }
+  // (The zone behind the front: the rank within the depth under the burnt share's level.)
   let across = fwidth(r.x);
   let depth = max(FLAME_DEPTH * f.length, FRONT_PX * e) / e * across;
-  let zone = max(under_share(r, f.burnt) - under_share(r, f.burnt - depth), 0.0);
-  let band = max(under_share(r, f.burnt) - under_share(r, f.burnt - f.flame), 0.0);
-  // The tongues stand on the front below the point: the rank rises to the burnt share that far south (to first order;
-  // a front that runs north and south is read as no less than half as steep).
+  let burnt = under_share(r, f.burnt, at);
+  let zone = max(burnt - under_share(r + vec2f(depth, 0.0), f.burnt, at), 0.0);
+  let band = max(burnt - under_share(r, f.burnt - f.flame, at), 0.0);
+  // The tongues stand on the front below the point: the rank rises to the burnt share's level that far south (to first
+  // order; a front that runs north and south is read as no less than half as steep).
   let slope = vec2f(dpdx(r.x), dpdy(r.x)) / e;
   let dy = sign(slope.y + 1e-12) * max(abs(slope.y), 0.5 * length(slope));
-  let t = (f.burnt - r.x) / dy;
+  let t = (burnt_level(f.burnt, at) - r.x) / dy;
   // The fronts inside the burning share (`SWEEP`): how far behind the last front the point lies, as a share of the way
   // between two, and in metres; the tongues on the front south of it, as on the outer front.
   let sweep = (0.5 + 0.5 * ragged(at, max(e, FRONT_SMOOTH * f.length), SWEEP_M, SWEEP_OCTAVES, 17)) * SWEEP_LEVELS - time / SWEEP_S;

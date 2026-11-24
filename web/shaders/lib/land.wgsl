@@ -345,21 +345,19 @@ fn rooted(loose: f32, need: f32, spread: f32) -> f32 {
 }
 
 // The state of the ground at a point: the depth of the liquid standing over it and its height over that liquid's
-// surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1, as its cells' share (`snow_at`
-// places it), and the snow's depth, m;
-// how readily it sheds its snow, with the snow's drifts (`snow_bares`; `snow_at` reads it); and the share of its
-// pores the soil's liquid fills there, 0..1.
+// surface, m; how wet it is, 0..1; its temperature, K; the snow and ice on it, 0..1, as its cells' share left unmelted
+// there (`snow_at` places it), and the snow's depth, m; how readily it sheds its snow (`snow_bares`; `snow_at` reads
+// it); and the share of its pores the soil's liquid fills there, 0..1.
 struct State { depth: f32, over: f32, wet: f32, t: f32, snow: f32, snow_m: f32, bares: f32, filled: f32 }
 
 // Inside a cell its snow lies first where the ground holds it (`snow_bares`): high ground before low (colder: the air's
 // fall with height; over `SNOW_RISE_M` a unit), slopes turned from the sun before those facing it (they melt first;
 // `SNOW_SUNNY` a unit of slope toward the light), hollows before knobs (drift fills them; `SNOW_HOLLOW_M` of the
 // relief's height a unit). The cell's share `s` covers where this index lies under `SNOW_SPREAD` ln(s / (1 - s)): of
-// an index spread about 1 either way (a logistic one), the share s, so as much snow is drawn as the cell holds. Its
-// edge is a line of that field, no narrower than `SNOW_EDGE` of the index.
+// an index spread about 1 either way (a logistic one), the share s, so as much snow is drawn as the cell holds.
 // The index is held softly within `SNOW_BARES_MOST` either way, so a cell's last few hundredths of snow lie nowhere,
 // and no snow ends on the straight line where the blended share reaches none (a line through the squares' centres).
-const SNOW_RISE_M = 40.0; const SNOW_SUNNY = 2.0; const SNOW_HOLLOW_M = 0.25; const SNOW_SPREAD = 1.0; const SNOW_EDGE = 0.05;
+const SNOW_RISE_M = 40.0; const SNOW_SUNNY = 2.0; const SNOW_HOLLOW_M = 0.25; const SNOW_SPREAD = 1.0;
 const SNOW_BARES_MOST = 3.0;
 
 // How readily the ground of slope `slope` (east, south), `rise` m over its cells' mean and `knob` m over its relief's
@@ -369,20 +367,31 @@ fn snow_bares(slope: vec2f, rise: f32, knob: f32) -> f32 {
   return SNOW_BARES_MOST * tanh((SNOW_SUNNY * sunward + knob / SNOW_HOLLOW_M - rise / SNOW_RISE_M) / SNOW_BARES_MOST);
 }
 
-// The snow at a point whose cells hold `share` of their ground under snow and whose ground sheds it as `bares`
-// (`snow_bares`), that index changing by `width` across a pixel: 1 where it lies, 0 where not, the pixel's share at
-// its edge.
-fn snow_at(share: f32, bares: f32, width: f32) -> f32 {
-  if (share <= 0.0 || share >= 1.0) { return share; }
-  let line = SNOW_SPREAD * log(share / (1.0 - share));
-  return 1.0 - smoothstep(-1.0, 1.0, (bares - line) / max(width, SNOW_EDGE));
+// A snow line is ragged (ragged.wgsl `meet`): at its margin the snow breaks into drifts in hollows behind knobs, bare
+// knobs first, at every scale from `SNOW_PATCH_M` down to the pixel, `SNOW_PATCHY` of the index either way (noise
+// stream `SNOW_NOISE`), and lies in its own patches, thinning to none over `SNOW_THIN` of that swing at a patch's
+// edge (a drift tapers, the ground showing through the thin snow). The melt moves the cells' share there, so the line
+// where the snow melts with height is as ragged.
+const SNOW_PATCH_M = 320.0; const SNOW_PATCHY = 2.5; const SNOW_NOISE = 80; const SNOW_THIN = 0.25;
+// How far the index of the line the cell's share draws is held from its middle either way: past what the patches and
+// the ground's index (`SNOW_BARES_MOST`) reach, so a share near none or all lies as none or all, and the change of the
+// line across a pixel stays finite.
+const SNOW_LINE_MOST = SNOW_BARES_MOST + 2.0 * SNOW_PATCHY;
+
+// How far a point whose cells hold `share` of their ground under snow and whose ground sheds it as `bares`
+// (`snow_bares`) lies past the line its snow ends at, in the index's units (into the snow).
+fn snow_past(share: f32, bares: f32) -> f32 {
+  let s = clamp(share, 1e-6, 1.0 - 1e-6);
+  return clamp(SNOW_SPREAD * log(s / (1.0 - s)), -SNOW_LINE_MOST, SNOW_LINE_MOST) - bares;
 }
 
-// A snow line is ragged (ragged.wgsl): at its margin the snow breaks into drifts in hollows behind knobs, bare knobs
-// first, at every scale from `SNOW_PATCH_M` down over `SNOW_PATCH_OCTAVES` octaves, `SNOW_PATCHY` of the index at
-// most. They move both where the snow lies and where the ground is warm enough to melt it, `SNOW_PATCH_K` kelvin a
-// unit of the index: so the line where it melts with height, and the depth that buries the plants, are as ragged.
-const SNOW_PATCH_M = 320.0; const SNOW_PATCH_OCTAVES = 6; const SNOW_PATCHY = 2.5; const SNOW_PATCH_K = 0.6;
+// The snow at `at`, seen at `e` m a pixel, whose cells hold `share` of their ground under snow, `past` the line its snow
+// ends at (`snow_past`), that changing by `px` across a pixel: 1 where it lies, 0 where not, the pixel's share at its
+// edge.
+fn snow_at(at: vec2f, e: f32, share: f32, past: f32, px: f32) -> f32 {
+  if (share <= 0.0 || share >= 1.0) { return share; }
+  return meet(at, e, past, SNOW_PATCHY, SNOW_THIN, px, SNOW_PATCH_M, SNOW_NOISE);
+}
 
 // The height of ground `g`, cut `cut` m deep, over the level of the ponds about it, m (`NO_LIQUID_M`: none about it):
 // it counts the more the less of the point is theirs.
@@ -400,10 +409,10 @@ fn through_band(g: Tiled, e: f32) -> f32 {
 // The depth of the liquid of the ponds about a point that stands over its ground `g` as drawn, m.
 fn standing(g: Tiled) -> f32 { return max(g.water.x - g.h, 0.0) * g.water.y; }
 
-// The state at `at`, m from the map's north-west corner, seen at `e` m a pixel, on ground `g` whose bed a channel cuts
+// The state at `at`, m from the map's north-west corner, on ground `g` whose bed a channel cuts
 // `cut` m deep there (`depth_in`) and whose relief stands `knob` m over its mean (relief.wgsl): the cells' values
 // blended between the squares' centres (`cs`), and the laws inside a cell applied at the point.
-fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, e: f32, knob: f32) -> State {
+fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, knob: f32) -> State {
   // The cells' ground, and the share of it each one's frozen cover covers, blended: the shares, not the depths, so a
   // snowy cell beside a bare one draws its share falling across the space between their centres, not at once along a
   // line where the blended depth reaches what covers all (tanh saturates within a few centimetres).
@@ -454,22 +463,20 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, e: f32, knob: f32) -> St
   p.filled = select(0.0, held / pores, pores > 0.0);
   // The ground's temperature is its cell's at the cell's mean height, less the air's fall with height above it.
   p.t = ground.y - ground.z * (g.h - ground.x);
-  var drifts = 0.0;
-  if (covered > 0.0) { drifts = SNOW_PATCHY * ragged(at, e, SNOW_PATCH_M, SNOW_PATCH_OCTAVES, 80); }
-  p.snow = covered * unmelted(p.t + SNOW_PATCH_K * drifts, land.time.z);
-  p.snow_m = snow_depth(ground.w, p.t + SNOW_PATCH_K * drifts, land.time.z);
-  p.bares = snow_bares(g.slope, g.h - ground.x, knob) + drifts;
+  p.snow = covered * unmelted(p.t, land.time.z);
+  p.snow_m = snow_depth(ground.w, p.t, land.time.z);
+  p.bares = snow_bares(g.slope, g.h - ground.x, knob);
   return p;
 }
 
-// The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl), every drift shown, on the tiles' ground (no
+// The state at `at` on ground `g` as a plant's foot reads it (cover.wgsl), on the tiles' ground (no
 // relief finer than them): the water of the point's channel stands over its bed too, and in the whole of the bed its
 // floods cut (`channel_at`, widened at its mouth) the liquid is taken as deeper than any plant's roots reach: the core
 // stands plants on its cells' land and on their ponds' ground, never in a channel's running water.
 fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   let c = channel_at(g, discharge_at(g, at));
   let cut = depth_in(g, c);
-  var p = state_on(at, g, cs, cut, 0.0, 0.0);
+  var p = state_on(at, g, cs, cut, 0.0);
   p.depth = max(max(p.depth, cut), select(0.0, NO_LIQUID_M, g.d < c.bed));
   return p;
 }

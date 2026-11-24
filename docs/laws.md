@@ -342,7 +342,8 @@ the channel law makes its own sample's discharge (`World::discharge`, 1.2); each
 the activity of each kind of the squares about it at the mark's foot (`cover::activity`), with the cell's pores half full and
 the liquid departing about its samples' mean index, so where a plant stands is the place's, not the month's. Each
 patch of a cell's cover (3) stands on its own ground (`inside::patch_ground`): a kind's marks and its field only on
-its patch's ground, the patch's edge drawn smooth through its samples and ragged, its plants per m² of that ground. A
+its patch's ground, the patch's edge drawn smooth through its samples and meeting the ground about it over a ragged
+margin, its plants per m² of that ground. A
 picture need not keep a cell's mean exactly (the core keeps the books).
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
