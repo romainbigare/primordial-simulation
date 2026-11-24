@@ -19,7 +19,7 @@ import { fillIcons, iconSvg } from './icons';
 import { textureLegend } from './soil';
 import { Inspector, LAYER_ORDER, layerLabel } from './inspect';
 import { Numbers } from './numbers';
-import { fillForm, readForm } from './world-form';
+import { fillForm, readForm, listenForm } from './world-form';
 import { showErrors } from './errors';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -56,15 +56,11 @@ map.layer = vegetation;
 const fire = new Fire();
 map.fire = fire;
 /** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
-const front = new FireFront((x, y, answer) => live?.probe(x, y, answer), fire);
-const editor = {
-  probe: (x: number, y: number) => live?.probe(x, y, p => god.probed(p)), settle: () => live?.settle(), undo: () => live?.undo(),
-  brush: (t: number, x: number, y: number, r: number, amount: number, row: number) => live?.brush(t, x, y, r, amount, row),
-};
+const front = new FireFront(() => live, fire);
 const god = new God({
   strip: $('god-strip'), card: $('god'), toast: $('toast'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
   picked: () => { if (playing) togglePlay(); }, burnt: b => front.burnt(b),
-}, editor, godTools(() => live?.kinds ?? []));
+}, () => live, godTools(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live && godOn()) god.draw(ctx, ox, oy, s); };
 map.paint = { start: (x, y) => live !== null && godOn() && god.start(x, y), move: (x, y) => god.move(x, y), end: () => god.end() };
@@ -240,7 +236,6 @@ $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
-$<HTMLInputElement>('file').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(load); };
 addEventListener('keydown', e => {
   const tag = (e.target as HTMLElement).tagName;
   if ((e.target as HTMLInputElement).type === 'search') return; // typing in the chart search
@@ -252,11 +247,6 @@ addEventListener('keydown', e => {
   else if (e.key === 'Escape' && !panels.close() && !god.putAway()) { setLayer(null); map.pick = -1; inspect(); map.invalidate(); }
   else if (e.key === 'f') map.fit();
 });
-let depth = 0;
-addEventListener('dragenter', e => { e.preventDefault(); depth++; $('drop').hidden = false; });
-addEventListener('dragleave', () => { if (--depth <= 0) $('drop').hidden = true; });
-addEventListener('dragover', e => e.preventDefault());
-addEventListener('drop', e => { e.preventDefault(); depth = 0; $('drop').hidden = true; e.dataTransfer?.files[0]?.arrayBuffer().then(load); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { charts.draw(); map.invalidate(); });
 $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"></s>${n}</li>`).join('');
 
@@ -311,9 +301,7 @@ function landOf(w: World): Land | null {
   const ground: GroundOf = saved ? { saved } : { seed: m.seed, size: m.w, band: [m.lat_south, m.lat_north], drawn: m.shape === 'Drawn' };
   const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), ground, { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, live?.version ?? 0, shown => {
     if (shown) map.invalidate();
-    // Once the ground in view shows a new version of the samples, the core is told: what edits moved since is drawn.
-    const told = land?.toTell();
-    if (told !== undefined && told !== null) live?.groundShown(told);
+    land?.tell(live);
     groundBusy();
     if (live) showStats(live.stats);
   }, say);
@@ -348,11 +336,7 @@ function openSaved(gz: ArrayBuffer): void {
   say('Opening the saved world…');
   live?.open(gz.slice(0));
 }
-$<HTMLInputElement>('saved').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(openSaved); };
-$('live').onsubmit = e => { e.preventDefault(); newWorld(); };
-$('band').onchange = () => newWorld();
-$('shape').onchange = () => newWorld();
-$('weather').onchange = () => newWorld();
+listenForm(newWorld, openSaved, load);
 
 requestAnimationFrame(loop);
 const embedded = document.getElementById('world-data')?.textContent?.trim();

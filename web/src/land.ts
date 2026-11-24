@@ -109,12 +109,13 @@ export class Land {
     this.told = version;
   }
 
-  /** The ground shows the samples of a version the core was not told of yet: that version (now told), else null. */
-  toTell(): number | null {
+  /** Once the ground in view shows a version of the samples the core was not told of, tell it (`core`): what edits moved
+   * since is then drawn. */
+  tell(core: { groundShown(version: number): void } | null): void {
     const v = this.tiles.shownVersion();
-    if (v === null || v === this.told) return null;
+    if (!core || v === null || v === this.told) return;
     this.told = v;
-    return v;
+    core.groundShown(v);
   }
 
   /** What edits moved the ground since the samples the core was told the page shows (wasm/src/lib.rs `preview`): drawn

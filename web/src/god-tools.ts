@@ -1,8 +1,8 @@
 // The tools of god mode (god.ts `GodTool`), in the order of the strip: each paints with the round brush
 // (wasm/src/lib.rs `brush`): Raise and Lower land move the ground under it while held, and the world builds its
 // samples and settles its liquid over the new ground when the stroke ends (`settle`); Plant clears a share of each
-// cell under it and plants a starting kind there; Burn strikes each, and the strikes burn at once when the stroke ends.
-// What the world cannot do is said in plain
+// cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, and
+// those that hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain
 // words, from the core's own reasons. A new tool is one more entry of `godTools`.
 import type { GodTool, Probe, StartKind } from './god';
 
@@ -10,7 +10,11 @@ import type { GodTool, Probe, StartKind } from './god';
 const BRUSH_SHAPE = 0, BRUSH_PLANT = 2, BRUSH_BURN = 3;
 /** How fast Raise and Lower move the ground at the brush's centre while held, m/s: a second's hold makes a hill or a
  * pit a hillside's shading shows from a few kilometres away. */
-const SHAPE_M_S = 8;
+const SHAPE_M_S = 20;
+/** How much heat Burn adds at the brush's centre while held, J/m² a second: at the first radius, the remains of a
+ * typical place light in about a second (the median heat they need is 0.47 MJ/m², core/src/flame `needed`; a cell
+ * holds the heat over all its land, of which the brush covers a share), the wettest in tens. */
+const HEAT_J_M2_S = 3e6;
 /** The starting kinds in plain words, by the core's name (worldgen/src/life/kinds.rs `KINDS`): a short name and a line. */
 const PLAIN_KINDS: Record<string, [string, string]> = {
   'small fast light-eaters': ['Short grass', 'Small plants that grow and spread fast.'],
@@ -67,14 +71,16 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
       }
       return list;
     },
-    told: (done, why) => (done ? `Planted ${kindName()} in ${cells(done)}. They grow as the world plays.` : `Nothing was planted. ${why}`),
+    told: (done, why, grown) => (!done ? `Nothing was planted. ${why}`
+      : grown ? `Planted grown ${kindName()} in ${cells(done)}.` : `No grown ${kindName()} yet: young ones planted.`),
   };
   const burn: GodTool = {
-    key: 'burn', icon: 'fire', label: 'Burn', ink: '#ff7a1a', code: BRUSH_BURN, row: () => -1,
-    hint: 'Drag to set fire. Right-drag or two fingers move the map.',
+    key: 'burn', icon: 'fire', label: 'Burn', ink: '#ff7a1a', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S,
+    hint: 'Press and hold to heat the ground till it lights; the ring fills as it nears. Right-drag or two fingers move the map.',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,
-    told: (done, why) => (done ? `Lightning struck ${cells(done)}. The fire spreads as far as the dry litter carries it.` : `Nothing caught fire. ${why}`),
+    told: (done, why) => (done ? `Fire took in ${cells(done)}. It spreads as far as the dry litter carries it.`
+      : `Nothing caught fire. ${why || 'Hold longer: the remains need more heat to light.'}`),
   };
   /** A ground tool: it moves the ground up or down (`sign`) under the brush while held. */
   const shape = (sign: number): GodTool => ({
