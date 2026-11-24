@@ -1,11 +1,11 @@
 // The loading screen: over the whole page (the map, the bar and every panel) till the map first stands whole, with the
 // steps of the loading, how far the one under way is, and a picture: a slab of ground seen at a slant, its tiles
 // dropping into place one by one as the loading goes on. They are bare earth till the world is made, then the world's
-// own ground and water, and its plants once the map draws them. How far each step is comes from the page (main.ts):
+// own ground and water, and its plants as they grow. How far each step is comes from the page (main.ts):
 // bytes come, tiles made, the picture drawn; a step that says nothing of its own progress (the core making the world)
 // moves by the time it is expected to take, and never ends before it does.
 import { World, decode } from './data';
-import { mapFields } from './earth';
+import { mapFields, wetOf } from './earth';
 import { toScreen } from './style';
 
 /** A step of the loading: its words and its weight, its share of the whole bar. */
@@ -145,12 +145,14 @@ export class Boot {
     [this.earth, this.top].forEach(c => this.size(c, W, H));
     this.paintEarth();
     this.ground = this.paintGround(w);
-    this.plants = this.paintPlants(w);
     this.groundAt = performance.now();
   }
 
-  /** The map draws the world's plants: they show on the slab. */
-  plantsDrawn(): void { if (Number.isNaN(this.plantsAt)) this.plantsAt = performance.now(); }
+  /** The slab shows the plants of world `w` as they stand now (the first time, fading in). */
+  plantsGrow(w: World): void {
+    this.plants = this.paintPlants(w);
+    if (Number.isNaN(this.plantsAt)) this.plantsAt = performance.now();
+  }
 
   /** All the steps are done: the bar fills, and the screen fades out and lets the page be seen. `now`: at once. */
   end(now = false): void {
@@ -326,7 +328,7 @@ export class Boot {
     return c;
   }
 
-  /** The world's plants in its first frame: green dots, as many on a square as its leaves shade it, darker where they
+  /** The world's plants as they stand now: green dots, as many on a square as its leaves shade it, darker where they
    * shade it more. */
   private paintPlants(w: World): HTMLCanvasElement {
     const m = w.meta, c = this.slabCanvas();
@@ -346,6 +348,20 @@ export class Boot {
     }
     return c;
   }
+}
+
+/** A square's plants show where their leaves shade at least this share of its ground. */
+const PLANTS_SHADE = 0.3;
+/** The share of the dry squares of world `w` whose plants show (`PLANTS_SHADE`), as they stand now. */
+export function plantShare(w: World): number {
+  const leaf = decode(w, 0, 'leaf'), { wet } = wetOf(w, 0);
+  let dry = 0, shown = 0;
+  for (let i = 0; i < leaf.length; i++) {
+    if (wet[i]) continue;
+    dry++;
+    if (1 - Math.exp(-leaf[i]) >= PLANTS_SHADE) shown++;
+  }
+  return dry ? shown / dry : 0;
 }
 
 /** A number in 0..1 that looks random, the same for the same `a` and `b`. */

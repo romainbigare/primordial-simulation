@@ -21,7 +21,7 @@ import { Inspector, LAYER_GROUPS, layerLabel } from './inspect';
 import { Numbers } from './numbers';
 import { fillForm, readForm, listenForm } from './world-form';
 import { showErrors } from './errors';
-import { Boot, BootStep } from './boot';
+import { Boot, BootStep, plantShare } from './boot';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 /** The layers of the soil's grain, shown with the texture classes' legend (soil.ts). */
@@ -38,20 +38,28 @@ const ASK_MS = 150;
 /** The steps of the loading screen (boot.ts): their words and their shares of its bar. */
 const BOOT_STEPS: Record<string, BootStep> = {
   file: { label: 'Download the world', weight: 15 }, core: { label: 'Download the core', weight: 15 },
-  start: { label: 'Start the simulation', weight: 5 }, land: { label: 'Shape the land', weight: 25 },
+  start: { label: 'Start the simulation', weight: 5 }, land: { label: 'Shape the land', weight: 20 },
   open: { label: 'Open the saved world', weight: 15 }, read: { label: 'Read the world', weight: 10 },
-  ground: { label: 'Build the ground', weight: 25 }, plants: { label: 'Grow the plants', weight: 10 },
+  ground: { label: 'Build the ground', weight: 20 }, grow: { label: 'Grow the first plants', weight: 25 },
   picture: { label: 'Draw the first picture', weight: 10 },
 };
 /** The time the steps that say nothing of their progress are expected to take, ms: the core downloaded where its
  * length is not known, the core started, a world made (and the first time, the air of the planet around it), a saved
- * world opened, the ground's workers ready, the map's programs made and its picture drawn whole. */
-const BOOT_MS = { core: 3000, start: 1500, land: 2000, air: 5000, open: 3000, rock: 8000, plants: 3000, picture: 2000 };
+ * world opened, the ground's workers ready, and the map's picture drawn whole. */
+const BOOT_MS = { core: 3000, start: 1500, land: 2000, air: 5000, open: 3000, rock: 8000, picture: 2000 };
 /** Of the step that builds the ground, the share its workers take to be ready (the rest: the tiles in view). */
 const ROCK_SHARE = 0.3;
 /** The loading screen lifts once the picture stays whole this long, ms; or this long after the map began to draw it,
  * whatever is left (a card too slow to draw it whole at the screen's pixels never keeps the page hidden). */
 const SETTLED_MS = 400, PICTURE_MOST_MS = 20000;
+/** A new world runs at full speed behind the loading screen till the plants show on this share of its dry squares
+ * (boot.ts `plantShare`: a green season), or for this many years at most (a world too dry or too cold for them). */
+const PLANTS_SHOW = 0.45, GROW_MOST_YEARS = 20;
+/** Its speed meanwhile, months of the world per second: fast, yet slow enough that it pauses within a month or two of
+ * that date (at full speed it steps years between two frames). */
+const GROW_RATE = 60;
+/** The plants on the loading screen's slab are drawn again at most this often, ms. */
+const BOOT_PLANTS_MS = 500;
 
 let world: World | null = null;
 let live: Live | null = null;
@@ -102,6 +110,9 @@ const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(wo
  * since when it is whole, ms (NaN: not yet). */
 const boot = new Boot($('boot'), watchBoot);
 let pictureFrom = NaN, settledFrom = NaN;
+/** Whether the new world runs behind the loading screen till its first plants show, the share of its dry squares they
+ * show on (`plantShare`), and when the slab last drew them, ms. */
+let growing = false, grown = 0, grownAt = -Infinity;
 /** Plan the loading screen's steps. */
 const bootPlan = (...keys: string[]) => boot.plan(keys.map(k => [k, BOOT_STEPS[k]]));
 /** Tell step `key` of the loading screen the bytes of a download come. */
@@ -110,21 +121,30 @@ const bootBytes = (key: string) => (bytes: number, all: number) => {
   if (all > 0) boot.at(key, bytes / all, `${mb(bytes)} of ${mb(all)} MB`);
   else boot.wait(key, BOOT_MS.core, `${mb(bytes)} MB`);
 };
-/** The loading screen's steps once the world came, read at each of its frames: the ground's tiles in view made, the
- * plants drawn with all their programs, then the picture whole for `SETTLED_MS`. */
+/** A frame of the new world growing behind the loading screen: it pauses as soon as its plants show (its ground may
+ * still be being made). */
+function growFrame(w: World): void {
+  grown = plantShare(w);
+  if (grown >= PLANTS_SHOW || w.meta.frames[0].year >= GROW_MOST_YEARS) { growing = false; togglePlay(); }
+}
+/** The loading screen's steps once the world came, read at each of its frames: the ground's tiles in view made; a new
+ * world's first plants grown (then it pauses, and its ground is made again of that date); then the picture drawn with
+ * all its programs, of the ground of that date, whole for `SETTLED_MS`. */
 function watchBoot(): void {
   if (!world || !drawing) return;
   const now = performance.now(), tiles = land?.tiles;
+  const year = world.meta.frames[0].year;
+  if (now - grownAt > BOOT_PLANTS_MS) { grownAt = now; boot.plantsGrow(world); }
   if (tiles && !tiles.rock) return boot.wait('ground', BOOT_MS.rock, '', ROCK_SHARE);
   if (tiles && tiles.toCome() > 0) {
     const n = tiles.inViewCount(), made = n - tiles.toCome();
     return boot.at('ground', ROCK_SHARE + ((1 - ROCK_SHARE) * made) / n, `${made} of ${n} tiles`);
   }
-  if (boot.has('plants') && !map.programsMade()) return boot.wait('plants', BOOT_MS.plants);
-  boot.plantsDrawn();
+  if (boot.has('grow')) boot.at('grow', growing ? Math.max(grown / PLANTS_SHOW, year / GROW_MOST_YEARS) : 1, `year ${Math.floor(year)}`);
+  if (growing) return;
   if (Number.isNaN(pictureFrom)) pictureFrom = now;
   if (now - pictureFrom > PICTURE_MOST_MS) return boot.end();
-  if (!map.settled()) { settledFrom = NaN; return boot.wait('picture', BOOT_MS.picture); }
+  if (!map.programsMade() || tiles?.shownVersion() === null || !map.settled()) { settledFrom = NaN; return boot.wait('picture', BOOT_MS.picture); }
   if (Number.isNaN(settledFrom)) settledFrom = now;
   if (now - settledFrom >= SETTLED_MS) boot.end();
 }
@@ -160,11 +180,17 @@ function setMode(isLive: boolean): void {
 function setup(w: World): void {
   const m = w.meta;
   say('');
-  // A new live world plays once the loading screen lifts (at once after the first), so it is seen from its start; the
-  // screen lifts once the map draws (`PICTURE_MOST_MS` at most), and at once on a failure (`fail`). A saved one
-  // opens paused at its date, to be looked at.
+  // A new live world plays at once: behind the loading screen at `GROW_RATE` till its first plants show (`watchBoot`),
+  // then at the speed shown once the screen lifts (`PICTURE_MOST_MS` at most after, and at once on a failure, `fail`).
+  // A saved one opens paused at its date, to be looked at.
   playing = false; layer = null;
-  if (live && !saved) { const l = live; boot.lifted.then(() => { if (live === l && !playing) togglePlay(); }); }
+  if (live && !saved && boot.up) {
+    const l = live;
+    growing = true;
+    l.rate(GROW_RATE);
+    boot.lifted.then(() => { if (live !== l) return; growing = false; l.rate(speed); if (!playing) togglePlay(); });
+  }
+  if (live && !saved) togglePlay();
   if (boot.up) boot.world(w);
   inspector.newWorld(m.w * m.h);
   map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
@@ -375,6 +401,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
       if (live !== l) return;
       if (changed && !edited) fire.still();
       if (changed) setFrame(0);
+      if (changed && growing && world) growFrame(world);
       if (edited) map.showNow();
       if (world) front.frame(world);
       groundBusy();
@@ -388,7 +415,8 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     error: text => { playing = false; syncUi(); fail(text); },
   });
   boot.wait('start', BOOT_MS.start);
-  l.drawn = () => map.shown();
+  // (While its first plants grow behind the loading screen, the world does not wait for the map to draw its frames.)
+  l.drawn = () => (growing ? Promise.resolve() : map.shown());
   setMode(true);
   say('Making the world…');
 }
@@ -455,9 +483,9 @@ const waiting = () => fail('Drop a .ewf.gz file here, or use “Open file”.');
 if (embedded) { bootPlan('read', 'picture'); load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer); }
 else if (url) { bootPlan('file', 'read', 'picture'); fetchBytes(url, undefined, bootBytes('file')).then(load, waiting); }
 else if (savedUrl) {
-  bootPlan('file', 'core', 'start', 'open', 'ground', 'plants', 'picture');
+  bootPlan('file', 'core', 'start', 'open', 'ground', 'picture');
   fetchBytes(savedUrl, undefined, bootBytes('file')).then(startLive).catch(e => fail(String(e instanceof Error ? e.message : e)));
 } else {
-  bootPlan('core', 'start', 'land', 'ground', 'plants', 'picture');
+  bootPlan('core', 'start', 'land', 'ground', 'grow', 'picture');
   startLive(null).catch(e => fail(`${String(e instanceof Error ? e.message : e)}. Drop a .ewf.gz file here, or use “Open file”.`));
 }
