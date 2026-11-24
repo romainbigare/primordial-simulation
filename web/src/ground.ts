@@ -3,7 +3,9 @@
 // coarsest, coarse before fine and nearest its middle first; a request that left the view is dropped; the tiles drawn
 // least lately go first once `MOST_TILES` are kept. A page of the tiles of the depth the view is drawn at (`pages`)
 // names, for each, the finest kept tile that holds it and the one before it, so a tile not made yet is drawn from its
-// nearest kept ancestor (stretched, softer), and a new one fades in over that one. The coarsest tiles are kept always.
+// nearest kept ancestor (stretched, softer), and a new one fades in over that one. The view is drawn at a new depth
+// only once its tiles in view at it came (`settle`): till then at the last, so a zoom never shows a whole view of
+// tiles stretched from a coarser depth, nor the ground of one depth and then of another. The coarsest tiles are kept always.
 // The page keeps no copy of a tile: after a lost context the card's are empty, and it asks for them again (`lost`).
 import { Gpu, Texture } from './gpu';
 import { MOST_DRAWN_PX, type View } from './map';
@@ -73,11 +75,13 @@ export class GroundTiles {
   /** The tiles the view asks for and has not, in order; those being made. */
   private queue: { depth: number; x: number; y: number }[] = [];
   private making = new Set<number>();
-  /** The views asked so far, and the keys of the last one's tiles in view at its own depth. */
+  /** The views asked so far, and the keys of the last one's tiles in view at its own depth (`wanted`). */
   private views = 0;
   private inView = new Set<number>();
-  /** The depth the view is drawn at. */
+  /** The depth the view is drawn at, and the depth the last view asked for, which it is drawn at once its tiles in
+   * view came (`settle`). */
   depth: number;
+  private wanted: number;
   private free: number[] = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
   /** Tiles come, not yet on the GPU; the page and the tiles' numbers to send to it. */
   private come: { layer: number; data: Uint16Array }[] = [];
@@ -124,7 +128,7 @@ export class GroundTiles {
 
   /** `version`: the version of the world's samples `ground` is made of. */
   constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, version: number, private changed: (shown: boolean) => void, error: (text: string) => void) {
-    this.depth = meta.depths[0];
+    this.depth = this.wanted = meta.depths[0];
     this.versionOf.set(0, version);
     this.previewed = version;
     this.makePage();
@@ -233,8 +237,16 @@ export class GroundTiles {
     // Tiles not kept come before those kept stale (which are drawn meanwhile), so a zoom's tiles never wait behind the
     // ground a build changed; then coarse before fine, nearest the view's middle first.
     this.queue = wanted.sort((a, b) => +a.stale - +b.stale || a.depth - b.depth || a.far - b.far);
-    if (depth !== this.depth) { this.depth = depth; this.makePage(); }
+    this.wanted = depth;
+    this.settle();
     this.next();
+  }
+
+  /** Draw the view at the depth it asked for (`wanted`) once its tiles in view there came: a page made anew. */
+  private settle(): void {
+    if (this.wanted === this.depth || [...this.inView].some(k => !this.kept.has(k))) return;
+    this.depth = this.wanted;
+    this.makePage();
   }
 
   /** Mark the nearest kept ancestor of the tile of `depth` at column `x` and row `y` as asked by view `asked`. */
@@ -332,6 +344,7 @@ export class GroundTiles {
       this.numbersDue = true;
       const before = this.page;
       this.makePage();
+      this.settle();
       // A tile that takes a stale one's place shows at once, with no fade (the ground under it barely moved), so a
       // playing world's builds do not keep the map drawing frame after frame.
       const shown = this.showsOtherThan(before) || (had !== undefined && this.seen(depth, x, y));
