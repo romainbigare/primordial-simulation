@@ -13,8 +13,8 @@ export class FireFront {
   /** When the front reached each cell, s after its strike, till the frame after the stroke comes. */
   private waiting: Map<number, number> | null = null;
 
-  /** `ask` asks the core about a place (squares), its answer to `answer`. */
-  constructor(private ask: (x: number, y: number, answer: (p: Probe) => void) => void, private fire: Fire) {}
+  /** `core`: what asks the live world's core about a place (squares), its answer to `answer`. */
+  constructor(private core: () => { probe(x: number, y: number, answer: (p: Probe) => void): void } | null, private fire: Fire) {}
 
   /** The cells a stroke burnt and when (`Settled`): played once the frame after it comes. */
   burnt(burnt: [number, number][]): void { this.waiting = new Map(burnt); }
@@ -28,7 +28,7 @@ export class FireFront {
     const squares = [...age.keys()].filter(i => age[i] < NOW_MONTHS);
     let left = squares.length;
     for (const i of squares) {
-      this.ask((i % side) + 0.5, Math.floor(i / side) + 0.5, p => {
+      this.core()?.probe((i % side) + 0.5, Math.floor(i / side) + 0.5, p => {
         at[i] = reached.get(p.cell) ?? NaN;
         if (--left === 0) this.fire.play(at);
       });

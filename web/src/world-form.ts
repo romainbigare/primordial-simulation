@@ -1,5 +1,6 @@
 // The form of a new live world (the World panel): its seed, size, variety, climate, shape and weather, first from the
-// page's URL (`?seed=1&size=32&variety=8&band=20,65&shape=drawn&weather=strong`), each kept within what the core runs.
+// page's URL (`?seed=1&size=32&variety=8&band=20,65&shape=drawn&weather=strong`), each kept within what the core runs;
+// and the files the page opens: a saved world, or a tape picked or dropped on it.
 
 /** The live world's first size and its least and most, squares a side: the first shows a land with its valleys, a
  * lake and an outlier; the most is the largest island the laws are run on, or on a screen touched with a finger (a
@@ -60,4 +61,21 @@ export function readForm(): WorldAsked {
     drawn: field<HTMLSelectElement>('shape').value === 'drawn',
     soft: field<HTMLSelectElement>('weather').value === 'soft',
   };
+}
+
+/** A new world (`fresh`) as the form is sent or its choices change; a saved world (`open`, its gzip) as one is picked;
+ * a tape (`tape`, its gzip) as one is picked or dropped on the page. */
+export function listenForm(fresh: () => void, open: (gz: ArrayBuffer) => void, tape: (gz: ArrayBuffer) => void): void {
+  const picked = (to: (gz: ArrayBuffer) => void) => (e: Event) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(to); };
+  field<HTMLInputElement>('saved').onchange = picked(open);
+  field<HTMLInputElement>('file').onchange = picked(tape);
+  field<HTMLFormElement>('live').onsubmit = e => { e.preventDefault(); fresh(); };
+  for (const id of ['band', 'shape', 'weather']) field<HTMLSelectElement>(id).onchange = () => fresh();
+  // (Entering and leaving the page's elements while dragging: the drop zone shows while the drag is over the page.)
+  let depth = 0;
+  const zone = field('drop');
+  addEventListener('dragenter', e => { e.preventDefault(); depth++; zone.hidden = false; });
+  addEventListener('dragleave', () => { if (--depth <= 0) zone.hidden = true; });
+  addEventListener('dragover', e => e.preventDefault());
+  addEventListener('drop', e => { e.preventDefault(); depth = 0; zone.hidden = true; e.dataTransfer?.files[0]?.arrayBuffer().then(tape); });
 }

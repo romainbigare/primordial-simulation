@@ -13,15 +13,20 @@ import { IconName, iconSvg } from './icons';
 export interface Probe { cell: number; bounds: [number, number, number, number]; at: [number, number]; area: number; land: number; patches: number; fire: string }
 /** A starting kind the world's plan places (wasm/src/lib.rs `kinds`): its row, the core's name, kg per m² placed. */
 export interface StartKind { row: number; name: string; kg: number }
-/** What a brush did (wasm/src/lib.rs `brush`): each cell under it not yet edited in the stroke, the share of it under
- * the brush, whether each of its edits was made and the core's reason where not; whether any cell changed. (A brush
+/** What a brush did (wasm/src/lib.rs `brush`): of a planting, each cell newly under it, the share of it under the
+ * brush, whether each of its edits was made and the core's reason where not, and whether the kind planted stands
+ * grown somewhere (`grown`; else it is planted young); of heat, each cell under it, its share, how much of the heat
+ * that lights its remains it holds (`progress`, 0 to 1) and why none would light; whether any cell changed. (A brush
  * of the ground answers its cells as numbers alone.) */
-export interface Brushed { cells: { cell: number; share: number; done: boolean[]; why: string }[]; changed: boolean }
+export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[]; changed: boolean; grown?: boolean }
 /** What a stroke's settling did (wasm/src/lib.rs `settle`): whether the ground was built again, and each cell the
  * flames of its strikes reached, and when, s after the strike. */
 export interface Settled { ground: boolean; burnt: [number, number][] }
-/** The worker's side of the tools: ask what lies under a place, paint, end a stroke, and undo the last. */
-export interface Editor { probe(x: number, y: number): void; brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): void; settle(): void; undo(): void }
+/** The worker's side of the tools (live.ts `Live`): ask what lies under a place, paint, end a stroke, and undo the last. */
+export interface Editor {
+  probe(x: number, y: number, answer: (p: Probe) => void): void; brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): void;
+  settle(): void; undo(): void;
+}
 
 /** A tool of god mode. The strip shows the tools in the order of their list; a new tool is one more entry. */
 export interface GodTool {
@@ -31,8 +36,8 @@ export interface GodTool {
   hint: string;
   /** The core's brush tool it paints with (wasm/src/lib.rs `brush`), and the starting kind it places (-1: none). */
   code: number; row(): number;
-  /** How fast it moves the ground at the brush's centre while held, m/s (up, or down where less than 0): it paints
-   * again and again while the pointer is down, held still or not (the ground tools). */
+  /** What it adds at the brush's centre each second it is held, in its core tool's unit (m of ground, up or down where
+   * less than 0; J/m² of heat): it paints again and again while the pointer is down, held still or not. */
   rate?: number;
   /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
   why(p: Probe | null): string;
@@ -40,8 +45,9 @@ export interface GodTool {
   reason(why: string): string;
   /** Its own choices, shown under the radius (`show` draws the card anew after one is picked). */
   choices?(show: () => void): HTMLElement;
-  /** What a stroke did, in a line: the cells it edited, and the plain reason most of the others were not. */
-  told(done: number, why: string): string;
+  /** What a stroke did, in a line: the cells it edited (lit, for heat), the plain reason most of the others were not,
+   * and whether what it planted stood grown. */
+  told(done: number, why: string, grown: boolean): string;
 }
 /** What the page gives god mode: its strip, card and toast; the map drawn anew; that a tool was picked (the world
  * pauses); the side of a square, m; and the cells a stroke burnt with when (`Settled`). */
@@ -58,6 +64,8 @@ const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
 const PAINT_MS = 90, PAINT_MOVE = 0.25;
 /** The ink of the brush where the tool cannot act: a dull red. */
 const NO_INK = 'rgba(196,76,60,.95)';
+/** The width of the ring that shows the heat held under the brush, css px. */
+const PROGRESS_PX = 5;
 /** The widest line of the box that says beside the cursor why a tool cannot act there, css px. */
 const LABEL_PX = 220;
 /** How long the toast of a stroke shows, ms. */
@@ -71,7 +79,12 @@ const radiusText = (m: number) => (m >= 1000 ? `${m / 1000} km` : `${m} m`);
  * those it did not, the place and time of its last paint (squares, ms), where the brush is now, the timer that paints
  * while a tool with a rate is held, and whether a paint of it waits for the core's answer (a tool with a rate paints
  * again only once answered, with the time since: the core may take longer over a paint than the timer's step). */
-interface Stroke { tool: GodTool; done: number; whys: Map<string, number>; last: [number, number, number]; now: [number, number]; held: number; waiting: boolean }
+interface Stroke {
+  tool: GodTool; done: number; whys: Map<string, number>; last: [number, number, number]; now: [number, number]; held: number; waiting: boolean;
+  /** Of heat: the cells lit so far, and how much of the heat that lights them the cells under the brush hold, their
+   * mean by share over those that can light (-1: no heat asked). Of a planting: whether its kind stood grown. */
+  lit: Set<number>; progress: number; grown: boolean;
+}
 
 export class God {
   private tool: GodTool | null = null;
@@ -93,7 +106,8 @@ export class God {
   private undoable = false;
   private undoButton: HTMLButtonElement;
 
-  constructor(private page: GodPage, private editor: Editor, private tools: GodTool[]) {
+  /** `editor`: the live world's, where there is one. */
+  constructor(private page: GodPage, private editor: () => Editor | null, private tools: GodTool[]) {
     page.strip.replaceChildren(...tools.map(t => {
       const b = document.createElement('button');
       b.className = 'ib'; b.dataset.tool = t.key; b.innerHTML = iconSvg(t.icon);
@@ -116,7 +130,7 @@ export class God {
   undo(): void {
     if (!this.undoable || this.stroke) return;
     this.undoable = false;
-    this.editor.undo();
+    this.editor()?.undo();
     this.show();
   }
 
@@ -155,7 +169,7 @@ export class God {
     const wait = this.asked + PROBE_MS - performance.now();
     if (wait > 0) { setTimeout(() => this.ask(), wait); return; }
     this.asking = true; this.asked = performance.now();
-    this.editor.probe(...this.at);
+    this.editor()?.probe(...this.at, p => this.probed(p));
   }
 
   /** The core's answer about a place. */
@@ -172,7 +186,7 @@ export class God {
     const t = this.tool;
     if (!t) return false;
     this.at = [x, y];
-    const st: Stroke = this.stroke = { tool: t, done: 0, whys: new Map(), last: [x, y, performance.now()], now: [x, y], held: 0, waiting: false };
+    const st: Stroke = this.stroke = { tool: t, done: 0, whys: new Map(), last: [x, y, performance.now()], now: [x, y], held: 0, waiting: false, lit: new Set(), progress: -1, grown: true };
     if (t.rate) st.held = window.setInterval(() => { if (!st.waiting) this.paint(); }, PAINT_MS);
     else this.paint();
     return true;
@@ -194,7 +208,7 @@ export class God {
     if (!st) return;
     clearInterval(st.held);
     if (st.tool.rate || st.now[0] !== st.last[0] || st.now[1] !== st.last[1]) this.paint();
-    this.editor.settle();
+    this.editor()?.settle();
   }
 
   /** Paint with the stroke's tool where its brush is now; a tool with a rate by what the time since its last paint
@@ -203,7 +217,7 @@ export class God {
     const st = this.stroke!, [x, y] = st.now, now = performance.now(), amount = ((st.tool.rate ?? 0) * (now - st.last[2])) / 1000;
     st.last = [x, y, now];
     st.waiting = true;
-    this.editor.brush(st.tool.code, x, y, this.radius, amount, st.tool.row());
+    this.editor()?.brush(st.tool.code, x, y, this.radius, amount, st.tool.row());
   }
 
   /** The core's answer to a paint: its cells counted to the stroke; the reason, where it edited none of them. */
@@ -211,15 +225,31 @@ export class God {
     const st = this.stroke;
     if (!st) return;
     st.waiting = false;
-    if (st.tool.rate) { st.done += +r.changed; return; }
-    const whys = new Map<string, number>();
-    for (const c of r.cells) {
-      if (c.done.every(d => d)) st.done++;
-      else if (c.why) whys.set(c.why, (whys.get(c.why) ?? 0) + 1);
+    if (r.grown === false) st.grown = false;
+    const heat = r.cells.filter(c => c.progress !== undefined);
+    if (heat.length) this.heated(st, heat);
+    else if (st.tool.rate) st.done += +r.changed;
+    else {
+      const whys = new Map<string, number>();
+      for (const c of r.cells) {
+        if (c.done!.every(d => d)) st.done++;
+        else if (c.why) whys.set(c.why, (whys.get(c.why) ?? 0) + 1);
+      }
+      for (const [why, n] of whys) st.whys.set(why, (st.whys.get(why) ?? 0) + n);
+      if (r.cells.length) this.lastWhy = r.cells.some(c => c.done!.every(d => d)) ? '' : st.tool.reason(most(whys));
     }
-    for (const [why, n] of whys) st.whys.set(why, (st.whys.get(why) ?? 0) + n);
-    if (r.cells.length) this.lastWhy = r.cells.some(c => c.done.every(d => d)) ? '' : st.tool.reason(most(whys));
     this.page.redraw();
+  }
+
+  /** Heat's answer: the cells lit so far, the progress under the brush, and why none would light there. */
+  private heated(st: Stroke, cells: Brushed['cells']): void {
+    const can = cells.filter(c => !c.why), share = can.reduce((n, c) => n + c.share, 0);
+    for (const c of can) if (c.progress! >= 1) st.lit.add(c.cell);
+    st.done = st.lit.size;
+    st.progress = share > 0 ? can.reduce((n, c) => n + c.share * c.progress!, 0) / share : 0;
+    st.whys = new Map();
+    for (const c of cells) if (c.why) st.whys.set(c.why, (st.whys.get(c.why) ?? 0) + 1);
+    this.lastWhy = can.length ? '' : st.tool.reason(most(st.whys));
   }
 
   /** The core's answer to the stroke's end: what it did, in the toast; the cells it burnt, to the page. */
@@ -229,7 +259,7 @@ export class God {
     if (!st) return;
     this.undoable = true;
     this.show();
-    this.say(st.tool.told(st.done, st.tool.reason(most(st.whys))));
+    this.say(st.tool.told(st.done, st.tool.reason(most(st.whys)), st.grown));
     if (r.burnt.length) this.page.burnt(r.burnt);
   }
 
@@ -246,6 +276,13 @@ export class God {
     ctx.globalAlpha = this.stroke ? 0.3 : 0.15; ctx.fillStyle = ink; ctx.fill();
     ctx.globalAlpha = 1; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.stroke();
     ctx.lineWidth = 1.5; ctx.strokeStyle = ink; ctx.stroke();
+    // Heat held: a ring that fills as the cells under the brush near lighting, and a glow that grows with it.
+    const p = this.stroke?.progress ?? -1;
+    if (p > 0) {
+      ctx.globalAlpha = 0.35 * p; ctx.fillStyle = ink; ctx.fill();
+      ctx.globalAlpha = 1; ctx.lineWidth = PROGRESS_PX; ctx.strokeStyle = ink;
+      ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.min(p, 1)); ctx.stroke();
+    }
     ctx.fillStyle = ink; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
     ctx.restore();
