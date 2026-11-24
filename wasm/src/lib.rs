@@ -434,7 +434,7 @@ const BURN: u32 = 3;
 /// The brush of radius `radius` m about the place `x`, `y` in squares (`World::under`), with the tool `tool`, between
 /// two months. The first call of a stroke keeps the world as it was (`undo`). `SHAPE` raises the ground by `amount` m
 /// at its centre, less toward its edge (lowers it where under none; `Act::Ground`); `LAKE` makes a lake under it at
-/// once, its floor `amount` m under its rim, full to its pass (`Act::Lake`: the samples are built again and the liquid
+/// once, its floor `amount` m under its rim, full to its pass (`Act::Basin`: the samples are built again and the liquid
 /// settles, so the page asks for the new relief); and `BURN` adds `amount` J a m² of
 /// heat there to the remains lying under it (`Act::Heat`), which dries and lights them when the stroke settles: the
 /// page calls them again and again while the brush is held, each time with what the time held since adds; the page
@@ -469,7 +469,7 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
         }
         if tool == LAKE {
             let cells: Vec<usize> = l.world.under(b).iter().map(|u| u.cell).collect();
-            let done = l.world.edit(&[Edit { place: [x, y], act: Act::Lake { radius_m: radius, depth_m: amount } }]);
+            let done = l.world.edit(&[Edit { place: [x, y], act: Act::Basin { radius_m: radius, depth_m: amount } }]);
             l.follow();
             return json!({"cells": cells, "changed": done[0]});
         }

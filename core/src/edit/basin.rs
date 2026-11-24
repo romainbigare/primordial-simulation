@@ -1,4 +1,4 @@
-//! A lake made by an edit (handover.md 11.1: "Flood: add liquid"; the owner: "flatten terrain + add water"): the
+//! A basin of liquid made by an edit (handover.md 11.1: add liquid; the ground levelled and the key liquid added): the
 //! ground under a brush levelled to a floor under its rim, and the key liquid poured in to the rim, all from the
 //! outside node. Whether it holds is the ground's: a floor under every sample round it is a closed basin, a pond of the
 //! samples, whose body keeps what is poured into it; where the brush's rim is lower than its floor somewhere, the
@@ -15,15 +15,15 @@ use std::collections::BTreeMap;
 const RIM_SAMPLES: f64 = 1.5;
 
 impl World {
-    /// A lake `depth` m deep under the brush `b` (the module's doc). Its level is that of the lowest sample on its rim
+    /// A basin of liquid `depth` m deep under the brush `b` (the module's doc). Its level is that of the lowest sample on its rim
     /// (the samples within `RIM_SAMPLES` round it, as built over the cells' grounds now);
     /// every sample it covers moves to its floor, `depth` under that level: the ground cut or filled with each cell's
     /// own rock (`move_ground`), and the samples built again over it (`flow::build::reshape`). The key liquid fills the
     /// pond under the brush's centre to its level, its pass (at least `depth` over the floor), from the outside node at
     /// each cell's ground temperature, poured into each cell's part of it (`flow::pour`); with no pond there (the floor
     /// opens to lower ground), `depth` over the floor, which runs off. Then the passes of a month's start and the liquid
-    /// settled with no time (`flow::settle`) level it. Whether a lake was made.
-    pub(crate) fn lake(&mut self, b: Brush, depth: f64) -> bool {
+    /// settled with no time (`flow::settle`) level it. Whether a basin was made.
+    pub(crate) fn basin(&mut self, b: Brush, depth: f64) -> bool {
         let Some(liquid) = crate::cover::Parts::of(&self.chem).map(|p| p.liquid) else { return false };
         // (The rim is read on the samples as they stand over the cells' grounds: built again first where edits shaped
         // them, or where they were never built from the running world, the seed's.)

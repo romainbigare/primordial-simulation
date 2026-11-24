@@ -231,8 +231,8 @@ samples move by from the outside node, with the heat that keeps its ground at it
 of where it lies. A raise lays the cell's own rock (its bed's mixture) and, at the top of a stroke, `edit_top_m` of
 loose ground of one of the terrain's makes drawn from the seed for the stroke (`Make::of`, `World::draw_make`); a
 lowering takes the loose ground first, then the rock, never more than the cell holds (its samples move by the share it
-took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **A lake** (`edit::Act::Lake`,
-`World::lake`): the ground under a brush is levelled to one floor, a depth under the lowest sample of the ring round
+took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **A basin of liquid** (`edit::Act::Basin`,
+`World::basin`): the ground under a brush is levelled to one floor, a depth under the lowest sample of the ring round
 it (its rim), cut or filled with each cell's own rock; the samples are built again over it at once; the key liquid
 fills the pond under its centre to that pond's level, its pass (the floor is a closed basin at least that deep), from
 the outside node at the ground's temperature, poured into each cell's part of that pond's body (`flow::pour`: the

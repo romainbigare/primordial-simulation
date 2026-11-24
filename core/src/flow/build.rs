@@ -50,7 +50,7 @@ pub fn reshape(w: &mut World) {
 }
 
 /// What runs through each sample (`World::discharge`, a mean over about a year) carried onto the samples' ways as
-/// built again after edits (`reshape`), so the rivers run where the ground now sends them: what each sample adds of
+/// built again after edits (`reshape`), so the channels run where the ground now sends them: what each sample adds of
 /// its own (what runs through it less what runs into it down the ways of the samples `old`) runs down the ways of the
 /// samples `new`, each before the one it runs to, as the runoff's pass sums it (`runoff::discharge`); a sample a pond
 /// now holds keeps what reaches it.
