@@ -103,6 +103,13 @@ fn stone_and_fall(s: vec2i) -> vec2f {
   return textureLoad(rock_field, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1), 0).yz;
 }
 
+// The wavelength of the bends of the channel of sample `s`, m (tape/src/ground/rock.rs: its make's plane; 0 for none,
+// `s.x < 0`).
+fn bend_length_of(s: vec2i) -> f32 {
+  if (s.x < 0) { return 0.0; }
+  return textureLoad(rock_field, clamp(s, vec2i(0), vec2i(land.samples.xy) - 1) + vec2i(0, MAKE_PLANE * i32(land.samples.y)), 0).w;
+}
+
 // A sample's channel's links are one number (tape/src/ground/rock.rs `links`): the step to the sample it runs to (1 to
 // 8, its neighbours row by row without itself; 8 more where it joins that one as a tributary; 0: none), and `LINK_UP`
 // times the step to its main neighbour upstream.

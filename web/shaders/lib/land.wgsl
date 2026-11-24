@@ -91,6 +91,21 @@ const BED_MIDDLE = 1.5;
 // (`lean`; none where the texels do not hold both lines).
 struct Tiled { h: f32, slope: vec2f, twi: f32, d: f32, d_slope: vec2f, channels: vec4i, ends: vec2f, water: vec3f, sd: f32, along: f32, lean: f32 }
 
+// A channel's bends are drawn fully where their wavelength takes at least `BEND_PX.y` pixels of the screen, and not at
+// all under `BEND_PX.x`: a line drawn from afar is several pixels wide, and a bend whose turns are tighter than it is
+// wide reads as the teeth of a saw (a bend turns on about a fifth of its length). The tiles hold them whole where
+// their texels show them (tape/src/ground/lines.rs `BEND_HELD`, under these at the depth a view is drawn at), so the
+// bends drawn are the same from every depth of the tiles: a zoom that changes the depth moves none.
+const BEND_PX = vec2f(24.0, 72.0);
+// The metres a pixel of the screen takes in the draw, which the bends are drawn by (`bends_shown`): each program that
+// reads the ground sets it first (0: the bends the tiles hold, whole).
+var<private> bends_e: f32 = 0.0;
+// The share of the bends of wavelength `length` m drawn (`BEND_PX`).
+fn bends_shown(length: f32) -> f32 {
+  if (bends_e <= 0.0) { return 1.0; }
+  return ease(BEND_PX.x * bends_e, BEND_PX.y * bends_e, length);
+}
+
 // The sample texel `n` of the tile of depth `depth` at column and row `tile` names by `code` (tape/src/ground/channels.rs
 // `code`): the sample that holds the texel's centre, stepped along each axis; none (-1) for 0.
 fn sample_of(n: vec2i, depth: f32, tile: vec2f, code: i32) -> vec2i {
@@ -130,8 +145,8 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   if (lo < 0.0 && hi > 0.0 && hi - lo > SAME_LINE_TEXELS * texel) { sd = abs(sd); }
   let sx = mix(sd.x, sd.y, f.x);
   let sy = mix(sd.z, sd.w, f.x);
-  let signed = mix(sx, sy, f.y);
-  let d_slope = sign(signed) * vec2f(mix(sd.y - sd.x, sd.w - sd.z, f.y), sy - sx) / texel;
+  let full = mix(sx, sy, f.y);
+  let full_slope = vec2f(mix(sd.y - sd.x, sd.w - sd.z, f.y), sy - sx) / texel;
   // The channels' samples of the texel nearest the point and of the one across the four from it: where a tributary's
   // line runs into the water of the channel it joins, its texels lie between that channel's (`discharge_at`).
   let a4 = array<vec4f, 4>(textureLoad(areas, a, layer, 0), textureLoad(areas, vec2i(b.x, a.y), layer, 0), textureLoad(areas, vec2i(a.x, b.y), layer, 0), textureLoad(areas, b, layer, 0));
@@ -174,7 +189,13 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let cx = mix(cd.x, cd.y, f.x);
   let cy = mix(cd.z, cd.w, f.x);
   let calm = mix(cx, cy, f.y);
-  let lean = select(0.0, calm - signed, shaped && c_hi < NO_LINE_M && hi < NO_LINE_M);
+  // The line as far as its bends show at the draw's pixels (`bends_shown`): between the line the tiles hold, with its
+  // bends whole, and the line without them.
+  let both = c_hi < NO_LINE_M && hi < NO_LINE_M;
+  let bent = select(1.0, bends_shown(bend_length_of(channels.xy)), both);
+  let signed = mix(calm, full, bent);
+  let d_slope = sign(signed) * mix(vec2f(mix(cd.y - cd.x, cd.w - cd.z, f.y), cy - cx) / texel, full_slope, bent);
+  let lean = select(0.0, calm - signed, shaped && both);
   if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, water, signed, along, lean); }
   let f2 = f * f;
   let f3 = f2 * f;

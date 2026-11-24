@@ -229,6 +229,7 @@ fn live_map(v: Varying) -> vec4f {
   // in the world.
   pix_origin = earth.frame.xy;
   pix_local = earth.corner.xy + v.px * earth.frame.z;
+  bends_e = earth.frame.w;
   let at = pix_origin + pix_local;
   let cs = corners(at / land.map.x);
   // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.

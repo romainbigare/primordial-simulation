@@ -11,6 +11,8 @@ struct MarkWords {
 }
 
 @fragment fn fs(v: Varying) -> MarkWords {
+  // (The channels' bends as the ground under the marks draws them, land.wgsl `bends_e`.)
+  bends_e = cover.seen.x;
   let t = vec2i(floor(v.px));
   // The lattice whose rows hold the texel: the last that starts at or above it.
   var l = 0;

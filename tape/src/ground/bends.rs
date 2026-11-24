@@ -35,7 +35,8 @@ pub const STATION_EXP: f64 = 0.26;
 /// width where a number that never changes needs one.
 pub const BED_RUNOFF: f64 = FLOOD * TYPICAL_RUNOFF;
 /// A bend's wavelength, in bed widths: 7 to 15 in rivers of every size, about 11 on their mean (Leopold and Wolman
-/// 1960). A tile draws the bends whose wavelength its texels show (`lines::BEND_FROM`).
+/// 1960). A tile holds the bends whose wavelength its texels show (`lines::BEND_HELD`), a shell draws those its pixels
+/// show (`rock::rock` gives it the wavelength).
 const BEND_WIDTHS: f64 = 11.0;
 /// How far a line's bends swing to each side of its wander, in bed widths, where nothing holds them (belts are 4 to
 /// 20 widths across, Williams 1986), and the share of that left on a hard bed.

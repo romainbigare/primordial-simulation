@@ -55,7 +55,8 @@ fn laid_years(settled: f64, age: f64) -> f64 {
 /// Of each sample of the reaches `r`, row by row, four 16-bit floats: the depth of its loose ground, m, the largest stone
 /// its channel moves, m (`STONE_M`; 0 where it runs nowhere: a sink, or under a pond), the slope of its reach (rise
 /// over run; 0 there too) and its channel's links (`links`); then of each sample again the reflectance of the make of
-/// its bed (red, green, blue: `colours`, one a make, `Samples::make`) and a zero; then of each sample again the shares of
+/// its bed (red, green, blue: `colours`, one a make, `Samples::make`) and the wavelength of its channel's bends, m
+/// (`Reaches::wavelength`, by which a shell draws as much of them as its pixels show); then of each sample again the shares of
 /// coarse and fine particles of its loose ground (`grain`, one a sample), how slowly its pores pass liquid, the decimal
 /// logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s), and the liquid it holds
 /// for roots (`Pores::for_roots` over its loose ground's depth) as the layer `avail` shows it (`layers::shown`); then of
@@ -70,9 +71,9 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<
         let stone = (STONE_M * s.up[k].sqrt() * slope).min(STONE_MOST_M);
         out.extend([half(s.loose[k] as f32), half(stone as f32), half(slope as f32), half(links(s, k) as f32)]);
     }
-    for &m in &s.make {
+    for (k, &m) in s.make.iter().enumerate() {
         let c = colours.get(m as usize).copied().unwrap_or([0.0; 3]);
-        out.extend([half(c[0] as f32), half(c[1] as f32), half(c[2] as f32), 0]);
+        out.extend([half(c[0] as f32), half(c[1] as f32), half(c[2] as f32), half(r.wavelength(k) as f32)]);
     }
     let pores: Vec<Pores> = grain[..s.h.len()].iter().map(Pores::of).collect();
     for ((t, p), &loose) in grain.iter().zip(&pores).zip(&s.loose) {

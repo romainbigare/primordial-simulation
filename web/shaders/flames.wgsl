@@ -100,6 +100,7 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
 @fragment fn fs(v: Varying) -> @location(0) vec4f {
   pix_origin = fire.frame.xy;
   pix_local = fire.corner.xy + v.px * fire.frame.z;
+  bends_e = fire.frame.w;
   let at = pix_origin + pix_local;
   let e = fire.frame.w;
   let time = fire.air.x;

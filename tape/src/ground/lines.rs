@@ -11,12 +11,17 @@ use pcore::space::network::NONE;
 /// at most `CALM_STEPS`): a curve departs from shorter chords by far less than a texel.
 const STEP_TEXELS: f64 = 0.5;
 const CALM_STEPS: usize = 48;
-/// A tile draws a channel's sway (its bends, and its wander) fully where its length is at least `BEND_TEXELS` texels,
-/// and not at all under `BEND_FROM`: a shell draws a channel from afar as a line several texels wide, and a sway whose
-/// turns are tighter than that line is wide reads as the teeth of a saw (a bend turns on about a fifth of its
-/// length). Between, it grows, the same at both ends of a joint, and its turns are wider as it is drawn less.
-const BEND_FROM: f64 = 24.0;
-const BEND_TEXELS: f64 = 72.0;
+/// A tile draws a channel's wander fully where a swing's length is at least `WANDER_TEXELS` texels, and not at all under
+/// `WANDER_FROM`: a shell draws a channel from afar as a line several texels wide, and a sway whose turns are tighter
+/// than that line is wide reads as the teeth of a saw (a bend turns on about a fifth of its length). Between, it grows,
+/// and its turns are wider as it is drawn less.
+const WANDER_FROM: f64 = 24.0;
+const WANDER_TEXELS: f64 = 72.0;
+/// A tile holds a channel's bends whole where their wavelength is at least `BEND_HELD[1]` texels, and none under
+/// `BEND_HELD[0]` (its texels draw no tighter turn), between the two the same at both ends of a joint; a shell draws
+/// them as far as its pixels show them (web/shaders/lib/land.wgsl `BEND_PX`, from more texels than these), so the
+/// bends drawn are the same from every depth of the tiles and a zoom that changes the depth moves none.
+const BEND_HELD: [f64; 2] = [12.0, 24.0];
 
 /// A point of a channel's line as drawn: its place, samples; the share of its piece's curve it lies along (0 to 1);
 /// and how far along the channel's line from its head, m.
@@ -63,17 +68,17 @@ fn kept(stride: f64, texel: f64) -> u32 {
 impl Channels<'_> {
     /// Sample `k`'s own piece as drawn on texels of `texel` m, from its start to its end (none for a sink none runs
     /// into): its curve moved by its wander (`bends::Bends::leans`), and that with its walked bends
-    /// (`bends::Reaches::walk`), each as far across as the tile draws it (`BEND_FROM`: at each end as the joint there is
-    /// drawn, so two pieces meet; no bend where the line ends, at a join or a sink).
+    /// (`bends::Reaches::walk`), each as far across as the tile holds it (`BEND_HELD`, `WANDER_FROM`: at each end as the
+    /// joint there is drawn, so two pieces meet; no bend where the line ends, at a join or a sink).
     pub(super) fn piece(&self, k: usize, texel: f64) -> Option<Drawn> {
         let (r, s) = (&self.r, self.r.s);
         let frame = r.frame(k)?;
         let (len, start) = (frame.len(), self.bends.start(k));
         // How far a sway of length `own` (its neighbour `j`'s by `of`) is drawn where the two pieces meet.
-        let joint = |own: f64, j: u32, of: &dyn Fn(usize) -> f64| ease(BEND_FROM, BEND_TEXELS, if j == NONE { own } else { own.min(of(j as usize)) } / texel);
+        let joint = |own: f64, j: u32, of: &dyn Fn(usize) -> f64| ease(BEND_HELD[0], BEND_HELD[1], if j == NONE { own } else { own.min(of(j as usize)) } / texel);
         let runs_on = s.to[k] != NONE && s.main[s.to[k] as usize] == k as u32;
         let bends = [joint(r.wavelength(k), s.main[k], &|j| r.wavelength(j)), if runs_on { joint(r.wavelength(k), s.to[k], &|j| r.wavelength(j)) } else { 0.0 }];
-        let wanders = ease(BEND_FROM, BEND_TEXELS, r.wander_length() / texel);
+        let wanders = ease(WANDER_FROM, WANDER_TEXELS, r.wander_length() / texel);
         let between = |ends: [f64; 2], u: f64| ends[0] + (ends[1] - ends[0]) * (u / len).clamp(0.0, 1.0);
         let lean = |u: f64| wanders * self.bends.leans(r, k, &frame, u.clamp(0.0, len));
         let n = ((len / (STEP_TEXELS * texel)).ceil() as usize).clamp(1, CALM_STEPS);
@@ -122,7 +127,7 @@ impl Channels<'_> {
             // The way on to the join sways by the tributary's wander (`bends::Bends::joins`), as far as the tile draws
             // a wander: no channel runs straight into the one it joins.
             let (calm_from, calm_at, run) = (own.calm[own.calm.len() - 1], next.calm[next.calm.len() / 2], last * r.metres);
-            let wanders = ease(BEND_FROM, BEND_TEXELS, r.wander_length() / texel);
+            let wanders = ease(WANDER_FROM, WANDER_TEXELS, r.wander_length() / texel);
             let across = [-(at[1] - from.p[1]) / last.max(f64::MIN_POSITIVE), (at[0] - from.p[0]) / last.max(f64::MIN_POSITIVE)];
             let n = ((run / (STEP_TEXELS * texel)).ceil() as usize).clamp(1, CALM_STEPS);
             for x in (1..=n).map(|i| i as f64 / n as f64) {

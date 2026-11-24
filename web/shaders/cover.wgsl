@@ -68,8 +68,10 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
 // The marks over the pixel `v`, premultiplied.
 fn marks_over(v: Varying) -> vec4f {
   let p = (v.px - draw.rect.xy) * cover.corner.z;
-  // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.
+  // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture (the channels'
+  // bends too, land.wgsl `bends_e`).
   let e = cover.seen.x;
+  bends_e = e;
   var dst = vec4f(0.0);
   var shade = 0.0;
   for (var l = 0; l < rolled(COVER_LATTICES); l++) { lattice(&dst, &shade, p, l, e); }
