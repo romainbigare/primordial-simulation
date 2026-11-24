@@ -11,11 +11,12 @@ mod bed;
 mod burn;
 mod join;
 
-pub use bed::{beds, Bed};
+pub use bed::{beds, heated, Bed};
 pub use burn::{burn, burnings, reach, Burning, Reach};
 pub use join::{shares, Lit};
 
 use crate::cover::Parts;
+use crate::store::{Move, Node};
 use crate::World;
 use serde::{Deserialize, Serialize};
 
@@ -149,10 +150,10 @@ pub fn month(w: &mut World) {
     }
 }
 
-/// The flames of the strikes of edits alone, burnt at once with no time on the world's clock (`World::settle`, laws.md
-/// 0 and 3c): over no time no strike is drawn. They burn in the coming month: what they did is shown as its own now
-/// (`show`) and kept in it (`Counters::flamed`, which its tally takes). Returns each cell their flames reached and
-/// when, s after its strike.
+/// The flames of the strikes of edits and of the heat they added alone, burnt at once with no time on the world's clock
+/// (`World::settle`, laws.md 0 and 3c): over no time no strike is drawn. They burn in the coming month: what they did is
+/// shown as its own now (`show`) and kept in it (`Counters::flamed`, which its tally takes). Returns each cell their
+/// flames reached and when, s after its strike or its heat.
 pub fn now(w: &mut World) -> Vec<(u32, f64)> {
     let reached = flames(w, 0.0).unwrap_or_default();
     let flamed = w.counts.flamed.clone();
@@ -162,15 +163,48 @@ pub fn now(w: &mut World) -> Vec<(u32, f64)> {
     reached
 }
 
-/// The flames over `span` s: the bed of each patch of each land cell (`beds`), the share of each cell that burns
-/// (`shares`, the strikes of edits with those drawn over the span, which it then forgets), the flames on its patches
-/// (`burnings`, serial) and the burning of them (`burn`), on the chunks of `life` only where some burns. Returns each
-/// cell the flames reached and when, s after its strike (`Lit::at`); none where the chemistry has no cover.
+/// The heat that lights the remains of land cell `i` over the share `over` of it where edits add heat (`heated`): what
+/// warms and boils off the liquid they hold and warms them to `t_light` on every patch, J; or why none lights: no
+/// land, no cover in the chemistry, nothing lying that burns, snow over it, or the air near the ground not read yet.
+pub fn needed(w: &World, i: usize, over: f64) -> Result<f64, Unlit> {
+    let p = Parts::of(&w.chem).ok_or(Unlit::Lifeless)?;
+    if crate::contract::land(w, i) <= 0.0 {
+        return Err(Unlit::NoLand);
+    }
+    let beds = heated(w, &p, i, (f64::INFINITY, over));
+    let all: f64 = beds.iter().flatten().map(|b| b.1).sum();
+    match beds.iter().find_map(|b| b.as_ref().err()) {
+        Some(&why) if all <= 0.0 => Err(why),
+        _ => Ok(all),
+    }
+}
+
+/// The flames over `span` s: the bed of each patch of each land cell (`beds`), of a cell edits added heat to its beds
+/// as that heat dries and lights them (`heated`, `World::heated`, which it then forgets); the share of each cell that
+/// burns (`shares`, the strikes of edits and the heated cells with the strikes drawn over the span, which it then
+/// forgets), the flames on its patches (`burnings`, serial) and the burning of them (`burn`), on the chunks of `life`
+/// only where some burns; last, the heat the heated beds took leaves their ground for the air over them, as the heat
+/// of their burning does. Returns each cell the flames reached and when, s after its strike or its heat (`Lit::at`);
+/// none where the chemistry has no cover.
 fn flames(w: &mut World, span: f64) -> Option<Vec<(u32, f64)>> {
     let p = Parts::of(&w.chem)?;
     let n = w.mesh.cells().n();
-    let beds: Vec<Vec<Option<Bed>>> = crate::par::map_n(n, n * BED_WORK, |i| if crate::contract::land(w, i) > 0.0 { beds(w, &p, i).into_iter().map(Result::ok).collect() } else { Vec::new() });
-    let lit = shares(w, &beds, span);
+    let mut beds: Vec<Vec<Option<Bed>>> = crate::par::map_n(n, n * BED_WORK, |i| if crate::contract::land(w, i) > 0.0 { beds(w, &p, i).into_iter().map(Result::ok).collect() } else { Vec::new() });
+    let (mut lit_by_heat, mut took) = (Vec::new(), Vec::new());
+    for (i, [e, over]) in std::mem::take(&mut w.heated) {
+        let (i, land) = (i as usize, crate::contract::land(w, i as usize));
+        if land <= 0.0 || over <= 0.0 {
+            continue;
+        }
+        let hot = heated(w, &p, i, (e / (land * over), over));
+        if hot.iter().any(Result::is_ok) {
+            let [heat, liquid] = hot.iter().flatten().fold([0.0; 2], |a, b| [a[0] + b.1, a[1] + b.2]);
+            took.push((i, heat.min(e), liquid));
+            beds[i] = hot.into_iter().map(|b| b.ok().map(|b| b.0)).collect();
+            lit_by_heat.push(i);
+        }
+    }
+    let lit = shares(w, &beds, span, &lit_by_heat);
     w.strikes.clear();
     let on: Vec<Vec<Burning>> = (0..n).map(|i| if lit.share[i] > 0.0 { burnings(w, i, &beds[i]) } else { Vec::new() }).collect();
     let load = on.iter().filter(|f| !f.is_empty()).count();
@@ -181,7 +215,28 @@ fn flames(w: &mut World, span: f64) -> Option<Vec<(u32, f64)>> {
             }
         });
     }
+    if !took.is_empty() {
+        boiled(w, p.liquid, &took);
+    }
     Some(lit.at.iter().enumerate().filter(|p| p.1.is_finite()).map(|(i, &t)| (i as u32, t)).collect())
+}
+
+/// The heat the heated beds took and the liquid they boiled off (`took`: each cell, J, kg) leave their ground: the
+/// liquid as vapour into the cell's aside node, which the air's step lets into the air (laws.md 1.5), carrying its heat
+/// at the ground's temperature and its latent heat, as the ground's evaporation does; the rest of the heat into the air
+/// over the cell, as the heat of the burning does. No more liquid leaves than the ground holds.
+fn boiled(w: &mut World, liquid: usize, took: &[(usize, f64, f64)]) {
+    use crate::chem::Heat;
+    let s = &w.chem.subs[liquid];
+    let moves: Vec<Move> = took.iter().flat_map(|&(i, heat, kg)| {
+        let (t, molten) = (w.thaw_last(i).0, w.molten_last(liquid, i));
+        let mol = (kg / s.molar_mass).min(w.g(liquid, i).max(0.0));
+        // The vapour takes its own heat from the ground, and the latent heat that lifts it out of its phase from the heat added.
+        let vapour = Move { from: Node::ground(i), to: Node::aside(i), k: liquid as u16, mol, heat: mol * (s.cp() * t + s.latent_gas()) };
+        let rest = (heat - mol * (s.latent_gas() - s.lf() * molten)).max(0.0);
+        [vapour, Move { from: Node::ground(i), to: Node::air(w.mesh.up(i, 0, crate::AIR)), k: 0, mol: 0.0, heat: rest }]
+    }).collect();
+    crate::store::apply(w, &[], &moves);
 }
 
 /// The months of a year and this month's place in it.

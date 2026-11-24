@@ -33,9 +33,10 @@ pub struct Lit {
 /// drawn by its covered ground, from the world's seed by the month and the region's first cell (`Purpose::Flame`), so
 /// the draws do not depend on the threads. Each flame runs over its region for `front_life` (`run`), and every cell it
 /// reaches burns all of the ground its remains cover on each patch that carries a flame. Each strike of an edit
-/// (`World::strikes`) lights its cell too, after them, where its remains carry a flame. A patch that burnt keeps no
-/// remains to carry a flame until its cover's leaves build them again.
-pub fn shares(w: &World, beds: &[Vec<Option<Bed>>], span: f64) -> Lit {
+/// (`World::strikes`) lights its cell too, after them, where its remains carry a flame; and each cell of `heated`
+/// burns where the heat edits added keeps a flame (`Bed::kept`), its flame running on where its beds carry one. A
+/// patch that burnt keeps no remains to carry a flame until its cover's leaves build them again.
+pub fn shares(w: &World, beds: &[Vec<Option<Bed>>], span: f64, heated: &[usize]) -> Lit {
     let (cells, n) = (w.mesh.cells(), beds.len());
     let carries = |i: usize| beds[i].iter().flatten().any(|b| b.carries());
     let mut up: Vec<u32> = (0..n as u32).collect();
@@ -77,12 +78,19 @@ pub fn shares(w: &World, beds: &[Vec<Option<Bed>>], span: f64) -> Lit {
     for &struck in w.strikes.iter().filter(|&&i| carries(i as usize)) {
         reach(struck as usize, &mut lit);
     }
+    for &i in heated {
+        (lit.share[i], lit.at[i]) = (covered(&beds[i]), 0.0);
+        if carries(i) {
+            reach(i, &mut lit);
+        }
+    }
     lit
 }
 
-/// The share of a cell's ground the remains cover on the patches of its cover whose beds `beds` carry a flame.
+/// The share of a cell's ground the remains cover on the patches of its cover whose beds `beds` carry a flame or whose
+/// flame added heat keeps (`Bed::kept`).
 fn covered(beds: &[Option<Bed>]) -> f64 {
-    beds.iter().flatten().filter(|b| b.carries()).map(|b| b.cover * b.share).sum()
+    beds.iter().flatten().filter(|b| b.carries() || b.kept).map(|b| b.cover * b.share).sum()
 }
 
 /// The bed a flame crosses a cell by, of its patches' `beds`: of those that carry a flame, the one whose remains cover

@@ -11,9 +11,9 @@ use crate::Physics;
 
 /// A group as the bookkeeping moves it: its plants, a real count, and its built cover, kg.
 #[derive(Clone, Copy, Debug, Default)]
-pub(super) struct Group {
-    pub(super) n: f64,
-    pub(super) kg: f64,
+pub struct Group {
+    pub n: f64,
+    pub kg: f64,
 }
 
 impl Group {
@@ -195,6 +195,13 @@ impl Cover {
         }
         g[0] = Group { n: g[0].n + n, kg: g[0].kg + kg };
         self.set_groups(x, &mut g[..held]);
+    }
+    /// The plants of a grown stand, `groups` times `f`, take hold in slot `x` (before their amounts join it): its groups
+    /// and theirs together, as the laws order and fuse them (`set_groups`).
+    pub(super) fn take_in(&mut self, mm: &[f64; NP], x: usize, groups: &[Group], f: f64) {
+        let (g, held) = self.groups(mm, x);
+        let mut all: Vec<Group> = g[..held].iter().copied().chain(groups.iter().map(|g| Group { n: g.n * f, kg: g.kg * f })).collect();
+        self.set_groups(x, &mut all);
     }
     /// Slot `small` joins slot `big` (`stand::join`, before their amounts join): their groups together.
     pub(super) fn join_groups(&mut self, mm: &[f64; NP], big: usize, small: usize) {

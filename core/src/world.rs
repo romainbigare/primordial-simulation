@@ -179,6 +179,9 @@ pub struct World {
     /// The cells an edit strikes in the coming month (`edit::Act::Strike`), which the flames' month lights and then
     /// forgets (`flame::shares`)
     pub strikes: Vec<u32>,
+    /// The heat edits added to the remains of cells (`edit::Act::Heat`): each cell, the heat, J (booked in its ground
+    /// node), and the share of the cell it was added over; the flames take it and then forget it (`flame::heated`)
+    pub heated: Vec<(u32, [f64; 2])>,
     /// Flow's working memory: its state (saved) and its caches (rebuilt when missing, `flow::Scratch`)
     pub scratch: flow::Scratch,
 }

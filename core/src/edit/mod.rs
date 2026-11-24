@@ -6,6 +6,7 @@
 //! on the world's clock (`World::settle`).
 
 mod brush;
+mod heat;
 mod shape;
 
 pub use brush::{Brush, Under};
@@ -25,9 +26,15 @@ pub enum Act {
     /// `kg` per m² of the cover of genes `genes` and starting kind `root` placed in the cell's newest patch, the one of
     /// the least age (`cover::place`)
     Plant { genes: [f32; crate::cover::NG], root: u32, kg: f64 },
+    /// The grown stand of starting kind `root` the world holds (`cover::grown`) placed in the cell's newest patch, its
+    /// amounts and plants per m² (`cover::place_grown`); where none stands, as `Plant`
+    Grown { genes: [f32; crate::cover::NG], root: u32, kg: f64 },
     /// One strike that lights the cell in the coming month (`World::strikes`, `flame::shares`), where its remains
     /// carry a flame (`flame::lights`)
     Strike,
+    /// `joules_m2` J a m² of heat added to the remains under a brush of radius `radius_m` m about the place at its
+    /// centre, less toward its edge (`World::heat`): it dries and lights them when the edits settle (`flame::heated`)
+    Heat { radius_m: f64, joules_m2: f64 },
     /// The ground under a brush of radius `radius_m` m about the place raised by `height_m` m at its centre (lowered
     /// where under none), less toward its edge; a stroke that has raised `stroke_m` m there before lays the loose ground
     /// of its top (`Config::edit_top_m`) of the terrain's make `make` (`World::shape`)
@@ -57,7 +64,9 @@ impl Edit {
             Act::Clear(s) => format!("cleared {s} of the cover of cell {i} as a new patch"),
             Act::Split(s) => format!("split {s} of the cover of cell {i} off as a new patch alike to the rest"),
             Act::Plant { root, kg, .. } => format!("placed {kg} kg per m2 of starting kind {root} in the newest patch of cell {i}"),
+            Act::Grown { root, .. } => format!("placed a grown stand of starting kind {root} in the newest patch of cell {i}"),
             Act::Strike => format!("a strike lights cell {i} in the coming month"),
+            Act::Heat { radius_m, joules_m2 } => format!("{joules_m2} J per m2 of heat added within {radius_m} m of a place in cell {i}"),
             Act::Ground { radius_m, height_m, .. } => format!("the ground within {radius_m} m of a place in cell {i} raised by {height_m} m at its middle"),
         };
         format!("{what}{}", if done { "" } else { ": nothing done" })
@@ -87,7 +96,8 @@ impl World {
     /// Run at once what the edits since the month began start that takes no time, with no time on the world's clock
     /// (laws.md 0): where edits shaped the ground (`Relief::due`), the samples are built again over it
     /// (`flow::build::reshape`), the passes of a month's start find the state of the ground from them, and the liquid
-    /// settles over it (`flow::settle`); then the strikes of edits burn (`flame::now`). Returns what it did (`Settled`).
+    /// settles over it (`flow::settle`); then the strikes of edits and the heat they added burn (`flame::now`). Returns
+/// what it did (`Settled`).
     pub fn settle(&mut self) -> Settled {
         let ground = self.relief.due;
         if ground {
@@ -95,8 +105,14 @@ impl World {
             crate::month_start(self);
             crate::flow::settle(self);
         }
-        let burnt = if self.strikes.is_empty() { Vec::new() } else { crate::flame::now(self) };
+        let burnt = if self.strikes.is_empty() && self.heated.is_empty() { Vec::new() } else { crate::flame::now(self) };
         Settled { ground, burnt }
+    }
+
+    /// The newest patch of cell `i`'s cover, the one of the least age (the last of those).
+    fn newest(&self, i: usize) -> usize {
+        let c = self.life.cover(i);
+        (0..c.patch_count()).rev().min_by(|&a, &b| c.patches[a].age.total_cmp(&c.patches[b].age)).unwrap_or(0)
     }
 
     /// Make the edit `e` on cell `i`; whether it was made.
@@ -107,11 +123,11 @@ impl World {
                 self.clear(i, s, Some(at))
             }
             Act::Split(s) => self.split(i, s),
-            Act::Plant { genes, root, kg } => {
-                let c = self.life.cover(i);
-                let newest = (0..c.patch_count()).rev().min_by(|&a, &b| c.patches[a].age.total_cmp(&c.patches[b].age)).unwrap_or(0);
-                crate::cover::place(self, i, newest, genes, root, kg)
-            }
+            Act::Plant { genes, root, kg } => crate::cover::place(self, i, self.newest(i), genes, root, kg),
+            Act::Grown { genes, root, kg } => match crate::cover::grown(self, root) {
+                Some(g) => crate::cover::place_grown(self, i, self.newest(i), &g),
+                None => crate::cover::place(self, i, self.newest(i), genes, root, kg),
+            },
             Act::Strike => {
                 let lit = crate::flame::lights(self, i).is_ok();
                 if lit {
@@ -119,6 +135,7 @@ impl World {
                 }
                 lit
             }
+            Act::Heat { radius_m, joules_m2 } => self.heat(Brush { centre: e.place, radius_m }, joules_m2),
             Act::Ground { radius_m, height_m, stroke_m, make } => self.shape(Brush { centre: e.place, radius_m }, (height_m, stroke_m), make as usize),
         }
     }

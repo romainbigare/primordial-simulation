@@ -15,7 +15,8 @@ use crate::World;
 /// and the most a kg could hold and still carry a flame (their moisture of extinction); what a kg of them frees burning,
 /// J, and what lighting a kg of them takes, J; the least load whose flame holds its heat (`least`), kg a m²; and the
 /// shares of the remains' load dry enough to flame and to smoulder (`layer`); the density of its particles, kg/m³ (the
-/// frame's); and the share of the low wind that reaches the height of its flame (`sheltered`).
+/// frame's); the share of the low wind that reaches the height of its flame (`sheltered`); and whether heat added from
+/// outside keeps its flame (`heated`: it burns where it does not carry a flame of its own).
 #[derive(Clone, Copy, Debug)]
 pub struct Bed {
     pub share: f64,
@@ -32,6 +33,7 @@ pub struct Bed {
     pub smoulder: f64,
     pub particle_rho: f64,
     pub waf: f64,
+    pub kept: bool,
 }
 
 impl Bed {
@@ -82,11 +84,24 @@ pub fn beds(w: &World, p: &Parts, i: usize) -> Vec<Result<Bed, Unlit>> {
     parts(w.life.cover(i)).into_iter().enumerate().map(|(k, part)| patch_bed(w, p, (i, k, part), &mut layer)).collect()
 }
 
-/// The remains lying on patch `k` of land cell `i`'s cover, the share `part` of the cell's (`parts`), and the cured
-/// leaves standing over them as a flame meets them this month (`Bed`); or why there is none: nothing that burns,
-/// remains that cover too little of the ground to join across it, less than the least load even dry, snow over them,
-/// or no air read yet. The cell's layer (`layer`) is read into `layer_of` where it is first needed.
-fn patch_bed(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), layer_of: &mut Option<Result<Layer, Unlit>>) -> Result<Bed, Unlit> {
+/// What the remains on a patch and the cured leaves over them are before their liquid is read (`fuel`): the patch's
+/// share of the cell, the loads of the remains and of the cured leaves, kg a m² of its land, the share of its ground
+/// they cover, the ground's temperature, K, what a kg frees burning and what warming a dry kg to `t_light` takes, J, and
+/// what a kg of the key liquid they hold takes to boil off, J.
+struct Fuel {
+    share: f64,
+    load: f64,
+    cured: f64,
+    cover: f64,
+    t: f64,
+    heat: f64,
+    dry: f64,
+    per_liquid: f64,
+}
+
+/// The fuel on patch `k` of land cell `i`'s cover, the share `part` of the cell's remains (`parts`) and of its cured
+/// leaves (`Fuel`); none where nothing lies that burns.
+fn fuel(w: &World, p: &Parts, (i, k, part): (usize, usize, f64)) -> Result<Fuel, Unlit> {
     let (chem, ph, mm) = (&w.chem, &w.cfg.phys, p.mm(&w.chem));
     let share = w.life.cover(i).patches[k].share;
     let load = crate::contract::remains_in(w, i, |k| w.g(k, i)) * part / share;
@@ -97,9 +112,6 @@ fn patch_bed(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), layer_of: 
         return Err(Unlit::Bare);
     }
     let cover = 1.0 - (-leaf_per_kg(w, p, i, k) * (load + cured)).exp();
-    if cover < CARRY_SHARE {
-        return Err(Unlit::Sparse);
-    }
     let t = w.thaw_last(i).0;
     // Per kg of what burns, by the mass of its parts: the heat their burning frees and their heat capacity.
     let kg = [MATTER, WALL].map(|q| (w.g(p.sub[q], i).max(0.0) + standing_dead[q]) * mm[q]);
@@ -115,6 +127,19 @@ fn patch_bed(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), layer_of: 
     // (Frozen, it must melt first.)
     let fusion = if t < liquid.melt { liquid.lf } else { 0.0 };
     let per_liquid = (liquid.cp * (liquid.boil - t).max(0.0) + liquid.lv + fusion) / liquid.molar_mass;
+    Ok(Fuel { share, load, cured, cover, t, heat, dry, per_liquid })
+}
+
+/// The remains lying on patch `k` of land cell `i`'s cover, the share `part` of the cell's (`parts`), and the cured
+/// leaves standing over them as a flame meets them this month (`Bed`); or why there is none: nothing that burns,
+/// remains that cover too little of the ground to join across it, less than the least load even dry, snow over them,
+/// or no air read yet. The cell's layer (`layer`) is read into `layer_of` where it is first needed.
+fn patch_bed(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), layer_of: &mut Option<Result<Layer, Unlit>>) -> Result<Bed, Unlit> {
+    let (chem, ph) = (&w.chem, &w.cfg.phys);
+    let Fuel { share, load, cured, cover, t, heat, dry, per_liquid } = fuel(w, p, (i, k, part))?;
+    if cover < CARRY_SHARE {
+        return Err(Unlit::Sparse);
+    }
     // The most liquid a kg may hold where the share `flux_ahead` of its heat still lights the next kg.
     let extinct = (ph.flux_ahead * heat - dry) / per_liquid;
     // (A bed under the least load of its dry remains is under it at any moisture: its layer need not be read.)
@@ -132,9 +157,42 @@ fn patch_bed(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), layer_of: 
     let light = dry + moist * per_liquid;
     let smoulder = l.share(ph.smoulder_moist, ph.duff_hold).max(flaming);
     let particle_rho = chem.subs[p.sub[WALL]].density[0];
-    let mut bed = Bed { share, part, load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder, particle_rho, waf: 0.0 };
+    let mut bed = Bed { share, part, load, standing, cover, moist, extinct, heat, light, least: least(ph, t, heat - light), flaming, smoulder, particle_rho, waf: 0.0, kept: false };
     bed.waf = sheltered(w, p, (i, k), bed.depth(ph));
     Ok(bed)
+}
+
+/// Steps over the depth of a layer of remains by which the liquid it holds is summed (`heated`): the midpoint rule.
+const DEPTH_STEPS: usize = 16;
+
+/// Heat added from outside to the remains of each patch in use of land cell `i` and the cured leaves over them, `e` J a
+/// m² over the share `over` of the cell (handover.md 11.1): on each patch it first warms and boils off the liquid they
+/// hold, their layer's whole depth (what its sorption curve holds and, as duff, what it draws from the ground,
+/// `Layer::share`), which is the ground's own liquid (`World::g`), so no more than the ground holds a m² of its land;
+/// then warms them dry to `t_light` (`Fuel`): that is `q` J a m² of the patch's land, and the heat lights the share
+/// min(1, e / q) of `over` of it, on the share of its ground the remains cover (off the cell's saturated share, where
+/// liquid stands): a bed burnt whole, all of it dry (`Bed::kept`: the heat keeps its flame where it would carry none of
+/// its own). Returns each patch's bed with the heat it took, J, and the liquid it boiled off, kg; or why none: nothing
+/// that burns, snow over it, or no air read yet.
+pub fn heated(w: &World, p: &Parts, i: usize, (e, over): (f64, f64)) -> Vec<Result<(Bed, f64, f64), Unlit>> {
+    let (chem, ph, land) = (&w.chem, &w.cfg.phys, crate::contract::land(w, i));
+    let ground_liquid = w.g(p.liquid, i).max(0.0) * chem.subs[p.liquid].molar_mass / land.max(f64::MIN_POSITIVE);
+    let mut layer_of = None;
+    parts(w.life.cover(i)).into_iter().enumerate().map(|(k, part)| {
+        let Fuel { share, load, cured, cover, t, heat, dry, per_liquid } = fuel(w, p, (i, k, part))?;
+        let l = layer_of.get_or_insert_with(|| layer(w, p, i, t)).clone()?;
+        let held: f64 = (0..DEPTH_STEPS).map(|s| {
+            let z = (s as f64 + 0.5) / DEPTH_STEPS as f64;
+            l.sorbed(l.h(z)) + ph.duff_hold * l.wet * z
+        }).sum::<f64>() / DEPTH_STEPS as f64;
+        let liquid = (cured * l.sorbed(l.top) + load * held).min(ground_liquid);
+        let q = (load + cured) * dry + liquid * per_liquid;
+        let lit = over * (e / q.max(f64::MIN_POSITIVE)).min(1.0) * (1.0 - l.saturated);
+        let particle_rho = chem.subs[p.sub[WALL]].density[0];
+        let mut bed = Bed { share, part, load, standing: cured, cover: cover * lit, moist: 0.0, extinct: f64::INFINITY, heat, light: dry, least: least(ph, t, heat - dry), flaming: 1.0, smoulder: 1.0, particle_rho, waf: 0.0, kept: true };
+        bed.waf = sheltered(w, p, (i, k), bed.depth(ph));
+        Ok((bed, q * lit * land * share, liquid * lit * land * share))
+    }).collect()
 }
 
 /// The layer of remains on the drier ground of a cell: the relative vapour of the air in it at its top and at its

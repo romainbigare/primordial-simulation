@@ -239,7 +239,8 @@ it as a build builds them, without the lobes and without counting a build of the
 version of the relief, `Relief::version`, by which built samples are kept), the passes of a month's start find the
 ground's state from them, and the liquid settles over the ground in the runoff's pass over a span of none
 (`flow::settle`: what stands runs to the bodies and each stands at one level; nothing drains, seeps or mixes, it
-carries no load, and the yearly means of what runs do not move); then the flames of the strikes of edits burn (3c).
+carries no load, and the yearly means of what runs do not move); then the flames of the strikes of edits and of the
+heat they added burn (3c).
 This is honest because a month's step already treats these processes as one event inside the month (the runoff's pass
 moves a month's runoff at once; a flame's run lasts at most `front_life`, 4 days), and every move goes through the
 store, so the books close; what needs time (sun, rain, growth, rot) does not run, and no strike is drawn over no time.
@@ -1494,13 +1495,18 @@ seeds fill it:
   that patch keeps its own point.
   `World::split` makes the share s of a cell's first patch a new patch alike to it at the cell's centre, each slot of
   the first patch giving it the share s of its amounts and plants, nothing dying: a control, as each patch stands per
-  m² as the cell did (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`). Every edit goes
+  m² as the cell did (`core/tests/stand.rs`). `cover::place` places the cover of a kind in a patch as seeds do (`seed::lodge`),
+  as seedlings; `cover::place_grown` places the world's grown stand of a kind (`cover::grown`: of the slots of that
+  starting kind in every cell, the one holding the most built cover per m² of the ground it stands on), its amounts and
+  its plants by size per m² of the ground the kind stands on in the patch, from the outside node, so planted trees
+  stand as the world grows them. Every edit goes
   through one entry, `World::edit` (`core/src/edit/`, `edit::Act`): it runs the passes of a month's start once, so
   the edits read the world as the laws do, then makes each in its order on the cell under its place (`World::cell_under`):
-  `Clear` about the sample under the place, `Split`, `Plant` in the cell's newest patch (the least age), and `Strike`
+  `Clear` about the sample under the place, `Split`, `Plant` in the cell's newest patch (the least age), `Grown` there
+  (the world's grown stand of the kind; as `Plant` where none stands), and `Strike`
   (3c), and `Ground` on the cells under a brush about the place (0); each is told as an event. `ew run` makes them at
   the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Due`), the live page between two months
-  (wasm `brush`: the ground under a round brush raised or lowered; or a clearing planted with a starting kind, or a
+  (wasm `brush`: the ground under a round brush raised or lowered; or a clearing planted with a grown stand of a starting kind, or a
   strike, on each cell under it, `World::under`, which covers the terrain's samples whose centres lie within its radius,
   each cell by the share of its samples covered, about its sample nearest the brush's centre, each cell once a
   stroke).
@@ -1590,7 +1596,22 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   made only where the bed of a patch of the cell carries a flame now (`flame::lights`, by the same `beds` and
   `Bed::carries`), and `flame::Unlit` says why the largest patch's does not: no land, no cover in the chemistry, nothing lying that burns, remains too sparse to join
   across the ground or too few to hold a flame's heat, snow over them, the air near the ground not read yet, ground so
-  wet that its saturated share breaks them apart, or remains too damp. Each flame runs from the cell it lit over the
+  wet that its saturated share breaks them apart, or remains too damp. **Heat added** by an edit (`edit::Act::Heat`,
+  handover.md 11.1 "Set on fire": from the outside node into the ground node of each land cell under a brush, kept with
+  the share of the cell it was added over, `World::heated`) dries and lights the remains there in the flames of the
+  coming month or at once when the edits settle (`flame::heated`): on each patch it first warms and boils off the
+  liquid the remains and the cured leaves hold, their layer's whole depth (what the sorption curve holds and, as duff,
+  what they draw from the ground, summed over 16 steps of depth), which is the ground's own liquid, so no more than the
+  ground node holds a m² of its land; then warms them dry to `t_light`; that is q J a m² of
+  the patch's land, and heat of e J a m² over the share s of the cell lights the share s min(1, e/q) of it, off the
+  saturated share, on the share its remains cover. Its bed burns whole and dry (`Bed::kept`), where it would carry no
+  flame of its own too (the heat keeps it: sparse or thin remains, damp ones), and its flame runs on from the cell where
+  its dry bed carries one. The liquid the lit beds boiled off leaves their ground node as vapour into its aside node
+  (and so the air, 1.5), with its heat at the ground's temperature and its latent heat, as evaporation does; the rest of
+  the heat they took goes to the air over them, as the heat of their burning does; what was not used stays in the
+  ground. `flame::needed` is the heat that lights all of a cell's remains over a share of it. With no heat added nothing
+  of this runs. Each
+  flame runs from the cell it lit over the
   region's cells for `front_life`, crossing half the way between two cells' centres at each one's speed R (below) on
   the bed of its patch that carries a flame over the most of its ground, the earliest first (`flame::run`). Every cell
   it reaches burns, on each patch whose bed carries a flame, all of the patch's ground its remains cover (f = that

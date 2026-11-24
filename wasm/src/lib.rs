@@ -53,7 +53,7 @@ struct Live {
     shown: Vec<f64>,
 }
 
-/// A stroke of the brush under way: the cells it planted or struck (each once a stroke), how far it has raised the
+/// A stroke of the brush under way: the cells it planted (each once a stroke), how far it has raised the
 /// ground at its centre, m (`Act::Ground`), and the make of the loose ground it lays (`World::draw_make`).
 struct Stroke {
     cells: Vec<u32>,
@@ -419,21 +419,24 @@ pub extern "C" fn kinds() -> *const u8 {
 }
 
 /// The brush's tools (`brush`): raise or lower the ground, plant (a clearing about the place nearest the brush's centre
-/// in each cell, planted with a starting kind) and burn (a strike on each cell).
+/// in each cell, planted with a grown stand of a starting kind) and burn (heat added to the remains under it).
 const SHAPE: u32 = 0;
 const PLANT: u32 = 2;
 const BURN: u32 = 3;
 
 /// The brush of radius `radius` m about the place `x`, `y` in squares (`World::under`), with the tool `tool`, between
 /// two months. The first call of a stroke keeps the world as it was (`undo`). `SHAPE` raises the ground by `amount` m
-/// at its centre, less toward its edge (lowers it where under none; `Act::Ground`): the page calls it again and again
-/// while the brush is held, each time with what the time held since adds; the page shows it from `preview` until the
-/// stroke settles. `PLANT` clears the share of each cell under it that it covers about the place there nearest its
-/// centre and places the starting kind of row `row` in it; `BURN` strikes each cell under it (`flame::lights`), which
-/// burns at `settle`; each cell once a stroke. Returns, as JSON: for `SHAPE`, the cells under the brush; else each
-/// cell newly under it, the share it covers, whether each of its edits was made (`World::edit`), and why not (""
-/// where all were: for a strike the flames' `Unlit`, for a planting "NoLand" or "NoRoom"); whether any edit was made;
-/// or, for another tool, why it is refused.
+/// at its centre, less toward its edge (lowers it where under none; `Act::Ground`), and `BURN` adds `amount` J a m² of
+/// heat there to the remains lying under it (`Act::Heat`), which dries and lights them when the stroke settles: the
+/// page calls them again and again while the brush is held, each time with what the time held since adds; the page
+/// shows the ground from `preview` until the stroke settles. `PLANT` clears the share of each cell under it that it
+/// covers about the place there nearest its centre and places the starting kind of row `row` in it as the world's
+/// grown stand of it (`Act::Grown`; `grown` false: none stands yet, it is placed as seedlings), each cell once a
+/// stroke. Returns, as JSON: for `SHAPE`, the cells under the brush; for `BURN`, each cell under it, the share it
+/// covers, how much of the heat that lights its remains it holds (`progress`, 0 to 1: they light at 1;
+/// `flame::needed`) and why none would light (`why`, the flames' `Unlit`; "" where some would); for `PLANT`, each cell
+/// newly under it, the share it covers, whether each of its edits was made (`World::edit`) and why not ("" where all
+/// were, else "NoLand" or "NoRoom"); whether any edit was made; or, for another tool, why it is refused.
 #[no_mangle]
 pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row: u32) -> *const u8 {
     use pcore::edit::{Act, Brush, Edit};
@@ -455,17 +458,30 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
             let done = l.world.edit(&[Edit { place: [x, y], act }]);
             return json!({"cells": cells, "changed": done[0]});
         }
+        if tool == BURN {
+            let done = l.world.edit(&[Edit { place: [x, y], act: Act::Heat { radius_m: radius, joules_m2: amount } }]);
+            let w = &l.world;
+            let cells: Vec<_> = w.under(b).iter().map(|u| {
+                let [e, over] = w.heated.iter().find(|h| h.0 == u.cell as u32).map_or([0.0, u.share], |h| h.1);
+                let (progress, why) = match pcore::flame::needed(w, u.cell, over) {
+                    Ok(need) => ((e / need.max(f64::MIN_POSITIVE)).min(1.0), String::new()),
+                    Err(why) => (0.0, format!("{why:?}")),
+                };
+                json!({"cell": u.cell, "share": u.share, "progress": progress, "why": why})
+            }).collect();
+            return json!({"cells": cells, "changed": done[0]});
+        }
         let under: Vec<_> = l.world.under(b).into_iter().filter(|u| !stroke.cells.contains(&(u.cell as u32))).collect();
         stroke.cells.extend(under.iter().map(|u| u.cell as u32));
-        let acts = |share: f64| if tool == PLANT { vec![Act::Clear(share), worldgen::schedule::plant((row as usize).min(worldgen::life::KINDS.len() - 1))] } else { vec![Act::Strike] };
-        let edits: Vec<Edit> = under.iter().flat_map(|u| acts(u.share).into_iter().map(move |act| Edit { place: u.place, act })).collect();
+        let row = (row as usize).min(worldgen::life::KINDS.len() - 1);
+        let grown = pcore::cover::grown(&l.world, row as u32).is_some();
+        // Of each cell a clearing, then the planting in it.
+        let edits: Vec<Edit> = under.iter().flat_map(|u| [Act::Clear(u.share), worldgen::schedule::grown(row)].map(|act| Edit { place: u.place, act })).collect();
         let done = l.world.edit(&edits);
         let w = &l.world;
-        let cells: Vec<_> = under.iter().zip(done.chunks(acts(1.0).len())).map(|(u, d)| {
+        let cells: Vec<_> = under.iter().zip(done.chunks(2)).map(|(u, d)| {
             let why = if d.iter().all(|&ok| ok) {
                 String::new()
-            } else if tool == BURN {
-                pcore::flame::lights(w, u.cell).err().map_or_else(String::new, |why| format!("{why:?}"))
             } else if pcore::contract::land(w, u.cell) <= 0.0 {
                 String::from("NoLand")
             } else {
@@ -473,7 +489,7 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
             };
             json!({"cell": u.cell, "share": u.share, "done": d, "why": why})
         }).collect();
-        json!({"cells": cells, "changed": done.iter().any(|&d| d)})
+        json!({"cells": cells, "changed": done.iter().any(|&d| d), "grown": grown})
     });
     give(out.to_string().into_bytes())
 }
