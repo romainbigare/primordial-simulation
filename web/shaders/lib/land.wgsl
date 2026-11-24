@@ -41,12 +41,14 @@ struct Land {
 @group(0) @binding(13) var areas: texture_2d_array<f32>;
 // Of each tile at the view's depth: the layer drawn there and the layer it fades in over (-1: none).
 @group(0) @binding(10) var pages: texture_2d<f32>;
-// Of each layer: its tile's depth, column and row, and when it came, ms.
+// Of each layer: its tile's depth, column and row, and when it came, ms; in the second row, 1 where its tile is made of
+// the samples edits have moved since (`moved_at`).
 @group(0) @binding(11) var tile_of: texture_2d<f32>;
 // The cells' table: `PLANES` planes of a texel a square, one under the other.
 @group(0) @binding(12) var table: texture_2d<f32>;
 // What runs through each of the terrain's samples, m³/s, and what its liquid carries, g/m³ (tape/src/table.rs
-// `discharge` and `load`, with the plumes' load in the bodies, web/src/land.ts), a texel a sample.
+// `discharge` and `load`, with the plumes' load in the bodies, web/src/land.ts), and how far edits moved its ground
+// since the samples the page's ground is made of, m (wasm/src/lib.rs `preview`), a texel a sample.
 @group(0) @binding(17) var flows: texture_2d<f32>;
 
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools
@@ -242,12 +244,42 @@ fn ground_at(at: vec2f, spline: bool) -> Tiled {
   if (page.x < 0.0) {
     return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec3f(-NO_LIQUID_M, 0.0, 0.0), NO_LIQUID_M, 0.0, 0.0);
   }
-  let shown = read_tile(i32(page.x), at, spline);
+  let shown = with_moved(read_tile(i32(page.x), at, spline), i32(page.x), at);
   let came = textureLoad(tile_of, vec2i(i32(page.x), 0), 0).w;
   let w = clamp((land.time.x - came) / land.time.y, 0.0, 1.0);
   if (w >= 1.0 || page.y < 0.0) { return shown; }
-  let under = read_tile(i32(page.y), at, spline);
+  let under = with_moved(read_tile(i32(page.y), at, spline), i32(page.y), at);
   return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.d, shown.d, w), mix(under.d_slope, shown.d_slope, w), shown.channels, shown.ends, mix(under.water, shown.water, w), mix(under.sd, shown.sd, w), shown.along, shown.lean);
+}
+
+// How far edits moved the ground at `at` since the samples the page's ground is made of, m, through the samples'
+// centres as a B-spline (draw.wgsl `b_spline`: no sample's square shows in the shading), and its slope east and south.
+fn moved_at(at: vec2f) -> vec3f {
+  let side = land.map.x * land.map.y / land.samples.x;
+  let c = b_spline(at / side - 0.5);
+  let t = at / side - 0.5 - vec2f(c.i);
+  let dx = vec3f(t.x - 0.5, -2.0 * t.x, t.x + 0.5);
+  let dy = vec3f(t.y - 0.5, -2.0 * t.y, t.y + 0.5);
+  let last = vec2i(land.samples.xy) - 1;
+  var m = vec3f(0.0);
+  for (var y = 0; y < 3; y++) {
+    for (var x = 0; x < 3; x++) {
+      let v = textureLoad(flows, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), 0).z;
+      m += v * vec3f(c.wx[x] * c.wy[y], dx[x] * c.wy[y], c.wx[x] * dy[y]);
+    }
+  }
+  return vec3f(m.x, m.yz / side);
+}
+
+// The ground `t` of layer `layer` at `at`, with what edits moved since, where its tile is made of the samples they
+// moved (a tile made since holds it).
+fn with_moved(t: Tiled, layer: i32, at: vec2f) -> Tiled {
+  if (textureLoad(tile_of, vec2i(layer, 1), 0).x <= 0.0) { return t; }
+  var g = t;
+  let m = moved_at(at);
+  g.h += m.x;
+  g.slope += m.yz;
+  return g;
 }
 
 // The liquid in the soil at a point of wetness index `twi` of a cell whose pores hold `pore` m and `pores` m full, its

@@ -3,7 +3,7 @@
 // samples (sent when it changed enough to show), and the numbers of the laws the core applies inside a cell. The page
 // adds to the table what it decides itself: the ground's own colour and the sea, the true colour, and the layer drawn.
 import { Draw, Gpu, Texture, Uniforms } from './gpu';
-import { GroundTiles, TILE_FADE_MS } from './ground';
+import { GroundTiles, Preview, TILE_FADE_MS } from './ground';
 import { World, plane, decode } from './data';
 import { MapLook, earthUniforms } from './field-window';
 import { Wet, seaSquares } from './earth';
@@ -80,12 +80,17 @@ export class Land {
   /** The bytes of the layer shown over which an empty point fades into a full one (`OVER_FADE`). */
   private fade = OVER_FADE;
   /** What runs through each sample, m³/s, and what its liquid carries, g/m³, as 16-bit floats, a texel a sample (none
-   * before the world's worker sent them); the plumes spread into the bodies of liquid (`plumesIn`); the two as the GPU
+   * before the world's worker sent them); the plumes spread into the bodies of liquid (`plumesIn`); how far edits
+   * moved each sample's ground since the samples the core was told the page shows (`preview`), m; the three as the GPU
    * reads them (the plumes' load where it is more than the sample's own), and whether that is still to be sent. */
   private flows: Texture | null = null;
   private discharge: Uint16Array;
   private plumes: Uint8Array = new Uint8Array(0);
+  private moved: Float32Array;
   private flowsDue = true;
+  /** The version of the world's samples the core was last told the page's ground shows (`Live.groundShown`): the
+   * preview of edits is of what moved since. */
+  told: number;
   /** The rock of each sample on the GPU (ground.ts `rock`), and the version of the ground's rock it holds (ground.ts
    * `rockVersion`; before it came: loose ground of `NO_ROCK_YET_M` everywhere). */
   private rock: Texture | null = null;
@@ -97,8 +102,30 @@ export class Land {
    * own), so all its tiles show the signs at one place along the channels. */
   flowAt: number | null = null;
 
-  constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf) {
+  /** `version`: the version of the world's samples `tiles` are made of. */
+  constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf, version: number) {
     this.discharge = new Uint16Array(2 * samples.across * samples.down);
+    this.moved = new Float32Array(samples.across * samples.down);
+    this.told = version;
+  }
+
+  /** The ground shows the samples of a version the core was not told of yet: that version (now told), else null. */
+  toTell(): number | null {
+    const v = this.tiles.shownVersion();
+    if (v === null || v === this.told) return null;
+    this.told = v;
+    return v;
+  }
+
+  /** What edits moved the ground since the samples the core was told the page shows (wasm/src/lib.rs `preview`): drawn
+   * over the tiles made of those samples (land.wgsl `moved_at`), till the tiles of the samples built again come. */
+  preview(p: Preview): void {
+    const across = this.samples.across, [x0, y0, w, h] = p.window;
+    this.moved.fill(0);
+    for (let y = 0; y < h; y++) this.moved.set(p.dh.subarray(y * w, (y + 1) * w), (y0 + y) * across + x0);
+    // (Over no tile where nothing moved: the map reads none of it.)
+    this.tiles.previewOver(w * h > 0 ? this.told : NaN);
+    this.flowsDue = true;
   }
 
   /** Where load came into a body of liquid in the last month, `bytes` (a sample, u32, and kg/s, f32, each: wasm/src/lib.rs
@@ -110,10 +137,12 @@ export class Land {
     this.flowsDue = true;
   }
 
-  /** The flows the GPU reads: the samples' discharge and load, with each plume's load (`MUD_PLUME_DAYS`) where it is more. */
+  /** The flows the GPU reads: the samples' discharge and load, with each plume's load (`MUD_PLUME_DAYS`) where it is
+   * more, and how far edits moved each sample's ground (`preview`). */
   private flowsOf(): Uint16Array {
-    const s = this.samples, out = this.discharge.slice(), view = new DataView(this.plumes.buffer, this.plumes.byteOffset, this.plumes.byteLength);
+    const s = this.samples, out = new Uint16Array(4 * s.across * s.down), view = new DataView(this.plumes.buffer, this.plumes.byteOffset, this.plumes.byteLength);
     const sampleM = (this.tiles.map.cell_m * this.tiles.map.w) / s.across;
+    for (let k = 0; k < s.across * s.down; k++) out.set([this.discharge[2 * k], this.discharge[2 * k + 1], half(this.moved[k])], 4 * k);
     for (let p = 0; p + 8 <= this.plumes.byteLength; p += 8) {
       const k = view.getUint32(p, true), kg = view.getFloat32(p + 4, true), x = k % s.across, y = Math.floor(k / s.across);
       if (!(kg > 0) || k >= s.across * s.down) continue;
@@ -128,7 +157,7 @@ export class Land {
       const r = Math.ceil(spread * Math.log(Math.max(mean / MUD_CLEAR_G, 1)));
       for (let j = Math.max(0, y - r); j <= Math.min(s.down - 1, y + r); j++) {
         for (let i = Math.max(0, x - r); i <= Math.min(s.across - 1, x + r); i++) {
-          const d = Math.hypot(i - x, j - y), c = mean * Math.exp(-d / spread), t = 2 * (j * s.across + i) + 1;
+          const d = Math.hypot(i - x, j - y), c = mean * Math.exp(-d / spread), t = 4 * (j * s.across + i) + 1;
           if (d <= r && c > unhalf(out[t])) out[t] = half(c);
         }
       }
@@ -244,7 +273,7 @@ export class Land {
     this.tex ??= gpu.texture('land', m.w, this.rows, 'rgba32float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const s = this.samples;
-    this.flows ??= gpu.texture('land', s.across, s.down, 'rg16float');
+    this.flows ??= gpu.texture('land', s.across, s.down, 'rgba16float');
     if (this.flowsDue) { gpu.write(this.flows, this.flowsOf()); this.flowsDue = false; }
     this.rock ??= gpu.texture('land', s.across, ROCK_PLANES * s.down, 'rgba16float');
     if (this.rockAt !== this.tiles.rockVersion) {

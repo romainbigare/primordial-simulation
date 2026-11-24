@@ -55,9 +55,15 @@ const REBUILD_EVERY_MS = 30000;
 const KEY_ROW = 1 << 12, KEY_DEPTH = KEY_ROW * KEY_ROW;
 const keyOf = (depth: number, x: number, y: number) => depth * KEY_DEPTH + y * KEY_ROW + x;
 
-/** A tile kept: its depth, column and row, its layer of the atlas, when it came (ms since the tiles started) and the
- * number of the last view that asked for it. */
-interface Kept { depth: number; x: number; y: number; layer: number; came: number; asked: number }
+/** A tile kept: its depth, column and row, its layer of the atlas, when it came (ms since the tiles started), the
+ * number of the last view that asked for it, and the version of the world's samples it is made of. */
+interface Kept { depth: number; x: number; y: number; layer: number; came: number; asked: number; version: number }
+/** The relief the world built its samples from, and the version of those samples (wasm/src/lib.rs `relief`,
+ * `ground_version`). */
+export interface Built { relief: Uint8Array; version: number }
+/** What edits moved the ground since the samples of a version (wasm/src/lib.rs `preview`): the window of the terrain's
+ * samples that moved (west column, north row, width, height) and how far each of its samples moved, m, row by row. */
+export interface Preview { window: [number, number, number, number]; dh: Float32Array }
 
 export class GroundTiles {
   private workers: { worker: Worker; ready: boolean; making: number; memory: number }[] = [];
@@ -75,7 +81,9 @@ export class GroundTiles {
   /** Tiles come, not yet on the GPU; the page and the tiles' numbers to send to it. */
   private come: { layer: number; data: Uint16Array }[] = [];
   private page = { w: 1, h: 1, data: new Float32Array(0) };
-  private numbers = new Float32Array(4 * MOST_TILES);
+  /** Of each layer: its tile's depth, column, row and when it came; then whether it is made of the samples the preview
+   * of edits is drawn over (`previewOver`). */
+  private numbers = new Float32Array(2 * 4 * MOST_TILES);
   private pageDue = true;
   private numbersDue = true;
   private atlas: Texture | null = null;
@@ -97,7 +105,11 @@ export class GroundTiles {
   private stale = new Set<number>();
   /** The relief of the latest build not yet handed to the workers (`rebuild`), when the last was handed, ms, and the
    * timer of the next. */
-  private built: Uint8Array | null = null;
+  private built: Built | null = null;
+  /** The version of the samples of each ground version handed to the workers (`gen`), and the version the preview of
+   * edits is drawn over (`previewOver`). */
+  private versionOf = new Map<number, number>();
+  private previewed: number;
   private rebuiltAt = -Infinity;
   private rebuildTimer = 0;
   private start = performance.now();
@@ -109,8 +121,11 @@ export class GroundTiles {
    * map holds them while the view moves, map.ts `hold`): what the GPU holds stays as it was, whole. */
   held = false;
 
-  constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
+  /** `version`: the version of the world's samples `ground` is made of. */
+  constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, version: number, private changed: (shown: boolean) => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
+    this.versionOf.set(0, version);
+    this.previewed = version;
     this.makePage();
     this.url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     for (let k = 0; k < WORKERS; k++) {
@@ -132,7 +147,7 @@ export class GroundTiles {
   /** The world built its samples anew from `relief` (wasm/src/lib.rs `relief`; null: no new build): each worker makes
    * its ground again (`ground_built`), and the tiles asked after are of it. While the world plays (`now` false) at
    * most once every `REBUILD_EVERY_MS`, of the latest build come; a paused world's ground at once. */
-  rebuild(relief: Uint8Array | null, now: boolean): void {
+  rebuild(relief: Built | null, now: boolean): void {
     this.built = relief ?? this.built;
     clearTimeout(this.rebuildTimer);
     if (!this.built) return;
@@ -142,8 +157,9 @@ export class GroundTiles {
     this.built = null;
     this.rebuiltAt = performance.now();
     this.gen++;
+    this.versionOf.set(this.gen, built.version);
     this.workers.forEach((w, k) => {
-      const copy = built.slice();
+      const copy = built.relief.slice();
       // (Only the first sends back the rock and the squares changed.)
       w.worker.postMessage({ cmd: 'built', relief: copy.buffer, gen: this.gen, answer: k === 0 }, [copy.buffer]);
     });
@@ -213,6 +229,22 @@ export class GroundTiles {
     }
   }
 
+  /** The version of the world's samples every tile in view at its own depth is made of, once all came; null while
+   * some are still to come, or a build is still to be handed to the workers. */
+  shownVersion(): number | null {
+    if (this.built) return null;
+    for (const k of this.inView) if (!this.kept.has(k) || this.stale.has(k)) return null;
+    return this.versionOf.get(this.gen) ?? null;
+  }
+
+  /** The preview of edits (land.ts `preview`) is of what moved since the samples of `version` (NaN: nothing moved): it
+   * is drawn over the tiles made of them alone (a tile made since holds what moved). */
+  previewOver(version: number): void {
+    this.previewed = version;
+    for (const k of this.kept.values()) this.numbers[4 * (MOST_TILES + k.layer)] = +(k.version === version);
+    this.numbersDue = true;
+  }
+
   /** The tiles in view at its own depth still to come. */
   toCome(): number { let n = 0; for (const k of this.inView) if (!this.kept.has(k)) n++; return n; }
   /** The tiles kept. */
@@ -272,9 +304,11 @@ export class GroundTiles {
     }
     if (layer !== undefined) {
       const came = performance.now() - this.start;
-      this.kept.set(keyOf(depth, x, y), { depth, x, y, layer, came: had ? had.came : came, asked: this.views });
+      const version = this.versionOf.get(gen) ?? this.previewed;
+      this.kept.set(keyOf(depth, x, y), { depth, x, y, layer, came: had ? had.came : came, asked: this.views, version });
       this.come.push({ layer, data });
       this.numbers.set([depth, x, y, had ? had.came : came], 4 * layer);
+      this.numbers[4 * (MOST_TILES + layer)] = +(version === this.previewed);
       this.numbersDue = true;
       const before = this.page;
       this.makePage();
@@ -332,7 +366,7 @@ export class GroundTiles {
     const side = this.meta.size + 2 * this.meta.gutter, n = side * side;
     this.atlas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
     this.areas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
-    this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 1, 'rgba32float');
+    this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 2, 'rgba32float');
     const now = performance.now() - this.start;
     if (this.held && this.pages) return { atlas: this.atlas, areas: this.areas, pages: this.pages, tiles: this.tilesTex, now };
     for (const c of this.come) {
