@@ -71,11 +71,11 @@ impl Live {
         let shaped = world.relief.shaped.clone();
         Live { built: world.relief.version, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, ready: None, before: None, version: shaped.clone(), shown: shaped }
     }
-    /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table made again, as the cells'
-    /// ground and the shore moved, and what edits had shaped kept as the new version's.
+    /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table found again, as the cells'
+    /// ground and the shore moved (`tape::Table::update`), and what edits had shaped kept as the new version's.
     fn follow(&mut self) {
         if self.world.relief.version != self.built {
-            self.cells = tape::Table::new(&self.world);
+            self.cells.update(&self.world);
             self.built = self.world.relief.version;
             self.version = self.world.relief.shaped.clone();
         }

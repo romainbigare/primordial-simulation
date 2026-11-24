@@ -45,9 +45,27 @@ pub const PONDS_EXACT: usize = 2048;
 /// The finest tiles' texels are no longer than this, m: finer, a shell magnifies them.
 const FINEST_M: f64 = 1.0;
 
-/// Whether the shore a shell draws leaves each of the samples `s` out of its pond's liquid (`shore::Shore::dry`).
-pub fn shore_dry(s: &Samples) -> Vec<bool> {
-    shore::Shore::new(s).dry()
+/// Whether the shore a shell draws leaves each sample out of its pond's liquid (`shore::Shore::dry`, `dry`), kept with
+/// the shore and the samples it was found on, so after edits it is found again only where the shore moved (`update`).
+pub struct Dry {
+    shore: shore::Shore,
+    samples: Arc<Samples>,
+    pub dry: Vec<bool>,
+}
+
+impl Dry {
+    /// Of the samples `s`.
+    pub fn new(s: Arc<Samples>) -> Dry {
+        let shore = shore::Shore::new(&s);
+        Dry { dry: shore.dry(), shore, samples: s }
+    }
+    /// The same on the samples `new`: the shore found again where it reads what changed (`shore::Shore::update`), and
+    /// each sample's whether it is dry where its spline reads a sample whose shore moved (two each way).
+    pub fn update(&mut self, new: Arc<Samples>) {
+        let moved = rebuild::near(&new, &self.shore.update(&self.samples, &new), shore::SPLINE_SAMPLES);
+        (0..new.h.len()).filter(|&k| moved[k]).for_each(|k| self.dry[k] = self.shore.dry_at(k));
+        self.samples = new;
+    }
 }
 
 /// The depths of the tiles of `map`, coarsest first: from the finest at which one tile holds the whole map to the first

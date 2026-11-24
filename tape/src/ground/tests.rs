@@ -125,8 +125,8 @@ fn the_smooth_shore_keeps_the_area_under_the_level() {
 
 /// A ground made again after edits shaped the world's ground (`Ground::rebuild`) is the ground made anew on the same
 /// samples: its points, shore, texture and tiles are the same to the last bit, though it finds the shore, the points
-/// and the texture of each sample and the pieces of the channels again only where they may read what changed. Two
-/// strokes, the second made again from the first's ground.
+/// and the texture of each sample and the pieces of the channels again only where they may read what changed; and so
+/// is the cells' table found again (`Table::update`). Two strokes, the second made again from the first's ground.
 #[test]
 fn a_ground_made_again_is_the_ground_made_anew() {
     use pcore::edit::{Act, Edit};
@@ -147,8 +147,10 @@ fn a_ground_made_again_is_the_ground_made_anew() {
         told.is_some()
     };
     stroke(&mut w, 20.0);
-    let mut again = super::super::Ground::of(&w);
+    let (mut again, mut table) = (super::super::Ground::of(&w), crate::Table::new(&w));
     assert!(stroke(&mut w, -10.0), "the second stroke's relief is told before it settles");
+    table.update(&w);
+    assert!(table.frame(&w).1 == crate::Table::new(&w).frame(&w).1 && table.discharge(&w) == crate::Table::new(&w).discharge(&w), "the cells' table found again");
     again.rebuild_from(&super::super::Ground::relief_bytes(&w)).expect("the relief");
     let anew = super::super::Ground::of(&w);
     let colours = vec![[0.5; 3]; w.terrain.makes.len()];

@@ -36,6 +36,8 @@ const SMOOTH_REACH: i64 = 3;
 const NEAR_SAMPLES: i64 = 2;
 /// A sample draws its own ground where its texels' splines read only far ones: two samples each way (`Shore::far_at`).
 const FAR_SAMPLES: i64 = 2;
+/// The samples a cubic B-spline through the samples' centres reads each way at a centre (`Shore::at`).
+pub(super) const SPLINE_SAMPLES: i64 = 2;
 /// The ground drawn lies on the offset's side of the level by at least this share of the offset, all of it to
 /// `SIDE_FROM` of `SHORE_M` and none at `SHORE_M`, where the ground lies on that side by itself.
 const SIDE: f64 = 0.5;
@@ -254,7 +256,12 @@ impl Shore {
     /// Whether the shore drawn leaves each sample out of its pond's liquid (the offset drawn at its centre over minus
     /// `MOUTH_UNDER_M`): a narrow arm of a body is drawn as land, and a river runs on through it.
     pub(super) fn dry(&self) -> Vec<bool> {
-        (0..self.offset.len()).map(|k| self.at([(k % self.across) as f64 + 0.5, (k / self.across) as f64 + 0.5]).0 > -MOUTH_UNDER_M).collect()
+        (0..self.offset.len()).map(|k| self.dry_at(k)).collect()
+    }
+
+    /// Whether the shore drawn leaves sample `k` out of its pond's liquid (`dry`).
+    pub(super) fn dry_at(&self, k: usize) -> bool {
+        self.at([(k % self.across) as f64 + 0.5, (k / self.across) as f64 + 0.5]).0 > -MOUTH_UNDER_M
     }
 
     /// Where a channel's line that the samples end at `from` (samples from the map's corner) ends as drawn (`MOUTH_MOST`):
