@@ -62,15 +62,15 @@ impl Table {
     /// The volume of liquid that runs through each of the terrain's samples, m³/s, row by row: its discharge
     /// (`World::discharge`) at the mol per m³ of the liquid its cell's ground holds (`World::liquid_in`); none where that
     /// cell holds no liquid. A shell sizes the channel of each sample by it (`Physics::channel`). A sample of a pond
-    /// that holds no liquid, or that the shore a shell draws leaves out of the liquid (`dry`), carries no less than
-    /// its main way upstream brings: a river runs on along a dry body's floor, and to the shore drawn, which lies up
-    /// to a few samples from the samples' own. Under a body's liquid no channel runs.
+    /// that holds no liquid, that its body's liquid does not reach (a body not full stands under its pass), or that
+    /// the shore a shell draws leaves out of the liquid (`dry`), carries no less than its main way upstream brings: a
+    /// river runs on along a dry floor, and to the shore drawn, which lies up to a few samples from the samples' own. Under a body's liquid no channel runs.
     pub fn discharge(&self, w: &World) -> Vec<f32> {
         let per_m3: Vec<f64> = (0..w.mesh.cells().n()).map(|i| w.liquid_in(i, |k| w.g(k, i)).map_or(0.0, |l| l.1)).collect();
         let per = |k: usize| per_m3[self.cell[k] as usize];
         let mut out: Vec<f32> = w.discharge.iter().enumerate().map(|(k, &q)| if per(k) > 0.0 { (q as f64 / per(k)) as f32 } else { 0.0 }).collect();
         let (s, levels) = (w.terrain_samples(), w.pond_levels());
-        let shore = |k: usize| self.dry.dry[k] || levels[s.pond[k] as usize].is_nan();
+        let shore = |k: usize| self.dry.dry[k] || levels[s.pond[k] as usize].is_nan() || s.h[k] >= levels[s.pond[k] as usize];
         // In the flood's order from the last sample reached: a sample comes before the one its liquid runs to.
         for &k in s.order.iter().rev() {
             let k = k as usize;

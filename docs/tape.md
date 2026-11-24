@@ -252,7 +252,8 @@ holds for roots (`Pores::for_roots` of its texture over its depth) as the `avail
 which the page draws that layer by. Then of each sample again two zeros, how deep the load the liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain, by which the page draws a deposit. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
-sample of a pond that holds no liquid, or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries
+sample of a pond that holds no liquid, that its body's liquid does not reach (a body not yet full stands under its
+pass), or that the shore drawn leaves out of the liquid (`ground::shore_dry`), carries
 no less than its main way upstream brings, so a river's line runs on along a dry body's floor and to the shore a shell
 draws; under a body's liquid no channel runs). The
 live page gets it as 16-bit floats with a frame when one sample's has changed by a tenth since it was last sent
