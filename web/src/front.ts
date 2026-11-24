@@ -30,7 +30,7 @@ export class FireFront {
     const next = (): void => {
       const i = left.shift(), core = this.core();
       // (All found, or the world gone: what was found plays.)
-      if (i === undefined || !core) return this.fire.play(at);
+      if (i === undefined || !core) return this.fire.play(at, w.meta.laws?.front_life ?? 0);
       core.probe((i % side) + 0.5, Math.floor(i / side) + 0.5, p => {
         const [x0, y0, x1, y1] = p.bounds, a = reached.get(p.cell) ?? NaN;
         const inside = (k: number) => { const x = (k % side) + 0.5, y = Math.floor(k / side) + 0.5; return x > x0 && x < x1 && y > y0 && y < y1; };

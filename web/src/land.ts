@@ -13,7 +13,7 @@ import { groundDetail } from './detail';
 /** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), the discharge
  * per metre a css pixel takes past which a channel shows as a line, m³/s per m, and that line's law (its css pixels,
  * the power it widens by, the most times: tape/src/ground/channels.rs `LINE_PX`). */
-export interface Laws { soil_m: number; wet_depth: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number; station: number }
+export interface Laws { soil_m: number; wet_depth: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number; station: number; front_life: number }
 /** The terrain's samples: across, down, and their depth. */
 export interface SamplesOf { across: number; down: number; depth: number }
 
@@ -53,7 +53,7 @@ const SEA_BLUR = 1.5, SEA_REACH = 4, OPEN_SEA_M = 20;
 export const FLOW_FPS = 6;
 const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
 /** Seconds in a day. */
-export const DAY_S = 86400;
+const DAY_S = 86400;
 /** A plume (drawing only: the core moves no currents in a body of liquid): what a river brings into standing liquid,
  * kg/s, is in the river's own water at its mouth, its discharge (no less than `MUD_Q_LEAST` m³/s): its load there, g/m³,
  * held to `MUD_PLUME_MOST_G`. That water spreads over the body as a layer `MUD_PLUME_DEEP_M` thick for
@@ -118,14 +118,14 @@ export class Land {
     core.groundShown(v);
   }
 
-  /** What edits moved the ground since the samples the core was told the page shows (wasm/src/lib.rs `preview`): drawn
-   * over the tiles made of those samples (land.wgsl `moved_at`), till the tiles of the samples built again come. */
+  /** What edits moved the ground since the samples of a version (wasm/src/lib.rs `preview`, `over`): drawn over the
+   * tiles made of those samples alone (land.wgsl `moved_at`), till the tiles of the samples built again come. */
   preview(p: Preview): void {
     const across = this.samples.across, [x0, y0, w, h] = p.window;
     this.moved.fill(0);
     for (let y = 0; y < h; y++) this.moved.set(p.dh.subarray(y * w, (y + 1) * w), (y0 + y) * across + x0);
     // (Over no tile where nothing moved: the map reads none of it.)
-    this.tiles.previewOver(w * h > 0 ? this.told : NaN);
+    this.tiles.previewOver(w * h > 0 ? p.over : NaN);
     this.flowsDue = true;
   }
 

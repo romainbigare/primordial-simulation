@@ -62,8 +62,9 @@ interface Kept { depth: number; x: number; y: number; layer: number; came: numbe
  * `ground_version`). */
 export interface Built { relief: Uint8Array; version: number }
 /** What edits moved the ground since the samples of a version (wasm/src/lib.rs `preview`): the window of the terrain's
- * samples that moved (west column, north row, width, height) and how far each of its samples moved, m, row by row. */
-export interface Preview { window: [number, number, number, number]; dh: Float32Array }
+ * samples that moved (west column, north row, width, height), that version (`over`), and how far each of its samples
+ * moved, m, row by row. */
+export interface Preview { window: [number, number, number, number]; over: number; dh: Float32Array }
 
 export class GroundTiles {
   private workers: { worker: Worker; ready: boolean; making: number; memory: number }[] = [];
