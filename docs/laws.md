@@ -246,7 +246,7 @@ it as a build builds them, without the lobes, without counting a build of the ye
 last build (`flow::build::reshape`: an edit moves a cell's ground and its samples' mean by one volume, so its offset
 stays to within the rounding of the areas, and the samples move only where edits shaped them; a new version of the
 relief, `Relief::version`, by which built samples are kept, and how the offsets raise the samples kept by the offsets,
-`relief::Lift`), and what runs through each sample (its mean
+`relief::Lift`; each cell's ground by height found again only where its samples moved, `curve::update`), and what runs through each sample (its mean
 over about a year, `World::discharge`) runs down the new ways: what each sample adds of its own (what runs through it
 less what runs into it down the old ways) is summed down the new, a sample a pond now holds keeping what reaches it
 (`build::reroute`), so a river runs round a raised hill at once; the passes of a month's start find the
