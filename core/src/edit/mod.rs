@@ -7,6 +7,7 @@
 
 mod brush;
 mod heat;
+mod lake;
 mod shape;
 
 pub use brush::{Brush, Under};
@@ -35,6 +36,9 @@ pub enum Act {
     /// `joules_m2` J a m² of heat added to the remains under a brush of radius `radius_m` m about the place at its
     /// centre, less toward its edge (`World::heat`): it dries and lights them when the edits settle (`flame::heated`)
     Heat { radius_m: f64, joules_m2: f64 },
+    /// A lake `depth_m` m deep under a brush of radius `radius_m` m about the place: its ground levelled to a floor
+    /// that deep under its rim's lowest sample, and the key liquid poured in to that level (`World::lake`)
+    Lake { radius_m: f64, depth_m: f64 },
     /// The ground under a brush of radius `radius_m` m about the place raised by `height_m` m at its centre (lowered
     /// where under none), less toward its edge; a stroke that has raised `stroke_m` m there before lays the loose ground
     /// of its top (`Config::edit_top_m`) of the terrain's make `make` (`World::shape`)
@@ -66,6 +70,7 @@ impl Edit {
             Act::Plant { root, kg, .. } => format!("placed {kg} kg per m2 of starting kind {root} in the newest patch of cell {i}"),
             Act::Grown { root, .. } => format!("placed a grown stand of starting kind {root} in the newest patch of cell {i}"),
             Act::Strike => format!("a strike lights cell {i} in the coming month"),
+            Act::Lake { radius_m, depth_m } => format!("a lake {depth_m} m deep within {radius_m} m of a place in cell {i}"),
             Act::Heat { radius_m, joules_m2 } => format!("{joules_m2} J per m2 of heat added within {radius_m} m of a place in cell {i}"),
             Act::Ground { radius_m, height_m, .. } => format!("the ground within {radius_m} m of a place in cell {i} raised by {height_m} m at its middle"),
         };
@@ -135,6 +140,7 @@ impl World {
                 }
                 lit
             }
+            Act::Lake { radius_m, depth_m } => self.lake(Brush { centre: e.place, radius_m }, depth_m),
             Act::Heat { radius_m, joules_m2 } => self.heat(Brush { centre: e.place, radius_m }, joules_m2),
             Act::Ground { radius_m, height_m, stroke_m, make } => self.shape(Brush { centre: e.place, radius_m }, (height_m, stroke_m), make as usize),
         }
