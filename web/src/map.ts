@@ -186,8 +186,10 @@ export class MapView {
   overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
   /** A tool that paints with the pointer (god mode): told where a press of the main button starts (squares), true
    * takes the press and its drag in place of a pan; then told of each move and of the end. A second finger, or another
-   * button, still moves the map. */
-  paint: { start(x: number, y: number): boolean; move(x: number, y: number): void; end(): void } | null = null;
+   * button, still moves the map; while a tool is on (`on`), the right button's menu does not open. */
+  paint: { on(): boolean; start(x: number, y: number): boolean; move(x: number, y: number): void; end(): void } | null = null;
+  /** The pointer that paints is told where it is on the map anew (the camera moved under it). */
+  private painterMoved = () => {};
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void, private onView: (v: View) => void = () => {}) {
     this.ctx = cv.getContext('2d')!;
@@ -209,7 +211,8 @@ export class MapView {
     new ResizeObserver(() => { this.resize(); this.invalidate(); }).observe(cv);
     /** The pointer that paints (-1: none), and where it is. */
     let painter = -1, painterAt = { x: 0, y: 0 };
-    const at = (e: PointerEvent): [number, number] => [(e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s];
+    const at = (e: { offsetX: number; offsetY: number }): [number, number] => [(e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s];
+    this.painterMoved = () => { if (painter >= 0) this.paint?.move(...at({ offsetX: painterAt.x, offsetY: painterAt.y })); };
     const stopPainting = () => { if (painter >= 0) { painter = -1; this.paint?.end(); } };
     cv.addEventListener('pointerdown', e => {
       cv.setPointerCapture(e.pointerId);
@@ -219,7 +222,7 @@ export class MapView {
       } else if (!this.gesture.size && e.button === 0 && this.paint?.start(...at(e))) { painter = e.pointerId; painterAt = { x: e.offsetX, y: e.offsetY }; return; }
       this.gesture.down(e.pointerId, e.offsetX, e.offsetY);
     });
-    cv.addEventListener('contextmenu', e => { if (this.paint) e.preventDefault(); });
+    cv.addEventListener('contextmenu', e => { if (this.paint?.on()) e.preventDefault(); });
     cv.addEventListener('pointermove', e => {
       if (e.pointerId === painter) { painterAt = { x: e.offsetX, y: e.offsetY }; this.setHover(this.cellAt(e.offsetX, e.offsetY)); return this.paint?.move(...at(e)); }
       if (this.gesture.move(e.pointerId, e.offsetX, e.offsetY)) this.redraw();
@@ -326,7 +329,7 @@ export class MapView {
   }
 
   /** The view moved now. */
-  private moved(): void { this.movedAt = performance.now(); }
+  private moved(): void { this.movedAt = performance.now(); this.painterMoved(); }
 
   private setHover(i: number): void { if (i !== this.hover) { this.hover = i; this.onHover(i); this.redraw(); } }
 

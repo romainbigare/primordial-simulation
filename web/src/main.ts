@@ -63,7 +63,7 @@ const god = new God({
 }, () => live, godTools(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live && godOn()) god.draw(ctx, ox, oy, s); };
-map.paint = { start: (x, y) => live !== null && godOn() && god.start(x, y), move: (x, y) => god.move(x, y), end: () => god.end() };
+map.paint = { on: () => godOn() && god.toolOn(), start: (x, y) => live !== null && godOn() && god.start(x, y), move: (x, y) => god.move(x, y), end: () => god.end() };
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
 let drawing: HeldGpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
@@ -215,7 +215,7 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 function togglePlay(): void {
-  if (!world) return;
+  if (!world || god.busy()) return; // (a stroke of god mode settles first)
   // (A paused world's ground is made again at once from its last build, ground.ts `rebuild`.)
   if (live) { playing = !playing; live.play(playing); if (!playing) land?.tiles.rebuild(null, true); return syncUi(); }
   if (!playing && frame >= world.meta.frames.length - 1) setFrame(0);
@@ -280,6 +280,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     settled: r => { if (live === l) god.settled(r); },
     undone: done => { if (live === l) { fire.still(); god.undone(done); } },
     preview: p => { if (live === l && land) { land.preview(p); map.showNow(); } },
+    relief: () => { if (live === l) land?.tiles.rebuild(l.takeRelief(), true); },
     error: text => { playing = false; syncUi(); say(text); },
   });
   l.drawn = () => map.shown();

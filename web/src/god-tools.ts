@@ -15,8 +15,8 @@ const LAKE_DEPTHS: [string, number][] = [['Shallow', 2], ['Middle', 5], ['Deep',
  * pit a hillside's shading shows from a few kilometres away. */
 const SHAPE_M_S = 20;
 /** How much heat Burn adds at the brush's centre while held, J/m² a second: at the first radius, the remains of a
- * typical place light in about a second (the median heat they need is 0.47 MJ/m², core/src/flame `needed`; a cell
- * holds the heat over all its land, of which the brush covers a share), the wettest in tens. */
+ * typical place light in about a second (the heat they need: core/src/flame `needed`; a cell holds the heat over all
+ * its land, of which the brush covers a share), the wettest in tens. */
 const HEAT_J_M2_S = 3e6;
 /** The starting kinds in plain words, by the core's name (worldgen/src/life/kinds.rs `KINDS`): a short name and a line. */
 const PLAIN_KINDS: Record<string, [string, string]> = {

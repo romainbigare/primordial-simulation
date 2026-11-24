@@ -19,19 +19,26 @@ export class FireFront {
   /** The cells a stroke burnt and when (`Settled`): played once the frame after it comes. */
   burnt(burnt: [number, number][]): void { this.waiting = new Map(burnt); }
 
-  /** A frame of world `w`: where a front waits, the squares it burnt are found and it plays. */
+  /** A frame of world `w`: where a front waits, the squares it burnt are found and it plays. The core is asked the cell
+   * of one square at a time: its answer names the cell's edges, so the other squares of that cell are not asked. */
   frame(w: World): void {
     const reached = this.waiting;
     this.waiting = null;
     if (!reached || !w.index.has('burnt_age')) return;
     const age = decode(w, 0, 'burnt_age'), side = w.meta.w, at = new Float32Array(age.length).fill(NaN);
-    const squares = [...age.keys()].filter(i => age[i] < NOW_MONTHS);
-    let left = squares.length;
-    for (const i of squares) {
-      this.core()?.probe((i % side) + 0.5, Math.floor(i / side) + 0.5, p => {
-        at[i] = reached.get(p.cell) ?? NaN;
-        if (--left === 0) this.fire.play(at);
+    const left = [...age.keys()].filter(i => age[i] < NOW_MONTHS);
+    const next = (): void => {
+      const i = left.shift(), core = this.core();
+      // (All found, or the world gone: what was found plays.)
+      if (i === undefined || !core) return this.fire.play(at);
+      core.probe((i % side) + 0.5, Math.floor(i / side) + 0.5, p => {
+        const [x0, y0, x1, y1] = p.bounds, a = reached.get(p.cell) ?? NaN;
+        const inside = (k: number) => { const x = (k % side) + 0.5, y = Math.floor(k / side) + 0.5; return x > x0 && x < x1 && y > y0 && y < y1; };
+        at[i] = a;
+        for (let k = left.length - 1; k >= 0; k--) if (inside(left[k])) { at[left[k]] = a; left.splice(k, 1); }
+        next();
       });
-    }
+    };
+    next();
   }
 }
