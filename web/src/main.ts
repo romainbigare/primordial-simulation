@@ -1,5 +1,5 @@
 import { World, gunzip, parse, fmt, fmtYear, unitText, fetchBytes } from './data';
-import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss } from './earth';
+import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss, wetOf } from './earth';
 import { MapView, View } from './map';
 import type { HeldGpu } from './gpu';
 import { MapLook } from './field-window';
@@ -17,7 +17,7 @@ import { godTools } from './god-tools';
 import { Panels, watchCovered } from './panels';
 import { fillIcons, iconSvg } from './icons';
 import { textureLegend } from './soil';
-import { Inspector, LAYER_ORDER, layerLabel } from './inspect';
+import { Inspector, LAYER_GROUPS, layerLabel } from './inspect';
 import { Numbers } from './numbers';
 import { fillForm, readForm, listenForm } from './world-form';
 import { showErrors } from './errors';
@@ -30,6 +30,8 @@ const SPEEDS = [1, 2, 4, 8, 16, 32];
 const LIVE_SPEEDS = [3, 12, 36, 120, Infinity];
 /** Months in a year, for the date on the bar. */
 const MONTHS = 12;
+/** A phone's screen (as style.css): the map is drawn out to the screen's edges and a fit frames the land. */
+const PHONE = matchMedia('(max-width: 640px)');
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
 
@@ -116,12 +118,45 @@ function setup(w: World): void {
   $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ...(m.globe ? [] : [['band', `${fmt(m.lat_south)}° to ${fmt(m.lat_north)}°`]]), ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
     .map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + '<span>year <b id="hy"></b></span>';
   const names = m.layers.map(l => l.name).filter(n => !/^(true|ground)_[rgb]$/.test(n));
-  const sorted = [...names.filter(n => LAYER_ORDER.includes(n)).sort((a, b) => LAYER_ORDER.indexOf(a) - LAYER_ORDER.indexOf(b)), ...names.filter(n => !LAYER_ORDER.includes(n))];
-  $('layers').replaceChildren(...sorted.map(n => button(layerLabel(n), () => setLayer(layer === n ? null : n), n)));
+  const grouped = LAYER_GROUPS.map(([g, labels]): [string, string[]] => [g, Object.keys(labels).filter(n => names.includes(n))]);
+  const others = names.filter(n => !grouped.some(([, ns]) => ns.includes(n)));
+  $('layers').replaceChildren(...[...grouped, ['Other', others] as [string, string[]]].filter(([, ns]) => ns.length).map(([g, ns]) => {
+    const group = document.createElement('div'), chips = document.createElement('div');
+    group.className = 'layergroup'; chips.className = 'chips';
+    group.innerHTML = `<h3>${g}</h3>`;
+    chips.replaceChildren(...ns.map(n => button(layerLabel(n), () => setLayer(layer === n ? null : n), n)));
+    group.append(chips);
+    return group;
+  }));
+  findLayers();
+  map.setFill(PHONE.matches, landBox(w));
   const years = m.frames.map(f => f.year);
   if (!live) charts.set(m.series, m.series_units, years);
   setTimeline(m, setFrame);
   setFrame(0); setLayer(null); syncUi();
+}
+
+/** The squares that hold land in the first frame of world `w` (x0, y0, x1, y1), what a fit frames on a phone; null:
+ * none. */
+function landBox(w: World): [number, number, number, number] | null {
+  const { sea } = wetOf(w, 0), W = w.meta.w;
+  let x0 = W, y0 = w.meta.h, x1 = 0, y1 = 0;
+  sea.forEach((s, i) => {
+    if (s) return;
+    const x = i % W, y = (i / W) | 0;
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + 1); y1 = Math.max(y1, y + 1);
+  });
+  return x1 > x0 ? [x0, y0, x1, y1] : null;
+}
+
+/** Show the layers whose names hold the text searched for, and the groups that hold one of them. */
+function findLayers(): void {
+  const q = $<HTMLInputElement>('layerfind').value.trim().toLowerCase();
+  document.querySelectorAll<HTMLElement>('#layers .layergroup').forEach(g => {
+    let any = false;
+    g.querySelectorAll<HTMLElement>('button').forEach(b => { const on = b.textContent!.toLowerCase().includes(q); b.hidden = !on; any ||= on; });
+    g.hidden = !any;
+  });
 }
 
 // ---- state changes
@@ -165,9 +200,10 @@ function setLayer(n: string | null): void {
   $('texture').innerHTML = GRAIN_LAYERS.includes(n ?? '') ? textureLegend(null) : '';
   if (n && world) {
     const l = world.meta.layers[world.index.get(n)!], lut = world.lut[world.index.get(n)!];
+    $('rampname').textContent = layerLabel(n);
     $('rampbar').style.background = rampCss(rampFor(n));
     [0, 128, 255].forEach((b, k) => ($('ramp').querySelectorAll('.lbl span')[k].textContent = fmt(lut[b])));
-    $('rampunit').textContent = `${layerLabel(n)}${unitText(l.unit) ? ` (${unitText(l.unit)})` : ''}${l.scale === 'log' ? ', log scale' : ''}`;
+    $('rampunit').textContent = [unitText(l.unit), l.scale === 'log' ? 'log scale' : ''].filter(t => t).join(', ');
   }
   syncUi(); repaint();
 }
@@ -228,7 +264,10 @@ fillIcons(document);
 $('play').onclick = togglePlay;
 $<HTMLSelectElement>('speeds').onchange = e => { speed = +(e.target as HTMLSelectElement).value; live?.rate(speed); syncUi(); };
 const panels = new Panels($('bar'), $('cv'));
-watchCovered([$('bar'), $('god-strip'), $('god'), $('inspect-card'), $('timebar')], edges => map.setCovered(edges));
+watchCovered([$('bar'), $('year'), $('god-strip'), $('god'), $('inspect-card'), $('timebar')], edges => map.setCovered(edges));
+PHONE.addEventListener('change', () => map.setFill(PHONE.matches, world && landBox(world)));
+$<HTMLInputElement>('layerfind').oninput = findLayers;
+$('clearlayer').onclick = () => setLayer(null);
 /** Inspect's card, shown while its button is pressed. */
 $('inspect-btn').onclick = () => { const on = $('inspect-card').hidden; $('inspect-card').hidden = !on; $('inspect-btn').setAttribute('aria-pressed', String(on)); inspect(); };
 $('god-btn').onclick = () => setGod(!godOn());
@@ -238,7 +277,7 @@ document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick 
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
 addEventListener('keydown', e => {
   const tag = (e.target as HTMLElement).tagName;
-  if ((e.target as HTMLInputElement).type === 'search') return; // typing in the chart search
+  if ((e.target as HTMLInputElement).type === 'search') return; // typing in a search (charts, layers)
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && tag !== 'INPUT') { e.preventDefault(); god.undo(); }
   else if (e.key === 't' || e.key === 'T') setView(view === 'earth' ? 'true' : 'earth');
   else if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'INPUT') { e.preventDefault(); togglePlay(); }

@@ -106,6 +106,10 @@ export class MapView {
    * the scale bar stands in its bottom left corner. */
   private covered: [number, number, number, number] = [0, 0, 0, 0];
   private w = 0; private h = 0; private cellM = 1;
+  /** On a phone the map is drawn out to the screen's edges (each point past the map shows the map's nearest point on its
+   * edge, picture.wgsl) and a fit frames `focus`, the land (squares: x0, y0, x1, y1; null: the whole map). */
+  private fillScreen = false;
+  private focus: [number, number, number, number] | null = null;
   /** Edge latitudes (degrees) of a globe, whose columns wrap east to west; null for an island. */
   private globe: { north: number; south: number } | null = null;
   private raf = 0;
@@ -278,9 +282,18 @@ export class MapView {
   }
 
   fit(): void {
-    const k = this.fitScale(), [top, right, bottom, left] = this.covered;
-    this.cam = { s: k, ox: left + (this.cv.clientWidth - left - right - this.w * k) / 2, oy: top + (this.cv.clientHeight - top - bottom - this.h * k) / 2 };
+    const [top, right, bottom, left] = this.covered, freeW = this.cv.clientWidth - left - right, freeH = this.cv.clientHeight - top - bottom;
+    const [x0, y0, x1, y1] = this.fillScreen && this.focus ? this.focus : [0, 0, this.w, this.h];
+    const k = this.fillScreen ? Math.min(freeW / (x1 - x0), freeH / (y1 - y0)) || 1 : this.fitScale();
+    this.cam = { s: k, ox: left + freeW / 2 - ((x0 + x1) / 2) * k, oy: top + freeH / 2 - ((y0 + y1) / 2) * k };
     this.fitted = true; this.invalidate();
+  }
+
+  /** Draw the map out to the screen's edges and fit it to `focus` (squares: x0, y0, x1, y1; null: the whole map), or
+   * not (`fill` false: the map on the page, fitted whole). */
+  setFill(fill: boolean, focus: [number, number, number, number] | null): void {
+    this.fillScreen = fill; this.focus = focus;
+    if (this.fitted && this.w) this.fit(); else this.invalidate();
   }
 
   /** The controls over the map now cover its edges `covered` (css px: top, right, bottom, left); a fitted map fits
@@ -584,8 +597,23 @@ export class MapView {
    * lie inside the screen (picture.wgsl), so a picture never ends on a line. */
   private compose(gpu: Gpu, pics: Pic[], alpha: number): void {
     const d = this.drawnDpr(), { s, ox, oy } = this.cam, q = gpu.pass(null, [...this.background(), 1]);
-    pics.forEach((p, i) => q.draw('picture', { rect: [(ox + p.x * s) * d, (oy + p.y * s) * d, p.w * s * d, p.h * s * d], alpha: i === pics.length - 1 ? alpha : 1, binds: { 1: p.t, 2: 'smooth' } }, true));
+    pics.forEach((p, i) => {
+      const r = [(ox + p.x * s) * d, (oy + p.y * s) * d, p.w * s * d, p.h * s * d], { rect, src, keep } = this.reach(p, r, d);
+      q.draw('picture', { rect, src, alpha: i === pics.length - 1 ? alpha : 1, binds: { 1: p.t, 2: 'smooth', 3: keep.buffer } }, true);
+    });
     q.end();
+  }
+
+  /** Where picture `p`, drawn at `r` (px: x, y, w, h), is drawn on a screen of `d` px a css px: past each of its sides
+   * that is the map's edge out to the screen's edge while the map is drawn out to them (a globe's east and west edges
+   * wrap), with the part of the source that rectangle reads and the part of the picture that holds the map (uv). */
+  private reach(p: Pic, r: number[], d: number): { rect: number[]; src: number[]; keep: Uniforms } {
+    if (!this.fillScreen) return { rect: r, src: [0, 0, 1, 1], keep: new Uniforms(1).vec4(0, 0, 1, 1) };
+    const W = this.cv.clientWidth * d, H = this.cv.clientHeight * d, ew = this.globe === null;
+    const keep = new Uniforms(1).vec4(ew ? Math.max(0, -p.x / p.w) : 0, Math.max(0, -p.y / p.h), ew ? Math.min(1, (this.w - p.x) / p.w) : 1, Math.min(1, (this.h - p.y) / p.h));
+    const x0 = ew && p.x <= 0 ? Math.min(r[0], 0) : r[0], y0 = p.y <= 0 ? Math.min(r[1], 0) : r[1];
+    const x1 = ew && p.x + p.w >= this.w ? Math.max(r[0] + r[2], W) : r[0] + r[2], y1 = p.y + p.h >= this.h ? Math.max(r[1] + r[3], H) : r[1] + r[3];
+    return { rect: [x0, y0, x1 - x0, y1 - y0], src: [(x0 - r[0]) / r[2], (y0 - r[1]) / r[3], (x1 - r[0]) / r[2], (y1 - r[1]) / r[3]], keep };
   }
 
   /** Show the last picture drawn: where `from` is given (what the screen showed before it), it comes in over that in
@@ -839,11 +867,13 @@ export class MapView {
     const { ctx, cam: { s }, cellM } = this, target = (96 / s) * cellM; // metres for ~96 px
     const p = 10 ** Math.floor(Math.log10(target)), m = [1, 2, 5, 10].map(k => k * p).reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
     const px = (m / cellM) * s, x = this.covered[3] + SCALE_MARGIN_PX, y = this.cv.clientHeight - this.covered[2] - SCALE_MARGIN_PX;
-    ctx.strokeStyle = ctx.fillStyle = css('--ink'); ctx.lineWidth = 1.5; ctx.globalAlpha = 0.75;
+    // (On the page in the ink's colour; over the map drawn out to the screen's edges, white with a dark halo.)
+    ctx.strokeStyle = ctx.fillStyle = this.fillScreen ? '#fff' : css('--ink'); ctx.lineWidth = 1.5; ctx.globalAlpha = this.fillScreen ? 0.95 : 0.75;
+    if (this.fillScreen) { ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 3; }
     ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 5); ctx.stroke();
     ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'bottom';
     ctx.fillText(m >= 1000 ? `${m / 1000} km` : `${m} m`, x, y - 7);
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
   }
 }
 

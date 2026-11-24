@@ -8,18 +8,16 @@ import type { MapView } from './map';
 import type { CoverSlots } from './slots';
 import { textureClass, textureLegend } from './soil';
 
-/** The layers' names in plain words, in the order the Map panel lists them. */
-const LAYER_LABELS: Record<string, string> = {
-  t_ground: 'Ground temperature', t_air: 'Air temperature', rain: 'Rain', vapor: 'Vapor', absorber: 'Absorber',
-  depth: 'Liquid depth', flux: 'River flux', catch: 'Catchment', loose: 'Loose sediment', wet: 'Ground wetness', ice: 'Ice', z: 'Elevation',
-  coarse: 'Sand (coarse grain)', fine: 'Clay (fine grain)', organic: 'Organic matter', conduct: 'Soil conductivity',
-  avail: 'Available water', filled: 'Soil water (pores filled)', roots: 'Water for roots (share)',
-  rises: 'Evaporation', sheds: 'Runoff and drainage (rain less evaporation)',
-  litter: 'Fresh litter', slow: 'Humus (slow organic pool)', mineral_free: 'Nitrogen, dissolved', mineral_held: 'Nitrogen, held on the soil',
-  rot: 'Rot speed',
-  seeds: 'Seeds on the ground', grown: 'Growth last year', takers: 'Takers',
-};
-export const LAYER_ORDER = Object.keys(LAYER_LABELS);
+/** The layers' names in plain words, in the groups and the order the Map panel lists them. */
+export const LAYER_GROUPS: [string, Record<string, string>][] = [
+  ['Air and climate', { t_ground: 'Ground temperature', t_air: 'Air temperature', rain: 'Rain', vapor: 'Vapor', absorber: 'Absorber', rises: 'Evaporation' }],
+  ['Water and ice', { depth: 'Liquid depth', flux: 'River flux', catch: 'Catchment', wet: 'Ground wetness', ice: 'Ice', sheds: 'Runoff and drainage (rain less evaporation)' }],
+  ['Ground', { z: 'Elevation', loose: 'Loose sediment', coarse: 'Sand (coarse grain)', fine: 'Clay (fine grain)', organic: 'Organic matter', conduct: 'Soil conductivity',
+    avail: 'Available water', filled: 'Soil water (pores filled)', roots: 'Water for roots (share)' }],
+  ['Life and decay', { litter: 'Fresh litter', slow: 'Humus (slow organic pool)', mineral_free: 'Nitrogen, dissolved', mineral_held: 'Nitrogen, held on the soil',
+    rot: 'Rot speed', seeds: 'Seeds on the ground', grown: 'Growth last year', takers: 'Takers' }],
+];
+const LAYER_LABELS: Record<string, string> = Object.assign({}, ...LAYER_GROUPS.map(([, g]) => g));
 /** A layer's name in plain words. */
 export const layerLabel = (n: string) => LAYER_LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).replace(/_/g, ' '));
 
