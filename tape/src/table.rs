@@ -3,7 +3,7 @@
 //! centres and applies the laws at each pixel of the ground's tiles (`ground`). It is made with each frame, from the
 //! frame's own context (`Ctx`), and holds nothing a picture needs to make.
 
-use crate::ground::shore_dry;
+use crate::ground::Dry;
 use crate::layers::{cover_melt, frame, pixels, Ctx};
 use pcore::inside::Means;
 use pcore::space::network::NONE;
@@ -16,33 +16,47 @@ pub const ROW: usize = 11;
 /// soaked ground rather than water.
 const DRY_M: f64 = 0.1;
 
-/// What a shell keeps of a world's cells, made again when the world builds its samples anew (`Relief::builds`): the
-/// cell of each square; of each cell the terrain's mean height over it as built, m; the cell of each of the terrain's
-/// samples; and whether the shore a shell draws leaves each sample out of its pond's liquid (`ground::shore_dry`).
+/// What a shell keeps of a world's cells, found again when the world builds its samples anew (`Relief::version`,
+/// `update`): the cell of each square; of each cell the terrain's mean height over it as built, m; the cell of each of
+/// the terrain's samples; and whether the shore a shell draws leaves each sample out of its pond's liquid
+/// (`ground::Dry`).
 pub struct Table {
     square: Vec<usize>,
     z: Vec<f64>,
     cell: Vec<u32>,
-    dry: Vec<bool>,
+    dry: Dry,
+}
+
+/// Of each of world `w`'s `n` cells, the terrain's mean height over the squares `square` it holds (the cell of each), m.
+fn means(w: &World, square: &[usize], n: usize) -> Vec<f64> {
+    let (map, lat) = (&w.map, (w.cfg.lat_south, w.cfg.lat_north));
+    let means = w.terrain.heights_on(&w.terrain_samples(), map, lat, [0, 0, map.w as i64 - 1, map.h as i64 - 1], map.square_depth());
+    let (mut z, mut count) = (vec![0.0f64; n], vec![0.0f64; n]);
+    for (s, &i) in square.iter().enumerate() {
+        (z[i], count[i]) = (z[i] + means[s], count[i] + 1.0);
+    }
+    z.iter_mut().zip(&count).for_each(|(z, c)| *z /= c.max(1.0));
+    z
 }
 
 impl Table {
     pub fn new(w: &World) -> Table {
         let (map, n) = (&w.map, w.mesh.cells().n());
         let square = pixels(w);
-        let lat = (w.cfg.lat_south, w.cfg.lat_north);
         let s = w.terrain_samples();
-        let means = w.terrain.heights_on(&s, map, lat, [0, 0, map.w as i64 - 1, map.h as i64 - 1], map.square_depth());
-        let (mut z, mut count) = (vec![0.0f64; n], vec![0.0f64; n]);
-        for (s, &i) in square.iter().enumerate() {
-            (z[i], count[i]) = (z[i] + means[s], count[i] + 1.0);
-        }
-        z.iter_mut().zip(&count).for_each(|(z, c)| *z /= c.max(1.0));
+        let z = means(w, &square, n);
         let per = (1u64 << (SAMPLE_DEPTH - map.square_depth())) as f64;
         let tree = w.mesh.tree();
         let cell = |k: usize| tree.cell_at(map.point_at(((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per));
         let cell: Vec<u32> = (0..s.h.len()).map(|k| cell(k) as u32).collect();
-        Table { square, z, cell, dry: shore_dry(&s) }
+        Table { square, z, cell, dry: Dry::new(s) }
+    }
+
+    /// The same for world `w`'s samples built anew (its cells are those it was made for): the cells' mean heights again,
+    /// and the shore where it moved (`Dry::update`).
+    pub fn update(&mut self, w: &World) {
+        self.z = means(w, &self.square, w.mesh.cells().n());
+        self.dry.update(w.terrain_samples());
     }
 
     /// The volume of liquid that runs through each of the terrain's samples, m³/s, row by row: its discharge
@@ -56,7 +70,7 @@ impl Table {
         let per = |k: usize| per_m3[self.cell[k] as usize];
         let mut out: Vec<f32> = w.discharge.iter().enumerate().map(|(k, &q)| if per(k) > 0.0 { (q as f64 / per(k)) as f32 } else { 0.0 }).collect();
         let (s, levels) = (w.terrain_samples(), w.pond_levels());
-        let shore = |k: usize| self.dry[k] || levels[s.pond[k] as usize].is_nan();
+        let shore = |k: usize| self.dry.dry[k] || levels[s.pond[k] as usize].is_nan();
         // In the flood's order from the last sample reached: a sample comes before the one its liquid runs to.
         for &k in s.order.iter().rev() {
             let k = k as usize;

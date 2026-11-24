@@ -46,20 +46,24 @@ pub fn samples(w: &World) -> Vec<Texture> {
 /// deep as a channel of the terrain's law carries it (`delta::flood_depth`), down its slope; the load that reaches it is
 /// what the flow at its main sample upstream (`Samples::main`) carried on, all particles where none runs to it.
 pub fn textures(s: &Samples, makes: &[Make], g: f64) -> Vec<Texture> {
+    crate::par::map_n(s.h.len(), crate::par::UNCOUNTED, |k| texture_at(s, makes, g, k))
+}
+
+/// The texture of sample `k` of samples `s` (`textures`): what it reads is its own numbers and those of its main sample
+/// upstream, and the slope of each to the sample it runs to.
+pub fn texture_at(s: &Samples, makes: &[Make], g: f64, k: usize) -> Texture {
     let shear = |k: usize| flood_shear(s, k, g, flood_depth(s.up[k], s.channel));
     let none = Make::default();
-    crate::par::map_n(s.h.len(), crate::par::UNCOUNTED, |k| {
-        let m = makes.get(s.make[k] as usize).unwrap_or(&none);
-        let laid = if s.loose[k] > 0.0 { s.settled[k] / s.loose[k] } else { 0.0 };
-        let mut x = weathered([0.0, 1.0 - m.coarse, m.coarse], m.weathers, s.age[k]);
-        if laid > 0.0 {
-            let upstream = if s.main[k] == NONE { f64::INFINITY } else { shear(s.main[k] as usize) };
-            let sinks = |u: f64| settles(u, m.buoyant, g);
-            let d = sorted(x, sinks(shear(k)), sinks(upstream));
-            x = [0, 1, 2].map(|c| (1.0 - laid) * x[c] + laid * d[c]);
-        }
-        Texture { coarse: x[COARSE], fine: x[FINE], organic: 0.0 }
-    })
+    let m = makes.get(s.make[k] as usize).unwrap_or(&none);
+    let laid = if s.loose[k] > 0.0 { s.settled[k] / s.loose[k] } else { 0.0 };
+    let mut x = weathered([0.0, 1.0 - m.coarse, m.coarse], m.weathers, s.age[k]);
+    if laid > 0.0 {
+        let upstream = if s.main[k] == NONE { f64::INFINITY } else { shear(s.main[k] as usize) };
+        let sinks = |u: f64| settles(u, m.buoyant, g);
+        let d = sorted(x, sinks(shear(k)), sinks(upstream));
+        x = [0, 1, 2].map(|c| (1.0 - laid) * x[c] + laid * d[c]);
+    }
+    Texture { coarse: x[COARSE], fine: x[FINE], organic: 0.0 }
 }
 
 /// The shear velocity of the flood at sample `k` of samples `s` at gravity `g`, m/s, where it runs `depth` m deep down

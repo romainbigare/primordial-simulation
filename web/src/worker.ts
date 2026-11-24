@@ -22,6 +22,7 @@ interface Core {
   discharge(): number;
   plumes(): number;
   ground_version(): number;
+  settled_relief(): number;
   relief(): number;
   things(x: number, y: number, w: number, h: number): number;
   cells(): number;
@@ -47,6 +48,7 @@ type Command =
   | { cmd: 'settle' }
   | { cmd: 'undo' }
   | { cmd: 'groundShown'; version: number }
+  | { cmd: 'earlyRelief'; on: boolean }
   | { cmd: 'shown'; frames: number };
 
 /** Longest time a tick steps before it lets messages in, ms. */
@@ -75,6 +77,8 @@ let thingsAt: [number, number, number, number] | null = null;
  * months per second, the time a month took, ms, and the share of the time spent stepping. */
 let stepped = 0, since = 0, pace = 0, steppingMs = 0, monthMs = 0, busy = 0;
 /** The version of the samples (`ground_version`) whose relief the page has: a new one's is sent with the next frame. */
+/** Whether the page takes a stroke's relief before the world settles (`earlyRelief`, a message of its own). */
+let early = false;
 let sentBuilds = 0;
 /** When the last frame was posted (ms), whether months were stepped since, and how many frames posted the page has not
  * yet drawn. */
@@ -205,9 +209,19 @@ host.onmessage = async e => {
         if (m.tool === 2 && (JSON.parse(answer) as { changed?: boolean }).changed) postFrame('frame', true);
       }
     }
+    else if (m.cmd === 'earlyRelief') early = m.on;
     else if (m.cmd === 'settle' && core) {
       // The stroke ends; what its edits start that takes no time runs at once (`settle`), and its frame shows it, with
-      // the relief of the ground's new version where it was built again.
+      // the relief of the ground's new version where it was built again. A page that asked for it (`earlyRelief`) gets
+      // that relief first, before the world settles, so its ground is made again meanwhile.
+      if (early) {
+        const at = core.settled_relief(), n = core.out_len();
+        if (n > 0) {
+          const relief = bytes(at, n);
+          sentBuilds = core.ground_version() + 1;
+          host.postMessage({ kind: 'relief', relief, reliefVersion: sentBuilds }, [relief.buffer]);
+        }
+      }
       host.postMessage({ kind: 'settled', text: text(core.settle()) }, []);
       postFrame('frame', true);
     }
