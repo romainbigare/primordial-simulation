@@ -26,26 +26,58 @@ pub fn build(w: &mut World) {
         lay(w, s, &old);
         w.relief.built = w.relief.laid.clone();
         w.relief.builds += 1;
+        w.relief.offset = offsets(w);
         anew(w, s, &old);
     });
     after(w);
 }
 
 /// The samples built anew after edits shaped the relief (`Relief::due`, `World::settle`): as a build, but no lobes are
-/// laid and no build of the years is counted (`Relief::builds`); only the samples' version moves.
+/// laid, no build of the years is counted (`Relief::builds`; only the samples' version moves) and the cells' offsets stay
+/// those of the last build (found here only where there was none): an edit moves a cell's ground and its samples' mean
+/// by the same volume, so its offset stays, to within the rounding of the areas, and the samples move only where edits
+/// shaped them.
 pub fn reshape(w: &mut World) {
+    if w.relief.offset.len() != w.mesh.cells().n() {
+        w.relief.offset = offsets(w);
+    }
     with(w, true, |w, s| {
         let old = w.terrain_samples();
         anew(w, s, &old);
+        reroute(w, (&old, &w.terrain_samples()));
     });
     after(w);
 }
 
-/// The samples of a new version of the relief (`Relief::version`) over the cells' grounds now (`offsets`), and with
+/// What runs through each sample (`World::discharge`, a mean over about a year) carried onto the samples' ways as
+/// built again after edits (`reshape`), so the channels run where the ground now sends them: what each sample adds of
+/// its own (what runs through it less what runs into it down the ways of the samples `old`) runs down the ways of the
+/// samples `new`, each before the one it runs to, as the runoff's pass sums it (`runoff::discharge`); a sample a pond
+/// now holds keeps what reaches it.
+fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
+    let n = old.h.len();
+    if w.discharge.len() != n || new.h.len() != n {
+        return;
+    }
+    let passes = |s: &Samples, k: usize| s.pond[k] == NONE && s.to[k] != NONE;
+    let mut q: Vec<f64> = w.discharge.iter().map(|&d| d as f64).collect();
+    for k in (0..n).filter(|&k| passes(old, k)) {
+        q[old.to[k] as usize] -= w.discharge[k] as f64;
+    }
+    q.iter_mut().for_each(|v| *v = v.max(0.0));
+    for &k in new.order.iter().rev() {
+        let k = k as usize;
+        if passes(new, k) {
+            q[new.to[k] as usize] += q[k];
+        }
+    }
+    w.discharge = q.into_iter().map(|v| v as f32).collect();
+}
+
+/// The samples of a new version of the relief (`Relief::version`) with the cells' offsets it holds, and with
 /// them each cell's ground as liquid stands on it, the bodies, what each cell's parts of them hold (`held_by_pond`; the
 /// samples `old` before) and the state of the ground nodes.
 fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
-    w.relief.offset = offsets(w);
     w.relief.version += 1;
     w.relief.due = false;
     let held = std::mem::take(&mut s.state.held);

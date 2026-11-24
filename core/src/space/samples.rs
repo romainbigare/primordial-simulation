@@ -10,7 +10,7 @@
 use super::delta::{exposures, lobes, Liquid, Mouth};
 use super::drain::{draws, flood, open_low, starts};
 use super::fill::heading;
-use super::relief::Relief;
+use super::relief::{Lift, Relief};
 use super::grid::Grid;
 use super::network::{accumulate, NONE};
 use super::ponds::{basins, grade, open_parts, shallow};
@@ -115,13 +115,16 @@ impl Samples {
 }
 
 /// The samples a terrain found, kept with it (not saved: found again when first read): the seed's, and those last built
-/// from what the running world laid and edits shaped (`Terrain::built`), with the version of the relief they are of.
+/// from what the running world laid and edits shaped (`Terrain::built`), with the version of the relief they are of;
+/// and how the cells' offsets last raised them (`relief::Lift`), which serves every version of the same offsets (edits
+/// that shape the ground move no offset, `flow::build::reshape`).
 #[derive(Debug, Default)]
-pub(super) struct Kept(Mutex<Option<Arc<Samples>>>, Mutex<Option<(u32, Arc<Samples>)>>);
+pub(super) struct Kept(Mutex<Option<Arc<Samples>>>, Mutex<Option<(u32, Arc<Samples>)>>, Mutex<Option<Arc<Lift>>>);
 
 impl Clone for Kept {
     fn clone(&self) -> Kept {
-        Kept(Mutex::new(self.0.lock().expect("the kept samples").clone()), Mutex::new(self.1.lock().expect("the built samples").clone()))
+        let (seed, built, lift) = (self.0.lock().expect("the kept samples"), self.1.lock().expect("the built samples"), self.2.lock().expect("the lift"));
+        Kept(Mutex::new(seed.clone()), Mutex::new(built.clone()), Mutex::new(lift.clone()))
     }
 }
 
@@ -192,7 +195,13 @@ impl Terrain {
             return s;
         }
         let (grid, rows, _) = grid_of(map, lat);
-        let h = super::relief::heights(&s0, map, lat, r);
+        let known_lift = self.kept.2.lock().expect("the lift").as_ref().filter(|l| l.offset == r.offset).cloned();
+        let lift = known_lift.unwrap_or_else(|| {
+            let l = Arc::new(super::relief::lift(&s0, map, lat, r));
+            *self.kept.2.lock().expect("the lift") = Some(l.clone());
+            l
+        });
+        let h = super::relief::heights(&s0, r, &lift);
         let open = open_low(&grid, &h, STAND_M);
         let ground = laid_ground(&s0, r, years);
         let found = Arc::new(self.found(seed, (&grid, rows), (h, &open, false), ground));

@@ -130,3 +130,34 @@ fn a_planted_kind_stands_as_the_worlds_grown_stand_of_it() {
         assert!((mass(c.plants[x][k], c.share[x][k]) / (g.kg / g.n) - 1.0).abs() < 1e-9, "group {k}: {:?} {:?} for {g:?}", c.plants[x], c.share[x]);
     }
 }
+
+/// A basin of liquid (`Act::Basin`): the ground under a brush is levelled to a floor `DEPTH` under its rim's lowest sample, and the
+/// key liquid poured in to its pass, from the outside node, so the books are kept. The floor is a closed basin, a pond
+/// at least that deep to its pass, whose body holds the liquid (less what the pores of its floor take): it stands over
+/// the floor at once and still after a month.
+#[test]
+fn a_basin_holds_its_liquid() {
+    const DEPTH: f64 = 5.0;
+    let mut w = small_world();
+    // An inland cell whose samples and its neighbours' lie in no pond: a basin of its own.
+    let s0 = w.terrain_samples();
+    let dry = |i: usize| w.map.leaves()[i].split(pcore::space::terrain::SAMPLE_DEPTH).all(|f| s0.pond[s0.index(&f)] == pcore::space::network::NONE);
+    let i = (0..w.mesh.cells().n()).find(|&i| w.is_land(i) && dry(i) && w.mesh.cells().around(i).1.iter().all(|&j| dry(j as usize))).expect("dry ground");
+    drop(s0);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let books = Books::now(&w);
+    let act = Act::Basin { radius_m: 0.4 * w.map.side, depth_m: DEPTH };
+    assert_eq!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]), [true]);
+    books.assert_kept(&w, 1e-9);
+    let s = w.terrain_samples();
+    let k = (0..w.relief.shaped.len()).find(|&k| w.relief.shaped[k] != 0.0).expect("the floor");
+    let pond = s.pond[k];
+    assert!(pond != pcore::space::network::NONE, "the floor is no pond");
+    let depth = |w: &World| w.pond_levels()[pond as usize] - s.h[k];
+    let (now, full) = (depth(&w), s.ponds[pond as usize].level - s.h[k]);
+    assert!(full >= DEPTH - 1e-6 && now > 0.5 * full && now <= full + 1e-6, "the liquid stands {now} m deep, {full} m to its pass");
+    pcore::step(&mut w);
+    let later = depth(&w);
+    assert!((later - now).abs() < 0.2 * full, "after a month it stands {later} m deep, from {now}");
+    books.assert_kept(&w, 1e-9);
+}
