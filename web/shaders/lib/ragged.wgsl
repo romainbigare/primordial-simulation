@@ -12,7 +12,10 @@ const RAGGED_STEP = 2.9; const RAGGED_FALL = 0.6;
 
 // The patches at `at`, m from the map's corner, seen at `e` m a pixel: `octaves` octaves from `size` m down, noise
 // streams from `k` on, -1..1 about 0. An octave too small to show reads no noise.
-fn ragged(at: vec2f, e: f32, size: f32, octaves: i32, k: i32) -> f32 {
+fn ragged(at: vec2f, e: f32, size: f32, octaves: i32, k: i32) -> f32 { return clamp(ragged_sum(at, e, size, octaves, k), -1.0, 1.0); }
+// The same not held within -1..1 (at most 2 either way, about 0.45 its spread): no share of the points piles up at
+// its ends.
+fn ragged_sum(at: vec2f, e: f32, size: f32, octaves: i32, k: i32) -> f32 {
   var n = 0.0;
   var s = size;
   var weight = 1.0;
@@ -24,7 +27,7 @@ fn ragged(at: vec2f, e: f32, size: f32, octaves: i32, k: i32) -> f32 {
     s /= RAGGED_STEP;
     weight *= RAGGED_FALL;
   }
-  return clamp(2.0 * n / sum, -1.0, 1.0);
+  return 2.0 * n / sum;
 }
 
 // How far a number swings over the octaves of patches from `size` m down that do not show at `e` m a pixel, as a share
@@ -65,6 +68,22 @@ fn meet(at: vec2f, e: f32, x: f32, swing: f32, soft: f32, px: f32, size: f32, k:
   if (x >= half + edge) { return 1.0; }
   if (x <= -half - edge) { return 0.0; }
   return smoothstep(-edge, edge, x + half * ragged(at, e, size, MEET_OCTAVES, k));
+}
+
+// The patches' number of a share of the ground laid in them (`share_level`) at `at`, seen at `e` m a pixel, not held
+// within -1..1 (`ragged_sum`: no part of the ground piles up at its ends, where a share near none or all would take
+// it); and the spread a share read on it takes over the patches too small to show, in the number's units.
+fn meet_noise(at: vec2f, e: f32, size: f32, k: i32) -> vec2f {
+  return vec2f(ragged_sum(at, e, size, MEET_OCTAVES, k), 0.5 * ragged_hidden(e, size, MEET_OCTAVES));
+}
+
+// A share `s` of the ground laid in patches (a square's burnt share) takes the points whose patches' number
+// (`meet_noise`) lies under this level: its spread about like a logistic of scale `SHARE_SPREAD` (`ragged_sum`'s
+// spread times sqrt 3 / pi), so the share is kept on the mean, and as it falls to none it thins to none.
+const SHARE_SPREAD = 0.25;
+fn share_level(s: f32) -> f32 {
+  let c = clamp(s, 1e-9, 1.0 - 1e-6);
+  return SHARE_SPREAD * log(c / (1.0 - c));
 }
 
 // The number `x` moved by the patches `n` (`ragged`), up to `share` of itself either way.

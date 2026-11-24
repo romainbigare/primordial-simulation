@@ -73,8 +73,9 @@ fn scarred(p: Spot) -> Spot {
   }
   if (f.burnt <= 0.0) { return q; }
   let rank = burn_rank(p.at, p.e);
-  let scar = under_share(rank, f.burnt);
-  let age = scar_age(p.at, rank.x);
+  let scar = under_share(rank, f.burnt, p.at);
+  if (scar <= 0.0) { return q; }
+  let age = scar_age(p.at, smoothstep(-EVEN_ONE, EVEN_ONE, rank.x));
   q.scar = vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-f.ash / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
   // The Earth view draws the plants standing on a fresh scar scorched: as dark as the char under them.
   if (styled()) { q.cover = vec4f(mix(q.cover.rgb, CHAR * q.cover.a, SCORCHED_COVER * scar * q.scar.y), q.cover.a); }
