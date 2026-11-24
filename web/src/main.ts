@@ -51,12 +51,12 @@ let viewTimer = 0;
 /** The slots of cover of the window in view, asked for when the map is close (live world only), and the window asked for. */
 const slots = new CoverSlots();
 let thingsKey = '';
-/** The cover of the live map (with no layer shown). */
-const vegetation = new Vegetation();
-map.layer = vegetation;
 /** Fire on the live map: its scars, flames and smoke. */
 const fire = new Fire();
 map.fire = fire;
+/** The cover of the live map (with no layer shown), its plants scorched on fresh scars. */
+const vegetation = new Vegetation(fire);
+map.layer = vegetation;
 /** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
 const front = new FireFront(() => live, fire);
 const god = new God({

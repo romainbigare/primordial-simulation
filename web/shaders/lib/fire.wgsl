@@ -32,6 +32,26 @@ struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f3
 const SNAG_KG = 150.0; const SNAG_KG_TALL_M = 10.0;
 fn snag_kg(h: f32) -> f32 { return SNAG_KG * pow(max(h, 0.5) / SNAG_KG_TALL_M, 4.0); }
 
+// A dead tree `h` m tall and its shadow cover the map as a disc `DEAD_SPECK` of its height across (a 10 m trunk and
+// its shadow cover about 4 m²): the specks of the dead trees far away (burn.wgsl `dead_far`), and the width by which
+// they are drawn one by one near (mark.wgsl `dead_decided`), so the one gives way to the other at one scale.
+const DEAD_SPECK = 0.22;
+fn dead_seen_w(h: f32) -> f32 { return DEAD_SPECK * h; }
+
+// Char, the black of a fresh burn, reflectance, linear (charred litter and soil reflect 3 to 6 % of visible light:
+// Smith and Hudak 2005, Roy and others 2010, read).
+const CHAR = vec3f(0.022, 0.020, 0.019);
+// The char darkens a scar by e^-(months / `CHAR_MONTHS`): wind and rain take a burn's char and ash away within months
+// (burn scars of savannas fade in 1 to 3 months, of forests over a year or more: Trigg and Flasse 2000); its bared,
+// scorched soil fades by e^-(months / `SCORCHED_MONTHS`) as litter falls on it again.
+const CHAR_MONTHS = 3.0; const SCORCHED_MONTHS = 12.0;
+// Ash on the ground covers all but e^-1 of it at this much, kg/m² (about a millimetre of loose ash at 0.2 to 0.4 t/m³:
+// Bodí and others 2014).
+const ASH_HIDES_KG = 0.25;
+// The Earth view darkens the plants standing on a fresh scar towards the char by this much (scorched leaves and
+// stems, black with soot; they fade with the char as the months pass).
+const SCORCHED_COVER = 0.75;
+
 // The planes of the fire's texture (fire.ts), one under the other.
 const FIRE_PLANES = 3.0;
 
@@ -98,3 +118,18 @@ fn under_share(r: vec2f, share: f32, at: vec2f) -> f32 {
   if (share <= 0.0) { return 0.0; }
   return smoothstep(-r.y, r.y, burnt_level(share, at) - r.x) * (1.0 - saturated_at(at));
 }
+
+// The scar at `at` of what fire did there `f` (`fire_at`), seen at `e` m a pixel: the share of the point under it
+// (`under_share`), how much of it is char, ash and scorched soil (0 where none lies there, burn.wgsl `scar_over`).
+fn scar_of(f: FireAt, at: vec2f, e: f32) -> vec4f {
+  if (f.burnt <= 0.0) { return vec4f(0.0); }
+  let rank = burn_rank(at, e);
+  let scar = under_share(rank, f.burnt, at);
+  if (scar <= 0.0) { return vec4f(0.0); }
+  let age = scar_age(at, smoothstep(-EVEN_ONE, EVEN_ONE, rank.x));
+  return vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-f.ash / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
+}
+
+// Plants of colour `rgb` (premultiplied by `a`) standing on scar `s` (`scar_of`): scorched, as dark as the char
+// under them while it is fresh (`SCORCHED_COVER`), in the field of the cover (burn.wgsl) and in its marks (cover.wgsl).
+fn scorched(rgb: vec3f, a: f32, s: vec4f) -> vec3f { return mix(rgb, CHAR * a, SCORCHED_COVER * s.x * s.y); }

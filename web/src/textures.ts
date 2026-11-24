@@ -25,7 +25,8 @@ const MARKS_FORMAT: Format = 'rgba8unorm';
 const CROWN_LEAST_PX = 2.5;
 
 /** A draw of the marks: its rectangle of the target, px; the metres a pixel of the target and of the screen (which the
- * detail drawn is chosen by); the world's point at its corner, m; and the live map's bindings (land.ts `lawBinds`). */
+ * detail drawn is chosen by); the world's point at its corner, m; and the live map's bindings (land.ts `lawBinds`) with
+ * fire's (fire.ts `planeBinds`). */
 export interface Marks { rect: number[]; mpp: number; seenMpp: number; at: [number, number]; land: Draw['binds'] }
 
 /** The cover on the GPU: the kinds' table and the field, sent once a frame of the world. */

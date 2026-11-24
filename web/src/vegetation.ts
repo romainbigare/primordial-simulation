@@ -11,6 +11,8 @@ import { CoverMarks, Marks } from './textures';
 import { Draw, Gpu, Pass } from './gpu';
 import { GpuLayer } from './map';
 import type { Land } from './land';
+import type { Fire } from './fire';
+import { frameOf } from './field-window';
 
 /** How strongly the marks cover the map, so its hill shading still shows through them (the field in the ground is lit
  * by it). */
@@ -26,6 +28,9 @@ export class Vegetation implements GpuLayer {
   land: Land | null = null;
   /** The draw of the marks `prepare` decided last (none: no cover drawn). */
   private drawn: Marks | null = null;
+
+  /** `fire`: what fire left on the live map, which scorches the plants on a fresh scar (fire.wgsl `scorched`). */
+  constructor(private fire: Fire) {}
 
   /** The kinds of world `w` from its table `rows` (tape/src/table.rs), or none (another view than the earth's, or a
    * tape). */
@@ -60,7 +65,8 @@ export class Vegetation implements GpuLayer {
     const x0 = Math.max(Math.floor(Math.max(ox, 0) * d), c[0]), y0 = Math.max(Math.floor(Math.max(oy, 0) * d), c[1]);
     const x1 = Math.min(Math.ceil(Math.min(ox + this.mapW * s, W) * d), c[0] + c[2]), y1 = Math.min(Math.ceil(Math.min(oy + this.mapH * s, H) * d), c[1] + c[3]);
     if (x1 <= x0 || y1 <= y0) return;
-    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land: laws };
+    const fire = this.fire.planeBinds(gpu, frameOf(ox * d, oy * d, mpp / d, mpp / seen), 0);
+    this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land: { ...laws, ...fire } };
     this.marks.prepare(gpu, this.drawn, waiting);
   }
 

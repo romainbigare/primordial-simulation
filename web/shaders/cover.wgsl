@@ -80,12 +80,19 @@ fn marks_over(v: Varying) -> vec4f {
 }
 
 // Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground and the deepest shadow
-// laid on the pixel is `shade`: its shadow and its model's sprites (models.wgsl).
+// laid on the pixel is `shade`: its shadow and its model's sprites (models.wgsl), scorched where it stands on dry ground
+// under a fresh scar (fire.wgsl `scorched`, as the field far away draws it).
 fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32) {
   let fit = model_fit(q);
   shadow(dst, shade, fade * model_shadow(q, fit, p, e));
   let m = clump_plant(q, fit, p, e, snow);
-  if (m.a > 0.0) { over(dst, m.rgb, m.a * fade); }
+  if (m.a <= 0.0) { return; }
+  var rgb = m.rgb;
+  if (q.wades <= 0.0 && fire.map.x > 0.0) {
+    let foot = cover.corner.xy + q.at;
+    rgb = scorched(rgb, 1.0, scar_of(fire_at(foot), foot, e));
+  }
+  over(dst, rgb, m.a * fade);
 }
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f { return marks_over(v); }

@@ -167,7 +167,13 @@ export class Fire {
   /** The bindings fire.wgsl reads on `gpu` in the ground's draws (land.wgsl, lib/burn.wgsl), as `binds`; where no fire
    * is known, or in a layer's view, a texture of one texel and squares of side 0: the ground reads none of it. */
   groundBinds(gpu: Gpu, look: MapLook, frame: number[], now: number): Draw['binds'] {
-    const b = look.mode === 'layer' ? null : this.binds(gpu, frame, now);
+    return this.planeBinds(gpu, look.mode === 'layer' ? null : frame, now);
+  }
+
+  /** The bindings fire.wgsl reads on `gpu` in a draw whose pixels lie as `frame` says (field-window.ts `frameOf`; a
+   * draw that reads only `fire_at`, the plants' marks, gives none it reads), as `groundBinds`; null: none of fire. */
+  planeBinds(gpu: Gpu, frame: number[] | null, now: number): Draw['binds'] {
+    const b = frame ? this.binds(gpu, frame, now) : null;
     if (b) return { 25: b[25], 26: b[26], 27: b[27] };
     return { 25: this.none(gpu), 26: 'smooth', 27: new Uniforms(FIRE_VEC4S).vec4(0, 1, 1).buffer };
   }

@@ -394,8 +394,8 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f) -> vec4f {
   if (dead.q.kind < 0 || snag_unit(id, 41) >= dead.mean) { return none; }
   let f = foot(at);
   if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
-  // (They show as things by the stems' height, as their specks far away give way to them, burn.wgsl `dead_far`.)
-  let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead.tall, cover.seen.x);
+  // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
+  let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }
   return vec4f(dead_code(), shows, f.snow, dead_box(l, dead.q));
 }

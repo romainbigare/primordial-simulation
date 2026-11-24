@@ -24,7 +24,7 @@ const SNAG_VARY = 0.2;
 // The older (`old`, its stage over `STUMP_FROM_STAGE`, at most 1), the more a dead tree leans, by up to `LEAN_MOST`
 // radians, more on the broken than on the whole.
 const LEAN_MOST = 0.6;
-// A fresh whole dead tree is charred: its bark drawn `CHARRED` of the way to char (burn.wgsl `CHAR`) at once, weathering
+// A fresh whole dead tree is charred: its bark drawn `CHARRED` of the way to char (fire.wgsl `CHAR`) at once, weathering
 // grey over `GREY_YEARS` (charcoal flakes off within a few years: from memory), drawn `GREYED` of the way to its own
 // grey, lit to `GREY_LIGHT` times as light. Each dead tree's tone is moved by up to `TINT` either way, warmer or cooler,
 // by its own draw.
