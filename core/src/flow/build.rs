@@ -37,8 +37,34 @@ pub fn reshape(w: &mut World) {
     with(w, true, |w, s| {
         let old = w.terrain_samples();
         anew(w, s, &old);
+        reroute(w, (&old, &w.terrain_samples()));
     });
     after(w);
+}
+
+/// What runs through each sample (`World::discharge`, a mean over about a year) carried onto the samples' ways as
+/// built again after edits (`reshape`), so the rivers run where the ground now sends them: what each sample adds of
+/// its own (what runs through it less what runs into it down the ways of the samples `old`) runs down the ways of the
+/// samples `new`, each before the one it runs to, as the runoff's pass sums it (`runoff::discharge`); a sample a pond
+/// now holds keeps what reaches it.
+fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
+    let n = old.h.len();
+    if w.discharge.len() != n || new.h.len() != n {
+        return;
+    }
+    let passes = |s: &Samples, k: usize| s.pond[k] == NONE && s.to[k] != NONE;
+    let mut q: Vec<f64> = w.discharge.iter().map(|&d| d as f64).collect();
+    for k in (0..n).filter(|&k| passes(old, k)) {
+        q[old.to[k] as usize] -= w.discharge[k] as f64;
+    }
+    q.iter_mut().for_each(|v| *v = v.max(0.0));
+    for &k in new.order.iter().rev() {
+        let k = k as usize;
+        if passes(new, k) {
+            q[new.to[k] as usize] += q[k];
+        }
+    }
+    w.discharge = q.into_iter().map(|v| v as f32).collect();
 }
 
 /// The samples of a new version of the relief (`Relief::version`) over the cells' grounds now (`offsets`), and with

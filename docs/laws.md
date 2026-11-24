@@ -243,7 +243,10 @@ ground and the make of their bed (what the tiles and the textures read) do not f
 its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
 (`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
 it as a build builds them, without the lobes and without counting a build of the years (`flow::build::reshape`; a new
-version of the relief, `Relief::version`, by which built samples are kept), the passes of a month's start find the
+version of the relief, `Relief::version`, by which built samples are kept), and what runs through each sample (its mean
+over about a year, `World::discharge`) runs down the new ways: what each sample adds of its own (what runs through it
+less what runs into it down the old ways) is summed down the new, a sample a pond now holds keeping what reaches it
+(`build::reroute`), so a river runs round a raised hill at once; the passes of a month's start find the
 ground's state from them, and the liquid settles over the ground in the runoff's pass over a span of none
 (`flow::settle`: what stands runs to the bodies and each stands at one level; nothing drains, seeps or mixes, it
 carries no load, and the yearly means of what runs do not move); then the flames of the strikes of edits and of the
