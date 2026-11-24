@@ -203,3 +203,36 @@ fn a_basin_open_to_the_low_ground_pours_nothing() {
     pcore::step(&mut w);
     books.assert_kept(&w, 1e-9);
 }
+
+/// A hill raised across a channel moves the channel, never drops it: the yearly flows run down the samples' new ways,
+/// and a pond the hill dams passes on what comes into it from its pass (`flow::build::reroute`), so what runs into the
+/// open low ground is what ran into it before, to the rounding of the flows. Of the test's channels, the first a hill
+/// dams into a new pond.
+#[test]
+fn a_hill_that_dams_a_channel_keeps_what_runs_to_the_low_ground() {
+    use pcore::space::{network::NONE, samples::Samples};
+    let w = small_world();
+    let to_low = |w: &World, s: &Samples| -> f64 {
+        let open = |k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
+        (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && open(s.to[k] as usize)).map(|k| w.discharge[k] as f64).sum()
+    };
+    let s = w.terrain_samples();
+    let before = to_low(&w, &s);
+    let per = (s.across / w.map.w) as f64;
+    let mut channels: Vec<usize> = (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && s.h[k] > 0.0 && s.up[k] > 1e7).collect();
+    channels.sort_by(|&a, &b| s.up[b].total_cmp(&s.up[a]));
+    let passes: Vec<u32> = s.ponds.iter().map(|p| p.pass).collect();
+    let dammed = channels.iter().take(DAM_TRIES).find_map(|&k| {
+        let mut v = w.clone();
+        let place = [((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per];
+        v.edit(&[Edit { place, act: Act::Ground { radius_m: 0.3 * v.map.side, height_m: 60.0, stroke_m: 0.0, make: 0 } }]);
+        v.settle();
+        let t = v.terrain_samples();
+        t.ponds.iter().any(|p| p.pass != NONE && !passes.contains(&p.pass)).then(|| to_low(&v, &t))
+    });
+    let after = dammed.expect("a hill that dams a channel");
+    assert!(before > 0.0 && ((after - before) / before).abs() < 1e-4, "ran to the low ground {before} mol/s, now {after}");
+}
+
+/// The channels a hill is raised across in the test of a dam, at most, the largest first.
+const DAM_TRIES: usize = 20;

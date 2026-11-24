@@ -249,8 +249,9 @@ stays to within the rounding of the areas, and the samples move only where edits
 relief, `Relief::version`, by which built samples are kept, and how the offsets raise the samples kept by the offsets,
 `relief::Lift`; each cell's ground by height found again only where its samples moved, `curve::update`), and what runs through each sample (its mean
 over about a year, `World::discharge`) runs down the new ways: what each sample adds of its own (what runs through it
-less what runs into it down the old ways) is summed down the new, a sample a pond now holds keeping what reaches it
-(`build::reroute`), so a river runs round a raised hill at once; the passes of a month's start find the
+less what runs into it down the old ways) is summed down the new, a sample a pond now holds keeping what reaches it and
+a pond whose pass is new passing on what comes into it from its pass, as a mean over the years does (it fills, then
+spills; `build::reroute`), so a river runs round a raised hill, or through the pond it dams, at once; the passes of a month's start find the
 ground's state from them, and the liquid settles over the ground in the runoff's pass over a span of none
 (`flow::settle`: what stands runs to the bodies and each stands at one level; nothing drains, seeps or mixes, it
 carries no load, and the yearly means of what runs do not move); then the flames of the strikes of edits and of the

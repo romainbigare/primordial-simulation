@@ -52,8 +52,10 @@ pub fn reshape(w: &mut World) {
 /// What runs through each sample (`World::discharge`, a mean over about a year) carried onto the samples' ways as
 /// built again after edits (`reshape`), so the channels run where the ground now sends them: what each sample adds of
 /// its own (what runs through it less what runs into it down the ways of the samples `old`) runs down the ways of the
-/// samples `new`, each before the one it runs to, as the runoff's pass sums it (`runoff::discharge`); a sample a pond
-/// now holds keeps what reaches it.
+/// samples `new`, each before the one it runs to, as the runoff's pass sums it (`runoff::discharge`). A pond's samples
+/// keep what reaches them; a pond whose pass is new passes on what comes into it from that pass, as a mean over the years
+/// does (a body fills first, then spills, and then all that comes in runs through); what a pond of `old` let over its
+/// pass stays in what its pass adds of its own.
 fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
     let n = old.h.len();
     if w.discharge.len() != n || new.h.len() != n {
@@ -65,9 +67,23 @@ fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
         q[old.to[k] as usize] -= w.discharge[k] as f64;
     }
     q.iter_mut().for_each(|v| *v = v.max(0.0));
+    // What comes into each pond whose pass is new, which runs on from that pass (the open low ground has none; what a
+    // pond of `old` let over its pass is in what that pass adds of its own already). A pond's samples come before its
+    // pass up the flood's order, as do those that run into them.
+    let was: std::collections::BTreeSet<u32> = old.ponds.iter().map(|p| p.pass).collect();
+    let mut at_pass: std::collections::BTreeMap<usize, Vec<usize>> = Default::default();
+    for (p, pond) in new.ponds.iter().enumerate().filter(|(_, pond)| pond.pass != NONE && !was.contains(&pond.pass)) {
+        at_pass.entry(pond.pass as usize).or_default().push(p);
+    }
+    let mut into = vec![0.0; new.ponds.len()];
     for &k in new.order.iter().rev() {
         let k = k as usize;
-        if passes(new, k) {
+        if let Some(ps) = at_pass.get(&k) {
+            ps.iter().for_each(|&p| q[k] += into[p]);
+        }
+        if new.pond[k] != NONE {
+            into[new.pond[k] as usize] += q[k];
+        } else if new.to[k] != NONE {
             q[new.to[k] as usize] += q[k];
         }
     }
