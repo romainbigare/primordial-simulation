@@ -232,14 +232,16 @@ of where it lies. A raise lays the cell's own rock (its bed's mixture) and, at t
 loose ground of one of the terrain's makes drawn from the seed for the stroke (`Make::of`, `World::draw_make`); a
 lowering takes the loose ground first, then the rock, never more than the cell holds (its samples move by the share it
 took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **A basin of liquid** (`edit::Act::Basin`,
-`World::basin`): the ground under a brush is levelled to one floor, a depth under the lowest sample of the ring round
-it (its rim), cut or filled with each cell's own rock; the samples are built again over it at once; the key liquid
-fills the pond under its centre to that pond's level, its pass (the floor is a closed basin at least that deep), from
-the outside node at the ground's temperature, poured into each cell's part of that pond's body (`flow::pour`: the
-part holds it, so the runoff's pass keeps it there); where the floor opens to lower ground and holds no pond, the
-depth over the floor is poured on the ground and runs off; where it opens to the open low ground, none (its liquid
-stands there already), and a brush whose centre lies in the open low ground makes none. Then the liquid settles over the ground (below), the pores
-of the floor taking their fill first. **Known limit:** the samples' loose
+`World::basin`): the ground under a brush is levelled to one floor, a depth under the mean height of the samples
+it covers, and the samples of the ring round it (its rim) that lie lower than that mean are raised to it, cut or
+filled with each cell's own rock; so the floor is a closed basin, that deep under its pass, wherever it is made. The
+samples are built again over it at once; the key liquid fills the pond under its centre to that pond's level, its pass,
+from the outside node at the ground's temperature, poured into each cell's part of that pond's body (`flow::pour`: the
+part holds it, so the runoff's pass keeps it there); where the floor still opens to the open low ground (a rim under
+the sea's level), none (its liquid stands there already), and a brush whose centre lies in the open low ground makes
+none. Then the liquid settles over the ground (below), the pores of a dry cell taking their fill first, so a basin on
+dry ground stands less deep than its pass. An edit moves the bed faster than the slow ground is checked: its caches
+are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. **Known limit:** the samples' loose
 ground and the make of their bed (what the tiles and the textures read) do not follow an edit; the cell's soil keeps
 its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
 (`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
@@ -497,7 +499,10 @@ solve left it: its temperature (`World::thaw_last`) and the share of each substa
   energy is where it lies: in the pores, and over each part at its centroid (0, "The books").
 - **Bodies of standing liquid** (`flow::bodies`, `flow::basin`): a body is a pond of the terrain's samples (0: the
   samples of a closed basin under its pass, or a part of the open low ground joined through its samples, which has no
-  pass), and every pond is one. Its volume by level is its own samples': Σ area × (level - floor) over them, each
+  pass), and every pond is one. The ponds keep their numbers when the samples are built again (`Relief::ponds`, each
+  pond's key its first sample; `space::ponds::renumber`): a pond of a key the last build had keeps its number, a new
+  pond takes the number of one gone or the next, and the last pond takes a number left empty; so an edit renumbers no
+  pond it did not reach. Its volume by level is its own samples': Σ area × (level - floor) over them, each
   sample's floor its height laid on its cell's mean surface. It is held by every cell that holds samples of it, each
   by its part, and its liquid stays in the ground nodes of those cells. The bodies, their parts and the ways to them
   are found once for the world's cells; at each month's start, each body's level from what its parts held at the last

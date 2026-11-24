@@ -13,7 +13,7 @@ use super::fill::heading;
 use super::relief::{Lift, Relief};
 use super::grid::Grid;
 use super::network::{accumulate, NONE};
-use super::ponds::{basins, grade, open_parts, shallow};
+use super::ponds::{basins, grade, open_parts, renumber, shallow};
 use super::wear::{noise_grid, wear, Books, STAND_M};
 use crate::math::central;
 use super::square::Square;
@@ -68,6 +68,10 @@ pub struct Pond {
 }
 
 impl Samples {
+    /// The key of each pond (`ponds::keys`): the first of its samples.
+    pub fn pond_keys(&self) -> Vec<u32> {
+        super::ponds::keys(&self.pond, self.ponds.len())
+    }
     /// The area of sample `k`, m² (its row's, `rows`).
     #[inline]
     pub fn area(&self, k: usize) -> f64 {
@@ -183,7 +187,8 @@ impl Terrain {
     /// seed's (`samples`) with the heights `relief::heights` gives, and the flood over them found again (`found`; no
     /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
     /// stands over the liquid's level (`wear::STAND_M`). What the relief laid on a sample is loose ground that settled
-    /// there (`laid_ground`), laid over `years` since the start. The seed's samples where there was no build; found
+    /// there (`laid_ground`), laid over `years` since the start. The ponds are numbered after those the relief keeps
+    /// (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build; found
     /// once for each version of the relief (`Relief::version`) and kept.
     pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief, years: f64) -> Arc<Samples> {
         let s0 = self.samples(seed, map, lat);
@@ -204,7 +209,9 @@ impl Terrain {
         let h = super::relief::heights(&s0, r, &lift);
         let open = open_low(&grid, &h, STAND_M);
         let ground = laid_ground(&s0, r, years);
-        let found = Arc::new(self.found(seed, (&grid, rows), (h, &open, false), ground));
+        let mut found = self.found(seed, (&grid, rows), (h, &open, false), ground);
+        renumber(&mut found.pond, &mut found.ponds, &r.ponds);
+        let found = Arc::new(found);
         let mut kept = self.kept.1.lock().expect("the built samples");
         known(&kept).unwrap_or_else(|| {
             *kept = Some((r.version, found.clone()));

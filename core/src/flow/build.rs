@@ -34,7 +34,8 @@ pub fn build(w: &mut World) {
 
 /// The samples built anew after edits shaped the relief (`Relief::due`, `World::settle`): as a build, but no lobes are
 /// laid, no build of the years is counted (`Relief::builds`; only the samples' version moves) and the cells' offsets stay
-/// those of the last build (found here only where there was none): an edit moves a cell's ground and its samples' mean
+/// those of the last build (found here only where there was none); the caches of the slow-changing ground are found
+/// again first (`scratch::refresh`: the bed an edit moved). An edit moves a cell's ground and its samples' mean
 /// by the same volume, so its offset stays, to within the rounding of the areas, and the samples move only where edits
 /// shaped them.
 pub fn reshape(w: &mut World) {
@@ -42,6 +43,8 @@ pub fn reshape(w: &mut World) {
         w.relief.offset = offsets(w);
     }
     with(w, true, |w, s| {
+        // The edits moved the ground faster than the slow ground is checked (`scratch::refresh`): its caches first.
+        super::scratch::refresh(w, s);
         let old = w.terrain_samples();
         anew(w, s, &old);
         reroute(w, (&old, &w.terrain_samples()));
@@ -101,6 +104,7 @@ fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
     curve::update(w, s, old);
     s.bodies = Bodies::of(w, &s.curves);
     let new = w.terrain_samples();
+    w.relief.ponds = new.pond_keys();
     s.state.held = held_by_pond(s, (old, &new), (&was, held));
     ground_now(w, s, true);
 }

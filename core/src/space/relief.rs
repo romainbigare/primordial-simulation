@@ -16,7 +16,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// and shaped, at the last build, m (`offset`, `heights`); how many builds there were (`builds`, one each
 /// `Config::build_years`, which the years of the build are read from); the version of the samples built from it, one
 /// more at every build and every reshape after edits (`version`, by which built samples are kept, `Terrain::built`;
-/// none: the seed's samples); and whether edits shaped it since the samples were last built (`due`, not saved: a world
+/// none: the seed's samples); the key of each pond of the samples last built, in the order of their numbers
+/// (`ponds::keys`, by which the next build numbers its ponds, `ponds::renumber`); and whether edits shaped it since the samples were last built (`due`, not saved: a world
 /// read from a snapshot builds them from it).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Relief {
@@ -26,6 +27,7 @@ pub struct Relief {
     pub offset: Vec<f64>,
     pub builds: u32,
     pub version: u32,
+    pub ponds: Vec<u32>,
     pub due: bool,
 }
 
@@ -73,7 +75,7 @@ impl Relief {
 }
 
 /// The relief as saved: of each list its length and the samples that hold some, each with what it holds; the cells'
-/// offsets, the builds and the version.
+/// offsets, the builds, the version and the ponds' keys.
 #[derive(Serialize, Deserialize)]
 struct Sparse {
     laid: (u32, Vec<(u32, f64)>),
@@ -82,6 +84,7 @@ struct Sparse {
     offset: Vec<f64>,
     builds: u32,
     version: u32,
+    ponds: Vec<u32>,
 }
 
 /// The length of `v` and its samples that hold some, in their order.
@@ -98,14 +101,14 @@ fn dense((n, v): (u32, Vec<(u32, f64)>)) -> Vec<f64> {
 
 impl Serialize for Relief {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
-        Sparse { laid: sparse(&self.laid), built: sparse(&self.built), shaped: sparse(&self.shaped), offset: self.offset.clone(), builds: self.builds, version: self.version }.serialize(to)
+        Sparse { laid: sparse(&self.laid), built: sparse(&self.built), shaped: sparse(&self.shaped), offset: self.offset.clone(), builds: self.builds, version: self.version, ponds: self.ponds.clone() }.serialize(to)
     }
 }
 
 impl<'de> Deserialize<'de> for Relief {
     fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Relief, D::Error> {
         let s = Sparse::deserialize(from)?;
-        Ok(Relief { laid: dense(s.laid), built: dense(s.built), shaped: dense(s.shaped), offset: s.offset, builds: s.builds, version: s.version, due: false })
+        Ok(Relief { laid: dense(s.laid), built: dense(s.built), shaped: dense(s.shaped), offset: s.offset, builds: s.builds, version: s.version, ponds: s.ponds, due: false })
     }
 }
 
@@ -251,7 +254,7 @@ mod tests {
     /// A relief saved and read again is the same, also where a list holds only none.
     #[test]
     fn a_relief_reads_back_the_same() {
-        let r = Relief { laid: vec![0.0; 4], built: vec![0.0, 1.5, 0.0], shaped: vec![-2.0, 0.0], offset: vec![0.25], builds: 2, version: 3, due: false };
+        let r = Relief { laid: vec![0.0; 4], built: vec![0.0, 1.5, 0.0], shaped: vec![-2.0, 0.0], offset: vec![0.25], builds: 2, version: 3, ponds: vec![7, 2], due: false };
         let back: Relief = serde_json::from_str(&serde_json::to_string(&r).expect("saved")).expect("read");
         assert_eq!(back, r);
     }

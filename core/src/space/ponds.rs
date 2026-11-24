@@ -34,6 +34,47 @@ pub(super) fn open_parts(g: &Grid, open: &[bool], (pond, ponds): (&mut [u32], &m
     }
 }
 
+/// Of each pond of a sample's `pond` (`ponds` many), its key: the first of its samples, which no other pond holds.
+pub(super) fn keys(pond: &[u32], ponds: usize) -> Vec<u32> {
+    let mut key = vec![NONE; ponds];
+    for (k, &p) in pond.iter().enumerate().filter(|(_, &p)| p != NONE) {
+        if key[p as usize] == NONE {
+            key[p as usize] = k as u32;
+        }
+    }
+    key
+}
+
+/// The ponds of a sample's `pond` and their list `ponds` numbered as near the ponds whose keys were `was` (`keys`) as
+/// they can be: a pond of a key in `was` keeps its place in it; a new pond takes the place of a pond gone, in order, or
+/// one after the last; a place left empty takes the last pond. So an edit renumbers no pond it did not reach, and a
+/// list numbered after its own keys stays as it is.
+pub(super) fn renumber(pond: &mut [u32], ponds: &mut Vec<Pond>, was: &[u32]) {
+    let key = keys(pond, ponds.len());
+    let place: std::collections::HashMap<u32, u32> = was.iter().enumerate().map(|(i, &k)| (k, i as u32)).collect();
+    let mut to: Vec<u32> = key.iter().map(|k| place.get(k).copied().unwrap_or(NONE)).collect();
+    let mut taken = vec![false; was.len()];
+    to.iter().filter(|&&t| t != NONE).for_each(|&t| taken[t as usize] = true);
+    let mut gone = (0..was.len() as u32).filter(|&i| !taken[i as usize]);
+    let mut next = was.len() as u32;
+    for t in to.iter_mut().filter(|t| **t == NONE) {
+        *t = gone.next().unwrap_or_else(|| {
+            next += 1;
+            next - 1
+        });
+    }
+    // The places left empty under the count of ponds, lowest first, each taken by the pond of the highest place over it.
+    let n = ponds.len() as u32;
+    let empty = gone.filter(|&i| i < n);
+    let mut over: Vec<usize> = (0..to.len()).filter(|&p| to[p] >= n).collect();
+    over.sort_by_key(|&p| std::cmp::Reverse(to[p]));
+    over.into_iter().zip(empty).for_each(|(p, e)| to[p] = e);
+    let mut list = vec![Pond { pass: NONE, level: f64::NAN }; ponds.len()];
+    ponds.iter().zip(&to).for_each(|(p, &t)| list[t as usize] = *p);
+    pond.iter_mut().filter(|p| **p != NONE).for_each(|p| *p = to[*p as usize]);
+    *ponds = list;
+}
+
 /// The closed basins of the flood `f` over heights `z` (`Flood::under`): of each sample the basin it lies in
 /// (`NONE` where none), and of each basin its samples, the first the one the flood reached first: samples under a
 /// level beside each other across a side are one basin, as they stand at one level (the flood joins them so).

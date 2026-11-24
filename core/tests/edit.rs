@@ -131,10 +131,10 @@ fn a_planted_kind_stands_as_the_worlds_grown_stand_of_it() {
     }
 }
 
-/// A basin of liquid (`Act::Basin`): the ground under a brush is levelled to a floor `DEPTH` under its rim's lowest sample, and the
-/// key liquid poured in to its pass, from the outside node, so the books are kept. The floor is a closed basin, a pond
-/// at least that deep to its pass, whose body holds the liquid (less what the pores of its floor take): it stands over
-/// the floor at once and still after a month.
+/// A basin of liquid (`Act::Basin`): the ground under a brush is levelled to a floor `DEPTH` under its mean height, its
+/// rim raised to that height where lower, and the key liquid poured in to its pass, from the outside node, so the books
+/// are kept. The floor is a closed basin, a pond at least that deep to its pass, whose body holds the liquid (less what
+/// the pores of its floor take): it stands over the floor at once and still after a month.
 #[test]
 fn a_basin_holds_its_liquid() {
     const DEPTH: f64 = 5.0;
@@ -150,7 +150,7 @@ fn a_basin_holds_its_liquid() {
     assert_eq!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]), [true]);
     books.assert_kept(&w, 1e-9);
     let s = w.terrain_samples();
-    let k = (0..w.relief.shaped.len()).find(|&k| w.relief.shaped[k] != 0.0).expect("the floor");
+    let k = (0..w.relief.shaped.len()).filter(|&k| w.relief.shaped[k] != 0.0).min_by(|&a, &b| s.h[a].total_cmp(&s.h[b])).expect("the floor");
     let pond = s.pond[k];
     assert!(pond != pcore::space::network::NONE, "the floor is no pond");
     let depth = |w: &World| w.pond_levels()[pond as usize] - s.h[k];
@@ -186,8 +186,8 @@ fn the_ground_by_height_found_again_is_the_ground_found_anew() {
     assert!(bits(&shores(&w)) == bits(&shores(&anew)) && bits(&levels(&w)) == bits(&levels(&anew)), "the cells' ground by height");
 }
 
-/// A basin of liquid whose floor opens to the open low ground (its brush's rim reaches the sea's floor) pours nothing:
-/// the open low ground's liquid stands there already, and its level is the sea's, not a pass. The books are kept, and
+/// A basin of liquid whose floor opens to the open low ground (on a coast, its rim under that ground's liquid) pours
+/// nothing: the open low ground's liquid stands there already, and its level is no pass. The books are kept, and
 /// the liquid's levels are found (no level of liquid poured without end).
 #[test]
 fn a_basin_open_to_the_low_ground_pours_nothing() {
@@ -236,3 +236,30 @@ fn a_hill_that_dams_a_channel_keeps_what_runs_to_the_low_ground() {
 
 /// The channels a hill is raised across in the test of a dam, at most, the largest first.
 const DAM_TRIES: usize = 20;
+
+/// The ponds keep their numbers when the samples are built again after an edit (`Relief::ponds`): a basin adds its
+/// own pond and renumbers none it did not reach, so whatever reads a pond by its number elsewhere reads the same.
+#[test]
+fn a_basin_renumbers_no_pond_it_did_not_reach() {
+    use pcore::space::network::NONE;
+    let mut w = small_world();
+    pcore::flow::build::reshape(&mut w);
+    let before = w.terrain_samples();
+    let i = inland(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let act = Act::Basin { radius_m: 0.4 * w.map.side, depth_m: 5.0 };
+    assert_eq!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]), [true]);
+    let after = w.terrain_samples();
+    let members = |s: &pcore::space::samples::Samples, p: u32| (0..s.h.len()).filter(|&k| s.pond[k] == p).collect::<Vec<usize>>();
+    // Each pond of before whose samples are those of a pond after: the same pond, at the same number.
+    let same: Vec<u32> = (0..before.ponds.len() as u32).filter(|&p| {
+        let m = members(&before, p);
+        m.first().is_some_and(|&k| after.pond[k] != NONE && members(&after, after.pond[k]) == m)
+    }).collect();
+    assert!(!same.is_empty(), "ponds away from the basin");
+    for p in same {
+        let k = members(&before, p)[0];
+        assert_eq!(after.pond[k], p, "pond {p}");
+    }
+    assert!(after.ponds.len() > before.ponds.len(), "the basin's own pond");
+}
