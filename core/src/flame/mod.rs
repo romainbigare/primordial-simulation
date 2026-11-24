@@ -198,7 +198,8 @@ fn flames(w: &mut World, span: f64) -> Option<Vec<(u32, f64)>> {
         }
         let hot = heated(w, &p, i, (e / (land * over), over));
         if hot.iter().any(Result::is_ok) {
-            took.push((i, hot.iter().flatten().map(|b| b.1).sum::<f64>().min(e)));
+            let [heat, liquid] = hot.iter().flatten().fold([0.0; 2], |a, b| [a[0] + b.1, a[1] + b.2]);
+            took.push((i, heat.min(e), liquid));
             beds[i] = hot.into_iter().map(|b| b.ok().map(|b| b.0)).collect();
             lit_by_heat.push(i);
         }
@@ -215,10 +216,27 @@ fn flames(w: &mut World, span: f64) -> Option<Vec<(u32, f64)>> {
         });
     }
     if !took.is_empty() {
-        let moves: Vec<Move> = took.iter().map(|&(i, heat)| Move { from: Node::ground(i), to: Node::air(w.mesh.up(i, 0, crate::AIR)), k: 0, mol: 0.0, heat }).collect();
-        crate::store::apply(w, &[], &moves);
+        boiled(w, p.liquid, &took);
     }
     Some(lit.at.iter().enumerate().filter(|p| p.1.is_finite()).map(|(i, &t)| (i as u32, t)).collect())
+}
+
+/// The heat the heated beds took and the liquid they boiled off (`took`: each cell, J, kg) leave their ground: the
+/// liquid as vapour into the cell's aside node, which the air's step lets into the air (laws.md 1.5), carrying its heat
+/// at the ground's temperature and its latent heat, as the ground's evaporation does; the rest of the heat into the air
+/// over the cell, as the heat of the burning does. No more liquid leaves than the ground holds.
+fn boiled(w: &mut World, liquid: usize, took: &[(usize, f64, f64)]) {
+    use crate::chem::Heat;
+    let s = &w.chem.subs[liquid];
+    let moves: Vec<Move> = took.iter().flat_map(|&(i, heat, kg)| {
+        let (t, molten) = (w.thaw_last(i).0, w.molten_last(liquid, i));
+        let mol = (kg / s.molar_mass).min(w.g(liquid, i).max(0.0));
+        // The vapour takes its own heat from the ground, and the latent heat that lifts it out of its phase from the heat added.
+        let vapour = Move { from: Node::ground(i), to: Node::aside(i), k: liquid as u16, mol, heat: mol * (s.cp() * t + s.latent_gas()) };
+        let rest = (heat - mol * (s.latent_gas() - s.lf() * molten)).max(0.0);
+        [vapour, Move { from: Node::ground(i), to: Node::air(w.mesh.up(i, 0, crate::AIR)), k: 0, mol: 0.0, heat: rest }]
+    }).collect();
+    crate::store::apply(w, &[], &moves);
 }
 
 /// The months of a year and this month's place in it.

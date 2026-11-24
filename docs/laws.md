@@ -1601,14 +1601,16 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   the share of the cell it was added over, `World::heated`) dries and lights the remains there in the flames of the
   coming month or at once when the edits settle (`flame::heated`): on each patch it first warms and boils off the
   liquid the remains and the cured leaves hold, their layer's whole depth (what the sorption curve holds and, as duff,
-  what they draw from the ground, summed over 16 steps of depth), then warms them dry to `t_light`; that is q J a m² of
+  what they draw from the ground, summed over 16 steps of depth), which is the ground's own liquid, so no more than the
+  ground node holds a m² of its land; then warms them dry to `t_light`; that is q J a m² of
   the patch's land, and heat of e J a m² over the share s of the cell lights the share s min(1, e/q) of it, off the
   saturated share, on the share its remains cover. Its bed burns whole and dry (`Bed::kept`), where it would carry no
   flame of its own too (the heat keeps it: sparse or thin remains, damp ones), and its flame runs on from the cell where
-  its dry bed carries one. The heat the lit beds took leaves their ground for the air over them, as the heat of their
-  burning does; the rest stays in the ground. `flame::needed` is the heat that lights all of a cell's remains over a
-  share of it. With no heat added nothing of this runs. **Known limit:** the liquid the remains hold is not matter of
-  their own (its sorption is read from the air and the ground), so boiling it off moves no matter, only its heat. Each
+  its dry bed carries one. The liquid the lit beds boiled off leaves their ground node as vapour into its aside node
+  (and so the air, 1.5), with its heat at the ground's temperature and its latent heat, as evaporation does; the rest of
+  the heat they took goes to the air over them, as the heat of their burning does; what was not used stays in the
+  ground. `flame::needed` is the heat that lights all of a cell's remains over a share of it. With no heat added nothing
+  of this runs. Each
   flame runs from the cell it lit over the
   region's cells for `front_life`, crossing half the way between two cells' centres at each one's speed R (below) on
   the bed of its patch that carries a flame over the most of its ground, the earliest first (`flame::run`). Every cell

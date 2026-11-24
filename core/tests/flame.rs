@@ -20,6 +20,8 @@ const WARMER: f64 = 15.0;
 const NEAR: f64 = 1e-3;
 /// The share of the test's remains left to make them too thin to carry a flame (under the least load).
 const THIN: f64 = 0.001;
+/// The share of the test cell's liquid its ground keeps in the heated test: damp remains on a damp ground.
+const DAMP: f64 = 0.5;
 /// How many times the heat that lights them a heated test adds: enough over the brush's weights falling off its centre.
 const HEAT_OVER: f64 = 10.0;
 /// The rounding of the liquid set to field capacity: the moisture share it gives is 1 to within it.
@@ -260,18 +262,20 @@ fn a_settled_strike_burns_at_once_with_no_time() {
 
 /// Heat added under a brush dries and lights remains too thin to carry a flame of their own (handover.md 11.1;
 /// `flame::heated`): a strike does not light them, the heat that lights them (`flame::needed`) does, at once when
-/// the edits settle; the heat they took leaves their ground for the air, and the books are kept.
+/// the edits settle; the liquid they held boils off their ground as vapour, the heat they took goes to the air, and the
+/// books are kept.
 #[test]
 fn heat_lights_remains_too_thin_to_carry_a_flame() {
     use pcore::edit::{Act, Brush, Edit};
     let (mut w, i) = start();
     w.cfg.phys.strikes = 0.0;
     let p = Parts::of(&w.chem).unwrap();
+    let held = w.g(p.liquid, i);
     for q in [MATTER, WALL] {
         let m = w.g(p.sub[q], i);
         testkit::set_amount(&mut w, Node::ground(i), p.sub[q], m * THIN);
     }
-    liquid_to(&mut w, i, 0.0);
+    liquid_to(&mut w, i, held * DAMP);
     assert!(flame::lights(&w, i).is_err(), "a strike lights the thin remains");
     let [x0, y0, x1, y1] = w.map.bounds(i);
     let brush = Brush { centre: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], radius_m: 0.5 * w.map.side };
@@ -283,5 +287,6 @@ fn heat_lights_remains_too_thin_to_carry_a_flame() {
     let reached = w.settle().burnt;
     assert!(reached.contains(&(i as u32, 0.0)) && w.heated.is_empty(), "reached {reached:?}");
     assert!(w.counts.flame[flame::REMAINS] > 0.0 && w.counts.flame_month[i].share > 0.0, "burnt {} kg, {:?}", w.counts.flame[flame::REMAINS], w.counts.flame_month[i]);
+    assert!(w.g(p.liquid, i) < held * DAMP && w.g(p.liquid, i) >= 0.0, "the liquid the remains held boiled off the ground: {} of {}", w.g(p.liquid, i), held * DAMP);
     books.assert_kept(&w, 1e-9);
 }
