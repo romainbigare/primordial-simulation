@@ -1,6 +1,6 @@
 import { World, gunzip, parse, fmt, fmtYear, unitText, fetchBytes } from './data';
 import { CLASSES, GROUND_LAYERS, mapFields, rampFor, rampCss, wetOf } from './earth';
-import { MapView, View } from './map';
+import { MapView, RING_AS_VIEW_SCALE, View } from './map';
 import type { HeldGpu } from './gpu';
 import { MapLook } from './field-window';
 import { Charts } from './charts';
@@ -260,6 +260,23 @@ $('play').innerHTML = iconSvg('play', 'go') + iconSvg('pause', 'pause');
 fillIcons(document);
 $('play').onclick = togglePlay;
 $<HTMLSelectElement>('speeds').onchange = e => { speed = +(e.target as HTMLSelectElement).value; live?.rate(speed); syncUi(); };
+/** A test setting: the share of the screen's pixels along each axis the near ring is drawn at (map.ts `setRingScale`),
+ * kept in this browser. */
+const RING_SCALES = [1, 0.5, 0.35, 0.25, 0.125], RING_SCALE_KEY = 'ew.ringScale';
+{
+  const pick = $<HTMLSelectElement>('ringscale');
+  pick.innerHTML = RING_SCALES.map(r => `<option value="${r}">${r} a side: 1/${Math.round(1 / (r * r))} of the pixels</option>`).join('');
+  let kept = NaN;
+  try { kept = Number(localStorage.getItem(RING_SCALE_KEY)); } catch { /* storage blocked: the default */ }
+  const r = RING_SCALES.includes(kept) ? kept : RING_AS_VIEW_SCALE;
+  pick.value = String(r);
+  map.setRingScale(r);
+  pick.onchange = () => {
+    const v = +pick.value;
+    try { localStorage.setItem(RING_SCALE_KEY, String(v)); } catch { /* storage blocked: this visit only */ }
+    map.setRingScale(v);
+  };
+}
 const panels = new Panels($('bar'), $('cv'));
 watchCovered([$('bar'), $('year'), $('god-strip'), $('god'), $('inspect-card'), $('timebar')], edges => map.setCovered(edges));
 PHONE.addEventListener('change', () => map.setFill(PHONE.matches, world && landBox(world)));

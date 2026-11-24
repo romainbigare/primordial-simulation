@@ -46,20 +46,21 @@ const MOVE_REST_MS = 120;
  * view moves (`quick`): a sixteenth of the pixels, a sixteenth of the time. */
 const QUICK_SCALE = 0.25;
 /** The pictures of the area about a view at rest (`MapView.rings`) are these many times its width, each at the screen's
- * pixels (but those drawn with the view's detail, `RING_AS_VIEW_SCALE`): so a view that moves out meets one at most
+ * pixels (but those drawn with the view's detail, `MapView.ringScale`): so a view that moves out meets one at most
  * three times softer than the last, and the whole map's picture only once it is far (none is drawn that is no sharper
  * than it). They are drawn once the view has rested `AROUND_REST_MS`, in the order `AROUND_ORDER`, a tile each time
  * the card is free; the whole map's picture is `WHOLE_PX` px across (22 MB with its mip levels at most), drawn in
  * tiles too after them, again once older than `WHOLE_EVERY_MS` (the world moves on). */
-const RINGS = [2, 6, 18, 54], AROUND_REST_MS = 250, WHOLE_PX = 2048, WHOLE_EVERY_MS = 20000;
+const RINGS = [2, 6, 18, 54], AROUND_REST_MS = 100, WHOLE_PX = 2048, WHOLE_EVERY_MS = 20000;
 /** The rings no wider than this many times the view are drawn with the detail of the view's own pixels (`around`):
  * the plants a pan shows in them are those the view shows, only softer, so none comes and goes as the screen passes
  * from one picture to the next. A wider ring takes its detail by its own pixels: at the view's, it would decide the
  * square of its width as many marks. */
 const RING_AS_VIEW_MOST = 2;
-/** Those rings are drawn at this share of the screen's pixels along each axis: a quarter of the pixels, so one costs
- * about what a ring with its own detail does; shown under the last picture as a pan moves it, softer only. */
-const RING_AS_VIEW_SCALE = 0.5;
+/** Those rings are drawn at this share of the screen's pixels along each axis by default (`MapView.ringScale`): a
+ * quarter of the pixels, so one costs about what a ring with its own detail does; shown under the last picture as a
+ * pan moves it, softer only. */
+export const RING_AS_VIEW_SCALE = 0.5;
 /** The order the pictures about the view are drawn in (`drawAround`), as indices of `RINGS` (its length: the whole
  * map's picture): the nearest ring with its own detail first, which is cheap and covers a short pan soon after the
  * view rests; then the rings with the view's detail, which cost more; then the wider rings and the whole map. */
@@ -163,6 +164,9 @@ export class MapView {
   private whole: Pic | null = null;
   private aroundTex: (Texture | null)[] = [];
   private spares: (Texture | null)[] = [null, null, null];
+  /** The share of the screen's pixels along each axis the rings with the view's detail are drawn at
+   * (`RING_AS_VIEW_SCALE`; a test setting of the page, `setRingScale`). */
+  private ringScale = RING_AS_VIEW_SCALE;
   private aroundTimer = 0;
   private aroundRun = 0;
   /** What the screen showed that the next picture drawn whole comes in over (`present`): what a moving view showed
@@ -657,6 +661,14 @@ export class MapView {
     return tiles;
   }
 
+  /** Draw the rings with the view's detail at `r` of the screen's pixels along each axis from now on: those drawn
+   * are let go and drawn anew. */
+  setRingScale(r: number): void {
+    this.ringScale = r;
+    RINGS.forEach((n, i) => { if (n <= RING_AS_VIEW_MOST) this.rings[i] = null; });
+    this.aroundSoon();
+  }
+
   /** Once the view has rested `AROUND_REST_MS`, draw the pictures shown under the last as the view moves, a tile each
    * time the card is free (`drawAround`). A move or a new frame meanwhile puts them off. */
   private aroundSoon(): void {
@@ -695,14 +707,14 @@ export class MapView {
   /** Picture `i` of those shown under the last as the view moves, at `now`: its camera, its pixels a css pixel, the
    * pixels of the screen a css pixel its detail is chosen by, and its size, px; null where none is drawn. The area about
    * the view `RINGS[i]` times its width at the screen's pixels (none where the whole map's picture is as sharp: its ring
-   * is let go), with the view's own detail at `RING_AS_VIEW_SCALE` of the screen's pixels up to `RING_AS_VIEW_MOST`,
+   * is let go), with the view's own detail at `ringScale` of the screen's pixels up to `RING_AS_VIEW_MOST`,
    * then the whole map where its picture is of another look or older than `WHOLE_EVERY_MS`. */
   private around(i: number, now: number): { cam: Camera; k: number; seen: number; w: number; h: number } | null {
     const wide = Math.max(this.w, this.h), d = this.drawnDpr();
     if (i < RINGS.length) {
       // About the view's middle, `n` times as many squares across.
       const n = RINGS[i], { s, ox, oy } = this.cam, cw = this.cv.clientWidth / 2, ch = this.cv.clientHeight / 2;
-      const asView = n <= RING_AS_VIEW_MOST, r = asView ? RING_AS_VIEW_SCALE : 1;
+      const asView = n <= RING_AS_VIEW_MOST, r = asView ? this.ringScale : 1;
       if ((s / n) * d * r <= WHOLE_PX / wide) { this.rings[i] = null; return null; }
       // (A css pixel of the ring takes n of the view's: at n times the screen's pixels, the ring's metres a pixel of
       // detail are the view's.)
