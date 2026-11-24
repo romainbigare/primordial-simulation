@@ -509,6 +509,14 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
     give(out.to_string().into_bytes())
 }
 
+/// The relief the world's samples will be built from when its stroke settles (`tape::Ground::settled_relief_bytes`),
+/// for the page's ground to be made again while the world settles; nothing (`out_len` 0) where none can be told before.
+#[no_mangle]
+pub extern "C" fn settled_relief() -> *const u8 {
+    let bytes = with(|l| tape::Ground::settled_relief_bytes(&l.world).unwrap_or_default());
+    give(bytes)
+}
+
 /// End the brush's stroke and run at once, with no time on the world's clock, what its edits start that takes no time
 /// (`World::settle`): the samples built again over the ground it shaped and the liquid settled over them (`ground`
 /// true: the page asks for the new version's relief), and the strikes burnt. Returns, as JSON, whether the ground was

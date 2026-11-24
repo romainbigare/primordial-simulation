@@ -119,6 +119,18 @@ impl Ground {
         bincode::serialize(&(&w.relief, w.built_years(), &w.map)).expect("a relief serializes")
     }
 
+    /// The relief world `w`'s samples will be built from when its edits settle (`World::settle`,
+    /// `flow::build::reshape`: the next version, the offsets kept), as `relief_bytes` gives it after: so a shell's
+    /// ground can be made again while the world settles. None where its edits shaped nothing, or where the reshape will
+    /// find the offsets (no build before).
+    pub fn settled_relief_bytes(w: &World) -> Option<Vec<u8>> {
+        if !w.relief.due || w.relief.offset.len() != w.mesh.cells().n() {
+            return None;
+        }
+        let r = Relief { version: w.relief.version + 1, due: false, ..w.relief.clone() };
+        Some(bincode::serialize(&(&r, w.built_years(), &w.map)).expect("a relief serializes"))
+    }
+
     /// The ground made again on the samples the relief `bytes` builds on the world's cells (`relief_bytes`,
     /// `Terrain::built`; `rebuild`). Returns the squares whose tiles changed, or why the bytes are refused.
     pub fn rebuild_from(&mut self, bytes: &[u8]) -> Result<Vec<bool>, String> {

@@ -137,13 +137,18 @@ fn a_ground_made_again_is_the_ground_made_anew() {
     let per = (s.across / w.map.w) as f64;
     let place = [((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per];
     drop(s);
+    // A stroke settled; the relief the world's samples will be built from, told before it settles, is the one they are
+    // built from (none before the world's first build of its offsets).
     let stroke = |w: &mut pcore::World, height_m: f64| {
         w.edit(&[Edit { place, act: Act::Ground { radius_m: 0.3 * w.map.side, height_m, stroke_m: 0.0, make: 0 } }]);
+        let told = super::super::Ground::settled_relief_bytes(w);
         w.settle();
+        assert!(told.as_ref().is_none_or(|r| *r == super::super::Ground::relief_bytes(w)), "the relief told before the world settled");
+        told.is_some()
     };
     stroke(&mut w, 20.0);
     let mut again = super::super::Ground::of(&w);
-    stroke(&mut w, -10.0);
+    assert!(stroke(&mut w, -10.0), "the second stroke's relief is told before it settles");
     again.rebuild_from(&super::super::Ground::relief_bytes(&w)).expect("the relief");
     let anew = super::super::Ground::of(&w);
     let colours = vec![[0.5; 3]; w.terrain.makes.len()];
