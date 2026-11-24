@@ -109,7 +109,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
       }
       return list;
     },
-    told: done => (done ? 'A lake fills the new basin.' : 'No lake could be made here.'),
+    told: done => (done ? 'Dug a basin for a lake; water fills it where the ground holds it.' : 'No lake could be made here.'),
   };
   return [shape(1), shape(-1), lake, plant, burn];
 }
