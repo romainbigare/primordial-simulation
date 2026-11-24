@@ -162,6 +162,7 @@ export interface Gpu {
   /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone,
    * which the renderer does not keep: after a lost context it is empty). */
   write(t: Texture, data: TexelData, level?: number, layer?: number): void;
+  /** Let texture `t` go: at once on the back end; on the page's GPU once the next picture begins (`HeldGpu.begin`). */
   drop(t: Texture): void;
   /** Draw into `target` (null: the canvas, sized to its pixels; several textures of one size and format: a program's
    * targets, `Program.targets`, in the order of its outputs), first filling it with `clear` (r, g, b, a, 0..1) if given,
@@ -228,6 +229,9 @@ class HeldTexture implements Texture {
 export class HeldGpu implements Gpu {
   private back!: Back;
   private held = new Set<HeldTexture>();
+  /** Textures dropped since the last picture began (`begin`): bindings worked out for it before its draws (a layer's
+   * marks, decided once for a picture drawn in tiles over many frames) may name them till then. */
+  private dropped: HeldTexture[] = [];
   /** Whether frames sent wait for the card to finish them, how many were sent since they began to wait and the
    * programs they drew; the frames the back end finished, the time the last took, ms, and the programs drawn in a
    * frame it finished. What a stalled card leaves undone is said from these (`stalled`). */
@@ -256,6 +260,7 @@ export class HeldGpu implements Gpu {
   private use(back: Back, rebuilt: boolean): void {
     this.back = back; this.watching = false; this.finished = 0; this.drewDone.clear();
     this.sentAll = this.doneAll = 0;
+    this.dropped = [];
     this.wake();
     for (const t of this.held) { t.inner = back.texture(t.label, t.w, t.h, t.format, t.layers, t.mips, t.target); t.levels.forEach((d, k) => d && back.write(t.inner, d, k)); }
     if (rebuilt) this.restored();
@@ -277,7 +282,13 @@ export class HeldGpu implements Gpu {
     if (layer === undefined) h.levels[level] = data;
     this.back.write(h.inner, data, level, layer);
   }
-  drop(t: Texture): void { this.back.drop((t as HeldTexture).inner); this.held.delete(t as HeldTexture); }
+  drop(t: Texture): void { this.held.delete(t as HeldTexture); this.dropped.push(t as HeldTexture); }
+  /** A picture begins (its bindings are worked out anew, none from before is drawn with again): the textures dropped
+   * since the last are let go now, so no draw ever binds one let go (which WebGL reads as black). */
+  begin(): void {
+    this.dropped.forEach(t => this.back.drop(t.inner));
+    this.dropped = [];
+  }
   pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
     const inner = (t: Texture) => (t as HeldTexture).inner;
     const p = this.back.pass(target === null ? null : Array.isArray(target) ? target.map(inner) : inner(target), clear, clip);

@@ -191,10 +191,12 @@ export class MapView {
     cv.before(c);
     this.gpuCv = c;
     this.resize();
-    const restored = () => { this.timing = false; this.sharpOf = ''; this.last = this.whole = this.movedShown = this.fade = null; this.rings = []; this.sharpening = null; this.resting = false; clearTimeout(this.sharpTimer); this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
+    const restored = () => { this.stopPictures(); this.timing = false; this.sharpOf = ''; this.last = this.whole = this.movedShown = this.fade = null; this.rings = []; this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
     this.ready = Promise.resolve(openGpu(c, restored)).then(g => {
       this.gpu = g;
-      if (g) sendDetail(g, () => { this.sharpOf = ''; this.invalidate(); });
+      // A new set of the ground's detail: the pictures begun with the set before (whose bindings name it) stop, and
+      // the map is drawn anew with the new one.
+      if (g) sendDetail(g, () => { this.stopPictures(); this.sharpOf = ''; this.invalidate(); });
       this.invalidate();
       return g;
     });
@@ -390,7 +392,7 @@ export class MapView {
    * than `FRAME_BUDGET_MS` the map is drawn at fewer pixels than the screen's and stretched onto it: the same picture,
    * softer, as every program chooses its detail by the screen's pixel; once the view rests it is drawn anew at the
    * screen's pixels (`sharpen`). */
-  private drawGpu(gpu: Gpu, xs: number[], d: number): void {
+  private drawGpu(gpu: HeldGpu, xs: number[], d: number): void {
     const { cam: { s, ox, oy } } = this, W = this.gpuCv!.width, H = this.gpuCv!.height;
     const r = this.scale, k = d * r, tw = Math.max(1, Math.round(W * r)), th = Math.max(1, Math.round(H * r));
     // (Drawn into a texture at the screen's pixels too, so a moving view can show it moved, `showMoved`.)
@@ -400,6 +402,7 @@ export class MapView {
       this.picture = gpu.texture('picture', tw, th, MAP_TARGET, 1, 1, true);
     }
     const waiting: string[] = [];
+    gpu.begin();
     this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
     this.fire?.prepare(gpu, waiting);
     const target = this.picture!, p = gpu.pass(target);
@@ -503,6 +506,7 @@ export class MapView {
     // What the layer works out before its draws holds for the whole view, so it is worked out once for all the tiles
     // (a new frame stops them); a program it goes without is waited for as a whole frame's is (`drawWhenMade`).
     const { cam: { s, ox, oy } } = this, waiting: string[] = [];
+    gpu.begin();
     this.layer?.prepare(gpu, ox, oy, s, d, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
     this.fire?.prepare(gpu, waiting);
     this.drawWhenMade(gpu, waiting);
@@ -525,14 +529,19 @@ export class MapView {
     gpu.drop(t);
   }
 
-  /** Show on the screen pictures `pics` (those of this look, in order, each over the last) where the camera puts the
-   * squares they hold now, over the map's background; the sharp picture being drawn of the view before is stopped. */
-  private showMoved(gpu: Gpu, pics: (Pic | null)[]): void {
+  /** Stop the pictures drawn over frames: the sharp picture (and the rest before it) and those about the view. */
+  private stopPictures(): void {
     clearTimeout(this.sharpTimer);
     clearTimeout(this.aroundTimer);
     this.aroundRun++;
     this.resting = false;
     this.sharpening = null;
+  }
+
+  /** Show on the screen pictures `pics` (those of this look, in order, each over the last) where the camera puts the
+   * squares they hold now, over the map's background; the sharp picture being drawn of the view before is stopped. */
+  private showMoved(gpu: Gpu, pics: (Pic | null)[]): void {
+    this.stopPictures();
     this.fade = null;
     cancelAnimationFrame(this.fadeFrame);
     const look = this.lookKey();
@@ -625,9 +634,10 @@ export class MapView {
   /** Draw the map and the layer over it (the plants, seen at its own pixels) into texture `t` with camera `cam`, `k` of
    * its pixels a css pixel, inside `clip` (x, y, w, h px) where given; false where a program it needs is not made yet
    * (then it is drawn without it). The layer is decided for this draw; the next frame decides it for the view again. */
-  private drawInto(gpu: Gpu, t: Texture, cam: Camera, k: number, clip?: number[]): boolean {
+  private drawInto(gpu: HeldGpu, t: Texture, cam: Camera, k: number, clip?: number[]): boolean {
     const was = this.cam, drawn = this.land?.drawn, waiting: string[] = [];
     this.cam = { ...cam };
+    gpu.begin();
     this.layer?.prepare(gpu, cam.ox, cam.oy, cam.s, k, k, t.w / k, t.h / k, waiting);
     const p = gpu.pass(t, [...this.background(), 1], clip);
     this.drawMap(gpu, p, [cam.ox], k, k, [t.w, t.h], waiting);
