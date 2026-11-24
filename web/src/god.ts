@@ -17,7 +17,7 @@ export interface StartKind { row: number; name: string; kg: number }
  * brush, whether each of its edits was made and the core's reason where not, and whether the kind planted stands
  * grown somewhere (`grown`; else it is planted young); of heat, each cell under it, its share, how much of the heat
  * that lights its remains it holds (`progress`, 0 to 1) and why none would light; whether any cell changed. (A brush
- * of the ground answers its cells as numbers alone.) */
+ * of the ground, or a lake, answers its cells as numbers alone.) */
 export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[]; changed: boolean; grown?: boolean }
 /** What a stroke's settling did (wasm/src/lib.rs `settle`): whether the ground was built again, and each cell the
  * flames of its strikes reached, and when, s after the strike. */
@@ -39,6 +39,8 @@ export interface GodTool {
   /** What it adds at the brush's centre each second it is held, in its core tool's unit (m of ground, up or down where
    * less than 0; J/m² of heat): it paints again and again while the pointer is down, held still or not. */
   rate?: number;
+  /** The amount it paints once, where the stroke begins (m of a lake's depth): a tool that makes one thing a stroke. */
+  amount?(): number;
   /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
   why(p: Probe | null): string;
   /** The core's reason a cell was not edited (`Brushed`), in plain words. */
@@ -197,7 +199,7 @@ export class God {
     const st = this.stroke;
     if (!st) return;
     st.now = [x, y];
-    if (st.tool.rate) return;
+    if (st.tool.rate || st.tool.amount) return;
     const [lx, ly, lt] = st.last, far = Math.hypot(x - lx, y - ly) >= (PAINT_MOVE * this.radius) / this.page.squareM();
     if (far && performance.now() - lt >= PAINT_MS) this.paint();
   }
@@ -207,14 +209,14 @@ export class God {
     const st = this.stroke;
     if (!st) return;
     clearInterval(st.held);
-    if (st.tool.rate || st.now[0] !== st.last[0] || st.now[1] !== st.last[1]) this.paint();
+    if (st.tool.rate || (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]))) this.paint();
     this.editor()?.settle();
   }
 
-  /** Paint with the stroke's tool where its brush is now; a tool with a rate by what the time since its last paint
-   * adds. */
+  /** Paint with the stroke's tool where its brush is now: by its amount, or for a tool with a rate by what the time
+   * since its last paint adds. */
   private paint(): void {
-    const st = this.stroke!, [x, y] = st.now, now = performance.now(), amount = ((st.tool.rate ?? 0) * (now - st.last[2])) / 1000;
+    const st = this.stroke!, [x, y] = st.now, now = performance.now(), amount = st.tool.amount ? st.tool.amount() : ((st.tool.rate ?? 0) * (now - st.last[2])) / 1000;
     st.last = [x, y, now];
     st.waiting = true;
     this.editor()?.brush(st.tool.code, x, y, this.radius, amount, st.tool.row());
@@ -228,7 +230,8 @@ export class God {
     if (r.grown === false) st.grown = false;
     const heat = r.cells.filter(c => c.progress !== undefined);
     if (heat.length) this.heated(st, heat);
-    else if (st.tool.rate) st.done += +r.changed;
+    // (The ground's tools and a lake answer their cells as numbers.)
+    else if (typeof r.cells[0] !== 'object') st.done += +r.changed;
     else {
       const whys = new Map<string, number>();
       for (const c of r.cells) {

@@ -1,13 +1,16 @@
 // The tools of god mode (god.ts `GodTool`), in the order of the strip: each paints with the round brush
 // (wasm/src/lib.rs `brush`): Raise and Lower land move the ground under it while held, and the world builds its
-// samples and settles its liquid over the new ground when the stroke ends (`settle`); Plant clears a share of each
+// samples and settles its liquid over the new ground when the stroke ends (`settle`); Lake digs a basin under it at
+// once, its floor a chosen depth under the brush's rim, and fills it; Plant clears a share of each
 // cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, and
 // those that hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain
 // words, from the core's own reasons. A new tool is one more entry of `godTools`.
 import type { GodTool, Probe, StartKind } from './god';
 
-/** The core's brush tools (wasm/src/lib.rs `SHAPE`, `PLANT`, `BURN`). */
-const BRUSH_SHAPE = 0, BRUSH_PLANT = 2, BRUSH_BURN = 3;
+/** The core's brush tools (wasm/src/lib.rs `SHAPE`, `LAKE`, `PLANT`, `BURN`). */
+const BRUSH_SHAPE = 0, BRUSH_LAKE = 1, BRUSH_PLANT = 2, BRUSH_BURN = 3;
+/** The depths a lake may have, m under the lowest point of the brush's rim, with their names; the second the first on. */
+const LAKE_DEPTHS: [string, number][] = [['Shallow', 2], ['Middle', 5], ['Deep', 15]];
 /** How fast Raise and Lower move the ground at the brush's centre while held, m/s: a second's hold makes a hill or a
  * pit a hillside's shading shows from a few kilometres away. */
 const SHAPE_M_S = 20;
@@ -90,5 +93,23 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     why: () => '', reason: why => why,
     told: done => (done ? `${sign > 0 ? 'Raised' : 'Lowered'} the land. Water finds its new way.` : 'The ground did not move here.'),
   });
-  return [shape(1), shape(-1), plant, burn];
+  let depth = LAKE_DEPTHS[1][1];
+  const lake: GodTool = {
+    key: 'lake', icon: 'lake', label: 'Lake', ink: '#4aa3e8', code: BRUSH_LAKE, row: () => -1, amount: () => depth,
+    hint: 'Click or tap to dig a lake under the brush; it fills with water at once.',
+    why: (p: Probe | null) => (p && p.land <= 0 ? 'This is open water already.' : ''), reason: why => why,
+    choices: show => {
+      const list = document.createElement('div');
+      list.className = 'chips';
+      for (const [name, m] of LAKE_DEPTHS) {
+        const b = document.createElement('button');
+        b.textContent = `${name}, ${m} m`; b.classList.toggle('on', m === depth);
+        b.onclick = () => { depth = m; show(); };
+        list.append(b);
+      }
+      return list;
+    },
+    told: done => (done ? 'A lake fills the new basin.' : 'No lake could be made here.'),
+  };
+  return [shape(1), shape(-1), lake, plant, burn];
 }
