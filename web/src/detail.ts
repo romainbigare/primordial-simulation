@@ -38,6 +38,9 @@ const SHRINK = 4;
 /** The view needs the detail where a pixel of the screen takes less than `DETAIL_LOAD_E` m (farther no layer is read
  * finer than its mean, which the blank texture gives too). */
 const DETAIL_LOAD_E = 25;
+/** The detail is loaded as for pixels this many times finer than the view's, so a zoom in finds it loaded (as gpu.ts
+ * `ZOOM_AHEAD` makes the programs ahead). */
+const DETAIL_AHEAD = 3;
 
 /** The side of the layers a view whose pixel takes `e` m needs (`SPAN_M`), of `SIDES`, at most `SIDE_MOST`. */
 function sideFor(e: number): number {
@@ -126,11 +129,12 @@ async function fetchDetail(l: Loading): Promise<void> {
   l.worker = null;
 }
 
-/** The view's pixels take `e` m of the screen's: load the layers of the side it needs (`sideFor`) where they are fine
- * enough to show (`DETAIL_LOAD_E`): a larger set as it comes close, a smaller one once it needs `SHRINK` times less. */
+/** The view's pixels take `e` m of the screen's: load the layers of the side a view `DETAIL_AHEAD` times closer needs
+ * (`sideFor`) where they are fine enough to show (`DETAIL_LOAD_E`): a larger set as it comes close, a smaller one once
+ * it needs `SHRINK` times less. */
 export function detailSeen(e: number): void {
-  const want = sideFor(e), have = loading?.side ?? shown?.side;
-  if (have === undefined ? e < DETAIL_LOAD_E : want > have || want * SHRINK <= have) loadSide(want);
+  const ahead = e / DETAIL_AHEAD, want = sideFor(ahead), have = loading?.side ?? shown?.side;
+  if (have === undefined ? ahead < DETAIL_LOAD_E : want > have || want * SHRINK <= have) loadSide(want);
 }
 
 /** Load the layers at `side` texels a side; the set drawn from stays till they are whole (`sendSoon`). */

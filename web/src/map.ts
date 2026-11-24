@@ -140,9 +140,10 @@ export class MapView {
   private wholeTex: Texture | null = null;
   private aroundTimer = 0;
   private aroundRun = 0;
-  /** What a moving view showed last (`showMoved`), which the picture drawn anew comes in over; and the pictures the
-   * last comes in over and when it began (`present`). */
-  private movedShown: Pic[] | null = null;
+  /** What the screen showed that the next picture drawn whole comes in over (`present`): what a moving view showed
+   * last (`showMoved`), or the last picture where the next draws what it went without (`fadeNext`); and the pictures
+   * the last comes in over and when it began. */
+  private fadeFrom: Pic[] | null = null;
   private fade: { from: Pic[]; at: number } | null = null;
   private fadeFrame = 0;
   private wholeAt = -Infinity;
@@ -191,12 +192,12 @@ export class MapView {
     cv.before(c);
     this.gpuCv = c;
     this.resize();
-    const restored = () => { this.stopPictures(); this.timing = false; this.sharpOf = ''; this.last = this.whole = this.movedShown = this.fade = null; this.rings = []; this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
+    const restored = () => { this.stopPictures(); this.timing = false; this.sharpOf = ''; this.last = this.whole = this.fadeFrom = this.fade = null; this.rings = []; this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
     this.ready = Promise.resolve(openGpu(c, restored)).then(g => {
       this.gpu = g;
       // A new set of the ground's detail: the pictures begun with the set before (whose bindings name it) stop, and
       // the map is drawn anew with the new one.
-      if (g) sendDetail(g, () => { this.stopPictures(); this.sharpOf = ''; this.invalidate(); });
+      if (g) sendDetail(g, () => { this.stopPictures(); this.sharpOf = ''; this.fadeNext(); this.invalidate(); });
       this.invalidate();
       return g;
     });
@@ -416,8 +417,8 @@ export class MapView {
     this.drawFire(gpu, p, xs, k, d, [tw, th], waiting);
     p.end();
     this.last = picOf(target, this.cam, k, this.lookKey());
-    this.present(gpu, this.movedShown);
-    this.movedShown = null;
+    this.present(gpu, this.fadeFrom);
+    this.fadeFrom = null;
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
     gpu.submit();
     this.time(gpu, r);
@@ -441,7 +442,7 @@ export class MapView {
     if (!waiting.length) return;
     this.gpuDue = true;
     const look = () => {
-      if (waiting.every(name => gpu.ready(name))) this.redraw();
+      if (waiting.every(name => gpu.ready(name))) { this.fadeNext(); this.redraw(); }
       else this.madeTimer = window.setTimeout(look, MADE_POLL_MS);
     };
     this.madeTimer = window.setTimeout(look, MADE_POLL_MS);
@@ -525,9 +526,13 @@ export class MapView {
   private dropPicture(gpu: Gpu, t: Texture): void {
     if (this.last?.t === t) this.last = null;
     if (this.fade?.from.some(p => p.t === t)) this.fade = null;
-    if (this.movedShown?.some(p => p.t === t)) this.movedShown = null;
+    if (this.fadeFrom?.some(p => p.t === t)) this.fadeFrom = null;
     gpu.drop(t);
   }
+
+  /** The next picture drawn whole comes in over the last (it draws what the last went without: the ground's detail, a
+   * program), so it does not change at once. */
+  private fadeNext(): void { this.fadeFrom ??= this.last ? [this.last] : null; }
 
   /** Stop the pictures drawn over frames: the sharp picture (and the rest before it) and those about the view. */
   private stopPictures(): void {
@@ -545,8 +550,8 @@ export class MapView {
     this.fade = null;
     cancelAnimationFrame(this.fadeFrame);
     const look = this.lookKey();
-    this.movedShown = pics.filter((p): p is Pic => p?.look === look);
-    this.compose(gpu, this.movedShown, 1);
+    this.fadeFrom = pics.filter((p): p is Pic => p?.look === look);
+    this.compose(gpu, this.fadeFrom, 1);
     gpu.submit();
   }
 

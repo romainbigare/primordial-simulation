@@ -39,8 +39,9 @@ export class CoverMarks {
   private decided: Draw['binds'] | null = null;
   private marksTex: Texture[] = [];
   private reachTex: Texture | null = null;
-  /** Whether the programs that decide and draw the marks are made (`prepare`): till then no lattice shows as marks, and
-   * the ground draws all the cover as its field, as it does far away. */
+  /** Whether the marks can be drawn: the rendered models they are drawn from are loaded and the programs that decide
+   * and draw them are made (`prepare`); till then no lattice shows as marks, and the ground draws all the cover as its
+   * field, as it does far away. */
   private made = false;
 
   /** `alpha`: how strongly the cover covers the map. */
@@ -89,9 +90,11 @@ export class CoverMarks {
    * made are added to `waiting`, and made first). */
   prepare(gpu: Gpu, m: Marks, waiting: string[]): void {
     this.decided = null;
-    this.made = true;
+    // (Till the rendered models are loaded no lattice shows as marks: the field draws all the cover, as it does far
+    // away, so the plants never leave bare ground between the far field and the marks.)
     const k = this.kinds, detail = groundDetail(gpu);
-    if (!k || this.shown(m.seenMpp).every(s => s <= 0) || detail.w <= 1) return;
+    this.made = detail.w > 1;
+    if (!k || !this.made || this.shown(m.seenMpp).every(s => s <= 0)) return;
     const missing = notMade(gpu, ['marks', 'reach', 'cover']);
     waiting.push(...missing);
     this.made = !missing.length;
