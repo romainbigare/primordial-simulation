@@ -172,7 +172,9 @@ export class GroundTiles {
   private across(depth: number): [number, number] { const s = this.squaresOf(depth); return [Math.ceil(this.map.w / s), Math.ceil(this.map.h / s)]; }
 
   /** The tiles of view `v`: drawn at the depth whose texels take no more than `TEXEL_PX` of the screen's pixels (no
-   * more than `VIEW_TILES` of them), its tiles there, at the depth above and at the coarsest, coarse first. */
+   * more than `VIEW_TILES` of them), its tiles there, at the depth above and at the coarsest, coarse first; then those
+   * in view of the depth below, nearest its middle first, as many as the tiles kept have room for, so a zoom in finds
+   * them made. */
   view(v: View): void {
     this.last = v;
     const [d0, d1] = this.meta.depths, sq = this.map.square_depth;
@@ -182,6 +184,8 @@ export class GroundTiles {
     while (depth > d0 && tiles(depth) > VIEW_TILES) depth--;
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2, asked = ++this.views, wanted: { depth: number; x: number; y: number; stale: boolean; far: number }[] = [];
     this.inView.clear();
+    // (The tiles this view asks for, kept or not: the depth below takes the room the others leave.)
+    let asks = 0;
     for (const d of new Set([d0, Math.max(depth - 1, d0), depth])) {
       const s = this.squaresOf(d), [nx, ny] = this.across(d), ahead = d === depth ? AHEAD : 0;
       const range = (from: number, span: number, n: number) => [Math.max(0, Math.floor((from - ahead * span) / s)), Math.min(n - 1, Math.floor((from + span * (1 + ahead)) / s))];
@@ -190,11 +194,23 @@ export class GroundTiles {
         const inside = (x + 1) * s > v.x && x * s < v.x + v.w && (y + 1) * s > v.y && y * s < v.y + v.h;
         if (d === depth && inside) this.inView.add(keyOf(d, x, y));
         const key = keyOf(d, x, y), k = this.kept.get(key);
+        asks++;
         if (k) k.asked = asked;
         if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, stale: k !== undefined, far: (inside ? 0 : 1e9) + Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
         // A tile in view not kept is drawn from its nearest kept ancestor till it comes: that one is asked too, so it
         // is not let go first (the view would fall back to a coarser tile, then come back).
         if (!k && inside) this.keepAncestor(d, x, y, asked);
+      }
+    }
+    if (depth < d1) {
+      const d = depth + 1, s = this.squaresOf(d), [nx, ny] = this.across(d), below: { x: number; y: number; far: number }[] = [];
+      const cover = (from: number, span: number, n: number) => [Math.max(0, Math.floor(from / s)), Math.min(n - 1, Math.floor((from + span) / s))];
+      const [x0, x1] = cover(v.x, v.w, nx), [y0, y1] = cover(v.y, v.h, ny);
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) below.push({ x, y, far: Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
+      for (const { x, y, far } of below.sort((a, b) => a.far - b.far).slice(0, Math.max(0, MOST_TILES - asks))) {
+        const key = keyOf(d, x, y), k = this.kept.get(key);
+        if (k) k.asked = asked;
+        if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, stale: k !== undefined, far });
       }
     }
     // Tiles not kept come before those kept stale (which are drawn meanwhile), so a zoom's tiles never wait behind the

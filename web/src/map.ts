@@ -40,7 +40,7 @@ const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
 /** While the view moves (a pan, a pinch, a wheel: the last within `MOVE_REST_MS`), the last picture drawn is shown
  * moved and scaled as the camera did, at each frame (`showMoved`), and nothing heavy is begun on the card: no map drawn
  * anew, no ground's tile nor layer of its detail sent; once the view rests the map is drawn anew. */
-const MOVE_REST_MS = 200;
+const MOVE_REST_MS = 120;
 /** The pictures of the area about a view at rest (`MapView.rings`) are these many times its width, each at the screen's
  * pixels: so a view that moves out meets one at most three times softer than the last, and the whole map's picture (one
  * colour where the view is close) only once it is far. They are drawn once the view has rested `AROUND_REST_MS`, the
