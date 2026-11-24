@@ -5,7 +5,7 @@
 //! runoff's pass, from its lowest sample up.
 
 use super::{level::level_of, scratch::Holding, Scratch};
-use crate::space::{network::NONE, terrain::SAMPLE_DEPTH};
+use crate::space::{network::NONE, samples::Samples, terrain::SAMPLE_DEPTH};
 use crate::World;
 use std::borrow::Cow;
 
@@ -349,3 +349,20 @@ pub(super) fn build(w: &World, s: &mut Scratch) {
     w.terrain_samples();
     s.curves = crate::par::map_n(w.map.leaves().len(), crate::par::UNCOUNTED, |i| of(w, i));
 }
+
+/// The curves found again on the terrain's samples now from those of the samples `old` (`Scratch::curves`): a cell's
+/// curve reads its own samples' heights and ponds alone, so it is found again only where one of those differs, to the
+/// last bit (all of them where there are none).
+pub(super) fn update(w: &World, s: &mut Scratch, old: &Samples) {
+    let new = w.terrain_samples();
+    if stale(w, s) || old.h.len() != new.h.len() {
+        return build(w, s);
+    }
+    for (i, l) in w.map.leaves().iter().enumerate() {
+        let moved = l.split(SAMPLE_DEPTH.max(l.depth)).map(|f| new.index(&f)).any(|k| old.h[k].to_bits() != new.h[k].to_bits() || old.pond[k] != new.pond[k]);
+        if moved {
+            s.curves[i] = of(w, i);
+        }
+    }
+}
+

@@ -161,3 +161,27 @@ fn a_basin_holds_its_liquid() {
     assert!((later - now).abs() < 0.2 * full, "after a month it stands {later} m deep, from {now}");
     books.assert_kept(&w, 1e-9);
 }
+
+/// After a stroke Flow finds each cell's ground by height again only where its samples moved (`flow::curve::update`):
+/// every cell's land, its ground under the liquid and its levels are those of the same world whose Flow finds them all
+/// anew (its saved state kept, its caches dropped, as a snapshot read again holds it), to the last bit.
+#[test]
+fn the_ground_by_height_found_again_is_the_ground_found_anew() {
+    let mut w = small_world();
+    let i = inland(&w);
+    let stroke = |w: &mut World, height: f64| {
+        assert!(shape(w, i, height));
+        w.settle();
+    };
+    stroke(&mut w, 20.0);
+    stroke(&mut w, -10.0);
+    let mut anew = w.clone();
+    anew.scratch = bincode::deserialize(&bincode::serialize(&w.scratch).expect("saved")).expect("read");
+    pcore::contract::surroundings(&mut w);
+    pcore::contract::surroundings(&mut anew);
+    let cells: Vec<usize> = (0..w.mesh.cells().n()).collect();
+    let bits = |v: &[f64]| v.iter().map(|x| x.to_bits()).collect::<Vec<u64>>();
+    let shores = |w: &World| pcore::flow::shores(w, &cells).expect("Flow's state").into_iter().flat_map(|(land, parts)| std::iter::once(land).chain(parts)).collect::<Vec<f64>>();
+    let levels = |w: &World| pcore::flow::levels(w, &cells).expect("Flow's state").into_iter().flatten().collect::<Vec<f64>>();
+    assert!(bits(&shores(&w)) == bits(&shores(&anew)) && bits(&levels(&w)) == bits(&levels(&anew)), "the cells' ground by height");
+}
