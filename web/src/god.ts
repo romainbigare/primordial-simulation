@@ -124,10 +124,9 @@ export class God {
       return b;
     }));
     const u = this.undoButton = document.createElement('button');
-    u.className = 'ib undo'; u.innerHTML = iconSvg('undo'); u.title = 'Undo the last stroke (Ctrl+Z)';
+    u.className = 'ib sm undo'; u.innerHTML = iconSvg('undo'); u.title = 'Undo the last stroke (Ctrl+Z)';
     u.setAttribute('aria-label', 'Undo');
     u.onclick = () => this.undo();
-    page.strip.append(u);
     this.show();
   }
 
@@ -327,9 +326,9 @@ export class God {
     lines.forEach((l, k) => ctx.fillText(l, bx + 8, by + 18 + 16 * k));
   }
 
-  /** The strip's buttons (the tool on pressed, a tool that cannot act here greyed with the reason), and the card: the
-   * tool's name, the brush's radius, its choices, and a line of how to use it or why it cannot act here; the undo
-   * button, where a stroke can be undone. */
+  /** The strip's buttons (the tool on pressed, a tool that cannot act here greyed with the reason), and the card: in
+   * its head the tool's name, the brush's radius and the undo button (greyed where no stroke can be undone); the
+   * radius's slider, the tool's choices, and a line of how to use it or why it cannot act here. */
   private show(): void {
     const t = this.tool;
     this.undoButton.disabled = !this.undoable;
@@ -342,13 +341,13 @@ export class God {
     const el = this.page.card;
     el.replaceChildren();
     const line = (cls: string, text: string) => { const d = document.createElement('p'); d.className = cls; d.textContent = text; el.append(d); };
-    if (!t) { line('hint', 'Pick a tool, then drag on the map.'); return; }
     const head = document.createElement('div'), size = document.createElement('b');
     head.className = 'top';
     head.innerHTML = '<h2></h2>';
-    head.querySelector('h2')!.textContent = t.label;
-    head.append(size);
+    head.querySelector('h2')!.textContent = t?.label ?? 'God mode';
+    head.append(size, this.undoButton);
     el.append(head);
+    if (!t) { line('hint', 'Pick a tool, then drag on the map.'); return; }
     this.slider(size);
     if (t.choices) el.append(t.choices(() => this.show()));
     const why = t.why(this.probe);
