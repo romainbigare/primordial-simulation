@@ -42,6 +42,25 @@ pub(super) fn changed(old: &Read, new: &Read) -> Vec<bool> {
         .collect()
 }
 
+/// The samples round a sample that its piece of channel reads (`bends::Bends::update`): its reach, `REACH_SAMPLES` steps
+/// up its main way and down its own, and a sample across them (`Reaches::rise_across`), each step a sample at most.
+pub(super) const BENDS_READ: i64 = REACH_SAMPLES as i64 + 1;
+
+/// `marked` with every sample of `s` within `by` samples of a marked one, row and column, marked too.
+pub(super) fn near(s: &Samples, marked: &[bool], by: i64) -> Vec<bool> {
+    let mut out = marked.to_vec();
+    let (across, down) = (s.across as i64, s.down as i64);
+    for k in (0..marked.len()).filter(|&k| marked[k]) {
+        let (x, y) = ((k % s.across) as i64, (k / s.across) as i64);
+        for j in (y - by).max(0)..=(y + by).min(down - 1) {
+            for i in (x - by).max(0)..=(x + by).min(across - 1) {
+                out[(j * across + i) as usize] = true;
+            }
+        }
+    }
+    out
+}
+
 /// `marked` with what reads a marked sample of `s` marked too: the samples `REACH_SAMPLES` up its main way and down its
 /// own (the fall of a reach, `bends::Reaches::fall`), and every sample down the way from those (a line's pieces start
 /// where the one above ended).

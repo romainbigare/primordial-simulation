@@ -26,14 +26,21 @@ pub fn build(w: &mut World) {
         lay(w, s, &old);
         w.relief.built = w.relief.laid.clone();
         w.relief.builds += 1;
+        w.relief.offset = offsets(w);
         anew(w, s, &old);
     });
     after(w);
 }
 
 /// The samples built anew after edits shaped the relief (`Relief::due`, `World::settle`): as a build, but no lobes are
-/// laid and no build of the years is counted (`Relief::builds`); only the samples' version moves.
+/// laid, no build of the years is counted (`Relief::builds`; only the samples' version moves) and the cells' offsets stay
+/// those of the last build (found here only where there was none): an edit moves a cell's ground and its samples' mean
+/// by the same volume, so its offset stays, to within the rounding of the areas, and the samples move only where edits
+/// shaped them.
 pub fn reshape(w: &mut World) {
+    if w.relief.offset.len() != w.mesh.cells().n() {
+        w.relief.offset = offsets(w);
+    }
     with(w, true, |w, s| {
         let old = w.terrain_samples();
         anew(w, s, &old);
@@ -67,11 +74,10 @@ fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
     w.discharge = q.into_iter().map(|v| v as f32).collect();
 }
 
-/// The samples of a new version of the relief (`Relief::version`) over the cells' grounds now (`offsets`), and with
+/// The samples of a new version of the relief (`Relief::version`) with the cells' offsets it holds, and with
 /// them each cell's ground as liquid stands on it, the bodies, what each cell's parts of them hold (`held_by_pond`; the
 /// samples `old` before) and the state of the ground nodes.
 fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
-    w.relief.offset = offsets(w);
     w.relief.version += 1;
     w.relief.due = false;
     let held = std::mem::take(&mut s.state.held);

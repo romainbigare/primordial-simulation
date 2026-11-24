@@ -242,8 +242,11 @@ of the floor taking their fill first. **Known limit:** the samples' loose
 ground and the make of their bed (what the tiles and the textures read) do not follow an edit; the cell's soil keeps
 its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
 (`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
-it as a build builds them, without the lobes and without counting a build of the years (`flow::build::reshape`; a new
-version of the relief, `Relief::version`, by which built samples are kept), and what runs through each sample (its mean
+it as a build builds them, without the lobes, without counting a build of the years and with the cells' offsets of the
+last build (`flow::build::reshape`: an edit moves a cell's ground and its samples' mean by one volume, so its offset
+stays to within the rounding of the areas, and the samples move only where edits shaped them; a new version of the
+relief, `Relief::version`, by which built samples are kept, and how the offsets raise the samples kept by the offsets,
+`relief::Lift`), and what runs through each sample (its mean
 over about a year, `World::discharge`) runs down the new ways: what each sample adds of its own (what runs through it
 less what runs into it down the old ways) is summed down the new, a sample a pond now holds keeping what reaches it
 (`build::reroute`), so a river runs round a raised hill at once; the passes of a month's start find the
