@@ -62,8 +62,9 @@ interface Kept { depth: number; x: number; y: number; layer: number; came: numbe
  * `ground_version`). */
 export interface Built { relief: Uint8Array; version: number }
 /** What edits moved the ground since the samples of a version (wasm/src/lib.rs `preview`): the window of the terrain's
- * samples that moved (west column, north row, width, height) and how far each of its samples moved, m, row by row. */
-export interface Preview { window: [number, number, number, number]; dh: Float32Array }
+ * samples that moved (west column, north row, width, height), that version (`over`), and how far each of its samples
+ * moved, m, row by row. */
+export interface Preview { window: [number, number, number, number]; over: number; dh: Float32Array }
 
 export class GroundTiles {
   private workers: { worker: Worker; ready: boolean; making: number; memory: number }[] = [];
@@ -270,16 +271,19 @@ export class GroundTiles {
   /** Whether a tile still fades in at `now` (performance.now, ms). */
   fading(now: number): boolean { return this.fades && now - this.start - this.lastCame < TILE_FADE_MS; }
 
-  /** Ask the workers for the next tiles of the queue, up to `MAKING` each at once (the least busy first), while a layer
-   * is free or can be freed. */
+  /** Ask the workers for the next tiles of the queue, up to `MAKING` each at once (the least busy first): a tile kept
+   * stale comes again on its own layer; another, while a layer is free or can be freed. */
   private next(): void {
+    const known = (q: { depth: number; x: number; y: number }) => { const key = keyOf(q.depth, q.x, q.y); return (this.kept.has(key) && !this.stale.has(key)) || this.making.has(key); };
     for (;;) {
       const w = this.workers.filter(v => v.ready && v.making < MAKING).sort((a, b) => a.making - b.making)[0];
-      if (!w || !(this.free.length > this.making.size || this.oldest() !== null)) return;
-      let t = this.queue.shift();
-      const known = (q: { depth: number; x: number; y: number }) => { const key = keyOf(q.depth, q.x, q.y); return (this.kept.has(key) && !this.stale.has(key)) || this.making.has(key); };
-      while (t && known(t)) t = this.queue.shift();
-      if (!t) return;
+      if (!w) return;
+      this.queue = this.queue.filter(q => !known(q));
+      const newMaking = [...this.making].filter(key => !this.kept.has(key)).length;
+      const room = this.free.length > newMaking || this.oldest() !== null;
+      const k = this.queue.findIndex(q => room || this.kept.has(keyOf(q.depth, q.x, q.y)));
+      if (k < 0) return;
+      const [t] = this.queue.splice(k, 1);
       this.making.add(keyOf(t.depth, t.x, t.y));
       w.making++;
       w.worker.postMessage({ cmd: 'tile', depth: t.depth, x: t.x, y: t.y, gen: this.gen });

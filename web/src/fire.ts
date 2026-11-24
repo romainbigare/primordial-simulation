@@ -7,7 +7,6 @@ import { Draw, Gpu, Texture, Uniforms, notMade } from './gpu';
 import { half } from './canopy';
 import { groundDetail } from './detail';
 import type { MapLook } from './field-window';
-import { DAY_S } from './land';
 
 /** What fire did on each square, a number a square (the core's layers, `LAYERS`). */
 export interface FirePlanes {
@@ -44,10 +43,9 @@ const TIME_WRAP_S = 600;
 /** Of the uniforms of fire.wgsl (`Fire`), four-wide members. */
 const FIRE_VEC4S = 4;
 
-/** A fire front of god mode is played on the map over this time for its longest run, ms, which the core bounds at this
- * many days after the strike (core/src/flame `now`); each square burns with flames over `FRONT_GLOW_MS` from when the
- * front reaches it. */
-const FRONT_MS = 2500, FRONT_DAYS = 4, FRONT_GLOW_MS = 1200;
+/** A fire front of god mode is played on the map over this time for the longest the core lets a front run (its
+ * `front_life`); each square burns with flames over `FRONT_GLOW_MS` from when the front reaches it. */
+const FRONT_MS = 2500, FRONT_GLOW_MS = 1200;
 /** Frames a second while a front plays. */
 const FRONT_FPS = 20;
 /** The flames' length shown on a square the front reaches where the core keeps none, m. */
@@ -77,9 +75,9 @@ export class Fire {
   /** The planes last put, as `put` took them. */
   private last: [number, number, number, FirePlanes | null, number] = [0, 0, 1, null, 0];
   /** A fire front played on the map while the world stands still: when it reaches each square, s after its strike
-   * (NaN: it does not), when it began to play and was last put (performance.now, ms), and whether it has played out
-   * (its scars stay shown till the world steps, `still`); null: none. */
-  private front: { at: Float32Array; begun: number; put: number; over: boolean } | null = null;
+   * (NaN: it does not), the longest a front runs, s, when it began to play and was last put (performance.now, ms), and
+   * whether it has played out (its scars stay shown till the world steps, `still`); null: none. */
+  private front: { at: Float32Array; life: number; begun: number; put: number; over: boolean } | null = null;
 
   /** What fire did on world `w`'s squares, from its layers (none on a world whose tape has no fire). */
   set(w: World | null): void {
@@ -97,7 +95,7 @@ export class Fire {
   put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number): void {
     this.last = [w, h, cellM, p, never];
     const f = this.front;
-    if (f && p && f.at.length === w * h) { f.put = performance.now(); p = frontAt(p, f.at, never, (f.put - f.begun) / FRONT_MS * FRONT_DAYS * DAY_S); }
+    if (f && p && f.at.length === w * h) { f.put = performance.now(); p = frontAt(p, f.at, never, ((f.put - f.begun) / FRONT_MS) * f.life, (FRONT_GLOW_MS / FRONT_MS) * f.life); }
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
     // (Saturated ground does not burn: a scar lies on the dry land alone.)
     const n = w * h, scar = (i: number) => (!p ? 0 : Math.min(p.age[i] < never ? 1 : p.burnt[i], 1 - p.wet[i]));
@@ -116,9 +114,9 @@ export class Fire {
   }
 
   /** Play the fire front that reaches each square `at` s after its strike (NaN: none): each square burns as it comes,
-   * the run of `FRONT_DAYS` over `FRONT_MS`. */
-  play(at: Float32Array): void {
-    this.front = { at, begun: performance.now(), put: 0, over: false };
+   * the longest a front runs (`life`, s: the core's `front_life`) over `FRONT_MS`. */
+  play(at: Float32Array, life: number): void {
+    this.front = { at, life, begun: performance.now(), put: 0, over: false };
     this.put(...this.last);
   }
 
@@ -205,13 +203,13 @@ function smokeBox(p: FirePlanes, w: number, h: number, cellM: number): Box | nul
   return b && [Math.max(Math.floor(b[0]), 0), Math.max(Math.floor(b[1]), 0), Math.min(Math.ceil(b[2]), w), Math.min(Math.ceil(b[3]), h)];
 }
 
-/** The planes `p` as a front that reaches each square `at` s after its strike stands at `t` s. The flames shown are
+/** The planes `p` as a front that reaches each square `at` s after its strike stands at `t` s, each square burning
+ * over `glow` s from when the front reaches it. The flames shown are
  * the front's alone, and their smoke: the core keeps the flames of the month last stepped while the world stands still,
- * which burn no more. A square the front has not reached shows no fire; one it reached less than `FRONT_GLOW_MS` ago burns whole,
+ * which burn no more. A square the front has not reached shows no fire; one it reached less than `glow` ago burns whole,
  * its flames along the edge of the burnt squares (flames.wgsl); one it passed shows the scar the core says. */
-function frontAt(p: FirePlanes, at: Float32Array, never: number, t: number): FirePlanes {
+function frontAt(p: FirePlanes, at: Float32Array, never: number, t: number, glow: number): FirePlanes {
   const q = { ...p, burnt: p.burnt.slice(), age: p.age.slice(), flame: new Float32Array(p.flame.length), length: p.length.slice(), ash: p.ash.slice(), air: new Float32Array(p.air.length) };
-  const glow = (FRONT_GLOW_MS / FRONT_MS) * FRONT_DAYS * DAY_S;
   at.forEach((a, i) => {
     if (Number.isNaN(a) || t >= a + glow) return;
     if (t < a) { q.burnt[i] = 0; q.age[i] = never; q.ash[i] = 0; return; }

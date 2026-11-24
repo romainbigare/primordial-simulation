@@ -1,10 +1,11 @@
-// God mode on the live map (handover 11): the player picks a tool on the strip and paints the world with a round
-// brush: while the pointer is down, each cell under the brush is edited once (wasm/src/lib.rs `brush`, the core's
-// `World::edit`), and when it lifts the stroke settles (`settle`: strikes burn at once). The tools themselves are a list
-// (god-tools.ts `godTools`); this is what they share: the strip of their buttons, the card of the tool on (the brush's
-// radius, its choices, what it does or why it cannot), the stroke, a toast of what a stroke did, the question to the
-// core about the place under the cursor (`probe`), and the brush drawn over the map at its true size with the reason
-// beside it where the tool cannot act.
+// God mode on the live map (handover 11): the player picks a tool on the strip and edits the world with a round brush
+// (wasm/src/lib.rs `brush`, the core's `World::edit`): a tool paints as the pointer moves, paints again and again while
+// it is held (the ground, heat), or makes one thing where the press begins (a lake); when the pointer lifts the stroke
+// settles (`settle`: the ground built again, what was heated burns). The tools themselves are a list (god-tools.ts
+// `godTools`); this is what they share: the strip of their buttons and the undo of the last stroke, the card of the
+// tool on (the brush's radius, its choices, what it does or why it cannot), the strokes and the core's answers to them,
+// a toast of what a stroke did, the question to the core about the place under the cursor (`probe`), and the brush
+// drawn over the map at its true size, with the heat it holds and the reason beside it where the tool cannot act.
 import { IconName, iconSvg } from './icons';
 
 /** What the core says of the cell under a place (wasm/src/lib.rs `probe`): the cell, its edges in squares (west, north,
@@ -17,7 +18,7 @@ export interface StartKind { row: number; name: string; kg: number }
  * brush, whether each of its edits was made and the core's reason where not, and whether the kind planted stands
  * grown somewhere (`grown`; else it is planted young); of heat, each cell under it, its share, how much of the heat
  * that lights its remains it holds (`progress`, 0 to 1) and why none would light; whether any cell changed. (A brush
- * of the ground answers its cells as numbers alone.) */
+ * of the ground, or a lake, answers its cells as numbers alone.) */
 export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[]; changed: boolean; grown?: boolean }
 /** What a stroke's settling did (wasm/src/lib.rs `settle`): whether the ground was built again, and each cell the
  * flames of its strikes reached, and when, s after the strike. */
@@ -39,6 +40,8 @@ export interface GodTool {
   /** What it adds at the brush's centre each second it is held, in its core tool's unit (m of ground, up or down where
    * less than 0; J/m² of heat): it paints again and again while the pointer is down, held still or not. */
   rate?: number;
+  /** The amount it paints once, where the stroke begins (m of a lake's depth): a tool that makes one thing a stroke. */
+  amount?(): number;
   /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
   why(p: Probe | null): string;
   /** The core's reason a cell was not edited (`Brushed`), in plain words. */
@@ -98,6 +101,11 @@ export class God {
   /** Whether a question is out, and when the last was asked (ms). */
   private asking = false;
   private asked = 0;
+  /** The timer of the question waiting for `PROBE_MS` to pass (0: none). */
+  private askTimer = 0;
+  /** The strokes ended whose settling the core has not answered yet, oldest first: the core answers in the order it was
+   * asked, so the answers to their paints and their settling come before those of the stroke under way. */
+  private ended: Stroke[] = [];
   /** The map's corner and the pixels a square takes, as last drawn. */
   private drawnAt: [number, number, number] | null = null;
   /** When the toast of the last stroke goes. */
@@ -116,19 +124,29 @@ export class God {
       return b;
     }));
     const u = this.undoButton = document.createElement('button');
-    u.className = 'ib undo'; u.innerHTML = iconSvg('undo'); u.title = 'Undo the last stroke (Ctrl+Z)';
+    u.className = 'ib sm undo'; u.innerHTML = iconSvg('undo'); u.title = 'Undo the last stroke (Ctrl+Z)';
     u.setAttribute('aria-label', 'Undo');
     u.onclick = () => this.undo();
-    page.strip.append(u);
     this.show();
   }
 
   /** Put the tool away and forget the place and the stroke to undo: a new world, or god mode closed. */
-  reset(): void { this.stroke = null; this.probe = null; this.asking = false; this.undoable = false; this.page.toast.classList.remove('on'); this.pick(null); }
+  reset(): void {
+    // (A stroke held is ended: its timer stops, and the core is told, so its next stroke is a new one.)
+    if (this.stroke) { clearInterval(this.stroke.held); this.editor()?.settle(); }
+    this.stroke = null; this.ended = []; this.probe = null; this.asking = false; this.undoable = false;
+    this.page.toast.classList.remove('on'); this.pick(null);
+  }
+
+  /** Whether a tool is on. */
+  toolOn(): boolean { return this.tool !== null; }
+
+  /** Whether a stroke is under way or its settling still to come: the world does not play meanwhile. */
+  busy(): boolean { return this.stroke !== null || this.ended.length > 0; }
 
   /** Undo the last stroke, where there is one and no stroke is under way. */
   undo(): void {
-    if (!this.undoable || this.stroke) return;
+    if (!this.undoable || this.busy()) return;
     this.undoable = false;
     this.editor()?.undo();
     this.show();
@@ -167,7 +185,7 @@ export class God {
   private ask(): void {
     if (!this.at || this.asking) return;
     const wait = this.asked + PROBE_MS - performance.now();
-    if (wait > 0) { setTimeout(() => this.ask(), wait); return; }
+    if (wait > 0) { this.askTimer ||= window.setTimeout(() => { this.askTimer = 0; this.ask(); }, wait); return; }
     this.asking = true; this.asked = performance.now();
     this.editor()?.probe(...this.at, p => this.probed(p));
   }
@@ -197,7 +215,7 @@ export class God {
     const st = this.stroke;
     if (!st) return;
     st.now = [x, y];
-    if (st.tool.rate) return;
+    if (st.tool.rate || st.tool.amount) return;
     const [lx, ly, lt] = st.last, far = Math.hypot(x - lx, y - ly) >= (PAINT_MOVE * this.radius) / this.page.squareM();
     if (far && performance.now() - lt >= PAINT_MS) this.paint();
   }
@@ -207,28 +225,31 @@ export class God {
     const st = this.stroke;
     if (!st) return;
     clearInterval(st.held);
-    if (st.tool.rate || st.now[0] !== st.last[0] || st.now[1] !== st.last[1]) this.paint();
+    if (st.tool.rate || (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]))) this.paint();
     this.editor()?.settle();
+    this.ended.push(st);
+    this.stroke = null;
   }
 
-  /** Paint with the stroke's tool where its brush is now; a tool with a rate by what the time since its last paint
-   * adds. */
+  /** Paint with the stroke's tool where its brush is now: by its amount, or for a tool with a rate by what the time
+   * since its last paint adds. */
   private paint(): void {
-    const st = this.stroke!, [x, y] = st.now, now = performance.now(), amount = ((st.tool.rate ?? 0) * (now - st.last[2])) / 1000;
+    const st = this.stroke!, [x, y] = st.now, now = performance.now(), amount = st.tool.amount ? st.tool.amount() : ((st.tool.rate ?? 0) * (now - st.last[2])) / 1000;
     st.last = [x, y, now];
     st.waiting = true;
     this.editor()?.brush(st.tool.code, x, y, this.radius, amount, st.tool.row());
   }
 
-  /** The core's answer to a paint: its cells counted to the stroke; the reason, where it edited none of them. */
+  /** The core's answer to a paint: its cells counted to its stroke; the reason, where it edited none of them. */
   brushed(r: Brushed): void {
-    const st = this.stroke;
+    const st = this.ended[0] ?? this.stroke;
     if (!st) return;
     st.waiting = false;
     if (r.grown === false) st.grown = false;
     const heat = r.cells.filter(c => c.progress !== undefined);
     if (heat.length) this.heated(st, heat);
-    else if (st.tool.rate) st.done += +r.changed;
+    // (The ground's tools and a lake answer their cells as numbers.)
+    else if (typeof r.cells[0] !== 'object') st.done += +r.changed;
     else {
       const whys = new Map<string, number>();
       for (const c of r.cells) {
@@ -254,8 +275,7 @@ export class God {
 
   /** The core's answer to the stroke's end: what it did, in the toast; the cells it burnt, to the page. */
   settled(r: Settled): void {
-    const st = this.stroke;
-    this.stroke = null;
+    const st = this.ended.shift();
     if (!st) return;
     this.undoable = true;
     this.show();
@@ -306,9 +326,9 @@ export class God {
     lines.forEach((l, k) => ctx.fillText(l, bx + 8, by + 18 + 16 * k));
   }
 
-  /** The strip's buttons (the tool on pressed, a tool that cannot act here greyed with the reason), and the card: the
-   * tool's name, the brush's radius, its choices, and a line of how to use it or why it cannot act here; the undo
-   * button, where a stroke can be undone. */
+  /** The strip's buttons (the tool on pressed, a tool that cannot act here greyed with the reason), and the card: in
+   * its head the tool's name, the brush's radius and the undo button (greyed where no stroke can be undone); the
+   * radius's slider, the tool's choices, and a line of how to use it or why it cannot act here. */
   private show(): void {
     const t = this.tool;
     this.undoButton.disabled = !this.undoable;
@@ -321,13 +341,13 @@ export class God {
     const el = this.page.card;
     el.replaceChildren();
     const line = (cls: string, text: string) => { const d = document.createElement('p'); d.className = cls; d.textContent = text; el.append(d); };
-    if (!t) { line('hint', 'Pick a tool, then drag on the map.'); return; }
     const head = document.createElement('div'), size = document.createElement('b');
     head.className = 'top';
     head.innerHTML = '<h2></h2>';
-    head.querySelector('h2')!.textContent = t.label;
-    head.append(size);
+    head.querySelector('h2')!.textContent = t?.label ?? 'God mode';
+    head.append(size, this.undoButton);
     el.append(head);
+    if (!t) { line('hint', 'Pick a tool, then drag on the map.'); return; }
     this.slider(size);
     if (t.choices) el.append(t.choices(() => this.show()));
     const why = t.why(this.probe);

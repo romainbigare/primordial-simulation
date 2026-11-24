@@ -39,7 +39,7 @@ export class Live {
   private unanswered = 0;
   private onHide = () => { if (document.hidden) this.answer(); };
 
-  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean, edited: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; brushed: (r: Brushed) => void; settled: (r: Settled) => void; undone: (done: boolean) => void; preview: (p: Preview) => void }) {
+  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean, edited: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; brushed: (r: Brushed) => void; settled: (r: Settled) => void; undone: (done: boolean) => void; preview: (p: Preview) => void; relief: () => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message || 'The world\'s worker failed.');
@@ -52,6 +52,8 @@ export class Live {
       // to `groundShown`.)
       if (m.preview) on.preview(m.preview);
       if (m.kind === 'preview') return;
+      // A stroke's relief, before the world settles (`earlyRelief`): the ground is made again meanwhile.
+      if (m.kind === 'relief') { this.relief = { relief: m.relief!, version: m.reliefVersion }; this.version = m.reliefVersion; return on.relief(); }
       if (m.kind === 'brushed') return on.brushed(JSON.parse(m.text) as Brushed);
       if (m.kind === 'settled') return on.settled(JSON.parse(m.text) as Settled);
       if (m.kind === 'undone') return on.undone((JSON.parse(m.text) as { done: boolean }).done);
@@ -82,6 +84,7 @@ export class Live {
       try { timed('world frames', () => { on.things(m.things); on.frame(m.stats, !same || m.edited, m.edited); }); } finally { this.shown(); }
     };
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);
+    this.worker.postMessage({ cmd: 'earlyRelief', on: true });
     document.addEventListener('visibilitychange', this.onHide);
   }
 
