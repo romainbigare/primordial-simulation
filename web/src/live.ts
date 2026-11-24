@@ -35,7 +35,7 @@ export class Live {
   private unanswered = 0;
   private onHide = () => { if (document.hidden) this.answer(); };
 
-  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; brushed: (r: Brushed) => void; settled: (r: Settled) => void }) {
+  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean, edited: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; brushed: (r: Brushed) => void; settled: (r: Settled) => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message || 'The world\'s worker failed.');
@@ -69,7 +69,7 @@ export class Live {
       this.table = m.table;
       this.world.meta.frames[0] = { day: m.day, year: m.year };
       this.stats = m.stats;
-      try { timed('world frames', () => { on.things(m.things); on.frame(m.stats, !same || m.edited); }); } finally { this.shown(); }
+      try { timed('world frames', () => { on.things(m.things); on.frame(m.stats, !same || m.edited, m.edited); }); } finally { this.shown(); }
     };
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);
     document.addEventListener('visibilitychange', this.onHide);
