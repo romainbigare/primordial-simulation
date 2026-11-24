@@ -276,6 +276,8 @@ export class GroundTiles {
 
   /** The tiles in view at its own depth still to come. */
   toCome(): number { let n = 0; for (const k of this.inView) if (!this.kept.has(k)) n++; return n; }
+  /** The tiles in view at its own depth, come or not. */
+  inViewCount(): number { return this.inView.size; }
   /** The tiles kept. */
   count(): number { return this.kept.size; }
   /** The bytes of each worker's core's memory, as it last said. */

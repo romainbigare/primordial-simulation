@@ -8,7 +8,7 @@ import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
 import { Box, FIRE_FPS, Fire } from './fire';
-import { detailHeld, detailLost, detailSeen, sendDetail } from './detail';
+import { detailComing, detailHeld, detailLost, detailSeen, sendDetail } from './detail';
 import { spend, timed } from './cost';
 import { Camera, Gesture } from './gesture';
 
@@ -549,6 +549,17 @@ export class MapView {
       await new Promise(go => setTimeout(go, SHOWN_POLL_MS));
     }
   }
+
+  /** Whether the picture is whole: no ground tile in view and no detail still to come, no tile fading in, no frame due,
+   * drawn, timed or being made sharp (the loading screen lifts, and the picture tool takes its picture, only then). */
+  settled(): boolean {
+    const tiles = this.land?.tiles;
+    if (tiles && (tiles.toCome() > 0 || tiles.fading(performance.now()))) return false;
+    return !detailComing() && !this.gpuDue && !this.raf && !this.timing && !this.resting && !this.sharpening;
+  }
+
+  /** Whether a picture was drawn whole with every program it draws with (none still being made). */
+  programsMade(): boolean { return this.last !== null && !this.wentWithout; }
 
   /** Start drawing the map at the screen's own pixels, in tiles each of about `SHARPEN_MS` on the GPU, into a texture
    * out of sight, shown once whole: the screen never shows a picture sharp in part (a tile drawn sharp, then the

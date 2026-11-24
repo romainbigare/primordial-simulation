@@ -21,6 +21,7 @@ import { Inspector, LAYER_GROUPS, layerLabel } from './inspect';
 import { Numbers } from './numbers';
 import { fillForm, readForm, listenForm } from './world-form';
 import { showErrors } from './errors';
+import { Boot, BootStep } from './boot';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 /** The layers of the soil's grain, shown with the texture classes' legend (soil.ts). */
@@ -34,6 +35,23 @@ const MONTHS = 12;
 const PHONE = matchMedia('(max-width: 640px)');
 /** Time the view rests before the worker is asked for the things of the window in view, ms. */
 const ASK_MS = 150;
+/** The steps of the loading screen (boot.ts): their words and their shares of its bar. */
+const BOOT_STEPS: Record<string, BootStep> = {
+  file: { label: 'Download the world', weight: 15 }, core: { label: 'Download the core', weight: 15 },
+  start: { label: 'Start the simulation', weight: 5 }, land: { label: 'Shape the land', weight: 25 },
+  open: { label: 'Open the saved world', weight: 15 }, read: { label: 'Read the world', weight: 10 },
+  ground: { label: 'Build the ground', weight: 25 }, plants: { label: 'Grow the plants', weight: 10 },
+  picture: { label: 'Draw the first picture', weight: 10 },
+};
+/** The time the steps that say nothing of their progress are expected to take, ms: the core downloaded where its
+ * length is not known, the core started, a world made (and the first time, the air of the planet around it), a saved
+ * world opened, the ground's workers ready, the map's programs made and its picture drawn whole. */
+const BOOT_MS = { core: 3000, start: 1500, land: 2000, air: 5000, open: 3000, rock: 8000, plants: 3000, picture: 2000 };
+/** Of the step that builds the ground, the share its workers take to be ready (the rest: the tiles in view). */
+const ROCK_SHARE = 0.3;
+/** The loading screen lifts once the picture stays whole this long, ms; or this long after the map began to draw it,
+ * whatever is left (a card too slow to draw it whole at the screen's pixels never keeps the page hidden). */
+const SETTLED_MS = 400, PICTURE_MOST_MS = 20000;
 
 let world: World | null = null;
 let live: Live | null = null;
@@ -69,7 +87,7 @@ map.paint = { on: () => godOn() && god.toolOn(), start: (x, y) => live !== null 
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
 let drawing: HeldGpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };
-map.ready.then(g => { drawing = g; if (!g) say('This browser has no WebGL2, so the map cannot be drawn.'); });
+map.ready.then(g => { drawing = g; if (!g) fail('This browser has no WebGL2, so the map cannot be drawn.'); });
 slots.listen($<HTMLCanvasElement>('cv'), () => inspect());
 const inspector = new Inspector($('inspect-card'), $('inspect'), $('texture'), map, slots);
 function inspect(): void { inspector.show(world, frame); }
@@ -80,13 +98,44 @@ function showStats(s: Stats): void {
   numbers.show(s, live && m ? { meta: m, playing, speed, land, drawing, drawnAt: map.drawnAt } : null);
 }
 const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(world.meta, year)));
+/** The loading screen, over the page till the map first stands whole, and when the map began to draw the picture and
+ * since when it is whole, ms (NaN: not yet). */
+const boot = new Boot($('boot'), watchBoot);
+let pictureFrom = NaN, settledFrom = NaN;
+/** Plan the loading screen's steps. */
+const bootPlan = (...keys: string[]) => boot.plan(keys.map(k => [k, BOOT_STEPS[k]]));
+/** Tell step `key` of the loading screen the bytes of a download come. */
+const bootBytes = (key: string) => (bytes: number, all: number) => {
+  const mb = (b: number) => (b / 1e6).toFixed(1);
+  if (all > 0) boot.at(key, bytes / all, `${mb(bytes)} of ${mb(all)} MB`);
+  else boot.wait(key, BOOT_MS.core, `${mb(bytes)} MB`);
+};
+/** The loading screen's steps once the world came, read at each of its frames: the ground's tiles in view made, the
+ * plants drawn with all their programs, then the picture whole for `SETTLED_MS`. */
+function watchBoot(): void {
+  if (!world || !drawing) return;
+  const now = performance.now(), tiles = land?.tiles;
+  if (tiles && !tiles.rock) return boot.wait('ground', BOOT_MS.rock, '', ROCK_SHARE);
+  if (tiles && tiles.toCome() > 0) {
+    const n = tiles.inViewCount(), made = n - tiles.toCome();
+    return boot.at('ground', ROCK_SHARE + ((1 - ROCK_SHARE) * made) / n, `${made} of ${n} tiles`);
+  }
+  if (boot.has('plants') && !map.programsMade()) return boot.wait('plants', BOOT_MS.plants);
+  boot.plantsDrawn();
+  if (Number.isNaN(pictureFrom)) pictureFrom = now;
+  if (now - pictureFrom > PICTURE_MOST_MS) return boot.end();
+  if (!map.settled()) { settledFrom = NaN; return boot.wait('picture', BOOT_MS.picture); }
+  if (Number.isNaN(settledFrom)) settledFrom = now;
+  if (now - settledFrom >= SETTLED_MS) boot.end();
+}
 
 // ---- loading
 async function load(buf: ArrayBuffer): Promise<void> {
   let next: World;
   try {
     next = parse(await gunzip(buf));
-  } catch (e) { return say(String(e instanceof Error ? e.message : e)); }
+  } catch (e) { return fail(String(e instanceof Error ? e.message : e)); }
+  boot.at('read', 1);
   live?.stop(); live = null;
   land = vegetation.land = null; map.setLand(null);
   world = next;
@@ -94,6 +143,8 @@ async function load(buf: ArrayBuffer): Promise<void> {
   setup(world);
 }
 const say = (t: string) => { $('msg').textContent = t; $('msg').hidden = !t; };
+/** Say what went wrong, with the loading screen lifted at once so it is read. */
+const fail = (t: string) => { say(t); boot.end(true); };
 showErrors($('errors'));
 
 /** The live world or a tape: what only one of them has is shown, and the speeds are its own. */
@@ -109,10 +160,12 @@ function setMode(isLive: boolean): void {
 function setup(w: World): void {
   const m = w.meta;
   say('');
-  // A new live world plays at once, before the page is set up for it and draws it, so a failure there does not hold it;
-  // a saved one opens paused at its date, to be looked at.
+  // A new live world plays once the loading screen lifts (at once after the first), so it is seen from its start; the
+  // screen lifts once the map draws (`PICTURE_MOST_MS` at most), and at once on a failure (`fail`). A saved one
+  // opens paused at its date, to be looked at.
   playing = false; layer = null;
-  if (live && !saved) togglePlay();
+  if (live && !saved) { const l = live; boot.lifted.then(() => { if (live === l && !playing) togglePlay(); }); }
+  if (boot.up) boot.world(w);
   inspector.newWorld(m.w * m.h);
   map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
   $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ...(m.globe ? [] : [['band', `${fmt(m.lat_south)}° to ${fmt(m.lat_north)}°`]]), ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
@@ -289,6 +342,7 @@ $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
 addEventListener('keydown', e => {
+  if (boot.up) return; // (the page under the loading screen is not yet to be used)
   const tag = (e.target as HTMLElement).tagName;
   if ((e.target as HTMLInputElement).type === 'search') return; // typing in a search (charts, layers)
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && tag !== 'INPUT') { e.preventDefault(); god.undo(); }
@@ -307,7 +361,7 @@ $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"
 async function startLive(from: ArrayBuffer | null): Promise<void> {
   // (Asked of the server each time, never from the browser's cache: a page of one build on the core of another reads
   // layers the core does not make, and draws nothing.)
-  const wasm = await fetchBytes('ew.wasm', { cache: 'no-cache' });
+  const wasm = await fetchBytes('ew.wasm', { cache: 'no-cache' }, bootBytes('core'));
   coreWasm = wasm.slice(0);
   const q = new URLSearchParams(location.search);
   fillForm(q);
@@ -331,8 +385,9 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     undone: done => { if (live === l) { fire.still(); god.undone(done); } },
     preview: p => { if (live === l && land) { land.preview(p); map.showNow(); } },
     relief: () => { if (live === l) land?.tiles.rebuild(l.takeRelief(), true); },
-    error: text => { playing = false; syncUi(); say(text); },
+    error: text => { playing = false; syncUi(); fail(text); },
   });
+  boot.wait('start', BOOT_MS.start);
   l.drawn = () => map.shown();
   setMode(true);
   say('Making the world…');
@@ -355,7 +410,7 @@ function landOf(w: World): Land | null {
     land?.tell(live);
     groundBusy();
     if (live) showStats(live.stats);
-  }, say);
+  }, fail);
   return new Land(tiles, m.laws, m.samples, live?.version ?? 0);
 }
 /** While the world stands still, its ground in view is being made again from samples built anew. */
@@ -377,7 +432,9 @@ let banded = false;
 function newWorld(): void {
   const { seed, size, band, drawn, variety, soft } = readForm();
   playing = false; saved = null;
-  say(band[0] < band[1] && !banded ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
+  const air = band[0] < band[1] && !banded;
+  say(air ? 'Making the world, and once the air of the planet around it (a few seconds)…' : 'Making the world…');
+  boot.wait('land', air ? BOOT_MS.air : BOOT_MS.land, air ? 'and the air of the planet' : '');
   banded ||= band[0] < band[1];
   live?.newWorld(seed, size, band, drawn, variety, soft);
 }
@@ -385,6 +442,7 @@ function newWorld(): void {
 function openSaved(gz: ArrayBuffer): void {
   playing = false; saved = gz;
   say('Opening the saved world…');
+  boot.wait('open', BOOT_MS.open);
   live?.open(gz.slice(0));
 }
 listenForm(newWorld, openSaved, load);
@@ -393,8 +451,13 @@ requestAnimationFrame(loop);
 const embedded = document.getElementById('world-data')?.textContent?.trim();
 // A tape (`?f=URL`), or the live world: on a saved world (`?world=URL`, a snapshot of `ew run`) or a new one.
 const asked = new URLSearchParams(location.search), url = asked.get('f'), savedUrl = asked.get('world');
-const waiting = () => say('Drop a .ewf.gz file here, or use “Open file”.');
-if (embedded) load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer);
-else if (url) fetchBytes(url).then(load, waiting);
-else if (savedUrl) fetchBytes(savedUrl).then(startLive).catch(e => say(String(e instanceof Error ? e.message : e)));
-else startLive(null).catch(e => say(`${String(e instanceof Error ? e.message : e)}. Drop a .ewf.gz file here, or use “Open file”.`));
+const waiting = () => fail('Drop a .ewf.gz file here, or use “Open file”.');
+if (embedded) { bootPlan('read', 'picture'); load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer); }
+else if (url) { bootPlan('file', 'read', 'picture'); fetchBytes(url, undefined, bootBytes('file')).then(load, waiting); }
+else if (savedUrl) {
+  bootPlan('file', 'core', 'start', 'open', 'ground', 'plants', 'picture');
+  fetchBytes(savedUrl, undefined, bootBytes('file')).then(startLive).catch(e => fail(String(e instanceof Error ? e.message : e)));
+} else {
+  bootPlan('core', 'start', 'land', 'ground', 'plants', 'picture');
+  startLive(null).catch(e => fail(`${String(e instanceof Error ? e.message : e)}. Drop a .ewf.gz file here, or use “Open file”.`));
+}

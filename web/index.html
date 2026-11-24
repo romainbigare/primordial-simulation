@@ -93,6 +93,12 @@
   <button class="ib fit glass" id="fit" data-icon="fit" aria-label="Fit map" title="Fit map (F, or double-click)"></button>
   <div class="errors glass" id="errors" hidden></div>
 </div>
+<!-- The loading screen (boot.ts): over everything till the map first stands whole. -->
+<div id="boot" role="progressbar" aria-label="Loading the world">
+  <canvas></canvas>
+  <div class="name">EMERGENT WORLD</div>
+  <div class="text"><div class="pct">0%</div><div><span class="now">Loading</span><span class="note"></span></div><div class="dots"></div></div>
+</div>
 <div id="tip" class="tip" hidden></div>
 <div id="drop" class="dropzone" hidden>Drop a .ewf.gz file</div>
 <!--JS-->

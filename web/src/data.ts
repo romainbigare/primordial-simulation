@@ -100,17 +100,37 @@ export function fmtYear(y: number): string {
 /** A download the network cut is tried this many times in all, the wait before each try again doubling from
  * `FETCH_WAIT_MS` (a phone's connection drops for a moment; a site being published swaps its files). */
 const FETCH_TRIES = 3, FETCH_WAIT_MS = 1000;
-/** The bytes at `url` (with `init`), tried again where the network cut the download; an error that names the file. */
-export async function fetchBytes(url: string, init?: RequestInit): Promise<ArrayBuffer> {
+/** The bytes at `url` (with `init`), tried again where the network cut the download; an error that names the file.
+ * `got` hears the bytes come so far, and how many there are in all (0: not known), as they come. */
+export async function fetchBytes(url: string, init?: RequestInit, got?: (bytes: number, all: number) => void): Promise<ArrayBuffer> {
   for (let n = 1; ; n++) {
     try {
       const r = await fetch(url, init);
       if (!r.ok) throw new Error(`${url}: ${r.status}`);
-      return await r.arrayBuffer();
+      return got && r.body ? await readCounted(r, got) : await r.arrayBuffer();
     } catch (e) {
       if (e instanceof Error && e.message.startsWith(`${url}: `)) throw e;
       if (n >= FETCH_TRIES) throw new Error(`${url}: ${e instanceof Error ? e.message : e}`);
       await new Promise(go => setTimeout(go, FETCH_WAIT_MS * 2 ** (n - 1)));
     }
   }
+}
+
+/** The body of response `r`, read a piece at a time, each told to `got` (the bytes so far and all of them). A body sent
+ * compressed says the length of its compressed bytes, not of those read: its length is not known. */
+async function readCounted(r: Response, got: (bytes: number, all: number) => void): Promise<ArrayBuffer> {
+  const all = r.headers.get('content-encoding') ? 0 : Number(r.headers.get('content-length') ?? 0) || 0;
+  const reader = r.body!.getReader(), parts: Uint8Array[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    bytes += value.length;
+    got(bytes, all);
+  }
+  const out = new Uint8Array(bytes);
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out.buffer;
 }

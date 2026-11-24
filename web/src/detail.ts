@@ -171,7 +171,7 @@ export function detailSent(): [number, number, number] {
 let detailFailed: string | null = null;
 export function detailFailure(): string | null { return detailFailed; }
 
-/** Whether detail the view asked for is still to come (look/page.mjs waits for it). */
+/** Whether detail the view asked for is still to come (map.ts `settled` waits for it). */
 export function detailComing(): boolean { return loading !== null; }
 
 /** Send the detail to `gpu` as its layers come, `LAYERS_A_FRAME` a frame; `sent` hears once a set is whole. */

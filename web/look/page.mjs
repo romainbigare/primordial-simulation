@@ -20,9 +20,11 @@ function playwright() {
 
 /** The hooks the tool gives the page (`window.__ew`), put at the end of the page's script, inside its scope: the map,
  * the cover, the world, its worker and its ground, play and pause, the speed and the layer, opening a saved world by URL, and the numbers the marks' textures are laid out by (textures.ts `prepare`, read.mjs `marks`).
- * The shipped page holds none of this. */
+ * The loading screen lifts at once (the tool waits for the picture itself, `settle`). The shipped page holds none of
+ * this. */
 const HOOKS = `
-window.__ew = { map, vegetation, fire, detailComing,
+boot.end(true);
+window.__ew = { map, vegetation, fire,
   get world() { return world; }, get live() { return live; }, get land() { return land; }, get playing() { return playing; },
   setLayer, togglePlay, setSpeed(s) { speed = s; live && live.rate(s); syncUi(); },
   open: u => fetch(u).then(r => r.arrayBuffer()).then(openSaved),
@@ -108,8 +110,7 @@ export async function reopen(page, url) {
 export async function settle(page, most = 120000) {
   const t0 = Date.now(); let calm = 0;
   while (Date.now() - t0 < most) {
-    const busy = await page.evaluate(() => { const e = window.__ew, m = e.map;
-      return (e.land ? e.land.tiles.toCome() : 0) > 0 || e.detailComing() || m.gpuDue || !!m.sharpening || !!m.raf || m.timing || (e.land && e.land.tiles.fading(performance.now())); });
+    const busy = await page.evaluate(() => !window.__ew.map.settled());
     calm = busy ? 0 : calm + 1;
     if (calm >= 4) return Date.now() - t0;
     await sleep(250);
