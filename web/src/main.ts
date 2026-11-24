@@ -57,7 +57,10 @@ const fire = new Fire();
 map.fire = fire;
 /** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
 const front = new FireFront((x, y, answer) => live?.probe(x, y, answer), fire);
-const editor = { probe: (x: number, y: number) => live?.probe(x, y, p => god.probed(p)), brush: (t: number, x: number, y: number, r: number, row: number) => live?.brush(t, x, y, r, row), settle: () => live?.settle() };
+const editor = {
+  probe: (x: number, y: number) => live?.probe(x, y, p => god.probed(p)), settle: () => live?.settle(), undo: () => live?.undo(),
+  brush: (t: number, x: number, y: number, r: number, amount: number, row: number) => live?.brush(t, x, y, r, amount, row),
+};
 const god = new God({
   strip: $('god-strip'), card: $('god'), toast: $('toast'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
   picked: () => { if (playing) togglePlay(); }, burnt: b => front.burnt(b),
@@ -241,7 +244,8 @@ $<HTMLInputElement>('file').onchange = e => { const f = (e.target as HTMLInputEl
 addEventListener('keydown', e => {
   const tag = (e.target as HTMLElement).tagName;
   if ((e.target as HTMLInputElement).type === 'search') return; // typing in the chart search
-  if (e.key === 't' || e.key === 'T') setView(view === 'earth' ? 'true' : 'earth');
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && tag !== 'INPUT') { e.preventDefault(); god.undo(); }
+  else if (e.key === 't' || e.key === 'T') setView(view === 'earth' ? 'true' : 'earth');
   else if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'INPUT') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'ArrowLeft' && tag !== 'INPUT') setFrame(frame - (e.shiftKey ? 10 : 1));
   else if (e.key === 'ArrowRight' && tag !== 'INPUT') setFrame(frame + (e.shiftKey ? 10 : 1));
@@ -279,10 +283,13 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
       if (changed) setFrame(0);
       if (edited) map.showNow();
       if (world) front.frame(world);
+      groundBusy();
       showStats(stats);
     },
     brushed: r => { if (live === l) god.brushed(r); },
     settled: r => { if (live === l) god.settled(r); },
+    undone: done => { if (live === l) { fire.still(); god.undone(done); } },
+    preview: p => { if (live === l && land) { land.preview(p); map.showNow(); } },
     error: text => { playing = false; syncUi(); say(text); },
   });
   l.drawn = () => map.shown();
@@ -302,8 +309,19 @@ function landOf(w: World): Land | null {
   const m = w.meta;
   if (!coreWasm || !m.tiles || !m.laws || !m.samples || m.square_depth === undefined) return null;
   const ground: GroundOf = saved ? { saved } : { seed: m.seed, size: m.w, band: [m.lat_south, m.lat_north], drawn: m.shape === 'Drawn' };
-  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), ground, { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, shown => { if (shown) map.invalidate(); if (live) showStats(live.stats); }, say);
-  return new Land(tiles, m.laws, m.samples);
+  const tiles = new GroundTiles($('tiles-src').textContent ?? '', coreWasm.slice(0), ground, { w: m.w, h: m.h, cell_m: m.cell_m, square_depth: m.square_depth }, m.tiles, live?.version ?? 0, shown => {
+    if (shown) map.invalidate();
+    // Once the ground in view shows a new version of the samples, the core is told: what edits moved since is drawn.
+    const told = land?.toTell();
+    if (told !== undefined && told !== null) live?.groundShown(told);
+    groundBusy();
+    if (live) showStats(live.stats);
+  }, say);
+  return new Land(tiles, m.laws, m.samples, live?.version ?? 0);
+}
+/** While the world stands still, its ground in view is being made again from samples built anew. */
+function groundBusy(): void {
+  $('busy').hidden = !(live && land && !playing && live.version !== land.told);
 }
 /** From `THINGS_PX` pixels a square on, the core is asked for the slots of cover of the window in view. */
 function thingsOf(v: View): void {

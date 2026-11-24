@@ -143,6 +143,12 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 /* What an edit did: a toast at the bottom middle that fades. */
 .toast { position: fixed; z-index: 4; left: 50%; bottom: calc(var(--edge) + var(--btn) + 2 * var(--gap)); transform: translate(-50%, 8px); max-width: min(420px, calc(100vw - 2 * var(--edge))); padding: 8px 16px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; }
 .toast.on { opacity: 1; transform: translate(-50%, 0); }
+/* While the ground is made again: a small note with a spinner, under the bar. */
+.busy { position: fixed; z-index: 3; left: 50%; top: calc(var(--edge) + var(--bar) + var(--gap)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--gap); padding: 4px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.busy i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: turn .8s linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+.strip .undo { margin-top: 4px; }
+.strip .undo:disabled { opacity: .35; cursor: default; background: none; }
 
 /* The timeline of a tape, the fit button, the errors. */
 .tl { --covers: bottom; position: fixed; z-index: 2; left: 50%; bottom: var(--edge); transform: translateX(-50%); width: min(720px, calc(100vw - 3 * var(--edge) - var(--btn))); padding: 4px 16px 6px; }
@@ -182,4 +188,5 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   .god .chips button { flex: none; }
   .toast { bottom: auto; top: calc(var(--edge) + var(--bar) + var(--gap)); }
   .tl { left: var(--edge); transform: none; }
+  .strip .undo { margin: 0 0 0 4px; }
 }

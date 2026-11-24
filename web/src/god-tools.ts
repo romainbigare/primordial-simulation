@@ -1,11 +1,16 @@
 // The tools of god mode (god.ts `GodTool`), in the order of the strip: each paints with the round brush
-// (wasm/src/lib.rs `brush`): Plant trees clears a share of each cell under it and plants a starting kind there, Burn
-// strikes each, and the strikes burn at once when the stroke ends (`settle`). What the world cannot do is said in plain
+// (wasm/src/lib.rs `brush`): Raise and Lower land move the ground under it while held, and the world builds its
+// samples and settles its liquid over the new ground when the stroke ends (`settle`); Plant clears a share of each
+// cell under it and plants a starting kind there; Burn strikes each, and the strikes burn at once when the stroke ends.
+// What the world cannot do is said in plain
 // words, from the core's own reasons. A new tool is one more entry of `godTools`.
 import type { GodTool, Probe, StartKind } from './god';
 
-/** The core's brush tools (wasm/src/lib.rs `PLANT`, `BURN`). */
-const BRUSH_PLANT = 2, BRUSH_BURN = 3;
+/** The core's brush tools (wasm/src/lib.rs `SHAPE`, `PLANT`, `BURN`). */
+const BRUSH_SHAPE = 0, BRUSH_PLANT = 2, BRUSH_BURN = 3;
+/** How fast Raise and Lower move the ground at the brush's centre while held, m/s: a second's hold makes a hill or a
+ * pit a hillside's shading shows from a few kilometres away. */
+const SHAPE_M_S = 8;
 /** The starting kinds in plain words, by the core's name (worldgen/src/life/kinds.rs `KINDS`): a short name and a line. */
 const PLAIN_KINDS: Record<string, [string, string]> = {
   'small fast light-eaters': ['Short grass', 'Small plants that grow and spread fast.'],
@@ -71,5 +76,13 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     reason: why => UNLIT[why] ?? why,
     told: (done, why) => (done ? `Lightning struck ${cells(done)}. The fire spreads as far as the dry litter carries it.` : `Nothing caught fire. ${why}`),
   };
-  return [plant, burn];
+  /** A ground tool: it moves the ground up or down (`sign`) under the brush while held. */
+  const shape = (sign: number): GodTool => ({
+    key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise land' : 'Lower land',
+    ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1, rate: sign * SHAPE_M_S,
+    hint: `Press and hold to ${sign > 0 ? 'raise' : 'lower'} the land; the longer, the more. Right-drag or two fingers move the map.`,
+    why: () => '', reason: why => why,
+    told: done => (done ? `${sign > 0 ? 'Raised' : 'Lowered'} the land. Water finds its new way.` : 'The ground did not move here.'),
+  });
+  return [shape(1), shape(-1), plant, burn];
 }
