@@ -1,24 +1,10 @@
-/* The map fills the window; every control floats over it on glass (a translucent, blurred panel). One palette, light
-   and dark; spacing on an 8 px grid. */
+/* The map fills the window; every control floats over it on glass (a translucent, blurred panel). One dark palette;
+   spacing on an 8 px grid. */
 :root {
-  --map-bg: #e7e3d8; --glass: rgba(251, 250, 247, .8); --solid: #fbfaf7; --ink: #1f2328; --muted: #646b73;
-  --line: rgba(31, 35, 40, .1); --chip: rgba(31, 35, 40, .06); --hover: rgba(31, 35, 40, .08);
-  --accent: #2b6a9c; --on-accent: #fff; --warn: #b4532a; --shadow: 0 8px 28px rgba(20, 24, 28, .16), 0 1px 3px rgba(20, 24, 28, .1);
-  --r: 12px; --r-sm: 10px; --gap: 8px; --edge: 12px; --btn: 40px; --bar: 56px; --thumb: 14px;
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --map-bg: #0f1214; --glass: rgba(27, 31, 35, .78); --solid: #1b1f23; --ink: #e6e8ea; --muted: #959ca3;
-    --line: rgba(230, 232, 234, .1); --chip: rgba(230, 232, 234, .07); --hover: rgba(230, 232, 234, .1);
-    --accent: #6fb2e3; --on-accent: #0c1217; --warn: #f0a070; --shadow: 0 8px 28px rgba(0, 0, 0, .45), 0 1px 3px rgba(0, 0, 0, .3);
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
   --map-bg: #0f1214; --glass: rgba(27, 31, 35, .78); --solid: #1b1f23; --ink: #e6e8ea; --muted: #959ca3;
   --line: rgba(230, 232, 234, .1); --chip: rgba(230, 232, 234, .07); --hover: rgba(230, 232, 234, .1);
   --accent: #6fb2e3; --on-accent: #0c1217; --warn: #f0a070; --shadow: 0 8px 28px rgba(0, 0, 0, .45), 0 1px 3px rgba(0, 0, 0, .3);
+  --r: 12px; --r-sm: 10px; --gap: 8px; --edge: 12px; --btn: 40px; --bar: 56px; --thumb: 14px;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
