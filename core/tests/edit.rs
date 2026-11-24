@@ -185,3 +185,21 @@ fn the_ground_by_height_found_again_is_the_ground_found_anew() {
     let levels = |w: &World| pcore::flow::levels(w, &cells).expect("Flow's state").into_iter().flatten().collect::<Vec<f64>>();
     assert!(bits(&shores(&w)) == bits(&shores(&anew)) && bits(&levels(&w)) == bits(&levels(&anew)), "the cells' ground by height");
 }
+
+/// A basin of liquid whose floor opens to the open low ground (its brush's rim reaches the sea's floor) pours nothing:
+/// the open low ground's liquid stands there already, and its level is the sea's, not a pass. The books are kept, and
+/// the liquid's levels are found (no level of liquid poured without end).
+#[test]
+fn a_basin_open_to_the_low_ground_pours_nothing() {
+    let mut w = small_world();
+    let cells = w.mesh.cells();
+    let coast = (0..cells.n()).find(|&i| w.is_land(i) && cells.around(i).1.iter().any(|&j| !w.is_land(j as usize))).expect("a coast");
+    let [x0, y0, x1, y1] = w.map.bounds(coast);
+    let books = Books::now(&w);
+    let act = Act::Basin { radius_m: 0.6 * w.map.side, depth_m: 5.0 };
+    w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]);
+    books.assert_kept(&w, 1e-9);
+    assert!(w.pond_levels().iter().all(|l| !l.is_infinite()), "{:?}", w.pond_levels());
+    pcore::step(&mut w);
+    books.assert_kept(&w, 1e-9);
+}

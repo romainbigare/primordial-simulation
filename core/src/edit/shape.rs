@@ -92,6 +92,7 @@ impl World {
     /// `g` mol of each substance put in ground node `i` and `bed` in its bed (taken where under none) from the outside
     /// node, with the heat that keeps the node at its temperature (`energy_of` after less before).
     pub(super) fn put(&mut self, i: usize, g: &[f64], bed: &[f64]) {
+        assert!(g.iter().chain(bed).all(|m| m.is_finite()), "an edit puts a finite amount in cell {i}");
         let t = self.t_ground(i);
         let heat = {
             let (now_g, now_b) = (self.stock(Node::ground(i)), self.stock(Node::new(Class::Bed, i)));

@@ -237,7 +237,8 @@ it (its rim), cut or filled with each cell's own rock; the samples are built aga
 fills the pond under its centre to that pond's level, its pass (the floor is a closed basin at least that deep), from
 the outside node at the ground's temperature, poured into each cell's part of that pond's body (`flow::pour`: the
 part holds it, so the runoff's pass keeps it there); where the floor opens to lower ground and holds no pond, the
-depth over the floor is poured on the ground and runs off. Then the liquid settles over the ground (below), the pores
+depth over the floor is poured on the ground and runs off; where it opens to the open low ground, none (its liquid
+stands there already), and a brush whose centre lies in the open low ground makes none. Then the liquid settles over the ground (below), the pores
 of the floor taking their fill first. **Known limit:** the samples' loose
 ground and the make of their bed (what the tiles and the textures read) do not follow an edit; the cell's soil keeps
 its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
