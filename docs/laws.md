@@ -231,7 +231,14 @@ samples move by from the outside node, with the heat that keeps its ground at it
 of where it lies. A raise lays the cell's own rock (its bed's mixture) and, at the top of a stroke, `edit_top_m` of
 loose ground of one of the terrain's makes drawn from the seed for the stroke (`Make::of`, `World::draw_make`); a
 lowering takes the loose ground first, then the rock, never more than the cell holds (its samples move by the share it
-took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **Known limit:** the samples' loose
+took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **A lake** (`edit::Act::Lake`,
+`World::lake`): the ground under a brush is levelled to one floor, a depth under the lowest sample of the ring round
+it (its rim), cut or filled with each cell's own rock; the samples are built again over it at once; the key liquid
+fills the pond under its centre to that pond's level, its pass (the floor is a closed basin at least that deep), from
+the outside node at the ground's temperature, poured into each cell's part of that pond's body (`flow::pour`: the
+part holds it, so the runoff's pass keeps it there); where the floor opens to lower ground and holds no pond, the
+depth over the floor is poured on the ground and runs off. Then the liquid settles over the ground (below), the pores
+of the floor taking their fill first. **Known limit:** the samples' loose
 ground and the make of their bed (what the tiles and the textures read) do not follow an edit; the cell's soil keeps
 its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
 (`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over

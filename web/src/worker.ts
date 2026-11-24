@@ -186,10 +186,16 @@ host.onmessage = async e => {
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
     else if (m.cmd === 'brush' && core) {
       // The brush between two months (wasm/src/lib.rs `brush`). Tool 0 moves the ground: the page draws it from the
-      // preview until the stroke settles. Tool 3 adds heat, which shows when the stroke settles. Tool 2 plants: a frame
+      // preview until the stroke settles. Tool 1 makes a lake. Tool 3 adds heat, which shows when the stroke settles. Tool 2 plants: a frame
       // of the same date where it planted a cell.
       const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
       if (m.tool === 0) host.postMessage({ kind: 'brushed', text: answer, preview: preview() }, []);
+      else if (m.tool === 1) {
+        // A lake is made at once: its frame, with the relief of the ground's new version, and the preview until the
+        // page's ground shows it.
+        host.postMessage({ kind: 'brushed', text: answer, preview: preview() }, []);
+        postFrame('frame', true);
+      }
       else {
         host.postMessage({ kind: 'brushed', text: answer }, []);
         if (m.tool === 2 && (JSON.parse(answer) as { changed?: boolean }).changed) postFrame('frame', true);

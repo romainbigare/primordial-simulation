@@ -418,21 +418,24 @@ pub extern "C" fn kinds() -> *const u8 {
     give(out.to_string().into_bytes())
 }
 
-/// The brush's tools (`brush`): raise or lower the ground, plant (a clearing about the place nearest the brush's centre
+/// The brush's tools (`brush`): raise or lower the ground, make a lake, plant (a clearing about the place nearest the brush's centre
 /// in each cell, planted with a grown stand of a starting kind) and burn (heat added to the remains under it).
 const SHAPE: u32 = 0;
+const LAKE: u32 = 1;
 const PLANT: u32 = 2;
 const BURN: u32 = 3;
 
 /// The brush of radius `radius` m about the place `x`, `y` in squares (`World::under`), with the tool `tool`, between
 /// two months. The first call of a stroke keeps the world as it was (`undo`). `SHAPE` raises the ground by `amount` m
-/// at its centre, less toward its edge (lowers it where under none; `Act::Ground`), and `BURN` adds `amount` J a m² of
+/// at its centre, less toward its edge (lowers it where under none; `Act::Ground`); `LAKE` makes a lake under it at
+/// once, its floor `amount` m under its rim, full to its pass (`Act::Lake`: the samples are built again and the liquid
+/// settles, so the page asks for the new relief); and `BURN` adds `amount` J a m² of
 /// heat there to the remains lying under it (`Act::Heat`), which dries and lights them when the stroke settles: the
 /// page calls them again and again while the brush is held, each time with what the time held since adds; the page
 /// shows the ground from `preview` until the stroke settles. `PLANT` clears the share of each cell under it that it
 /// covers about the place there nearest its centre and places the starting kind of row `row` in it as the world's
 /// grown stand of it (`Act::Grown`; `grown` false: none stands yet, it is placed as seedlings), each cell once a
-/// stroke. Returns, as JSON: for `SHAPE`, the cells under the brush; for `BURN`, each cell under it, the share it
+/// stroke. Returns, as JSON: for `SHAPE` and `LAKE`, the cells under the brush; for `BURN`, each cell under it, the share it
 /// covers, how much of the heat that lights its remains it holds (`progress`, 0 to 1: they light at 1;
 /// `flame::needed`) and why none would light (`why`, the flames' `Unlit`; "" where some would); for `PLANT`, each cell
 /// newly under it, the share it covers, whether each of its edits was made (`World::edit`) and why not ("" where all
@@ -440,7 +443,7 @@ const BURN: u32 = 3;
 #[no_mangle]
 pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row: u32) -> *const u8 {
     use pcore::edit::{Act, Brush, Edit};
-    if ![SHAPE, PLANT, BURN].contains(&tool) {
+    if ![SHAPE, LAKE, PLANT, BURN].contains(&tool) {
         return give(json!({"refused": format!("no brush tool {tool}")}).to_string().into_bytes());
     }
     let out = with(|l| {
@@ -456,6 +459,12 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
             stroke.raised += amount;
             let cells: Vec<usize> = l.world.under(b).iter().map(|u| u.cell).collect();
             let done = l.world.edit(&[Edit { place: [x, y], act }]);
+            return json!({"cells": cells, "changed": done[0]});
+        }
+        if tool == LAKE {
+            let cells: Vec<usize> = l.world.under(b).iter().map(|u| u.cell).collect();
+            let done = l.world.edit(&[Edit { place: [x, y], act: Act::Lake { radius_m: radius, depth_m: amount } }]);
+            l.follow();
             return json!({"cells": cells, "changed": done[0]});
         }
         if tool == BURN {

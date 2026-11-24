@@ -16,15 +16,18 @@ const RIM_SAMPLES: f64 = 1.5;
 
 impl World {
     /// A lake `depth` m deep under the brush `b` (the module's doc). Its level is that of the lowest sample on its rim
-    /// (the samples within `RIM_SAMPLES` round it, as last built: the samples are built first where edits shaped them);
+    /// (the samples within `RIM_SAMPLES` round it, as built over the cells' grounds now);
     /// every sample it covers moves to its floor, `depth` under that level: the ground cut or filled with each cell's
-    /// own rock (`move_ground`), and the samples built again over it (`flow::build::reshape`). The key liquid fills it to
-    /// its level from the outside node, each cell `depth` × its samples' area at its ground's temperature, poured into
-    /// its part of the pond under the brush's centre (`flow::pour`); then the passes of a month's start and the liquid
+    /// own rock (`move_ground`), and the samples built again over it (`flow::build::reshape`). The key liquid fills the
+    /// pond under the brush's centre to its level, its pass (at least `depth` over the floor), from the outside node at
+    /// each cell's ground temperature, poured into each cell's part of it (`flow::pour`); with no pond there (the floor
+    /// opens to lower ground), `depth` over the floor, which runs off. Then the passes of a month's start and the liquid
     /// settled with no time (`flow::settle`) level it. Whether a lake was made.
     pub(crate) fn lake(&mut self, b: Brush, depth: f64) -> bool {
         let Some(liquid) = crate::cover::Parts::of(&self.chem).map(|p| p.liquid) else { return false };
-        if self.relief.due {
+        // (The rim is read on the samples as they stand over the cells' grounds: built again first where edits shaped
+        // them, or where they were never built from the running world, the seed's.)
+        if self.relief.due || self.relief.version == 0 {
             crate::flow::build::reshape(self);
         }
         let s = self.terrain_samples();
@@ -43,15 +46,32 @@ impl World {
         drop(s);
         self.move_ground(&cells, 0.0, &[]);
         crate::flow::build::reshape(self);
-        let pond = self.terrain_samples().pond[centre];
+        // What fills it: of the pond under its centre, each member sample to the pond's level (its pass, the lowest
+        // the liquid leaves by), by cell; with no pond, `depth` over the floor, which runs off.
+        let s = self.terrain_samples();
+        let pond = s.pond[centre];
+        let fill: BTreeMap<usize, f64> = if pond == NONE {
+            area.iter().map(|(&i, &a)| (i, depth * a)).collect()
+        } else {
+            let level = s.ponds[pond as usize].level;
+            let mut by: BTreeMap<usize, f64> = BTreeMap::new();
+            for (i, l) in self.map.leaves().iter().enumerate() {
+                let v: f64 = l.split(SAMPLE_DEPTH.max(l.depth)).map(|f| s.index(&f)).filter(|&k| s.pond[k] == pond).map(|k| (level - s.h[k]).max(0.0) * s.area(k)).sum();
+                if v > 0.0 {
+                    by.insert(i, v);
+                }
+            }
+            by
+        };
+        drop(s);
         let sub = &self.chem.subs[liquid];
         let per_m3 = sub.density[1] / sub.molar_mass;
-        for (&i, &a) in &area {
+        for (&i, &v) in &fill {
             let mut g = vec![0.0; self.chem.ns()];
-            g[liquid] = depth * a * per_m3;
+            g[liquid] = v * per_m3;
             self.put(i, &g, &vec![0.0; self.chem.ns()]);
             if pond != NONE {
-                crate::flow::pour(self, i, pond, depth * a);
+                crate::flow::pour(self, i, pond, v);
             }
         }
         crate::month_start(self);
