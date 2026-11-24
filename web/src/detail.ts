@@ -185,13 +185,24 @@ export function detailLost(): void {
   if (side !== undefined) loadSide(side);
 }
 
-/** Send the next layers of load `l` that came, at the next frame; once all are, draw from them. */
+/** Whether the layers that came wait to be sent to the GPU (the map holds them while the view moves, map.ts `hold`). */
+let held = false;
+
+/** Hold the layers that come (`held`), or send them again. */
+export function detailHeld(hold: boolean): void {
+  if (hold === held) return;
+  held = hold;
+  if (!held && loading) sendSoon(loading);
+}
+
+/** Send the next layers of load `l` that came, at the next frame, while they are not held; once all are, draw from
+ * them. */
 function sendSoon(l: Loading): void {
   const s = sending;
-  if (!s || l.frame || !l.made.length) return;
+  if (!s || l.frame || !l.made.length || held) return;
   l.frame = requestAnimationFrame(() => timed('detail', () => {
     l.frame = 0;
-    if (loading !== l) return;
+    if (loading !== l || held) return;
     l.t ??= s.gpu.texture('detail', l.side, l.side, 'rgba8unorm', l.layers, Math.log2(l.side) + 1);
     for (const { layer, levels } of l.made.splice(0, LAYERS_A_FRAME)) {
       levels.forEach((d, k) => s.gpu.write(l.t!, d, k, layer));

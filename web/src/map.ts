@@ -8,16 +8,19 @@ import { Fields } from './fields';
 import { FieldWindow, MapLook, frameOf } from './field-window';
 import { FLOW_FPS, Land } from './land';
 import { Box, FIRE_FPS, Fire } from './fire';
-import { detailLost, detailSeen, sendDetail } from './detail';
+import { detailHeld, detailLost, detailSeen, sendDetail } from './detail';
 import { spend, timed } from './cost';
+import { Camera, Gesture } from './gesture';
 
 const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /** The part of the map in view: its window in squares (clipped to the map), the pixels a square takes, and the zoom (1: the map fits). */
 export interface View { x: number; y: number; w: number; h: number; s: number; zoom: number }
-/** The most pixels a metre takes on screen. */
-const MOST_PX_PER_M = 80;
+/** The most pixels a metre takes on screen, and the least share of the fit's that a zoom out takes the map to. */
+const MOST_PX_PER_M = 80, LEAST_ZOOM = 0.5;
+/** A pointer that goes up having moved less than this, css px, taps the map (picks its square). */
+const TAP_PX = 6;
 /** The scale bar's margin from the free area's bottom left corner, css px. */
 const SCALE_MARGIN_PX = 14;
 /** The most pixels of the map's canvas a css pixel takes: a screen with more (a phone's, 3) is drawn at this many and
@@ -35,9 +38,9 @@ const FRAME_BUDGET_MS = 16, SCALES = [1, 0.75, 0.5];
  * side. */
 const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
 /** While the view moves (a pan, a pinch, a wheel: the last within `MOVE_REST_MS`), the last picture drawn is shown
- * moved and scaled as the camera did, at once (`showMoved`), and the map is drawn anew no sooner than `MOVE_REDRAW_MS`
- * after the card finished the last (to fill what the moved picture leaves bare); once the view rests it is drawn anew. */
-const MOVE_REST_MS = 200, MOVE_REDRAW_MS = 400;
+ * moved and scaled as the camera did, at each frame (`showMoved`), and nothing heavy is begun on the card: no map drawn
+ * anew, no ground's tile nor layer of its detail sent; once the view rests the map is drawn anew. */
+const MOVE_REST_MS = 200;
 /** The pictures of the area about a view at rest (`MapView.rings`) are these many times its width, each at the screen's
  * pixels: so a view that moves out meets one at most three times softer than the last, and the whole map's picture (one
  * colour where the view is close) only once it is far. They are drawn once the view has rested `AROUND_REST_MS`, the
@@ -52,7 +55,7 @@ const FADE_MS = 220;
 interface Pic { t: Texture; x: number; y: number; w: number; h: number; look: string }
 /** The picture texture `t` holds, drawn with camera `cam` (css px a square, the map's corner, css px) at `k` of its
  * pixels a css pixel. */
-function picOf(t: Texture, cam: { s: number; ox: number; oy: number }, k: number, look: string): Pic {
+function picOf(t: Texture, cam: Camera, k: number, look: string): Pic {
   return { t, x: -cam.ox / cam.s, y: -cam.oy / cam.s, w: t.w / k / cam.s, h: t.h / k / cam.s, look };
 }
 /** How often a frame drawn without a program not made yet looks whether it is made, ms (`drawWhenMade`). */
@@ -76,7 +79,7 @@ const MAP_TARGET: Format = 'rgba8unorm';
  * (css px), the device pixels a css pixel, the view it is of (`viewKey`), the texture it is drawn into (out of
  * sight, shown once whole: `MapView.sharpenSoon`), the time its tiles drawn so far took the GPU, ms, and the camera it
  * is drawn with. */
-interface Sharpening { tiles: number[][]; xs: number[]; d: number; key: string; into: Texture; ms: number; cam: { s: number; ox: number; oy: number } }
+interface Sharpening { tiles: number[][]; xs: number[]; d: number; key: string; into: Texture; ms: number; cam: Camera }
 /** How long the world's next frame waits at most for the sharp picture of the last, ms (`shown`), and how often it
  * looks whether that picture is whole, ms. */
 const SHOWN_MOST_MS = 1500, SHOWN_POLL_MS = 30;
@@ -90,7 +93,9 @@ export class MapView {
   /** The canvas the GPU draws on, under the map's canvas (none before the GPU opens). */
   private gpuCv: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D;
-  private cam = { s: 1, ox: 0, oy: 0 };
+  private cam: Camera = { s: 1, ox: 0, oy: 0 };
+  /** The pointers' gesture, which sets the camera once a frame (`draw`). */
+  private gesture = new Gesture(() => this.cam, c => { this.cam = c; this.fitted = false; this.moved(); this.gpuDue = true; }, s => this.limit(s));
   private fitted = true;
   /** The edges of the map covered by the controls over it, css px (top, right, bottom, left): a fit fills the rest, and
    * the scale bar stands in its bottom left corner. */
@@ -121,8 +126,8 @@ export class MapView {
   private picture: Texture | null = null;
   private pictureNext: Texture | null = null;
   /** The last picture shown whole on the screen (`picture` or `sharp`) and the camera and look it was drawn with,
-   * which a moving view shows moved (`showMoved`); when the view last moved, when the card finished the map drawn
-   * anew last, ms (Infinity while it draws it), and the timer that draws it once the view rests. */
+   * which a moving view shows moved (`showMoved`); when the view last moved, ms, and the timer that draws the map anew
+   * once the view rests. */
   private last: Pic | null = null;
   /** Pictures shown under the last as the view moves, so it moves over less detail, never over nothing: the area about
    * the view at rest, `RINGS` times its width, and the whole map at `WHOLE_PX` px across, each in its texture (and the
@@ -142,7 +147,6 @@ export class MapView {
   private fadeFrame = 0;
   private wholeAt = -Infinity;
   private movedAt = -Infinity;
-  private lastDrawn = -Infinity;
   private moveTimer = 0;
   private sharpTimer = 0;
   /** Whether the GPU's picture is to be drawn anew at the next frame. */
@@ -195,8 +199,6 @@ export class MapView {
       return g;
     });
     new ResizeObserver(() => { this.resize(); this.invalidate(); }).observe(cv);
-    const ptrs = new Map<number, { x: number; y: number }>();
-    let moved = 0;
     /** The pointer that paints (-1: none), and where it is. */
     let painter = -1, painterAt = { x: 0, y: 0 };
     const at = (e: PointerEvent): [number, number] => [(e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s];
@@ -205,29 +207,21 @@ export class MapView {
       cv.setPointerCapture(e.pointerId);
       if (painter >= 0) {
         // A second finger: the stroke ends, and the two move the map.
-        ptrs.set(painter, painterAt); stopPainting(); moved = 99;
-      } else if (!ptrs.size && e.button === 0 && this.paint?.start(...at(e))) { painter = e.pointerId; painterAt = { x: e.offsetX, y: e.offsetY }; return; }
-      ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
-      if (ptrs.size === 1) moved = 0;
+        this.gesture.down(painter, painterAt.x, painterAt.y); stopPainting();
+      } else if (!this.gesture.size && e.button === 0 && this.paint?.start(...at(e))) { painter = e.pointerId; painterAt = { x: e.offsetX, y: e.offsetY }; return; }
+      this.gesture.down(e.pointerId, e.offsetX, e.offsetY);
     });
     cv.addEventListener('contextmenu', e => { if (this.paint) e.preventDefault(); });
     cv.addEventListener('pointermove', e => {
       if (e.pointerId === painter) { painterAt = { x: e.offsetX, y: e.offsetY }; this.setHover(this.cellAt(e.offsetX, e.offsetY)); return this.paint?.move(...at(e)); }
-      const p = ptrs.get(e.pointerId);
-      if (!p) return this.setHover(this.cellAt(e.offsetX, e.offsetY));
-      const before = [...ptrs.values()].map(q => ({ ...q }));
-      p.x = e.offsetX; p.y = e.offsetY;
-      const after = [...ptrs.values()];
-      const mid = (a: { x: number; y: number }[]) => ({ x: a.reduce((t, q) => t + q.x, 0) / a.length, y: a.reduce((t, q) => t + q.y, 0) / a.length });
-      const m0 = mid(before), m1 = mid(after);
-      if (ptrs.size > 1) { this.zoomAt(m0.x, m0.y, Math.hypot(after[0].x - after[1].x, after[0].y - after[1].y) / Math.hypot(before[0].x - before[1].x, before[0].y - before[1].y)); moved = 99; }
-      moved += Math.abs(m1.x - m0.x) + Math.abs(m1.y - m0.y);
-      this.cam.ox += m1.x - m0.x; this.cam.oy += m1.y - m0.y; this.fitted = false; this.moved(); this.invalidate();
+      if (this.gesture.move(e.pointerId, e.offsetX, e.offsetY)) this.redraw();
+      else this.setHover(this.cellAt(e.offsetX, e.offsetY));
     });
     const up = (e: PointerEvent) => {
       if (e.pointerId === painter) return stopPainting();
-      if (ptrs.size === 1 && moved < 6 && e.type === 'pointerup') { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
-      ptrs.delete(e.pointerId);
+      if (this.gesture.size === 1 && this.gesture.moved < TAP_PX && e.type === 'pointerup') { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
+      this.gesture.up(e.pointerId);
+      this.redraw();
     };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
     cv.addEventListener('pointerleave', () => this.setHover(-1));
@@ -323,25 +317,31 @@ export class MapView {
     return x >= 0 && y >= 0 && x < this.w && y < this.h ? y * this.w + x : -1;
   }
 
-  /** The view moved now: a move that starts after it rested shows the last picture moved first (the map is drawn
-   * anew `MOVE_REDRAW_MS` on, as if the card had just finished it). */
-  private moved(): void {
-    const now = performance.now();
-    if (now - this.movedAt >= MOVE_REST_MS) this.lastDrawn = now;
-    this.movedAt = now;
-  }
+  /** The view moved now. */
+  private moved(): void { this.movedAt = performance.now(); }
 
   private setHover(i: number): void { if (i !== this.hover) { this.hover = i; this.onHover(i); this.redraw(); } }
 
+  /** The scale a camera may take nearest `s`, css px a square: from `LEAST_ZOOM` of the fit to `MOST_PX_PER_M`. */
+  private limit(s: number): number { return Math.min(Math.max(s, this.fitScale() * LEAST_ZOOM), MOST_PX_PER_M * this.cellM); }
+
   private zoomAt(px: number, py: number, k: number): void {
-    const c = this.cam, s = Math.min(Math.max(c.s * k, this.fitScale() * 0.5), MOST_PX_PER_M * this.cellM);
+    const c = this.cam, s = this.limit(c.s * k);
     c.ox = px - ((px - c.ox) / c.s) * s; c.oy = py - ((py - c.oy) / c.s) * s; c.s = s;
     this.fitted = false; this.moved(); this.invalidate();
+  }
+
+  /** Hold back what is sent to the card (the ground's tiles, the layers of its detail) while the view moves (`held`),
+   * so the moved picture's frames find the card free; once it rests they are sent. */
+  private hold(held: boolean): void {
+    if (this.land) this.land.tiles.held = held;
+    detailHeld(held);
   }
 
   /** Draw the map: on the GPU if it is due, and what lies over it. */
   private draw(): void {
     if (!this.w) return;
+    this.gesture.apply();
     const { ctx, cam, w } = this, d = this.dpr(), span = w * cam.s, W = this.cv.clientWidth, H = this.cv.clientHeight;
     // Once moved, a globe is drawn again east and west of itself, so panning round it shows no seam.
     const wrap = this.globe !== null && !this.fitted;
@@ -355,22 +355,21 @@ export class MapView {
     // tiles that come one after another never keep the map from getting sharp.
     const viewed = this.viewKey(xs);
     const held = this.scale < 1 && !this.asked.length && (this.sharpening?.key === viewed || (this.resting && this.restOf === viewed));
-    // A frame is sent only once the card has drawn the last, so frames never pile up in its queue; till then the
-    // frame stays due and is drawn as soon as the card is free.
-    const now = performance.now(), moving = now - this.movedAt < MOVE_REST_MS && now - this.lastDrawn < MOVE_REDRAW_MS;
-    if (held) { /* (stays due) */ } else if (this.gpu && this.gpuDue && this.gpu.busy) {
-      if (!this.waitingCard) { this.waitingCard = true; this.gpu.idle().then(() => { this.waitingCard = false; this.redraw(); }); }
-    } else if (this.gpu && this.gpuDue && moving && this.last?.look === this.lookKey()) {
+    const now = performance.now(), moving = now - this.movedAt < MOVE_REST_MS && this.last?.look === this.lookKey();
+    this.hold(moving);
+    if (held) { /* (stays due) */ } else if (this.gpu && this.gpuDue && moving) {
       // The view moves: the last picture moved with it, over those of the area about it (the widest lowest) and of the
-      // whole map, and the map drawn anew once it rests (or `MOVE_REDRAW_MS` on).
+      // whole map, at every frame (a few textured rectangles: it does not wait for the card), and the map drawn anew
+      // once it rests.
       this.showMoved(this.gpu, [this.whole, ...[...this.rings].reverse(), this.last]);
       clearTimeout(this.moveTimer);
-      this.moveTimer = window.setTimeout(() => this.redraw(), Math.min(this.movedAt + MOVE_REST_MS, this.lastDrawn + MOVE_REDRAW_MS) - now + 1);
+      this.moveTimer = window.setTimeout(() => this.redraw(), this.movedAt + MOVE_REST_MS - now + 1);
+    } else if (this.gpu && this.gpuDue && this.gpu.busy) {
+      // A frame is sent only once the card has drawn the last, so frames never pile up in its queue; till then the
+      // frame stays due and is drawn as soon as the card is free.
+      if (!this.waitingCard) { this.waitingCard = true; this.gpu.idle().then(() => { this.waitingCard = false; this.redraw(); }); }
     } else if (this.gpu && this.gpuDue) {
       this.gpuDue = false;
-      // (Counted from when the card has drawn it: a slow card's frame is not drawn again at once while the view moves.)
-      this.lastDrawn = Infinity;
-      this.gpu.idle().then(() => { this.lastDrawn = performance.now(); });
       clearTimeout(this.sharpTimer);
       this.resting = false;
       this.sharpening = null;
@@ -543,6 +542,7 @@ export class MapView {
     this.resting = false;
     this.sharpening = null;
     this.fade = null;
+    cancelAnimationFrame(this.fadeFrame);
     const look = this.lookKey();
     this.movedShown = pics.filter((p): p is Pic => p?.look === look);
     this.compose(gpu, this.movedShown, 1);
@@ -633,7 +633,7 @@ export class MapView {
   /** Draw the map and the layer over it (the plants, seen at its own pixels) into texture `t` with camera `cam`, `k` of
    * its pixels a css pixel, inside `clip` (x, y, w, h px) where given; false where a program it needs is not made yet
    * (then it is drawn without it). The layer is decided for this draw; the next frame decides it for the view again. */
-  private drawInto(gpu: Gpu, t: Texture, cam: { s: number; ox: number; oy: number }, k: number, clip?: number[]): boolean {
+  private drawInto(gpu: Gpu, t: Texture, cam: Camera, k: number, clip?: number[]): boolean {
     const was = this.cam, drawn = this.land?.drawn, waiting: string[] = [];
     this.cam = { ...cam };
     this.layer?.prepare(gpu, cam.ox, cam.oy, cam.s, k, k, t.w / k, t.h / k, waiting);

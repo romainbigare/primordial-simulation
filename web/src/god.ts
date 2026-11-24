@@ -14,13 +14,14 @@ export interface Probe { cell: number; bounds: [number, number, number, number];
 /** A starting kind the world's plan places (wasm/src/lib.rs `kinds`): its row, the core's name, kg per m² placed. */
 export interface StartKind { row: number; name: string; kg: number }
 /** What a brush did (wasm/src/lib.rs `brush`): each cell under it not yet edited in the stroke, the share of it under
- * the brush, whether each of its edits was made and the core's reason where not; whether any cell changed. */
+ * the brush, whether each of its edits was made and the core's reason where not; whether any cell changed. (A brush
+ * of the ground answers its cells as numbers alone.) */
 export interface Brushed { cells: { cell: number; share: number; done: boolean[]; why: string }[]; changed: boolean }
-/** What a stroke's settling did (wasm/src/lib.rs `settle`): each cell the flames of its strikes reached, and when, s
- * after the strike. */
-export interface Settled { burnt: [number, number][] }
-/** The worker's side of the tools: ask what lies under a place, paint, and end a stroke. */
-export interface Editor { probe(x: number, y: number): void; brush(tool: number, x: number, y: number, radius: number, row: number): void; settle(): void }
+/** What a stroke's settling did (wasm/src/lib.rs `settle`): whether the ground was built again, and each cell the
+ * flames of its strikes reached, and when, s after the strike. */
+export interface Settled { ground: boolean; burnt: [number, number][] }
+/** The worker's side of the tools: ask what lies under a place, paint, end a stroke, and undo the last. */
+export interface Editor { probe(x: number, y: number): void; brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): void; settle(): void; undo(): void }
 
 /** A tool of god mode. The strip shows the tools in the order of their list; a new tool is one more entry. */
 export interface GodTool {
@@ -30,6 +31,9 @@ export interface GodTool {
   hint: string;
   /** The core's brush tool it paints with (wasm/src/lib.rs `brush`), and the starting kind it places (-1: none). */
   code: number; row(): number;
+  /** How fast it moves the ground at the brush's centre while held, m/s (up, or down where less than 0): it paints
+   * again and again while the pointer is down, held still or not (the ground tools). */
+  rate?: number;
   /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
   why(p: Probe | null): string;
   /** The core's reason a cell was not edited (`Brushed`), in plain words. */
@@ -49,7 +53,8 @@ export interface GodPage {
 /** The brush's radii, m (the slider's stops), and the one it starts at. */
 const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
 /** The least time between two paints of a stroke, ms, and the least move of the brush's centre between them, a share
- * of its radius: cells are edited once a stroke, so a paint where the brush has not moved adds nothing. */
+ * of its radius: cells are edited once a stroke, so a paint where the brush has not moved adds nothing. A tool with a
+ * rate paints every `PAINT_MS` while held. */
 const PAINT_MS = 90, PAINT_MOVE = 0.25;
 /** The ink of the brush where the tool cannot act: a dull red. */
 const NO_INK = 'rgba(196,76,60,.95)';
@@ -62,9 +67,11 @@ const PROBE_MS = 80;
 
 const radiusText = (m: number) => (m >= 1000 ? `${m / 1000} km` : `${m} m`);
 
-/** A stroke under way: the cells it edited, its reasons for those it did not, the place and time of its last paint
- * (squares, ms), and where the brush is now. */
-interface Stroke { tool: GodTool; done: number; whys: Map<string, number>; last: [number, number, number]; now: [number, number] }
+/** A stroke under way: the cells it edited (for a tool with a rate, the paints that moved the ground), its reasons for
+ * those it did not, the place and time of its last paint (squares, ms), where the brush is now, the timer that paints
+ * while a tool with a rate is held, and whether a paint of it waits for the core's answer (a tool with a rate paints
+ * again only once answered, with the time since: the core may take longer over a paint than the timer's step). */
+interface Stroke { tool: GodTool; done: number; whys: Map<string, number>; last: [number, number, number]; now: [number, number]; held: number; waiting: boolean }
 
 export class God {
   private tool: GodTool | null = null;
@@ -82,6 +89,9 @@ export class God {
   private drawnAt: [number, number, number] | null = null;
   /** When the toast of the last stroke goes. */
   private toastTimer = 0;
+  /** Whether a stroke settled that can be undone (the core keeps one), and the button that undoes it. */
+  private undoable = false;
+  private undoButton: HTMLButtonElement;
 
   constructor(private page: GodPage, private editor: Editor, private tools: GodTool[]) {
     page.strip.replaceChildren(...tools.map(t => {
@@ -91,11 +101,27 @@ export class God {
       b.onclick = () => { this.pick(this.tool === t ? null : t); };
       return b;
     }));
+    const u = this.undoButton = document.createElement('button');
+    u.className = 'ib undo'; u.innerHTML = iconSvg('undo'); u.title = 'Undo the last stroke (Ctrl+Z)';
+    u.setAttribute('aria-label', 'Undo');
+    u.onclick = () => this.undo();
+    page.strip.append(u);
     this.show();
   }
 
-  /** Put the tool away and forget the place: a new world, or god mode closed. */
-  reset(): void { this.stroke = null; this.probe = null; this.asking = false; this.page.toast.classList.remove('on'); this.pick(null); }
+  /** Put the tool away and forget the place and the stroke to undo: a new world, or god mode closed. */
+  reset(): void { this.stroke = null; this.probe = null; this.asking = false; this.undoable = false; this.page.toast.classList.remove('on'); this.pick(null); }
+
+  /** Undo the last stroke, where there is one and no stroke is under way. */
+  undo(): void {
+    if (!this.undoable || this.stroke) return;
+    this.undoable = false;
+    this.editor.undo();
+    this.show();
+  }
+
+  /** The core's answer to an undo. */
+  undone(done: boolean): void { if (done) this.say('Undone: the world is as before the last stroke.'); }
 
   /** Put the tool on away: true if one was on. */
   putAway(): boolean {
@@ -146,8 +172,9 @@ export class God {
     const t = this.tool;
     if (!t) return false;
     this.at = [x, y];
-    this.stroke = { tool: t, done: 0, whys: new Map(), last: [x, y, 0], now: [x, y] };
-    this.paint();
+    const st: Stroke = this.stroke = { tool: t, done: 0, whys: new Map(), last: [x, y, performance.now()], now: [x, y], held: 0, waiting: false };
+    if (t.rate) st.held = window.setInterval(() => { if (!st.waiting) this.paint(); }, PAINT_MS);
+    else this.paint();
     return true;
   }
 
@@ -156,6 +183,7 @@ export class God {
     const st = this.stroke;
     if (!st) return;
     st.now = [x, y];
+    if (st.tool.rate) return;
     const [lx, ly, lt] = st.last, far = Math.hypot(x - lx, y - ly) >= (PAINT_MOVE * this.radius) / this.page.squareM();
     if (far && performance.now() - lt >= PAINT_MS) this.paint();
   }
@@ -164,21 +192,26 @@ export class God {
   end(): void {
     const st = this.stroke;
     if (!st) return;
-    if (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]) this.paint();
+    clearInterval(st.held);
+    if (st.tool.rate || st.now[0] !== st.last[0] || st.now[1] !== st.last[1]) this.paint();
     this.editor.settle();
   }
 
-  /** Paint with the stroke's tool where its brush is now. */
+  /** Paint with the stroke's tool where its brush is now; a tool with a rate by what the time since its last paint
+   * adds. */
   private paint(): void {
-    const st = this.stroke!, [x, y] = st.now;
-    st.last = [x, y, performance.now()];
-    this.editor.brush(st.tool.code, x, y, this.radius, st.tool.row());
+    const st = this.stroke!, [x, y] = st.now, now = performance.now(), amount = ((st.tool.rate ?? 0) * (now - st.last[2])) / 1000;
+    st.last = [x, y, now];
+    st.waiting = true;
+    this.editor.brush(st.tool.code, x, y, this.radius, amount, st.tool.row());
   }
 
   /** The core's answer to a paint: its cells counted to the stroke; the reason, where it edited none of them. */
   brushed(r: Brushed): void {
     const st = this.stroke;
     if (!st) return;
+    st.waiting = false;
+    if (st.tool.rate) { st.done += +r.changed; return; }
     const whys = new Map<string, number>();
     for (const c of r.cells) {
       if (c.done.every(d => d)) st.done++;
@@ -194,6 +227,8 @@ export class God {
     const st = this.stroke;
     this.stroke = null;
     if (!st) return;
+    this.undoable = true;
+    this.show();
     this.say(st.tool.told(st.done, st.tool.reason(most(st.whys))));
     if (r.burnt.length) this.page.burnt(r.burnt);
   }
@@ -235,10 +270,12 @@ export class God {
   }
 
   /** The strip's buttons (the tool on pressed, a tool that cannot act here greyed with the reason), and the card: the
-   * tool's name, the brush's radius, its choices, and a line of how to use it or why it cannot act here. */
+   * tool's name, the brush's radius, its choices, and a line of how to use it or why it cannot act here; the undo
+   * button, where a stroke can be undone. */
   private show(): void {
     const t = this.tool;
-    for (const b of this.page.strip.querySelectorAll<HTMLElement>('button')) {
+    this.undoButton.disabled = !this.undoable;
+    for (const b of this.page.strip.querySelectorAll<HTMLElement>('button[data-tool]')) {
       const tool = this.tools.find(d => d.key === b.dataset.tool)!, why = tool.why(this.probe);
       b.setAttribute('aria-pressed', String(tool === t));
       b.classList.toggle('no', why !== '');
