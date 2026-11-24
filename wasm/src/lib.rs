@@ -40,7 +40,8 @@ const LOAD_SHOWS: f64 = 0.25;
 /// takes as the world before it, so its first call copies nothing; the world as it was before the last stroke began
 /// (`undo`); and what edits had shaped of each of the terrain's samples
 /// (`Relief::shaped`) when the samples of the version the cells' table is of were built (`version`), and in the samples
-/// of the ground the page shows (`shown`, `ground_shown`), from which `preview` tells it what edits moved since.
+/// of the ground the page shows (`shown`, `ground_shown`) with their version (`over`), from which `preview` tells it
+/// what edits moved since.
 struct Live {
     world: World,
     built: u32,
@@ -54,6 +55,7 @@ struct Live {
     before: Option<World>,
     version: Vec<f64>,
     shown: Vec<f64>,
+    over: u32,
 }
 
 /// A stroke of the brush under way: the cells it planted (each once a stroke), how far it has raised the
@@ -68,8 +70,8 @@ impl Live {
     /// The live world `world` and its plan, the cells' table made for it; the page shows its ground as it is.
     fn new(world: World, plan: Schedule) -> Live {
         let cells = tape::Table::new(&world);
-        let shaped = world.relief.shaped.clone();
-        Live { built: world.relief.version, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, ready: None, before: None, version: shaped.clone(), shown: shaped }
+        let (shaped, v) = (world.relief.shaped.clone(), world.relief.version);
+        Live { built: v, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, ready: None, before: None, version: shaped.clone(), shown: shaped, over: v }
     }
     /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table found again, as the cells'
     /// ground and the shore moved (`tape::Table::update`), and what edits had shaped kept as the new version's.
@@ -267,8 +269,9 @@ pub extern "C" fn day() -> f64 {
 /// the reflectance of the walls the cover builds), the terrain's samples (across,
 /// down, their depth), the numbers of the laws the shell applies inside a cell (`Physics`), the discharge per metre a
 /// pixel takes past which a channel shows as a line, m³/s per m (`tape::TYPICAL_RUNOFF` × `tape::SHOW_M`), that line's
-/// law (`tape::LINE_PX`, `LINE_GROW`, `LINE_MOST`), and how many times the mean flow the flood that shapes a channel's
-/// bed passes (`tape::FLOOD`) with the power a channel's water widens by at one place (`tape::STATION_EXP`).
+/// law (`tape::LINE_PX`, `LINE_GROW`, `LINE_MOST`), how many times the mean flow the flood that shapes a channel's
+/// bed passes (`tape::FLOOD`) with the power a channel's water widens by at one place (`tape::STATION_EXP`), and how
+/// long a flame's front runs, s (`Physics::front_life`), over which a shell plays a burn's front.
 #[no_mangle]
 pub extern "C" fn meta() -> *const u8 {
     let head = with(|l| {
@@ -283,7 +286,7 @@ pub extern "C" fn meta() -> *const u8 {
             "seed": w.seed, "shape": w.terrain.shape, "days_per_year": w.days_per_year(), "layers": layers,
             "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "step_most": tape::STEP_MOST, "along_wrap": tape::ALONG_WRAP_M, "row": tape::ROW, "kind_row": tape::KIND_ROW, "place_row": tape::PLACE_ROW, "dead_row": tape::DEAD_ROW, "walls": walls},
             "samples": {"across": s.across, "down": s.down, "depth": pcore::space::terrain::SAMPLE_DEPTH},
-            "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "rooted_from": ph.rooted_from, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M, "line_law": [tape::LINE_PX, tape::LINE_GROW, tape::LINE_MOST], "flood": tape::FLOOD, "station": tape::STATION_EXP},
+            "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "rooted_from": ph.rooted_from, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M, "line_law": [tape::LINE_PX, tape::LINE_GROW, tape::LINE_MOST], "flood": tape::FLOOD, "station": tape::STATION_EXP, "front_life": ph.front_life},
             "frames": [], "series": {}, "series_units": {}, "events": [], "months": [],
         })
     });
@@ -561,15 +564,16 @@ pub extern "C" fn hold() {
 pub extern "C" fn ground_shown(version: u32) {
     with(|l| {
         if version == l.built {
-            l.shown = l.version.clone();
+            (l.shown, l.over) = (l.version.clone(), version);
         }
     })
 }
 
 /// What edits moved the ground since the samples of the ground the page shows (`ground_shown`), for the page to add to
-/// the heights it draws until its ground is made again: the window of the terrain's samples that moved, its west
-/// column, north row, width and height in samples (four u32), then of each sample of the window, row by row, how far
-/// its ground moved, m (f32), little-endian; an empty window (all 0) where none moved.
+/// the heights it draws until its ground is made again, over the tiles made of the samples of the version it is of: the
+/// window of the terrain's samples that moved, its west column, north row, width and height in samples, and that
+/// version (`ground_version` as `ground_shown` last took it; five u32), then of each sample of the window, row by row,
+/// how far its ground moved, m (f32), little-endian; an empty window (0, 0, 0, 0) where none moved.
 #[no_mangle]
 pub extern "C" fn preview() -> *const u8 {
     let bytes = with(|l| {
@@ -584,7 +588,7 @@ pub extern "C" fn preview() -> *const u8 {
         }
         let window: [u32; 4] = if x0 == usize::MAX { [0; 4] } else { [x0, y0, x1 - x0, y1 - y0].map(|v| v as u32) };
         let dh = (y0..y1).flat_map(|y| (x0..x1).map(move |x| y * across + x)).map(|k| (at(now, k) - at(shown, k)) as f32);
-        window.iter().flat_map(|v| v.to_le_bytes()).chain(dh.flat_map(|v| v.to_le_bytes())).collect()
+        window.iter().chain([&l.over]).flat_map(|v| v.to_le_bytes()).chain(dh.flat_map(|v| v.to_le_bytes())).collect()
     });
     give(bytes)
 }
