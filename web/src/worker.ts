@@ -30,6 +30,7 @@ interface Core {
   brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): number;
   settle(): number;
   undo(): number;
+  hold(): void;
   ground_shown(version: number): void;
   preview(): number;
   out_len(): number;
@@ -175,11 +176,14 @@ host.onmessage = async e => {
       if (refused) throw new Error(refused);
       due = 0; thingsAt = null; stepped = pace = 0;
       postFrame('world');
+      c.hold();
     } else if (m.cmd === 'play') {
       // A pause shows the state it stopped at.
       const was = playing;
       start(m.on);
       if (was && !playing) postFrame('frame');
+      // A paused world waits for edits: the core keeps a copy for the first stroke's undo now, not on its first call.
+      if (!playing && core) core.hold();
     }
     else if (m.cmd === 'rate') rate = m.rate;
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);

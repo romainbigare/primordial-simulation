@@ -61,6 +61,15 @@ pub struct Settled {
     pub burnt: Vec<(u32, f64)>,
 }
 
+impl Act {
+    /// Whether it reads the world as the laws read it at a month's start (what stands on each cell, Flow's state, the
+    /// wet ground): the edits of the cover and the strikes do; those that put matter or heat in the ground from outside
+    /// read the store alone (a lake builds what it reads itself).
+    pub fn reads_month(&self) -> bool {
+        !matches!(self, Act::Ground { .. } | Act::Heat { .. } | Act::Lake { .. })
+    }
+}
+
 impl Edit {
     /// What the edit did to cell `i`, in a line; `done` false: the world could not make it.
     pub fn line(&self, i: usize, done: bool) -> String {
@@ -79,14 +88,14 @@ impl Edit {
 }
 
 impl World {
-    /// Make the edits `edits` in their order, after the passes of a month's start (`month_start`), so each reads the
-    /// world as the laws read it at a month's start; each is told as an event (`EventKind::Edit`, its cell the node,
-    /// the value 1 where it was made, 0 where the world could not make it). Returns whether each was made.
+    /// Make the edits `edits` in their order, after the passes of a month's start (`month_start`) where one of them
+    /// reads the world as the laws read it at a month's start (`Act::reads_month`); each is told as an event
+    /// (`EventKind::Edit`, its cell the node, the value 1 where it was made, 0 where the world could not make it).
+    /// Returns whether each was made.
     pub fn edit(&mut self, edits: &[Edit]) -> Vec<bool> {
-        if edits.is_empty() {
-            return Vec::new();
+        if edits.iter().any(|e| e.act.reads_month()) {
+            crate::month_start(self);
         }
-        crate::month_start(self);
         edits
             .iter()
             .map(|e| {
