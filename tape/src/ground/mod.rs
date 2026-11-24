@@ -105,7 +105,9 @@ impl Ground {
 
     /// The ground of world `w`, on its samples as last built (`World::terrain_samples`).
     pub fn of(w: &World) -> Ground {
-        Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), w.terrain_samples())
+        // (Its samples first, so the terrain it keeps holds them and how they were raised, `Terrain::built`.)
+        let samples = w.terrain_samples();
+        Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), samples)
     }
 
     /// The relief a world built its samples from (`World::relief`), the years since its start at its last build and the
