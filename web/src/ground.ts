@@ -105,6 +105,9 @@ export class GroundTiles {
   /** Whether a new tile fades in (else it shows at once): the map says so, and lets none fade while its card is too
    * slow to draw a frame at each step of a fade (map.ts `drawGpu`). */
   fades = true;
+  /** Whether the tiles that came wait to be sent to the GPU, with the page and the tiles' numbers that name them (the
+   * map holds them while the view moves, map.ts `hold`): what the GPU holds stays as it was, whole. */
+  held = false;
 
   constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, private changed: (shown: boolean) => void, error: (text: string) => void) {
     this.depth = meta.depths[0];
@@ -329,6 +332,9 @@ export class GroundTiles {
     const side = this.meta.size + 2 * this.meta.gutter, n = side * side;
     this.atlas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
     this.areas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
+    this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 1, 'rgba32float');
+    const now = performance.now() - this.start;
+    if (this.held && this.pages) return { atlas: this.atlas, areas: this.areas, pages: this.pages, tiles: this.tilesTex, now };
     for (const c of this.come) {
       gpu.write(this.atlas, c.data.subarray(0, PLANE_A * n), 0, c.layer);
       gpu.write(this.areas, c.data.subarray(PLANE_A * n, (PLANE_A + PLANE_B) * n), 0, c.layer);
@@ -339,8 +345,6 @@ export class GroundTiles {
       gpu.write(this.pages, this.page.data);
       this.pageDue = false;
     }
-    this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 1, 'rgba32float');
-    const now = performance.now() - this.start;
     if (!this.fades) this.faded(now);
     if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; }
     return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now };
