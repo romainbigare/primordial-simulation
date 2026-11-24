@@ -52,8 +52,9 @@ function madeFor(name: string, e: number): string[] {
 export function seenFrom(gpu: Gpu, name: string, e: number, waiting: string[]): string | null {
   const may = madeFor(name, e), made = may.find(key => gpu.ready(key));
   gpu.warm(may[0], made === undefined);
-  // The one a zoom in needs next is made after all others asked, so a zoom finds it made.
+  // The ones a zoom in and a zoom out need next are made after all others asked, so a zoom finds them made.
   gpu.warm(madeFor(name, e / ZOOM_AHEAD)[0]);
+  gpu.warm(madeFor(name, e * ZOOM_AHEAD)[0]);
   if (made !== undefined) return made;
   waiting.push(may[0]);
   // Till one is made, the one made for the nearest size of a pixel draws (a little more or less detail for a moment),
@@ -61,7 +62,7 @@ export function seenFrom(gpu: Gpu, name: string, e: number, waiting: string[]): 
   const size = (key: string) => Math.abs(Math.log(Math.max(+(key.split(':')[1] ?? 0), EVERY_SIZE_M) / e));
   return madeFor(name, Infinity).filter(key => gpu.ready(key)).sort((x, y) => size(x) - size(y))[0] ?? null;
 }
-/** The program made ahead is the one for pixels this many times finer than the view's (`seenFrom`). */
+/** The programs made ahead are those for pixels this many times finer and coarser than the view's (`seenFrom`). */
 const ZOOM_AHEAD = 3;
 /** Where programs are sorted by the sizes of a pixel they are made for (`seenFrom`), the one made
  * for every size counts as made for this many metres. */
@@ -137,8 +138,9 @@ export const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, rgba32float:
 export type Format = 'rgba8unorm' | 'rgba32float' | 'rgba16float' | 'rg16float' | 'r16float';
 /** The data a texture of each format is filled with: bytes, 32-bit floats, or 16-bit floats as their bits. */
 export type TexelData = Uint8Array | Float32Array | Uint16Array;
-/** How a sampler reads a texture: blended between its texels' centres, and also between its mip levels' nearest; or
- * repeated across the plane and blended between its mip levels too (`tile`: a texture laid on the ground). */
+/** How a sampler reads a texture: blended between its texels' centres and between its mip levels (`smooth`); blended
+ * between its texels' centres on its nearest mip level (`mip`); or repeated across the plane and blended between its
+ * mip levels too (`tile`: a texture laid on the ground). */
 export type Sampler = 'smooth' | 'mip' | 'tile';
 /** A texture on the GPU: `w` x `h` texels, `layers` of them (more than one: an array), `mips` levels. */
 export interface Texture { readonly w: number; readonly h: number; readonly layers: number; readonly mips: number; readonly format: Format }
@@ -162,6 +164,9 @@ export interface Gpu {
   /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone,
    * which the renderer does not keep: after a lost context it is empty). */
   write(t: Texture, data: TexelData, level?: number, layer?: number): void;
+  /** Make the mip levels of texture `t` from its first (a picture drawn into it, shown smaller later). */
+  mipmap(t: Texture): void;
+  /** Let texture `t` go: at once on the back end; on the page's GPU once the next picture begins (`HeldGpu.begin`). */
   drop(t: Texture): void;
   /** Draw into `target` (null: the canvas, sized to its pixels; several textures of one size and format: a program's
    * targets, `Program.targets`, in the order of its outputs), first filling it with `clear` (r, g, b, a, 0..1) if given,
@@ -228,6 +233,9 @@ class HeldTexture implements Texture {
 export class HeldGpu implements Gpu {
   private back!: Back;
   private held = new Set<HeldTexture>();
+  /** Textures dropped since the last picture began (`begin`): bindings worked out for it before its draws (a layer's
+   * marks, decided once for a picture drawn in tiles over many frames) may name them till then. */
+  private dropped: HeldTexture[] = [];
   /** Whether frames sent wait for the card to finish them, how many were sent since they began to wait and the
    * programs they drew; the frames the back end finished, the time the last took, ms, and the programs drawn in a
    * frame it finished. What a stalled card leaves undone is said from these (`stalled`). */
@@ -256,6 +264,7 @@ export class HeldGpu implements Gpu {
   private use(back: Back, rebuilt: boolean): void {
     this.back = back; this.watching = false; this.finished = 0; this.drewDone.clear();
     this.sentAll = this.doneAll = 0;
+    this.dropped = [];
     this.wake();
     for (const t of this.held) { t.inner = back.texture(t.label, t.w, t.h, t.format, t.layers, t.mips, t.target); t.levels.forEach((d, k) => d && back.write(t.inner, d, k)); }
     if (rebuilt) this.restored();
@@ -277,7 +286,14 @@ export class HeldGpu implements Gpu {
     if (layer === undefined) h.levels[level] = data;
     this.back.write(h.inner, data, level, layer);
   }
-  drop(t: Texture): void { this.back.drop((t as HeldTexture).inner); this.held.delete(t as HeldTexture); }
+  mipmap(t: Texture): void { this.back.mipmap((t as HeldTexture).inner); }
+  drop(t: Texture): void { this.held.delete(t as HeldTexture); this.dropped.push(t as HeldTexture); }
+  /** A picture begins (its bindings are worked out anew, none from before is drawn with again): the textures dropped
+   * since the last are let go now, so no draw ever binds one let go (which WebGL reads as black). */
+  begin(): void {
+    this.dropped.forEach(t => this.back.drop(t.inner));
+    this.dropped = [];
+  }
   pass(target: Texture | Texture[] | null, clear?: number[], clip?: number[]): Pass {
     const inner = (t: Texture) => (t as HeldTexture).inner;
     const p = this.back.pass(target === null ? null : Array.isArray(target) ? target.map(inner) : inner(target), clear, clip);
