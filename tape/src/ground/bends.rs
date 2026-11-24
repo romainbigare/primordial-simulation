@@ -291,6 +291,22 @@ impl Bends {
         b
     }
 
+    /// The same made again on the channels of `r` (other samples than those it was made on) where `marked` says a
+    /// sample's piece may read them differently (`rebuild::bends_read`): each marked sample's piece found again in the
+    /// flood's order, a head's start first set as `new` sets it; the rest kept, as their pieces read what they did.
+    pub(super) fn update(&mut self, r: &Reaches, marked: &[bool]) {
+        let s = r.s;
+        for &k in s.order.iter().rev().filter(|&&k| marked[k as usize]) {
+            let k = k as usize;
+            if s.main[k] == NONE {
+                (self.straight[k], self.head[k], self.down[k]) = (0.0, k as u32, 0.0);
+                self.bent.remove(&(k as u32));
+            }
+            self.lean[k] = 0.0;
+            self.reach(r, k);
+        }
+    }
+
     /// The start of the piece after sample `k` of `r` (`new`), from `k`'s own.
     fn reach(&mut self, r: &Reaches, k: usize) {
         let (s, to) = (r.s, r.s.to[k]);
@@ -301,7 +317,10 @@ impl Bends {
         }
         (self.head[to as usize], self.down[to as usize]) = (self.head[k], self.down[k] + frame.len() / (WANDER_EVERY * r.metres));
         match r.walk(k, &frame, self.start(k), &mut |_| {}) {
-            Start::Straight(s) => self.straight[to as usize] = s,
+            Start::Straight(s) => {
+                self.straight[to as usize] = s;
+                self.bent.remove(&to);
+            }
             Start::Bent(e) => {
                 self.bent.insert(to, e);
             }

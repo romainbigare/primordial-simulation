@@ -30,6 +30,7 @@ interface Core {
   brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): number;
   settle(): number;
   undo(): number;
+  hold(): void;
   ground_shown(version: number): void;
   preview(): number;
   out_len(): number;
@@ -175,21 +176,30 @@ host.onmessage = async e => {
       if (refused) throw new Error(refused);
       due = 0; thingsAt = null; stepped = pace = 0;
       postFrame('world');
+      c.hold();
     } else if (m.cmd === 'play') {
       // A pause shows the state it stopped at.
       const was = playing;
       start(m.on);
       if (was && !playing) postFrame('frame');
+      // A paused world waits for edits: the core keeps a copy for the first stroke's undo now, not on its first call.
+      if (!playing && core) core.hold();
     }
     else if (m.cmd === 'rate') rate = m.rate;
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
     else if (m.cmd === 'brush' && core) {
       // The brush between two months (wasm/src/lib.rs `brush`). Tool 0 moves the ground: the page draws it from the
-      // preview until the stroke settles. Tool 3 adds heat, which shows when the stroke settles. Tool 2 plants: a frame
+      // preview until the stroke settles. Tool 1 makes a lake. Tool 3 adds heat, which shows when the stroke settles. Tool 2 plants: a frame
       // of the same date where it planted a cell.
       const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
       if (m.tool === 0) host.postMessage({ kind: 'brushed', text: answer, preview: preview() }, []);
+      else if (m.tool === 1) {
+        // A lake is made at once: its frame, with the relief of the ground's new version, and the preview until the
+        // page's ground shows it.
+        host.postMessage({ kind: 'brushed', text: answer, preview: preview() }, []);
+        postFrame('frame', true);
+      }
       else {
         host.postMessage({ kind: 'brushed', text: answer }, []);
         if (m.tool === 2 && (JSON.parse(answer) as { changed?: boolean }).changed) postFrame('frame', true);

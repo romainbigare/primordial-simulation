@@ -30,13 +30,23 @@ impl World {
         for c in self.covered(b, s.across) {
             cells.entry(c.cell).or_default().push((c.k, height * (1.0 - c.d * c.d).powi(2)));
         }
+        drop(s);
         let top = self.cfg.edit_top_m;
         let loose = if height > 0.0 { ((stroke + height).min(top) - stroke.min(top)).max(0.0) / height } else { 0.0 };
         let mix = self.terrain.makes.get(make).map_or_else(Vec::new, |m| m.of.clone());
+        self.move_ground(&cells, loose, &mix)
+    }
+
+    /// The ground of each cell of `cells` moved by its samples' heights, m (each sample and how far it moves; raised
+    /// where above none): the cell takes the volume they move by, a raise the share `loose` of it as loose ground of the
+    /// substances `mix` and the rest as its rock (`raise`), a lowering at most what it holds (`lower`), and its samples
+    /// move by the share it took (`Relief::shape`). Whether any ground moved.
+    pub(super) fn move_ground(&mut self, cells: &BTreeMap<usize, Vec<(usize, f64)>>, loose: f64, mix: &[(usize, f64)]) -> bool {
+        let s = self.terrain_samples();
         let mut moved = false;
-        for (i, samples) in cells {
+        for (&i, samples) in cells {
             let v: f64 = samples.iter().map(|&(k, dh)| dh * s.area(k)).sum();
-            let got = if v >= 0.0 { self.raise(i, v, loose, &mix) } else { -self.lower(i, -v) };
+            let got = if v >= 0.0 { self.raise(i, v, loose, mix) } else { -self.lower(i, -v) };
             let share = if v != 0.0 { got / v } else { 0.0 };
             samples.iter().for_each(|&(k, dh)| self.relief.shape(k, dh * share, s.h.len()));
             moved |= got != 0.0;
@@ -81,7 +91,7 @@ impl World {
 
     /// `g` mol of each substance put in ground node `i` and `bed` in its bed (taken where under none) from the outside
     /// node, with the heat that keeps the node at its temperature (`energy_of` after less before).
-    fn put(&mut self, i: usize, g: &[f64], bed: &[f64]) {
+    pub(super) fn put(&mut self, i: usize, g: &[f64], bed: &[f64]) {
         let t = self.t_ground(i);
         let heat = {
             let (now_g, now_b) = (self.stock(Node::ground(i)), self.stock(Node::new(Class::Bed, i)));

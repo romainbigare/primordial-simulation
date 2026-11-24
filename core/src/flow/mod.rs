@@ -102,6 +102,20 @@ pub fn settle(w: &mut World) {
     with(w, true, liquid::settle);
 }
 
+/// `m3` m³ of liquid an edit put in cell `i`'s ground node poured into its part of the body of standing liquid of pond
+/// `pond` (`Samples::ponds`): that part holds it (`State::held`), so the runoff's pass keeps it in the body
+/// (`runoff::surface`) and levels it there. Whether the cell holds a part of that pond.
+pub fn pour(w: &mut World, i: usize, pond: u32, m3: f64) -> bool {
+    let mut done = false;
+    with(w, false, |_, s| {
+        let h = &mut s.state.held[i];
+        if let Some(q) = h.ponds.iter().position(|&p| p == pond) {
+            (h.m3[q], done) = (h.m3[q] + m3, true);
+        }
+    });
+    done
+}
+
 /// Heat conducted sideways through the ground (`land::conduct`), then creep (`creep::creep`), for `dt` seconds.
 pub fn creep(w: &mut World, dt: f64) {
     with(w, true, |w, s| {

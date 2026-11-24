@@ -117,14 +117,29 @@ const SMOOTH_PASSES: usize = 3;
 /// the cells' borders.
 const SMOOTH_ROUNDS: usize = 8;
 
-/// The heights of the samples built from the seed's samples `seed` of `map` (its rows between latitudes `lat`) and the
-/// relief `r` as last built (`Relief::ground`, `Relief::offset`), m: each the seed's height with what was laid on it and shaped,
-/// raised by its cell's offset; the offsets spread smoothly between the cells (`SMOOTH_SHARE` of a square each way,
-/// `SMOOTH_PASSES` passes of a box filter, round a globe's rows), what the cells' means then lack spread the same way `SMOOTH_ROUNDS` times,
-/// and each cell's raised by the constant it still lacks, so that its samples' mean by area is its ground exactly. A cell finer than a sample shares it: the sample takes their offsets' mean by area.
-pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), r: &Relief) -> Vec<f64> {
+/// How the cells' offsets raise the samples (`lift`, `heights`): the offsets they are of (`Relief::offset`), and of each
+/// sample the offsets spread smoothly and what its cell's mean then still lacked, m.
+#[derive(Debug)]
+pub(super) struct Lift {
+    pub(super) offset: Vec<f64>,
+    smooth: Vec<f64>,
+    last: Vec<f64>,
+}
+
+/// The heights of the samples built from the seed's samples `seed` and the relief `r` as last built (`Relief::ground`),
+/// raised by the cells' offsets as `l` spreads them (`lift`), m.
+pub(super) fn heights(seed: &Samples, r: &Relief, l: &Lift) -> Vec<f64> {
+    (0..seed.h.len()).map(|k| seed.h[k] + r.ground(k) + l.smooth[k] + l.last[k]).collect()
+}
+
+/// How the cells' offsets of the relief `r` (`Relief::offset`) raise the samples of the seed's samples `seed` of `map`
+/// (its rows between latitudes `lat`; `Lift`): each sample by its cell's offset, the offsets spread smoothly between the
+/// cells (`SMOOTH_SHARE` of a square each way, `SMOOTH_PASSES` passes of a box filter, round a globe's rows), what the
+/// cells' means then lack spread the same way `SMOOTH_ROUNDS` times, and each cell's raised by the constant it still
+/// lacks, so that its samples' mean by area is its ground exactly. A cell finer than a sample shares it: the sample
+/// takes their offsets' mean by area.
+pub(super) fn lift(seed: &Samples, map: &Square, (south, north): (f64, f64), r: &Relief) -> Lift {
     let n = seed.h.len();
-    let base: Vec<f64> = (0..n).map(|k| seed.h[k] + r.ground(k)).collect();
     // Of each sample, the offset it takes and the group it is held to the mean of (its cell; or itself, under cells
     // finer than it).
     let (mut target, mut weight, mut group) = (vec![0.0; n], vec![0.0; n], vec![u32::MAX; n]);
@@ -166,7 +181,7 @@ pub(super) fn heights(seed: &Samples, map: &Square, (south, north): (f64, f64), 
         smooth.iter_mut().zip(more).for_each(|(f, m)| *f += m);
     }
     let last = lacks(&smooth);
-    (0..n).map(|k| base[k] + smooth[k] + last[k]).collect()
+    Lift { offset: r.offset.clone(), smooth, last }
 }
 
 /// Values `v` on a grid `across` x `down` smoothed by `SMOOTH_PASSES` passes of a box filter `radius` samples each way

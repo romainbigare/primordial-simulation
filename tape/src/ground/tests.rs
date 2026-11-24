@@ -122,3 +122,34 @@ fn the_smooth_shore_keeps_the_area_under_the_level() {
     assert!(length > 100.0, "a shore of {length} samples");
     assert!(area.abs() < 0.3 * length, "the area under the level moves by {area} samples² along a shore of {length} samples");
 }
+
+/// A ground made again after edits shaped the world's ground (`Ground::rebuild`) is the ground made anew on the same
+/// samples: its tiles are the same to the last bit, though it finds the pieces of the channels again only where they
+/// may read what changed (`Bends::update`). Two strokes, the second made again from the first's ground.
+#[test]
+fn a_ground_made_again_is_the_ground_made_anew() {
+    use pcore::edit::{Act, Edit};
+    let mut w = worldgen::testkit::small_world();
+    let s = w.terrain_samples();
+    // A place on a channel: the sample the most drains through that lies in no pond and has land round it.
+    let k = (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && s.h[k] > 0.0).max_by(|&a, &b| s.up[a].total_cmp(&s.up[b])).unwrap();
+    let per = (s.across / w.map.w) as f64;
+    let place = [((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per];
+    drop(s);
+    let stroke = |w: &mut pcore::World, height_m: f64| {
+        w.edit(&[Edit { place, act: Act::Ground { radius_m: 0.3 * w.map.side, height_m, stroke_m: 0.0, make: 0 } }]);
+        w.settle();
+    };
+    stroke(&mut w, 20.0);
+    let mut again = super::super::Ground::of(&w);
+    stroke(&mut w, -10.0);
+    again.rebuild_from(&super::super::Ground::relief_bytes(&w)).expect("the relief");
+    let anew = super::super::Ground::of(&w);
+    let depths = super::super::depths(&w.map);
+    for depth in [*depths.start(), depths.start() + 2] {
+        let tiles = 1i64 << (depth - depths.start());
+        for (tx, ty) in (0..tiles).flat_map(|y| (0..tiles).map(move |x| (x, y))) {
+            assert!(again.tile(depth, tx, ty) == anew.tile(depth, tx, ty), "tile {tx}, {ty} of depth {depth}");
+        }
+    }
+}

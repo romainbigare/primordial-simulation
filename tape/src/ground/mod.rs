@@ -124,17 +124,21 @@ impl Ground {
         Ok(self.rebuild(s))
     }
 
-    /// The ground made again on the samples `new` (as a world built them again, `Terrain::built`): all of it, as a
-    /// build moves the samples of every cell. Returns the squares whose tiles changed (`rebuild`), row by row, true for
-    /// each.
+    /// The ground made again on the samples `new` (as a world built them again, `Terrain::built`): what each sample
+    /// holds of it found again, but the pieces of the channels (`bends::Bends`), found again only where a piece may read
+    /// a sample that changed (`rebuild::near`, `BENDS_READ`; and every piece down the ways from those, whose start they
+    /// set): the rest read what they did. Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
     pub fn rebuild(&mut self, new: Arc<Samples>) -> Vec<bool> {
-        // What a tile reads of the old ground stays while the new one is made (`read`); the rest goes first, so the two
-        // grounds are not held whole at once: a page's worker has little memory, and a wasm memory never shrinks.
-        (self.bends, self.shore, self.grain) = Default::default();
-        let made = Ground::on(self.seed, (self.map.clone(), self.terrain.clone(), self.lat), (&self.phys, self.gravity), new);
-        let changed = rebuild::readers(&made.samples, &rebuild::changed(&self.read(), &made.read()));
-        let squares = rebuild::squares(&self.map, &made.samples, &changed);
-        *self = made;
+        let shore = shore::Shore::new(&new);
+        let at = stems::points(&new, &shore);
+        let grain = pcore::soil::textures(&new, &self.terrain.makes, self.gravity);
+        let strips = wetness::strips(&new, &self.phys);
+        let hill = wetness::hill(&new, &strips);
+        let changed = rebuild::changed(&self.read(), &rebuild::Read { s: &new, hill: &hill, strips: &strips, at: &at });
+        let reaches = bends::Reaches { seed: self.seed, s: &new, at: &at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) };
+        self.bends.update(&reaches, &rebuild::readers(&new, &rebuild::near(&new, &changed, rebuild::BENDS_READ)));
+        let squares = rebuild::squares(&self.map, &new, &rebuild::readers(&new, &changed));
+        (self.samples, self.at, self.shore, self.grain, self.strips, self.hill) = (new, at, shore, grain, strips, hill);
         squares
     }
 

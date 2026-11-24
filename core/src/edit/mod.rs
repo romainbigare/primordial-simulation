@@ -7,6 +7,7 @@
 
 mod brush;
 mod heat;
+mod basin;
 mod shape;
 
 pub use brush::{Brush, Under};
@@ -35,6 +36,9 @@ pub enum Act {
     /// `joules_m2` J a m² of heat added to the remains under a brush of radius `radius_m` m about the place at its
     /// centre, less toward its edge (`World::heat`): it dries and lights them when the edits settle (`flame::heated`)
     Heat { radius_m: f64, joules_m2: f64 },
+    /// A basin of liquid `depth_m` m deep under a brush of radius `radius_m` m about the place: its ground levelled to
+    /// a floor that deep under its rim's lowest sample, and the key liquid poured in to that level (`World::basin`)
+    Basin { radius_m: f64, depth_m: f64 },
     /// The ground under a brush of radius `radius_m` m about the place raised by `height_m` m at its centre (lowered
     /// where under none), less toward its edge; a stroke that has raised `stroke_m` m there before lays the loose ground
     /// of its top (`Config::edit_top_m`) of the terrain's make `make` (`World::shape`)
@@ -57,6 +61,15 @@ pub struct Settled {
     pub burnt: Vec<(u32, f64)>,
 }
 
+impl Act {
+    /// Whether it reads the world as the laws read it at a month's start (what stands on each cell, Flow's state, the
+    /// wet ground): the edits of the cover and the strikes do; those that put matter or heat in the ground from outside
+    /// read the store alone (a basin builds what it reads itself).
+    pub fn reads_month(&self) -> bool {
+        !matches!(self, Act::Ground { .. } | Act::Heat { .. } | Act::Basin { .. })
+    }
+}
+
 impl Edit {
     /// What the edit did to cell `i`, in a line; `done` false: the world could not make it.
     pub fn line(&self, i: usize, done: bool) -> String {
@@ -66,6 +79,7 @@ impl Edit {
             Act::Plant { root, kg, .. } => format!("placed {kg} kg per m2 of starting kind {root} in the newest patch of cell {i}"),
             Act::Grown { root, .. } => format!("placed a grown stand of starting kind {root} in the newest patch of cell {i}"),
             Act::Strike => format!("a strike lights cell {i} in the coming month"),
+            Act::Basin { radius_m, depth_m } => format!("a basin of liquid {depth_m} m deep within {radius_m} m of a place in cell {i}"),
             Act::Heat { radius_m, joules_m2 } => format!("{joules_m2} J per m2 of heat added within {radius_m} m of a place in cell {i}"),
             Act::Ground { radius_m, height_m, .. } => format!("the ground within {radius_m} m of a place in cell {i} raised by {height_m} m at its middle"),
         };
@@ -74,14 +88,14 @@ impl Edit {
 }
 
 impl World {
-    /// Make the edits `edits` in their order, after the passes of a month's start (`month_start`), so each reads the
-    /// world as the laws read it at a month's start; each is told as an event (`EventKind::Edit`, its cell the node,
-    /// the value 1 where it was made, 0 where the world could not make it). Returns whether each was made.
+    /// Make the edits `edits` in their order, after the passes of a month's start (`month_start`) where one of them
+    /// reads the world as the laws read it at a month's start (`Act::reads_month`); each is told as an event
+    /// (`EventKind::Edit`, its cell the node, the value 1 where it was made, 0 where the world could not make it).
+    /// Returns whether each was made.
     pub fn edit(&mut self, edits: &[Edit]) -> Vec<bool> {
-        if edits.is_empty() {
-            return Vec::new();
+        if edits.iter().any(|e| e.act.reads_month()) {
+            crate::month_start(self);
         }
-        crate::month_start(self);
         edits
             .iter()
             .map(|e| {
@@ -135,6 +149,7 @@ impl World {
                 }
                 lit
             }
+            Act::Basin { radius_m, depth_m } => self.basin(Brush { centre: e.place, radius_m }, depth_m),
             Act::Heat { radius_m, joules_m2 } => self.heat(Brush { centre: e.place, radius_m }, joules_m2),
             Act::Ground { radius_m, height_m, stroke_m, make } => self.shape(Brush { centre: e.place, radius_m }, (height_m, stroke_m), make as usize),
         }
