@@ -112,9 +112,19 @@ pub(super) fn flood(g: &Grid, z: &[f64], open: &[bool], (start, draw): (&[usize]
     let n = z.len();
     let (mut surface, mut level, mut seen) = (z.to_vec(), z.to_vec(), open.to_vec());
     let (mut to, mut apart, mut rank, mut order) = (vec![NONE; n], vec![0.0; n], vec![NONE; n], Vec::with_capacity(n));
-    let mut heap: BinaryHeap<Low> = start.iter().map(|&i| Low(z[i], z[i], i)).collect();
+    // The starts wait in their own list, sorted so its last is the lowest (`Low`), and the samples the flood reaches in a
+    // heap: the next is the lower of the two lowest, so the flood takes them in the order one heap of all would, and the
+    // heap holds only the flood's edge.
+    let mut first: Vec<Low> = start.iter().map(|&i| Low(z[i], z[i], i)).collect();
+    first.sort_unstable();
+    let mut heap: BinaryHeap<Low> = BinaryHeap::new();
     let mut down: Vec<(u32, f64, f64)> = Vec::with_capacity(8);
-    while let Some(Low(l, s, i)) = heap.pop() {
+    let mut next = |heap: &mut BinaryHeap<Low>| match (heap.peek(), first.last()) {
+        (Some(h), Some(f)) if f > h => first.pop(),
+        (Some(_), _) => heap.pop(),
+        (None, _) => first.pop(),
+    };
+    while let Some(Low(l, s, i)) = next(&mut heap) {
         rank[i] = order.len() as u32;
         order.push(i as u32);
         down.clear();

@@ -74,15 +74,15 @@ fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
     w.discharge = q.into_iter().map(|v| v as f32).collect();
 }
 
-/// The samples of a new version of the relief (`Relief::version`) with the cells' offsets it holds, and with
-/// them each cell's ground as liquid stands on it, the bodies, what each cell's parts of them hold (`held_by_pond`; the
+/// The samples of a new version of the relief (`Relief::version`) with the cells' offsets it holds, and with them each
+/// cell's ground as liquid stands on it (`curve::update`: found again where its samples moved), the bodies, what each cell's parts of them hold (`held_by_pond`; the
 /// samples `old` before) and the state of the ground nodes.
 fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
     w.relief.version += 1;
     w.relief.due = false;
     let held = std::mem::take(&mut s.state.held);
     let was: Vec<Vec<u32>> = s.curves.iter().map(|c| c.ponds().iter().map(|p| p.pond).collect()).collect();
-    curve::build(w, s);
+    curve::update(w, s, old);
     s.bodies = Bodies::of(w, &s.curves);
     let new = w.terrain_samples();
     s.state.held = held_by_pond(s, (old, &new), (&was, held));

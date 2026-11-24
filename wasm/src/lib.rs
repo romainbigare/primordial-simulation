@@ -71,11 +71,11 @@ impl Live {
         let shaped = world.relief.shaped.clone();
         Live { built: world.relief.version, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, ready: None, before: None, version: shaped.clone(), shown: shaped }
     }
-    /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table made again, as the cells'
-    /// ground and the shore moved, and what edits had shaped kept as the new version's.
+    /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table found again, as the cells'
+    /// ground and the shore moved (`tape::Table::update`), and what edits had shaped kept as the new version's.
     fn follow(&mut self) {
         if self.world.relief.version != self.built {
-            self.cells = tape::Table::new(&self.world);
+            self.cells.update(&self.world);
             self.built = self.world.relief.version;
             self.version = self.world.relief.shaped.clone();
         }
@@ -507,6 +507,14 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
         json!({"cells": cells, "changed": done.iter().any(|&d| d), "grown": grown})
     });
     give(out.to_string().into_bytes())
+}
+
+/// The relief the world's samples will be built from when its stroke settles (`tape::Ground::settled_relief_bytes`),
+/// for the page's ground to be made again while the world settles; nothing (`out_len` 0) where none can be told before.
+#[no_mangle]
+pub extern "C" fn settled_relief() -> *const u8 {
+    let bytes = with(|l| tape::Ground::settled_relief_bytes(&l.world).unwrap_or_default());
+    give(bytes)
 }
 
 /// End the brush's stroke and run at once, with no time on the world's clock, what its edits start that takes no time

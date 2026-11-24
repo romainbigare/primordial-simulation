@@ -45,9 +45,27 @@ pub const PONDS_EXACT: usize = 2048;
 /// The finest tiles' texels are no longer than this, m: finer, a shell magnifies them.
 const FINEST_M: f64 = 1.0;
 
-/// Whether the shore a shell draws leaves each of the samples `s` out of its pond's liquid (`shore::Shore::dry`).
-pub fn shore_dry(s: &Samples) -> Vec<bool> {
-    shore::Shore::new(s).dry()
+/// Whether the shore a shell draws leaves each sample out of its pond's liquid (`shore::Shore::dry`, `dry`), kept with
+/// the shore and the samples it was found on, so after edits it is found again only where the shore moved (`update`).
+pub struct Dry {
+    shore: shore::Shore,
+    samples: Arc<Samples>,
+    pub dry: Vec<bool>,
+}
+
+impl Dry {
+    /// Of the samples `s`.
+    pub fn new(s: Arc<Samples>) -> Dry {
+        let shore = shore::Shore::new(&s);
+        Dry { dry: shore.dry(), shore, samples: s }
+    }
+    /// The same on the samples `new`: the shore found again where it reads what changed (`shore::Shore::update`), and
+    /// each sample's whether it is dry where its spline reads a sample whose shore moved (two each way).
+    pub fn update(&mut self, new: Arc<Samples>) {
+        let moved = rebuild::near(&new, &self.shore.update(&self.samples, &new), shore::SPLINE_SAMPLES);
+        (0..new.h.len()).filter(|&k| moved[k]).for_each(|k| self.dry[k] = self.shore.dry_at(k));
+        self.samples = new;
+    }
 }
 
 /// The depths of the tiles of `map`, coarsest first: from the finest at which one tile holds the whole map to the first
@@ -73,6 +91,7 @@ pub struct Ground {
     samples: Arc<Samples>,
     law: Law,
     at: Vec<[f64; 2]>,
+    raw: Vec<[f64; 2]>,
     bends: bends::Bends,
     shore: shore::Shore,
     grain: Vec<pcore::soil::Texture>,
@@ -95,17 +114,19 @@ impl Ground {
         let law = Law::of(phys);
         assert!(!map.wrap, "tiles of the ground are made for an island");
         let shore = shore::Shore::new(&samples);
-        let at = stems::points(&samples, &shore);
+        let (at, raw) = stems::points(&samples, &shore);
         let bends = bends::Bends::new(&bends::Reaches { seed, s: &samples, at: &at, law, metres: map.length(SAMPLE_DEPTH) });
         let grain = pcore::soil::textures(&samples, &terrain.makes, gravity);
         let strips = wetness::strips(&samples, phys);
         let hill = wetness::hill(&samples, &strips);
-        Ground { seed, map, terrain, lat, samples, law, at, bends, shore, grain, strips, hill, phys: *phys, gravity }
+        Ground { seed, map, terrain, lat, samples, law, at, raw, bends, shore, grain, strips, hill, phys: *phys, gravity }
     }
 
     /// The ground of world `w`, on its samples as last built (`World::terrain_samples`).
     pub fn of(w: &World) -> Ground {
-        Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), w.terrain_samples())
+        // (Its samples first, so the terrain it keeps holds them and how they were raised, `Terrain::built`.)
+        let samples = w.terrain_samples();
+        Ground::on(w.terrain.seed, (w.map.clone(), w.terrain.clone(), (w.cfg.lat_south, w.cfg.lat_north)), (&w.cfg.phys, w.cfg.gravity), samples)
     }
 
     /// The relief a world built its samples from (`World::relief`), the years since its start at its last build and the
@@ -114,6 +135,18 @@ impl Ground {
     /// ground is made of its squares, `worldgen::terrain::island_ground`).
     pub fn relief_bytes(w: &World) -> Vec<u8> {
         bincode::serialize(&(&w.relief, w.built_years(), &w.map)).expect("a relief serializes")
+    }
+
+    /// The relief world `w`'s samples will be built from when its edits settle (`World::settle`,
+    /// `flow::build::reshape`: the next version, the offsets kept), as `relief_bytes` gives it after: so a shell's
+    /// ground can be made again while the world settles. None where its edits shaped nothing, or where the reshape will
+    /// find the offsets (no build before).
+    pub fn settled_relief_bytes(w: &World) -> Option<Vec<u8>> {
+        if !w.relief.due || w.relief.offset.len() != w.mesh.cells().n() {
+            return None;
+        }
+        let r = Relief { version: w.relief.version + 1, due: false, ..w.relief.clone() };
+        Some(bincode::serialize(&(&r, w.built_years(), &w.map)).expect("a relief serializes"))
     }
 
     /// The ground made again on the samples the relief `bytes` builds on the world's cells (`relief_bytes`,
@@ -125,20 +158,27 @@ impl Ground {
     }
 
     /// The ground made again on the samples `new` (as a world built them again, `Terrain::built`): what each sample
-    /// holds of it found again, but the pieces of the channels (`bends::Bends`), found again only where a piece may read
-    /// a sample that changed (`rebuild::near`, `BENDS_READ`; and every piece down the ways from those, whose start they
-    /// set): the rest read what they did. Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
+    /// holds of it found again, but the shore (`shore::Shore::update`), the points the lines run through
+    /// (`stems::update`), the texture (`pcore::soil::texture_at`) and the pieces of the channels (`bends::Bends`), found
+    /// again only where they may read a sample that changed (`rebuild::near`, `BENDS_READ`; and every piece down
+    /// the ways from those, whose start they set): the rest read what they did. Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
     pub fn rebuild(&mut self, new: Arc<Samples>) -> Vec<bool> {
-        let shore = shore::Shore::new(&new);
-        let at = stems::points(&new, &shore);
-        let grain = pcore::soil::textures(&new, &self.terrain.makes, self.gravity);
+        let old = self.samples.clone();
+        let mut shore = std::mem::take(&mut self.shore);
+        let shore_moved = shore.update(&old, &new);
+        let ways: Vec<bool> = (0..new.h.len()).map(|k| old.main[k] != new.main[k] || old.to[k] != new.to[k]).collect();
+        let (mut at, mut raw) = (self.at.clone(), std::mem::take(&mut self.raw));
+        stems::update(&new, &shore, (&mut at, &mut raw), (&ways, &shore_moved));
+        let mut grain = std::mem::take(&mut self.grain);
+        let read = rebuild::near(&new, &rebuild::moved(&old, &new), rebuild::GRAIN_READ);
+        (0..new.h.len()).filter(|&k| read[k]).for_each(|k| grain[k] = pcore::soil::texture_at(&new, &self.terrain.makes, self.gravity, k));
         let strips = wetness::strips(&new, &self.phys);
         let hill = wetness::hill(&new, &strips);
         let changed = rebuild::changed(&self.read(), &rebuild::Read { s: &new, hill: &hill, strips: &strips, at: &at });
         let reaches = bends::Reaches { seed: self.seed, s: &new, at: &at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) };
         self.bends.update(&reaches, &rebuild::readers(&new, &rebuild::near(&new, &changed, rebuild::BENDS_READ)));
         let squares = rebuild::squares(&self.map, &new, &rebuild::readers(&new, &changed));
-        (self.samples, self.at, self.shore, self.grain, self.strips, self.hill) = (new, at, shore, grain, strips, hill);
+        (self.samples, self.at, self.raw, self.shore, self.grain, self.strips, self.hill) = (new, at, raw, shore, grain, strips, hill);
         squares
     }
 
