@@ -11,8 +11,6 @@ export interface Fields {
   /** Four floats a texel: the ice, m; the ground's temperature, K; the share of the texel that is the sea's; the share
    * that is a river. */
   matter: Float32Array;
-  /** Four bytes a texel: the true colour (r, g, b), one unused. */
-  bytes: Uint8Array;
   /** Four bytes a texel: the ground's own colour (r, g, b), one unused. */
   ground: Uint8Array;
   /** Four floats a texel: how wet the ground is, 0..1 (the `wet` layer); the
@@ -34,7 +32,6 @@ export interface Fields {
 export const FIELD_TEXTURES = [
   { binding: 2, field: 'height', format: 'rgba32float' },
   { binding: 3, field: 'matter', format: 'rgba32float' },
-  { binding: 4, field: 'bytes', format: 'rgba8unorm' },
   { binding: 7, field: 'inside', format: 'rgba32float' },
   { binding: 8, field: 'ground', format: 'rgba8unorm' },
 ] as const;

@@ -2,7 +2,7 @@
 // in the patches of a square's scar, the ground is black with char and grey with ash where the flames left it, the char
 // fades to the scorched brown of bare burnt soil and that to the ground's own colour as the months pass, under the
 // plants that come back by the core's own numbers (the cover's field, drawn as it is). The Earth view draws the cured
-// leaves standing as straw over the cover; the true view shows the ground's reflectance.
+// leaves standing as straw over the cover.
 
 // Reflectances, linear: char, the black of a fresh burn (charred litter and soil reflect 3 to 6 % of visible light:
 // Smith and Hudak 2005, Roy and others 2010, read); ash, grey to white where the flames burnt all (white ash 30 to 50 %,
@@ -106,6 +106,3 @@ fn scar_over(c: vec3f, p: Spot) -> vec3f {
 // The Earth view's floor `c` (colour.wgsl `ground_of`) under the scar; and the share of it the scar takes from the
 // soil's own tint.
 fn burnt_floor(c: vec3f, p: Spot) -> vec4f { return vec4f(scar_over(c, p), p.scar.x); }
-
-// The true colour `truth` of spot p's ground under its scar.
-fn burnt_truth(truth: vec3f, p: Spot) -> vec3f { return scar_over(truth, p); }

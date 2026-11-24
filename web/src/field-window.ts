@@ -22,14 +22,14 @@ export function frameOf(left: number, top: number, mpp: number, seen: number): n
   return [hx, hy, mpp, seen, x - hx, y - hy, 0, 0];
 }
 
-/** What the map draws: the Earth's colours, the true colour, or a layer (its name, its ramp, and where it is of the
+/** What the map draws: the Earth's colours, or a layer over them (its name, its ramp, and where it is of the
  * soil how it is drawn, `GROUND_LAYERS`; 0 not of the soil). */
-export interface MapLook { mode: 'earth' | 'true' | 'layer'; layer: string; ramp: RGB[]; ground: number }
+export interface MapLook { mode: 'earth' | 'layer'; layer: string; ramp: RGB[]; ground: number }
 
 /** The uniforms of colour.wgsl (`Earth`) for view `look`: how the fields are read (`Fields.look`), where they lie in
  * the world (`Fields.place`), the sea's level, m, and where a pixel of the target lies in the world (`frameOf`). */
 export function earthUniforms(look: MapLook, read: number[], place: number[], sea = 0, frame: number[] = []): ArrayBuffer {
-  const mode = look.mode === 'earth' ? 0 : look.mode === 'true' ? 1 : 2, u = new Uniforms(EARTH_VEC4S);
+  const mode = look.mode === 'earth' ? 0 : 1, u = new Uniforms(EARTH_VEC4S);
   u.vec4(...read).vec4(mode, look.ramp.length, sea, look.ground).vec4(...place).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4));
   for (let k = 0; k < RAMP_STOPS; k++) u.vec4(...(look.ramp[k] ?? [0, 0, 0]));
   return u.buffer;

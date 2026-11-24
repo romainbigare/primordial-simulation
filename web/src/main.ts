@@ -37,7 +37,7 @@ const ASK_MS = 150;
 
 let world: World | null = null;
 let live: Live | null = null;
-let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null;
+let frame = 0, speed = 4, playing = false, layer: string | null = null;
 
 const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect(), v => viewSoon(v));
 /** The live map: the ground's tiles and the cells' table (live world only). */
@@ -51,7 +51,7 @@ let viewTimer = 0;
 /** The slots of cover of the window in view, asked for when the map is close (live world only), and the window asked for. */
 const slots = new CoverSlots();
 let thingsKey = '';
-/** The cover of the live map (earth view only). */
+/** The cover of the live map (with no layer shown). */
 const vegetation = new Vegetation();
 map.layer = vegetation;
 /** Fire on the live map: its scars, flames and smoke. */
@@ -117,7 +117,7 @@ function setup(w: World): void {
   map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
   $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ...(m.globe ? [] : [['band', `${fmt(m.lat_south)}° to ${fmt(m.lat_north)}°`]]), ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
     .map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + '<span>year <b id="hy"></b></span>';
-  const names = m.layers.map(l => l.name).filter(n => !/^(true|ground)_[rgb]$/.test(n));
+  const names = m.layers.map(l => l.name).filter(n => !/^ground_[rgb]$/.test(n));
   const grouped = LAYER_GROUPS.map(([g, labels]): [string, string[]] => [g, Object.keys(labels).filter(n => names.includes(n))]);
   const others = names.filter(n => !grouped.some(([, ns]) => ns.includes(n)));
   $('layers').replaceChildren(...[...grouped, ['Other', others] as [string, string[]]].filter(([, ns]) => ns.length).map(([g, ns]) => {
@@ -180,7 +180,7 @@ function repaint(): void {
   if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
   if (land && live) land.plumesIn(live.plumes);
   if (land && live) land.tiles.rebuild(live.takeRelief(), !playing);
-  vegetation.set(view === 'earth' && !layer && live ? w : null, live?.table ?? null);
+  vegetation.set(!layer && live ? w : null, live?.table ?? null);
   fire.set(land && live ? w : null);
   map.setLook(look);
   inspector.painted();
@@ -188,9 +188,9 @@ function repaint(): void {
 }
 
 
-/** What the map draws: the view or the layer shown. */
+/** What the map draws: the Earth view, or a layer over it. */
 function mapLook(): MapLook {
-  return { mode: layer ? 'layer' : view === 'true' ? 'true' : 'earth', layer: layer ?? '', ramp: layer ? rampFor(layer) : [], ground: GROUND_LAYERS.get(layer ?? '') ?? 0 };
+  return { mode: layer ? 'layer' : 'earth', layer: layer ?? '', ramp: layer ? rampFor(layer) : [], ground: GROUND_LAYERS.get(layer ?? '') ?? 0 };
 }
 
 function setLayer(n: string | null): void {
@@ -209,7 +209,6 @@ function setLayer(n: string | null): void {
 }
 
 function syncUi(): void {
-  document.querySelectorAll<HTMLElement>('#views button').forEach(b => b.classList.toggle('on', !layer && b.dataset.view === view));
   document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
   $<HTMLSelectElement>('speeds').value = String(speed);
   $('play').classList.toggle('playing', playing);
@@ -224,8 +223,6 @@ function setGod(on: boolean): void {
   $('god-btn').setAttribute('aria-pressed', String(on));
   if (!on) god.reset();
 }
-
-function setView(v: string): void { view = v; layer = null; setLayer(null); }
 
 function button(text: string, fn: () => void, layerName?: string): HTMLButtonElement {
   const b = document.createElement('button');
@@ -273,13 +270,11 @@ $('inspect-btn').onclick = () => { const on = $('inspect-card').hidden; $('inspe
 $('god-btn').onclick = () => setGod(!godOn());
 $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
-document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
 addEventListener('keydown', e => {
   const tag = (e.target as HTMLElement).tagName;
   if ((e.target as HTMLInputElement).type === 'search') return; // typing in a search (charts, layers)
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && tag !== 'INPUT') { e.preventDefault(); god.undo(); }
-  else if (e.key === 't' || e.key === 'T') setView(view === 'earth' ? 'true' : 'earth');
   else if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'INPUT') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'ArrowLeft' && tag !== 'INPUT') setFrame(frame - (e.shiftKey ? 10 : 1));
   else if (e.key === 'ArrowRight' && tag !== 'INPUT') setFrame(frame + (e.shiftKey ? 10 : 1));

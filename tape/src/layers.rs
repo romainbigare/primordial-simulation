@@ -7,7 +7,7 @@ use pcore::chem::{Phase, Substance};
 use pcore::inside::Means;
 use pcore::{World, AIR};
 
-/// Thinnest cover (m) that hides what lies below it.
+/// Thinnest frozen cover, m, that counts a cell as under ice (the `ice_frac` column).
 pub(crate) const COVER_MIN: f64 = 0.01;
 /// The remains of the cover lie on the ground's surface as litter, covering all but e^-1 of it at this much, kg/m² (a
 /// forest floor's litter of a few tenths of a kg/m² hides the mineral soil; forests hold 0.5 to 5 kg/m² of it, from
@@ -17,7 +17,7 @@ const LITTER_KG: f64 = 0.3;
 const COVER_MELT: (f64, f64) = (200.0, 320.0);
 /// Boiling point above which a gas of the air counts as vapour (it condenses on the surface), K.
 const VAPOR_BOIL: f64 = 250.0;
-/// Ground temperature at which the true colour starts to glow, K; the glow triples it over as many K again.
+/// Ground temperature at which the ground's colour starts to glow, K; the glow triples it over as many K again.
 const GLOW_T: f64 = 500.0;
 
 /// Frozen cover: substances that are liquid somewhere on the surface (`COVER_MELT`).
@@ -46,16 +46,14 @@ pub struct Fields {
     pub loose: Vec<f64>,
     /// Ground temperature, K
     pub t: Vec<f64>,
-    /// Visible colour of what covers the surface, 0..1
-    pub rgb: Vec<[f64; 3]>,
     /// Colour of the ground itself, 0..1: its loose solids, else its bonded ones (no frozen cover, no liquid), under the
     /// litter of the cover's remains on it (`LITTER_KG`)
     pub ground: Vec<[f64; 3]>,
 }
 
 /// One cell's values: elevation, liquid depth, soft solid's depth, loose solid depth, temperature, colour of the
-/// surface and of the ground.
-type Cell = (f64, f64, f64, f64, f64, [f64; 3], [f64; 3]);
+/// ground.
+type Cell = (f64, f64, f64, f64, f64, [f64; 3]);
 
 /// Of each cell of `w`, its liquid in its pores and over them (`flow::means`); none before Flow first built its state.
 /// A frame works it out once and hands it to all that read it.
@@ -63,55 +61,40 @@ pub fn means(w: &World) -> Option<Vec<Means>> {
     pcore::flow::means(w, &(0..w.mesh.cells().n()).collect::<Vec<usize>>())
 }
 
-/// The fields of `w` whose cells hold the liquid `means` (`means`; none before Flow first built its state: then no
-/// liquid in or over the pores).
-pub fn fields(w: &World, means: Option<&[Means]>) -> Fields {
-    let stands = |i: usize| means.map_or(0.0, |m| m[i].stands);
-    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i, stands(i)));
-    let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], rgb: vec![], ground: vec![] };
-    for (z, depth, ice, loose, t, rgb, ground) in cells {
+/// The fields of `w`.
+pub fn fields(w: &World) -> Fields {
+    let cells = par::map_n(w.mesh.cells().n(), par::UNCOUNTED, |i| cell(w, i));
+    let mut f = Fields { z: vec![], depth: vec![], ice: vec![], loose: vec![], t: vec![], ground: vec![] };
+    for (z, depth, ice, loose, t, ground) in cells {
         f.z.push(z);
         f.depth.push(depth);
         f.ice.push(ice);
         f.loose.push(loose);
         f.t.push(t);
-        f.rgb.push(rgb);
         f.ground.push(ground);
     }
     f
 }
 
-/// The values of cell `i` (`Cell`), over whose pores `stands` m of liquid stands, as Flow's state has it: its solid
-/// surface, its liquid, in its pores and standing (`Scratch::surface`), its soft cover (`Scratch::soft`) and the
-/// phase of each substance (`Scratch::phases`); before Flow first built its state, none (NaN) and black. The liquid
-/// shows as the surface only so far as it stands over the ground; the liquid in the pores is part of the ground
-/// (`flow::means`).
-fn cell(w: &World, i: usize, stands: f64) -> Cell {
+/// The values of cell `i` (`Cell`) as Flow's state has it: its solid surface and its liquid (`Scratch::surface`), its
+/// soft cover (`Scratch::soft`) and the phase of each substance (`Scratch::phases`); before Flow first built its state,
+/// none (NaN) and black. The ground's colour is its loose solids', else its bonded ones' (by volume), under its litter.
+fn cell(w: &World, i: usize) -> Cell {
     let t = w.thaw_node_last(i).0;
-    let Some([z, depth]) = w.scratch.surface(i) else { return (f64::NAN, f64::NAN, 0.0, f64::NAN, w.t_surface_last(i), [0.0; 3], [0.0; 3]) };
-    // Kinds of cover in order of priority: soft solid, liquid, loose, bonded. Each: volume, volume * colour.
-    let mut acc = [[0.0f64; 4]; 4];
-    let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {
-        acc[kind][0] += vol;
-        for c in 0..3 {
-            acc[kind][1 + c] += vol * refl[c] as f64;
-        }
-    };
+    let Some([z, depth]) = w.scratch.surface(i) else { return (f64::NAN, f64::NAN, 0.0, f64::NAN, w.t_surface_last(i), [0.0; 3]) };
+    // The loose solids, then the bonded ones: each their volume, m³, and that times their reflectance.
+    let mut loose = [0.0f64; 4];
     for k in 0..w.chem.ns() {
-        let s = &w.chem.subs[k];
-        let [soft, liquid, loose] = w.scratch.phases(i, k, w.g(k, i)).unwrap_or_default();
-        add(0, soft, s.refl[0]);
-        add(1, liquid, s.refl[1]);
-        add(2, loose, s.refl[0]);
+        let [_, _, vol] = w.scratch.phases(i, k, w.g(k, i)).unwrap_or_default();
+        loose[0] += vol;
+        (0..3).for_each(|c| loose[1 + c] += vol * w.chem.subs[k].refl[0][c] as f64);
     }
-    acc[3] = bonded(w, i);
-    let (area, ice) = (w.mesh.cells().area()[i], w.scratch.soft(i));
-    let shows = |kind: usize, a: &[f64; 4]| a[0] > 0.0 && [ice, stands, a[0] / area][kind] >= COVER_MIN;
-    let top = acc[..3].iter().enumerate().find(|&(kind, a)| shows(kind, a)).map_or(&acc[3], |(_, a)| a);
+    let bed = bonded(w, i);
+    let area = w.mesh.cells().area()[i];
     let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
     let colour = |a: &[f64; 4]| [1, 2, 3].map(|c| if a[0] > 0.0 { (a[c] / a[0] * glow).min(1.0) } else { 0.0 });
-    let ground = colour(acc[2..].iter().find(|a| a[0] > 0.0).unwrap_or(&acc[3]));
-    (z, depth, ice, acc[2][0] / area, w.t_surface_last(i), colour(top), litter(w, i, area, ground))
+    let ground = colour(if loose[0] > 0.0 { &loose } else { &bed });
+    (z, depth, w.scratch.soft(i), loose[0] / area, w.t_surface_last(i), litter(w, i, area, ground))
 }
 
 /// The bonded solids of cell `i` (its bed): their volume, m³, and that times their reflectance (red, green, blue).
@@ -214,7 +197,7 @@ impl<'a> Ctx<'a> {
         let n = w.mesh.cells().n();
         let t_air = (0..w.mesh.level(AIR).n()).map(|j| w.t_air(j)).collect();
         let means = means(w);
-        let f = fields(w, means.as_deref());
+        let f = fields(w);
         let none = vec![Means::default(); n];
         let each = means.as_deref().unwrap_or(&none);
         let wet = each.iter().map(|m| w.cfg.phys.wetness(m.pore + m.stands)).collect();
@@ -331,9 +314,6 @@ pub const LAYERS: &[Layer] = &[
     l("burnt_age", "months", "lin", 0.0, pcore::flame::AGE_MOST as f64, |c, i| pcore::flame::since(c.w, i)),
     l("ash", "kg/m2", "log", 1e-5, 1.0, |c, i| flamed(c.w, i).ash as f64),
     l("flame_air", "kg/m2", "log", 1e-3, 10.0, |c, i| flamed(c.w, i).air as f64),
-    l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
-    l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
-    l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),
     l("ground_r", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][0]),
     l("ground_g", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][1]),
     l("ground_b", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][2]),

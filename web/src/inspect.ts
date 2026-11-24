@@ -57,11 +57,9 @@ export class Inspector {
     if (!this.texture.hidden) this.texture.innerHTML = textureLegend(grain);
     let rows = grain ? `<tr><td>Soil texture</td><td>${textureClass(...grain)}</td></tr>` : '';
     meta.layers.forEach((l, k) => {
-      if (/^(true|ground)_[rgb]$/.test(l.name)) return;
+      if (/^ground_[rgb]$/.test(l.name)) return;
       rows += `<tr><td>${layerLabel(l.name)}</td><td>${fmt(world.lut[k][plane(world, frame, l.name)[i]])} <u>${unitText(l.unit)}</u></td></tr>`;
     });
-    const t = ['true_r', 'true_g', 'true_b'].map(n => plane(world, frame, n)[i]);
-    rows += `<tr><td>True colour</td><td><s style="background:rgb(${t})"></s></td></tr>`;
     el.innerHTML = `<div class="cell"><s style="background:${color}"></s><b>${name}</b><span>x ${i % meta.w}, y ${(i / meta.w) | 0}</span></div>${where(world, i)}<table>${rows}</table>`;
   }
 }

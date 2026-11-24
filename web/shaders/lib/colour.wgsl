@@ -10,7 +10,7 @@ struct Earth {
   // temperature lays snow near it (0: the ice of the cells alone); a shore by the sea is sand up to this height over
   // the liquid, m; the bytes of a layer view over which an empty spot fades into a full one.
   look: vec4f,
-  // What is drawn: the view (0 the Earth's colours, 1 the true colour, 2 a layer over them); the stops of the layer's
+  // What is drawn: the view (0 the Earth's colours, 1 a layer over them); the stops of the layer's
   // ramp; the sea's level, m (the live map: the lowest body's); and where the layer is of the soil (drawn on dry
   // ground alone, `in_view_of`) 1, or from 2 on which of the layers the live map finds at each point (live_map.wgsl
   // `layer_at`, earth.ts `GROUND_LAYERS`).
@@ -330,13 +330,6 @@ fn swash_of(over: f32, waves: vec2f, slope: f32, at: vec2f, e: f32, snow: f32) -
   return vec2f(wet, foam) * (1.0 - snow);
 }
 
-// The true colour `truth` of what covers spot p, its ground darker as far as it is soaked (`WET_DARK`), where no
-// liquid stands over it and as far as no snow lies on it: the liquid in its pores is part of the ground, not a surface.
-fn true_soaked(truth: vec3f, p: Spot) -> vec3f {
-  if (p.depth > 0.0) { return truth; }
-  return truth * (1.0 - WET_DARK * soaked(p) * (1.0 - p.snow));
-}
-
 // Ground g soaked to s, lit by `lit` (its shade's multiplier): its bare part (on peat its soil seen, `wets`) the darker the more soaked (and in the
 // style tinted by its grain as far as it takes the tint, and darkened by its organic matter as far as its soil is seen,
 // style.wgsl `bare_tint`).
@@ -415,7 +408,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     let rgb = ice_on(water, ice, p.depth, p.at, p.e);
     var kind = select(LAKE, select(SHALLOW, DEEP, p.depth > DEEP_SEA_M), p.sea >= 0.5);
     if (ice > 0.5) { kind = ICE; }
-    // The true view shades the bed's colours as far as the bed shows.
+    // A layer's view shades the bed's colours as far as the bed shows (`Shaded.m`, `in_view_of`).
     return Shaded(rgb, 1.0 + (lit - 1.0) * through(p.depth).g, kind);
   }
   // Over it: the ground, wet by how soaked it is and by the swash (peat soaked through as far as it is peat,
@@ -499,16 +492,13 @@ fn puddles(p: Spot, film: f32, peat: f32) -> Puddle {
 }
 
 // Shaded colour `c` in the view drawn, as the screen's bytes (0..255), where the byte of the layer it draws is `o`
-// (0..1) and the true colour is `truth` (reflectance, 0..1): the Earth's colours; the true colour, shaded; or a layer's
-// ramp over a little of the Earth's colours (where the layer is empty, the Earth's colours faded; a layer of the soil,
-// `earth.view.w` from 1, is empty over standing liquid).
-fn in_view_of(c: Shaded, o: f32, truth: vec3f) -> vec3f {
+// (0..1): the Earth's colours, or a layer's ramp over a little of them (where the layer is empty, the Earth's colours
+// faded; a layer of the soil, `earth.view.w` from 1, is empty over standing liquid).
+fn in_view_of(c: Shaded, o: f32) -> vec3f {
   var rgb = 255.0 * srgb(c.rgb);
   if (styled()) {
     rgb = 255.0 * painted(srgb(c.rgb));
-  } else if (earth.view.x == 1.0) {
-    rgb = 255.0 * srgb(truth * clamp(1.0 + (c.m - 1.0) * 0.7, 0.55, 1.4));
-  } else if (earth.view.x == 2.0) {
+  } else {
     // A layer found at each point is a share known everywhere on dry ground: none of it is a value, not an empty point.
     var full = select(clamp(255.0 * o / earth.look.w, 0.0, 1.0), 1.0, earth.view.w >= 2.0);
     if (earth.view.w >= 1.0 && c.kind <= LAKE) { full = 0.0; }

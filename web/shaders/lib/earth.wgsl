@@ -5,8 +5,6 @@
 @group(0) @binding(2) var height_field: texture_2d<f32>;
 // The ice, m; the ground's temperature, K; the share that is the sea's; the share that is a river.
 @group(0) @binding(3) var matter_field: texture_2d<f32>;
-// The true colour (red, green, blue), 0..1.
-@group(0) @binding(4) var byte_field: texture_2d<f32>;
 // The ground's own colour (red, green, blue), 0..1.
 @group(0) @binding(8) var ground_field: texture_2d<f32>;
 // The byte of the layer a view draws, 0..1.
@@ -99,8 +97,8 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.grain = TAPE_GRAIN;
   return s;
 }
-// The colour of spot p at uv in the view drawn (`in_view_of`), its true colour soaked as the spot is (`true_soaked`).
+// The colour of spot p at uv in the view drawn (`in_view_of`).
 fn in_view(p: Spot, uv: vec2f) -> vec3f {
   let o = textureSampleLevel(view_field, smooth_sampler, uv, 0.0);
-  return in_view_of(colour(p), o.x, true_soaked(textureSampleLevel(byte_field, smooth_sampler, uv, 0.0).xyz, p));
+  return in_view_of(colour(p), o.x);
 }

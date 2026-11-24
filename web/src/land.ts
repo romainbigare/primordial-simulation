@@ -1,7 +1,7 @@
 // The live map as the GPU draws it (web/shaders/land.wgsl): the ground from its tiles (ground.ts), the state from the
 // cells' table the world's worker sends with each frame (tape/src/table.rs), what runs through each of the terrain's
 // samples (sent when it changed enough to show), and the numbers of the laws the core applies inside a cell. The page
-// adds to the table what it decides itself: the ground's own colour and the sea, the true colour, and the layer drawn.
+// adds to the table what it decides itself: the ground's own colour and the sea, the land's ice, and the layer drawn.
 import { Draw, Gpu, Texture, Uniforms } from './gpu';
 import { GroundTiles, Preview, TILE_FADE_MS } from './ground';
 import { World, plane, decode } from './data';
@@ -187,8 +187,6 @@ export class Land {
     // The land's mean height, ground temperature and ice of each square (the sea's squares' from the land nearest): the land a
     // coastal square of the open low ground holds is the land's, not its 8 km cell's.
     const [landZ, landT, landIce] = fromLand([0, 1, 3].map(k => Float32Array.from({ length: n }, (_, i) => rows[1 + row * i + k])), wet.sea, W, H);
-    // The true colour, read over standing liquid alone (land.wgsl `fs`): the dry squares' from the wet ones nearest.
-    const truth = fromLand(['true_r', 'true_g', 'true_b'].map(name => plane(w, 0, name)), Uint8Array.from(wet.wet, v => 1 - v), W, H);
     // The share of organic matter of each square's loose ground, which the Earth view darkens it by (land.wgsl).
     const organic = w.index.has('organic') ? decode(w, 0, 'organic') : new Float32Array(n);
     // The soil's grain the laws read, each cell's (`World::soil`), over its samples' as the rock draws them: what the
@@ -205,7 +203,7 @@ export class Land {
     for (let i = 0; i < n; i++) {
       for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
       put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
-      put(4, i, [truth[0][i] / 255, truth[1][i] / 255, truth[2][i] / 255, landIce[i]]);
+      put(4, i, [landIce[i], 0, 0, 0]);
       put(5, i, [shown ? shown[i] / 255 : 0, organic[i], landT[i], landZ[i]]);
       put(6, i, [coarse[i] - samplesGrain.coarse[i], fine[i] - samplesGrain.fine[i], 0, 0]);
       data[4 * n * Math.floor(SATURATED_AT / 4) + 4 * i + SATURATED_AT % 4] = saturated[i];
@@ -318,8 +316,7 @@ function blurSea(data: Float32Array, open: ArrayLike<number>, w: number, h: numb
 /** Planes `planes` (a number a square) of the map's `w` x `h` squares with the squares marked in `other` (1 where
  * marked) taken from the nearest squares not marked, ring by ring (each the mean of its neighbours already found). The
  * open low ground is cells of 8 km, whose numbers are their liquid surface's: the land a coastal square of one holds is
- * the land's, so no 8 km square of the sea's numbers shows on a coast; and the liquid's true colour, read over the
- * liquid alone, is the wet squares', so no land's colour blurs into the water along a shore. */
+ * the land's, so no 8 km square of the sea's numbers shows on a coast. */
 function fromLand(planes: ArrayLike<number>[], other: ArrayLike<number>, w: number, h: number): Float32Array[] {
   const out = planes.map(p => Float32Array.from(p)), known = Uint8Array.from(other, v => (v ? 0 : 1));
   for (let left = true; left;) {

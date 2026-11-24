@@ -38,9 +38,9 @@ WebGL2. The shaders are written once in WGSL (`web/shaders/`); the build (`npm r
 as GLSL ES 3.00 for WebGL2 too with naga, the shader translator of the wgpu project (`web/shade`, so the build needs
 cargo), and puts both in the page. The page hands the card fields, not pictures (a tape's `web/src/fields.ts`, the live
 map's tiles and table): of each square or texel the ground's height and slope, the liquid's surface over the ground, the ice, the ground's temperature, the
-share that is sea and that is a river and the river's depth, how wet the ground is, the plant cover's byte, the true
-colour and every layer. The card turns them into colours at each pixel of the screen (`web/shaders/lib/colour.wgsl`:
-the Earth view, the true colour and the layer views, one rule for a tape's map of squares and for the live map),
+share that is sea and that is a river and the river's depth, how wet the ground is, the plant cover's byte and every
+layer. The card turns them into colours at each pixel of the screen (`web/shaders/lib/colour.wgsl`:
+the Earth view and the layer views over it, one rule for a tape's map of squares and for the live map),
 with the light on the slopes. Water is water (`web/shaders/lib/water.wgsl`): a flat surface, its bed seen through it
 and fading with depth as water absorbs red light most and blue least (Beer–Lambert), into the dark blue of deep water;
 a little of the sky reflects from it and the sun glints on small ripples fixed in the world, which fade out as they
@@ -156,8 +156,8 @@ ground, bluer for hardiness to frost, its walls showing through an open crown, y
 tall, open canopy is darker by the shadows its plants lay between them.
 
 The Earth view takes one style step over the physical colours, a hand-painted map's, with all of its numbers in one
-place (`web/shaders/lib/style.wgsl` for each pixel, `web/src/style.ts` for the plants' colours); the true view and the
-layer views keep the physical colours. Every look still means what the model holds. The colours are cleaner, with
+place (`web/shaders/lib/style.wgsl` for each pixel, `web/src/style.ts` for the plants' colours); the layer views keep
+the physical colours under their ramp. Every look still means what the model holds. The colours are cleaner, with
 more contrast; slopes have a clear lit side and a soft cool shade. Water is coloured by its depth through the clear
 water of the clearest coasts, drawn stretched, so the bed shows to tens of metres: sand, pale shallows, turquoise,
 blue, then the deep, with the sea's foam along its edge (close up a line at the water's edge and a few soft broken lines that follow

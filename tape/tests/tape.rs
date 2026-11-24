@@ -198,7 +198,7 @@ fn a_globe_file_names_its_shape_and_its_means_are_by_area() {
     let meta: serde_json::Value = serde_json::from_slice(&raw[8..8 + n]).unwrap();
     assert_eq!((meta["globe"].as_bool(), meta["w"].as_u64(), meta["h"].as_u64()), (Some(true), Some(2 * rows), Some(rows)));
     assert_eq!((meta["lat_north"].as_f64(), meta["lat_south"].as_f64()), (Some(90.0), Some(-90.0)));
-    let (t, area) = (tape::fields(&w, tape::means(&w).as_deref()).t, w.mesh.cells().area());
+    let (t, area) = (tape::fields(&w).t, w.mesh.cells().area());
     let by_area = t.iter().zip(area).map(|(t, a)| t * a).sum::<f64>() / area.iter().sum::<f64>();
     assert!((rec.last("t_ground") - by_area).abs() < 1e-9, "{} against {by_area}", rec.last("t_ground"));
 }

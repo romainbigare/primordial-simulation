@@ -95,7 +95,7 @@ impl<'a> Look<'a> {
         let liquid_m3 = w.chem.molar_volume(liquid, pcore::chem::Phase::Liquid);
         let ground = means.as_deref().map_or_else(|| vec![Default::default(); cells.len()], |m| pcore::soil::holdings(w, m));
         let patched = (0..cells.len()).map(|i| Patched::of(w, i)).collect();
-        Look { w, f: fields(w, means.as_deref()), green: pcore::cover::per_m2(w, Cover::kg), wet, liquid_m3, ground, lead: lead(w), patched }
+        Look { w, f: fields(w), green: pcore::cover::per_m2(w, Cover::kg), wet, liquid_m3, ground, lead: lead(w), patched }
     }
 
     /// The minerals the ground of cell `i` holds (`Chemistry::minerals`), mol/m².

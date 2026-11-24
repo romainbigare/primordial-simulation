@@ -26,7 +26,7 @@ const FLAME_FOOT = vec3f(1.0, 0.86, 0.48); const FLAME_MID = vec3f(1.0, 0.47, 0.
 const EMBERS = 0.35; const EMBER_M = 0.6; const EMBER_SPARSE = 0.75; const EMBER_MEAN = 0.1; const EMBER_RGB = vec3f(0.95, 0.25, 0.04);
 // A burning square glows over its ground and the squares about it, seen from afar: as bright as `GLOW` times its
 // burning share over `GLOW_SHARE` (held to 1) times its flames' length over `GLOW_M` (held to 1), fading in as a pixel
-// takes from `GLOW_E.x` to `GLOW_E.y` m, where its fronts are too thin to see. In the Earth view stronger by
+// takes from `GLOW_E.x` to `GLOW_E.y` m, where its fronts are too thin to see. The map draws it stronger by
 // `GLOW_EARTH`.
 const GLOW = 0.3; const GLOW_SHARE = 0.05; const GLOW_M = 3.0; const GLOW_E = vec2f(10.0, 60.0); const GLOW_EARTH = 1.6;
 const GLOW_RGB = vec3f(1.0, 0.36, 0.06);
@@ -47,7 +47,7 @@ const INNER_PX = vec2f(1.0, 3.0);
 
 // Smoke: its column of particles, g/m², and how far it came, worked out once a world frame (smoke.wgsl, read here
 // through lib/smoke.wgsl `smoke_at`). Light passes the column by e^-(`EXTINCTION` × g/m²): biomass smoke takes 3.5 to
-// 5 m² a gram (Reid and others 2005). The Earth view draws it `SMOKE_EARTH` times as thick, so a fire's plume shows,
+// 5 m² a gram (Reid and others 2005). The map draws it `SMOKE_EARTH` times as thick, so a fire's plume shows,
 // and covers no more than `SMOKE_EARTH_MOST` of the map under it, so a fire shows through its own smoke. It shows from
 // `SMOKE_NEAR_E` m a pixel on.
 const EXTINCTION = 4.5; const SMOKE_EARTH = 2.0; const SMOKE_EARTH_MOST = 0.45;
@@ -103,7 +103,6 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
   let at = pix_origin + pix_local;
   let e = fire.frame.w;
   let time = fire.air.x;
-  let earth_view = fire.map.w == 0.0;
   let f = fire_at(at);
   // The front: the outer edge of the burnt share, the flaming zone `FLAME_DEPTH` lengths deep behind it, and the embers
   // over the rest of this month's burnt share.
@@ -145,13 +144,13 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
     light *= ease(0.0, FLAME_FADE, f.flame) * select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M);
   }
   // The glow of the burning squares, seen from afar.
-  let glow = GLOW * select(1.0, GLOW_EARTH, earth_view) * ease(0.0, GLOW_SHARE, f.flame) * min(f.length / GLOW_M, 1.0) * ease(GLOW_E.x, GLOW_E.y, e);
+  let glow = GLOW * GLOW_EARTH * ease(0.0, GLOW_SHARE, f.flame) * min(f.length / GLOW_M, 1.0) * ease(GLOW_E.x, GLOW_E.y, e);
   light += glow * GLOW_RGB;
-  // The smoke over it all: its column's depth, thicker in the Earth view; its texture moves with the wind.
+  // The smoke over it all: its column's depth, drawn thicker (`SMOKE_EARTH`); its texture moves with the wind.
   let col = smoke_at(at);
   let drift = at - f.wind * time;
   let rough = 0.55 + 0.5 * noise(drift / SMOKE_NOISE_M, 21).x + 0.3 * noise(drift / (0.4 * SMOKE_NOISE_M), 22).x;
-  var tau = EXTINCTION * col.x * select(1.0, SMOKE_EARTH, earth_view) * max(rough, 0.0);
+  var tau = EXTINCTION * col.x * SMOKE_EARTH * max(rough, 0.0);
   let puffs = shows_at(PUFF_M, e) * ease(PUFF_PX.x * e, PUFF_PX.y * e, PUFF_M);
   if (puffs > 0.0 && tau > 0.0) {
     let moved = -f.wind * time / PUFF_M;
@@ -173,7 +172,7 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
   // brightest channel: a flame hides what is behind it); the smoke over the map.
   // The smoke stands some hundreds of metres up: close to the ground the map draws what is under it, the smoke fading
   // out as a pixel takes from `SMOKE_NEAR_E.y` down to `SMOKE_NEAR_E.x` m.
-  let a = clamp(smoke, 0.0, select(1.0, SMOKE_EARTH_MOST, earth_view)) * ease(SMOKE_NEAR_E.x, SMOKE_NEAR_E.y, e);
+  let a = clamp(smoke, 0.0, SMOKE_EARTH_MOST) * ease(SMOKE_NEAR_E.x, SMOKE_NEAR_E.y, e);
   let lit = light * (1.0 - 0.7 * a);
   let shine = min(FLAME_COVER * max(lit.r, max(lit.g, lit.b)), 1.0);
   return vec4f(tone * a + lit, a + shine * (1.0 - a)) * draw.alpha;

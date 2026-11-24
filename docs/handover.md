@@ -123,7 +123,7 @@ What went wrong:
 | Waits | Natural fire starts and disease (bodies inside bodies) wait until after the animal layer (`review/roadmap.md` section 7) |
 | World chemistry | One hand-made, Earth-like "chemistry 0" (numbers only, no names in core). No random chemistry is planned (Section 6.0) |
 | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
-| Visuals | **2D map, no 3D**: colour-coded pixels for land plus small axonometric sprites. Earth view (default) with a switch to true view |
+| Visuals | **2D map, no 3D**: colour-coded pixels for land plus small axonometric sprites. One Earth view, with layers of the model's numbers over it |
 | Translation | Pattern finder (normal code) → fact cards → matcher (normal code) → small LLM for leftovers and stories (cached, read-only) |
 | God mode | Physics edits on one timeline, auto-save before each action, "then and now" view |
 | Timelines | One only |
@@ -540,7 +540,7 @@ PATTERN FINDER (normal code) ──► FACT CARDS
    ▼
 MATCHER (normal code) + RECOGNITION LIBRARY ──► Earth concept + match level
    ▼                                      (leftovers)
-VIEWER (Earth view / true view)   ◄── LLM TRANSLATOR (cached, read-only)
+VIEWER (Earth view + layers)      ◄── LLM TRANSLATOR (cached, read-only)
 ```
 
 ### 9.1 Pattern finder
@@ -759,11 +759,10 @@ as a light, subtle blob; the zoom goes deep enough to see single animals.
 - A player understands what they see **instinctively**, without reading.
 - What is drawn is **what is really there**. The Earth view only gives it a familiar face.
 
-### 10.2 Two views
+### 10.2 The view and its layers
 
-- **Earth view (default):** map colours and sprites for familiar concepts (forest, farmland, village, house, boat…), with a "≈" badge where the match is only similar.
-- **True view:** every pixel is coloured from physics: the reflectance of the substances in the cell, brighter when hot. Unmatched structures are drawn as simple blocks coloured by their materials. Flows are moving dots along edges.
-- One key switches between them.
+- **Earth view:** map colours and sprites for familiar concepts (forest, farmland, village, house, boat…), with a "≈" badge where the match is only similar.
+- **Layers:** one number of the model at a time (a temperature, the rain, the soil's grain…) drawn as a colour ramp over the Earth view, turned on and off.
 
 ### 10.3 The base map (pixels)
 
@@ -1007,7 +1006,7 @@ Note: words like `liquid`, `gas`, `solid`, `energy`, `heat`, `body`, `bond`, `fl
 | Art cost explodes | Many concepts without sprites | Few variants per concept, material tints instead of new drawings; generic block sprites as fallback |
 | Earth view misleads players | Players think the world copies Earth | Keep "≈" badges, "why this name", and the true-view switch |
 | Team adds named rules "just this once" | A named concept appears in `core` | The word-ban check; review against Section 3 |
-| Results are strange, not Earth-like | Nothing matches the library | That is allowed. Use local names and true view. Grow the library only from what appears. |
+| Results are strange, not Earth-like | Nothing matches the library | That is allowed. Use local names and the layers. Grow the library only from what appears. |
 
 ---
 
@@ -1033,7 +1032,7 @@ Note: words like `liquid`, `gas`, `solid`, `energy`, `heat`, `body`, `bond`, `fl
 | **fact card** | a short JSON summary of one detected pattern |
 | **recognition library** | data files describing Earth concepts as fingerprints |
 | **match level** | same / similar / analogy / none |
-| **Earth view / true view** | familiar map colours, sprites and names / pure physics colours |
+| **Earth view / layer** | familiar map colours, sprites and names / one number of the model as a colour ramp over it |
 | **axonometric sprite** | a small picture drawn at a fixed angle, placed on the flat map |
 | **god action** | a player's physics edit to the world |
 

@@ -508,7 +508,7 @@ tracks run side by side, one helper each: **nature** (N) and **life** (L). The o
 | 11 | N | **Years that differ** (to study first), **a wet and a dry side** (the mean wind) | Animals look too steady without bad years; rain shadows make dry land | this look; handover 6 |
 | 12 | L | **Animals on the page** (F4): single animals and herds drawn from the field | The owner judges by pictures | this look |
 | 13 | both | **The small game** (G): god tools on the living island; fire as a law | A whole thing by itself, before people | this look |
-| 14 | N | **Channels that lay down their load** (plains, marsh, deltas), with grain sizes of loose ground and soil that builds up; then ice that cuts valleys; the exact solve of the surface's step; the True view's water | Large and already agreed to wait | handover 7; this look |
+| 14 | N | **Channels that lay down their load** (plains, marsh, deltas), with grain sizes of loose ground and soil that builds up; then ice that cuts valleys; the exact solve of the surface's step | Large and already agreed to wait | handover 7; this look |
 | 15 | L | **Habits that are learned** (F5); life in the water; a term for saltiness | | this look |
 | 16 | — | **People** (P0, a design round with the owner, then P1 and on); useful rocks and metals with them; names (T) | After the animal layer is done, by the owner's word | this look |
 

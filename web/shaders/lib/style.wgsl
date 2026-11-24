@@ -1,5 +1,5 @@
 // The Earth view's style: the step from the physical colours (reflectances in linear light, colour.wgsl) to a
-// hand-painted map, for the Earth view only; the true view and the layer views keep the physical colours. Each look
+// hand-painted map, for the Earth view only; the layer views keep the physical colours under their ramp. Each look
 // here still means what the model holds: the water's colour is its depth, a beach lies where the ground is low and
 // gentle by the liquid, a slope's light is its slope. The kinds' colours are styled on the page (web/src/style.ts).
 // Nothing here reads the view: a place keeps its look at any pan or zoom.
@@ -138,6 +138,9 @@ fn painted_through(bed: vec3f, depth: f32, g: vec2f, clear: f32, load: f32) -> v
   let k = loaded_k(mix(INLAND_ATTENUATION, CLEAR_ATTENUATION, clear), load);
   return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, k, loaded_deep(mix(INLAND_DEEP, open, clear), load));
 }
+// The open sea far from any shore, as the map paints it (the screen's share of full scale): what the page shows past
+// the map's edge where it is drawn out to the screen's (picture.wgsl).
+fn open_sea_painted() -> vec3f { return painted(srgb(standing_painted(vec3f(0.0), DEEP_M, vec2f(0.0), 1.0, 0.0))); }
 // Running water (river.wgsl), inland water all.
 fn water_painted(bed: vec3f, depth: f32, g: vec2f, load: f32) -> vec3f { return painted_through(bed, depth, g, 0.0, load); }
 // Standing liquid, `sea` of it the sea's.

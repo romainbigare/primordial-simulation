@@ -106,8 +106,8 @@ export class MapView {
    * the scale bar stands in its bottom left corner. */
   private covered: [number, number, number, number] = [0, 0, 0, 0];
   private w = 0; private h = 0; private cellM = 1;
-  /** On a phone the map is drawn out to the screen's edges (each point past the map shows the map's nearest point on its
-   * edge, picture.wgsl) and a fit frames `focus`, the land (squares: x0, y0, x1, y1; null: the whole map). */
+  /** On a phone the map is drawn out to the screen's edges (past the map, the open sea: picture.wgsl) and a fit frames
+   * `focus`, the land (squares: x0, y0, x1, y1; null: the whole map). */
   private fillScreen = false;
   private focus: [number, number, number, number] | null = null;
   /** Edge latitudes (degrees) of a globe, whose columns wrap east to west; null for an island. */
@@ -791,7 +791,7 @@ export class MapView {
 
   /** Draw into pass `p` (as `drawMap`) program `name` over the map's squares in `box` (null: none), once it is made. */
   private drawOver(gpu: Gpu, p: Pass, name: string, box: Box | null, xs: number[], k: number, d: number, size: number[], waiting: string[]): void {
-    const { cam: { s, oy }, w, h, look } = this;
+    const { cam: { s, oy }, w, h } = this;
     if (!box || !this.land) return;
     const mpp = this.cellM / (s * k), seen = this.cellM / (s * d);
     const program = seenFrom(gpu, name, seen, waiting);
@@ -800,7 +800,7 @@ export class MapView {
     xs.forEach((_, c) => {
       const map: Rect = [Math.max(edge(c), 0), Math.max(oy * k, 0), Math.min(edge(c + 1), size[0]), Math.min((oy + h * s) * k, size[1])];
       const r = clip(boxRect(box, edge(c), oy * k, s * k), map);
-      const binds = r && this.fire!.binds(gpu, look, frameOf(edge(c), oy * k, mpp, seen), this.fireTime()), ground = this.land!.lawBinds(gpu);
+      const binds = r && this.fire!.binds(gpu, frameOf(edge(c), oy * k, mpp, seen), this.fireTime()), ground = this.land!.lawBinds(gpu);
       if (r && binds && ground) p.draw(program, { rect: [r[0], r[1], r[2] - r[0], r[3] - r[1]], binds: { ...ground, ...binds } }, true);
     });
   }

@@ -308,7 +308,7 @@ const STONE_WATERED = 0.35;
 // The colour of a channel's water at spot `p` (`land_spots`) over its bed `g` (colour.wgsl `ground_for`), a reflectance
 // in linear light: its bed, soaked bare ground (washed sand and gravel: the flow takes the plants) under its film
 // (`BED_FILM`), seen through running water as deep as it is there (water.wgsl); snow lies on it as on standing liquid
-// (colour.wgsl `colour_on`), and the true view shades its bed as far as it shows.
+// (colour.wgsl `colour_on`), and a layer's view shades its bed as far as it shows (`Shaded.m`).
 fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let soaked_bed = soil(g, 1.0, lit);

@@ -3,7 +3,7 @@
 // (flames.wgsl), and by the dead trees standing on them among the plants (snag.wgsl, cover.wgsl). Points are in metres from the map's north-west corner.
 
 struct Fire {
-  // A square's side, m; the map's squares across and down; the view drawn (0 the Earth's colours, 1 the true colour).
+  // A square's side, m; the map's squares across and down; w is not read.
   map: vec4f,
   // Where a pixel of the target lies in the world (field-window.ts `frameOf`): the origin of the draw, m, the metres a
   // pixel of the target and of the screen take; the world's point under the target's first pixel, m from the origin.

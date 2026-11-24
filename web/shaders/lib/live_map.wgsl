@@ -16,8 +16,6 @@ const STONE_SMALL = vec2f(0.3, 1.25);
 const SHORE_RISE_LEAST = 1e-3;
 // The relief moves the ground's height fully on ground drawn this steep (rise over run), less on gentler.
 const RELIEF_EDGE_SLOPE = 0.1;
-// Cells nearly all under snow keep their true colour as it is: the ground under it is not found from so little.
-const SNOW_CELLS_ALL = 0.95;
 // A soil takes `SOIL_OF_BED` of its bed's colour where the bed is bare, less as its loose ground deepens, none from
 // `SOIL_OF_BED_M` m on (Earth view only).
 const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0;
@@ -30,7 +28,7 @@ const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0;
 // and of the channel's water: the signs of its flow (lib/flow.wgsl `flow_signs`), and (`water`) its depth over the
 // depth the channel law gives its middle and how near its edge the point lies, 0..1; and the way it runs (`down`, a
 // unit vector east and south).
-struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, snow_cells: f32, flow: vec3f, water: vec2f, down: vec2f }
+struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f }
 
 // The spot `s` with its channel's stones: on the bed of channel `ch` (of discharge `q`, on ground `g`), and beside it
 // where the reach is steep, with the walls and the fallen blocks of a steep reach. The largest drawn takes its size
@@ -207,7 +205,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
   // The marks of fire on dry ground: its burn scars and the plants they took (burn.wgsl).
   p = burnt_spot(p);
-  var out = Spots(p, p, 0.0, pool, st.snow, vec3f(0.0), vec2f(0.0), vec2f(0.0));
+  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0));
   // A channel is drawn on the land and through the band of shallows of the liquid it runs into, no farther.
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
@@ -250,28 +248,8 @@ fn live_map(v: Varying) -> vec4f {
     if (k == LAYER_RIVER) { o = river_on(p, g, spots.flow, spots.water, spots.down); } else { o = colour_on(p, g); }
     c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, share > 0.5));
   }
-  // The true colour: of a point no liquid stands on, its ground's (the cells' `SURFACE`, the sea's squares taking the
-  // land's nearest, so the sea's colour does not run onto the land past the shore drawn) and the bed's where it shows,
-  // with the burn scars' char and ash (burn.wgsl `burnt_truth`), under the snow placed as the Earth view places it;
-  // over standing liquid, the cells' colour, taken as their ground's under their share of snow (all of it as it is
-  // where they are nearly all under snow), with their ice placed (ice.wgsl `ice_cover`). Each is read only in the view that draws it (colour.wgsl `in_view_of`): the true
-  // colour in the true view, the layer's value in a layer's view.
-  var truth = vec3f(0.0);
-  if (earth.view.x == 1.0) {
-    let s = spots.snow_cells;
-    if (spots.dry.depth <= 0.0) {
-      truth = mix(burnt_truth(mix(blended(SURFACE, cs).xyz, spots.dry.bed, spots.dry.rock), spots.dry), SNOW, spots.dry.snow);
-    } else {
-      truth = blended(TRUTH, cs).xyz;
-      if (s > 0.0 && s < SNOW_CELLS_ALL) {
-        let under = clamp((truth - s * SNOW) / (1.0 - s), vec3f(0.0), vec3f(1.0));
-        truth = mix(under, SNOW, ice_cover(s, spots.dry.depth, at, spots.dry.e));
-      }
-    }
-    truth = true_soaked(truth, spots.dry);
-  }
   var shown = 0.0;
-  if (earth.view.x == 2.0) { shown = layer_at(at, spots.dry); }
-  let rgb = in_view_of(c, shown, truth);
+  if (earth.view.x == 1.0) { shown = layer_at(at, spots.dry); }
+  let rgb = in_view_of(c, shown);
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

@@ -132,10 +132,10 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
   const m = w.meta, { w: W, h: H, cell_m, globe } = m, n = W * H;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
   const leaf = decode(w, f, 'leaf'), soaked = decode(w, f, 'wet'), channelW = decode(w, f, 'channel_w'), channelD = decode(w, f, 'channel_d'), loose = decode(w, f, 'loose');
-  const [tr, tgr, tb, gr, gg, gb] = ['true_r', 'true_g', 'true_b', 'ground_r', 'ground_g', 'ground_b'].map(name => plane(w, f, name));
+  const [gr, gg, gb] = ['ground_r', 'ground_g', 'ground_b'].map(name => plane(w, f, name));
   const wet = wetOf(w, f), sea = seaSquares(wet, m);
   const wrapX = (x: number) => (globe ? (x + W) % W : x);
-  const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), bytes = new Uint8Array(4 * n), ground = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
+  const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), ground = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
   for (let i = 0; i < n; i++) {
     const x = i % W, y = (i / W) | 0;
     const zAt = (dx: number, dy: number) => z[clamp(y + dy, 0, H - 1) * W + clamp(wrapX(x + dx), 0, W - 1)];
@@ -154,11 +154,10 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
     }
     put4(height, i, z[i], water, gx, gy);
     put4(matter, i, ice[i], tg[i], sea[i], wet.wet[i] ? 0 : Math.min(channelW[i] / width, 1));
-    put4(bytes, i, tr[i], tgr[i], tb[i], 0);
     put4(ground, i, gr[i], gg[i], gb[i], 0);
     put4(inside, i, soaked[i], channelD[i], Math.exp(-leaf[i]), loose[i]);
   }
   const o = w.base + f * w.frameBytes;
-  const fields: Fields = { w: W, h: H, height, matter, bytes, ground, inside, layers: w.data.subarray(o, o + w.frameBytes), names: w.meta.layers.map(l => l.name), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };
+  const fields: Fields = { w: W, h: H, height, matter, ground, inside, layers: w.data.subarray(o, o + w.frameBytes), names: w.meta.layers.map(l => l.name), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };
   return { fields, wet };
 }

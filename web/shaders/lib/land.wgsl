@@ -55,11 +55,11 @@ struct Land {
 // with height, K/m, and its ice, m; its standing liquid's level, its lowest ground and the depth that stands, m, and the
 // liquid in its pores, m; what its pores hold full, m, the level of the wetness index its soil's liquid departs
 // about, the share of its area that is land and the wetness index from which its land is saturated (the core's
-// `inside::wet_ground`); the ground's own colour and its share of the sea; its true colour; the byte of the layer drawn and the share of organic matter of
-// its loose ground; and in the last numbers of the true colour's and the layer's planes, the land's ice, m, its ground
-// temperature, K, and its mean height, m; and its cell's shares of coarse and fine grain over those of its samples as
+// `inside::wet_ground`); the ground's own colour and its share of the sea; the land's ice, m; the byte of the layer
+// drawn and the share of organic matter of its loose ground, and in the last numbers of the layer's plane the land's
+// ground temperature, K, and its mean height, m; and its cell's shares of coarse and fine grain over those of its samples as
 // drawn (rock.wgsl `soil_at`). (The bed's colour comes with the ground: rock.wgsl `bed_make_at`.)
-const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const TRUTH = 4; const VIEW = 5; const GRAIN_SHIFT = 6;
+const GROUND = 0; const LIQUID = 1; const SOIL = 2; const SURFACE = 3; const LAND_ICE = 4; const VIEW = 5; const GRAIN_SHIFT = 6;
 const PLANES = 7;
 // Where no liquid stands near a point, its surface is taken this far below the ground, m.
 const NO_LIQUID_M = 1000.0;
@@ -416,7 +416,7 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, knob: f32) -> State {
   // The cells' ground, and the share of it each one's frozen cover covers, blended: the shares, not the depths, so a
   // snowy cell beside a bare one draws its share falling across the space between their centres, not at once along a
   // line where the blended depth reaches what covers all (tanh saturates within a few centimetres).
-  // Over land, the land's mean height, temperature and ice (the table's `TRUTH` and `VIEW` planes carry them, the open low ground's
+  // Over land, the land's mean height, temperature and ice (the table's `LAND_ICE` and `VIEW` planes carry them, the open low ground's
   // coastal squares taking the land's nearest: web/src/land.ts `fromLand`); over standing liquid, the cells'.
   let dry = g.water.y <= 0.0 || g.h - cut > g.water.x;
   var ground = vec4f(0.0);
@@ -426,7 +426,7 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, knob: f32) -> State {
     // A sea's square (its air's fall marked as -(it + 1), web/src/land.ts) gives a dry point the land's numbers.
     if (c.z < 0.0) {
       c.z = -c.z - 1.0;
-      if (dry) { let v = cell(VIEW, cs.at[k]); c = vec4f(v.w, v.z, c.z, cell(TRUTH, cs.at[k]).w); }
+      if (dry) { let v = cell(VIEW, cs.at[k]); c = vec4f(v.w, v.z, c.z, cell(LAND_ICE, cs.at[k]).x); }
     }
     ground += cs.w[k] * c;
     covered += cs.w[k] * snow_of(c.w, 0.0, 0.0);

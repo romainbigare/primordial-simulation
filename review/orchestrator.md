@@ -133,7 +133,7 @@ tests of `tape/tests/ranges` pass):
 - Snow and ice cost 25 to 45% of a far frame in the headless browser, also on an island with no ice (the software
   drawing seems to pay for the program's size, not for the work a pixel runs). The owner's word: the speed on phones
   is perfectly fine. So no more cuts for now; the headless numbers only guard against a change that makes them worse.
-- The True view on water: a 2 km haze, no floes. The pack's ridges read as wiggly lines.
+- The pack's ridges read as wiggly lines.
 - The coast's squares in a Wide island's far north hold no plants (their cells are low ground): bare land there.
 - A square notch where a channel joins two lakes (mended, not seen on a picture); steps on lake shores at the 2 km
   bar on a phone (texels of 31 m: `VIEW_TILES` bites); shallow lakes are a pale grey-blue (their true depth).
@@ -963,7 +963,7 @@ layer. The full list with its reasons is `review/roadmap.md` 7.1; two tracks sid
    load lands on a whole cell, and the tiles draw one channel to the shore. The package: the load settles at the
    mouth below the cell's size, the fan's top reaches the water's level, the tiles split the channel over it
    (Edmonds and Slingerland 2007), plants take it. Also: ice that cuts valleys; the exact solve of the surface's
-   step by pieces; the True view's water.
+   step by pieces.
 
 **The orchestrator, between packages**: the spec and the docs say what is true (`roadmap.md` 8, step C4).
 

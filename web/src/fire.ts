@@ -145,21 +145,20 @@ export class Fire {
       this.smoke = gpu.texture('fire', w, h, SMOKE_FORMAT, 1, 1, true);
     }
     const p = gpu.pass(this.smoke);
-    p.draw('smoke', { rect: [0, 0, w, h], binds: this.binds(gpu, { mode: 'earth', layer: '', ramp: [], ground: 0 }, [0, 0, 0, 0, 0, 0, 0, 0], 0)! }, false);
+    p.draw('smoke', { rect: [0, 0, w, h], binds: this.binds(gpu, [0, 0, 0, 0, 0, 0, 0, 0], 0)! }, false);
     p.end();
     this.smokeDue = false;
   }
 
-  /** The bindings fire.wgsl (and the sprites and photograph of tex.wgsl) read on `gpu` for a draw in view `look` whose
-   * pixels lie as `frame` says (field-window.ts `frameOf`), at time `now` (performance.now, ms); null when nothing of
+  /** The bindings fire.wgsl (and the sprites and photograph of tex.wgsl) read on `gpu` for a draw of the Earth view
+   * whose pixels lie as `frame` says (field-window.ts `frameOf`), at time `now` (performance.now, ms); null when nothing of
    * fire is known. */
-  binds(gpu: Gpu, look: MapLook, frame: number[], now: number): Draw['binds'] | null {
+  binds(gpu: Gpu, frame: number[], now: number): Draw['binds'] | null {
     if (!this.data) return null;
     if (this.tex && (this.tex.w !== this.w || this.tex.h !== FIRE_PLANES * this.h)) { gpu.drop(this.tex); this.tex = null; }
     this.tex ??= gpu.texture('fire', this.w, FIRE_PLANES * this.h, 'rgba16float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
-    const mode = look.mode === 'earth' ? 0 : 1;
-    const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h, mode).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
+    const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
       .vec4((now / 1000) % TIME_WRAP_S, this.never);
     if (!this.noSmoke) { this.noSmoke = gpu.texture('fire', 1, 1, SMOKE_FORMAT); gpu.write(this.noSmoke, new Uint8Array(4)); }
     return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer, 28: this.smoke && !this.smokeDue ? this.smoke : this.noSmoke };
@@ -168,7 +167,7 @@ export class Fire {
   /** The bindings fire.wgsl reads on `gpu` in the ground's draws (land.wgsl, lib/burn.wgsl), as `binds`; where no fire
    * is known, or in a layer's view, a texture of one texel and squares of side 0: the ground reads none of it. */
   groundBinds(gpu: Gpu, look: MapLook, frame: number[], now: number): Draw['binds'] {
-    const b = look.mode === 'layer' ? null : this.binds(gpu, look, frame, now);
+    const b = look.mode === 'layer' ? null : this.binds(gpu, frame, now);
     if (b) return { 25: b[25], 26: b[26], 27: b[27] };
     return { 25: this.none(gpu), 26: 'smooth', 27: new Uniforms(FIRE_VEC4S).vec4(0, 1, 1).buffer };
   }

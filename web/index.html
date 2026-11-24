@@ -27,7 +27,7 @@
       <span class="date" id="year"></span>
     </div>
     <div class="grp">
-      <button class="ib tool" data-panel="map" data-icon="layers" aria-label="Map view and layers" title="Map view and layers (T: Earth or True)"><span class="lb">Layers</span></button>
+      <button class="ib tool" data-panel="map" data-icon="layers" aria-label="Layers" title="Layers: a layer over the map, and the legend"><span class="lb">Layers</span></button>
       <button class="ib tool" id="inspect-btn" data-icon="inspect" aria-label="Inspect" aria-pressed="false" title="Inspect: what lies under the cursor"><span class="lb">Inspect</span></button>
       <button class="ib tool live-only" id="god-btn" data-icon="wand" aria-label="God mode" aria-pressed="false" title="God mode: change the world"><span class="lb">Create</span></button>
     </div>
@@ -60,9 +60,8 @@
     </div>
   </section>
 
-  <section class="panel glass" id="panel-map" aria-label="Map view and layers">
-    <div class="head"><h2>Map</h2><button class="ib sm" data-close data-icon="close" aria-label="Close" title="Close (Esc)"></button></div>
-    <div class="seg" id="views"><button data-view="earth">Earth</button><button data-view="true">True</button></div>
+  <section class="panel glass" id="panel-map" aria-label="Layers">
+    <div class="head"><h2>Layers</h2><button class="ib sm" data-close data-icon="close" aria-label="Close" title="Close (Esc)"></button></div>
     <div class="ramp" id="ramp" hidden><div class="shown"><span>Showing <b id="rampname"></b></span><button id="clearlayer">Clear</button></div><div class="grad" id="rampbar"></div><div class="lbl"><span></span><span></span><span></span></div><div class="unit" id="rampunit"></div></div>
     <div class="tri" id="texture" hidden></div>
     <input id="layerfind" class="find layerfind" type="search" placeholder="Search layers" aria-label="Search layers" autocomplete="off">
