@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mobile designs</title>
+<style>
+:root {
+  --sea: #1d376f; --glass: rgba(251, 250, 247, .84); --solid: #fbfaf7; --ink: #1f2328; --muted: #646b73;
+  --line: rgba(31, 35, 40, .1); --chip: rgba(31, 35, 40, .06); --accent: #2b6a9c; --on-accent: #fff;
+  --shadow: 0 8px 28px rgba(20, 24, 28, .22), 0 1px 3px rgba(20, 24, 28, .12);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9e6de; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); }
+.board { width: 980px; padding: 32px 40px 40px; background: #efece5; }
+.board h2 { margin: 0; font-size: 26px; }
+.board .sub { margin: 6px 0 22px; color: var(--muted); font-size: 15px; max-width: 880px; }
+.board .row { display: flex; gap: 40px; justify-content: center; }
+.cap { text-align: center; margin-top: 12px; font-size: 14px; color: var(--muted); }
+
+.phone { position: relative; width: 390px; height: 844px; border-radius: 48px; overflow: hidden; background: var(--sea);
+  box-shadow: 0 0 0 10px #111, 0 0 0 11px #444, 0 30px 60px rgba(0,0,0,.3); margin: 11px; }
+.phone .map { position: absolute; width: 520px; height: 520px; left: -90px; top: 150px; background: url(map.jpg) center/cover; }
+.phone .map.temp { background-image: url(temp.jpg); }
+.status { position: absolute; z-index: 9; top: 0; left: 0; right: 0; height: 47px; display: flex; justify-content: space-between; align-items: center; padding: 6px 30px 0 34px; font-weight: 600; font-size: 15px; color: #fff; }
+.status.dark { color: #111; }
+.status .bat { width: 25px; height: 12px; border: 1.5px solid currentColor; border-radius: 4px; position: relative; opacity: .9; }
+.status .bat::after { content: ""; position: absolute; inset: 1.5px; right: 5px; background: currentColor; border-radius: 1px; }
+.home { position: absolute; z-index: 9; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: rgba(255,255,255,.85); }
+.home.dark { background: #111; }
+.glass { background: var(--glass); -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.i { width: 22px; height: 22px; display: block; flex: none; }
+.ib { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; border: 0; background: none; color: var(--ink); padding: 0; }
+.ib.on { background: var(--accent); color: #fff; }
+.abs { position: absolute; }
+.scale { position: absolute; font-size: 11px; color: rgba(255,255,255,.85); }
+.scale i { display: block; width: 70px; height: 5px; border: 1.5px solid rgba(255,255,255,.85); border-top: 0; margin-top: 2px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; }
+.muted { color: var(--muted); }
+b { font-weight: 600; }
+.num { font-variant-numeric: tabular-nums; }
+.play { width: 60px; height: 60px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; box-shadow: 0 6px 16px rgba(43,106,156,.45); }
+.play .i { width: 28px; height: 28px; }
+.scrim { position: absolute; inset: 0; background: rgba(10, 16, 28, .45); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 22px 22px 0 0; padding: 8px 18px 34px; }
+.grab { width: 40px; height: 5px; border-radius: 3px; background: rgba(31,35,40,.2); margin: 0 auto 10px; }
+.seg { display: flex; border-radius: 10px; background: var(--chip); padding: 3px; gap: 3px; }
+.seg span { flex: 1; text-align: center; padding: 7px 0; border-radius: 8px; color: var(--muted); font-size: 13px; }
+.seg span.on { background: var(--solid); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips span { padding: 6px 12px; border-radius: 999px; background: var(--chip); font-size: 13px; }
+.chips span.on { background: var(--accent); color: #fff; }
+h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 0 7px; font-weight: 600; }
+.ramp { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #3b4cc0, #6fa8dc, #9fd17a, #e6c34f, #c97a2c); }
+.rl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.search { display: flex; align-items: center; gap: 8px; background: var(--chip); border-radius: 10px; padding: 9px 12px; color: var(--muted); font-size: 14px; }
+.search .i { width: 18px; height: 18px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td { padding: 5px 0; border-top: 1px solid var(--line); }
+td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+td u { text-decoration: none; color: var(--muted); }
+
+/* Design 5: dark. */
+.dk { --glass: rgba(18, 22, 26, .82); --solid: #1b1f23; --ink: #e6e8ea; --muted: #8f979e; --line: rgba(230,232,234,.1); --chip: rgba(230,232,234,.08); --accent: #6fb2e3; --shadow: 0 8px 28px rgba(0,0,0,.5); }
+.dk .ib { color: var(--ink); }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+
+<!-- 0: the current page, labelled -->
+
+<!-- 1: Thumb dock -->
+<section class="board" id="d1">
+  <h2>1 · Thumb dock</h2>
+  <p class="sub">All buttons move to the bottom, where the thumb is. Each button has a short label. The date sits alone at the top. Panels open as sheets from the bottom, with a handle. Layers are put in groups, with search.</p>
+  <div class="row">
+    <div>
+      <div class="phone">
+        <div class="map"></div>
+        <div class="status"><span>9:41</span><span class="bat"></span></div>
+        <div class="abs glass pill" style="top:56px;left:16px;padding:8px 14px 8px 10px">
+          <svg class="i" viewBox="0 0 24 24" style="width:22px;height:22px"><circle cx="12" cy="12" r="10" fill="#e8b04a"/></svg>
+          <span><b class="num">Year 34</b> <span class="muted">· July</span></span>
+        </div>
+        <div class="abs glass" style="top:52px;right:16px;border-radius:50%"><button class="ib" style="border-radius:50%" data-i="globe"></button></div>
+        <div class="scale" style="left:20px;bottom:138px">5 km<i></i></div>
+        <div class="abs glass" style="right:16px;bottom:130px;border-radius:14px"><button class="ib" data-i="fit"></button></div>
+        <div class="abs glass" style="left:12px;right:12px;bottom:30px;height:84px;border-radius:26px;display:flex;align-items:center;justify-content:space-around;padding:0 6px">
+          <div style="text-align:center;font-size:11px"><button class="ib" data-i="layers"></button>Layers</div>
+          <div style="text-align:center;font-size:11px"><button class="ib" data-i="inspect"></button>Inspect</div>
+          <div class="play" data-i="pause"></div>
+          <div style="text-align:center;font-size:11px"><button class="ib" data-i="wand"></button>Create</div>
+          <div style="text-align:center;font-size:11px"><button class="ib num" style="font-weight:700;font-size:15px">12×</button>Speed</div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <div class="cap">Main view</div>
+    </div>
+    <div>
+      <div class="phone">
+        <div class="map temp" style="width:760px;height:760px;left:-200px;top:-120px"></div>
+        <div class="status dark"><span>9:41</span><span class="bat"></span></div>
+        <div class="sheet glass" style="height:500px;background:rgba(251,250,247,.95)">
+          <div class="grab"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">Map layers</b><button class="ib" data-i="close"></button></div>
+          <div class="seg" style="margin-top:4px"><span class="on">Earth</span><span>True</span></div>
+          <div style="margin-top:12px;font-size:13px"><span class="muted">Showing</span> <b>Ground temperature</b> <span class="muted" style="float:right">Clear ✕</span></div>
+          <div style="margin-top:10px"><div class="ramp"></div><div class="rl num"><span>250 K</span><span>270 K</span><span>290 K</span></div></div>
+          <div class="search" style="margin-top:12px"><span data-i="search"></span>Search 30 layers</div>
+          <h4>Air and climate</h4>
+          <div class="chips"><span class="on">Ground temperature</span><span>Air temperature</span><span>Rain</span><span>Vapor</span><span>Evaporation</span></div>
+          <h4>Water</h4>
+          <div class="chips"><span>Liquid depth</span><span>River flux</span><span>Catchment</span><span>Ice</span><span>Runoff</span></div>
+          <h4>Soil</h4>
+          <div class="chips"><span>Sand</span><span>Clay</span><span>Organic matter</span><span>Soil water</span><span>More…</span></div>
+        </div>
+        <div class="home dark"></div>
+      </div>
+      <div class="cap">Layers sheet</div>
+    </div>
+  </div>
+</section>
+
+<!-- 2: Player -->
+<section class="board" id="d2">
+  <h2>2 · Player</h2>
+  <p class="sub">Time is the heart of the page, so the bottom is a player: a big date, a bar for the year with its seasons, speed − and +. Three tools sit on the right edge. Inspect uses a fixed cross in the middle: you move the map under it, and the numbers change live. No need to "hover" on a phone.</p>
+  <div class="row">
+    <div>
+      <div class="phone">
+        <div class="map"></div>
+        <div class="status"><span>9:41</span><span class="bat"></span></div>
+        <div class="abs glass pill" style="top:56px;left:16px;padding:7px 14px;font-size:13px"><span data-i="globe" style="transform:scale(.8)"></span><b>Seed 1</b><span class="muted">32 × 32</span></div>
+        <div class="abs glass" style="right:14px;top:300px;border-radius:16px;padding:4px;display:flex;flex-direction:column;gap:4px">
+          <button class="ib" data-i="layers"></button><button class="ib" data-i="inspect"></button><button class="ib" data-i="wand"></button>
+          <div style="height:1px;background:var(--line);margin:0 6px"></div><button class="ib" data-i="fit"></button>
+        </div>
+        <div class="abs glass" style="left:12px;right:12px;bottom:28px;border-radius:24px;padding:14px 18px 16px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between">
+            <div><b style="font-size:24px" class="num">Year 34</b> <span class="muted" style="font-size:15px">July</span></div>
+            <span class="muted num" style="font-size:12px">5 km ▬</span>
+          </div>
+          <div style="position:relative;height:22px;margin:10px 0 2px">
+            <div style="position:absolute;top:8px;left:0;right:0;height:6px;border-radius:3px;background:linear-gradient(90deg,#9fc3e6 0 17%,#9fd17a 17% 42%,#e6c34f 42% 67%,#d39a5a 67% 92%,#9fc3e6 92%)"></div>
+            <div style="position:absolute;top:3px;left:52%;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px var(--accent),0 2px 4px rgba(0,0,0,.3)"></div>
+          </div>
+          <div class="rl" style="margin-bottom:10px"><span>Winter</span><span>Spring</span><span>Summer</span><span>Autumn</span></div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:26px">
+            <button class="ib" style="background:var(--chip);border-radius:50%" data-i="minus"></button>
+            <div class="play" data-i="pause"></div>
+            <button class="ib" style="background:var(--chip);border-radius:50%" data-i="plus"></button>
+          </div>
+          <div class="cap" style="margin-top:6px;font-size:12px">12 months / s</div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <div class="cap">Main view</div>
+    </div>
+    <div>
+      <div class="phone">
+        <div class="map" style="width:900px;height:900px;left:-330px;top:-120px"></div>
+        <div class="status"><span>9:41</span><span class="bat"></span></div>
+        <div class="abs" style="left:195px;top:250px;transform:translate(-50%,-50%)">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.5" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))"><circle cx="32" cy="32" r="14"/><path d="M32 4v14M32 46v14M4 32h14M46 32h14"/></svg>
+        </div>
+        <div class="abs glass" style="right:14px;top:56px;border-radius:16px;padding:4px;display:flex;flex-direction:column;gap:4px">
+          <button class="ib" data-i="layers"></button><button class="ib on" data-i="inspect"></button><button class="ib" data-i="wand"></button>
+        </div>
+        <div class="abs glass" style="left:12px;right:12px;bottom:28px;border-radius:24px;padding:16px 18px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:14px;height:14px;border-radius:4px;background:#f1f3f6;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)"></span><b style="font-size:17px">Snow and ice</b><span class="muted num" style="margin-left:auto;font-size:12px">x 22, y 14</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:14px 0">
+            <div style="background:var(--chip);border-radius:12px;padding:8px 10px"><div class="muted" style="font-size:11px">Elevation</div><b class="num" style="font-size:18px">1,233</b> <span class="muted" style="font-size:11px">m</span></div>
+            <div style="background:var(--chip);border-radius:12px;padding:8px 10px"><div class="muted" style="font-size:11px">Ground</div><b class="num" style="font-size:18px">283</b> <span class="muted" style="font-size:11px">K</span></div>
+            <div style="background:var(--chip);border-radius:12px;padding:8px 10px"><div class="muted" style="font-size:11px">Ice</div><b class="num" style="font-size:18px">0.09</b> <span class="muted" style="font-size:11px">m</span></div>
+          </div>
+          <table>
+            <tr><td>Soil texture</td><td>loamy sand</td></tr>
+            <tr><td>River flux</td><td>14,500 <u>mol/s</u></td></tr>
+            <tr><td>Ground wetness</td><td>0.8745</td></tr>
+            <tr><td>Fresh litter</td><td>0.7747 <u>kg/m²</u></td></tr>
+          </table>
+          <div style="text-align:center;color:var(--accent);font-weight:600;font-size:13px;margin-top:10px">All 28 values ⌃</div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <div class="cap">Inspect with a fixed cross</div>
+    </div>
+  </div>
+</section>
+
+<!-- 3: One button -->
+<section class="board" id="d3">
+  <h2>3 · One button</h2>
+  <p class="sub">The quietest design. The map gets the whole screen. Only the date (on the map, no box), a play button at the bottom left and one menu button at the bottom right. The menu opens a short list with clear names.</p>
+  <div class="row">
+    <div>
+      <div class="phone">
+        <div class="map" style="width:620px;height:620px;left:-115px;top:110px"></div>
+        <div class="status"><span>9:41</span><span class="bat"></span></div>
+        <div class="abs" style="top:58px;left:22px;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.5)">
+          <div class="num" style="font-size:30px;font-weight:700;line-height:1">Year 34</div>
+          <div style="font-size:15px;opacity:.9;margin-top:2px">July · 12 months/s</div>
+        </div>
+        <div class="scale" style="right:22px;top:72px">5 km<i></i></div>
+        <div class="abs" style="left:20px;bottom:40px;display:flex;align-items:center;gap:10px">
+          <div class="play" style="width:64px;height:64px" data-i="pause"></div>
+          <div class="glass pill" style="padding:8px 14px;font-weight:700" class="num">12×</div>
+        </div>
+        <div class="abs glass" style="right:20px;bottom:40px;width:64px;height:64px;border-radius:50%;display:grid;place-items:center" data-i="menu"></div>
+        <div class="home"></div>
+      </div>
+      <div class="cap">Main view</div>
+    </div>
+    <div>
+      <div class="phone">
+        <div class="map" style="width:620px;height:620px;left:-115px;top:110px"></div>
+        <div class="status"><span>9:41</span><span class="bat"></span></div>
+        <div class="scrim"></div>
+        <div class="abs" style="right:20px;bottom:120px;display:flex;flex-direction:column;align-items:flex-end;gap:12px">
+          <div style="display:flex;align-items:center;gap:12px"><span class="glass pill" style="padding:8px 14px;font-weight:600">World · new · open file</span><span class="glass" style="width:52px;height:52px;border-radius:50%;display:grid;place-items:center" data-i="globe"></span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span class="glass pill" style="padding:8px 14px;font-weight:600">Map layers</span><span class="glass" style="width:52px;height:52px;border-radius:50%;display:grid;place-items:center" data-i="layers"></span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span class="glass pill" style="padding:8px 14px;font-weight:600">Inspect a place</span><span class="glass" style="width:52px;height:52px;border-radius:50%;display:grid;place-items:center" data-i="inspect"></span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span class="glass pill" style="padding:8px 14px;font-weight:600">Change the world</span><span class="glass" style="width:52px;height:52px;border-radius:50%;display:grid;place-items:center" data-i="wand"></span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span class="glass pill" style="padding:8px 14px;font-weight:600">Fit the map</span><span class="glass" style="width:52px;height:52px;border-radius:50%;display:grid;place-items:center" data-i="fit"></span></div>
+        </div>
+        <div class="abs" style="right:20px;bottom:40px;width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;box-shadow:var(--shadow)" data-i="close"></div>
+        <div class="home"></div>
+      </div>
+      <div class="cap">Menu open</div>
+    </div>
+  </div>
+</section>
+
+<!-- 4: Tab bar -->
+<section class="board" id="d4">
+  <h2>4 · App with tabs</h2>
+  <p class="sub">Feels like a normal phone app. A tab bar at the bottom: Map, Layers, Inspect, Charts, Create. A thin bar at the top holds the date and play. Layers become a grid of tiles, each with a small colour bar, so you see what a layer looks like before you pick it.</p>
+  <div class="row">
+    <div>
+      <div class="phone">
+        <div class="abs" style="top:0;left:0;right:0;height:60px;background:var(--solid)"></div>
+        <div class="map" style="top:100px;height:600px;width:600px;left:-105px"></div>
+        <div class="status dark"><span>9:41</span><span class="bat"></span></div>
+        <div class="abs" style="top:47px;left:0;right:0;height:56px;background:var(--solid);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 12px 0 18px;gap:10px">
+          <div style="flex:1"><b style="font-size:17px">Seed 1</b><div class="muted num" style="font-size:12px;margin-top:-2px">Year 34 · July</div></div>
+          <span class="pill num" style="background:var(--chip);padding:6px 12px;font-size:13px;font-weight:600">12×</span>
+          <div class="play" style="width:42px;height:42px;box-shadow:none" data-i="pause"></div>
+        </div>
+        <div class="scale" style="left:18px;bottom:110px">5 km<i></i></div>
+        <div class="abs glass" style="right:14px;bottom:104px;border-radius:12px"><button class="ib" data-i="fit"></button></div>
+        <div class="abs" style="left:0;right:0;bottom:0;height:88px;background:var(--solid);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:8px 6px 0;font-size:10.5px">
+          <div style="text-align:center;color:var(--accent);font-weight:600"><span data-i="map" style="display:block;margin:0 auto 3px;width:24px"></span>Map</div>
+          <div style="text-align:center;color:var(--muted)"><span data-i="layers" style="display:block;margin:0 auto 3px;width:24px"></span>Layers</div>
+          <div style="text-align:center;color:var(--muted)"><span data-i="inspect" style="display:block;margin:0 auto 3px;width:24px"></span>Inspect</div>
+          <div style="text-align:center;color:var(--muted)"><span data-i="chart" style="display:block;margin:0 auto 3px;width:24px"></span>Charts</div>
+          <div style="text-align:center;color:var(--muted)"><span data-i="wand" style="display:block;margin:0 auto 3px;width:24px"></span>Create</div>
+        </div>
+        <div class="home dark"></div>
+      </div>
+      <div class="cap">Map tab</div>
+    </div>
+    <div>
+      <div class="phone" style="background:var(--solid)">
+        <div class="status dark"><span>9:41</span><span class="bat"></span></div>
+        <div class="abs" style="top:47px;left:0;right:0;bottom:88px;padding:8px 18px;overflow:hidden">
+          <b style="font-size:28px">Layers</b>
+          <div class="seg" style="margin-top:10px"><span class="on">Earth</span><span>True</span></div>
+          <div class="search" style="margin-top:10px"><span data-i="search"></span>Search layers</div>
+          <h4>Air and climate</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="border:2px solid var(--accent);border-radius:12px;padding:8px 10px"><div style="height:30px;border-radius:6px;background:linear-gradient(90deg,#3b4cc0,#9fd17a,#c97a2c)"></div><div style="font-size:13px;font-weight:600;margin-top:6px">Ground temperature</div><div class="muted" style="font-size:11px">K</div></div>
+            <div style="border:1px solid var(--line);border-radius:12px;padding:9px 11px"><div style="height:30px;border-radius:6px;background:linear-gradient(90deg,#4a6fd0,#f2f2f2,#d0503c)"></div><div style="font-size:13px;margin-top:6px">Air temperature</div><div class="muted" style="font-size:11px">K</div></div>
+            <div style="border:1px solid var(--line);border-radius:12px;padding:9px 11px"><div style="height:30px;border-radius:6px;background:linear-gradient(90deg,#f4f1e6,#7fb3d5,#1f4e8c)"></div><div style="font-size:13px;margin-top:6px">Rain</div><div class="muted" style="font-size:11px">mol/m²/s</div></div>
+            <div style="border:1px solid var(--line);border-radius:12px;padding:9px 11px"><div style="height:30px;border-radius:6px;background:linear-gradient(90deg,#f6efe0,#a9c9a4,#2e6b56)"></div><div style="font-size:13px;margin-top:6px">Evaporation</div><div class="muted" style="font-size:11px">mol/m²/s</div></div>
+          </div>
+          <h4>Water</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:9px 11px"><div style="height:30px;border-radius:6px;background:linear-gradient(90deg,#e8f1f8,#5a9bd5,#0b2e63)"></div><div style="font-size:13px;margin-top:6px">Liquid depth</div><div class="muted" style="font-size:11px">m</div></div>
+            <div style="border:1px solid var(--line);border-radius:12px;padding:9px 11px"><div style="height:30px;border-radius:6px;background:linear-gradient(90deg,#eef3f7,#7ab8d9,#183f7a)"></div><div style="font-size:13px;margin-top:6px">River flux</div><div class="muted" style="font-size:11px">mol/s</div></div>
+          </div>
+        </div>
+        <div class="abs" style="left:0;right:0;bottom:0;height:88px;background:var(--solid);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:8px 6px 0;font-size:10.5px">
+          <div style="text-align:center;color:var(--muted)"><span data-i="map" style="display:block;margin:0 auto 3px;width:24px"></span>Map</div>
+          <div style="text-align:center;color:var(--accent);font-weight:600"><span data-i="layers" style="display:block;margin:0 auto 3px;width:24px"></span>Layers</div>
+          <div style="text-align:center;color:var(--muted)"><span data-i="inspect" style="display:block;margin:0 auto 3px;width:24px"></span>Inspect</div>
+          <div style="text-align:center;color:var(--muted)"><span data-i="chart" style="display:block;margin:0 auto 3px;width:24px"></span>Charts</div>
+          <div style="text-align:center;color:var(--muted)"><span data-i="wand" style="display:block;margin:0 auto 3px;width:24px"></span>Create</div>
+        </div>
+        <div class="home dark"></div>
+      </div>
+      <div class="cap">Layers tab</div>
+    </div>
+  </div>
+</section>
+
+<!-- 5: Dark lab -->
+<section class="board" id="d5">
+  <h2>5 · Dark lab</h2>
+  <p class="sub">Dark, calm, made for science. A thin line of live numbers at the top. A drawer at the bottom that you pull up: small, it shows the play button and the layer legend; pulled up, it shows the tools. Here: God mode with big named tools, the brush size and undo.</p>
+  <div class="row">
+    <div>
+      <div class="phone dk">
+        <div class="map" style="filter:none"></div>
+        <div class="status"><span>9:41</span><span class="bat"></span></div>
+        <div class="abs glass mono num" style="top:52px;left:12px;right:12px;border-radius:14px;padding:8px 14px;display:flex;justify-content:space-between;font-size:12px;color:var(--ink)">
+          <span><span class="muted">Y</span> 34.6</span><span><span class="muted">T</span> 283 K</span><span><span class="muted">cells</span> 757</span><span><span class="muted">pace</span> 12</span>
+        </div>
+        <div class="abs glass" style="left:0;right:0;bottom:0;border-radius:22px 22px 0 0;padding:8px 18px 38px;color:var(--ink)">
+          <div class="grab" style="background:rgba(230,232,234,.25)"></div>
+          <div style="display:flex;align-items:center;gap:14px">
+            <div class="play" style="width:52px;height:52px;color:#0c1217" data-i="pause"></div>
+            <div style="flex:1">
+              <div style="display:flex;justify-content:space-between"><b>Earth view</b><span class="muted mono" style="font-size:12px">×12</span></div>
+              <div class="muted" style="font-size:12px">Year 34 · July</div>
+            </div>
+            <button class="ib" data-i="layers"></button><button class="ib" data-i="inspect"></button><button class="ib" data-i="wand"></button>
+          </div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <div class="cap">Main view, drawer small</div>
+    </div>
+    <div>
+      <div class="phone dk">
+        <div class="map" style="filter:none;top:40px"></div>
+        <div class="status"><span>9:41</span><span class="bat"></span></div>
+        <div class="abs" style="left:250px;top:300px;width:70px;height:70px;border-radius:50%;border:2px solid rgba(255,255,255,.9);box-shadow:0 0 0 1px rgba(0,0,0,.4)"></div>
+        <div class="abs glass" style="left:0;right:0;bottom:0;border-radius:22px 22px 0 0;padding:8px 18px 38px;color:var(--ink)">
+          <div class="grab" style="background:rgba(230,232,234,.25)"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between"><b style="font-size:17px">Change the world</b><button class="ib" data-i="undo"></button></div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:6px;font-size:11px;text-align:center">
+            <div style="background:var(--accent);color:#0c1217;border-radius:14px;padding:10px 0 7px"><span data-i="raise" style="display:block;margin:0 auto 4px;width:24px"></span>Raise</div>
+            <div style="background:var(--chip);border-radius:14px;padding:10px 0 7px"><span data-i="lower" style="display:block;margin:0 auto 4px;width:24px"></span>Lower</div>
+            <div style="background:var(--chip);border-radius:14px;padding:10px 0 7px"><span data-i="lake" style="display:block;margin:0 auto 4px;width:24px"></span>Water</div>
+            <div style="background:var(--chip);border-radius:14px;padding:10px 0 7px"><span data-i="plant" style="display:block;margin:0 auto 4px;width:24px"></span>Plant</div>
+            <div style="background:var(--chip);border-radius:14px;padding:10px 0 7px"><span data-i="fire" style="display:block;margin:0 auto 4px;width:24px"></span>Fire</div>
+          </div>
+          <h4>Brush size <span class="mono" style="float:right;color:var(--ink);letter-spacing:0">2.0 km</span></h4>
+          <div style="position:relative;height:20px"><div style="position:absolute;top:8px;left:0;right:0;height:4px;border-radius:2px;background:var(--chip)"></div><div style="position:absolute;top:8px;left:0;width:40%;height:4px;border-radius:2px;background:var(--accent)"></div><div style="position:absolute;top:2px;left:calc(40% - 8px);width:16px;height:16px;border-radius:50%;background:var(--accent)"></div></div>
+          <h4>Strength <span class="mono" style="float:right;color:var(--ink);letter-spacing:0">+50 m</span></h4>
+          <div style="position:relative;height:20px"><div style="position:absolute;top:8px;left:0;right:0;height:4px;border-radius:2px;background:var(--chip)"></div><div style="position:absolute;top:8px;left:0;width:62%;height:4px;border-radius:2px;background:var(--accent)"></div><div style="position:absolute;top:2px;left:calc(62% - 8px);width:16px;height:16px;border-radius:50%;background:var(--accent)"></div></div>
+          <p class="muted" style="font-size:12.5px;margin:12px 0 0">Drag on the map to raise the ground. Two fingers move the map.</p>
+        </div>
+        <div class="home"></div>
+      </div>
+      <div class="cap">Drawer pulled up: God mode</div>
+    </div>
+  </div>
+</section>
+
+<script>
+const P = {
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3c-2.5 2.6-3.8 5.6-3.8 9s1.3 6.4 3.8 9"/>',
+  pause: '<rect x="6.5" y="5" width="3.5" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="3.5" height="14" rx="1" fill="currentColor"/>',
+  layers: '<path d="M12 3.5 3 8.2l9 4.7 9-4.7z"/><path d="m3 12.2 9 4.7 9-4.7"/><path d="m3 16.2 9 4.7 9-4.7"/>',
+  inspect: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.01"/>',
+  wand: '<path d="m4 20 10-10"/><path d="M16 3v2.5M16 10.5V13M11 8h2.5M18.5 8H21M12.5 4.5 14 6M19.5 4.5 18 6M18 10l1.5 1.5"/>',
+  fit: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
+  close: '<path d="m6 6 12 12M18 6 6 18"/>',
+  plant: '<path d="M12 21v-9M7 21h10"/><path d="M12 12c0-4.2 2.8-7 8-7 0 4.2-2.8 7-8 7zM12 14.5c0-3.3-2.3-5.5-7-5.5 0 3.4 2.3 5.5 7 5.5z"/>',
+  raise: '<path d="M3 20h18M5 20l5-7 3 3 2-2 4 6"/><path d="M17 4v7M14 7l3-3 3 3"/>',
+  lower: '<path d="M3 20h18M5 20l5-7 3 3 2-2 4 6"/><path d="M17 4v7M14 8l3 3 3-3"/>',
+  lake: '<path d="M3 9c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 14c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0M3 19c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  fire: '<path d="M12 21c-3.9 0-7-2.7-7-6.6 0-3.4 2.5-5.4 3.8-8.4 1.1 2 1.6 3 3.2 4 0-3 1-5.4 3-7 .6 3 4 5.4 4 10.6 0 4.5-3.1 7.4-7 7.4z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  chart: '<path d="M4 20V4M4 20h16"/><path d="m7 15 4-5 3 3 5-6"/>',
+  map: '<path d="m9 4-6 2.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/>',
+};
+document.querySelectorAll('[data-i]').forEach(el => el.insertAdjacentHTML('afterbegin',
+  `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${P[el.dataset.i]}</svg>`));
+</script>
+</body>
+</html>
