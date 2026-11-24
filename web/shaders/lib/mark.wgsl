@@ -84,7 +84,7 @@ struct Foot { depth: f32, saturated: f32, snow: f32, snow_m: f32 }
 fn foot(at: vec2f) -> Foot {
   let g = ground_at(at, false);
   let st = state_at(at, g, corners(at / land.map.x));
-  return Foot(st.depth, saturated_of(g, at), select(snow_at(st.snow, st.bares, 0.0), st.snow, st.depth > 0.0), st.snow_m);
+  return Foot(st.depth, saturated_of(g, at), select(snow_at(at, 0.0, st.snow, snow_past(st.snow, st.bares), 0.0), st.snow, st.depth > 0.0), st.snow_m);
 }
 
 // Of each of four kinds that stand in liquid as deep as `reach` m (canopy.ts: down to the core's `Cover::line`), 1 where
