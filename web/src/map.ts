@@ -46,17 +46,27 @@ const MOVE_REST_MS = 120;
  * view moves (`quick`): a sixteenth of the pixels, a sixteenth of the time. */
 const QUICK_SCALE = 0.25;
 /** The pictures of the area about a view at rest (`MapView.rings`) are these many times its width, each at the screen's
- * pixels: so a view that moves out meets one at most three times softer than the last, and the whole map's picture
- * only once it is far (none is drawn that is no sharper than it). They are drawn once the view has rested
- * `AROUND_REST_MS`, the nearest first, a tile each time the card is free; the whole map's picture is `WHOLE_PX` px
- * across (22 MB with its mip levels at most), drawn in tiles too after them, again once older than `WHOLE_EVERY_MS`
- * (the world moves on). */
+ * pixels (but those drawn with the view's detail, `RING_AS_VIEW_SCALE`): so a view that moves out meets one at most
+ * three times softer than the last, and the whole map's picture only once it is far (none is drawn that is no sharper
+ * than it). They are drawn once the view has rested `AROUND_REST_MS`, in the order `AROUND_ORDER`, a tile each time
+ * the card is free; the whole map's picture is `WHOLE_PX` px across (22 MB with its mip levels at most), drawn in
+ * tiles too after them, again once older than `WHOLE_EVERY_MS` (the world moves on). */
 const RINGS = [2, 6, 18, 54], AROUND_REST_MS = 250, WHOLE_PX = 2048, WHOLE_EVERY_MS = 20000;
 /** The rings no wider than this many times the view are drawn with the detail of the view's own pixels (`around`):
  * the plants a pan shows in them are those the view shows, only softer, so none comes and goes as the screen passes
  * from one picture to the next. A wider ring takes its detail by its own pixels: at the view's, it would decide the
  * square of its width as many marks. */
 const RING_AS_VIEW_MOST = 2;
+/** Those rings are drawn at this share of the screen's pixels along each axis: a quarter of the pixels, so one costs
+ * about what a ring with its own detail does; shown under the last picture as a pan moves it, softer only. */
+const RING_AS_VIEW_SCALE = 0.5;
+/** The order the pictures about the view are drawn in (`drawAround`), as indices of `RINGS` (its length: the whole
+ * map's picture): the nearest ring with its own detail first, which is cheap and covers a short pan soon after the
+ * view rests; then the rings with the view's detail, which cost more; then the wider rings and the whole map. */
+const AROUND_ORDER = (() => {
+  const all = RINGS.map((_, i) => i), own = all.filter(i => RINGS[i] > RING_AS_VIEW_MOST);
+  return [own[0], ...all.filter(i => RINGS[i] <= RING_AS_VIEW_MOST), ...own.slice(1), RINGS.length];
+})();
 /** A picture drawn anew after the view moved, or sharp over the softer picture of its view, comes in over what the
  * screen showed in this long, ms (`present`): it does not jump in. */
 const FADE_MS = 220;
@@ -152,7 +162,7 @@ export class MapView {
   private rings: (Pic | null)[] = [];
   private whole: Pic | null = null;
   private aroundTex: (Texture | null)[] = [];
-  private spares: (Texture | null)[] = [null, null];
+  private spares: (Texture | null)[] = [null, null, null];
   private aroundTimer = 0;
   private aroundRun = 0;
   /** What the screen showed that the next picture drawn whole comes in over (`present`): what a moving view showed
@@ -655,17 +665,19 @@ export class MapView {
     this.aroundTimer = window.setTimeout(() => this.drawAround(run, 0, null, true), AROUND_REST_MS);
   }
 
-  /** Draw the next tile (`tilesOf`) of picture `i` of those shown under the last as the view moves (`around`), then go
-   * on once the card is free, each into a spare texture (the picture it replaces is shown till it is whole). `tiles`
-   * are those of picture `i` still to draw (null: none drawn yet), `ok` whether all drawn so far had their programs.
-   * Nothing where the view moved or a sharp picture is being drawn since run `run` began. */
-  private drawAround(run: number, i: number, tiles: number[][] | null, ok: boolean): void {
-    const gpu = this.gpu, now = performance.now();
-    if (run !== this.aroundRun || !gpu || this.sharpening || now - this.movedAt < AROUND_REST_MS || i > RINGS.length) return;
-    if (gpu.busy) { gpu.idle().then(() => this.drawAround(run, i, tiles, ok)); return; }
+  /** Draw the next tile (`tilesOf`) of the picture of step `step` of `AROUND_ORDER`, of those shown under the last as
+   * the view moves (`around`), then go on once the card is free, each into a spare texture of its size (the picture it
+   * replaces is shown till it is whole). `tiles` are those of the picture still to draw (null: none drawn yet), `ok`
+   * whether all drawn so far had their programs. Nothing where the view moved or a sharp picture is being drawn since
+   * run `run` began. */
+  private drawAround(run: number, step: number, tiles: number[][] | null, ok: boolean): void {
+    const gpu = this.gpu, now = performance.now(), i = AROUND_ORDER[step];
+    if (run !== this.aroundRun || !gpu || this.sharpening || now - this.movedAt < AROUND_REST_MS || i === undefined) return;
+    if (gpu.busy) { gpu.idle().then(() => this.drawAround(run, step, tiles, ok)); return; }
     const a = this.around(i, now);
-    if (!a) { this.drawAround(run, i + 1, null, true); return; }
-    const spare = i < RINGS.length ? 0 : 1;
+    if (!a) { this.drawAround(run, step + 1, null, true); return; }
+    // (One spare of each size: the rings with the view's detail, the other rings, the whole map.)
+    const spare = i === RINGS.length ? 2 : RINGS[i] <= RING_AS_VIEW_MOST ? 0 : 1;
     if (!tiles) { this.spares[spare] = this.sized(gpu, this.spares[spare], a.w, a.h); tiles = this.tilesOf(a.w, a.h); }
     const t = this.spares[spare]!;
     ok = this.drawInto(gpu, t, a.cam, a.k, a.seen, tiles.shift()) && ok;
@@ -677,24 +689,25 @@ export class MapView {
     }
     gpu.submit();
     const more = tiles.length > 0;
-    gpu.idle().then(() => nextFrame(() => this.drawAround(run, more ? i : i + 1, more ? tiles : null, more ? ok : true)));
+    gpu.idle().then(() => nextFrame(() => this.drawAround(run, more ? step : step + 1, more ? tiles : null, more ? ok : true)));
   }
 
   /** Picture `i` of those shown under the last as the view moves, at `now`: its camera, its pixels a css pixel, the
    * pixels of the screen a css pixel its detail is chosen by, and its size, px; null where none is drawn. The area about
    * the view `RINGS[i]` times its width at the screen's pixels (none where the whole map's picture is as sharp: its ring
-   * is let go), with the view's own detail up to `RING_AS_VIEW_MOST`, then the whole map where its picture is of
-   * another look or older than `WHOLE_EVERY_MS`. */
+   * is let go), with the view's own detail at `RING_AS_VIEW_SCALE` of the screen's pixels up to `RING_AS_VIEW_MOST`,
+   * then the whole map where its picture is of another look or older than `WHOLE_EVERY_MS`. */
   private around(i: number, now: number): { cam: Camera; k: number; seen: number; w: number; h: number } | null {
     const wide = Math.max(this.w, this.h), d = this.drawnDpr();
     if (i < RINGS.length) {
       // About the view's middle, `n` times as many squares across.
       const n = RINGS[i], { s, ox, oy } = this.cam, cw = this.cv.clientWidth / 2, ch = this.cv.clientHeight / 2;
-      if ((s / n) * d <= WHOLE_PX / wide) { this.rings[i] = null; return null; }
+      const asView = n <= RING_AS_VIEW_MOST, r = asView ? RING_AS_VIEW_SCALE : 1;
+      if ((s / n) * d * r <= WHOLE_PX / wide) { this.rings[i] = null; return null; }
       // (A css pixel of the ring takes n of the view's: at n times the screen's pixels, the ring's metres a pixel of
       // detail are the view's.)
-      const seen = n <= RING_AS_VIEW_MOST ? n * d : d;
-      return { cam: { s: s / n, ox: cw - (cw - ox) / n, oy: ch - (ch - oy) / n }, k: d, seen, w: this.gpuCv!.width, h: this.gpuCv!.height };
+      const seen = asView ? n * d : d, w = Math.round(this.gpuCv!.width * r), h = Math.round(this.gpuCv!.height * r);
+      return { cam: { s: s / n, ox: cw - (cw - ox) / n, oy: ch - (ch - oy) / n }, k: (d * w) / this.gpuCv!.width, seen, w, h };
     }
     if (this.whole?.look === this.lookKey() && now - this.wholeAt <= WHOLE_EVERY_MS) return null;
     return { cam: { s: WHOLE_PX / wide, ox: 0, oy: 0 }, k: 1, seen: 1, w: Math.round((WHOLE_PX * this.w) / wide), h: Math.round((WHOLE_PX * this.h) / wide) };
