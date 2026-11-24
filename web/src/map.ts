@@ -52,6 +52,11 @@ const QUICK_SCALE = 0.25;
  * across (22 MB with its mip levels at most), drawn in tiles too after them, again once older than `WHOLE_EVERY_MS`
  * (the world moves on). */
 const RINGS = [2, 6, 18, 54], AROUND_REST_MS = 250, WHOLE_PX = 2048, WHOLE_EVERY_MS = 20000;
+/** The rings no wider than this many times the view are drawn with the detail of the view's own pixels (`around`):
+ * the plants a pan shows in them are those the view shows, only softer, so none comes and goes as the screen passes
+ * from one picture to the next. A wider ring takes its detail by its own pixels: at the view's, it would decide the
+ * square of its width as many marks. */
+const RING_AS_VIEW_MOST = 2;
 /** A picture drawn anew after the view moved, or sharp over the softer picture of its view, comes in over what the
  * screen showed in this long, ms (`present`): it does not jump in. */
 const FADE_MS = 220;
@@ -68,11 +73,12 @@ const MADE_POLL_MS = 50;
 
 /** Drawn on the GPU over the map by another module, in the map's pass, at every frame: what it works out before the
  * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` px of the target and
- * `seen` px of the screen (its detail is chosen by the screen's), and the view is `w` x `h` css px, adding to `waiting`
- * the programs it goes without as they are not made yet (`prepare`); its draw in the pass; and what the live map's
+ * `seen` px of the screen (its detail is chosen by the screen's), and the view is `w` x `h` css px, of which only the
+ * part `clip` of the target (x, y, w, h px) is drawn where given, adding to `waiting` the programs it goes without as
+ * they are not made yet (`prepare`); its draw in the pass; and what the live map's
  * ground draws of it, with a square taking `s` css px and a css px `seen` px of the screen (`under`, its bindings). */
 export interface GpuLayer {
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: string[]): void;
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: string[], clip?: number[]): void;
   draw(p: Pass): void;
   under(gpu: Gpu, s: number, seen: number): Draw['binds'];
 }
@@ -662,7 +668,7 @@ export class MapView {
     const spare = i < RINGS.length ? 0 : 1;
     if (!tiles) { this.spares[spare] = this.sized(gpu, this.spares[spare], a.w, a.h); tiles = this.tilesOf(a.w, a.h); }
     const t = this.spares[spare]!;
-    ok = this.drawInto(gpu, t, a.cam, a.k, tiles.shift()) && ok;
+    ok = this.drawInto(gpu, t, a.cam, a.k, a.seen, tiles.shift()) && ok;
     if (!tiles.length && ok) {
       gpu.mipmap(t);
       const pic = picOf(t, a.cam, a.k, this.lookKey());
@@ -674,20 +680,24 @@ export class MapView {
     gpu.idle().then(() => nextFrame(() => this.drawAround(run, more ? i : i + 1, more ? tiles : null, more ? ok : true)));
   }
 
-  /** Picture `i` of those shown under the last as the view moves, at `now`: its camera, its pixels a css pixel and its
-   * size, px; null where none is drawn. The area about the view `RINGS[i]` times its width at the screen's pixels (none
-   * where the whole map's picture is as sharp: its ring is let go), then the whole map where its picture is of another
-   * look or older than `WHOLE_EVERY_MS`. */
-  private around(i: number, now: number): { cam: Camera; k: number; w: number; h: number } | null {
+  /** Picture `i` of those shown under the last as the view moves, at `now`: its camera, its pixels a css pixel, the
+   * pixels of the screen a css pixel its detail is chosen by, and its size, px; null where none is drawn. The area about
+   * the view `RINGS[i]` times its width at the screen's pixels (none where the whole map's picture is as sharp: its ring
+   * is let go), with the view's own detail up to `RING_AS_VIEW_MOST`, then the whole map where its picture is of
+   * another look or older than `WHOLE_EVERY_MS`. */
+  private around(i: number, now: number): { cam: Camera; k: number; seen: number; w: number; h: number } | null {
     const wide = Math.max(this.w, this.h), d = this.drawnDpr();
     if (i < RINGS.length) {
       // About the view's middle, `n` times as many squares across.
       const n = RINGS[i], { s, ox, oy } = this.cam, cw = this.cv.clientWidth / 2, ch = this.cv.clientHeight / 2;
       if ((s / n) * d <= WHOLE_PX / wide) { this.rings[i] = null; return null; }
-      return { cam: { s: s / n, ox: cw - (cw - ox) / n, oy: ch - (ch - oy) / n }, k: d, w: this.gpuCv!.width, h: this.gpuCv!.height };
+      // (A css pixel of the ring takes n of the view's: at n times the screen's pixels, the ring's metres a pixel of
+      // detail are the view's.)
+      const seen = n <= RING_AS_VIEW_MOST ? n * d : d;
+      return { cam: { s: s / n, ox: cw - (cw - ox) / n, oy: ch - (ch - oy) / n }, k: d, seen, w: this.gpuCv!.width, h: this.gpuCv!.height };
     }
     if (this.whole?.look === this.lookKey() && now - this.wholeAt <= WHOLE_EVERY_MS) return null;
-    return { cam: { s: WHOLE_PX / wide, ox: 0, oy: 0 }, k: 1, w: Math.round((WHOLE_PX * this.w) / wide), h: Math.round((WHOLE_PX * this.h) / wide) };
+    return { cam: { s: WHOLE_PX / wide, ox: 0, oy: 0 }, k: 1, seen: 1, w: Math.round((WHOLE_PX * this.w) / wide), h: Math.round((WHOLE_PX * this.h) / wide) };
   }
 
   /** Texture `t`, or a new one where it is not `w` x `h`, for a picture, with its mip levels (a picture shown smaller
@@ -698,16 +708,17 @@ export class MapView {
     return gpu.texture('picture', w, h, MAP_TARGET, 1, Math.floor(Math.log2(Math.max(w, h))) + 1, true);
   }
 
-  /** Draw the map and the layer over it (the plants, seen at its own pixels) into texture `t` with camera `cam`, `k` of
-   * its pixels a css pixel, inside `clip` (x, y, w, h px) where given; false where a program it needs is not made yet
-   * (then it is drawn without it). The layer is decided for this draw; the next frame decides it for the view again. */
-  private drawInto(gpu: HeldGpu, t: Texture, cam: Camera, k: number, clip?: number[]): boolean {
+  /** Draw the map and the layer over it into texture `t` with camera `cam`, `k` of its pixels a css pixel, its detail
+   * (the ground's and the plants') chosen as on a screen of `seen` px a css pixel, inside `clip` (x, y, w, h px) where
+   * given; false where a program it needs is not made yet (then it is drawn without it). The layer is decided for this
+   * draw; the next frame decides it for the view again. */
+  private drawInto(gpu: HeldGpu, t: Texture, cam: Camera, k: number, seen: number, clip?: number[]): boolean {
     const was = this.cam, drawn = this.land?.drawn, waiting: string[] = [];
     this.cam = { ...cam };
     gpu.begin();
-    this.layer?.prepare(gpu, cam.ox, cam.oy, cam.s, k, k, t.w / k, t.h / k, waiting);
+    this.layer?.prepare(gpu, cam.ox, cam.oy, cam.s, k, seen, t.w / k, t.h / k, waiting, clip);
     const p = gpu.pass(t, [...this.background(), 1], clip);
-    this.drawMap(gpu, p, [cam.ox], k, k, [t.w, t.h], waiting);
+    this.drawMap(gpu, p, [cam.ox], k, seen, [t.w, t.h], waiting);
     this.layer?.draw(p);
     p.end();
     this.cam = was;
