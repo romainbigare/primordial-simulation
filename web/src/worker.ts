@@ -51,6 +51,8 @@ type Command =
   | { cmd: 'earlyRelief'; on: boolean }
   | { cmd: 'shown'; frames: number };
 
+/** The numbers before the heights of a preview (wasm/src/lib.rs `preview`): its window and its version, u32. */
+const PREVIEW_HEAD = 5;
 /** Longest time a tick steps before it lets messages in, ms. */
 const TICK_MS = 50;
 /** Pause between ticks, ms. */
@@ -99,11 +101,12 @@ function handIn(data: ArrayBuffer, use: () => number): string {
 }
 
 /** What edits moved the ground since the ground the page shows (wasm/src/lib.rs `preview`): the window of the
- * terrain's samples (west column, north row, width, height) and how far each of its samples moved, m, row by row. */
-function preview(): { window: [number, number, number, number]; dh: Float32Array } {
+ * terrain's samples (west column, north row, width, height), the version of the samples it moved from (`over`: the
+ * page draws it over the tiles made of that version alone), and how far each of its samples moved, m, row by row. */
+function preview(): { window: [number, number, number, number]; over: number; dh: Float32Array } {
   const c = core!, raw = bytes(c.preview(), c.out_len());
-  const head = new Uint32Array(raw.buffer, 0, 4);
-  return { window: [head[0], head[1], head[2], head[3]], dh: new Float32Array(raw.buffer.slice(16)) };
+  const head = new Uint32Array(raw.buffer, 0, PREVIEW_HEAD);
+  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer.slice(4 * PREVIEW_HEAD)) };
 }
 
 /** The text the core last returned at `at`. */
