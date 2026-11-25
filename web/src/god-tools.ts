@@ -1,11 +1,11 @@
-// The tools of god mode (god.ts `GodTool`), in the order of the strip: each paints with the round brush
+// The tools of god mode (god-types.ts `GodTool`), in the order of the strip: each paints with the round brush
 // (wasm/src/lib.rs `brush`): Raise and Lower land move the ground under it while held, and the world builds its
 // samples and settles its liquid over the new ground when the stroke ends (`settle`); Lake digs a basin under it at
 // once, its floor a chosen depth under the brush's rim, and fills it; Plant clears a share of each
-// cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, and
-// those that hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain
+// cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, the
+// longer the faster, and those that hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain
 // words, from the core's own reasons. A new tool is one more entry of `godTools`.
-import type { GodTool, Probe, StartKind } from './god';
+import type { GodTool, Probe, StartKind } from './god-types';
 
 /** The core's brush tools (wasm/src/lib.rs `SHAPE`, `LAKE`, `PLANT`, `BURN`). */
 const BRUSH_SHAPE = 0, BRUSH_LAKE = 1, BRUSH_PLANT = 2, BRUSH_BURN = 3;
@@ -18,6 +18,8 @@ const SHAPE_M_S = 20;
  * typical place light in about a second (the heat they need: core/src/flame `needed`; a cell holds the heat over all
  * its land, of which the brush covers a share), the wettest in tens. */
 const HEAT_J_M2_S = 3e6;
+/** Burn's heat doubles every this many seconds it is held, so damp remains light in a few seconds too, not tens. */
+const HEAT_DOUBLING_S = 1;
 /** The starting kinds in plain words, by the core's name (worldgen/src/life/kinds.rs `KINDS`): a short name and a line. */
 const PLAIN_KINDS: Record<string, [string, string]> = {
   'small fast light-eaters': ['Short grass', 'Small plants that grow and spread fast.'],
@@ -60,7 +62,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   const kindName = () => { const k = kinds().find(d => d.row === plantRow()); return k ? plainKind(k)[0].toLowerCase() : 'plants'; };
   const plant: GodTool = {
     key: 'plant', icon: 'plant', label: 'Plant', ink: '#7ed957', code: BRUSH_PLANT, row: plantRow,
-    hint: 'Drag to plant. Right-drag or two fingers move the map.',
+    hint: 'Drag on the map to plant. Two fingers move the map.',
     why: (p: Probe | null) => (!kinds().length ? 'This world has no plants to plant.' : p && p.land <= 0 ? OPEN_WATER : ''),
     reason: why => UNPLANTED[why] ?? why,
     choices: show => {
@@ -78,25 +80,25 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
       : grown ? `Planted grown ${kindName()} in ${cells(done)}.` : `No grown ${kindName()} yet: young ones planted.`),
   };
   const burn: GodTool = {
-    key: 'burn', icon: 'fire', label: 'Burn', ink: '#ff7a1a', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S,
-    hint: 'Press and hold to heat the ground till it lights; the ring fills as it nears. Right-drag or two fingers move the map.',
+    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff7a1a', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S,
+    hint: 'Hold on the map. The ring fills, then the ground lights.',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,
-    told: (done, why) => (done ? `Fire took in ${cells(done)}. It spreads as far as the dry litter carries it.`
+    told: (done, why) => (done ? 'Fire took. It spreads as far as the dry litter carries it.'
       : `Nothing caught fire. ${why || 'Hold longer: the remains need more heat to light.'}`),
   };
   /** A ground tool: it moves the ground up or down (`sign`) under the brush while held. */
   const shape = (sign: number): GodTool => ({
-    key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise land' : 'Lower land',
+    key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise' : 'Lower',
     ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1, rate: sign * SHAPE_M_S,
-    hint: `Press and hold to ${sign > 0 ? 'raise' : 'lower'} the land; the longer, the more. Right-drag or two fingers move the map.`,
+    hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Two fingers move the map.`,
     why: () => '', reason: why => why,
     told: done => (done ? `${sign > 0 ? 'Raised' : 'Lowered'} the land. Water finds its new way.` : 'The ground did not move here.'),
   });
   let depth = LAKE_DEPTHS[1][1];
   const lake: GodTool = {
     key: 'lake', icon: 'lake', label: 'Lake', ink: '#4aa3e8', code: BRUSH_LAKE, row: () => -1, amount: () => depth,
-    hint: 'Click or tap to dig a lake under the brush; it fills with water at once.',
+    hint: 'Tap the map to dig a lake. It fills with water at once.',
     why: (p: Probe | null) => (p && p.land <= 0 ? 'This is open water already.' : ''), reason: why => why,
     choices: show => {
       const list = document.createElement('div');

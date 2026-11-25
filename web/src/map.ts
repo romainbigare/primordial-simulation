@@ -248,13 +248,14 @@ export class MapView {
     });
     cv.addEventListener('contextmenu', e => { if (this.paint?.on()) e.preventDefault(); });
     cv.addEventListener('pointermove', e => {
-      if (e.pointerId === painter) { painterAt = { x: e.offsetX, y: e.offsetY }; this.setHover(this.cellAt(e.offsetX, e.offsetY)); return this.paint?.move(...at(e)); }
+      if (e.pointerId === painter) { painterAt = { x: e.offsetX, y: e.offsetY }; return this.paint?.move(...at(e)); }
       if (this.gesture.move(e.pointerId, e.offsetX, e.offsetY)) this.redraw();
-      else this.setHover(this.cellAt(e.offsetX, e.offsetY));
+      // (While a tool paints the map, the brush shows where it acts: no square is outlined.)
+      else this.setHover(this.paint?.on() ? -1 : this.cellAt(e.offsetX, e.offsetY));
     });
     const up = (e: PointerEvent) => {
       if (e.pointerId === painter) return stopPainting();
-      if (this.gesture.size === 1 && this.gesture.moved < TAP_PX && e.type === 'pointerup') { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
+      if (this.gesture.size === 1 && this.gesture.moved < TAP_PX && e.type === 'pointerup' && !this.paint?.on()) { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
       this.gesture.up(e.pointerId);
       this.redraw();
     };
@@ -441,7 +442,7 @@ export class MapView {
     this.overlay?.(ctx, ox, oy, s);
     if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
     for (const [i, col] of [[this.pick, '#fff'], [this.hover, '#000']] as const) {
-      if (i < 0) continue;
+      if (i < 0 || this.paint?.on()) continue;
       ctx.lineWidth = 1.5; ctx.strokeStyle = col;
       for (const x of xs) ctx.strokeRect(x + (i % w) * s - 0.5, oy + Math.floor(i / w) * s - 0.5, s + 1, s + 1);
     }

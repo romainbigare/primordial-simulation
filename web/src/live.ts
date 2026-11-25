@@ -1,6 +1,6 @@
 import { World, makeWorld, Meta } from './data';
 import { timed } from './cost';
-import type { Probe, StartKind, Brushed, Settled } from './god';
+import type { Probe, StartKind, Brushed, Settled } from './god-types';
 import type { Built, Preview } from './ground';
 
 /** What the core reports with each frame: its cells, the months stepped per second of real time, the time a month

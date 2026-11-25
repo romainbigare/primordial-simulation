@@ -84,10 +84,10 @@ map.fire = fire;
 const vegetation = new Vegetation(fire);
 map.layer = vegetation;
 /** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
-const front = new FireFront(() => live, fire);
+const front = new FireFront(() => live, fire, m2 => god.spread(m2));
 const god = new God({
   strip: $('god-strip'), card: $('god'), toast: $('toast'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
-  picked: () => { if (playing) togglePlay(); }, burnt: b => front.burnt(b),
+  picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), play: () => { if (!playing) togglePlay(); }, burnt: b => front.burnt(b),
 }, () => live, godTools(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live && godOn()) god.draw(ctx, ox, oy, s); };
@@ -299,8 +299,10 @@ function syncUi(): void {
 function godOn(): boolean { return !$('god-strip').hidden; }
 function setGod(on: boolean): void {
   $('god-strip').hidden = $('god').hidden = !on;
+  // (On a phone the strip takes the dock's place, style.css.)
+  document.body.classList.toggle('god-on', on);
   $('god-btn').setAttribute('aria-pressed', String(on));
-  if (!on) god.reset();
+  if (on) god.opened(); else god.reset();
 }
 
 function button(text: string, fn: () => void, layerName?: string): HTMLButtonElement {
