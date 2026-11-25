@@ -268,7 +268,8 @@ heat they added burn (3c).
 This is honest because a month's step already treats these processes as one event inside the month (the runoff's pass
 moves a month's runoff at once; a flame's run lasts at most `front_life`, 4 days), and every move goes through the
 store, so the books close; what needs time (sun, rain, growth, rot) does not run, and no strike is drawn over no time.
-The live page settles when a stroke of its brush ends, while the world is paused.
+The live page settles when a stroke of its brush ends, while the world is paused, and about once a second while a
+stroke of the ground is held (wasm `soften`: the stroke goes on, and its undo is to the world before it).
 **Chunks and the parallel pass** (`life::run`). The cells are cut into `Config::chunks` runs of neighbouring indices,
 the same for any number of threads. Each chunk is one task on the pool, its cells' life taken out of the world, the
 world read only; in each cell in order the cover's month and then the takers' run on the cell's **view of the store** (`store::Moves`): its

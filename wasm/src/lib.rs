@@ -528,6 +528,20 @@ pub extern "C" fn settle() -> *const u8 {
     give(out.to_string().into_bytes())
 }
 
+/// Settle what the edits of the stroke under way started (`World::settle`: the samples built again over the ground it
+/// shaped so far and the liquid settled over them) and keep the stroke: the page settles a held stroke of the ground now
+/// and then, so its water follows while it is held. Its undo is still to the world before the stroke began. Returns, as
+/// JSON, as `settle`.
+#[no_mangle]
+pub extern "C" fn soften() -> *const u8 {
+    let out = with(|l| {
+        let done = l.world.settle();
+        l.follow();
+        json!(done)
+    });
+    give(out.to_string().into_bytes())
+}
+
 /// Put the world back as it was before the last stroke of the brush began, once (one level). Its samples take a new
 /// version (`Relief::version`, above every one before, so no version names two grounds), and the page asks for its
 /// relief as after a build. Returns, as JSON, whether there was a stroke to undo.
@@ -571,7 +585,9 @@ pub extern "C" fn ground_shown(version: u32) {
 /// the heights it draws until its ground is made again, over the tiles made of the samples of the version it is of: the
 /// window of the terrain's samples that moved, its west column, north row, width and height in samples, and that
 /// version (`ground_version` as `ground_shown` last took it; five u32), then of each sample of the window, row by row,
-/// how far its ground moved, m (f32), little-endian; an empty window (0, 0, 0, 0) where none moved.
+/// how far its ground moved, m (f32), then the depth of its loose ground once the samples are built again over the
+/// ground as it stands (`World::loose_to_build`, m, f32), little-endian; an empty window (0, 0, 0, 0) where none
+/// moved.
 #[no_mangle]
 pub extern "C" fn preview() -> *const u8 {
     let bytes = with(|l| {
@@ -585,14 +601,19 @@ pub extern "C" fn preview() -> *const u8 {
             (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
         }
         let window: [u32; 4] = if x0 == usize::MAX { [0; 4] } else { [x0, y0, x1 - x0, y1 - y0].map(|v| v as u32) };
-        let dh = (y0..y1).flat_map(|y| (x0..x1).map(move |x| y * across + x)).map(|k| (at(now, k) - at(shown, k)) as f32);
-        window.iter().chain([&l.over]).flat_map(|v| v.to_le_bytes()).chain(dh.flat_map(|v| v.to_le_bytes())).collect()
+        let ks: Vec<usize> = (y0..y1).flat_map(|y| (x0..x1).map(move |x| y * across + x)).collect();
+        let dh = ks.iter().map(|&k| (at(now, k) - at(shown, k)) as f32);
+        // The heights the samples will be built at: those last built with what edits shaped since.
+        let built = l.world.terrain_samples();
+        let loose = l.world.loose_to_build(&ks, &|j| built.h[j] + at(now, j) - at(&l.version, j));
+        let tail = dh.chain(loose.iter().map(|&m| m as f32));
+        window.iter().chain([&l.over]).flat_map(|v| v.to_le_bytes()).chain(tail.flat_map(|v| v.to_le_bytes())).collect()
     });
     give(bytes)
 }
 
 /// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile`, `rock`, `open_world`,
-/// `ground_of_world`, `probe`, `kinds`, `brush`, `settle`, `undo` or `preview` last returned.
+/// `ground_of_world`, `probe`, `kinds`, `brush`, `settle`, `soften`, `undo` or `preview` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().len())

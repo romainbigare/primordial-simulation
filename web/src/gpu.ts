@@ -164,6 +164,9 @@ export interface Gpu {
   /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone,
    * which the renderer does not keep: after a lost context it is empty). */
   write(t: Texture, data: TexelData, level?: number, layer?: number): void;
+  /** Fill rows `y` to `y + rows` of the first level of texture `t` (one layer) from `data`, all of its texels: the
+   * renderer keeps `data` itself as that level, so the rows not sent must already hold what it holds. */
+  writeRows(t: Texture, data: TexelData, y: number, rows: number): void;
   /** Make the mip levels of texture `t` from its first (a picture drawn into it, shown smaller later). */
   mipmap(t: Texture): void;
   /** Let texture `t` go: at once on the back end; on the page's GPU once the next picture begins (`HeldGpu.begin`). */
@@ -285,6 +288,11 @@ export class HeldGpu implements Gpu {
     const h = t as HeldTexture;
     if (layer === undefined) h.levels[level] = data;
     this.back.write(h.inner, data, level, layer);
+  }
+  writeRows(t: Texture, data: TexelData, y: number, rows: number): void {
+    const h = t as HeldTexture;
+    h.levels[0] = data;
+    this.back.writeRows(h.inner, data, y, rows);
   }
   mipmap(t: Texture): void { this.back.mipmap((t as HeldTexture).inner); }
   drop(t: Texture): void { this.held.delete(t as HeldTexture); this.dropped.push(t as HeldTexture); }

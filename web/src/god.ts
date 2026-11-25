@@ -21,6 +21,13 @@ const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
 const PAINT_MS = 90, PAINT_MOVE = 0.25;
 /** A tool with a rate paints only once held this long, ms: a tap does nothing. */
 const HOLD_MS = 220;
+/** A tool that paints in steps (`GodTool.step`) looks this many times a step whether one is due, so each lands within a
+ * quarter of its time of its start. */
+const STEP_LOOKS = 4;
+/** A held stroke of a tool that softens (`GodTool.softens`) settles what it did so far at most this often, ms: the
+ * world's samples are built again and its liquid settles over them while the ground moves (a pause of the core of a
+ * few hundred ms, so not at every step; the steps it holds up are painted together after it). */
+const SOFTEN_MS = 1000;
 /** The ink of the brush where the tool cannot act: a dull red. */
 const NO_INK = 'rgba(196,76,60,.95)';
 /** How long the brush's size shows on the map after one is picked, ms. */
@@ -39,6 +46,9 @@ const PROBE_MS = 80;
  * paint than the timer's step). */
 interface Stroke {
   tool: GodTool; last: [number, number, number]; began: number; now: [number, number]; sent: number; held: number; waiting: boolean;
+  /** Of a tool that paints in steps: the steps painted. Of a tool that softens: when it last settled what it did so far
+   * (ms), and the paints sent then. */
+  steps: number; softened: number; softenedAt: number;
   /** Of heat: how much of the heat that lights them the cells under the brush hold, their mean by share over those that
    * can light (-1: no heat asked). */
   progress: number;
@@ -176,20 +186,35 @@ export class God {
     this.page.picked();
     this.at = [x, y];
     const now = performance.now();
-    const st: Stroke = this.stroke = { tool: t, last: [x, y, now], began: now, now: [x, y], sent: 0, held: 0, waiting: false, progress: -1 };
-    const ticks = () => window.setInterval(() => this.tick(st), PAINT_MS);
+    const st: Stroke = this.stroke = { tool: t, last: [x, y, now], began: now, now: [x, y], sent: 0, held: 0, waiting: false, steps: 0, softened: now, softenedAt: 0, progress: -1 };
+    const ticks = () => window.setInterval(() => this.tick(st), t.step ? t.step.every / STEP_LOOKS : PAINT_MS);
     if (t.rate) st.held = window.setTimeout(() => { if (this.stroke !== st) return; st.held = ticks(); this.paint(st); }, HOLD_MS);
     else { this.paint(st); if (!t.amount) st.held = ticks(); }
     return true;
   }
 
   /** A tick of stroke `st` while held: the brush follows the sight where it stands there; a tool with a rate paints
-   * again once the core answered its last paint, another where the brush moved. A tick of a stroke that ended stops. */
+   * again once the core answered its last paint, one with steps once a step is due too, another where the brush moved.
+   * A tick of a stroke that ended stops. */
   private tick(st: Stroke): void {
     if (this.stroke !== st) { clearInterval(st.held); return; }
     const aim = this.page.aim();
     if (aim) { st.now = aim; this.at = aim; }
-    if (st.tool.rate) { if (!st.waiting) this.paint(st); } else this.moved(st);
+    if (st.tool.softens && !st.waiting && st.sent > st.softenedAt && performance.now() - st.softened >= SOFTEN_MS) this.soften(st);
+    if (st.tool.rate || st.tool.step) { if (!st.waiting && this.due(st) !== 0) this.paint(st); } else this.moved(st);
+  }
+
+  /** Stroke `st`, held, settles what it did so far and goes on (`Editor.soften`): the core answers its paints after. */
+  private soften(st: Stroke): void {
+    st.softened = performance.now(); st.softenedAt = st.sent;
+    this.editor()?.soften();
+  }
+
+  /** Of stroke `st` of a tool with steps, the steps due and not yet painted: one at its start and one at the start of
+   * each `every` ms held since, so a hold of t ms makes ⌈t / every⌉ (at least one); of another tool, 1. */
+  private due(st: Stroke): number {
+    const s = st.tool.step;
+    return s ? Math.max(1, Math.ceil((performance.now() - st.began) / s.every)) - st.steps : 1;
   }
 
   /** The pointer of the stroke moved to (x, y) squares: a paint there, once it moved far and long enough. */
@@ -197,7 +222,7 @@ export class God {
     const st = this.stroke;
     if (!st) return;
     st.now = [x, y];
-    if (!st.tool.rate && !st.tool.amount) this.moved(st);
+    if (!st.tool.rate && !st.tool.step && !st.tool.amount) this.moved(st);
   }
 
   /** A paint of stroke `st` where its brush is now, if it moved far and long enough since its last. */
@@ -206,25 +231,29 @@ export class God {
     if (far && performance.now() - lt >= PAINT_MS) this.paint(st);
   }
 
-  /** The stroke ends: a last paint where the brush moved since, and it settles; a tool with a rate let go before it
-   * painted (a tap) does nothing. */
+  /** The stroke ends: a last paint where the brush moved since (of a tool with steps, the steps still due), and it
+   * settles; a tool with a rate let go before it painted (a tap) does nothing. */
   end(): void {
     const st = this.stroke;
     if (!st) return;
     clearInterval(st.held);
     this.stroke = null;
     if (st.tool.rate && !st.sent) { this.page.redraw(); return; }
-    if (st.tool.rate || (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]))) this.paint(st);
+    if (st.tool.step) { if (this.due(st) > 0) this.paint(st); }
+    else if (st.tool.rate || (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]))) this.paint(st);
     this.editor()?.settle();
     this.ended.push(st);
   }
 
-  /** Paint with stroke `st`'s tool where its brush is now: by its amount, or for a tool with a rate by what the time
-   * since its last paint adds, its rate doubling every `doubling` s it has been held, at most `doublings` times. */
+  /** Paint with stroke `st`'s tool where its brush is now: by its amount, for a tool with steps by the steps due (all
+   * at once where the core was slower than a step), or for a tool with a rate by what the time since its last paint
+   * adds, its rate doubling every `doubling` s it has been held, at most `doublings` times. */
   private paint(st: Stroke): void {
     const t = st.tool, [x, y] = st.now, now = performance.now();
     const rate = (t.rate ?? 0) * (t.doubling ? 2 ** Math.min((now - st.began) / 1000 / t.doubling, t.doublings ?? Infinity) : 1);
-    const amount = t.amount ? t.amount() : (rate * (now - st.last[2])) / 1000;
+    const steps = t.step ? this.due(st) : 0;
+    st.steps += steps;
+    const amount = t.amount ? t.amount() : t.step ? steps * t.step.amount : (rate * (now - st.last[2])) / 1000;
     st.last = [x, y, now];
     st.waiting = true; st.sent++;
     this.editor()?.brush(t.code, x, y, this.radius, amount, t.row());
