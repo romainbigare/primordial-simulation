@@ -511,7 +511,10 @@ solve left it: its temperature (`World::thaw_last`) and the share of each substa
   sample's floor its height laid on its cell's mean surface. It is held by every cell that holds samples of it, each
   by its part, and its liquid stays in the ground nodes of those cells. The bodies, their parts and the ways to them
   are found once for the world's cells; at each month's start, each body's level from what its parts held at the last
-  pass (at the world's start, its pass: section 8), and the cells under it (their mean surface under it: the others are its shore). The lowest body, the open low
+  pass (at the world's start, its pass: section 8), and the cells under it (their mean surface under it: the others are its shore). When the samples are built again, a cell's part of a
+  pond holds what its part of the pond it came from held (`build::held_by_pond`, `came_from`), and a part new to the
+  cell holds none yet: it fills from what comes into it, not from the liquid of the parts beside it; a cell one of
+  whose parts before no part takes holds what stands at one level over its parts. The lowest body, the open low
   ground, has no code of its own.
 - **Running off** (`flow::runoff`), once a month in one pass: each cell sends what may run off (what came up from the
   store, the pores' drainage to the channels, below, which what stands over them refills first, and what stands over
