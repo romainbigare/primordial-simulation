@@ -131,10 +131,19 @@ fn a_planted_kind_stands_as_the_worlds_grown_stand_of_it() {
     }
 }
 
-/// A basin of liquid (`Act::Basin`): the ground under a brush is levelled to a floor `DEPTH` under its mean height, its
-/// rim raised to that height where lower, and the key liquid poured in to its pass with what the pores under it lack,
-/// from the outside node, so the books are kept. The floor is a closed basin, a pond at least that deep to its pass,
-/// whose body holds the liquid: on dry ground it stands the asked depth over the floor at once, and still after a month.
+/// The terrain's samples whose centres lie within `r` m of `place` (squares), as a brush covers them (`World::under`).
+fn disc_samples(w: &World, place: [f64; 2], r: f64) -> Vec<usize> {
+    let s = w.terrain_samples();
+    let per = (s.across / w.map.w) as f64;
+    let m = w.map.length(pcore::space::terrain::SAMPLE_DEPTH);
+    (0..s.h.len()).filter(|&k| (((k % s.across) as f64 + 0.5 - place[0] * per).hypot((k / s.across) as f64 + 0.5 - place[1] * per)) * m <= r).collect()
+}
+
+/// A basin of liquid (`Act::Basin`): the ground under a brush is cut to a floor `DEPTH` under the lowest dry sample of
+/// its rim, none of it raised, and the key liquid poured in to its pass with what the pores under it lack, from the
+/// outside node, so the books are kept. The floor is a closed basin, a pond at least that deep to its pass, whose body
+/// holds the liquid: on dry ground it covers the brush and stands the asked depth over the floor at once, and still
+/// after a month.
 #[test]
 fn a_basin_holds_its_liquid() {
     const DEPTH: f64 = 5.0;
@@ -148,13 +157,16 @@ fn a_basin_holds_its_liquid() {
     drop(s0);
     let [x0, y0, x1, y1] = w.map.bounds(i);
     let books = Books::now(&w);
-    let act = Act::Basin { radius_m: 0.4 * w.map.side, depth_m: DEPTH };
-    assert_eq!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]), [true]);
+    let (place, r) = ([(x0 + x1) / 2.0, (y0 + y1) / 2.0], 0.4 * w.map.side);
+    assert_eq!(w.edit(&[Edit { place, act: Act::Basin { radius_m: r, depth_m: DEPTH } }]), [true]);
     books.assert_kept(&w, 1e-9);
     let s = w.terrain_samples();
     let k = (0..w.relief.shaped.len()).filter(|&k| w.relief.shaped[k] != 0.0).min_by(|&a, &b| s.h[a].total_cmp(&s.h[b])).expect("the floor");
     let pond = s.pond[k];
     assert!(pond != pcore::space::network::NONE, "the floor is no pond");
+    let under = disc_samples(&w, place, r);
+    assert!(under.iter().all(|&j| w.relief.shaped[j] <= 0.0), "ground under the brush raised");
+    assert!(under.iter().all(|&j| s.pond[j] == pond), "the liquid covers {} of the brush's {} samples", under.iter().filter(|&&j| s.pond[j] == pond).count(), under.len());
     let depth = |w: &World| w.pond_levels()[pond as usize] - s.h[k];
     let (now, full) = (depth(&w), s.ponds[pond as usize].level - s.h[k]);
     assert!(full >= DEPTH - 1e-6 && now >= (1.0 - FULL_SHARE) * DEPTH && now <= full + 1e-6, "the liquid stands {now} m deep, {full} m to its pass");
@@ -162,6 +174,42 @@ fn a_basin_holds_its_liquid() {
     let later = depth(&w);
     assert!((later - now).abs() < 0.2 * full, "after a month it stands {later} m deep, from {now}");
     books.assert_kept(&w, 1e-9);
+}
+
+/// A basin that reaches a pond grows it (`World::basin`): its level is the pond's, so the pond's liquid still covers
+/// all its samples, at a level no lower, and the basin's own centre lies in it, with the brushes overlapping by most of
+/// one or by a little; a basin beside it, its rim on the pond's bank, leaves the pond as it was. The books are kept.
+#[test]
+fn a_basin_that_reaches_a_pond_grows_it() {
+    use pcore::space::network::NONE;
+    let mut w = small_world();
+    let i = inland(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let (place, r) = ([(x0 + x1) / 2.0, (y0 + y1) / 2.0], 0.3 * w.map.side);
+    let act = Act::Basin { radius_m: r, depth_m: 5.0 };
+    assert_eq!(w.edit(&[Edit { place, act }]), [true]);
+    let s = w.terrain_samples();
+    let centre = |s: &pcore::space::samples::Samples, p: [f64; 2]| {
+        let per = (s.across / w.map.w) as f64;
+        (p[1] * per) as usize * s.across + (p[0] * per) as usize
+    };
+    let pond = s.pond[centre(&s, place)];
+    assert!(pond != NONE, "the first pond");
+    let level = w.pond_levels()[pond as usize];
+    let members: Vec<usize> = (0..s.h.len()).filter(|&k| s.pond[k] == pond && s.h[k] < level).collect();
+    for apart in [1.0, 1.8, 2.4] {
+        let mut v = w.clone();
+        let books = Books::now(&v);
+        let at = [place[0] + apart * r / v.map.side, place[1]];
+        assert_eq!(v.edit(&[Edit { place: at, act }]), [true]);
+        books.assert_kept(&v, 1e-9);
+        let t = v.terrain_samples();
+        let grown = t.pond[centre(&t, at)];
+        assert!(grown != NONE, "{apart} radii apart: no pond at the second brush");
+        let first = t.pond[members[0]];
+        let kept = members.iter().all(|&k| t.pond[k] == first) && v.pond_levels()[first as usize] >= level - 1e-6;
+        assert!(kept && (apart > 2.0 || first == grown), "{apart} radii apart: the first pond not whole at its level in the grown pond");
+    }
 }
 
 /// After a stroke Flow finds each cell's ground by height again only where its samples moved (`flow::curve::update`):
@@ -240,7 +288,9 @@ fn a_hill_that_dams_a_channel_keeps_what_runs_to_the_low_ground() {
 const DAM_TRIES: usize = 20;
 
 /// The ponds keep their numbers when the samples are built again after an edit (`Relief::ponds`): a basin adds its
-/// own pond and renumbers none it did not reach, so whatever reads a pond by its number elsewhere reads the same.
+/// own pond and renumbers none it did not reach, and a number never comes to name another pond: after a second basin
+/// grows the first pond, each number names none or the pond that holds the key it had (an empty number reads that
+/// pond), so whatever reads a pond by its number elsewhere reads the same.
 #[test]
 fn a_basin_renumbers_no_pond_it_did_not_reach() {
     use pcore::space::network::NONE;
@@ -249,8 +299,9 @@ fn a_basin_renumbers_no_pond_it_did_not_reach() {
     let before = w.terrain_samples();
     let i = inland(&w);
     let [x0, y0, x1, y1] = w.map.bounds(i);
-    let act = Act::Basin { radius_m: 0.4 * w.map.side, depth_m: 5.0 };
-    assert_eq!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]), [true]);
+    let (place, r) = ([(x0 + x1) / 2.0, (y0 + y1) / 2.0], 0.4 * w.map.side);
+    let act = Act::Basin { radius_m: r, depth_m: 5.0 };
+    assert_eq!(w.edit(&[Edit { place, act }]), [true]);
     let after = w.terrain_samples();
     let members = |s: &pcore::space::samples::Samples, p: u32| (0..s.h.len()).filter(|&k| s.pond[k] == p).collect::<Vec<usize>>();
     // Each pond of before whose samples are those of a pond after: the same pond, at the same number.
@@ -264,4 +315,11 @@ fn a_basin_renumbers_no_pond_it_did_not_reach() {
         assert_eq!(after.pond[k], p, "pond {p}");
     }
     assert!(after.ponds.len() > before.ponds.len(), "the basin's own pond");
+    let keys = w.relief.ponds.clone();
+    assert_eq!(w.edit(&[Edit { place: [place[0] + r / w.map.side, place[1]], act }]), [true]);
+    let grown = w.terrain_samples();
+    for (p, &k) in keys.iter().enumerate() {
+        let empty = grown.ponds.get(p).is_some_and(|q| q.level.is_nan());
+        assert!(empty || (k != NONE && grown.pond[k as usize] == p as u32), "number {p} names a pond that does not hold its key");
+    }
 }

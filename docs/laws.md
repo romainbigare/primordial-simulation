@@ -232,9 +232,15 @@ of where it lies. A raise lays the cell's own rock (its bed's mixture) and, at t
 loose ground of one of the terrain's makes drawn from the seed for the stroke (`Make::of`, `World::draw_make`); a
 lowering takes the loose ground first, then the rock, never more than the cell holds (its samples move by the share it
 took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **A basin of liquid** (`edit::Act::Basin`,
-`World::basin`): the ground under a brush is levelled to one floor, a depth under the mean height of the samples
-it covers, and the samples of the ring round it (its rim) that lie lower than that mean are raised to it, cut or
-filled with each cell's own rock; so the floor is a closed basin, that deep under its pass, wherever it is made. The
+`World::basin`): its rim is the samples beside those the brush covers. Its level is the highest level of the liquid
+of the closed ponds that stands on the brush's samples or its rim, so a pond its cut opens grows over it at its own
+level, and a pond whose liquid stands on none of them keeps every way out of it (a way out leaves by a sample beside
+its liquid, which the basin only raises); else the way out of its outlet: of the dry samples of its rim, the one the
+higher of whose height and the lowest sample beside it outside the rim is lowest. Each sample under the brush higher
+than a depth under that level is cut to it, none filled; each dry sample of the rim lower than `edit_bank_m` over the
+level is raised to it, the dug ground's bank, but the outlet, moved to the level (a pond it grows leaves by a pass at
+its own level wherever its own pass lay); cut or raised with each cell's own rock. So the floor is a closed basin, at
+least that deep under its pass, wherever it is made; its liquid covers the brush, and no pond it reaches is lowered. The
 samples are built again over it at once; the key liquid fills the pond under its centre to that pond's level, its pass,
 with what the pores of the ground under it lack to be full (a real body on dry ground soaks the ground under it
 first: of a node that is one, its pores' lack at the cell's mean under the pond's samples alone, `flow::pores_lack`),
