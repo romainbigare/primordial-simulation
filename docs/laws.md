@@ -1682,8 +1682,9 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   share of its air, `Books::room`); the heat the burning frees goes to the air node over the cell. What it burnt and
   killed is counted (`Counters::flame`, `flame_air`, `cover_lost` by `life::FLAME`, the budget's `burnt`), and what the
   flames did on each cell in the month (`flame::Flamed`: the share burnt, the flame's length, the minerals left and
-  the gas given, per m² of land), the share burnt in each month of the last year and the months since it last
-  burnt, for the tape (`Counters::flame_month`, `burnt_months`, `burnt_age`).
+  the gas given, per m² of land, and the share of the soft tissue standing on the land burnt that they burnt or
+  killed), the share burnt in each month of the last year, the months since it last burnt, and its last burn's share
+  and soft tissue killed, for the tape (`Counters::flame_month`, `burnt_months`, `burnt_age`, `burnt_last`).
 - **Known limits:** dead leaves keep all their nitrogen (body matter's share of it is fixed by chemistry 0, and a
   plant has no part that could hold the mineral it would pull back; real plants pull back about half, Aerts 1996), so
   a flame sends 2 to 5 times the real nitrogen to the air (about 20 to 30 g a m² burnt); the slow organic matter held on the mineral particles (14) does not burn; the smouldering part

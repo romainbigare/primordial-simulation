@@ -312,6 +312,8 @@ pub const LAYERS: &[Layer] = &[
     l("flame_len", "m", "log", 0.01, 30.0, |c, i| flamed(c.w, i).length as f64),
     l("burnt", "1/yr", "lin", 0.0, 1.0, |c, i| pcore::flame::burnt_year(c.w, i)),
     l("burnt_age", "months", "lin", 0.0, pcore::flame::AGE_MOST as f64, |c, i| pcore::flame::since(c.w, i)),
+    l("burnt_last", "1", "lin", 0.0, 1.0, |c, i| pcore::flame::last_burn(c.w, i)[0]),
+    l("crown_kill", "1", "lin", 0.0, 1.0, |c, i| pcore::flame::last_burn(c.w, i)[1]),
     l("ash", "kg/m2", "log", 1e-5, 1.0, |c, i| flamed(c.w, i).ash as f64),
     l("flame_air", "kg/m2", "log", 1e-3, 10.0, |c, i| flamed(c.w, i).air as f64),
     l("ground_r", "", "raw", 0.0, 1.0, |c, i| c.f.ground[i][0]),
