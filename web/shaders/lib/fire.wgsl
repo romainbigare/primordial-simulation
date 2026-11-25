@@ -150,14 +150,17 @@ const BURN_WARP = 0.06; const BURN_WARP_M = 600.0; const BURN_WARP_NOISE = 96;
 // The burn of god mode at `at` (of those on its square, the one it lies deepest inside), seen at `e` m a pixel: how far
 // inside its burnt land the point lies, m (less than 0: outside; -1e9 where none lies), the spread of that over the
 // pixel's patches, m, whether its front still moves there (1) or the square's share has been taken (0), its flames'
-// length, m, the months since it burnt, and the share of the soft tissue on its land it killed (the burn's own).
-struct BurnAt { inside: f32, soft: f32, live: f32, length: f32, age: f32, crown: f32 }
+// length, m, the months since it burnt, the share of the soft tissue on its land it killed (the burn's own), and the
+// ash on the land burnt of its square, kg/m² (the square's own, not blended with the squares about it).
+struct BurnAt { inside: f32, soft: f32, live: f32, length: f32, age: f32, crown: f32, ash: f32 }
 fn burn_at(at: vec2f, e: f32) -> BurnAt {
-  var out = BurnAt(-1e9, 1.0, 0.0, 0.0, 0.0, 0.0);
+  var out = BurnAt(-1e9, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
   // (No burn lies on the four squares about the point: none is read.)
   if (fire.map.x <= 0.0 || dot(fire_plane(3, at), vec4f(1.0)) <= 0.0) { return out; }
   let w = vec2f(ragged(at, e, BURN_WARP_M, 3, BURN_WARP_NOISE), ragged(at, e, BURN_WARP_M, 3, BURN_WARP_NOISE + 1));
-  let limits = fire_texel(3, vec2i(floor(at / fire.map.x + BURN_WARP * w)));
+  let sq = vec2i(floor(at / fire.map.x + BURN_WARP * w));
+  let limits = fire_texel(3, sq);
+  let ash = fire_texel(1, sq).x / max(fire_texel(0, sq).x, 1e-6);
   let n = meet_noise(at, e, BURN_EDGE_M, BURN_EDGE_NOISE);
   for (var k = 0; k < BURNS; k++) {
     let t = limits[k];
@@ -166,7 +169,7 @@ fn burn_at(at: vec2f, e: f32) -> BurnAt {
     let limit = min(play.x, t);
     let scale = BURN_RAGGED * max(limit, BURN_RAGGED_LEAST_M);
     let inside = limit - burn_time(k, at) - scale * n.x;
-    if (inside > out.inside) { out = BurnAt(inside, scale * n.y + 0.5 * e, select(0.0, 1.0, play.x < t), play.w, play.y, play.z); }
+    if (inside > out.inside) { out = BurnAt(inside, scale * n.y + 0.5 * e, select(0.0, 1.0, play.x < t), play.w, play.y, play.z, ash); }
   }
   return out;
 }
@@ -198,8 +201,10 @@ fn scar_of(f: FireAt, b: BurnAt, at: vec2f, e: f32) -> vec4f {
   if (scar <= 0.0) { return vec4f(0.0); }
   // (Each part of the scar is as old as its own burn.)
   let age = select(scar_age(at, smoothstep(-EVEN_ONE, EVEN_ONE, rank.x)), b.age, burn > patches);
-  // (The core's ash is per m² of the square's land: it lies on the land burnt, its share of it.)
-  return vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-f.ash / max(f.burnt, 1e-6) / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
+  // (The core's ash is per m² of the square's land: it lies on the land burnt, its share of it; on a burn of god mode's
+  // land, its own square's.)
+  let ash = select(f.ash / max(f.burnt, 1e-6), b.ash, burn > patches);
+  return vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-ash / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
 }
 
 // The share of a point under the fresh char of scar `s` (`scar_of`), which scorches the plants standing there.
