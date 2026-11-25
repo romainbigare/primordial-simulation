@@ -10,6 +10,9 @@ struct Fire {
   frame: vec4f, corner: vec4f,
   // The time, s (wrapped); the months since a burn that mean none (the core tells no more apart).
   air: vec4f,
+  // A burn of god mode playing (fire.ts `play`): its strike, m, how far its front reached from it, m, and the metres a
+  // unit of its patches' number takes (`burn_rank`); w 0: none plays.
+  front: vec4f,
 }
 @group(0) @binding(25) var fire_tex: texture_2d<f32>;
 @group(0) @binding(26) var fire_sampler: sampler;
@@ -104,8 +107,21 @@ fn scar_age(at: vec2f, rank: f32) -> f32 {
 // every zoom and, where it falls to none, thins to none.
 const BURN_PATCH_M = 600.0; const BURN_NOISE = 91;
 
+// The squares a burn of god mode plays on (the third plane's third number, blended between the squares' centres) burn
+// outward from its strike: there a point's patches' number is its distance from the strike past the front's reach, in
+// `fire.front.w` m, moved by the patches by `FRONT_RAGGED` of their number, so the burnt share (a half: level 0, fire.ts
+// `FRONT_SHARE`) is the ground the front has swept, with a ragged edge, and the burning share a band behind its edge.
+const FRONT_RAGGED = 0.8;
+
 // The patches' number at point `at` seen at `e` m a pixel, and the spread a share read on it takes (`meet_noise`).
-fn burn_rank(at: vec2f, e: f32) -> vec2f { return meet_noise(at, e, BURN_PATCH_M, BURN_NOISE); }
+fn burn_rank(at: vec2f, e: f32) -> vec2f {
+  let n = meet_noise(at, e, BURN_PATCH_M, BURN_NOISE);
+  if (fire.front.w <= 0.0) { return n; }
+  let swept = fire_plane(2, at).z;
+  if (swept <= 0.0) { return n; }
+  let radial = (distance(at, fire.front.xy) - fire.front.z) / fire.front.w + FRONT_RAGGED * n.x;
+  return vec2f(mix(n.x, radial, swept), n.y);
+}
 
 // The level of the burnt share `share` of the land at `at` among the patches (ragged.wgsl `share_level`): saturated
 // ground does not burn (its fuel is wet; the core's burnt share leaves its wet share out), so the share fills the dry

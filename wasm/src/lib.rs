@@ -270,8 +270,7 @@ pub extern "C" fn day() -> f64 {
 /// down, their depth), the numbers of the laws the shell applies inside a cell (`Physics`), the discharge per metre a
 /// pixel takes past which a channel shows as a line, m³/s per m (`tape::TYPICAL_RUNOFF` × `tape::SHOW_M`), that line's
 /// law (`tape::LINE_PX`, `LINE_GROW`, `LINE_MOST`), how many times the mean flow the flood that shapes a channel's
-/// bed passes (`tape::FLOOD`) with the power a channel's water widens by at one place (`tape::STATION_EXP`), and how
-/// long a flame's front runs, s (`Physics::front_life`), over which a shell plays a burn's front.
+/// bed passes (`tape::FLOOD`) with the power a channel's water widens by at one place (`tape::STATION_EXP`).
 #[no_mangle]
 pub extern "C" fn meta() -> *const u8 {
     let head = with(|l| {
@@ -286,7 +285,7 @@ pub extern "C" fn meta() -> *const u8 {
             "seed": w.seed, "shape": w.terrain.shape, "days_per_year": w.days_per_year(), "layers": layers,
             "tiles": {"size": tape::TILE, "gutter": tape::GUTTER, "depths": [depths.start(), depths.end()], "step_most": tape::STEP_MOST, "along_wrap": tape::ALONG_WRAP_M, "row": tape::ROW, "kind_row": tape::KIND_ROW, "place_row": tape::PLACE_ROW, "dead_row": tape::DEAD_ROW, "walls": walls},
             "samples": {"across": s.across, "down": s.down, "depth": pcore::space::terrain::SAMPLE_DEPTH},
-            "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "rooted_from": ph.rooted_from, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M, "line_law": [tape::LINE_PX, tape::LINE_GROW, tape::LINE_MOST], "flood": tape::FLOOD, "station": tape::STATION_EXP, "front_life": ph.front_life},
+            "laws": {"soil_m": ph.soil_m, "wet_depth": ph.wet_depth, "rooted_from": ph.rooted_from, "channel_width": ph.channel_width, "channel_width_exp": ph.channel_width_exp, "channel_depth": ph.channel_depth, "channel_depth_exp": ph.channel_depth_exp, "line": tape::TYPICAL_RUNOFF * tape::SHOW_M, "line_law": [tape::LINE_PX, tape::LINE_GROW, tape::LINE_MOST], "flood": tape::FLOOD, "station": tape::STATION_EXP},
             "frames": [], "series": {}, "series_units": {}, "events": [], "months": [],
         })
     });
@@ -443,7 +442,7 @@ const BURN: u32 = 3;
 /// page calls them again and again while the brush is held, each time with what the time held since adds; the page
 /// shows the ground from `preview` until the stroke settles. `PLANT` clears the share of each cell under it that it
 /// covers about the place there nearest its centre and places the starting kind of row `row` in it as the world's
-/// grown stand of it (`Act::Grown`; `grown` false: none stands yet, it is placed as seedlings), each cell once a
+/// grown stand of it (`Act::Grown`; where none stands yet, it is placed as seedlings), each cell once a
 /// stroke. Returns, as JSON: for `SHAPE` and `LAKE`, the cells under the brush; for `BURN`, each cell under it, the share it
 /// covers, how much of the heat that lights its remains it holds (`progress`, 0 to 1: they light at 1;
 /// `flame::needed`) and why none would light (`why`, the flames' `Unlit`; "" where some would); for `PLANT`, each cell
@@ -492,7 +491,6 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
         let under: Vec<_> = l.world.under(b).into_iter().filter(|u| !stroke.cells.contains(&(u.cell as u32))).collect();
         stroke.cells.extend(under.iter().map(|u| u.cell as u32));
         let row = (row as usize).min(worldgen::life::KINDS.len() - 1);
-        let grown = pcore::cover::grown(&l.world, row as u32).is_some();
         // Of each cell a clearing, then the planting in it.
         let edits: Vec<Edit> = under.iter().flat_map(|u| [Act::Clear(u.share), worldgen::schedule::grown(row)].map(|act| Edit { place: u.place, act })).collect();
         let done = l.world.edit(&edits);
@@ -507,7 +505,7 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
             };
             json!({"cell": u.cell, "share": u.share, "done": d, "why": why})
         }).collect();
-        json!({"cells": cells, "changed": done.iter().any(|&d| d), "grown": grown})
+        json!({"cells": cells, "changed": done.iter().any(|&d| d)})
     });
     give(out.to_string().into_bytes())
 }

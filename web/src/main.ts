@@ -11,6 +11,7 @@ import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
 import { Fire } from './fire';
 import { God } from './god';
+import { drawFireEdge } from './god-draw';
 import { FireFront } from './front';
 import { nearestFrame, setTimeline } from './timeline';
 import { godTools } from './god-tools';
@@ -84,14 +85,20 @@ map.fire = fire;
 const vegetation = new Vegetation(fire);
 map.layer = vegetation;
 /** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
-const front = new FireFront(() => live, fire, m2 => god.spread(m2));
+const front = new FireFront(() => live, fire);
 const god = new God({
-  strip: $('god-strip'), card: $('god'), toast: $('toast'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
-  picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), play: () => { if (!playing) togglePlay(); }, burnt: b => front.burnt(b),
+  strip: $('god-strip'), card: $('god'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
+  picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), burnt: (b, strike) => front.burnt(b, strike),
   aim: () => (PHONE.matches && world ? map.sightAt() : null),
 }, () => live, godTools(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));
-map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live && godOn()) god.draw(ctx, ox, oy, s); };
+map.overlay = (ctx, ox, oy, s) => {
+  slots.seen(ox, oy, s);
+  // The burning edge of a burn of god mode as it spreads, in css px (its numbers in m).
+  const burning = world && fire.edgeAt(performance.now()), k = s / (world?.meta.cell_m ?? 1);
+  if (burning) drawFireEdge(ctx, ox + burning.strike[0] * k, oy + burning.strike[1] * k, burning.reach * k, burning.edge * k, performance.now());
+  if (live && godOn()) god.draw(ctx, ox, oy, s);
+};
 map.paint = { on: () => godOn() && god.toolOn(), start: (x, y) => live !== null && godOn() && !god.aiming() && god.start(x, y), move: (x, y) => god.move(x, y), end: () => god.end() };
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
 let drawing: HeldGpu | null = null;
@@ -303,7 +310,7 @@ function setGod(on: boolean): void {
   // (On a phone the strip takes the dock's place, style.css.)
   document.body.classList.toggle('god-on', on);
   $('god-btn').setAttribute('aria-pressed', String(on));
-  if (on) god.opened(); else god.reset();
+  if (!on) god.reset();
 }
 
 function button(text: string, fn: () => void, layerName?: string): HTMLButtonElement {
@@ -326,7 +333,7 @@ function loop(now: number): void {
       setFrame(frame + n);
     }
   }
-  if (fire.step(now)) map.showNow();
+  if (fire.step(now)) map.invalidate();
   requestAnimationFrame(loop);
 }
 function togglePlay(): void {
@@ -412,7 +419,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     },
     brushed: r => { if (live === l) god.brushed(r); },
     settled: r => { if (live === l) god.settled(r); },
-    undone: done => { if (live === l) { fire.still(); god.undone(done); } },
+    undone: () => { if (live === l) fire.still(); },
     preview: p => { if (live === l && land) { land.preview(p); map.showNow(); } },
     relief: () => { if (live === l) land?.tiles.rebuild(l.takeRelief(), true); },
     error: text => { playing = false; syncUi(); fail(text); },

@@ -13,7 +13,7 @@ import { groundDetail } from './detail';
 /** The numbers of the laws inside a cell as the core sends them (wasm/src/lib.rs `meta`, `Physics`), the discharge
  * per metre a css pixel takes past which a channel shows as a line, m³/s per m, and that line's law (its css pixels,
  * the power it widens by, the most times: tape/src/ground/channels.rs `LINE_PX`). */
-export interface Laws { soil_m: number; wet_depth: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number; station: number; front_life: number }
+export interface Laws { soil_m: number; wet_depth: number; rooted_from: number; channel_width: number; channel_width_exp: number; channel_depth: number; channel_depth_exp: number; line: number; line_law: [number, number, number]; flood: number; station: number }
 /** The terrain's samples: across, down, and their depth. */
 export interface SamplesOf { across: number; down: number; depth: number }
 

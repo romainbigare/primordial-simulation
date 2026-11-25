@@ -3,15 +3,15 @@
 // it is held (the ground, heat), or makes one thing where the stroke begins (a lake); when the stroke ends it settles
 // (`settle`: the ground built again, what was heated burns). With a mouse the brush is where the pointer is; on a
 // phone it stands at a sight in the middle of the map (`GodPage.aim`): a finger moves the map under it, and a stroke
-// lasts while the tool's big button is held, so a finger never hides the brush nor paints by mistake. The tools themselves are a list (god-tools.ts
-// `godTools`); this is what they share: the strip (done, the tools named, the undo of the last stroke), the card of the
-// brush's sizes and the tool's choices, the strokes and the core's answers to them, a short message of what a stroke
-// did or how to use a tool, the question to the core about the place under the cursor (`probe`), and the brush drawn
-// over the map at its true size (god-draw.ts).
+// lasts while the tool's big button is held, so a finger never hides the brush nor paints by mistake. A burn's stroke
+// ends as soon as the ground lights, and its fire spreads on the map (front.ts). The tools themselves are a list
+// (god-tools.ts `godTools`); this is what they share: the strip (done, the tools named, the undo of the last stroke), the
+// card of the brush's sizes and the tool's choices, the strokes and the core's answers to them, the question to the core
+// about the place under the cursor (`probe`), and the brush drawn over the map at its true size (god-draw.ts).
 import { IconName, iconSvg } from './icons';
 import type { Brushed, Editor, GodPage, GodTool, Probe, Settled } from './god-types';
 import { drawBrush, drawFlames, drawReason, drawSight, drawSizeTag } from './god-draw';
-import { Toast, holdButton, radiusText, sizeChips, sizeStepper } from './god-controls';
+import { holdButton, radiusText, sizeChips, sizeStepper } from './god-controls';
 
 /** The brush's radii, m (its size chips), and the one it starts at. */
 const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
@@ -25,11 +25,12 @@ const HOLD_MS = 220;
 const NO_INK = 'rgba(196,76,60,.95)';
 /** How long the brush's size shows on the map after one is picked, ms. */
 const SIZE_SHOWN_MS = 1500;
+/** The fire of a burn that ended is drawn this long after the core answered its end, ms: the map's own fire spreads
+ * from it once the frame after it came (front.ts). */
+const FIRE_LINGERS_MS = 1500;
 /** Least time between two questions about the place under the cursor, ms. */
 const PROBE_MS = 80;
 
-/** An area of m² in km², to two figures. */
-const km2Text = (m2: number) => { const k = m2 / 1e6; return `${k >= 10 ? k.toFixed(0) : k >= 1 ? k.toFixed(1) : k.toFixed(2)} km²`; };
 
 /** A stroke under way: the cells it edited (for a tool with a rate, the paints that moved the ground), its reasons for
  * those it did not, the place and time of its last paint (squares, ms), when it began (ms), where the brush is now, the
@@ -37,10 +38,10 @@ const km2Text = (m2: number) => { const k = m2 / 1e6; return `${k >= 10 ? k.toFi
  * answer (a tool with a rate paints again only once answered, with the time since: the core may take longer over a
  * paint than the timer's step). */
 interface Stroke {
-  tool: GodTool; done: number; whys: Map<string, number>; last: [number, number, number]; began: number; now: [number, number]; sent: number; held: number; waiting: boolean;
-  /** Of heat: the cells lit so far, and how much of the heat that lights them the cells under the brush hold, their
-   * mean by share over those that can light (-1: no heat asked). Of a planting: whether its kind stood grown. */
-  lit: Set<number>; progress: number; grown: boolean;
+  tool: GodTool; last: [number, number, number]; began: number; now: [number, number]; sent: number; held: number; waiting: boolean;
+  /** Of heat: how much of the heat that lights them the cells under the brush hold, their mean by share over those that
+   * can light (-1: no heat asked). */
+  progress: number;
 }
 
 export class God {
@@ -62,9 +63,10 @@ export class God {
   private ended: Stroke[] = [];
   /** The map's corner and the pixels a square takes, as last drawn. */
   private drawnAt: [number, number, number] | null = null;
-  /** When the size of the brush picked last stops showing on the map (ms), and the message. */
+  /** When the size of the brush picked last stops showing on the map (ms). */
   private sizeShownTill = 0;
-  private toast: Toast;
+  /** The fire of the last burn, drawn where it struck (squares) till the map's own has begun (`till`, ms). */
+  private lingers: { at: [number, number]; progress: number; till: number } = { at: [0, 0], progress: 0, till: 0 };
   /** Whether a stroke settled that can be undone (the core keeps one), and the button that undoes it. */
   private undoable = false;
   private undoButton: HTMLButtonElement;
@@ -87,7 +89,6 @@ export class God {
       b.dataset.tool = t.key;
       return b;
     }), this.undoButton);
-    this.toast = new Toast(page.toast);
     // (The button starts a stroke at the sight, on a phone alone.)
     this.holdButton = holdButton(() => { const aim = this.page.aim(); return aim !== null && this.start(...aim); }, () => this.end());
     this.show();
@@ -102,11 +103,8 @@ export class God {
     if (this.stroke) { clearInterval(this.stroke.held); if (this.stroke.sent) this.editor()?.settle(); }
     this.holdButton.classList.remove('held');
     this.stroke = null; this.ended = []; this.probe = null; this.asking = false; this.undoable = false;
-    this.toast.hide(); this.pick(null);
+    this.pick(null);
   }
-
-  /** God mode opened: say what to do first. */
-  opened(): void { this.say('Pick a tool to change the world.'); }
 
   /** Whether a tool is on. */
   toolOn(): boolean { return this.tool !== null; }
@@ -122,9 +120,6 @@ export class God {
     this.show();
   }
 
-  /** The core's answer to an undo. */
-  undone(done: boolean): void { if (done) this.say('Undone: the world is as before the last stroke.'); }
-
   /** Put the tool on away: true if one was on. */
   putAway(): boolean {
     if (!this.tool) return false;
@@ -135,7 +130,7 @@ export class God {
   /** Take tool `t` (null: none), and say how to use it; the world pauses while one is on. */
   private pick(t: GodTool | null): void {
     this.tool = t; this.lastWhy = '';
-    if (t) { this.page.picked(); this.say(this.aiming() ? `Move the map to aim. ${t.verb}.` : t.hint); }
+    if (t) this.page.picked();
     this.show(); this.page.redraw();
   }
 
@@ -181,7 +176,7 @@ export class God {
     this.page.picked();
     this.at = [x, y];
     const now = performance.now();
-    const st: Stroke = this.stroke = { tool: t, done: 0, whys: new Map(), last: [x, y, now], began: now, now: [x, y], sent: 0, held: 0, waiting: false, lit: new Set(), progress: -1, grown: true };
+    const st: Stroke = this.stroke = { tool: t, last: [x, y, now], began: now, now: [x, y], sent: 0, held: 0, waiting: false, progress: -1 };
     const ticks = () => window.setInterval(() => this.tick(st), PAINT_MS);
     if (t.rate) st.held = window.setTimeout(() => { if (this.stroke !== st) return; st.held = ticks(); this.paint(st); }, HOLD_MS);
     else { this.paint(st); if (!t.amount) st.held = ticks(); }
@@ -235,53 +230,39 @@ export class God {
     this.editor()?.brush(t.code, x, y, this.radius, amount, t.row());
   }
 
-  /** The core's answer to a paint: its cells counted to its stroke; the reason, where it edited none of them. */
+  /** The core's answer to a paint: the heat it holds, or the reason, where it edited none of its cells. */
   brushed(r: Brushed): void {
     const st = this.ended[0] ?? this.stroke;
     if (!st) return;
     st.waiting = false;
-    if (r.grown === false) st.grown = false;
     const heat = r.cells.filter(c => c.progress !== undefined);
     if (heat.length) this.heated(st, heat);
     // (The ground's tools and a lake answer their cells as numbers.)
-    else if (typeof r.cells[0] !== 'object') st.done += +r.changed;
-    else {
-      const whys = new Map<string, number>();
-      for (const c of r.cells) {
-        if (c.done!.every(d => d)) st.done++;
-        else if (c.why) whys.set(c.why, (whys.get(c.why) ?? 0) + 1);
-      }
-      for (const [why, n] of whys) st.whys.set(why, (st.whys.get(why) ?? 0) + n);
-      if (r.cells.length) this.lastWhy = r.cells.some(c => c.done!.every(d => d)) ? '' : st.tool.reason(most(whys));
+    else if (typeof r.cells[0] === 'object') {
+      const done = (c: Brushed['cells'][number]) => c.done!.every(d => d);
+      this.lastWhy = r.cells.some(done) ? '' : st.tool.reason(most(counted(r.cells.filter(c => !done(c)))));
     }
     this.page.redraw();
   }
 
-  /** Heat's answer: the cells lit so far, the progress under the brush, and why none would light there. */
+  /** Heat's answer: the progress under the brush, and why none would light there; a tool whose fire runs on its own
+   * (`settlesLit`) ends its stroke once a cell under it lights, so the fire spreads at once. */
   private heated(st: Stroke, cells: Brushed['cells']): void {
     const can = cells.filter(c => !c.why), share = can.reduce((n, c) => n + c.share, 0);
-    for (const c of can) if (c.progress! >= 1) st.lit.add(c.cell);
-    st.done = st.lit.size;
     st.progress = share > 0 ? can.reduce((n, c) => n + c.share * c.progress!, 0) / share : 0;
-    st.whys = new Map();
-    for (const c of cells) if (c.why) st.whys.set(c.why, (st.whys.get(c.why) ?? 0) + 1);
-    this.lastWhy = can.length ? '' : st.tool.reason(most(st.whys));
+    this.lastWhy = can.length ? '' : st.tool.reason(most(counted(cells)));
+    if (st === this.stroke && st.tool.settlesLit && can.some(c => c.progress! >= 1)) this.end();
   }
 
-  /** The core's answer to the stroke's end: what it did, said; the cells it burnt, to the page, which tells the area
-   * burnt once the frame after it came (`spread`). */
+  /** The core's answer to the stroke's end: the cells it burnt, to the page, from where the stroke ended. */
   settled(r: Settled): void {
     const st = this.ended.shift();
     if (!st) return;
     this.undoable = true;
     this.show();
-    if (r.burnt.length) this.page.burnt(r.burnt);
-    else this.say(st.tool.told(st.done, st.tool.reason(most(st.whys)), st.grown));
-  }
-
-  /** The land a burn's flames took, m², known once the frame after it came: said, with the world to play on. */
-  spread(m2: number): void {
-    this.say(`${m2 > 0 ? `Fire burnt ${km2Text(m2)}.` : 'Fire took.'} Play to let the world go on.`, ['Play', () => this.page.play()]);
+    if (!r.burnt.length) return;
+    this.page.burnt(r.burnt, st.now);
+    this.lingers = { at: st.now, progress: st.progress, till: performance.now() + FIRE_LINGERS_MS };
   }
 
   /** Over the map, with its corner at (ox, oy) and a square `s` pixels: the brush at its true size at the sight (a
@@ -296,8 +277,11 @@ export class God {
     const [cx, cy] = [ox + this.at[0] * s, oy + this.at[1] * s];
     const r = (this.radius / this.page.squareM()) * s, progress = this.stroke?.progress ?? -1;
     drawBrush(ctx, cx, cy, r, ink, this.stroke !== null, progress);
-    // (The fire flickers: the map's overlay is drawn again at the next frame while it burns.)
-    if (this.stroke && progress > 0 && !why) { drawFlames(ctx, cx, cy, r, progress, now); this.page.redraw(); }
+    // The fire of the heat held, and of a burn that ended till the map's own fire has begun to spread from it. (It
+    // flickers: the map's overlay is drawn again at the next frame while it burns.)
+    const burnt = this.stroke ?? this.ended[0], linger = now < this.lingers.till ? this.lingers : null;
+    const fire = burnt && !why ? { at: burnt.now, progress: burnt.progress } : linger;
+    if (fire && fire.progress > 0) { drawFlames(ctx, ox + fire.at[0] * s, oy + fire.at[1] * s, r, fire.progress, now); this.page.redraw(); }
     if (aim) drawSight(ctx, cx, cy);
     if (now < this.sizeShownTill) drawSizeTag(ctx, cx, cy, r, radiusText(this.radius));
     if (why) drawReason(ctx, cx, cy, r, why);
@@ -339,8 +323,13 @@ export class God {
     window.setTimeout(() => this.page.redraw(), SIZE_SHOWN_MS);
   }
 
-  /** Say `text` for a moment, with a button (its label and what it does) where given. */
-  private say(text: string, act?: [string, () => void]): void { this.toast.say(text, act); }
+}
+
+/** The core's reasons of `cells` counted. */
+function counted(cells: Brushed['cells']): Map<string, number> {
+  const n = new Map<string, number>();
+  for (const c of cells) if (c.why) n.set(c.why, (n.get(c.why) ?? 0) + 1);
+  return n;
 }
 
 /** The key counted most in `counts` ('' for none). */

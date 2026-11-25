@@ -41,15 +41,19 @@ export const FIRE_FPS = 8;
 /** The time the flames are drawn at, s, wraps round after this many seconds (a float keeps its steps fine). */
 const TIME_WRAP_S = 600;
 /** Of the uniforms of fire.wgsl (`Fire`), four-wide members. */
-const FIRE_VEC4S = 4;
+const FIRE_VEC4S = 5;
 
-/** A fire front of god mode is played on the map over this time for the longest the core lets a front run (its
- * `front_life`); each square burns with flames over `FRONT_GLOW_MS` from when the front reaches it. */
-const FRONT_MS = 2500, FRONT_GLOW_MS = 1200;
-/** Frames a second while a front plays. */
+/** A burn of god mode plays on the map outward from its strike, over the squares its front reached (fire.wgsl
+ * `burn_rank`): its reach grows at `FRONT_M_S` m a second of the page's time, taking no less than `FRONT_LEAST_MS` and no
+ * more than `FRONT_MOST_MS`, to the radius of a disc as large as the land it burnt. Its edge is ragged over
+ * `FRONT_EDGE` of that radius (and no less than `FRONT_EDGE_M`). */
+const FRONT_M_S = 30, FRONT_LEAST_MS = 5000, FRONT_MOST_MS = 15000, FRONT_EDGE = 0.12, FRONT_EDGE_M = 12;
+/** Of a square a burn plays on: the share burnt (fire.wgsl: its level is 0, where the front's distance past the point
+ * is none), the share burning while it plays (a band behind its edge), and its flames' length where the core keeps
+ * none, m. */
+const FRONT_SHARE = 0.5, FRONT_BURNING = 0.35, FRONT_FLAME_M = 1.5;
+/** Frames a second while a burn plays. */
 const FRONT_FPS = 20;
-/** The flames' length shown on a square the front reaches where the core keeps none, m. */
-const FRONT_FLAME_M = 1.5;
 
 /** A box of squares: x0, y0, x1, y1 (x1, y1 past its last square). */
 export type Box = [number, number, number, number];
@@ -74,10 +78,14 @@ export class Fire {
   private smokeDue = false;
   /** The planes last put, as `put` took them. */
   private last: [number, number, number, FirePlanes | null, number] = [0, 0, 1, null, 0];
-  /** A fire front played on the map while the world stands still: when it reaches each square, s after its strike
-   * (NaN: it does not), the longest a front runs, s, when it began to play and was last put (performance.now, ms), and
-   * whether it has played out (its scars stay shown till the world steps, `still`); null: none. */
-  private front: { at: Float32Array; life: number; begun: number; put: number; over: boolean } | null = null;
+  /** A burn of god mode played on the map while the world stands still: the squares its front reached (1), its strike
+   * and the radius its reach grows to, m, the metres a unit of its patches' number takes, when it began to play and was
+   * last drawn (performance.now, ms), how long it plays (ms), and whether it has played out (its scar stays shown till
+   * the world steps, `still`); null: none. */
+  private front: { reached: Uint8Array; strike: [number, number]; radius: number; edge: number; begun: number; drawn: number; ms: number; over: boolean } | null = null;
+  /** Whether a burn is about to play (`hold`): the frame after its stroke came, but where it burns is still being found,
+   * so the planes shown stay those before it (else its squares would show burnt whole at once). */
+  private held = false;
 
   /** What fire did on world `w`'s squares, from its layers (none on a world whose tape has no fire). */
   set(w: World | null): void {
@@ -91,14 +99,16 @@ export class Fire {
    * means none. A square burns whole, so its land is under a scar while it is younger than that, else its share burnt
    * this year. The texture's first plane holds that share, the months since the burn times it, the burning share and
    * the flames' length times that share (so the blend between squares gives each its share's mean); its second the
-   * ash, the gas sent to the air and the wind east and south; its third the cured leaves standing and the share of the land saturated. */
+   * ash, the gas sent to the air and the wind east and south; its third the cured leaves standing, the share of the land saturated and whether a burn of god mode plays on it
+   * (`play`). */
   put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number): void {
     this.last = [w, h, cellM, p, never];
-    const f = this.front;
-    if (f && p && f.at.length === w * h) { f.put = performance.now(); p = frontAt(p, f.at, never, ((f.put - f.begun) / FRONT_MS) * f.life, (FRONT_GLOW_MS / FRONT_MS) * f.life); }
+    if (this.held) return;
+    const reached = this.front && p && this.front.reached.length === w * h ? this.front.reached : null;
+    if (reached) p = frontAt(p!, reached, !this.front!.over);
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
     // (Saturated ground does not burn: a scar lies on the dry land alone.)
-    const n = w * h, scar = (i: number) => (!p ? 0 : Math.min(p.age[i] < never ? 1 : p.burnt[i], 1 - p.wet[i]));
+    const n = w * h, scar = (i: number) => (!p ? 0 : reached?.[i] ? FRONT_SHARE : Math.min(p.age[i] < never ? 1 : p.burnt[i], 1 - p.wet[i]));
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
     if (!p || !(this.flames || p.ash.some((a, i) => a > 0 || p.cured[i] > 0 || scar(i) > 0))) { this.data = null; return; }
     const data = new Uint16Array(4 * FIRE_PLANES * n);
@@ -106,31 +116,53 @@ export class Fire {
       const s = scar(i), f = p.flame[i];
       data.set([s, s * Math.min(p.age[i], never), f, f * p.length[i]].map(half), 4 * i);
       data.set([p.ash[i], p.air[i], p.east[i], -p.north[i]].map(half), 4 * (n + i));
-      data.set([p.cured[i], p.wet[i], 0, 0].map(half), 4 * (2 * n + i));
+      data.set([p.cured[i], p.wet[i], reached?.[i] ?? 0, 0].map(half), 4 * (2 * n + i));
     }
     this.data = data;
     this.due = true;
     this.smokeDue = this.flames !== null;
   }
 
-  /** Play the fire front that reaches each square `at` s after its strike (NaN: none): each square burns as it comes,
-   * the longest a front runs (`life`, s: the core's `front_life`) over `FRONT_MS`. */
-  play(at: Float32Array, life: number): void {
-    this.front = { at, life, begun: performance.now(), put: 0, over: false };
+  /** Play the burn whose front reached the squares `reached` (1) from its strike `strike` (squares), which burnt `m2`
+   * of land: it burns outward from the strike to a disc of that area, over the squares it reached. */
+  play(reached: Uint8Array, strike: [number, number], m2: number): void {
+    const radius = Math.sqrt(m2 / Math.PI), cellM = this.last[2];
+    const ms = Math.min(Math.max((radius / FRONT_M_S) * 1000, FRONT_LEAST_MS), FRONT_MOST_MS);
+    this.front = { reached, strike: [strike[0] * cellM, strike[1] * cellM], radius, edge: Math.max(FRONT_EDGE * radius, FRONT_EDGE_M), begun: performance.now(), drawn: 0, ms, over: false };
+    this.held = false;
     this.put(...this.last);
   }
 
-  /** The world stepped: the fire shown is the core's own again. */
-  still(): void { this.front = null; }
+  /** A burn is about to play: the planes shown stay as they are till it does (`play`), or the world steps (`still`). */
+  hold(): void { this.held = true; }
 
-  /** While a front plays, its planes at time `now` (performance.now, ms), at most `FRONT_FPS` times a second: true when
-   * they were put anew (the map is to be drawn anew). */
+  /** The edge of the burn playing at time `now` (ms): its strike and its reach, m, and the metres its edge is ragged
+   * over; null where none is burning. */
+  edgeAt(now: number): { strike: [number, number]; reach: number; edge: number } | null {
+    const f = this.front;
+    if (!f || f.over) return null;
+    return { strike: f.strike, reach: this.frontAt(now)[2], edge: f.edge };
+  }
+
+  /** The world stepped: the fire shown is the core's own again. */
+  still(): void { this.front = null; this.held = false; }
+
+  /** While a burn plays, whether the map is to be drawn anew at time `now` (performance.now, ms): at most `FRONT_FPS`
+   * times a second, its front further on; once it played out, its planes are put without its flames. */
   step(now: number): boolean {
     const f = this.front;
-    if (!f || f.over || now - f.put < 1000 / FRONT_FPS) return false;
-    f.over = now - f.begun > FRONT_MS + FRONT_GLOW_MS;
-    this.put(...this.last);
+    if (!f || f.over || now - f.drawn < 1000 / FRONT_FPS) return false;
+    f.drawn = now;
+    if (now - f.begun > f.ms) { f.over = true; this.put(...this.last); }
     return true;
+  }
+
+  /** The burn playing at time `now` (ms), as fire.wgsl reads it (`Fire.front`): its strike, its reach, and the metres a
+   * unit of its patches' number takes; none (0) where none plays. Its reach grows evenly, then stays. */
+  private frontAt(now: number): number[] {
+    const f = this.front;
+    if (!f) return [0, 0, 0, 0];
+    return [...f.strike, f.radius * Math.min(Math.max((now - f.begun) / f.ms, 0), 1), f.edge];
   }
 
   /** Work out the smoke of this frame on `gpu` once, before the map's pass (smoke.wgsl), once its program is made
@@ -159,7 +191,7 @@ export class Fire {
     this.tex ??= gpu.texture('fire', this.w, FIRE_PLANES * this.h, 'rgba16float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
-      .vec4((now / 1000) % TIME_WRAP_S, this.never);
+      .vec4((now / 1000) % TIME_WRAP_S, this.never).vec4(...this.frontAt(now));
     if (!this.noSmoke) { this.noSmoke = gpu.texture('fire', 1, 1, SMOKE_FORMAT); gpu.write(this.noSmoke, new Uint8Array(4)); }
     return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer, 28: this.smoke && !this.smokeDue ? this.smoke : this.noSmoke };
   }
@@ -208,17 +240,14 @@ function smokeBox(p: FirePlanes, w: number, h: number, cellM: number): Box | nul
   return b && [Math.max(Math.floor(b[0]), 0), Math.max(Math.floor(b[1]), 0), Math.min(Math.ceil(b[2]), w), Math.min(Math.ceil(b[3]), h)];
 }
 
-/** The planes `p` as a front that reaches each square `at` s after its strike stands at `t` s, each square burning
- * over `glow` s from when the front reaches it. The flames shown are
- * the front's alone, and their smoke: the core keeps the flames of the month last stepped while the world stands still,
- * which burn no more. A square the front has not reached shows no fire; one it reached less than `glow` ago burns whole,
- * its flames along the edge of the burnt squares (flames.wgsl); one it passed shows the scar the core says. */
-function frontAt(p: FirePlanes, at: Float32Array, never: number, t: number, glow: number): FirePlanes {
-  const q = { ...p, burnt: p.burnt.slice(), age: p.age.slice(), flame: new Float32Array(p.flame.length), length: p.length.slice(), ash: p.ash.slice(), air: new Float32Array(p.air.length) };
-  at.forEach((a, i) => {
-    if (Number.isNaN(a) || t >= a + glow) return;
-    if (t < a) { q.burnt[i] = 0; q.age[i] = never; q.ash[i] = 0; return; }
-    q.flame[i] = 1; q.length[i] = Math.max(p.length[i], FRONT_FLAME_M); q.air[i] = p.air[i];
+/** The planes `p` as a burn of god mode plays on them over the squares `reached` (1): those burn fresh, flaming while it
+ * plays (`burning`), their flames at least `FRONT_FLAME_M` long; no other square flames (the core keeps the flames of
+ * the month last stepped while the world stands still, which burn no more), and only those send their gas to the air. */
+function frontAt(p: FirePlanes, reached: Uint8Array, burning: boolean): FirePlanes {
+  const q = { ...p, age: p.age.slice(), flame: new Float32Array(p.flame.length), length: p.length.slice(), air: new Float32Array(p.air.length) };
+  reached.forEach((r, i) => {
+    if (!r) return;
+    q.age[i] = 0; q.flame[i] = burning ? FRONT_BURNING : 0; q.length[i] = Math.max(p.length[i], FRONT_FLAME_M); q.air[i] = p.air[i];
   });
   return q;
 }

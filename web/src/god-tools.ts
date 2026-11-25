@@ -48,7 +48,6 @@ const UNLIT: Record<string, string> = {
 const UNPLANTED: Record<string, string> = { NoLand: OPEN_WATER, NoRoom: 'The plants found no room to grow.' };
 
 const plainKind = (k: StartKind): [string, string] => PLAIN_KINDS[k.name] ?? [k.name, ''];
-const cells = (n: number) => `${n} ${n === 1 ? 'cell' : 'cells'}`;
 
 /** Today's tools; Plant plants one of the world's starting kinds (`kinds`). */
 export function godTools(kinds: () => StartKind[]): GodTool[] {
@@ -59,7 +58,6 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     if (!ks.some(k => k.row === row)) row = ks.find(k => plainKind(k)[0] === FIRST_KIND)?.row ?? ks[0]?.row ?? -1;
     return row;
   };
-  const kindName = () => { const k = kinds().find(d => d.row === plantRow()); return k ? plainKind(k)[0].toLowerCase() : 'plants'; };
   const plant: GodTool = {
     key: 'plant', icon: 'plant', label: 'Plant', ink: '#7ed957', code: BRUSH_PLANT, row: plantRow,
     hint: 'Drag on the map to plant. Right-drag moves the map.', verb: 'Hold to plant',
@@ -76,16 +74,12 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
       }
       return list;
     },
-    told: (done, why, grown) => (!done ? `Nothing was planted. ${why}`
-      : grown ? `Planted grown ${kindName()} in ${cells(done)}.` : `No grown ${kindName()} yet: young ones planted.`),
   };
   const burn: GodTool = {
-    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S,
+    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S, settlesLit: true,
     hint: 'Hold on the map. The ring fills, then the ground lights.', verb: 'Hold to burn',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,
-    told: (done, why) => (done ? 'Fire took. It spreads as far as the dry litter carries it.'
-      : `Nothing caught fire. ${why || 'Hold longer: the remains need more heat to light.'}`),
   };
   /** A ground tool: it moves the ground up or down (`sign`) under the brush while held. */
   const shape = (sign: number): GodTool => ({
@@ -93,7 +87,6 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1, rate: sign * SHAPE_M_S,
     hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Right-drag moves the map.`, verb: `Hold to ${sign > 0 ? 'raise' : 'lower'}`,
     why: () => '', reason: why => why,
-    told: done => (done ? `${sign > 0 ? 'Raised' : 'Lowered'} the land. Water finds its new way.` : 'The ground did not move here.'),
   });
   let depth = LAKE_DEPTHS[1][1];
   const lake: GodTool = {
@@ -111,7 +104,6 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
       }
       return list;
     },
-    told: done => (done ? 'Dug a basin for a lake; water fills it where the ground holds it.' : 'No lake could be made here.'),
   };
   return [shape(1), shape(-1), lake, plant, burn];
 }

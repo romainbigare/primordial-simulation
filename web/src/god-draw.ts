@@ -1,6 +1,6 @@
 // What god mode draws over the map (god.ts `draw`): the round brush at its true size, the sight on a phone, the heat
-// it holds as a ring that fills and as a fire that grows in it, the brush's size beside it, and the reason a tool
-// cannot act there.
+// it holds as a ring that fills and as a fire that grows in it, the brush's size beside it, the reason a tool cannot
+// act there, and the burning edge of a burn as it spreads (`drawFireEdge`).
 
 /** The width of the ring that shows the heat held under the brush, css px. */
 const PROGRESS_PX = 5;
@@ -108,6 +108,56 @@ export function drawFlames(ctx: CanvasRenderingContext2D, cx: number, cy: number
       ctx.beginPath(); ctx.arc(px, py, size, 0, 2 * Math.PI); ctx.fill();
     }
   });
+  ctx.restore();
+}
+
+/** The edge of a burn spreading on the map (fire.ts `edgeAt`): tongues of flame this far apart along it (css px), as
+ * tall as this (css px), standing out of the burnt ground to this share of the edge's raggedness either way; a glow
+ * along it this many times the tongues' height wide. */
+const EDGE_STEP_PX = 7, EDGE_FLAME_PX = 15, EDGE_JITTER = 0.6, EDGE_GLOW = 1.2;
+/** Its tongues and their glow drawn at most this many around (a large burn's ring seen close takes no more). */
+const EDGE_FLAMES_MOST = 220;
+
+/** The burning edge of a burn spreading from (cx, cy), `reach` css px from it and ragged over `edge` css px, at time
+ * `now` (ms): a ring of glow and of tongues of flame that sway and flicker, with sparks and smoke rising off it. The
+ * scar inside it, and the map's own flames, are the map's (fire.wgsl); these stand on its edge as the fire's light seen
+ * at any zoom. */
+export function drawFireEdge(ctx: CanvasRenderingContext2D, cx: number, cy: number, reach: number, edge: number, now: number): void {
+  if (reach < 1) return;
+  const t = now / 1000, n = Math.min(Math.max(Math.round((2 * Math.PI * reach) / EDGE_STEP_PX), 6), EDGE_FLAMES_MOST);
+  const tall = Math.min(EDGE_FLAME_PX, Math.max(reach, FLAME_LEAST_PX));
+  const along = Array.from({ length: n }, (_, k) => {
+    const a = ((k + 0.5 * frac(k * 0.618)) / n) * 2 * Math.PI, d = reach + EDGE_JITTER * edge * waver(k, 0.15 * t);
+    return { x: cx + d * Math.cos(a), y: cy + d * Math.sin(a), k };
+  });
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const { x, y, k } of along) {
+    const reachOf = tall * EDGE_GLOW * (0.8 + 0.2 * waver(k + 9, t)), light = ctx.createRadialGradient(x, y, 0, x, y, reachOf);
+    light.addColorStop(0, `rgba(${LIGHT.join()},.35)`); light.addColorStop(1, `rgba(${LIGHT.join()},0)`);
+    ctx.fillStyle = light;
+    ctx.beginPath(); ctx.arc(x, y, reachOf, 0, 2 * Math.PI); ctx.fill();
+  }
+  for (const { x, y, k } of along.sort((p, q) => p.y - q.y)) {
+    const h = tall * (0.55 + 0.45 * frac(k * 0.618)) * (0.8 + 0.2 * waver(k, 1.4 * t)), w = h * FLAME_WIDTH, sway = w * 0.45 * waver(k + 11, 1.2 * t);
+    flame(ctx, x, y, 1.7 * w, 1.15 * h, 1.2 * sway, EDGE_STOPS, 'source-over');
+    flame(ctx, x, y, w, h, sway, BODY_STOPS, 'source-over');
+    flame(ctx, x, y + 0.05 * h, 0.45 * w, 0.45 * h, 0.5 * sway, CORE_STOPS, 'lighter');
+    if (k % 3) continue;
+    const age = frac(0.6 * t + k * 0.377);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(255,${210 - 130 * age},70,${1 - age})`;
+    ctx.beginPath(); ctx.arc(x + tall * (0.5 * waver(k, t) + DRIFT * age), y - 3 * tall * age, 1.2, 0, 2 * Math.PI); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  for (const { x, y, k } of along) {
+    if (k % 4) continue;
+    const age = frac(0.22 * t + k * 0.31), rise = tall * (1.2 + 3 * age), size = tall * (0.8 + 1.8 * age), px = x + DRIFT * rise, py = y - rise;
+    const puff = ctx.createRadialGradient(px, py, 0, px, py, size);
+    puff.addColorStop(0, `rgba(${SMOKE.join()},${0.25 * Math.sin(Math.PI * age)})`); puff.addColorStop(1, `rgba(${SMOKE.join()},0)`);
+    ctx.fillStyle = puff;
+    ctx.beginPath(); ctx.arc(px, py, size, 0, 2 * Math.PI); ctx.fill();
+  }
   ctx.restore();
 }
 

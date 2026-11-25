@@ -139,12 +139,6 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 .god .hint { color: var(--muted); }
 .god .why { color: var(--warn); }
 .god .stepper, .god .hold { display: none; }
-/* A short message (what a stroke did, how to use a tool): a pill at the bottom middle that fades; a button in it where
-   there is something to do. */
-.toast { position: fixed; z-index: 4; left: 50%; bottom: calc(var(--edge) + var(--btn) + 2 * var(--gap)); transform: translate(-50%, 8px); max-width: min(420px, calc(100vw - 2 * var(--edge))); display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-radius: 22px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; }
-.toast.on { opacity: 1; transform: translate(-50%, 0); }
-.toast.on.act { pointer-events: auto; padding-right: 6px; }
-.toast button { flex: none; min-height: 32px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 600; }
 /* While the ground is made again: a small note with a spinner, under the bar. */
 .busy { position: fixed; z-index: 3; left: 50%; top: calc(var(--edge) + var(--bar) + var(--gap)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--gap); padding: 4px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); pointer-events: none; }
 .busy i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: turn .8s linear infinite; }
@@ -194,7 +188,7 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   #inspect-card { --covers: none; top: calc(var(--top) + 48px + var(--gap)); left: var(--edge); width: auto; max-height: 40dvh; }
   /* God mode: its strip takes the dock's place (done, each tool named, undo). Above it, the brush's size between a
      smaller and a larger button, the tool's choices, and the tool's big button, held for a stroke at the sight in the
-     middle of the map (god.ts); how to use a tool is said in the message at the top. */
+     middle of the map (god.ts); how to use a tool is said on the card with a mouse. */
   body.god-on .bar::before, body.god-on .bar .grp > :is(.tool, .play, .speed), body.god-on .fit { display: none; }
   body.god-on .bar { pointer-events: none; }
   body.god-on .bar :is(.world, .date) { pointer-events: auto; }
@@ -219,7 +213,6 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   .god .hold { display: grid; place-content: center; justify-items: center; gap: 3px; grid-column: 2; grid-row: 1 / span 2; width: 84px; height: 84px; margin: 6px; border: 1px solid rgba(255, 255, 255, .28); border-radius: 50%; background: radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--tool) 55%, #fff4e0), var(--tool) 52%, color-mix(in srgb, var(--tool) 72%, #5a1606)); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .35); font-size: 11px; font-weight: 700; line-height: 1.1; text-align: center; box-shadow: 0 0 0 5px color-mix(in srgb, var(--tool) 28%, transparent), 0 8px 22px rgba(0, 0, 0, .45), inset 0 -3px 8px rgba(0, 0, 0, .18); touch-action: none; transition: transform .1s, box-shadow .1s; }
   .god .hold .i { width: 24px; height: 24px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3)); }
   .god .hold.held { transform: scale(.93); box-shadow: 0 0 0 9px color-mix(in srgb, var(--tool) 35%, transparent), 0 4px 14px rgba(0, 0, 0, .45), inset 0 2px 8px rgba(0, 0, 0, .25); }
-  .toast { bottom: auto; top: calc(var(--top) + 48px + var(--gap)); }
   .busy { top: calc(var(--top) + 48px + var(--gap)); }
   .errors { top: calc(var(--top) + 48px + var(--gap)); }
   .tl { left: var(--edge); right: calc(2 * var(--edge) + var(--btn)); width: auto; transform: none; bottom: var(--above-dock); }

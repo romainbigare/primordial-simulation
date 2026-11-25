@@ -9,12 +9,11 @@ import type { IconName } from './icons';
 export interface Probe { cell: number; bounds: [number, number, number, number]; at: [number, number]; area: number; land: number; patches: number; fire: string }
 /** A starting kind the world's plan places (wasm/src/lib.rs `kinds`): its row, the core's name, kg per m² placed. */
 export interface StartKind { row: number; name: string; kg: number }
-/** What a brush did (wasm/src/lib.rs `brush`): of a planting, each cell newly under it, the share of it under the
- * brush, whether each of its edits was made and the core's reason where not, and whether the kind planted stands
- * grown somewhere (`grown`; else it is planted young); of heat, each cell under it, its share, how much of the heat
- * that lights its remains it holds (`progress`, 0 to 1) and why none would light; whether any cell changed. (A brush
- * of the ground, or a lake, answers its cells as numbers alone.) */
-export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[]; changed: boolean; grown?: boolean }
+/** What a brush did (wasm/src/lib.rs `brush`), as god mode reads it: of a planting, each cell newly under it, the share
+ * of it under the brush, whether each of its edits was made and the core's reason where not; of heat, each cell under
+ * it, its share, how much of the heat that lights its remains it holds (`progress`, 0 to 1) and why none would light.
+ * (A brush of the ground, or a lake, answers its cells as numbers alone.) */
+export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[] }
 /** What a stroke's settling did (wasm/src/lib.rs `settle`): whether the ground was built again, and each cell the
  * flames of its strikes reached, and when, s after the strike. */
 export interface Settled { ground: boolean; burnt: [number, number][] }
@@ -37,6 +36,8 @@ export interface GodTool {
   rate?: number;
   /** The time over which its rate doubles while it is held, s (none: it stays). */
   doubling?: number;
+  /** Whether what it starts runs on its own once it took (a fire): its stroke ends as soon as a cell lights. */
+  settlesLit?: boolean;
   /** The amount it paints once, where the stroke begins (m of a lake's depth): a tool that makes one thing a stroke. */
   amount?(): number;
   /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
@@ -45,16 +46,13 @@ export interface GodTool {
   reason(why: string): string;
   /** Its own choices, shown under the brush's sizes (`show` draws the card anew after one is picked). */
   choices?(show: () => void): HTMLElement;
-  /** What a stroke did, in a line: the cells it edited (lit, for heat), the plain reason most of the others were not,
-   * and whether what it planted stood grown. */
-  told(done: number, why: string, grown: boolean): string;
 }
-/** What the page gives god mode: its strip, card and toast; the map drawn anew; that a tool was picked or a stroke
- * begins (the world pauses); that god mode is done; play the world; the side of a square, m; the cells a stroke burnt
- * with when (`Settled`); and on a phone the place at the sight in the middle of the map, squares (null: the brush is
- * under the pointer). */
+/** What the page gives god mode: its strip and card; the map drawn anew; that a tool was picked or a stroke begins (the
+ * world pauses); that god mode is done; the side of a square, m; the cells a stroke burnt with when (`Settled`), and
+ * where it struck (squares); and on a phone the place at the sight in the middle of the map, squares (null: the brush
+ * is under the pointer). */
 export interface GodPage {
-  strip: HTMLElement; card: HTMLElement; toast: HTMLElement;
-  redraw(): void; picked(): void; close(): void; play(): void; squareM(): number; burnt(burnt: [number, number][]): void;
+  strip: HTMLElement; card: HTMLElement;
+  redraw(): void; picked(): void; close(): void; squareM(): number; burnt(burnt: [number, number][], strike: [number, number]): void;
   aim(): [number, number] | null;
 }
