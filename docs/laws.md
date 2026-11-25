@@ -245,9 +245,12 @@ the sea's level), none (its liquid stands there already), and a brush whose cent
 none. Then the liquid settles over the ground (below); what the cells' other liquid and pores took of it is poured
 again, up to three times, until it lacks less than a hundredth of its room, so it stands the asked depth over a dry
 floor. An edit moves the bed faster than the slow ground is checked: its caches
-are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. **Known limit:** the samples' loose
-ground and the make of their bed (what the tiles and the textures read) do not follow an edit; the cell's soil keeps
-its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
+are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. The samples' loose
+ground follows an edit when they are built again (`mantle::edited`): a lowering takes it first, and on a sample an edit
+shaped no more stays than the creep holds on its new slope (the mantle's balance with nothing coming from upslope, the
+bed breaking as under ground that does not lower), so the flanks of a hill raised steeper than loose ground rests at
+are bare bed, and the cells' plants root by it (`cover::loose_bins`). **Known limit:** the make of the samples' bed
+does not follow an edit; the cell's soil keeps its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
 (`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
 it as a build builds them, without the lobes, without counting a build of the years and with the cells' offsets of the
 last build (`flow::build::reshape`: an edit moves a cell's ground and its samples' mean by one volume, so its offset

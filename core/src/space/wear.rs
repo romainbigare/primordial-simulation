@@ -36,7 +36,7 @@ pub const STAND_M: f64 = 0.0;
 /// on a unit slope.
 const CUT: f64 = 3.0e-7;
 /// The diffusivity of the slopes' creep, m² a year.
-const CREEP: f64 = 3.0e-3;
+pub(super) const CREEP: f64 = 3.0e-3;
 /// The grids the time runs on, coarsest first, each half as coarse as the one before: the samples a side to one of
 /// the grid's (on a map no larger than `MOST_SAMPLES` allows), the share of the time on it, and its steps.
 const STAGES: [(usize, f64, usize); 3] = [(4, 0.4, 16), (2, 0.3, 8), (1, 0.3, 4)];
