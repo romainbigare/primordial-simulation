@@ -19,6 +19,10 @@ const CURED_HIDES_KG = 0.15; const STRAW = vec3f(0.62, 0.50, 0.22);
 // the ground it runs over only scorched, in ragged spots from `UNBURNT_M` across (a burn's patchiness down to the
 // metre: Key and Benson 2006, read).
 const CHAR_PHOTO_M = 1.0; const UNBURNT = 0.07; const UNBURNT_M = 0.6; const UNBURNT_OCTAVES = 2;
+// Ash lies in drifts where the fuel lay thickest (logs, shrubs, litter heaped), from `ASH_DRIFT_M` across (noise stream
+// `ASH_NOISE`), as much of the ground as the scar's ash covers: seen close, a point is ash or char; as a drift takes
+// fewer pixels than `ASH_PX.y`, down to `ASH_PX.x`, their mean (a noise of a few pixels reads as grain, not drifts).
+const ASH_DRIFT_M = 8.0; const ASH_OCTAVES = 4; const ASH_NOISE = 94; const ASH_EDGE = 0.05; const ASH_PX = vec2f(4.0, 12.0);
 
 // Far away, where they are not drawn one by one (cover.wgsl, snag.wgsl), the Earth view draws the dead trees standing
 // on a patch as specks of their bark and shadow (cover_field.wgsl `specks`), as many as their walls make (fire.wgsl
@@ -63,10 +67,26 @@ fn scarred(p: Spot) -> Spot {
   }
   let b = burn_at(p.at, p.e);
   q.scar = scar_of(f, b, p.at, p.e);
-  // The Earth view draws the plants on a scar scorched and with their dead leaves, and burning as a front passes (as
-  // the marks drawn one by one, cover.wgsl).
-  if (styled()) { q.cover = vec4f(burnt_plant(q.cover.rgb, q.cover.a, field_fire(plant_fire(f, q.scar, b))), q.cover.a); }
+  // The Earth view draws the plants on a scar burnt (as the marks drawn one by one, cover.wgsl).
+  if (styled()) { q.cover = burnt_field(q.cover, min(p.low / max(q.cover.a, 1e-3), 1.0), plant_fire(f, q.scar, b), q.scar.x); }
   return q;
+}
+
+// The low plants on a scar burnt away in its flames and grow back by e^-(months / `LOW_REGROW_MONTHS`) (a burnt sward
+// greens again within a season: from memory). The woody plants its burn killed stand dead and bare, charred
+// (`DEAD_BARK`), covering `BARE_COVER` of what their crowns did (a bare crown's stems and twigs hide about a third of
+// the ground under them: from memory); from afar they fall and give way by e^-(months / `DEAD_STAND_MONTHS`) (the
+// years over which the dead trees drawn one by one break down, snag.wgsl `BREAK_YEARS`).
+const LOW_REGROW_MONTHS = 4.0; const BARE_COVER = 0.3; const DEAD_STAND_MONTHS = 96.0;
+
+// The cover `c` of the field (premultiplied), `low` of it low plants, on a scar of share `scar` with fire `g` on its
+// plants (fire.wgsl `plant_fire`): the low plants on it burnt away, the woody plants it killed dead and bare, the rest
+// sooted and burning as a front passes.
+fn burnt_field(c: vec4f, low: f32, g: vec4f, scar: f32) -> vec4f {
+  let burnt = low * scar * exp(-g.z / LOW_REGROW_MONTHS);
+  let dead = (1.0 - low) * g.y * exp(-g.z / DEAD_STAND_MONTHS);
+  let living = max(1.0 - burnt - dead, 0.0);
+  return vec4f(burnt_plant(c.rgb, c.a, g.x, g.w) * living + DEAD_BARK * c.a * BARE_COVER * dead, c.a * (living + BARE_COVER * dead));
 }
 
 // The scar's colour over ground colour `c` at spot p: its scorched soil, its char, its ash (`burnt_spot`), each over
@@ -86,7 +106,8 @@ fn scar_over(c: vec3f, p: Spot) -> vec3f {
   }
   var rgb = mix(c, SCORCHED, s.w);
   rgb = mix(rgb, char_rgb, char_share);
-  rgb = mix(rgb, ASH, s.z);
+  let drift = smoothstep(-EVEN_ONE, EVEN_ONE, ragged(p.at, p.e, ASH_DRIFT_M, ASH_OCTAVES, ASH_NOISE));
+  rgb = mix(rgb, ASH, mix(s.z, smoothstep(drift - ASH_EDGE, drift + ASH_EDGE, s.z), ease(ASH_PX.x * p.e, ASH_PX.y * p.e, ASH_DRIFT_M)));
   return mix(c, rgb, s.x);
 }
 

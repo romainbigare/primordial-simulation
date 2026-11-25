@@ -90,7 +90,7 @@ map.layer = vegetation;
 const front = new FireFront(() => live, fire);
 const god = new God({
   strip: $('god-strip'), card: $('god'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
-  picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), burnt: (b, strike) => front.burnt(b, strike),
+  picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), burnt: (b, strike, lit) => front.burnt(b, strike, lit),
   aim: () => (PHONE.matches && world ? map.sightAt() : null),
 }, () => live, godTools(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));

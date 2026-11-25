@@ -24,11 +24,12 @@ const SNAG_VARY = 0.2;
 // The older (`old`, its stage over `STUMP_FROM_STAGE`, at most 1), the more a dead tree leans, by up to `LEAN_MOST`
 // radians, more on the broken than on the whole.
 const LEAN_MOST = 0.6;
-// A fresh whole dead tree is charred: its bark drawn `CHARRED` of the way to char (fire.wgsl `CHAR`) at once, weathering
-// grey over `GREY_YEARS` (charcoal flakes off within a few years: from memory), drawn `GREYED` of the way to its own
-// grey, lit to `GREY_LIGHT` times as light. Each dead tree's tone is moved by up to `TINT` either way, warmer or cooler,
-// by its own draw.
-const CHARRED = 0.8; const SNAG_CHAR = vec3f(0.04, 0.035, 0.03); const GREY_YEARS = 4.0; const GREYED = 0.65; const GREY_LIGHT = 1.35; const TINT = 0.12;
+// A fresh whole dead tree is charred: its bark drawn `CHARRED` of the way to char at once, as light as `CHAR_OF_WOOD`
+// of its grey wood where the light falls on it (charcoal reflects 4 to 6 % of the light, weathered wood 20 to 30 %:
+// from memory), weathering grey over `GREY_YEARS` (charcoal flakes off within a few years: from memory), drawn
+// `GREYED` of the way to its own grey, lit to `GREY_LIGHT` times as light. Each dead tree's tone is moved by up to
+// `TINT` either way, warmer or cooler, by its own draw.
+const CHARRED = 0.8; const CHAR_OF_WOOD = 0.2; const GREY_YEARS = 4.0; const GREYED = 0.65; const GREY_LIGHT = 1.35; const TINT = 0.12;
 // A charred trunk's or stump's sprite is all stem, its base about `SNAG_STEM` of its width from its foot (its contact
 // shade's reach, models.wgsl `contact_shade`).
 const SNAG_STEM = 0.4;
@@ -89,7 +90,7 @@ fn snag_texel(q: Snag, uv: vec2f, g: vec2f) -> vec4f {
   if (q.kind == KIND_BARE) {
     let t = model_texel(bare_of(q.s), uv, max(g.x, g.y));
     let grey = mix(t.rgb, vec3f(dot(t.rgb, LUMA)), GREYED) * GREY_LIGHT * q.tint;
-    return vec4f(mix(grey, SNAG_CHAR * q.tint, q.char), t.a);
+    return vec4f(mix(grey, grey * CHAR_OF_WOOD, q.char), t.a);
   }
   let size = snag_size(q);
   // Its cell: a whole layer, or a quarter of one.

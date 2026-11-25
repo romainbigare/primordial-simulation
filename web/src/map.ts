@@ -85,11 +85,12 @@ const MADE_POLL_MS = 50;
 /** Drawn on the GPU over the map by another module, in the map's pass, at every frame: what it works out before the
  * pass, where the map's corner is at (ox, oy) css px, a square takes `s` css px, a css px `d` px of the target and
  * `seen` px of the screen (its detail is chosen by the screen's), and the view is `w` x `h` css px, of which only the
- * part `clip` of the target (x, y, w, h px) is drawn where given, adding to `waiting` the programs it goes without as
- * they are not made yet (`prepare`); its draw in the pass; and what the live map's
+ * part `clip` of the target (x, y, w, h px) is drawn where given, with what changes in time as it stands at `now`
+ * (performance.now, ms: the time the ground is drawn at, `fireTime`), adding to `waiting` the programs it goes without
+ * as they are not made yet (`prepare`); its draw in the pass; and what the live map's
  * ground draws of it, with a square taking `s` css px and a css px `seen` px of the screen (`under`, its bindings). */
 export interface GpuLayer {
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, waiting: string[], clip?: number[]): void;
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, w: number, h: number, now: number, waiting: string[], clip?: number[]): void;
   draw(p: Pass): void;
   under(gpu: Gpu, s: number, seen: number): Draw['binds'];
 }
@@ -223,7 +224,7 @@ export class MapView {
     cv.before(c);
     this.gpuCv = c;
     this.resize();
-    const restored = () => { this.stopPictures(); this.timing = false; this.sharpOf = ''; this.last = this.whole = this.fadeFrom = this.fade = null; this.rings = []; this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
+    const restored = () => { this.stopPictures(); this.timing = false; this.sharpOf = ''; this.last = this.whole = this.fadeFrom = this.fade = null; this.rings = RINGS.map(() => null); this.land?.tiles.lost(); this.fire?.stop(null); detailLost(); this.invalidate(); };
     this.ready = Promise.resolve(openGpu(c, restored)).then(g => {
       this.gpu = g;
       // A new set of the ground's detail: the pictures begun with the set before (whose bindings name it) stop, and
@@ -338,7 +339,7 @@ export class MapView {
   invalidate(): void { this.gpuDue = true; this.redraw(); }
   /** Forget the pictures of the area about the view and of the whole map (they show a fire as it was): they are drawn
    * again once the view rests. */
-  forgetAround(): void { this.rings = []; this.whole = null; this.invalidate(); }
+  forgetAround(): void { this.rings = RINGS.map(() => null); this.whole = null; this.invalidate(); }
 
   /** Draw the map anew at the next frame though a sharp picture of this same view is being drawn (`sharpen`, which a
    * playing world's frames leave to finish): the player changed the world, and sees it at once. */
@@ -474,7 +475,7 @@ export class MapView {
     this.picture = this.sized(gpu, this.picture, tw, th);
     const waiting: string[] = [];
     gpu.begin();
-    this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
+    this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, this.fireTime(), waiting);
     this.fire?.prepare(gpu, waiting);
     const target = this.picture!, p = gpu.pass(target);
     // While a tile of the ground fades in, the map is drawn again at each frame; none fades where the card cannot
@@ -586,7 +587,7 @@ export class MapView {
     // (a new frame stops them); a program it goes without is waited for as a whole frame's is (`drawWhenMade`).
     const { cam: { s, ox, oy } } = this, waiting: string[] = [];
     gpu.begin();
-    this.layer?.prepare(gpu, ox, oy, s, d, d, this.cv.clientWidth, this.cv.clientHeight, waiting);
+    this.layer?.prepare(gpu, ox, oy, s, d, d, this.cv.clientWidth, this.cv.clientHeight, this.fireTime(), waiting);
     this.fire?.prepare(gpu, waiting);
     this.drawWhenMade(gpu, waiting);
     const job = { tiles, xs, d, key: this.viewKey(xs), into: this.sharpNext!, ms: 0, cam: { ...this.cam } };
@@ -762,7 +763,7 @@ export class MapView {
     const was = this.cam, drawn = this.land?.drawn, waiting: string[] = [];
     this.cam = { ...cam };
     gpu.begin();
-    this.layer?.prepare(gpu, cam.ox, cam.oy, cam.s, k, seen, t.w / k, t.h / k, waiting, clip);
+    this.layer?.prepare(gpu, cam.ox, cam.oy, cam.s, k, seen, t.w / k, t.h / k, this.fireTime(), waiting, clip);
     const p = gpu.pass(t, [...this.background(), 1], clip);
     this.drawMap(gpu, p, [cam.ox], k, seen, [t.w, t.h], waiting);
     this.layer?.draw(p);

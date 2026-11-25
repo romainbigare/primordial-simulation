@@ -11,12 +11,13 @@ const SIGHT_PX = 11, SIGHT_GAP_PX = 4;
 /** The angle between one flame and the next of a patch, radians: the golden angle, so they spread evenly over it. */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
-/** The brush at (cx, cy), `r` css px: a disc of `ink` (`held`: while a stroke is under way, stronger), its rim, its
- * centre; the heat it holds (`progress`, 0 to 1; less than 0: none asked) as a ring that fills. */
-export function drawBrush(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, ink: string, held: boolean, progress: number): void {
+/** The brush at (cx, cy), `r` css px: a disc of `ink` (`held`: while a stroke is under way, stronger; `rim`: none,
+ * its rim alone), its rim, its centre; the heat it holds (`progress`, 0 to 1; less than 0: none asked) as a ring that
+ * fills. */
+export function drawBrush(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, ink: string, held: boolean, rim: boolean, progress: number): void {
   ctx.save();
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-  ctx.globalAlpha = held ? 0.3 : 0.15; ctx.fillStyle = ink; ctx.fill();
+  ctx.globalAlpha = rim ? 0 : held ? 0.3 : 0.15; ctx.fillStyle = ink; ctx.fill();
   ctx.globalAlpha = 1; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.stroke();
   ctx.lineWidth = 1.5; ctx.strokeStyle = ink; ctx.stroke();
   if (progress > 0) {
@@ -65,26 +66,35 @@ function draw01(x: number, y: number, k: number): number {
 /** Where the map lies on the screen: the css px of its north-west corner, and css px a metre. */
 export interface MapAt { ox: number; oy: number; k: number }
 
+/** A place in a grid fixed to the map where the brush's heat has lit the ground (`litSites`): where, m, how far past
+ * its lighting it is, and its own number (its flames' draws). */
+export interface Lit { x: number; y: number; past: number; k: number }
+
+/** The places in the brush at `at` (m) of radius `radiusM` (m) that the heat it holds, `progress` (0 to 1) of what
+ * lights the ground under it, has lit (`drawFlames`), the most lit first. */
+export function litSites(at: [number, number], radiusM: number, progress: number): Lit[] {
+  const p = Math.min(Math.max(progress, 0), 1), step = (2 * radiusM) / Math.sqrt((4 / Math.PI) * PATCH_SITES), out: Lit[] = [];
+  for (let gy = Math.floor((at[1] - radiusM) / step); gy * step <= at[1] + radiusM; gy++) {
+    for (let gx = Math.floor((at[0] - radiusM) / step); gx * step <= at[0] + radiusM; gx++) {
+      const x = (gx + draw01(gx, gy, 1)) * step, y = (gy + draw01(gx, gy, 2)) * step, d = Math.hypot(x - at[0], y - at[1]) / radiusM;
+      if (d >= 1) continue;
+      const past = LIGHT_GAIN * p * (1 - d * d) ** 2 - draw01(gx, gy, 3);
+      if (past > 0) out.push({ x, y, past, k: (gx * 31 + gy * 17) & 1023 });
+    }
+  }
+  return out.sort((a, b) => b.past - a.past);
+}
+
 /** The fire in the brush at `at` (m) of radius `radiusM` (m) on the map lying as `map` says, as much of the heat that
  * lights the ground under it held as `progress` (0 to 1), at time `now` (ms): patches of it burning at fixed places on
  * the ground, more as it nears lighting, each scorching the ground about it, a light cast on it, embers, a cluster of
  * flames that sway and flicker in soft layers, sparks, and smoke drifting off. A picture of the heat held, not the
  * core's flames: those play when the stroke settles (burns.ts). */
 export function drawFlames(ctx: CanvasRenderingContext2D, map: MapAt, at: [number, number], radiusM: number, progress: number, now: number): void {
-  const p = Math.min(Math.max(progress, 0), 1), t = now / 1000, r = radiusM * map.k;
-  const cx = map.ox + at[0] * map.k, cy = map.oy + at[1] * map.k;
+  const t = now / 1000, r = radiusM * map.k, cx = map.ox + at[0] * map.k, cy = map.oy + at[1] * map.k;
   const full = Math.min(Math.max(r * FLAME_OF_RADIUS, FLAME_LEAST_PX), FLAME_MOST_PX);
-  // The places in the brush's grid that the heat has lit, each with its own draw, and how far past lighting it is.
-  const step = (2 * radiusM) / Math.sqrt((4 / Math.PI) * PATCH_SITES), patches: { x: number; y: number; k: number; tall: number }[] = [];
-  for (let gy = Math.floor((at[1] - radiusM) / step); gy * step <= at[1] + radiusM; gy++) {
-    for (let gx = Math.floor((at[0] - radiusM) / step); gx * step <= at[0] + radiusM; gx++) {
-      const mx = (gx + draw01(gx, gy, 1)) * step, my = (gy + draw01(gx, gy, 2)) * step, d = Math.hypot(mx - at[0], my - at[1]) / radiusM;
-      if (d >= 1) continue;
-      const past = LIGHT_GAIN * p * (1 - d * d) ** 2 - draw01(gx, gy, 3);
-      if (past <= 0) continue;
-      patches.push({ x: map.ox + mx * map.k, y: map.oy + my * map.k, k: (gx * 31 + gy * 17) & 1023, tall: full * (0.55 + 0.45 * Math.min(past / GROW, 1)) });
-    }
-  }
+  // The places the heat has lit, on the screen, their flames as tall as they are past lighting.
+  const patches = litSites(at, radiusM, progress).map(s => ({ x: map.ox + s.x * map.k, y: map.oy + s.y * map.k, k: s.k, tall: full * (0.55 + 0.45 * Math.min(s.past / GROW, 1)) }));
   ctx.save();
   // The ground scorched about each patch, the light each casts on it, and its embers.
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.clip();

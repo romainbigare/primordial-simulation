@@ -4,7 +4,7 @@
 // and the burns of god mode laid about their strikes (burns.ts). Where no fire is known the ground reads none of it
 // (`groundBinds`).
 import { World, decode } from './data';
-import { BURNS, BURN_FLOATS, Burns } from './burns';
+import { AGE_SLACK, BURNS, BURN_VEC4S, Burns } from './burns';
 import { Draw, Gpu, Texture, Uniforms, notMade } from './gpu';
 import { half } from './canopy';
 import { groundDetail } from './detail';
@@ -43,7 +43,7 @@ export const FIRE_FPS = 8;
 /** The time the flames are drawn at, s, wraps round after this many seconds (a float keeps its steps fine). */
 const TIME_WRAP_S = 600;
 /** Of the uniforms of fire.wgsl (`Fire`), four-wide members: four, then the burns'. */
-const FIRE_VEC4S = 4 + (BURNS * BURN_FLOATS) / 4;
+const FIRE_VEC4S = 4 + BURNS * BURN_VEC4S;
 /** A burn's flames are at least this long where the core keeps none, m. */
 const BURN_FLAME_M = 1.5;
 /** Months a year (the core's `Config::months_per_year`). */
@@ -75,8 +75,10 @@ export class Fire {
   /** The burns of god mode laid about their strikes (burns.ts). */
   private burns = new Burns();
   /** Whether a burn is about to play (`hold`): the frame after its stroke came, but where it burns is still being found,
-   * so the planes shown stay those before it (else its squares would show their shares laid in patches at once). */
+   * so the planes shown stay those before it (else its squares would show their shares laid in patches at once); and
+   * the planes before it, whose shares burnt this month are not its own. */
   private held = false;
+  private before: FirePlanes | null = null;
   /** Told when a burn begins to play (true) and when one has played out or none could (false) (main.ts: the plants it
    * held are let go, and the pictures about the view drawn again). */
   played: (begun: boolean) => void = () => {};
@@ -98,9 +100,9 @@ export class Fire {
    * burning this month in patches and its flames' length times that share (so the blend between squares gives each its
    * share's mean); its second the ash, the gas sent to the air and the wind east and south; its third the cured leaves
    * standing, the share of the land saturated, the share of the soft tissue standing on the scar its burn killed times
-   * the scar's share, and the scar's share in patches; its fourth the burn of god mode on it (its number among them,
-   * from 1; 0: none), how far that burn's mean growth reaches when it has taken the square's share (m), and its flames'
-   * length (m). */
+   * the scar's share, and the scar's share in patches (none where its last burn is one of god mode); its fourth, for
+   * each burn of god mode by its place among them, how far its mean growth reaches when it has taken the square's share
+   * (m; none: it does not lie on the square). */
   put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number, month: number): void {
     this.last = [w, h, cellM, p, never, month];
     if (this.held) return;
@@ -112,43 +114,52 @@ export class Fire {
     if (!p || !(this.flames || p.ash.some((a, i) => a > 0 || p.cured[i] > 0 || scar(i) > 0))) { this.data = null; return; }
     const data = new Uint16Array(4 * FIRE_PLANES * n);
     for (let i = 0; i < n; i++) {
-      const s = scar(i), [burn, limit] = this.burns.of(i, p.age, month, never);
+      const s = scar(i), { limits, last } = this.burns.of(i, p.age, month);
       // (A burn of god mode draws its own flames: the core's of its square, the same burn, are not drawn again.)
-      const f = burn ? Math.max(p.flame[i] - p.last[i], 0) : p.flame[i];
+      const f = last ? Math.max(p.flame[i] - p.last[i], 0) : p.flame[i];
       data.set([s, s * Math.min(p.age[i], never), f, f * p.length[i]].map(half), 4 * i);
       data.set([p.ash[i], p.air[i], p.east[i], -p.north[i]].map(half), 4 * (n + i));
-      data.set([p.cured[i], p.wet[i], s * p.crown[i], burn ? 0 : s].map(half), 4 * (2 * n + i));
-      data.set([burn, limit, Math.max(p.length[i], BURN_FLAME_M), 0].map(half), 4 * (3 * n + i));
+      data.set([p.cured[i], p.wet[i], s * p.crown[i], last ? 0 : s].map(half), 4 * (2 * n + i));
+      data.set(limits.map(half), 4 * (3 * n + i));
     }
     this.data = data;
     this.due = true;
     this.smokeDue = this.flames !== null;
   }
 
-  /** Play the burn struck at `strike` (squares) that burnt the squares `reached` (1): it grows from the strike in the
-   * low wind there over the share of each square's dry land the core says it burnt. */
-  play(reached: Uint8Array, strike: [number, number]): void {
-    const [w, , cellM, p, , month] = this.last;
-    this.held = false;
+  /** Play the burn that took at `seeds` (m; none: at its strike `strike`, squares) and burnt the squares `reached` (1):
+   * it grows from where it took in the low wind there over the share of each square's dry land the core says it burnt
+   * (less what burnt there this month before it), killing what the core says. */
+  play(reached: Uint8Array, strike: [number, number], seeds: [number, number][]): void {
+    const [w, h, cellM, p, , month] = this.last, was = this.before;
+    this.held = false; this.before = null;
     if (p && reached.length === p.last.length) {
       const shares = new Map<number, number>();
-      reached.forEach((r, i) => { if (r) shares.set(i, p.last[i] / Math.max(1 - p.wet[i], 1e-6)); });
-      const sq = Math.min(Math.max(Math.floor(strike[1]), 0), this.last[1] - 1) * w + Math.min(Math.max(Math.floor(strike[0]), 0), w - 1);
-      this.burns.add([strike[0] * cellM, strike[1] * cellM], [p.east[sq], p.north[sq]], shares, month, w, cellM);
+      let [all, crown, length] = [0, 0, 0];
+      reached.forEach((r, i) => {
+        if (!r) return;
+        const own = Math.max(p.last[i] - (was && was.age[i] <= AGE_SLACK ? was.last[i] : 0), 0);
+        shares.set(i, own / Math.max(1 - p.wet[i], 1e-6));
+        [all, crown, length] = [all + own, crown + own * p.crown[i], length + own * p.length[i]];
+      });
+      const sq = Math.min(Math.max(Math.floor(strike[1]), 0), h - 1) * w + Math.min(Math.max(Math.floor(strike[0]), 0), w - 1);
+      const damage = { crown: all > 0 ? crown / all : p.crown[sq], length: Math.max(all > 0 ? length / all : p.length[sq], BURN_FLAME_M) };
+      const at: [number, number][] = seeds.length ? seeds : [[strike[0] * cellM, strike[1] * cellM]];
+      this.burns.add(at, [p.east[sq], p.north[sq]], shares, damage, month, w, cellM);
     }
     this.put(...this.last);
     this.played(this.burns.playing());
   }
 
   /** A burn is about to play: the planes shown stay as they are till it does (`play`), or the world steps (`still`). */
-  hold(): void { this.held = true; }
+  hold(): void { this.held = true; this.before ??= this.last[3]; }
 
   /** Whether a burn is about to play or plays now. */
   playing(): boolean { return this.held || this.burns.playing(); }
 
   /** The world stepped: the burns have burnt out, and the fire shown is the core's own (each burn kept still lies
    * about its strike). */
-  still(): void { this.burns.still(); this.held = false; }
+  still(): void { this.burns.still(); this.held = false; this.before = null; }
 
   /** While a burn plays, whether the map is to be drawn anew at time `now` (performance.now, ms): its front further on;
    * once one played out, `played` is told. */
@@ -185,7 +196,7 @@ export class Fire {
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
       .vec4((now / 1000) % TIME_WRAP_S, this.never);
-    const burns = this.burns.uniforms(now);
+    const burns = this.burns.uniforms(now, this.last[5]);
     for (let k = 0; k < burns.length; k += 4) u.vec4(...burns.slice(k, k + 4));
     if (!this.noSmoke) { this.noSmoke = gpu.texture('fire', 1, 1, SMOKE_FORMAT); gpu.write(this.noSmoke, new Uint8Array(4)); }
     return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer, 28: this.smoke && !this.smokeDue ? this.smoke : this.noSmoke };

@@ -36,7 +36,8 @@ export interface GodTool {
   rate?: number;
   /** The time over which its rate doubles while it is held, s (none: it stays), and the most times it doubles. */
   doubling?: number; doublings?: number;
-  /** Whether what it starts runs on its own once it took (a fire): its stroke ends as soon as a cell lights. */
+  /** Whether what it starts runs on its own once it took (a fire): its stroke ends as soon as a cell lights; and its
+   * brush is drawn as its rim alone, so the ground under it shows as it burns. */
   settlesLit?: boolean;
   /** The amount it paints once, where the stroke begins (m of a lake's depth): a tool that makes one thing a stroke. */
   amount?(): number;
@@ -48,11 +49,11 @@ export interface GodTool {
   choices?(show: () => void): HTMLElement;
 }
 /** What the page gives god mode: its strip and card; the map drawn anew; that a tool was picked or a stroke begins (the
- * world pauses); that god mode is done; the side of a square, m; the cells a stroke burnt with when (`Settled`), and
- * where it struck (squares); and on a phone the place at the sight in the middle of the map, squares (null: the brush
- * is under the pointer). */
+ * world pauses); that god mode is done; the side of a square, m; the cells a stroke burnt with when (`Settled`), where
+ * it struck (squares) and where its heat lit the ground, m (god-draw.ts `litSites`, the most lit first); and on a phone
+ * the place at the sight in the middle of the map, squares (null: the brush is under the pointer). */
 export interface GodPage {
   strip: HTMLElement; card: HTMLElement;
-  redraw(): void; picked(): void; close(): void; squareM(): number; burnt(burnt: [number, number][], strike: [number, number]): void;
+  redraw(): void; picked(): void; close(): void; squareM(): number; burnt(burnt: [number, number][], strike: [number, number], lit: [number, number][]): void;
   aim(): [number, number] | null;
 }

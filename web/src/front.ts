@@ -10,15 +10,17 @@ import type { Probe } from './god-types';
 const NOW_MONTHS = 1;
 
 export class FireFront {
-  /** The cells a stroke's flames reached and where it struck (squares), till the frame after the stroke comes. */
-  private waiting: { cells: Set<number>; strike: [number, number] } | null = null;
+  /** The cells a stroke's flames reached, where it struck (squares) and where its heat lit the ground (m), till the
+   * frame after the stroke comes. */
+  private waiting: { cells: Set<number>; strike: [number, number]; lit: [number, number][] } | null = null;
 
   /** `core`: what asks the live world's core about a place (squares), its answer to `answer`. */
   constructor(private core: () => { probe(x: number, y: number, answer: (p: Probe) => void): void } | null, private fire: Fire) {}
 
-  /** The cells a stroke burnt (`Settled`) from its strike at `strike` (squares): played once the frame after it comes. */
-  burnt(burnt: [number, number][], strike: [number, number]): void {
-    this.waiting = { cells: new Set(burnt.map(b => b[0])), strike };
+  /** The cells a stroke burnt (`Settled`) from its strike at `strike` (squares), its heat having lit the ground at
+   * `lit` (m): played once the frame after it comes. */
+  burnt(burnt: [number, number][], strike: [number, number], lit: [number, number][]): void {
+    this.waiting = { cells: new Set(burnt.map(b => b[0])), strike, lit };
     this.fire.hold();
   }
 
@@ -35,7 +37,7 @@ export class FireFront {
     const next = (): void => {
       const i = left.shift(), core = this.core();
       // (All found, or the world gone: what was found plays.)
-      if (i === undefined || !core) return this.fire.play(reached, burn.strike);
+      if (i === undefined || !core) return this.fire.play(reached, burn.strike, burn.lit);
       core.probe((i % side) + 0.5, Math.floor(i / side) + 0.5, p => {
         const [x0, y0, x1, y1] = p.bounds, hit = burn.cells.has(p.cell) ? 1 : 0;
         const inside = (k: number) => { const x = (k % side) + 0.5, y = Math.floor(k / side) + 0.5; return x > x0 && x < x1 && y > y0 && y < y1; };

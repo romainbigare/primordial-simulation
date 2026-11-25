@@ -10,7 +10,7 @@
 // about the place under the cursor (`probe`), and the brush drawn over the map at its true size (god-draw.ts).
 import { IconName, iconSvg } from './icons';
 import type { Brushed, Editor, GodPage, GodTool, Probe, Settled } from './god-types';
-import { drawBrush, drawFlames, drawReason, drawSight, drawSizeTag } from './god-draw';
+import { drawBrush, drawFlames, drawReason, drawSight, drawSizeTag, litSites } from './god-draw';
 import { holdButton, radiusText, sizeChips, sizeStepper } from './god-controls';
 
 /** The brush's radii, m (its size chips), and the one it starts at. */
@@ -261,7 +261,8 @@ export class God {
     this.undoable = true;
     this.show();
     if (!r.burnt.length) return;
-    this.page.burnt(r.burnt, st.now);
+    const m = this.page.squareM();
+    this.page.burnt(r.burnt, st.now, litSites([st.now[0] * m, st.now[1] * m], this.radius, st.progress).map(s => [s.x, s.y]));
     this.lingers = { at: st.now, progress: st.progress, till: performance.now() + FIRE_LINGERS_MS };
   }
 
@@ -276,7 +277,7 @@ export class God {
     const why = this.lastWhy || t.why(this.probe), ink = why ? NO_INK : t.ink;
     const [cx, cy] = [ox + this.at[0] * s, oy + this.at[1] * s];
     const r = (this.radius / this.page.squareM()) * s, progress = this.stroke?.progress ?? -1;
-    drawBrush(ctx, cx, cy, r, ink, this.stroke !== null, progress);
+    drawBrush(ctx, cx, cy, r, ink, this.stroke !== null, t.settlesLit === true, progress);
     // The fire of the heat held, and of a burn that ended till the map's own fire has begun to spread from it. (It
     // flickers: the map's overlay is drawn again at the next frame while it burns.)
     const burnt = this.stroke ?? this.ended[0], linger = now < this.lingers.till ? this.lingers : null;

@@ -144,6 +144,8 @@ fn decided(l: i32, k: vec2f, d: vec2f, e: f32) -> vec2f {
 // then the fire on the plant.
 const TOP_BYTE = 126.0 / 255.0;
 fn ground_of(b: vec4f) -> vec4f { return vec4f(b.xyz, b.w / TOP_BYTE); }
+// The months since a plant a burn killed died, from its word's byte (mark.wgsl `dead_word`).
+fn dead_months(b: f32) -> f32 { return round(b * 255.0) - 1.0; }
 
 // Of the mark lattice l decided for its cell k: the share of the ground at its foot under snow and the fire on its plant
 // (mark.wgsl `ground_word`), read only where a plant stands there.

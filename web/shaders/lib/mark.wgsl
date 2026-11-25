@@ -349,17 +349,17 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32)
   let q = mark_plant(l, k, sq, pick.y, place_of(pick.z), wades);
   let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
-  // Scorched, with dead leaves and burning, where it stands on dry ground under a scar or a passing front (fire.wgsl
-  // `plant_fire`, as the field reads it): its leaves are dead by its own draw, with the chance the burn killed the soft
-  // tissue standing there, so a burn's plants stand dead and living among each other as the field's mean says; soot
-  // darkens the living, and the dead by their own draw (fire.wgsl `plant_fire`).
+  // On dry ground under a scar or a passing front (fire.wgsl `plant_fire`, as the field reads it): sooted and burning;
+  // killed by its own draw with the chance the burn killed the soft tissue standing there, once it has stopped burning
+  // (below `DEAD_AFTER` of its glow), so a burn's plants stand dead and living among each other as the field's mean
+  // says; a dead one stands bare and charred (cover.wgsl `burnt_tree`), the months since it died kept in its word.
   var burnt = vec3f(0.0);
   if (f.depth <= 0.0 && fire.map.x > 0.0) {
     let fa = fire_at(at);
     let b = burn_at(at, cover.seen.x);
     let g = plant_fire(fa, scar_of(fa, b, at, cover.seen.x), b);
-    let dead = snag_unit(id, LEAVES_DRAW) < g.y;
-    burnt = vec3f(g.x * select(1.0, snag_unit(id, LEAVES_DRAW + 1), dead), select(0.0, g.z, dead), g.w);
+    let dead = snag_unit(id, KILLED_DRAW) < g.y && g.w < DEAD_AFTER;
+    burnt = vec3f(g.x, select(0.0, dead_word(g.z), dead), g.w);
   }
   return Living(vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), ground_word(f.snow, burnt), mark_box(l, q)), true);
 }
@@ -372,9 +372,12 @@ fn ground_open(at: vec2f) -> bool {
   return ch.water <= 0.0 || abs(g.sd - ch.middle) >= ch.water;
 }
 
-// The noise stream of a living mark's own draw of whether a burn killed its leaves (`living_decided`), and the next of
-// how charred they are.
-const LEAVES_DRAW = 45;
+// The noise stream of a living mark's own draw of whether a burn killed it (`living_decided`), and the share of its
+// burning's glow below which a killed one stands dead.
+const KILLED_DRAW = 45; const DEAD_AFTER = 0.3;
+// The months since a plant a burn killed died, as its ground word's byte (`ground_word`): 1 more than them, at most the
+// byte's top but one (0: living). `dead_months` reads it back.
+fn dead_word(months: f32) -> f32 { return min(1.0 + round(max(months, 0.0)), 254.0) / 255.0; }
 
 // The code of a dead tree's mark (`dead_decided`): past every living mark's.
 fn dead_code() -> f32 { return f32(i32(land.map.y) * i32(land.map.z) * kinds_n() * GROUPS * PLACE_STEPS); }
@@ -435,9 +438,9 @@ fn dead_box(l: i32, q: Snag) -> f32 {
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
 
-// The share of the ground at a mark's foot that snow covers, and the fire on its plant (fire.wgsl `plant_fire`: under
-// fresh char, its leaves dead, burning), each 0..1, as one number (`decide`): a byte each in its bits (cells.wgsl
-// `word_of`, `ground_of`), the last under `TOP_BYTE` of its range.
+// The share of the ground at a mark's foot that snow covers, and the fire on its plant (`living_decided`: its soot,
+// whether it is dead and since when, `dead_word`, and its burning), each 0..1, as one number (`decide`): a byte each in
+// its bits (cells.wgsl `word_of`, `ground_of`), the last under `TOP_BYTE` of its range.
 fn ground_word(snow: f32, g: vec3f) -> f32 { return bitcast<f32>(word_of(vec4f(snow, g.x, g.y, TOP_BYTE * clamp(g.z, 0.0, 1.0)))); }
 
 // The share of a mark that shows (0..1, more than 0) and the depth of the liquid over its foot, m (0: on land), as one

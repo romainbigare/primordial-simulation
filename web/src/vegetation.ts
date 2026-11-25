@@ -52,9 +52,9 @@ export class Vegetation implements GpuLayer {
 
   /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` px of the
    * target and `seen` px of the screen a css px, in a view `W` x `H` css px of which only the part `clip` of the target
-   * (x, y, w, h px) is drawn where given, before the map's pass, adding to `waiting` the programs it goes without
-   * (textures.ts `prepare`). */
-  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number, waiting: string[], clip?: number[]): void {
+   * (x, y, w, h px) is drawn where given, with fire as it stands at time `now` (performance.now, ms: the ground's), before
+   * the map's pass, adding to `waiting` the programs it goes without (textures.ts `prepare`). */
+  prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number, now: number, waiting: string[], clip?: number[]): void {
     this.drawn = null;
     const laws = this.land?.lawBinds(gpu);
     if (!laws) return;
@@ -65,7 +65,7 @@ export class Vegetation implements GpuLayer {
     const x0 = Math.max(Math.floor(Math.max(ox, 0) * d), c[0]), y0 = Math.max(Math.floor(Math.max(oy, 0) * d), c[1]);
     const x1 = Math.min(Math.ceil(Math.min(ox + this.mapW * s, W) * d), c[0] + c[2]), y1 = Math.min(Math.ceil(Math.min(oy + this.mapH * s, H) * d), c[1] + c[3]);
     if (x1 <= x0 || y1 <= y0) return;
-    const fire = this.fire.planeBinds(gpu, frameOf(ox * d, oy * d, mpp / d, mpp / seen), 0);
+    const fire = this.fire.planeBinds(gpu, frameOf(ox * d, oy * d, mpp / d, mpp / seen), now);
     this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land: { ...laws, ...fire } };
     this.marks.prepare(gpu, this.drawn, waiting);
   }
