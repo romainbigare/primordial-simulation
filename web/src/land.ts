@@ -194,8 +194,12 @@ export class Land {
     // and the samples' pattern inside a square.
     const coarse = w.index.has('coarse') ? decode(w, 0, 'coarse') : new Float32Array(n), fine = w.index.has('fine') ? decode(w, 0, 'fine') : new Float32Array(n);
     const samplesGrain = this.grainShift(W, H, coarse, fine);
-    // The wetness index from which each square's land is saturated (the core's `inside::wet_ground`).
-    const saturated = decode(w, 0, 'lambda_sat');
+    // The wetness index from which each square's land is saturated (the core's `inside::wet_ground`). The layer holds no
+    // level where none of the land is saturated or the core has not yet told (both a share of none): there the index of
+    // saturation is the layer's top, which only a channel reaches; where all of it is, its bottom.
+    const saturated = decode(w, 0, 'lambda_sat'), wetShare = decode(w, 0, 'wet_share');
+    const twiScale = w.meta.layers[w.index.get('lambda_sat')!];
+    const saturatedFrom = (i: number) => (wetShare[i] <= 0 ? twiScale.max : wetShare[i] >= 1 ? twiScale.min : saturated[i]);
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
     this.fade = shown && w.meta.layers[w.index.get(look.layer)!].scale !== 'log' ? 1 : OVER_FADE;
     const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
@@ -206,7 +210,7 @@ export class Land {
       put(4, i, [landIce[i], 0, 0, 0]);
       put(5, i, [shown ? shown[i] / 255 : 0, organic[i], landT[i], landZ[i]]);
       put(6, i, [coarse[i] - samplesGrain.coarse[i], fine[i] - samplesGrain.fine[i], 0, 0]);
-      data[4 * n * Math.floor(SATURATED_AT / 4) + 4 * i + SATURATED_AT % 4] = saturated[i];
+      data[4 * n * Math.floor(SATURATED_AT / 4) + 4 * i + SATURATED_AT % 4] = saturatedFrom(i);
     }
     blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
     // The sea's squares are marked by their air's fall with height as -(it + 1) (land.wgsl `state_on`): only a point
