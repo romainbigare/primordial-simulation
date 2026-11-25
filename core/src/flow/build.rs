@@ -104,7 +104,7 @@ fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
     curve::update(w, s, old);
     s.bodies = Bodies::of(w, &s.curves);
     let new = w.terrain_samples();
-    w.relief.ponds = new.pond_keys();
+    w.relief.ponds = new.pond_keys(&w.relief.ponds);
     s.state.held = held_by_pond(s, (old, &new), (&was, held));
     ground_now(w, s, true);
 }

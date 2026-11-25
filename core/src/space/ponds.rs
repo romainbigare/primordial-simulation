@@ -45,34 +45,40 @@ pub(super) fn keys(pond: &[u32], ponds: usize) -> Vec<u32> {
     key
 }
 
-/// The ponds of a sample's `pond` and their list `ponds` numbered as near the ponds whose keys were `was` (`keys`) as
-/// they can be: a pond of a key in `was` keeps its place in it; a new pond takes the place of a pond gone, in order, or
-/// one after the last; a place left empty takes the last pond. So an edit renumbers no pond it did not reach, and a
-/// list numbered after its own keys stays as it is.
+/// The ponds of a sample's `pond` and their list `ponds` numbered after the ponds whose keys were `was` (`keys`), so
+/// that a number never comes to name a pond elsewhere while a picture made before still reads it: a pond takes the place
+/// of the pond of `was` whose key is its own, else the first place of `was` whose key it holds (a pond grown over
+/// another), else the place after the last; a place no pond takes stays empty (no pass, no level). So an edit
+/// renumbers no pond it did not reach, a pond that grew over another keeps a number of one of them, and a list
+/// numbered after its own keys stays as it is.
 pub(super) fn renumber(pond: &mut [u32], ponds: &mut Vec<Pond>, was: &[u32]) {
     let key = keys(pond, ponds.len());
-    let place: std::collections::HashMap<u32, u32> = was.iter().enumerate().map(|(i, &k)| (k, i as u32)).collect();
-    let mut to: Vec<u32> = key.iter().map(|k| place.get(k).copied().unwrap_or(NONE)).collect();
+    let mut to = vec![NONE; ponds.len()];
     let mut taken = vec![false; was.len()];
-    to.iter().filter(|&&t| t != NONE).for_each(|&t| taken[t as usize] = true);
-    let mut gone = (0..was.len() as u32).filter(|&i| !taken[i as usize]);
+    // (First each pond whose own key a place holds, then each pond over the keys of the places left.)
+    for own in [true, false] {
+        for (i, &k) in was.iter().enumerate() {
+            let p = if k == NONE || taken[i] { NONE } else { pond.get(k as usize).copied().unwrap_or(NONE) };
+            if p != NONE && to[p as usize] == NONE && (!own || key[p as usize] == k) {
+                (to[p as usize], taken[i]) = (i as u32, true);
+            }
+        }
+    }
     let mut next = was.len() as u32;
     for t in to.iter_mut().filter(|t| **t == NONE) {
-        *t = gone.next().unwrap_or_else(|| {
-            next += 1;
-            next - 1
-        });
+        (*t, next) = (next, next + 1);
     }
-    // The places left empty under the count of ponds, lowest first, each taken by the pond of the highest place over it.
-    let n = ponds.len() as u32;
-    let empty = gone.filter(|&i| i < n);
-    let mut over: Vec<usize> = (0..to.len()).filter(|&p| to[p] >= n).collect();
-    over.sort_by_key(|&p| std::cmp::Reverse(to[p]));
-    over.into_iter().zip(empty).for_each(|(p, e)| to[p] = e);
-    let mut list = vec![Pond { pass: NONE, level: f64::NAN }; ponds.len()];
+    let mut list = vec![Pond { pass: NONE, level: f64::NAN }; next as usize];
     ponds.iter().zip(&to).for_each(|(p, &t)| list[t as usize] = *p);
     pond.iter_mut().filter(|p| **p != NONE).for_each(|p| *p = to[*p as usize]);
     *ponds = list;
+}
+
+/// The key of each place of the ponds `pond` (`ponds` many) numbered after the keys `was` (`renumber`): its pond's
+/// (`keys`), and for an empty place the key it had, so a pond that holds that sample later takes its place again,
+/// and a picture that still reads the place finds the pond that holds it now.
+pub(super) fn kept_keys(pond: &[u32], ponds: usize, was: &[u32]) -> Vec<u32> {
+    keys(pond, ponds).iter().enumerate().map(|(p, &k)| if k == NONE { was.get(p).copied().unwrap_or(NONE) } else { k }).collect()
 }
 
 /// The closed basins of the flood `f` over heights `z` (`Flood::under`): of each sample the basin it lies in

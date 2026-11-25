@@ -60,7 +60,8 @@ pub struct Samples {
 /// A pond: the samples of one closed basin that lie under its level, where liquid stands at one level before it runs
 /// over the basin's lowest pass. Its pass is the first sample out of it on the way its liquid leaves by, and the level
 /// is that of the pass, m. The open low ground is ponds too, one for each part of it joined through its samples (an
-/// island's one): its liquid leaves by no pass (`network::NONE`) and stands at any level (infinite).
+/// island's one): its liquid leaves by no pass (`network::NONE`) and stands at any level (infinite). A place of the
+/// list no pond holds (`ponds::renumber`) has no pass and no level (NaN).
 #[derive(Clone, Copy, Debug)]
 pub struct Pond {
     pub pass: u32,
@@ -68,9 +69,10 @@ pub struct Pond {
 }
 
 impl Samples {
-    /// The key of each pond (`ponds::keys`): the first of its samples.
-    pub fn pond_keys(&self) -> Vec<u32> {
-        super::ponds::keys(&self.pond, self.ponds.len())
+    /// The key of each place of the ponds, numbered after the keys `was` (`ponds::kept_keys`): the first of its pond's
+    /// samples, and for an empty place the key it had.
+    pub fn pond_keys(&self, was: &[u32]) -> Vec<u32> {
+        super::ponds::kept_keys(&self.pond, self.ponds.len(), was)
     }
     /// The area of sample `k`, m² (its row's, `rows`).
     #[inline]

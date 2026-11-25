@@ -505,9 +505,11 @@ solve left it: its temperature (`World::thaw_last`) and the share of each substa
 - **Bodies of standing liquid** (`flow::bodies`, `flow::basin`): a body is a pond of the terrain's samples (0: the
   samples of a closed basin under its pass, or a part of the open low ground joined through its samples, which has no
   pass), and every pond is one. The ponds keep their numbers when the samples are built again (`Relief::ponds`, each
-  pond's key its first sample; `space::ponds::renumber`): a pond of a key the last build had keeps its number, a new
-  pond takes the number of one gone or the next, and the last pond takes a number left empty; so an edit renumbers no
-  pond it did not reach. Its volume by level is its own samples': Σ area × (level - floor) over them, each
+  pond's key its first sample; `space::ponds::renumber`): a pond whose own key the last build had keeps its number,
+  a pond grown over another takes the number of the first whose key it holds, a new pond the next; a number no pond
+  takes stays empty and keeps its key, and none comes to name a pond elsewhere, so a tile made before a build never
+  reads another pond's level (an empty number reads the pond that holds its key, `tape::Table`). So an edit renumbers
+  no pond it did not reach. Its volume by level is its own samples': Σ area × (level - floor) over them, each
   sample's floor its height laid on its cell's mean surface. It is held by every cell that holds samples of it, each
   by its part, and its liquid stays in the ground nodes of those cells. The bodies, their parts and the ways to them
   are found once for the world's cells; at each month's start, each body's level from what its parts held at the last
