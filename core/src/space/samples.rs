@@ -12,6 +12,7 @@ use super::drain::{draws, flood, open_low, starts};
 use super::fill::heading;
 use super::relief::{Lift, Relief};
 use super::grid::Grid;
+use super::mantle::edited;
 use super::network::{accumulate, NONE};
 use super::ponds::{basins, grade, open_parts, renumber, shallow};
 use super::wear::{noise_grid, wear, Books, STAND_M};
@@ -60,7 +61,8 @@ pub struct Samples {
 /// A pond: the samples of one closed basin that lie under its level, where liquid stands at one level before it runs
 /// over the basin's lowest pass. Its pass is the first sample out of it on the way its liquid leaves by, and the level
 /// is that of the pass, m. The open low ground is ponds too, one for each part of it joined through its samples (an
-/// island's one): its liquid leaves by no pass (`network::NONE`) and stands at any level (infinite).
+/// island's one): its liquid leaves by no pass (`network::NONE`) and stands at any level (infinite). A place of the
+/// list no pond holds (`ponds::renumber`) has no pass and no level (NaN).
 #[derive(Clone, Copy, Debug)]
 pub struct Pond {
     pub pass: u32,
@@ -68,9 +70,10 @@ pub struct Pond {
 }
 
 impl Samples {
-    /// The key of each pond (`ponds::keys`): the first of its samples.
-    pub fn pond_keys(&self) -> Vec<u32> {
-        super::ponds::keys(&self.pond, self.ponds.len())
+    /// The key of each place of the ponds, numbered after the keys `was` (`ponds::kept_keys`): the first of its pond's
+    /// samples, and for an empty place the key it had.
+    pub fn pond_keys(&self, was: &[u32]) -> Vec<u32> {
+        super::ponds::kept_keys(&self.pond, self.ponds.len(), was)
     }
     /// The area of sample `k`, m² (its row's, `rows`).
     #[inline]
@@ -137,7 +140,7 @@ impl Clone for Kept {
 /// loose ground the mean by volume of the seed's and the relief's, the relief laid evenly over the years since the
 /// start, so half as old as they are on its mean.
 fn laid_ground(s0: &Samples, r: &Relief, years: f64) -> Ground {
-    let laid = |k: usize| r.built.get(k).copied().unwrap_or(0.0);
+    let laid = |k: usize| laid_on(r, k);
     let n = s0.h.len();
     let age = (0..n).map(|k| {
         let (old, new) = (s0.loose[k], laid(k));
@@ -150,6 +153,11 @@ fn laid_ground(s0: &Samples, r: &Relief, years: f64) -> Ground {
         age: age.collect(),
         books: s0.books,
     }
+}
+
+/// What the relief `r` laid on sample `k`, m (`Relief::built`).
+fn laid_on(r: &Relief, k: usize) -> f64 {
+    r.built.get(k).copied().unwrap_or(0.0)
 }
 
 impl Terrain {
@@ -187,7 +195,8 @@ impl Terrain {
     /// seed's (`samples`) with the heights `relief::heights` gives, and the flood over them found again (`found`; no
     /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
     /// stands over the liquid's level (`wear::STAND_M`). What the relief laid on a sample is loose ground that settled
-    /// there (`laid_ground`), laid over `years` since the start. The ponds are numbered after those the relief keeps
+    /// there (`laid_ground`), laid over `years` since the start; where edits shaped a sample its loose ground follows on
+    /// its new slope (`mantle::edited`). The ponds are numbered after those the relief keeps
     /// (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build; found
     /// once for each version of the relief (`Relief::version`) and kept.
     pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief, years: f64) -> Arc<Samples> {
@@ -210,6 +219,9 @@ impl Terrain {
         let open = open_low(&grid, &h, STAND_M);
         let ground = laid_ground(&s0, r, years);
         let mut found = self.found(seed, (&grid, rows), (h, &open, false), ground);
+        for k in (0..r.shaped.len()).filter(|&k| r.shaped[k] != 0.0) {
+            found.loose[k] = edited(&grid, k, (&|j| found.h[j], found.up[k]), (found.loose[k], found.settled[k], r.shaped[k]));
+        }
         renumber(&mut found.pond, &mut found.ponds, &r.ponds);
         let found = Arc::new(found);
         let mut kept = self.kept.1.lock().expect("the built samples");
@@ -322,4 +334,18 @@ pub fn sample_index(across: usize, down: usize, dy: f64, up: &[f64], h: &[f64]) 
     let grid = crate::inside::Grid::new(across, down, dy, vec![dy; down]);
     let own = vec![dy * dy; h.len()];
     crate::inside::Grid::wetness_index(up, &own, &grid.slope(h))
+}
+
+impl crate::World {
+    /// Of each of the terrain's samples `ks`, the loose ground the samples built from the world's relief as it stands
+    /// will hold (`Terrain::built`, `mantle::edited`) where they stand at heights `h`, m: what was laid on it and what
+    /// edits shaped of it, on the slope of `h` there, draining what it drained at the last build. A shell reads it to
+    /// draw the ground an edit moves before the samples are built again.
+    pub fn loose_to_build(&self, ks: &[usize], h: &dyn Fn(usize) -> f64) -> Vec<f64> {
+        let lat = (self.cfg.lat_south, self.cfg.lat_north);
+        let (grid, _, _) = grid_of(&self.map, lat);
+        let (s0, built) = (self.terrain.samples(self.terrain.seed, &self.map, lat), self.terrain_samples());
+        let r = &self.relief;
+        ks.iter().map(|&k| edited(&grid, k, (h, built.up[k]), (s0.loose[k] + laid_on(r, k), s0.settled[k] + laid_on(r, k), r.shaped_at(k)))).collect()
+    }
 }

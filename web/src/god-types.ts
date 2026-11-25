@@ -17,10 +17,11 @@ export interface Brushed { cells: { cell: number; share: number; done?: boolean[
 /** What a stroke's settling did (wasm/src/lib.rs `settle`): whether the ground was built again, and each cell the
  * flames of its strikes reached, and when, s after the strike. */
 export interface Settled { ground: boolean; burnt: [number, number][] }
-/** The worker's side of the tools (live.ts `Live`): ask what lies under a place, paint, end a stroke, and undo the last. */
+/** The worker's side of the tools (live.ts `Live`): ask what lies under a place, paint, end a stroke, settle a stroke
+ * held so far and go on with it, and undo the last. */
 export interface Editor {
   probe(x: number, y: number, answer: (p: Probe) => void): void; brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): void;
-  settle(): void; undo(): void;
+  settle(): void; soften(): void; undo(): void;
 }
 
 /** A tool of god mode. The strip shows the tools in the order of their list; a new tool is one more entry. */
@@ -34,6 +35,12 @@ export interface GodTool {
   /** What it adds at the brush's centre each second it is held, in its core tool's unit (m of ground, up or down where
    * less than 0; J/m² of heat): it paints again and again while the pointer is down, held still or not. */
   rate?: number;
+  /** What it adds at the brush's centre in steps, in its core tool's unit (m of ground, up or down where less than 0):
+   * one where the stroke begins and one more at the start of each `every` ms it is held. */
+  step?: { amount: number; every: number };
+  /** Whether a stroke of it held settles what it did so far every `SOFTEN_MS` (god.ts): the ground's tools, so the
+   * water follows the ground while it moves. */
+  softens?: boolean;
   /** The time over which its rate doubles while it is held, s (none: it stays), and the most times it doubles. */
   doubling?: number; doublings?: number;
   /** Whether what it starts runs on its own once it took (a fire): its stroke ends as soon as a cell lights; and its
@@ -41,6 +48,8 @@ export interface GodTool {
   settlesLit?: boolean;
   /** The amount it paints once, where the stroke begins (m of a lake's depth): a tool that makes one thing a stroke. */
   amount?(): number;
+  /** The least radius of its brush, m (none: the smallest of the sizes). */
+  least?: number;
   /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
   why(p: Probe | null): string;
   /** The core's reason a cell was not edited (`Brushed`), in plain words. */
@@ -50,10 +59,13 @@ export interface GodTool {
 }
 /** What the page gives god mode: its strip and card; the map drawn anew; that a tool was picked or a stroke begins (the
  * world pauses); that god mode is done; the side of a square, m; the cells a stroke burnt with when (`Settled`), where
- * it struck (squares) and where its heat lit the ground, m (god-draw.ts `litSites`, the most lit first); and on a phone
- * the place at the sight in the middle of the map, squares (null: the brush is under the pointer). */
+ * it struck (squares) and where its heat lit the ground, m (god-draw.ts `litSites`, the most lit first); on a phone the
+ * place at the sight in the middle of the map, squares (null: the brush is under the pointer); and which samples the
+ * world holds and which the ground in view shows. */
 export interface GodPage {
   strip: HTMLElement; card: HTMLElement;
   redraw(): void; picked(): void; close(): void; squareM(): number; burnt(burnt: [number, number][], strike: [number, number], lit: [number, number][]): void;
   aim(): [number, number] | null;
+  /** The version of the live world's samples, and the version the ground in view is made of (`Land::told`). */
+  ground(): [number, number];
 }

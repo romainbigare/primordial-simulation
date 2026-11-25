@@ -30,6 +30,7 @@ interface Core {
   kinds(): number;
   brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): number;
   settle(): number;
+  soften(): number;
   undo(): number;
   hold(): void;
   ground_shown(version: number): void;
@@ -46,6 +47,7 @@ type Command =
   | { cmd: 'probe'; at: [number, number] }
   | { cmd: 'brush'; tool: number; at: [number, number]; radius: number; amount?: number; row: number }
   | { cmd: 'settle' }
+  | { cmd: 'soften' }
   | { cmd: 'undo' }
   | { cmd: 'groundShown'; version: number }
   | { cmd: 'earlyRelief'; on: boolean }
@@ -102,11 +104,12 @@ function handIn(data: ArrayBuffer, use: () => number): string {
 
 /** What edits moved the ground since the ground the page shows (wasm/src/lib.rs `preview`): the window of the
  * terrain's samples (west column, north row, width, height), the version of the samples it moved from (`over`: the
- * page draws it over the tiles made of that version alone), and how far each of its samples moved, m, row by row. */
-function preview(): { window: [number, number, number, number]; over: number; dh: Float32Array } {
+ * page draws it over the tiles made of that version alone), and of its samples row by row how far each moved, m, and
+ * the depth of its loose ground once built again, m. */
+function preview(): { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array } {
   const c = core!, raw = bytes(c.preview(), c.out_len());
-  const head = new Uint32Array(raw.buffer, 0, PREVIEW_HEAD);
-  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer.slice(4 * PREVIEW_HEAD)) };
+  const head = new Uint32Array(raw.buffer, 0, PREVIEW_HEAD), n = head[2] * head[3], at = 4 * PREVIEW_HEAD;
+  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer.slice(at, at + 4 * n)), loose: new Float32Array(raw.buffer.slice(at + 4 * n)) };
 }
 
 /** The text the core last returned at `at`. */
@@ -213,10 +216,11 @@ host.onmessage = async e => {
       }
     }
     else if (m.cmd === 'earlyRelief') early = m.on;
-    else if (m.cmd === 'settle' && core) {
-      // The stroke ends; what its edits start that takes no time runs at once (`settle`), and its frame shows it, with
-      // the relief of the ground's new version where it was built again. A page that asked for it (`earlyRelief`) gets
-      // that relief first, before the world settles, so its ground is made again meanwhile.
+    else if ((m.cmd === 'settle' || m.cmd === 'soften') && core) {
+      // The stroke ends, or a held stroke settles what it did so far and goes on (`soften`); what its edits start that
+      // takes no time runs at once (`settle`), and its frame shows it, with the relief of the ground's new version where
+      // it was built again. A page that asked for it (`earlyRelief`) gets that relief first, before the world settles,
+      // so its ground is made again meanwhile.
       if (early) {
         const at = core.settled_relief(), n = core.out_len();
         if (n > 0) {
@@ -225,7 +229,8 @@ host.onmessage = async e => {
           host.postMessage({ kind: 'relief', relief, reliefVersion: sentBuilds }, [relief.buffer]);
         }
       }
-      host.postMessage({ kind: 'settled', text: text(core.settle()) }, []);
+      if (m.cmd === 'settle') host.postMessage({ kind: 'settled', text: text(core.settle()) }, []);
+      else core.soften();
       postFrame('frame', true);
     }
     else if (m.cmd === 'undo' && core) {

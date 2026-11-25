@@ -107,6 +107,14 @@ class WebGl2 implements Back {
     else { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.texSubImage2D(gl.TEXTURE_2D, level, 0, 0, w, h, format, type, data); }
   }
 
+  writeRows(t: Texture, data: TexelData, y: number, rows: number): void {
+    const gl = this.gl, g = t as WebGl2Texture, [, format, type] = this.formats()[t.format];
+    if (gl.isContextLost()) return;
+    const row = (data.length / t.h) | 0;
+    gl.bindTexture(gl.TEXTURE_2D, g.tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, y, t.w, rows, format, type, data, y * row);
+  }
+
   mipmap(t: Texture): void {
     const gl = this.gl, g = t as WebGl2Texture;
     if (gl.isContextLost() || g.mips < 2) return;

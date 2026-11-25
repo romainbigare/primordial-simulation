@@ -104,7 +104,7 @@ fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
     curve::update(w, s, old);
     s.bodies = Bodies::of(w, &s.curves);
     let new = w.terrain_samples();
-    w.relief.ponds = new.pond_keys();
+    w.relief.ponds = new.pond_keys(&w.relief.ponds);
     s.state.held = held_by_pond(s, (old, &new), (&was, held));
     ground_now(w, s, true);
 }
@@ -239,16 +239,17 @@ fn offsets(w: &World) -> Vec<f64> {
 }
 
 /// What each cell's parts of the bodies hold after a build: a part of a new pond takes what the cell's part of the old
-/// pond it came from held (`came_from`); a cell whose parts do not each take one part of its own, all of them, takes
-/// `curve::first_held_at`. `samples` before and after; `was` the ponds of each cell's parts before, `held` what they
-/// held.
+/// pond it came from held (`came_from`), and a part that came from none of the cell's parts holds none yet (a pond new
+/// to the cell fills from what comes into it, not from the liquid of the parts beside it); a cell some of whose parts
+/// before no part takes takes `curve::first_held_at`. `samples` before and after; `was` the ponds of each cell's parts
+/// before, `held` what they held.
 fn held_by_pond(s: &Scratch, (old, new): (&Samples, &Samples), (was, held): (&[Vec<u32>], Vec<Holding>)) -> Vec<Holding> {
     let from = came_from(old, new);
     s.curves.iter().enumerate().map(|(i, c)| {
         let matched: Option<Vec<f64>> = was.get(i).zip(held.get(i)).and_then(|(before, h)| {
             let at = |q: u32| before.iter().position(|&p| from[q as usize] == p);
-            let places: Option<Vec<usize>> = c.ponds().iter().map(|p| at(p.pond)).collect();
-            places.filter(|ps| ps.len() == before.len()).map(|ps| ps.iter().map(|&q| h.m3[q]).collect())
+            let places: Vec<Option<usize>> = c.ponds().iter().map(|p| at(p.pond)).collect();
+            (0..before.len()).all(|q| places.contains(&Some(q))).then(|| places.iter().map(|q| q.map_or(0.0, |q| h.m3[q])).collect())
         });
         matched.map_or_else(|| curve::first_held_at(s, i), |m3| curve::held_by(c, m3))
     }).collect()

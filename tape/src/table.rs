@@ -97,7 +97,8 @@ impl Table {
     /// patches, row by row (`stands::places`, `PLACE_ROW` f32), then the dead walls standing on its cell's patches, row
     /// by row (`stands::dead`, `DEAD_ROW` f32), then the level of each pond of the terrain's
     /// samples, m (`World::pond_levels`: NaN where no body holds it, or where its body holds less than `DRY_M` of liquid on
-    /// its mean: dry ground), which a shell draws each pond's liquid flat at, over the ground that lies under it; then
+    /// its mean: dry ground; an empty place reads the pond that holds its key), which a shell draws each pond's liquid flat
+    /// at, over the ground that lies under it; then
     /// the fetch of each pond, m: the side of a square as large as its liquid's surface, the length of open water a
     /// wind blows over, which a shell sizes its waves by (0 where it holds none); last the kinds a square holds
     /// (`stands::kinds`).
@@ -126,6 +127,14 @@ impl Table {
             } else {
                 fetch[p.pond] = p.area.sqrt();
             }
+        }
+        // An empty place (`Samples::ponds`) reads the pond that holds its key now (`Relief::ponds`): a tile made before
+        // the samples were built again draws the pond grown over its own at that pond's level, not another's.
+        let s = w.terrain_samples();
+        for p in (0..ponds.len()).filter(|&p| s.ponds[p].level.is_nan()) {
+            let k = w.relief.ponds.get(p).copied().unwrap_or(NONE);
+            let heir = if k == NONE { NONE } else { s.pond[k as usize] };
+            (ponds[p], fetch[p]) = if heir == NONE { (f64::NAN, 0.0) } else { (ponds[heir as usize], fetch[heir as usize]) };
         }
         table.extend(ponds.iter().map(|&l| l as f32));
         table.extend(fetch.iter().map(|&f| f as f32));

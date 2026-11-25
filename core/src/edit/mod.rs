@@ -36,8 +36,9 @@ pub enum Act {
     /// `joules_m2` J a m² of heat added to the remains under a brush of radius `radius_m` m about the place at its
     /// centre, less toward its edge (`World::heat`): it dries and lights them when the edits settle (`flame::heated`)
     Heat { radius_m: f64, joules_m2: f64 },
-    /// A basin of liquid `depth_m` m deep under a brush of radius `radius_m` m about the place: its ground levelled to
-    /// a floor that deep under its rim's lowest sample, and the key liquid poured in to that level (`World::basin`)
+    /// A basin of liquid `depth_m` m deep under a brush of radius `radius_m` m about the place: its ground cut to a
+    /// floor that deep under its rim's lowest dry sample, or under the level of a pond it reaches, and the key liquid
+    /// poured in to its pass (`World::basin`)
     Basin { radius_m: f64, depth_m: f64 },
     /// The ground under a brush of radius `radius_m` m about the place raised by `height_m` m at its centre (lowered
     /// where under none), less toward its edge; a stroke that has raised `stroke_m` m there before lays the loose ground

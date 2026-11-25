@@ -37,6 +37,8 @@ const PLANE_A = 4, PLANE_B = 4;
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
 const AHEAD = 0.25;
+/** What a tile out of the view adds to its distance from the view's middle (squares): it comes after those in it. */
+const OUT_OF_VIEW = 1e9;
 /** The view is drawn at the depth whose texels take no more than this many of the pixels the map is drawn at, so its ground and
  * its shores are read between texels no larger than a pixel; where that asks for more than `VIEW_TILES` tiles, a depth
  * coarser (each halving of a texel costs four times the tiles). */
@@ -64,9 +66,9 @@ interface Kept { depth: number; x: number; y: number; layer: number; came: numbe
  * `ground_version`). */
 export interface Built { relief: Uint8Array; version: number }
 /** What edits moved the ground since the samples of a version (wasm/src/lib.rs `preview`): the window of the terrain's
- * samples that moved (west column, north row, width, height), that version (`over`), and how far each of its samples
- * moved, m, row by row. */
-export interface Preview { window: [number, number, number, number]; over: number; dh: Float32Array }
+ * samples that moved (west column, north row, width, height), that version (`over`), and of its samples row by row how
+ * far each moved, m, and the depth of its loose ground once the samples are built again, m. */
+export interface Preview { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array }
 
 export class GroundTiles {
   private workers: { worker: Worker; ready: boolean; making: number; memory: number }[] = [];
@@ -217,7 +219,7 @@ export class GroundTiles {
         const key = keyOf(d, x, y), k = this.kept.get(key);
         asks++;
         if (k) k.asked = asked;
-        if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, stale: k !== undefined, far: (inside ? 0 : 1e9) + Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
+        if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, stale: k !== undefined, far: (inside ? 0 : OUT_OF_VIEW) + Math.hypot((x + 0.5) * s - cx, (y + 0.5) * s - cy) });
         // A tile in view not kept is drawn from its nearest kept ancestor till it comes: that one is asked too, so it
         // is not let go first (the view would fall back to a coarser tile, then come back).
         if (!k && inside) this.keepAncestor(d, x, y, asked);
@@ -234,9 +236,11 @@ export class GroundTiles {
         if (!k || this.stale.has(key)) wanted.push({ depth: d, x, y, stale: k !== undefined, far });
       }
     }
-    // Tiles not kept come before those kept stale (which are drawn meanwhile), so a zoom's tiles never wait behind the
-    // ground a build changed; then coarse before fine, nearest the view's middle first.
-    this.queue = wanted.sort((a, b) => +a.stale - +b.stale || a.depth - b.depth || a.far - b.far);
+    // The tiles in view at its depth come first (where an edit just changed the ground, its tiles there come before
+    // those about it); then tiles not kept before those kept stale (which are drawn meanwhile), so a zoom's tiles never
+    // wait behind the ground a build changed; then coarse before fine, nearest the view's middle first.
+    const shown = (q: { depth: number; far: number }) => +!(q.depth === depth && q.far < OUT_OF_VIEW);
+    this.queue = wanted.sort((a, b) => shown(a) - shown(b) || +a.stale - +b.stale || a.depth - b.depth || a.far - b.far);
     this.wanted = depth;
     this.settle();
     this.next();
