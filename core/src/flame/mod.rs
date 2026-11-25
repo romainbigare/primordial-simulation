@@ -106,6 +106,16 @@ pub struct Flamed {
     pub crown: f32,
 }
 
+impl Flamed {
+    /// Two burns of one cell in a month taken as one: their shares, ash and gas added, their flames' length and the
+    /// share of the soft tissue they killed meant by their shares.
+    fn with(self, o: Flamed) -> Flamed {
+        let share = self.share + o.share;
+        let mean = |a: f32, b: f32| if share > 0.0 { (a * self.share + b * o.share) / share } else { 0.0 };
+        Flamed { share, length: mean(self.length, o.length), ash: self.ash + o.ash, air: self.air + o.air, crown: mean(self.crown, o.crown) }
+    }
+}
+
 /// The most months since a cell last burnt that the tape tells apart (`since`): a cell that never burnt counts as this
 /// old.
 pub const AGE_MOST: f32 = 120.0;
@@ -271,15 +281,20 @@ fn tally(w: &mut World, n: usize) {
     show(c, &flamed, (months, of_year));
 }
 
-/// What the flames `flamed` did on each cell shown as this month's: its last month's (`Counters::flame_month`), the
-/// share it burnt this month of the year's (`burnt_months`, of `months` a cell, this month `of_year`), none since it
-/// last burnt (`burnt_age`), and its last burn's share and the share of the soft tissue on it killed (`burnt_last`).
+/// What the flames `flamed` did on each cell shown as this month's, the burns of one cell taken as one (`Flamed::with`):
+/// its last month's (`Counters::flame_month`), the share it burnt this month of the year's (`burnt_months`, of `months`
+/// a cell, this month `of_year`), none since it last burnt (`burnt_age`), and its last burn's share (at most all of its
+/// land) and the share of the soft tissue on it killed (`burnt_last`).
 fn show(c: &mut crate::Counters, flamed: &[(u32, Flamed)], (months, of_year): (usize, usize)) {
+    let mut cells: std::collections::BTreeMap<u32, Flamed> = std::collections::BTreeMap::new();
     for &(i, f) in flamed {
+        cells.entry(i).and_modify(|m| *m = m.with(f)).or_insert(f);
+    }
+    for (i, f) in cells {
         let i = i as usize;
         (c.flame_month[i], c.burnt_months[i * months + of_year]) = (f, f.share);
         c.burnt_age[i] = 0.0;
-        c.burnt_last[i] = [f.share, f.crown];
+        c.burnt_last[i] = [f.share.min(1.0), f.crown];
     }
 }
 

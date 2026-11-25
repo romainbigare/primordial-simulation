@@ -263,6 +263,27 @@ fn a_settled_strike_burns_at_once_with_no_time() {
     assert!(w.counts.flame_month[i].share > 0.0 && flame::since(&w, i) == 0.0, "the month took the burn as its own: {:?}", w.counts.flame_month[i]);
 }
 
+/// A cell burnt twice in one month keeps both burns for the tape: its month's share burnt, and its last burn's, are
+/// the sum of theirs (`flame::show`).
+#[test]
+fn two_burns_of_a_cell_in_a_month_add_up() {
+    use pcore::edit::{Act, Brush, Edit};
+    let (mut w, i) = start();
+    liquid_to(&mut w, i, 0.0);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    for at in [0.25, 0.75] {
+        let brush = Brush { centre: [x0 + at * (x1 - x0), (y0 + y1) / 2.0], radius_m: 0.15 * w.map.side };
+        let over = w.under(brush).iter().find(|u| u.cell == i).expect("the cell under the brush").share;
+        let joules_m2 = HEAT_OVER * flame::needed(&w, i, over).expect("heat lights them") / (over * pcore::contract::land(&w, i));
+        assert_eq!(w.edit(&[Edit { place: brush.centre, act: Act::Heat { radius_m: brush.radius_m, joules_m2 } }]), [true]);
+        w.settle();
+    }
+    let burns: Vec<f32> = w.counts.flamed.iter().filter(|f| f.0 == i as u32).map(|f| f.1.share).collect();
+    let sum: f32 = burns.iter().sum();
+    assert!(burns.len() == 2 && w.counts.flame_month[i].share == sum, "burns {burns:?}, shown {:?}", w.counts.flame_month[i]);
+    assert_eq!(flame::last_burn(&w, i)[0], sum.min(1.0) as f64);
+}
+
 /// Heat added under a brush dries and lights remains too thin to carry a flame of their own (handover.md 11.1;
 /// `flame::heated`): a strike does not light them, the heat that lights them (`flame::needed`) does, at once when
 /// the edits settle; the liquid they held boils off their ground as vapour, the heat they took goes to the air, and the
