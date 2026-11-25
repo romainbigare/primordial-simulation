@@ -138,6 +138,7 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 .god p { margin: 0; }
 .god .hint { color: var(--muted); }
 .god .why { color: var(--warn); }
+.god .stepper, .god .hold { display: none; }
 /* A short message (what a stroke did, how to use a tool): a pill at the bottom middle that fades; a button in it where
    there is something to do. */
 .toast { position: fixed; z-index: 4; left: 50%; bottom: calc(var(--edge) + var(--btn) + 2 * var(--gap)); transform: translate(-50%, 8px); max-width: min(420px, calc(100vw - 2 * var(--edge))); display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-radius: 22px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; }
@@ -191,21 +192,29 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   .panel { top: auto; bottom: 0; left: 0; width: 100%; max-width: none; max-height: 75dvh; border-radius: 22px 22px 0 0; padding-top: 22px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateY(24px); transform-origin: bottom; }
   .panel::before { content: ""; position: absolute; top: 8px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--line); }
   #inspect-card { --covers: none; top: calc(var(--top) + 48px + var(--gap)); left: var(--edge); width: auto; max-height: 40dvh; }
-  /* God mode: its strip takes the dock's place (done, each tool named, undo), the card of the brush's sizes and the
-     tool's choices a slim bar above it; how to use a tool is said in the message at the top. */
+  /* God mode: its strip takes the dock's place (done, each tool named, undo). Above it, the brush's size between a
+     smaller and a larger button, the tool's choices, and the tool's big button, held for a stroke at the sight in the
+     middle of the map (god.ts); how to use a tool is said in the message at the top. */
   body.god-on .bar::before, body.god-on .bar .grp > :is(.tool, .play, .speed), body.god-on .fit { display: none; }
   body.god-on .bar { pointer-events: none; }
   body.god-on .bar :is(.world, .date) { pointer-events: auto; }
   .strip { --covers: bottom; top: auto; left: var(--edge); right: var(--edge); bottom: calc(var(--edge) + env(safe-area-inset-bottom)); height: var(--dock); flex-direction: row; justify-content: space-around; align-items: center; gap: 0; padding: 0 4px; border-radius: 26px; }
   .strip .ib { flex: 1 1 0; min-width: 0; max-width: 60px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 16px; }
   .strip .ib .i { width: 22px; height: 22px; }
-  .god { --covers: bottom; top: auto; left: var(--edge); right: var(--edge); width: auto; bottom: var(--above-dock); max-height: none; padding: 6px; gap: 6px; border-radius: 22px; }
-  .god h2, .god p { display: none; }
-  .god:not(:has(.chips)) { display: none; }
+  .god.glass { --covers: bottom; top: auto; left: var(--edge); right: var(--edge); width: auto; bottom: var(--above-dock); max-height: none; padding: 0; gap: 8px; grid-template-columns: minmax(0, 1fr) auto; align-items: end; background: none; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; pointer-events: none; }
+  .god > * { pointer-events: auto; }
+  .god h2, .god p, .god .sizes { display: none; }
+  .god:not(:has(.hold)) { display: none; }
+  .god .stepper, .god .chips { grid-column: 1; justify-self: start; max-width: 100%; padding: 4px; border-radius: 999px; background: var(--glass); -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .god .stepper { display: flex; align-items: center; gap: 4px; }
+  .god .stepper button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--chip); font-size: 18px; line-height: 1; }
+  .god .stepper button:disabled { opacity: .35; }
+  .god .stepper b { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
   .god .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .god .chips button { flex: none; }
-  .god .sizes { justify-content: space-between; }
-  .god .sizes button { padding: 0 9px; }
+  .god .hold { display: grid; place-content: center; justify-items: center; gap: 2px; grid-column: 2; grid-row: 1 / span 2; width: 84px; height: 84px; border: 0; border-radius: 50%; color: #1a1208; font-size: 11px; font-weight: 700; line-height: 1.1; text-align: center; box-shadow: 0 0 0 5px rgba(0, 0, 0, .25), var(--shadow); touch-action: none; transition: transform .1s; }
+  .god .hold .i { width: 24px; height: 24px; }
+  .god .hold.held { transform: scale(.92); box-shadow: 0 0 0 8px rgba(255, 255, 255, .25), var(--shadow); }
   .toast { bottom: auto; top: calc(var(--top) + 48px + var(--gap)); }
   .busy { top: calc(var(--top) + 48px + var(--gap)); }
   .errors { top: calc(var(--top) + 48px + var(--gap)); }

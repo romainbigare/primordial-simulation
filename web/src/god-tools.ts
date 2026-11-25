@@ -62,7 +62,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   const kindName = () => { const k = kinds().find(d => d.row === plantRow()); return k ? plainKind(k)[0].toLowerCase() : 'plants'; };
   const plant: GodTool = {
     key: 'plant', icon: 'plant', label: 'Plant', ink: '#7ed957', code: BRUSH_PLANT, row: plantRow,
-    hint: 'Drag on the map to plant. Two fingers move the map.',
+    hint: 'Drag on the map to plant. Right-drag moves the map.', verb: 'Hold to plant',
     why: (p: Probe | null) => (!kinds().length ? 'This world has no plants to plant.' : p && p.land <= 0 ? OPEN_WATER : ''),
     reason: why => UNPLANTED[why] ?? why,
     choices: show => {
@@ -81,7 +81,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   };
   const burn: GodTool = {
     key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff7a1a', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S,
-    hint: 'Hold on the map. The ring fills, then the ground lights.',
+    hint: 'Hold on the map. The ring fills, then the ground lights.', verb: 'Hold to burn',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,
     told: (done, why) => (done ? 'Fire took. It spreads as far as the dry litter carries it.'
@@ -91,14 +91,14 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   const shape = (sign: number): GodTool => ({
     key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise' : 'Lower',
     ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1, rate: sign * SHAPE_M_S,
-    hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Two fingers move the map.`,
+    hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Right-drag moves the map.`, verb: `Hold to ${sign > 0 ? 'raise' : 'lower'}`,
     why: () => '', reason: why => why,
     told: done => (done ? `${sign > 0 ? 'Raised' : 'Lowered'} the land. Water finds its new way.` : 'The ground did not move here.'),
   });
   let depth = LAKE_DEPTHS[1][1];
   const lake: GodTool = {
     key: 'lake', icon: 'lake', label: 'Lake', ink: '#4aa3e8', code: BRUSH_LAKE, row: () => -1, amount: () => depth,
-    hint: 'Tap the map to dig a lake. It fills with water at once.',
+    hint: 'Click the map to dig a lake. It fills with water at once.', verb: 'Tap to dig',
     why: (p: Probe | null) => (p && p.land <= 0 ? 'This is open water already.' : ''), reason: why => why,
     choices: show => {
       const list = document.createElement('div');

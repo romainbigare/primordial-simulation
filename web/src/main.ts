@@ -88,10 +88,11 @@ const front = new FireFront(() => live, fire, m2 => god.spread(m2));
 const god = new God({
   strip: $('god-strip'), card: $('god'), toast: $('toast'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
   picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), play: () => { if (!playing) togglePlay(); }, burnt: b => front.burnt(b),
+  aim: () => (PHONE.matches && world ? map.sightAt() : null),
 }, () => live, godTools(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => { slots.seen(ox, oy, s); if (live && godOn()) god.draw(ctx, ox, oy, s); };
-map.paint = { on: () => godOn() && god.toolOn(), start: (x, y) => live !== null && godOn() && god.start(x, y), move: (x, y) => god.move(x, y), end: () => god.end() };
+map.paint = { on: () => godOn() && god.toolOn(), start: (x, y) => live !== null && godOn() && !god.aiming() && god.start(x, y), move: (x, y) => god.move(x, y), end: () => god.end() };
 /** The GPU that draws the map (null: none yet, or the page cannot draw it). */
 let drawing: HeldGpu | null = null;
 map.onScale = () => { if (live) showStats(live.stats); };

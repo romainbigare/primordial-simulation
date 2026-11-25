@@ -325,6 +325,12 @@ export class MapView {
     if (this.fitted && this.w) this.fit(); else this.redraw();
   }
 
+  /** The place in the middle of the part of the map the controls leave free, squares. */
+  sightAt(): [number, number] {
+    const [top, right, bottom, left] = this.covered, x = (left + this.cv.clientWidth - right) / 2, y = (top + this.cv.clientHeight - bottom) / 2;
+    return [(x - this.cam.ox) / this.cam.s, (y - this.cam.oy) / this.cam.s];
+  }
+
   /** The share of the screen's pixels along each axis the map is drawn at now. */
   get drawnAt(): number { return this.scale; }
 

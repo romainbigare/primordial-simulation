@@ -28,8 +28,8 @@ export interface Editor {
 export interface GodTool {
   /** Its key (its button's `data-tool`), its icon, its short name, and its colour on the map. */
   key: string; icon: IconName; label: string; ink: string;
-  /** How to use it, in a short line. */
-  hint: string;
+  /** How to use it with a mouse, in a short line; and its big button's words on a phone (`GodPage.aim`). */
+  hint: string; verb: string;
   /** The core's brush tool it paints with (wasm/src/lib.rs `brush`), and the starting kind it places (-1: none). */
   code: number; row(): number;
   /** What it adds at the brush's centre each second it is held, in its core tool's unit (m of ground, up or down where
@@ -50,9 +50,11 @@ export interface GodTool {
   told(done: number, why: string, grown: boolean): string;
 }
 /** What the page gives god mode: its strip, card and toast; the map drawn anew; that a tool was picked or a stroke
- * begins (the world pauses); that god mode is done; play the world; the side of a square, m; and the cells a stroke
- * burnt with when (`Settled`). */
+ * begins (the world pauses); that god mode is done; play the world; the side of a square, m; the cells a stroke burnt
+ * with when (`Settled`); and on a phone the place at the sight in the middle of the map, squares (null: the brush is
+ * under the pointer). */
 export interface GodPage {
   strip: HTMLElement; card: HTMLElement; toast: HTMLElement;
   redraw(): void; picked(): void; close(): void; play(): void; squareM(): number; burnt(burnt: [number, number][]): void;
+  aim(): [number, number] | null;
 }

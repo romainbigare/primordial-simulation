@@ -1,4 +1,4 @@
-// What god mode draws over the map (god.ts `draw`): the round brush at its true size, the heat it holds as a ring that
+// What god mode draws over the map (god.ts `draw`): the round brush at its true size, the sight on a phone, the heat it holds as a ring that
 // fills and as flames that grow in it, the brush's size beside it, and the reason a tool cannot act there.
 
 /** The width of the ring that shows the heat held under the brush, css px. */
@@ -11,6 +11,8 @@ const LABEL_PX = 220, LABEL_GAP_PX = 10;
 const FLAMES_LEAST = 4, FLAMES_MORE = 26, FLAME_SIZE = 0.16, FLAME_LEAST_PX = 6, FLICKER_HZ = 7;
 /** The flames' colours: the hot core, the flame, and the edge where it fades. */
 const FLAME_CORE = 'rgba(255,236,170,.95)', FLAME_BODY = 'rgba(255,140,30,.75)', FLAME_EDGE = 'rgba(200,40,10,0)';
+/** The sight's arms reach this far from its centre, from this gap, css px. */
+const SIGHT_PX = 11, SIGHT_GAP_PX = 4;
 /** A flame is this many times taller than wide. */
 const FLAME_TALL = 1.8;
 /** The angle between one flame and the next about the brush's centre, radians: the golden angle, so they spread evenly
@@ -56,6 +58,20 @@ export function drawFlames(ctx: CanvasRenderingContext2D, cx: number, cy: number
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(0, -0.5 * size, size, 0, 2 * Math.PI); ctx.fill();
     ctx.restore();
+  }
+  ctx.restore();
+}
+
+/** The sight at (cx, cy): a small white cross with a dark edge, where the brush acts on a phone. */
+export function drawSight(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const [width, colour] of [[4, 'rgba(0,0,0,.5)'], [2, '#fff']] as const) {
+    ctx.lineWidth = width; ctx.strokeStyle = colour;
+    ctx.beginPath();
+    ctx.moveTo(cx - SIGHT_PX, cy); ctx.lineTo(cx - SIGHT_GAP_PX, cy); ctx.moveTo(cx + SIGHT_GAP_PX, cy); ctx.lineTo(cx + SIGHT_PX, cy);
+    ctx.moveTo(cx, cy - SIGHT_PX); ctx.lineTo(cx, cy - SIGHT_GAP_PX); ctx.moveTo(cx, cy + SIGHT_GAP_PX); ctx.lineTo(cx, cy + SIGHT_PX);
+    ctx.stroke();
   }
   ctx.restore();
 }
