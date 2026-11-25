@@ -32,7 +32,8 @@ fn burnt_spot(p: Spot) -> Spot { return dead_far(scarred(p)); }
 
 // The dead trees standing at spot p as its field is read (cover_field.wgsl `dead_here`: the rest of the cells' and its
 // patch's over the share of it the patch takes) seen from afar, in the Earth view, where it lies dry: specks as many as
-// their walls make, as far as the marks do not draw them one by one.
+// their walls make, those of a burn spread over its cell on the land it burnt (fire.wgsl `dead_on_scar`), as far as the
+// marks do not draw them one by one.
 fn dead_far(p: Spot) -> Spot {
   var q = p;
   if (p.depth > 0.0 || !styled()) { return q; }
@@ -42,7 +43,8 @@ fn dead_far(p: Spot) -> Spot {
   let w = dead_seen_w(dead.y);
   let near = cover_look.shown[STANDS] * as_crown(w, p.e);
   if (near >= 1.0) { return q; }
-  let seen = specks(p.at, w, dead.x / snag_kg(dead.y) * 0.25 * PI * w * w, p.e, 89);
+  let on_scar = select(1.0, dead_on_scar(fire_at(p.at), dead.z, p.scar.x), cell_patch == 0 && fire.map.x > 0.0);
+  let seen = specks(p.at, w, on_scar * dead.x / snag_kg(dead.y) * 0.25 * PI * w * w, p.e, 89);
   let share = seen.x * (1.0 - near);
   q.cover = vec4f(DEAD_BARK * (1.0 + DOME_LIT * seen.y) * share + q.cover.rgb * (1.0 - share), share + q.cover.a * (1.0 - share));
   return q;
@@ -59,9 +61,11 @@ fn scarred(p: Spot) -> Spot {
     let low = min(p.low / max(p.cover.a, 1e-3), 1.0);
     q.cover = vec4f(mix(q.cover.rgb, STRAW * q.cover.a, low * -expm1(-f.cured / CURED_HIDES_KG)), q.cover.a);
   }
-  q.scar = scar_of(f, p.at, p.e);
-  // The Earth view draws the plants standing on a fresh scar scorched (as the marks drawn one by one, cover.wgsl).
-  if (styled()) { q.cover = vec4f(scorched(q.cover.rgb, q.cover.a, fresh_char(q.scar)), q.cover.a); }
+  let b = burn_at(p.at, p.e);
+  q.scar = scar_of(f, b, p.at, p.e);
+  // The Earth view draws the plants on a scar scorched and with their dead leaves, and burning as a front passes (as
+  // the marks drawn one by one, cover.wgsl).
+  if (styled()) { q.cover = vec4f(burnt_plant(q.cover.rgb, q.cover.a, field_fire(plant_fire(f, q.scar, b))), q.cover.a); }
   return q;
 }
 

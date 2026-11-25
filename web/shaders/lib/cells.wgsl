@@ -129,15 +129,25 @@ fn reach_at(l: i32, k: vec2f) -> Reach {
 }
 
 // The mark lattice l decided for its cell k (`decide`), from the marks' textures, where it covers the point `d` m from
-// its foot within a pixel `e` m (its box, `mark_box`), else none: its code, its share, and the shares of the ground at
-// its foot under snow and under fresh char (mark.wgsl `ground_word`), read only where a plant stands there.
-fn decided(l: i32, k: vec2f, d: vec2f, e: f32) -> vec4f {
-  let none = vec4f(-1.0, 0.0, 0.0, 0.0);
+// its foot within a pixel `e` m (its box, `mark_box`), else none: its code and its share (`decided_ground`: the rest of
+// what was decided of it).
+fn decided(l: i32, k: vec2f, d: vec2f, e: f32) -> vec2f {
+  let none = vec2f(-1.0, 0.0);
   let t = mark_texel(l, k);
   let code = word_of(textureLoad(marks_kind, t, 0));
   if (code == 0u || !box_holds(word_of(textureLoad(marks_box, t, 0)), d, cover.grid[l].z, e)) { return none; }
-  return vec4f(f32(code - 1u), bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))), unpack2x16unorm(word_of(textureLoad(marks_snow, t, 0))));
+  return vec2f(f32(code - 1u), bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))));
 }
+
+// A mark's word of the ground at its foot (mark.wgsl `ground_word`) keeps its top byte under `TOP_BYTE` of its range,
+// so the word's bits are never a number's that is not finite; its shares as `marks_snow` holds its bytes: the snow,
+// then the fire on the plant.
+const TOP_BYTE = 126.0 / 255.0;
+fn ground_of(b: vec4f) -> vec4f { return vec4f(b.xyz, b.w / TOP_BYTE); }
+
+// Of the mark lattice l decided for its cell k: the share of the ground at its foot under snow and the fire on its plant
+// (mark.wgsl `ground_word`), read only where a plant stands there.
+fn decided_ground(l: i32, k: vec2f) -> vec4f { return ground_of(textureLoad(marks_snow, mark_texel(l, k), 0)); }
 
 // A box (mark.wgsl `mark_box`) counts its extents in steps of its cell's side over this.
 const BOX_STEPS = 12.0;

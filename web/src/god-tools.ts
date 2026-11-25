@@ -18,8 +18,10 @@ const SHAPE_M_S = 20;
  * typical place light in about a second (the heat they need: core/src/flame `needed`; a cell holds the heat over all
  * its land, of which the brush covers a share), the wettest in tens. */
 const HEAT_J_M2_S = 3e6;
-/** Burn's heat doubles every this many seconds it is held, so damp remains light in a few seconds too, not tens. */
-const HEAT_DOUBLING_S = 1;
+/** Burn's heat doubles every this many seconds it is held, so damp remains light in a few seconds too, not tens; at
+ * most this many times (256 times its first rate, about 8e8 J/m² a second: what boils off some 300 kg of liquid a m²),
+ * so a brush held long over ground that does not light adds no heat past any the ground could take. */
+const HEAT_DOUBLING_S = 1, HEAT_DOUBLINGS = 8;
 /** The starting kinds in plain words, by the core's name (worldgen/src/life/kinds.rs `KINDS`): a short name and a line. */
 const PLAIN_KINDS: Record<string, [string, string]> = {
   'small fast light-eaters': ['Short grass', 'Small plants that grow and spread fast.'],
@@ -76,7 +78,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     },
   };
   const burn: GodTool = {
-    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S, settlesLit: true,
+    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S, doublings: HEAT_DOUBLINGS, settlesLit: true,
     hint: 'Hold on the map. The ring fills, then the ground lights.', verb: 'Hold to burn',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,

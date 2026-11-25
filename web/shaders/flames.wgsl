@@ -2,8 +2,9 @@
 // The fires burning this month over the live map, over its plants (web/src/fire.ts; drawn only over the squares they
 // burn and the smoke's reach): the glow of the burning ground, the flames along the front of each burning patch (the
 // outer edge of the square's burnt share, fire.wgsl `under_share`, as tall as the core's flame length), the embers behind
-// it, and the smoke drifting down the low wind (the core's, fire.wgsl `FireAt.wind`). Light the flames give is added to the map's colour; smoke covers it. Colours
-// are the screen's shares, 0..1, premultiplied.
+// it, the front of a burn of god mode as it grows (fire.wgsl `burn_at`) with the embers behind it, and the smoke
+// drifting down the low wind (the core's, fire.wgsl `FireAt.wind`). Light the flames give is added to the map's colour;
+// smoke covers it. Colours are the screen's shares, 0..1, premultiplied.
 
 // The flaming zone behind a front is `FLAME_DEPTH` flame lengths deep, and drawn no thinner than `FRONT_PX` pixels: a
 // front's depth is its speed times the time a fuel flames, about a flame's length in grass and litter (Byram 1959,
@@ -44,6 +45,9 @@ const FLAME_FADE = 0.005; const FLAME_COVER = 0.8;
 // The fronts inside a burning share are drawn as lines where their flaming depth takes from `INNER_PX.x` to
 // `INNER_PX.y` pixels: thinner, a share's glow is its embers' mean.
 const INNER_PX = vec2f(1.0, 3.0);
+// Behind the front of a burn of god mode its embers fade by e^-(m / `BURNING_M`) of the front's run (fire.wgsl: as long
+// as its plants burn); from afar its front glows `BURN_GLOW_PX` pixels deep.
+const BURN_GLOW_PX = 3.0;
 
 // Smoke: its column of particles, g/m², and how far it came, worked out once a world frame (smoke.wgsl, read here
 // through lib/smoke.wgsl `smoke_at`). Light passes the column by e^-(`EXTINCTION` × g/m²): biomass smoke takes 3.5 to
@@ -113,14 +117,18 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
   // (The zone behind the front: the rank within the depth under the burnt share's level.)
   let across = fwidth(r.x);
   let depth = max(FLAME_DEPTH * f.length, FRONT_PX * e) / e * across;
-  let burnt = under_share(r, f.burnt, at);
-  let zone = max(burnt - under_share(r + vec2f(depth, 0.0), f.burnt, at), 0.0);
-  let band = max(burnt - under_share(r, f.burnt - f.flame, at), 0.0);
+  let burnt = under_share(r, f.rest, at);
+  let zone = max(burnt - under_share(r + vec2f(depth, 0.0), f.rest, at), 0.0);
+  let band = max(burnt - under_share(r, f.rest - f.flame, at), 0.0);
   // The tongues stand on the front below the point: the rank rises to the burnt share's level that far south (to first
   // order; a front that runs north and south is read as no less than half as steep).
   let slope = vec2f(dpdx(r.x), dpdy(r.x)) / e;
   let dy = sign(slope.y + 1e-12) * max(abs(slope.y), 0.5 * length(slope));
-  let t = (burnt_level(f.burnt, at) - r.x) / dy;
+  let t = (burnt_level(f.rest, at) - r.x) / dy;
+  // A burn of god mode: how far inside its land the point lies, m, read the same way (outward, its front at none).
+  let b = burn_at(at, e);
+  let b_slope = -vec2f(dpdx(b.inside), dpdy(b.inside)) / e;
+  let b_dy = sign(b_slope.y + 1e-12) * max(abs(b_slope.y), 0.5 * length(b_slope));
   // The fronts inside the burning share (`SWEEP`): how far behind the last front the point lies, as a share of the way
   // between two, and in metres; the tongues on the front south of it, as on the outer front.
   let sweep = (0.5 + 0.5 * ragged(at, max(e, FRONT_SMOOTH * f.length), SWEEP_M, SWEEP_OCTAVES, 17)) * SWEEP_LEVELS - time / SWEEP_S;
@@ -129,20 +137,35 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
   let behind = 1.0 - fract(sweep);
   let behind_m = behind / max(length(sweep_slope), 1e-9);
   var light = vec3f(0.0);
+  let speck = ease(EMBER_SPARSE, 1.0, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
+  let specks = mix(EMBER_MEAN, speck, shows_at(EMBER_M, e));
+  let on_liquid = select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M);
+  if (b.live > 0.0) {
+    // Its front flames `FLAME_DEPTH` lengths deep, its tongues on it where they show; its embers behind it fade as its
+    // plants stop burning (fire.wgsl `BURNING_M`); from afar its front glows a few pixels deep.
+    let shown = ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * b.length);
+    let deep = max(FLAME_DEPTH * b.length, FRONT_PX * e);
+    let inside = burnt_by(b);
+    let b_zone = inside * (1.0 - smoothstep(deep - b.soft, deep + b.soft, b.inside));
+    var lb = tongues(at, b.inside / b_dy, b.length, f.wind, e, time) * shown;
+    lb += b_zone * FLAME_MID * (1.0 - shown);
+    lb += EMBERS * (inside - b_zone) * exp(-max(b.inside - deep, 0.0) / BURNING_M) * specks * EMBER_RGB;
+    let glow_deep = max(deep, BURN_GLOW_PX * e);
+    lb += GLOW * GLOW_EARTH * ease(GLOW_E.x, GLOW_E.y, e) * inside * (1.0 - smoothstep(glow_deep - b.soft, glow_deep + b.soft, b.inside)) * GLOW_RGB;
+    light += lb * on_liquid;
+  }
   if (f.flame > 0.0) {
     let shown = ease(TONGUE_PX.x * e, TONGUE_PX.y * e, MAP_VIEW.y * f.length);
     // The fronts inside the share show where they are a few pixels deep; from afar the share glows with its mean.
     let resolved = ease(INNER_PX.x * e, INNER_PX.y * e, FLAME_DEPTH * f.length);
     let inner = max(band - zone, 0.0);
     let flaming = max(1.0 - ease(max(FLAME_DEPTH * f.length, FRONT_PX * e), max(FLAME_DEPTH * f.length, FRONT_PX * e) + e, behind_m), 0.0);
-    light += tongues(at, t, f.length, f.wind, e, time) * shown;
-    light += inner * resolved * tongues(at, (round(sweep) - sweep) / sweep_dy, f.length, f.wind, e, time) * shown;
+    var lf = tongues(at, t, f.length, f.wind, e, time) * shown;
+    lf += inner * resolved * tongues(at, (round(sweep) - sweep) / sweep_dy, f.length, f.wind, e, time) * shown;
     // The fronts flame where tongues do not show; the embers flicker behind them.
-    light += (zone + inner * resolved * flaming) * FLAME_MID * (1.0 - shown);
-    let speck = ease(EMBER_SPARSE, 1.0, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
-    let specks = mix(EMBER_MEAN, speck, shows_at(EMBER_M, e));
-    light += EMBERS * inner * (1.0 - flaming) * mix(EMBER_BASE, 1.0, exp(-behind / EMBER_FADE)) * specks * EMBER_RGB;
-    light *= ease(0.0, FLAME_FADE, f.flame) * select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M);
+    lf += (zone + inner * resolved * flaming) * FLAME_MID * (1.0 - shown);
+    lf += EMBERS * inner * (1.0 - flaming) * mix(EMBER_BASE, 1.0, exp(-behind / EMBER_FADE)) * specks * EMBER_RGB;
+    light += lf * ease(0.0, FLAME_FADE, f.flame) * on_liquid;
   }
   // The glow of the burning squares, seen from afar.
   let glow = GLOW * GLOW_EARTH * ease(0.0, GLOW_SHARE, f.flame) * min(f.length / GLOW_M, 1.0) * ease(GLOW_E.x, GLOW_E.y, e);

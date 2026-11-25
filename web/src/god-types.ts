@@ -34,8 +34,8 @@ export interface GodTool {
   /** What it adds at the brush's centre each second it is held, in its core tool's unit (m of ground, up or down where
    * less than 0; J/m² of heat): it paints again and again while the pointer is down, held still or not. */
   rate?: number;
-  /** The time over which its rate doubles while it is held, s (none: it stays). */
-  doubling?: number;
+  /** The time over which its rate doubles while it is held, s (none: it stays), and the most times it doubles. */
+  doubling?: number; doublings?: number;
   /** Whether what it starts runs on its own once it took (a fire): its stroke ends as soon as a cell lights. */
   settlesLit?: boolean;
   /** The amount it paints once, where the stroke begins (m of a lake's depth): a tool that makes one thing a stroke. */

@@ -220,10 +220,10 @@ export class God {
   }
 
   /** Paint with stroke `st`'s tool where its brush is now: by its amount, or for a tool with a rate by what the time
-   * since its last paint adds, its rate doubling every `doubling` s it has been held. */
+   * since its last paint adds, its rate doubling every `doubling` s it has been held, at most `doublings` times. */
   private paint(st: Stroke): void {
     const t = st.tool, [x, y] = st.now, now = performance.now();
-    const rate = (t.rate ?? 0) * (t.doubling ? 2 ** ((now - st.began) / 1000 / t.doubling) : 1);
+    const rate = (t.rate ?? 0) * (t.doubling ? 2 ** Math.min((now - st.began) / 1000 / t.doubling, t.doublings ?? Infinity) : 1);
     const amount = t.amount ? t.amount() : (rate * (now - st.last[2])) / 1000;
     st.last = [x, y, now];
     st.waiting = true; st.sent++;
@@ -281,7 +281,11 @@ export class God {
     // flickers: the map's overlay is drawn again at the next frame while it burns.)
     const burnt = this.stroke ?? this.ended[0], linger = now < this.lingers.till ? this.lingers : null;
     const fire = burnt && !why ? { at: burnt.now, progress: burnt.progress } : linger;
-    if (fire && fire.progress > 0) { drawFlames(ctx, ox + fire.at[0] * s, oy + fire.at[1] * s, r, fire.progress, now); this.page.redraw(); }
+    if (fire && fire.progress > 0) {
+      const m = this.page.squareM();
+      drawFlames(ctx, { ox, oy, k: s / m }, [fire.at[0] * m, fire.at[1] * m], this.radius, fire.progress, now);
+      this.page.redraw();
+    }
     if (aim) drawSight(ctx, cx, cy);
     if (now < this.sizeShownTill) drawSizeTag(ctx, cx, cy, r, radiusText(this.radius));
     if (why) drawReason(ctx, cx, cy, r, why);

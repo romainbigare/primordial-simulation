@@ -1,6 +1,6 @@
 // What god mode draws over the map (god.ts `draw`): the round brush at its true size, the sight on a phone, the heat
-// it holds as a ring that fills and as a fire that grows in it, the brush's size beside it, the reason a tool cannot
-// act there, and the burning edge of a burn as it spreads (`drawFireEdge`).
+// it holds as a ring that fills and as a fire that grows in it, the brush's size beside it, and the reason a tool cannot
+// act there. (A burn's fire once it spreads is the map's own: fire.wgsl, burns.ts.)
 
 /** The width of the ring that shows the heat held under the brush, css px. */
 const PROGRESS_PX = 5;
@@ -8,8 +8,7 @@ const PROGRESS_PX = 5;
 const LABEL_PX = 220, LABEL_GAP_PX = 10;
 /** The sight's arms reach this far from its centre, from this gap, css px. */
 const SIGHT_PX = 11, SIGHT_GAP_PX = 4;
-/** The angle between one flame and the next about the brush's centre, radians: the golden angle, so they spread evenly
- * over the disc however many there are. */
+/** The angle between one flame and the next of a patch, radians: the golden angle, so they spread evenly over it. */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 /** The brush at (cx, cy), `r` css px: a disc of `ink` (`held`: while a stroke is under way, stronger), its rim, its
@@ -29,18 +28,26 @@ export function drawBrush(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   ctx.restore();
 }
 
-/** The fire in the brush while it heats burns in patches: its flames are as tall as this share of the brush's radius,
- * between these heights (css px), less while the heat is low; a patch takes about this many flames' heights squared of
- * the brush, between these counts of patches, a share of them burning that grows with the heat; and each holds this many
- * flames, packed within this many of their heights of its centre. Sparks and puffs of smoke rise from them. */
-const FLAME_OF_RADIUS = 0.3, FLAME_LEAST_PX = 10, FLAME_MOST_PX = 34, PATCH_AREA = 7, PATCHES_LEAST = 3, PATCHES_MOST = 26;
+/** The fire in the brush while it heats burns in patches at fixed places on the ground: the brush holds about
+ * `PATCH_SITES` places, one in each square of a grid fixed to the map (moved within it by its own draw); a place lights
+ * once the heat it holds passes its own draw, the heat falling from the brush's centre as the core adds it, by
+ * (1 − (d/r)²)² (the core's `World::heat`), so the patches light from the middle out and none moves. A patch's flames
+ * grow to their height over `GROW` of the heat past its lighting; they are as tall as this share of the brush's radius,
+ * between these heights (css px); each holds this many flames, packed within this many of their heights of its centre.
+ * Sparks and puffs of smoke rise from them, and the ground under each is scorched about it. */
+const PATCH_SITES = 30, GROW = 0.3, FLAME_OF_RADIUS = 0.3, FLAME_LEAST_PX = 10, FLAME_MOST_PX = 34;
 const PATCH_FLAMES = 7, PATCH_SPREAD = 0.55, FLAME_WIDTH = 0.55, SPARKS = 3, PUFFS = 1;
+/** A place's draw is under the heat it holds times `LIGHT_GAIN` (so the middle lights soon, the rim only as the
+ * ground lights). */
+const LIGHT_GAIN = 1.4;
+/** The scorched ground under a patch reaches this many flames' heights about it, as dark as this. */
+const SCORCH_REACH = 1.6, SCORCH_ALPHA = 0.45;
 /** A flame's colours from its foot to its tip: its glowing edge, its body, and its hot core; the light it casts on the
  * ground; the embers; the smoke. */
 const EDGE_STOPS: [number, string][] = [[0, 'rgba(200,50,10,.35)'], [0.6, 'rgba(160,30,5,.18)'], [1, 'rgba(90,15,5,0)']];
 const BODY_STOPS: [number, string][] = [[0, 'rgba(255,150,40,.9)'], [0.4, 'rgba(240,96,22,.75)'], [0.8, 'rgba(180,40,10,.3)'], [1, 'rgba(110,20,5,0)']];
 const CORE_STOPS: [number, string][] = [[0, 'rgba(255,246,200,.9)'], [0.45, 'rgba(255,200,80,.55)'], [1, 'rgba(255,150,40,0)']];
-const LIGHT = [255, 120, 30], EMBER = [255, 90, 20], SMOKE = [58, 54, 52];
+const LIGHT = [255, 120, 30], EMBER = [255, 90, 20], SMOKE = [58, 54, 52], SCORCH = [30, 18, 10];
 /** The smoke drifts this way across the screen as it rises, a share of its rise (east: a steady breeze). */
 const DRIFT = 0.6;
 
@@ -48,36 +55,61 @@ const DRIFT = 0.6;
 const waver = (k: number, t: number) => 0.5 * Math.sin(2.1 * t + 1.7 * k) + 0.3 * Math.sin(5.3 * t + 0.9 * k) + 0.2 * Math.sin(11.7 * t + 2.3 * k);
 /** The fractional part of `x`. */
 const frac = (x: number) => x - Math.floor(x);
+/** A draw 0..1 of the grid square (x, y) and the stream k, the same every time. */
+function draw01(x: number, y: number, k: number): number {
+  let h = Math.imul(x | 0, 0x27d4eb2d) ^ Math.imul(y | 0, 0x165667b1) ^ Math.imul(k, 0x9e3779b9);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
 
-/** The fire in the brush at (cx, cy), `r` css px, as much of the heat that lights the ground under it held as
- * `progress` (0 to 1), at time `now` (ms): patches of it burning on the scorched ground, more as it nears lighting, each
- * a light cast on the ground, embers, a cluster of flames that sway and flicker in soft layers, sparks, and smoke
- * drifting off. A picture of the heat held, not the core's flames: those play when the stroke settles (fire.ts `play`). */
-export function drawFlames(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, progress: number, now: number): void {
-  const p = Math.min(Math.max(progress, 0), 1), t = now / 1000;
-  const tall = Math.min(Math.max(r * FLAME_OF_RADIUS, FLAME_LEAST_PX), FLAME_MOST_PX) * (0.55 + 0.45 * p);
-  const all = Math.min(Math.max(Math.round((r * r) / (PATCH_AREA * tall * tall)), PATCHES_LEAST), PATCHES_MOST);
-  const patches = Array.from({ length: Math.ceil(all * (0.25 + 0.75 * p)) }, (_, k) => scatter(cx, cy, r * 0.8, k, all));
+/** Where the map lies on the screen: the css px of its north-west corner, and css px a metre. */
+export interface MapAt { ox: number; oy: number; k: number }
+
+/** The fire in the brush at `at` (m) of radius `radiusM` (m) on the map lying as `map` says, as much of the heat that
+ * lights the ground under it held as `progress` (0 to 1), at time `now` (ms): patches of it burning at fixed places on
+ * the ground, more as it nears lighting, each scorching the ground about it, a light cast on it, embers, a cluster of
+ * flames that sway and flicker in soft layers, sparks, and smoke drifting off. A picture of the heat held, not the
+ * core's flames: those play when the stroke settles (burns.ts). */
+export function drawFlames(ctx: CanvasRenderingContext2D, map: MapAt, at: [number, number], radiusM: number, progress: number, now: number): void {
+  const p = Math.min(Math.max(progress, 0), 1), t = now / 1000, r = radiusM * map.k;
+  const cx = map.ox + at[0] * map.k, cy = map.oy + at[1] * map.k;
+  const full = Math.min(Math.max(r * FLAME_OF_RADIUS, FLAME_LEAST_PX), FLAME_MOST_PX);
+  // The places in the brush's grid that the heat has lit, each with its own draw, and how far past lighting it is.
+  const step = (2 * radiusM) / Math.sqrt((4 / Math.PI) * PATCH_SITES), patches: { x: number; y: number; k: number; tall: number }[] = [];
+  for (let gy = Math.floor((at[1] - radiusM) / step); gy * step <= at[1] + radiusM; gy++) {
+    for (let gx = Math.floor((at[0] - radiusM) / step); gx * step <= at[0] + radiusM; gx++) {
+      const mx = (gx + draw01(gx, gy, 1)) * step, my = (gy + draw01(gx, gy, 2)) * step, d = Math.hypot(mx - at[0], my - at[1]) / radiusM;
+      if (d >= 1) continue;
+      const past = LIGHT_GAIN * p * (1 - d * d) ** 2 - draw01(gx, gy, 3);
+      if (past <= 0) continue;
+      patches.push({ x: map.ox + mx * map.k, y: map.oy + my * map.k, k: (gx * 31 + gy * 17) & 1023, tall: full * (0.55 + 0.45 * Math.min(past / GROW, 1)) });
+    }
+  }
   ctx.save();
-  // The ground scorched inside the brush, and the light each patch casts on it, with its embers.
+  // The ground scorched about each patch, the light each casts on it, and its embers.
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.clip();
-  ctx.fillStyle = `rgba(30,18,10,${0.35 * p})`; ctx.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+  for (const { x, y, tall } of patches) {
+    const reach = SCORCH_REACH * tall, under = ctx.createRadialGradient(x, y, 0, x, y, reach);
+    under.addColorStop(0, `rgba(${SCORCH.join()},${SCORCH_ALPHA})`); under.addColorStop(1, `rgba(${SCORCH.join()},0)`);
+    ctx.fillStyle = under;
+    ctx.beginPath(); ctx.arc(x, y, reach, 0, 2 * Math.PI); ctx.fill();
+  }
   ctx.globalCompositeOperation = 'lighter';
-  patches.forEach(([x, y], k) => {
+  for (const { x, y, k, tall } of patches) {
     const reach = tall * (2 + 0.3 * waver(k, t)), light = ctx.createRadialGradient(x, y, 0, x, y, reach);
-    light.addColorStop(0, `rgba(${LIGHT.join()},${0.45 * p})`); light.addColorStop(1, `rgba(${LIGHT.join()},0)`);
+    light.addColorStop(0, `rgba(${LIGHT.join()},.45)`); light.addColorStop(1, `rgba(${LIGHT.join()},0)`);
     ctx.fillStyle = light;
     ctx.beginPath(); ctx.arc(x, y, reach, 0, 2 * Math.PI); ctx.fill();
     for (let e = 0; e < 2 * PATCH_FLAMES; e++) {
       const [ex, ey] = scatter(x, y, tall * 1.4, e + 3, 2 * PATCH_FLAMES + 3), glow = 0.5 + 0.5 * waver(e + 5 * k, 1.5 * t);
-      ctx.fillStyle = `rgba(${EMBER.join()},${0.6 * glow * p})`;
+      ctx.fillStyle = `rgba(${EMBER.join()},${0.6 * glow})`;
       ctx.beginPath(); ctx.arc(ex, ey, 0.8 + glow, 0, 2 * Math.PI); ctx.fill();
     }
-  });
+  }
   ctx.restore();
   ctx.save();
   // The flames, the farthest (highest on the screen) first, so the nearer stand in front.
-  const flames = patches.flatMap(([x, y], k) => Array.from({ length: PATCH_FLAMES }, (_, f) => {
+  const flames = patches.flatMap(({ x, y, k, tall }) => Array.from({ length: PATCH_FLAMES }, (_, f) => {
     const [fx, fy] = scatter(x, y, tall * PATCH_SPREAD, f, PATCH_FLAMES), id = k * PATCH_FLAMES + f;
     return { x: fx, y: fy + tall * 0.3, h: tall * (0.55 + 0.45 * frac(id * 0.618)) * (0.8 + 0.2 * waver(id, 1.4 * t)), id };
   })).sort((a, b) => a.y - b.y);
@@ -91,72 +123,22 @@ export function drawFlames(ctx: CanvasRenderingContext2D, cx: number, cy: number
   }
   // Sparks rising from the patches, fading as they go; and the smoke drifting off them.
   ctx.globalCompositeOperation = 'lighter';
-  patches.forEach(([x, y], k) => {
+  for (const { x, y, k, tall } of patches) {
     for (let f = 0; f < SPARKS; f++) {
       const age = frac(0.6 * t + (k * SPARKS + f) * 0.377), sx = x + tall * (0.6 * waver(f + k, t) + DRIFT * age), sy = y - 3 * tall * age;
-      ctx.fillStyle = `rgba(255,${210 - 130 * age},70,${(1 - age) * p})`;
+      ctx.fillStyle = `rgba(255,${210 - 130 * age},70,${1 - age})`;
       ctx.beginPath(); ctx.arc(sx, sy, 1.2, 0, 2 * Math.PI); ctx.fill();
     }
-  });
+  }
   ctx.globalCompositeOperation = 'source-over';
-  patches.forEach(([x, y], k) => {
+  for (const { x, y, k, tall } of patches) {
     for (let f = 0; f < PUFFS; f++) {
       const age = frac(0.22 * t + (k + f) * 0.31), rise = tall * (1.2 + 3 * age), size = tall * (0.8 + 1.8 * age);
       const px = x + DRIFT * rise, py = y - rise, puff = ctx.createRadialGradient(px, py, 0, px, py, size);
-      puff.addColorStop(0, `rgba(${SMOKE.join()},${0.3 * Math.sin(Math.PI * age) * p})`); puff.addColorStop(1, `rgba(${SMOKE.join()},0)`);
+      puff.addColorStop(0, `rgba(${SMOKE.join()},${0.3 * Math.sin(Math.PI * age)})`); puff.addColorStop(1, `rgba(${SMOKE.join()},0)`);
       ctx.fillStyle = puff;
       ctx.beginPath(); ctx.arc(px, py, size, 0, 2 * Math.PI); ctx.fill();
     }
-  });
-  ctx.restore();
-}
-
-/** The edge of a burn spreading on the map (fire.ts `edgeAt`): tongues of flame this far apart along it (css px), as
- * tall as this (css px), standing out of the burnt ground to this share of the edge's raggedness either way; a glow
- * along it this many times the tongues' height wide. */
-const EDGE_STEP_PX = 7, EDGE_FLAME_PX = 15, EDGE_JITTER = 0.6, EDGE_GLOW = 1.2;
-/** Its tongues and their glow drawn at most this many around (a large burn's ring seen close takes no more). */
-const EDGE_FLAMES_MOST = 220;
-
-/** The burning edge of a burn spreading from (cx, cy), `reach` css px from it and ragged over `edge` css px, at time
- * `now` (ms): a ring of glow and of tongues of flame that sway and flicker, with sparks and smoke rising off it. The
- * scar inside it, and the map's own flames, are the map's (fire.wgsl); these stand on its edge as the fire's light seen
- * at any zoom. */
-export function drawFireEdge(ctx: CanvasRenderingContext2D, cx: number, cy: number, reach: number, edge: number, now: number): void {
-  if (reach < 1) return;
-  const t = now / 1000, n = Math.min(Math.max(Math.round((2 * Math.PI * reach) / EDGE_STEP_PX), 6), EDGE_FLAMES_MOST);
-  const tall = Math.min(EDGE_FLAME_PX, Math.max(reach, FLAME_LEAST_PX));
-  const along = Array.from({ length: n }, (_, k) => {
-    const a = ((k + 0.5 * frac(k * 0.618)) / n) * 2 * Math.PI, d = reach + EDGE_JITTER * edge * waver(k, 0.15 * t);
-    return { x: cx + d * Math.cos(a), y: cy + d * Math.sin(a), k };
-  });
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (const { x, y, k } of along) {
-    const reachOf = tall * EDGE_GLOW * (0.8 + 0.2 * waver(k + 9, t)), light = ctx.createRadialGradient(x, y, 0, x, y, reachOf);
-    light.addColorStop(0, `rgba(${LIGHT.join()},.35)`); light.addColorStop(1, `rgba(${LIGHT.join()},0)`);
-    ctx.fillStyle = light;
-    ctx.beginPath(); ctx.arc(x, y, reachOf, 0, 2 * Math.PI); ctx.fill();
-  }
-  for (const { x, y, k } of along.sort((p, q) => p.y - q.y)) {
-    const h = tall * (0.55 + 0.45 * frac(k * 0.618)) * (0.8 + 0.2 * waver(k, 1.4 * t)), w = h * FLAME_WIDTH, sway = w * 0.45 * waver(k + 11, 1.2 * t);
-    flame(ctx, x, y, 1.7 * w, 1.15 * h, 1.2 * sway, EDGE_STOPS, 'source-over');
-    flame(ctx, x, y, w, h, sway, BODY_STOPS, 'source-over');
-    flame(ctx, x, y + 0.05 * h, 0.45 * w, 0.45 * h, 0.5 * sway, CORE_STOPS, 'lighter');
-    if (k % 3) continue;
-    const age = frac(0.6 * t + k * 0.377);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `rgba(255,${210 - 130 * age},70,${1 - age})`;
-    ctx.beginPath(); ctx.arc(x + tall * (0.5 * waver(k, t) + DRIFT * age), y - 3 * tall * age, 1.2, 0, 2 * Math.PI); ctx.fill();
-  }
-  ctx.globalCompositeOperation = 'source-over';
-  for (const { x, y, k } of along) {
-    if (k % 4) continue;
-    const age = frac(0.22 * t + k * 0.31), rise = tall * (1.2 + 3 * age), size = tall * (0.8 + 1.8 * age), px = x + DRIFT * rise, py = y - rise;
-    const puff = ctx.createRadialGradient(px, py, 0, px, py, size);
-    puff.addColorStop(0, `rgba(${SMOKE.join()},${0.25 * Math.sin(Math.PI * age)})`); puff.addColorStop(1, `rgba(${SMOKE.join()},0)`);
-    ctx.fillStyle = puff;
-    ctx.beginPath(); ctx.arc(px, py, size, 0, 2 * Math.PI); ctx.fill();
   }
   ctx.restore();
 }
