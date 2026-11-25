@@ -1,9 +1,11 @@
 // What god mode draws over the map (god.ts `draw`): the round brush at its true size, the sight on a phone, the heat
-// it holds as a ring that fills and as a fire that grows in it, the brush's size beside it, the reason a tool cannot
-// act there, and the burning edge of a burn as it spreads (`drawFireEdge`).
+// it holds as a ring that fills and as a fire that grows in it, a lake's water as it is dug, the brush's size beside it,
+// the reason a tool cannot act there, and the burning edge of a burn as it spreads (`drawFireEdge`).
 
 /** The width of the ring that shows the heat held under the brush, css px. */
 const PROGRESS_PX = 5;
+/** A dug lake's water fills its ring over this long, ms, as strong as this; then a ripple runs out every this long, ms. */
+const FILL_MS = 450, FILL_ALPHA = 0.55, RIPPLE_MS = 1100;
 /** The widest line of the box that says why a tool cannot act, css px, and its gap to the brush. */
 const LABEL_PX = 220, LABEL_GAP_PX = 10;
 /** The sight's arms reach this far from its centre, from this gap, css px. */
@@ -180,6 +182,22 @@ function flame(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
   ctx.bezierCurveTo(x + sway + 0.15 * w, y - 0.7 * h, x + w / 2, y - 0.45 * h, x + w / 2, y);
   ctx.quadraticCurveTo(x, y + 0.25 * w, x - w / 2, y);
   ctx.fill();
+}
+
+/** The water of a lake dug, at (cx, cy) in a ring of `r` css px, `ms` after the tap: it rises from the centre to the
+ * ring over `FILL_MS`, then ripples softly while the world builds its ground (the map shows the lake once its tiles
+ * come). */
+export function drawFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, ink: string, ms: number): void {
+  const t = Math.min(ms / FILL_MS, 1), grown = r * (1 - (1 - t) ** 3);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, grown, 0, 2 * Math.PI);
+  ctx.globalAlpha = FILL_ALPHA; ctx.fillStyle = ink; ctx.fill();
+  if (t >= 1) {
+    const ripple = (ms / RIPPLE_MS) % 1;
+    ctx.globalAlpha = FILL_ALPHA * (1 - ripple); ctx.lineWidth = 2; ctx.strokeStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx, cy, r * ripple, 0, 2 * Math.PI); ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /** The sight at (cx, cy): a small white cross with a dark edge, where the brush acts on a phone. */

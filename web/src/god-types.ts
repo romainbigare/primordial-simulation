@@ -40,6 +40,8 @@ export interface GodTool {
   settlesLit?: boolean;
   /** The amount it paints once, where the stroke begins (m of a lake's depth): a tool that makes one thing a stroke. */
   amount?(): number;
+  /** The least radius of its brush, m (none: the smallest of the sizes). */
+  least?: number;
   /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
   why(p: Probe | null): string;
   /** The core's reason a cell was not edited (`Brushed`), in plain words. */
@@ -50,9 +52,11 @@ export interface GodTool {
 /** What the page gives god mode: its strip and card; the map drawn anew; that a tool was picked or a stroke begins (the
  * world pauses); that god mode is done; the side of a square, m; the cells a stroke burnt with when (`Settled`), and
  * where it struck (squares); and on a phone the place at the sight in the middle of the map, squares (null: the brush
- * is under the pointer). */
+ * is under the pointer); and which samples the world holds and which the ground in view shows. */
 export interface GodPage {
   strip: HTMLElement; card: HTMLElement;
   redraw(): void; picked(): void; close(): void; squareM(): number; burnt(burnt: [number, number][], strike: [number, number]): void;
   aim(): [number, number] | null;
+  /** The version of the live world's samples, and the version the ground in view is made of (`Land::told`). */
+  ground(): [number, number];
 }

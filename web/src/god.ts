@@ -10,7 +10,7 @@
 // about the place under the cursor (`probe`), and the brush drawn over the map at its true size (god-draw.ts).
 import { IconName, iconSvg } from './icons';
 import type { Brushed, Editor, GodPage, GodTool, Probe, Settled } from './god-types';
-import { drawBrush, drawFlames, drawReason, drawSight, drawSizeTag } from './god-draw';
+import { drawBrush, drawFill, drawFlames, drawReason, drawSight, drawSizeTag } from './god-draw';
 import { holdButton, radiusText, sizeChips, sizeStepper } from './god-controls';
 
 /** The brush's radii, m (its size chips), and the one it starts at. */
@@ -30,6 +30,9 @@ const SIZE_SHOWN_MS = 1500;
 const FIRE_LINGERS_MS = 1500;
 /** Least time between two questions about the place under the cursor, ms. */
 const PROBE_MS = 80;
+/** A lake's water is drawn in its ring at most this long after the stroke settled, ms, where the world's samples do not
+ * change (a lake the core did not dig). */
+const FILL_MOST_MS = 4000;
 
 
 /** A stroke under way: the cells it edited (for a tool with a rate, the paints that moved the ground), its reasons for
@@ -72,6 +75,10 @@ export class God {
   private undoButton: HTMLButtonElement;
   /** The button held for a stroke where the brush stands at the sight (`GodPage.aim`). */
   private holdButton: HTMLButtonElement;
+  /** The lake being dug: where (squares), its radius (m), its tool's ink, when its stroke ended (ms), the version of
+   * the world's samples then, and when the core answered its settling (ms; 0: not yet). Its water is drawn in its
+   * ring till the ground in view shows the samples it built (`GodPage.ground`). */
+  private filling: { at: [number, number]; radius: number; ink: string; began: number; from: number; settled: number } | null = null;
 
   /** `editor`: the live world's, where there is one. */
   constructor(private page: GodPage, private editor: () => Editor | null, private tools: GodTool[]) {
@@ -102,7 +109,7 @@ export class God {
     // (A stroke held is ended: its timer stops, and the core is told, so its next stroke is a new one.)
     if (this.stroke) { clearInterval(this.stroke.held); if (this.stroke.sent) this.editor()?.settle(); }
     this.holdButton.classList.remove('held');
-    this.stroke = null; this.ended = []; this.probe = null; this.asking = false; this.undoable = false;
+    this.stroke = null; this.ended = []; this.probe = null; this.asking = false; this.undoable = false; this.filling = null;
     this.pick(null);
   }
 
@@ -130,6 +137,7 @@ export class God {
   /** Take tool `t` (null: none), and say how to use it; the world pauses while one is on. */
   private pick(t: GodTool | null): void {
     this.tool = t; this.lastWhy = '';
+    if (t?.least && this.radius < t.least) this.radius = this.radii()[0];
     if (t) this.page.picked();
     this.show(); this.page.redraw();
   }
@@ -217,6 +225,7 @@ export class God {
     if (st.tool.rate || (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]))) this.paint(st);
     this.editor()?.settle();
     this.ended.push(st);
+    if (st.tool.amount) this.filling = { at: st.last.slice(0, 2) as [number, number], radius: this.radius, ink: st.tool.ink, began: performance.now(), from: this.page.ground()[0], settled: 0 };
   }
 
   /** Paint with stroke `st`'s tool where its brush is now: by its amount, or for a tool with a rate by what the time
@@ -258,6 +267,7 @@ export class God {
   settled(r: Settled): void {
     const st = this.ended.shift();
     if (!st) return;
+    if (this.filling && st.tool.amount) this.filling.settled = performance.now();
     this.undoable = true;
     this.show();
     if (!r.burnt.length) return;
@@ -271,6 +281,7 @@ export class God {
   draw(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number): void {
     this.drawnAt = [ox, oy, s];
     const t = this.tool, aim = this.page.aim(), now = performance.now();
+    this.drawFilling(ctx, ox, oy, s, now);
     if (t && aim && !this.stroke && (!this.at || this.at[0] !== aim[0] || this.at[1] !== aim[1])) { this.at = aim; this.ask(); }
     if (!t || !this.at) return;
     const why = this.lastWhy || t.why(this.probe), ink = why ? NO_INK : t.ink;
@@ -285,6 +296,17 @@ export class God {
     if (aim) drawSight(ctx, cx, cy);
     if (now < this.sizeShownTill) drawSizeTag(ctx, cx, cy, r, radiusText(this.radius));
     if (why) drawReason(ctx, cx, cy, r, why);
+  }
+
+  /** The water of the lake being dug (`filling`), in its ring, till the core settled it and the ground in view shows
+   * the samples it built, or `FILL_MOST_MS` after it settled where they did not change. */
+  private drawFilling(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number, now: number): void {
+    const f = this.filling;
+    if (!f) return;
+    const [version, shown] = this.page.ground();
+    if (f.settled && ((version !== f.from && shown === version) || now - f.settled > FILL_MOST_MS)) { this.filling = null; this.page.redraw(); return; }
+    drawFill(ctx, ox + f.at[0] * s, oy + f.at[1] * s, (f.radius / this.page.squareM()) * s, f.ink, now - f.began);
+    this.page.redraw();
   }
 
   /** The strip's buttons (the tool on pressed, a tool that cannot act here greyed with the reason, the undo greyed
@@ -307,7 +329,7 @@ export class God {
     title.textContent = t?.label ?? 'God mode';
     el.append(title);
     if (!t) { line('hint', 'Pick a tool, then use it on the map.'); return; }
-    el.append(sizeChips(RADII_M, this.radius, m => this.sized(m)), sizeStepper(RADII_M, this.radius, m => this.sized(m)));
+    el.append(sizeChips(this.radii(), this.radius, m => this.sized(m)), sizeStepper(this.radii(), this.radius, m => this.sized(m)));
     if (t.choices) el.append(t.choices(() => this.show()));
     const why = t.why(this.probe);
     line(why ? 'why' : 'hint', why || t.hint);
@@ -315,6 +337,9 @@ export class God {
     this.holdButton.style.setProperty('--tool', t.ink);
     el.append(this.holdButton);
   }
+
+  /** The brush's radii the tool on may take (`GodTool.least`). */
+  private radii(): number[] { return RADII_M.filter(m => m >= (this.tool?.least ?? 0)); }
 
   /** Take the brush's radius `m`; it shows its size on the map for `SIZE_SHOWN_MS`. */
   private sized(m: number): void {

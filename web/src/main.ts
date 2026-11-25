@@ -90,6 +90,7 @@ const god = new God({
   strip: $('god-strip'), card: $('god'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
   picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), burnt: (b, strike) => front.burnt(b, strike),
   aim: () => (PHONE.matches && world ? map.sightAt() : null),
+  ground: () => [live?.version ?? 0, land?.told ?? 0],
 }, () => live, godTools(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => {

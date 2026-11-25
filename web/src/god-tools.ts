@@ -1,7 +1,8 @@
 // The tools of god mode (god-types.ts `GodTool`), in the order of the strip: each paints with the round brush
 // (wasm/src/lib.rs `brush`): Raise and Lower land move the ground under it while held, and the world builds its
 // samples and settles its liquid over the new ground when the stroke ends (`settle`); Lake digs a basin under it at
-// once, its floor a chosen depth under the brush's rim, and fills it; Plant clears a share of each
+// once, its floor a chosen depth under the lowest point of the brush's rim (or under the level of a lake it reaches,
+// which grows over it), and fills it; Plant clears a share of each
 // cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, the
 // longer the faster, and those that hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain
 // words, from the core's own reasons. A new tool is one more entry of `godTools`.
@@ -9,8 +10,12 @@ import type { GodTool, Probe, StartKind } from './god-types';
 
 /** The core's brush tools (wasm/src/lib.rs `SHAPE`, `LAKE`, `PLANT`, `BURN`). */
 const BRUSH_SHAPE = 0, BRUSH_LAKE = 1, BRUSH_PLANT = 2, BRUSH_BURN = 3;
-/** The depths a lake may have, m under the lowest point of the brush's rim, with their names; the second the first on. */
+/** The depths a lake may have, m under its level (the lowest point of the brush's rim, or a lake it reaches), with their
+ * names (a chip shows the depth, its title the name); the second the first on. */
 const LAKE_DEPTHS: [string, number][] = [['Shallow', 2], ['Middle', 5], ['Deep', 15]];
+/** The least radius of a lake, m: it is dug on the terrain's samples, 125 m apart (core/src/space/terrain.rs
+ * `SAMPLE_DEPTH`), so a smaller one is a few samples, drawn as a rounded square, not a disc. */
+const LAKE_LEAST_M = 300;
 /** How fast Raise and Lower move the ground at the brush's centre while held, m/s: a second's hold makes a hill or a
  * pit a hillside's shading shows from a few kilometres away. */
 const SHAPE_M_S = 20;
@@ -90,7 +95,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   });
   let depth = LAKE_DEPTHS[1][1];
   const lake: GodTool = {
-    key: 'lake', icon: 'lake', label: 'Lake', ink: '#4aa3e8', code: BRUSH_LAKE, row: () => -1, amount: () => depth,
+    key: 'lake', icon: 'lake', label: 'Lake', ink: '#4aa3e8', code: BRUSH_LAKE, row: () => -1, amount: () => depth, least: LAKE_LEAST_M,
     hint: 'Click the map to dig a lake. It fills with water at once.', verb: 'Tap to dig',
     why: (p: Probe | null) => (p && p.land <= 0 ? 'This is open water already.' : ''), reason: why => why,
     choices: show => {
@@ -98,7 +103,8 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
       list.className = 'chips';
       for (const [name, m] of LAKE_DEPTHS) {
         const b = document.createElement('button');
-        b.textContent = `${name}, ${m} m`; b.classList.toggle('on', m === depth);
+        b.textContent = `${m} m`; b.title = `${name}: ${m} m deep`; b.setAttribute('aria-label', `${name}, ${m} m deep`);
+        b.classList.toggle('on', m === depth);
         b.onclick = () => { depth = m; show(); };
         list.append(b);
       }
