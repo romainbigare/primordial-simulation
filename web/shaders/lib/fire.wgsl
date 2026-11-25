@@ -10,10 +10,13 @@ struct Fire {
   frame: vec4f, corner: vec4f,
   // The time, s (wrapped); the months since a burn that mean none (the core tells no more apart).
   air: vec4f,
-  // A burn of god mode playing (fire.ts `play`): its strike, m, how far its front reached from it, m, and the metres a
-  // unit of its patches' number takes (`burn_rank`); w 0: none plays.
-  front: vec4f,
+  // The burns of god mode (web/src/burns.ts `Burns.uniforms`), two members each: its strike, m, and the way downwind
+  // (east, south, a unit); how far its head runs ahead of its mean growth, its breadth over its length, and how far its
+  // mean growth has reached, m (past every square's once it burnt out).
+  burns: array<vec4f, 8>,
 }
+// The burns the uniforms hold (burns.ts `BURNS`).
+const BURNS = 4;
 @group(0) @binding(25) var fire_tex: texture_2d<f32>;
 @group(0) @binding(26) var fire_sampler: sampler;
 @group(0) @binding(27) var<uniform> fire: Fire;
@@ -21,12 +24,14 @@ struct Fire {
 // e^x - 1, kept exact for small x.
 fn expm1(x: f32) -> f32 { return select(exp(x) - 1.0, x + 0.5 * x * x, abs(x) < 1e-3); }
 
-// What fire did at a point, blended between the squares' centres: the share of the land under a scar (burnt within the
-// months the core tells apart, fire.ts), the months since its last burn (the scar's mean), the share burning this
-// month, its flames' mean length, m (the burning share's mean), the ash on the ground and the gas the flames sent to the
-// air this month, kg/m²; the low wind, m/s east and south; the cured leaves standing, kg/m². (Its third plane's second
-// number is the share of its land saturated, `under_share`.)
-struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32, wind: vec2f, cured: f32 }
+// What fire did at a point, blended between the squares' centres: the share of the land under a scar (its last burn's,
+// within the months the core tells apart, fire.ts), the months since its last burn (the scar's mean), the share burning
+// this month in patches, its flames' mean length, m (the burning share's mean), the ash on the ground and the gas the
+// flames sent to the air this month, kg/m²; the low wind, m/s east and south; the cured leaves standing, kg/m²; the
+// share of the scar laid in patches (the rest is a burn of god mode's, `burn_at`); and the share of the soft tissue
+// standing on the scar its burn killed (the scar's mean). (Its third plane's second number is the share of its land
+// saturated, `under_share`.)
+struct FireAt { burnt: f32, age: f32, flame: f32, length: f32, ash: f32, air: f32, wind: vec2f, cured: f32, rest: f32, crown: f32 }
 
 // A dead stem as tall as the plants that died (`Patch::snag_h`) holds `snag_kg` of walls (snag.wgsl, burn.wgsl):
 // `SNAG_KG` at `SNAG_KG_TALL_M` (a stem of about 20 cm and 10 m, from memory), its mass growing with the fourth power
@@ -56,7 +61,7 @@ const ASH_HIDES_KG = 0.25;
 const SCORCHED_COVER = 0.75;
 
 // The planes of the fire's texture (fire.ts), one under the other.
-const FIRE_PLANES = 3.0;
+const FIRE_PLANES = 4.0;
 
 // Plane k of the fire's texture at `at`, blended between the squares' centres and held inside its plane.
 fn fire_plane(k: i32, at: vec2f) -> vec4f {
@@ -75,13 +80,14 @@ fn fire_at(at: vec2f) -> FireAt {
   let a = fire_plane(0, at);
   let b = fire_plane(1, at);
   let c = fire_plane(2, at);
-  return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y, b.zw, c.x);
+  return FireAt(a.x, a.y / max(a.x, 1e-6), a.z, a.w / max(a.z, 1e-6), b.x, b.y, b.zw, c.x, c.w, c.z / max(a.x, 1e-6));
 }
 
-// The months since the burn of the scar at `at`, a point of rank `rank` among the patches (`burn_rank`'s number made
-// even, 0..1): of one of the four squares whose centres lie about it, drawn by the rank with the chance of each
-// square's blend weight times its scar. So where scars of different ages meet, the point takes one of them, and their meeting is as ragged
-// as the patches; a blend of their ages would lay a straight line where the younger one's char fades.
+// The months since the burn of the scar in patches at `at` (`FireAt.rest`), a point of rank `rank` among the patches
+// (`burn_rank`'s number made even, 0..1): of one of the four squares whose centres lie about it, drawn by the rank with
+// the chance of each square's blend weight times its scar in patches. So where scars of different ages meet, the point
+// takes one of them, and their meeting is as ragged as the patches; a blend of their ages would lay a straight line where
+// the younger one's char fades.
 fn scar_age(at: vec2f, rank: f32) -> f32 {
   let s = at / fire.map.x - 0.5;
   let c = vec2i(floor(s));
@@ -90,7 +96,7 @@ fn scar_age(at: vec2f, rank: f32) -> f32 {
   var w = vec4f((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
   for (var k = 0; k < 4; k++) {
     t[k] = fire_texel(0, c + vec2i(k % 2, k / 2));
-    w[k] *= t[k].x;
+    w[k] *= fire_texel(2, c + vec2i(k % 2, k / 2)).w;
   }
   var left = rank * (w.x + w.y + w.z + w.w);
   for (var k = 0; k < 3; k++) {
@@ -107,21 +113,61 @@ fn scar_age(at: vec2f, rank: f32) -> f32 {
 // every zoom and, where it falls to none, thins to none.
 const BURN_PATCH_M = 600.0; const BURN_NOISE = 91;
 
-// The squares a burn of god mode plays on (the third plane's third number, blended between the squares' centres) burn
-// outward from its strike: there a point's patches' number is its distance from the strike past the front's reach, in
-// `fire.front.w` m, moved by the patches by `FRONT_RAGGED` of their number, so the burnt share (a half: level 0, fire.ts
-// `FRONT_SHARE`) is the ground the front has swept, with a ragged edge, and the burning share a band behind its edge.
-const FRONT_RAGGED = 0.8;
-
 // The patches' number at point `at` seen at `e` m a pixel, and the spread a share read on it takes (`meet_noise`).
-fn burn_rank(at: vec2f, e: f32) -> vec2f {
-  let n = meet_noise(at, e, BURN_PATCH_M, BURN_NOISE);
-  if (fire.front.w <= 0.0) { return n; }
-  let swept = fire_plane(2, at).z;
-  if (swept <= 0.0) { return n; }
-  let radial = (distance(at, fire.front.xy) - fire.front.z) / fire.front.w + FRONT_RAGGED * n.x;
-  return vec2f(mix(n.x, radial, swept), n.y);
+fn burn_rank(at: vec2f, e: f32) -> vec2f { return meet_noise(at, e, BURN_PATCH_M, BURN_NOISE); }
+
+// How far burn k's mean growth has reached when its edge reaches `at`, m (burns.ts `reachAt`): the ellipse of semi-axes
+// t along the wind and its breadth times t across it, its centre its lead times t downwind of the strike.
+fn burn_time(k: i32, at: vec2f) -> f32 {
+  let a = fire.burns[2 * k];
+  let s = fire.burns[2 * k + 1];
+  let d = at - a.xy;
+  let u = dot(d, a.zw);
+  let v = a.z * d.y - a.w * d.x;
+  let c = s.x;
+  let q = 1.0 - c * c;
+  return (-u * c + sqrt(u * u * c * c + q * (u * u + v * v / (s.y * s.y)))) / q;
 }
+
+// A burn of god mode's edge is ragged by `BURN_RAGGED` of how far it reached (no less than `BURN_RAGGED_LEAST_M`), in
+// patches from `BURN_EDGE_M` across down to the pixel (noise stream `BURN_EDGE_NOISE`): a fire's edge runs out along
+// its fuel and stops at gaps. A point takes the burn of the square `BURN_WARP` of a side about it, moved along noise
+// `BURN_WARP_M` across (streams `BURN_WARP_NOISE` and the next), so a burn that ends at a square's edge ends on a winding
+// line.
+const BURN_RAGGED = 0.3; const BURN_RAGGED_LEAST_M = 20.0; const BURN_EDGE_M = 120.0; const BURN_EDGE_NOISE = 95;
+const BURN_WARP = 0.06; const BURN_WARP_M = 600.0; const BURN_WARP_NOISE = 96;
+
+// The burn of god mode at `at`, seen at `e` m a pixel: how far inside its burnt land the point lies, m (less than 0:
+// outside; -1e9 where none lies), the spread of that over the pixel's patches, m, whether its front still moves there (1)
+// or the square's share has been taken (0), its flames' length, m, and of its square the months since it burnt and the
+// share of the soft tissue standing on its land it killed (its own numbers, not blended with the squares about it).
+struct BurnAt { inside: f32, soft: f32, live: f32, length: f32, age: f32, crown: f32 }
+fn burn_at(at: vec2f, e: f32) -> BurnAt {
+  var out = BurnAt(-1e9, 1.0, 0.0, 0.0, 0.0, 0.0);
+  // (No burn lies on the four squares about the point: none is read.)
+  if (fire.map.x <= 0.0 || fire_plane(3, at).x <= 0.0) { return out; }
+  let w = vec2f(ragged(at, e, BURN_WARP_M, 3, BURN_WARP_NOISE), ragged(at, e, BURN_WARP_M, 3, BURN_WARP_NOISE + 1));
+  let sq = vec2i(floor(at / fire.map.x + BURN_WARP * w));
+  let t = fire_texel(3, sq);
+  let id = i32(round(t.x));
+  if (id < 1 || id > BURNS) { return out; }
+  let k = id - 1;
+  let reach = fire.burns[2 * k + 1].z;
+  let limit = min(reach, t.y);
+  let n = meet_noise(at, e, BURN_EDGE_M, BURN_EDGE_NOISE);
+  let scale = BURN_RAGGED * max(limit, BURN_RAGGED_LEAST_M);
+  out.inside = limit - burn_time(k, at) - scale * n.x;
+  out.soft = scale * n.y + 0.5 * e;
+  out.live = select(0.0, 1.0, reach < t.y);
+  out.length = t.z;
+  let a = fire_texel(0, sq);
+  out.age = a.y / max(a.x, 1e-6);
+  out.crown = fire_texel(2, sq).z / max(a.x, 1e-6);
+  return out;
+}
+
+// The share of a point in the burnt land of burn `b` (`burn_at`).
+fn burnt_by(b: BurnAt) -> f32 { return smoothstep(-b.soft, b.soft, b.inside); }
 
 // The level of the burnt share `share` of the land at `at` among the patches (ragged.wgsl `share_level`): saturated
 // ground does not burn (its fuel is wet; the core's burnt share leaves its wet share out), so the share fills the dry
@@ -135,21 +181,74 @@ fn under_share(r: vec2f, share: f32, at: vec2f) -> f32 {
   return smoothstep(-r.y, r.y, burnt_level(share, at) - r.x) * (1.0 - saturated_at(at));
 }
 
-// The scar at `at` of what fire did there `f` (`fire_at`), seen at `e` m a pixel: the share of the point under it
-// (`under_share`), how much of it is char, ash and scorched soil (0 where none lies there, burn.wgsl `scar_over`).
-fn scar_of(f: FireAt, at: vec2f, e: f32) -> vec4f {
+// The scar at `at` of what fire did there `f` (`fire_at`) and the burn of god mode there `b` (`burn_at`), seen at `e`
+// m a pixel: the share of the point under it (its share in patches, `under_share`, or the burn's land), how much of it
+// is char, ash and scorched soil (0 where none lies there, burn.wgsl `scar_over`).
+fn scar_of(f: FireAt, b: BurnAt, at: vec2f, e: f32) -> vec4f {
   if (f.burnt <= 0.0) { return vec4f(0.0); }
   let rank = burn_rank(at, e);
-  let scar = under_share(rank, f.burnt, at);
+  let patches = under_share(rank, f.rest, at);
+  let burn = burnt_by(b) * (1.0 - saturated_at(at));
+  let scar = max(patches, burn);
   if (scar <= 0.0) { return vec4f(0.0); }
-  let age = scar_age(at, smoothstep(-EVEN_ONE, EVEN_ONE, rank.x));
+  // (Each part of the scar is as old as its own burn.)
+  let age = select(scar_age(at, smoothstep(-EVEN_ONE, EVEN_ONE, rank.x)), b.age, burn > patches);
   return vec4f(scar, exp(-age / CHAR_MONTHS), -expm1(-f.ash / ASH_HIDES_KG), exp(-age / SCORCHED_MONTHS));
 }
 
 // The share of a point under the fresh char of scar `s` (`scar_of`), which scorches the plants standing there.
 fn fresh_char(s: vec4f) -> f32 { return s.x * s.y; }
 
-// Plants of colour `rgb` (premultiplied by `a`) standing where `fresh` of the ground is under fresh char
-// (`fresh_char`): scorched, as dark as the char under them (`SCORCHED_COVER`), in the field of the cover (burn.wgsl)
-// and in its marks (cover.wgsl, decided once for each by mark.wgsl).
-fn scorched(rgb: vec3f, a: f32, fresh: f32) -> vec3f { return mix(rgb, CHAR * a, SCORCHED_COVER * fresh); }
+// Leaves the flames killed but did not burn stay on their plants, the red-brown of scorched foliage (`DEAD_LEAVES`,
+// linear), till they fall: they fall by e^-(months / `LEAF_FALL_MONTHS`) (scorched crowns drop their leaves within a
+// season or so: from memory). The core takes them off at once (laws.md 3c); the map shows them as the plants' colour.
+const DEAD_LEAVES = vec3f(0.30, 0.10, 0.03); const LEAF_FALL_MONTHS = 4.0;
+// A plant a front of god mode is passing burns: lit by the flames under it by `PLANT_GLOW_LEAST`, and by up to 1 as its
+// crown burns (the share of the soft tissue its burn killed), in the flames' colour (`PLANT_GLOW`, linear, added); by
+// e^-(m / `BURNING_M`) of the front's run behind it (a crown flames for under a minute, some metres of a front's run:
+// from memory).
+const PLANT_GLOW = vec3f(0.6, 0.19, 0.03); const PLANT_GLOW_LEAST = 0.35; const BURNING_M = 10.0;
+
+// The share of the plants burning where the front of a burn of god mode `b` passes (`burn_at`).
+fn burning_of(b: BurnAt) -> f32 {
+  if (b.live <= 0.0) { return 0.0; }
+  return burnt_by(b) * exp(-max(b.inside, 0.0) / BURNING_M);
+}
+
+// What fire does to the plants where fire did `f` (`fire_at`), its scar is `s` (`scar_of`) and a burn of god mode is
+// `b` (`burn_at`): how far soot darkens their living leaves towards the char (`SCORCHED_COVER` of the share under
+// fresh char, `fresh_char`, by the share of their soft tissue the burn killed: soot stands as high as the flames and
+// their heat reached), the share of them whose leaves the burn killed (charred from none to that much, plant by plant:
+// some crowns stood in the flames, more under the scorch height alone), how much of those leaves still hang on them
+// (`LEAF_FALL_MONTHS`), and how much they burn now (`burning_of`, by how much of their soft tissue the burn kills).
+fn plant_fire(f: FireAt, s: vec4f, b: BurnAt) -> vec4f {
+  // (On a burn of god mode's land, its own square's share killed.)
+  let crown = mix(f.crown, b.crown, burnt_by(b));
+  return vec4f(SCORCHED_COVER * fresh_char(s) * crown, crown * s.x, pow(s.w, SCORCHED_MONTHS / LEAF_FALL_MONTHS), burning_of(b) * mix(PLANT_GLOW_LEAST, 1.0, crown));
+}
+
+// Of plants with fire `g` on them (`plant_fire`) seen as a field (their mean): their soot (the dead charred half as
+// much on the mean), the share of their leaves dead on them, and their burning (`burnt_plant`).
+fn field_fire(g: vec4f) -> vec3f {
+  let dead = g.y * g.z;
+  return vec3f(g.x * (1.0 - 0.5 * dead), dead, g.w);
+}
+
+// Dead walls that died within `SAME_BURN_MONTHS` of a square's last burn are that burn's. The core keeps a burn of
+// under `EVENT_LEAST` of a patch spread over it, its dead walls too (laws.md 3c); the map stands them on the land the
+// burn took: their density at a point under `scar` of a scar (`scar_of`) of the square's share is their patch's mean
+// times this.
+const SAME_BURN_MONTHS = 1.5; const YEAR_MONTHS = 12.0;
+fn dead_on_scar(f: FireAt, years: f32, scar: f32) -> f32 {
+  if (f.burnt <= 0.0 || abs(years * YEAR_MONTHS - f.age) > SAME_BURN_MONTHS) { return 1.0; }
+  return scar / f.burnt;
+}
+
+// Plants of colour `rgb` (premultiplied by `a`) with fire `g` on them (soot, the share of their leaves dead on them,
+// burning: `field_fire`, mark.wgsl `living_decided`): their dead leaves red-brown, darkened by their soot, and lit by
+// their burning, in the field of the cover (burn.wgsl) and in its marks (cover.wgsl, decided once for each by
+// mark.wgsl).
+fn burnt_plant(rgb: vec3f, a: f32, g: vec3f) -> vec3f {
+  let dead = mix(rgb, DEAD_LEAVES * a, g.y);
+  return mix(dead, CHAR * a, g.x) + PLANT_GLOW * a * g.z;
+}

@@ -1,8 +1,10 @@
 // Fire on the live map: what the core's layers say fire did on each square (tape/src/layers.rs), sent to the GPU as a
-// texture of three planes (web/shaders/lib/fire.wgsl): the burn scars and the cured grass on the ground (land.wgsl,
-// lib/burn.wgsl), the flames and the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach).
-// Where no fire is known the ground reads none of it (`groundBinds`).
+// texture of four planes (web/shaders/lib/fire.wgsl): the burn scars and the cured grass on the ground (land.wgsl,
+// lib/burn.wgsl), the flames and the smoke over the plants (flames.wgsl, over the squares that burn and the smoke's reach),
+// and the burns of god mode laid about their strikes (burns.ts). Where no fire is known the ground reads none of it
+// (`groundBinds`).
 import { World, decode } from './data';
+import { BURNS, BURN_FLOATS, Burns } from './burns';
 import { Draw, Gpu, Texture, Uniforms, notMade } from './gpu';
 import { half } from './canopy';
 import { groundDetail } from './detail';
@@ -10,16 +12,16 @@ import type { MapLook } from './field-window';
 
 /** What fire did on each square, a number a square (the core's layers, `LAYERS`). */
 export interface FirePlanes {
-  burnt: Float32Array; age: Float32Array; flame: Float32Array; length: Float32Array; ash: Float32Array; air: Float32Array;
-  east: Float32Array; north: Float32Array; cured: Float32Array; wet: Float32Array;
+  last: Float32Array; crown: Float32Array; age: Float32Array; flame: Float32Array; length: Float32Array; ash: Float32Array;
+  air: Float32Array; east: Float32Array; north: Float32Array; cured: Float32Array; wet: Float32Array;
 }
-/** The core's layers of fire, by the planes' names: the share of the land burnt in the last 12 months, the months since
- * the square last burnt (at most the layer's top: never), the share burning this month, its flames' mean length (m),
- * the ash on the ground and the gas the flames sent to the air this month (kg/m²), the low wind east and north (m/s),
- * the cured leaves standing (kg/m²), the share of the land saturated. */
+/** The core's layers of fire, by the planes' names: of the square's last burn the share of its land burnt and the share
+ * of the soft tissue standing there killed, the months since it last burnt (at most the layer's top: never), the share
+ * burning this month, its flames' mean length (m), the ash on the ground and the gas the flames sent to the air this
+ * month (kg/m²), the low wind east and north (m/s), the cured leaves standing (kg/m²), the share of the land saturated. */
 const LAYERS: Record<keyof FirePlanes, string> = {
-  burnt: 'burnt', age: 'burnt_age', flame: 'flame', length: 'flame_len', ash: 'ash', air: 'flame_air',
-  east: 'wind_u', north: 'wind_v', cured: 'cured', wet: 'wet_share',
+  last: 'burnt_last', crown: 'crown_kill', age: 'burnt_age', flame: 'flame', length: 'flame_len', ash: 'ash',
+  air: 'flame_air', east: 'wind_u', north: 'wind_v', cured: 'cured', wet: 'wet_share',
 };
 
 /** The smoke reaches this far downwind, m, and spreads this share of the way gone to each side (lib/smoke.wgsl
@@ -33,27 +35,19 @@ const BLEND_SQUARES = 1;
 /** The smoke's texels a square's side (lib/smoke.wgsl `SMOKE_PER_SQUARE`), worked out once a world frame. */
 const SMOKE_PER_SQUARE = 8;
 /** The texture's planes (fire.wgsl `FIRE_PLANES`). */
-const FIRE_PLANES = 3;
+const FIRE_PLANES = 4;
 /** The format of the smoke's texture: four bytes (lib/smoke.wgsl `smoke_packed`). */
 const SMOKE_FORMAT = 'rgba8unorm';
 /** Frames a second while a fire in view burns and the world plays. */
 export const FIRE_FPS = 8;
 /** The time the flames are drawn at, s, wraps round after this many seconds (a float keeps its steps fine). */
 const TIME_WRAP_S = 600;
-/** Of the uniforms of fire.wgsl (`Fire`), four-wide members. */
-const FIRE_VEC4S = 5;
-
-/** A burn of god mode plays on the map outward from its strike, over the squares its front reached (fire.wgsl
- * `burn_rank`): its reach grows at `FRONT_M_S` m a second of the page's time, taking no less than `FRONT_LEAST_MS` and no
- * more than `FRONT_MOST_MS`, to the radius of a disc as large as the land it burnt. Its edge is ragged over
- * `FRONT_EDGE` of that radius (and no less than `FRONT_EDGE_M`). */
-const FRONT_M_S = 30, FRONT_LEAST_MS = 5000, FRONT_MOST_MS = 15000, FRONT_EDGE = 0.12, FRONT_EDGE_M = 12;
-/** Of a square a burn plays on: the share burnt (fire.wgsl: its level is 0, where the front's distance past the point
- * is none), the share burning while it plays (a band behind its edge), and its flames' length where the core keeps
- * none, m. */
-const FRONT_SHARE = 0.5, FRONT_BURNING = 0.35, FRONT_FLAME_M = 1.5;
-/** Frames a second while a burn plays. */
-const FRONT_FPS = 20;
+/** Of the uniforms of fire.wgsl (`Fire`), four-wide members: four, then the burns'. */
+const FIRE_VEC4S = 4 + (BURNS * BURN_FLOATS) / 4;
+/** A burn's flames are at least this long where the core keeps none, m. */
+const BURN_FLAME_M = 1.5;
+/** Months a year (the core's `Config::months_per_year`). */
+const YEAR_MONTHS = 12;
 
 /** A box of squares: x0, y0, x1, y1 (x1, y1 past its last square). */
 export type Box = [number, number, number, number];
@@ -77,92 +71,91 @@ export class Fire {
   private noSmoke: Texture | null = null;
   private smokeDue = false;
   /** The planes last put, as `put` took them. */
-  private last: [number, number, number, FirePlanes | null, number] = [0, 0, 1, null, 0];
-  /** A burn of god mode played on the map while the world stands still: the squares its front reached (1), its strike
-   * and the radius its reach grows to, m, the metres a unit of its patches' number takes, when it began to play and was
-   * last drawn (performance.now, ms), how long it plays (ms), and whether it has played out (its scar stays shown till
-   * the world steps, `still`); null: none. */
-  private front: { reached: Uint8Array; strike: [number, number]; radius: number; edge: number; begun: number; drawn: number; ms: number; over: boolean } | null = null;
+  private last: [number, number, number, FirePlanes | null, number, number] = [0, 0, 1, null, 0, 0];
+  /** The burns of god mode laid about their strikes (burns.ts). */
+  private burns = new Burns();
   /** Whether a burn is about to play (`hold`): the frame after its stroke came, but where it burns is still being found,
-   * so the planes shown stay those before it (else its squares would show burnt whole at once). */
+   * so the planes shown stay those before it (else its squares would show their shares laid in patches at once). */
   private held = false;
+  /** Told when a burn begins to play (true) and when one has played out or none could (false) (main.ts: the plants it
+   * held are let go, and the pictures about the view drawn again). */
+  played: (begun: boolean) => void = () => {};
 
   /** What fire did on world `w`'s squares, from its layers (none on a world whose tape has no fire). */
   set(w: World | null): void {
     const has = w !== null && Object.values(LAYERS).every(name => w.index.has(name));
-    if (!w || !has) { this.put(0, 0, 1, null, 0); return; }
+    if (!w || !has) { this.put(0, 0, 1, null, 0, 0); return; }
     const p = Object.fromEntries(Object.entries(LAYERS).map(([k, name]) => [k, decode(w, 0, name)])) as unknown as FirePlanes;
-    this.put(w.meta.w, w.meta.h, w.meta.cell_m, p, w.meta.layers[w.index.get(LAYERS.age)!].max);
+    // (A frame's day counts from the world's start.)
+    const month = Math.floor((w.meta.frames[0].day * YEAR_MONTHS) / w.meta.days_per_year);
+    this.put(w.meta.w, w.meta.h, w.meta.cell_m, p, w.meta.layers[w.index.get(LAYERS.age)!].max, month);
   }
 
-  /** What fire did on a map of `w` x `h` squares of `cellM` m, `p` (null: nothing), where `never` months since a burn
-   * means none. A square burns whole, so its land is under a scar while it is younger than that, else its share burnt
-   * this year. The texture's first plane holds that share, the months since the burn times it, the burning share and
-   * the flames' length times that share (so the blend between squares gives each its share's mean); its second the
-   * ash, the gas sent to the air and the wind east and south; its third the cured leaves standing, the share of the land saturated and whether a burn of god mode plays on it
-   * (`play`). */
-  put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number): void {
-    this.last = [w, h, cellM, p, never];
+  /** What fire did on a map of `w` x `h` squares of `cellM` m in the world's month `month`, `p` (null: nothing), where
+   * `never` months since a burn means none. A square's land is under a scar as large as the share its last burn took
+   * while that is younger than that: laid about the strike of a burn of god mode that lies on it (`Burns.of`), else in
+   * patches over the square. The texture's first plane holds that share, the months since the burn times it, the share
+   * burning this month in patches and its flames' length times that share (so the blend between squares gives each its
+   * share's mean); its second the ash, the gas sent to the air and the wind east and south; its third the cured leaves
+   * standing, the share of the land saturated, the share of the soft tissue standing on the scar its burn killed times
+   * the scar's share, and the scar's share in patches; its fourth the burn of god mode on it (its number among them,
+   * from 1; 0: none), how far that burn's mean growth reaches when it has taken the square's share (m), and its flames'
+   * length (m). */
+  put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number, month: number): void {
+    this.last = [w, h, cellM, p, never, month];
     if (this.held) return;
-    const reached = this.front && p && this.front.reached.length === w * h ? this.front.reached : null;
-    if (reached) p = frontAt(p!, reached, !this.front!.over);
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
+    if (p) this.burns.keep(p.age, month, never);
     // (Saturated ground does not burn: a scar lies on the dry land alone.)
-    const n = w * h, scar = (i: number) => (!p ? 0 : reached?.[i] ? FRONT_SHARE : Math.min(p.age[i] < never ? 1 : p.burnt[i], 1 - p.wet[i]));
+    const n = w * h, scar = (i: number) => (!p || p.age[i] >= never ? 0 : Math.min(p.last[i], 1 - p.wet[i]));
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
     if (!p || !(this.flames || p.ash.some((a, i) => a > 0 || p.cured[i] > 0 || scar(i) > 0))) { this.data = null; return; }
     const data = new Uint16Array(4 * FIRE_PLANES * n);
     for (let i = 0; i < n; i++) {
-      const s = scar(i), f = p.flame[i];
+      const s = scar(i), [burn, limit] = this.burns.of(i, p.age, month, never);
+      // (A burn of god mode draws its own flames: the core's of its square, the same burn, are not drawn again.)
+      const f = burn ? Math.max(p.flame[i] - p.last[i], 0) : p.flame[i];
       data.set([s, s * Math.min(p.age[i], never), f, f * p.length[i]].map(half), 4 * i);
       data.set([p.ash[i], p.air[i], p.east[i], -p.north[i]].map(half), 4 * (n + i));
-      data.set([p.cured[i], p.wet[i], reached?.[i] ?? 0, 0].map(half), 4 * (2 * n + i));
+      data.set([p.cured[i], p.wet[i], s * p.crown[i], burn ? 0 : s].map(half), 4 * (2 * n + i));
+      data.set([burn, limit, Math.max(p.length[i], BURN_FLAME_M), 0].map(half), 4 * (3 * n + i));
     }
     this.data = data;
     this.due = true;
     this.smokeDue = this.flames !== null;
   }
 
-  /** Play the burn whose front reached the squares `reached` (1) from its strike `strike` (squares), which burnt `m2`
-   * of land: it burns outward from the strike to a disc of that area, over the squares it reached. */
-  play(reached: Uint8Array, strike: [number, number], m2: number): void {
-    const radius = Math.sqrt(m2 / Math.PI), cellM = this.last[2];
-    const ms = Math.min(Math.max((radius / FRONT_M_S) * 1000, FRONT_LEAST_MS), FRONT_MOST_MS);
-    this.front = { reached, strike: [strike[0] * cellM, strike[1] * cellM], radius, edge: Math.max(FRONT_EDGE * radius, FRONT_EDGE_M), begun: performance.now(), drawn: 0, ms, over: false };
+  /** Play the burn struck at `strike` (squares) that burnt the squares `reached` (1): it grows from the strike in the
+   * low wind there over the share of each square's dry land the core says it burnt. */
+  play(reached: Uint8Array, strike: [number, number]): void {
+    const [w, , cellM, p, , month] = this.last;
     this.held = false;
+    if (p && reached.length === p.last.length) {
+      const shares = new Map<number, number>();
+      reached.forEach((r, i) => { if (r) shares.set(i, p.last[i] / Math.max(1 - p.wet[i], 1e-6)); });
+      const sq = Math.min(Math.max(Math.floor(strike[1]), 0), this.last[1] - 1) * w + Math.min(Math.max(Math.floor(strike[0]), 0), w - 1);
+      this.burns.add([strike[0] * cellM, strike[1] * cellM], [p.east[sq], p.north[sq]], shares, month, w, cellM);
+    }
     this.put(...this.last);
+    this.played(this.burns.playing());
   }
 
   /** A burn is about to play: the planes shown stay as they are till it does (`play`), or the world steps (`still`). */
   hold(): void { this.held = true; }
 
-  /** The edge of the burn playing at time `now` (ms): its strike and its reach, m, and the metres its edge is ragged
-   * over; null where none is burning. */
-  edgeAt(now: number): { strike: [number, number]; reach: number; edge: number } | null {
-    const f = this.front;
-    if (!f || f.over) return null;
-    return { strike: f.strike, reach: this.frontAt(now)[2], edge: f.edge };
-  }
+  /** Whether a burn is about to play or plays now. */
+  playing(): boolean { return this.held || this.burns.playing(); }
 
-  /** The world stepped: the fire shown is the core's own again. */
-  still(): void { this.front = null; this.held = false; }
+  /** The world stepped: the burns have burnt out, and the fire shown is the core's own (each burn kept still lies
+   * about its strike). */
+  still(): void { this.burns.still(); this.held = false; }
 
-  /** While a burn plays, whether the map is to be drawn anew at time `now` (performance.now, ms): at most `FRONT_FPS`
-   * times a second, its front further on; once it played out, its planes are put without its flames. */
+  /** While a burn plays, whether the map is to be drawn anew at time `now` (performance.now, ms): its front further on;
+   * once one played out, `played` is told. */
   step(now: number): boolean {
-    const f = this.front;
-    if (!f || f.over || now - f.drawn < 1000 / FRONT_FPS) return false;
-    f.drawn = now;
-    if (now - f.begun > f.ms) { f.over = true; this.put(...this.last); }
-    return true;
-  }
-
-  /** The burn playing at time `now` (ms), as fire.wgsl reads it (`Fire.front`): its strike, its reach, and the metres a
-   * unit of its patches' number takes; none (0) where none plays. Its reach grows evenly, then stays. */
-  private frontAt(now: number): number[] {
-    const f = this.front;
-    if (!f) return [0, 0, 0, 0];
-    return [...f.strike, f.radius * Math.min(Math.max((now - f.begun) / f.ms, 0), 1), f.edge];
+    const { redraw, ended } = this.burns.step(now);
+    if (ended) this.played(false);
+    return redraw;
   }
 
   /** Work out the smoke of this frame on `gpu` once, before the map's pass (smoke.wgsl), once its program is made
@@ -191,7 +184,9 @@ export class Fire {
     this.tex ??= gpu.texture('fire', this.w, FIRE_PLANES * this.h, 'rgba16float');
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
     const u = new Uniforms(FIRE_VEC4S).vec4(this.cellM, this.w, this.h).vec4(...frame.slice(0, 4)).vec4(...frame.slice(4))
-      .vec4((now / 1000) % TIME_WRAP_S, this.never).vec4(...this.frontAt(now));
+      .vec4((now / 1000) % TIME_WRAP_S, this.never);
+    const burns = this.burns.uniforms(now);
+    for (let k = 0; k < burns.length; k += 4) u.vec4(...burns.slice(k, k + 4));
     if (!this.noSmoke) { this.noSmoke = gpu.texture('fire', 1, 1, SMOKE_FORMAT); gpu.write(this.noSmoke, new Uint8Array(4)); }
     return { 20: groundDetail(gpu), 21: 'tile', 25: this.tex, 26: 'smooth', 27: u.buffer, 28: this.smoke && !this.smokeDue ? this.smoke : this.noSmoke };
   }
@@ -238,16 +233,4 @@ function smokeBox(p: FirePlanes, w: number, h: number, cellM: number): Box | nul
     b = b ? [Math.min(b[0], own[0]), Math.min(b[1], own[1]), Math.max(b[2], own[2]), Math.max(b[3], own[3])] : own;
   }
   return b && [Math.max(Math.floor(b[0]), 0), Math.max(Math.floor(b[1]), 0), Math.min(Math.ceil(b[2]), w), Math.min(Math.ceil(b[3]), h)];
-}
-
-/** The planes `p` as a burn of god mode plays on them over the squares `reached` (1): those burn fresh, flaming while it
- * plays (`burning`), their flames at least `FRONT_FLAME_M` long; no other square flames (the core keeps the flames of
- * the month last stepped while the world stands still, which burn no more), and only those send their gas to the air. */
-function frontAt(p: FirePlanes, reached: Uint8Array, burning: boolean): FirePlanes {
-  const q = { ...p, age: p.age.slice(), flame: new Float32Array(p.flame.length), length: p.length.slice(), air: new Float32Array(p.air.length) };
-  reached.forEach((r, i) => {
-    if (!r) return;
-    q.age[i] = 0; q.flame[i] = burning ? FRONT_BURNING : 0; q.length[i] = Math.max(p.length[i], FRONT_FLAME_M); q.air[i] = p.air[i];
-  });
-  return q;
 }

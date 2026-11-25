@@ -349,10 +349,19 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32)
   let q = mark_plant(l, k, sq, pick.y, place_of(pick.z), wades);
   let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
-  // Scorched where it stands on dry ground under a fresh scar (fire.wgsl `scar_of`, as the field reads it).
-  var fresh = 0.0;
-  if (f.depth <= 0.0 && fire.map.x > 0.0) { fresh = fresh_char(scar_of(fire_at(at), at, cover.seen.x)); }
-  return Living(vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), ground_word(f.snow, fresh), mark_box(l, q)), true);
+  // Scorched, with dead leaves and burning, where it stands on dry ground under a scar or a passing front (fire.wgsl
+  // `plant_fire`, as the field reads it): its leaves are dead by its own draw, with the chance the burn killed the soft
+  // tissue standing there, so a burn's plants stand dead and living among each other as the field's mean says; soot
+  // darkens the living, and the dead by their own draw (fire.wgsl `plant_fire`).
+  var burnt = vec3f(0.0);
+  if (f.depth <= 0.0 && fire.map.x > 0.0) {
+    let fa = fire_at(at);
+    let b = burn_at(at, cover.seen.x);
+    let g = plant_fire(fa, scar_of(fa, b, at, cover.seen.x), b);
+    let dead = snag_unit(id, LEAVES_DRAW) < g.y;
+    burnt = vec3f(g.x * select(1.0, snag_unit(id, LEAVES_DRAW + 1), dead), select(0.0, g.z, dead), g.w);
+  }
+  return Living(vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), ground_word(f.snow, burnt), mark_box(l, q)), true);
 }
 
 // Whether a plant may stand on the ground at `at`: not in a channel's water (rock.wgsl `channel_at`, its water's
@@ -362,6 +371,10 @@ fn ground_open(at: vec2f) -> bool {
   let ch = channel_at(g, discharge_of(sample_at(g)));
   return ch.water <= 0.0 || abs(g.sd - ch.middle) >= ch.water;
 }
+
+// The noise stream of a living mark's own draw of whether a burn killed its leaves (`living_decided`), and the next of
+// how charred they are.
+const LEAVES_DRAW = 45;
 
 // The code of a dead tree's mark (`dead_decided`): past every living mark's.
 fn dead_code() -> f32 { return f32(i32(land.map.y) * i32(land.map.z) * kinds_n() * GROUPS * PLACE_STEPS); }
@@ -389,18 +402,25 @@ fn dead_at(l: i32, k: vec2f) -> Dead {
 
 // The dead tree of cell k (`id` in the world, its foot at `at`) of lattice l where no living plant claims it
 // (`decide`): with the chance its mean makes (`dead_at`; its own draw, fixed in the world, so a cell's dead tree stays
-// as long as the walls that make it stand), on open ground (`ground_open`) with no liquid over `FILM_M` and loose ground
+// as long as the walls that make it stand), those of a burn spread over the rest of its cell standing on the land it
+// burnt (fire.wgsl `dead_on_scar`), on open ground (`ground_open`) with no liquid over `FILM_M` and loose ground
 // over the bed, as deep in snow as shows it: a mark of `dead_code` and its box (`dead_box`).
 fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f) -> vec4f {
   let none = vec4f(-1.0, 0.0, 0.0, 0.0);
   let dead = dead_at(l, k);
-  if (dead.q.kind < 0 || snag_unit(id, 41) >= dead.mean) { return none; }
+  if (dead.q.kind < 0) { return none; }
+  var on_scar = 1.0;
+  if (foot_patch(at).x == 0 && fire.map.x > 0.0) {
+    let f = fire_at(at);
+    on_scar = dead_on_scar(f, patch_dead(foot_patch(at)).z, scar_of(f, burn_at(at, cover.seen.x), at, cover.seen.x).x);
+  }
+  if (snag_unit(id, 41) >= dead.mean * on_scar) { return none; }
   let f = foot(at);
   if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }
-  return vec4f(dead_code(), shows, ground_word(f.snow, 0.0), dead_box(l, dead.q));
+  return vec4f(dead_code(), shows, ground_word(f.snow, vec3f(0.0)), dead_box(l, dead.q));
 }
 
 // The box dead tree q of lattice l covers about its foot, as `mark_box`: its sprite with its lean, and its shadow.
@@ -415,9 +435,10 @@ fn dead_box(l: i32, q: Snag) -> f32 {
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
 
-// The share of the ground at a mark's foot that snow covers and that lies under fresh char (`fresh_char`), each 0..1,
-// as one number (`decide`): two 16-bit shares in its bits.
-fn ground_word(snow: f32, fresh: f32) -> f32 { return bitcast<f32>(pack2x16unorm(vec2f(snow, fresh))); }
+// The share of the ground at a mark's foot that snow covers, and the fire on its plant (fire.wgsl `plant_fire`: under
+// fresh char, its leaves dead, burning), each 0..1, as one number (`decide`): a byte each in its bits (cells.wgsl
+// `word_of`, `ground_of`), the last under `TOP_BYTE` of its range.
+fn ground_word(snow: f32, g: vec3f) -> f32 { return bitcast<f32>(word_of(vec4f(snow, g.x, g.y, TOP_BYTE * clamp(g.z, 0.0, 1.0)))); }
 
 // The share of a mark that shows (0..1, more than 0) and the depth of the liquid over its foot, m (0: on land), as one
 // number (`decide`): on land the share; in liquid, negated, the depth in steps of `WADE_STEP_M` m and half the share.

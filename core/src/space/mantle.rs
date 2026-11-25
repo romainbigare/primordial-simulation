@@ -13,6 +13,9 @@
 //!
 //! What settled on a sample in the wear's last stage lies over the first. So a slope near `REST` holds almost no loose
 //! ground (its bed bare), and the gentle ground at its foot, where a grows and S falls, holds the more.
+//!
+//! Where edits shaped a sample (`Relief::shaped`), its loose ground follows (`edited`): a lowering takes it first, and
+//! no more stays than the creep holds on its new slope, so the flanks of a hill raised steep are bare bed.
 
 use super::grid::Grid;
 
@@ -35,7 +38,20 @@ const CLOSE_M: f64 = 1e-6;
 /// mantle (the module's doc) where the ground lowers at `lowers`, m a year, drains `drained`, m², and stands at heights
 /// `h`, m, its loose ground creeping at `creep`, m² a year at `CREEP_DEPTH_M` of depth.
 pub(super) fn mantle(g: &Grid, (h, drained): (&[f64], &[f64]), (settled, lowers): (&[f64], &[f64]), (creep, years): (f64, f64)) -> Vec<f64> {
-    (0..g.n()).map(|k| depth((settled[k], lowers[k]), (slope(g, h, k), drained[k] / g.dy), (settled[k] / years * g.dy, creep))).collect()
+    (0..g.n()).map(|k| depth((settled[k], lowers[k]), (slope(g, &|j| h[j], k), drained[k] / g.dy), (settled[k] / years * g.dy, creep))).collect()
+}
+
+/// The loose ground of sample `k` of grid `g` once edits shaped it by `shaped` m (raised; lowered where under none),
+/// where it held `loose` m with `settled` m of it laid by the liquid, and stands at heights `h` draining `drained` m²: a
+/// lowering takes the loose ground first, and no more stays than the creep holds on its slope (`depth`, the bed
+/// breaking under it as under ground that does not lower, `SLOWEST`; nothing coming on it from upslope, as an edit is
+/// over in no time). Unshaped, it keeps its own.
+pub(super) fn edited(g: &Grid, k: usize, (h, drained): (&dyn Fn(usize) -> f64, f64), (loose, settled, shaped): (f64, f64, f64)) -> f64 {
+    if shaped == 0.0 {
+        return loose;
+    }
+    let left = if shaped < 0.0 { (loose + shaped).max(0.0) } else { loose };
+    left.min(depth((settled, BREAKS * SLOWEST), (slope(g, h, k), drained / g.dy), (0.0, super::wear::CREEP)))
 }
 
 /// How long the loose ground of `loose` m has lain, years, where `settled` m settled on it over the last `years` and
@@ -48,9 +64,9 @@ pub(super) fn age(loose: f64, (settled, years): (f64, f64), lowers: f64) -> f64 
 
 /// The slope of heights `h` at sample `k` of grid `g`, rise over run: from the differences across it east to west and
 /// north to south (one-sided at the map's edge).
-fn slope(g: &Grid, h: &[f64], k: usize) -> f64 {
+fn slope(g: &Grid, h: &dyn Fn(usize) -> f64, k: usize) -> f64 {
     let [(e, dx), (w, _), (n, dy), (s, _)] = g.sides(k);
-    let across = |a: usize, b: usize, len: f64| (h[a] - h[b]) / (len * ((a != k) as u8 + (b != k) as u8).max(1) as f64);
+    let across = |a: usize, b: usize, len: f64| (h(a) - h(b)) / (len * ((a != k) as u8 + (b != k) as u8).max(1) as f64);
     across(e, w, dx).hypot(across(s, n, dy))
 }
 

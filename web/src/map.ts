@@ -336,11 +336,16 @@ export class MapView {
 
   /** Draw the map anew at the next frame, on the GPU and over it. */
   invalidate(): void { this.gpuDue = true; this.redraw(); }
+  /** Forget the pictures of the area about the view and of the whole map (they show a fire as it was): they are drawn
+   * again once the view rests. */
+  forgetAround(): void { this.rings = []; this.whole = null; this.invalidate(); }
 
   /** Draw the map anew at the next frame though a sharp picture of this same view is being drawn (`sharpen`, which a
-   * playing world's frames leave to finish): the player changed the world, and sees it at once. */
+   * playing world's frames leave to finish): the player changed the world, and sees it at once, drawn whole (at fewer
+   * pixels on a slow card) and sharp once it rests; not sharp again over the last, which a change every tenth of a
+   * second, as a held brush makes, would stop before it is done each time. */
   showNow(): void {
-    this.sharpening = null; this.resting = false;
+    this.sharpening = null; this.resting = false; this.sharpOf = '';
     clearTimeout(this.sharpTimer);
     this.invalidate();
   }

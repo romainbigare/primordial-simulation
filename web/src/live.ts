@@ -128,6 +128,8 @@ export class Live {
   brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): void { this.worker.postMessage({ cmd: 'brush', tool, at: [x, y], radius, amount, row }); }
   /** End the stroke: what its edits start that takes no time runs at once (answered by `on.settled`). */
   settle(): void { this.worker.postMessage({ cmd: 'settle' }); }
+  /** Settle what the stroke under way did so far and go on with it (answered by a frame). */
+  soften(): void { this.worker.postMessage({ cmd: 'soften' }); }
   /** Put the world back as before the last stroke (answered by `on.undone`). */
   undo(): void { this.worker.postMessage({ cmd: 'undo' }); }
   /** The page's ground shows the samples of `version` now (answered by `on.preview`: what edits moved since). */

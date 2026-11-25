@@ -239,8 +239,9 @@ fn a_flame_leaves_a_young_clearing_and_burns_the_rest() {
 }
 
 /// An edit's strike burns at once when the edits settle (`World::settle`, laws.md 0), with no time on the world's clock
-/// and no strike drawn: its flame reaches its cell at once, and the burn is shown as the coming month's; the books are
-/// kept. The month's own flames then take that burn as theirs and burn nothing again.
+/// and no strike drawn: its flame reaches its cell at once, and the burn is shown as the coming month's and kept as the
+/// cell's last (its share, and a share of the soft tissue on it killed); the books are kept. The month's own flames
+/// then take that burn as theirs and burn nothing again.
 #[test]
 fn a_settled_strike_burns_at_once_with_no_time() {
     use pcore::edit::{Act, Edit};
@@ -253,6 +254,8 @@ fn a_settled_strike_burns_at_once_with_no_time() {
     let burnt = w.counts.flame[flame::REMAINS];
     assert!(reached.contains(&(i as u32, 0.0)) && w.time == time && w.strikes.is_empty(), "reached {reached:?}, time {} for {time}", w.time);
     assert!(burnt > 0.0 && w.counts.flame_month[i].share > 0.0 && flame::since(&w, i) == 0.0, "burnt {burnt} kg, shown {:?}", w.counts.flame_month[i]);
+    let [share, crown] = flame::last_burn(&w, i);
+    assert!(share == w.counts.flame_month[i].share as f64 && (0.0..=1.0).contains(&crown), "last burn {share}, {crown}");
     books.assert_kept(&w, 1e-9);
     w.cfg.phys.strikes = 0.0;
     flame::month(&mut w);

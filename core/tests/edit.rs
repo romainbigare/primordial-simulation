@@ -86,6 +86,32 @@ fn a_raised_brush_raises_its_disc_and_keeps_the_books() {
     assert!((after.h[far] - before.h[far]).abs() < 1e-3, "a sample far away moved {} m", after.h[far] - before.h[far]);
 }
 
+/// The samples' loose ground follows an edit (`mantle::edited`): a hill raised steep bares its flanks, where loose
+/// ground cannot rest, its gentle top keeps loose ground (no more than lay there), and a sample no edit shaped keeps its own; what a shell reads
+/// of it before the samples are built again (`World::loose_to_build`) is what the build gives.
+#[test]
+fn a_steep_raised_hill_bares_its_flanks() {
+    let mut w = small_world();
+    let i = inland(&w);
+    let mut control = w.clone();
+    control.relief.due = true;
+    control.settle();
+    let before = control.terrain_samples();
+    let height = 0.5 * w.map.side;
+    assert!(shape(&mut w, i, height));
+    let ks: Vec<usize> = (0..w.relief.shaped.len()).filter(|&k| w.relief.shaped[k] != 0.0).collect();
+    w.settle();
+    let after = w.terrain_samples();
+    let read = w.loose_to_build(&ks, &|j| after.h[j]);
+    assert!(ks.iter().zip(&read).all(|(&k, &m)| m == after.loose[k]), "the shell reads the build's loose ground");
+    let bared = ks.iter().filter(|&&k| before.loose[k] > 0.0 && after.loose[k] == 0.0).count();
+    assert!(bared > ks.len() / 4, "{bared} of {} samples bared", ks.len());
+    let top = *ks.iter().max_by(|&&a, &&b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
+    assert!(after.loose[top] > 0.0 && after.loose[top] <= before.loose[top], "the top keeps {} of {} m", after.loose[top], before.loose[top]);
+    let far = (0..after.h.len()).find(|&k| w.relief.shaped_at(k) == 0.0 && before.loose[k] > 0.0).unwrap();
+    assert_eq!(after.loose[far], before.loose[far], "a sample far away keeps its loose ground");
+}
+
 /// A lowering takes the loose ground first: one shallower than the cell's loose ground leaves its rock as it was; the
 /// books are kept.
 #[test]

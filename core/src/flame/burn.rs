@@ -194,8 +194,13 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, burnings: &[Burning])
             flows[CURED] += burn_up(chem, &mut b, (&p.sub, &mut c.cured), p.sub[q], cured[q] * lit) * mm[q];
         }
     }
+    // The soft tissue of the slots on the ground burnt, kg, and what of it the flames burnt or killed (`Flamed::crown`).
+    let soft_kg = |c: &Cover, x: usize| SOFT.iter().map(|&q| c.mol[x][q].max(0.0) * mm[q]).sum::<f64>();
+    let [mut held, mut lost] = [0.0; 2];
     for (x, f, r, crown) in crowns {
+        let before = soft_kg(c, x);
         crown_burns(w, p, (c, x, crown), (f, &r), (&mut b, &mut flows));
+        (held, lost) = (held + f * before, lost + before - soft_kg(c, x));
     }
     events.into_iter().for_each(|x| c.fell[x] = 0.0);
     if joined {
@@ -225,10 +230,12 @@ pub fn burn(w: &World, d: &mut Chunk, p: &Parts, i: usize, burnings: &[Burning])
     let given = |k: usize| (-b.ext[k]).max(0.0) * chem.subs[k].molar_mass / crate::contract::land(w, i).max(f64::MIN_POSITIVE);
     let air: f64 = (0..chem.ns()).filter(|&k| chem.phase(k, t) == Phase::Gas).map(given).sum();
     let ash: f64 = (0..chem.ns()).filter(|&k| k != p.liquid && chem.phase(k, t) != Phase::Gas).map(given).sum();
-    // The share of the cell's land burnt, and the flames' mean length over it.
+    // The share of the cell's land burnt, the flames' mean length over it, and the share of the soft tissue standing on
+    // it they burnt or killed.
     let share: f64 = burnings.iter().map(|x| x.bed.cover * x.bed.share).sum();
     let length = burnings.iter().map(|x| x.bed.cover * x.bed.share * reach(&w.cfg.phys, &x.bed).flame).sum::<f64>() / share.max(f64::MIN_POSITIVE);
-    counts.flamed.push((i as u32, super::Flamed { share: share as f32, length: length as f32, ash: ash as f32, air: air as f32 }));
+    let crown = if held > 0.0 { (lost / held).clamp(0.0, 1.0) } else { 0.0 };
+    counts.flamed.push((i as u32, super::Flamed { share: share as f32, length: length as f32, ash: ash as f32, air: air as f32, crown: crown as f32 }));
     // The heat the burning frees goes to the air over the cell (its plume); the rest closes with the ground as the
     // cover's books close (`life::book`).
     let freed = std::mem::take(&mut b.heat);

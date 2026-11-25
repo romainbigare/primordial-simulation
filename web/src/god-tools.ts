@@ -1,6 +1,7 @@
 // The tools of god mode (god-types.ts `GodTool`), in the order of the strip: each paints with the round brush
-// (wasm/src/lib.rs `brush`): Raise and Lower land move the ground under it while held, and the world builds its
-// samples and settles its liquid over the new ground when the stroke ends (`settle`); Lake digs a basin under it at
+// (wasm/src/lib.rs `brush`): Raise and Lower land move the ground under it by a step at once and a step each tenth of
+// a second while held, the map showing the new ground at each, and the world builds its samples and settles its liquid
+// over the new ground now and then while held (`soften`) and when the stroke ends (`settle`); Lake digs a basin under it at
 // once, its floor a chosen depth under the lowest point of the brush's rim (or under the level of a lake it reaches,
 // which grows over it), and fills it; Plant clears a share of each
 // cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, the
@@ -16,15 +17,17 @@ const LAKE_DEPTHS: [string, number][] = [['Shallow', 2], ['Middle', 5], ['Deep',
 /** The least radius of a lake, m: it is dug on the terrain's samples, 125 m apart (core/src/space/terrain.rs
  * `SAMPLE_DEPTH`), so a smaller one is a few samples, drawn as a rounded square, not a disc. */
 const LAKE_LEAST_M = 300;
-/** How fast Raise and Lower move the ground at the brush's centre while held, m/s: a second's hold makes a hill or a
- * pit a hillside's shading shows from a few kilometres away. */
-const SHAPE_M_S = 20;
+/** How far Raise and Lower move the ground at the brush's centre each step, m, and the time between steps while held,
+ * ms (the owner's choice: 25 m a tenth of a second, so a second's hold makes a hill of 250 m). */
+const SHAPE_STEP_M = 25, SHAPE_STEP_MS = 100;
 /** How much heat Burn adds at the brush's centre while held, J/m² a second: at the first radius, the remains of a
  * typical place light in about a second (the heat they need: core/src/flame `needed`; a cell holds the heat over all
  * its land, of which the brush covers a share), the wettest in tens. */
 const HEAT_J_M2_S = 3e6;
-/** Burn's heat doubles every this many seconds it is held, so damp remains light in a few seconds too, not tens. */
-const HEAT_DOUBLING_S = 1;
+/** Burn's heat doubles every this many seconds it is held, so damp remains light in a few seconds too, not tens; at
+ * most this many times (256 times its first rate, about 8e8 J/m² a second: what boils off some 300 kg of liquid a m²),
+ * so a brush held long over ground that does not light adds no heat past any the ground could take. */
+const HEAT_DOUBLING_S = 1, HEAT_DOUBLINGS = 8;
 /** The starting kinds in plain words, by the core's name (worldgen/src/life/kinds.rs `KINDS`): a short name and a line. */
 const PLAIN_KINDS: Record<string, [string, string]> = {
   'small fast light-eaters': ['Short grass', 'Small plants that grow and spread fast.'],
@@ -81,7 +84,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     },
   };
   const burn: GodTool = {
-    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S, settlesLit: true,
+    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S, doublings: HEAT_DOUBLINGS, settlesLit: true,
     hint: 'Hold on the map. The ring fills, then the ground lights.', verb: 'Hold to burn',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,
@@ -89,7 +92,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   /** A ground tool: it moves the ground up or down (`sign`) under the brush while held. */
   const shape = (sign: number): GodTool => ({
     key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise' : 'Lower',
-    ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1, rate: sign * SHAPE_M_S,
+    ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1, step: { amount: sign * SHAPE_STEP_M, every: SHAPE_STEP_MS }, softens: true,
     hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Right-drag moves the map.`, verb: `Hold to ${sign > 0 ? 'raise' : 'lower'}`,
     why: () => '', reason: why => why,
   });

@@ -251,9 +251,12 @@ the sea's level), none (its liquid stands there already), and a brush whose cent
 none. Then the liquid settles over the ground (below); what the cells' other liquid and pores took of it is poured
 again, up to three times, until it lacks less than a hundredth of its room, so it stands the asked depth over a dry
 floor. An edit moves the bed faster than the slow ground is checked: its caches
-are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. **Known limit:** the samples' loose
-ground and the make of their bed (what the tiles and the textures read) do not follow an edit; the cell's soil keeps
-its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
+are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. The samples' loose
+ground follows an edit when they are built again (`mantle::edited`): a lowering takes it first, and on a sample an edit
+shaped no more stays than the creep holds on its new slope (the mantle's balance with nothing coming from upslope, the
+bed breaking as under ground that does not lower), so the flanks of a hill raised steeper than loose ground rests at
+are bare bed, and the cells' plants root by it (`cover::loose_bins`). **Known limit:** the make of the samples' bed
+does not follow an edit; the cell's soil keeps its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
 (`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
 it as a build builds them, without the lobes, without counting a build of the years and with the cells' offsets of the
 last build (`flow::build::reshape`: an edit moves a cell's ground and its samples' mean by one volume, so its offset
@@ -271,7 +274,8 @@ heat they added burn (3c).
 This is honest because a month's step already treats these processes as one event inside the month (the runoff's pass
 moves a month's runoff at once; a flame's run lasts at most `front_life`, 4 days), and every move goes through the
 store, so the books close; what needs time (sun, rain, growth, rot) does not run, and no strike is drawn over no time.
-The live page settles when a stroke of its brush ends, while the world is paused.
+The live page settles when a stroke of its brush ends, while the world is paused, and about once a second while a
+stroke of the ground is held (wasm `soften`: the stroke goes on, and its undo is to the world before it).
 **Chunks and the parallel pass** (`life::run`). The cells are cut into `Config::chunks` runs of neighbouring indices,
 the same for any number of threads. Each chunk is one task on the pool, its cells' life taken out of the world, the
 world read only; in each cell in order the cover's month and then the takers' run on the cell's **view of the store** (`store::Moves`): its
@@ -1693,8 +1697,9 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   share of its air, `Books::room`); the heat the burning frees goes to the air node over the cell. What it burnt and
   killed is counted (`Counters::flame`, `flame_air`, `cover_lost` by `life::FLAME`, the budget's `burnt`), and what the
   flames did on each cell in the month (`flame::Flamed`: the share burnt, the flame's length, the minerals left and
-  the gas given, per m² of land), the share burnt in each month of the last year and the months since it last
-  burnt, for the tape (`Counters::flame_month`, `burnt_months`, `burnt_age`).
+  the gas given, per m² of land, and the share of the soft tissue standing on the land burnt that they burnt or
+  killed), the share burnt in each month of the last year, the months since it last burnt, and its last burn's share
+  and soft tissue killed, for the tape (`Counters::flame_month`, `burnt_months`, `burnt_age`, `burnt_last`).
 - **Known limits:** dead leaves keep all their nitrogen (body matter's share of it is fixed by chemistry 0, and a
   plant has no part that could hold the mineral it would pull back; real plants pull back about half, Aerts 1996), so
   a flame sends 2 to 5 times the real nitrogen to the air (about 20 to 30 g a m² burnt); the slow organic matter held on the mineral particles (14) does not burn; the smouldering part

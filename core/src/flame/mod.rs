@@ -95,13 +95,15 @@ pub const PLANTS: usize = 6;
 pub const CURED: usize = 7;
 
 /// What flames did on a cell in a month, for the tape: the share of its land they burnt; their mean length, m; the
-/// solids their burning left on its ground and the gas it gave the air, kg a m² of its land.
+/// solids their burning left on its ground and the gas it gave the air, kg a m² of its land; and the share of the soft
+/// tissue of the cover standing on the land they burnt that they burnt or killed.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Flamed {
     pub share: f32,
     pub length: f32,
     pub ash: f32,
     pub air: f32,
+    pub crown: f32,
 }
 
 /// The most months since a cell last burnt that the tape tells apart (`since`): a cell that never burnt counts as this
@@ -250,6 +252,7 @@ fn sized(c: &mut crate::Counters, n: usize, months: usize) {
     c.flame_month.resize(n, Flamed::default());
     c.burnt_months.resize(n * months, 0.0);
     c.burnt_age.resize(n, AGE_MOST);
+    c.burnt_last.resize(n, [0.0; 2]);
 }
 
 /// What each cell's flames did in the month (`Counters::flamed`) becomes its last month's (`Counters::flame_month`,
@@ -269,13 +272,14 @@ fn tally(w: &mut World, n: usize) {
 }
 
 /// What the flames `flamed` did on each cell shown as this month's: its last month's (`Counters::flame_month`), the
-/// share it burnt this month of the year's (`burnt_months`, of `months` a cell, this month `of_year`), and none since
-/// it last burnt (`burnt_age`).
+/// share it burnt this month of the year's (`burnt_months`, of `months` a cell, this month `of_year`), none since it
+/// last burnt (`burnt_age`), and its last burn's share and the share of the soft tissue on it killed (`burnt_last`).
 fn show(c: &mut crate::Counters, flamed: &[(u32, Flamed)], (months, of_year): (usize, usize)) {
     for &(i, f) in flamed {
         let i = i as usize;
         (c.flame_month[i], c.burnt_months[i * months + of_year]) = (f, f.share);
         c.burnt_age[i] = 0.0;
+        c.burnt_last[i] = [f.share, f.crown];
     }
 }
 
@@ -320,4 +324,10 @@ pub fn burnt_year(w: &World, i: usize) -> f64 {
 /// The whole months since cell `i` last burnt, at most `AGE_MOST` (a cell that never burnt counts as that old).
 pub fn since(w: &World, i: usize) -> f64 {
     w.counts.burnt_age.get(i).copied().unwrap_or(AGE_MOST) as f64
+}
+
+/// Of cell `i`'s last burn: the share of its land it burnt, and the share of the soft tissue standing there it burnt
+/// or killed (both 0 where it never burnt).
+pub fn last_burn(w: &World, i: usize) -> [f64; 2] {
+    w.counts.burnt_last.get(i).copied().unwrap_or_default().map(f64::from)
 }

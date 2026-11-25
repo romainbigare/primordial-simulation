@@ -1,8 +1,7 @@
 // The fire of a stroke of Burn, played on the map though the world stands still: the core says which cells its flames
 // reached (god-types.ts `Settled`); the frame that follows says which squares burnt now, the core is asked the cell under
-// each of them (`probe`), and the burn plays outward from its strike over the squares of the cells it reached, to the
-// land its flames took (the share of each cell's land burning this month, the core's `flame`, times its land; fire.ts
-// `play`).
+// each of them (`probe`), and the burn grows from its strike over the squares of the cells it reached, each to the share
+// of its land the core says burnt (fire.ts `play`, burns.ts).
 import { World, decode } from './data';
 import type { Fire } from './fire';
 import type { Probe } from './god-types';
@@ -31,16 +30,14 @@ export class FireFront {
     if (!burn) return;
     // (No fire told: the planes are let go as they are.)
     if (!w.index.has('burnt_age')) return this.fire.still();
-    const age = decode(w, 0, 'burnt_age'), flame = decode(w, 0, 'flame'), side = w.meta.w, reached = new Uint8Array(age.length);
+    const age = decode(w, 0, 'burnt_age'), side = w.meta.w, reached = new Uint8Array(age.length);
     const left = [...age.keys()].filter(i => age[i] < NOW_MONTHS);
-    let m2 = 0;
     const next = (): void => {
       const i = left.shift(), core = this.core();
       // (All found, or the world gone: what was found plays.)
-      if (i === undefined || !core) return this.fire.play(reached, burn.strike, m2);
+      if (i === undefined || !core) return this.fire.play(reached, burn.strike);
       core.probe((i % side) + 0.5, Math.floor(i / side) + 0.5, p => {
         const [x0, y0, x1, y1] = p.bounds, hit = burn.cells.has(p.cell) ? 1 : 0;
-        m2 += hit * flame[i] * p.land;
         const inside = (k: number) => { const x = (k % side) + 0.5, y = Math.floor(k / side) + 0.5; return x > x0 && x < x1 && y > y0 && y < y1; };
         reached[i] = hit;
         for (let k = left.length - 1; k >= 0; k--) if (inside(left[k])) { reached[left[k]] = hit; left.splice(k, 1); }

@@ -11,7 +11,6 @@ import { CoverSlots, THINGS_PX } from './slots';
 import { Vegetation } from './vegetation';
 import { Fire } from './fire';
 import { God } from './god';
-import { drawFireEdge } from './god-draw';
 import { FireFront } from './front';
 import { nearestFrame, setTimeline } from './timeline';
 import { godTools } from './god-tools';
@@ -81,6 +80,9 @@ let thingsKey = '';
 /** Fire on the live map: its scars, flames and smoke. */
 const fire = new Fire();
 map.fire = fire;
+// (While a burn of god mode plays the plants stand as they were till its front has passed: they are let go once it
+// played out, `repaint`; the pictures about the view show it as it was.)
+fire.played = begun => { if (!begun) repaint(); map.forgetAround(); };
 /** The cover of the live map (with no layer shown), its plants scorched on fresh scars. */
 const vegetation = new Vegetation(fire);
 map.layer = vegetation;
@@ -95,9 +97,6 @@ const god = new God({
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => {
   slots.seen(ox, oy, s);
-  // The burning edge of a burn of god mode as it spreads, in css px (its numbers in m).
-  const burning = world && fire.edgeAt(performance.now()), k = s / (world?.meta.cell_m ?? 1);
-  if (burning) drawFireEdge(ctx, ox + burning.strike[0] * k, oy + burning.strike[1] * k, burning.reach * k, burning.edge * k, performance.now());
   if (live && godOn()) god.draw(ctx, ox, oy, s);
 };
 map.paint = { on: () => godOn() && god.toolOn(), start: (x, y) => live !== null && godOn() && !god.aiming() && god.start(x, y), move: (x, y) => god.move(x, y), end: () => god.end() };
@@ -268,7 +267,7 @@ function repaint(): void {
   if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
   if (land && live) land.plumesIn(live.plumes);
   if (land && live) land.tiles.rebuild(live.takeRelief(), !playing);
-  vegetation.set(!layer && live ? w : null, live?.table ?? null);
+  if (layer || !live || !fire.playing()) vegetation.set(!layer && live ? w : null, live?.table ?? null);
   fire.set(land && live ? w : null);
   map.setLook(look);
   inspector.painted();
