@@ -80,7 +80,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
       : grown ? `Planted grown ${kindName()} in ${cells(done)}.` : `No grown ${kindName()} yet: young ones planted.`),
   };
   const burn: GodTool = {
-    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff7a1a', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S,
+    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S,
     hint: 'Hold on the map. The ring fills, then the ground lights.', verb: 'Hold to burn',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,

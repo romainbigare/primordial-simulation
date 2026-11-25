@@ -296,7 +296,8 @@ export class God {
     const [cx, cy] = [ox + this.at[0] * s, oy + this.at[1] * s];
     const r = (this.radius / this.page.squareM()) * s, progress = this.stroke?.progress ?? -1;
     drawBrush(ctx, cx, cy, r, ink, this.stroke !== null, progress);
-    if (this.stroke && progress > 0 && !why) drawFlames(ctx, cx, cy, r, progress, now);
+    // (The fire flickers: the map's overlay is drawn again at the next frame while it burns.)
+    if (this.stroke && progress > 0 && !why) { drawFlames(ctx, cx, cy, r, progress, now); this.page.redraw(); }
     if (aim) drawSight(ctx, cx, cy);
     if (now < this.sizeShownTill) drawSizeTag(ctx, cx, cy, r, radiusText(this.radius));
     if (why) drawReason(ctx, cx, cy, r, why);
@@ -327,7 +328,7 @@ export class God {
     const why = t.why(this.probe);
     line(why ? 'why' : 'hint', why || t.hint);
     this.holdButton.innerHTML = `${iconSvg(t.icon)}<span>${t.verb}</span>`;
-    this.holdButton.style.background = t.ink;
+    this.holdButton.style.setProperty('--tool', t.ink);
     el.append(this.holdButton);
   }
 

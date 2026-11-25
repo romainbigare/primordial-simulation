@@ -212,9 +212,13 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   .god .stepper b { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
   .god .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .god .chips button { flex: none; }
-  .god .hold { display: grid; place-content: center; justify-items: center; gap: 2px; grid-column: 2; grid-row: 1 / span 2; width: 84px; height: 84px; border: 0; border-radius: 50%; color: #1a1208; font-size: 11px; font-weight: 700; line-height: 1.1; text-align: center; box-shadow: 0 0 0 5px rgba(0, 0, 0, .25), var(--shadow); touch-action: none; transition: transform .1s; }
-  .god .hold .i { width: 24px; height: 24px; }
-  .god .hold.held { transform: scale(.92); box-shadow: 0 0 0 8px rgba(255, 255, 255, .25), var(--shadow); }
+  /* (The card shows all of the button's shadow: nothing in it scrolls but the choices.) */
+  .god.glass { overflow: visible; }
+  /* The tool's button: its colour (`--tool`, the tool's ink, god.ts) lit from the top left, deeper to the bottom right,
+     with a soft ring of it and a shadow under it. */
+  .god .hold { display: grid; place-content: center; justify-items: center; gap: 3px; grid-column: 2; grid-row: 1 / span 2; width: 84px; height: 84px; margin: 6px; border: 1px solid rgba(255, 255, 255, .28); border-radius: 50%; background: radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--tool) 55%, #fff4e0), var(--tool) 52%, color-mix(in srgb, var(--tool) 72%, #5a1606)); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .35); font-size: 11px; font-weight: 700; line-height: 1.1; text-align: center; box-shadow: 0 0 0 5px color-mix(in srgb, var(--tool) 28%, transparent), 0 8px 22px rgba(0, 0, 0, .45), inset 0 -3px 8px rgba(0, 0, 0, .18); touch-action: none; transition: transform .1s, box-shadow .1s; }
+  .god .hold .i { width: 24px; height: 24px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3)); }
+  .god .hold.held { transform: scale(.93); box-shadow: 0 0 0 9px color-mix(in srgb, var(--tool) 35%, transparent), 0 4px 14px rgba(0, 0, 0, .45), inset 0 2px 8px rgba(0, 0, 0, .25); }
   .toast { bottom: auto; top: calc(var(--top) + 48px + var(--gap)); }
   .busy { top: calc(var(--top) + 48px + var(--gap)); }
   .errors { top: calc(var(--top) + 48px + var(--gap)); }
