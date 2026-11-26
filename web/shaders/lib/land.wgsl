@@ -15,8 +15,8 @@ struct Land {
   // cover, K (0: none), and the discharge per metre a css pixel takes past which a channel shows as a line, m³/s per m.
   time: vec4f,
   // The soil's liquid departs by this per unit of the wetness index, m; ground with this depth of liquid is half wet, m;
-  // a living thing that holds the share x of the liquid it needs is x to this power active; a point whose loose ground
-  // is under this share of the depth a kind's roots need holds none of it (`Physics::rooted_from`).
+  // a point whose loose ground is under this share of the depth a kind's roots need holds none of it
+  // (`Physics::rooted_from`); w is not read.
   soil: vec4f,
   // A channel's width and depth: each a factor, m, times its discharge in m³/s to a power.
   channel: vec4f,

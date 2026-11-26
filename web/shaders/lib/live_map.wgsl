@@ -71,8 +71,8 @@ fn layer_at(at: vec2f, dry: Spot) -> f32 {
 // `PLUME_STREAK` times an even noise over `PLUME_STREAK_M` m along the e-fold of the load, so the cloud's edge breaks
 // into tongues and filaments.
 const PLUME_STREAK = 1.2; const PLUME_STREAK_M = 300.0;
-// The load `load` g/m³ of standing liquid at `at`, as drawn.
-fn plume_streaks(load: f32, at: vec2f) -> f32 {
+// The load `load` g/m³ of standing liquid at the pixel, as drawn.
+fn plume_streaks(load: f32) -> f32 {
   if (load <= 0.0 || !styled()) { return load; }
   return load * exp(PLUME_STREAK * noise_l(lat_turned(PLUME_STREAK_M, vec2f(0.3)), 216).x);
 }
@@ -126,7 +126,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
   p.depth = select(st.depth, 0.0, st.depth < FILM_M);
   // What standing liquid carries: its plumes' load (web/src/land.ts), in the Earth view in streaks (`PLUME_STREAK`).
-  if (p.depth > 0.0) { p.load = plume_streaks(load_at(at), at); }
+  if (p.depth > 0.0) { p.load = plume_streaks(load_at(at)); }
   p.over = st.over;
   p.sea = surface.w;
   p.wet = st.wet;
@@ -231,7 +231,6 @@ fn live_map(v: Varying) -> vec4f {
   pix_local = earth.corner.xy + v.px * earth.frame.z;
   bends_e = earth.frame.w;
   let at = pix_origin + pix_local;
-  let cs = corners(at / land.map.x);
   // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.
   let spots = land_spots(at, earth.frame.w);
   var c = Shaded(vec3f(0.0), 1.0, BARE);

@@ -8,7 +8,7 @@ struct CoverLook {
   // Of each lattice: its cell's side, m (0: no square holds it), and 1 where any of its marks takes enough pixels to show
   // (each by the width of its lattice's marks where it stands, the rest is the field, `lattice_field`); w is not read.
   sides: vec4f, shown: vec4f,
-  // 1 where the cover is drawn (0: none); how strongly its marks cover the map; z and w are not read.
+  // How strongly its marks cover the map; y, z and w are not read.
   look: vec4f,
 }
 @group(0) @binding(14) var<uniform> cover_look: CoverLook;
