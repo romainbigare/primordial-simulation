@@ -87,7 +87,8 @@ fn a_hot_oxide_with_char_frees_its_element() {
 
 /// A ground node sleeps by its own rates (`clock::Sleep`): a node at 600 K holding the energy-rich solid with the
 /// burning gas above it burns far within a step, so it reacts again at the next step; a node holding only rock, where
-/// nothing reacts (the air holds none of the gas that burns in it alone), sleeps `sleep_days` after its first step.
+/// nothing reacts (the air holds none of the gas that burns in it alone), sleeps after its first step its share of
+/// `sleep_days` (`change::first_sleep`: node i the share (1 + i mod m) / m, m the steps in it), then `sleep_days`.
 #[test]
 fn a_node_sleeps_by_its_own_rates() {
     let mut w = worldgen::testkit::one_rise(1, 16, 16);
@@ -116,7 +117,9 @@ fn a_node_sleeps_by_its_own_rates() {
             cold_ran.push(w.time - start);
         }
     }
-    assert_eq!(cold_ran, [step, sleep + step], "the steps the cold node reacted at");
+    let m = sleep / step;
+    let first = sleep / m * (1 + cold as u64 % m);
+    assert_eq!(cold_ran, [step, first + step], "the steps the cold node reacted at");
 }
 
 /// Gas a ground reaction exchanges with the air crosses the height from the ground to the air's mean height: in a world
