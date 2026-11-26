@@ -79,11 +79,10 @@ export class Land {
   private sea = 0;
   /** The bytes of the layer shown over which an empty point fades into a full one (`OVER_FADE`). */
   private fade = OVER_FADE;
-  /** What runs through each sample, m³/s, and what its liquid carries, g/m³, as 16-bit floats, a texel a sample (none
-   * before the world's worker sent them); the plumes spread into the bodies of liquid (`plumesIn`); how far edits
-   * moved each sample's ground since the samples the core was told the page shows (`preview`), m, and the window of
-   * samples that holds what moved (null: none); the three as the GPU reads them (the plumes' load where it is more than
-   * the sample's own), whether they are to be made and sent anew (a new discharge) and whether the plumes are to be
+  /** What runs through each sample, m³/s, and what its channel's liquid carries, g/m³, as 16-bit floats, a texel a
+   * sample (none before the world's worker sent them); the plumes spread into the bodies of liquid (`plumesIn`); how far
+   * edits moved each sample's ground since the samples the core was told the page shows (`preview`), m, and the window
+   * of samples that holds what moved (null: none); the three and the plumes' load as the GPU reads them, whether they are to be made and sent anew (a new discharge) and whether the plumes are to be
    * laid anew, the windows of samples the plumes were laid in (rows from, to, columns from, to), and the rows of them
    * to send where only what edits moved changed (null: none). */
   private flows: Texture | null = null;
@@ -202,29 +201,29 @@ export class Land {
     this.plumesDue = true;
   }
 
-  /** The flows the GPU reads (`flowsData`), made whole: the samples' discharge and load, and how far edits moved each
-   * sample's ground (`preview`), with the plumes laid over them (`layPlumes`). */
+  /** The flows the GPU reads (`flowsData`), made whole: the samples' discharge and load, how far edits moved each
+   * sample's ground (`preview`), and the plumes' load (`layPlumes`). */
   private flowsOf(): Uint16Array {
     const s = this.samples, n = s.across * s.down, out = this.flowsData ?? new Uint16Array(4 * n);
-    for (let k = 0; k < n; k++) { out[4 * k] = this.discharge[2 * k]; out[4 * k + 1] = this.discharge[2 * k + 1]; out[4 * k + 2] = half(this.moved[k]); }
+    for (let k = 0; k < n; k++) { out[4 * k] = this.discharge[2 * k]; out[4 * k + 1] = this.discharge[2 * k + 1]; out[4 * k + 2] = half(this.moved[k]); out[4 * k + 3] = 0; }
     this.plumed = [];
     this.layPlumes(out);
     return out;
   }
 
-  /** In the flows the GPU reads, the plumes laid anew: the windows the last were laid in back to the samples' own load,
-   * then the new laid (`layPlumes`); the rows of samples [from, to) they span (null: none). */
+  /** In the flows the GPU reads, the plumes laid anew: the windows the last were laid in cleared, then the new laid
+   * (`layPlumes`); the rows of samples [from, to) they span (null: none). */
   private plumesAgain(out: Uint16Array): [number, number] | null {
     const across = this.samples.across, was = this.plumed;
-    for (const [y0, y1, x0, x1] of was) for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) out[4 * (j * across + i) + 1] = this.discharge[2 * (j * across + i) + 1];
+    for (const [y0, y1, x0, x1] of was) for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) out[4 * (j * across + i) + 3] = 0;
     this.plumed = [];
     this.layPlumes(out);
     const all = [...was, ...this.plumed];
     return all.length ? [Math.min(...all.map(p => p[0])), Math.max(...all.map(p => p[1])) + 1] : null;
   }
 
-  /** Into the flows `out`, each plume's load (`MUD_PLUME_DAYS`) where it is more than what is there, and the window of
-   * samples each is laid in (`plumed`). */
+  /** Into the flows `out`, each plume's load (`MUD_PLUME_DAYS`) where it is more than another's there, and the window
+   * of samples each is laid in (`plumed`). */
   private layPlumes(out: Uint16Array): void {
     const s = this.samples, view = new DataView(this.plumes.buffer, this.plumes.byteOffset, this.plumes.byteLength);
     const sampleM = (this.tiles.map.cell_m * this.tiles.map.w) / s.across;
@@ -244,7 +243,7 @@ export class Land {
       this.plumed.push([y0, y1, x0, x1]);
       for (let j = y0; j <= y1; j++) {
         for (let i = x0; i <= x1; i++) {
-          const d = Math.hypot(i - x, j - y), c = mean * Math.exp(-d / spread), t = 4 * (j * s.across + i) + 1;
+          const d = Math.hypot(i - x, j - y), c = mean * Math.exp(-d / spread), t = 4 * (j * s.across + i) + 3;
           if (d <= r && c > unhalf(out[t])) out[t] = half(c);
         }
       }

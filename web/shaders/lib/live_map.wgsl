@@ -128,7 +128,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
   p.depth = select(st.depth, 0.0, st.depth < FILM_M);
   // What standing liquid carries: its plumes' load (web/src/land.ts), in the Earth view in streaks (`PLUME_STREAK`).
-  if (p.depth > 0.0) { p.load = plume_streaks(load_at(at)); }
+  if (p.depth > 0.0) { p.load = plume_streaks(plume_at(at)); }
   p.over = st.over;
   p.sea = surface.w;
   p.wet = st.wet;

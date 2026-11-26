@@ -49,9 +49,10 @@ struct Land {
 @group(0) @binding(11) var tile_of: texture_2d<f32>;
 // The cells' table: `PLANES` planes of a texel a square, one under the other.
 @group(0) @binding(12) var table: texture_2d<f32>;
-// What runs through each of the terrain's samples, m³/s, and what its liquid carries, g/m³ (tape/src/table.rs
-// `discharge` and `load`, with the plumes' load in the bodies, web/src/land.ts), and how far edits moved its ground
-// since the samples the page's ground is made of, m (wasm/src/lib.rs `preview`), a texel a sample.
+// What runs through each of the terrain's samples, m³/s, and what its channel's liquid carries, g/m³ (tape/src/table.rs
+// `discharge` and `load`), how far edits moved its ground since the samples the page's ground is made of, m
+// (wasm/src/lib.rs `preview`), and what the plumes in the bodies of liquid carry there, g/m³ (web/src/land.ts), a
+// texel a sample.
 @group(0) @binding(17) var flows: texture_2d<f32>;
 
 // The table's planes: the terrain's mean height over the cell, m, its ground's temperature, K, how fast its air cools

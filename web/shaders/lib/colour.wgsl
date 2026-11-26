@@ -184,7 +184,7 @@ struct Spot {
   // liquid (the decimal logarithm of 1 m/s over their conductivity; tape/src/ground/rock.rs); and the share of its
   // pores the soil's liquid fills, 0..1 (land.wgsl `State`); how deep the load the liquid laid lies on it, m, and the
   // decimal logarithm of the years its loose ground has lain (rock.wgsl `soil_at`); and the load its liquid carries,
-  // g/m³ (rock.wgsl `load_of`, `load_at`).
+  // g/m³ (rock.wgsl `load_of`, `plume_at`).
   grain: vec4f, filled: f32, deposit: vec2f, load: f32,
   // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
   // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
