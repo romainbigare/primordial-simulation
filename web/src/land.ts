@@ -103,13 +103,17 @@ export class Land {
   /** The rock as the GPU holds it: the ground's own (ground.ts `rock`, one copy on the page), in which the loose ground
    * of the samples edits moved since it came is set as the core will build them (`preview`); that preview's window
    * (west column, north row, width, height, in samples), its loose ground, m, and the ground's own loose ground there
-   * that it took the place of (to put back); and the rows of the rock's first plane still to send (none: null). */
+   * that it took the place of (to put back); the rows of the rock's first plane still to send, and the rows of all
+   * four planes a build laid anew still to send (`rockLaid`; none: null). */
   private rockShown: Uint16Array | null = null;
   private loosePreview: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array } | null = null;
   private rockRows: [number, number] | null = null;
+  private laidRows: [number, number] | null = null;
   /** Of each square, the mean of its samples' shares of coarse and fine grain (the rock's third plane), and the version
    * of the rock they are of (`grainShift`). */
   private grainOf: { version: number; coarse: Float32Array; fine: Float32Array } | null = null;
+  /** The rows of samples a build laid anew in the rock since the grain was last summed (`grainShift`; none: null). */
+  private grainRows: [number, number] | null = null;
   /** The time the flow's signs stand at while one picture is drawn in tiles (performance.now, ms; null: each draw's
    * own), so all its tiles show the signs at one place along the channels. */
   flowAt: number | null = null;
@@ -121,6 +125,18 @@ export class Land {
     this.discharge = new Uint16Array(2 * samples.across * samples.down);
     this.moved = new Float32Array(samples.across * samples.down);
     this.told = version;
+    tiles.onRows = rows => this.rockLaid(rows);
+  }
+
+  /** A build laid the rows of samples `rows` [from, to) anew in the rock (ground.ts `rebuilt`, in place: the rock the
+   * GPU holds is the same array): the preview's loose ground is set again over those rows, all four planes of them are
+   * sent, and the grain of their squares is summed again. */
+  private rockLaid(rows: [number, number]): void {
+    const band = [0, rows[0], 0, rows[1] - rows[0]];
+    this.grainRows = rowsOf(band, null, this.grainRows);
+    if (!this.rockShown) return;
+    if (this.loosePreview) this.overlay(this.loosePreview, rows);
+    this.laidRows = rowsOf(band, null, this.laidRows);
   }
 
   /** Once the ground in view shows a version of the samples the core was not told of, tell it (`core`): what edits moved
@@ -157,10 +173,11 @@ export class Land {
   }
 
   /** In the rock the GPU holds (`rockShown`), the loose ground of the samples of preview `p`'s window as the preview
-   * says, the ground's own there kept in `p.own`. */
-  private overlay(p: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array }): void {
+   * says, the ground's own there kept in `p.own`; only in the rows of samples `rows` [from, to) where given. */
+  private overlay(p: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array }, rows?: [number, number]): void {
     const out = this.rockShown!, across = this.samples.across, [x0, y0, w, h] = p.window;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const first = rows ? Math.max(rows[0] - y0, 0) : 0, last = rows ? Math.min(rows[1] - y0, h) : h;
+    for (let y = first; y < last; y++) for (let x = 0; x < w; x++) {
       const k = 4 * ((y0 + y) * across + x0 + x);
       p.own[y * w + x] = out[k];
       out[k] = half(p.loose[y * w + x]);
@@ -269,16 +286,23 @@ export class Land {
   private grainShift(W: number, H: number, coarse: Float32Array, fine: Float32Array): { coarse: Float32Array; fine: Float32Array } {
     const r = this.tiles.rock, s = this.samples;
     if (!r) return { coarse, fine };
-    if (this.grainOf?.version !== this.tiles.rockVersion) {
-      const per = s.across / W, plane = 2 * 4 * s.across * s.down, out = { version: this.tiles.rockVersion, coarse: new Float32Array(W * H), fine: new Float32Array(W * H) };
-      for (let y = 0; y < s.down; y++) for (let x = 0; x < s.across; x++) {
-        const i = Math.floor(y / per) * W + Math.floor(x / per), t = plane + 4 * (y * s.across + x);
-        out.coarse[i] += unhalf(r[t]) / (per * per);
-        out.fine[i] += unhalf(r[t + 1]) / (per * per);
-      }
-      this.grainOf = out;
+    const per = s.across / W, plane = 2 * 4 * s.across * s.down;
+    // The squares of the samples' rows [from, to) summed anew: all of them where the rock came whole, else those of the
+    // rows a build laid anew.
+    let rows = this.grainRows;
+    if (this.grainOf?.version !== this.tiles.rockVersion) { this.grainOf = { version: this.tiles.rockVersion, coarse: new Float32Array(W * H), fine: new Float32Array(W * H) }; rows = [0, s.down]; }
+    this.grainRows = null;
+    const out = this.grainOf;
+    if (!rows) return out;
+    const y0 = Math.floor(Math.floor(rows[0] / per) * per), y1 = Math.min(Math.ceil(Math.ceil(rows[1] / per) * per), s.down);
+    out.coarse.fill(0, Math.floor(y0 / per) * W, Math.ceil(y1 / per) * W);
+    out.fine.fill(0, Math.floor(y0 / per) * W, Math.ceil(y1 / per) * W);
+    for (let y = y0; y < y1; y++) for (let x = 0; x < s.across; x++) {
+      const i = Math.floor(y / per) * W + Math.floor(x / per), t = plane + 4 * (y * s.across + x);
+      out.coarse[i] += unhalf(r[t]) / (per * per);
+      out.fine[i] += unhalf(r[t + 1]) / (per * per);
     }
-    return this.grainOf;
+    return out;
   }
 
   /** The bindings land.wgsl reads on `gpu` in view `look` (`lawBinds` and colour.wgsl's), for a draw whose pixels lie as
@@ -331,7 +355,13 @@ export class Land {
       if (r && this.loosePreview) this.overlay(this.loosePreview);
       gpu.write(this.rock, this.rockShown ?? Uint16Array.from({ length: 4 * ROCK_PLANES * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
       this.rockAt = this.tiles.rockVersion;
-      this.rockRows = null;
+      this.rockRows = this.laidRows = null;
+      this.written++;
+    }
+    if (this.laidRows && this.rockShown) {
+      const [from, to] = this.laidRows;
+      for (let p = 0; p < ROCK_PLANES; p++) gpu.writeRows(this.rock, this.rockShown, p * s.down + from, to - from);
+      this.laidRows = null;
       this.written++;
     }
     if (this.rockRows && this.rockShown) {
