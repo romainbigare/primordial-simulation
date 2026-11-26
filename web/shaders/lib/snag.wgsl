@@ -97,7 +97,7 @@ fn snag_texel(q: Snag, uv: vec2f, g: vec2f) -> vec4f {
   let origin = select(vec2f(f32(k % 2), f32(k / 2)) * 0.5, vec2f(0.0), k < 0);
   let at = origin + scale * (vec2f(0.5 - 0.5 * size.x, 1.0 - SNAG_F[q.s] - size.y) + uv * size);
   let t = textureSampleGrad(detail_tex, detail_sampler, at, SNAGS_FROM + SNAG_LAYER[q.s], vec2f(scale * g.x * size.x, 0.0), vec2f(0.0, scale * g.y * size.y));
-  return vec4f(unsrgb(t.rgb) * CHAR_TONE * q.tint, t.a * box_fade(uv, g));
+  return vec4f(exposed(t.rgb) * CHAR_TONE * q.tint, t.a * box_fade(uv, g));
 }
 
 // Snag q's width, m.

@@ -1,6 +1,8 @@
 // The textures of the map's detail (web/src/detail.ts): one array of photographs of ground seen from above, of tiles of
 // ground cover, and of rendered plants four to a layer, each a layer with its mips down to its mean; read by the ground
-// (detail.wgsl) and by the plants (models.wgsl).
+// (detail.wgsl) and by the plants (models.wgsl). Its texels are sRGB, so the GPU reads them as light and blends them
+// in light (`exposed`); the layers that hold numbers, not colours (the fire's flames and puffs, the heights of what
+// stands in water), are written so that they read back as those numbers (web/src/detail-worker.ts).
 
 @group(0) @binding(20) var detail_tex: texture_2d_array<f32>;
 @group(0) @binding(21) var detail_sampler: sampler;
@@ -22,11 +24,11 @@ const DETAIL_TOP = 16.0;
 
 // Photograph t at `uv` (repeating), its step over a pixel along the screen's axes `gx` and `gy` (for its mip): linear.
 fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {
-  return unsrgb(textureSampleGrad(detail_tex, detail_sampler, uv, t, gx, gy).rgb);
+  return exposed(textureSampleGrad(detail_tex, detail_sampler, uv, t, gx, gy).rgb);
 }
 
 // Photograph t's mean (its last mip), linear.
-fn photo_mean(t: i32) -> vec3f { return unsrgb(textureSampleLevel(detail_tex, detail_sampler, vec2f(0.5), t, DETAIL_TOP).rgb); }
+fn photo_mean(t: i32) -> vec3f { return exposed(textureSampleLevel(detail_tex, detail_sampler, vec2f(0.5), t, DETAIL_TOP).rgb); }
 
 // Photograph t at `uv` over its mean: the change it gives a colour, in lightness alone, its step `g` over a pixel.
 fn photo_light(t: i32, uv: vec2f, g: f32) -> f32 {
@@ -85,7 +87,7 @@ fn model_texel(s: i32, uv: vec2f, g: f32) -> vec4f {
     let at = (q + vec2f(0.5 - 0.5 * size.x, 1.0 - size.y - 2.0 / 256.0) + uv * size) * 0.5;
     t = textureSampleGrad(detail_tex, detail_sampler, at, MODELS_FROM + k / 4, vec2f(0.5 * g * size.x, 0.0), vec2f(0.0, 0.5 * g * size.y));
   }
-  return vec4f(unsrgb(t.rgb), t.a * box_fade(uv, vec2f(g)));
+  return vec4f(exposed(t.rgb), t.a * box_fade(uv, vec2f(g)));
 }
 
 // The height over the ground of the point of sprite s at `uv` in its content (`g` of it a pixel), drawn `h` m tall, the

@@ -255,7 +255,6 @@ fn srgb(c: vec3f) -> vec3f {
   return select(1.055 * pow(x, vec3f(1.0 / 2.4)) - 0.055, 12.92 * x, x <= vec3f(0.0031308));
 }
 
-// The light that the screen's share `x` of full scale shows (`srgb` backwards).
-fn unsrgb(x: vec3f) -> vec3f {
-  return select(pow((x + 0.055) / 1.055, vec3f(2.4)), x / 12.92, x <= vec3f(0.04045)) / EXPOSURE;
-}
+// The light of a texel of an image read as light (an sRGB texture, which the GPU reads back to light): `srgb`
+// backwards, past its exposure.
+fn exposed(light: vec3f) -> vec3f { return light / EXPOSURE; }

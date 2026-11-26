@@ -66,12 +66,18 @@ const photoBlank = new WeakMap<Gpu, Texture>();
 /** A cut-out texel shows where its cover is at least this (tex.wgsl `model_texel`, of the trees; detail-worker.ts
  * keeps it so in the mips). */
 const CUT = 128;
+/** The detail's texels are sRGB: the GPU reads them as light, and blends and filters them in light (tex.wgsl). */
+const DETAIL_FORMAT = 'rgba8unorm-srgb';
+/** Of each group, the layers of a strip that hold numbers, not colours, from its first: the fire's flames and puffs
+ * (its first layer, flames.wgsl `fire_sprite`) and the heights of what stands in water (all, tex.wgsl), which
+ * detail-worker.ts writes so that they read back as those numbers. */
+const NUMBER_LAYERS: Partial<Record<StripGroup, number>> = { fire: 1, heights: Infinity };
 
 /** The strips' files beside the page at layers `side` texels a side (web/textures/bake/sizes.py), in their layers'
- * order, and whether each is the trees' (cut-outs). */
-function stripFiles(side: number): [string, boolean][] {
+ * order, whether each is the trees' (cut-outs), and how many of its first layers hold numbers (`NUMBER_LAYERS`). */
+function stripFiles(side: number): [string, boolean, number][] {
   const at = (f: string) => (side === PHOTO_SIDE ? f : f.replace(/(\.[a-z]+)$/, `@${side}$1`));
-  return STRIP_GROUPS.flatMap(g => STRIPS[g].map(f => [at(f), g === 'trees'] as [string, boolean]));
+  return STRIP_GROUPS.flatMap(g => STRIPS[g].map(f => [at(f), g === 'trees', NUMBER_LAYERS[g] ?? 0] as [string, boolean, number]));
 }
 
 /** The height of the image in `bytes`, px, read from its head (a PNG's IHDR, a JPEG's start of frame), so the layers
@@ -121,7 +127,7 @@ async function fetchDetail(l: Loading): Promise<void> {
     while (ahead >= STRIPS_AHEAD) { await waiting; waiting = one(); }
     const strip = await createImageBitmap(new Blob([bytes[k]])).catch(e => Promise.reject(new Error(`${files[k][0]}: ${e}`)));
     if (!current()) { strip.close(); return; }
-    w.postMessage({ strip, first, cutOut: files[k][1], side: l.side, cut: CUT }, [strip]);
+    w.postMessage({ strip, first, cutOut: files[k][1], numbers: files[k][2], side: l.side, cut: CUT }, [strip]);
     ahead++;
   }
   while (ahead > 0) { await waiting; waiting = one(); }
@@ -207,7 +213,7 @@ function sendSoon(l: Loading): void {
   l.frame = requestAnimationFrame(() => timed('detail', () => {
     l.frame = 0;
     if (loading !== l || held) return;
-    l.t ??= s.gpu.texture('detail', l.side, l.side, 'rgba8unorm', l.layers, Math.log2(l.side) + 1);
+    l.t ??= s.gpu.texture('detail', l.side, l.side, DETAIL_FORMAT, l.layers, Math.log2(l.side) + 1);
     for (const { layer, levels } of l.made.splice(0, LAYERS_A_FRAME)) {
       levels.forEach((d, k) => s.gpu.write(l.t!, d, k, layer));
       l.filled++;
@@ -225,7 +231,7 @@ export function groundDetail(gpu: Gpu): Texture {
   if (sending?.gpu === gpu && shown) return shown.t;
   let t = photoBlank.get(gpu);
   if (!t) {
-    t = gpu.texture('detail', 1, 1, 'rgba8unorm', BLANK_LAYERS, 1);
+    t = gpu.texture('detail', 1, 1, DETAIL_FORMAT, BLANK_LAYERS, 1);
     gpu.write(t, new Uint8Array(4 * BLANK_LAYERS).fill(255));
     photoBlank.set(gpu, t);
   }
