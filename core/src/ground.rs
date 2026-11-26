@@ -111,9 +111,16 @@ impl World {
     /// liquid share.
     pub fn thaw(&self, i: usize) -> (f64, Option<(usize, f64)>) {
         let (c, g) = (self.heat_cap_ground(i).max(1.0), self.stock(Node::ground(i)));
-        let mut ks: Vec<(f64, usize)> = (0..self.chem.ns()).filter(|&k| g(k) > 0.0).map(|k| (self.chem.melt_in(k, &g), k)).collect();
+        // (The substances present by their melting points, in room on the stack: one for each the chemistry may hold.)
+        let mut room = [(0.0, 0); crate::units::MAX_SUBSTANCES];
+        let mut n = 0;
+        for k in (0..self.chem.ns()).filter(|&k| g(k) > 0.0) {
+            room[n] = (self.chem.melt_in(k, &g), k);
+            n += 1;
+        }
+        let ks = &mut room[..n];
         ks.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let th = melting(c, self.store.heat(Class::Ground)[i], ks.into_iter().map(|(tm, k)| (tm, k, g(k) * self.chem.subs[k].lf)));
+        let th = melting(c, self.store.heat(Class::Ground)[i], ks.iter().map(|&(tm, k)| (tm, k, g(k) * self.chem.subs[k].lf)));
         (th.t, th.on)
     }
     /// Temperature of the ground of cell `i` as life and the shell read it, K, with its plateau: Flow's solve at its

@@ -50,8 +50,8 @@ pub fn reshape(w: &mut World) {
         // The edits moved the ground faster than the slow ground is checked (`scratch::refresh`): its caches first.
         super::scratch::refresh(w, s);
         let old = w.terrain_samples();
-        anew(w, s, &old);
-        reroute(w, (&old, &w.terrain_samples()));
+        let from = anew(w, s, &old);
+        reroute(w, (&old, &w.terrain_samples()), &from);
         super::book_by(w, s, Some(crate::store::Boundary::Outside));
     });
     after(w);
@@ -66,8 +66,8 @@ pub fn reshape(w: &mut World) {
 /// from its pass, as a mean over the years does (a body fills first, then spills, and then all that comes in runs
 /// through), and a pond of `old` that no pond keeps the pass of no longer lets anything over it: what came into it (what
 /// reached its samples), at most what its pass adds of its own, is taken off that pass. So what a pond passes on is
-/// counted once.
-fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
+/// counted once. `from`: the pond of `old` each pond of `new` came from (`came_from`).
+fn reroute(w: &mut World, (old, new): (&Samples, &Samples), from: &[u32]) {
     let n = old.h.len();
     if w.discharge.len() != n || new.h.len() != n {
         return;
@@ -79,8 +79,7 @@ fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
     }
     q.iter_mut().for_each(|v| *v = v.max(0.0));
     // The ponds that keep their pass, of `new` and of `old` (the open low ground has none).
-    let from = came_from(old, new);
-    let kept: Vec<bool> = new.ponds.iter().zip(&from).map(|(p, &o)| p.pass != NONE && o != NONE && old.ponds[o as usize].pass == p.pass).collect();
+    let kept: Vec<bool> = new.ponds.iter().zip(from).map(|(p, &o)| p.pass != NONE && o != NONE && old.ponds[o as usize].pass == p.pass).collect();
     let mut kept_old = vec![false; old.ponds.len()];
     from.iter().zip(&kept).filter(|p| *p.1).for_each(|(&o, _)| kept_old[o as usize] = true);
     let mut came = vec![0.0; old.ponds.len()];
@@ -111,9 +110,10 @@ fn reroute(w: &mut World, (old, new): (&Samples, &Samples)) {
 }
 
 /// The samples of a new version of the relief (`Relief::version`) with the cells' offsets it holds, and with them each
-/// cell's ground as liquid stands on it (`curve::update`: found again where its samples moved), the bodies, what each cell's parts of them hold (`held_by_pond`; the
-/// samples `old` before) and the state of the ground nodes.
-fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
+/// cell's ground as liquid stands on it (`curve::update`: found again where its samples moved), the bodies, what each
+/// cell's parts of them hold (`held_by_pond`; the samples `old` before) and the state of the ground nodes. Returns the
+/// pond of `old` each new pond came from (`came_from`).
+fn anew(w: &mut World, s: &mut Scratch, old: &Samples) -> Vec<u32> {
     w.relief.version += 1;
     w.relief.due = false;
     let held = std::mem::take(&mut s.state.held);
@@ -122,8 +122,10 @@ fn anew(w: &mut World, s: &mut Scratch, old: &Samples) {
     s.bodies = Bodies::of(w, &s.curves);
     let new = w.terrain_samples();
     w.relief.ponds = new.pond_keys(&w.relief.ponds);
-    s.state.held = held_by_pond(s, (old, &new), (&was, held));
+    let from = came_from(old, &new);
+    s.state.held = held_by_pond(s, &from, (&was, held));
     ground_now(w, s, true);
+    from
 }
 
 /// The ground the cells' plants root in and the way they face, from the samples as built.
@@ -258,10 +260,9 @@ fn offsets(w: &World) -> Vec<f64> {
 /// What each cell's parts of the bodies hold after a build: a part of a new pond takes what the cell's part of the old
 /// pond it came from held (`came_from`), and a part that came from none of the cell's parts holds none yet (a pond new
 /// to the cell fills from what comes into it, not from the liquid of the parts beside it); a cell some of whose parts
-/// before no part takes takes `curve::first_held_at`. `samples` before and after; `was` the ponds of each cell's parts
-/// before, `held` what they held.
-fn held_by_pond(s: &Scratch, (old, new): (&Samples, &Samples), (was, held): (&[Vec<u32>], Vec<Holding>)) -> Vec<Holding> {
-    let from = came_from(old, new);
+/// before no part takes takes `curve::first_held_at`. `from` the pond each pond came from (`came_from`); `was` the ponds
+/// of each cell's parts before, `held` what they held.
+fn held_by_pond(s: &Scratch, from: &[u32], (was, held): (&[Vec<u32>], Vec<Holding>)) -> Vec<Holding> {
     s.curves.iter().enumerate().map(|(i, c)| {
         let matched: Option<Vec<f64>> = was.get(i).zip(held.get(i)).and_then(|(before, h)| {
             let at = |q: u32| before.iter().position(|&p| from[q as usize] == p);
@@ -276,8 +277,19 @@ fn held_by_pond(s: &Scratch, (old, new): (&Samples, &Samples), (was, held): (&[V
 /// the one that most of no other new pond came from (`NONE` for none): one to one.
 fn came_from(old: &Samples, new: &Samples) -> Vec<u32> {
     let mut counts: Vec<std::collections::BTreeMap<u32, u32>> = vec![Default::default(); new.ponds.len()];
-    for (k, &q) in new.pond.iter().enumerate().filter(|p| *p.1 != NONE && old.pond[p.0] != NONE) {
-        *counts[q as usize].entry(old.pond[k]).or_default() += 1;
+    // (Counted by runs of samples of one pair of ponds, as the samples of a pond lie in rows.)
+    let mut run: Option<((u32, u32), u32)> = None;
+    let pairs = new.pond.iter().zip(&old.pond).filter(|p| *p.0 != NONE && *p.1 != NONE).map(|(&q, &p)| (q, p));
+    for pair in pairs.map(Some).chain([None]) {
+        match (run, pair) {
+            (Some((at, m)), Some(p)) if at == p => run = Some((at, m + 1)),
+            _ => {
+                if let Some(((q, p), m)) = run {
+                    *counts[q as usize].entry(p).or_default() += m;
+                }
+                run = pair.map(|p| (p, 1));
+            }
+        }
     }
     let best: Vec<u32> = counts.iter().map(|c| c.iter().max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0))).map_or(NONE, |p| *p.0)).collect();
     let mut taken = vec![0u32; old.ponds.len()];

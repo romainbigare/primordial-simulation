@@ -106,10 +106,10 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let slope = slopes(w, s);
     let runs = springs(w, s, tmin, &slope, dt);
-    let mut off = OffLand::new(w);
+    let mut off = OffLand::new(s);
     under(w, s, &liq, tmin, dt, &mut off);
     land_drains(w, s, (&liq, tmin), &slope, dt);
-    surface(w, s, (&liq, tmin), (&slope, &runs, off), dt);
+    surface(w, s, (&liq, tmin), (&slope, &runs, Some(off)), dt);
     let mixed = super::parts::mix(w, s, dt);
     cells_state(w, s, &mixed, false);
     super::basin::mix(w, s);
@@ -118,12 +118,13 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
 
 /// The liquid settled over the ground as it stands now, in no time (`World::settle`, laws.md 0): the runoff's pass alone
 /// (`runoff::surface`) over a span of none, so what stands runs to the bodies and each stands at one level, and what a
-/// body holds over its pass runs on; nothing drains, seeps or mixes, and the yearly means of what runs do not move.
+/// body holds over its pass runs on; nothing drains, seeps or mixes (no pores drain to the channels in no time, whatever
+/// their slope), and the yearly means of what runs do not move.
 pub(super) fn settle(w: &mut World, s: &mut Scratch) {
     let (tmin, tmax) = range(&s.state.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
-    let (slope, none_up) = (slopes(w, s), vec![0.0; w.mesh.cells().n()]);
-    surface(w, s, (&liq, tmin), (&slope, &none_up, OffLand::new(w)), 0.0);
+    let none = vec![0.0; w.mesh.cells().n()];
+    surface(w, s, (&liq, tmin), (&none, &none, None), 0.0);
 }
 
 /// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
