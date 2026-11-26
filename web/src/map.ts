@@ -44,9 +44,11 @@ const TIMED_FRAMES = 4, SCALE_UP_SHARE = 0.8;
  * side. */
 const REST_MS = 150, SHARPEN_MS = 50, TILE_LEAST = 64;
 /** While the view moves (a pan, a pinch, a wheel: the last within `MOVE_REST_MS`), the last picture drawn is shown
- * moved and scaled as the camera did, at each frame (`showMoved`), and nothing heavy is begun on the card: no map drawn
- * anew, no ground's tile nor layer of its detail sent; once the view rests the map is drawn anew. */
-const MOVE_REST_MS = 120;
+ * moved and scaled as the camera did, at each frame (`showMoved`), and nothing heavy is begun on the card: no ground's
+ * tile nor layer of its detail sent, and no map drawn anew but on a card that draws a frame at the screen's pixels in
+ * `MOVE_DRAW_SHARE` of `FRAME_BUDGET_MS` or less (it is drawn anew at each frame then, as it moves); once the view
+ * rests the map is drawn anew. */
+const MOVE_REST_MS = 120, MOVE_DRAW_SHARE = 0.5;
 /** Where no picture shown moved covers the map in view at least as sharp as this share of the screen's pixels along
  * each axis (a zoom out past the pictures of the area about the view), the map is drawn anew at it, at once, as the
  * view moves (`quick`): a sixteenth of the pixels, a sixteenth of the time. */
@@ -472,12 +474,15 @@ export class MapView {
     const now = performance.now(), moving = now - this.movedAt < MOVE_REST_MS && this.last?.look === this.lookKey();
     this.hold(moving);
     if (held) { /* (stays due) */ } else if (this.gpu && this.gpuDue && moving) {
-      // The view moves: the last picture moved with it, over those of the area about it (the widest lowest) and of the
-      // whole map, at every frame (a few textured rectangles: it does not wait for the card); where none of them
-      // covers the view sharp enough, the map drawn anew at `QUICK_SCALE` once the card is free (a zoom out past them);
-      // and the map drawn anew once the view rests.
+      // The view moves: on a fast card the map drawn anew whenever the card is free (`MOVE_DRAW_SHARE`); else the last
+      // picture moved with it, over those of the area about it (the widest lowest) and of the whole map, at every
+      // frame (a few textured rectangles: it does not wait for the card); where none of them covers the view sharp
+      // enough, the map drawn anew at `QUICK_SCALE` once the card is free (a zoom out past them); and the map drawn
+      // anew once the view rests.
       const pics = [this.whole, ...[...this.rings].reverse(), this.last];
-      if (!this.gpu.busy && !this.coversView(pics, xs)) { this.stopPictures(); this.drawGpu(this.gpu, xs, this.drawnDpr(), true); }
+      const fast = this.scale >= 1 && this.timedMs.length > 0 && this.fullMs <= MOVE_DRAW_SHARE * FRAME_BUDGET_MS;
+      if (!this.gpu.busy && fast) { this.stopPictures(); this.fade = this.fadeFrom = null; this.drawGpu(this.gpu, xs, this.drawnDpr(), 'whole'); }
+      else if (!this.gpu.busy && !this.coversView(pics, xs)) { this.stopPictures(); this.drawGpu(this.gpu, xs, this.drawnDpr(), 'quick'); }
       else this.showMoved(this.gpu, pics);
       clearTimeout(this.moveTimer);
       this.moveTimer = window.setTimeout(() => this.redraw(), this.movedAt + MOVE_REST_MS - now + 1);
@@ -514,10 +519,11 @@ export class MapView {
    * `xs`, css px), the layer over them; and the map's classes if they were asked for. While frames take the GPU longer
    * than `FRAME_BUDGET_MS` the map is drawn at fewer pixels than the screen's and stretched onto it: the same picture,
    * softer, as every program chooses its detail by the screen's pixel; once the view rests it is drawn anew at the
-   * screen's pixels (`sharpen`). A `quick` frame, drawn as the view moves, is drawn at `QUICK_SCALE`, shown at once and
-   * neither timed nor sharpened. */
-  private drawGpu(gpu: HeldGpu, xs: number[], d: number, quick = false): void {
-    const { cam: { s, ox, oy } } = this, W = this.gpuCv!.width, H = this.gpuCv!.height;
+   * screen's pixels (`sharpen`). A frame drawn as the view moves (`moving`) is shown at once, neither sharpened nor
+   * followed by the pictures about the view: a `quick` one at `QUICK_SCALE`, not timed; a `whole` one as the view at
+   * rest (on a fast card, `MOVE_DRAW_SHARE`). */
+  private drawGpu(gpu: HeldGpu, xs: number[], d: number, moving: 'quick' | 'whole' | null = null): void {
+    const { cam: { s, ox, oy } } = this, W = this.gpuCv!.width, H = this.gpuCv!.height, quick = moving === 'quick';
     const r = quick ? QUICK_SCALE : this.scale, k = d * r, tw = Math.max(1, Math.round(W * r)), th = Math.max(1, Math.round(H * r));
     // (Drawn into a texture at the screen's pixels too, so a moving view can show it moved, `showMoved`.)
     [this.picture, this.pictureNext] = [this.pictureNext, this.picture];
@@ -541,12 +547,12 @@ export class MapView {
     this.drawFire(gpu, p, xs, k, d, [tw, th], waiting);
     p.end();
     this.last = picOf(target, this.cam, k, this.lookKey());
-    this.present(gpu, quick ? null : this.fadeFrom);
-    if (!quick) this.fadeFrom = null;
+    this.present(gpu, moving ? null : this.fadeFrom);
+    if (!moving) this.fadeFrom = null;
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
     gpu.submit();
     if (timer) this.time(timer, r);
-    if (quick) return;
+    if (moving) return;
     // The ground's detail is held only while the view is close enough to show it.
     detailSeen(this.cellM / (s * d));
     if (r < 1 && !fading && !waiting.length) {
