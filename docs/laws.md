@@ -1113,7 +1113,8 @@ tolerance.
 ### 2.2 Where it runs
 **Ground and air nodes** (`change::step`, `Reactor::react`) react when due over all the time since, at Flow's last
 temperature (a plateau's fusion heat set aside), then sleep until their reactions would use 5% of an input or warm
-them 0.5 K, at most `sleep_days`. The nodes under one air node react as one task (a block), each into a row of what its reactions changed and the gas it gives or takes; the rows are booked after the call, each array of the store by one task (`change/booking.rs`, `store::book_by_array`), so an air node gets the gas of its ground nodes in the order of their cells whatever thread ran them. Gas a ground node takes or gives
+them 0.5 K, at most `sleep_days`; after their first run node i sleeps at most the share (1 + i mod m) / m of it, m
+the months in `sleep_days`, so the calm nodes wake spread over those months and not all in one (`change::first_sleep`). The nodes under one air node react as one task (a block), each into a row of what its reactions changed and the gas it gives or takes; the rows are booked after the call, each array of the store by one task (`change/booking.rs`, `store::book_by_array`), so an air node gets the gas of its ground nodes in the order of their cells whatever thread ran them. Gas a ground node takes or gives
 (what its reactions made less what the node itself gained, so it never gives more than it holds) carries its heat and
 latent heat: what it gives goes into its cell's aside node, which the air's next step empties into the air with its
 lift, as life's gas does; what it takes comes down from its air node, which is given back its lift. **Growth** is a
