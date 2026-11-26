@@ -62,26 +62,29 @@ fn laid_years(settled: f64, age: f64) -> f64 {
 /// for roots (`Pores::for_roots` over its loose ground's depth) as the layer `avail` shows it (`layers::shown`); then of
 /// each sample again two zeros, how deep the load the
 /// liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain
-/// (`laid_years`), by which a shell draws a deposit: four planes of a texture, one under the other.
-pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<u16> {
+/// (`laid_years`), by which a shell draws a deposit: four planes of a texture, one under the other. Only of the
+/// samples of the rows `rows`: each plane holds those rows alone.
+pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture], rows: std::ops::Range<usize>) -> Vec<u16> {
     let s = r.s;
-    let mut out = Vec::with_capacity(16 * s.h.len());
-    for k in 0..s.h.len() {
+    let ks = rows.start * s.across..rows.end * s.across;
+    let mut out = Vec::with_capacity(16 * ks.len());
+    for k in ks.clone() {
         let slope = if s.to[k] == NONE || s.pond[k] != NONE { 0.0 } else { r.fall(k)[0] };
         let stone = (STONE_M * s.up[k].sqrt() * slope).min(STONE_MOST_M);
         out.extend([half(s.loose[k] as f32), half(stone as f32), half(slope as f32), half(links(s, k) as f32)]);
     }
-    for (k, &m) in s.make.iter().enumerate() {
-        let c = colours.get(m as usize).copied().unwrap_or([0.0; 3]);
+    for k in ks.clone() {
+        let c = colours.get(s.make[k] as usize).copied().unwrap_or([0.0; 3]);
         out.extend([half(c[0] as f32), half(c[1] as f32), half(c[2] as f32), half(r.wavelength(k) as f32)]);
     }
-    let pores: Vec<Pores> = grain[..s.h.len()].iter().map(Pores::of).collect();
     let avail = shown("avail");
-    for ((t, p), &loose) in grain.iter().zip(&pores).zip(&s.loose) {
-        let roots = avail(p.for_roots(loose));
+    for k in ks.clone() {
+        let (t, p) = (&grain[k], Pores::of(&grain[k]));
+        let roots = avail(p.for_roots(s.loose[k]));
         out.extend([half(t.coarse as f32), half(t.fine as f32), half(-p.seep.log10() as f32), half(roots)]);
     }
-    for (&settled, &age) in s.settled.iter().zip(&s.age) {
+    for k in ks {
+        let (settled, age) = (s.settled[k], s.age[k]);
         out.extend([0, 0, half(settled as f32), half(laid_years(settled, age).log10() as f32)]);
     }
     out

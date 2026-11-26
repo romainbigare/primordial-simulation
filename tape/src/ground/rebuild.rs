@@ -50,6 +50,19 @@ pub(super) const BENDS_READ: i64 = REACH_SAMPLES as i64 + 1;
 /// samples each runs to, a step each.
 pub(super) const GRAIN_READ: i64 = 2;
 
+/// The samples round a sample that its rock reads (`rock::rock`): the fall of its reach, as its piece of channel
+/// (`BENDS_READ`), its links (a step), and its texture (`GRAIN_READ`).
+pub(super) const ROCK_READ: i64 = if BENDS_READ > GRAIN_READ { BENDS_READ } else { GRAIN_READ };
+
+/// The band of rows of samples (`across` a row) that holds every one marked in `marked`: its first row and the row
+/// past its last; none (0, 0) where none is marked.
+pub(super) fn rows(marked: &[bool], across: usize) -> (usize, usize) {
+    match (marked.iter().position(|&m| m), marked.iter().rposition(|&m| m)) {
+        (Some(first), Some(last)) => (first / across, last / across + 1),
+        _ => (0, 0),
+    }
+}
+
 /// Of each sample, whether one of the numbers its texture reads differs in `new` from `old` (its height, its ways,
 /// what drains through it, its run, its pond, its make and its loose ground), to the last bit.
 pub(super) fn moved(old: &Samples, new: &Samples) -> Vec<bool> {

@@ -82,8 +82,9 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 /// the point each sample's line runs through (`stems::points`), how each sample's piece of its line starts
 /// (`bends::Bends`), the texture of each sample's loose ground (`pcore::soil::textures`), the samples whose line
 /// carries their wetness index (`wetness::strips`) and the wetness index of each as the hillslope holds it
-/// (`wetness::hill`), the largest area a sample drains (`channels::most_drained`); and the laws and the gravity it was
-/// made under, by which it is made again (`rebuild`).
+/// (`wetness::hill`), the largest area a sample drains (`channels::most_drained`), the band of rows of samples whose
+/// rock the last rebuild may have changed (`rebuild`, `rock_rows`); and the laws and the gravity it was made under, by
+/// which it is made again (`rebuild`).
 pub struct Ground {
     seed: u64,
     map: Square,
@@ -99,6 +100,7 @@ pub struct Ground {
     strips: Vec<bool>,
     hill: Vec<f64>,
     most: f64,
+    rock_rows: (usize, usize),
     phys: Physics,
     gravity: f64,
 }
@@ -122,7 +124,8 @@ impl Ground {
         let strips = wetness::strips(&samples, phys);
         let hill = wetness::hill(&samples, &strips);
         let most = channels::most_drained(&samples);
-        Ground { seed, map, terrain, lat, samples, law, at, raw, bends, shore, grain, strips, hill, most, phys: *phys, gravity }
+        let rock_rows = (0, samples.down);
+        Ground { seed, map, terrain, lat, samples, law, at, raw, bends, shore, grain, strips, hill, most, rock_rows, phys: *phys, gravity }
     }
 
     /// The ground of world `w`, on its samples as last built (`World::terrain_samples`).
@@ -164,7 +167,8 @@ impl Ground {
     /// holds of it found again, but the shore (`shore::Shore::update`), the points the lines run through
     /// (`stems::update`), the texture (`pcore::soil::texture_at`) and the pieces of the channels (`bends::Bends`), found
     /// again only where they may read a sample that changed (`rebuild::near`, `BENDS_READ`; and every piece down
-    /// the ways from those, whose start they set): the rest read what they did. Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
+    /// the ways from those, whose start they set): the rest read what they did; and the band of rows whose rock may
+    /// change kept (`rock_rows`). Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
     pub fn rebuild(&mut self, new: Arc<Samples>) -> Vec<bool> {
         let old = self.samples.clone();
         let mut shore = std::mem::take(&mut self.shore);
@@ -173,7 +177,9 @@ impl Ground {
         let (mut at, mut raw) = (self.at.clone(), std::mem::take(&mut self.raw));
         stems::update(&new, &shore, (&mut at, &mut raw), (&ways, &shore_moved));
         let mut grain = std::mem::take(&mut self.grain);
-        let read = rebuild::near(&new, &rebuild::moved(&old, &new), rebuild::GRAIN_READ);
+        let moved = rebuild::moved(&old, &new);
+        self.rock_rows = rebuild::rows(&rebuild::near(&new, &moved, rebuild::ROCK_READ), new.across);
+        let read = rebuild::near(&new, &moved, rebuild::GRAIN_READ);
         (0..new.h.len()).filter(|&k| read[k]).for_each(|k| grain[k] = pcore::soil::texture_at(&new, &self.terrain.makes, self.gravity, k));
         let strips = wetness::strips(&new, &self.phys);
         let hill = wetness::hill(&new, &strips);
@@ -251,7 +257,15 @@ impl Ground {
     /// bed's make, of `colours` one a make; the texture of its loose ground; and its pores and the deposit on it
     /// (`rock::rock`).
     pub fn rock(&self, colours: &[[f64; 3]]) -> Vec<u16> {
-        rock::rock(&self.reaches(), colours, &self.grain)
+        rock::rock(&self.reaches(), colours, &self.grain, 0..self.samples.down)
+    }
+
+    /// The band of rows of samples whose rock the last rebuild may have changed (`rebuild`; all of them before the
+    /// first; (0, 0): none), its first row and the row past its last, and their rock as `rock` gives it (each plane
+    /// those rows alone): laid over the rock before, the whole `rock` now.
+    pub fn rock_rows(&self, colours: &[[f64; 3]]) -> ((usize, usize), Vec<u16>) {
+        let (from, to) = self.rock_rows;
+        (self.rock_rows, rock::rock(&self.reaches(), colours, &self.grain, from..to))
     }
 
     /// The depths the ground's tiles are drawn at (`depths`).

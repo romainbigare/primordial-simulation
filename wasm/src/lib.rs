@@ -105,7 +105,7 @@ impl Live {
 
 thread_local! {
     static LIVE: RefCell<Option<Live>> = const { RefCell::new(None) };
-    static GROUND: RefCell<Option<tape::Ground>> = const { RefCell::new(None) };
+    static GROUND: RefCell<Option<ground::Drawn>> = const { RefCell::new(None) };
     /// What was last handed to the page (it reads it until the next call that returns bytes).
     static OUT: RefCell<Out> = const { RefCell::new(Out::Bytes(Vec::new())) };
     /// The bytes the page last handed in (`input`), until a call reads them.
@@ -389,8 +389,8 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     give(bytes)
 }
 
-/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile`, `rock`, `open_world`,
-/// `ground_of_world`, `probe`, `kinds`, `brush`, `settle`, `soften`, `undo` or `preview` last returned.
+/// The length in bytes of what the last call that returns bytes returned (`meta`, `frame`, `table`, `tile`, `rock`,
+/// `rock_rows`, `preview` and the others).
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
     OUT.with(|o| o.borrow().place().1)
