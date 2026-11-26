@@ -112,9 +112,10 @@ pub(super) fn push(cfg: &Config, st: Stretch, (a, b): (&End, &End), (wd, d, ab):
     [mix, over, contrast, even, mix * (a.aloft - b.aloft)]
 }
 
-/// The air of a link between ends `a` and `b` (`End`): its mol per m³ and its column's depth, m, their means.
+/// The air of a link between ends `a` and `b` (`End`): its mol per m³, their mean, and its column's depth over their
+/// mean height (`air::column_depth`), m.
 pub(super) fn column(cfg: &Config, a: &End, b: &End) -> (f64, f64) {
-    ((a.rho + b.rho) / 2.0, cfg.air_top_m - (a.za + b.za) / 2.0)
+    ((a.rho + b.rho) / 2.0, super::column_depth(cfg.air_top_m, (a.za + b.za) / 2.0))
 }
 
 /// The heat that `flux` mol/s of a lower half flowing from end `a` to end `b`, and as much of the upper half back,

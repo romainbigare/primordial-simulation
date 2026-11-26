@@ -47,6 +47,13 @@ const HALF_K: f64 = 0.5;
 /// Least heat capacity an air node's temperature divides by, J/K (a node emptied of gas reads 0 K).
 const CAPA_MIN: f64 = 1.0;
 
+/// The depth of the air over ground at mean height `za`, m, under the air's top `top`, m (`Config::air_top_m`): no
+/// less than `COLUMN_MIN`.
+#[inline]
+pub(super) fn column_depth(top: f64, za: f64) -> f64 {
+    (top - za).max(COLUMN_MIN)
+}
+
 /// Temperature of an air node of energy `e`, J, and heat capacity `capa`, J/K.
 #[inline]
 pub(crate) fn air_temp(e: f64, capa: f64) -> f64 {
@@ -174,7 +181,7 @@ fn nodes(w: &World, s: &mut Scratch) {
     }
     for j in 0..na {
         s.za[j] /= air.area()[j];
-        let (a, l) = (air.area()[j], (top - s.za[j]).max(COLUMN_MIN));
+        let (a, l) = (air.area()[j], column_depth(top, s.za[j]));
         s.vol[j] = a * l;
         s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]);
         s.gam[j] = g * s.mass[j] / s.capa[j].max(CAPA_MIN);
@@ -213,7 +220,7 @@ fn heights(w: &World, s: &mut Scratch) {
     // The vapour pressure falls by exp(lv/R (1/(t-½) - 1/(t+½))) per K; a gas that does not condense spreads like the air.
     for (gi, &k) in s.state.gas.iter().enumerate() {
         for j in 0..na {
-            let h = node_scale_height(s, j, g).min((top - s.za[j]).max(COLUMN_MIN));
+            let h = node_scale_height(s, j, g).min(column_depth(top, s.za[j]));
             let (mut hk, mut split) = (h, 0.5);
             if s.cond[gi] {
                 let t = s.ta[j] + s.gam[j] * (s.zair[j] - s.za[j]);
@@ -238,7 +245,7 @@ fn layers(w: &World, s: &mut Scratch) {
             let gases: Vec<(usize, f64, f64)> = s.state.gas.iter().enumerate().filter(|e| chem.absorbs_heat(*e.1)).map(|(gi, &k)| (k, w.store.amounts(Class::Air)[k * na + j] / air.area()[j], s.hk[gi * na + j].max(COLUMN_MIN))).collect();
             let (big, [share, depth]) = (node_scale_height(s, j, g), s.state.cloud[j]);
             let bands = band_depths(chem, &gases, (s.ta[j], big));
-            let sky = |cloud: f64| Heat::of(bands, (cloud, big), (s.gam[j], (top - s.za[j]).max(COLUMN_MIN)), w.cfg.line_spread);
+            let sky = |cloud: f64| Heat::of(bands, (cloud, big), (s.gam[j], column_depth(top, s.za[j])), w.cfg.line_spread);
             Skies::of(sky(0.0), (share > 0.0).then(|| (share, sky(radiation::drops_heat(depth)))))
         })
         .collect();
