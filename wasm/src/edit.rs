@@ -332,7 +332,7 @@ pub extern "C" fn ground_shown(version: u32) {
 /// moved. Only the samples edits may have moved since (`Built::moved`) are looked at.
 #[no_mangle]
 pub extern "C" fn preview() -> *const u8 {
-    let bytes = with(|l| {
+    let bytes: Vec<u8> = with(|l| {
         let (shown, newest) = (&l.since[0], l.since.last().expect("a version"));
         let now = |k: usize| l.world.relief.shaped_at(k);
         let across = l.world.terrain_samples().across;

@@ -38,7 +38,7 @@ const LOAD_SHOWS: f64 = 0.25;
 
 /// The world; the version of its samples what the shell keeps of its cells is of (`Relief::version`); what is placed
 /// when, and what a recorder keeps of it (`tape::Kept`, saved with it, `save_world`); what the shell keeps of its cells
-/// (`tape::Table`); the table made with the last frame; the samples' discharge, m³/s, and load, g/m³, last sent to the
+/// (`tape::Table`); the table made with the last frame, till `table` hands it to the page; the samples' discharge, m³/s, and load, g/m³, last sent to the
 /// page (`tape::Table::discharge`, `tape::Table::load`; none before the first); the brush's stroke under way (`Stroke`;
 /// none between strokes: a stroke ends at `settle`) and the strokes begun; whether an edit changed the world since the
 /// last frame (`frame`), so a stroke's end sends one only then (`settle`); a copy of the world as it stands now, kept
@@ -106,8 +106,8 @@ impl Live {
 thread_local! {
     static LIVE: RefCell<Option<Live>> = const { RefCell::new(None) };
     static GROUND: RefCell<Option<tape::Ground>> = const { RefCell::new(None) };
-    /// The bytes last handed to the page (it reads them until the next call that returns bytes).
-    static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    /// What was last handed to the page (it reads it until the next call that returns bytes).
+    static OUT: RefCell<Out> = const { RefCell::new(Out::Bytes(Vec::new())) };
     /// The bytes the page last handed in (`input`), until a call reads them.
     static IN: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
@@ -121,11 +121,47 @@ fn with<T>(f: impl FnOnce(&mut Live) -> T) -> T {
     LIVE.with(|c| f(c.borrow_mut().as_mut().expect("no world: call new_world first")))
 }
 
-/// Hand `bytes` to the page: their address in memory, valid until the next call that returns bytes; `out_len` is their length.
-fn give(bytes: Vec<u8>) -> *const u8 {
+/// What the shell hands the page: bytes, or numbers of 16 or 32 bits, handed as they lie in memory: little-endian, as
+/// the target is (wasm32), so none is copied to be encoded.
+enum Out {
+    Bytes(Vec<u8>),
+    Halves(Vec<u16>),
+    Floats(Vec<f32>),
+}
+
+impl Out {
+    /// Its address in memory and its length in bytes.
+    fn place(&self) -> (*const u8, usize) {
+        match self {
+            Out::Bytes(v) => (v.as_ptr(), v.len()),
+            Out::Halves(v) => (v.as_ptr().cast(), 2 * v.len()),
+            Out::Floats(v) => (v.as_ptr().cast(), 4 * v.len()),
+        }
+    }
+}
+
+impl From<Vec<u8>> for Out {
+    fn from(v: Vec<u8>) -> Out {
+        Out::Bytes(v)
+    }
+}
+impl From<Vec<u16>> for Out {
+    fn from(v: Vec<u16>) -> Out {
+        Out::Halves(v)
+    }
+}
+impl From<Vec<f32>> for Out {
+    fn from(v: Vec<f32>) -> Out {
+        Out::Floats(v)
+    }
+}
+
+/// Hand `out` to the page: its address in memory, valid until the next call that returns bytes; `out_len` is its
+/// length in bytes.
+fn give(out: impl Into<Out>) -> *const u8 {
     OUT.with(|o| {
-        *o.borrow_mut() = bytes;
-        o.borrow().as_ptr()
+        *o.borrow_mut() = out.into();
+        o.borrow().place().0
     })
 }
 
@@ -309,11 +345,11 @@ pub extern "C" fn frame() -> *const u8 {
     give(bytes)
 }
 
-/// The cells' table made with the last frame, f32 little-endian (`tape::Table::frame`).
+/// The cells' table made with the last frame, f32 little-endian (`tape::Table::frame`), handed over once.
 #[no_mangle]
 pub extern "C" fn table() -> *const u8 {
-    let bytes = with(|l| l.table.iter().flat_map(|v| v.to_le_bytes()).collect());
-    give(bytes)
+    let table = with(|l| std::mem::take(&mut l.table));
+    give(table)
 }
 
 /// What runs through each of the terrain's samples, m³/s, and what it carries, g/m³, row by row, two 16-bit floats
@@ -322,7 +358,7 @@ pub extern "C" fn table() -> *const u8 {
 /// or to carry counts); else nothing (`out_len` 0).
 #[no_mangle]
 pub extern "C" fn discharge() -> *const u8 {
-    let bytes = with(|l| {
+    let halves = with(|l| {
         let q = l.cells.discharge(&l.world);
         let now: Vec<[f32; 2]> = q.iter().zip(l.cells.load(&l.world, &q)).map(|(&q, c)| [q, c]).collect();
         let off = |a: f32, b: f32, share: f64| (a > 0.0) != (b > 0.0) || (a as f64 - b as f64).abs() > share * b.max(a) as f64;
@@ -330,18 +366,18 @@ pub extern "C" fn discharge() -> *const u8 {
         if l.sent.len() == now.len() && !l.sent.iter().zip(&now).any(moved) {
             return Vec::new();
         }
-        let bytes = now.iter().flat_map(|v| v.iter().flat_map(|&x| tape::half(x).to_le_bytes())).collect();
+        let halves: Vec<u16> = now.iter().flat_map(|v| v.map(tape::half)).collect();
         l.sent = now;
-        bytes
+        halves
     });
-    give(bytes)
+    give(halves)
 }
 
 /// Where load came into a body of standing liquid in the last month (`Counters::plumes`): each the terrain's sample
 /// (u32) and how much, kg/s (f32), little-endian.
 #[no_mangle]
 pub extern "C" fn plumes() -> *const u8 {
-    let bytes = with(|l| l.world.counts.plumes.iter().flat_map(|&(k, kg)| k.to_le_bytes().into_iter().chain(kg.to_le_bytes())).collect());
+    let bytes: Vec<u8> = with(|l| l.world.counts.plumes.iter().flat_map(|&(k, kg)| k.to_le_bytes().into_iter().chain(kg.to_le_bytes())).collect());
     give(bytes)
 }
 
@@ -357,5 +393,5 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
 /// `ground_of_world`, `probe`, `kinds`, `brush`, `settle`, `soften`, `undo` or `preview` last returned.
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
-    OUT.with(|o| o.borrow().len())
+    OUT.with(|o| o.borrow().place().1)
 }

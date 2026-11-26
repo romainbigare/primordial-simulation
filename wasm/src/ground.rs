@@ -50,7 +50,7 @@ pub extern "C" fn tile(depth: u32, x: i32, y: i32) -> *const u8 {
         let depth = u8::try_from(depth).ok().filter(|d| g.depths().contains(d));
         depth.map_or_else(Vec::new, |d| g.tile(d, x as i64, y as i64))
     });
-    give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
+    give(texels)
 }
 
 /// The rock of each of the terrain's samples of the ground made by `ground`, 16-bit floats little-endian
@@ -68,5 +68,5 @@ pub extern "C" fn rock() -> *const u8 {
         })
         .collect();
     let texels = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").rock(&colours));
-    give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
+    give(texels)
 }
