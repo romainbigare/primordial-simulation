@@ -11,12 +11,17 @@
 interface Strip { strip: ImageBitmap; first: number; cutOut: boolean; numbers: number; side: number; cut: number }
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Strip>) => void) | null };
 
-/** The light of each sRGB byte (IEC 61966-2-1), which the GPU reads an sRGB texel as (detail.ts `DETAIL_FORMAT`). */
-const LIGHT = Array.from({ length: 256 }, (_, b) => { const c = b / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
-/** The sRGB byte of light `x` (0..1), the nearest. */
+/** The light of an sRGB level `c` (0..1, IEC 61966-2-1), which the GPU reads an sRGB texel as (detail.ts
+ * `DETAIL_FORMAT`); of each byte; and half way between each byte and the next, a light under which is nearer the
+ * byte. */
+const unlit = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const LIGHT = Float32Array.from({ length: 256 }, (_, b) => unlit(b / 255));
+const EDGES = Float32Array.from({ length: 255 }, (_, b) => unlit((b + 0.5) / 255));
+/** The sRGB byte whose level lies nearest light `x` (0..1): found among the edges, with no power taken. */
 function srgbByte(x: number): number {
-  const c = x <= 0.0031308 ? 12.92 * x : 1.055 * Math.max(x, 0) ** (1 / 2.4) - 0.055;
-  return Math.min(255, Math.max(0, Math.round(255 * c)));
+  let lo = 0, hi = 255;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (EDGES[m] <= x) lo = m + 1; else hi = m; }
+  return lo;
 }
 
 /** The strips' levels (layers `side` texels a side), each of its `layers` after the last: level 0 as the image holds
@@ -30,19 +35,22 @@ function photoMips(base: Uint8Array, layers: number, cutFrom: number, side: numb
   const out = [base], area = side * side, mips = Math.log2(side) + 1;
   const showing = (level: Uint8Array, l: number, n: number) => { let k = 0; for (let i = 0; i < n; i++) k += level[4 * (l * n + i) + 3] >= cut ? 1 : 0; return k / n; };
   const shown = Array.from({ length: layers }, (_, l) => (l >= cutFrom ? showing(base, l, area) : 0));
-  // The colour of each texel of the last level made: its light (of a colour), or its number over 255.
-  let from = Float32Array.from(base, (v, i) => (i % 4 === 3 ? v : numbers ? v / 255 : LIGHT[v]));
-  if (numbers) out[0] = base.map((v, i) => (i % 4 === 3 ? v : srgbByte(v / 255)));
+  // The colour of each texel of the last level made: its light (of a colour), or its number over 255 (each fourth, its
+  // cover, unused).
+  let from = new Float32Array(base.length);
+  for (let i = 0; i < base.length; i++) from[i] = numbers ? base[i] / 255 : LIGHT[base[i]];
+  if (numbers) out[0] = base.map((v, i) => ((i & 3) === 3 ? v : srgbByte(v / 255)));
   for (let k = 1; k < mips; k++) {
     const s = side >> k, bytes = out[k - 1], next = new Uint8Array(4 * s * s * layers), made = new Float32Array(4 * s * s * layers);
     for (let l = 0; l < layers; l++) {
       for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
-        const at = (dx: number, dy: number) => 4 * ((l * 2 * s + 2 * y + dy) * 2 * s + 2 * x + dx);
-        const o = 4 * ((l * s + y) * s + x), t = [at(0, 0), at(1, 0), at(0, 1), at(1, 1)];
+        // The four texels' places, and the texel's own.
+        const t0 = 4 * ((l * 2 * s + 2 * y) * 2 * s + 2 * x), t1 = t0 + 4, t2 = t0 + 8 * s, t3 = t2 + 4;
+        const o = 4 * ((l * s + y) * s + x);
         // The colour is the mean of the texels by their cover, so a cut-out's mips do not take the black about it.
-        const a = t.map(i => bytes[i + 3]), sum = a[0] + a[1] + a[2] + a[3];
+        const a0 = bytes[t0 + 3], a1 = bytes[t1 + 3], a2 = bytes[t2 + 3], a3 = bytes[t3 + 3], sum = a0 + a1 + a2 + a3;
         for (let c = 0; c < 3; c++) {
-          made[o + c] = sum > 0 ? (a[0] * from[t[0] + c] + a[1] * from[t[1] + c] + a[2] * from[t[2] + c] + a[3] * from[t[3] + c]) / sum : 0;
+          made[o + c] = sum > 0 ? (a0 * from[t0 + c] + a1 * from[t1 + c] + a2 * from[t2 + c] + a3 * from[t3 + c]) / sum : 0;
           next[o + c] = srgbByte(made[o + c]);
         }
         next[o + 3] = (sum + 2) >> 2;
