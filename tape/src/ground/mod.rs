@@ -82,7 +82,8 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 /// the point each sample's line runs through (`stems::points`), how each sample's piece of its line starts
 /// (`bends::Bends`), the texture of each sample's loose ground (`pcore::soil::textures`), the samples whose line
 /// carries their wetness index (`wetness::strips`) and the wetness index of each as the hillslope holds it
-/// (`wetness::hill`); and the laws and the gravity it was made under, by which it is made again (`rebuild`).
+/// (`wetness::hill`), the largest area a sample drains (`channels::most_drained`); and the laws and the gravity it was
+/// made under, by which it is made again (`rebuild`).
 pub struct Ground {
     seed: u64,
     map: Square,
@@ -97,6 +98,7 @@ pub struct Ground {
     grain: Vec<pcore::soil::Texture>,
     strips: Vec<bool>,
     hill: Vec<f64>,
+    most: f64,
     phys: Physics,
     gravity: f64,
 }
@@ -119,7 +121,8 @@ impl Ground {
         let grain = pcore::soil::textures(&samples, &terrain.makes, gravity);
         let strips = wetness::strips(&samples, phys);
         let hill = wetness::hill(&samples, &strips);
-        Ground { seed, map, terrain, lat, samples, law, at, raw, bends, shore, grain, strips, hill, phys: *phys, gravity }
+        let most = channels::most_drained(&samples);
+        Ground { seed, map, terrain, lat, samples, law, at, raw, bends, shore, grain, strips, hill, most, phys: *phys, gravity }
     }
 
     /// The ground of world `w`, on its samples as last built (`World::terrain_samples`).
@@ -178,6 +181,7 @@ impl Ground {
         let reaches = bends::Reaches { seed: self.seed, s: &new, at: &at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) };
         self.bends.update(&reaches, &rebuild::readers(&new, &rebuild::near(&new, &changed, rebuild::BENDS_READ)));
         let squares = rebuild::squares(&self.map, &new, &rebuild::readers(&new, &changed));
+        self.most = channels::most_drained(&new);
         (self.samples, self.at, self.raw, self.shore, self.grain, self.strips, self.hill) = (new, at, raw, shore, grain, strips, hill);
         squares
     }
@@ -205,7 +209,7 @@ impl Ground {
         let (wide, high) = ((win[2] - win[0] + 1) as usize, (win[3] - win[1] + 1) as usize);
         let heights = self.terrain.heights_on(&self.samples, &self.map, self.lat, win, depth);
         let k = 2f64.powi(SAMPLE_DEPTH as i32 - depth as i32);
-        let near = channels::Channels::new(self.reaches(), &self.bends, &self.strips).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
+        let near = channels::Channels::new(self.reaches(), &self.bends, &self.strips, self.most).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
         let twi = wetness::field(&self.samples, &self.hill, depth, [win[0], win[1]], [wide, high], &near.bank);
         // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`); near a pond
         // (`shore::Shore::beside`) a valley only lowers the ground, and never under the pond's level where the ground is
