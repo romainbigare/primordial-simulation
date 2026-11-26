@@ -330,7 +330,7 @@ fn a_hill_that_dams_a_channel_keeps_what_runs_to_the_low_ground() {
 
 /// A hill raised on a pond's pass moves its pass: the pond passes on what comes into it from its new pass, and its old
 /// pass no longer lets it over (`flow::build::reroute`), so what runs into the open low ground is what ran into it
-/// before, to the rounding of the flows, and no river is counted twice. Of the closed ponds, those that most comes into
+/// before, to the rounding of the flows, and no flow is counted twice. Of the closed ponds, those that most comes into
 /// first, the first whose pass a hill moves to a new sample out of it while it stays a pond.
 #[test]
 fn a_hill_on_a_pass_keeps_what_runs_to_the_low_ground() {
@@ -403,13 +403,13 @@ const PIT_BELOW_M: f64 = 300.0;
 /// its level joined to the seed's (`drain::open_from`), so the pit's samples are a pond with a pass and the seed's open
 /// low ground stays open, however deep the pit.
 #[test]
-fn a_pit_deeper_than_the_sea_stays_a_closed_pond() {
+fn a_pit_deeper_than_the_open_low_ground_stays_a_closed_pond() {
     use pcore::space::network::NONE;
     let mut w = small_world();
     let i = inland(&w);
     let open = |s: &pcore::space::samples::Samples, k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
     let s0 = w.terrain_samples();
-    let sea: Vec<usize> = (0..s0.h.len()).filter(|&k| open(&s0, k)).collect();
+    let low: Vec<usize> = (0..s0.h.len()).filter(|&k| open(&s0, k)).collect();
     let floor = s0.h.iter().copied().fold(f64::INFINITY, f64::min);
     drop(s0);
     let height = floor - PIT_BELOW_M - w.ground_z(i);
@@ -419,7 +419,7 @@ fn a_pit_deeper_than_the_sea_stays_a_closed_pond() {
     let pit = (0..s.h.len()).min_by(|&a, &b| s.h[a].total_cmp(&s.h[b])).unwrap();
     assert!(s.h[pit] < floor && w.relief.shaped_at(pit) < 0.0, "the pit at {} m, the floor at {floor} m", s.h[pit]);
     assert!(s.pond[pit] != NONE && !open(&s, pit), "the pit is open low ground");
-    assert!(sea.iter().all(|&k| open(&s, k)), "the sea is closed");
+    assert!(low.iter().all(|&k| open(&s, k)), "the open low ground is closed");
 }
 
 /// An edit whose numbers are not finite is refused before it touches the world (`Edit::valid`): it is told as not made,
@@ -455,8 +455,8 @@ fn a_basin_not_made_still_settles_the_stroke_before_it() {
     let i = inland(&w);
     assert!(shape(&mut w, i, 20.0));
     let mut alone = w.clone();
-    let sea = (0..w.mesh.cells().n()).find(|&j| !w.is_land(j)).expect("the sea");
-    let [x0, y0, x1, y1] = w.map.bounds(sea);
+    let low = (0..w.mesh.cells().n()).find(|&j| !w.is_land(j)).expect("the open low ground");
+    let [x0, y0, x1, y1] = w.map.bounds(low);
     let act = Act::Basin { radius_m: 0.3 * w.map.side, depth_m: 5.0 };
     assert_eq!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]), [false]);
     w.settle();
