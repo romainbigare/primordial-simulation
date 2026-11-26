@@ -15,7 +15,7 @@
 //! ground (its bed bare), and the gentle ground at its foot, where a grows and S falls, holds the more.
 //!
 //! Where edits shaped a sample (`Relief::shaped`), its loose ground follows (`edited`): a lowering takes it first, and
-//! no more stays than the creep holds on its new slope, so the flanks of a hill raised steep are bare bed.
+//! it thins as the creep holds less on its new slope than on its old, so the flanks of a hill raised steep are bare bed.
 
 use super::grid::Grid;
 
@@ -41,18 +41,22 @@ pub(super) fn mantle(g: &Grid, (h, drained): (&[f64], &[f64]), (settled, lowers)
     (0..g.n()).map(|k| depth((settled[k], lowers[k]), (slope(g, &|j| h[j], k), drained[k] / g.dy), (settled[k] / years * g.dy, creep))).collect()
 }
 
-/// The loose ground of sample `k` of grid `g` once edits shaped it by `shaped` m (raised; lowered where under none),
-/// where it held `loose` m with `settled` m of it laid by the liquid, and stands at heights `h` draining `drained` m²: a
-/// lowering takes the loose ground first, from its top, where what settled lies (the module's doc), and no more stays
-/// than the creep holds on its slope (`depth`, the bed breaking under it as under ground that does not lower,
-/// `SLOWEST`; nothing coming on it from upslope, as an edit is over in no time), the creep taking what settled with the
-/// rest. Returns its depth and what of it settled, m (never more than its depth). Unshaped, it keeps its own.
-pub(super) fn edited(g: &Grid, k: usize, (h, drained): (&dyn Fn(usize) -> f64, f64), (loose, settled, shaped): (f64, f64, f64)) -> [f64; 2] {
-    if shaped == 0.0 {
+/// The loose ground of sample `k` of grid `g` once edits shaped each sample j by `shaped(j)` m (raised; lowered where
+/// under none), where it held `loose` m with `settled` m of it laid by the liquid, and stands at heights `h` draining
+/// `drained` m²: a lowering takes the loose ground first, from its top, where what settled lies (the module's doc), and
+/// of what is left the share stays that the creep holds on its new slope over what it held on its slope before the
+/// edits, where less (`depth`, the bed breaking under it as under ground that does not lower, `SLOWEST`; nothing coming
+/// on it from upslope, as an edit is over in no time), the creep taking what settled with the rest. So ground the
+/// edits barely tilted keeps nearly all its own. Returns its depth and what of it settled, m (never more than its
+/// depth). Unshaped, it keeps its own.
+pub(super) fn edited(g: &Grid, k: usize, (h, drained): (&dyn Fn(usize) -> f64, f64), (loose, settled): (f64, f64), shaped: &dyn Fn(usize) -> f64) -> [f64; 2] {
+    if shaped(k) == 0.0 {
         return [loose, settled];
     }
-    let (left, laid) = if shaped < 0.0 { ((loose + shaped).max(0.0), (settled + shaped).max(0.0)) } else { (loose, settled) };
-    let kept = left.min(depth((settled, BREAKS * SLOWEST), (slope(g, h, k), drained / g.dy), (0.0, super::wear::CREEP)));
+    let (left, laid) = if shaped(k) < 0.0 { ((loose + shaped(k)).max(0.0), (settled + shaped(k)).max(0.0)) } else { (loose, settled) };
+    let holds = |s: f64| depth((settled, BREAKS * SLOWEST), (s, drained / g.dy), (0.0, super::wear::CREEP));
+    let (now, before) = (holds(slope(g, h, k)), holds(slope(g, &|j| h(j) - shaped(j), k)));
+    let kept = if now >= before { left } else { left * now / before.max(f64::MIN_POSITIVE) };
     [kept, laid.min(kept)]
 }
 

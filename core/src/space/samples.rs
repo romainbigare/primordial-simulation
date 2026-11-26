@@ -235,7 +235,7 @@ impl Terrain {
         let last = self.kept.1.lock().expect("the built samples").as_ref().filter(|b| b.1.seed == seed).map(|b| b.1.clone());
         let mut found = self.found(seed, (&grid, rows), (h, &open, false), (ground, Some(last.as_deref().unwrap_or(&s0))));
         for k in (0..r.shaped.len()).filter(|&k| r.shaped[k] != 0.0) {
-            [found.loose[k], found.settled[k]] = edited(&grid, k, (&|j| found.h[j], found.up[k]), (found.loose[k], found.settled[k], r.shaped[k]));
+            [found.loose[k], found.settled[k]] = edited(&grid, k, (&|j| found.h[j], found.up[k]), (found.loose[k], found.settled[k]), &|j| r.shaped[j]);
         }
         renumber(&mut found.pond, &mut found.ponds, &r.ponds);
         let found = Arc::new(found);
@@ -408,6 +408,6 @@ impl crate::World {
         let (grid, _, _) = grid_of(&self.map, lat);
         let (s0, built) = (self.terrain.samples(self.terrain.seed, &self.map, lat), self.terrain_samples());
         let r = &self.relief;
-        ks.iter().map(|&k| edited(&grid, k, (h, built.up[k]), (s0.loose[k] + laid_on(r, k), s0.settled[k] + laid_on(r, k), r.shaped_at(k)))[0]).collect()
+        ks.iter().map(|&k| edited(&grid, k, (h, built.up[k]), (s0.loose[k] + laid_on(r, k), s0.settled[k] + laid_on(r, k)), &|j| r.shaped_at(j))[0]).collect()
     }
 }
