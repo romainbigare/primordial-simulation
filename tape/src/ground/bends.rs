@@ -358,10 +358,10 @@ impl Bends {
 
     /// How far the line of sample `k` of `r`, a tributary, leans from the straight way on from its piece's end to the
     /// line it joins, `u` m along that way of `run` m, m: its wander there (`wander::wander`, running on from its
-    /// piece's), as far as `JOIN_SWAY` of the way's length and no farther than its piece leans; none, and no turn,
-    /// at either end.
-    pub(super) fn joins(&self, r: &Reaches, k: usize, u: f64, run: f64) -> f64 {
-        let down = self.down[k] + (r.frame(k).map_or(0.0, |f| f.len()) + u) / (WANDER_EVERY * r.metres);
+    /// piece's, whose curve is `len` m long), as far as `JOIN_SWAY` of the way's length and no farther than its piece
+    /// leans; none, and no turn, at either end.
+    pub(super) fn joins(&self, r: &Reaches, k: usize, len: f64, u: f64, run: f64) -> f64 {
+        let down = self.down[k] + (len + u) / (WANDER_EVERY * r.metres);
         let held = (std::f64::consts::PI * (u / run.max(1e-9)).clamp(0.0, 1.0)).sin().powi(2);
         (JOIN_SWAY * run).min(self.lean[k]) * held * wander(r.seed, self.head[k], down, r.bed_of(k).0 / (WANDER_EVERY * r.metres))
     }

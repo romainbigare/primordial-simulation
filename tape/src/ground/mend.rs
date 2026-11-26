@@ -6,7 +6,6 @@
 
 use super::channels::{to_segment, Channels, Field, Near, Window, NO_CHANNEL_M};
 use pcore::space::network::NONE;
-use std::collections::HashMap;
 
 /// The widest strip mended, texels.
 pub(super) const STRIP: usize = 2;
@@ -21,10 +20,11 @@ fn nearest(at: [f64; 2], pts: impl Iterator<Item = [f64; 2]>) -> Option<(f64, f6
 impl Channels<'_> {
     /// Mend the strips of the field `f` over the window `win`, whose lines are `near`: a texel given to the channel of
     /// its two neighbours holds the sample of the nearer of their two lines, its distance to that line and to the same
-    /// sample's line without bends.
+    /// sample's line without bends. (Each texel reads its neighbours as they were before any was mended; `near` is in
+    /// the order of its samples.)
     pub(super) fn mend(&self, f: &mut Field, win: &Window, near: &[Near]) {
         let (s, wide, sample) = (self.r.s, win.wide, f.sample.clone());
-        let lines: HashMap<u32, &Near> = near.iter().map(|l| (l.q as u32, l)).collect();
+        let line_of = |q: u32| &near[near.binary_search_by_key(&(q as usize), |l| l.q).expect("the line of a texel's sample")];
         let head = |q: u32| self.bends.head(q as usize);
         for i in (0..sample.len()).filter(|&i| sample[i] != NONE) {
             // The first texel of another channel within `STRIP` of this one along `step` (none past the window's row,
@@ -39,9 +39,9 @@ impl Channels<'_> {
                     continue;
                 }
                 let at = win.texel(win.x0 + (i % wide) as i64, win.y0 + (i / wide) as i64).0;
-                let to = |q: u32| nearest(at, lines[&q].drawn.line.iter().map(|v| v.p)).map(|(d2, side, n, t)| (d2, side, n, t, q));
+                let to = |q: u32| nearest(at, line_of(q).drawn.line.iter().map(|v| v.p)).map(|(d2, side, n, t)| (d2, side, n, t, q));
                 let Some((d2, side, n, t, q)) = [to(qa), to(qb)].into_iter().flatten().min_by(|x, y| x.0.total_cmp(&y.0)) else { continue };
-                let line = &lines[&q].drawn;
+                let line = &line_of(q).drawn;
                 let calm = nearest(at, line.calm.iter().copied()).map_or(NO_CHANNEL_M, |(d2, side, ..)| side * d2.sqrt() * self.r.metres);
                 (f.sample[i], f.dist[i], f.along[i], f.calm[i]) = (q, side * d2.sqrt() * self.r.metres, line.line[n].s + (line.line[n + 1].s - line.line[n].s) * t, calm);
                 break;
