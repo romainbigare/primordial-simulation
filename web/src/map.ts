@@ -36,6 +36,9 @@ const SHADOW_DROP = 5, SHADOW_BLUR = 11, SHADOW_DARK = 0.28;
 /** The time a frame may take on the GPU, ms, before the map is drawn at fewer pixels; and the shares of the screen's
  * pixels along each axis it may be drawn at, largest first: few, so the picture does not pump, and none under a half. */
 const FRAME_BUDGET_MS = 16, SCALES = [1, 0.75, 0.5];
+/** The share of the screen's pixels is taken from the mean time of this many frames timed last; and a frame would take
+ * no more than this share of `FRAME_BUDGET_MS` at a larger share than now before the map is drawn at it (`time`). */
+const TIMED_FRAMES = 4, SCALE_UP_SHARE = 0.8;
 /** The time the view rests before the map drawn at fewer pixels is drawn anew at the screen's own, ms, a tile a frame,
  * each of about `SHARPEN_MS` on the GPU (the view rests, so a frame may take longer) and no less than `TILE_LEAST` px a
  * side. */
@@ -156,6 +159,8 @@ export class MapView {
   onScale: () => void = () => {};
   private fullMs = 0;
   private timing = false;
+  /** The times of the last frames timed, at the screen's pixels, ms (`time`). */
+  private timedMs: number[] = [];
   /** The textures the map drawn whole goes into, by turns: the one shown last stays whole while the next is drawn,
    * so it can be faded from (`present`). */
   private picture: Texture | null = null;
@@ -519,6 +524,9 @@ export class MapView {
     this.picture = this.sized(gpu, this.picture, tw, th);
     this.drawingInto(gpu, this.picture);
     const waiting: string[] = [];
+    // (A frame drawn whole is timed on the card, one at a time: `time`.)
+    const timer = quick || this.timing ? null : gpu.timer();
+    if (timer) this.timing = true;
     gpu.begin();
     this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, this.fireTime(), waiting);
     this.fire?.prepare(gpu, waiting);
@@ -537,8 +545,8 @@ export class MapView {
     if (!quick) this.fadeFrom = null;
     if (this.asked.length && this.map) this.readClasses(gpu, this.map);
     gpu.submit();
+    if (timer) this.time(timer, r);
     if (quick) return;
-    this.time(gpu, r);
     // The ground's detail is held only while the view is close enough to show it.
     detailSeen(this.cellM / (s * d));
     if (r < 1 && !fading && !waiting.length) {
@@ -954,20 +962,20 @@ export class MapView {
   /** The time the flames stand at, ms: while one picture is drawn in tiles, the one it began at (as the flow's signs). */
   private fireTime(): number { return this.land?.flowAt ?? performance.now(); }
 
-  /** Time the frame just sent at `r` of the screen's pixels along each axis on the GPU (one at a time), and take the
-   * share the next frames are drawn at from it: the largest of `SCALES` at which a frame would meet `FRAME_BUDGET_MS`,
-   * else the least. */
-  private time(gpu: Gpu, r: number): void {
-    if (this.timing) return;
-    this.timing = true;
-    const t0 = performance.now();
-    gpu.done().then(() => {
+  /** Take the time of the frame `timer` timed (`drawGpu`, one at a time), drawn at `r` of the screen's pixels along
+   * each axis, and from the mean of the last `TIMED_FRAMES` the share the next frames are drawn at: the largest of
+   * `SCALES` at which a frame would meet `FRAME_BUDGET_MS` (a larger one than now within `SCALE_UP_SHARE` of it, so the
+   * share does not flip between two), else the least. */
+  private time(timer: { end(): Promise<number | null> }, r: number): void {
+    timer.end().then(ms => {
       this.timing = false;
-      const ms = performance.now() - t0;
+      if (ms === null) return;
       spend('gpu', ms); spend('gpu n', 1);
-      this.fullMs = ms / (r * r);
+      this.timedMs.push(ms / (r * r));
+      if (this.timedMs.length > TIMED_FRAMES) this.timedMs.shift();
+      this.fullMs = this.timedMs.reduce((a, b) => a + b, 0) / this.timedMs.length;
       const was = this.scale;
-      this.scale = SCALES.find(k => this.fullMs * k * k <= FRAME_BUDGET_MS) ?? SCALES[SCALES.length - 1];
+      this.scale = SCALES.find(k => this.fullMs * k * k <= FRAME_BUDGET_MS * (k > was ? SCALE_UP_SHARE : 1)) ?? SCALES[SCALES.length - 1];
       if (this.scale !== was) this.onScale();
     });
   }

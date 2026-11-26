@@ -194,6 +194,10 @@ export interface Gpu {
   submit(): void;
   /** Once the GPU has finished all that was sent. */
   done(): Promise<void>;
+  /** Time on the GPU what is sent from now till `end`: its ms once the GPU has drawn it, by a timer on the card where it
+   * has one (null where that timer was disturbed: no time), else the time from `end` till the GPU has finished all
+   * sent, the page's own work in it. */
+  timer(): { end(): Promise<number | null> };
   /** The bytes of texture `t` (four a texel, rows top first), once the GPU has drawn it. */
   read(t: Texture): Promise<Uint8Array>;
 }
@@ -328,6 +332,7 @@ export class HeldGpu implements Gpu {
   warm(name: string, first?: boolean): void { this.back.warm(name, first); }
   ready(name: string): boolean { return this.back.ready(name); }
   done(): Promise<void> { return this.back.done(); }
+  timer(): { end(): Promise<number | null> } { return this.back.timer(); }
   read(t: Texture): Promise<Uint8Array> { return this.back.read((t as HeldTexture).inner); }
   /** The programs being made (`Warming.pending`), as text. */
   making(): string { return this.back.making(); }

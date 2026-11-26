@@ -7,6 +7,9 @@ import { Back, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, program
 interface Linked { prog: WebGLProgram; units: { unit: number; texture: number; sampler: number | null }[] }
 /** The extension that compiles and links programs without stopping the page, and asks whether they are done. */
 interface Parallel { COMPLETION_STATUS_KHR: number }
+/** The extension that times what the card does (EXT_disjoint_timer_query_webgl2): a query of the time elapsed, and
+ * whether a timing was disturbed (the card's clock jumped: its results mean nothing). */
+interface Timer { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
 
 class WebGl2Texture implements Texture {
   tex: WebGLTexture | null = null;
@@ -23,6 +26,9 @@ class WebGl2 implements Back {
   /** Programs sent to compile and link and not yet looked at (`build`, `finish`). */
   private built = new Map<string, WebGLProgram>();
   private parallel: Parallel | null;
+  /** The card's timer (none: the browser has none), and whether a timing is under way (one at a time). */
+  private timerExt: Timer | null;
+  private timing = false;
   private warming = new Warming(name => this.makeAhead(name), name => this.linked.has(name));
   private samplers!: Record<Sampler | 'texel', WebGLSampler>;
   /** A uniform buffer a binding number. */
@@ -37,6 +43,7 @@ class WebGl2 implements Back {
 
   constructor(private gl: WebGL2RenderingContext, private canvas: HTMLCanvasElement, restored: () => void) {
     this.parallel = gl.getExtension('KHR_parallel_shader_compile') as Parallel | null;
+    this.timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2') as Timer | null;
     this.formats = { rgba8unorm: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba32float: [gl.RGBA32F, gl.RGBA, gl.FLOAT], rgba16float: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rg16float: [gl.RG16F, gl.RG, gl.HALF_FLOAT], r16float: [gl.R16F, gl.RED, gl.HALF_FLOAT] };
     this.setUp();
     // A lost context draws nothing and throws nothing: say so, so a page that stops drawing (a program too large for
@@ -193,6 +200,33 @@ class WebGl2 implements Back {
     }));
   }
 
+  timer(): { end(): Promise<number | null> } {
+    const gl = this.gl, ext = this.timerExt;
+    if (!ext || this.timing || gl.isContextLost()) {
+      return { end: () => { const t0 = performance.now(); return this.done().then(() => performance.now() - t0); } };
+    }
+    const q = gl.createQuery();
+    gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
+    this.timing = true;
+    return {
+      end: () => {
+        gl.endQuery(ext.TIME_ELAPSED_EXT);
+        gl.flush();
+        this.timing = false;
+        return new Promise(resolve => {
+          const poll = () => {
+            if (gl.isContextLost()) return resolve(null);
+            if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) { setTimeout(poll, FENCE_POLL_MS); return; }
+            const ns = gl.getQueryParameter(q, gl.QUERY_RESULT) as number, disturbed = gl.getParameter(ext.GPU_DISJOINT_EXT) as boolean;
+            gl.deleteQuery(q);
+            resolve(disturbed ? null : ns / NS_A_MS);
+          };
+          poll();
+        });
+      },
+    };
+  }
+
   /** More is sent to the card: a wait asked from now on (`done`) is for it too. */
   private sent(): void { this.finishing = null; }
 
@@ -308,6 +342,8 @@ const idle = (f: () => void) => ('requestIdleCallback' in window ? requestIdleCa
 
 /** How often a wait for the GPU looks whether it has finished, ms. */
 const FENCE_POLL_MS = 4;
+/** Nanoseconds in a millisecond (the card's timer counts nanoseconds). */
+const NS_A_MS = 1e6;
 
 /** WebGL2 on `canvas`, or null where the browser has none; `restored` redraws after a lost context comes back. */
 export function openWebGl2(canvas: HTMLCanvasElement, restored: () => void): Back | null {
