@@ -86,7 +86,7 @@ pub(super) fn book_solids(w: &mut World, s: &mut Scratch, sol: &[usize], rows: &
 
 /// What each cell holds that may move as the pass goes (`basin::movable`: rows of the liquids then the heat; and the
 /// volume, m³), what each cell's part of each body holds of it (`State::held`), m³, and what the pass sends into the samples'
-/// ways: mol and kg at each sample.
+/// ways: mol and kg at each sample (none where it does not follow them, `surface`).
 struct Held {
     q: Vec<f64>,
     vol: Vec<f64>,
@@ -95,11 +95,21 @@ struct Held {
     into: Vec<[f64; 2]>,
 }
 
+impl Held {
+    /// `[mol, kg]` sent into the ways at sample `k` (`into`), where the pass follows what runs (none over no time).
+    fn runs(&mut self, k: usize, [mol, kg]: [f64; 2]) {
+        if let Some(into) = self.into.get_mut(k) {
+            (into[0], into[1]) = (into[0] + mol, into[1] + kg);
+        }
+    }
+}
+
 /// One pass a month of `dt` seconds (the module's doc), of the liquids `liq` (what boils below the coldest node, `tmin`,
 /// is a dissolved gas); `slope` and `runs` as the drain to the channels inside each cell found them (`drain::springs`),
 /// and what left each land cell for the cells that are not land under the surface in the step (`drain::OffLand`), to which
-/// it adds what leaves them in the pass.
-pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs, mut off): (&[f64], &[f64], OffLand), dt: f64) {
+/// it adds what leaves them in the pass. Over no time (a settle, `liquid::settle`: `dt` none, no `off`) what runs through
+/// the samples is not followed: it carries no load and moves no yearly mean.
+pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs, off): (&[f64], &[f64], Option<OffLand>), dt: f64) {
     let n = w.mesh.cells().n();
     let all: Vec<u32> = (0..n as u32).collect();
     let (mut q, mut vol) = movable(w, s, liq, &all, tmin, (|k, i| super::land::wet(s, k, i), |i, mol| liquid_heat(w, s, liq, i, mol)));
@@ -113,17 +123,21 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     let b = std::mem::take(&mut s.bodies);
     let mut x = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1, class: [Class::Ground; 2] };
     let mut edge = Crossings { a: Vec::new(), b: Vec::new(), rows: Vec::new(), width: liq.len() + 1, class: [Class::Boundary, Class::Ground] };
-    // (The room for what runs through each sample is kept from month to month, `spare::Spare`.)
+    // (The room for what runs through each sample is kept from month to month, `spare::Spare`; a settle uses none.)
     let mut into = std::mem::take(&mut s.spare.samples);
     into.clear();
-    into.resize(b.cell_of.len(), [0.0; 2]);
+    if dt > 0.0 {
+        into.resize(b.cell_of.len(), [0.0; 2]);
+    }
     let mut h = Held { q, vol, width: liq.len() + 1, part: s.state.held.iter().map(|v| vec![0.0; v.m3.len()]).collect(), into };
     let mm: Vec<f64> = liq.iter().map(|&k| s.sp[k].mm).collect();
     send(w, s, &b, &mut h, &mut x, (liq, slope, runs, &mm), (&pores, dt));
     let (levels, came) = stand(s, &b, &mut h, (&mut x, &mut edge), (liq, &mm, w.edges_open()));
     s.basin.level = levels;
     s.state.held = std::mem::take(&mut h.part).into_iter().zip(&s.state.held).map(|(m3, was)| Holding { ponds: was.ponds.clone(), m3 }).collect();
-    discharge(w, &b, &mut h.into);
+    if dt > 0.0 {
+        discharge(w, &b, &mut h.into);
+    }
     let flux = h.into;
     book_all(w, s, liq, &[&x, &edge]);
     if !edge.a.is_empty() {
@@ -133,17 +147,15 @@ pub(super) fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     // What the liquid carries is booked apart from the liquid, so the heat of each lands with its own matter in a cell
     // of parts (`parts::to_liquid`): the loose ground's solids (`Scratch::solids`). Over no time (a settle, `settle`)
     // the liquid carries none, and the yearly means of what runs do not move.
-    if dt > 0.0 {
+    if let Some(mut off) = off.filter(|_| dt > 0.0) {
         carry_load(w, s, &b, (&flux, liq, tmin), dt);
-    }
-    for (l, row) in x.rows.chunks_exact(x.width).enumerate() {
-        off.moved((x.a[l] as usize, x.b[l] as usize), row[..x.width - 1].iter().sum());
-    }
-    // (What leaves over the planet's level goes from the open low ground's hub, `stand`.)
-    for (l, row) in edge.rows.chunks_exact(edge.width).enumerate() {
-        off.left(edge.b[l] as usize, -row[..edge.width - 1].iter().sum::<f64>());
-    }
-    if dt > 0.0 {
+        for (l, row) in x.rows.chunks_exact(x.width).enumerate() {
+            off.moved((x.a[l] as usize, x.b[l] as usize), row[..x.width - 1].iter().sum());
+        }
+        // (What leaves over the planet's level goes from the open low ground's hub, `stand`.)
+        for (l, row) in edge.rows.chunks_exact(edge.width).enumerate() {
+            off.left(edge.b[l] as usize, -row[..edge.width - 1].iter().sum::<f64>());
+        }
         follow_flux(w, &b, (&flux, &off.mol), dt);
     }
     (s.bodies, s.spare.samples) = (b, flux);
@@ -206,8 +218,7 @@ fn send(w: &World, s: &Scratch, b: &Bodies, h: &mut Held, x: &mut Crossings, (li
     for &k in &b.land {
         let (k, i) = (k as usize, b.cell_of[k as usize] as usize);
         if off[i] > 0.0 {
-            let into = &mut h.into[k];
-            (into[0], into[1]) = (into[0] + sent[i][0] * b.share[k], into[1] + sent[i][1] * b.share[k]);
+            h.runs(k, [sent[i][0] * b.share[k], sent[i][1] * b.share[k]]);
         }
     }
     // What each cell sends, its row and what it takes from what stands there, as the pass starts: what it then gets does
@@ -343,8 +354,7 @@ fn stand(s: &Scratch, b: &Bodies, h: &mut Held, (x, edge): (&mut Crossings, &mut
             if body.next.part != NONE {
                 h.part[to][body.next.part as usize] += gone;
             }
-            let into = &mut h.into[body.pass as usize];
-            (into[0], into[1]) = (into[0] + left[..width - 1].iter().sum::<f64>(), into[1] + left[..width - 1].iter().zip(mm).map(|(m, k)| m * k).sum::<f64>());
+            h.runs(body.pass as usize, [left[..width - 1].iter().sum::<f64>(), left[..width - 1].iter().zip(mm).map(|(m, k)| m * k).sum::<f64>()]);
         }
     }
     (levels, came)

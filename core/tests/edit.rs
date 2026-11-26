@@ -106,6 +106,7 @@ fn a_steep_raised_hill_bares_its_flanks() {
     assert!(ks.iter().zip(&read).all(|(&k, &m)| m == after.loose[k]), "the shell reads the build's loose ground");
     let bared = ks.iter().filter(|&&k| before.loose[k] > 0.0 && after.loose[k] == 0.0).count();
     assert!(bared > ks.len() / 4, "{bared} of {} samples bared", ks.len());
+    assert!(ks.iter().all(|&k| after.settled[k] <= after.loose[k]), "more settled than lies loose");
     let top = *ks.iter().max_by(|&&a, &&b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
     assert!(after.loose[top] > 0.0 && after.loose[top] <= before.loose[top], "the top keeps {} of {} m", after.loose[top], before.loose[top]);
     let far = (0..after.h.len()).find(|&k| w.relief.shaped_at(k) == 0.0 && before.loose[k] > 0.0).unwrap();
@@ -280,35 +281,80 @@ fn a_basin_open_to_the_low_ground_pours_nothing() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// What runs into the open low ground of samples `s` of world `w`, mol/s: the yearly flows of the samples in no pond
+/// whose liquid runs into it.
+fn to_low(w: &World, s: &pcore::space::samples::Samples) -> f64 {
+    use pcore::space::network::NONE;
+    let open = |k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
+    (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && open(s.to[k] as usize)).map(|k| w.discharge[k] as f64).sum()
+}
+
+/// A world `w` with a hill raised at sample `k` (radius `r` m, 60 m high) and settled.
+fn hill_at(w: &World, k: usize, r: f64) -> World {
+    let s = w.terrain_samples();
+    let per = (s.across / w.map.w) as f64;
+    let place = [((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per];
+    let mut v = w.clone();
+    v.edit(&[Edit { place, act: Act::Ground { radius_m: r, height_m: HILL_M, stroke_m: 0.0, make: 0 } }]);
+    v.settle();
+    v
+}
+
+/// The height of the hills the tests of the flows raise, m.
+const HILL_M: f64 = 60.0;
+/// How far what runs into the open low ground may move when a hill moves its channels, a share: the rounding of the
+/// yearly flows (32-bit).
+const TO_LOW_SHARE: f64 = 1e-4;
+
 /// A hill raised across a channel moves the channel, never drops it: the yearly flows run down the samples' new ways,
 /// and a pond the hill dams passes on what comes into it from its pass (`flow::build::reroute`), so what runs into the
 /// open low ground is what ran into it before, to the rounding of the flows. Of the test's channels, the first a hill
 /// dams into a new pond.
 #[test]
 fn a_hill_that_dams_a_channel_keeps_what_runs_to_the_low_ground() {
-    use pcore::space::{network::NONE, samples::Samples};
+    use pcore::space::network::NONE;
     let w = small_world();
-    let to_low = |w: &World, s: &Samples| -> f64 {
-        let open = |k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
-        (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && open(s.to[k] as usize)).map(|k| w.discharge[k] as f64).sum()
-    };
     let s = w.terrain_samples();
     let before = to_low(&w, &s);
-    let per = (s.across / w.map.w) as f64;
     let mut channels: Vec<usize> = (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && s.h[k] > 0.0 && s.up[k] > 1e7).collect();
     channels.sort_by(|&a, &b| s.up[b].total_cmp(&s.up[a]));
     let passes: Vec<u32> = s.ponds.iter().map(|p| p.pass).collect();
     let dammed = channels.iter().take(DAM_TRIES).find_map(|&k| {
-        let mut v = w.clone();
-        let place = [((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per];
-        v.edit(&[Edit { place, act: Act::Ground { radius_m: 0.3 * v.map.side, height_m: 60.0, stroke_m: 0.0, make: 0 } }]);
-        v.settle();
+        let v = hill_at(&w, k, 0.3 * w.map.side);
         let t = v.terrain_samples();
         t.ponds.iter().any(|p| p.pass != NONE && !passes.contains(&p.pass)).then(|| to_low(&v, &t))
     });
     let after = dammed.expect("a hill that dams a channel");
-    assert!(before > 0.0 && ((after - before) / before).abs() < 1e-4, "ran to the low ground {before} mol/s, now {after}");
+    assert!(before > 0.0 && ((after - before) / before).abs() < TO_LOW_SHARE, "ran to the low ground {before} mol/s, now {after}");
 }
+
+/// A hill raised on a pond's pass moves its pass: the pond passes on what comes into it from its new pass, and its old
+/// pass no longer lets it over (`flow::build::reroute`), so what runs into the open low ground is what ran into it
+/// before, to the rounding of the flows, and no flow is counted twice. Of the closed ponds, those that most comes into
+/// first, the first whose pass a hill moves to a new sample out of it while it stays a pond.
+#[test]
+fn a_hill_on_a_pass_keeps_what_runs_to_the_low_ground() {
+    use pcore::space::network::NONE;
+    let w = small_world();
+    let s = w.terrain_samples();
+    let before = to_low(&w, &s);
+    // The closed ponds, by their keys and passes, those that most comes into first.
+    let came = |p: usize| (0..s.h.len()).filter(|&k| s.pond[k] == p as u32).map(|k| w.discharge[k] as f64).sum::<f64>();
+    let mut closed: Vec<(usize, u32, f64)> = s.ponds.iter().enumerate().filter(|p| p.1.pass != NONE).filter_map(|(p, pond)| (0..s.h.len()).find(|&k| s.pond[k] == p as u32).map(|k| (k, pond.pass, came(p)))).collect();
+    closed.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let passes: Vec<u32> = s.ponds.iter().map(|p| p.pass).collect();
+    let moved = closed.iter().find_map(|&(key, pass, _)| {
+        let v = hill_at(&w, pass as usize, PASS_HILL_SHARE * w.map.side);
+        let t = v.terrain_samples();
+        let p = t.pond[key];
+        (p != NONE && t.ponds[p as usize].pass != NONE && !passes.contains(&t.ponds[p as usize].pass) && t.pond[pass as usize] == NONE).then(|| to_low(&v, &t))
+    });
+    let after = moved.expect("a hill that moves a pass");
+    assert!(before > 0.0 && ((after - before) / before).abs() < TO_LOW_SHARE, "ran to the low ground {before} mol/s, now {after}");
+}
+
+/// The radius of the hill raised on a pass, a share of a square's side.
+const PASS_HILL_SHARE: f64 = 0.05;
 
 /// The channels a hill is raised across in the test of a dam, at most, the largest first.
 const DAM_TRIES: usize = 20;
@@ -348,4 +394,119 @@ fn a_basin_renumbers_no_pond_it_did_not_reach() {
         let empty = grown.ponds.get(p).is_some_and(|q| q.level.is_nan());
         assert!(empty || (k != NONE && grown.pond[k as usize] == p as u32), "number {p} names a pond that does not hold its key");
     }
+}
+
+/// How far under the floor of the open low ground the test's pit is dug at its centre, m.
+const PIT_BELOW_M: f64 = 300.0;
+
+/// A pit dug inland below the floor of the open low ground stays a closed basin: the open low ground is what lies under
+/// its level joined to the seed's (`drain::open_from`), so the pit's samples are a pond with a pass and the seed's open
+/// low ground stays open, however deep the pit.
+#[test]
+fn a_pit_deeper_than_the_open_low_ground_stays_a_closed_pond() {
+    use pcore::space::network::NONE;
+    let mut w = small_world();
+    let i = inland(&w);
+    let open = |s: &pcore::space::samples::Samples, k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
+    let s0 = w.terrain_samples();
+    let low: Vec<usize> = (0..s0.h.len()).filter(|&k| open(&s0, k)).collect();
+    let floor = s0.h.iter().copied().fold(f64::INFINITY, f64::min);
+    drop(s0);
+    let height = floor - PIT_BELOW_M - w.ground_z(i);
+    assert!(shape(&mut w, i, height));
+    w.settle();
+    let s = w.terrain_samples();
+    let pit = (0..s.h.len()).min_by(|&a, &b| s.h[a].total_cmp(&s.h[b])).unwrap();
+    assert!(s.h[pit] < floor && w.relief.shaped_at(pit) < 0.0, "the pit at {} m, the floor at {floor} m", s.h[pit]);
+    assert!(s.pond[pit] != NONE && !open(&s, pit), "the pit is open low ground");
+    assert!(low.iter().all(|&k| open(&s, k)), "the open low ground is closed");
+}
+
+/// An edit whose numbers are not finite is refused before it touches the world (`Edit::valid`): it is told as not made,
+/// and the ground's amounts, its heat and the relief stay as they were, to the last bit.
+#[test]
+fn an_edit_of_numbers_not_finite_is_refused() {
+    use pcore::store::Class;
+    let mut w = small_world();
+    let i = inland(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let place = [(x0 + x1) / 2.0, (y0 + y1) / 2.0];
+    let state = |w: &World| (w.store.amounts(Class::Ground).iter().chain(w.store.heat(Class::Ground)).map(|x| x.to_bits()).collect::<Vec<u64>>(), w.relief.clone());
+    let before = state(&w);
+    let acts = [
+        Act::Ground { radius_m: 0.4 * w.map.side, height_m: f64::NAN, stroke_m: 0.0, make: 0 },
+        Act::Basin { radius_m: f64::INFINITY, depth_m: 5.0 },
+        Act::Heat { radius_m: 0.4 * w.map.side, joules_m2: f64::INFINITY },
+        Act::Clear(f64::NAN),
+    ];
+    let edits: Vec<Edit> = acts.iter().map(|&act| Edit { place, act }).chain([Edit { place: [f64::NAN, 1.0], act: Act::Strike }]).collect();
+    assert!(w.edit(&edits).iter().all(|&done| !done));
+    w.settle();
+    assert!(state(&w) == before, "the world moved");
+}
+
+/// A basin that cannot be made after a stroke (its centre in the open low ground) still leaves the ground the stroke
+/// shaped settled: the world is the one the stroke alone and its settling give, to the last bit of the ground's amounts
+/// and heat.
+#[test]
+fn a_basin_not_made_still_settles_the_stroke_before_it() {
+    use pcore::store::Class;
+    let mut w = small_world();
+    let i = inland(&w);
+    assert!(shape(&mut w, i, 20.0));
+    let mut alone = w.clone();
+    let low = (0..w.mesh.cells().n()).find(|&j| !w.is_land(j)).expect("the open low ground");
+    let [x0, y0, x1, y1] = w.map.bounds(low);
+    let act = Act::Basin { radius_m: 0.3 * w.map.side, depth_m: 5.0 };
+    assert_eq!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]), [false]);
+    w.settle();
+    alone.settle();
+    let state = |w: &World| w.store.amounts(Class::Ground).iter().chain(w.store.heat(Class::Ground)).map(|x| x.to_bits()).collect::<Vec<u64>>();
+    assert!(state(&w) == state(&alone) && w.relief.version == alone.relief.version, "the stroke's ground not settled");
+}
+
+/// The liquid poured into a pond (`flow::pour`, as a basin pours it) comes from the outside node with its potential
+/// energy where it comes to lie, as the ground an edit raises does (`World::cross`): the cell keeps its temperature, to
+/// within the rounding, and the books are kept.
+#[test]
+fn a_poured_pond_leaves_its_cells_temperature() {
+    let mut w = small_world();
+    let i = inland(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let place = [(x0 + x1) / 2.0, (y0 + y1) / 2.0];
+    let act = Act::Basin { radius_m: 0.4 * w.map.side, depth_m: 5.0 };
+    assert_eq!(w.edit(&[Edit { place, act }]), [true]);
+    let s = w.terrain_samples();
+    let per = (s.across / w.map.w) as f64;
+    let pond = s.pond[(place[1] * per) as usize * s.across + (place[0] * per) as usize];
+    drop(s);
+    let k = pcore::cover::Parts::of(&w.chem).expect("the liquid").liquid;
+    let m3 = POURED_M * w.mesh.cells().area()[i];
+    let mol = m3 * w.chem.subs[k].density[1] / w.chem.subs[k].molar_mass;
+    let (books, t0) = (Books::now(&w), w.t_ground(i));
+    assert_eq!(pcore::flow::pour(&mut w, pond, k, &[(i, m3)], |w, i, _| worldgen::testkit::put(w, k, i, mol)), [true], "the cell holds no part of its pond");
+    books.assert_kept(&w, 1e-9);
+    let t = w.t_ground(i);
+    assert!((t - t0).abs() < POURED_KELVIN, "the cell went from {t0} K to {t} K");
+}
+
+/// The depth over its cell the test pours into a pond, m.
+const POURED_M: f64 = 2.0;
+/// How far the temperature of a cell a pond is poured into may move, K: the rounding of its heat.
+const POURED_KELVIN: f64 = 1e-9;
+
+/// A copied world (a shell's undo keeps one) steps as the world it was copied from, to the last bit: a copy of Flow's
+/// working memory leaves out only room its passes write before they read (`flow::spare::Spare`).
+#[test]
+fn a_copied_world_steps_as_its_original() {
+    use pcore::store::Class;
+    let mut w = small_world();
+    let i = inland(&w);
+    assert!(shape(&mut w, i, 20.0));
+    w.settle();
+    let mut copy = w.clone();
+    pcore::step(&mut w);
+    pcore::step(&mut copy);
+    let bits = |w: &World| [Class::Ground, Class::Air].iter().flat_map(|&c| w.store.amounts(c).iter().chain(w.store.heat(c))).map(|x| x.to_bits()).collect::<Vec<u64>>();
+    assert!(bits(&w) == bits(&copy), "the copy stepped apart");
 }

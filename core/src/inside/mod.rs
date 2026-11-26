@@ -60,28 +60,21 @@ impl Grid {
         Grid { across, down, dy, dx }
     }
 
-    /// The slope of the ground at each sample, rise over run, east and south: central differences, one-sided at the
-    /// grid's edges.
-    fn gradient(&self, h: &[f64]) -> Vec<[f64; 2]> {
+    /// The slope of ground `h` at sample `p`, rise over run, no less than a valley floor's (`TAN_MIN`): of its central
+    /// differences east and south (one-sided at the grid's edges), so it reads the sample and those beside it across
+    /// its sides alone.
+    pub fn slope_at(&self, h: &[f64], p: usize) -> f64 {
         let (w, d) = (self.across, self.down);
         let at = |r: usize, c: usize| h[r * w + c];
-        (0..w * d)
-            .map(|p| {
-                let (r, c) = (p / w, p % w);
-                [central(c, w, |x| at(r, x), self.dx[r]), central(r, d, |y| at(y, c), self.dy)]
-            })
-            .collect()
+        let (r, c) = (p / w, p % w);
+        let g = [central(c, w, |x| at(r, x), self.dx[r]), central(r, d, |y| at(y, c), self.dy)];
+        g[0].hypot(g[1]).max(TAN_MIN)
     }
 
-    /// The slope of ground `h` at each sample, rise over run, no less than a valley floor's (`TAN_MIN`).
-    pub fn slope(&self, h: &[f64]) -> Vec<f64> {
-        self.gradient(h).iter().map(|g| g[0].hypot(g[1]).max(TAN_MIN)).collect()
-    }
-
-    /// How much liquid gathers at each sample, the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979), from
-    /// the area that drains through each, m², over the width of a sample (the root of its area `own`, m²),
-    /// and its slope (`slope`).
-    pub fn wetness_index(drains: &[f64], own: &[f64], tan: &[f64]) -> Vec<f64> {
-        (0..drains.len()).map(|p| (drains[p] / own[p].sqrt() / tan[p]).ln()).collect()
+    /// How much liquid gathers at a sample, the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979), from
+    /// the area that drains through it `drains`, m², over the width of a sample (the root of its area `own`, m²), and
+    /// its slope `tan` (`slope_at`).
+    pub fn wetness_at(drains: f64, own: f64, tan: f64) -> f64 {
+        (drains / own.sqrt() / tan).ln()
     }
 }

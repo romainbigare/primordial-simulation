@@ -76,21 +76,29 @@ pub(super) fn draws(seed: u64, by: usize, n: usize) -> Vec<f64> {
     (0..n).map(|k| Rng::new(seed, DRAW_KEY - by as u64, k as u64, Purpose::Terrain).f64()).collect()
 }
 
-/// The open low ground of heights `z` on grid `g` where its liquid stands at `stand`, m, where the flood starts: on a
-/// globe every sample under `stand`; on an island those under it joined to its lowest sample, so ground under it inland
-/// is a closed basin too; and the lowest sample where none lies under it.
+/// The open low ground of heights `z` on grid `g` where its liquid stands at `stand`, m, where the flood starts
+/// (`open_from`, from the lowest sample).
 pub(super) fn open_low(g: &Grid, z: &[f64], stand: f64) -> Vec<bool> {
+    open_from(g, z, stand, &[])
+}
+
+/// The open low ground of heights `z` on grid `g` where its liquid stands at `stand`, m: on a globe every sample under
+/// `stand`; on an island those under it joined to the lowest of the samples `from` that lie under it, else to its
+/// lowest sample, so ground under it inland is a closed basin too; and the lowest sample where none lies under it.
+pub(super) fn open_from(g: &Grid, z: &[f64], stand: f64, from: &[usize]) -> Vec<bool> {
     let mut open: Vec<bool> = z.iter().map(|&h| h < stand && g.wrap).collect();
-    let low = (0..z.len()).min_by(|&a, &b| z[a].total_cmp(&z[b]).then(a.cmp(&b))).expect("a sample");
-    if !g.wrap || !open.contains(&true) {
-        let mut todo = vec![low];
-        open[low] = true;
-        while let Some(k) = todo.pop() {
-            for (j, _) in g.around(k) {
-                if z[j] < stand && !open[j] {
-                    open[j] = true;
-                    todo.push(j);
-                }
+    if g.wrap && open.contains(&true) {
+        return open;
+    }
+    let lowest = |ks: &mut dyn Iterator<Item = usize>| ks.min_by(|&a, &b| z[a].total_cmp(&z[b]).then(a.cmp(&b)));
+    let start = lowest(&mut from.iter().copied().filter(|&k| !g.wrap && z[k] < stand)).or_else(|| lowest(&mut (0..z.len()))).expect("a sample");
+    let mut todo = vec![start];
+    open[start] = true;
+    while let Some(k) = todo.pop() {
+        for (j, _) in g.around(k) {
+            if z[j] < stand && !open[j] {
+                open[j] = true;
+                todo.push(j);
             }
         }
     }

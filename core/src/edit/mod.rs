@@ -73,6 +73,21 @@ impl Act {
 }
 
 impl Edit {
+    /// Whether its numbers can be made (the one check of an edit's numbers, `World::edit`): its place and every number
+    /// of its act finite, and a brush's radius not under none.
+    pub fn valid(&self) -> bool {
+        let finite = |v: &[f64]| v.iter().all(|x| x.is_finite());
+        let act = match self.act {
+            Act::Clear(s) | Act::Split(s) => finite(&[s]),
+            Act::Plant { genes, kg, .. } | Act::Grown { genes, kg, .. } => finite(&[kg]) && genes.iter().all(|g| g.is_finite()),
+            Act::Strike => true,
+            Act::Heat { radius_m, joules_m2 } => finite(&[radius_m, joules_m2]) && radius_m >= 0.0,
+            Act::Basin { radius_m, depth_m } => finite(&[radius_m, depth_m]) && radius_m >= 0.0,
+            Act::Ground { radius_m, height_m, stroke_m, .. } => finite(&[radius_m, height_m, stroke_m]) && radius_m >= 0.0,
+        };
+        finite(&self.place) && act
+    }
+
     /// What the edit did to cell `i`, in a line; `done` false: the world could not make it.
     pub fn line(&self, i: usize, done: bool) -> String {
         let what = match self.act {
@@ -92,19 +107,20 @@ impl Edit {
 impl World {
     /// Make the edits `edits` in their order, after the passes of a month's start (`month_start`) where one of them
     /// reads the world as the laws read it at a month's start (`Act::reads_month`); each is told as an event
-    /// (`EventKind::Edit`, its cell the node, the value 1 where it was made, 0 where the world could not make it).
-    /// The grown stand of a kind is found once for all of them, as the world stood before the first placed it: each
-    /// cell takes the same stand. Returns whether each was made.
+    /// (`EventKind::Edit`, its cell the node, the value 1 where it was made, 0 where the world could not make it). An
+    /// edit whose numbers cannot be made (`Edit::valid`) is refused before it touches the world (its node the first
+    /// cell where its place is not finite). The grown stand of a kind is found once for all of them, as the world stood
+    /// before the first placed it: each cell takes the same stand. Returns whether each was made.
     pub fn edit(&mut self, edits: &[Edit]) -> Vec<bool> {
-        if edits.iter().any(|e| e.act.reads_month()) {
+        if edits.iter().any(|e| e.valid() && e.act.reads_month()) {
             crate::month_start(self);
         }
         let mut grown = BTreeMap::new();
         edits
             .iter()
             .map(|e| {
-                let i = self.cell_under(e.place);
-                let done = self.make(i, e, &mut grown);
+                let i = if e.place.iter().all(|v| v.is_finite()) { self.cell_under(e.place) } else { 0 };
+                let done = e.valid() && self.make(i, e, &mut grown);
                 self.events.push(Event { day: self.day(), kind: EventKind::Edit(*e), node: i as u32, value: if done { 1.0 } else { 0.0 } });
                 done
             })

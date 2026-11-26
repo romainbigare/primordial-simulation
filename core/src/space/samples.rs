@@ -8,7 +8,7 @@
 //! terrain, not saved.
 
 use super::delta::{exposures, lobes, Liquid, Mouth};
-use super::drain::{draws, flood, open_low, starts};
+use super::drain::{draws, flood, open_from, starts};
 use super::fill::heading;
 use super::relief::{Lift, Relief};
 use super::grid::Grid;
@@ -75,6 +75,15 @@ impl Samples {
     pub fn pond_keys(&self, was: &[u32]) -> Vec<u32> {
         super::ponds::kept_keys(&self.pond, self.ponds.len(), was)
     }
+    /// The keys `was` of the places of its ponds (`Relief::ponds`) for a build of the years to number its ponds after:
+    /// the empty places dropped where they are too many (`ponds::compact`).
+    pub fn compact_keys(&self, was: &[u32]) -> Vec<u32> {
+        super::ponds::compact(was, &self.ponds)
+    }
+    /// The samples of the open low ground (the ponds of no pass).
+    pub fn open_samples(&self) -> Vec<usize> {
+        (0..self.pond.len()).filter(|&k| self.pond[k] != NONE && self.ponds[self.pond[k] as usize].pass == NONE).collect()
+    }
     /// The area of sample `k`, m² (its row's, `rows`).
     #[inline]
     pub fn area(&self, k: usize) -> f64 {
@@ -123,15 +132,17 @@ impl Samples {
 
 /// The samples a terrain found, kept with it (not saved: found again when first read): the seed's, and those last built
 /// from what the running world laid and edits shaped (`Terrain::built`), with the version of the relief they are of;
-/// and how the cells' offsets last raised them (`relief::Lift`), which serves every version of the same offsets (edits
-/// that shape the ground move no offset, `flow::build::reshape`).
+/// how the cells' offsets last raised them (`relief::Lift`), which serves every version of the same offsets (edits
+/// that shape the ground move no offset, `flow::build::reshape`); and the draws of the ways down for a seed and a
+/// number of samples (`drain::draws`, which every build reads).
 #[derive(Debug, Default)]
-pub(super) struct Kept(Mutex<Option<Arc<Samples>>>, Mutex<Option<(u32, Arc<Samples>)>>, Mutex<Option<Arc<Lift>>>);
+pub(super) struct Kept(Mutex<Option<Arc<Samples>>>, Mutex<Option<(u32, Arc<Samples>)>>, Mutex<Option<Arc<Lift>>>, Mutex<Option<(u64, Arc<Vec<f64>>)>>);
 
 impl Clone for Kept {
     fn clone(&self) -> Kept {
         let (seed, built, lift) = (self.0.lock().expect("the kept samples"), self.1.lock().expect("the built samples"), self.2.lock().expect("the lift"));
-        Kept(Mutex::new(seed.clone()), Mutex::new(built.clone()), Mutex::new(lift.clone()))
+        let draws = self.3.lock().expect("the draws").clone();
+        Kept(Mutex::new(seed.clone()), Mutex::new(built.clone()), Mutex::new(lift.clone()), Mutex::new(draws))
     }
 }
 
@@ -194,10 +205,11 @@ impl Terrain {
     /// The samples of `map` for `seed` (its rows between latitudes `lat`) as built from the relief `r` (`Relief`): the
     /// seed's (`samples`) with the heights `relief::heights` gives, and the flood over them found again (`found`; no
     /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
-    /// stands over the liquid's level (`wear::STAND_M`). What the relief laid on a sample is loose ground that settled
-    /// there (`laid_ground`), laid over `years` since the start; where edits shaped a sample its loose ground follows on
-    /// its new slope (`mantle::edited`). The ponds are numbered after those the relief keeps
-    /// (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build (no version, or a relief of no
+    /// stands over the liquid's level (`wear::STAND_M`), and the open low ground is what lies under that level joined
+    /// to the lowest sample of the seed's (`drain::open_from`), so a pit dug inland, however deep, is a closed basin. What the relief laid on
+    /// a sample is loose ground that settled there (`laid_ground`), laid over `years` since the start; where edits
+    /// shaped a sample its loose ground follows on its new slope (`mantle::edited`). The ponds are numbered after those
+    /// the relief keeps (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build (no version, or a relief of no
     /// cells' offsets: a world put back to before its first build, `rename_built`); found once for each version of the
     /// relief (`Relief::version`) and kept.
     pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief, years: f64) -> Arc<Samples> {
@@ -217,11 +229,13 @@ impl Terrain {
             l
         });
         let h = super::relief::heights(&s0, r, &lift);
-        let open = open_low(&grid, &h, STAND_M);
+        let open = open_from(&grid, &h, STAND_M, &s0.open_samples());
         let ground = laid_ground(&s0, r, years);
-        let mut found = self.found(seed, (&grid, rows), (h, &open, false), ground);
+        // (The wetness index is found again where it can differ from that of the samples last built, or the seed's.)
+        let last = self.kept.1.lock().expect("the built samples").as_ref().filter(|b| b.1.seed == seed).map(|b| b.1.clone());
+        let mut found = self.found(seed, (&grid, rows), (h, &open, false), (ground, Some(last.as_deref().unwrap_or(&s0))));
         for k in (0..r.shaped.len()).filter(|&k| r.shaped[k] != 0.0) {
-            found.loose[k] = edited(&grid, k, (&|j| found.h[j], found.up[k]), (found.loose[k], found.settled[k], r.shaped[k]));
+            [found.loose[k], found.settled[k]] = edited(&grid, k, (&|j| found.h[j], found.up[k]), (found.loose[k], found.settled[k], r.shaped[k]));
         }
         renumber(&mut found.pond, &mut found.ponds, &r.ponds);
         let found = Arc::new(found);
@@ -278,15 +292,29 @@ impl Terrain {
         let rim = crate::par::map_n(grid.n(), crate::par::UNCOUNTED, |k| Strata::rim(seed, map, map.place_of(&leaf(k), south, north).1));
         let worn = wear(seed, &grid, (by, &rise), (&fold, [&body, &rim], &Strata::of(seed, &self.makes)), self.channel);
         let ground = Ground { make: worn.make, loose: worn.loose, settled: worn.settled, age: worn.age, books: worn.books };
-        self.found(seed, (&grid, rows), (worn.h, &worn.open, true), ground)
+        self.found(seed, (&grid, rows), (worn.h, &worn.open, true), (ground, None))
+    }
+
+    /// The draws of the ways down of `n` samples for `seed` (`drain::draws`), found once and kept.
+    fn draws(&self, seed: u64, n: usize) -> Arc<Vec<f64>> {
+        let mut kept = self.kept.3.lock().expect("the draws");
+        match kept.as_ref().filter(|d| d.0 == seed && d.1.len() == n) {
+            Some(d) => d.1.clone(),
+            None => {
+                let d = Arc::new(draws(seed, 1, n));
+                *kept = Some((seed, d.clone()));
+                d
+            }
+        }
     }
 
     /// The samples of heights `h` on grid `g` for `seed`, the open low ground `open` (`drain::open_low`), and their
     /// ground `ground`: the flood over them from all the open low ground, the closed basins too shallow to hold a pond
     /// (`ponds::shallow`) with `graded` filled (`ponds::grade`), else left as they lie but no ponds (the floods flow
-    /// through them), the area that drains through each sample, the ponds, and the wetness index (`sample_index`).
-    fn found(&self, seed: u64, (grid, rows): (&Grid, Vec<f64>), (mut h, open, graded): (Vec<f64>, &[bool], bool), ground: Ground) -> Samples {
-        let f = flood(grid, &h, open, (&starts(grid, open, false), &draws(seed, 1, grid.n())));
+    /// through them), the area that drains through each sample, the ponds, and the wetness index (`sample_index`; found
+    /// again only where it can differ from that of the samples `was` where given, `index_from`).
+    fn found(&self, seed: u64, (grid, rows): (&Grid, Vec<f64>), (mut h, open, graded): (Vec<f64>, &[bool], bool), (ground, was): (Ground, Option<&Samples>)) -> Samples {
+        let f = flood(grid, &h, open, (&starts(grid, open, false), &self.draws(seed, grid.n())));
         let (up, main) = accumulate(&f.to, &f.order, |k| grid.area(k));
         if graded {
             let shallow = basins(grid, &h, &f).1;
@@ -301,7 +329,10 @@ impl Terrain {
         }
         let mut ponds: Vec<Pond> = members.iter().map(|m| Pond { pass: f.to[m[0] as usize], level: f.level[m[0] as usize] }).collect();
         open_parts(grid, open, (&mut pond, &mut ponds));
-        let twi = sample_index(grid.across, grid.down, grid.dy, &up, &h);
+        let twi = match was.filter(|p| p.h.len() == h.len()) {
+            Some(p) => index_from(p, (grid.across, grid.down, grid.dy), (&up, &h)),
+            None => sample_index(grid.across, grid.down, grid.dy, &up, &h),
+        };
         let Ground { make, loose, settled, age, books } = ground;
         Samples { seed, across: grid.across, down: grid.down, h, to: f.to, order: f.order, up, main, run: f.apart, pond, ponds, make, loose, settled, age, books, twi, channel: self.channel, rows }
     }
@@ -337,12 +368,34 @@ fn leaf_at(across: usize, k: usize) -> Leaf {
 
 /// How much liquid gathers at each of the samples `across` x `down`, `dy` m a side, of heights `h`, m, through which
 /// `up` m² drain (`network::accumulate`): the topographic wetness index ln(a / tan β) (Beven and Kirkby 1979,
-/// `inside::Grid::wetness_index`), a sample's width its side and its slope that of the samples' ground (`Grid::slope`).
+/// `inside::Grid::wetness_at`), a sample's width its side and its slope that of the samples' ground (`Grid::slope_at`).
 /// A function of the place alone: the law (`inside::wet_ground`), the page's tiles and the tape read this one.
 pub fn sample_index(across: usize, down: usize, dy: f64, up: &[f64], h: &[f64]) -> Vec<f64> {
-    let grid = crate::inside::Grid::new(across, down, dy, vec![dy; down]);
-    let own = vec![dy * dy; h.len()];
-    crate::inside::Grid::wetness_index(up, &own, &grid.slope(h))
+    let grid = index_grid(across, down, dy);
+    (0..h.len()).map(|k| index_at(&grid, dy, (up, h), k)).collect()
+}
+
+/// The grid the wetness index is read on (`sample_index`): samples `dy` m a side.
+fn index_grid(across: usize, down: usize, dy: f64) -> crate::inside::Grid {
+    crate::inside::Grid::new(across, down, dy, vec![dy; down])
+}
+
+/// The wetness index of sample `k` of `grid`, its samples `dy` m a side (`sample_index`).
+fn index_at(grid: &crate::inside::Grid, dy: f64, (up, h): (&[f64], &[f64]), k: usize) -> f64 {
+    crate::inside::Grid::wetness_at(up[k], dy * dy, grid.slope_at(h, k))
+}
+
+/// The wetness index of samples `across` x `down` as `sample_index` finds it, found again only where it can differ from
+/// that of the samples `was` of the same grid: where what drains through a sample moved, or the height of the sample or
+/// of one beside it across a side (`Grid::slope_at`), to the last bit; elsewhere it is `was`'s.
+fn index_from(was: &Samples, (across, down, dy): (usize, usize, f64), (up, h): (&[f64], &[f64])) -> Vec<f64> {
+    let grid = index_grid(across, down, dy);
+    let moved: Vec<bool> = h.iter().zip(&was.h).map(|(a, b)| a.to_bits() != b.to_bits()).collect();
+    let near = |k: usize| {
+        let (r, c) = (k / across, k % across);
+        moved[k] || (c > 0 && moved[k - 1]) || (c + 1 < across && moved[k + 1]) || (r > 0 && moved[k - across]) || (r + 1 < down && moved[k + across])
+    };
+    (0..h.len()).map(|k| if near(k) || up[k].to_bits() != was.up[k].to_bits() { index_at(&grid, dy, (up, h), k) } else { was.twi[k] }).collect()
 }
 
 impl crate::World {
@@ -355,6 +408,6 @@ impl crate::World {
         let (grid, _, _) = grid_of(&self.map, lat);
         let (s0, built) = (self.terrain.samples(self.terrain.seed, &self.map, lat), self.terrain_samples());
         let r = &self.relief;
-        ks.iter().map(|&k| edited(&grid, k, (h, built.up[k]), (s0.loose[k] + laid_on(r, k), s0.settled[k] + laid_on(r, k), r.shaped_at(k)))).collect()
+        ks.iter().map(|&k| edited(&grid, k, (h, built.up[k]), (s0.loose[k] + laid_on(r, k), s0.settled[k] + laid_on(r, k), r.shaped_at(k)))[0]).collect()
     }
 }

@@ -224,7 +224,9 @@ days, two a month, each at its own time in the month), after each the sink of th
 bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: where
 the soil's liquid saturates each cell's land, by Flow's state as its month left it, `contract::wet_grounds`; the cover's,
 then the takers') and Change.
-**Edits and their settling** (`core/src/edit/`). Edits are made between two months (3, **Edits**). **The ground under
+**Edits and their settling** (`core/src/edit/`). Edits are made between two months (3, **Edits**). An edit whose
+place or numbers are not finite, or whose brush's radius is under none, is refused before it touches the world
+(`Edit::valid`). **The ground under
 a brush** is raised or lowered (`edit::Act::Ground`, `World::shape`): over the terrain's samples the brush covers, by
 (1 − (d/r)²)² of its height at the centre at a distance d from it (r its radius), each cell taking the volume its
 samples move by from the outside node, with the heat that keeps its ground at its temperature and the potential energy
@@ -246,13 +248,17 @@ with what the pores of the ground under it lack to be full (a real body on dry g
 first: of a node that is one, its pores' lack at the cell's mean under the pond's samples alone, `flow::pores_lack`),
 from the outside node at the ground's temperature and liquid (with its fusion enthalpy where that ground is frozen),
 poured into each cell's part of that pond's body (`flow::pour`: in a cell of parts it comes into its liquid, and the
-part holds it, so the runoff's pass keeps it there); where the floor still opens to the open low ground (a rim under
+part holds it, so the runoff's pass keeps it there), the outside node giving its potential energy where it comes to
+lie, so the cells keep their temperature; where the floor still opens to the open low ground (a rim under
 the sea's level), none (its liquid stands there already), and a brush whose centre lies in the open low ground makes
-none. Then the liquid settles over the ground (below); what the cells' other liquid and pores took of it is poured
-again, up to three times, until it lacks less than a hundredth of its room, so it stands the asked depth over a dry
-floor. An edit moves the bed faster than the slow ground is checked: its caches
+none (where the samples were built again to read the ground, the liquid still settles over them, as the settling of
+the edits would). The pond's cells are poured in one pour. Then the liquid settles over the ground (below); what the
+cells' other liquid and pores took of it is poured again, up to three times, until it lacks less than a hundredth of
+its room, so it stands the asked depth over a dry floor; then the passes of a month's start find the world's state
+from the full basin. An edit moves the bed faster than the slow ground is checked: its caches
 are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. The samples' loose
-ground follows an edit when they are built again (`mantle::edited`): a lowering takes it first, and on a sample an edit
+ground follows an edit when they are built again (`mantle::edited`): a lowering takes it first, from its top, where what
+the liquid laid lies (`Samples::settled`, never more than the loose ground), and on a sample an edit
 shaped no more stays than the creep holds on its new slope (the mantle's balance with nothing coming from upslope, the
 bed breaking as under ground that does not lower), so the flanks of a hill raised steeper than loose ground rests at
 are bare bed, and the cells' plants root by it (`cover::loose_bins`). **Known limit:** the make of the samples' bed
@@ -260,13 +266,18 @@ does not follow an edit; the cell's soil keeps its texture. What an edit starts 
 (`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
 it as a build builds them, without the lobes, without counting a build of the years and with the cells' offsets of the
 last build (`flow::build::reshape`: an edit moves a cell's ground and its samples' mean by one volume, so its offset
-stays to within the rounding of the areas, and the samples move only where edits shaped them; a new version of the
+stays to within the rounding of the areas, and the samples move only where edits shaped them; what the new samples
+lift or lower of the cells' matter, where in a cell it lies, is the edits' work, paid by the outside node and not by
+the cells' heat, so the outside node pays all an edit changes of the potential energy; a new version of the
 relief, `Relief::version`, by which built samples are kept, and how the offsets raise the samples kept by the offsets,
 `relief::Lift`; each cell's ground by height found again only where its samples moved, `curve::update`), and what runs through each sample (its mean
 over about a year, `World::discharge`) runs down the new ways: what each sample adds of its own (what runs through it
-less what runs into it down the old ways) is summed down the new, a sample a pond now holds keeping what reaches it and
-a pond whose pass is new passing on what comes into it from its pass, as a mean over the years does (it fills, then
-spills; `build::reroute`), so a river runs round a raised hill, or through the pond it dams, at once; the passes of a month's start find the
+less what runs into it down the old ways) is summed down the new, a sample a pond now holds keeping what reaches it, a
+pond that keeps its pass (it came from a pond with that pass) letting over it what it did, and every other pond passing
+on what comes into it from its pass, as a mean over the years does (it fills, then spills), while the old pass of a pond
+no pond keeps the pass of no longer lets that pond over it (what came into it is taken off that pass, at most what the
+pass adds of its own; `build::reroute`): what a pond passes on is counted once, so a river runs round a raised hill,
+or through the pond it dams or whose pass it moves, at once; the passes of a month's start find the
 ground's state from them, and the liquid settles over the ground in the runoff's pass over a span of none
 (`flow::settle`: what stands runs to the bodies and each stands at one level; nothing drains, seeps or mixes, it
 carries no load, and the yearly means of what runs do not move); then the flames of the strikes of edits and of the
@@ -521,7 +532,9 @@ solve left it: its temperature (`World::thaw_last`) and the share of each substa
   a pond grown over another takes the number of the first whose key it holds, a new pond the next; a number no pond
   takes stays empty and keeps its key, and none comes to name a pond elsewhere, so a tile made before a build never
   reads another pond's level (an empty number reads the pond that holds its key, `tape::Table`). So an edit renumbers
-  no pond it did not reach. Its volume by level is its own samples': Σ area × (level - floor) over them, each
+  no pond it did not reach. Only a build of the years renumbers: where the empty numbers are more than a quarter of
+  the list (`ponds::compact`), it drops them, and the ponds after them take lower numbers, so the list does not only
+  grow. Its volume by level is its own samples': Σ area × (level - floor) over them, each
   sample's floor its height laid on its cell's mean surface. It is held by every cell that holds samples of it, each
   by its part, and its liquid stays in the ground nodes of those cells. The bodies, their parts and the ways to them
   are found once for the world's cells; at each month's start, each body's level from what its parts held at the last
@@ -660,7 +673,10 @@ its solids that stay solid at the surface: snow and ice do not raise it): the ce
 their centres (a box filter half a square each way, three passes, round a globe's rows), what their means then lack spread the same way
 eight times, and each raised by the constant it still lacks, so each cell's samples' mean is its ground exactly
 (`space::relief::heights`). Over them the flood finds the ways, the ponds and the wetness index again
-(`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level; a closed basin
+(`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level, and the open
+low ground is what lies under that level joined to the lowest sample of the seed's that lies under it
+(`drain::open_from`; on a globe all that lies under it), so a pit dug inland deeper than the sea's floor is a closed
+basin, not the sea; a closed basin
 too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flow through it (the start's wear fills
 such basins; the build fills none). Then each cell's ground as liquid stands on it, the bodies, the key samples and
 their rooms are found again; what a cell's parts of the bodies held follows each part's pond (a new pond comes from the

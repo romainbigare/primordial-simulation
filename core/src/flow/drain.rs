@@ -60,18 +60,18 @@ pub(super) fn land_drains(w: &World, s: &mut Scratch, (liq, tmin): (&[usize], f6
     super::parts::solve_nodes(w, s, &drained, (false, true));
 }
 
-/// What leaves each land cell (`World::is_land`) for the cells that are not land in a liquid step, mol, less what comes
-/// back (`World::off_land`): under the surface (`under`) and in the runoff's pass (`runoff`).
+/// What leaves each land cell (`flow::on_land`, as Flow's state has it) for the cells that are not land in a liquid
+/// step, mol, less what comes back (`World::off_land`): under the surface (`under`) and in the runoff's pass (`runoff`).
 pub(super) struct OffLand {
     land: Vec<bool>,
     pub(super) mol: Vec<f64>,
 }
 
 impl OffLand {
-    /// None yet, over the cells of `w`.
-    pub(super) fn new(w: &World) -> OffLand {
-        let n = w.mesh.cells().n();
-        OffLand { land: (0..n).map(|i| w.is_land(i)).collect(), mol: vec![0.0; n] }
+    /// None yet, over the cells of Flow's state `s`.
+    pub(super) fn new(s: &Scratch) -> OffLand {
+        let n = s.z.len();
+        OffLand { land: (0..n).map(|i| super::on_land(s, i)).collect(), mol: vec![0.0; n] }
     }
     /// What `mol` moves from cell `a` to cell `b`, between land and not.
     pub(super) fn moved(&mut self, (a, b): (usize, usize), mol: f64) {

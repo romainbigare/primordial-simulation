@@ -43,15 +43,17 @@ pub(super) fn mantle(g: &Grid, (h, drained): (&[f64], &[f64]), (settled, lowers)
 
 /// The loose ground of sample `k` of grid `g` once edits shaped it by `shaped` m (raised; lowered where under none),
 /// where it held `loose` m with `settled` m of it laid by the liquid, and stands at heights `h` draining `drained` m²: a
-/// lowering takes the loose ground first, and no more stays than the creep holds on its slope (`depth`, the bed
-/// breaking under it as under ground that does not lower, `SLOWEST`; nothing coming on it from upslope, as an edit is
-/// over in no time). Unshaped, it keeps its own.
-pub(super) fn edited(g: &Grid, k: usize, (h, drained): (&dyn Fn(usize) -> f64, f64), (loose, settled, shaped): (f64, f64, f64)) -> f64 {
+/// lowering takes the loose ground first, from its top, where what settled lies (the module's doc), and no more stays
+/// than the creep holds on its slope (`depth`, the bed breaking under it as under ground that does not lower,
+/// `SLOWEST`; nothing coming on it from upslope, as an edit is over in no time), the creep taking what settled with the
+/// rest. Returns its depth and what of it settled, m (never more than its depth). Unshaped, it keeps its own.
+pub(super) fn edited(g: &Grid, k: usize, (h, drained): (&dyn Fn(usize) -> f64, f64), (loose, settled, shaped): (f64, f64, f64)) -> [f64; 2] {
     if shaped == 0.0 {
-        return loose;
+        return [loose, settled];
     }
-    let left = if shaped < 0.0 { (loose + shaped).max(0.0) } else { loose };
-    left.min(depth((settled, BREAKS * SLOWEST), (slope(g, h, k), drained / g.dy), (0.0, super::wear::CREEP)))
+    let (left, laid) = if shaped < 0.0 { ((loose + shaped).max(0.0), (settled + shaped).max(0.0)) } else { (loose, settled) };
+    let kept = left.min(depth((settled, BREAKS * SLOWEST), (slope(g, h, k), drained / g.dy), (0.0, super::wear::CREEP)));
+    [kept, laid.min(kept)]
 }
 
 /// How long the loose ground of `loose` m has lain, years, where `settled` m settled on it over the last `years` and

@@ -267,8 +267,9 @@ impl Lifts {
     /// what came in less what left less the change of its own potential energy (`store::fall_heat`, which adds their sum to
     /// `Store::lifted`). An aside node's gas lies at its cell's head, which the part moves with the ground's matter,
     /// not its own: what its lifts and falls give or take is its ground node's (an aside node holds little heat of its
-    /// own). Returns the potential energy now, and the room of its moves, emptied.
-    pub(super) fn book(self, w: &mut World, s: &Scratch) -> (Potential, Vec<Moved>) {
+    /// own). With `by` the boundary node `by` pays the change of every node's own potential energy instead of its heat
+    /// (an edit's: `build::reshape`). Returns the potential energy now, and the room of its moves, emptied.
+    pub(super) fn book(self, w: &mut World, s: &Scratch, by: Option<store::Boundary>) -> (Potential, Vec<Moved>) {
         let (mut start, mut moved) = (self.start, self.moved);
         let (now, g) = (potential(w, s, Some(std::mem::take(&mut start.found))), w.cfg.gravity);
         let olds = start.energies();
@@ -292,8 +293,10 @@ impl Lifts {
         }
         let [ground, air, deep, aside] = &mut q;
         ground.iter_mut().zip(aside.iter_mut()).for_each(|(g, b)| *g += std::mem::take(b));
-        for (class, q) in [(Class::Ground, ground), (Class::Air, air), (Class::Deep, deep)] {
-            fall_heat(w, class, q.iter().copied().enumerate());
+        let classes = [(Class::Ground, ground), (Class::Air, air), (Class::Deep, deep)];
+        match by {
+            None => classes.into_iter().for_each(|(class, q)| fall_heat(w, class, q.iter().copied().enumerate())),
+            Some(b) => fall_heat(w, Class::Boundary, [(b as usize, classes.iter().map(|(_, q)| q.iter().sum::<f64>()).sum())]),
         }
         (now, moved)
     }

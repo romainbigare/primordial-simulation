@@ -74,6 +74,21 @@ pub(super) fn renumber(pond: &mut [u32], ponds: &mut Vec<Pond>, was: &[u32]) {
     *ponds = list;
 }
 
+/// The share of the places of the ponds' list that may be empty: past it, a build of the years drops them (`compact`).
+const EMPTY_SHARE: f64 = 0.25;
+
+/// The keys `was` of the places of the ponds `ponds` (`Relief::ponds`) with the empty places dropped (no pond holds
+/// them: no level, `renumber`) where they are more than `EMPTY_SHARE` of the list, else as they are: so the list
+/// does not only grow, and the ponds after an empty place dropped take lower numbers at the next build.
+pub(super) fn compact(was: &[u32], ponds: &[Pond]) -> Vec<u32> {
+    let empty = |p: usize| ponds.get(p).is_some_and(|q| q.level.is_nan());
+    let n = (0..was.len()).filter(|&p| empty(p)).count();
+    if n as f64 <= EMPTY_SHARE * was.len() as f64 {
+        return was.to_vec();
+    }
+    was.iter().enumerate().filter(|&(p, _)| !empty(p)).map(|(_, &k)| k).collect()
+}
+
 /// The key of each place of the ponds `pond` (`ponds` many) numbered after the keys `was` (`renumber`): its pond's
 /// (`keys`), and for an empty place the key it had, so a pond that holds that sample later takes its place again,
 /// and a picture that still reads the place finds the pond that holds it now.
@@ -169,4 +184,19 @@ fn fill(g: &Grid, h: &mut [f64], members: &[u32], volume: f64, pass: u32) -> f64
     };
     members.iter().for_each(|&k| h[k as usize] = h[k as usize].max(level));
     (volume - room).max(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compact, Pond, NONE};
+
+    /// The list of ponds does not only grow: its empty places are dropped once they are more than `EMPTY_SHARE` of it,
+    /// and kept, with their keys, while they are fewer.
+    #[test]
+    fn empty_places_are_dropped_once_too_many() {
+        let (full, empty) = (Pond { pass: 3, level: 1.0 }, Pond { pass: NONE, level: f64::NAN });
+        let keys = [10, 20, 30, 40];
+        assert_eq!(compact(&keys, &[full, empty, full, full]), keys);
+        assert_eq!(compact(&keys, &[full, empty, empty, full]), [10, 40]);
+    }
 }
