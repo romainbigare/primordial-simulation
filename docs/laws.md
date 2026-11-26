@@ -1300,7 +1300,8 @@ seeds fill it:
   (none below `rooted_from` of it, all from it, smoothly between: bare bed anchors nothing and holds no liquid in
   pores). Each cell keeps the share of its area in each of 24 bins of loose depth, from its terrain's samples, found
   when the world is built and at each build of the samples (`World::loose_bins`, `cover::loose_bins`), and a kind holds the share s of the cell their
-  mean gives (`Cover::rooted`, found again only when its need has moved by more than a bin). It stands on that share
+  mean gives (`Cover::rooted`, found again only when its need has moved by more than a bin; a slot founded by seeds
+  finds it at `root_least` when it is founded, `seed::lodge`). It stands on that share
   alone, its capture area x / s per unit of it; the shares are nested, as ground that holds deep roots holds shallow
   ones, so the cell's ground falls into rings (`canopy::rings`), each held by the kinds of a share at least its own, and
   the light passes down through the crowns that stand on each ring (with s = 1 everywhere, Beer's law through the

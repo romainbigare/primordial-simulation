@@ -96,6 +96,8 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
     let burn = &chem.reactions[p.burn];
     let pace = burn.relative_rate(a.t, ph.t_cat);
     let melt = chem.subs[p.liquid].melt;
+    // The share of the cell whose loose ground holds the first roots of what takes hold (`seed::lodge`).
+    let rooted = super::stand::rooted_in(w, i, ph.root_least);
     for x in 0..GROUND_LOTS {
         if c.lying.root[x] == NO_ROOT {
             continue;
@@ -128,7 +130,7 @@ pub(super) fn month(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, area, d
             let f = c.patches[k].share;
             let part: [f64; NP] = std::array::from_fn(|q| if k == last { left[q] } else { (up[q] * f).min(left[q]) });
             (0..NP).for_each(|q| left[q] -= part[q]);
-            match lodge(c, &mm, (&Seed { to: i as u32, mol: part, genes: g, root, heat: 0.0 }, None), &w.cfg, (area, foot.share, foot.strip), &mut recruits, k) {
+            match lodge(c, &mm, (&Seed { to: i as u32, mol: part, genes: g, root, heat: 0.0 }, None), &w.cfg, (area, foot.share, foot.strip, rooted), &mut recruits, k) {
                 Landed::In => {}
                 Landed::Out(m) => {
                     budget[DIED] -= held(&e, &m);

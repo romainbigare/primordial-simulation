@@ -359,11 +359,11 @@ fn seeds_take_the_slot_in_deficit() {
     for k in 0..cfg.variety {
         let mut v = g;
         v[FROST] -= 3.0 * step * k as f32;
-        assert!(matches!(cover::lodge(&mut c, &mm, (&seeds(v, k as u32, 0.5), None), &cfg, (1.0, 1.0, 0.0), &mut [0.0; cover::SLOTS], 0), cover::Landed::In));
+        assert!(matches!(cover::lodge(&mut c, &mm, (&seeds(v, k as u32, 0.5), None), &cfg, (1.0, 1.0, 0.0, 1.0), &mut [0.0; cover::SLOTS], 0), cover::Landed::In));
     }
     (c.net[1], c.net[2]) = (-1.0, -3.0);
     let (held, worst) = (c.clone(), c.mol[2]);
-    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, (&seeds(g, 9, 0.01), None), &cfg, (1.0, 1.0, 0.0), &mut [0.0; cover::SLOTS], 0) else { panic!("the seeds took no slot in deficit") };
+    let cover::Landed::Out(died) = cover::lodge(&mut c, &mm, (&seeds(g, 9, 0.01), None), &cfg, (1.0, 1.0, 0.0, 1.0), &mut [0.0; cover::SLOTS], 0) else { panic!("the seeds took no slot in deficit") };
     assert_eq!(died, worst, "the worst in deficit gave way");
     assert_eq!(c.root[2], 9, "the new kind holds the slot");
     for x in [0, 1, 3] {

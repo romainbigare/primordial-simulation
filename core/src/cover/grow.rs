@@ -141,7 +141,7 @@ pub fn live(w: &World, c: &mut Cover, p: &Parts, a: &Around, (i, dt): (usize, f6
         // The share of its ground (`cover::ground`) its plants hold: where its loose ground is as deep as their roots need (found again
         // only when their need has moved by more than a bin of depth).
         if super::stand::moved(c.need[q], need) {
-            c.rooted[q] = w.loose_bins.get(i).map_or(1.0, |b| super::stand::rooted_share(ph, b, need)) as f32;
+            c.rooted[q] = super::stand::rooted_in(w, i, need) as f32;
             c.need[q] = need as f32;
         }
         let (base, top) = c.crown(ph, &mm, area, q, h);

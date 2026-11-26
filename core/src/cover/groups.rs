@@ -180,7 +180,7 @@ impl Cover {
     }
     /// Slot `x` empties: no amounts, genes of no kind, no plants, in the first patch.
     pub(super) fn clear(&mut self, x: usize) {
-        (self.mol[x], self.root[x], self.full[x], self.net[x], self.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0);
+        (self.mol[x], self.root[x], self.full[x], self.net[x], self.rooted[x], self.need[x]) = ([0.0; NP], NO_ROOT, false, 0.0, 0.0, 0.0);
         (self.line[x], self.stands[x], self.airless[x], self.drained[x], self.strip[x]) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (self.plants[x], self.share[x], self.patch[x], self.fell[x]) = ([0.0; GROUPS], [0.0; GROUPS], 0, 0.0);
     }

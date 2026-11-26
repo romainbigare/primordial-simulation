@@ -197,6 +197,12 @@ pub(super) fn rooted_share(ph: &Physics, bins: &[f32; BINS], need: f64) -> f64 {
     bins.iter().enumerate().map(|(b, &s)| s as f64 * rooted(ph, bin_m(b), need)).sum()
 }
 
+/// The share of cell `i` of `w` that holds a kind whose roots need `need` m (`rooted_share`; all of it where the world
+/// holds no loose ground yet).
+pub(super) fn rooted_in(w: &crate::World, i: usize, need: f64) -> f64 {
+    w.loose_bins.get(i).map_or(1.0, |b| rooted_share(&w.cfg.phys, b, need))
+}
+
 /// Whether a kind whose roots needed `was` m when its rooted share was last found needs a new one at `now` m: when the
 /// need has moved by more than a bin.
 pub(super) fn moved(was: f32, now: f64) -> bool {

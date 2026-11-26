@@ -86,13 +86,14 @@ pub enum Landed {
 /// the most alike slot of their starting kind in the patch within `APART` × `alike` steps (`distance`), the genes and
 /// the share in the strips the mean by built cover, the plants each slot took in added to `recruits` (where they take
 /// ground below its line, `soak::lowered`); else they found a slot of their own (its line `UNSET`) among the slots the
-/// cell uses (`Cover::slots`), the patch holding at most `Config::variety`: an empty one; else the patch's one in
+/// cell uses (`Cover::slots`), its rooted share `rooted` of the cell, found at the least root need (`Cover::rooted`,
+/// `stand::rooted_in`; its first roots are shallow), the patch holding at most `Config::variety`: an empty one; else the patch's one in
 /// deficit (`Cover::net` below zero, the worst first), whose cover dies; else the two slots nearest each other by their
 /// genes join (`room`) and they found the slot it frees; a world whose cells hold one kind (`Config::variety` 1) has no
 /// two to join, and the seeds do not take hold (`Landed::Refused`). So a cell of more slots is never closed to seeds
 /// and a holder that pays its way is never pushed out: what lives after is the light's to decide, as seedlings live on
 /// the light that reaches the bottom of the layers above them and what does not pay dies (the gap models, Shugart 1984).
-pub fn lodge(c: &mut Cover, mm: &[f64; NP], (s, stand): (&Seed, Option<&[Group]>), cfg: &crate::Config, (area, share, strip): (f64, f64, f64), recruits: &mut [f64; super::SLOTS], k: usize) -> Landed {
+pub fn lodge(c: &mut Cover, mm: &[f64; NP], (s, stand): (&Seed, Option<&[Group]>), cfg: &crate::Config, (area, share, strip, rooted): (f64, f64, f64, f64), recruits: &mut [f64; super::SLOTS], k: usize) -> Landed {
     let (ph, n) = (&cfg.phys, c.slots(cfg.variety));
     let kg = built_kg(mm, &s.mol);
     let plants = stand.map_or_else(|| super::stand::founded(ph, kg, area * c.patches[k].share * share), |g| g.iter().map(|g| g.n).sum());
@@ -136,7 +137,8 @@ pub fn lodge(c: &mut Cover, mm: &[f64; NP], (s, stand): (&Seed, Option<&[Group]>
         },
     };
     (c.patch[x], c.fell[x]) = (k as u8, 0.0);
-    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x], c.need[x]) = (s.mol, s.genes, s.root, false, 0.0, 0.0);
+    (c.mol[x], c.genes[x], c.root[x], c.full[x], c.net[x]) = (s.mol, s.genes, s.root, false, 0.0);
+    (c.rooted[x], c.need[x]) = (rooted as f32, ph.root_least as f32);
     (c.line[x], c.stands[x], c.airless[x], c.drained[x], c.strip[x]) = (super::UNSET, share as f32, 0.0, 0.0, strip as f32);
     match stand {
         Some(g) => c.set_groups(x, &mut g.to_vec()),
@@ -214,9 +216,10 @@ fn put(w: &mut World, (i, k): (usize, usize), genes: [f32; NG], made: impl FnOnc
     let (s, stand) = made(w, area);
     let (mol, heat) = (s.mol, s.heat);
     let mut recruits = [0.0; super::SLOTS];
+    let rooted = super::stand::rooted_in(w, i, w.cfg.phys.root_least);
     let c = &mut w.life.cells[i].cover;
     let was = c.temp(&w.chem, &p);
-    let landed = lodge(c, &mm, (&s, stand.as_deref()), &w.cfg, (cell, foot.share, foot.strip), &mut recruits, k);
+    let landed = lodge(c, &mm, (&s, stand.as_deref()), &w.cfg, (cell, foot.share, foot.strip, rooted), &mut recruits, k);
     let to = lines(w, &w.life.cells[i].cover, i, &soak, (&recruits, built_kg(&mm, &mol)), cell * foot.share);
     let c = &mut w.life.cells[i].cover;
     c.line = to;

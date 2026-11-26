@@ -167,7 +167,7 @@ pub struct Cover {
     pub plants: [[f64; GROUPS]; SLOTS],
     pub share: [[f64; GROUPS]; SLOTS],
     /// Per slot: the share of its ground (`ground`) whose loose ground holds its plants (`stand::rooted_share`), and the loose ground
-    /// its roots needed when that was found, m (`stand::need`; 0: not found yet)
+    /// its roots needed when that was found, m (`stand::need`; a slot founded by seeds takes them at `root_least`)
     pub rooted: [f32; SLOTS],
     pub need: [f32; SLOTS],
     /// Per slot: its line, m over its cell's lowest ground: it holds the cell's ground above it (`cover::footing`), which
