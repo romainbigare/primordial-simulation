@@ -224,7 +224,9 @@ days, two a month, each at its own time in the month), after each the sink of th
 bed's store; then the liquid and erosion; heat sideways and creep yearly. Then the month of life (`life::month`: where
 the soil's liquid saturates each cell's land, by Flow's state as its month left it, `contract::wet_grounds`; the cover's,
 then the takers') and Change.
-**Edits and their settling** (`core/src/edit/`). Edits are made between two months (3, **Edits**). **The ground under
+**Edits and their settling** (`core/src/edit/`). Edits are made between two months (3, **Edits**). An edit whose
+place or numbers are not finite, or whose brush's radius is under none, is refused before it touches the world
+(`Edit::valid`). **The ground under
 a brush** is raised or lowered (`edit::Act::Ground`, `World::shape`): over the terrain's samples the brush covers, by
 (1 − (d/r)²)² of its height at the centre at a distance d from it (r its radius), each cell taking the volume its
 samples move by from the outside node, with the heat that keeps its ground at its temperature and the potential energy

@@ -376,3 +376,26 @@ fn a_pit_deeper_than_the_sea_stays_a_closed_pond() {
     assert!(s.pond[pit] != NONE && !open(&s, pit), "the pit is open low ground");
     assert!(sea.iter().all(|&k| open(&s, k)), "the sea is closed");
 }
+
+/// An edit whose numbers are not finite is refused before it touches the world (`Edit::valid`): it is told as not made,
+/// and the ground's amounts, its heat and the relief stay as they were, to the last bit.
+#[test]
+fn an_edit_of_numbers_not_finite_is_refused() {
+    use pcore::store::Class;
+    let mut w = small_world();
+    let i = inland(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let place = [(x0 + x1) / 2.0, (y0 + y1) / 2.0];
+    let state = |w: &World| (w.store.amounts(Class::Ground).iter().chain(w.store.heat(Class::Ground)).map(|x| x.to_bits()).collect::<Vec<u64>>(), w.relief.clone());
+    let before = state(&w);
+    let acts = [
+        Act::Ground { radius_m: 0.4 * w.map.side, height_m: f64::NAN, stroke_m: 0.0, make: 0 },
+        Act::Basin { radius_m: f64::INFINITY, depth_m: 5.0 },
+        Act::Heat { radius_m: 0.4 * w.map.side, joules_m2: f64::INFINITY },
+        Act::Clear(f64::NAN),
+    ];
+    let edits: Vec<Edit> = acts.iter().map(|&act| Edit { place, act }).chain([Edit { place: [f64::NAN, 1.0], act: Act::Strike }]).collect();
+    assert!(w.edit(&edits).iter().all(|&done| !done));
+    w.settle();
+    assert!(state(&w) == before, "the world moved");
+}
