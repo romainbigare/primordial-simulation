@@ -75,6 +75,11 @@ impl Samples {
     pub fn pond_keys(&self, was: &[u32]) -> Vec<u32> {
         super::ponds::kept_keys(&self.pond, self.ponds.len(), was)
     }
+    /// The keys `was` of the places of its ponds (`Relief::ponds`) for a build of the years to number its ponds after:
+    /// the empty places dropped where they are too many (`ponds::compact`).
+    pub fn compact_keys(&self, was: &[u32]) -> Vec<u32> {
+        super::ponds::compact(was, &self.ponds)
+    }
     /// The samples of the open low ground (the ponds of no pass).
     pub fn open_samples(&self) -> Vec<usize> {
         (0..self.pond.len()).filter(|&k| self.pond[k] != NONE && self.ponds[self.pond[k] as usize].pass == NONE).collect()

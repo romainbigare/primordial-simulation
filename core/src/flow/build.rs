@@ -4,8 +4,9 @@
 //! (`Terrain::built`), and with them each cell's ground as liquid stands on it (`curve`), the bodies, the key samples
 //! of the load and their rooms (`bodies::Bodies::of`). First the load piled at the mouths since the last build is laid
 //! out as lobes (`lay`): the only matter a build moves. What a cell's parts of the bodies held follows each part's pond
-//! (`held`), and the state of the ground nodes is found again. After edits shaped the ground the same is done at once,
-//! without the lobes (`reshape`).
+//! (`held`), and the state of the ground nodes is found again; the places of the ponds' list no pond holds are dropped
+//! there where they are too many (`Samples::compact_keys`). After edits shaped the ground the same is done at once,
+//! without the lobes and keeping every number (`reshape`).
 
 use super::{bodies::Bodies, curve, ground_now, land::solid, range, runoff, scratch::Holding, with, Scratch};
 use crate::space::{delta::flood_depth, network::NONE, samples::Samples, terrain::SAMPLE_DEPTH};
@@ -27,6 +28,7 @@ pub fn build(w: &mut World) {
         w.relief.built = w.relief.laid.clone();
         w.relief.builds += 1;
         w.relief.offset = offsets(w);
+        w.relief.ponds = old.compact_keys(&w.relief.ponds);
         anew(w, s, &old);
     });
     after(w);

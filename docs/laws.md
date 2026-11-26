@@ -529,7 +529,9 @@ solve left it: its temperature (`World::thaw_last`) and the share of each substa
   a pond grown over another takes the number of the first whose key it holds, a new pond the next; a number no pond
   takes stays empty and keeps its key, and none comes to name a pond elsewhere, so a tile made before a build never
   reads another pond's level (an empty number reads the pond that holds its key, `tape::Table`). So an edit renumbers
-  no pond it did not reach. Its volume by level is its own samples': Σ area × (level - floor) over them, each
+  no pond it did not reach. Only a build of the years renumbers: where the empty numbers are more than a quarter of
+  the list (`ponds::compact`), it drops them, and the ponds after them take lower numbers, so the list does not only
+  grow. Its volume by level is its own samples': Σ area × (level - floor) over them, each
   sample's floor its height laid on its cell's mean surface. It is held by every cell that holds samples of it, each
   by its part, and its liquid stays in the ground nodes of those cells. The bodies, their parts and the ways to them
   are found once for the world's cells; at each month's start, each body's level from what its parts held at the last
