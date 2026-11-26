@@ -44,11 +44,9 @@ const LOAD_SHOWS: f64 = 0.25;
 /// last frame (`frame`), so a stroke's end sends one only then (`settle`); a copy of the world as it stands now, kept
 /// while it waits for edits (`hold`, and after a stroke that changed nothing), which the next stroke takes as the world
 /// before it, so its first call copies nothing; the world as it was before the last stroke that changed it began, till
-/// the world steps on (`undo`); and what edits had shaped of each of the terrain's samples (`Relief::shaped`) when the
-/// samples of the version the cells' table is of were built (`version`), at each version built since the one of the
-/// ground the page shows (`since`: the version, and the samples edits shaped with how far, oldest first), and in the
-/// samples of the ground the page shows (`shown`, `ground_shown`) with their version (`over`), from which `preview`
-/// tells it what edits moved since.
+/// the world steps on (`undo`), with the samples that stroke moved (`edit::Area`); and of the version of the ground the
+/// page shows (`ground_shown`) and of each built since, oldest first (`since`, `Built`), what edits had shaped, from
+/// which `preview` tells the page what edits moved since: the last is the version the cells' table is of.
 struct Live {
     world: World,
     built: u32,
@@ -61,11 +59,29 @@ struct Live {
     strokes: u64,
     unframed: bool,
     ready: Option<World>,
-    before: Option<World>,
-    version: Vec<f64>,
-    since: Vec<(u32, Vec<(usize, f64)>)>,
-    shown: Vec<f64>,
-    over: u32,
+    before: Option<(World, edit::Area)>,
+    since: Vec<Built>,
+}
+
+/// A version of the world's samples (`Relief::version`): what edits had shaped of each of the terrain's samples when
+/// they were built (`Relief::shaped`: the samples that hold some, with how far, in their order), and the samples edits
+/// moved while it was the newest version (`edit::Area`).
+struct Built {
+    version: u32,
+    shaped: Vec<(usize, f64)>,
+    moved: edit::Area,
+}
+
+impl Built {
+    /// The version of the world `w`'s samples now.
+    fn of(w: &World) -> Built {
+        let shaped = w.relief.shaped.iter().enumerate().filter(|p| *p.1 != 0.0).map(|(k, &m)| (k, m)).collect();
+        Built { version: w.relief.version, shaped, moved: edit::Area::NONE }
+    }
+    /// What edits had shaped of sample `k` at this version, m.
+    fn shaped_at(&self, k: usize) -> f64 {
+        self.shaped.binary_search_by_key(&k, |p| p.0).map_or(0.0, |i| self.shaped[i].1)
+    }
 }
 
 impl Live {
@@ -73,8 +89,8 @@ impl Live {
     /// its ground as it is.
     fn new(world: World, (plan, kept): (Schedule, tape::Kept)) -> Live {
         let cells = tape::Table::new(&world);
-        let (shaped, v) = (world.relief.shaped.clone(), world.relief.version);
-        Live { built: v, world, plan, kept, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, unframed: false, ready: None, before: None, version: shaped.clone(), since: vec![(v, sparse(&shaped))], shown: shaped, over: v }
+        let since = vec![Built::of(&world)];
+        Live { built: world.relief.version, world, plan, kept, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, unframed: false, ready: None, before: None, since }
     }
     /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table found again, as the cells'
     /// ground and the shore moved (`tape::Table::update`), and what edits had shaped kept as the new version's.
@@ -82,15 +98,9 @@ impl Live {
         if self.world.relief.version != self.built {
             self.cells.update(&self.world);
             self.built = self.world.relief.version;
-            self.version = self.world.relief.shaped.clone();
-            self.since.push((self.built, sparse(&self.version)));
+            self.since.push(Built::of(&self.world));
         }
     }
-}
-
-/// Of `v`, each place that holds some, with what it holds.
-fn sparse(v: &[f64]) -> Vec<(usize, f64)> {
-    v.iter().enumerate().filter(|p| *p.1 != 0.0).map(|(k, &m)| (k, m)).collect()
 }
 
 thread_local! {

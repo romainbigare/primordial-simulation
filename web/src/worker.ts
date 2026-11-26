@@ -113,8 +113,12 @@ function handIn(data: ArrayBuffer, use: () => number): string {
 function preview(): { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array } {
   const c = core!, raw = bytes(c.preview(), c.out_len());
   const head = new Uint32Array(raw.buffer, 0, PREVIEW_HEAD), n = head[2] * head[3], at = 4 * PREVIEW_HEAD;
-  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer.slice(at, at + 4 * n)), loose: new Float32Array(raw.buffer.slice(at + 4 * n)) };
+  // (Both views of the one copy, which the page takes over: `moved`.)
+  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer, at, n), loose: new Float32Array(raw.buffer, at + 4 * n, n) };
 }
+
+/** The buffers of a preview, for the page to take over. */
+const moved = (p: { dh: Float32Array }): Transferable[] => [p.dh.buffer];
 
 /** The text the core last returned at `at`. */
 function text(at: number): string {
@@ -221,7 +225,8 @@ host.onmessage = async e => {
       const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
       const sends = JSON.parse(answer) as { preview: boolean; frame: boolean; refused?: string };
       if (sends.refused) throw new Error(sends.refused);
-      host.postMessage({ kind: 'brushed', text: answer, ...(sends.preview ? { preview: preview() } : {}) }, []);
+      const p = sends.preview ? preview() : null;
+      host.postMessage({ kind: 'brushed', text: answer, ...(p ? { preview: p } : {}) }, p ? moved(p) : []);
       if (sends.frame) postFrame('frame', true);
     }
     else if (m.cmd === 'save' && core) {
@@ -251,14 +256,16 @@ host.onmessage = async e => {
     else if (m.cmd === 'undo' && core) {
       // The world as before the last stroke (`undo`): its frame, the relief of its ground's new version, and the preview
       // of what moved since the ground the page shows; then a copy kept for the next stroke (`hold`), as at a pause.
-      host.postMessage({ kind: 'undone', text: text(core.undo()), preview: preview() }, []);
+      const done = text(core.undo()), p = preview();
+      host.postMessage({ kind: 'undone', text: done, preview: p }, moved(p));
       postFrame('frame', true);
       core.hold();
     }
     else if (m.cmd === 'groundShown' && core) {
       // The page's ground shows the samples of this version now: what edits moved since (`preview`).
       core.ground_shown(m.version);
-      host.postMessage({ kind: 'preview', preview: preview() }, []);
+      const p = preview();
+      host.postMessage({ kind: 'preview', preview: p }, moved(p));
     }
     else if (m.cmd === 'things' && core) {
       // A playing world's next frame brings them; a paused one's come alone (the frame would be the same).
