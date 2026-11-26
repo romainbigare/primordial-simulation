@@ -34,6 +34,8 @@ export class CoverMarks {
   private kinds: Kinds | null = null;
   private tableTex: Texture | null = null;
   private fieldTex: Texture | null = null;
+  /** The field as the GPU takes it, 16-bit floats (kept from frame to frame: the GPU's copy after a lost context). */
+  private halves: Uint16Array | null = null;
   private due = false;
   /** The marks decided this frame (`prepare`): the bindings the cover draws with; the textures they are in, one for
    * each of their words; and the texture of the cells whose marks reach each cell. */
@@ -44,6 +46,10 @@ export class CoverMarks {
    * and draw them are made (`prepare`); till then no lattice shows as marks, and the ground draws all the cover as its
    * field, as it does far away. */
   private made = false;
+  /** How many times the cover was set (`set`), and what the marks decided last were decided for (`prepare`), with
+   * their bindings: a draw of the same is drawn from them, not decided again. */
+  private version = 0;
+  private kept: { key: string; detail: Texture; decided: Draw['binds'] } | null = null;
 
   /** `alpha`: how strongly the cover covers the map. */
   constructor(private alpha: number) {}
@@ -52,6 +58,7 @@ export class CoverMarks {
   set(k: Kinds | null): void {
     this.kinds = k;
     this.due = true;
+    this.version++;
   }
 
   /** Of each lattice, 1 where a pixel of the screen takes `mpp` m and its widest marks take enough pixels to show as
@@ -72,7 +79,10 @@ export class CoverMarks {
     }
     if (k) {
       gpu.write(this.tableTex!, k.table);
-      gpu.write(this.fieldTex!, Uint16Array.from(k.field.data, half));
+      const d = k.field.data;
+      if (this.halves?.length !== d.length) this.halves = new Uint16Array(d.length);
+      for (let i = 0; i < d.length; i++) this.halves[i] = half(d[i]);
+      gpu.write(this.fieldTex!, this.halves);
     }
     this.due = false;
   }
@@ -81,15 +91,17 @@ export class CoverMarks {
   fieldBinds(gpu: Gpu, mpp: number): Draw['binds'] {
     this.upload(gpu);
     // A lattice no square holds is sent with side 0: the field does not read it.
-    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => ((this.kinds?.widest[l] ?? 0) > 0 ? a : 0)), 0).vec4(...this.shown(mpp)).vec4(this.kinds ? 1 : 0, this.alpha);
+    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => ((this.kinds?.widest[l] ?? 0) > 0 ? a : 0)), 0).vec4(...this.shown(mpp)).vec4(this.alpha);
     return { 14: u.buffer, 15: this.fieldTex!, 16: 'mip' };
   }
 
   /** Decide each mark of draw `m` on `gpu` once, before the map's pass: a texel a cell in view of each lattice that
    * shows, its rows below the last's (web/shaders/marks.wgsl). None before the rendered models are loaded (the marks
    * are drawn from them), nor before the programs that decide and draw them are made for the map's targets (those not
-   * made are added to `waiting`, and made first). */
-  prepare(gpu: Gpu, m: Marks, waiting: string[]): void {
+   * made are added to `waiting`, and made first). Where the last decided were of the same cells, cover and detail, and
+   * of what `inputs` says of the live map and of fire (vegetation.ts `prepare`), they are kept: the flow's signs, the
+   * flames and a fade change none of them. */
+  prepare(gpu: Gpu, m: Marks, waiting: string[], inputs: string): void {
     this.decided = null;
     // (Till the rendered models are loaded no lattice shows as marks: the field draws all the cover, as it does far
     // away, so the plants never leave bare ground between the far field and the marks.)
@@ -126,6 +138,8 @@ export class CoverMarks {
     grids.forEach((_, l) => u.vec4(REACH[l]));
     grids.forEach(g => u.ivec4(...g.base));
     const binds: Draw['binds'] = { ...m.land, ...this.fieldBinds(gpu, m.seenMpp), 1: u.buffer, 4: this.tableTex!, 20: detail, 21: 'tile' };
+    const key = [inputs, this.version, new Uint32Array(u.buffer).join(), shown.join(), m.rect.join()].join('|');
+    if (this.kept?.key === key && this.kept.detail === detail && this.marksTex[0] === was) { this.decided = { ...binds, ...this.kept.decided }; return; }
     // The marks' four words at once, a texture each, then from them the cells whose marks reach each cell
     // (web/shaders/reach.wgsl).
     const cellsOf = (p: Pass, name: string, drawn: Draw['binds']) => {
@@ -136,6 +150,7 @@ export class CoverMarks {
     const decided = { ...binds, ...Object.fromEntries(MARK_BINDINGS.map((b, word) => [b, this.marksTex[word]])) };
     cellsOf(gpu.pass(this.reachTex!), 'reach', decided);
     this.decided = { ...decided, [REACH_BINDING]: this.reachTex! };
+    this.kept = { key, detail, decided: { ...Object.fromEntries(MARK_BINDINGS.map((b, word) => [b, this.marksTex[word]])), [REACH_BINDING]: this.reachTex! } };
   }
 
   /** Draw marks `m` in pass `p` on `gpu`, as decided before the pass (`prepare`). */

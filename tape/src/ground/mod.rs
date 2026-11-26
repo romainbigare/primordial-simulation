@@ -68,6 +68,15 @@ impl Dry {
     }
 }
 
+/// Of world `w`'s relief, what the samples are built from (`Terrain::built`), as the samples of version `version`, with
+/// the years since its start at its last build and its map, as bytes (bincode; `Ground::relief_bytes`): not what lies
+/// on each sample now (`Relief::laid`), which a build does not read.
+fn built_bytes(w: &World, version: u32) -> Vec<u8> {
+    let r = &w.relief;
+    let built = Relief { laid: Vec::new(), built: r.built.clone(), shaped: r.shaped.clone(), offset: r.offset.clone(), builds: r.builds, version, ponds: r.ponds.clone(), due: false };
+    bincode::serialize(&(&built, w.built_years(), &w.map)).expect("a relief serializes")
+}
+
 /// The depths of the tiles of `map`, coarsest first: from the finest at which one tile holds the whole map to the first
 /// whose texels are no longer than `FINEST_M`.
 pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
@@ -82,7 +91,9 @@ pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
 /// the point each sample's line runs through (`stems::points`), how each sample's piece of its line starts
 /// (`bends::Bends`), the texture of each sample's loose ground (`pcore::soil::textures`), the samples whose line
 /// carries their wetness index (`wetness::strips`) and the wetness index of each as the hillslope holds it
-/// (`wetness::hill`); and the laws and the gravity it was made under, by which it is made again (`rebuild`).
+/// (`wetness::hill`), the largest area a sample drains (`channels::most_drained`), the band of rows of samples whose
+/// rock the last rebuild may have changed (`rebuild`, `rock_rows`); and the laws and the gravity it was made under, by
+/// which it is made again (`rebuild`).
 pub struct Ground {
     seed: u64,
     map: Square,
@@ -97,6 +108,8 @@ pub struct Ground {
     grain: Vec<pcore::soil::Texture>,
     strips: Vec<bool>,
     hill: Vec<f64>,
+    most: f64,
+    rock_rows: (usize, usize),
     phys: Physics,
     gravity: f64,
 }
@@ -119,7 +132,9 @@ impl Ground {
         let grain = pcore::soil::textures(&samples, &terrain.makes, gravity);
         let strips = wetness::strips(&samples, phys);
         let hill = wetness::hill(&samples, &strips);
-        Ground { seed, map, terrain, lat, samples, law, at, raw, bends, shore, grain, strips, hill, phys: *phys, gravity }
+        let most = channels::most_drained(&samples);
+        let rock_rows = (0, samples.down);
+        Ground { seed, map, terrain, lat, samples, law, at, raw, bends, shore, grain, strips, hill, most, rock_rows, phys: *phys, gravity }
     }
 
     /// The ground of world `w`, on its samples as last built (`World::terrain_samples`).
@@ -134,7 +149,7 @@ impl Ground {
     /// to build the same samples (`rebuild_from`): the ground's own map may cut the island into other cells (a page's
     /// ground is made of its squares, `worldgen::terrain::island_ground`).
     pub fn relief_bytes(w: &World) -> Vec<u8> {
-        bincode::serialize(&(&w.relief, w.built_years(), &w.map)).expect("a relief serializes")
+        built_bytes(w, w.relief.version)
     }
 
     /// The relief world `w`'s samples will be built from when its edits settle (`World::settle`,
@@ -145,23 +160,35 @@ impl Ground {
         if !w.relief.due || w.relief.offset.len() != w.mesh.cells().n() {
             return None;
         }
-        let r = Relief { version: w.relief.version + 1, due: false, ..w.relief.clone() };
-        Some(bincode::serialize(&(&r, w.built_years(), &w.map)).expect("a relief serializes"))
+        Some(built_bytes(w, w.relief.version + 1))
     }
 
     /// The ground made again on the samples the relief `bytes` builds on the world's cells (`relief_bytes`,
-    /// `Terrain::built`; `rebuild`). Returns the squares whose tiles changed, or why the bytes are refused.
+    /// `Terrain::built`; `rebuild`). Returns the squares whose tiles changed, or why the bytes are refused, or why its
+    /// tiles cannot be drawn (`drawable`).
     pub fn rebuild_from(&mut self, bytes: &[u8]) -> Result<Vec<bool>, String> {
         let (r, years, cells): (Relief, f64, Square) = bincode::deserialize(bytes).map_err(|e| format!("a relief: {e}"))?;
         let s = self.terrain.built(self.seed, &cells, self.lat, &r, years);
-        Ok(self.rebuild(s))
+        let squares = self.rebuild(s);
+        self.drawable().map(|()| squares)
+    }
+
+    /// Whether its tiles can be drawn, or why not: a tile names the pond of a texel by a 16-bit float (`tile`), so it
+    /// names no more than `PONDS_EXACT` ponds.
+    pub fn drawable(&self) -> Result<(), String> {
+        let n = self.samples.ponds.len();
+        if n > PONDS_EXACT {
+            return Err(format!("The ground holds {n} ponds, and its tiles name at most {PONDS_EXACT}: it cannot be drawn."));
+        }
+        Ok(())
     }
 
     /// The ground made again on the samples `new` (as a world built them again, `Terrain::built`): what each sample
     /// holds of it found again, but the shore (`shore::Shore::update`), the points the lines run through
     /// (`stems::update`), the texture (`pcore::soil::texture_at`) and the pieces of the channels (`bends::Bends`), found
     /// again only where they may read a sample that changed (`rebuild::near`, `BENDS_READ`; and every piece down
-    /// the ways from those, whose start they set): the rest read what they did. Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
+    /// the ways from those, whose start they set): the rest read what they did; and the band of rows whose rock may
+    /// change kept (`rock_rows`). Returns the squares whose tiles changed (`rebuild`), row by row, true for each.
     pub fn rebuild(&mut self, new: Arc<Samples>) -> Vec<bool> {
         let old = self.samples.clone();
         let mut shore = std::mem::take(&mut self.shore);
@@ -170,7 +197,9 @@ impl Ground {
         let (mut at, mut raw) = (self.at.clone(), std::mem::take(&mut self.raw));
         stems::update(&new, &shore, (&mut at, &mut raw), (&ways, &shore_moved));
         let mut grain = std::mem::take(&mut self.grain);
-        let read = rebuild::near(&new, &rebuild::moved(&old, &new), rebuild::GRAIN_READ);
+        let moved = rebuild::moved(&old, &new);
+        self.rock_rows = rebuild::rows(&rebuild::near(&new, &moved, rebuild::ROCK_READ), new.across);
+        let read = rebuild::near(&new, &moved, rebuild::GRAIN_READ);
         (0..new.h.len()).filter(|&k| read[k]).for_each(|k| grain[k] = pcore::soil::texture_at(&new, &self.terrain.makes, self.gravity, k));
         let strips = wetness::strips(&new, &self.phys);
         let hill = wetness::hill(&new, &strips);
@@ -178,6 +207,7 @@ impl Ground {
         let reaches = bends::Reaches { seed: self.seed, s: &new, at: &at, law: self.law, metres: self.map.length(SAMPLE_DEPTH) };
         self.bends.update(&reaches, &rebuild::readers(&new, &rebuild::near(&new, &changed, rebuild::BENDS_READ)));
         let squares = rebuild::squares(&self.map, &new, &rebuild::readers(&new, &changed));
+        self.most = channels::most_drained(&new);
         (self.samples, self.at, self.raw, self.shore, self.grain, self.strips, self.hill) = (new, at, raw, shore, grain, strips, hill);
         squares
     }
@@ -194,7 +224,7 @@ impl Ground {
     /// distance to the nearest channel's line without its bends, m, signed by the side (60,000 where none reaches it).
     /// Texels off the map are those of its edge.
     pub fn tile(&self, depth: u8, tx: i64, ty: i64) -> Vec<u16> {
-        assert!(depths(&self.map).contains(&depth), "a tile of a depth the ground is drawn at");
+        assert!(self.depths().contains(&depth), "a tile of a depth the ground is drawn at");
         let side = TILE + 2 * GUTTER;
         let (x0, y0) = (tx * TILE as i64 - GUTTER as i64, ty * TILE as i64 - GUTTER as i64);
         let per = 1i64 << (depth - self.map.square_depth());
@@ -205,7 +235,7 @@ impl Ground {
         let (wide, high) = ((win[2] - win[0] + 1) as usize, (win[3] - win[1] + 1) as usize);
         let heights = self.terrain.heights_on(&self.samples, &self.map, self.lat, win, depth);
         let k = 2f64.powi(SAMPLE_DEPTH as i32 - depth as i32);
-        let near = channels::Channels::new(self.reaches(), &self.bends, &self.strips).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
+        let near = channels::Channels::new(self.reaches(), &self.bends, &self.strips, self.most).field(channels::Window { x0: win[0], y0: win[1], wide, high, k });
         let twi = wetness::field(&self.samples, &self.hill, depth, [win[0], win[1]], [wide, high], &near.bank);
         // The valleys about the channels drawn into the ground out of the ponds (`channels::Field::drawn`); near a pond
         // (`shore::Shore::beside`) a valley only lowers the ground, and never under the pond's level where the ground is
@@ -219,7 +249,7 @@ impl Ground {
             .map(|(i, &h)| {
                 let p = self.centre(depth, win[0] + (i % wide) as i64, win[1] + (i / wide) as i64);
                 let by = self.shore.beside(p);
-                let in_pond = self.shore.share(p, |k| self.samples.pond[k] != NONE);
+                let in_pond = by.share(|k| self.samples.pond[k] != NONE);
                 let valley = near.drawn(i, h);
                 let met = if by.level.is_nan() { valley } else { valley + (valley.min(h).max(h.min(by.level)) - valley) * by.share };
                 let mouth = [near.mouth[i][0], near.mouth[i][1] / self.map.length(SAMPLE_DEPTH)];
@@ -247,7 +277,20 @@ impl Ground {
     /// bed's make, of `colours` one a make; the texture of its loose ground; and its pores and the deposit on it
     /// (`rock::rock`).
     pub fn rock(&self, colours: &[[f64; 3]]) -> Vec<u16> {
-        rock::rock(&self.reaches(), colours, &self.grain)
+        rock::rock(&self.reaches(), colours, &self.grain, 0..self.samples.down)
+    }
+
+    /// The band of rows of samples whose rock the last rebuild may have changed (`rebuild`; all of them before the
+    /// first; (0, 0): none), its first row and the row past its last, and their rock as `rock` gives it (each plane
+    /// those rows alone): laid over the rock before, the whole `rock` now.
+    pub fn rock_rows(&self, colours: &[[f64; 3]]) -> ((usize, usize), Vec<u16>) {
+        let (from, to) = self.rock_rows;
+        (self.rock_rows, rock::rock(&self.reaches(), colours, &self.grain, from..to))
+    }
+
+    /// The depths the ground's tiles are drawn at (`depths`).
+    pub fn depths(&self) -> std::ops::RangeInclusive<u8> {
+        depths(&self.map)
     }
 
     /// The ponds of the ground, each with its pass and its level (`Samples::ponds`).

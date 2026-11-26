@@ -53,7 +53,8 @@ export class Vegetation implements GpuLayer {
   /** Decide the marks of the cover on a map whose corner is at (ox, oy) and whose square takes `s` css px, `d` px of the
    * target and `seen` px of the screen a css px, in a view `W` x `H` css px of which only the part `clip` of the target
    * (x, y, w, h px) is drawn where given, with fire as it stands at time `now` (performance.now, ms: the ground's), before
-   * the map's pass, adding to `waiting` the programs it goes without (textures.ts `prepare`). */
+   * the map's pass, adding to `waiting` the programs it goes without (textures.ts `prepare`): decided again only where
+   * what they read changed. */
   prepare(gpu: Gpu, ox: number, oy: number, s: number, d: number, seen: number, W: number, H: number, now: number, waiting: string[], clip?: number[]): void {
     this.drawn = null;
     const laws = this.land?.lawBinds(gpu);
@@ -67,7 +68,9 @@ export class Vegetation implements GpuLayer {
     if (x1 <= x0 || y1 <= y0) return;
     const fire = this.fire.planeBinds(gpu, frameOf(ox * d, oy * d, mpp / d, mpp / seen), now);
     this.drawn = { rect: [x0, y0, x1 - x0, y1 - y0], mpp: mpp / d, seenMpp: mpp / seen, at: [(x0 / d - ox) * mpp, (y0 / d - oy) * mpp], land: { ...laws, ...fire } };
-    this.marks.prepare(gpu, this.drawn, waiting);
+    // (While a tile fades in, the ground the marks stand on changes at each frame: they are decided anew.)
+    const land = this.land!, fading = land.tiles.fading(performance.now()) ? performance.now() : 0;
+    this.marks.prepare(gpu, this.drawn, waiting, [land.contents(), fading, this.fire.contents(now)].join('|'));
   }
 
   /** Draw the cover in pass `p`, as `prepare` decided it. */

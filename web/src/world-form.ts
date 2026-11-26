@@ -7,8 +7,9 @@
  * phone's, whose browser gives a page a few hundred MB) the largest whose workers fit there (each of the ground's
  * workers holds about 0.4 kB a sample: 110 MB at 32, 250 MB at 48). */
 const LIVE_SIZE = 32, SIZE_LEAST = 8, SIZE_MOST = matchMedia('(pointer: coarse)').matches ? 48 : 128;
-/** The live world's kinds of cover a cell may hold, a setting of the world (the core's `Config::variety`), and its
- * most (the core's `cover::SLOTS`). */
+/** The live world's kinds of cover a cell of one patch may hold, a setting of the world (the core's `Config::variety`),
+ * and the most the form offers: the page's choice, under the core's most (`cover::SLOTS`, 16, which a cell of several
+ * patches may hold whatever the variety). */
 const LIVE_VARIETY = 8, VARIETY_MOST = 12;
 /** The climates a live island may have: a name, and the band of latitudes it stands for (south, north), its air the
  * planet's air over that band. The first is the page's. */

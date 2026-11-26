@@ -127,11 +127,11 @@ def main():
         "// each one's width, its height over its foot and its foot over its cell's bottom as shares of its cell, its layer",
         "// and its quarter (-1: the whole layer), and each kind's first sprite and count.",
         f"const SNAG_SPRITES = {n}; const SNAG_LAYERS = {layers};",
-        f"var<private> SNAG_W: array<f32, {n}> = array<f32, {n}>({rows(w)});",
-        f"var<private> SNAG_H: array<f32, {n}> = array<f32, {n}>({rows(h)});",
-        f"var<private> SNAG_F: array<f32, {n}> = array<f32, {n}>({rows(foot)});",
-        f"var<private> SNAG_LAYER: array<i32, {n}> = array<i32, {n}>({', '.join(str(a) for a, _ in placed)});",
-        f"var<private> SNAG_QUARTER: array<i32, {n}> = array<i32, {n}>({', '.join(str(q) for _, q in placed)});",
+        f"const SNAG_W: array<f32, {n}> = array<f32, {n}>({rows(w)});",
+        f"const SNAG_H: array<f32, {n}> = array<f32, {n}>({rows(h)});",
+        f"const SNAG_F: array<f32, {n}> = array<f32, {n}>({rows(foot)});",
+        f"const SNAG_LAYER: array<i32, {n}> = array<i32, {n}>({', '.join(str(a) for a, _ in placed)});",
+        f"const SNAG_QUARTER: array<i32, {n}> = array<i32, {n}>({', '.join(str(q) for _, q in placed)});",
     ]
     first = 0
     for kind, _, models in KINDS:

@@ -15,8 +15,8 @@ struct Land {
   // cover, K (0: none), and the discharge per metre a css pixel takes past which a channel shows as a line, m³/s per m.
   time: vec4f,
   // The soil's liquid departs by this per unit of the wetness index, m; ground with this depth of liquid is half wet, m;
-  // a living thing that holds the share x of the liquid it needs is x to this power active; a point whose loose ground
-  // is under this share of the depth a kind's roots need holds none of it (`Physics::rooted_from`).
+  // a point whose loose ground is under this share of the depth a kind's roots need holds none of it
+  // (`Physics::rooted_from`); w is not read.
   soil: vec4f,
   // A channel's width and depth: each a factor, m, times its discharge in m³/s to a power.
   channel: vec4f,
@@ -39,7 +39,10 @@ struct Land {
 // nearest channel's line without its bends, m.
 @group(0) @binding(9) var atlas: texture_2d_array<f32>;
 @group(0) @binding(13) var areas: texture_2d_array<f32>;
-// Of each tile at the view's depth: the layer drawn there and the layer it fades in over (-1: none).
+// The page of the tiles (web/src/ground.ts `makePage`): in its first row its window at the view's depth (first column
+// and row, tiles across and down) and the coarsest depth with its tiles across and down; then, of each tile of the
+// window, row by row, and under them of each of the coarsest tiles: the layer drawn there and the layer it fades in
+// over (-1: none).
 @group(0) @binding(10) var pages: texture_2d<f32>;
 // Of each layer: its tile's depth, column and row, and when it came, ms; in the second row, 1 where its tile is made of
 // the samples edits have moved since (`moved_at`).
@@ -82,7 +85,7 @@ const BED_MIDDLE = 1.5;
 // channel's line, m, its slope east and south; the samples of the channels of the texel nearest it and of the one
 // across from that (-1: none) and the least distances of those texels to their lines, m (from their nearest
 // points); and the highest level of the ponds of the four texels about it, m (`-NO_LIQUID_M`: none), the share of
-// the point's weight on those of them in a pond, and the fetch of the highest, m (`pond_fetch`): its liquid stands at
+// the point's weight on those of them in a pond, and the fetch of the highest, m (`pond_of`): its liquid stands at
 // that level over the ground drawn, so a shore runs smooth between the texels where the ground crosses the level; the distance to the channel's line signed by
 // the side the point lies on, m; of the line's nearest point, how far along the channel it lies, m (modulo
 // `land.reach.x`, blended across the texels of its stretch); of the channel's line without its bends (its valley's
@@ -119,9 +122,8 @@ fn sample_of(n: vec2i, depth: f32, tile: vec2f, code: i32) -> vec2i {
 
 // The ground of layer `layer` at `at`, m from the map's north-west corner, blended between the texels' centres; with
 // `spline`, its height and slope through them as a Catmull-Rom spline (so light on a slope drawn over many pixels a
-// texel shows no creases).
-fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
-  let t = textureLoad(tile_of, vec2i(layer, 0), 0);
+// texel shows no creases). `t` is the layer's row of `tile_of`.
+fn read_tile(layer: i32, t: vec4f, at: vec2f, spline: bool) -> Tiled {
   let texel = land.map.x / exp2(t.x - land.map.w);
   let q = at / texel - (t.yz * land.tiles.x - land.tiles.y) - 0.5;
   let i = vec2i(floor(q));
@@ -157,15 +159,16 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   // The ponds the four texels lie in: their highest level, the share of the point's weight on them, and the highest's
   // fetch.
   let ponds = vec4i(i32(a4[0].y + 0.5), i32(a4[1].y + 0.5), i32(a4[2].y + 0.5), i32(a4[3].y + 0.5)) - 1;
-  var levels = vec4f(-NO_LIQUID_M);
-  if (all(ponds == vec4i(ponds.x))) { levels = vec4f(pond_level(ponds.x)); }
-  else { levels = vec4f(pond_level(ponds.x), pond_level(ponds.y), pond_level(ponds.z), pond_level(ponds.w)); }
+  var pond4 = array<vec2f, 4>();
+  if (all(ponds == vec4i(ponds.x))) { let one = pond_of(ponds.x); pond4 = array<vec2f, 4>(one, one, one, one); }
+  else { pond4 = array<vec2f, 4>(pond_of(ponds.x), pond_of(ponds.y), pond_of(ponds.z), pond_of(ponds.w)); }
+  let levels = vec4f(pond4[0].x, pond4[1].x, pond4[2].x, pond4[3].x);
   let bilinear = vec4f((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
   let wet = select(vec4f(0.0), vec4f(1.0), ponds >= vec4i(0));
   let high = max(max(levels.x, levels.y), max(levels.z, levels.w));
-  var highest = ponds.x;
-  for (var n = 1; n < 4; n++) { if (levels[n] > levels[0] && levels[n] >= high) { highest = ponds[n]; } }
-  let water = vec3f(high, dot(bilinear, wet), pond_fetch(highest));
+  var highest = 0;
+  for (var n = 1; n < 4; n++) { if (levels[n] > levels[0] && levels[n] >= high) { highest = n; } }
+  let water = vec3f(high, dot(bilinear, wet), pond4[highest].y);
   // The place along the channel: the nearest texel's, blended with those of the others that hold the same stretch of
   // the line (their places taken the short way round the length they are kept modulo).
   // (In a program made for draws from afar, where no bed's shape shows, the nearest texel's as it is, and no swing.)
@@ -197,16 +200,18 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let d_slope = sign(signed) * mix(vec2f(mix(cd.y - cd.x, cd.w - cd.z, f.y), cy - cx) / texel, full_slope, bent);
   let lean = select(0.0, calm - signed, shaped && both);
   if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, water, signed, along, lean); }
-  let f2 = f * f;
-  let f3 = f2 * f;
   // The weights of the texels from i - 1 to i + 2 along each axis, and their slopes.
-  var w = array<vec2f, 4>(0.5 * (-f3 + 2.0 * f2 - f), 0.5 * (3.0 * f3 - 5.0 * f2 + 2.0), 0.5 * (-3.0 * f3 + 4.0 * f2 + f), 0.5 * (f3 - f2));
-  var dw = array<vec2f, 4>(0.5 * (-3.0 * f2 + 4.0 * f - 1.0), 0.5 * (9.0 * f2 - 10.0 * f), 0.5 * (-9.0 * f2 + 8.0 * f + 1.0), 0.5 * (3.0 * f2 - 2.0 * f));
+  let w = catmull_rom(f);
+  let dw = catmull_rom_slope(f);
   var h = vec3f(0.0);
+  // (The four texels about the point were read above.)
+  let inner = array<vec4f, 4>(c00, c10, c01, c11);
   for (var y = 0; y < 4; y++) {
     for (var x = 0; x < 4; x++) {
-      let t = textureLoad(atlas, clamp(i + vec2i(x - 1, y - 1), vec2i(0), vec2i(last)), layer, 0);
-      let v = t.x + t.y;
+      var c: vec4f;
+      if (x >= 1 && x <= 2 && y >= 1 && y <= 2) { c = inner[(x - 1) + 2 * (y - 1)]; }
+      else { c = textureLoad(atlas, clamp(i + vec2i(x - 1, y - 1), vec2i(0), vec2i(last)), layer, 0); }
+      let v = c.x + c.y;
       h += v * vec3f(w[x].x * w[y].y, dw[x].x * w[y].y, w[x].x * dw[y].y);
     }
   }
@@ -222,8 +227,7 @@ fn pond_texel(p: i32) -> vec2f {
   let t = textureLoad(table, vec2i(q % w, PLANES * i32(land.map.z) + q / w), 0);
   return select(t.xy, t.zw, p % 2 == 1);
 }
-fn pond_level(p: i32) -> f32 { return select(pond_texel(p).x, -NO_LIQUID_M, p < 0); }
-fn pond_fetch(p: i32) -> f32 { return select(pond_texel(p).y, 0.0, p < 0); }
+fn pond_of(p: i32) -> vec2f { return select(pond_texel(p), vec2f(-NO_LIQUID_M, 0.0), p < 0); }
 
 // Cell value `k` (a plane of the table) of the square at column and row c, the nearest on the map.
 fn cell(k: i32, c: vec2i) -> vec4f {
@@ -250,26 +254,34 @@ fn blended(k: i32, c: Corners) -> vec4f {
 fn cells_smooth(k: i32, s: vec2f) -> vec4f {
   let c = b_spline(s - 0.5);
   var sum = vec4f(0.0);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) { sum += c.wx[x] * c.wy[y] * cell(k, c.i + vec2i(x - 1, y - 1)); }
-  }
+  for (var n = 0; n < B_TAPS; n++) { sum += b_weight(c, n) * cell(k, b_texel(c, n)); }
   return sum;
+}
+
+// The layers the page names at `at`, m from the map's north-west corner: of its tile at the view's depth inside its
+// window, else of its coarsest tile.
+fn page_at(at: vec2f) -> vec4f {
+  let window = textureLoad(pages, vec2i(0, 0), 0);
+  let coarse = textureLoad(pages, vec2i(1, 0), 0);
+  let c = vec2i(floor(at / (land.map.x * land.tiles.x / exp2(land.tiles.z - land.map.w)))) - vec2i(window.xy);
+  if (all(c >= vec2i(0)) && all(c < vec2i(window.zw))) { return textureLoad(pages, c + vec2i(0, 1), 0); }
+  let k = clamp(vec2i(floor(at / (land.map.x * land.tiles.x / exp2(coarse.x - land.map.w)))), vec2i(0), vec2i(coarse.yz) - 1);
+  return textureLoad(pages, k + vec2i(0, 1 + i32(window.w)), 0);
 }
 
 // The ground at `at`, m from the map's north-west corner (`read_tile`, with `spline`): from the tile the page names
 // there, fading in over the one before it; before any tile came, the cells' mean heights, flat.
 fn ground_at(at: vec2f, spline: bool) -> Tiled {
-  let span = land.map.x * land.tiles.x / exp2(land.tiles.z - land.map.w);
-  let size = vec2i(textureDimensions(pages));
-  let page = textureLoad(pages, clamp(vec2i(floor(at / span)), vec2i(0), size - 1), 0);
+  let page = page_at(at);
   if (page.x < 0.0) {
     return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec3f(-NO_LIQUID_M, 0.0, 0.0), NO_LIQUID_M, 0.0, 0.0);
   }
-  let shown = with_moved(read_tile(i32(page.x), at, spline), i32(page.x), at);
-  let came = textureLoad(tile_of, vec2i(i32(page.x), 0), 0).w;
+  let row = textureLoad(tile_of, vec2i(i32(page.x), 0), 0);
+  let shown = with_moved(read_tile(i32(page.x), row, at, spline), i32(page.x), at);
+  let came = row.w;
   let w = clamp((land.time.x - came) / land.time.y, 0.0, 1.0);
   if (w >= 1.0 || page.y < 0.0) { return shown; }
-  let under = with_moved(read_tile(i32(page.y), at, spline), i32(page.y), at);
+  let under = with_moved(read_tile(i32(page.y), textureLoad(tile_of, vec2i(i32(page.y), 0), 0), at, spline), i32(page.y), at);
   return Tiled(mix(under.h, shown.h, w), mix(under.slope, shown.slope, w), mix(under.twi, shown.twi, w), mix(under.d, shown.d, w), mix(under.d_slope, shown.d_slope, w), shown.channels, shown.ends, mix(under.water, shown.water, w), mix(under.sd, shown.sd, w), shown.along, shown.lean);
 }
 
@@ -283,11 +295,11 @@ fn moved_at(at: vec2f) -> vec3f {
   let dy = vec3f(t.y - 0.5, -2.0 * t.y, t.y + 0.5);
   let last = vec2i(land.samples.xy) - 1;
   var m = vec3f(0.0);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      let v = textureLoad(flows, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), 0).z;
-      m += v * vec3f(c.wx[x] * c.wy[y], dx[x] * c.wy[y], c.wx[x] * dy[y]);
-    }
+  for (var n = 0; n < B_TAPS; n++) {
+    let x = n % 3;
+    let y = n / 3;
+    let v = textureLoad(flows, clamp(b_texel(c, n), vec2i(0), last), 0).z;
+    m += v * vec3f(b_weight(c, n), dx[x] * c.wy[y], c.wx[x] * dy[y]);
   }
   return vec3f(m.x, m.yz / side);
 }
@@ -334,13 +346,11 @@ fn saturated_of(g: Tiled, at: vec2f) -> f32 {
   let c = b_spline(at / land.map.x - 0.5);
   var level = 0.0;
   var weight = 0.0;
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      let s = cell(SOIL, c.i + vec2i(x - 1, y - 1));
-      let w = select(0.0, c.wx[x] * c.wy[y], s.z > 0.0);
-      level += w * s.w;
-      weight += w;
-    }
+  for (var n = 0; n < B_TAPS; n++) {
+    let s = cell(SOIL, b_texel(c, n));
+    let w = select(0.0, b_weight(c, n), s.z > 0.0);
+    level += w * s.w;
+    weight += w;
   }
   if (weight <= 0.0) { return 0.0; }
   return smoothstep(-SATURATED_EDGE, 0.0, g.twi - level / weight);
@@ -459,15 +469,13 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, knob: f32) -> State {
   var held = 0.0;
   var pores = 0.0;
   let bs = b_spline(at / land.map.x - 0.5);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      let ci = bs.i + vec2i(x - 1, y - 1);
-      let w = bs.wx[x] * bs.wy[y];
-      let l = cell(LIQUID, ci);
-      let s = cell(SOIL, ci);
-      held += w * soil_held(l.w, s.x, s.y, g.twi);
-      pores += w * s.x;
-    }
+  for (var n = 0; n < B_TAPS; n++) {
+    let ci = b_texel(bs, n);
+    let w = b_weight(bs, n);
+    let l = cell(LIQUID, ci);
+    let s = cell(SOIL, ci);
+    held += w * soil_held(l.w, s.x, s.y, g.twi);
+    pores += w * s.x;
   }
   var p: State;
   if (g.water.x > -NO_LIQUID_M && g.water.y > 0.0) {

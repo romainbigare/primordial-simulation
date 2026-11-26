@@ -130,8 +130,9 @@ impl Channels<'_> {
             let wanders = ease(WANDER_FROM, WANDER_TEXELS, r.wander_length() / texel);
             let across = [-(at[1] - from.p[1]) / last.max(f64::MIN_POSITIVE), (at[0] - from.p[0]) / last.max(f64::MIN_POSITIVE)];
             let n = ((run / (STEP_TEXELS * texel)).ceil() as usize).clamp(1, CALM_STEPS);
+            let curve = r.frame(k).map_or(0.0, |f| f.len());
             for x in (1..=n).map(|i| i as f64 / n as f64) {
-                let off = wanders * self.bends.joins(r, k, x * run, run) / r.metres;
+                let off = wanders * self.bends.joins(r, k, curve, x * run, run) / r.metres;
                 let on = |from: [f64; 2], to: [f64; 2]| [from[0] + (to[0] - from[0]) * x + across[0] * off, from[1] + (to[1] - from[1]) * x + across[1] * off];
                 own.line.push(Vertex { p: on(from.p, at), t: 1.0, s: from.s + x * run });
                 own.calm.push(on(calm_from, calm_at));

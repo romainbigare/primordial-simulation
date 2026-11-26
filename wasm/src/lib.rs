@@ -38,16 +38,15 @@ const LOAD_SHOWS: f64 = 0.25;
 
 /// The world; the version of its samples what the shell keeps of its cells is of (`Relief::version`); what is placed
 /// when, and what a recorder keeps of it (`tape::Kept`, saved with it, `save_world`); what the shell keeps of its cells
-/// (`tape::Table`); the table made with the last frame; the samples' discharge, m³/s, and load, g/m³, last sent to the
+/// (`tape::Table`); the table made with the last frame, till `table` hands it to the page; the samples' discharge, m³/s, and load, g/m³, last sent to the
 /// page (`tape::Table::discharge`, `tape::Table::load`; none before the first); the brush's stroke under way (`Stroke`;
-/// none between strokes: a stroke ends at `settle`) and the strokes begun; a copy of the world as it stands now, kept
+/// none between strokes: a stroke ends at `settle`) and the strokes begun; whether an edit changed the world since the
+/// last frame (`frame`), so a stroke's end sends one only then (`settle`); a copy of the world as it stands now, kept
 /// while it waits for edits (`hold`, and after a stroke that changed nothing), which the next stroke takes as the world
 /// before it, so its first call copies nothing; the world as it was before the last stroke that changed it began, till
-/// the world steps on (`undo`); and what edits had shaped of each of the terrain's samples (`Relief::shaped`) when the
-/// samples of the version the cells' table is of were built (`version`), at each version built since the one of the
-/// ground the page shows (`since`: the version, and the samples edits shaped with how far, oldest first), and in the
-/// samples of the ground the page shows (`shown`, `ground_shown`) with their version (`over`), from which `preview`
-/// tells it what edits moved since.
+/// the world steps on (`undo`), with the samples that stroke moved (`edit::Area`); and of the version of the ground the
+/// page shows (`ground_shown`) and of each built since, oldest first (`since`, `Built`), what edits had shaped, from
+/// which `preview` tells the page what edits moved since: the last is the version the cells' table is of.
 struct Live {
     world: World,
     built: u32,
@@ -58,12 +57,31 @@ struct Live {
     sent: Vec<[f32; 2]>,
     stroke: Option<Stroke>,
     strokes: u64,
+    unframed: bool,
     ready: Option<World>,
-    before: Option<World>,
-    version: Vec<f64>,
-    since: Vec<(u32, Vec<(usize, f64)>)>,
-    shown: Vec<f64>,
-    over: u32,
+    before: Option<(World, edit::Area)>,
+    since: Vec<Built>,
+}
+
+/// A version of the world's samples (`Relief::version`): what edits had shaped of each of the terrain's samples when
+/// they were built (`Relief::shaped`: the samples that hold some, with how far, in their order), and the samples edits
+/// moved while it was the newest version (`edit::Area`).
+struct Built {
+    version: u32,
+    shaped: Vec<(usize, f64)>,
+    moved: edit::Area,
+}
+
+impl Built {
+    /// The version of the world `w`'s samples now.
+    fn of(w: &World) -> Built {
+        let shaped = w.relief.shaped.iter().enumerate().filter(|p| *p.1 != 0.0).map(|(k, &m)| (k, m)).collect();
+        Built { version: w.relief.version, shaped, moved: edit::Area::NONE }
+    }
+    /// What edits had shaped of sample `k` at this version, m.
+    fn shaped_at(&self, k: usize) -> f64 {
+        self.shaped.binary_search_by_key(&k, |p| p.0).map_or(0.0, |i| self.shaped[i].1)
+    }
 }
 
 impl Live {
@@ -71,8 +89,8 @@ impl Live {
     /// its ground as it is.
     fn new(world: World, (plan, kept): (Schedule, tape::Kept)) -> Live {
         let cells = tape::Table::new(&world);
-        let (shaped, v) = (world.relief.shaped.clone(), world.relief.version);
-        Live { built: v, world, plan, kept, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, ready: None, before: None, version: shaped.clone(), since: vec![(v, sparse(&shaped))], shown: shaped, over: v }
+        let since = vec![Built::of(&world)];
+        Live { built: world.relief.version, world, plan, kept, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, unframed: false, ready: None, before: None, since }
     }
     /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table found again, as the cells'
     /// ground and the shore moved (`tape::Table::update`), and what edits had shaped kept as the new version's.
@@ -80,22 +98,16 @@ impl Live {
         if self.world.relief.version != self.built {
             self.cells.update(&self.world);
             self.built = self.world.relief.version;
-            self.version = self.world.relief.shaped.clone();
-            self.since.push((self.built, sparse(&self.version)));
+            self.since.push(Built::of(&self.world));
         }
     }
 }
 
-/// Of `v`, each place that holds some, with what it holds.
-fn sparse(v: &[f64]) -> Vec<(usize, f64)> {
-    v.iter().enumerate().filter(|p| *p.1 != 0.0).map(|(k, &m)| (k, m)).collect()
-}
-
 thread_local! {
     static LIVE: RefCell<Option<Live>> = const { RefCell::new(None) };
-    static GROUND: RefCell<Option<tape::Ground>> = const { RefCell::new(None) };
-    /// The bytes last handed to the page (it reads them until the next call that returns bytes).
-    static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static GROUND: RefCell<Option<ground::Drawn>> = const { RefCell::new(None) };
+    /// What was last handed to the page (it reads it until the next call that returns bytes).
+    static OUT: RefCell<Out> = const { RefCell::new(Out::Bytes(Vec::new())) };
     /// The bytes the page last handed in (`input`), until a call reads them.
     static IN: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
@@ -109,11 +121,47 @@ fn with<T>(f: impl FnOnce(&mut Live) -> T) -> T {
     LIVE.with(|c| f(c.borrow_mut().as_mut().expect("no world: call new_world first")))
 }
 
-/// Hand `bytes` to the page: their address in memory, valid until the next call that returns bytes; `out_len` is their length.
-fn give(bytes: Vec<u8>) -> *const u8 {
+/// What the shell hands the page: bytes, or numbers of 16 or 32 bits, handed as they lie in memory: little-endian, as
+/// the target is (wasm32), so none is copied to be encoded.
+enum Out {
+    Bytes(Vec<u8>),
+    Halves(Vec<u16>),
+    Floats(Vec<f32>),
+}
+
+impl Out {
+    /// Its address in memory and its length in bytes.
+    fn place(&self) -> (*const u8, usize) {
+        match self {
+            Out::Bytes(v) => (v.as_ptr(), v.len()),
+            Out::Halves(v) => (v.as_ptr().cast(), 2 * v.len()),
+            Out::Floats(v) => (v.as_ptr().cast(), 4 * v.len()),
+        }
+    }
+}
+
+impl From<Vec<u8>> for Out {
+    fn from(v: Vec<u8>) -> Out {
+        Out::Bytes(v)
+    }
+}
+impl From<Vec<u16>> for Out {
+    fn from(v: Vec<u16>) -> Out {
+        Out::Halves(v)
+    }
+}
+impl From<Vec<f32>> for Out {
+    fn from(v: Vec<f32>) -> Out {
+        Out::Floats(v)
+    }
+}
+
+/// Hand `out` to the page: its address in memory, valid until the next call that returns bytes; `out_len` is its
+/// length in bytes.
+fn give(out: impl Into<Out>) -> *const u8 {
     OUT.with(|o| {
-        *o.borrow_mut() = bytes;
-        o.borrow().as_ptr()
+        *o.borrow_mut() = out.into();
+        o.borrow().place().0
     })
 }
 
@@ -140,12 +188,13 @@ fn shape_of(drawn: u32) -> Shape {
 pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn: u32, variety: u32, soft: u32) -> u32 {
     let band = island((south, north));
     let cfg = Config { variety: variety as usize, ..if soft != 0 { worldgen::terrain::soft_weather(band) } else { band } };
+    // (Refused before anything is built: the island keeps these settings as they are.)
+    if cfg.validate().is_err() {
+        return 1;
+    }
     let mut world = worldgen::terrain::new_island(seed as u64, (size as usize, size as usize), shape_of(drawn), cfg);
     if south < north {
         worldgen::planet::stand(&mut world);
-    }
-    if world.cfg.validate().is_err() {
-        return 1;
     }
     // Its ground gets Flow's state from its heat first, as `ew run` gives a new world's, so the same seed makes the
     // same world in the page as on the command line.
@@ -291,17 +340,17 @@ pub extern "C" fn meta() -> *const u8 {
 pub extern "C" fn frame() -> *const u8 {
     let bytes = with(|l| {
         let (bytes, table) = l.cells.frame(&l.world);
-        l.table = table;
+        (l.table, l.unframed) = (table, false);
         bytes
     });
     give(bytes)
 }
 
-/// The cells' table made with the last frame, f32 little-endian (`tape::Table::frame`).
+/// The cells' table made with the last frame, f32 little-endian (`tape::Table::frame`), handed over once.
 #[no_mangle]
 pub extern "C" fn table() -> *const u8 {
-    let bytes = with(|l| l.table.iter().flat_map(|v| v.to_le_bytes()).collect());
-    give(bytes)
+    let table = with(|l| std::mem::take(&mut l.table));
+    give(table)
 }
 
 /// What runs through each of the terrain's samples, m³/s, and what it carries, g/m³, row by row, two 16-bit floats
@@ -310,7 +359,7 @@ pub extern "C" fn table() -> *const u8 {
 /// or to carry counts); else nothing (`out_len` 0).
 #[no_mangle]
 pub extern "C" fn discharge() -> *const u8 {
-    let bytes = with(|l| {
+    let halves = with(|l| {
         let q = l.cells.discharge(&l.world);
         let now: Vec<[f32; 2]> = q.iter().zip(l.cells.load(&l.world, &q)).map(|(&q, c)| [q, c]).collect();
         let off = |a: f32, b: f32, share: f64| (a > 0.0) != (b > 0.0) || (a as f64 - b as f64).abs() > share * b.max(a) as f64;
@@ -318,18 +367,18 @@ pub extern "C" fn discharge() -> *const u8 {
         if l.sent.len() == now.len() && !l.sent.iter().zip(&now).any(moved) {
             return Vec::new();
         }
-        let bytes = now.iter().flat_map(|v| v.iter().flat_map(|&x| tape::half(x).to_le_bytes())).collect();
+        let halves: Vec<u16> = now.iter().flat_map(|v| v.map(tape::half)).collect();
         l.sent = now;
-        bytes
+        halves
     });
-    give(bytes)
+    give(halves)
 }
 
 /// Where load came into a body of standing liquid in the last month (`Counters::plumes`): each the terrain's sample
 /// (u32) and how much, kg/s (f32), little-endian.
 #[no_mangle]
 pub extern "C" fn plumes() -> *const u8 {
-    let bytes = with(|l| l.world.counts.plumes.iter().flat_map(|&(k, kg)| k.to_le_bytes().into_iter().chain(kg.to_le_bytes())).collect());
+    let bytes: Vec<u8> = with(|l| l.world.counts.plumes.iter().flat_map(|&(k, kg)| k.to_le_bytes().into_iter().chain(kg.to_le_bytes())).collect());
     give(bytes)
 }
 
@@ -341,9 +390,9 @@ pub extern "C" fn things(x: f64, y: f64, w: f64, h: f64) -> *const u8 {
     give(bytes)
 }
 
-/// The length in bytes of what `meta`, `frame`, `table`, `discharge`, `things`, `tile`, `rock`, `open_world`,
-/// `ground_of_world`, `probe`, `kinds`, `brush`, `settle`, `soften`, `undo` or `preview` last returned.
+/// The length in bytes of what the last call that returns bytes returned (`meta`, `frame`, `table`, `tile`, `rock`,
+/// `rock_rows`, `preview` and the others).
 #[no_mangle]
 pub extern "C" fn out_len() -> usize {
-    OUT.with(|o| o.borrow().len())
+    OUT.with(|o| o.borrow().place().1)
 }

@@ -186,12 +186,12 @@ pub fn dead(w: &World, i: usize) -> [f64; DEAD_ROW] {
 /// The kinds a square holds in the rows of world `w` (`rows`): the slots its world uses in a cell of one patch
 /// (`Config::variety`), or as many as the cell that holds the most (a cell of patches uses up to `cover::SLOTS`).
 pub fn kinds(w: &World) -> usize {
-    (0..w.mesh.cells().n()).map(|i| standing(w.life.cover(i)).len()).fold(w.cfg.variety, usize::max)
+    (0..w.mesh.cells().n()).map(|i| standing(w.life.cover(i)).count()).fold(w.cfg.variety, usize::max)
 }
 
 /// The slots of cover `c` that stand on any of its cell's ground.
-fn standing(c: &Cover) -> Vec<usize> {
-    c.held().filter(|&x| c.stands[x] > 0.0).collect()
+fn standing(c: &Cover) -> impl Iterator<Item = usize> + '_ {
+    c.held().filter(|&x| c.stands[x] > 0.0)
 }
 
 /// The kinds of cell `i` of `w`, a row of `KIND_ROW` numbers (`row`) for each of `kinds` slots (`kinds`): its slots
@@ -205,7 +205,7 @@ pub fn rows(w: &World, i: usize, level: f64, kinds: usize) -> Vec<f64> {
     let (mm, c) = (p.mm(&w.chem), w.life.cover(i));
     let saturated = w.life.wet.get(i).copied().flatten().map_or(0.0, |g| g.share);
     let g = Ground { level, ran: w.counts.ran_month.get(i).map(|r| &r.slots), saturated, rho: w.chem.subs[p.sub[cover::WALL]].density[0], area: w.mesh.cells().area()[i] };
-    let mut slots = standing(c);
+    let mut slots: Vec<usize> = standing(c).collect();
     slots.sort_by(|&a, &b| c.built(&mm, b).total_cmp(&c.built(&mm, a)));
     for (k, &x) in slots.iter().enumerate() {
         out[k * KIND_ROW..(k + 1) * KIND_ROW].copy_from_slice(&row(w, c, &mm, x, &g));

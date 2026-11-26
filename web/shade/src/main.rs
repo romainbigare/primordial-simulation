@@ -20,14 +20,18 @@ use std::{env, fs, path::Path, process::ExitCode};
 
 /// The line that names the files of `lib/` a program reads, before its own text.
 const USES: &str = "// uses:";
-/// The line that names the least metres a pixel takes for which a program is made once more.
+/// The line that names the least metres a pixel takes for which a program is made once more, and how it starts.
 const LEAST: &str = "// least metres a pixel:";
+const LEAST_START: &str = "// least";
 
 /// The program in `dir` named `name` for draws whose pixels take at least `least` metres: its own text with the files
-/// of `lib/` it uses before it, after `LEAST_E`.
+/// of `lib/` it uses before it, after `LEAST_E`. Its first line must name them (`USES`), and no other line may.
 fn source(dir: &Path, name: &str, least: f32) -> Result<String, String> {
     let own = fs::read_to_string(dir.join(format!("{name}.wgsl"))).map_err(|e| format!("{name}: {e}"))?;
-    let uses = own.lines().next().and_then(|l| l.strip_prefix(USES)).unwrap_or("");
+    let uses = own.lines().next().and_then(|l| l.strip_prefix(USES)).ok_or(format!("{name}: its first line is not \"{USES}\""))?;
+    if own.lines().skip(1).any(|l| l.starts_with(USES)) {
+        return Err(format!("{name}: \"{USES}\" past its first line"));
+    }
     let mut text = format!("const LEAST_E: f32 = {least:?};\n");
     for lib in uses.split_whitespace() {
         text += &fs::read_to_string(dir.join("lib").join(lib)).map_err(|e| format!("{name}: {lib}: {e}"))?;
@@ -36,9 +40,14 @@ fn source(dir: &Path, name: &str, least: f32) -> Result<String, String> {
     Ok(text + &own)
 }
 
-/// The (group, binding) of a global, as JSON.
-fn binding(module: &Module, h: Handle<naga::GlobalVariable>) -> Value {
-    module.global_variables[h].binding.as_ref().map_or(Value::Null, |b| json!([b.group, b.binding]))
+/// The (group, binding) of a global, as JSON; refused in any group but 0 (the page binds by binding alone,
+/// web/src/gpu-webgl2.ts).
+fn binding(module: &Module, h: Handle<naga::GlobalVariable>) -> Result<Value, String> {
+    match module.global_variables[h].binding.as_ref() {
+        None => Ok(Value::Null),
+        Some(b) if b.group != 0 => Err(format!("binding {} in group {}: the page binds group 0 alone", b.binding, b.group)),
+        Some(b) => Ok(json!([b.group, b.binding])),
+    }
 }
 
 /// The texture units a program may read on every WebGL2 device (`MAX_TEXTURE_IMAGE_UNITS` is at least this by the
@@ -62,10 +71,11 @@ fn glsl_of(module: &Module, info: &naga::valid::ModuleInfo, stage: ShaderStage, 
         return Err(format!("{entry}: reads {} textures, more than the {TEXTURE_UNITS_MOST} units every WebGL2 device has", reflection.texture_mapping.len()));
     }
     for (h, name) in &reflection.uniforms {
-        binds.insert(name.clone(), json!({ "uniform": binding(module, *h) }));
+        binds.insert(name.clone(), json!({ "uniform": binding(module, *h).map_err(|e| format!("{entry}: {e}"))? }));
     }
     for (name, m) in &reflection.texture_mapping {
-        binds.insert(name.clone(), json!({ "texture": binding(module, m.texture), "sampler": m.sampler.map_or(Value::Null, |s| binding(module, s)) }));
+        let sampler = m.sampler.map_or(Ok(Value::Null), |s| binding(module, s)).map_err(|e| format!("{entry}: {e}"))?;
+        binds.insert(name.clone(), json!({ "texture": binding(module, m.texture).map_err(|e| format!("{entry}: {e}"))?, "sampler": sampler }));
     }
     Ok(out)
 }
@@ -81,9 +91,13 @@ fn targets_of(module: &Module) -> Result<usize, String> {
     })
 }
 
-/// The least metres a pixel takes for which program `name` in `dir` is made once more (its line `LEAST`).
+/// The least metres a pixel takes for which program `name` in `dir` is made once more (its line `LEAST`; none
+/// without one). A line that starts as it does but is not it is refused, so a misspelt one is not read as none.
 fn leasts(dir: &Path, name: &str) -> Result<Vec<f32>, String> {
     let own = fs::read_to_string(dir.join(format!("{name}.wgsl"))).map_err(|e| format!("{name}: {e}"))?;
+    if let Some(bad) = own.lines().find(|l| l.starts_with(LEAST_START) && !l.starts_with(LEAST)) {
+        return Err(format!("{name}: \"{bad}\" is not \"{LEAST} M...\""));
+    }
     let line = own.lines().find_map(|l| l.strip_prefix(LEAST)).unwrap_or("");
     line.split_whitespace().map(|m| m.parse::<f32>().map_err(|e| format!("{name}: {m}: {e}"))).collect()
 }

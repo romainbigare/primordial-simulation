@@ -122,12 +122,27 @@ fn level_of(s: &Samples, q: u32) -> f64 {
     if p.pass == NONE { STAND_M } else { p.level }
 }
 
-/// The pond beside a point (`Shore::beside`; `NONE`: none) and its level, m (NaN: none), and the share of the point's
-/// weight on the samples about it that have a pond near.
+/// The pond beside a point (`Shore::beside`; `NONE`: none) and its level, m (NaN: none), the share of the point's
+/// weight on the samples about it that have a pond near, and those samples with their weights (`Shore::about`), found
+/// once for all a point reads of them.
 pub(super) struct Beside {
     pub(super) pond: u32,
     pub(super) level: f64,
     pub(super) share: f64,
+    pub(super) about: [(usize, f64); 4],
+}
+
+impl Beside {
+    /// The share of the point's weight on the samples about it that `on` holds for: 1 at such a sample's centre, 0 at
+    /// another's, even between.
+    pub(super) fn share(&self, on: impl Fn(usize) -> bool) -> f64 {
+        share_of(&self.about, on)
+    }
+}
+
+/// The share of the weights `about` on the samples that `on` holds for.
+fn share_of(about: &[(usize, f64); 4], on: impl Fn(usize) -> bool) -> f64 {
+    about.iter().filter(|(k, _)| on(*k)).map(|(_, w)| w).sum()
 }
 
 impl Shore {
@@ -216,22 +231,17 @@ impl Shore {
         [(at(0, 0), (1.0 - fx) * (1.0 - fy)), (at(1, 0), fx * (1.0 - fy)), (at(0, 1), (1.0 - fx) * fy), (at(1, 1), fx * fy)]
     }
 
-    /// The share of the weight of the point `p` (samples from the map's corner) that lies on the samples about it
-    /// that `on` holds for: 1 at such a sample's centre, 0 at another's, even between.
-    pub(super) fn share(&self, p: [f64; 2], on: impl Fn(usize) -> bool) -> f64 {
-        self.about(p).iter().filter(|(k, _)| on(*k)).map(|(_, w)| w).sum()
-    }
-
     /// The pond beside the point `p` (samples from the map's corner): its own sample's (the nearest within
     /// `NEAR_SAMPLES`), or where that has none, the heaviest's of the samples about it that have one, or of the samples
     /// its offset is drawn from (`at`), so every point whose offset lies under `SHORE_M` has one; and the share of the
-    /// point's weight on the samples about it that have one (`share`).
+    /// point's weight on the samples about it that have one (`Beside::share`).
     pub(super) fn beside(&self, p: [f64; 2]) -> Beside {
         let own = (p[1] as usize).min(self.down - 1) * self.across + (p[0] as usize).min(self.across - 1);
         let heaviest = |about: &[(usize, f64)]| about.iter().filter(|(k, _)| self.pond[*k] != NONE).max_by(|a, b| a.1.total_cmp(&b.1)).map(|(k, _)| self.pond[*k]);
-        let pond = if self.pond[own] != NONE { self.pond[own] } else { heaviest(&self.about(p)).or_else(|| heaviest(&self.spline(p))).unwrap_or(NONE) };
+        let about = self.about(p);
+        let pond = if self.pond[own] != NONE { self.pond[own] } else { heaviest(&about).or_else(|| heaviest(&self.spline(p))).unwrap_or(NONE) };
         let level = if pond == NONE { f64::NAN } else { self.levels[pond as usize] };
-        Beside { pond, level, share: self.share(p, |k| self.pond[k] != NONE) }
+        Beside { pond, level, share: share_of(&about, |k| self.pond[k] != NONE), about }
     }
 
     /// The sixteen samples whose centres a cubic B-spline at `p` (samples from the map's corner) runs through, each with

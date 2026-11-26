@@ -105,7 +105,7 @@ const PETAL_0 = 0.15, PETAL_PER_SEED = 2.2, PETAL_PER_MOIST = 0.8;
 /** The flowers' palette (OKLCH), round: white, yellow, orange, red, pink, purple, blue. */
 const PETALS: Rgb[] = [[0.96, 0.02, 100], [0.9, 0.17, 95], [0.78, 0.17, 60], [0.64, 0.2, 25], [0.78, 0.14, 350], [0.62, 0.16, 310], [0.7, 0.13, 260]];
 
-const lerp3 = (a: Rgb, b: Rgb, t: number): Rgb => [0, 1, 2].map(i => a[i] + (b[i] - a[i]) * t) as Rgb;
+const lerp3 = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 /** Linear sRGB `c` in OKLab (Ottosson 2020). */
 function oklab(c: Rgb): Rgb {
@@ -119,10 +119,13 @@ function linear(p: Rgb): Rgb {
   const l = (p[0] + 0.3963377774 * p[1] + 0.2158037573 * p[2]) ** 3;
   const m = (p[0] - 0.1055613458 * p[1] - 0.0638541728 * p[2]) ** 3;
   const s = (p[0] - 0.0894841775 * p[1] - 1.291485548 * p[2]) ** 3;
-  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s].map(v => clamp(v)) as Rgb;
+  return [clamp(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s), clamp(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s), clamp(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)];
 }
 /** OKLCH (lightness, chroma, hue in degrees) in OKLab. */
 const fromLch = (c: Rgb): Rgb => [c[0], c[1] * Math.cos((c[2] * Math.PI) / 180), c[1] * Math.sin((c[2] * Math.PI) / 180)];
+/** The fixed colours in OKLab (`fromLch`), and the green leaf's lightness (`oklab`), found once: a frame finds the
+ * look of every kind of every square from them. */
+const YELLOW_LAB = fromLch(YELLOW), BARE_LAB = fromLch(BARE), STRAW_LAB = fromLch(STRAW), PETALS_LAB = PETALS.map(fromLch), LEAF_PHYS_L = oklab(LEAF_PHYS)[0];
 
 /** How much the ground is cooling at `year` (years: its fraction is the season from the north's midwinter) at latitude
  * `lat`, degrees: 0 (warming) .. 1 (cooling). */
@@ -178,7 +181,7 @@ export function grownWalls(walls: number): number {
  * sward's (`SWARD_L`). */
 function green(k: Leafy, phys: Rgb): Rgb {
   const hue = Math.min(Math.max(HUE_MID + HUE_PER_LEAF * (k.leaf - LEAF_0) + HUE_PER_FROST * (k.frost - FROST_0) + HUE_PER_MOIST * (k.moist - MOIST_0), HUE_GREENS[0]), HUE_GREENS[1]);
-  const lightness = L_MID + L_PER_LEAF * (k.leaf - LEAF_0) + L_PER_WOOD * (k.wood - WOOD_0) + PHYSICAL_L * (oklab(phys)[0] - oklab(LEAF_PHYS)[0]);
+  const lightness = L_MID + L_PER_LEAF * (k.leaf - LEAF_0) + L_PER_WOOD * (k.wood - WOOD_0) + PHYSICAL_L * (oklab(phys)[0] - LEAF_PHYS_L);
   const chroma = C_MID * clamp(1 - C_DRY * Math.max(MOIST_0 - k.moist, 0));
   const sward = k.design === DESIGN.herb;
   return fromLch([sward ? SWARD_L + SWARD_L_KEEP * (lightness - SWARD_L) : lightness, sward ? SWARD_CHROMA * chroma : chroma, hue]);
@@ -193,7 +196,7 @@ function deepest(reach: number): Rgb {
 /** Colour (OKLab) at stage `s` of the turn (0 green .. 1 dormant) from green `g`, reaching `reach` (`deepest`), while
  * the ground cools by `falling`: through a pale form of its deepest colour to it; while it warms, from bare to green. */
 function turned(g: Rgb, s: number, reach: number, falling: number): Rgb {
-  const deep = fromLch(deepest(reach)), pale = lerp3(fromLch(YELLOW), deep, PALE), bare = fromLch(BARE);
+  const deep = fromLch(deepest(reach)), pale = lerp3(YELLOW_LAB, deep, PALE), bare = BARE_LAB;
   const autumn = s < TO_PALE ? lerp3(g, pale, s / TO_PALE) : s < TO_DEEP ? lerp3(pale, deep, (s - TO_PALE) / (TO_DEEP - TO_PALE))
     : lerp3(deep, bare, Math.min((s - TO_DEEP) / (TO_BARE - TO_DEEP), 1));
   const spring = lerp3(g, bare, smooth(TO_DEEP, TO_BARE, s));
@@ -216,7 +219,7 @@ export function kindLook(k: Leafy, phys: Rgb, falling: number): KindLook {
   const sheds = k.design === DESIGN.herb ? 1 : shedOf(k), seasons = 1 - softOf(k);
   const cold = seasons * Math.max(shedOf(k) * smooth(k.frost + COLD_NEAR_K, k.frost, k.t), (1 - k.act) * frozenGround, k.frozen);
   const drought = seasons * (1 - k.act) * (1 - frozenGround);
-  const dry = (c: Rgb) => lerp3(lerp3(c, fromLch(STRAW), smooth(0, TO_STRAW, drought)), fromLch(BARE), smooth(TO_STRAW, 1, drought));
+  const dry = (c: Rgb) => lerp3(lerp3(c, STRAW_LAB, smooth(0, TO_STRAW, drought)), BARE_LAB, smooth(TO_STRAW, 1, drought));
   const reach = smooth(RED_FROM, RED_TO, k.pigment), spread = TURN_SPREAD * smooth(0, 2 * TURN_SPREAD, cold);
   const kept: Rgb = [g[0] * (1 - KEPT_DARK * clamp(cold)), g[1] * (1 - KEPT_DULL * drought), g[2] * (1 - KEPT_DULL * drought)];
   const at = (s: number, r: number) => linear(lerp3(kept, dry(turned(g, clamp(s), r, falling)), sheds));
@@ -225,7 +228,7 @@ export function kindLook(k: Leafy, phys: Rgb, falling: number): KindLook {
   const x = (((place % 1) + 1) % 1) * PETALS.length, i = Math.floor(x);
   return {
     from: at(cold - spread, reach - HUE_SPREAD), to: at(cold + spread, reach + HUE_SPREAD), left: 1 - (1 - BARE_LEFT) * dormant,
-    petal: linear(lerp3(fromLch(PETALS[i]), fromLch(PETALS[(i + 1) % PETALS.length]), x - i)),
+    petal: linear(lerp3(PETALS_LAB[i], PETALS_LAB[(i + 1) % PETALS.length], x - i)),
     bloom: clamp(BLOOM_PER_SEED * k.seed) * (1 - Math.max(cold, drought)),
   };
 }
@@ -244,10 +247,13 @@ export const fromScreen = (x: number) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055
  * shows them. A mix of colours on a screen averages what the screen shows, not the light (the screen's curve bends), so
  * plants of many colours look deeper from near than the mean of their light; the field is the mean of what the plants
  * show, as the near picture comes to when its plants take a pixel each. */
-/** The colour of cured straw standing (the mean of a straw and a weathered straw), as the field far away draws it. */
+/** The colour of cured straw standing (the mean of a straw and a weathered straw), as the field far away draws it:
+ * found once. */
+let straw: Rgb | null = null;
 export function strawSeen(): Rgb {
-  const s = linear(fromLch(STRAW));
-  return seenFar({ from: s, to: linear(lerp3(fromLch(STRAW), fromLch(BARE), WEATHERED)), left: 1, petal: s, bloom: 0 });
+  if (straw) return straw;
+  const s = linear(STRAW_LAB);
+  return (straw = seenFar({ from: s, to: linear(lerp3(STRAW_LAB, BARE_LAB, WEATHERED)), left: 1, petal: s, bloom: 0 }));
 }
 
 export function seenFar(l: KindLook): Rgb {

@@ -8,8 +8,10 @@
 
 // Of each photograph laid as detail (`detail`): its side in the world, m (web/textures/SOURCES.md), and its own stream
 // of noise.
-fn detail_m(t: i32) -> f32 { var m = array<f32, PHOTOS>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35, 4.0, 3.0, 2.0, 2.17); return m[t]; }
-fn detail_noise(t: i32) -> i32 { var k = array<i32, PHOTOS>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 185, 186, 187, 188); return k[t]; }
+const DETAIL_M = array<f32, PHOTOS>(2.0, 50.0, 1.3, 3.0, 2.0, 15.0, 1.3, 2.2, 2.9, 1.3, 2.3, 2.07, 2.0, 2.35, 4.0, 3.0, 2.0, 2.17);
+const DETAIL_NOISE = array<i32, PHOTOS>(100, 102, 103, 101, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 185, 186, 187, 188);
+fn detail_m(t: i32) -> f32 { return DETAIL_M[t]; }
+fn detail_noise(t: i32) -> i32 { return DETAIL_NOISE[t]; }
 // The streams of noise of the tiles of cover: their patches' shifts and their seams' waves (`carpet`), each tile its own.
 const CARPET_SHIFTS = 108; const CARPET_WAVES = 110;
 // A photograph's hexagons are `DETAIL_HEX` times its side across, and meet over `DETAIL_EDGE` of their weights.
@@ -135,17 +137,17 @@ const SOIL_CROWNED = 2; const SOIL_MUD = 4; const SOIL_BEACH = 5; const SOIL_DRI
 const SOIL_DARK_MUD = 8; const SOIL_CLAY = 10;
 const SOIL_WET_SAND = 12; const SOIL_FLAT = 13; const SOIL_SILT = 14; const SOIL_ALGAE = 15; const SOIL_WET_GRAVEL = 16;
 const SOIL_IMAGES = 17;
+// The photograph of each image from `SOIL_PEBBLES` on, and the tile of cover of each before it (-1: drawn otherwise).
+const SOIL_PHOTOS = array<i32, 10>(ROUND_PEBBLE_TEX, DARK_MUD_TEX, LOAM_TEX, CLAY_TEX, HUMUS_TEX, WET_SAND_TEX, -1, -1, ALGAL_MUD_TEX, WET_GRAVEL_TEX);
+const SOIL_CARPETS = array<i32, 7>(LITTER_CARPET, FERN_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, -1, SAND_CARPET);
 fn soil_image(i: i32, p: Spot, wet: f32) -> vec3f {
   if (i == SOIL_MUD) { return detail(MUD_TEX, p.e); }
   if (i == SOIL_FLAT || i == SOIL_SILT) { return ripples_laid(select(RIPPLE_SILT_TEX, RIPPLE_FLAT_TEX, i == SOIL_FLAT), p.e); }
   if (i == SOIL_BEACH) { return beach_sand(p, wet); }
   if (i >= SOIL_PEBBLES) {
-    var t = array<i32, 10>(ROUND_PEBBLE_TEX, DARK_MUD_TEX, LOAM_TEX, CLAY_TEX, HUMUS_TEX, WET_SAND_TEX, -1, -1, ALGAL_MUD_TEX,
-      WET_GRAVEL_TEX);
-    return detail(t[i - SOIL_PEBBLES], p.e);
+    return detail(SOIL_PHOTOS[i - SOIL_PEBBLES], p.e);
   }
-  var c = array<i32, 7>(LITTER_CARPET, FERN_CARPET, SCRUB_CARPET, CRACKED_CARPET, -1, -1, SAND_CARPET);
-  return carpet(c[i], p.e);
+  return carpet(SOIL_CARPETS[i], p.e);
 }
 
 // Ripples lie in fields whose crests run one way, across the flow that made them: photograph t laid with each hexagon
@@ -321,16 +323,17 @@ fn grass_hexes(e: f32, n: f32, dry: bool, reeds: f32) -> vec3f {
   return mix(vec3f(dot(out, LUMA)), out, CARPET_HUE);
 }
 
+// The tiles of a hexagon of grass, green and dried (`hex_tile`).
+const HEX_GREEN = array<i32, 3>(TURF_CARPET, GRASS_CARPET, TUSSOCK_CARPET);
+const HEX_DRIED = array<i32, 3>(DRY_TURF_CARPET, STRAW_CARPET, DRY_TUSSOCK_CARPET);
 // The change the tile of the hexagon at `corner` gives (`grass_hexes`), at e m a pixel.
 fn hex_tile(corner: vec2i, e: f32, n: f32, dry: bool, reeds: f32) -> vec3f {
-  var green = array<i32, 3>(TURF_CARPET, GRASS_CARPET, TUSSOCK_CARPET);
-  var dried = array<i32, 3>(DRY_TURF_CARPET, STRAW_CARPET, DRY_TUSSOCK_CARPET);
   let x = lowbias(corner, 107);
   // Its kind: the noise, with `HEX_MIX` of the hexagon's own draw.
   let pick = clamp(mix(n, f32(x & 1023u) / 1024.0, HEX_MIX), 0.0, 0.999);
   // Reeds in as many hexagons as they stand (by a draw of the hexagon's own).
   let reed = f32(lowbias(corner, 109) & 1023u) / 1024.0 < reeds;
-  let c = select(select(green[i32(pick * 3.0)], dried[i32(pick * 3.0)], dry), REED_CARPET, reed);
+  let c = select(select(HEX_GREEN[i32(pick * 3.0)], HEX_DRIED[i32(pick * 3.0)], dry), REED_CARPET, reed);
   let t = CARPETS_FROM + c;
   let side = carpet_m(c);
   let shift = vec2f(f32((x >> 10u) & 1023u), f32((x >> 20u) & 1023u)) / 1024.0;
@@ -419,7 +422,9 @@ fn sward_tufts(c: vec3f, veil: vec3f, e: f32, s: f32, t: Tufts, depth: f32) -> v
       let v = l.f - foot;
       let uv = clamp(vec2f(v.x / w + 0.5, 1.0 + v.y / h - foot_rise(k)), vec2f(-1.0), vec2f(2.0));
       let inside = all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0));
-      let tex = select(vec4f(0.0), model_texel(k, uv, e / (w * t.cell_m)), inside);
+      // (Its sprite is read only where the pixel lies on it: `model_texel` takes its level of detail by hand.)
+      var tex = vec4f(0.0);
+      if (inside) { tex = model_texel(k, uv, e / (w * t.cell_m)); }
       let lit = dot(tex.rgb, LUMA) / TUFT_MEAN;
       var rgb = mix(c * lit, tex.rgb * dot(c, LUMA) / TUFT_MEAN, TUFT_HUE);
       if (depth > 0.0 && tex.a > 0.0) { rgb = seen_in_liquid(rgb, depth, model_height_m(k, uv, e / (w * t.cell_m), -v.y * t.cell_m, h * t.cell_m), e / MAP_VIEW.y); }

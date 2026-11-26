@@ -110,14 +110,16 @@ impl Table {
     pub fn frame(&self, w: &World) -> (Vec<u8>, Vec<f32>) {
         let c = Ctx::new(w);
         let mut bytes = Vec::with_capacity(w.map.n() * crate::LAYERS.len());
-        frame(&c, &mut bytes);
+        frame(&c, &self.square, &mut bytes);
         let n = w.mesh.cells().n();
         let levels = pcore::flow::levels(w, &(0..n).collect::<Vec<usize>>());
         let rows: Vec<[f64; ROW]> = (0..n).map(|i| self.row(&c, i, c.means.as_ref().map(|m| m[i]), levels.as_ref().map(|l| l[i]))).collect();
-        let mut table = vec![cover_melt(w) as f32];
-        table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
         let stands = |i: usize| levels.as_ref().map_or(0.0, |l| l[i][1] - l[i][0]);
         let count = crate::stands::kinds(w);
+        let s = w.terrain_samples();
+        let mut table = Vec::with_capacity(1 + self.square.len() * (ROW + count * crate::KIND_ROW + crate::PLACE_ROW + crate::DEAD_ROW) + 2 * s.ponds.len() + 1);
+        table.push(cover_melt(w) as f32);
+        table.extend(self.square.iter().flat_map(|&i| rows[i].map(|v| v as f32)));
         let kinds: Vec<_> = (0..n).map(|i| crate::stands::rows(w, i, stands(i), count)).collect();
         table.extend(self.square.iter().flat_map(|&i| kinds[i].iter().map(|&v| v as f32)));
         let places: Vec<_> = (0..n).map(|i| crate::stands::places(w, i)).collect();
@@ -135,7 +137,6 @@ impl Table {
         }
         // An empty place (`Samples::ponds`) reads the pond that holds its key now (`Relief::ponds`): a tile made before
         // the samples were built again draws the pond grown over its own at that pond's level, not another's.
-        let s = w.terrain_samples();
         for p in (0..ponds.len()).filter(|&p| s.ponds[p].level.is_nan()) {
             let k = w.relief.ponds.get(p).copied().unwrap_or(NONE);
             let heir = if k == NONE { NONE } else { s.pond[k as usize] };

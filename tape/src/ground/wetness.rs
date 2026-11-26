@@ -39,14 +39,16 @@ pub(super) fn hill(s: &Samples, strips: &[bool]) -> Vec<f64> {
                 return s.twi[k];
             }
             let (c, r) = ((k % s.across) as i64, (k / s.across) as i64);
-            let near: Vec<f64> = (0..9)
-                .map(|n| (c + n % 3 - 1, r + n / 3 - 1))
-                .filter(|&(x, y)| (x, y) != (c, r) && x >= 0 && y >= 0 && x < s.across as i64 && y < s.down as i64)
-                .map(|(x, y)| y as usize * s.across + x as usize)
-                .filter(|&j| !strips[j])
-                .map(|j| s.twi[j])
-                .collect();
-            if near.is_empty() { s.twi[k] } else { near.iter().sum::<f64>() / near.len() as f64 }
+            let near = || {
+                (0..9)
+                    .map(|n| (c + n % 3 - 1, r + n / 3 - 1))
+                    .filter(|&(x, y)| (x, y) != (c, r) && x >= 0 && y >= 0 && x < s.across as i64 && y < s.down as i64)
+                    .map(|(x, y)| y as usize * s.across + x as usize)
+                    .filter(|&j| !strips[j])
+                    .map(|j| s.twi[j])
+            };
+            let n = near().count();
+            if n == 0 { s.twi[k] } else { near().sum::<f64>() / n as f64 }
         })
         .collect()
 }

@@ -234,10 +234,11 @@ export class God {
     if (!st.tool.rate && !st.tool.step && !st.tool.amount) this.moved(st);
   }
 
-  /** A paint of stroke `st` where its brush is now, if it moved far and long enough since its last. */
+  /** A paint of stroke `st` where its brush is now, if it moved far and long enough since its last and the core
+   * answered that one (a fast drag never queues paints faster than the core does them; the next tick paints). */
   private moved(st: Stroke): void {
     const [x, y] = st.now, [lx, ly, lt] = st.last, far = Math.hypot(x - lx, y - ly) >= (PAINT_MOVE * this.radius) / this.page.squareM();
-    if (far && performance.now() - lt >= PAINT_MS) this.paint(st);
+    if (far && !st.waiting && performance.now() - lt >= PAINT_MS) this.paint(st);
   }
 
   /** The stroke ends: a last paint where the brush moved since (of a tool with steps, the steps still due), and it
@@ -280,8 +281,8 @@ export class God {
     st.waiting = false;
     const heat = r.cells.filter(c => c.progress !== undefined);
     if (heat.length) this.heated(st, heat);
-    // (The ground's tools and a lake answer their cells as numbers.)
-    else if (typeof r.cells[0] === 'object') {
+    // (The ground's tools and a lake answer no cells: only whether they changed the world.)
+    else if (r.cells.length) {
       const done = (c: Brushed['cells'][number]) => c.done!.every(d => d);
       this.lastWhy = r.cells.some(done) ? '' : st.tool.reason(mostWhy(r.cells.filter(c => !done(c))));
     } else this.lastWhy = r.changed ? '' : st.tool.reason(UNCHANGED);

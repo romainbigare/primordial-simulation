@@ -262,9 +262,10 @@ function setFrame(f: number): void {
 /** Draw frame `frame` in the view shown; the map's classes come back from the GPU for the inspector. */
 function repaint(): void {
   if (!world) return;
-  const w = world, f = frame, squares = mapFields(w, f), look = mapLook();
-  map.setMap(squares.fields);
-  if (land && live) land.set(w, live.table, live.takeDischarge(), squares.wet, look);
+  // (The map's squares are made only once drawn: the live map draws them for its classes alone.)
+  const w = world, f = frame, look = mapLook(), wet = wetOf(w, f);
+  map.setMap(() => mapFields(w, f, wet));
+  if (land && live) land.set(w, live.table, live.takeDischarge(), wet, look);
   if (land && live) land.plumesIn(live.plumes);
   if (land && live) land.tiles.rebuild(live.takeRelief(), !playing);
   if (layer || !live || !fire.playing()) vegetation.set(!layer && live ? w : null, live?.table ?? null);

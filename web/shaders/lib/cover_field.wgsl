@@ -8,7 +8,7 @@ struct CoverLook {
   // Of each lattice: its cell's side, m (0: no square holds it), and 1 where any of its marks takes enough pixels to show
   // (each by the width of its lattice's marks where it stands, the rest is the field, `lattice_field`); w is not read.
   sides: vec4f, shown: vec4f,
-  // 1 where the cover is drawn (0: none); how strongly its marks cover the map; z and w are not read.
+  // How strongly its marks cover the map; y, z and w are not read.
   look: vec4f,
 }
 @group(0) @binding(14) var<uniform> cover_look: CoverLook;
@@ -297,13 +297,15 @@ fn foot_patch(at: vec2f) -> vec3i {
   let own = all(cell == p.cell) && p.share / max((1.0 - p.across.x) * (1.0 - p.across.y), 1e-6) > draw.z;
   return vec3i(select(0, p.which, own), cell);
 }
-// Set `cell_patch`, `patch_cell` and `patch_share` at a mark's foot at `at` (`foot_patch`), and no cells across.
-fn foot_patch_at(at: vec2f) {
+// Set `cell_patch`, `patch_cell` and `patch_share` at a mark's foot at `at` (`foot_patch`, which it returns), and no
+// cells across.
+fn foot_patch_at(at: vec2f) -> vec3i {
   let p = foot_patch(at);
   cell_patch = max(p.x, 0);
   patch_cell = p.yz;
   patch_share = select(0.0, 1.0, p.x > 0);
   across_share = vec2f(0.0);
+  return p;
 }
 
 // Of patch `p` of the cell of square `q` (`foot_patch`): the dead walls flames left standing on it, kg a m² of its
@@ -349,10 +351,9 @@ fn with_patch(plain: vec4f, l: i32) -> vec4f {
   return mix(plain, patch_field(l), patch_share);
 }
 
-// Set `land_plain`, `land_smooth` and the patch (`cell_patch_at`) at `at`, m from the map's north-west corner, seen at
-// `e` m a pixel.
-fn land_weights(at: vec2f, e: f32) {
-  cell_patch_at(at, e);
+// Set `land_plain` and `land_smooth` at `at`, m from the map's north-west corner (the patch is found after,
+// `cell_patch_at`).
+fn land_weights(at: vec2f) {
   let uv = at / (land.map.x * land.map.yz);
   land_plain = select(field_tap(uv, LAND_LAYER).x, 0.0, any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)));
   land_smooth = spline_field(at, LAND_LAYER).x;
@@ -363,11 +364,7 @@ fn spline_field(at: vec2f, l: i32) -> vec4f {
   let c = b_spline(at / land.map.x - 0.5);
   let last = vec2i(textureDimensions(cover_field_tex).xy) - 1;
   var sum = vec4f(0.0);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      sum += c.wx[x] * c.wy[y] * textureLoad(cover_field_tex, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), l, 0);
-    }
-  }
+  for (var n = 0; n < B_TAPS; n++) { sum += b_weight(c, n) * textureLoad(cover_field_tex, clamp(b_texel(c, n), vec2i(0), last), l, 0); }
   return sum;
 }
 
@@ -546,7 +543,12 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
 // (`patchy`), as far as it holds there (`held_at`); far away, where the sward's and the low lattices' detail no longer
 // shows, those three as their one layer (canopy.ts `FIELD.low`).
 fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
-  land_weights(at, e);
+  land_weights(at);
+  // Under liquid where no square about the point holds cover, none stands: every layer reads none (`on_land`; the
+  // squares of the cells about it hold none in any layer, its patch's too, as the patch's cell is one of the four
+  // about it), and under liquid no burn reads its patch (burn.wgsl). Neither the patch nor a layer is read.
+  if (b.depth > 0.0 && land_plain <= LAND_LEAST && land_smooth <= LAND_LEAST) { return CoverAt(vec4f(0.0), 0.0, 0.0, vec4f(0.0), 0.0, 0.0); }
+  cell_patch_at(at, e);
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
   let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);

@@ -94,7 +94,8 @@ interface Sheet {
 export function kindsOf(w: number, h: number, rows: Float32Array, row: number, at: number, kinds: number, kindRow: number, walls: Rgb, falling: number): Kinds {
   const P = planesOf(kinds), cols = Math.ceil(P.count / PLANES_DOWN), down = Math.min(P.count, PLANES_DOWN), n = w * h;
   const places = at + n * kinds * kindRow, dead = places + n * (PATCHES - 1) * PLACE;
-  const patched = Array.from({ length: n }, (_, i) => placeOf(rows, places, i, 1)[2] > 0).some(Boolean);
+  let patched = false;
+  for (let i = 0; i < n && !patched; i++) patched = reachOf(rows, places, i, 1) > 0;
   const layers = patchLayer(patched ? PATCHES : 1);
   // Plane `plane` of square `i`: in column plane / `PLANES_DOWN`, row plane % `PLANES_DOWN`.
   const texel = (plane: number, i: number) => 4 * ((((plane % PLANES_DOWN) * h + Math.floor(i / w)) * cols + Math.floor(plane / PLANES_DOWN)) * w + (i % w));
@@ -102,20 +103,21 @@ export function kindsOf(w: number, h: number, rows: Float32Array, row: number, a
   for (let i = 0; i < n; i++) {
     // A square whose cell holds no land and no kind (tape/src/stands.rs: a kind may stand on its ponds' ground) holds
     // 0 in every layer of the field.
-    if (!(rows[1 + row * i + LAND_AT] > 0) && !Array.from({ length: kinds }, (_, k) => holdsKind(s, i, k)).some(Boolean)) continue;
+    let holds = rows[1 + row * i + LAND_AT] > 0;
+    for (let k = 0; k < kinds && !holds; k++) holds = holdsKind(s, i, k);
+    if (!holds) continue;
     placesOf(s, i, w);
     for (let c = 0; c < 3; c++) for (let p = 0; p < PATCHES; p++) s.field[4 * ((DEAD + c) * s.n + i) + p] = rows[dead + (i * 3 + c) * PATCHES + p];
-    for (let p = 0; p < PATCHES; p++) if (p === 0 || placeOf(rows, places, i, p)[2] > 0) patchOf(s, i, p, p === 0 ? 0 : patchLayer(p));
+    for (let p = 0; p < PATCHES; p++) if (p === 0 || reachOf(rows, places, i, p) > 0) patchOf(s, i, p, p === 0 ? 0 : patchLayer(p));
   }
   return { w, h, planes: P, cols, table: s.table, field: { w, h, layers, data: s.field }, tallest: s.tallest, widest: s.widest, walls };
 }
 
-/** The place of patch `p` (from 1) of square `i`'s cell in the core's table `rows`, whose places start at `places`:
- * its point, x and y in squares from the map's corner, and its reach in squares (0: none). */
-function placeOf(rows: Float32Array, places: number, i: number, p: number): Float32Array {
-  const at = places + (i * (PATCHES - 1) + p - 1) * PLACE;
-  return rows.subarray(at, at + PLACE);
-}
+/** Where the place of patch `p` (from 1) of square `i`'s cell lies in the core's table, whose places start at
+ * `places`: its point, x and y in squares from the map's corner, then its reach in squares (0: none). */
+const placeAt = (places: number, i: number, p: number) => places + (i * (PATCHES - 1) + p - 1) * PLACE;
+/** The reach of that place (`placeAt`) in the core's table `rows`, squares (0: none). */
+const reachOf = (rows: Float32Array, places: number, i: number, p: number) => rows[placeAt(places, i, p) + 2];
 
 /** Does kind `k` of square `i` of `s` hold cover? */
 function holdsKind(s: Sheet, i: number, k: number): boolean {
@@ -126,10 +128,10 @@ function holdsKind(s: Sheet, i: number, k: number): boolean {
 /** Into the layers `PLACES` of square `i` (of a map `w` squares wide) of `s`: where its cell's patches past the first
  * lie, their points from its north-west corner (0 for a patch not in use). */
 function placesOf(s: Sheet, i: number, w: number): void {
-  const x = i % w, y = Math.floor(i / w);
-  const [a, b] = [1, 2].map(p => { const q = placeOf(s.rows, s.places, i, p); return q[2] > 0 ? [q[0] - x, q[1] - y, q[2]] : [0, 0, 0]; });
-  [a[0], a[1], a[2], b[0]].forEach((v, c) => { s.field[4 * (PLACES * s.n + i) + c] = v; });
-  [b[1], b[2], 0, 0].forEach((v, c) => { s.field[4 * ((PLACES + 1) * s.n + i) + c] = v; });
+  const x = i % w, y = Math.floor(i / w), r = s.rows, f = s.field, a = placeAt(s.places, i, 1), b = placeAt(s.places, i, 2);
+  const one = r[a + 2] > 0, two = r[b + 2] > 0, at = 4 * (PLACES * s.n + i), next = 4 * ((PLACES + 1) * s.n + i);
+  f[at] = one ? r[a] - x : 0; f[at + 1] = one ? r[a + 1] - y : 0; f[at + 2] = one ? r[a + 2] : 0; f[at + 3] = two ? r[b] - x : 0;
+  f[next] = two ? r[b + 1] - y : 0; f[next + 1] = two ? r[b + 2] : 0; f[next + 2] = 0; f[next + 3] = 0;
 }
 
 /** What a patch's kinds gather in a square (`patchOf`): each lattice's marks, the sward and its flowers (`Paint`), the
@@ -146,8 +148,7 @@ function patchOf(s: Sheet, i: number, p: number, base: number): void {
   const g: Gather = { paint: LATTICES.map(() => new Paint()), sward: new Paint(), flowers: new Paint(), shed: 0, covered: 0, wading: 0, reach: 0, herbReach: 0, herbTall: 0, herbs: 0 };
   for (let k = 0; k < s.kinds; k++) {
     const o = s.at + (i * s.kinds + k) * s.kindRow;
-    // A copy: its crowns' numbers are set (`standingCrowns`).
-    if (holdsKind(s, i, k) && s.rows[o + K.patch] === p) kindOf(s, i, k, s.rows.slice(o, o + s.kindRow), g);
+    if (holdsKind(s, i, k) && s.rows[o + K.patch] === p) kindOf(s, i, k, s.rows.subarray(o, o + s.kindRow), g);
   }
   const first = g.paint[STANDS].first.k;
   for (let q = 0; first >= 0 && q < 4; q++) s.table[s.texel(s.P.chance + STANDS * s.kinds + first, i) + q] *= -1;
@@ -230,14 +231,22 @@ function kindOf(s: Sheet, i: number, k: number, r: Float32Array, g: Gather): voi
 
 /** Scratch of `half`: one float and its bits. */
 const ONE = new Float32Array(1), BITS = new Uint32Array(ONE.buffer);
-/** The bits of `v` as an IEEE binary16 float, rounded to the nearest (the field goes to the GPU as 16-bit floats: a
- * leaf's reflectance of 0.04 in 8 bits would hold ten steps). */
+/** The bits of `v` (as a 32-bit float) as an IEEE binary16 float, the nearest, ties to even; past the largest,
+ * infinite; NaN kept: bit for bit `tape::ground::half` (the field goes to the GPU as 16-bit floats: a leaf's reflectance
+ * of 0.04 in 8 bits would hold ten steps). */
 export function half(v: number): number {
   ONE[0] = v;
-  const x = BITS[0], sign = (x >>> 16) & 0x8000, e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
-  if (e <= 0) return e < -10 ? sign : sign | (((m | 0x800000) >> (1 - e)) + 0x1000) >> 13;
+  const b = BITS[0], sign = (b >>> 16) & 0x8000;
+  if ((b & 0x7fffffff) > 0x7f800000) return sign | 0x7e00;
+  const e = ((b >>> 23) & 0xff) - 127 + 15, f = b & 0x7fffff;
   if (e >= 31) return sign | 0x7c00;
-  return sign | ((e << 10) + ((m + 0x1000) >> 13));
+  // Below the least normal 16-bit float the leading bit joins the fraction (a subnormal).
+  const m = e <= 0 ? f | 0x800000 : f, shift = e <= 0 ? 14 - e : 13;
+  if (shift > 24) return sign;
+  const kept = m >>> shift, rest = m & ((1 << shift) - 1), mid = 1 << (shift - 1);
+  const rounded = kept + +(rest > mid || (rest === mid && (kept & 1) === 1));
+  // A carry out of the fraction raises the exponent, and past the largest gives infinity: the bits add up so.
+  return sign | (e <= 0 ? rounded : (e << 10) + rounded);
 }
 
 /** The number whose IEEE binary16 bits are `bits` (`half`'s inverse). */

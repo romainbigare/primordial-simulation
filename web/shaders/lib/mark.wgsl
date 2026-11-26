@@ -296,36 +296,39 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square, kind and place
 // among the kind's groups packed as ((row x squares across + column) x the kinds a square holds (`kinds_n`) + kind) x
-// `GROUPS` x `PLACE_STEPS` + its place in steps (-1:
+// `GROUPS` x `PLACE_STEPS` + its place in steps, one more (`Mark`; 0:
 // none stands there, or the snow buries it, or its lattice's marks there take too few pixels to show), the share of it
 // that shows (over the snow, and as a crown by the width of its lattice's marks at its foot, draw.wgsl `as_crown`: the
 // field far away, cover_field.wgsl `lattice_field`, is drawn by the same width where they do not) with the depth of the
-// liquid over its foot (`wade_word`), and the share of the ground snow covers at its foot.
+// liquid over its foot (`wade_word`), the shares of the ground at its foot (`ground_shares`) and its box.
 // A function of the cell alone, so it is decided once a frame for each cell in view (marks.wgsl) and read by every
 // pixel the mark may cover (cover.wgsl `lattice`).
-fn decide(l: i32, k: vec2f) -> vec4f {
+fn decide(l: i32, k: vec2f) -> Mark {
   let id = cover.base[l].xy + vec2i(k);
   let at = cover.corner.xy + mark_foot(l, k);
-  foot_patch_at(at);
+  let fp = foot_patch_at(at);
   let cs = patch_corners(corners(at / land.map.x));
-  // Whether any kind of the four squares has marks on the lattice.
+  // Whether the lattice's marks take pixels enough to show there (`as_crown` by their width), and whether any kind of
+  // the four squares has marks on it (read only where they do).
+  let thing = as_crown(field_at(at, WIDE_LAYER)[l], cover.seen.x);
   var all = 0.0;
-  for (var s = 0; s < rolled(4); s++) {
-    for (var t = 0; t < kinds_n(); t++) { all += cs.w[s] * dot(abs(kind(chance_plane(l, t), cs.at[s])), vec4f(1.0)); }
+  if (thing > 0.0) {
+    for (var s = 0; s < rolled(4); s++) {
+      for (var t = 0; t < kinds_n(); t++) { all += cs.w[s] * dot(abs(kind(chance_plane(l, t), cs.at[s])), vec4f(1.0)); }
+    }
   }
-  let living = living_decided(l, k, id, at, cs, all);
+  let living = living_decided(l, k, id, at, cs, all, thing);
   // (One call where no living plant claims the cell, so the program holds `dead_decided` once.)
-  if (!living.claimed) { return dead_decided(l, k, id, at); }
+  if (!living.claimed) { return dead_decided(l, k, id, at, fp); }
   return living.mark;
 }
 
 // The mark of a living plant of cell k of lattice l (`decide`), or that none claims the cell (its dead tree is decided
 // then, `dead_decided`).
-struct Living { mark: vec4f, claimed: bool }
-fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32) -> Living {
-  let none = Living(vec4f(-1.0, 0.0, 0.0, 0.0), true);
-  let unclaimed = Living(vec4f(0.0), false);
-  let thing = as_crown(field_at(at, WIDE_LAYER)[l], cover.seen.x);
+struct Living { mark: Mark, claimed: bool }
+fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32, thing: f32) -> Living {
+  let none = Living(NO_MARK, true);
+  let unclaimed = Living(NO_MARK, false);
   if (thing <= 0.0 || all <= 0.0) { return unclaimed; }
   // First whether any kind may claim the cell, before its ground is read; then, on open ground (`ground_open`), the
   // kind its ground lets claim it. (Both by one call, so the program holds `pick_kind` once.)
@@ -358,10 +361,11 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32)
     let fa = fire_at(at);
     let b = burn_at(at, cover.seen.x);
     let g = plant_fire(fa, scar_of(fa, b, at, cover.seen.x), b);
-    let dead = snag_unit(id, KILLED_DRAW) < g.y && g.w < DEAD_AFTER;
+    let dead = unit(id, KILLED_DRAW) < g.y && g.w < DEAD_AFTER;
     burnt = vec3f(g.x, select(0.0, dead_word(g.z), dead), g.w);
   }
-  return Living(vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), ground_word(f.snow, burnt), mark_box(l, q)), true);
+  let code = u32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z) + 1u;
+  return Living(Mark(code, wade_word(shows, wades), ground_shares(f.snow, burnt), mark_box(l, q)), true);
 }
 
 // Whether a plant may stand on the ground at `at`: not in a channel's water (rock.wgsl `channel_at`, its water's
@@ -375,25 +379,25 @@ fn ground_open(at: vec2f) -> bool {
 // The noise stream of a living mark's own draw of whether a burn killed it (`living_decided`), and the share of its
 // burning's glow below which a killed one stands dead.
 const KILLED_DRAW = 45; const DEAD_AFTER = 0.3;
-// The months since a plant a burn killed died, as its ground word's byte (`ground_word`): 1 more than them, at most the
+// The months since a plant a burn killed died, as its ground's byte (`ground_shares`): 1 more than them, at most the
 // byte's top but one (0: living). `dead_months` reads it back.
 fn dead_word(months: f32) -> f32 { return min(1.0 + round(max(months, 0.0)), 254.0) / 255.0; }
 
 // The code of a dead tree's mark (`dead_decided`): past every living mark's.
-fn dead_code() -> f32 { return f32(i32(land.map.y) * i32(land.map.z) * kinds_n() * GROUPS * PLACE_STEPS); }
+fn dead_code() -> u32 { return u32(i32(land.map.y) * i32(land.map.z) * kinds_n() * GROUPS * PLACE_STEPS); }
 
 // The dead tree cell k of lattice l may hold (snag.wgsl; its kind -1: none), the dead trees its cells hold on the
 // mean (0: none) and the height of the stems that died, m: on the trees' lattice, on the ground of the patch whose plants flames killed whole and whose walls
 // still stand there (the patch the fire made: cover_field.wgsl `foot_patch`, `patch_dead`), as many as those walls make
 // (`snag_kg`, each as heavy as a stem of its height), in clumps (`DEAD_CLUMP_M` across) inside it; as tall as the plants
-// that died, broken down by the years since they died (`snag_of`).
+// that died, broken down by the years since they died (`snag_of`). `fp` is the patch at its foot (`foot_patch`).
 const DEAD_CLUMP_M = 40.0;
 struct Dead { q: Snag, mean: f32, tall: f32 }
-fn dead_at(l: i32, k: vec2f) -> Dead {
+fn dead_at(l: i32, k: vec2f, fp: vec3i) -> Dead {
   var out = Dead(Snag(-1, 0, 0.0, 0.0, 1.0, vec3f(1.0), 0.0), 0.0, 0.0);
   if (l != STANDS) { return out; }
   let at = cover.corner.xy + mark_foot(l, k);
-  let dead = patch_dead(foot_patch(at));
+  let dead = patch_dead(fp);
   if (dead.x <= 0.0 || dead.y <= 0.0) { return out; }
   let side = cover.grid[l].z;
   let clump = 2.0 * smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / DEAD_CLUMP_M, 97));
@@ -407,23 +411,24 @@ fn dead_at(l: i32, k: vec2f) -> Dead {
 // (`decide`): with the chance its mean makes (`dead_at`; its own draw, fixed in the world, so a cell's dead tree stays
 // as long as the walls that make it stand), those of a burn spread over the rest of its cell standing on the land it
 // burnt (fire.wgsl `dead_on_scar`), on open ground (`ground_open`) with no liquid over `FILM_M` and loose ground
-// over the bed, as deep in snow as shows it: a mark of `dead_code` and its box (`dead_box`).
-fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f) -> vec4f {
-  let none = vec4f(-1.0, 0.0, 0.0, 0.0);
-  let dead = dead_at(l, k);
+// over the bed, as deep in snow as shows it: a mark of `dead_code` and its box (`dead_box`). `fp` is the patch at its
+// foot (`foot_patch`).
+fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, fp: vec3i) -> Mark {
+  let none = NO_MARK;
+  let dead = dead_at(l, k, fp);
   if (dead.q.kind < 0) { return none; }
   var on_scar = 1.0;
-  if (foot_patch(at).x == 0 && fire.map.x > 0.0) {
+  if (fp.x == 0 && fire.map.x > 0.0) {
     let f = fire_at(at);
-    on_scar = dead_on_scar(f, patch_dead(foot_patch(at)).z, scar_of(f, burn_at(at, cover.seen.x), at, cover.seen.x).x);
+    on_scar = dead_on_scar(f, patch_dead(fp).z, scar_of(f, burn_at(at, cover.seen.x), at, cover.seen.x).x);
   }
-  if (snag_unit(id, 41) >= dead.mean * on_scar) { return none; }
+  if (unit(id, 41) >= dead.mean * on_scar) { return none; }
   let f = foot(at);
   if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }
-  return vec4f(dead_code(), shows, ground_word(f.snow, vec3f(0.0)), dead_box(l, dead.q));
+  return Mark(dead_code() + 1u, shows, ground_shares(f.snow, vec3f(0.0)), dead_box(l, dead.q));
 }
 
 // The box dead tree q of lattice l covers about its foot, as `mark_box`: its sprite with its lean, and its shadow.
@@ -439,9 +444,9 @@ fn dead_box(l: i32, q: Snag) -> f32 {
 }
 
 // The share of the ground at a mark's foot that snow covers, and the fire on its plant (`living_decided`: its soot,
-// whether it is dead and since when, `dead_word`, and its burning), each 0..1, as one number (`decide`): a byte each in
-// its bits (cells.wgsl `word_of`, `ground_of`), the last under `TOP_BYTE` of its range.
-fn ground_word(snow: f32, g: vec3f) -> f32 { return bitcast<f32>(word_of(vec4f(snow, g.x, g.y, TOP_BYTE * clamp(g.z, 0.0, 1.0)))); }
+// whether it is dead and since when, `dead_word`, and its burning), each 0..1 (`decide`): a byte each of the marks'
+// texture `marks_snow` as they are (cells.wgsl `mark_word`).
+fn ground_shares(snow: f32, g: vec3f) -> vec4f { return vec4f(snow, g.x, g.y, clamp(g.z, 0.0, 1.0)); }
 
 // The share of a mark that shows (0..1, more than 0) and the depth of the liquid over its foot, m (0: on land), as one
 // number (`decide`): on land the share; in liquid, negated, the depth in steps of `WADE_STEP_M` m and half the share.

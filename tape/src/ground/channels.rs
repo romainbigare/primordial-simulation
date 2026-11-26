@@ -178,6 +178,11 @@ fn mid(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
     [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
 }
 
+/// The largest area a sample of `s` drains, m² (`Samples::up`).
+pub(super) fn most_drained(s: &Samples) -> f64 {
+    s.up.iter().fold(0.0f64, |m, &a| m.max(a))
+}
+
 /// The three points of the curve through sample `k` of `s` whose lines run through the points `at` (`stems::points`),
 /// in samples: from the middle of its main way in (its point at a head) through its point to the middle of its way out;
 /// a sink that liquid runs into ends at its point; none for a sink none runs into.
@@ -210,9 +215,9 @@ fn banks_read(k: f64) -> bool {
 }
 
 impl<'a> Channels<'a> {
-    /// The channels `r`, their pieces starting as `bends` holds, the lines of `strips` carrying their wetness index.
-    pub(super) fn new(r: Reaches<'a>, bends: &'a Bends, strips: &'a [bool]) -> Channels<'a> {
-        let most = r.s.up.iter().fold(0.0f64, |m, &a| m.max(a));
+    /// The channels `r`, their pieces starting as `bends` holds, the lines of `strips` carrying their wetness index,
+    /// the largest area a sample of them drains `most` (`most_drained`).
+    pub(super) fn new(r: Reaches<'a>, bends: &'a Bends, strips: &'a [bool], most: f64) -> Channels<'a> {
         Channels { r, bends, strips, cap: r.widest(1.0), most }
     }
 
@@ -363,14 +368,26 @@ fn about(win: &Window, l: &Near, [a, b]: [[f64; 2]; 2], visit: &mut dyn FnMut(us
 /// The step from the sample that holds the centre of the texel at column `x` and row `y` of texels `k` samples a side
 /// to sample `q` of `s`, as one whole number: 1 + (dx + `STEP_MOST`) + (2 `STEP_MOST` + 1)(dy + `STEP_MOST`); 0 for
 /// none. A shell finds the sample again from the texel's centre: the texel's own, floor((x + 1/2) k), stepped by it.
-pub(super) fn code(s: &Samples, [x, y]: [i64; 2], k: f64, q: u32) -> u32 {
+pub(super) fn code(s: &Samples, texel: [i64; 2], k: f64, q: u32) -> u32 {
     if q == NONE {
         return 0;
     }
-    let own = |t: i64| ((t as f64 + 0.5) * k).floor() as i64;
-    let (dx, dy) = ((q as usize % s.across) as i64 - own(x), (q as usize / s.across) as i64 - own(y));
-    debug_assert!(dx.abs() <= STEP_MOST && dy.abs() <= STEP_MOST, "a channel's sample within the steps a tile names");
+    let [dx, dy] = step_to(s, texel, k, q);
+    debug_assert!(names(s, texel, k, q), "a channel's sample within the steps a tile names");
     (1 + (dx + STEP_MOST) + (2 * STEP_MOST + 1) * (dy + STEP_MOST)) as u32
+}
+
+/// The step from the sample that holds the centre of the texel at column `x` and row `y` of texels `k` samples a side
+/// to sample `q` of `s`, along each axis.
+fn step_to(s: &Samples, [x, y]: [i64; 2], k: f64, q: u32) -> [i64; 2] {
+    let own = |t: i64| ((t as f64 + 0.5) * k).floor() as i64;
+    [(q as usize % s.across) as i64 - own(x), (q as usize / s.across) as i64 - own(y)]
+}
+
+/// Whether a tile can name sample `q` of `s` at the texel `texel` of texels `k` samples a side (`code`): no farther than
+/// `STEP_MOST` along each axis.
+pub(super) fn names(s: &Samples, texel: [i64; 2], k: f64, q: u32) -> bool {
+    step_to(s, texel, k, q).iter().all(|d| d.abs() <= STEP_MOST)
 }
 
 #[cfg(test)]
