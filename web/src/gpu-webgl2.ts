@@ -42,7 +42,7 @@ class WebGl2 implements Back {
   constructor(private gl: WebGL2RenderingContext, private canvas: HTMLCanvasElement, restored: () => void) {
     this.parallel = gl.getExtension('KHR_parallel_shader_compile') as Parallel | null;
     this.timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2') as Timer | null;
-    this.formats = { rgba8unorm: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba32float: [gl.RGBA32F, gl.RGBA, gl.FLOAT], rgba16float: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rg16float: [gl.RG16F, gl.RG, gl.HALF_FLOAT], r16float: [gl.R16F, gl.RED, gl.HALF_FLOAT] };
+    this.formats = { rgba8unorm: [gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE], 'rgba8unorm-srgb': [gl.SRGB8_ALPHA8, gl.RGBA, gl.UNSIGNED_BYTE], rgba32float: [gl.RGBA32F, gl.RGBA, gl.FLOAT], rgba16float: [gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT], rg16float: [gl.RG16F, gl.RG, gl.HALF_FLOAT], r16float: [gl.R16F, gl.RED, gl.HALF_FLOAT] };
     this.setUp();
     // A lost context draws nothing and throws nothing: say so, so a page that stops drawing (a program too large for
     // the card, which the browser drops the context for) is seen.

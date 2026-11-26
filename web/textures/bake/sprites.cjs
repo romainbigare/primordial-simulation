@@ -33,7 +33,7 @@ const STRIP_LAYERS = 4;
 const expand = e => (e.parts || [null]).flatMap(nodes => (e.turns || [0]).map(turn => ({ ...e, nodes, turn })));
 // A table as one array of the program's (made once, not again at each call: a copy in each function that reads it is
 // more than a software renderer compiles) and its reader.
-const wgslTable = (name, table, type, values) => `var<private> ${table}: array<${type}, ${values.length}> = array<${type}, ${values.length}>(${values.join(', ')});\nfn ${name}(s: i32) -> ${type} { return ${table}[s]; }\n`;
+const wgslTable = (name, table, type, values) => `const ${table}: array<${type}, ${values.length}> = array<${type}, ${values.length}>(${values.join(', ')});\nfn ${name}(s: i32) -> ${type} { return ${table}[s]; }\n`;
 const wgslArray = (name, rows, doc, digits = 3) => `${doc ? doc + '\n' : ''}${wgslTable(name, `${name.toUpperCase()}_TABLE`, 'f32', rows.map(v => v.toFixed(digits)))}`;
 
 (async () => {
@@ -115,7 +115,7 @@ const wgslArray = (name, rows, doc, digits = 3) => `${doc ? doc + '\n' : ''}${wg
     `const HEIGHT_LAYERS = ${Math.ceil(heights.length / HEIGHT_PER)};`,
     '// The runs of sprites with heights: the first sprite, how many, and the first of their heights.',
     `const HEIGHT_RUNS_N = ${runs.length};`,
-    `var<private> HEIGHT_RUNS: array<vec3i, ${runs.length}> = array<vec3i, ${runs.length}>(${runs.map(r => `vec3i(${r.join(', ')})`).join(', ')});`,
+    `const HEIGHT_RUNS: array<vec3i, ${runs.length}> = array<vec3i, ${runs.length}>(${runs.map(r => `vec3i(${r.join(', ')})`).join(', ')});`,
     '// The heights of sprite s (their number among the heights), -1 where it has none.',
     'fn heights_of(s: i32) -> i32 {',
     '  for (var r = 0; r < HEIGHT_RUNS_N; r++) { let run = HEIGHT_RUNS[r]; if (s >= run.x && s < run.x + run.y) { return run.z + s - run.x; } }',

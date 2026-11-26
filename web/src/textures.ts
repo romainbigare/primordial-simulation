@@ -91,7 +91,7 @@ export class CoverMarks {
   fieldBinds(gpu: Gpu, mpp: number): Draw['binds'] {
     this.upload(gpu);
     // A lattice no square holds is sent with side 0: the field does not read it.
-    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => ((this.kinds?.widest[l] ?? 0) > 0 ? a : 0)), 0).vec4(...this.shown(mpp)).vec4(this.kinds ? 1 : 0, this.alpha);
+    const u = new Uniforms(LOOK_VEC4S).vec4(...LATTICES.map((a, l) => ((this.kinds?.widest[l] ?? 0) > 0 ? a : 0)), 0).vec4(...this.shown(mpp)).vec4(this.alpha);
     return { 14: u.buffer, 15: this.fieldTex!, 16: 'mip' };
   }
 

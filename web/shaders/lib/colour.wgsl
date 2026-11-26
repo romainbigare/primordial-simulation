@@ -250,7 +250,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // never bares the ground.
   let steep = p.slope / earth.look.x;
   var bed = p.bed;
-  if (styled()) {
+  // (Under full snow none of it shows: the snow below takes the pixel whole.)
+  if (styled() && snow < 1.0) {
     // A burn scar takes the floor (burn.wgsl `burnt_floor`) and as much of the soil's own tint.
     let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, g.grain) * soil_detail(p), p);
     g.rgb = burnt.rgb;

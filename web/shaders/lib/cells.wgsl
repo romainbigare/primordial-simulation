@@ -26,10 +26,11 @@ struct Cover {
 }
 @group(0) @binding(1) var<uniform> cover: Cover;
 // The marks of the cells in view (marks.wgsl): a texel a cell, a lattice's from row `cover.rows` on and from
-// `MARK_MARGIN` cells before its base on, each what `decide` decided of the mark in it as four 32-bit words, a texture
-// of four bytes a texel for each (`MARK_WORDS`; bytes, which every GPU draws into): one more than its square and kind
-// (0: none), the bits of the share that shows and of the ground at its foot (its snow and fresh char, mark.wgsl
-// `ground_word`), so each comes back to the bit, and the box it covers about its foot (`mark_box`).
+// `MARK_MARGIN` cells before its base on, each what `decide` decided of the mark in it as four words (`Mark`), a
+// texture of four bytes a texel for each (`MARK_WORDS`; bytes, which every GPU draws into): one more than its square
+// and kind (0: none), as a whole number, the bits of the share that shows, so it comes back to the bit, the shares of
+// the ground at its foot a byte each (its snow and fresh char, mark.wgsl `ground_shares`), and the box it covers about
+// its foot (`mark_box`), as a whole number.
 @group(0) @binding(5) var marks_kind: texture_2d<f32>;
 @group(0) @binding(6) var marks_shows: texture_2d<f32>;
 @group(0) @binding(7) var marks_snow: texture_2d<f32>;
@@ -57,10 +58,18 @@ fn word_bytes(x: u32) -> vec4f {
   return (vec4f(f32(x & 255u), f32((x >> 8u) & 255u), f32((x >> 16u) & 255u), f32(x >> 24u)) + BYTE_LIFT) / 255.0;
 }
 
-// Word `w` of mark `m` (`decide`) as its four bytes (marks.wgsl).
-fn mark_word(m: vec4f, w: i32) -> vec4f {
-  var x = u32(m.x + 1.0);
-  if (w == 1) { x = bitcast<u32>(m.y); } else if (w == 2) { x = bitcast<u32>(m.z); } else if (w == 3) { x = u32(m.w); }
+// A mark as decided (mark.wgsl `decide`): one more than its code, its square, kind and place (0: none), as a whole
+// number; the share of it that shows with the depth of the liquid over its foot (`wade_word`); the shares of the
+// ground at its foot (`ground_shares`); and the box it covers about its foot (`mark_box`), a whole number.
+struct Mark { code: u32, shows: f32, ground: vec4f, box: f32 }
+const NO_MARK = Mark(0u, 0.0, vec4f(0.0), 0.0);
+
+// Word `w` of mark `m` (`decide`) as its four bytes (marks.wgsl): the ground's shares a byte each as they are, the
+// others as the bytes of a 32-bit word.
+fn mark_word(m: Mark, w: i32) -> vec4f {
+  if (w == 2) { return (round(m.ground * 255.0) + BYTE_LIFT) / 255.0; }
+  var x = m.code;
+  if (w == 1) { x = bitcast<u32>(m.shows); } else if (w == 3) { x = u32(m.box); }
   return word_bytes(x);
 }
 
@@ -129,27 +138,22 @@ fn reach_at(l: i32, k: vec2f) -> Reach {
 }
 
 // The mark lattice l decided for its cell k (`decide`), from the marks' textures, where it covers the point `d` m from
-// its foot within a pixel `e` m (its box, `mark_box`), else none: its code and its share (`decided_ground`: the rest of
-// what was decided of it).
-fn decided(l: i32, k: vec2f, d: vec2f, e: f32) -> vec2f {
-  let none = vec2f(-1.0, 0.0);
+// its foot within a pixel `e` m (its box, `mark_box`), else none (`code` 0): one more than its code, and its share
+// (`decided_ground`: the rest of what was decided of it).
+struct Seen { code: u32, shows: f32 }
+fn decided(l: i32, k: vec2f, d: vec2f, e: f32) -> Seen {
   let t = mark_texel(l, k);
   let code = word_of(textureLoad(marks_kind, t, 0));
-  if (code == 0u || !box_holds(word_of(textureLoad(marks_box, t, 0)), d, cover.grid[l].z, e)) { return none; }
-  return vec2f(f32(code - 1u), bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))));
+  if (code == 0u || !box_holds(word_of(textureLoad(marks_box, t, 0)), d, cover.grid[l].z, e)) { return Seen(0u, 0.0); }
+  return Seen(code, bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))));
 }
 
-// A mark's word of the ground at its foot (mark.wgsl `ground_word`) keeps its top byte under `TOP_BYTE` of its range,
-// so the word's bits are never a number's that is not finite; its shares as `marks_snow` holds its bytes: the snow,
-// then the fire on the plant.
-const TOP_BYTE = 126.0 / 255.0;
-fn ground_of(b: vec4f) -> vec4f { return vec4f(b.xyz, b.w / TOP_BYTE); }
 // The months since a plant a burn killed died, from its word's byte (mark.wgsl `dead_word`).
 fn dead_months(b: f32) -> f32 { return round(b * 255.0) - 1.0; }
 
 // Of the mark lattice l decided for its cell k: the share of the ground at its foot under snow and the fire on its plant
-// (mark.wgsl `ground_word`), read only where a plant stands there.
-fn decided_ground(l: i32, k: vec2f) -> vec4f { return ground_of(textureLoad(marks_snow, mark_texel(l, k), 0)); }
+// (mark.wgsl `ground_shares`, its bytes as they are), read only where a plant stands there.
+fn decided_ground(l: i32, k: vec2f) -> vec4f { return textureLoad(marks_snow, mark_texel(l, k), 0); }
 
 // A box (mark.wgsl `mark_box`) counts its extents in steps of its cell's side over this.
 const BOX_STEPS = 12.0;

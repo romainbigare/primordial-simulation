@@ -59,14 +59,14 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
     for (var i = reach.least.x; i <= reach.most.x; i++) {
       let k = cell + vec2f(f32(i), f32(j));
       let m = decided(l, k, p - mark_foot(l, k), e);
-      if (m.x < 0.0) { continue; }
-      if (m.x >= dead_code()) { snag_over(dst, shade, dead_at(l, k).q, p, l, k, e, fade * m.y); continue; }
+      if (m.code == 0u) { continue; }
+      if (m.code - 1u >= dead_code()) { snag_over(dst, shade, dead_at(l, k, foot_patch(cover.corner.xy + mark_foot(l, k))).q, p, l, k, e, fade * m.shows); continue; }
       // Its square, kind and place among the kind's groups (mark.wgsl `decide`).
-      let packed = i32(m.x);
+      let packed = i32(m.code - 1u);
       let kd = packed / (GROUPS * PLACE_STEPS);
       let s = kd / kinds_n();
       // Its share that shows and the depth of the liquid over its foot (mark.wgsl `wade_word`).
-      let wade = wade_of(m.y);
+      let wade = wade_of(m.shows);
       let g = decided_ground(l, k);
       let q = mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), wade.y);
       if (g.z > 0.0) { snag_over(dst, shade, burnt_tree(l, k, q.h, dead_months(g.z)), p, l, k, e, fade * wade.x); continue; }
@@ -88,7 +88,7 @@ fn marks_over(v: Varying) -> vec4f {
   // Linear light turned into the screen's share once (draw.wgsl `srgb`), in the style (style.wgsl `painted`),
   // premultiplied.
   if (dst.a <= 0.0) { return vec4f(0.0); }
-  return vec4f(painted(srgb(dst.rgb / dst.a)), 1.0) * dst.a * cover_look.look.y;
+  return vec4f(painted(srgb(dst.rgb / dst.a)), 1.0) * dst.a * cover_look.look.x;
 }
 
 // Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground, the fire on it is

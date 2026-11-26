@@ -169,29 +169,36 @@ fn seen_in_liquid(c: vec3f, depth: f32, height: f32, e: f32) -> vec3f {
 
 // The foam over water `depth` m deep at `at` where the bed rises at `slope` (rise over run), seen at `e` m a pixel: its
 // lines (`FOAM_LINES`) where they show, else its rim; fading out as its band grows narrower than a pixel (`FOAM_PX`),
-// where it would only show the pixels.
+// where it would only show the pixels. (Where that fades it to none nothing more is read; and more than `FOAM_PAST` of
+// the lines' spacing past the last line, the lines are none: a line's wander and width reach 0.68 of it at most.)
+const FOAM_PAST = 1.0;
 fn foam(depth: f32, slope: f32, e: f32, at: vec2f) -> f32 {
   let rise = max(slope, 1e-3);
+  let shows = ease(FOAM_PX.x, FOAM_PX.y, FOAM_M / rise / max(e, 1e-3));
+  if (shows <= 0.0) { return 0.0; }
   var white = FOAM_RIM * (1.0 - ease(0.0, FOAM_M, depth));
   // (The lines' breaks cannot show in a program made for draws from far, draw.wgsl `LEAST_E`: there the foam is its
   // rim, and the lines are not compiled.)
   if (!unseen(FOAM_BREAK_M)) {
+    let lines = ease(FOAM_LINE_PX.x, FOAM_LINE_PX.y, FOAM_LINE_M / rise / max(e, 1e-3));
     // The lines, counted from the edge of the water drawn (`FILM_M`): the nearest one's share at this depth.
     let x = max(depth - FILM_M, 0.0) / FOAM_LINE_M;
-    let k = min(floor(x + 0.5), FOAM_LINES);
-    let n = noise_turned(at / FOAM_BREAK_M + 7.3 * k, 110);
-    var line: f32;
-    if (k == 0.0) {
-      line = (1.0 - smoothstep(0.0, FOAM_LINE_W, x)) * mix(FOAM_EDGE_KEPT, 1.0, ease(-0.2, 0.3, n));
-    } else {
-      let wander = noise_turned(at / FOAM_WANDER_M + 3.1 * k, 115);
-      let across = abs(x - k + FOAM_WANDER * wander) / (FOAM_LINE_W * (1.0 + 0.5 * noise_turned(at / FOAM_WANDER_M + 5.7, 116)));
-      let breaks = smoothstep(-0.1, 0.45, n + 0.5 * noise_turned(at * (3.0 / FOAM_BREAK_M) + 1.9 * k, 117));
-      line = (1.0 - smoothstep(0.3, 1.0, across)) * breaks * pow(FOAM_LINE_FALL, k);
+    var line = 0.0;
+    if (lines > 0.0 && x <= FOAM_LINES + FOAM_PAST) {
+      let k = min(floor(x + 0.5), FOAM_LINES);
+      let n = noise_turned(at / FOAM_BREAK_M + 7.3 * k, 110);
+      if (k == 0.0) {
+        line = (1.0 - smoothstep(0.0, FOAM_LINE_W, x)) * mix(FOAM_EDGE_KEPT, 1.0, ease(-0.2, 0.3, n));
+      } else {
+        let wander = noise_turned(at / FOAM_WANDER_M + 3.1 * k, 115);
+        let across = abs(x - k + FOAM_WANDER * wander) / (FOAM_LINE_W * (1.0 + 0.5 * noise_turned(at / FOAM_WANDER_M + 5.7, 116)));
+        let breaks = smoothstep(-0.1, 0.45, n + 0.5 * noise_turned(at * (3.0 / FOAM_BREAK_M) + 1.9 * k, 117));
+        line = (1.0 - smoothstep(0.3, 1.0, across)) * breaks * pow(FOAM_LINE_FALL, k);
+      }
     }
-    white = mix(white, line, ease(FOAM_LINE_PX.x, FOAM_LINE_PX.y, FOAM_LINE_M / rise / max(e, 1e-3)));
+    white = mix(white, line, lines);
   }
-  return FOAM * white * ease(FOAM_PX.x, FOAM_PX.y, FOAM_M / rise / max(e, 1e-3));
+  return FOAM * white * shows;
 }
 
 // The marks (cover.wgsl): each mark differs a little from its kind in hue and tone. A mark's hue turns from its kind's

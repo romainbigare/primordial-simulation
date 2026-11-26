@@ -16,7 +16,7 @@ const SMOKE_RISE_M = 800.0; const CALM_M_S = 0.5;
 // The column is summed over `PLUME_STEPS` steps upwind, each read at five points across the spread, weighted as a
 // Gaussian of the spread (`PLUME_ACROSS`).
 const PLUME_STEPS = 8;
-var<private> PLUME_ACROSS: array<f32, 5> = array<f32, 5>(0.054, 0.244, 0.403, 0.244, 0.054);
+const PLUME_ACROSS: array<f32, 5> = array<f32, 5>(0.054, 0.244, 0.403, 0.244, 0.054);
 
 // The column of smoke particles at `at`, in wind `wind` (m/s east and south) g/m²: what the burning ground upwind sends
 // (`SMOKE_SHARE` of its gas over `FLAMING_S`) over the time the wind takes to cross each step, spread across, fading

@@ -18,8 +18,8 @@ const TRUNK_SHARE = 0.5; const STUMP_SHARE = 0.15; const STUMP_MOST_M = 1.4; con
 // on its foot, the row where its trunk meets the ground); each one's height `SNAG_VARY` either way of its share of the
 // stem's, no taller and no wider than its lattice lets a mark reach (`snag_of`).
 const KIND_TRUNK = 0; const KIND_STUMP = 1; const KIND_BARE = 2;
-var<private> KIND_FROM: array<i32, 2> = array<i32, 2>(TRUNK_FROM, STUMP_FROM);
-var<private> KIND_N: array<i32, 2> = array<i32, 2>(TRUNK_N, STUMP_N);
+const KIND_FROM: array<i32, 2> = array<i32, 2>(TRUNK_FROM, STUMP_FROM);
+const KIND_N: array<i32, 2> = array<i32, 2>(TRUNK_N, STUMP_N);
 const SNAG_VARY = 0.2;
 // The older (`old`, its stage over `STUMP_FROM_STAGE`, at most 1), the more a dead tree leans, by up to `LEAN_MOST`
 // radians, more on the broken than on the whole.
@@ -40,9 +40,7 @@ const CHAR_TONE = vec3f(1.1, 1.0, 0.85);
 // trunk reads as a heap, not a tree), a side of an island tree and of an island tree's second model whose branches are cut by
 // their frame, and a horse chestnut whose fine twigs blur into a haze.
 const BARE_TREES_N = 21;
-var<private> BARE_TREES: array<i32, 21> = array<i32, 21>(0, 1, 2, 4, 6, 7, 8, 10, 11, 12, 13, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28);
-
-fn snag_unit(c: vec2i, k: i32) -> f32 { return f32(lowbias(c, k)) * (1.0 / 4294967296.0); }
+const BARE_TREES: array<i32, 21> = array<i32, 21>(0, 1, 2, 4, 6, 7, 8, 10, 11, 12, 13, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28);
 
 // A dead tree: its kind (-1: none) and sprite (of snags.png, or the tree whose bare twin it is), its height, m, its
 // lean, radians, whether it is mirrored (-1) or not (1), its tint, and how charred it is (0..1, a whole tree's).
@@ -53,9 +51,9 @@ struct Snag { kind: i32, s: i32, h: f32, lean: f32, mirror: f32, tint: vec3f, ch
 // has broken down (`BREAK_YEARS`), its sprite, its height and its lean within that box.
 fn snag_of(id: vec2i, years: f32, tall: f32, side: f32, north: f32) -> Snag {
   var q: Snag;
-  let stage = select(years / BREAK_YEARS + BREAK_DRAW * snag_unit(id, 42), 0.0, tall < SHRUB_M);
+  let stage = select(years / BREAK_YEARS + BREAK_DRAW * unit(id, 42), 0.0, tall < SHRUB_M);
   let old = min(stage / STUMP_FROM_STAGE, 1.0);
-  let r = snag_unit(id, 43);
+  let r = unit(id, 43);
   var share = 1.0;
   if (stage < BROKEN_FROM) {
     q.kind = KIND_BARE;
@@ -65,14 +63,14 @@ fn snag_of(id: vec2i, years: f32, tall: f32, side: f32, north: f32) -> Snag {
     q.s = KIND_FROM[q.kind] + min(i32(r * f32(KIND_N[q.kind])), KIND_N[q.kind] - 1);
     share = select(TRUNK_SHARE, STUMP_SHARE, q.kind == KIND_STUMP);
   }
-  q.lean = LEAN_MOST * old * (2.0 * snag_unit(id, 47) - 1.0) * select(1.0, 0.5, q.kind == KIND_BARE);
+  q.lean = LEAN_MOST * old * (2.0 * unit(id, 47) - 1.0) * select(1.0, 0.5, q.kind == KIND_BARE);
   let size = snag_size(q);
   let wide = side / (0.5 * size.x / size.y + abs(sin(q.lean)));
-  var h = tall * share * mix(1.0 - SNAG_VARY, 1.0 + SNAG_VARY, snag_unit(id, 44));
+  var h = tall * share * mix(1.0 - SNAG_VARY, 1.0 + SNAG_VARY, unit(id, 44));
   if (q.kind == KIND_STUMP) { h = min(h, STUMP_MOST_M); }
   q.h = min(h, min(north / MAP_VIEW.y, wide));
-  q.mirror = select(1.0, -1.0, snag_unit(id, 49) < 0.5);
-  q.tint = 1.0 + TINT * (2.0 * snag_unit(id, 50) - 1.0) * vec3f(1.0, 0.4, -0.6);
+  q.mirror = select(1.0, -1.0, unit(id, 49) < 0.5);
+  q.tint = 1.0 + TINT * (2.0 * unit(id, 50) - 1.0) * vec3f(1.0, 0.4, -0.6);
   q.char = CHARRED * exp(-years / GREY_YEARS);
   return q;
 }
@@ -99,7 +97,7 @@ fn snag_texel(q: Snag, uv: vec2f, g: vec2f) -> vec4f {
   let origin = select(vec2f(f32(k % 2), f32(k / 2)) * 0.5, vec2f(0.0), k < 0);
   let at = origin + scale * (vec2f(0.5 - 0.5 * size.x, 1.0 - SNAG_F[q.s] - size.y) + uv * size);
   let t = textureSampleGrad(detail_tex, detail_sampler, at, SNAGS_FROM + SNAG_LAYER[q.s], vec2f(scale * g.x * size.x, 0.0), vec2f(0.0, scale * g.y * size.y));
-  return vec4f(unsrgb(t.rgb) * CHAR_TONE * q.tint, t.a * box_fade(uv, g));
+  return vec4f(exposed(t.rgb) * CHAR_TONE * q.tint, t.a * box_fade(uv, g));
 }
 
 // Snag q's width, m.

@@ -41,10 +41,8 @@ fn spline(t: texture_2d<f32>, uv: vec2f) -> vec4f {
   let p = uv * vec2f(size) - 0.5;
   let i = vec2i(floor(p));
   let f = p - floor(p);
-  let f2 = f * f;
-  let f3 = f2 * f;
   // The weights of the texels from i - 1 to i + 2 along each axis.
-  var w = array<vec2f, 4>(0.5 * (-f3 + 2.0 * f2 - f), 0.5 * (3.0 * f3 - 5.0 * f2 + 2.0), 0.5 * (-3.0 * f3 + 4.0 * f2 + f), 0.5 * (f3 - f2));
+  let w = catmull_rom(f);
   var sum = vec4f(0.0);
   for (var y = 0; y < 4; y++) {
     var row = vec4f(0.0);

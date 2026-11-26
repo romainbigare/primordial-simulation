@@ -71,8 +71,8 @@ fn layer_at(at: vec2f, dry: Spot) -> f32 {
 // `PLUME_STREAK` times an even noise over `PLUME_STREAK_M` m along the e-fold of the load, so the cloud's edge breaks
 // into tongues and filaments.
 const PLUME_STREAK = 1.2; const PLUME_STREAK_M = 300.0;
-// The load `load` g/m³ of standing liquid at `at`, as drawn.
-fn plume_streaks(load: f32, at: vec2f) -> f32 {
+// The load `load` g/m³ of standing liquid at the pixel, as drawn.
+fn plume_streaks(load: f32) -> f32 {
   if (load <= 0.0 || !styled()) { return load; }
   return load * exp(PLUME_STREAK * noise_l(lat_turned(PLUME_STREAK_M, vec2f(0.3)), 216).x);
 }
@@ -105,7 +105,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   g.slope += fine.slope;
   // Its channel: what runs through it and the largest stone it moves, each grown evenly along it (rock.wgsl
   // `next_along`).
+  // (Its change across a pixel taken the short way round the length the place along is kept modulo.)
   let grows = vec2f(dpdx(g.along), dpdy(g.along));
+  let grows_short = grows - land.reach.x * round(grows / land.reach.x);
   let reach = sample_at(g);
   var next = Next(reach, 0.0);
   var q = discharge_of(reach);
@@ -126,7 +128,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
   p.depth = select(st.depth, 0.0, st.depth < FILM_M);
   // What standing liquid carries: its plumes' load (web/src/land.ts), in the Earth view in streaks (`PLUME_STREAK`).
-  if (p.depth > 0.0) { p.load = plume_streaks(load_at(at), at); }
+  if (p.depth > 0.0) { p.load = plume_streaks(load_at(at)); }
   p.over = st.over;
   p.sea = surface.w;
   p.wet = st.wet;
@@ -138,7 +140,13 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.ground = surface.xyz;
   // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
   // the cells' soil is a mean over kilometres, the bed's make is the samples'.
-  if (styled() && loose < SOIL_OF_BED_M) { p.ground = mix(p.ground, bed_make_at(at), SOIL_OF_BED * (1.0 - loose / SOIL_OF_BED_M)); }
+  // (The bed's make is read once, where something below asks for it.)
+  var make = vec3f(0.0);
+  var made = false;
+  if (styled() && loose < SOIL_OF_BED_M) {
+    make = bed_make_at(at); made = true;
+    p.ground = mix(p.ground, make, SOIL_OF_BED * (1.0 - loose / SOIL_OF_BED_M));
+  }
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
@@ -181,7 +189,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   }
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
-  if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
+  if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) {
+    if (!made) { make = bed_make_at(at); made = true; }
+    p.bed = make;
+  }
   p.fetch = g.water.z;
   let waves = waves_of(p.sea, p.fetch);
   // On a deposit (colour.wgsl `laid_share`) the waves sort sand up their storms' swash alone: past it lies what the
@@ -189,7 +200,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z * (1.0 - laid_share(p)), waves);
   p.swash = swash_of(over_ponds(tiled, 0.0), waves, length(tiled.slope), at, e, p.snow);
   // A beach of pebbles takes their colour from the bed they are worn from (colour.wgsl `shore_grain`).
-  if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
+  if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) {
+    if (!made) { make = bed_make_at(at); }
+    p.bed = make;
+  }
   p.river = 0.0;
   p.river_depth = 0.0;
   p.mouth = 0.0;
@@ -210,7 +224,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
   if (!near) { return out; }
-  var r = river_spots(out, g, ch, q, moved, fall, grows, line_of(q, e), mouth);
+  var r = river_spots(out, g, ch, q, moved, fall, grows_short, line_of(q, e), mouth);
   // A channel's water carries its sample's load, grown along it as its discharge is.
   r.wet.load = mix(load_of(reach), load_of(next.s), next.share);
   return r;
@@ -231,7 +245,6 @@ fn live_map(v: Varying) -> vec4f {
   pix_local = earth.corner.xy + v.px * earth.frame.z;
   bends_e = earth.frame.w;
   let at = pix_origin + pix_local;
-  let cs = corners(at / land.map.x);
   // Detail is chosen by the screen's pixel, so a picture drawn at fewer pixels is the same picture.
   let spots = land_spots(at, earth.frame.w);
   var c = Shaded(vec3f(0.0), 1.0, BARE);
