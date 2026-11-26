@@ -39,7 +39,10 @@ struct Land {
 // nearest channel's line without its bends, m.
 @group(0) @binding(9) var atlas: texture_2d_array<f32>;
 @group(0) @binding(13) var areas: texture_2d_array<f32>;
-// Of each tile at the view's depth: the layer drawn there and the layer it fades in over (-1: none).
+// The page of the tiles (web/src/ground.ts `makePage`): in its first row its window at the view's depth (first column
+// and row, tiles across and down) and the coarsest depth with its tiles across and down; then, of each tile of the
+// window, row by row, and under them of each of the coarsest tiles: the layer drawn there and the layer it fades in
+// over (-1: none).
 @group(0) @binding(10) var pages: texture_2d<f32>;
 // Of each layer: its tile's depth, column and row, and when it came, ms; in the second row, 1 where its tile is made of
 // the samples edits have moved since (`moved_at`).
@@ -256,12 +259,21 @@ fn cells_smooth(k: i32, s: vec2f) -> vec4f {
   return sum;
 }
 
+// The layers the page names at `at`, m from the map's north-west corner: of its tile at the view's depth inside its
+// window, else of its coarsest tile.
+fn page_at(at: vec2f) -> vec4f {
+  let window = textureLoad(pages, vec2i(0, 0), 0);
+  let coarse = textureLoad(pages, vec2i(1, 0), 0);
+  let c = vec2i(floor(at / (land.map.x * land.tiles.x / exp2(land.tiles.z - land.map.w)))) - vec2i(window.xy);
+  if (all(c >= vec2i(0)) && all(c < vec2i(window.zw))) { return textureLoad(pages, c + vec2i(0, 1), 0); }
+  let k = clamp(vec2i(floor(at / (land.map.x * land.tiles.x / exp2(coarse.x - land.map.w)))), vec2i(0), vec2i(coarse.yz) - 1);
+  return textureLoad(pages, k + vec2i(0, 1 + i32(window.w)), 0);
+}
+
 // The ground at `at`, m from the map's north-west corner (`read_tile`, with `spline`): from the tile the page names
 // there, fading in over the one before it; before any tile came, the cells' mean heights, flat.
 fn ground_at(at: vec2f, spline: bool) -> Tiled {
-  let span = land.map.x * land.tiles.x / exp2(land.tiles.z - land.map.w);
-  let size = vec2i(textureDimensions(pages));
-  let page = textureLoad(pages, clamp(vec2i(floor(at / span)), vec2i(0), size - 1), 0);
+  let page = page_at(at);
   if (page.x < 0.0) {
     return Tiled(blended(GROUND, corners(at / land.map.x)).x, vec2f(0.0), 0.0, NO_LIQUID_M, vec2f(0.0), vec4i(-1), vec2f(NO_LIQUID_M), vec3f(-NO_LIQUID_M, 0.0, 0.0), NO_LIQUID_M, 0.0, 0.0);
   }
