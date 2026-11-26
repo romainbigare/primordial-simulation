@@ -251,9 +251,18 @@ impl Ground {
                 let by = self.shore.beside(p);
                 let in_pond = by.share(|k| self.samples.pond[k] != NONE);
                 let valley = near.drawn(i, h);
-                let met = if by.level.is_nan() { valley } else { valley + (valley.min(h).max(h.min(by.level)) - valley) * by.share };
                 let mouth = [near.mouth[i][0], near.mouth[i][1] / self.map.length(SAMPLE_DEPTH)];
-                let (drawn, wet) = self.shore.drawn(p, met + (h - met) * in_pond, &by, mouth);
+                let drawn_by = |b: &shore::Beside| {
+                    let met = if b.level.is_nan() { valley } else { valley + (valley.min(h).max(h.min(b.level)) - valley) * b.share };
+                    self.shore.drawn(p, met + (h - met) * in_pond, b, mouth)
+                };
+                let (mut drawn, wet) = drawn_by(&by);
+                // (Where other ponds' samples are about the point, each pond's ground blended by its share.)
+                let ponds = self.shore.ponds_about(&by);
+                if ponds.len() > 1 {
+                    let all: f64 = ponds.iter().map(|q| q.1).sum();
+                    drawn = ponds.iter().map(|(b, w)| w * if b.pond == by.pond { drawn } else { drawn_by(b).0 }).sum::<f64>() / all;
+                }
                 (drawn, if wet { (by.pond + 1) as f32 } else { 0.0 })
             })
             .unzip();

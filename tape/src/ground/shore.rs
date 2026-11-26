@@ -125,6 +125,7 @@ fn level_of(s: &Samples, q: u32) -> f64 {
 /// The pond beside a point (`Shore::beside`; `NONE`: none) and its level, m (NaN: none), the share of the point's
 /// weight on the samples about it that have a pond near, and those samples with their weights (`Shore::about`), found
 /// once for all a point reads of them.
+#[derive(Clone, Copy)]
 pub(super) struct Beside {
     pub(super) pond: u32,
     pub(super) level: f64,
@@ -242,6 +243,21 @@ impl Shore {
         let pond = if self.pond[own] != NONE { self.pond[own] } else { heaviest(&about).or_else(|| heaviest(&self.spline(p))).unwrap_or(NONE) };
         let level = if pond == NONE { f64::NAN } else { self.levels[pond as usize] };
         Beside { pond, level, share: share_of(&about, |k| self.pond[k] != NONE), about }
+    }
+
+    /// The ponds of the samples about the point `by` is beside (`beside`) and the share of the point's weight on the
+    /// samples of each (`Beside::about`), `by`'s own first, each as the point beside it: where two ponds' samples meet,
+    /// the ground is drawn by each and blended by these shares (`Ground::tile`), so it has no step where one pond's
+    /// samples meet another's at another level. Only `by`'s where no other pond is about it.
+    pub(super) fn ponds_about(&self, by: &Beside) -> Vec<(Beside, f64)> {
+        let mut out = vec![(Beside { ..*by }, by.share(|k| self.pond[k] == by.pond))];
+        for &(k, _) in &by.about {
+            let q = self.pond[k];
+            if q != NONE && out.iter().all(|o| o.0.pond != q) {
+                out.push((Beside { pond: q, level: self.levels[q as usize], ..*by }, by.share(|j| self.pond[j] == q)));
+            }
+        }
+        out
     }
 
     /// The sixteen samples whose centres a cubic B-spline at `p` (samples from the map's corner) runs through, each with
