@@ -59,6 +59,11 @@ impl Table {
         self.dry.update(w.terrain_samples());
     }
 
+    /// The squares, row by row, whose centre lies in one of the cells `cells` (`in_cell`: whether a cell is one of them).
+    pub fn squares_in(&self, in_cell: impl Fn(usize) -> bool) -> Vec<u32> {
+        self.square.iter().enumerate().filter(|p| in_cell(*p.1)).map(|p| p.0 as u32).collect()
+    }
+
     /// The volume of liquid that runs through each of the terrain's samples, m³/s, row by row: its discharge
     /// (`World::discharge`) at the mol per m³ of the liquid its cell's ground holds (`World::liquid_in`); none where that
     /// cell holds no liquid. A shell sizes the channel of each sample by it (`Physics::channel`). A sample of a pond

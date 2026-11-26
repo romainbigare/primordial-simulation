@@ -10,7 +10,7 @@
 // about the place under the cursor (`probe`), and the brush drawn over the map at its true size (god-draw.ts).
 import { IconName, iconSvg } from './icons';
 import { UNCHANGED, type Brushed, type Editor, type GodPage, type GodTool, type Probe, type Settled } from './god-types';
-import { drawBrush, drawFill, drawFlames, drawReason, drawSight, drawSizeTag, litSites } from './god-draw';
+import { drawBrush, drawFill, drawFlames, drawReason, drawSight, drawSizeTag, drawTrail, litSites } from './god-draw';
 import { holdButton, radiusText, sizeChips, sizeStepper } from './god-controls';
 
 /** The brush's radii, m (its size chips), and the one it starts at. */
@@ -85,6 +85,9 @@ export class God {
   private undoButton: HTMLButtonElement;
   /** The button held for a stroke where the brush stands at the sight (`GodPage.aim`). */
   private holdButton: HTMLButtonElement;
+  /** The trail of the stroke of a tool that trails (`GodTool.trails`): each paint's place (squares) and radius (m), and
+   * its ink; drawn till the core settled it. */
+  private trail: { at: [number, number][]; radius: number[]; ink: string } | null = null;
   /** The lake being dug: where (squares), its radius (m), its tool's ink, when its stroke ended (ms), the version of
    * the world's samples then, and when the core answered its settling (ms; 0: not yet). Its water is drawn in its
    * ring till the ground in view shows the samples it built (`GodPage.ground`). */
@@ -275,6 +278,10 @@ export class God {
     st.steps += steps;
     const amount = t.amount ? t.amount() : t.step ? steps * t.step.amount : (rate * (now - st.last[2])) / 1000;
     st.last = [x, y, now];
+    if (t.trails) {
+      if (this.stroke === st && st.sent === 0) this.trail = { at: [], radius: [], ink: t.ink };
+      this.trail?.at.push([x, y]); this.trail?.radius.push(this.radius);
+    }
     st.waiting = true; st.sent++;
     this.editor()?.brush(t.code, x, y, this.radius, amount, t.row());
   }
@@ -310,11 +317,13 @@ export class God {
     const st = this.ended.shift();
     if (!st) return;
     if (this.filling && st.tool.amount) this.filling.settled = performance.now();
+    if (st.tool.trails) { this.trail = null; this.page.redraw(); }
+    if (r.unplanted) this.lastWhy = st.tool.reason(r.unplanted);
     if (r.undo) this.undoable = true;
     this.show();
     if (!r.burnt.length) return;
     const m = this.page.squareM();
-    this.page.burnt(r.burnt, st.now, litSites([st.now[0] * m, st.now[1] * m], this.radius, st.progress).map(s => [s.x, s.y]));
+    this.page.burnt(r.squares, st.now, litSites([st.now[0] * m, st.now[1] * m], this.radius, st.progress).map(s => [s.x, s.y]));
     this.lingers = { at: st.now, progress: st.progress, till: performance.now() + FIRE_LINGERS_MS };
   }
 
@@ -325,6 +334,7 @@ export class God {
     this.drawnAt = [ox, oy, s];
     const t = this.tool, aim = this.page.aim(), now = performance.now();
     this.drawFilling(ctx, ox, oy, s, now);
+    if (this.trail) drawTrail(ctx, this.trail.at.map(([x, y]) => [ox + x * s, oy + y * s]), this.trail.radius.map(r => (r / this.page.squareM()) * s), this.trail.ink);
     if (t && aim && !this.stroke && (!this.at || this.at[0] !== aim[0] || this.at[1] !== aim[1])) { this.at = aim; this.ask(); }
     if (!t || !this.at) return;
     const why = this.lastWhy || t.why(this.probe), ink = why ? NO_INK : t.ink;
@@ -369,20 +379,26 @@ export class God {
       b.classList.toggle('no', why !== '');
       b.title = why ? `${tool.label}: ${why}` : tool.label;
     }
-    const el = this.page.card;
-    el.replaceChildren();
-    const line = (cls: string, text: string) => { const d = document.createElement('p'); d.className = cls; d.textContent = text; el.append(d); };
+    // (The button held for a stroke stays in the card while a tool is on: a button taken out loses the finger on it,
+    // and the stroke would end.)
+    const el = this.page.card, hold = this.holdButton, parts: HTMLElement[] = [];
+    const line = (cls: string, text: string) => { const d = document.createElement('p'); d.className = cls; d.textContent = text; parts.push(d); };
     const title = document.createElement('h2');
     title.textContent = t?.label ?? 'God mode';
-    el.append(title);
-    if (!t) { line('hint', 'Pick a tool, then use it on the map.'); return; }
-    el.append(sizeChips(this.radii(), this.radius, m => this.sized(m)), sizeStepper(this.radii(), this.radius, m => this.sized(m)));
-    if (t.choices) el.append(t.choices(() => this.show()));
-    const why = t.why(this.probe);
-    line(why ? 'why' : 'hint', why || t.hint);
-    this.holdButton.innerHTML = `${iconSvg(t.icon)}<span>${t.verb}</span>`;
-    this.holdButton.style.setProperty('--tool', t.ink);
-    el.append(this.holdButton);
+    parts.push(title);
+    if (t) {
+      parts.push(sizeChips(this.radii(), this.radius, m => this.sized(m)), sizeStepper(this.radii(), this.radius, m => this.sized(m)));
+      if (t.choices) parts.push(t.choices(() => this.show()));
+      const why = t.why(this.probe);
+      line(why ? 'why' : 'hint', why || t.hint);
+      const face = `${iconSvg(t.icon)}<span>${t.verb}</span>`;
+      if (hold.innerHTML !== face) hold.innerHTML = face;
+      hold.style.setProperty('--tool', t.ink);
+    } else line('hint', 'Pick a tool, then use it on the map.');
+    for (const c of [...el.children]) if (c !== hold) c.remove();
+    if (!t) hold.remove();
+    else if (hold.parentElement !== el) el.append(hold);
+    for (const part of parts) el.insertBefore(part, t ? hold : null);
   }
 
   /** The brush's radii the tool on may take (`GodTool.least`). */

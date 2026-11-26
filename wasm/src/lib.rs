@@ -60,15 +60,25 @@ struct Live {
     over: u32,
 }
 
-/// A stroke of the brush under way: the cells it planted (each once a stroke), how far it has raised the
-/// ground at its centre, m (`Act::Ground`), the make of the loose ground it lays (`World::draw_make`), the world as it
-/// was before it began, and whether one of its edits was made (then that world is the one an undo puts back).
+/// A stroke of the brush under way: where it plants, and the starting kind (planted when it ends, `Live::settle`);
+/// where it moved the ground, each paint's place, radius, m, and height at its centre, m (`Act::Ground`); the make of
+/// the loose ground it lays (`World::draw_make`), the world as it was before it began, and whether one of its edits was
+/// made (then that world is the one an undo puts back).
 struct Stroke {
-    cells: Vec<u32>,
-    raised: f64,
+    planting: Vec<pcore::edit::Brush>,
+    row: usize,
+    raises: Vec<([f64; 2], f64, f64)>,
     make: u8,
     before: World,
     changed: bool,
+}
+
+impl Stroke {
+    /// How far its paints so far moved the ground at `place` (squares from the map's north-west corner, on squares of
+    /// `side` m), m: each by its height at its centre and `edit::falloff` of its distance from it.
+    fn raised_at(&self, place: [f64; 2], side: f64) -> f64 {
+        self.raises.iter().map(|&(at, r, h)| h * pcore::edit::falloff((place[0] - at[0]).hypot(place[1] - at[1]) * side / r)).sum()
+    }
 }
 
 impl Live {
@@ -88,20 +98,43 @@ impl Live {
             self.since.push((self.built, sparse(&self.version)));
         }
     }
-    /// End the stroke under way and settle the world's edits (`World::settle`); the world after it kept for the next
-    /// stroke (`ready`), and the world before it for an undo where it changed the world. Returns what settling did, and
+    /// End the stroke under way: its planting made (`plant`), the world's edits settled (`World::settle`); the world
+    /// after it kept for the next stroke (`ready`), and the world before it for an undo where it changed the world.
+    /// Returns what settling did, why its planting placed nothing ("" where it placed some, or there was none), and
     /// whether the stroke can be undone.
-    fn settle(&mut self) -> (pcore::edit::Settled, bool) {
-        let changed = self.stroke.take().is_some_and(|st| {
+    fn settle(&mut self) -> (pcore::edit::Settled, String, bool) {
+        let (mut unplanted, mut changed) = (String::new(), false);
+        if let Some(mut st) = self.stroke.take() {
+            if !st.planting.is_empty() {
+                let (planted, why) = self.plant(&st.planting, st.row);
+                (unplanted, st.changed) = (why, st.changed || planted);
+            }
             if st.changed {
                 self.before = Some(st.before);
             }
-            st.changed
-        });
+            changed = st.changed;
+        }
         let done = self.world.settle();
         self.follow();
         self.ready = Some(self.world.clone());
-        (done, changed)
+        (done, unplanted, changed)
+    }
+
+    /// Of each cell under the brushes `planting` (`World::under`), the share of it they covered cleared about its
+    /// sample nearest one's centre, and the starting kind of row `row` placed in it as the world's grown stand of it
+    /// (`Act::Grown`; where none stands yet, as seedlings). Whether any cell was planted, and where none was the reason
+    /// most cells give ("NoLand" or "NoRoom").
+    fn plant(&mut self, planting: &[pcore::edit::Brush], row: usize) -> (bool, String) {
+        use pcore::edit::{Act, Edit};
+        let under = self.world.under(planting);
+        let edits: Vec<Edit> = under.iter().flat_map(|u| [Act::Clear(u.share), worldgen::schedule::grown(row)].map(|act| Edit { place: u.place, act })).collect();
+        let done = self.world.edit(&edits);
+        let planted = done.chunks(2).any(|d| d.iter().all(|&ok| ok));
+        if planted || under.is_empty() {
+            return (planted, String::new());
+        }
+        let wet = under.iter().filter(|u| pcore::contract::land(&self.world, u.cell) <= 0.0).count();
+        (false, String::from(if 2 * wet >= under.len() { "NoLand" } else { "NoRoom" }))
     }
 }
 
@@ -457,14 +490,12 @@ const BURN: u32 = 3;
 /// settles, so the page asks for the new relief); and `BURN` adds `amount` J a m² of
 /// heat there to the remains lying under it (`Act::Heat`), which dries and lights them when the stroke settles: the
 /// page calls them again and again while the brush is held, each time with what the time held since adds; the page
-/// shows the ground from `preview` until the stroke settles. `PLANT` clears the share of each cell under it that it
-/// covers about the place there nearest its centre and places the starting kind of row `row` in it as the world's
-/// grown stand of it (`Act::Grown`; where none stands yet, it is placed as seedlings), each cell once a
-/// stroke. Returns, as JSON: for `SHAPE` and `LAKE`, the cells under the brush; for `BURN`, each cell under it, the share it
-/// covers, how much of the heat that lights its remains it holds (`progress`, 0 to 1: they light at 1;
-/// `flame::needed`) and why none would light (`why`, the flames' `Unlit`; "" where some would); for `PLANT`, each cell
-/// newly under it, the share it covers, whether each of its edits was made (`World::edit`) and why not ("" where all
-/// were, else "NoLand" or "NoRoom"); whether any edit was made; or, for another tool, why it is refused.
+/// shows the ground from `preview` until the stroke settles. `PLANT` keeps the place: when the stroke ends, the starting
+/// kind of row `row` is planted on what the stroke covered (`Live::plant`). Returns, as JSON: for `SHAPE` and `LAKE`,
+/// the cells under the brush; for `BURN`, each cell under it, the share it covers, how much of the heat that lights its
+/// remains it holds (`progress`, 0 to 1: they light at 1; `flame::needed`) and why none would light (`why`, the flames'
+/// `Unlit`; "" where some would); for `PLANT`, each cell under it, the share it covers, whether it holds land (`done`)
+/// and "NoLand" where not; whether any edit was made; or, for another tool, why it is refused.
 #[no_mangle]
 pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row: u32) -> *const u8 {
     use pcore::edit::{Act, Brush, Edit};
@@ -475,20 +506,21 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
         if l.stroke.is_none() {
             let before = l.ready.take().unwrap_or_else(|| l.world.clone());
             l.strokes += 1;
-            l.stroke = Some(Stroke { cells: Vec::new(), raised: 0.0, make: l.world.draw_make(l.strokes), before, changed: false });
+            l.stroke = Some(Stroke { planting: Vec::new(), row: 0, raises: Vec::new(), make: l.world.draw_make(l.strokes), before, changed: false });
         }
         let stroke = l.stroke.as_mut().expect("a stroke under way");
         let b = Brush { centre: [x, y], radius_m: radius };
         if tool == SHAPE {
-            let act = Act::Ground { radius_m: radius, height_m: amount, stroke_m: stroke.raised.max(0.0), make: stroke.make };
-            stroke.raised += amount;
-            let cells: Vec<usize> = l.world.under(b).iter().map(|u| u.cell).collect();
+            // (The loose ground it lays is the top of what the stroke raised where the brush is now.)
+            let act = Act::Ground { radius_m: radius, height_m: amount, stroke_m: stroke.raised_at([x, y], l.world.map.side).max(0.0), make: stroke.make };
+            stroke.raises.push(([x, y], radius, amount));
+            let cells: Vec<usize> = l.world.under(&[b]).iter().map(|u| u.cell).collect();
             let done = l.world.edit(&[Edit { place: [x, y], act }]);
             stroke.changed |= done[0];
             return json!({"cells": cells, "changed": done[0]});
         }
         if tool == LAKE {
-            let cells: Vec<usize> = l.world.under(b).iter().map(|u| u.cell).collect();
+            let cells: Vec<usize> = l.world.under(&[b]).iter().map(|u| u.cell).collect();
             let done = l.world.edit(&[Edit { place: [x, y], act: Act::Basin { radius_m: radius, depth_m: amount } }]);
             stroke.changed |= done[0];
             l.follow();
@@ -498,7 +530,7 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
             let done = l.world.edit(&[Edit { place: [x, y], act: Act::Heat { radius_m: radius, joules_m2: amount } }]);
             stroke.changed |= done[0];
             let w = &l.world;
-            let cells: Vec<_> = w.under(b).iter().map(|u| {
+            let cells: Vec<_> = w.under(&[b]).iter().map(|u| {
                 let [e, over] = w.heated.iter().find(|h| h.0 == u.cell as u32).map_or([0.0, u.share], |h| h.1);
                 let (progress, why) = match pcore::flame::needed(w, u.cell, over) {
                     Ok(need) => ((e / need.max(f64::MIN_POSITIVE)).min(1.0), String::new()),
@@ -508,25 +540,15 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
             }).collect();
             return json!({"cells": cells, "changed": done[0]});
         }
-        let under: Vec<_> = l.world.under(b).into_iter().filter(|u| !stroke.cells.contains(&(u.cell as u32))).collect();
-        stroke.cells.extend(under.iter().map(|u| u.cell as u32));
-        let row = (row as usize).min(worldgen::life::KINDS.len() - 1);
-        // Of each cell a clearing, then the planting in it.
-        let edits: Vec<Edit> = under.iter().flat_map(|u| [Act::Clear(u.share), worldgen::schedule::grown(row)].map(|act| Edit { place: u.place, act })).collect();
-        let done = l.world.edit(&edits);
-        stroke.changed |= done.iter().any(|&d| d);
+        // A planting is kept, and made when the stroke ends.
+        stroke.planting.push(b);
+        stroke.row = (row as usize).min(worldgen::life::KINDS.len() - 1);
         let w = &l.world;
-        let cells: Vec<_> = under.iter().zip(done.chunks(2)).map(|(u, d)| {
-            let why = if d.iter().all(|&ok| ok) {
-                String::new()
-            } else if pcore::contract::land(w, u.cell) <= 0.0 {
-                String::from("NoLand")
-            } else {
-                String::from("NoRoom")
-            };
-            json!({"cell": u.cell, "share": u.share, "done": d, "why": why})
+        let cells: Vec<_> = w.under(&[b]).iter().map(|u| {
+            let land = pcore::contract::land(w, u.cell) > 0.0;
+            json!({"cell": u.cell, "share": u.share, "done": [land], "why": if land { "" } else { "NoLand" }})
         }).collect();
-        json!({"cells": cells, "changed": done.iter().any(|&d| d)})
+        json!({"cells": cells, "changed": false})
     });
     give(out.to_string().into_bytes())
 }
@@ -542,14 +564,16 @@ pub extern "C" fn settled_relief() -> *const u8 {
 /// End the brush's stroke and run at once, with no time on the world's clock, what its edits start that takes no time
 /// (`World::settle`): the samples built again over the ground it shaped and the liquid settled over them (`ground`
 /// true: the page asks for the new version's relief), and the strikes burnt. Returns, as JSON, whether the ground was
-/// built again, each cell the flames reached and when, s after its strike (`burnt`: [cell, s] pairs), and whether the
-/// stroke can be undone (`undo`: one of its edits was made).
+/// built again, each cell the flames reached and when, s after its strike (`burnt`: [cell, s] pairs), the squares whose
+/// centre lies in one of those cells (`squares`), why the stroke's planting placed nothing (`unplanted`: "" where it
+/// placed some), and whether the stroke can be undone (`undo`: one of its edits was made).
 #[no_mangle]
 pub extern "C" fn settle() -> *const u8 {
     let out = with(|l| {
-        let (done, undo) = l.settle();
+        let (done, unplanted, undo) = l.settle();
+        let reached: std::collections::BTreeSet<usize> = done.burnt.iter().map(|b| b.0 as usize).collect();
         let mut out = json!(done);
-        out["undo"] = json!(undo);
+        (out["squares"], out["unplanted"], out["undo"]) = (json!(l.cells.squares_in(|i| reached.contains(&i))), json!(unplanted), json!(undo));
         out
     });
     give(out.to_string().into_bytes())

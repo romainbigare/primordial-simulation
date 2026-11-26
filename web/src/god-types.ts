@@ -17,8 +17,9 @@ export interface Brushed { cells: { cell: number; share: number; done?: boolean[
 /** The reason god mode gives a tool (`GodTool.reason`) where a paint whose cells hold no reason changed nothing. */
 export const UNCHANGED = 'Unchanged';
 /** What a stroke's settling did (wasm/src/lib.rs `settle`): each cell the flames of its strikes reached, and when, s
- * after the strike; and whether the stroke can be undone (it changed the world). */
-export interface Settled { burnt: [number, number][]; undo: boolean }
+ * after the strike, and the squares whose centre lies in one of them; why its planting placed nothing ('' where it
+ * placed some, or there was none); and whether the stroke can be undone (it changed the world). */
+export interface Settled { burnt: [number, number][]; squares: number[]; unplanted: string; undo: boolean }
 /** The worker's side of the tools (live.ts `Live`): ask what lies under a place, paint, end a stroke, settle a stroke
  * held so far and go on with it, and undo the last. */
 export interface Editor {
@@ -48,6 +49,8 @@ export interface GodTool {
   /** Whether what it starts runs on its own once it took (a fire): its stroke ends as soon as a cell lights; and its
    * brush is drawn as its rim alone, so the ground under it shows as it burns. */
   settlesLit?: boolean;
+  /** Whether what it does is made when its stroke ends (a planting): the brush's trail is drawn till then. */
+  trails?: boolean;
   /** The amount it paints once, where the stroke begins (m of a lake's depth): a tool that makes one thing a stroke. */
   amount?(): number;
   /** The least radius of its brush, m (none: the smallest of the sizes). */
@@ -61,13 +64,13 @@ export interface GodTool {
   choices?(show: () => void): HTMLElement;
 }
 /** What the page gives god mode: its strip and card; the map drawn anew; that a tool was picked or a stroke begins (the
- * world pauses); that god mode is done; the side of a square, m; the cells a stroke burnt with when (`Settled`), where
- * it struck (squares) and where its heat lit the ground, m (god-draw.ts `litSites`, the most lit first); on a phone the
+ * world pauses); that god mode is done; the side of a square, m; the squares a stroke burnt (`Settled`), where it struck
+ * (squares) and where its heat lit the ground, m (god-draw.ts `litSites`, the most lit first); on a phone the
  * place at the sight in the middle of the map, squares (null: the brush is under the pointer); and which samples the
  * world holds and which the ground in view shows. */
 export interface GodPage {
   strip: HTMLElement; card: HTMLElement;
-  redraw(): void; picked(): void; close(): void; squareM(): number; burnt(burnt: [number, number][], strike: [number, number], lit: [number, number][]): void;
+  redraw(): void; picked(): void; close(): void; squareM(): number; burnt(squares: number[], strike: [number, number], lit: [number, number][]): void;
   aim(): [number, number] | null;
   /** The version of the live world's samples, and the version the ground in view is made of (`Land::told`). */
   ground(): [number, number];

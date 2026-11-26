@@ -8,6 +8,8 @@ const PROGRESS_PX = 5;
 const FILL_MS = 450, FILL_ALPHA = 0.55, RIPPLE_MS = 1100;
 /** The widest line of the box that says why a tool cannot act, css px, and its gap to the brush. */
 const LABEL_PX = 220, LABEL_GAP_PX = 10;
+/** How strong a planting's trail is drawn (`drawTrail`). */
+const TRAIL_ALPHA = 0.35;
 /** The sight's arms reach this far from its centre, from this gap, css px. */
 const SIGHT_PX = 11, SIGHT_GAP_PX = 4;
 /** The angle between one flame and the next of a patch, radians: the golden angle, so they spread evenly over it. */
@@ -189,6 +191,16 @@ export function drawFill(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
     ctx.globalAlpha = FILL_ALPHA * (1 - ripple); ctx.lineWidth = 2; ctx.strokeStyle = '#fff';
     ctx.beginPath(); ctx.arc(cx, cy, r * ripple, 0, 2 * Math.PI); ctx.stroke();
   }
+  ctx.restore();
+}
+
+/** The trail of a stroke whose making waits for its end (a planting): a disc of `ink` at each of `at` (css px) of its
+ * radius `r` (css px), drawn as one shape, so where they overlap it is no stronger. */
+export function drawTrail(ctx: CanvasRenderingContext2D, at: [number, number][], r: number[], ink: string): void {
+  ctx.save();
+  ctx.beginPath();
+  at.forEach(([x, y], k) => { ctx.moveTo(x + r[k], y); ctx.arc(x, y, r[k], 0, 2 * Math.PI); });
+  ctx.globalAlpha = TRAIL_ALPHA; ctx.fillStyle = ink; ctx.fill('nonzero');
   ctx.restore();
 }
 

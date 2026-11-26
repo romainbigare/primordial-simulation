@@ -21,6 +21,9 @@ export interface View { x: number; y: number; w: number; h: number; s: number; z
 const MOST_PX_PER_M = 80, LEAST_ZOOM = 0.5;
 /** A pointer that goes up having moved less than this, css px, taps the map (picks its square). */
 const TAP_PX = 6;
+/** A finger down on the map paints with a tool (`MapView.paint`) only once it stayed alone this long, ms, or moved
+ * `TAP_PX`: the first finger of a pinch paints nothing. */
+const TOUCH_PAINT_MS = 120;
 /** The scale bar's margin from the free area's bottom left corner, css px. */
 const SCALE_MARGIN_PX = 14;
 /** The most pixels of the map's canvas a css pixel takes: a screen with more (a phone's, 3) is drawn at this many and
@@ -211,8 +214,10 @@ export class MapView {
   overlay: ((ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number) => void) | null = null;
   /** A tool that paints with the pointer (god mode): told where a press of the main button starts (squares), true
    * takes the press and its drag in place of a pan; then told of each move and of the end. A second finger, or another
-   * button, still moves the map; while a tool is on (`on`), the right button's menu does not open. */
-  paint: { on(): boolean; start(x: number, y: number): boolean; move(x: number, y: number): void; end(): void } | null = null;
+   * button, still moves the map; while a tool is on (`on`), the right button's menu does not open; and whether a
+   * pointer down may paint (`direct`; false: the tool acts elsewhere, a phone's sight, and a finger moves the map at
+   * once). */
+  paint: { on(): boolean; direct(): boolean; start(x: number, y: number): boolean; move(x: number, y: number): void; end(): void } | null = null;
   /** The pointer that paints is told where it is on the map anew (the camera moved under it). */
   private painterMoved = () => {};
 
@@ -234,27 +239,50 @@ export class MapView {
       return g;
     });
     new ResizeObserver(() => { this.resize(); this.invalidate(); }).observe(cv);
-    /** The pointer that paints (-1: none), and where it is. */
+    /** The pointer that paints (-1: none), and where it is; the finger that waits to paint (`TOUCH_PAINT_MS`). */
     let painter = -1, painterAt = { x: 0, y: 0 };
+    let touch: { id: number; x: number; y: number; moved: number; timer: number } | null = null;
     const at = (e: { offsetX: number; offsetY: number }): [number, number] => [(e.offsetX - this.cam.ox) / this.cam.s, (e.offsetY - this.cam.oy) / this.cam.s];
     this.painterMoved = () => { if (painter >= 0) this.paint?.move(...at({ offsetX: painterAt.x, offsetY: painterAt.y })); };
     const stopPainting = () => { if (painter >= 0) { painter = -1; this.paint?.end(); } };
+    /** The finger that waited paints from where it went down, or, where the tool takes no stroke, moves the map. */
+    const touchPaints = () => {
+      const t = touch;
+      if (!t) return;
+      clearTimeout(t.timer); touch = null;
+      if (this.paint?.start(...at({ offsetX: t.x, offsetY: t.y }))) { painter = t.id; painterAt = { x: t.x, y: t.y }; }
+      else this.gesture.down(t.id, t.x, t.y);
+    };
     cv.addEventListener('pointerdown', e => {
       cv.setPointerCapture(e.pointerId);
-      if (painter >= 0) {
+      if (touch) {
+        // A second finger before the first painted: the two move the map.
+        clearTimeout(touch.timer);
+        this.gesture.down(touch.id, touch.x, touch.y); touch = null;
+      } else if (painter >= 0) {
         // A second finger: the stroke ends, and the two move the map.
         this.gesture.down(painter, painterAt.x, painterAt.y); stopPainting();
+      } else if (!this.gesture.size && e.button === 0 && e.pointerType === 'touch' && this.paint?.on() && this.paint.direct()) {
+        touch = { id: e.pointerId, x: e.offsetX, y: e.offsetY, moved: 0, timer: window.setTimeout(touchPaints, TOUCH_PAINT_MS) };
+        return;
       } else if (!this.gesture.size && e.button === 0 && this.paint?.start(...at(e))) { painter = e.pointerId; painterAt = { x: e.offsetX, y: e.offsetY }; return; }
       this.gesture.down(e.pointerId, e.offsetX, e.offsetY);
     });
     cv.addEventListener('contextmenu', e => { if (this.paint?.on()) e.preventDefault(); });
     cv.addEventListener('pointermove', e => {
+      if (e.pointerId === touch?.id) {
+        touch.moved = Math.abs(e.offsetX - touch.x) + Math.abs(e.offsetY - touch.y);
+        if (touch.moved < TAP_PX) return;
+        touchPaints();
+      }
       if (e.pointerId === painter) { painterAt = { x: e.offsetX, y: e.offsetY }; return this.paint?.move(...at(e)); }
       if (this.gesture.move(e.pointerId, e.offsetX, e.offsetY)) this.redraw();
       // (While a tool paints the map, the brush shows where it acts: no square is outlined.)
       else this.setHover(this.paint?.on() ? -1 : this.cellAt(e.offsetX, e.offsetY));
     });
     const up = (e: PointerEvent) => {
+      // (A finger that went up before it painted taps: a stroke at its place, unless it was cancelled.)
+      if (e.pointerId === touch?.id) { if (e.type === 'pointerup') touchPaints(); else { clearTimeout(touch.timer); touch = null; return; } }
       if (e.pointerId === painter) return stopPainting();
       if (this.gesture.size === 1 && this.gesture.moved < TAP_PX && e.type === 'pointerup' && !this.paint?.on()) { this.pick = this.cellAt(e.offsetX, e.offsetY); this.onPick(this.pick); this.redraw(); }
       this.gesture.up(e.pointerId);

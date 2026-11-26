@@ -67,8 +67,8 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     return row;
   };
   const plant: GodTool = {
-    key: 'plant', icon: 'plant', label: 'Plant', ink: '#7ed957', code: BRUSH_PLANT, row: plantRow,
-    hint: 'Drag on the map to plant. Right-drag moves the map.', verb: 'Hold to plant',
+    key: 'plant', icon: 'plant', label: 'Plant', ink: '#7ed957', code: BRUSH_PLANT, row: plantRow, trails: true,
+    hint: 'Drag on the map where to plant. The plants grow when you let go. Right-drag moves the map.', verb: 'Hold to plant',
     why: (p: Probe | null) => (!kinds().length ? 'This world has no plants to plant.' : p && p.land <= 0 ? OPEN_WATER : ''),
     reason: why => UNPLANTED[why] ?? why,
     choices: show => {
