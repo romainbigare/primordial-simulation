@@ -139,7 +139,9 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
   var light = vec3f(0.0);
   let speck = ease(EMBER_SPARSE, 1.0, noise(at / EMBER_M + vec2f(0.0, 3.0 * time), 13).x);
   let specks = mix(EMBER_MEAN, speck, shows_at(EMBER_M, e));
-  let on_liquid = select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M);
+  // (No flame stands on liquid: the ground is read only where a flame may stand.)
+  var on_liquid = 1.0;
+  if (b.live > 0.0 || f.flame > 0.0) { on_liquid = select(1.0, 0.0, standing(ground_at(at, false)) > FILM_M); }
   if (b.live > 0.0) {
     // Its front flames `FLAME_DEPTH` lengths deep, its tongues on it where they show; its embers behind it fade as its
     // plants stop burning (fire.wgsl `BURNING_M`); from afar its front glows a few pixels deep.
