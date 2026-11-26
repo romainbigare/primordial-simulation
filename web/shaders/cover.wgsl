@@ -60,7 +60,7 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       let k = cell + vec2f(f32(i), f32(j));
       let m = decided(l, k, p - mark_foot(l, k), e);
       if (m.x < 0.0) { continue; }
-      if (m.x >= dead_code()) { snag_over(dst, shade, dead_at(l, k).q, p, l, k, e, fade * m.y); continue; }
+      if (m.x >= dead_code()) { snag_over(dst, shade, dead_at(l, k, foot_patch(cover.corner.xy + mark_foot(l, k))).q, p, l, k, e, fade * m.y); continue; }
       // Its square, kind and place among the kind's groups (mark.wgsl `decide`).
       let packed = i32(m.x);
       let kd = packed / (GROUPS * PLACE_STEPS);

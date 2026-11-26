@@ -297,13 +297,15 @@ fn foot_patch(at: vec2f) -> vec3i {
   let own = all(cell == p.cell) && p.share / max((1.0 - p.across.x) * (1.0 - p.across.y), 1e-6) > draw.z;
   return vec3i(select(0, p.which, own), cell);
 }
-// Set `cell_patch`, `patch_cell` and `patch_share` at a mark's foot at `at` (`foot_patch`), and no cells across.
-fn foot_patch_at(at: vec2f) {
+// Set `cell_patch`, `patch_cell` and `patch_share` at a mark's foot at `at` (`foot_patch`, which it returns), and no
+// cells across.
+fn foot_patch_at(at: vec2f) -> vec3i {
   let p = foot_patch(at);
   cell_patch = max(p.x, 0);
   patch_cell = p.yz;
   patch_share = select(0.0, 1.0, p.x > 0);
   across_share = vec2f(0.0);
+  return p;
 }
 
 // Of patch `p` of the cell of square `q` (`foot_patch`): the dead walls flames left standing on it, kg a m² of its
