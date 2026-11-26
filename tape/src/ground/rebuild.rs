@@ -69,16 +69,31 @@ pub(super) fn moved(old: &Samples, new: &Samples) -> Vec<bool> {
         .collect()
 }
 
-/// `marked` with every sample of `s` within `by` samples of a marked one, row and column, marked too.
+/// `marked` with every sample of `s` within `by` samples of a marked one, row and column, marked too: spread along
+/// the rows, then down the columns, each by a count of the marked ones in a window that slides along it.
 pub(super) fn near(s: &Samples, marked: &[bool], by: i64) -> Vec<bool> {
-    let mut out = marked.to_vec();
-    let (across, down) = (s.across as i64, s.down as i64);
-    for k in (0..marked.len()).filter(|&k| marked[k]) {
-        let (x, y) = ((k % s.across) as i64, (k / s.across) as i64);
-        for j in (y - by).max(0)..=(y + by).min(down - 1) {
-            for i in (x - by).max(0)..=(x + by).min(across - 1) {
-                out[(j * across + i) as usize] = true;
+    let (across, down) = (s.across, s.down);
+    let rows = spread(marked, across, (down, across, 1), by);
+    spread(&rows, 1, (across, down, across), by)
+}
+
+/// Of `marked`, along each of `lines` lines (the first of line `l` at `l * line_step`) of `len` places `step` apart,
+/// each place marked where one within `by` places of it is.
+fn spread(marked: &[bool], line_step: usize, (lines, len, step): (usize, usize, usize), by: i64) -> Vec<bool> {
+    let mut out = vec![false; marked.len()];
+    let by = by.max(0) as usize;
+    for l in 0..lines {
+        let at = |i: usize| l * line_step + i * step;
+        // The marked ones in the window [i - by, i + by] of place i.
+        let mut count = (0..by.min(len)).filter(|&i| marked[at(i)]).count();
+        for i in 0..len {
+            if i + by < len && marked[at(i + by)] {
+                count += 1;
             }
+            if i > by && marked[at(i - by - 1)] {
+                count -= 1;
+            }
+            out[at(i)] = count > 0;
         }
     }
     out
