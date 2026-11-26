@@ -264,7 +264,10 @@ fn the_way_to_the_liquid_costs_the_walk() {
     let beyond = at(2.0 * reach);
     println!("its day walks {reach:.0} m to the liquid at most; at twice that it fetches {beyond:?}");
     assert!((beyond.mol - 0.5 * short).abs() <= 1e-9 * short, "beyond its reach a slot fetched {} of {short} mol", beyond.mol);
+    // (The ways are found where takers live, who walk them.)
     let mut w = testkit::living(8, 1);
+    let land = testkit::dry_land(&w);
+    testkit::takers(&mut w, land, 0, (n, 0.1));
     pcore::step(&mut w);
     let cells = w.mesh.cells();
     let field = |need: f64| (0..cells.n()).map(|i| pcore::contract::to_liquid(&w, i, need).0).collect::<Vec<f64>>();
