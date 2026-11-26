@@ -17,7 +17,7 @@ import { spend, timed } from './cost';
  * cells' table (of a square, of a kind, of its patches' places and of their dead walls), and the reflectance of the walls the cover builds. */
 export interface TileMeta { size: number; gutter: number; depths: [number, number]; step_most: number; along_wrap: number; row: number; kind_row: number; place_row: number; dead_row: number; walls: [number, number, number] }
 /** Whose ground the tiles are of: a new island's, made from its seed, size, band of latitudes (south, north) and
- * whether its large shape is drawn from the seed (wasm/src/lib.rs `ground`); or a saved world's, the gzip of its
+ * whether its large shape is drawn from the seed (wasm/src/ground.rs `ground`); or a saved world's, the gzip of its
  * snapshot (`ground_of_world`). */
 export type GroundOf = { seed: number; size: number; band: [number, number]; drawn: boolean } | { saved: ArrayBuffer };
 /** The map the tiles are of: squares across and down, metres a square and the depth of a square. */
@@ -66,7 +66,7 @@ interface Kept { depth: number; x: number; y: number; layer: number; came: numbe
 /** The relief the world built its samples from, and the version of those samples (wasm/src/lib.rs `relief`,
  * `ground_version`). */
 export interface Built { relief: Uint8Array; version: number }
-/** What edits moved the ground since the samples of a version (wasm/src/lib.rs `preview`): the window of the terrain's
+/** What edits moved the ground since the samples of a version (wasm/src/edit.rs `preview`): the window of the terrain's
  * samples that moved (west column, north row, width, height), that version (`over`), and of its samples row by row how
  * far each moved, m, and the depth of its loose ground once the samples are built again, m. */
 export interface Preview { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array }
@@ -100,7 +100,7 @@ export class GroundTiles {
   /** The last view asked for, to ask again after a lost context. */
   private last: View | null = null;
   private tilesTex: Texture | null = null;
-  /** The rock of each of the terrain's samples (wasm/src/lib.rs `rock`), four 16-bit floats a sample in four planes:
+  /** The rock of each of the terrain's samples (wasm/src/ground.rs `rock`), four 16-bit floats a sample in four planes:
    * the depth of its loose ground and the largest stone its channel moves, m, the slope of its reach and its channel's
    * links; the reflectance of its bed's make; its loose ground's grain; its pores and the deposit on it
    * (tape/src/ground/rock.rs); none until a worker made the ground. */

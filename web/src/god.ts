@@ -1,5 +1,5 @@
 // God mode on the live map (handover 11): the player picks a tool on the strip and edits the world with a round brush
-// (wasm/src/lib.rs `brush`, the core's `World::edit`): a tool paints as the brush moves, paints again and again while
+// (wasm/src/edit.rs `brush`, the core's `World::edit`): a tool paints as the brush moves, paints again and again while
 // it is held (the ground, heat), or makes one thing where the stroke begins (a lake); when the stroke ends it settles
 // (`settle`: the ground built again, what was heated burns). With a mouse the brush is where the pointer is; on a
 // phone it stands at a sight in the middle of the map (`GodPage.aim`): a finger moves the map under it, and a stroke
@@ -8,10 +8,10 @@
 // (god-tools.ts `godTools`); this is what they share: the strip (done, the tools named, the undo of the last stroke), the
 // card of the brush's sizes and the tool's choices, the strokes and the core's answers to them, the question to the core
 // about the place under the cursor (`probe`), and the brush drawn over the map at its true size (god-draw.ts).
-import { IconName, iconSvg } from './icons';
+
 import { UNCHANGED, type Brushed, type Editor, type GodPage, type GodTool, type Probe, type Settled } from './god-types';
 import { drawBrush, drawFill, drawFlames, drawReason, drawSight, drawSizeTag, drawTrail, litSites } from './god-draw';
-import { holdButton, radiusText, sizeChips, sizeStepper } from './god-controls';
+import { holdButton, makeStrip, mostWhy, radiusText, showCard, showStrip } from './god-controls';
 
 /** The brush's radii, m (its size chips), and the one it starts at. */
 const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
@@ -42,11 +42,10 @@ const PROBE_MS = 80;
 const FILL_MOST_MS = 4000;
 
 
-/** A stroke under way: the cells it edited (for a tool with a rate, the paints that moved the ground), its reasons for
- * those it did not, the place and time of its last paint (squares, ms), when it began (ms), where the brush is now, the
- * paints sent, the timer that paints while it is held (its tick, `tick`), and whether a paint of it waits for the core's
- * answer (a tool with a rate paints again only once answered, with the time since: the core may take longer over a
- * paint than the timer's step). */
+/** A stroke under way: its tool, the place and time of its last paint (squares, ms), when it began (ms), where the
+ * brush is now (squares), the paints sent, the timer that paints while it is held (its tick, `tick`), and whether a
+ * paint of it waits for the core's answer (a tool with a rate paints again only once answered, with the time since: the
+ * core may take longer over a paint than the timer's step). */
 interface Stroke {
   tool: GodTool; last: [number, number, number]; began: number; now: [number, number]; sent: number; held: number; waiting: boolean;
   /** Of a tool that paints in steps: the steps painted. Of a tool that softens: when it last settled what it did so far
@@ -95,20 +94,7 @@ export class God {
 
   /** `editor`: the live world's, where there is one. */
   constructor(private page: GodPage, private editor: () => Editor | null, private tools: GodTool[]) {
-    const button = (icon: IconName, label: string, title: string, act: () => void) => {
-      const b = document.createElement('button');
-      b.className = 'ib tool'; b.innerHTML = `${iconSvg(icon)}<span class="lb">${label}</span>`;
-      b.title = title; b.setAttribute('aria-label', label); b.onclick = act;
-      return b;
-    };
-    const done = button('close', 'Done', 'Done: close god mode', () => page.close());
-    done.classList.add('done');
-    this.undoButton = button('undo', 'Undo', 'Undo the last stroke (Ctrl+Z)', () => this.undo());
-    page.strip.replaceChildren(done, ...tools.map(t => {
-      const b = button(t.icon, t.label, t.label, () => this.pick(this.tool === t ? null : t));
-      b.dataset.tool = t.key;
-      return b;
-    }), this.undoButton);
+    this.undoButton = makeStrip(page.strip, tools, () => page.close(), t => this.pick(this.tool === t ? null : t), () => this.undo());
     // (The button starts a stroke at the sight, on a phone alone.)
     this.holdButton = holdButton(() => { const aim = this.page.aim(); return aim !== null && this.start(...aim); }, () => this.end());
     this.show();
@@ -297,7 +283,7 @@ export class God {
     // (The ground's tools and a lake answer their cells as numbers.)
     else if (typeof r.cells[0] === 'object') {
       const done = (c: Brushed['cells'][number]) => c.done!.every(d => d);
-      this.lastWhy = r.cells.some(done) ? '' : st.tool.reason(most(counted(r.cells.filter(c => !done(c)))));
+      this.lastWhy = r.cells.some(done) ? '' : st.tool.reason(mostWhy(r.cells.filter(c => !done(c))));
     } else this.lastWhy = r.changed ? '' : st.tool.reason(UNCHANGED);
     if (st.tool.amount && !r.changed) this.filling = null;
     this.page.redraw();
@@ -308,7 +294,7 @@ export class God {
   private heated(st: Stroke, cells: Brushed['cells']): void {
     const can = cells.filter(c => !c.why), share = can.reduce((n, c) => n + c.share, 0);
     st.progress = share > 0 ? can.reduce((n, c) => n + c.share * c.progress!, 0) / share : 0;
-    this.lastWhy = can.length ? '' : st.tool.reason(most(counted(cells)));
+    this.lastWhy = can.length ? '' : st.tool.reason(mostWhy(cells));
     if (st === this.stroke && st.tool.settlesLit && can.some(c => c.progress! >= 1)) this.end();
   }
 
@@ -371,34 +357,8 @@ export class God {
    * larger button), the tool's choices, a line of how to use it or why it cannot act here, and on a phone the button
    * held for a stroke. */
   private show(): void {
-    const t = this.tool;
-    this.undoButton.disabled = !this.undoable;
-    for (const b of this.page.strip.querySelectorAll<HTMLElement>('button[data-tool]')) {
-      const tool = this.tools.find(d => d.key === b.dataset.tool)!, why = tool.why(this.probe);
-      b.setAttribute('aria-pressed', String(tool === t));
-      b.classList.toggle('no', why !== '');
-      b.title = why ? `${tool.label}: ${why}` : tool.label;
-    }
-    // (The button held for a stroke stays in the card while a tool is on: a button taken out loses the finger on it,
-    // and the stroke would end.)
-    const el = this.page.card, hold = this.holdButton, parts: HTMLElement[] = [];
-    const line = (cls: string, text: string) => { const d = document.createElement('p'); d.className = cls; d.textContent = text; parts.push(d); };
-    const title = document.createElement('h2');
-    title.textContent = t?.label ?? 'God mode';
-    parts.push(title);
-    if (t) {
-      parts.push(sizeChips(this.radii(), this.radius, m => this.sized(m)), sizeStepper(this.radii(), this.radius, m => this.sized(m)));
-      if (t.choices) parts.push(t.choices(() => this.show()));
-      const why = t.why(this.probe);
-      line(why ? 'why' : 'hint', why || t.hint);
-      const face = `${iconSvg(t.icon)}<span>${t.verb}</span>`;
-      if (hold.innerHTML !== face) hold.innerHTML = face;
-      hold.style.setProperty('--tool', t.ink);
-    } else line('hint', 'Pick a tool, then use it on the map.');
-    for (const c of [...el.children]) if (c !== hold) c.remove();
-    if (!t) hold.remove();
-    else if (hold.parentElement !== el) el.append(hold);
-    for (const part of parts) el.insertBefore(part, t ? hold : null);
+    showStrip(this.page.strip, this.tools, this.tool, this.probe, this.undoable, this.undoButton);
+    showCard(this.page.card, this.holdButton, this.tool, this.probe, { radii: this.radii(), radius: this.radius, pick: m => this.sized(m) }, () => this.show());
   }
 
   /** The brush's radii the tool on may take (`GodTool.least`). */
@@ -413,16 +373,3 @@ export class God {
 
 }
 
-/** The core's reasons of `cells` counted. */
-function counted(cells: Brushed['cells']): Map<string, number> {
-  const n = new Map<string, number>();
-  for (const c of cells) if (c.why) n.set(c.why, (n.get(c.why) ?? 0) + 1);
-  return n;
-}
-
-/** The key counted most in `counts` ('' for none). */
-function most(counts: Map<string, number>): string {
-  let best = '', n = 0;
-  for (const [k, c] of counts) if (c > n) { best = k; n = c; }
-  return best;
-}

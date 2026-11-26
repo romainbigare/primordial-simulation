@@ -30,7 +30,8 @@ interface Core {
   kinds(): number;
   brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): number;
   settle(): number;
-  soften(): number;
+  soften(): void;
+  save_world(): number;
   undo(): number;
   hold(): void;
   ground_shown(version: number): void;
@@ -50,10 +51,10 @@ type Command =
   | { cmd: 'soften' }
   | { cmd: 'undo' }
   | { cmd: 'groundShown'; version: number }
-  | { cmd: 'earlyRelief'; on: boolean }
+  | { cmd: 'save' }
   | { cmd: 'shown'; frames: number };
 
-/** The numbers before the heights of a preview (wasm/src/lib.rs `preview`): its window and its version, u32. */
+/** The numbers before the heights of a preview (wasm/src/edit.rs `preview`): its window and its version, u32. */
 const PREVIEW_HEAD = 5;
 /** Longest time a tick steps before it lets messages in, ms. */
 const TICK_MS = 50;
@@ -81,8 +82,6 @@ let thingsAt: [number, number, number, number] | null = null;
  * months per second, the time a month took, ms, and the share of the time spent stepping. */
 let stepped = 0, since = 0, pace = 0, steppingMs = 0, monthMs = 0, busy = 0;
 /** The version of the samples (`ground_version`) whose relief the page has: a new one's is sent with the next frame. */
-/** Whether the page takes a stroke's relief before the world settles (`earlyRelief`, a message of its own). */
-let early = false;
 let sentBuilds = 0;
 /** When the last frame was posted (ms), whether months were stepped since, and how many frames posted the page has not
  * yet drawn. */
@@ -102,7 +101,7 @@ function handIn(data: ArrayBuffer, use: () => number): string {
   return new TextDecoder().decode(bytes(at, c.out_len()));
 }
 
-/** What edits moved the ground since the ground the page shows (wasm/src/lib.rs `preview`): the window of the
+/** What edits moved the ground since the ground the page shows (wasm/src/edit.rs `preview`): the window of the
  * terrain's samples (west column, north row, width, height), the version of the samples it moved from (`over`: the
  * page draws it over the tiles made of that version alone), and of its samples row by row how far each moved, m, and
  * the depth of its loose ground once built again, m. */
@@ -199,32 +198,28 @@ host.onmessage = async e => {
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
     else if (m.cmd === 'brush' && core) {
-      // The brush between two months (wasm/src/lib.rs `brush`). Tool 0 moves the ground: the page draws it from the
-      // preview until the stroke settles. Tool 1 makes a lake. Tool 3 adds heat, and tool 2 plants: both show when the
-      // stroke settles.
+      // The brush between two months (wasm/src/edit.rs `brush`): its answer says whether the page is sent the preview
+      // of the ground it moved (drawn till the page's ground shows it) and a frame (with the relief of the ground's new
+      // version, where it built the samples again).
       const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
-      if (m.tool === 0) host.postMessage({ kind: 'brushed', text: answer, preview: preview() }, []);
-      else if (m.tool === 1) {
-        // A lake is made at once: its frame, with the relief of the ground's new version, and the preview until the
-        // page's ground shows it.
-        host.postMessage({ kind: 'brushed', text: answer, preview: preview() }, []);
-        postFrame('frame', true);
-      }
-      else host.postMessage({ kind: 'brushed', text: answer }, []);
+      const sends = JSON.parse(answer) as { preview: boolean; frame: boolean };
+      host.postMessage({ kind: 'brushed', text: answer, ...(sends.preview ? { preview: preview() } : {}) }, []);
+      if (sends.frame) postFrame('frame', true);
     }
-    else if (m.cmd === 'earlyRelief') early = m.on;
+    else if (m.cmd === 'save' && core) {
+      // The world as a snapshot file (wasm/src/lib.rs `save_world`).
+      const saved = bytes(core.save_world(), core.out_len());
+      host.postMessage({ kind: 'saved', saved, year: core.year() }, [saved.buffer]);
+    }
     else if ((m.cmd === 'settle' || m.cmd === 'soften') && core) {
       // The stroke ends, or a held stroke settles what it did so far and goes on (`soften`); what its edits start that
-      // takes no time runs at once (`settle`), and its frame shows it, with the relief of the ground's new version where
-      // it was built again. A page that asked for it (`earlyRelief`) gets that relief first, before the world settles,
-      // so its ground is made again meanwhile.
-      if (early) {
-        const at = core.settled_relief(), n = core.out_len();
-        if (n > 0) {
-          const relief = bytes(at, n);
-          sentBuilds = core.ground_version() + 1;
-          host.postMessage({ kind: 'relief', relief, reliefVersion: sentBuilds }, [relief.buffer]);
-        }
+      // takes no time runs at once (`settle`), and its frame shows it. The relief of the ground's new version is sent
+      // first, before the world settles, so the page's ground is made again meanwhile.
+      const at = core.settled_relief(), n = core.out_len();
+      if (n > 0) {
+        const relief = bytes(at, n);
+        sentBuilds = core.ground_version() + 1;
+        host.postMessage({ kind: 'relief', relief, reliefVersion: sentBuilds }, [relief.buffer]);
       }
       if (m.cmd === 'settle') host.postMessage({ kind: 'settled', text: text(core.settle()) }, []);
       else core.soften();

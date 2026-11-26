@@ -129,7 +129,7 @@ export class Land {
     core.groundShown(v);
   }
 
-  /** What edits moved the ground since the samples of a version (wasm/src/lib.rs `preview`, `over`): drawn over the
+  /** What edits moved the ground since the samples of a version (wasm/src/edit.rs `preview`, `over`): drawn over the
    * tiles made of those samples alone (land.wgsl `moved_at`), till the tiles of the samples built again come. */
   preview(p: Preview): void {
     const across = this.samples.across, [x0, y0, w, h] = p.window, was = this.movedIn;

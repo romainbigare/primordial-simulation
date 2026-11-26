@@ -34,6 +34,14 @@ pub fn snapshot_bytes<P: Serialize>(w: &World, plan: &P, bytes: &mut Vec<u8>) ->
     bincode::serialize_into(&mut *bytes, plan).map_err(bad)
 }
 
+/// A snapshot of the world and the shell's state (`snapshot_bytes`) as the gzip a snapshot file holds (`write_snapshot`),
+/// for a shell that hands the file on (the page's save).
+pub fn snapshot_gz<P: Serialize>(w: &World, plan: &P) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    snapshot_bytes(w, plan, &mut bytes)?;
+    crate::gzfile::gzip(&bytes)
+}
+
 /// Write the bytes of a snapshot (`snapshot_bytes`) to `path` as gzip, whole or not at all (`gzfile::write_gzip`).
 pub fn write_snapshot(bytes: &[u8], path: impl AsRef<Path>) -> io::Result<()> {
     crate::gzfile::write_gzip(path.as_ref(), &[bytes])

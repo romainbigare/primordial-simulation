@@ -379,6 +379,8 @@ $('clearlayer').onclick = () => setLayer(null);
 /** Inspect's card, shown while its button is pressed. */
 $('inspect-btn').onclick = () => { const on = $('inspect-card').hidden; $('inspect-card').hidden = !on; $('inspect-btn').setAttribute('aria-pressed', String(on)); inspect(); };
 $('god-btn').onclick = () => setGod(!godOn());
+// (Between strokes: a stroke under way settles first.)
+$('save').onclick = () => { if (!god.busy()) live?.save(); };
 $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
@@ -427,6 +429,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
     undone: () => { if (live === l) fire.still(); },
     preview: p => { if (live === l && land) { land.preview(p); map.showNow(); } },
     relief: () => { if (live === l) land?.tiles.rebuild(l.takeRelief(), true); },
+    saved: (gz, year) => { if (live === l) download(gz, year); },
     error: text => { playing = false; syncUi(); fail(text); },
   });
   boot.wait('start', BOOT_MS.start);
@@ -468,6 +471,15 @@ function thingsOf(v: View): void {
   thingsKey = key;
   if (!at) slots.set(null);
   live.things(at);
+}
+
+/** Hand the browser the live world saved (`gz`, a snapshot file of `ew run`) of year `year` to keep, named as `ew run`
+ * names its snapshots (`snap_YYYYY_MM.bin.gz`). */
+function download(gz: Uint8Array<ArrayBuffer>, year: number): void {
+  const months = Math.floor(year * MONTHS + 1e-6), name = `snap_${String(Math.floor(months / MONTHS)).padStart(5, '0')}_${String(months % MONTHS).padStart(2, '0')}.bin.gz`;
+  const a = document.createElement('a'), url = URL.createObjectURL(new Blob([gz], { type: 'application/gzip' }));
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /** Whether a banded world was made in this session: the first one makes the planet's air too, which takes a while. */

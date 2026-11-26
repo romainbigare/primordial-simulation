@@ -29,7 +29,7 @@ export class Live {
   stats: Stats = { cells: 0, pace: 0, monthMs: 0, busy: 0, memory: 0 };
   /** The version of the world's samples, as the last frame said (wasm/src/lib.rs `ground_version`). */
   version = 0;
-  /** The starting kinds the world's plan places (wasm/src/lib.rs `kinds`). */
+  /** The starting kinds the world's plan places (wasm/src/edit.rs `kinds`). */
   kinds: StartKind[] = [];
   private worker: Worker;
   /** The answers awaited about places, in the order asked (the worker answers in turn). */
@@ -39,20 +39,21 @@ export class Live {
   private unanswered = 0;
   private onHide = () => { if (document.hidden) this.answer(); };
 
-  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean, edited: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; brushed: (r: Brushed) => void; settled: (r: Settled) => void; undone: (done: boolean) => void; preview: (p: Preview) => void; relief: () => void }) {
+  constructor(workerSource: string, wasm: ArrayBuffer, on: { ready: () => void; world: (w: World) => void; frame: (stats: Stats, changed: boolean, edited: boolean) => void; error: (text: string) => void; things: (data: Uint8Array | null) => void; brushed: (r: Brushed) => void; settled: (r: Settled) => void; undone: (done: boolean) => void; preview: (p: Preview) => void; relief: () => void; saved: (gz: Uint8Array<ArrayBuffer>, year: number) => void }) {
     this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
     this.worker = new Worker(this.url);
     this.worker.onerror = e => on.error(e.message || 'The world\'s worker failed.');
     this.worker.onmessage = e => {
-      const m = e.data as { kind: string; meta: string; kinds: string; edited: boolean; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; plumes: Uint8Array; relief: Uint8Array | null; reliefVersion: number; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null; preview?: Preview };
+      const m = e.data as { kind: string; meta: string; kinds: string; edited: boolean; frame: Uint8Array; table: Float32Array; discharge: Uint16Array | null; plumes: Uint8Array; relief: Uint8Array | null; reliefVersion: number; year: number; day: number; text: string; stats: Stats; things: Uint8Array | null; preview?: Preview; saved?: Uint8Array<ArrayBuffer> };
       if (m.kind === 'ready') return on.ready();
       if (m.kind === 'error') return on.error(m.text);
       if (m.kind === 'probe') return this.answers.shift()?.(JSON.parse(m.text) as Probe);
+      if (m.kind === 'saved') return on.saved(m.saved!, m.year);
       // (What the edits moved since the ground the page shows comes with a brush of the ground, an undo, and the answer
       // to `groundShown`.)
       if (m.preview) on.preview(m.preview);
       if (m.kind === 'preview') return;
-      // A stroke's relief, before the world settles (`earlyRelief`): the ground is made again meanwhile.
+      // A stroke's relief, before the world settles (worker.ts `settle`): the ground is made again meanwhile.
       if (m.kind === 'relief') { this.relief = { relief: m.relief!, version: m.reliefVersion }; this.version = m.reliefVersion; return on.relief(); }
       if (m.kind === 'brushed') return on.brushed(JSON.parse(m.text) as Brushed);
       if (m.kind === 'settled') return on.settled(JSON.parse(m.text) as Settled);
@@ -84,7 +85,6 @@ export class Live {
       try { timed('world frames', () => { on.things(m.things); on.frame(m.stats, !same || m.edited, m.edited); }); } finally { this.shown(); }
     };
     this.worker.postMessage({ cmd: 'init', wasm }, [wasm]);
-    this.worker.postMessage({ cmd: 'earlyRelief', on: true });
     document.addEventListener('visibilitychange', this.onHide);
   }
 
@@ -130,6 +130,8 @@ export class Live {
   settle(): void { this.worker.postMessage({ cmd: 'settle' }); }
   /** Settle what the stroke under way did so far and go on with it (answered by a frame). */
   soften(): void { this.worker.postMessage({ cmd: 'soften' }); }
+  /** The world as a snapshot file of `ew run`, its gzip (answered by `on.saved`, with its year). */
+  save(): void { this.worker.postMessage({ cmd: 'save' }); }
   /** Put the world back as before the last stroke (answered by `on.undone`). */
   undo(): void { this.worker.postMessage({ cmd: 'undo' }); }
   /** The page's ground shows the samples of `version` now (answered by `on.preview`: what edits moved since). */

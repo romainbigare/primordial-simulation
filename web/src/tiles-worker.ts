@@ -1,4 +1,4 @@
-// The ground's tiles: a second Web Worker with its own instance of the core's WebAssembly (wasm/src/lib.rs `ground`,
+// The ground's tiles: a second Web Worker with its own instance of the core's WebAssembly (wasm/src/ground.rs `ground`,
 // `tile`, `rock`), which needs no world, so the world steps in its own worker while tiles are made. The ground is that of a
 // new island (`ground`, from its seed), or of a saved world handed in (`ground_of_world`), made again on the samples the
 // world builds from the relief the page hands in (`ground_built`). It runs as a separate

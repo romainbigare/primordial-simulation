@@ -4,6 +4,13 @@ use flate2::{write::GzEncoder, Compression};
 use std::io::{self, Write};
 use std::path::Path;
 
+/// `bytes` as gzip (the fast level, as `write_gzip`), in memory.
+pub(crate) fn gzip(bytes: &[u8]) -> io::Result<Vec<u8>> {
+    let mut z = GzEncoder::new(Vec::new(), Compression::fast());
+    z.write_all(bytes)?;
+    z.finish()
+}
+
 /// Added to a file's name while it is being written.
 const PART: &str = ".part";
 

@@ -64,6 +64,13 @@ pub struct Kept {
     seen: Vec<bool>,
 }
 
+impl Kept {
+    /// What a recorder that starts on world `w` keeps: no substance seen yet.
+    pub fn new(w: &World) -> Kept {
+        Kept { seen: vec![false; w.chem.ns()] }
+    }
+}
+
 /// What a tape's files hold: the viewer's file (frames, events, the series and the months), `physics.json` and
 /// `series.csv`. The recorder keeps it as it goes (`Recorder::tape` copies it for another thread to
 /// write).
@@ -112,7 +119,7 @@ impl Recorder {
         Recorder {
             every,
             monthly,
-            seen: vec![false; w.chem.ns()],
+            seen: Kept::new(w).seen,
             files: TapeFiles { shape, frames: vec![], bytes: vec![], series: vec![], log: vec![], months: vec![], physics: physics_json(w) },
             year: YearTally::default(),
             spent: Spent::default(),

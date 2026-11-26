@@ -1,5 +1,5 @@
 // The tools of god mode (god-types.ts `GodTool`), in the order of the strip: each paints with the round brush
-// (wasm/src/lib.rs `brush`): Raise and Lower land move the ground under it by a step at once and a step each tenth of
+// (wasm/src/edit.rs `brush`): Raise and Lower land move the ground under it by a step at once and a step each tenth of
 // a second while held, the map showing the new ground at each, and the world builds its samples and settles its liquid
 // over the new ground now and then while held (`soften`) and when the stroke ends (`settle`); Lake digs a basin under it at
 // once, its floor a chosen depth under the lowest point of the brush's rim (or under the level of a lake it reaches,
@@ -9,7 +9,7 @@
 // words, from the core's own reasons. A new tool is one more entry of `godTools`.
 import { UNCHANGED, type GodTool, type Probe, type StartKind } from './god-types';
 
-/** The core's brush tools (wasm/src/lib.rs `SHAPE`, `LAKE`, `PLANT`, `BURN`). */
+/** The core's brush tools (wasm/src/edit.rs `SHAPE`, `LAKE`, `PLANT`, `BURN`). */
 const BRUSH_SHAPE = 0, BRUSH_LAKE = 1, BRUSH_PLANT = 2, BRUSH_BURN = 3;
 /** The depths a lake may have, m under its level (the lowest point of the brush's rim, or a lake it reaches), with their
  * names (a chip shows the depth, its title the name); the second the first on. */
@@ -52,7 +52,7 @@ const UNLIT: Record<string, string> = {
   Wet: 'The ground is too wet. Much of it is soaked.',
   Damp: 'The dead leaves and stems are too damp to burn.',
 };
-/** Why a cell was not planted, in plain words, by the core's reason (wasm/src/lib.rs `brush`). */
+/** Why a cell was not planted, in plain words, by the core's reason (wasm/src/edit.rs `brush`). */
 const UNPLANTED: Record<string, string> = { NoLand: OPEN_WATER, NoRoom: 'The plants found no room to grow.' };
 
 const plainKind = (k: StartKind): [string, string] => PLAIN_KINDS[k.name] ?? [k.name, ''];

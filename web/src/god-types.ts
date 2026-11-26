@@ -3,20 +3,20 @@
 // tool; and what the page gives god mode.
 import type { IconName } from './icons';
 
-/** What the core says of the cell under a place (wasm/src/lib.rs `probe`): the cell, its edges in squares (west, north,
- * east, south), the centre of its sample under the place (squares), its area and land (m²), its patches, and whether a
- * strike lights it ("yes", or the core's reason). */
-export interface Probe { cell: number; bounds: [number, number, number, number]; at: [number, number]; area: number; land: number; patches: number; fire: string }
-/** A starting kind the world's plan places (wasm/src/lib.rs `kinds`): its row, the core's name, kg per m² placed. */
-export interface StartKind { row: number; name: string; kg: number }
-/** What a brush did (wasm/src/lib.rs `brush`), as god mode reads it: of a planting, each cell newly under it, the share
+/** What the core says of the cell under a place (wasm/src/edit.rs `probe`): the cell, its edges in squares (west,
+ * north, east, south), its land (m²), its patches, and whether heat added there lights it ("yes", or the core's
+ * reason). */
+export interface Probe { cell: number; bounds: [number, number, number, number]; land: number; patches: number; fire: string }
+/** A starting kind the world's plan places (wasm/src/edit.rs `kinds`): its row and the core's name. */
+export interface StartKind { row: number; name: string }
+/** What a brush did (wasm/src/edit.rs `brush`), as god mode reads it: of a planting, each cell newly under it, the share
  * of it under the brush, whether each of its edits was made and the core's reason where not; of heat, each cell under
  * it, its share, how much of the heat that lights its remains it holds (`progress`, 0 to 1) and why none would light.
  * (A brush of the ground, or a lake, answers its cells as numbers alone.) And whether it changed the world. */
 export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[]; changed: boolean }
 /** The reason god mode gives a tool (`GodTool.reason`) where a paint whose cells hold no reason changed nothing. */
 export const UNCHANGED = 'Unchanged';
-/** What a stroke's settling did (wasm/src/lib.rs `settle`): each cell the flames of its strikes reached, and when, s
+/** What a stroke's settling did (wasm/src/edit.rs `settle`): each cell the flames of its strikes reached, and when, s
  * after the strike, and the squares whose centre lies in one of them; why its planting placed nothing ('' where it
  * placed some, or there was none); and whether the stroke can be undone (it changed the world). */
 export interface Settled { burnt: [number, number][]; squares: number[]; unplanted: string; undo: boolean }
@@ -33,7 +33,7 @@ export interface GodTool {
   key: string; icon: IconName; label: string; ink: string;
   /** How to use it with a mouse, in a short line; and its big button's words on a phone (`GodPage.aim`). */
   hint: string; verb: string;
-  /** The core's brush tool it paints with (wasm/src/lib.rs `brush`), and the starting kind it places (-1: none). */
+  /** The core's brush tool it paints with (wasm/src/edit.rs `brush`), and the starting kind it places (-1: none). */
   code: number; row(): number;
   /** What it adds at the brush's centre each second it is held, in its core tool's unit (m of ground, up or down where
    * less than 0; J/m² of heat): it paints again and again while the pointer is down, held still or not. */
