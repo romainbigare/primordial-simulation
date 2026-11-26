@@ -44,7 +44,7 @@ const OUT_OF_VIEW = 1e9;
  * coarser (each halving of a texel costs four times the tiles). */
 const TEXEL_PX = 1;
 /** Tiles asked of each worker at once: it makes the next while the page takes the last. */
-const MAKING = 3;
+const MAKING = 2;
 /** Cores the page, the world's worker, a tiles' worker and the drawing keep busy. */
 const SPARE_CORES = 4;
 /** The tiles' workers: two where the browser has cores to spare beside the world's worker and the page (it says how

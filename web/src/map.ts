@@ -803,10 +803,12 @@ export class MapView {
     return !waiting.length;
   }
 
-  /** The map's background colour (css `--map-bg`), 0..1. */
+  /** The map's background colour (css `--map-bg`), 0..1, read once: the page's colours do not change. */
+  private bg: number[] | null = null;
   private background(): number[] {
+    if (this.bg) return this.bg;
     this.ctx.fillStyle = css('--map-bg');
-    return (this.ctx.fillStyle as string).match(/[0-9a-f]{2}/gi)?.map(c => parseInt(c, 16) / 255) ?? [1, 1, 1];
+    return (this.bg = (this.ctx.fillStyle as string).match(/[0-9a-f]{2}/gi)?.map(c => parseInt(c, 16) / 255) ?? [1, 1, 1]);
   }
 
   /** Draw the next tile of the sharp picture `job` once the GPU has finished the last, and show the picture once all
@@ -845,10 +847,7 @@ export class MapView {
    * background and the map's shadow, and the live map or the map's squares (a copy at each of `xs`, css px); the live
    * map only once a program for it is made (`seenFrom`, else it adds the one it waits for to `waiting`). */
   private drawMap(gpu: Gpu, p: Pass, xs: number[], k: number, d: number, size: number[], waiting: string[]): void {
-    const { cam: { s, ox, oy }, w, h, look } = this;
-    const bg = this.background();
-    const backdrop = new Uniforms(3).vec4(...bg).vec4(ox * k, oy * k, xs.length * w * s * k, h * s * k).vec4(SHADOW_DROP * k, SHADOW_BLUR * k, SHADOW_DARK);
-    p.draw('backdrop', { rect: [0, 0, size[0], size[1]], binds: { 1: backdrop.buffer } }, false);
+    const { cam: { s, oy }, w, h, look } = this;
     // Copies meet on whole pixels, so no thin line shows between them.
     const edge = (c: number) => Math.round((xs[0] + c * w * s) * k);
     if (this.land) this.land.drawn = d;
@@ -859,7 +858,9 @@ export class MapView {
     // runs over more than the target's pixels.
     const frames = xs.map((_, c) => frameOf(edge(c), oy * k, mpp, seen));
     const lands = frames.map(f => this.land?.binds(gpu, look, f));
-    if (lands[0] && under) {
+    const live = lands[0] && under;
+    this.drawBackdrop(p, xs, k, size, [edge(0), oy * k, edge(xs.length), (oy + h * s) * k], live ? program !== null : this.map !== null);
+    if (live) {
       if (program) xs.forEach((_, c) => {
         const x0 = Math.max(edge(c), 0), x1 = Math.min(edge(c + 1), size[0]), y0 = Math.max(oy * k, 0), y1 = Math.min((oy + h * s) * k, size[1]);
         if (x1 <= x0 || y1 <= y0) return;
@@ -868,6 +869,17 @@ export class MapView {
         p.draw(program, { rect: [x0, y0, x1 - x0, y1 - y0], binds: { ...lands[c]!, ...under, ...fire } }, false);
       });
     } else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
+  }
+
+  /** Draw into pass `p` (as `drawMap`) the background and the map's shadow on it; where the map is drawn over it
+   * (`covered`) only outside the map's rectangle `map` (x0, y0, x1, y1 px), which the map covers whole. */
+  private drawBackdrop(p: Pass, xs: number[], k: number, size: number[], map: Rect, covered: boolean): void {
+    const { cam: { s, ox, oy }, w, h } = this;
+    const backdrop = new Uniforms(3).vec4(...this.background()).vec4(ox * k, oy * k, xs.length * w * s * k, h * s * k).vec4(SHADOW_DROP * k, SHADOW_BLUR * k, SHADOW_DARK);
+    const [W, H] = size, x0 = Math.min(Math.max(map[0], 0), W), x1 = Math.min(Math.max(map[2], x0), W);
+    const y0 = Math.min(Math.max(map[1], 0), H), y1 = Math.min(Math.max(map[3], y0), H);
+    const rects = covered ? [[0, 0, W, y0], [0, y1, W, H - y1], [0, y0, x0, y1 - y0], [x1, y0, W - x1, y1 - y0]] : [[0, 0, W, H]];
+    for (const rect of rects) if (rect[2] > 0 && rect[3] > 0) p.draw('backdrop', { rect, binds: { 1: backdrop.buffer } }, false);
   }
 
   /** Draw into pass `p` (as `drawMap`) over the plants the flames and the smoke of the fires burning in view, over the
@@ -951,12 +963,14 @@ export class MapView {
     ctx.restore();
   }
 
+  /** The page's ink (css `--ink`), read once. */
+  private ink: string | null = null;
   private scaleBar(): void {
     const { ctx, cam: { s }, cellM } = this, target = (96 / s) * cellM; // metres for ~96 px
     const p = 10 ** Math.floor(Math.log10(target)), m = [1, 2, 5, 10].map(k => k * p).reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
     const px = (m / cellM) * s, x = this.covered[3] + SCALE_MARGIN_PX, y = this.cv.clientHeight - this.covered[2] - SCALE_MARGIN_PX;
     // (On the page in the ink's colour; over the map drawn out to the screen's edges, white with a dark halo.)
-    ctx.strokeStyle = ctx.fillStyle = this.fillScreen ? '#fff' : css('--ink'); ctx.lineWidth = 1.5; ctx.globalAlpha = this.fillScreen ? 0.95 : 0.75;
+    ctx.strokeStyle = ctx.fillStyle = this.fillScreen ? '#fff' : (this.ink ??= css('--ink')); ctx.lineWidth = 1.5; ctx.globalAlpha = this.fillScreen ? 0.95 : 0.75;
     if (this.fillScreen) { ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 3; }
     ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 5); ctx.stroke();
     ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'bottom';

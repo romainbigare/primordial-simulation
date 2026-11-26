@@ -38,10 +38,20 @@ const LEAST_SPARE = 0.99;
  * draws whose pixels take at least no more than `e` metres (`programs`), the most first, and `name` itself last. Each
  * draws the same picture there (draw.wgsl `LEAST_E`: what one leaves out cannot show at `e`); the first does least. */
 function madeFor(name: string, e: number): string[] {
-  const fit = Object.keys(programs()).map(key => [key, key.split(':')] as const)
-    .filter(([, [base, m]]) => base === name && m !== undefined && +m <= e * LEAST_SPARE)
-    .sort((x, y) => +y[1][1] - +x[1][1]).map(([key]) => key);
+  const fit = sizedOf(name).filter(([, m]) => m <= e * LEAST_SPARE).map(([key]) => key);
   return [...fit, name];
+}
+/** Of each program, those made for a least size of a pixel (`programs`) with that size, m, the most first: found once
+ * (the programs never change). */
+const sized = new Map<string, [string, number][]>();
+function sizedOf(name: string): [string, number][] {
+  let out = sized.get(name);
+  if (!out) {
+    out = Object.keys(programs()).map(key => [key, ...key.split(':')]).filter(([, base, m]) => base === name && m !== undefined)
+      .map(([key, , m]): [string, number] => [key, +m]).sort((x, y) => y[1] - x[1]);
+    sized.set(name, out);
+  }
+  return out;
 }
 
 /** Of program `name`, the one a draw where a pixel takes `e` metres draws with: the best of those that may (`madeFor`)
