@@ -86,11 +86,12 @@ interface Kept { depth: number; x: number; y: number; layer: number; came: numbe
 /** The relief the world built its samples from, and the version of those samples (wasm/src/lib.rs `relief`,
  * `ground_version`). */
 export interface Built { relief: Uint8Array; version: number }
-/** What edits moved the ground since the samples of a version (wasm/src/edit.rs `preview`): the window of the terrain's
- * samples that moved (west column, north row, width, height), that version (`over`), and of its samples row by row how
- * far each moved, m, and the depth of its loose ground once the samples are built again, m (`dh` and `loose` are two
- * views of one buffer: neither's `.buffer` is its own). */
-export interface Preview { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array }
+/** What edits moved the ground since the samples of a version (wasm/src/shown.rs `preview`): the window of the
+ * terrain's samples it tells (west column, north row, width, height), that version (`over`), whether it is a part (a
+ * paint's: what lies outside its window stays as it was) or whole (nothing moved outside it), and of its samples row by
+ * row how far each moved, m, and the depth of its loose ground once the samples are built again, m (`dh` and `loose`
+ * are two views of one buffer: neither's `.buffer` is its own). */
+export interface Preview { window: [number, number, number, number]; over: number; part: boolean; dh: Float32Array; loose: Float32Array }
 
 /** Lay into the rock `rock`, in place, the band of rows `rows` [from, to) of samples from `band` (wasm/src/ground.rs
  * `rock_rows`: of each of the four planes those rows in turn). */

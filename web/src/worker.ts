@@ -28,14 +28,14 @@ interface Core {
   cells(): number;
   probe(x: number, y: number): number;
   kinds(): number;
-  brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): number;
+  brush(tool: number, radius: number, row: number): number;
   settle(): number;
   soften(): void;
   save_world(): number;
   undo(): number;
   hold(): void;
   ground_shown(version: number): void;
-  preview(): number;
+  preview(part: number): number;
   out_len(): number;
 }
 type Command =
@@ -46,7 +46,7 @@ type Command =
   | { cmd: 'rate'; rate: number }
   | { cmd: 'things'; at: [number, number, number, number] | null }
   | { cmd: 'probe'; at: [number, number] }
-  | { cmd: 'brush'; tool: number; at: [number, number]; radius: number; amount?: number; row: number }
+  | { cmd: 'brush'; tool: number; stamps: Float64Array; radius: number; row: number }
   | { cmd: 'settle' }
   | { cmd: 'soften' }
   | { cmd: 'undo' }
@@ -54,8 +54,9 @@ type Command =
   | { cmd: 'save' }
   | { cmd: 'shown'; frames: number };
 
-/** The numbers before the heights of a preview (wasm/src/edit.rs `preview`): its window and its version, u32. */
-const PREVIEW_HEAD = 5;
+/** The numbers before the heights of a preview (wasm/src/shown.rs `preview`): its window, its version and whether it
+ * is a part, u32. */
+const PREVIEW_HEAD = 6;
 /** Longest time a tick steps before it lets messages in, ms. */
 const TICK_MS = 50;
 /** Pause between ticks, ms. */
@@ -106,15 +107,16 @@ function handIn(data: ArrayBuffer, use: () => number): string {
   return new TextDecoder().decode(bytes(at, c.out_len()));
 }
 
-/** What edits moved the ground since the ground the page shows (wasm/src/edit.rs `preview`): the window of the
- * terrain's samples (west column, north row, width, height), the version of the samples it moved from (`over`: the
- * page draws it over the tiles made of that version alone), and of its samples row by row how far each moved, m, and
- * the depth of its loose ground once built again, m. */
-function preview(): { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array } {
-  const c = core!, raw = bytes(c.preview(), c.out_len());
+/** What edits moved the ground since the ground the page shows (wasm/src/shown.rs `preview`): whole, or of the part
+ * the last paint may have moved (`part`): the window of the terrain's samples (west column, north row, width, height),
+ * the version of the samples it moved from (`over`: the page draws it over the tiles made of that version alone),
+ * whether it is a part, and of its samples row by row how far each moved, m, and the depth of its loose ground once
+ * built again, m. */
+function preview(part = false): { window: [number, number, number, number]; over: number; part: boolean; dh: Float32Array; loose: Float32Array } {
+  const c = core!, raw = bytes(c.preview(part ? 1 : 0), c.out_len());
   const head = new Uint32Array(raw.buffer, 0, PREVIEW_HEAD), n = head[2] * head[3], at = 4 * PREVIEW_HEAD;
   // (Both views of the one copy, which the page takes over: `moved`.)
-  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer, at, n), loose: new Float32Array(raw.buffer, at + 4 * n, n) };
+  return { window: [head[0], head[1], head[2], head[3]], over: head[4], part: head[5] !== 0, dh: new Float32Array(raw.buffer, at, n), loose: new Float32Array(raw.buffer, at + 4 * n, n) };
 }
 
 /** The buffers of a preview, for the page to take over. */
@@ -219,13 +221,14 @@ host.onmessage = async e => {
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
     else if (m.cmd === 'brush' && core) {
-      // The brush between two months (wasm/src/edit.rs `brush`): its answer says whether the page is sent the preview
-      // of the ground it moved (drawn till the page's ground shows it) and a frame (with the relief of the ground's new
-      // version, where it built the samples again).
-      const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
-      const sends = JSON.parse(answer) as { preview: boolean; frame: boolean; refused?: string };
+      // The brush between two months at the places of a paint (wasm/src/edit.rs `brush`): its answer says whether the
+      // page is sent the preview of the ground it moved (of the part the paint may have moved, or whole; drawn till the
+      // page's ground shows it) and a frame (with the relief of the ground's new version, where it built the samples
+      // again).
+      const c = core, answer = handIn(m.stamps.buffer as ArrayBuffer, () => c.brush(m.tool, m.radius, m.row));
+      const sends = JSON.parse(answer) as { preview: '' | 'paint' | 'whole'; frame: boolean; refused?: string };
       if (sends.refused) throw new Error(sends.refused);
-      const p = sends.preview ? preview() : null;
+      const p = sends.preview ? preview(sends.preview === 'paint') : null;
       host.postMessage({ kind: 'brushed', text: answer, ...(p ? { preview: p } : {}) }, p ? moved(p) : []);
       if (sends.frame) postFrame('frame', true);
     }

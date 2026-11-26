@@ -1,7 +1,7 @@
 //! The ground's tiles of the live viewer (the second worker's instance, `tape::Ground`), which need no world: the
 //! ground of a new island or of a saved world, made again on the relief the world built, its tiles and its rock.
 
-use crate::{give, island, saved, shape_of, GROUND, IN};
+use crate::{give, handed, island, saved, shape_of, GROUND};
 
 /// The ground a worker draws (`tape::Ground`), and the reflectance of each make of its bed, which its rock is coloured
 /// by (`colours`).
@@ -38,7 +38,7 @@ fn with_ground<T>(f: impl FnOnce(&mut Drawn) -> T) -> T {
 /// or, past them, why the relief was refused, as text. The rock it changed is read with `rock_rows`.
 #[no_mangle]
 pub extern "C" fn ground_built() -> *const u8 {
-    let bytes = IN.with(|i| std::mem::take(&mut *i.borrow_mut()));
+    let bytes = handed();
     let out = with_ground(|d| d.ground.rebuild_from(&bytes));
     give(match out {
         Ok(squares) => squares.iter().map(|&c| c as u8).collect(),

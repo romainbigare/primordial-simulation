@@ -125,9 +125,13 @@ export class Live {
   things(at: [number, number, number, number] | null): void { this.worker.postMessage({ cmd: 'things', at }); }
   /** Ask what lies under the place (x, y) in squares (`probe`), the core's answer to `answer`. */
   probe(x: number, y: number, answer: (p: Probe) => void): void { this.answers.push(answer); this.worker.postMessage({ cmd: 'probe', at: [x, y] }); }
-  /** Paint with brush tool `tool` (god-tools.ts) a circle of `radius` m about (x, y) in squares, by `amount` (m the
-   * ground moves at its centre), planting the starting kind of `row` (answered by `on.brushed`). */
-  brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): void { this.worker.postMessage({ cmd: 'brush', tool, at: [x, y], radius, amount, row }); }
+  /** Paint with brush tool `tool` (god-tools.ts) circles of `radius` m about the places of `stamps` (x and y in squares,
+   * and the amount there: m the ground moves at its centre, J/m² of heat, m of a lake's depth), planting the starting
+   * kind of `row`: one message, one answer (`on.brushed`). */
+  brush(tool: number, stamps: [number, number, number][], radius: number, row: number): void {
+    const flat = Float64Array.from(stamps.flat());
+    this.worker.postMessage({ cmd: 'brush', tool, stamps: flat, radius, row }, [flat.buffer]);
+  }
   /** End the stroke: what its edits start that takes no time runs at once (answered by `on.settled`). */
   settle(): void { this.worker.postMessage({ cmd: 'settle' }); }
   /** Settle what the stroke under way did so far and go on with it (answered by a frame). */
