@@ -87,11 +87,17 @@ interface Sheet {
   P: Planes; n: number; table: Float32Array; texel: (plane: number, i: number) => number; field: Float32Array; tallest: number[]; widest: number[];
 }
 
+/** A mark's code (lib/mark.wgsl `decide`: its square, its kind, and its group and place among the groups, `GROUPS` x
+ * `PLACE_STEPS` of them) passes through a 32-bit float, which holds whole numbers exactly below 2^24; the code of a dead
+ * tree (`dead_code`, past all others) and one more (lib/cells.wgsl `mark_word`) must stay under it. */
+const MARK_PLACES = 64, MARK_CODES_MOST = 2 ** 24;
+
 /** The kinds of the core's table `rows` for a map of `w` x `h` squares (`row` numbers a square, tape/src/table.rs):
  * `kinds` kinds a square of `kindRow` numbers, from `at` on, then the places of each square's patches, then their dead
  * walls; while the
  * ground cools by `falling` (style.ts `cooling`). */
 export function kindsOf(w: number, h: number, rows: Float32Array, row: number, at: number, kinds: number, kindRow: number, walls: Rgb, falling: number): Kinds {
+  if (w * h * kinds * MARK_PLACES >= MARK_CODES_MOST) throw new Error(`cover: ${w} x ${h} squares of ${kinds} kinds have more marks than a mark's code holds (lib/mark.wgsl \`decide\`)`);
   const P = planesOf(kinds), cols = Math.ceil(P.count / PLANES_DOWN), down = Math.min(P.count, PLANES_DOWN), n = w * h;
   const places = at + n * kinds * kindRow, dead = places + n * (PATCHES - 1) * PLACE;
   const patched = Array.from({ length: n }, (_, i) => placeOf(rows, places, i, 1)[2] > 0).some(Boolean);

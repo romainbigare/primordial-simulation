@@ -100,11 +100,12 @@ export class Land {
    * `rockVersion`; before it came: loose ground of `NO_ROCK_YET_M` everywhere). */
   private rock: Texture | null = null;
   private rockAt = -1;
-  /** The rock as the GPU holds it: the ground's (ground.ts `rock`) with the loose ground of the samples edits moved
-   * since it came, as the core will build them (`preview`); that preview's window (west column, north row, width,
-   * height, in samples) and loose ground, m; and the rows of the rock's first plane still to send (none: null). */
+  /** The rock as the GPU holds it: the ground's own (ground.ts `rock`, one copy on the page), in which the loose ground
+   * of the samples edits moved since it came is set as the core will build them (`preview`); that preview's window
+   * (west column, north row, width, height, in samples), its loose ground, m, and the ground's own loose ground there
+   * that it took the place of (to put back); and the rows of the rock's first plane still to send (none: null). */
   private rockShown: Uint16Array | null = null;
-  private loosePreview: { window: [number, number, number, number]; loose: Float32Array } | null = null;
+  private loosePreview: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array } | null = null;
   private rockRows: [number, number] | null = null;
   /** Of each square, the mean of its samples' shares of coarse and fine grain (the rock's third plane), and the version
    * of the rock they are of (`grainShift`). */
@@ -112,6 +113,8 @@ export class Land {
   /** The time the flow's signs stand at while one picture is drawn in tiles (performance.now, ms; null: each draw's
    * own), so all its tiles show the signs at one place along the channels. */
   flowAt: number | null = null;
+  /** How many times the table, the flows or the rock were sent to the GPU (`lawBinds`): what is drawn from them changed. */
+  private written = 0;
 
   /** `version`: the version of the world's samples `tiles` are made of. */
   constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf, version: number) {
@@ -145,22 +148,29 @@ export class Land {
       this.movedRows = rows;
     }
     // The loose ground of the samples it moved: the last preview's window back to the ground's own, then this one's.
-    const loose = this.loosePreview;
-    this.loosePreview = w * h > 0 ? { window: p.window, loose: p.loose } : null;
-    if (!this.rockShown || !this.tiles.rock) return;
-    if (loose) this.overlay(loose.window, this.tiles.rock, null);
-    if (this.loosePreview) this.overlay(p.window, this.tiles.rock, p.loose);
-    this.rockRows = rowsOf(loose?.window ?? null, this.loosePreview?.window ?? null, this.rockRows);
+    const before = this.loosePreview, shown = this.rockShown !== null;
+    if (before && shown) this.putBack(before);
+    this.loosePreview = w * h > 0 ? { window: p.window, loose: p.loose, own: new Uint16Array(w * h) } : null;
+    if (!shown) return;
+    if (this.loosePreview) this.overlay(this.loosePreview);
+    this.rockRows = rowsOf(before?.window ?? null, this.loosePreview?.window ?? null, this.rockRows);
   }
 
-  /** In the rock the GPU holds (`rockShown`), the loose ground of the samples of `window` (west column, north row, width,
-   * height): `loose`, m, row by row, or the ground's own (`rock`) where null. */
-  private overlay([x0, y0, w, h]: [number, number, number, number], rock: Uint16Array, loose: Float32Array | null): void {
-    const out = this.rockShown!, across = this.samples.across;
+  /** In the rock the GPU holds (`rockShown`), the loose ground of the samples of preview `p`'s window as the preview
+   * says, the ground's own there kept in `p.own`. */
+  private overlay(p: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array }): void {
+    const out = this.rockShown!, across = this.samples.across, [x0, y0, w, h] = p.window;
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const k = 4 * ((y0 + y) * across + x0 + x);
-      out[k] = loose ? half(loose[y * w + x]) : rock[k];
+      p.own[y * w + x] = out[k];
+      out[k] = half(p.loose[y * w + x]);
     }
+  }
+
+  /** In the rock the GPU holds, the ground's own loose ground put back in preview `p`'s window (`overlay`). */
+  private putBack(p: { window: [number, number, number, number]; own: Uint16Array }): void {
+    const out = this.rockShown!, across = this.samples.across, [x0, y0, w, h] = p.window;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[4 * ((y0 + y) * across + x0 + x)] = p.own[y * w + x];
   }
 
   /** Where load came into a body of liquid in the last month, `bytes` (a sample, u32, and kg/s, f32, each: wasm/src/lib.rs
@@ -308,30 +318,38 @@ export class Land {
     const m = this.tiles.map;
     if (this.tex && this.tex.h !== this.rows) { gpu.drop(this.tex); this.tex = null; }
     this.tex ??= gpu.texture('land', m.w, this.rows, 'rgba32float');
-    if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
+    if (this.due) { gpu.write(this.tex, this.data); this.due = false; this.written++; }
     const s = this.samples;
     this.flows ??= gpu.texture('land', s.across, s.down, 'rgba16float');
-    if (this.flowsDue) { this.flowsData = this.flowsOf(); gpu.write(this.flows, this.flowsData); this.flowsDue = false; this.movedRows = null; }
-    if (this.movedRows && this.flowsData) { gpu.writeRows(this.flows, this.flowsData, this.movedRows[0], this.movedRows[1] - this.movedRows[0]); this.movedRows = null; }
+    if (this.flowsDue) { this.flowsData = this.flowsOf(); gpu.write(this.flows, this.flowsData); this.flowsDue = false; this.movedRows = null; this.written++; }
+    if (this.movedRows && this.flowsData) { gpu.writeRows(this.flows, this.flowsData, this.movedRows[0], this.movedRows[1] - this.movedRows[0]); this.movedRows = null; this.written++; }
     this.rock ??= gpu.texture('land', s.across, ROCK_PLANES * s.down, 'rgba16float');
     if (this.rockAt !== this.tiles.rockVersion) {
+      // (A new rock holds the ground's own everywhere: the preview is set in it anew.)
       const r = this.tiles.rock;
-      this.rockShown = r ? r.slice() : null;
-      if (r && this.loosePreview) this.overlay(this.loosePreview.window, r, this.loosePreview.loose);
+      this.rockShown = r;
+      if (r && this.loosePreview) this.overlay(this.loosePreview);
       gpu.write(this.rock, this.rockShown ?? Uint16Array.from({ length: 4 * ROCK_PLANES * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
       this.rockAt = this.tiles.rockVersion;
       this.rockRows = null;
+      this.written++;
     }
     if (this.rockRows && this.rockShown) {
       gpu.writeRows(this.rock, this.rockShown, this.rockRows[0], this.rockRows[1] - this.rockRows[0]);
       this.rockRows = null;
+      this.written++;
     }
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
-    const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)
+    const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, t.page.depth, tm.step_most)
       .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.rooted_from, 0).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
       .vec4(s.across, s.down, s.depth, this.drawn).vec4(tm.along_wrap, l.flood, this.slid(this.flowAt ?? performance.now()), l.flood ** -l.station).vec4(...l.line_law);
     return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
   }
+
+  /** What the draws that read the live map's laws read (`lawBinds`) as it stands, as text, but for its time (the tiles'
+   * fade, the flow's signs): it changes with what was sent to the GPU, the depth drawn and the pixels the detail is
+   * chosen by. */
+  contents(): string { return [this.written, this.tiles.written, this.tiles.depth, this.drawn].join(); }
 
   stop(gpu: Gpu | null): void {
     this.tiles.stop(gpu);

@@ -38,10 +38,20 @@ const LEAST_SPARE = 0.99;
  * draws whose pixels take at least no more than `e` metres (`programs`), the most first, and `name` itself last. Each
  * draws the same picture there (draw.wgsl `LEAST_E`: what one leaves out cannot show at `e`); the first does least. */
 function madeFor(name: string, e: number): string[] {
-  const fit = Object.keys(programs()).map(key => [key, key.split(':')] as const)
-    .filter(([, [base, m]]) => base === name && m !== undefined && +m <= e * LEAST_SPARE)
-    .sort((x, y) => +y[1][1] - +x[1][1]).map(([key]) => key);
+  const fit = sizedOf(name).filter(([, m]) => m <= e * LEAST_SPARE).map(([key]) => key);
   return [...fit, name];
+}
+/** Of each program, those made for a least size of a pixel (`programs`) with that size, m, the most first: found once
+ * (the programs never change). */
+const sized = new Map<string, [string, number][]>();
+function sizedOf(name: string): [string, number][] {
+  let out = sized.get(name);
+  if (!out) {
+    out = Object.keys(programs()).map(key => [key, ...key.split(':')]).filter(([, base, m]) => base === name && m !== undefined)
+      .map(([key, , m]): [string, number] => [key, +m]).sort((x, y) => y[1] - x[1]);
+    sized.set(name, out);
+  }
+  return out;
 }
 
 /** Of program `name`, the one a draw where a pixel takes `e` metres draws with: the best of those that may (`madeFor`)
@@ -184,6 +194,10 @@ export interface Gpu {
   submit(): void;
   /** Once the GPU has finished all that was sent. */
   done(): Promise<void>;
+  /** Time on the GPU what is sent from now till `end`: its ms once the GPU has drawn it, by a timer on the card where it
+   * has one (null where that timer was disturbed: no time), else the time from `end` till the GPU has finished all
+   * sent, the page's own work in it. */
+  timer(): { end(): Promise<number | null> };
   /** The bytes of texture `t` (four a texel, rows top first), once the GPU has drawn it. */
   read(t: Texture): Promise<Uint8Array>;
 }
@@ -318,6 +332,7 @@ export class HeldGpu implements Gpu {
   warm(name: string, first?: boolean): void { this.back.warm(name, first); }
   ready(name: string): boolean { return this.back.ready(name); }
   done(): Promise<void> { return this.back.done(); }
+  timer(): { end(): Promise<number | null> } { return this.back.timer(); }
   read(t: Texture): Promise<Uint8Array> { return this.back.read((t as HeldTexture).inner); }
   /** The programs being made (`Warming.pending`), as text. */
   making(): string { return this.back.making(); }

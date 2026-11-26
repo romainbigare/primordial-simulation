@@ -1,9 +1,10 @@
 // The ground's tiles on the GPU (tape/src/ground): made once in workers of their own (tiles-worker.ts) and kept, so the
 // world never waits for a picture. The view asks for the tiles about it at its depth, those of the depth above and the
 // coarsest, coarse before fine and nearest its middle first; a request that left the view is dropped; the tiles drawn
-// least lately go first once `MOST_TILES` are kept. A page of the tiles of the depth the view is drawn at (`pages`)
-// names, for each, the finest kept tile that holds it and the one before it, so a tile not made yet is drawn from its
-// nearest kept ancestor (stretched, softer), and a new one fades in over that one. The view is drawn at a new depth
+// least lately go first once `MOST_TILES` are kept. A page of the tiles of the depth the view is drawn at about the
+// view (`pages`, `PAGE_AHEAD`) names, for each, the finest kept tile that holds it and the one before it, so a tile not
+// made yet is drawn from its nearest kept ancestor (stretched, softer), and a new one fades in over that one; past it,
+// the page of the coarsest tiles. The view is drawn at a new depth
 // only once its tiles in view at it came (`settle`): till then at the last, so a zoom never shows a whole view of
 // tiles stretched from a coarser depth, nor the ground of one depth and then of another. The coarsest tiles are kept always.
 // The page keeps no copy of a tile: after a lost context the card's are empty, and it asks for them again (`lost`).
@@ -37,6 +38,9 @@ const PLANE_A = 4, PLANE_B = 4;
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
 const AHEAD = 0.25;
+/** The page of the tiles (`makePage`) covers the view and this share of its width and height past each of its edges:
+ * the nearest picture about the view (map.ts `RINGS`, twice its width) is drawn from the view's tiles too. */
+const PAGE_AHEAD = 0.5;
 /** What a tile out of the view adds to its distance from the view's middle (squares): it comes after those in it. */
 const OUT_OF_VIEW = 1e9;
 /** The view is drawn at the depth whose texels take no more than this many of the pixels the map is drawn at, so its ground and
@@ -44,7 +48,7 @@ const OUT_OF_VIEW = 1e9;
  * coarser (each halving of a texel costs four times the tiles). */
 const TEXEL_PX = 1;
 /** Tiles asked of each worker at once: it makes the next while the page takes the last. */
-const MAKING = 3;
+const MAKING = 2;
 /** Cores the page, the world's worker, a tiles' worker and the drawing keep busy. */
 const SPARE_CORES = 4;
 /** The tiles' workers: two where the browser has cores to spare beside the world's worker and the page (it says how
@@ -58,6 +62,22 @@ const REBUILD_EVERY_MS = 30000;
 /** A tile's key: its depth, row and column, as one number. */
 const KEY_ROW = 1 << 12, KEY_DEPTH = KEY_ROW * KEY_ROW;
 const keyOf = (depth: number, x: number, y: number) => depth * KEY_DEPTH + y * KEY_ROW + x;
+
+/** A page of the tiles (`makePage`): the depth the view is drawn at and the coarsest; its window at that depth (first
+ * column and row, tiles across and down); the coarsest tiles across and down; the texels a row; and its texels, four
+ * numbers each, as land.wgsl `pages` reads them: a row of its head (the window, the coarsest depth and its tiles), then
+ * of each tile of the window, then under them of each coarsest tile, the two layers. */
+export interface Page { depth: number; d0: number; window: [number, number, number, number]; coarse: [number, number]; across: number; data: Float32Array }
+/** The texels of a page's head (`Page`). */
+const PAGE_HEAD = 2;
+
+/** The layer page `p` shows at the tile of its depth at column `x` and row `y`: from its window, else from its
+ * coarsest tile that holds it. */
+function shownAt(p: Page, x: number, y: number): number {
+  const [x0, y0, w, h] = p.window, up = p.depth - p.d0;
+  const at = x >= x0 && y >= y0 && x < x0 + w && y < y0 + h ? (1 + y - y0) * p.across + x - x0 : (1 + h + Math.min(y >> up, p.coarse[1] - 1)) * p.across + Math.min(x >> up, p.coarse[0] - 1);
+  return p.data[4 * at];
+}
 
 /** A tile kept: its depth, column and row, its layer of the atlas, when it came (ms since the tiles started), the
  * number of the last view that asked for it, and the ground's version (`gen`) and the version of the world's samples
@@ -98,7 +118,9 @@ export class GroundTiles {
   private free: number[] = Array.from({ length: MOST_TILES }, (_, k) => MOST_TILES - 1 - k);
   /** Tiles come, not yet on the GPU; the page and the tiles' numbers to send to it. */
   private come: { layer: number; data: Uint16Array }[] = [];
-  private page = { w: 1, h: 1, data: new Float32Array(0) };
+  private page: Page | null = null;
+  /** The page the GPU holds (`textures`): the land reads its window by it. */
+  private pageSent: Page | null = null;
   /** Of each layer: its tile's depth, column, row and when it came; then whether it is made of the samples the preview
    * of edits is drawn over (`previewOver`). */
   private numbers = new Float32Array(2 * 4 * MOST_TILES);
@@ -146,6 +168,8 @@ export class GroundTiles {
   /** Whether the tiles that came wait to be sent to the GPU, with the page and the tiles' numbers that name them (the
    * map holds them while the view moves, map.ts `hold`): what the GPU holds stays as it was, whole. */
   held = false;
+  /** How many times something was sent to the GPU (`textures`): what is drawn from the tiles changed. */
+  written = 0;
 
   /** `version`: the version of the world's samples `ground` is made of. */
   constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, version: number, private changed: (shown: boolean) => void, error: (text: string) => void) {
@@ -187,8 +211,10 @@ export class GroundTiles {
     this.gen++;
     this.building = this.workers.length;
     this.versionOf.set(this.gen, built.version);
+    const own = built.relief.byteOffset === 0 && built.relief.byteLength === built.relief.buffer.byteLength;
     this.workers.forEach((w, k) => {
-      const copy = built.relief.slice();
+      // (The last worker takes the relief itself where it is a buffer of its own: no copy.)
+      const copy = own && k === this.workers.length - 1 ? built.relief : built.relief.slice();
       // (Only the first sends back the rock and the squares changed.)
       w.worker.postMessage({ cmd: 'built', relief: copy.buffer, gen: this.gen, answer: k === 0 }, [copy.buffer]);
     });
@@ -207,13 +233,20 @@ export class GroundTiles {
     this.told = gen;
     this.rock = rock;
     this.rockVersion++;
+    const version = this.versionOf.get(gen) ?? this.previewed;
     for (const [key, k] of this.kept) {
-      if (k.gen >= gen) continue;
+      if (k.gen >= gen || this.stale.has(key)) continue;
       const s = this.squaresOf(k.depth), x0 = Math.floor(k.x * s), y0 = Math.floor(k.y * s);
       const x1 = Math.min(Math.ceil((k.x + 1) * s), this.map.w), y1 = Math.min(Math.ceil((k.y + 1) * s), this.map.h);
       let changed = false;
       for (let y = y0; y < y1 && !changed; y++) for (let x = x0; x < x1 && !changed; x++) changed = squares[y * this.map.w + x] === 1;
-      if (changed) this.stale.add(key);
+      if (changed) { this.stale.add(key); continue; }
+      // A tile over no square the build changed holds the ground of this build too: it is of its version, so the
+      // preview of the next edits (of what moved since the version shown) is drawn over it.
+      k.gen = gen;
+      k.version = version;
+      this.numbers[4 * (MOST_TILES + k.layer)] = +(version === this.previewed);
+      this.numbersDue = true;
     }
     this.changed(true);
     if (this.last) this.view(this.last);
@@ -276,10 +309,10 @@ export class GroundTiles {
     this.next();
   }
 
-  /** Draw the view at the depth it asked for (`wanted`) once its tiles in view there came: a page made anew. */
+  /** Draw the view at the depth it asked for (`wanted`) once its tiles in view there came; the page made anew (about
+   * the view, at the depth drawn). */
   private settle(): void {
-    if (this.wanted === this.depth || [...this.inView].some(k => !this.kept.has(k))) return;
-    this.depth = this.wanted;
+    if (this.wanted !== this.depth && ![...this.inView].some(k => !this.kept.has(k))) this.depth = this.wanted;
     this.makePage();
   }
 
@@ -380,7 +413,6 @@ export class GroundTiles {
       this.numbers[4 * (MOST_TILES + layer)] = +(version === this.previewed);
       this.numbersDue = true;
       const before = this.page;
-      this.makePage();
       this.settle();
       // A tile that takes a stale one's place shows at once, with no fade (the ground under it barely moved), so a
       // playing world's builds do not keep the map drawing frame after frame.
@@ -388,7 +420,10 @@ export class GroundTiles {
       if (shown && !had) this.lastCame = came;
       this.changed(shown);
     }
-    this.next();
+    // A tile of an older build (made by another worker while the first told what the new build changed) is stale: the
+    // view asks for it again, else nothing would till the view moves.
+    if (gen !== this.gen && this.last) this.view(this.last);
+    else this.next();
   }
 
   /** Whether the tile of `depth` at column `x` and row `y` lies in the last view. */
@@ -398,60 +433,71 @@ export class GroundTiles {
   }
 
   /** Whether the page shows another layer than page `before` anywhere in the last view. */
-  private showsOtherThan(before: { w: number; h: number; data: Float32Array }): boolean {
-    const v = this.last, { w, h, data } = this.page;
-    if (!v || before.w !== w || before.h !== h) return true;
-    const s = this.squaresOf(this.depth), clip = (c: number, n: number) => Math.min(Math.max(Math.floor(c / s), 0), n - 1);
-    for (let y = clip(v.y, h); y <= clip(v.y + v.h, h); y++) {
-      for (let x = clip(v.x, w); x <= clip(v.x + v.w, w); x++) if (data[4 * (y * w + x)] !== before.data[4 * (y * w + x)]) return true;
+  private showsOtherThan(before: Page | null): boolean {
+    const v = this.last, page = this.page!;
+    if (!v || !before || before.depth !== page.depth) return true;
+    const [nx, ny] = this.across(page.depth), s = this.squaresOf(page.depth), clip = (c: number, n: number) => Math.min(Math.max(Math.floor(c / s), 0), n - 1);
+    for (let y = clip(v.y, ny); y <= clip(v.y + v.h, ny); y++) {
+      for (let x = clip(v.x, nx); x <= clip(v.x + v.w, nx); x++) if (shownAt(page, x, y) !== shownAt(before, x, y)) return true;
     }
     return false;
   }
 
-  /** The page at the view's depth, made anew as the tiles kept or that depth change (sent to the GPU at the next
-   * draw): for each of its tiles, the layer of the finest kept tile that holds it and of the one kept before that (its
-   * nearest kept ancestor), -1 for none; found depth by depth from the coarsest. */
+  /** The page at the depth the view is drawn at (sent to the GPU at the next draw where it changed): for each of its
+   * tiles in its window about the last view (`PAGE_AHEAD`), then for each of the coarsest, the layer of the finest kept
+   * tile that holds it and of the one kept before that (its nearest kept ancestor), -1 for none. */
   private makePage(): void {
-    const [d0] = this.meta.depths;
-    let shown = new Float32Array(1).fill(-1), under = new Float32Array(1).fill(-1), w = 1;
-    for (let d = d0; d <= this.depth; d++) {
-      const [nx, ny] = this.across(d), a = new Float32Array(nx * ny), b = new Float32Array(nx * ny);
-      for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
-        const up = d === d0 ? -1 : (y >> 1) * w + (x >> 1), k = this.kept.get(keyOf(d, x, y)), i = y * nx + x;
-        const above = up < 0 ? -1 : shown[up];
-        a[i] = k ? k.layer : above;
-        b[i] = k ? above : up < 0 ? -1 : under[up];
+    const depth = this.depth, [d0] = this.meta.depths, [nx, ny] = this.across(depth), [cw, ch] = this.across(d0), s = this.squaresOf(depth), v = this.last;
+    const range = (from: number, span: number, n: number) => (v ? [Math.max(0, Math.floor((from - PAGE_AHEAD * span) / s)), Math.min(n - 1, Math.floor((from + span * (1 + PAGE_AHEAD)) / s))] : [0, n - 1]);
+    const [x0, x1] = range(v?.x ?? 0, v?.w ?? 0, nx), [y0, y1] = range(v?.y ?? 0, v?.h ?? 0, ny);
+    const w = Math.max(x1 - x0 + 1, 0), h = Math.max(y1 - y0 + 1, 0), across = Math.max(w, cw, PAGE_HEAD), data = new Float32Array(4 * across * (1 + h + ch)).fill(-1);
+    data.set([x0, y0, w, h, d0, cw, ch, 0]);
+    // Of the tile of depth `d` at column `x` and row `y`, the layers of the finest kept tile that holds it and of the
+    // kept one before that.
+    const chain = (d: number, x: number, y: number, at: number) => {
+      for (let shown = false; d >= d0; d--, x >>= 1, y >>= 1) {
+        const k = this.kept.get(keyOf(d, x, y));
+        if (!k) continue;
+        data[at + +shown] = k.layer;
+        if (shown) return;
+        shown = true;
       }
-      shown = a; under = b; w = nx;
-    }
-    const [nx, ny] = this.across(this.depth), data = new Float32Array(4 * nx * ny);
-    for (let i = 0; i < nx * ny; i++) { data[4 * i] = shown[i]; data[4 * i + 1] = under[i]; }
-    this.page = { w: nx, h: ny, data };
+    };
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) chain(depth, x0 + x, y0 + y, 4 * ((1 + y) * across + x));
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) chain(d0, x, y, 4 * ((1 + h + y) * across + x));
+    const was = this.page, page: Page = { depth, d0, window: [x0, y0, w, h], coarse: [cw, ch], across, data };
+    if (was && was.depth === depth && was.across === across && was.window.every((c, k) => c === page.window[k]) && was.data.every((c, k) => c === data[k])) return;
+    this.page = page;
     this.pageDue = true;
   }
 
   /** The textures the land program reads (land.wgsl): the tiles' two planes, the page and each layer's tile (depth,
    * column, row, when it came), sent to `gpu` as they change; and the time since the tiles started, ms. */
-  textures(gpu: Gpu): { atlas: Texture; areas: Texture; pages: Texture; tiles: Texture; now: number } {
+  textures(gpu: Gpu): { atlas: Texture; areas: Texture; pages: Texture; page: Page; tiles: Texture; now: number } {
     const side = this.meta.size + 2 * this.meta.gutter, n = side * side;
     this.atlas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
     this.areas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
     this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 2, 'rgba32float');
     const now = performance.now() - this.start;
-    if (this.held && this.pages) return { atlas: this.atlas, areas: this.areas, pages: this.pages, tiles: this.tilesTex, now };
+    if (this.held && this.pages && this.pageSent) return { atlas: this.atlas, areas: this.areas, pages: this.pages, page: this.pageSent, tiles: this.tilesTex, now };
+    if (this.come.length) this.written++;
     for (const c of this.come) {
       gpu.write(this.atlas, c.data.subarray(0, PLANE_A * n), 0, c.layer);
       gpu.write(this.areas, c.data.subarray(PLANE_A * n, (PLANE_A + PLANE_B) * n), 0, c.layer);
     }
     this.come = [];
+    const page = this.page!;
     if (this.pageDue) {
-      if (this.pages?.w !== this.page.w || this.pages.h !== this.page.h) { if (this.pages) gpu.drop(this.pages); this.pages = gpu.texture('tiles', this.page.w, this.page.h, 'rgba32float'); }
-      gpu.write(this.pages, this.page.data);
+      const rows = 1 + page.window[3] + page.coarse[1];
+      if (this.pages?.w !== page.across || this.pages.h !== rows) { if (this.pages) gpu.drop(this.pages); this.pages = gpu.texture('tiles', page.across, rows, 'rgba32float'); }
+      gpu.write(this.pages, page.data);
+      this.pageSent = page;
       this.pageDue = false;
+      this.written++;
     }
     if (!this.fades) this.faded(now);
-    if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; }
-    return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now };
+    if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; this.written++; }
+    return { atlas: this.atlas, areas: this.areas, pages: this.pages!, page: this.pageSent!, tiles: this.tilesTex, now };
   }
 
   /** End at `now` (ms since the tiles started) the fade of every tile still fading in: a frame drawn with no fade shows

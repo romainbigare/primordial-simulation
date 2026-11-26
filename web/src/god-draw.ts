@@ -102,18 +102,11 @@ export function drawFlames(ctx: CanvasRenderingContext2D, map: MapAt, at: [numbe
   ctx.save();
   // The ground scorched about each patch, the light each casts on it, and its embers.
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.clip();
-  for (const { x, y, tall } of patches) {
-    const reach = SCORCH_REACH * tall, under = ctx.createRadialGradient(x, y, 0, x, y, reach);
-    under.addColorStop(0, `rgba(${SCORCH.join()},${SCORCH_ALPHA})`); under.addColorStop(1, `rgba(${SCORCH.join()},0)`);
-    ctx.fillStyle = under;
-    ctx.beginPath(); ctx.arc(x, y, reach, 0, 2 * Math.PI); ctx.fill();
-  }
+  const sp = sprites();
+  for (const { x, y, tall } of patches) glow(ctx, sp.scorch, x, y, SCORCH_REACH * tall, 1);
   ctx.globalCompositeOperation = 'lighter';
   for (const { x, y, k, tall } of patches) {
-    const reach = tall * (2 + 0.3 * waver(k, t)), light = ctx.createRadialGradient(x, y, 0, x, y, reach);
-    light.addColorStop(0, `rgba(${LIGHT.join()},.45)`); light.addColorStop(1, `rgba(${LIGHT.join()},0)`);
-    ctx.fillStyle = light;
-    ctx.beginPath(); ctx.arc(x, y, reach, 0, 2 * Math.PI); ctx.fill();
+    glow(ctx, sp.light, x, y, tall * (2 + 0.3 * waver(k, t)), 1);
     for (let e = 0; e < 2 * PATCH_FLAMES; e++) {
       const [ex, ey] = scatter(x, y, tall * 1.4, e + 3, 2 * PATCH_FLAMES + 3), glow = 0.5 + 0.5 * waver(e + 5 * k, 1.5 * t);
       ctx.fillStyle = `rgba(${EMBER.join()},${0.6 * glow})`;
@@ -127,14 +120,16 @@ export function drawFlames(ctx: CanvasRenderingContext2D, map: MapAt, at: [numbe
     const [fx, fy] = scatter(x, y, tall * PATCH_SPREAD, f, PATCH_FLAMES), id = k * PATCH_FLAMES + f;
     return { x: fx, y: fy + tall * 0.3, h: tall * (0.55 + 0.45 * frac(id * 0.618)) * (0.8 + 0.2 * waver(id, 1.4 * t)), id };
   })).sort((a, b) => a.y - b.y);
+  const base = ctx.getTransform();
   for (const { x, y, h, id } of flames) {
     const w = h * FLAME_WIDTH, sway = w * 0.45 * waver(id + 11, 1.2 * t);
-    flame(ctx, x, y, 1.7 * w, 1.15 * h, 1.2 * sway, EDGE_STOPS, 'source-over');
-    flame(ctx, x, y, w, h, sway, BODY_STOPS, 'source-over');
+    flame(ctx, base, sp.edge, x, y, 1.7 * w, 1.15 * h, 1.2 * sway, 'source-over');
+    flame(ctx, base, sp.body, x, y, w, h, sway, 'source-over');
     // (A second, smaller tongue beside it, on its own sway: a flame's edge is never smooth.)
-    flame(ctx, x + 0.3 * w * Math.sign(waver(id + 3, 0) || 1), y, 0.6 * w, 0.65 * h, w * 0.5 * waver(id + 23, 1.7 * t), BODY_STOPS, 'source-over');
-    flame(ctx, x, y + 0.05 * h, 0.45 * w, 0.45 * h, 0.5 * sway, CORE_STOPS, 'lighter');
+    flame(ctx, base, sp.body, x + 0.3 * w * Math.sign(waver(id + 3, 0) || 1), y, 0.6 * w, 0.65 * h, w * 0.5 * waver(id + 23, 1.7 * t), 'source-over');
+    flame(ctx, base, sp.core, x, y + 0.05 * h, 0.45 * w, 0.45 * h, 0.5 * sway, 'lighter');
   }
+  ctx.setTransform(base);
   // Sparks rising from the patches, fading as they go; and the smoke drifting off them.
   ctx.globalCompositeOperation = 'lighter';
   for (const { x, y, k, tall } of patches) {
@@ -148,13 +143,51 @@ export function drawFlames(ctx: CanvasRenderingContext2D, map: MapAt, at: [numbe
   for (const { x, y, k, tall } of patches) {
     for (let f = 0; f < PUFFS; f++) {
       const age = frac(0.22 * t + (k + f) * 0.31), rise = tall * (1.2 + 3 * age), size = tall * (0.8 + 1.8 * age);
-      const px = x + DRIFT * rise, py = y - rise, puff = ctx.createRadialGradient(px, py, 0, px, py, size);
-      puff.addColorStop(0, `rgba(${SMOKE.join()},${0.3 * Math.sin(Math.PI * age)})`); puff.addColorStop(1, `rgba(${SMOKE.join()},0)`);
-      ctx.fillStyle = puff;
-      ctx.beginPath(); ctx.arc(px, py, size, 0, 2 * Math.PI); ctx.fill();
+      glow(ctx, sp.puff, x + DRIFT * rise, y - rise, size, 0.3 * Math.sin(Math.PI * age));
     }
   }
   ctx.restore();
+}
+
+/** The pictures the brush's fire is stamped from (`drawFlames`), drawn once: a tongue of flame of each of its colour
+ * layers (`FLAME_SPRITE_W` wide at its foot, `FLAME_SPRITE_H` tall, upright), and a disc fading from its middle to its
+ * edge of each glow (`GLOW_SPRITE_R` in radius: the scorch, the light, a puff of smoke at full strength). So a frame
+ * draws a few hundred images, not a gradient for each. */
+const FLAME_SPRITE_W = 64, FLAME_SPRITE_H = 96, GLOW_SPRITE_R = 128;
+/** The room about a tongue's picture, px: its foot's curve reaches below its foot by a quarter of its width. */
+const FLAME_SPRITE_ROOM = 0.25 * FLAME_SPRITE_W;
+let made: Record<'edge' | 'body' | 'core' | 'scorch' | 'light' | 'puff', HTMLCanvasElement> | null = null;
+function sprites(): NonNullable<typeof made> {
+  if (made) return made;
+  const canvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  const tongue = (stops: [number, string][]) => {
+    const c = canvas(FLAME_SPRITE_W + 2 * FLAME_SPRITE_ROOM, FLAME_SPRITE_H + 2 * FLAME_SPRITE_ROOM), g = c.getContext('2d')!;
+    const x = c.width / 2, y = FLAME_SPRITE_ROOM + FLAME_SPRITE_H, w = FLAME_SPRITE_W, h = FLAME_SPRITE_H, fill = g.createLinearGradient(x, y, x, y - h);
+    for (const [at, colour] of stops) fill.addColorStop(at, colour);
+    g.fillStyle = fill;
+    g.beginPath();
+    g.moveTo(x - w / 2, y);
+    g.bezierCurveTo(x - w / 2, y - 0.45 * h, x - 0.15 * w, y - 0.7 * h, x, y - h);
+    g.bezierCurveTo(x + 0.15 * w, y - 0.7 * h, x + w / 2, y - 0.45 * h, x + w / 2, y);
+    g.quadraticCurveTo(x, y + 0.25 * w, x - w / 2, y);
+    g.fill();
+    return c;
+  };
+  const disc = (rgb: number[], alpha: number) => {
+    const c = canvas(2 * GLOW_SPRITE_R, 2 * GLOW_SPRITE_R), g = c.getContext('2d')!, r = GLOW_SPRITE_R, fill = g.createRadialGradient(r, r, 0, r, r, r);
+    fill.addColorStop(0, `rgba(${rgb.join()},${alpha})`); fill.addColorStop(1, `rgba(${rgb.join()},0)`);
+    g.fillStyle = fill;
+    g.beginPath(); g.arc(r, r, r, 0, 2 * Math.PI); g.fill();
+    return c;
+  };
+  return (made = { edge: tongue(EDGE_STOPS), body: tongue(BODY_STOPS), core: tongue(CORE_STOPS), scorch: disc(SCORCH, SCORCH_ALPHA), light: disc(LIGHT, 0.45), puff: disc(SMOKE, 1) });
+}
+
+/** Stamp the glow `sprite` about (x, y), `reach` css px in radius, as strong as `alpha`. */
+function glow(ctx: CanvasRenderingContext2D, sprite: HTMLCanvasElement, x: number, y: number, reach: number, alpha: number): void {
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(sprite, x - reach, y - reach, 2 * reach, 2 * reach);
+  ctx.globalAlpha = 1;
 }
 
 /** Point `k` of `of` scattered evenly over the disc of radius `r` about (cx, cy) (each a turn of the golden angle
@@ -164,18 +197,15 @@ function scatter(cx: number, cy: number, r: number, k: number, of: number): [num
   return [cx + d * Math.cos(a), cy + d * Math.sin(a)];
 }
 
-/** A tongue of flame standing at (x, y), `w` wide at its foot and `h` tall, its tip moved `sway` to the side, filled
- * from its foot to its tip with the colours `stops` by the composite `op`. */
-function flame(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, sway: number, stops: [number, string][], op: GlobalCompositeOperation): void {
-  const g = ctx.createLinearGradient(x, y, x + sway, y - h);
-  for (const [at, colour] of stops) g.addColorStop(at, colour);
-  ctx.globalCompositeOperation = op; ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(x - w / 2, y);
-  ctx.bezierCurveTo(x - w / 2, y - 0.45 * h, x + sway - 0.15 * w, y - 0.7 * h, x + sway, y - h);
-  ctx.bezierCurveTo(x + sway + 0.15 * w, y - 0.7 * h, x + w / 2, y - 0.45 * h, x + w / 2, y);
-  ctx.quadraticCurveTo(x, y + 0.25 * w, x - w / 2, y);
-  ctx.fill();
+/** A tongue of flame of the picture `sprite` (`sprites`) standing at (x, y), `w` wide at its foot and `h` tall, its tip
+ * moved `sway` to the side (a shear: each height moved by its share of the sway), by the composite `op`, on the canvas
+ * whose transform is `base`. */
+function flame(ctx: CanvasRenderingContext2D, base: DOMMatrix, sprite: HTMLCanvasElement, x: number, y: number, w: number, h: number, sway: number, op: GlobalCompositeOperation): void {
+  // The picture's foot to (x, y): across by w over its width, up by h over its height, sheared by the sway.
+  const a = w / FLAME_SPRITE_W, c = -sway / FLAME_SPRITE_H, d = h / FLAME_SPRITE_H;
+  ctx.setTransform(base.a * a, base.b * a, base.a * c + base.c * d, base.b * c + base.d * d, base.a * x + base.c * y + base.e, base.b * x + base.d * y + base.f);
+  ctx.globalCompositeOperation = op;
+  ctx.drawImage(sprite, -sprite.width / 2, -(FLAME_SPRITE_ROOM + FLAME_SPRITE_H));
 }
 
 /** The water of a lake dug, at (cx, cy) in a ring of `r` css px, `ms` after the tap: it rises from the centre to the
