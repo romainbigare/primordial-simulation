@@ -75,13 +75,16 @@ const AROUND_ORDER = (() => {
  * screen showed in this long, ms (`present`): it does not jump in. */
 const FADE_MS = 220;
 /** A picture the map was drawn into: its texture, the square at its top-left corner (x, y, squares), the squares it
- * spans across and down, and the look and canvas it was drawn for (`MapView.lookKey`). */
-interface Pic { t: Texture; x: number; y: number; w: number; h: number; look: string }
+ * spans across and down, the look and canvas it was drawn for (`MapView.lookKey`), and whether its mip levels are made
+ * (only once it is shown smaller than it was drawn, `compose`: most are never). */
+interface Pic { t: Texture; x: number; y: number; w: number; h: number; look: string; mipped: boolean }
 /** The picture texture `t` holds, drawn with camera `cam` (css px a square, the map's corner, css px) at `k` of its
  * pixels a css pixel. */
 function picOf(t: Texture, cam: Camera, k: number, look: string): Pic {
-  return { t, x: -cam.ox / cam.s, y: -cam.oy / cam.s, w: t.w / k / cam.s, h: t.h / k / cam.s, look };
+  return { t, x: -cam.ox / cam.s, y: -cam.oy / cam.s, w: t.w / k / cam.s, h: t.h / k / cam.s, look, mipped: false };
 }
+/** The share by which a picture shown at the size it was drawn may seem smaller by rounding alone (`compose`). */
+const ROUNDED = 1e-6;
 /** How often a frame drawn without a program not made yet looks whether it is made, ms (`drawWhenMade`). */
 const MADE_POLL_MS = 50;
 
@@ -517,7 +520,6 @@ export class MapView {
     this.layer?.draw(p);
     this.drawFire(gpu, p, xs, k, d, [tw, th], waiting);
     p.end();
-    gpu.mipmap(target);
     this.last = picOf(target, this.cam, k, this.lookKey());
     this.present(gpu, quick ? null : this.fadeFrom);
     if (!quick) this.fadeFrom = null;
@@ -670,6 +672,8 @@ export class MapView {
   private compose(gpu: Gpu, pics: Pic[], alpha: number): void {
     const d = this.drawnDpr(), { s, ox, oy } = this.cam, q = gpu.pass(null, [...this.background(), 1]);
     pics.forEach((p, i) => {
+      // (Shown smaller than it was drawn, the picture reads its mip levels: made the first time.)
+      if (!p.mipped && p.t.w > p.w * s * d * (1 + ROUNDED)) { gpu.mipmap(p.t); p.mipped = true; }
       const r = [(ox + p.x * s) * d, (oy + p.y * s) * d, p.w * s * d, p.h * s * d], { rect, src, keep } = this.reach(p, r, d);
       q.draw('picture', { rect, src, alpha: i === pics.length - 1 ? alpha : 1, binds: { 1: p.t, 2: 'smooth', 3: keep.buffer } }, true);
     });
@@ -746,7 +750,6 @@ export class MapView {
     const t = this.spares[spare]!;
     ok = this.drawInto(gpu, t, a.cam, a.k, a.seen, tiles.shift()) && ok;
     if (!tiles.length && ok) {
-      gpu.mipmap(t);
       const pic = picOf(t, a.cam, a.k, this.lookKey());
       if (i < RINGS.length) this.rings[i] = pic; else { this.whole = pic; this.wholeAt = now; }
       [this.aroundTex[i], this.spares[spare]] = [t, this.aroundTex[i] ?? null];
@@ -822,7 +825,6 @@ export class MapView {
     this.drawFire(gpu, p, job.xs, job.d, job.d, [W, H], []);
     p.end();
     if (!job.tiles.length) {
-      gpu.mipmap(job.into);
       this.sharpening = null; this.sharpOf = job.key;
       [this.sharp, this.sharpNext] = [this.sharpNext, this.sharp];
       // (Sharp over the softer picture of the view it replaces, which it comes in over.)
