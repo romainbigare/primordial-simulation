@@ -40,7 +40,8 @@ const LOAD_SHOWS: f64 = 0.25;
 /// when, and what a recorder keeps of it (`tape::Kept`, saved with it, `save_world`); what the shell keeps of its cells
 /// (`tape::Table`); the table made with the last frame; the samples' discharge, m³/s, and load, g/m³, last sent to the
 /// page (`tape::Table::discharge`, `tape::Table::load`; none before the first); the brush's stroke under way (`Stroke`;
-/// none between strokes: a stroke ends at `settle`) and the strokes begun; a copy of the world as it stands now, kept
+/// none between strokes: a stroke ends at `settle`) and the strokes begun; whether an edit changed the world since the
+/// last frame (`frame`), so a stroke's end sends one only then (`settle`); a copy of the world as it stands now, kept
 /// while it waits for edits (`hold`, and after a stroke that changed nothing), which the next stroke takes as the world
 /// before it, so its first call copies nothing; the world as it was before the last stroke that changed it began, till
 /// the world steps on (`undo`); and what edits had shaped of each of the terrain's samples (`Relief::shaped`) when the
@@ -58,6 +59,7 @@ struct Live {
     sent: Vec<[f32; 2]>,
     stroke: Option<Stroke>,
     strokes: u64,
+    unframed: bool,
     ready: Option<World>,
     before: Option<World>,
     version: Vec<f64>,
@@ -72,7 +74,7 @@ impl Live {
     fn new(world: World, (plan, kept): (Schedule, tape::Kept)) -> Live {
         let cells = tape::Table::new(&world);
         let (shaped, v) = (world.relief.shaped.clone(), world.relief.version);
-        Live { built: v, world, plan, kept, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, ready: None, before: None, version: shaped.clone(), since: vec![(v, sparse(&shaped))], shown: shaped, over: v }
+        Live { built: v, world, plan, kept, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, unframed: false, ready: None, before: None, version: shaped.clone(), since: vec![(v, sparse(&shaped))], shown: shaped, over: v }
     }
     /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table found again, as the cells'
     /// ground and the shore moved (`tape::Table::update`), and what edits had shaped kept as the new version's.
@@ -291,7 +293,7 @@ pub extern "C" fn meta() -> *const u8 {
 pub extern "C" fn frame() -> *const u8 {
     let bytes = with(|l| {
         let (bytes, table) = l.cells.frame(&l.world);
-        l.table = table;
+        (l.table, l.unframed) = (table, false);
         bytes
     });
     give(bytes)

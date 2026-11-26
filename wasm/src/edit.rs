@@ -60,6 +60,7 @@ impl Live {
         let under = self.world.under(planting);
         let edits: Vec<Edit> = under.iter().flat_map(|u| [Act::Clear(u.share), worldgen::schedule::grown(row)].map(|act| Edit { place: u.place, act })).collect();
         let done = self.world.edit(&edits);
+        self.unframed |= done.iter().any(|&d| d);
         let planted = done.chunks(2).any(|d| d.iter().all(|&ok| ok));
         if planted || under.is_empty() {
             return (planted, String::new());
@@ -134,29 +135,28 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
 fn make(l: &mut Live, b: pcore::edit::Brush, act: pcore::edit::Act) -> bool {
     let done = l.world.edit(&[pcore::edit::Edit { place: b.centre, act }])[0];
     l.stroke.as_mut().expect("a stroke under way").changed |= done;
+    l.unframed |= done;
     done
 }
 
 /// The ground under the brush `b` raised by `height` m at its centre, less toward its edge (lowered where under none;
 /// `Act::Ground`), its loose top of the stroke's make on what the stroke raised where the brush is now. The page draws
-/// it from the preview until the stroke settles.
+/// it from the preview until the stroke settles. It names no cells (the page reads whether it changed the world).
 fn shape(l: &mut Live, b: pcore::edit::Brush, height: f64) -> serde_json::Value {
     let st = l.stroke.as_mut().expect("a stroke under way");
     let act = pcore::edit::Act::Ground { radius_m: b.radius_m, height_m: height, stroke_m: st.raised_at(b.centre, l.world.map.side).max(0.0), make: st.make };
     st.raises.push((b.centre, b.radius_m, height));
-    let cells: Vec<usize> = l.world.under(&[b]).iter().map(|u| u.cell).collect();
     let done = make(l, b, act);
-    json!({"cells": cells, "changed": done, "preview": true, "frame": false})
+    json!({"cells": [], "changed": done, "preview": true, "frame": false})
 }
 
 /// A lake under the brush `b` at once, its floor `depth` m under its rim, full to its pass (`Act::Basin`: the samples
 /// are built again and the liquid settles; the page asks for the new relief): a frame, and the preview until the
-/// page's ground shows it.
+/// page's ground shows it. It names no cells, as `shape`.
 fn lake(l: &mut Live, b: pcore::edit::Brush, depth: f64) -> serde_json::Value {
-    let cells: Vec<usize> = l.world.under(&[b]).iter().map(|u| u.cell).collect();
     let done = make(l, b, pcore::edit::Act::Basin { radius_m: b.radius_m, depth_m: depth });
     l.follow();
-    json!({"cells": cells, "changed": done, "preview": true, "frame": done})
+    json!({"cells": [], "changed": done, "preview": true, "frame": done})
 }
 
 /// `joules_m2` J a m² of heat added under the brush `b` to the remains lying there (`Act::Heat`), which dries and lights
@@ -205,14 +205,16 @@ pub extern "C" fn settled_relief() -> *const u8 {
 /// true: the page asks for the new version's relief), and the strikes burnt. Returns, as JSON, whether the ground was
 /// built again, each cell the flames reached and when, s after its strike (`burnt`: [cell, s] pairs), the squares whose
 /// centre lies in one of those cells (`squares`), why the stroke's planting placed nothing (`unplanted`: "" where it
-/// placed some), and whether the stroke can be undone (`undo`: one of its edits was made).
+/// placed some), whether the stroke can be undone (`undo`: one of its edits was made), and whether the page is to be
+/// sent a frame (`frame`: the world changed since the last, `Live::unframed`, or as it settled).
 #[no_mangle]
 pub extern "C" fn settle() -> *const u8 {
     let out = with(|l| {
         let (done, unplanted, undo) = l.settle();
         let reached: std::collections::BTreeSet<usize> = done.burnt.iter().map(|b| b.0 as usize).collect();
+        let frame = l.unframed || done.ground || !done.burnt.is_empty();
         let mut out = json!(done);
-        (out["squares"], out["unplanted"], out["undo"]) = (json!(l.cells.squares_in(|i| reached.contains(&i))), json!(unplanted), json!(undo));
+        (out["squares"], out["unplanted"], out["undo"], out["frame"]) = (json!(l.cells.squares_in(|i| reached.contains(&i))), json!(unplanted), json!(undo), json!(frame));
         out
     });
     give(out.to_string().into_bytes())
@@ -248,7 +250,7 @@ pub extern "C" fn undo() -> *const u8 {
     give(out.to_string().into_bytes())
 }
 
-/// The world waits for edits (the page paused it): a copy of it is kept for the first stroke (`Live::ready`), so that
+/// The world waits for edits (the page paused it, or undid a stroke): a copy of it is kept for the first stroke (`Live::ready`), so that
 /// stroke's first call need not copy it; none where the last stroke's undo is kept (the next stroke copies the world
 /// then, so no more than two copies of it are kept between strokes).
 #[no_mangle]

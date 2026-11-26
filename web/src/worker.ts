@@ -239,15 +239,21 @@ host.onmessage = async e => {
         sentBuilds = core.ground_version() + 1;
         host.postMessage({ kind: 'relief', relief, reliefVersion: sentBuilds }, [relief.buffer]);
       }
-      if (m.cmd === 'settle') host.postMessage({ kind: 'settled', text: text(core.settle()) }, []);
-      else core.soften();
-      postFrame('frame', true);
+      // A stroke's end sends a frame where the world changed since the last (a lake's paint sent its own).
+      let framed = true;
+      if (m.cmd === 'settle') {
+        const answer = text(core.settle());
+        framed = (JSON.parse(answer) as { frame: boolean }).frame;
+        host.postMessage({ kind: 'settled', text: answer }, []);
+      } else core.soften();
+      if (framed) postFrame('frame', true);
     }
     else if (m.cmd === 'undo' && core) {
       // The world as before the last stroke (`undo`): its frame, the relief of its ground's new version, and the preview
-      // of what moved since the ground the page shows.
+      // of what moved since the ground the page shows; then a copy kept for the next stroke (`hold`), as at a pause.
       host.postMessage({ kind: 'undone', text: text(core.undo()), preview: preview() }, []);
       postFrame('frame', true);
+      core.hold();
     }
     else if (m.cmd === 'groundShown' && core) {
       // The page's ground shows the samples of this version now: what edits moved since (`preview`).
