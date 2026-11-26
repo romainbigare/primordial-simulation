@@ -36,20 +36,37 @@ impl World {
     /// under the brush's centre to its level, its pass, from the outside node at each cell's ground temperature, poured
     /// into each cell's part of it (`pour_pond`); then the passes of a month's start and the liquid settled with no
     /// time (`flow::settle`) level it (the pores of the ground it covers were given what they take first). Whether a
-    /// basin was made: none whose centre lies in the open low ground (its liquid stands there already).
+    /// basin was made: none whose centre lies in the open low ground (its liquid stands there already). Where none is
+    /// made but the samples were built again to read the ground, the liquid settles over them as `World::settle` would
+    /// have (which finds nothing due then).
     pub(crate) fn basin(&mut self, b: Brush, depth: f64) -> bool {
         let Some(liquid) = crate::cover::Parts::of(&self.chem).map(|p| p.liquid) else { return false };
+        if depth <= 0.0 {
+            return false;
+        }
         // (The ground is read on the samples as they stand over the cells' grounds: built again first where edits
         // shaped them, or where they were never built from the running world, the seed's.)
-        if self.relief.due || self.relief.version == 0 {
+        let reshaped = self.relief.due || self.relief.version == 0;
+        if reshaped {
             crate::flow::build::reshape(self);
         }
+        let made = self.dig(b, depth, liquid);
+        if reshaped && !made {
+            crate::month_start(self);
+            crate::flow::settle(self);
+        }
+        made
+    }
+
+    /// The basin dug under the brush `b`, `depth` m deep, and filled with the liquid `liquid`, over the samples as they
+    /// stand (`basin`); whether it was made.
+    fn dig(&mut self, b: Brush, depth: f64, liquid: usize) -> bool {
         let s = self.terrain_samples();
         let wide = Brush { centre: b.centre, radius_m: b.radius_m + RIM_SAMPLES * self.map.length(SAMPLE_DEPTH) };
         let all = self.covered(wide, s.across);
         let inside = |c: &Covered| c.d * wide.radius_m <= b.radius_m;
         let Some(centre) = all.iter().filter(|c| inside(c)).min_by(|a, z| a.d.total_cmp(&z.d)).map(|c| c.k) else { return false };
-        if depth <= 0.0 || open(&s, centre) {
+        if open(&s, centre) {
             return false;
         }
         let levels = self.pond_levels();

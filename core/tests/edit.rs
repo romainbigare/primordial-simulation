@@ -399,3 +399,23 @@ fn an_edit_of_numbers_not_finite_is_refused() {
     w.settle();
     assert!(state(&w) == before, "the world moved");
 }
+
+/// A basin that cannot be made after a stroke (its centre in the open low ground) still leaves the ground the stroke
+/// shaped settled: the world is the one the stroke alone and its settling give, to the last bit of the ground's amounts
+/// and heat.
+#[test]
+fn a_basin_not_made_still_settles_the_stroke_before_it() {
+    use pcore::store::Class;
+    let mut w = small_world();
+    let i = inland(&w);
+    assert!(shape(&mut w, i, 20.0));
+    let mut alone = w.clone();
+    let sea = (0..w.mesh.cells().n()).find(|&j| !w.is_land(j)).expect("the sea");
+    let [x0, y0, x1, y1] = w.map.bounds(sea);
+    let act = Act::Basin { radius_m: 0.3 * w.map.side, depth_m: 5.0 };
+    assert_eq!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }]), [false]);
+    w.settle();
+    alone.settle();
+    let state = |w: &World| w.store.amounts(Class::Ground).iter().chain(w.store.heat(Class::Ground)).map(|x| x.to_bits()).collect::<Vec<u64>>();
+    assert!(state(&w) == state(&alone) && w.relief.version == alone.relief.version, "the stroke's ground not settled");
+}

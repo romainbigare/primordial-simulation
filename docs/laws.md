@@ -250,7 +250,8 @@ from the outside node at the ground's temperature and liquid (with its fusion en
 poured into each cell's part of that pond's body (`flow::pour`: in a cell of parts it comes into its liquid, and the
 part holds it, so the runoff's pass keeps it there); where the floor still opens to the open low ground (a rim under
 the sea's level), none (its liquid stands there already), and a brush whose centre lies in the open low ground makes
-none. Then the liquid settles over the ground (below); what the cells' other liquid and pores took of it is poured
+none (where the samples were built again to read the ground, the liquid still settles over them, as the settling of
+the edits would). Then the liquid settles over the ground (below); what the cells' other liquid and pores took of it is poured
 again, up to three times, until it lacks less than a hundredth of its room, so it stands the asked depth over a dry
 floor. An edit moves the bed faster than the slow ground is checked: its caches
 are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. The samples' loose
