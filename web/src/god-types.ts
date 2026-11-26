@@ -12,11 +12,13 @@ export interface StartKind { row: number; name: string; kg: number }
 /** What a brush did (wasm/src/lib.rs `brush`), as god mode reads it: of a planting, each cell newly under it, the share
  * of it under the brush, whether each of its edits was made and the core's reason where not; of heat, each cell under
  * it, its share, how much of the heat that lights its remains it holds (`progress`, 0 to 1) and why none would light.
- * (A brush of the ground, or a lake, answers its cells as numbers alone.) */
-export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[] }
-/** What a stroke's settling did (wasm/src/lib.rs `settle`): whether the ground was built again, and each cell the
- * flames of its strikes reached, and when, s after the strike. */
-export interface Settled { ground: boolean; burnt: [number, number][] }
+ * (A brush of the ground, or a lake, answers its cells as numbers alone.) And whether it changed the world. */
+export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[]; changed: boolean }
+/** The reason god mode gives a tool (`GodTool.reason`) where a paint whose cells hold no reason changed nothing. */
+export const UNCHANGED = 'Unchanged';
+/** What a stroke's settling did (wasm/src/lib.rs `settle`): each cell the flames of its strikes reached, and when, s
+ * after the strike; and whether the stroke can be undone (it changed the world). */
+export interface Settled { burnt: [number, number][]; undo: boolean }
 /** The worker's side of the tools (live.ts `Live`): ask what lies under a place, paint, end a stroke, settle a stroke
  * held so far and go on with it, and undo the last. */
 export interface Editor {
@@ -52,7 +54,8 @@ export interface GodTool {
   least?: number;
   /** Why it cannot act at the place the core answered about (null: none yet), or ''. */
   why(p: Probe | null): string;
-  /** The core's reason a cell was not edited (`Brushed`), in plain words. */
+  /** The core's reason a cell was not edited (`Brushed`), in plain words; of `UNCHANGED`, why a paint that names no
+   * cell's reason changed nothing. */
   reason(why: string): string;
   /** Its own choices, shown under the brush's sizes (`show` draws the card anew after one is picked). */
   choices?(show: () => void): HTMLElement;

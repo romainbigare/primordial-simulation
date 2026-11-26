@@ -339,7 +339,12 @@ function loop(now: number): void {
 function togglePlay(): void {
   if (!world || god.busy()) return; // (a stroke of god mode settles first)
   // (A paused world's ground is made again at once from its last build, ground.ts `rebuild`.)
-  if (live) { playing = !playing; live.play(playing); if (!playing) land?.tiles.rebuild(null, true); return syncUi(); }
+  if (live) {
+    playing = !playing; live.play(playing);
+    // (The core forgets the last stroke as the world plays on.)
+    if (playing) god.forgetUndo(); else land?.tiles.rebuild(null, true);
+    return syncUi();
+  }
   if (!playing && frame >= world.meta.frames.length - 1) setFrame(0);
   playing = !playing; acc = 0; syncUi();
 }
@@ -405,7 +410,7 @@ async function startLive(from: ArrayBuffer | null): Promise<void> {
   world = null;
   const l = live = new Live($('worker-src').textContent ?? '', wasm, {
     ready: () => (from ? openSaved(from) : newWorld()),
-    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); god.reset(); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
+    world: w => { world = w; land = vegetation.land = landOf(w); map.setLand(land); thingsKey = ''; slots.set(null); god.reset(); god.forgetUndo(); setup(w); land?.tiles.view(map.view()); showStats(l.stats); },
     things: data => { if (live === l && world) slots.set(data); },
     frame: (stats, changed, edited) => {
       if (live !== l) return;

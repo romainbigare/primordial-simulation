@@ -9,7 +9,7 @@
 // card of the brush's sizes and the tool's choices, the strokes and the core's answers to them, the question to the core
 // about the place under the cursor (`probe`), and the brush drawn over the map at its true size (god-draw.ts).
 import { IconName, iconSvg } from './icons';
-import type { Brushed, Editor, GodPage, GodTool, Probe, Settled } from './god-types';
+import { UNCHANGED, type Brushed, type Editor, type GodPage, type GodTool, type Probe, type Settled } from './god-types';
 import { drawBrush, drawFill, drawFlames, drawReason, drawSight, drawSizeTag, litSites } from './god-draw';
 import { holdButton, radiusText, sizeChips, sizeStepper } from './god-controls';
 
@@ -114,13 +114,20 @@ export class God {
   /** Whether the brush stands at the sight (a phone), not under the pointer. */
   aiming(): boolean { return this.page.aim() !== null; }
 
-  /** Put the tool away and forget the place and the stroke to undo: a new world, or god mode closed. */
+  /** Put the tool away and forget the place: a new world, or god mode closed. A stroke held ends as a stroke does
+   * (`end`), so the core's answers to it come in their turn. */
   reset(): void {
-    // (A stroke held is ended: its timer stops, and the core is told, so its next stroke is a new one.)
-    if (this.stroke) { clearInterval(this.stroke.held); if (this.stroke.sent) this.editor()?.settle(); }
+    this.end();
     this.holdButton.classList.remove('held');
-    this.stroke = null; this.ended = []; this.probe = null; this.asking = false; this.undoable = false; this.filling = null;
+    this.probe = null; this.asking = false; this.filling = null;
     this.pick(null);
+  }
+
+  /** The last stroke can no longer be undone: the world played on (the core forgets it), or a new world came. */
+  forgetUndo(): void {
+    if (!this.undoable) return;
+    this.undoable = false;
+    this.show();
   }
 
   /** Whether a tool is on. */
@@ -144,8 +151,9 @@ export class God {
     return true;
   }
 
-  /** Take tool `t` (null: none), and say how to use it; the world pauses while one is on. */
+  /** Take tool `t` (null: none), and say how to use it; the world pauses while one is on. A stroke under way ends. */
   private pick(t: GodTool | null): void {
+    if (t !== this.tool) this.end();
     this.tool = t; this.lastWhy = '';
     if (t?.least && this.radius < t.least) this.radius = this.radii()[0];
     if (t) this.page.picked();
@@ -180,6 +188,8 @@ export class God {
     this.asking = false;
     const was = this.probe;
     this.probe = p;
+    // (The reason a paint gave is of its own place.)
+    if (!this.stroke && was && was.cell !== p.cell) this.lastWhy = '';
     if (this.tool) this.page.redraw();
     if (!was || was.cell !== p.cell || was.fire !== p.fire || was.land !== p.land || was.patches !== p.patches) { this.show(); this.page.redraw(); }
   }
@@ -192,12 +202,14 @@ export class God {
     if (!t) return false;
     this.end();
     this.page.picked();
-    this.at = [x, y];
+    this.at = [x, y]; this.lastWhy = '';
     const now = performance.now();
     const st: Stroke = this.stroke = { tool: t, last: [x, y, now], began: now, now: [x, y], sent: 0, held: 0, waiting: false, steps: 0, softened: now, softenedAt: 0, progress: -1 };
     const ticks = () => window.setInterval(() => this.tick(st), t.step ? t.step.every / STEP_LOOKS : PAINT_MS);
     if (t.rate) st.held = window.setTimeout(() => { if (this.stroke !== st) return; st.held = ticks(); this.paint(st); }, HOLD_MS);
     else { this.paint(st); if (!t.amount) st.held = ticks(); }
+    // A lake's water is drawn in its ring from the tap.
+    if (t.amount) this.filling = { at: [x, y], radius: this.radius, ink: t.ink, began: now, from: this.page.ground()[0], settled: 0 };
     return true;
   }
 
@@ -251,7 +263,6 @@ export class God {
     else if (st.tool.rate || (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]))) this.paint(st);
     this.editor()?.settle();
     this.ended.push(st);
-    if (st.tool.amount) this.filling = { at: st.last.slice(0, 2) as [number, number], radius: this.radius, ink: st.tool.ink, began: performance.now(), from: this.page.ground()[0], settled: 0 };
   }
 
   /** Paint with stroke `st`'s tool where its brush is now: by its amount, for a tool with steps by the steps due (all
@@ -268,7 +279,8 @@ export class God {
     this.editor()?.brush(t.code, x, y, this.radius, amount, t.row());
   }
 
-  /** The core's answer to a paint: the heat it holds, or the reason, where it edited none of its cells. */
+  /** The core's answer to a paint: the heat it holds, or the reason, where it edited none of its cells (a lake that was
+   * not dug draws no water). */
   brushed(r: Brushed): void {
     const st = this.ended[0] ?? this.stroke;
     if (!st) return;
@@ -279,7 +291,8 @@ export class God {
     else if (typeof r.cells[0] === 'object') {
       const done = (c: Brushed['cells'][number]) => c.done!.every(d => d);
       this.lastWhy = r.cells.some(done) ? '' : st.tool.reason(most(counted(r.cells.filter(c => !done(c)))));
-    }
+    } else this.lastWhy = r.changed ? '' : st.tool.reason(UNCHANGED);
+    if (st.tool.amount && !r.changed) this.filling = null;
     this.page.redraw();
   }
 
@@ -297,7 +310,7 @@ export class God {
     const st = this.ended.shift();
     if (!st) return;
     if (this.filling && st.tool.amount) this.filling.settled = performance.now();
-    this.undoable = true;
+    if (r.undo) this.undoable = true;
     this.show();
     if (!r.burnt.length) return;
     const m = this.page.squareM();

@@ -7,7 +7,7 @@
 // cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, the
 // longer the faster, and those that hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain
 // words, from the core's own reasons. A new tool is one more entry of `godTools`.
-import type { GodTool, Probe, StartKind } from './god-types';
+import { UNCHANGED, type GodTool, type Probe, type StartKind } from './god-types';
 
 /** The core's brush tools (wasm/src/lib.rs `SHAPE`, `LAKE`, `PLANT`, `BURN`). */
 const BRUSH_SHAPE = 0, BRUSH_LAKE = 1, BRUSH_PLANT = 2, BRUSH_BURN = 3;
@@ -94,13 +94,14 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise' : 'Lower',
     ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1, step: { amount: sign * SHAPE_STEP_M, every: SHAPE_STEP_MS }, softens: true,
     hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Right-drag moves the map.`, verb: `Hold to ${sign > 0 ? 'raise' : 'lower'}`,
-    why: () => '', reason: why => why,
+    why: () => '', reason: why => (why === UNCHANGED ? 'No ground is left here to take away.' : why),
   });
   let depth = LAKE_DEPTHS[1][1];
   const lake: GodTool = {
     key: 'lake', icon: 'lake', label: 'Lake', ink: '#4aa3e8', code: BRUSH_LAKE, row: () => -1, amount: () => depth, least: LAKE_LEAST_M,
     hint: 'Click the map to dig a lake. It fills with water at once.', verb: 'Tap to dig',
-    why: (p: Probe | null) => (p && p.land <= 0 ? 'This is open water already.' : ''), reason: why => why,
+    why: (p: Probe | null) => (p && p.land <= 0 ? 'This is open water already.' : ''),
+    reason: why => (why === UNCHANGED ? 'No lake can be dug here.' : why),
     choices: show => {
       const list = document.createElement('div');
       list.className = 'chips';

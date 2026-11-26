@@ -197,11 +197,12 @@ impl Terrain {
     /// stands over the liquid's level (`wear::STAND_M`). What the relief laid on a sample is loose ground that settled
     /// there (`laid_ground`), laid over `years` since the start; where edits shaped a sample its loose ground follows on
     /// its new slope (`mantle::edited`). The ponds are numbered after those the relief keeps
-    /// (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build; found
-    /// once for each version of the relief (`Relief::version`) and kept.
+    /// (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build (no version, or a relief of no
+    /// cells' offsets: a world put back to before its first build, `rename_built`); found once for each version of the
+    /// relief (`Relief::version`) and kept.
     pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief, years: f64) -> Arc<Samples> {
         let s0 = self.samples(seed, map, lat);
-        if r.version == 0 {
+        if r.version == 0 || r.offset.is_empty() {
             return s0;
         }
         let known = |kept: &Option<(u32, Arc<Samples>)>| kept.as_ref().filter(|b| b.0 == r.version && b.1.seed == seed).map(|b| b.1.clone());
@@ -229,6 +230,14 @@ impl Terrain {
             *kept = Some((r.version, found.clone()));
             found
         })
+    }
+
+    /// The samples kept as built for the version `from` of the relief kept as those of version `to` (`built`): a world
+    /// put back as it was (an undo) takes a new version, so no version names two grounds, and keeps its samples.
+    pub fn rename_built(&self, from: u32, to: u32) {
+        if let Some(b) = self.kept.1.lock().expect("the built samples").as_mut().filter(|b| b.0 == from) {
+            b.0 = to;
+        }
     }
 
     /// The lobes the running world's mouths lay at a build of the samples `s` of `map` (`delta::lobes`, one call on the

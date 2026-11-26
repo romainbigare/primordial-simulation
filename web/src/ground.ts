@@ -107,8 +107,11 @@ export class GroundTiles {
   /** How many times the rock came (the land sends it to the GPU when this moves). */
   rockVersion = 0;
   /** The ground's version: how many times the world's samples were built anew and handed to the workers (`rebuild`); a
-   * tile made of an older one is stale. The tiles kept that a build changed, drawn until each comes again. */
+   * tile made of an older one is stale. The last version whose changed tiles the first worker told (`rebuilt`): till it
+   * is the latest, a tile kept may be stale and not yet known to be. The tiles kept that a build changed, drawn until
+   * each comes again. */
   private gen = 0;
+  private told = 0;
   private stale = new Set<number>();
   /** The relief of the latest build not yet handed to the workers (`rebuild`), when the last was handed, ms, and the
    * timer of the next. */
@@ -143,7 +146,7 @@ export class GroundTiles {
         if (m.kind === 'error') return error(m.text);
         if (m.kind === 'ready') { w.ready = true; if (!this.rock) { this.rock = m.rock; this.rockVersion++; } this.changed(true); return this.next(); }
         if (m.kind === 'tile') { w.making--; w.memory = m.memory; spend('tile ms', m.ms); timed('tiles', () => this.took(m.depth, m.x, m.y, m.data, m.gen)); }
-        if (m.kind === 'rebuilt' && k === 0) this.rebuilt(m.squares, m.rock);
+        if (m.kind === 'rebuilt' && k === 0) this.rebuilt(m.squares, m.rock, m.gen);
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
       w.worker.postMessage({ cmd: 'init', wasm: copy, ground }, [copy]);
@@ -172,10 +175,12 @@ export class GroundTiles {
     });
   }
 
-  /** The first worker's ground made again, each build in its order: the rock of the latest, and each tile kept over a
-   * square whose tiles changed (`squares`, a byte a square row by row) stale, asked for again and drawn until it comes
-   * (so builds that come before the first is answered mark the union of their squares). */
-  private rebuilt(squares: Uint8Array, rock: Uint16Array): void {
+  /** The first worker's ground made again of the ground's version `gen`, each build in its order: the rock of the
+   * latest, and each tile kept over a square whose tiles changed (`squares`, a byte a square row by row) stale, asked
+   * for again and drawn until it comes (so builds that come before the first is answered mark the union of their
+   * squares). */
+  private rebuilt(squares: Uint8Array, rock: Uint16Array, gen: number): void {
+    this.told = gen;
     this.rock = rock;
     this.rockVersion++;
     for (const [key, k] of this.kept) {
@@ -263,9 +268,10 @@ export class GroundTiles {
   }
 
   /** The version of the world's samples every tile in view at its own depth is made of, once all came; null while
-   * some are still to come, or a build is still to be handed to the workers. */
+   * some are still to come, a build is still to be handed to the workers, or the tiles the last changed are not yet
+   * told. */
   shownVersion(): number | null {
-    if (this.built) return null;
+    if (this.built || this.told !== this.gen) return null;
     for (const k of this.inView) if (!this.kept.has(k) || this.stale.has(k)) return null;
     return this.versionOf.get(this.gen) ?? null;
   }
