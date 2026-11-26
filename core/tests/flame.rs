@@ -317,3 +317,18 @@ fn heat_lights_remains_too_thin_to_carry_a_flame() {
     assert!(w.g(p.liquid, i) < held * DAMP && w.g(p.liquid, i) >= 0.0, "the liquid the remains held boiled off the ground: {} of {}", w.g(p.liquid, i), held * DAMP);
     books.assert_kept(&w, 1e-9);
 }
+
+/// Remains on a cell with no cover to give their leaf area cover none of its ground (`flame::beds`): a strike does not
+/// light them, and no heat does (`flame::needed`), so an edit adds none there.
+#[test]
+fn remains_with_no_cover_take_no_heat() {
+    let mut w = small_world();
+    worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
+    let i = dry_lands(&w)[0];
+    let p = Parts::of(&w.chem).unwrap();
+    for (q, kg) in [MATTER, WALL].into_iter().zip(REMAINS_KG) {
+        testkit::put_kg_m2(&mut w, p.sub[q], i, kg);
+    }
+    assert_eq!(flame::lights(&w, i), Err(flame::Unlit::Sparse));
+    assert_eq!(flame::needed(&w, i, 1.0), Err(flame::Unlit::Sparse));
+}

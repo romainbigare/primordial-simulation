@@ -168,12 +168,16 @@ const DEPTH_STEPS: usize = 16;
 /// What lighting the remains of patch `k` of land cell `i` (the share `part` of the cell's, `parts`) and the cured
 /// leaves over them takes (`heated`): their fuel, the cell's layer of remains (read into `layer_of` where first needed),
 /// the liquid they hold, kg a m² of the patch's land, and the heat that warms and boils it off and warms them dry to
-/// `t_light`, J a m². The liquid is their layer's whole depth (what its sorption curve holds and, as duff, what it draws
+/// `t_light`, J a m²; none where they cover none of its ground (`Unlit::Sparse`: no cover to give their leaf area,
+/// `leaf_per_kg`), as heat there lights nothing. The liquid is their layer's whole depth (what its sorption curve holds and, as duff, what it draws
 /// from the ground, `Layer::share`), which is the ground's own (`World::g`): no more than the ground holds a m² of its
 /// land (`ground_liquid`).
 fn to_light(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), ground_liquid: f64, layer_of: &mut Option<Result<Layer, Unlit>>) -> Result<(Fuel, Layer, f64, f64), Unlit> {
     let ph = &w.cfg.phys;
     let fuel = fuel(w, p, (i, k, part))?;
+    if fuel.cover <= 0.0 {
+        return Err(Unlit::Sparse);
+    }
     let l = layer_of.get_or_insert_with(|| layer(w, p, i, fuel.t)).clone()?;
     let held: f64 = (0..DEPTH_STEPS).map(|s| {
         let z = (s as f64 + 0.5) / DEPTH_STEPS as f64;
@@ -195,7 +199,7 @@ fn ground_liquid(w: &World, p: &Parts, i: usize) -> f64 {
 /// share min(1, e / q) of `over` of it, on the share of its ground the remains cover (off the cell's saturated share,
 /// where liquid stands): a bed burnt whole, all of it dry (`Bed::kept`: the heat keeps its flame where it would carry
 /// none of its own). Returns each patch's bed with the heat it took, J, and the liquid it boiled off, kg; or why none:
-/// nothing that burns, snow over it, or no air read yet.
+/// nothing that burns, nothing that covers its ground, snow over it, or no air read yet.
 pub fn heated(w: &World, p: &Parts, i: usize, (e, over): (f64, f64)) -> Vec<Result<(Bed, f64, f64), Unlit>> {
     let (chem, ph, land) = (&w.chem, &w.cfg.phys, crate::contract::land(w, i));
     let ground_liquid = ground_liquid(w, p, i);

@@ -1646,7 +1646,8 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   what they draw from the ground, summed over 16 steps of depth), which is the ground's own liquid, so no more than the
   ground node holds a m² of its land; then warms them dry to `t_light`; that is q J a m² of
   the patch's land, and heat of e J a m² over the share s of the cell lights the share s min(1, e/q) of it, off the
-  saturated share, on the share its remains cover. Its bed burns whole and dry (`Bed::kept`), where it would carry no
+  saturated share, on the share its remains cover (remains that cover none of it, with no cover to give their leaf
+  area, take no heat and light nothing). Its bed burns whole and dry (`Bed::kept`), where it would carry no
   flame of its own too (the heat keeps it: sparse or thin remains, damp ones), and its flame runs on from the cell where
   its dry bed carries one. The liquid the lit beds boiled off leaves their ground node as vapour into its aside node
   (and so the air, 1.5), with its heat at the ground's temperature and its latent heat, as evaporation does; the rest of

@@ -177,7 +177,7 @@ pub fn now(w: &mut World) -> Vec<(u32, f64)> {
 
 /// The heat that lights the remains of every patch of land cell `i` whole over the share `over` of it where edits add
 /// heat evenly (`heated`, `bed::light_m2`), J; or why none lights: no land, no cover in the chemistry, nothing lying
-/// that burns, snow over it, or the air near the ground not read yet. An edit adds no more (`World::heat`).
+/// that burns, nothing that covers its ground, snow over it, or the air near the ground not read yet. An edit adds no more (`World::heat`).
 pub fn needed(w: &World, i: usize, over: f64) -> Result<f64, Unlit> {
     let p = Parts::of(&w.chem).ok_or(Unlit::Lifeless)?;
     let land = crate::contract::land(w, i);
