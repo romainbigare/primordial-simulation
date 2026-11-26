@@ -311,9 +311,14 @@ pub(super) fn exchange(cx: &Ctx, g: &Surf, air: &[f64], work: &mut Work) -> [f64
         let kept = sun * caught * g.keep;
         [sun, sun * ((1.0 - cover) * (1.0 - alb) + caught) - kept, kept, in_air]
     };
-    // The heat radiation its air absorbs of what it sends, at the shares of its temperature at the step's start.
-    let [down, slope] = [0, 1].map(|c| seen(&|q| s.heat[q].glow(&w.chem, tl, DOWN)[c]));
-    let rad = Air { tl, f: seen(&|q| s.heat[q].absorbs(&w.chem, g.tg)), down, slope };
+    // The heat radiation its air absorbs of what it sends, at the shares of its temperature at the step's start; what
+    // each node it sees sends down, found once.
+    let (shares, mut glow) = (w.chem.heat_shares(g.tg), [[0.0; 2]; super::SEES]);
+    for ((&q, _), o) in s.near[g.cell].iter().zip(&s.wt[g.cell]).zip(&mut glow).filter(|e| *e.0 .1 > 0.0) {
+        *o = s.heat[q as usize].glow(&w.chem, tl, DOWN);
+    }
+    let of = |c: usize| s.near[g.cell].iter().zip(&s.wt[g.cell]).zip(&glow).filter(|e| *e.0 .1 > 0.0).map(|((_, &x), o)| x * o[c]).sum::<f64>();
+    let rad = Air { tl, f: seen(&|q| s.heat[q].absorbs(&shares)), down: of(0), slope: of(1) };
     // The share of the air it sees that lies over it (`over_cell`).
     let over = area / g.seen_area;
     let Work { gas, ev, p, carry, out, loss, soak } = work;

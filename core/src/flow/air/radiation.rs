@@ -271,7 +271,12 @@ impl Heat {
 
     /// The share of the heat radiation of a surface at `t` K that the air absorbs.
     pub fn absorbs(&self, chem: &Chemistry, t: f64) -> f64 {
-        let shares = chem.heat_shares(t);
+        self.absorbs_shares(&chem.heat_shares(t))
+    }
+
+    /// The share of the heat radiation of a surface that the air absorbs, its shares in the bands `shares`
+    /// (`Chemistry::heat_shares`).
+    fn absorbs_shares(&self, shares: &[f64; HEAT_BANDS]) -> f64 {
         (0..SUBS).map(|q| shares[q / PARTS] / PARTS as f64 * self.f[q]).sum()
     }
 
@@ -326,10 +331,11 @@ impl Skies {
         Skies { clear, cloud }
     }
 
-    /// `Heat::absorbs` of the whole sky.
-    pub(crate) fn absorbs(&self, chem: &Chemistry, t: f64) -> f64 {
-        let clear = self.clear.absorbs(chem, t);
-        self.cloud.as_ref().map_or(clear, |(share, under)| (1.0 - share) * clear + share * under.absorbs(chem, t))
+    /// `Heat::absorbs` of the whole sky, the surface's heat radiation in the bands by `shares`
+    /// (`Chemistry::heat_shares`).
+    pub(crate) fn absorbs(&self, shares: &[f64; HEAT_BANDS]) -> f64 {
+        let clear = self.clear.absorbs_shares(shares);
+        self.cloud.as_ref().map_or(clear, |(share, under)| (1.0 - share) * clear + share * under.absorbs_shares(shares))
     }
 
     /// `Heat::sends` of the whole sky.
