@@ -106,12 +106,22 @@ fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
     assert!(amount[0] > 0.9, "the law ran: {amount:?}");
 }
 
-/// The default settings pass; a month that is not a whole number of the air's steps, or a dormancy of 1, is refused.
+/// The default settings pass; a month that is not a whole number of the air's steps, a year of no months, no gravity,
+/// a dormancy of 1, or a light-limited rate whose reference lies at its floor, is refused.
 #[test]
-fn the_default_settings_pass_and_a_month_off_the_air_steps_or_a_dormancy_of_1_is_refused() {
+fn the_default_settings_pass_and_settings_the_laws_cannot_run_are_refused() {
     assert_eq!(Config::default().validate(), Ok(()));
-    let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
-    for c in [Config { days_per_month: 25, ..Default::default() }, Config { days_per_month: 0, ..Default::default() }, dormant] {
-        assert!(c.validate().is_err(), "{} {}", c.days_per_month, c.phys.dormancy);
+    let phys = |p: Physics| Config { phys: p, ..Default::default() };
+    let floor = Physics::default().gas_floor;
+    let refused = [
+        Config { days_per_month: 25, ..Default::default() },
+        Config { days_per_month: 0, ..Default::default() },
+        Config { months_per_year: 0, ..Default::default() },
+        Config { gravity: 0.0, ..Default::default() },
+        phys(Physics { dormancy: 1.0, ..Default::default() }),
+        phys(Physics { gas_ref: floor, ..Default::default() }),
+    ];
+    for (n, c) in refused.iter().enumerate() {
+        assert!(c.validate().is_err(), "settings {n} passed");
     }
 }

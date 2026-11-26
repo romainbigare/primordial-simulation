@@ -33,8 +33,9 @@ pub fn reversible(chem: &Chemistry) -> Vec<(usize, usize, u16, usize)> {
 impl Reactor {
     /// The amounts at which pairs of reactions that undo each other balance in one node at `t`, from the chemistry's own
     /// rates, with the gas around (`gas`) held: of each pair the substance the first makes, if the node holds none, is set
-    /// where the two go at equal rates (laws.md 2.5). Returns the substances set and their amounts.
-    pub fn balance(&mut self, chem: &Chemistry, n: &mut [f64], gas: &[f64], t: f64) -> Vec<(usize, f64)> {
+    /// where the two go at equal rates (laws.md 2.5). Returns the substances set and their amounts; an error where a
+    /// balance lies past `MOST_MOL`.
+    pub fn balance(&mut self, chem: &Chemistry, n: &mut [f64], gas: &[f64], t: f64) -> Result<Vec<(usize, f64)>, String> {
         let mut out = Vec::new();
         for (f, b, m, u) in reversible(chem) {
             if n[u] > 0.0 || gas[u] > 0.0 {
@@ -58,7 +59,10 @@ impl Reactor {
                 continue;
             }
             let (mut lo, mut hi) = (0.0, 1.0);
-            while net(self, n, hi) > 0.0 && hi < MOST_MOL {
+            while net(self, n, hi) > 0.0 {
+                if hi >= MOST_MOL {
+                    return Err(format!("substance {u} balances past {MOST_MOL:e} mol at {t} K"));
+                }
                 (lo, hi) = (hi, hi * 2.0);
             }
             for _ in 0..BISECT {
@@ -69,6 +73,6 @@ impl Reactor {
             net(self, n, x);
             out.push((u, x));
         }
-        out
+        Ok(out)
     }
 }

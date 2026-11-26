@@ -112,3 +112,21 @@ fn the_vapour_absorbs_sunlight_as_its_bands_fill() {
     assert!((d(4.0 * s.sw_sat) - 2.0 * d(s.sw_sat)).abs() < 1e-12 * d(s.sw_sat), "not the square root past its band");
     assert!((0..chem.ns()).filter(|&k| k != LIQUID).all(|k| chem.sun_depth(k, 1e5) == 0.0));
 }
+
+/// A chemistry the laws cannot run is refused (`Chemistry::validate`): a reaction of no inputs, a count of 0, an input
+/// named twice, or a starting air of a substance it does not hold.
+#[test]
+fn a_chemistry_the_laws_cannot_run_is_refused() {
+    use pcore::chem::Chemistry;
+    let (chem, _) = worldgen::chemistry0();
+    let with = |f: &dyn Fn(&mut pcore::chem::Reaction)| {
+        let mut c = chem.clone();
+        f(&mut c.reactions[0]);
+        c
+    };
+    let air_beyond = Chemistry::new(chem.n_elements, chem.subs.clone(), chem.reactions.clone(), (chem.build.clone(), chem.builds.clone()), &[(chem.ns(), 0.1)], chem.heat_spans);
+    let refused = [with(&|r| r.inputs.clear()), with(&|r| r.outputs[0].1 = 0), with(&|r| r.inputs.push(r.inputs[0])), air_beyond];
+    for (n, c) in refused.iter().enumerate() {
+        assert!(c.validate().is_err(), "chemistry {n} passed");
+    }
+}

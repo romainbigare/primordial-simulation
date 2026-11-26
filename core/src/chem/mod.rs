@@ -180,7 +180,8 @@ struct Derived {
 impl Chemistry {
     /// A chemistry whose starting air has the mole fractions `air` (substance, fraction); the other substances none.
     pub fn new(n_elements: usize, subs: Vec<Substance>, reactions: Vec<Reaction>, (build, builds): (Option<Reaction>, Vec<Reaction>), air: &[(usize, f64)], heat_spans: [[f64; 2]; HEAT_BANDS - 1]) -> Self {
-        let mut shares = vec![0.0; subs.len()];
+        // (A substance beyond the others makes the shares longer than them, which `validate` refuses.)
+        let mut shares = vec![0.0; air.iter().map(|a| a.0 + 1).fold(subs.len(), usize::max)];
         air.iter().for_each(|&(k, x)| shares[k] = x);
         Chemistry { n_elements, subs, reactions, build, builds, air: shares, heat_spans, derived: OnceLock::new() }
     }
@@ -277,6 +278,8 @@ impl Chemistry {
             let light = s.heat.iter().flatten().chain(&[s.continuum, s.sw_abs, s.sw_sat, s.scatter]).all(|&x| x >= 0.0 && x.is_finite());
             require(light, || format!("substance {k}: its absorption and scattering of light must be finite and not below 0"))?;
         }
+        let air = self.air.iter().all(|&x| x >= 0.0 && x.is_finite());
+        require(self.air.len() == ns && air, || format!("the starting air must name substances of the {ns}, each a share not below 0"))?;
         let spans = self.heat_spans;
         let apart = spans.iter().all(|b| b[0] > 0.0 && b[1] > b[0] && b[1].is_finite()) && spans.iter().enumerate().all(|(i, a)| spans[i + 1..].iter().all(|b| a[1] <= b[0] || b[1] <= a[0]));
         require(apart, || format!("the bands of heat radiation {spans:?} must be spans of wavelength above 0 that do not overlap"))?;
@@ -285,14 +288,19 @@ impl Chemistry {
             let wall = p.sub[crate::life::WALL];
             require(self.subs[wall].shear > 0.0, || format!("substance {wall}, life's frame: its stress for a cut (shear) must be above 0"))?;
         }
-        // Each reaction, then each conversion: a conversion needs inputs and a product, a reaction no more orders than
-        // inputs. Its molar masses must agree with its elements to rounding: it keeps mass.
+        // Each reaction, then each conversion: each needs inputs, each named once and each count above 0 (the rates and
+        // the balance of a pair divide by them, `change::reversible`); a conversion needs a product, a reaction no more
+        // orders than inputs. Its molar masses must agree with its elements to rounding: it keeps mass.
         let mass = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].molar_mass).sum::<f64>();
         let reactions = self.reactions.iter().enumerate().map(|(r, rx)| (format!("reaction {r}"), rx, false));
         let builds = self.build.iter().map(|b| (String::from("build"), b, true));
         for (name, rx, conversion) in reactions.chain(builds).chain(self.builds.iter().enumerate().map(|(q, b)| (format!("builds {q}"), b, true))) {
-            let whole = !conversion || !(rx.outputs.is_empty() || rx.inputs.is_empty());
-            require(whole, || format!("{name} needs inputs and a product"))?;
+            let whole = !rx.inputs.is_empty() && !(conversion && rx.outputs.is_empty());
+            require(whole, || format!("{name} needs inputs{}", if conversion { " and a product" } else { "" }))?;
+            let counted = rx.inputs.iter().chain(&rx.outputs).all(|p| p.1 > 0);
+            require(counted, || format!("{name}: each count must be above 0"))?;
+            let once = rx.inputs.iter().enumerate().all(|(a, p)| rx.inputs[a + 1..].iter().all(|q| q.0 != p.0));
+            require(once, || format!("{name}: a substance named twice among its inputs"))?;
             let known = rx.inputs.iter().chain(&rx.outputs).all(|p| (p.0 as usize) < ns);
             require(known, || format!("{name}: a substance beyond the {ns}"))?;
             require(rx.ord.len() <= rx.inputs.len(), || format!("{name}: more orders than inputs"))?;

@@ -450,6 +450,15 @@ impl Config {
         let air = crate::schedule::AIR_STEP_DAYS;
         require(m > 0 && m.is_multiple_of(air), || format!("days_per_month ({m}) must be a whole number of the air's steps ({air} days)"))?;
         require(self.chunks > 0, || "chunks must be at least 1".to_string())?;
+        // The year is a whole number of months (`Config::calendar`), and its months divide the flames' tally.
+        require(self.months_per_year > 0, || format!("months_per_year ({}) must be at least 1", self.months_per_year))?;
+        // The air's scale height divides by gravity; a liquid's film renews its gas over its depth over `dissolve`.
+        require(self.gravity > 0.0 && self.gravity.is_finite(), || format!("gravity ({}) must be above 0", self.gravity))?;
+        require(self.dissolve > 0.0, || format!("dissolve ({}) must be above 0", self.dissolve))?;
+        // The light-limited rate is over its value at `gas_ref` (`Physics::gas_factor`); wetness and frost are shares over
+        // their scales (`Physics::wetness`, `Physics::frozen`).
+        require(p.gas_floor >= 0.0 && p.gas_ref > p.gas_floor, || format!("gas_ref ({}) must be above gas_floor ({}), and that not below 0", p.gas_ref, p.gas_floor))?;
+        require(p.wet_depth > 0.0 && p.frost_k > 0.0, || format!("wet_depth ({}) and frost_k ({}) must be above 0", p.wet_depth, p.frost_k))?;
         let (south, north) = (self.lat_south, self.lat_north);
         require(-90.0 <= south && south < north && north <= 90.0, || format!("lat_south ({south}) must lie below lat_north ({north}), both from -90 to 90"))?;
         // A cell's cover holds its kinds in arrays of `cover::SLOTS`.

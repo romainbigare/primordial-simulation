@@ -101,7 +101,7 @@ fn balances(c: &Chemistry, init: &worldgen::Init) {
                     for &(k, share) in &init.makes[0] {
                         n[k] = share / all * LOOSE_M / c.molar_volume(k, Phase::Solid);
                     }
-                    let x = rc.balance(c, &mut n, &gas, t).iter().find(|p| p.0 == u).map_or(0.0, |p| p.1);
+                    let x = rc.balance(c, &mut n, &gas, t).unwrap_or_else(|e| panic!("{e}")).iter().find(|p| p.0 == u).map_or(0.0, |p| p.1);
                     format!("{t:.0} K: {x:8.1} mol/m2 ({:.3} mol/m3)", x / depth)
                 })
                 .collect();

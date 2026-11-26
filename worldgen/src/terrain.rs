@@ -335,7 +335,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         let (t, j, share) = (world.t_ground(i), world.mesh.up(i, 0, AIR), world.mesh.share(i, AIR));
         let mut amt: Vec<f64> = (0..ns).map(|k| world.g(k, i)).collect();
         let gas: Vec<f64> = (0..ns).map(|k| world.a(k, j) * share).collect();
-        if !rc.balance(&world.chem, &mut amt, &gas, t).is_empty() {
+        if !rc.balance(&world.chem, &mut amt, &gas, t).unwrap_or_else(|e| panic!("the starting liquid of cell {i}: {e}")).is_empty() {
             for (k, &a) in amt.iter().enumerate() {
                 ground[k * n + i] = a;
             }

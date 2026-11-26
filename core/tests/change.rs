@@ -319,7 +319,7 @@ fn column(chem: &Chemistry, depth: f64, ppm: f64) -> (Vec<f64>, Vec<f64>) {
 /// The dissolved mineral the chemistry holds per m² at balance: `depth` m of liquid, `ppm` of the gas, `t` K.
 fn at_balance(chem: &Chemistry, depth: f64, ppm: f64, t: f64) -> f64 {
     let (mut n, gas) = column(chem, depth, ppm);
-    let set = Reactor::new(chem, &cfg()).balance(chem, &mut n, &gas, t);
+    let set = Reactor::new(chem, &cfg()).balance(chem, &mut n, &gas, t).expect("a balance");
     set.iter().find(|p| p.0 == DISSOLVED).map_or(0.0, |p| p.1)
 }
 
@@ -469,7 +469,7 @@ fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet()
             amt[DISSOLVED] = 0.0;
             let share = w.mesh.share(i, AIR);
             let gas: Vec<f64> = (0..w.chem.ns()).map(|k| w.store.amounts(Class::Air)[k * na + j] * share).collect();
-            rc.balance(&w.chem, &mut amt, &gas, t);
+            rc.balance(&w.chem, &mut amt, &gas, t).expect("a balance");
             if amt[DISSOLVED] > 0.0 {
                 wet += 1;
                 ratio.push(w.store.amounts(Class::Ground)[DISSOLVED * n + i] / amt[DISSOLVED]);

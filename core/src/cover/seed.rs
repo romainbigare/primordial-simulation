@@ -177,10 +177,10 @@ pub(super) fn room(c: &mut Cover, mm: &[f64; NP], n: usize, k: usize) -> Option<
 
 /// An edit: `kg` per m² of the ground its kind stands on in patch `k` of cell `i` (`cover::footing` at the
 /// least root need, of the patch's share of the cell's ground, `cover::ground`) of cover of genes `genes` and
-/// starting kind `root` placed as seedlings (`sown`), as seeds lodge (`put`). False if the chemistry has no cover, the
-/// cell no such patch, or its kind no ground or no room there (nothing is placed then).
+/// starting kind `root` placed as seedlings (`sown`), as seeds lodge (`put`). False if `kg` is not a mass above 0,
+/// the chemistry has no cover, the cell no such patch, or its kind no ground or no room there (nothing is placed then).
 pub fn place(w: &mut World, i: usize, k: usize, genes: [f32; NG], root: u32, kg: f64) -> bool {
-    let Some(p) = Parts::of(&w.chem) else { return false };
+    let Some(p) = Parts::of(&w.chem).filter(|_| kg > 0.0 && kg.is_finite()) else { return false };
     put(w, (i, k), genes, |w, area| (sown(&w.chem, &w.cfg.phys, &p, (i, area, w.t_ground_last(i)), genes, root, kg), None))
 }
 
