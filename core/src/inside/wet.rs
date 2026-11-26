@@ -45,20 +45,32 @@ pub struct Sorted {
 
 /// Each cell's samples sorted (`Sorted`), kept with the samples they are of (`Life::sorted`): sorted again only where
 /// those are not the samples now (a build of the terrain, a cell's ground made level, a world loaded), as the orders
-/// change with nothing else.
+/// change with nothing else; and then only the cells some of whose samples' heights or wetness indices are not those of
+/// the samples they were sorted for, to the last bit (the orders read nothing else: an edit's build moves few).
 pub(crate) fn sort_samples(w: &mut World) {
     let s = w.terrain_samples();
     if w.life.sorted.as_ref().is_some_and(|(of, _)| Arc::ptr_eq(of, &s)) {
         return;
     }
     let leaves = w.map.leaves();
-    let sorted = crate::par::map_n(leaves.len(), crate::par::UNCOUNTED, |i| {
+    let sort = |i: usize| {
         let mut high: Vec<u32> = leaves[i].split(SAMPLE_DEPTH).map(|f| s.index(&f) as u32).collect();
         high.sort_by(|&a, &b| s.h[b as usize].total_cmp(&s.h[a as usize]));
         let mut wettest: Vec<u32> = (0..high.len() as u32).collect();
         wettest.sort_by(|&a, &b| s.twi[high[a as usize] as usize].total_cmp(&s.twi[high[b as usize] as usize]));
         Sorted { high, wettest }
-    });
+    };
+    let kept = w.life.sorted.take().filter(|(of, by)| of.h.len() == s.h.len() && by.len() == leaves.len());
+    let sorted = match kept {
+        Some((of, mut by)) => {
+            let same = |k: usize| s.h[k].to_bits() == of.h[k].to_bits() && s.twi[k].to_bits() == of.twi[k].to_bits();
+            let moved: Vec<usize> = (0..leaves.len()).filter(|&i| !leaves[i].split(SAMPLE_DEPTH).all(|f| same(s.index(&f)))).collect();
+            let again = crate::par::map_n(moved.len(), crate::par::UNCOUNTED, |q| sort(moved[q]));
+            moved.into_iter().zip(again).for_each(|(i, x)| by[i] = x);
+            by
+        }
+        None => crate::par::map_n(leaves.len(), crate::par::UNCOUNTED, sort),
+    };
     w.life.sorted = Some((s, sorted));
 }
 

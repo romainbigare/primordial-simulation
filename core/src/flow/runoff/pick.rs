@@ -24,7 +24,7 @@ pub(super) struct Work {
 /// cell picked up (rows of `sol`, mol, then the heat, J, into `picked`), the moves of the bed into loose ground, and
 /// what the pick-up took from the samples' relief (`taken`).
 pub(super) fn pick_up(w: &World, s: &mut Scratch, b: &Bodies, (flux, sol): (&[[f64; 2]], &[usize]), picked: &mut Vec<f64>) -> (Work, Vec<Move>, Vec<(u32, f64)>) {
-    let (samples, n, width, c) = (w.terrain_samples(), w.mesh.cells().n(), sol.len() + 1, &b.carriage);
+    let (samples, n, width, c) = (w.terrain_samples(), w.mesh.cells().n(), sol.len() + 1, b.carriage(w));
     let mut work = Work { pairs: vec![[0.0; 2]; c.pairs.len()], cells: vec![0.0; n], on_relief: Vec::new() };
     for &k in b.land.iter().filter(|&&k| flux[k as usize][1] > 0.0) {
         let (k, f) = (k as usize, flux[k as usize]);

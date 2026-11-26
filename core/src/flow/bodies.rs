@@ -47,7 +47,7 @@ const NOWHERE: Reach = Reach { body: NONE, cell: NONE, part: NONE };
 /// each with the share of the cell's area whose ways lead there, in order (its own cell among them, for the samples of
 /// its own parts); the samples in no pond, in order; and of those whose liquid runs on, each before the one it runs to
 /// (the last the flood reached first), the ways the runoff's pass sums down; and the key samples its load is followed
-/// at (`Carriage`).
+/// at (`Carriage`), found when the load first reads them (`carriage`: a settle carries no load).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Bodies {
     pub(super) of: Vec<u32>,
@@ -58,7 +58,7 @@ pub(super) struct Bodies {
     pub(super) ways: Vec<Vec<(Reach, f64)>>,
     pub(super) land: Vec<u32>,
     pub(super) down: Vec<u32>,
-    pub(super) carriage: Carriage,
+    carriage: std::sync::OnceLock<Carriage>,
 }
 
 impl Bodies {
@@ -91,7 +91,7 @@ impl Bodies {
         }
         let land = (0..s.h.len() as u32).filter(|&k| s.pond[k as usize] == NONE).collect();
         let down = s.order.iter().rev().copied().filter(|&k| s.pond[k as usize] == NONE && s.to[k as usize] != NONE).collect();
-        let mut b = Bodies { of, list, cell_of, share, at: s.pond.clone(), ways: Vec::new(), land, down, carriage: Carriage::default() };
+        let mut b = Bodies { of, list, cell_of, share, at: s.pond.clone(), ways: Vec::new(), land, down, carriage: Default::default() };
         let reach = b.reaches(&s, curves);
         b.ways = vec![Vec::new(); n];
         for (k, r) in reach.iter().enumerate() {
@@ -113,8 +113,13 @@ impl Bodies {
             }
         }
         b.order();
-        b.carriage = Carriage::of(w, &b);
         b
+    }
+
+    /// The key samples the load is followed at (`Carriage::of`), found the first time they are read: they are of the
+    /// world's terrain's samples and its numbers, which stay till the bodies are found again.
+    pub(super) fn carriage(&self, w: &World) -> &Carriage {
+        self.carriage.get_or_init(|| Carriage::of(w, self))
     }
 
     /// Where liquid goes that runs down the samples' ways from each sample (`Reach`): from the first sample the flood

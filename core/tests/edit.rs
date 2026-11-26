@@ -494,3 +494,19 @@ fn a_poured_pond_leaves_its_cells_temperature() {
 const POURED_M: f64 = 2.0;
 /// How far the temperature of a cell a pond is poured into may move, K: the rounding of its heat.
 const POURED_KELVIN: f64 = 1e-9;
+
+/// A copied world (a shell's undo keeps one) steps as the world it was copied from, to the last bit: a copy of Flow's
+/// working memory leaves out only room its passes write before they read (`flow::spare::Spare`).
+#[test]
+fn a_copied_world_steps_as_its_original() {
+    use pcore::store::Class;
+    let mut w = small_world();
+    let i = inland(&w);
+    assert!(shape(&mut w, i, 20.0));
+    w.settle();
+    let mut copy = w.clone();
+    pcore::step(&mut w);
+    pcore::step(&mut copy);
+    let bits = |w: &World| [Class::Ground, Class::Air].iter().flat_map(|&c| w.store.amounts(c).iter().chain(w.store.heat(c))).map(|x| x.to_bits()).collect::<Vec<u64>>();
+    assert!(bits(&w) == bits(&copy), "the copy stepped apart");
+}
