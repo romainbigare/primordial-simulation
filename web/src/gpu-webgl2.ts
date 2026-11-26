@@ -38,8 +38,6 @@ class WebGl2 implements Back {
   private noise!: WebGl2Texture;
   /** Of each format: its internal format, the format of its data and the type of its data's numbers. */
   private formats: Record<Format, [number, number, number]>;
-  /** The wait for the card to finish what was sent (`done`), shared by all who ask till more is sent; null: none. */
-  private finishing: Promise<void> | null = null;
 
   constructor(private gl: WebGL2RenderingContext, private canvas: HTMLCanvasElement, restored: () => void) {
     this.parallel = gl.getExtension('KHR_parallel_shader_compile') as Parallel | null;
@@ -105,12 +103,10 @@ class WebGl2 implements Back {
     return t.fbWith;
   }
 
-
   write(t: Texture, data: TexelData, level = 0, layer?: number): void {
     const gl = this.gl, g = t as WebGl2Texture, w = Math.max(1, t.w >> level), h = Math.max(1, t.h >> level);
     const [, format, type] = this.formats[t.format];
     if (gl.isContextLost()) return;
-    this.sent();
     if (g.array) { gl.bindTexture(gl.TEXTURE_2D_ARRAY, g.tex); gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, level, 0, 0, layer ?? 0, w, h, layer === undefined ? t.layers : 1, format, type, data); }
     else { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.texSubImage2D(gl.TEXTURE_2D, level, 0, 0, w, h, format, type, data); }
   }
@@ -118,7 +114,6 @@ class WebGl2 implements Back {
   writeRows(t: Texture, data: TexelData, y: number, rows: number): void {
     const gl = this.gl, g = t as WebGl2Texture, [, format, type] = this.formats[t.format];
     if (gl.isContextLost()) return;
-    this.sent();
     const row = (data.length / t.h) | 0;
     gl.bindTexture(gl.TEXTURE_2D, g.tex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, y, t.w, rows, format, type, data, y * row);
@@ -127,7 +122,6 @@ class WebGl2 implements Back {
   mipmap(t: Texture): void {
     const gl = this.gl, g = t as WebGl2Texture;
     if (gl.isContextLost() || g.mips < 2) return;
-    this.sent();
     gl.bindTexture(gl.TEXTURE_2D, g.tex);
     gl.generateMipmap(gl.TEXTURE_2D);
   }
@@ -145,11 +139,10 @@ class WebGl2 implements Back {
     // A texture's rows are kept top first (`flip`), the canvas's bottom first. (The clip holds for the clear too.)
     if (clip) { gl.enable(gl.SCISSOR_TEST); gl.scissor(clip[0], t ? clip[1] : size[1] - clip[1] - clip[3], clip[2], clip[3]); }
     else gl.disable(gl.SCISSOR_TEST);
-    if (clear) { this.sent(); gl.clearColor(clear[0], clear[1], clear[2], clear[3]); gl.clear(gl.COLOR_BUFFER_BIT); }
+    if (clear) { gl.clearColor(clear[0], clear[1], clear[2], clear[3]); gl.clear(gl.COLOR_BUFFER_BIT); }
     return {
       draw: (name: string, d: Draw, blend: boolean) => {
         if (gl.isContextLost()) return;
-        this.sent();
         const l = this.link(name);
         gl.useProgram(l.prog);
         this.uniform(0, drawHeader(size, t ? -1 : 1, d));
@@ -178,7 +171,7 @@ class WebGl2 implements Back {
     return true;
   }
 
-  submit(): void { this.sent(); this.gl.flush(); }
+  submit(): void { this.gl.flush(); }
 
   making(): string { return this.warming.pending(); }
 
@@ -188,16 +181,15 @@ class WebGl2 implements Back {
   }
 
   done(): Promise<void> {
-    if (this.finishing) return this.finishing;
     const gl = this.gl, sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     gl.flush();
-    return (this.finishing = new Promise(resolve => {
+    return new Promise(resolve => {
       const poll = () => {
         if (gl.isContextLost() || !sync || gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED) { if (sync && !gl.isContextLost()) gl.deleteSync(sync); resolve(); }
         else setTimeout(poll, FENCE_POLL_MS);
       };
       poll();
-    }));
+    });
   }
 
   timer(): { end(): Promise<number | null> } {
@@ -227,9 +219,6 @@ class WebGl2 implements Back {
     };
   }
 
-  /** More is sent to the card: a wait asked from now on (`done`) is for it too. */
-  private sent(): void { this.finishing = null; }
-
   /** Read into a buffer on the GPU, and copy it out once the GPU has drawn it, so the page never waits for the GPU. */
   async read(t: Texture): Promise<Uint8Array> {
     const gl = this.gl, out = new Uint8Array(4 * t.w * t.h), buf = gl.createBuffer();
@@ -237,7 +226,6 @@ class WebGl2 implements Back {
     gl.bufferData(gl.PIXEL_PACK_BUFFER, out.byteLength, gl.STREAM_READ);
     gl.bindFramebuffer(gl.FRAMEBUFFER, (t as WebGl2Texture).fb);
     gl.readPixels(0, 0, t.w, t.h, gl.RGBA, gl.UNSIGNED_BYTE, 0);
-    this.sent();
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     await this.done();
