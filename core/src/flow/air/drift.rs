@@ -13,25 +13,30 @@ const ALONG: usize = 16;
 /// leaves the node's centre and lands along its wind by an exponential of mean the wind's speed times `rain_drift_s`;
 /// each point of its path lays its share over the nodes round it as a cell reads them (bilinear, by the nodes'
 /// spacing), and each node over the places that see it by its air's share of each. A share whose path leaves the map
-/// lands on the map by the rest's shares, so all of it lands. With no wind it stays with the node.
-pub(super) fn drift(w: &World, wind: &[[f64; 2]], own: &[(Vec<u32>, Vec<f64>)]) -> Vec<(Vec<u32>, Vec<f64>)> {
-    crate::par::map_n(w.mesh.level(AIR).n(), crate::par::UNCOUNTED, |q| {
-        let nodes = path(w, q, wind[q]);
+/// lands on the map by the rest's shares, so all of it lands. With no wind it stays with the node. `places` is how many
+/// places there are.
+pub(super) fn drift(w: &World, wind: &[[f64; 2]], own: &[(Vec<u32>, Vec<f64>)], places: usize) -> Vec<(Vec<u32>, Vec<f64>)> {
+    let na = w.mesh.level(AIR).n();
+    // A task's marks: of each place its entry in the node's list plus one (0: none), of each node whether its path's
+    // search found it; each node clears what it marked.
+    crate::par::map_n_init(na, crate::par::UNCOUNTED, || (vec![0u32; places], vec![false; na]), |(entry, found), q| {
+        let nodes = path(w, q, wind[q], found);
         let (place, _) = &own[q];
-        let mut entry: std::collections::HashMap<u32, usize> = place.iter().enumerate().map(|(e, &p)| (p, e)).collect();
+        place.iter().enumerate().for_each(|(e, &p)| entry[p as usize] = e as u32 + 1);
         let (mut beyond, mut share) = (Vec::new(), vec![0.0; place.len()]);
         for (k, wk) in nodes {
             let (places, of) = &own[k];
             let all: f64 = of.iter().sum::<f64>().max(f64::MIN_POSITIVE);
             for (&p, &x) in places.iter().zip(of) {
-                let e = *entry.entry(p).or_insert_with(|| {
+                if entry[p as usize] == 0 {
                     beyond.push(p);
                     share.push(0.0);
-                    share.len() - 1
-                });
-                share[e] += wk * x / all;
+                    entry[p as usize] = share.len() as u32;
+                }
+                share[entry[p as usize] as usize - 1] += wk * x / all;
             }
         }
+        place.iter().chain(&beyond).for_each(|&p| entry[p as usize] = 0);
         (beyond, share)
     })
 }
@@ -39,8 +44,9 @@ pub(super) fn drift(w: &World, wind: &[[f64; 2]], own: &[(Vec<u32>, Vec<f64>)]) 
 /// The nodes node `q`'s drift lands on under its low wind `u`, m/s [east, south], with the share of it each gets
 /// (summing to one): the points of its path (the middles of `ALONG` equal shares of an exponential of mean the wind's
 /// speed times `rain_drift_s`, along the wind from the node's centre), each laid bilinearly on the nodes round it by
-/// their spacing; with no wind, the node itself.
-fn path(w: &World, q: usize, u: [f64; 2]) -> Vec<(usize, f64)> {
+/// their spacing; with no wind, the node itself. `marks` is room to mark the nodes found, one a node, all false (and so
+/// left).
+fn path(w: &World, q: usize, u: [f64; 2], marks: &mut [bool]) -> Vec<(usize, f64)> {
     let (air, speed) = (w.mesh.level(AIR), u[0].hypot(u[1]));
     if speed <= 0.0 {
         return vec![(q, 1.0)];
@@ -51,24 +57,29 @@ fn path(w: &World, q: usize, u: [f64; 2]) -> Vec<(usize, f64)> {
     // The nodes within its reach and two of their spacings, found outward from it through their links.
     let within = |k: usize| air.offset(q, k)[0].hypot(air.offset(q, k)[1]) <= far + 2.0 * air.area()[k].sqrt();
     let (mut found, mut at) = (vec![q], 0);
+    marks[q] = true;
     while at < found.len() {
         for &k in air.around(found[at]).1 {
-            if !found.contains(&(k as usize)) && within(k as usize) {
+            if !marks[k as usize] && within(k as usize) {
+                marks[k as usize] = true;
                 found.push(k as usize);
             }
         }
         at += 1;
     }
+    found.iter().for_each(|&k| marks[k] = false);
     let near: Vec<(usize, [f64; 2], f64)> = found.into_iter().map(|k| (k, air.offset(q, k), air.area()[k].sqrt())).collect();
-    let mut got: Vec<(usize, f64)> = Vec::new();
+    let (mut got, mut tents): (Vec<(usize, f64)>, Vec<f64>) = (Vec::new(), Vec::with_capacity(near.len()));
     for p in &pts {
         let tent = |o: [f64; 2], a: f64| (1.0 - (o[0] - p[0]).abs() / a).max(0.0) * (1.0 - (o[1] - p[1]).abs() / a).max(0.0);
-        let sum: f64 = near.iter().map(|&(_, o, a)| tent(o, a)).sum();
+        tents.clear();
+        tents.extend(near.iter().map(|&(_, o, a)| tent(o, a)));
+        let sum: f64 = tents.iter().sum();
         if sum <= 0.0 {
             continue;
         }
-        for &(k, o, a) in &near {
-            let x = tent(o, a) / sum;
+        for (&(k, _, _), &t) in near.iter().zip(&tents) {
+            let x = t / sum;
             if x > 0.0 {
                 match got.iter_mut().find(|g| g.0 == k) {
                     Some(g) => g.1 += x,

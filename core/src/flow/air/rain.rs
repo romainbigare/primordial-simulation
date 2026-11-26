@@ -286,7 +286,7 @@ pub(super) fn wet(w: &World, s: &Scratch, (act, wind): (&[Active], &[[f64; 2]]),
         }
         (place, share)
     });
-    let drift = drift(w, wind, &own);
+    let drift = drift(w, wind, &own, n + places.len());
     let nodes = crate::par::map_n(na, crate::par::UNCOUNTED, |q| {
         let ((place, share), (beyond, drift)) = (&own[q], &drift[q]);
         let (sat, node, places) = (&sat, &node, place);

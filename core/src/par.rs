@@ -112,6 +112,19 @@ pub fn map_n<R: Send>(n: usize, work: usize, f: impl Fn(usize) -> R + Sync + Sen
     (0..n).map(f).collect()
 }
 
+/// `map_n` with a scratch `state` made by `init` once per task of the pool, not per item (`each_init`).
+pub fn map_n_init<R: Send, S>(n: usize, work: usize, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, usize) -> R + Sync + Send) -> Vec<R> {
+    #[cfg(feature = "threads")]
+    if pays(work) {
+        use rayon::prelude::*;
+        return (0..n).into_par_iter().with_min_len(MIN_TASK).map_init(init, f).collect();
+    }
+    #[cfg(not(feature = "threads"))]
+    let _ = work;
+    let mut st = init();
+    (0..n).map(|i| f(&mut st, i)).collect()
+}
+
 /// `a()` and `b()`, side by side on the pool (tasks that write different things); both results, in this order.
 pub fn join<A: Send, B: Send>(a: impl FnOnce() -> A + Send, b: impl FnOnce() -> B + Send) -> (A, B) {
     #[cfg(feature = "threads")]
