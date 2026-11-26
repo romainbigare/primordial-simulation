@@ -105,9 +105,13 @@ const BURN: u32 = 3;
 /// two months, by `amount` (`shape`, `lake`, `burn`) or of the starting kind of row `row` (`keep_planting`). The first
 /// call of a stroke begins it (`Stroke`), with the world as it was (`ready`, else a copy) for its undo. Returns, as
 /// JSON, what the tool says (`cells`, whether it changed the world), and what the page is to be sent: the preview of
-/// the ground moved (`preview`) and a frame of the world (`frame`). A tool the shell has not is a page's bug: it panics.
+/// the ground moved (`preview`) and a frame of the world (`frame`); or, for a tool the shell has not, why it is refused
+/// (`refused`), and nothing is done.
 #[no_mangle]
 pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row: u32) -> *const u8 {
+    if !matches!(tool, SHAPE | LAKE | BURN | PLANT) {
+        return give(json!({"refused": format!("The core has no brush tool {tool}.")}).to_string().into_bytes());
+    }
     let out = with(|l| {
         if l.stroke.is_none() {
             let before = l.ready.take().unwrap_or_else(|| l.world.clone());
@@ -119,8 +123,8 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
             SHAPE => shape(l, b, amount),
             LAKE => lake(l, b, amount),
             BURN => burn(l, b, amount),
-            PLANT => keep_planting(l, b, row),
-            _ => panic!("no brush tool {tool}"),
+            // (`PLANT`: a tool the shell has not is refused above.)
+            _ => keep_planting(l, b, row),
         }
     });
     give(out.to_string().into_bytes())

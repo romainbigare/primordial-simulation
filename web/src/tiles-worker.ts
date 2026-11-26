@@ -23,6 +23,9 @@ type Command =
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Command>) => void) | null };
 let core: Core | null = null;
+/** Why the core stopped, in plain words, once a call trapped inside it (a panic aborts and leaves its state locked):
+ * every command after is answered with it. */
+let stopped = '';
 
 /** The messages, each handled once the one before is done: a tile or a build asked while the core is still starting
  * waits for it. (The page hands a build only once every worker made the last, ground.ts `rebuild`.) */
@@ -32,6 +35,7 @@ host.onmessage = e => {
 };
 
 async function handle(m: Command): Promise<void> {
+  if (stopped) return host.postMessage({ kind: 'error', text: stopped }, []);
   try {
     if (m.cmd === 'init') {
       core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
@@ -51,6 +55,7 @@ async function handle(m: Command): Promise<void> {
       host.postMessage({ kind: 'ready', rock }, [rock.buffer]);
     } else if (m.cmd === 'tile' && core) {
       const t0 = performance.now(), at = core.tile(m.depth, m.x, m.y);
+      if (core.out_len() === 0) throw new Error(`The ground has no tiles of depth ${m.depth}.`);
       const data = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
       // With the time it took, ms, and the bytes of the core's memory, for the page's cost line.
       host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data, gen: m.gen, ms: performance.now() - t0, memory: core.memory.buffer.byteLength }, [data.buffer]);
@@ -67,7 +72,11 @@ async function handle(m: Command): Promise<void> {
       host.postMessage({ kind: 'rebuilt', squares: out, rock, gen: m.gen }, [out.buffer, rock.buffer]);
     }
   } catch (err) {
-    host.postMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) }, []);
+    if (err instanceof WebAssembly.RuntimeError) {
+      core = null;
+      stopped = `The ground's tiles stopped: the core failed inside (${err.message}). Make a new world, or open a saved one.`;
+    }
+    host.postMessage({ kind: 'error', text: stopped || (err instanceof Error ? err.message : String(err)) }, []);
   }
 }
 

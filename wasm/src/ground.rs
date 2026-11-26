@@ -41,10 +41,15 @@ pub extern "C" fn ground_of_world() -> *const u8 {
 }
 
 /// The tile of `depth` at column `x` and row `y` of tiles of the ground made by `ground`, 16-bit floats little-endian
-/// (`tape::Ground::tile`).
+/// (`tape::Ground::tile`); nothing (`out_len` 0) for a depth the ground is not drawn at.
 #[no_mangle]
 pub extern "C" fn tile(depth: u32, x: i32, y: i32) -> *const u8 {
-    let texels = GROUND.with(|c| c.borrow().as_ref().expect("no ground: call ground first").tile(depth.min(u8::MAX as u32) as u8, x as i64, y as i64));
+    let texels = GROUND.with(|c| {
+        let g = c.borrow();
+        let g = g.as_ref().expect("no ground: call ground first");
+        let depth = u8::try_from(depth).ok().filter(|d| g.depths().contains(d));
+        depth.map_or_else(Vec::new, |d| g.tile(d, x as i64, y as i64))
+    });
     give(texels.iter().flat_map(|v| v.to_le_bytes()).collect())
 }
 

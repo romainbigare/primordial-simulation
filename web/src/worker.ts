@@ -69,6 +69,11 @@ const PACE_MS = 1000;
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Command>) => void) | null };
 let core: Core | null = null;
+/** The core compiled (`init`): a new or saved world after the core stopped stands on a new instance of it. */
+let compiled: WebAssembly.Module | null = null;
+/** Why the core stopped, in plain words, once a call trapped inside it (a panic aborts and leaves its state locked):
+ * every command after is answered with it, till a new or saved world starts a new instance. */
+let stopped = '';
 let playing = false;
 /** Months of the world per second of real time (Infinity: as many as a tick holds). */
 let rate = 12;
@@ -159,10 +164,19 @@ function tick(): void {
     if (owed && unshown === 0 && performance.now() - posted >= FRAME_MS) postFrame('frame');
   } catch (e) {
     playing = false;
-    host.postMessage({ kind: 'error', text: `The world stopped: ${String(e)}` }, []);
+    failed(e);
     return;
   }
   if (playing) timer = setTimeout(tick, GAP_MS);
+}
+
+/** Tell the page of the error `e`; a trap inside the core stops it (`stopped`). */
+function failed(e: unknown): void {
+  if (e instanceof WebAssembly.RuntimeError) {
+    core = null;
+    stopped = `The world stopped: the core failed inside (${e.message}). Make a new world, or open a saved one.`;
+  }
+  host.postMessage({ kind: 'error', text: stopped || (e instanceof Error ? e.message : String(e)) }, []);
 }
 
 function start(on: boolean): void {
@@ -175,11 +189,13 @@ host.onmessage = async e => {
   const m = e.data;
   try {
     if (m.cmd === 'init') {
-      core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
+      compiled = await WebAssembly.compile(m.wasm);
+      core = (await WebAssembly.instantiate(compiled, {})).exports as unknown as Core;
       host.postMessage({ kind: 'ready' }, []);
-    } else if ((m.cmd === 'new' || m.cmd === 'open') && core) {
-      // A new world, or the saved one handed in.
+    } else if ((m.cmd === 'new' || m.cmd === 'open') && compiled) {
+      // A new world, or the saved one handed in (on a new instance of the core where it stopped).
       start(false);
+      if (!core) { core = (await WebAssembly.instantiate(compiled, {})).exports as unknown as Core; stopped = ''; }
       const c = core, refused = m.cmd === 'open' ? handIn(m.saved, () => c.open_world())
         : c.new_world(m.seed, m.size, m.band[0], m.band[1], m.drawn ? 1 : 0, m.variety, m.soft ? 1 : 0) !== 0 ? 'The world was refused.' : '';
       if (refused) throw new Error(refused);
@@ -195,6 +211,7 @@ host.onmessage = async e => {
       if (!playing && core) core.hold();
     }
     else if (m.cmd === 'rate') rate = m.rate;
+    else if (stopped && m.cmd !== 'shown') host.postMessage({ kind: 'error', text: stopped }, []);
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
     else if (m.cmd === 'brush' && core) {
@@ -202,7 +219,8 @@ host.onmessage = async e => {
       // of the ground it moved (drawn till the page's ground shows it) and a frame (with the relief of the ground's new
       // version, where it built the samples again).
       const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
-      const sends = JSON.parse(answer) as { preview: boolean; frame: boolean };
+      const sends = JSON.parse(answer) as { preview: boolean; frame: boolean; refused?: string };
+      if (sends.refused) throw new Error(sends.refused);
       host.postMessage({ kind: 'brushed', text: answer, ...(sends.preview ? { preview: preview() } : {}) }, []);
       if (sends.frame) postFrame('frame', true);
     }
@@ -241,7 +259,7 @@ host.onmessage = async e => {
       if (!playing) postFrame('frame');
     }
   } catch (err) {
-    host.postMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) }, []);
+    failed(err);
   }
 };
 

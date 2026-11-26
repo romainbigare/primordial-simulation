@@ -194,7 +194,7 @@ impl Ground {
     /// distance to the nearest channel's line without its bends, m, signed by the side (60,000 where none reaches it).
     /// Texels off the map are those of its edge.
     pub fn tile(&self, depth: u8, tx: i64, ty: i64) -> Vec<u16> {
-        assert!(depths(&self.map).contains(&depth), "a tile of a depth the ground is drawn at");
+        assert!(self.depths().contains(&depth), "a tile of a depth the ground is drawn at");
         let side = TILE + 2 * GUTTER;
         let (x0, y0) = (tx * TILE as i64 - GUTTER as i64, ty * TILE as i64 - GUTTER as i64);
         let per = 1i64 << (depth - self.map.square_depth());
@@ -248,6 +248,11 @@ impl Ground {
     /// (`rock::rock`).
     pub fn rock(&self, colours: &[[f64; 3]]) -> Vec<u16> {
         rock::rock(&self.reaches(), colours, &self.grain)
+    }
+
+    /// The depths the ground's tiles are drawn at (`depths`).
+    pub fn depths(&self) -> std::ops::RangeInclusive<u8> {
+        depths(&self.map)
     }
 
     /// The ponds of the ground, each with its pass and its level (`Samples::ponds`).
