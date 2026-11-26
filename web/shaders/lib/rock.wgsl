@@ -22,6 +22,10 @@ const PATCHY = 0.6; const PATCHY_M = 40.0; const PATCHY_OCTAVES = 4;
 // Loose ground deeper than this, m, creeps into smooth swells; thinner, the bed's roughness shows through it
 // (relief.wgsl).
 const SMOOTH_LOOSE_M = 0.5;
+// The patches fade out as the thinnest they make deepens from where it shows the bed or its roughness
+// (`HIDES_BED_M`, `SMOOTH_LOOSE_M`) to `PATCHES_GONE_M`, past which they are none: so no line shows where they end on
+// what reads deeper loose ground (a soil's colour, scree, roots).
+const PATCHES_GONE_M = 1.0;
 
 // The rock's planes (`rock_field`): the loose ground's and its channel's, the bed's make, the loose ground's grain, its
 // deposit.
@@ -119,16 +123,19 @@ fn links_of(s: vec2i) -> i32 {
 // about its depth there without them, `mean` (`loose_at`): the field every edge of bare bed is drawn from, the
 // ground's and the plants' alike.
 fn loose_seen(at: vec2f, mean: f32, e: f32) -> f32 {
-  // Where the thinnest the patches make it is deeper than shows the bed or its roughness, they change nothing drawn
-  // (and no noise is read).
-  if (mean * (1.0 - PATCHY) >= max(HIDES_BED_M, SMOOTH_LOOSE_M)) { return mean; }
-  return with_patches(mean, ragged(at, e, PATCHY_M, PATCHY_OCTAVES, 55), PATCHY);
+  // (Where they are none no noise is read.)
+  let share = patches_of(mean);
+  if (share <= 0.0) { return mean; }
+  return with_patches(mean, ragged(at, e, PATCHY_M, PATCHY_OCTAVES, 55), share);
 }
+
+// How far the patches move loose ground `mean` m deep on the mean, as a share of it (`PATCHY`, `PATCHES_GONE_M`).
+fn patches_of(mean: f32) -> f32 { return PATCHY * (1.0 - ease(max(HIDES_BED_M, SMOOTH_LOOSE_M), PATCHES_GONE_M, mean * (1.0 - PATCHY))); }
 
 // How far the loose ground's depth swings, m, about its depth `mean` at a point (`loose_at`), over the patches
 // `loose_seen` does not show at `e` m a pixel: a rule on the depth read there is spread over this much, so it holds
 // on the mean where the near picture's patches would make it (the cover's roots, cover_field.wgsl `cover_field`).
-fn loose_unseen(mean: f32, e: f32) -> f32 { return mean * PATCHY * ragged_hidden(e, PATCHY_M, PATCHY_OCTAVES); }
+fn loose_unseen(mean: f32, e: f32) -> f32 { return mean * patches_of(mean) * ragged_hidden(e, PATCHY_M, PATCHY_OCTAVES); }
 
 // The share of the bed that shows through `loose` m of loose ground (`loose_seen`).
 fn bed_shows(loose: f32) -> f32 { return 1.0 - ease(0.0, HIDES_BED_M, loose); }
@@ -217,12 +224,12 @@ const POOL_AT_BANK = 0.6;
 // (its depth times 1 + `POOL_SKEW` × the share of the way to the outer edge).
 const POOL_SKEW = 0.8;
 
-// Value noise over a channel's reach, of stream `k`, -1..1: at `along` m along its line, in cells `cell` m long (a whole
-// number of them in the length the place along is kept modulo, after which it comes again), and `across` cells
-// across it.
+// Value noise over a channel's reach, of stream `k`, -1..1: at `along` m along its line, in cells about `cell` m long
+// (as many whole ones as fit nearest in the length the place along is kept modulo, each stretched to fill it, so it
+// comes again with no break where the place wraps), and `across` cells across it.
 fn noise_reach(along: f32, cell: f32, across: f32, k: i32) -> f32 {
-  let n = i32(round(land.reach.x / cell));
-  let p = vec2f(along / cell, across);
+  let n = i32(max(round(land.reach.x / cell), 1.0));
+  let p = vec2f(along * f32(n) / land.reach.x, across);
   let i = vec2i(floor(p));
   let f = p - floor(p);
   let u = f * f * (3.0 - 2.0 * f);

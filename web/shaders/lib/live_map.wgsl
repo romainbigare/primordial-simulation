@@ -105,7 +105,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   g.slope += fine.slope;
   // Its channel: what runs through it and the largest stone it moves, each grown evenly along it (rock.wgsl
   // `next_along`).
+  // (Its change across a pixel taken the short way round the length the place along is kept modulo.)
   let grows = vec2f(dpdx(g.along), dpdy(g.along));
+  let grows_short = grows - land.reach.x * round(grows / land.reach.x);
   let reach = sample_at(g);
   var next = Next(reach, 0.0);
   var q = discharge_of(reach);
@@ -222,7 +224,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
   if (!near) { return out; }
-  var r = river_spots(out, g, ch, q, moved, fall, grows, line_of(q, e), mouth);
+  var r = river_spots(out, g, ch, q, moved, fall, grows_short, line_of(q, e), mouth);
   // A channel's water carries its sample's load, grown along it as its discharge is.
   r.wet.load = mix(load_of(reach), load_of(next.s), next.share);
   return r;

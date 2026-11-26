@@ -39,9 +39,11 @@ const PI = 3.14159265;
 // The light from the north-west (a unit vector to the sun: east, south, up).
 const LIGHT = vec3f(-0.588, -0.588, 0.647);
 
-// 0 at a, 1 at b, smooth between (a may be above b).
+// 0 at a, 1 at b, smooth between (a may be above b). Equal bounds make a step at them: none at them and below, all
+// above (taken over `EASE_STEP`, so no division by none gives a number that is not one).
+const EASE_STEP = 1e-30;
 fn ease(a: f32, b: f32, x: f32) -> f32 {
-  let t = clamp((x - a) / (b - a), 0.0, 1.0);
+  let t = clamp((x - a) / select(b - a, EASE_STEP, b == a), 0.0, 1.0);
   return t * t * (3.0 - 2.0 * t);
 }
 
