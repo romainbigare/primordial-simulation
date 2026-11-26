@@ -2,9 +2,10 @@
 //! larger one lies nearer over its scale in a strip a texel or two wide, which would notch the line a shell draws the
 //! larger one as from afar. A texel that holds a channel and lies within `STRIP` texels, to its left and to its right
 //! or above and below, of texels that hold one other channel, which drains more (with none but its own channel's
-//! between), is given to that channel.
+//! between), is given to that channel, where a tile can name that channel's sample there (`channels::names`: on coarse
+//! texels a neighbour's sample may lie farther than that).
 
-use super::channels::{to_segment, Channels, Field, Near, Window, NO_CHANNEL_M};
+use super::channels::{names, to_segment, Channels, Field, Near, Window, NO_CHANNEL_M};
 use pcore::space::network::NONE;
 
 /// The widest strip mended, texels.
@@ -38,9 +39,11 @@ impl Channels<'_> {
                 if head(qa) != head(qb) || s.up[qa as usize].min(s.up[qb as usize]) <= s.up[sample[i] as usize] {
                     continue;
                 }
-                let at = win.texel(win.x0 + (i % wide) as i64, win.y0 + (i / wide) as i64).0;
+                let texel = [win.x0 + (i % wide) as i64, win.y0 + (i / wide) as i64];
+                let at = win.texel(texel[0], texel[1]).0;
+                let named = |q: u32| names(s, texel, win.k, q).then_some(q);
                 let to = |q: u32| nearest(at, line_of(q).drawn.line.iter().map(|v| v.p)).map(|(d2, side, n, t)| (d2, side, n, t, q));
-                let Some((d2, side, n, t, q)) = [to(qa), to(qb)].into_iter().flatten().min_by(|x, y| x.0.total_cmp(&y.0)) else { continue };
+                let Some((d2, side, n, t, q)) = [named(qa).and_then(to), named(qb).and_then(to)].into_iter().flatten().min_by(|x, y| x.0.total_cmp(&y.0)) else { continue };
                 let line = &line_of(q).drawn;
                 let calm = nearest(at, line.calm.iter().copied()).map_or(NO_CHANNEL_M, |(d2, side, ..)| side * d2.sqrt() * self.r.metres);
                 (f.sample[i], f.dist[i], f.along[i], f.calm[i]) = (q, side * d2.sqrt() * self.r.metres, line.line[n].s + (line.line[n + 1].s - line.line[n].s) * t, calm);
