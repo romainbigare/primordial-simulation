@@ -134,8 +134,13 @@ async function fetchDetail(l: Loading): Promise<void> {
  * it needs `SHRINK` times less. */
 export function detailSeen(e: number): void {
   const ahead = e / DETAIL_AHEAD, want = sideFor(ahead), have = loading?.side ?? shown?.side;
+  if (want === failedSide) return;
   if (have === undefined ? ahead < DETAIL_LOAD_E : want > have || want * SHRINK <= have) loadSide(want);
 }
+
+/** The side whose load failed last (none: null): it is not tried again, so a file that is missing or broken is not
+ * fetched at every frame. */
+let failedSide: number | null = null;
 
 /** Load the layers at `side` texels a side; the set drawn from stays till they are whole (`sendSoon`). */
 function loadSide(side: number): void {
@@ -144,7 +149,10 @@ function loadSide(side: number): void {
   loading = l;
   fetchDetail(l).catch(e => {
     if (loading !== l) return;
-    // Said on the page once, and kept for the cost line: the ground is drawn without its detail, or with the set before.
+    // The load stops (nothing more of it is waited for: the picture settles), said on the page once and kept for the
+    // cost line: the ground is drawn without its detail, or with the set before.
+    stopLoading();
+    failedSide = side;
     if (!detailFailed) reportError(new Error(`detail: ${e instanceof Error ? e.message : e}`));
     detailFailed = String(e instanceof Error ? e.message : e);
   });
