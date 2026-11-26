@@ -58,8 +58,9 @@ pub fn shares(w: &World, beds: &[Vec<Option<Bed>>], span: f64, heated: &[usize])
     let ph = &w.cfg.phys;
     let strikes = ph.strikes * span / w.cfg.calendar().year as f64;
     let mut lit = Lit { share: vec![0.0; n], at: vec![f64::INFINITY; n] };
-    let reach = |from: usize, lit: &mut Lit| {
-        for (i, t) in run(w, beds, from) {
+    let mut marks = Marks { best: vec![f64::INFINITY; n], done: vec![false; n] };
+    let mut reach = |from: usize, lit: &mut Lit| {
+        for (i, t) in run(w, beds, from, &mut marks) {
             (lit.share[i], lit.at[i]) = (covered(&beds[i]), lit.at[i].min(t));
         }
     };
@@ -99,6 +100,13 @@ fn lead(beds: &[Option<Bed>]) -> Option<&Bed> {
     beds.iter().flatten().filter(|b| b.carries()).max_by(|a, b| (a.cover * a.share).total_cmp(&(b.cover * b.share)))
 }
 
+/// What a flame's run (`run`) marks of each cell: the earliest time it was found to reach it so far, s, and whether it
+/// reached it; a run leaves them as it found them (none, and false).
+struct Marks {
+    best: Vec<f64>,
+    done: Vec<bool>,
+}
+
 /// A place a flame reaches, and when, s (`run`); the heap pops the earliest.
 #[derive(PartialEq)]
 struct Reached(f64, usize);
@@ -119,20 +127,21 @@ impl PartialOrd for Reached {
 /// at the speed of each one's bed (`lead`, `reach`) along the way between them, the push of its wind at mid-flame added
 /// (`Bed::waf`, `super::downwind`), through
 /// cells whose remains carry a flame, the earliest first (Dijkstra's way over the times). Returns them with when the
-/// flame reaches each, s, the lit one first.
-fn run(w: &World, beds: &[Vec<Option<Bed>>], from: usize) -> Vec<(usize, f64)> {
+/// flame reaches each, s, the lit one first; `marks` holds what it found of each cell while it runs.
+fn run(w: &World, beds: &[Vec<Option<Bed>>], from: usize, marks: &mut Marks) -> Vec<(usize, f64)> {
     let (cells, ph) = (w.mesh.cells(), &w.cfg.phys);
     let speed = |i: usize, way: [f64; 2]| {
         let wind = w.low_wind.get(w.mesh.up(i, 0, crate::AIR)).map_or([0.0; 2], |v| v.map(|x| x as f64));
         lead(&beds[i]).map(|b| super::reach(ph, b).speed * super::downwind(ph, b, wind.map(|v| v * b.waf), way))
     };
-    let mut when: Vec<(usize, f64)> = vec![(from, 0.0)];
+    let (mut touched, mut out) = (vec![from], Vec::new());
+    marks.best[from] = 0.0;
     let mut heap = BinaryHeap::from([Reached(0.0, from)]);
-    let mut out = Vec::new();
     while let Some(Reached(t, i)) = heap.pop() {
-        if when.iter().any(|&(c, s)| c == i && s < t) || out.iter().any(|&(c, _)| c == i) {
+        if marks.best[i] < t || marks.done[i] {
             continue;
         }
+        marks.done[i] = true;
         out.push((i, t));
         let (links, others) = cells.around(i);
         for (&l, &j) in links.iter().zip(others) {
@@ -143,11 +152,15 @@ fn run(w: &World, beds: &[Vec<Option<Bed>>], from: usize) -> Vec<(usize, f64)> {
             let Some(here) = speed(i, way) else { continue };
             let Some(there) = speed(j, way).filter(|_| cells.width()[l as usize] > 0.0) else { continue };
             let t = t + half / here.max(f64::MIN_POSITIVE) + half / there.max(f64::MIN_POSITIVE);
-            if t <= ph.front_life && !when.iter().any(|&(c, s)| c == j && s <= t) {
-                when.push((j, t));
+            if t <= ph.front_life && marks.best[j] > t {
+                if marks.best[j] == f64::INFINITY {
+                    touched.push(j);
+                }
+                marks.best[j] = t;
                 heap.push(Reached(t, j));
             }
         }
     }
+    touched.iter().for_each(|&c| (marks.best[c], marks.done[c]) = (f64::INFINITY, false));
     out
 }
