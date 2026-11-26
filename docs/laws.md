@@ -1542,7 +1542,7 @@ seeds fill it:
   stand as the world grows them. Every edit goes
   through one entry, `World::edit` (`core/src/edit/`, `edit::Act`): it runs the passes of a month's start once, so
   the edits read the world as the laws do, then makes each in its order on the cell under its place (`World::cell_under`):
-  `Clear` about the sample under the place, `Split`, `Plant` in the cell's newest patch (the least age), `Grown` there
+  `Clear` about the sample under the place (of the whole cell: its patches made one, of age 0), `Split`, `Plant` in the cell's newest patch (the least age), `Grown` there
   (the world's grown stand of the kind; as `Plant` where none stands), and `Strike`
   (3c), and `Ground` on the cells under a brush about the place (0); each is told as an event. `ew run` makes them at
   the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Due`), the live page between two months
@@ -1649,7 +1649,9 @@ the next fuel; Rothermel 1972). Three stages, each number with one writer:
   its dry bed carries one. The liquid the lit beds boiled off leaves their ground node as vapour into its aside node
   (and so the air, 1.5), with its heat at the ground's temperature and its latent heat, as evaporation does; the rest of
   the heat they took goes to the air over them, as the heat of their burning does; what was not used stays in the
-  ground. `flame::needed` is the heat that lights all of a cell's remains over a share of it. With no heat added nothing
+  ground. `flame::needed` is the heat that lights the remains of every patch of a cell whole over a share of it, heat
+  added evenly there: the most q of its patches over that share of its land; an edit adds no more to a cell, and none
+  where nothing there can light. With no heat added nothing
   of this runs. Each
   flame runs from the cell it lit over the
   region's cells for `front_life`, crossing half the way between two cells' centres at each one's speed R (below) on

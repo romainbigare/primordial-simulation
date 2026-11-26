@@ -259,6 +259,15 @@ pub(super) fn open(c: &mut Cover, s: f64, point: u32, from: Option<usize>, at: (
     Some(k)
 }
 
+/// The whole cell of cover `c` cleared (`World::clear` of a share of 1): its patches joined into one (`join`), of age
+/// 0, made at its sample `point`, with every dead wall standing on them.
+fn clear_whole(c: &mut Cover, point: u32) {
+    while c.patch_count() > 1 {
+        join(c, 0, c.patch_count() - 1);
+    }
+    c.patches[0] = Patch { share: 1.0, age: 0.0, at: point, ..c.patches[0] };
+}
+
 /// Patch `k` of cover `c` gives the share `s` of its cell as a new patch about its sample `point` (`open`), each of its
 /// slots `x` giving it the share `by[x][g]` of the plants of each of its groups `g` as a slot of its own there
 /// (`Cover::part`; none where it gives no plants). Returns the patch it is; none (nothing done) where the arrays hold
@@ -340,14 +349,15 @@ pub(super) fn year(w: &mut World) {
 }
 
 impl World {
-    /// An edit: the share `s` (0 to 1) of cell `i` becomes a new patch of its cover (`open`), made at its sample `at`
-    /// (`World::sample_in`; none: its centre, `World::centre_sample`), whose plants all die above
+    /// An edit: the share `s` (above 0, at most 1) of cell `i` becomes a new patch of its cover (`open`; the whole cell:
+    /// its patches one, `clear_whole`), made at its sample `at` (`World::sample_in`; none: its centre,
+    /// `World::centre_sample`), whose plants all die above
     /// the ground, a clearing: of every slot the share `s` of its amounts goes to the cell's ground as remains with its
     /// heat, its plants with it (`Cover::cut`), booked as the cover's deaths (`DIED`). Its seeds lying, its cured leaves
-    /// and its dead walls stay. False (nothing done) for a share outside 0 to 1 or a chemistry with no cover.
+    /// and its dead walls stay. False (nothing done) for a share outside that or a chemistry with no cover.
     pub fn clear(&mut self, i: usize, s: f64, at: Option<usize>) -> bool {
         let Some(p) = Parts::of(&self.chem) else { return false };
-        if !(s > 0.0 && s < 1.0) {
+        if !(s > 0.0 && s <= 1.0) {
             return false;
         }
         let point = at.unwrap_or_else(|| self.centre_sample(i)) as u32;
@@ -357,7 +367,11 @@ impl World {
         for x in (0..SLOTS).filter(|&x| c.root[x] != NO_ROOT) {
             c.plants[x].iter_mut().for_each(|n| *n -= *n * s);
         }
-        open(c, s, point, None, (&self.cfg.phys, &mm, rho));
+        if s == 1.0 {
+            clear_whole(c, point);
+        } else {
+            open(c, s, point, None, (&self.cfg.phys, &mm, rho));
+        }
         self.counts.cover_budget[DIED] -= held(&e, &dead);
         crate::contract::died_at(self, i, (0..NP).map(|q| (p.sub[q], dead[q])), heat);
         true

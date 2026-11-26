@@ -285,7 +285,8 @@ fn two_burns_of_a_cell_in_a_month_add_up() {
 }
 
 /// Heat added under a brush dries and lights remains too thin to carry a flame of their own (handover.md 11.1;
-/// `flame::heated`): a strike does not light them, the heat that lights them (`flame::needed`) does, at once when
+/// `flame::heated`): a strike does not light them, the heat that lights them (`flame::needed`, the most a brush adds)
+/// does, at once when
 /// the edits settle; the liquid they held boils off their ground as vapour, the heat they took goes to the air, and the
 /// books are kept.
 #[test]
@@ -308,6 +309,8 @@ fn heat_lights_remains_too_thin_to_carry_a_flame() {
     let books = Books::now(&w);
     let joules_m2 = HEAT_OVER * need / (over * pcore::contract::land(&w, i));
     assert_eq!(w.edit(&[Edit { place: brush.centre, act: Act::Heat { radius_m: brush.radius_m, joules_m2 } }]), [true]);
+    let added: f64 = w.heated.iter().filter(|h| h.0 == i as u32).map(|h| h.1[0]).sum();
+    assert!(added <= need * (1.0 + 1e-12), "the brush added {added} J, more than the {need} J that light the remains");
     let reached = w.settle().burnt;
     assert!(reached.contains(&(i as u32, 0.0)) && w.heated.is_empty(), "reached {reached:?}");
     assert!(w.counts.flame[flame::REMAINS] > 0.0 && w.counts.flame_month[i].share > 0.0, "burnt {} kg, {:?}", w.counts.flame[flame::REMAINS], w.counts.flame_month[i]);

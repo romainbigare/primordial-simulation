@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 /// What an edit does to the cell under its place.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Act {
-    /// The share of the cell made a new patch whose plants die above the ground (`World::clear`), about the cell's
-    /// sample under the place (`World::sample_in`)
+    /// The share of the cell (above 0, at most 1) made a new patch whose plants die above the ground (`World::clear`),
+    /// about the cell's sample under the place (`World::sample_in`)
     Clear(f64),
     /// The share of the cell's first patch made a new patch alike to it, a control that changes nothing (`World::split`)
     Split(f64),

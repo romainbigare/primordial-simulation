@@ -165,34 +165,62 @@ fn patch_bed(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), layer_of: 
 /// Steps over the depth of a layer of remains by which the liquid it holds is summed (`heated`): the midpoint rule.
 const DEPTH_STEPS: usize = 16;
 
+/// What lighting the remains of patch `k` of land cell `i` (the share `part` of the cell's, `parts`) and the cured
+/// leaves over them takes (`heated`): their fuel, the cell's layer of remains (read into `layer_of` where first needed),
+/// the liquid they hold, kg a m² of the patch's land, and the heat that warms and boils it off and warms them dry to
+/// `t_light`, J a m². The liquid is their layer's whole depth (what its sorption curve holds and, as duff, what it draws
+/// from the ground, `Layer::share`), which is the ground's own (`World::g`): no more than the ground holds a m² of its
+/// land (`ground_liquid`).
+fn to_light(w: &World, p: &Parts, (i, k, part): (usize, usize, f64), ground_liquid: f64, layer_of: &mut Option<Result<Layer, Unlit>>) -> Result<(Fuel, Layer, f64, f64), Unlit> {
+    let ph = &w.cfg.phys;
+    let fuel = fuel(w, p, (i, k, part))?;
+    let l = layer_of.get_or_insert_with(|| layer(w, p, i, fuel.t)).clone()?;
+    let held: f64 = (0..DEPTH_STEPS).map(|s| {
+        let z = (s as f64 + 0.5) / DEPTH_STEPS as f64;
+        l.sorbed(l.h(z)) + ph.duff_hold * l.wet * z
+    }).sum::<f64>() / DEPTH_STEPS as f64;
+    let liquid = (fuel.cured * l.sorbed(l.top) + fuel.load * held).min(ground_liquid);
+    let q = (fuel.load + fuel.cured) * fuel.dry + liquid * fuel.per_liquid;
+    Ok((fuel, l, liquid, q))
+}
+
+/// The liquid of land cell `i`'s ground a m² of its land, kg.
+fn ground_liquid(w: &World, p: &Parts, i: usize) -> f64 {
+    w.g(p.liquid, i).max(0.0) * w.chem.subs[p.liquid].molar_mass / crate::contract::land(w, i).max(f64::MIN_POSITIVE)
+}
+
 /// Heat added from outside to the remains of each patch in use of land cell `i` and the cured leaves over them, `e` J a
 /// m² over the share `over` of the cell (handover.md 11.1): on each patch it first warms and boils off the liquid they
-/// hold, their layer's whole depth (what its sorption curve holds and, as duff, what it draws from the ground,
-/// `Layer::share`), which is the ground's own liquid (`World::g`), so no more than the ground holds a m² of its land;
-/// then warms them dry to `t_light` (`Fuel`): that is `q` J a m² of the patch's land, and the heat lights the share
-/// min(1, e / q) of `over` of it, on the share of its ground the remains cover (off the cell's saturated share, where
-/// liquid stands): a bed burnt whole, all of it dry (`Bed::kept`: the heat keeps its flame where it would carry none of
-/// its own). Returns each patch's bed with the heat it took, J, and the liquid it boiled off, kg; or why none: nothing
-/// that burns, snow over it, or no air read yet.
+/// hold, then warms them dry to `t_light` (`to_light`): that is `q` J a m² of the patch's land, and the heat lights the
+/// share min(1, e / q) of `over` of it, on the share of its ground the remains cover (off the cell's saturated share,
+/// where liquid stands): a bed burnt whole, all of it dry (`Bed::kept`: the heat keeps its flame where it would carry
+/// none of its own). Returns each patch's bed with the heat it took, J, and the liquid it boiled off, kg; or why none:
+/// nothing that burns, snow over it, or no air read yet.
 pub fn heated(w: &World, p: &Parts, i: usize, (e, over): (f64, f64)) -> Vec<Result<(Bed, f64, f64), Unlit>> {
     let (chem, ph, land) = (&w.chem, &w.cfg.phys, crate::contract::land(w, i));
-    let ground_liquid = w.g(p.liquid, i).max(0.0) * chem.subs[p.liquid].molar_mass / land.max(f64::MIN_POSITIVE);
+    let ground_liquid = ground_liquid(w, p, i);
     let mut layer_of = None;
     parts(w.life.cover(i)).into_iter().enumerate().map(|(k, part)| {
-        let Fuel { share, load, cured, cover, t, heat, dry, per_liquid } = fuel(w, p, (i, k, part))?;
-        let l = layer_of.get_or_insert_with(|| layer(w, p, i, t)).clone()?;
-        let held: f64 = (0..DEPTH_STEPS).map(|s| {
-            let z = (s as f64 + 0.5) / DEPTH_STEPS as f64;
-            l.sorbed(l.h(z)) + ph.duff_hold * l.wet * z
-        }).sum::<f64>() / DEPTH_STEPS as f64;
-        let liquid = (cured * l.sorbed(l.top) + load * held).min(ground_liquid);
-        let q = (load + cured) * dry + liquid * per_liquid;
+        let (Fuel { share, load, cured, cover, t, heat, dry, .. }, l, liquid, q) = to_light(w, p, (i, k, part), ground_liquid, &mut layer_of)?;
         let lit = over * (e / q.max(f64::MIN_POSITIVE)).min(1.0) * (1.0 - l.saturated);
         let particle_rho = chem.subs[p.sub[WALL]].density[0];
         let mut bed = Bed { share, part, load, standing: cured, cover: cover * lit, moist: 0.0, extinct: f64::INFINITY, heat, light: dry, least: least(ph, t, heat - dry), flaming: 1.0, smoulder: 1.0, particle_rho, waf: 0.0, kept: true };
         bed.waf = sheltered(w, p, (i, k), bed.depth(ph));
         Ok((bed, q * lit * land * share, liquid * lit * land * share))
     }).collect()
+}
+
+/// The heat a m² of land cell `i`'s land takes for the remains of every patch of it to light whole when heat is added
+/// evenly over it (`heated`): the most any patch's take (`to_light`), J; or why none lights (the first patch's reason,
+/// where none can).
+pub fn light_m2(w: &World, p: &Parts, i: usize) -> Result<f64, Unlit> {
+    let ground_liquid = ground_liquid(w, p, i);
+    let mut layer_of = None;
+    let takes: Vec<Result<f64, Unlit>> = parts(w.life.cover(i)).into_iter().enumerate().map(|(k, part)| to_light(w, p, (i, k, part), ground_liquid, &mut layer_of).map(|t| t.3)).collect();
+    match takes.iter().flatten().copied().reduce(f64::max) {
+        Some(q) => Ok(q),
+        None => Err(takes.into_iter().find_map(Result::err).unwrap_or(Unlit::Bare)),
+    }
 }
 
 /// The layer of remains on the drier ground of a cell: the relative vapour of the air in it at its top and at its

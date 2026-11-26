@@ -175,20 +175,16 @@ pub fn now(w: &mut World) -> Vec<(u32, f64)> {
     reached
 }
 
-/// The heat that lights the remains of land cell `i` over the share `over` of it where edits add heat (`heated`): what
-/// warms and boils off the liquid they hold and warms them to `t_light` on every patch, J; or why none lights: no
-/// land, no cover in the chemistry, nothing lying that burns, snow over it, or the air near the ground not read yet.
+/// The heat that lights the remains of every patch of land cell `i` whole over the share `over` of it where edits add
+/// heat evenly (`heated`, `bed::light_m2`), J; or why none lights: no land, no cover in the chemistry, nothing lying
+/// that burns, snow over it, or the air near the ground not read yet. An edit adds no more (`World::heat`).
 pub fn needed(w: &World, i: usize, over: f64) -> Result<f64, Unlit> {
     let p = Parts::of(&w.chem).ok_or(Unlit::Lifeless)?;
-    if crate::contract::land(w, i) <= 0.0 {
+    let land = crate::contract::land(w, i);
+    if land <= 0.0 {
         return Err(Unlit::NoLand);
     }
-    let beds = heated(w, &p, i, (f64::INFINITY, over));
-    let all: f64 = beds.iter().flatten().map(|b| b.1).sum();
-    match beds.iter().find_map(|b| b.as_ref().err()) {
-        Some(&why) if all <= 0.0 => Err(why),
-        _ => Ok(all),
-    }
+    Ok(bed::light_m2(w, &p, i)? * land * over)
 }
 
 /// The flames over `span` s: the bed of each patch of each land cell (`beds`), of a cell edits added heat to its beds

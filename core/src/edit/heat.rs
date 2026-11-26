@@ -11,7 +11,8 @@ impl World {
     /// `q` J a m² of heat added under the brush `b` at its centre, by (1 − (d/r)²)² of that at a distance d from it (r
     /// its radius; as `shape`), over the samples it covers (`covered`): each land cell takes the heat its samples take,
     /// from the outside node into its ground node, kept for its flames with the share of it the brush covers
-    /// (`World::heated`; a cell heated again adds to it, over the larger share). Whether any heat was added.
+    /// (`World::heated`; a cell heated again adds to it, over the larger share), up to the heat that lights its remains
+    /// whole over that share (`flame::needed`), and none where nothing there can light. Whether any heat was added.
     pub(crate) fn heat(&mut self, b: Brush, q: f64) -> bool {
         let s = self.terrain_samples();
         let mut cells: BTreeMap<usize, f64> = BTreeMap::new();
@@ -20,12 +21,18 @@ impl World {
         }
         let over: BTreeMap<usize, f64> = self.under(b).into_iter().map(|u| (u.cell, u.share)).collect();
         let mut added = false;
-        let land: Vec<(usize, f64)> = cells.into_iter().filter(|&(i, e)| e > 0.0 && crate::contract::land(self, i) > 0.0).collect();
-        for (i, e) in land {
+        for (i, e) in cells.into_iter().filter(|&(_, e)| e > 0.0) {
+            let at = self.heated.iter().position(|h| h.0 == i as u32);
+            let [held, was] = at.map_or([0.0, 0.0], |k| self.heated[k].1);
+            let share = was.max(over.get(&i).copied().unwrap_or(0.0));
+            let Ok(need) = crate::flame::needed(self, i, share) else { continue };
+            let e = e.min(need - held);
+            if e <= 0.0 {
+                continue;
+            }
             self.cross((Boundary::Outside, Node::ground(i)), [], e);
-            let share = over.get(&i).copied().unwrap_or(0.0);
-            match self.heated.iter_mut().find(|h| h.0 == i as u32) {
-                Some(h) => h.1 = [h.1[0] + e, h.1[1].max(share)],
+            match at {
+                Some(k) => self.heated[k].1 = [held + e, share],
                 None => self.heated.push((i as u32, [e, share])),
             }
             added = true;
