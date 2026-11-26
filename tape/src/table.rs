@@ -74,26 +74,34 @@ impl Table {
         let per_m3: Vec<f64> = (0..w.mesh.cells().n()).map(|i| w.liquid_in(i, |k| w.g(k, i)).map_or(0.0, |l| l.1)).collect();
         let per = |k: usize| per_m3[self.cell[k] as usize];
         let mut out: Vec<f32> = w.discharge.iter().enumerate().map(|(k, &q)| if per(k) > 0.0 { (q as f64 / per(k)) as f32 } else { 0.0 }).collect();
-        let (s, levels) = (w.terrain_samples(), w.pond_levels());
-        let shore = |k: usize| self.dry.dry[k] || levels[s.pond[k] as usize].is_nan() || s.h[k] >= levels[s.pond[k] as usize];
+        let under = self.under_liquid(w);
+        let s = w.terrain_samples();
         // In the flood's order from the last sample reached: a sample comes before the one its liquid runs to.
         for &k in s.order.iter().rev() {
             let k = k as usize;
             // (And one sample on, so the line's last piece runs into the liquid drawn.)
-            if s.pond[k] != NONE && s.main[k] != NONE && (shore(k) || s.pond[s.main[k] as usize] == NONE || shore(s.main[k] as usize)) {
+            if s.pond[k] != NONE && s.main[k] != NONE && (!under[k] || !under[s.main[k] as usize]) {
                 out[k] = out[k].max(out[s.main[k] as usize]);
             }
         }
         out
     }
 
+    /// Whether each of the terrain's samples, row by row, lies under the liquid of a body a shell draws: in a pond whose
+    /// body holds liquid (`World::pond_levels`), under its level, and not left out of it by the shore drawn (`dry`).
+    fn under_liquid(&self, w: &World) -> Vec<bool> {
+        let (s, levels) = (w.terrain_samples(), w.pond_levels());
+        (0..s.h.len()).map(|k| s.pond[k] != NONE && !self.dry.dry[k] && s.h[k] < levels[s.pond[k] as usize]).collect()
+    }
+
     /// What the liquid running through each of the terrain's samples carries, g/m³, row by row: of a sample that carries
     /// liquid (`q`, its discharge, `discharge`), what the main channel of its cell carried in the last month
-    /// (`Counters::load_month`); none where it carries none, or before the first month. A shell colours a channel's
-    /// water by it.
+    /// (`Counters::load_month`); none where it carries none, or before the first month, and none under a body's liquid
+    /// (`under_liquid`: a channel's load settles where it meets a body, which a shell draws as its plume,
+    /// `Counters::plumes`). A shell colours a channel's water by it.
     pub fn load(&self, w: &World, q: &[f32]) -> Vec<f32> {
-        let month = &w.counts.load_month;
-        q.iter().zip(&self.cell).map(|(&q, &i)| if q > 0.0 { month.get(i as usize).map_or(0.0, |c| c[0]) } else { 0.0 }).collect()
+        let (month, under) = (&w.counts.load_month, self.under_liquid(w));
+        q.iter().zip(&self.cell).enumerate().map(|(k, (&q, &i))| if q > 0.0 && !under[k] { month.get(i as usize).map_or(0.0, |c| c[0]) } else { 0.0 }).collect()
     }
 
     /// The present state of world `w` as one tape frame, as a tape would keep it (`frame`), and its table: the melting point of the frozen
