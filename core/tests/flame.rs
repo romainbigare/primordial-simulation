@@ -273,7 +273,7 @@ fn two_burns_of_a_cell_in_a_month_add_up() {
     let [x0, y0, x1, y1] = w.map.bounds(i);
     for at in [0.25, 0.75] {
         let brush = Brush { centre: [x0 + at * (x1 - x0), (y0 + y1) / 2.0], radius_m: 0.15 * w.map.side };
-        let over = w.under(brush).iter().find(|u| u.cell == i).expect("the cell under the brush").share;
+        let over = w.under(&[brush]).iter().find(|u| u.cell == i).expect("the cell under the brush").share;
         let joules_m2 = HEAT_OVER * flame::needed(&w, i, over).expect("heat lights them") / (over * pcore::contract::land(&w, i));
         assert_eq!(w.edit(&[Edit { place: brush.centre, act: Act::Heat { radius_m: brush.radius_m, joules_m2 } }]), [true]);
         w.settle();
@@ -304,7 +304,7 @@ fn heat_lights_remains_too_thin_to_carry_a_flame() {
     assert!(flame::lights(&w, i).is_err(), "a strike lights the thin remains");
     let [x0, y0, x1, y1] = w.map.bounds(i);
     let brush = Brush { centre: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], radius_m: 0.5 * w.map.side };
-    let over = w.under(brush).iter().find(|u| u.cell == i).expect("the cell under the brush").share;
+    let over = w.under(&[brush]).iter().find(|u| u.cell == i).expect("the cell under the brush").share;
     let need = flame::needed(&w, i, over).expect("heat lights them");
     let books = Books::now(&w);
     let joules_m2 = HEAT_OVER * need / (over * pcore::contract::land(&w, i));

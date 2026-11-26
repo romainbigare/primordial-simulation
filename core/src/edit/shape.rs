@@ -18,8 +18,8 @@ impl World {
         Rng::new(self.seed, stroke, 0, Purpose::Edit).below(self.terrain.makes.len().max(1)) as u8
     }
 
-    /// The ground under the brush `b` raised by `height` m at its centre (lowered where under none), by (1 − (d/r)²)² of
-    /// that at a distance d from it (r its radius: a smooth bump, flat at its edge), over the samples it covers
+    /// The ground under the brush `b` raised by `height` m at its centre (lowered where under none), by `falloff` of
+    /// that at a distance d from it (in radii: a smooth bump, flat at its edge), over the samples it covers
     /// (`covered`). Each cell takes the volume its samples move by; a raise is the share `loose` of loose ground of the
     /// make `make` (the part of the stroke's height at the centre, which has raised `stroke` m there before, within
     /// `edit_top_m` of its top) and the rest the cell's rock (`raise`); a lowering takes at most what the cell holds
@@ -28,7 +28,7 @@ impl World {
         let s = self.terrain_samples();
         let mut cells: BTreeMap<usize, Vec<(usize, f64)>> = BTreeMap::new();
         for c in self.covered(b, s.across) {
-            cells.entry(c.cell).or_default().push((c.k, height * (1.0 - c.d * c.d).powi(2)));
+            cells.entry(c.cell).or_default().push((c.k, height * super::falloff(c.d)));
         }
         drop(s);
         let top = self.cfg.edit_top_m;

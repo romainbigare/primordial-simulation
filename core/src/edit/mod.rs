@@ -10,11 +10,12 @@ mod heat;
 mod basin;
 mod shape;
 
-pub use brush::{Brush, Under};
+pub use brush::{falloff, Brush, Under};
 
 use crate::event::{Event, EventKind};
 use crate::World;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// What an edit does to the cell under its place.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -92,16 +93,18 @@ impl World {
     /// Make the edits `edits` in their order, after the passes of a month's start (`month_start`) where one of them
     /// reads the world as the laws read it at a month's start (`Act::reads_month`); each is told as an event
     /// (`EventKind::Edit`, its cell the node, the value 1 where it was made, 0 where the world could not make it).
-    /// Returns whether each was made.
+    /// The grown stand of a kind is found once for all of them, as the world stood before the first placed it: each
+    /// cell takes the same stand. Returns whether each was made.
     pub fn edit(&mut self, edits: &[Edit]) -> Vec<bool> {
         if edits.iter().any(|e| e.act.reads_month()) {
             crate::month_start(self);
         }
+        let mut grown = BTreeMap::new();
         edits
             .iter()
             .map(|e| {
                 let i = self.cell_under(e.place);
-                let done = self.make(i, e);
+                let done = self.make(i, e, &mut grown);
                 self.events.push(Event { day: self.day(), kind: EventKind::Edit(*e), node: i as u32, value: if done { 1.0 } else { 0.0 } });
                 done
             })
@@ -130,8 +133,8 @@ impl World {
         (0..c.patch_count()).rev().min_by(|&a, &b| c.patches[a].age.total_cmp(&c.patches[b].age)).unwrap_or(0)
     }
 
-    /// Make the edit `e` on cell `i`; whether it was made.
-    fn make(&mut self, i: usize, e: &Edit) -> bool {
+    /// Make the edit `e` on cell `i`, the grown stands of the kinds found so far in `grown`; whether it was made.
+    fn make(&mut self, i: usize, e: &Edit, grown: &mut BTreeMap<u32, Option<crate::cover::Grown>>) -> bool {
         match e.act {
             Act::Clear(s) => {
                 let at = self.sample_in(i, e.place);
@@ -139,7 +142,7 @@ impl World {
             }
             Act::Split(s) => self.split(i, s),
             Act::Plant { genes, root, kg } => crate::cover::place(self, i, self.newest(i), genes, root, kg),
-            Act::Grown { genes, root, kg } => match crate::cover::grown(self, root) {
+            Act::Grown { genes, root, kg } => match grown.entry(root).or_insert_with(|| crate::cover::grown(self, root)).clone() {
                 Some(g) => crate::cover::place_grown(self, i, self.newest(i), &g),
                 None => crate::cover::place(self, i, self.newest(i), genes, root, kg),
             },

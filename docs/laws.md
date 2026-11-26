@@ -1548,8 +1548,9 @@ seeds fill it:
   the start of a year (`--clear`, `--split`, `--plant`; `worldgen::schedule::Due`), the live page between two months
   (wasm `brush`: the ground under a round brush raised or lowered; or a clearing planted with a grown stand of a starting kind, or a
   strike, on each cell under it, `World::under`, which covers the terrain's samples whose centres lie within its radius,
-  each cell by the share of its samples covered, about its sample nearest the brush's centre, each cell once a
-  stroke).
+  each cell by the share of its samples covered, about its sample nearest the brush's centre; a planting once its
+  stroke ends, on the samples all of the stroke's places covered). The grown stand of a kind is found once for all the
+  edits of one call, as the world stood before them.
 - **Events** (`patches::hit`, `open_event`): a patch is made for an event that hits a share of a stand at once (a
   die-off, a flame), never for one plant. An event that hits at least `EVENT_LEAST` (0.15) of a patch's own ground and
   leaves at least that share of it makes the ground it hit a new patch of age 0 (`patches::carve`), about a sample of the

@@ -19,7 +19,7 @@ fn a_brush_covers_its_disc_of_the_cells_under_it() {
     let w = small_world();
     let centre = [w.map.w as f64 / 2.0, w.map.h as f64 / 2.0];
     let side = w.map.side;
-    let under = w.under(Brush { centre, radius_m: 1.5 * side });
+    let under = w.under(&[Brush { centre, radius_m: 1.5 * side }]);
     let covered: f64 = under.iter().map(|u| u.share * w.map.squares(u.cell)).sum();
     assert!((covered / disc(1.5) - 1.0).abs() < 0.02, "covered {covered} squares of a disc of {}", disc(1.5));
     for u in &under {
@@ -27,7 +27,7 @@ fn a_brush_covers_its_disc_of_the_cells_under_it() {
         assert!(u.share > 0.0 && u.share <= 1.0 && (x0..x1).contains(&u.place[0]) && (y0..y1).contains(&u.place[1]), "{u:?} in {:?}", w.map.bounds(u.cell));
     }
     assert!(under.windows(2).all(|p| p[0].cell < p[1].cell), "the cells in their order");
-    let fine = w.under(Brush { centre, radius_m: 1.0 });
+    let fine = w.under(&[Brush { centre, radius_m: 1.0 }]);
     let samples = (side / w.map.length(pcore::space::terrain::SAMPLE_DEPTH)).powi(2);
     assert_eq!(fine.len(), 1, "{fine:?}");
     assert!((fine[0].share * w.map.squares(fine[0].cell) * samples - 1.0).abs() < 1e-12, "one sample: {fine:?}");

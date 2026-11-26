@@ -3,7 +3,13 @@
 
 use crate::space::terrain::SAMPLE_DEPTH;
 use crate::World;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// What a brush adds at a distance `d` from its centre, in radii, as a share of what it adds there: (1 − d²)², a smooth
+/// bump, flat at its edge.
+pub fn falloff(d: f64) -> f64 {
+    (1.0 - d * d).max(0.0).powi(2)
+}
 
 /// A round brush: its centre, in squares from the map's north-west corner (as `Edit::place`), and its radius, m.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -61,20 +67,22 @@ impl World {
         out
     }
 
-    /// The cells under the brush `b`, in the order of the cells (`Under`): each cell's share is the share of its samples
-    /// the brush covers (`covered`).
-    pub fn under(&self, b: Brush) -> Vec<Under> {
+    /// The cells under the brushes `brushes` (one, or the places of a stroke), in the order of the cells (`Under`): each
+    /// cell's share is the share of its samples one of them covers (`covered`), its place the sample nearest the centre
+    /// of one.
+    pub fn under(&self, brushes: &[Brush]) -> Vec<Under> {
         let map = &self.map;
         let per = (1u64 << SAMPLE_DEPTH.saturating_sub(map.square_depth())) as f64;
-        // Of each cell: the samples covered, and the place of the one nearest the centre with its distance.
-        let mut cells: BTreeMap<usize, (f64, f64, [f64; 2])> = BTreeMap::new();
-        for c in self.covered(b, self.terrain_samples().across) {
-            let at = cells.entry(c.cell).or_insert((0.0, f64::INFINITY, c.place));
-            at.0 += 1.0;
+        let across = self.terrain_samples().across;
+        // Of each cell: the samples covered, and the place of the one nearest a centre with its distance.
+        let mut cells: BTreeMap<usize, (BTreeSet<usize>, f64, [f64; 2])> = BTreeMap::new();
+        for c in brushes.iter().flat_map(|&b| self.covered(b, across)) {
+            let at = cells.entry(c.cell).or_insert((BTreeSet::new(), f64::INFINITY, c.place));
+            at.0.insert(c.k);
             if c.d < at.1 {
                 (at.1, at.2) = (c.d, c.place);
             }
         }
-        cells.into_iter().map(|(cell, (count, _, place))| Under { cell, share: (count / (map.squares(cell) * per * per)).min(1.0), place }).collect()
+        cells.into_iter().map(|(cell, (ks, _, place))| Under { cell, share: (ks.len() as f64 / (map.squares(cell) * per * per)).min(1.0), place }).collect()
     }
 }

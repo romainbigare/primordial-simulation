@@ -8,8 +8,8 @@ use crate::World;
 use std::collections::BTreeMap;
 
 impl World {
-    /// `q` J a m² of heat added under the brush `b` at its centre, by (1 − (d/r)²)² of that at a distance d from it (r
-    /// its radius; as `shape`), over the samples it covers (`covered`): each land cell takes the heat its samples take,
+    /// `q` J a m² of heat added under the brush `b` at its centre, by `falloff` of that at a distance d from it (in
+    /// radii; as `shape`), over the samples it covers (`covered`): each land cell takes the heat its samples take,
     /// from the outside node into its ground node, kept for its flames with the share of it the brush covers
     /// (`World::heated`; a cell heated again adds to it, over the larger share), up to the heat that lights its remains
     /// whole over that share (`flame::needed`), and none where nothing there can light. Whether any heat was added.
@@ -17,9 +17,9 @@ impl World {
         let s = self.terrain_samples();
         let mut cells: BTreeMap<usize, f64> = BTreeMap::new();
         for c in self.covered(b, s.across) {
-            *cells.entry(c.cell).or_default() += q * (1.0 - c.d * c.d).powi(2) * s.area(c.k);
+            *cells.entry(c.cell).or_default() += q * super::falloff(c.d) * s.area(c.k);
         }
-        let over: BTreeMap<usize, f64> = self.under(b).into_iter().map(|u| (u.cell, u.share)).collect();
+        let over: BTreeMap<usize, f64> = self.under(&[b]).into_iter().map(|u| (u.cell, u.share)).collect();
         let mut added = false;
         for (i, e) in cells.into_iter().filter(|&(_, e)| e > 0.0) {
             let at = self.heated.iter().position(|h| h.0 == i as u32);
