@@ -192,12 +192,19 @@ pub fn needed(w: &World, i: usize, over: f64) -> Result<f64, Unlit> {
 /// burns (`shares`, the strikes of edits and the heated cells with the strikes drawn over the span, which it then
 /// forgets), the flames on its patches (`burnings`, serial) and the burning of them (`burn`), on the chunks of `life`
 /// only where some burns; last, the heat the heated beds took leaves their ground for the air over them, as the heat
-/// of their burning does. Returns each cell the flames reached and when, s after its strike or its heat (`Lit::at`);
+/// of their burning does. Over no time no strike is drawn, so only the cells a flame of the edits can reach need their
+/// beds (`reachable`). Returns each cell the flames reached and when, s after its strike or its heat (`Lit::at`);
 /// none where the chemistry has no cover.
 fn flames(w: &mut World, span: f64) -> Option<Vec<(u32, f64)>> {
     let p = Parts::of(&w.chem)?;
     let n = w.mesh.cells().n();
-    let mut beds: Vec<Vec<Option<Bed>>> = crate::par::map_n(n, n * BED_WORK, |i| if crate::contract::land(w, i) > 0.0 { beds(w, &p, i).into_iter().map(Result::ok).collect() } else { Vec::new() });
+    let bed_of = |w: &World, i: usize| if crate::contract::land(w, i) > 0.0 { beds(w, &p, i).into_iter().map(Result::ok).collect() } else { Vec::new() };
+    let lit_by_edits: Vec<usize> = w.strikes.iter().map(|&i| i as usize).chain(w.heated.iter().map(|h| h.0 as usize)).collect();
+    let mut beds: Vec<Vec<Option<Bed>>> = if span > 0.0 { crate::par::map_n(n, n * BED_WORK, |i| bed_of(w, i)) } else { vec![Vec::new(); n] };
+    let mut known = vec![span > 0.0; n];
+    for &i in lit_by_edits.iter().filter(|_| span <= 0.0) {
+        (beds[i], known[i]) = (bed_of(w, i), true);
+    }
     let (mut lit_by_heat, mut took) = (Vec::new(), Vec::new());
     for (i, [e, over]) in std::mem::take(&mut w.heated) {
         let (i, land) = (i as usize, crate::contract::land(w, i as usize));
@@ -212,12 +219,15 @@ fn flames(w: &mut World, span: f64) -> Option<Vec<(u32, f64)>> {
             lit_by_heat.push(i);
         }
     }
+    if span <= 0.0 {
+        reachable(w, &mut beds, &mut known, &lit_by_edits, bed_of);
+    }
     let lit = shares(w, &beds, span, &lit_by_heat);
     w.strikes.clear();
     let on: Vec<Vec<Burning>> = (0..n).map(|i| if lit.share[i] > 0.0 { burnings(w, i, &beds[i]) } else { Vec::new() }).collect();
     let load = on.iter().filter(|f| !f.is_empty()).count();
     if load > 0 {
-        crate::life::run(w, load, |w, d| {
+        crate::life::run_on(w, load, |cells| on[cells].iter().any(|f| !f.is_empty()), |w, d| {
             for i in d.cells().filter(|&i| !on[i].is_empty()) {
                 burn(w, d, &p, i, &on[i]);
             }
@@ -227,6 +237,27 @@ fn flames(w: &mut World, span: f64) -> Option<Vec<(u32, f64)>> {
         boiled(w, p.liquid, &took);
     }
     Some(lit.at.iter().enumerate().filter(|p| p.1.is_finite()).map(|(i, &t)| (i as u32, t)).collect())
+}
+
+/// The beds `beds` of every cell a flame lit in the cells `from` can reach, found where not `known` yet (`bed_of`): the
+/// cells round each cell whose beds carry a flame, from those cells on (`join::run` moves only through such cells and
+/// reads the beds of the cells round them).
+fn reachable(w: &World, beds: &mut [Vec<Option<Bed>>], known: &mut [bool], from: &[usize], bed_of: impl Fn(&World, usize) -> Vec<Option<Bed>>) {
+    let carries = |b: &[Option<Bed>]| b.iter().flatten().any(Bed::carries);
+    let mut queued = vec![false; beds.len()];
+    let mut next: Vec<usize> = from.iter().copied().filter(|&i| carries(&beds[i]) && !std::mem::replace(&mut queued[i], true)).collect();
+    while let Some(i) = next.pop() {
+        for &j in w.mesh.cells().around(i).1 {
+            let j = j as usize;
+            if !known[j] {
+                (beds[j], known[j]) = (bed_of(w, j), true);
+            }
+            if !queued[j] && carries(&beds[j]) {
+                queued[j] = true;
+                next.push(j);
+            }
+        }
+    }
 }
 
 /// The heat the heated beds took and the liquid they boiled off (`took`: each cell, J, kg) leave their ground: the

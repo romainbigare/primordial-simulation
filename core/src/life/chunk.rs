@@ -20,10 +20,13 @@ pub struct Chunk<'a> {
 }
 
 impl<'a> Chunk<'a> {
-    /// A chunk of `cells`, the run from cell `first`; its view with room for all of them (`ns` substances).
-    fn new(first: usize, cells: &'a mut [Cell], ns: usize) -> Chunk<'a> {
+    /// A chunk of `cells`, the run from cell `first`; its view with room for all of them (`ns` substances), or none
+    /// for a chunk that does not run (`run_on`).
+    fn new(first: usize, cells: &'a mut [Cell], ns: usize, room: bool) -> Chunk<'a> {
         let mut moves = Moves::default();
-        moves.reserve(cells.len(), ns);
+        if room {
+            moves.reserve(cells.len(), ns);
+        }
         Chunk { cells, first, moves, counts: Counters::default() }
     }
     /// The cells of its chunk, by index, in order.
@@ -60,6 +63,12 @@ fn bounds(w: &World) -> Vec<usize> {
 /// phase's count of work, is small). The cells are taken out of the world meanwhile, and the world takes what they
 /// wrote after (`World::take_chunks`).
 pub(crate) fn run(w: &mut World, load: usize, f: impl Fn(&World, &mut Chunk) + Sync + Send) {
+    run_on(w, load, |_| true, f);
+}
+
+/// `run` on the chunks whose cells `busy` holds work for (it reads each chunk's run of cells); the others write
+/// nothing, and the world takes them as empty, in their place.
+pub(crate) fn run_on(w: &mut World, load: usize, busy: impl Fn(std::ops::Range<usize>) -> bool + Sync + Send, f: impl Fn(&World, &mut Chunk) + Sync + Send) {
     let b = bounds(w);
     let ns = w.chem.ns();
     let mut cells = std::mem::take(&mut w.life.cells);
@@ -67,14 +76,18 @@ pub(crate) fn run(w: &mut World, load: usize, f: impl Fn(&World, &mut Chunk) + S
     let mut rest = &mut cells[..];
     for k in 0..b.len() - 1 {
         let (mine, after) = rest.split_at_mut(b[k + 1] - b[k]);
-        items.push(Chunk::new(b[k], mine, ns));
+        items.push(Chunk::new(b[k], mine, ns, busy(b[k]..b[k + 1])));
         rest = after;
     }
     // (What the cells see of an air node is worked out once, where they first read it: the store does not change while
     // the pass runs, `store::gather`.)
     w.life.air_seen = (0..w.mesh.level(crate::AIR).n()).map(|_| std::sync::OnceLock::new()).collect();
     let world = &*w;
-    crate::par::each_init(&mut items, load, || (), |_, c| f(world, c));
+    crate::par::each_init(&mut items, load, || (), |_, c| {
+        if busy(c.cells()) {
+            f(world, c);
+        }
+    });
     let done: Vec<(Moves, Counters)> = items.into_iter().map(|c| (c.moves, c.counts)).collect();
     w.life.air_seen.clear();
     w.life.cells = cells;
@@ -90,7 +103,7 @@ impl World {
     /// node, it is put back, and the world takes what it wrote (`take_chunks`).
     pub fn in_cell<R>(&mut self, i: usize, f: impl FnOnce(&World, &mut Chunk) -> R) -> R {
         let mut one = [std::mem::take(&mut self.life.cells[i])];
-        let mut c = Chunk::new(i, &mut one, self.chem.ns());
+        let mut c = Chunk::new(i, &mut one, self.chem.ns(), true);
         c.moves.open(self, i, Node::new(Class::Life, i));
         let r = f(self, &mut c);
         let done = vec![(c.moves, c.counts)];

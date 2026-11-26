@@ -11,7 +11,7 @@ mod shared;
 
 pub use books::{book, Books};
 pub use chunk::Chunk;
-pub(crate) use chunk::run;
+pub(crate) use chunk::{run, run_on};
 pub use disperse::lot;
 pub use kin::NO_ROOT;
 pub use parts::{Parts, BURN_CURB, CURBS, FUEL, MATTER, NP, SOFT, SPLIT_CURB, WALL};
