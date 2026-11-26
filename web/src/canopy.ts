@@ -236,14 +236,22 @@ function kindOf(s: Sheet, i: number, k: number, r: Float32Array, g: Gather): voi
 
 /** Scratch of `half`: one float and its bits. */
 const ONE = new Float32Array(1), BITS = new Uint32Array(ONE.buffer);
-/** The bits of `v` as an IEEE binary16 float, rounded to the nearest (the field goes to the GPU as 16-bit floats: a
- * leaf's reflectance of 0.04 in 8 bits would hold ten steps). */
+/** The bits of `v` (as a 32-bit float) as an IEEE binary16 float, the nearest, ties to even; past the largest,
+ * infinite; NaN kept: bit for bit `tape::ground::half` (the field goes to the GPU as 16-bit floats: a leaf's reflectance
+ * of 0.04 in 8 bits would hold ten steps). */
 export function half(v: number): number {
   ONE[0] = v;
-  const x = BITS[0], sign = (x >>> 16) & 0x8000, e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
-  if (e <= 0) return e < -10 ? sign : sign | (((m | 0x800000) >> (1 - e)) + 0x1000) >> 13;
+  const b = BITS[0], sign = (b >>> 16) & 0x8000;
+  if ((b & 0x7fffffff) > 0x7f800000) return sign | 0x7e00;
+  const e = ((b >>> 23) & 0xff) - 127 + 15, f = b & 0x7fffff;
   if (e >= 31) return sign | 0x7c00;
-  return sign | ((e << 10) + ((m + 0x1000) >> 13));
+  // Below the least normal 16-bit float the leading bit joins the fraction (a subnormal).
+  const m = e <= 0 ? f | 0x800000 : f, shift = e <= 0 ? 14 - e : 13;
+  if (shift > 24) return sign;
+  const kept = m >>> shift, rest = m & ((1 << shift) - 1), mid = 1 << (shift - 1);
+  const rounded = kept + +(rest > mid || (rest === mid && (kept & 1) === 1));
+  // A carry out of the fraction raises the exponent, and past the largest gives infinity: the bits add up so.
+  return sign | (e <= 0 ? rounded : (e << 10) + rounded);
 }
 
 /** The number whose IEEE binary16 bits are `bits` (`half`'s inverse). */
