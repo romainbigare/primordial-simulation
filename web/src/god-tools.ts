@@ -25,8 +25,8 @@ const SHAPE_STEP_M = 25, SHAPE_STEP_MS = 100;
  * its land, of which the brush covers a share), the wettest in tens. */
 const HEAT_J_M2_S = 3e6;
 /** Burn's heat doubles every this many seconds it is held, so damp remains light in a few seconds too, not tens; at
- * most this many times (256 times its first rate, about 8e8 J/m² a second: what boils off some 300 kg of liquid a m²),
- * so a brush held long over ground that does not light adds no heat past any the ground could take. */
+ * most this many times (256 times its first rate, about 8e8 J/m² a second: what boils off some 300 kg of liquid a m²).
+ * (The core adds no more than lights the remains, and none where nothing can light: core/src/edit/heat.rs.) */
 const HEAT_DOUBLING_S = 1, HEAT_DOUBLINGS = 8;
 /** The starting kinds in plain words, by the core's name (worldgen/src/life/kinds.rs `KINDS`): a short name and a line. */
 const PLAIN_KINDS: Record<string, [string, string]> = {
