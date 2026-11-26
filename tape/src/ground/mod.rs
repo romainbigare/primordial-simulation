@@ -241,7 +241,7 @@ impl Ground {
             .map(|(i, &h)| {
                 let p = self.centre(depth, win[0] + (i % wide) as i64, win[1] + (i / wide) as i64);
                 let by = self.shore.beside(p);
-                let in_pond = self.shore.share(p, |k| self.samples.pond[k] != NONE);
+                let in_pond = by.share(|k| self.samples.pond[k] != NONE);
                 let valley = near.drawn(i, h);
                 let met = if by.level.is_nan() { valley } else { valley + (valley.min(h).max(h.min(by.level)) - valley) * by.share };
                 let mouth = [near.mouth[i][0], near.mouth[i][1] / self.map.length(SAMPLE_DEPTH)];
