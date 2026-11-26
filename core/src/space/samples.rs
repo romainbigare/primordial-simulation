@@ -8,7 +8,7 @@
 //! terrain, not saved.
 
 use super::delta::{exposures, lobes, Liquid, Mouth};
-use super::drain::{draws, flood, open_low, starts};
+use super::drain::{draws, flood, open_from, starts};
 use super::fill::heading;
 use super::relief::{Lift, Relief};
 use super::grid::Grid;
@@ -74,6 +74,10 @@ impl Samples {
     /// samples, and for an empty place the key it had.
     pub fn pond_keys(&self, was: &[u32]) -> Vec<u32> {
         super::ponds::kept_keys(&self.pond, self.ponds.len(), was)
+    }
+    /// The samples of the open low ground (the ponds of no pass).
+    pub fn open_samples(&self) -> Vec<usize> {
+        (0..self.pond.len()).filter(|&k| self.pond[k] != NONE && self.ponds[self.pond[k] as usize].pass == NONE).collect()
     }
     /// The area of sample `k`, m² (its row's, `rows`).
     #[inline]
@@ -194,10 +198,11 @@ impl Terrain {
     /// The samples of `map` for `seed` (its rows between latitudes `lat`) as built from the relief `r` (`Relief`): the
     /// seed's (`samples`) with the heights `relief::heights` gives, and the flood over them found again (`found`; no
     /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
-    /// stands over the liquid's level (`wear::STAND_M`). What the relief laid on a sample is loose ground that settled
-    /// there (`laid_ground`), laid over `years` since the start; where edits shaped a sample its loose ground follows on
-    /// its new slope (`mantle::edited`). The ponds are numbered after those the relief keeps
-    /// (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build (no version, or a relief of no
+    /// stands over the liquid's level (`wear::STAND_M`), and the open low ground is what lies under that level joined
+    /// to the seed's (`drain::open_from`), so a pit dug inland, however deep, is a closed basin. What the relief laid on
+    /// a sample is loose ground that settled there (`laid_ground`), laid over `years` since the start; where edits
+    /// shaped a sample its loose ground follows on its new slope (`mantle::edited`). The ponds are numbered after those
+    /// the relief keeps (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build (no version, or a relief of no
     /// cells' offsets: a world put back to before its first build, `rename_built`); found once for each version of the
     /// relief (`Relief::version`) and kept.
     pub fn built(&self, seed: u64, map: &Square, lat: (f64, f64), r: &Relief, years: f64) -> Arc<Samples> {
@@ -217,7 +222,7 @@ impl Terrain {
             l
         });
         let h = super::relief::heights(&s0, r, &lift);
-        let open = open_low(&grid, &h, STAND_M);
+        let open = open_from(&grid, &h, STAND_M, &s0.open_samples());
         let ground = laid_ground(&s0, r, years);
         let mut found = self.found(seed, (&grid, rows), (h, &open, false), ground);
         for k in (0..r.shaped.len()).filter(|&k| r.shaped[k] != 0.0) {

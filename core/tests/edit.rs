@@ -349,3 +349,29 @@ fn a_basin_renumbers_no_pond_it_did_not_reach() {
         assert!(empty || (k != NONE && grown.pond[k as usize] == p as u32), "number {p} names a pond that does not hold its key");
     }
 }
+
+/// How far under the floor of the open low ground the test's pit is dug at its centre, m.
+const PIT_BELOW_M: f64 = 300.0;
+
+/// A pit dug inland below the floor of the open low ground stays a closed basin: the open low ground is what lies under
+/// its level joined to the seed's (`drain::open_from`), so the pit's samples are a pond with a pass and the seed's open
+/// low ground stays open, however deep the pit.
+#[test]
+fn a_pit_deeper_than_the_sea_stays_a_closed_pond() {
+    use pcore::space::network::NONE;
+    let mut w = small_world();
+    let i = inland(&w);
+    let open = |s: &pcore::space::samples::Samples, k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
+    let s0 = w.terrain_samples();
+    let sea: Vec<usize> = (0..s0.h.len()).filter(|&k| open(&s0, k)).collect();
+    let floor = s0.h.iter().copied().fold(f64::INFINITY, f64::min);
+    drop(s0);
+    let height = floor - PIT_BELOW_M - w.ground_z(i);
+    assert!(shape(&mut w, i, height));
+    w.settle();
+    let s = w.terrain_samples();
+    let pit = (0..s.h.len()).min_by(|&a, &b| s.h[a].total_cmp(&s.h[b])).unwrap();
+    assert!(s.h[pit] < floor && w.relief.shaped_at(pit) < 0.0, "the pit at {} m, the floor at {floor} m", s.h[pit]);
+    assert!(s.pond[pit] != NONE && !open(&s, pit), "the pit is open low ground");
+    assert!(sea.iter().all(|&k| open(&s, k)), "the sea is closed");
+}

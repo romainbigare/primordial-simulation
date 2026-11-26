@@ -658,7 +658,9 @@ its solids that stay solid at the surface: snow and ice do not raise it): the ce
 their centres (a box filter half a square each way, three passes, round a globe's rows), what their means then lack spread the same way
 eight times, and each raised by the constant it still lacks, so each cell's samples' mean is its ground exactly
 (`space::relief::heights`). Over them the flood finds the ways, the ponds and the wetness index again
-(`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level; a closed basin
+(`Terrain::built`): a sample of the open low ground stands as land where it is over the liquid's level, and the open
+low ground is what lies under that level joined to the seed's (`drain::open_from`; on a globe all that lies under
+it), so a pit dug inland deeper than the sea's floor is a closed basin, not the sea; a closed basin
 too shallow to hold a pond (under 1 m, `ponds::shallow`) is none, the floods flow through it (the start's wear fills
 such basins; the build fills none). Then each cell's ground as liquid stands on it, the bodies, the key samples and
 their rooms are found again; what a cell's parts of the bodies held follows each part's pond (a new pond comes from the
