@@ -144,7 +144,9 @@ export class MapView {
   /** Edge latitudes (degrees) of a globe, whose columns wrap east to west; null for an island. */
   private globe: { north: number; south: number } | null = null;
   private raf = 0;
-  /** The map's squares (a tape's map, and the classes of the live map's squares), and the live map. */
+  /** The map's squares (a tape's map, and the classes of the live map's squares): what makes them, and them, made only
+   * once drawn (`squares`: the live map draws them only for its classes); and the live map. */
+  private mapOf: (() => Fields) | null = null;
   private map: FieldWindow | null = null;
   private land: Land | null = null;
   private look: MapLook = { mode: 'earth', layer: '', ramp: [], ground: 0 };
@@ -320,12 +322,19 @@ export class MapView {
     this.resize(); this.fit();
   }
 
-  /** Draw the map's squares from `fields`. */
-  setMap(fields: Fields): void {
+  /** Draw the map's squares from the fields `fields` makes (made once they are drawn). */
+  setMap(fields: () => Fields): void {
     this.map?.drop(this.gpu);
-    this.map = new FieldWindow(fields);
+    this.map = null;
+    this.mapOf = fields;
     this.frames++;
     this.invalidate();
+  }
+
+  /** The map's squares, made from `mapOf` the first time they are drawn; null: none. */
+  private squares(): FieldWindow | null {
+    if (!this.map && this.mapOf) this.map = new FieldWindow(this.mapOf());
+    return this.map;
   }
 
   /** Draw in view `look`. */
@@ -549,7 +558,8 @@ export class MapView {
     this.last = picOf(target, this.cam, k, this.lookKey());
     this.present(gpu, moving ? null : this.fadeFrom);
     if (!moving) this.fadeFrom = null;
-    if (this.asked.length && this.map) this.readClasses(gpu, this.map);
+    const squares = this.asked.length ? this.squares() : null;
+    if (squares) this.readClasses(gpu, squares);
     gpu.submit();
     if (timer) this.time(timer, r);
     if (moving) return;
@@ -919,7 +929,7 @@ export class MapView {
     const frames = xs.map((_, c) => frameOf(edge(c), oy * k, mpp, seen));
     const lands = frames.map(f => this.land?.binds(gpu, look, f));
     const live = lands[0] && under;
-    this.drawBackdrop(p, xs, k, size, [edge(0), oy * k, edge(xs.length), (oy + h * s) * k], live ? program !== null : this.map !== null);
+    this.drawBackdrop(p, xs, k, size, [edge(0), oy * k, edge(xs.length), (oy + h * s) * k], live ? program !== null : this.mapOf !== null);
     if (live) {
       if (program) xs.forEach((_, c) => {
         const x0 = Math.max(edge(c), 0), x1 = Math.min(edge(c + 1), size[0]), y0 = Math.max(oy * k, 0), y1 = Math.min((oy + h * s) * k, size[1]);
@@ -928,7 +938,7 @@ export class MapView {
         const fire = this.fire?.groundBinds(gpu, look, frames[c], this.fireTime());
         p.draw(program, { rect: [x0, y0, x1 - x0, y1 - y0], binds: { ...lands[c]!, ...under, ...fire } }, false);
       });
-    } else if (this.map) xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: this.map!.binds(gpu, look) }, false));
+    } else if (this.mapOf) { const squares = this.squares()!; xs.forEach((_, c) => p.draw('earth', { rect: [edge(c), oy * k, edge(c + 1) - edge(c), h * s * k], binds: squares.binds(gpu, look) }, false)); }
   }
 
   /** Draw into pass `p` (as `drawMap`) the background and the map's shadow on it; where the map is drawn over it

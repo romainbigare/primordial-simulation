@@ -123,17 +123,17 @@ export function seaSquares(wet: Wet, meta: Meta): Uint8Array {
   });
 }
 
-/** The fields of the map's squares at frame f, a texel a square (fields.ts), and its wet squares and sea (a frame does
- * not say how wet the ground is: 0). The liquid's
+/** The fields of the map's squares at frame f, a texel a square (fields.ts), of its wet squares and sea `wet` (a frame
+ * does not say how wet the ground is: 0). The liquid's
  * surface over the ground is a wet square's depth, and in a dry square lies below its ground by the depth it lacks to
  * be wet and by its height over the surface of the wet squares beside it, so the shore drawn between a wet square and
  * a dry one lies nearer the lower. A square's slope is the Sobel gradient of the heights about it. */
-export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
+export function mapFields(w: World, f: number, wet = wetOf(w, f)): Fields {
   const m = w.meta, { w: W, h: H, cell_m, globe } = m, n = W * H;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
   const leaf = decode(w, f, 'leaf'), soaked = decode(w, f, 'wet'), channelW = decode(w, f, 'channel_w'), channelD = decode(w, f, 'channel_d'), loose = decode(w, f, 'loose');
   const [gr, gg, gb] = ['ground_r', 'ground_g', 'ground_b'].map(name => plane(w, f, name));
-  const wet = wetOf(w, f), sea = seaSquares(wet, m);
+  const sea = seaSquares(wet, m);
   const wrapX = (x: number) => (globe ? (x + W) % W : x);
   const height = new Float32Array(4 * n), matter = new Float32Array(4 * n), ground = new Uint8Array(4 * n), inside = new Float32Array(4 * n);
   for (let i = 0; i < n; i++) {
@@ -159,5 +159,5 @@ export function mapFields(w: World, f: number): { fields: Fields; wet: Wet } {
   }
   const o = w.base + f * w.frameBytes;
   const fields: Fields = { w: W, h: H, height, matter, ground, inside, layers: w.data.subarray(o, o + w.frameBytes), names: w.meta.layers.map(l => l.name), look: [1, 0, SQUARE_BEACH_M, 1], place: [0, 0, W * cell_m, H * cell_m] };
-  return { fields, wet };
+  return fields;
 }
