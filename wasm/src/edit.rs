@@ -69,8 +69,8 @@ impl Live {
         let (mut unplanted, mut changed) = (String::new(), false);
         if let Some(mut st) = self.stroke.take() {
             if !st.planting.is_empty() {
-                let (planted, why) = self.plant(&st.planting, st.row);
-                (unplanted, st.changed) = (why, st.changed || planted);
+                let (made, why) = self.plant(&st.planting, st.row);
+                (unplanted, st.changed) = (why, st.changed || made);
             }
             if st.changed {
                 self.before = Some((st.before, st.moved));
@@ -86,20 +86,22 @@ impl Live {
 
     /// Of each cell under the brushes `planting` (`World::under`), the share of it they covered cleared about its
     /// sample nearest one's centre, and the starting kind of row `row` placed in it as the world's grown stand of it
-    /// (`Act::Grown`; where none stands yet, as seedlings). Whether any cell was planted, and where none was the reason
-    /// most cells give ("NoLand" or "NoRoom").
+    /// (`Act::Grown`; where none stands yet, as seedlings). Whether any of these edits was made (a clearing changes the
+    /// world even where nothing is planted after it, so the stroke's undo is kept), and, where no cell was planted, the
+    /// reason most cells give ("NoLand" or "NoRoom").
     fn plant(&mut self, planting: &[pcore::edit::Brush], row: usize) -> (bool, String) {
         use pcore::edit::{Act, Edit};
         let under = self.world.under(planting);
         let edits: Vec<Edit> = under.iter().flat_map(|u| [Act::Clear(u.share), worldgen::schedule::grown(row)].map(|act| Edit { place: u.place, act })).collect();
         let done = self.world.edit(&edits);
-        self.unframed |= done.iter().any(|&d| d);
+        let made = done.iter().any(|&d| d);
+        self.unframed |= made;
         let planted = done.chunks(2).any(|d| d.iter().all(|&ok| ok));
         if planted || under.is_empty() {
-            return (planted, String::new());
+            return (made, String::new());
         }
         let wet = under.iter().filter(|u| pcore::contract::land(&self.world, u.cell) <= 0.0).count();
-        (false, String::from(if 2 * wet >= under.len() { "NoLand" } else { "NoRoom" }))
+        (made, String::from(if 2 * wet >= under.len() { "NoLand" } else { "NoRoom" }))
     }
 }
 

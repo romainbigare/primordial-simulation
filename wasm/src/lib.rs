@@ -188,12 +188,13 @@ fn shape_of(drawn: u32) -> Shape {
 pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn: u32, variety: u32, soft: u32) -> u32 {
     let band = island((south, north));
     let cfg = Config { variety: variety as usize, ..if soft != 0 { worldgen::terrain::soft_weather(band) } else { band } };
+    // (Refused before anything is built: the island keeps these settings as they are.)
+    if cfg.validate().is_err() {
+        return 1;
+    }
     let mut world = worldgen::terrain::new_island(seed as u64, (size as usize, size as usize), shape_of(drawn), cfg);
     if south < north {
         worldgen::planet::stand(&mut world);
-    }
-    if world.cfg.validate().is_err() {
-        return 1;
     }
     // Its ground gets Flow's state from its heat first, as `ew run` gives a new world's, so the same seed makes the
     // same world in the page as on the command line.
