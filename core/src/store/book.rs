@@ -65,8 +65,8 @@ impl Booker<'_> {
 }
 
 /// Book into the arrays of the nodes of `classes` (their amounts of each of the `ns` substances, then their heat) the
-/// changes `f` adds to them (`Booker::add`). With work enough for the pool (`work`, `par::each_init`), the amounts of
-/// `PER_TASK` substances of a class are one task; else all of a class's amounts, on the calling thread. Then what
+/// changes `f` adds to them (`Booker::add`). With threads and work enough for the pool (`work`, `par::each_init`), the
+/// amounts of `PER_TASK` substances of a class are one task; else all of a class's amounts, on the calling thread. Then what
 /// rounding left below zero in each is set to zero (`zero_rounding`). Returns what was set to zero, each task's in
 /// task order: of the amounts, mol, and of the heat, J (`Counters::rounded`).
 pub(crate) fn book_by_array(store: &mut Store, ns: usize, classes: &[Class], work: usize, f: impl Fn(&mut Booker) + Sync + Send) -> [f64; 2] {
@@ -82,7 +82,7 @@ pub(crate) fn book_by_array(store: &mut Store, ns: usize, classes: &[Class], wor
         })
         .collect();
     // Substances per task.
-    let per = if work >= crate::par::SERIAL_BELOW { PER_TASK } else { ns };
+    let per = if cfg!(feature = "threads") && work >= crate::par::SERIAL_BELOW { PER_TASK } else { ns };
     let mut tasks = Vec::new();
     for (((c, a), h), node) in amounts.iter_mut().enumerate().zip(heat.iter_mut()).zip(&nodes) {
         let class = Class::ALL[c];
