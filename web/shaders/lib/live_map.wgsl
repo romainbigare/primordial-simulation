@@ -138,7 +138,13 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.ground = surface.xyz;
   // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
   // the cells' soil is a mean over kilometres, the bed's make is the samples'.
-  if (styled() && loose < SOIL_OF_BED_M) { p.ground = mix(p.ground, bed_make_at(at), SOIL_OF_BED * (1.0 - loose / SOIL_OF_BED_M)); }
+  // (The bed's make is read once, where something below asks for it.)
+  var make = vec3f(0.0);
+  var made = false;
+  if (styled() && loose < SOIL_OF_BED_M) {
+    make = bed_make_at(at); made = true;
+    p.ground = mix(p.ground, make, SOIL_OF_BED * (1.0 - loose / SOIL_OF_BED_M));
+  }
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
@@ -181,7 +187,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   }
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
-  if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
+  if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) {
+    if (!made) { make = bed_make_at(at); made = true; }
+    p.bed = make;
+  }
   p.fetch = g.water.z;
   let waves = waves_of(p.sea, p.fetch);
   // On a deposit (colour.wgsl `laid_share`) the waves sort sand up their storms' swash alone: past it lies what the
@@ -189,7 +198,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z * (1.0 - laid_share(p)), waves);
   p.swash = swash_of(over_ponds(tiled, 0.0), waves, length(tiled.slope), at, e, p.snow);
   // A beach of pebbles takes their colour from the bed they are worn from (colour.wgsl `shore_grain`).
-  if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) { p.bed = bed_make_at(at); }
+  if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) {
+    if (!made) { make = bed_make_at(at); }
+    p.bed = make;
+  }
   p.river = 0.0;
   p.river_depth = 0.0;
   p.mouth = 0.0;

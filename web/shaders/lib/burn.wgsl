@@ -32,13 +32,19 @@ const DEAD_BARK = vec3f(0.035, 0.032, 0.03);
 // Spot p with the marks of fire on it: where it lies dry, the share of it under a scar (`Spot.scar.x`), how much of it
 // is char, ash and scorched soil (`.yzw`); in the Earth view its cover tinted by the cured leaves standing in it, under
 // the dead trees of its patch seen from afar (`dead_far`).
-fn burnt_spot(p: Spot) -> Spot { return dead_far(scarred(p)); }
+// (The fire's numbers at the spot are read once, where it lies dry and the page draws fire, `fire_at`.)
+fn burnt_spot(p: Spot) -> Spot {
+  let fired = p.depth <= 0.0 && fire.map.x > 0.0;
+  var f = FireAt();
+  if (fired) { f = fire_at(p.at); }
+  return dead_far(scarred(p, f, fired), f, fired);
+}
 
 // The dead trees standing at spot p as its field is read (cover_field.wgsl `dead_here`: the rest of the cells' and its
 // patch's over the share of it the patch takes) seen from afar, in the Earth view, where it lies dry: specks as many as
 // their walls make, those of a burn spread over its cell on the land it burnt (fire.wgsl `dead_on_scar`), as far as the
-// marks do not draw them one by one.
-fn dead_far(p: Spot) -> Spot {
+// marks do not draw them one by one. The fire's numbers there are `f`, where `fired` (`burnt_spot`).
+fn dead_far(p: Spot, f: FireAt, fired: bool) -> Spot {
   var q = p;
   if (p.depth > 0.0 || !styled()) { return q; }
   let dead = dead_here();
@@ -47,19 +53,19 @@ fn dead_far(p: Spot) -> Spot {
   let w = dead_seen_w(dead.y);
   let near = cover_look.shown[STANDS] * as_crown(w, p.e);
   if (near >= 1.0) { return q; }
-  let on_scar = select(1.0, dead_on_scar(fire_at(p.at), dead.z, p.scar.x), cell_patch == 0 && fire.map.x > 0.0);
+  var on_scar = 1.0;
+  if (cell_patch == 0 && fired) { on_scar = dead_on_scar(f, dead.z, p.scar.x); }
   let seen = specks(p.at, w, on_scar * dead.x / snag_kg(dead.y) * 0.25 * PI * w * w, p.e, 89);
   let share = seen.x * (1.0 - near);
   q.cover = vec4f(DEAD_BARK * (1.0 + DOME_LIT * seen.y) * share + q.cover.rgb * (1.0 - share), share + q.cover.a * (1.0 - share));
   return q;
 }
 
-// Spot p with the scar and the cured leaves of fire on it (`burnt_spot`).
-fn scarred(p: Spot) -> Spot {
+// Spot p with the scar and the cured leaves of fire on it, the fire's numbers there `f`, where `fired` (`burnt_spot`).
+fn scarred(p: Spot, f: FireAt, fired: bool) -> Spot {
   var q = p;
   // (Squares of side 0: the page knows no fire, or draws none, fire.ts `groundBinds`.)
-  if (p.depth > 0.0 || fire.map.x <= 0.0) { return q; }
-  let f = fire_at(p.at);
+  if (!fired) { return q; }
   if (styled() && f.cured > 0.0) {
     // (The cured leaves stand in the low plants: the share of the cover that is theirs takes the tint.)
     let low = min(p.low / max(p.cover.a, 1e-3), 1.0);
