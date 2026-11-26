@@ -68,6 +68,15 @@ impl Dry {
     }
 }
 
+/// Of world `w`'s relief, what the samples are built from (`Terrain::built`), as the samples of version `version`, with
+/// the years since its start at its last build and its map, as bytes (bincode; `Ground::relief_bytes`): not what lies
+/// on each sample now (`Relief::laid`), which a build does not read.
+fn built_bytes(w: &World, version: u32) -> Vec<u8> {
+    let r = &w.relief;
+    let built = Relief { laid: Vec::new(), built: r.built.clone(), shaped: r.shaped.clone(), offset: r.offset.clone(), builds: r.builds, version, ponds: r.ponds.clone(), due: false };
+    bincode::serialize(&(&built, w.built_years(), &w.map)).expect("a relief serializes")
+}
+
 /// The depths of the tiles of `map`, coarsest first: from the finest at which one tile holds the whole map to the first
 /// whose texels are no longer than `FINEST_M`.
 pub fn depths(map: &Square) -> std::ops::RangeInclusive<u8> {
@@ -140,7 +149,7 @@ impl Ground {
     /// to build the same samples (`rebuild_from`): the ground's own map may cut the island into other cells (a page's
     /// ground is made of its squares, `worldgen::terrain::island_ground`).
     pub fn relief_bytes(w: &World) -> Vec<u8> {
-        bincode::serialize(&(&w.relief, w.built_years(), &w.map)).expect("a relief serializes")
+        built_bytes(w, w.relief.version)
     }
 
     /// The relief world `w`'s samples will be built from when its edits settle (`World::settle`,
@@ -151,8 +160,7 @@ impl Ground {
         if !w.relief.due || w.relief.offset.len() != w.mesh.cells().n() {
             return None;
         }
-        let r = Relief { version: w.relief.version + 1, due: false, ..w.relief.clone() };
-        Some(bincode::serialize(&(&r, w.built_years(), &w.map)).expect("a relief serializes"))
+        Some(built_bytes(w, w.relief.version + 1))
     }
 
     /// The ground made again on the samples the relief `bytes` builds on the world's cells (`relief_bytes`,
