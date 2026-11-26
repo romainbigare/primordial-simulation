@@ -196,13 +196,20 @@ export class GroundTiles {
     this.told = gen;
     this.rock = rock;
     this.rockVersion++;
+    const version = this.versionOf.get(gen) ?? this.previewed;
     for (const [key, k] of this.kept) {
-      if (k.gen >= gen) continue;
+      if (k.gen >= gen || this.stale.has(key)) continue;
       const s = this.squaresOf(k.depth), x0 = Math.floor(k.x * s), y0 = Math.floor(k.y * s);
       const x1 = Math.min(Math.ceil((k.x + 1) * s), this.map.w), y1 = Math.min(Math.ceil((k.y + 1) * s), this.map.h);
       let changed = false;
       for (let y = y0; y < y1 && !changed; y++) for (let x = x0; x < x1 && !changed; x++) changed = squares[y * this.map.w + x] === 1;
-      if (changed) this.stale.add(key);
+      if (changed) { this.stale.add(key); continue; }
+      // A tile over no square the build changed holds the ground of this build too: it is of its version, so the
+      // preview of the next edits (of what moved since the version shown) is drawn over it.
+      k.gen = gen;
+      k.version = version;
+      this.numbers[4 * (MOST_TILES + k.layer)] = +(version === this.previewed);
+      this.numbersDue = true;
     }
     this.changed(true);
     if (this.last) this.view(this.last);
@@ -377,7 +384,10 @@ export class GroundTiles {
       if (shown && !had) this.lastCame = came;
       this.changed(shown);
     }
-    this.next();
+    // A tile of an older build (made by another worker while the first told what the new build changed) is stale: the
+    // view asks for it again, else nothing would till the view moves.
+    if (gen !== this.gen && this.last) this.view(this.last);
+    else this.next();
   }
 
   /** Whether the tile of `depth` at column `x` and row `y` lies in the last view. */
