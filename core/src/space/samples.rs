@@ -206,7 +206,7 @@ impl Terrain {
     /// seed's (`samples`) with the heights `relief::heights` gives, and the flood over them found again (`found`; no
     /// grading: it would move ground the books do not know); a sample of the seed's open low ground is land where it
     /// stands over the liquid's level (`wear::STAND_M`), and the open low ground is what lies under that level joined
-    /// to the seed's (`drain::open_from`), so a pit dug inland, however deep, is a closed basin. What the relief laid on
+    /// to the lowest sample of the seed's (`drain::open_from`), so a pit dug inland, however deep, is a closed basin. What the relief laid on
     /// a sample is loose ground that settled there (`laid_ground`), laid over `years` since the start; where edits
     /// shaped a sample its loose ground follows on its new slope (`mantle::edited`). The ponds are numbered after those
     /// the relief keeps (`Relief::ponds`, `ponds::renumber`). The seed's samples where there was no build (no version, or a relief of no
