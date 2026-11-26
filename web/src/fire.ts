@@ -115,15 +115,16 @@ export class Fire {
     const n = w * h, scar = (i: number) => (!p || p.age[i] >= never ? 0 : Math.min(p.last[i], 1 - p.wet[i]));
     this.flames = p ? smokeBox(p, w, h, cellM) : null;
     if (!p || !(this.flames || p.ash.some((a, i) => a > 0 || p.cured[i] > 0 || scar(i) > 0))) { this.data = null; return; }
-    const data = new Uint16Array(4 * FIRE_PLANES * n);
+    const data = new Uint16Array(4 * FIRE_PLANES * n), limits = new Array<number>(BURNS).fill(0);
+    const put = (at: number, a: number, b: number, c: number, d: number) => { data[at] = half(a); data[at + 1] = half(b); data[at + 2] = half(c); data[at + 3] = half(d); };
     for (let i = 0; i < n; i++) {
-      const s = scar(i), { limits, last } = this.burns.of(i, p.age, month);
+      const s = scar(i), last = this.burns.of(i, p.age, month, limits);
       // (A burn of god mode draws its own flames: the core's of its square, the same burn, are not drawn again.)
       const f = last ? Math.max(p.flame[i] - p.last[i], 0) : p.flame[i];
-      data.set([s, s * Math.min(p.age[i], never), f, f * p.length[i]].map(half), 4 * i);
-      data.set([p.ash[i], p.air[i], p.east[i], -p.north[i]].map(half), 4 * (n + i));
-      data.set([p.cured[i], p.wet[i], s * p.crown[i], last ? 0 : s].map(half), 4 * (2 * n + i));
-      data.set(limits.map(half), 4 * (3 * n + i));
+      put(4 * i, s, s * Math.min(p.age[i], never), f, f * p.length[i]);
+      put(4 * (n + i), p.ash[i], p.air[i], p.east[i], -p.north[i]);
+      put(4 * (2 * n + i), p.cured[i], p.wet[i], s * p.crown[i], last ? 0 : s);
+      for (let b = 0; b < BURNS; b++) data[4 * (3 * n + i) + b] = half(limits[b]);
     }
     this.data = data;
     this.due = true;
