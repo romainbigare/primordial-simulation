@@ -506,6 +506,7 @@ export class MapView {
     // (Drawn into a texture at the screen's pixels too, so a moving view can show it moved, `showMoved`.)
     [this.picture, this.pictureNext] = [this.pictureNext, this.picture];
     this.picture = this.sized(gpu, this.picture, tw, th);
+    this.drawingInto(gpu, this.picture);
     const waiting: string[] = [];
     gpu.begin();
     this.layer?.prepare(gpu, ox, oy, s, k, d, this.cv.clientWidth, this.cv.clientHeight, this.fireTime(), waiting);
@@ -641,6 +642,16 @@ export class MapView {
     gpu.drop(t);
   }
 
+  /** Texture `t` is about to be drawn into: a fade that reads it ends, the last picture shown whole, and what the
+   * next picture was to come in over holds it no more (a fade never shows what is drawn into it meanwhile). */
+  private drawingInto(gpu: Gpu, t: Texture): void {
+    if (this.fadeFrom?.some(p => p.t === t)) this.fadeFrom = this.fadeFrom.filter(p => p.t !== t);
+    if (this.fadeFrom?.length === 0) this.fadeFrom = null;
+    if (!this.fade?.from.some(p => p.t === t)) return;
+    this.fade = null;
+    this.present(gpu, null);
+  }
+
   /** The next picture drawn whole comes in over the last (it draws what the last went without: the ground's detail, a
    * program), so it does not change at once. */
   private fadeNext(): void { this.fadeFrom ??= this.last ? [this.last] : null; }
@@ -748,6 +759,7 @@ export class MapView {
     const spare = i === RINGS.length ? 2 : RINGS[i] <= RING_AS_VIEW_MOST ? 0 : 1;
     if (!tiles) { this.spares[spare] = this.sized(gpu, this.spares[spare], a.w, a.h); tiles = this.tilesOf(a.w, a.h); }
     const t = this.spares[spare]!;
+    this.drawingInto(gpu, t);
     ok = this.drawInto(gpu, t, a.cam, a.k, a.seen, tiles.shift()) && ok;
     if (!tiles.length && ok) {
       const pic = picOf(t, a.cam, a.k, this.lookKey());
@@ -819,6 +831,7 @@ export class MapView {
   private sharpen(job: Sharpening): void {
     const gpu = this.gpu, tile = job.tiles.shift(), W = this.gpuCv!.width, H = this.gpuCv!.height;
     if (this.sharpening !== job || !gpu || !tile || job.into.w !== W || job.into.h !== H) return;
+    this.drawingInto(gpu, job.into);
     const p = gpu.pass(job.into, undefined, tile);
     this.drawMap(gpu, p, job.xs, job.d, job.d, [W, H], []);
     this.layer?.draw(p);
