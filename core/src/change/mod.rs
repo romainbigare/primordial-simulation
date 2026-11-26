@@ -16,7 +16,10 @@ use crate::{store::Class, AIR, World};
 use rows::Rows;
 
 /// Run Law 2 for the step of `dt` seconds at the temperatures of the last flow step: each ground node, then each air
-/// node, that is due, for all the time since it last reacted, from the world as it was before its class reacted. The
+/// node, that is due, for all the time since it last reacted, from the world as it was before its class reacted. A
+/// node a gain woke (`Sleep::grew`) got it in the step's month, after it slept on what it held: first it reacts the
+/// time it slept up to the step's start on what it held then and still holds (`Rows::make` of `Sleep::held`, booked),
+/// then the step with all it holds, as the others. The
 /// nodes of a class react apart (`Rows::make`, block by block, in parallel with `threads`), each into its row, and the rows
 /// are booked after the call (`Rows::book`). Then each sleeps (`Reactor::rest`, at most `sleep_days`); after the
 /// law's first run at most `first_sleep` of that, so the calm nodes, which sleep the longest, wake spread over its
@@ -36,7 +39,12 @@ pub fn step(w: &mut World, dt: f64) {
         if due.is_empty() {
             continue;
         }
-        let rows = Rows::make(w, class, &due, (end, most));
+        let woken: Vec<usize> = due.iter().copied().filter(|&i| w.sleep.since(class, i) < w.time && w.sleep.grew(class, i, len, w.store.amounts(class), w.cfg.wake_share)).collect();
+        if !woken.is_empty() {
+            Rows::make(w, class, &woken, (w.time, most), Some(w.sleep.held(class))).book(w);
+            woken.iter().for_each(|&i| w.sleep.brought_up(class, i, w.time));
+        }
+        let rows = Rows::make(w, class, &due, (end, most), None);
         rows.book(w);
         for (i, rest) in rows.rests() {
             let rest = if first { rest.min(first_sleep(i, most, dt as u64)) } else { rest };

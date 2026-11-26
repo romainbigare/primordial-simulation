@@ -1,6 +1,7 @@
 //! One sleep and wake for every node (laws.md 0): a calm node's own process sleeps until an alarm, or until one of its
 //! amounts has grown by more than `Config::wake_share` of what it held when it fell asleep (`watch`); when due, its law
-//! brings it up to date for all the time since (`since`) in one span. A long integration is exact for a calm node, and
+//! brings it up to date for all the time since (`since`) in one span, a node woken by a gain with what it held while
+//! it slept (`held`) up to the gain's step. A long integration is exact for a calm node, and
 //! what moves between nodes never sleeps. Saved, so a resumed run sleeps the same.
 
 use crate::store::Class;
@@ -74,16 +75,33 @@ impl Sleep {
     }
 
     /// Wakes each sleeping node of `class` one of whose amounts has grown by more than `share` of what it held when it
-    /// fell asleep, so many small gains wake it as one large gain would.
+    /// fell asleep (`gained`), so many small gains wake it as one large gain would.
     pub fn watch(&mut self, class: Class, len: usize, amounts: &[f64], share: f64, now: u64) {
         if self.none(class) {
             return;
         }
         let mut grew = vec![false; len];
         for (now_k, then_k) in amounts.chunks(len).zip(self.of(class).held.chunks(len)) {
-            grew.iter_mut().zip(now_k.iter().zip(then_k)).for_each(|(g, (&a, &h))| *g |= a - h > share * h.max(0.0));
+            grew.iter_mut().zip(now_k.iter().zip(then_k)).for_each(|(g, (&a, &h))| *g |= gained(a, h, share));
         }
         (0..len).filter(|&i| grew[i]).for_each(|i| self.wake(class, i, now));
+    }
+
+    /// Whether node `i` of `class` (of `len`) holds, of `amounts` (`[k * len + i]`), more than `share` above what it
+    /// held when it fell asleep of some substance (`gained`): what wakes it before its alarm (`watch`).
+    pub fn grew(&self, class: Class, i: usize, len: usize, amounts: &[f64], share: f64) -> bool {
+        let held = &self.0[class as usize].held;
+        (i..held.len()).step_by(len).any(|x| gained(amounts[x], held[x], share))
+    }
+
+    /// What the nodes of `class` held when each last fell asleep, `[k * len + i]` (`keep`).
+    pub fn held(&self, class: Class) -> &[f64] {
+        &self.0[class as usize].held
+    }
+
+    /// Node `i` of `class`, due, was brought up to date at `now` (its law runs on from there).
+    pub fn brought_up(&mut self, class: Class, i: usize, now: u64) {
+        self.of(class).since[i] = now;
     }
 
     /// Whether no node of `class` sleeps: its law has not run yet (after a run, it puts every node it ran back to sleep).
@@ -95,4 +113,9 @@ impl Sleep {
     pub fn since(&self, class: Class, i: usize) -> u64 {
         self.0[class as usize].since[i]
     }
+}
+
+/// Whether an amount `now` has grown by more than `share` of what it was, `then`.
+fn gained(now: f64, then: f64, share: f64) -> bool {
+    now - then > share * then.max(0.0)
 }

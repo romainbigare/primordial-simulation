@@ -580,3 +580,28 @@ fn dead_frame_rots_on_moist_land_in_a_year() {
     assert!((0.15..0.35).contains(&wet), "share of the frame lost in a year at field capacity {wet}");
     assert!(dry < 0.05, "share of the frame lost dry in a year {dry}");
 }
+
+/// A sleeping node a gain wakes reacts the gain from the step it came in, not over all the time it slept
+/// (`change::step`): frame put on a ground node that slept for months rots in the step as much as on the same node
+/// brought up to date at the step's start, to within what its sleep on what it held changed.
+#[test]
+fn a_node_woken_by_a_gain_reacts_it_from_its_step() {
+    let mut w = worldgen::testkit::one_rise(1, 16, 16);
+    let dt = w.cfg.calendar().month;
+    let month = |w: &mut pcore::World| {
+        change::step(w, dt as f64);
+        w.time += dt;
+    };
+    (0..4).for_each(|_| month(&mut w));
+    let i = (0..w.mesh.cells().n()).find(|&i| w.sleep.since(Class::Ground, i) + dt < w.time).expect("a ground node that sleeps");
+    let mut brought = w.clone();
+    brought.sleep.sleep(Class::Ground, i, brought.time, brought.time);
+    let frame = 5.0 * w.mesh.cells().area()[i] / w.chem.subs[FRAME].molar_mass;
+    let rot = |w: &mut pcore::World| {
+        set_amount(w, Node::ground(i), FRAME, w.g(FRAME, i) + frame);
+        month(w);
+        1.0 - w.g(FRAME, i) / frame
+    };
+    let (woken, up) = (rot(&mut w), rot(&mut brought));
+    assert!(up > 0.0 && (woken / up - 1.0).abs() < 0.05, "woken it lost {woken} of the frame in its step, brought up to date {up}");
+}

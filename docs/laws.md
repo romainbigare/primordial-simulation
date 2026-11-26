@@ -356,7 +356,9 @@ its patch's ground, the patch's edge drawn smooth through its samples and meetin
 margin, its plants per m² of that ground. A
 picture need not keep a cell's mean exactly (the core keeps the books).
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
-than `wake_share`, then its law brings it up to date over the whole time since.
+than `wake_share`, then its law brings it up to date over the whole time since; a node a gain woke got it in the step
+that wakes it, so its law first runs the time it slept on what it held when it fell asleep and still holds, then the
+step on all it holds.
 **One ground temperature**: every law and the tape read that of Flow's last step: the cover its
 land's (`World::t_ground_last`, of a cell of parts its land, on which no liquid stands, or its liquid's top where it has
 no land, 1.1), Change and the

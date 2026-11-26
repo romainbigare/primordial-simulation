@@ -42,9 +42,10 @@ pub(super) struct Block {
     pub(super) lift: f64,
 }
 
-/// A node's amounts and the gas around it (a ground node's share of its air node) as it reacts, mol.
+/// A node's amounts as it reacts and as it started, and the gas around it (a ground node's share of its air node), mol.
 struct Held {
     amt: Vec<f64>,
+    start: Vec<f64>,
     pool: Vec<f64>,
 }
 
@@ -61,13 +62,16 @@ struct Step<'w> {
     /// The time they react until, s, and the longest they sleep, s
     end: u64,
     most: u64,
+    /// What they held when they fell asleep (`[k * len + i]`, `clock::Sleep::held`), where each reacts that much of what
+    /// it holds now and no more, at its temperature now; none: all it holds
+    held: Option<&'w [f64]>,
 }
 
 impl Rows {
     /// The `due` nodes of `class` react each for all the time since they last did, until `end`, at the temperatures of
-    /// the last flow step, from the world as it is: the nodes of a block together, the most nodes first. A node sleeps at
-    /// most `most` s.
-    pub(super) fn make(w: &World, class: Class, due: &[usize], (end, most): (u64, u64)) -> Rows {
+    /// the last flow step, from the world as it is (each no more of each substance than `held`, `Step::held`): the nodes
+    /// of a block together, the most nodes first. A node sleeps at most `most` s.
+    pub(super) fn make(w: &World, class: Class, due: &[usize], (end, most): (u64, u64), held: Option<&[f64]>) -> Rows {
         let (ns, parent) = (w.chem.ns(), w.mesh.cells().parent());
         let (width, len) = (ROW * ns + 1, w.store.amounts(class).len() / ns);
         let block_of = |i: usize| if class == Class::Ground { parent[i] as usize } else { i / NODES_PER_ITEM };
@@ -82,7 +86,7 @@ impl Rows {
             }
         }
         let mut data = vec![0.0; nodes.len() * width];
-        let step = Step { w, flow: w.scratch.view(), class, len, end, most };
+        let step = Step { w, flow: w.scratch.view(), class, len, end, most, held };
         let (mut rest, mut from) = (&mut data[..], 0);
         let work = blocks
             .iter_mut()
@@ -93,8 +97,8 @@ impl Rows {
                 (b.at, list.len().div_ceil(NODES_PER_ITEM), (list, mine, &mut b.lift))
             })
             .collect();
-        let held = || Held { amt: vec![0.0; ns], pool: vec![0.0; ns] };
-        crate::par::longest_first(work, || (Reactor::new(&w.chem, &w.cfg), held()), |s, (list, rows, lift)| {
+        let room = || Held { amt: vec![0.0; ns], start: vec![0.0; ns], pool: vec![0.0; ns] };
+        crate::par::longest_first(work, || (Reactor::new(&w.chem, &w.cfg), room()), |s, (list, rows, lift)| {
             for (&i, row) in list.iter().zip(rows.chunks_exact_mut(width)) {
                 step.react(s, i, row);
                 **lift = row[3 * ns..4 * ns].iter().fold(**lift, |sum, q| sum + q);
@@ -125,19 +129,30 @@ impl Rows {
 }
 
 impl Step<'_> {
-    /// Node `i` reacts into `row`, and the time it can sleep goes at its end.
+    /// Node `i` reacts into `row`, and the time it can sleep goes at its end. Where it reacts no more than it `held`,
+    /// it takes the share of its heat that what it reacts holds by heat capacity: its temperature stays.
     fn react(&self, (rc, h): &mut Scratch, i: usize, row: &mut [f64]) {
-        let (w, ns) = (self.w, self.w.chem.ns());
+        let (w, ns, chem) = (self.w, self.w.chem.ns(), &self.w.chem);
         let amounts = w.store.amounts(self.class);
         h.amt.iter_mut().enumerate().for_each(|(k, a)| *a = amounts[k * self.len + i]);
-        let (all, span) = (h.amt.iter().sum::<f64>(), self.end.saturating_sub(w.sleep.since(self.class, i)) as f64);
+        h.start.copy_from_slice(&h.amt);
+        if let Some(held) = self.held {
+            h.start.iter_mut().enumerate().for_each(|(k, a)| *a = a.min(held[k * self.len + i]).max(0.0));
+        }
+        let (all, span) = (h.start.iter().sum::<f64>(), self.end.saturating_sub(w.sleep.since(self.class, i)) as f64);
         if self.class == Class::Ground {
-            react_ground(w, rc, h, &self.flow, i, span, row);
+            let cap = |amt: &[f64]| ground_cap(self.flow.skin[i], 0..ns, |k| amt[k], |k| chem.subs[k].cp);
+            let share = if self.held.is_some() { cap(&h.start) / cap(&h.amt).max(1e-9) } else { 1.0 };
+            h.amt.copy_from_slice(&h.start);
+            react_ground(w, rc, h, &self.flow, (i, w.store.heat(Class::Ground)[i] * share), span, row);
         } else {
+            let cap = |amt: &[f64]| (0..ns).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
+            let share = if self.held.is_some() { cap(&h.start) / cap(&h.amt).max(1e-9) } else { 1.0 };
+            h.amt.copy_from_slice(&h.start);
             // An air node holds its gas itself: no liquid's film stands between them, and it is no moist ground
             // (the reactor's `film` and `moist` stay 0: it reacts only air nodes).
-            rc.react(&w.chem, &mut h.amt, None, &mut { w.store.heat(Class::Air)[i] }, 0.0, span);
-            rc.made(&w.chem, &mut row[..ns]);
+            rc.react(chem, &mut h.amt, None, &mut { w.store.heat(Class::Air)[i] * share }, 0.0, span);
+            rc.made(chem, &mut row[..ns]);
         }
         debug_assert!(
             w.chem.keeps_elements(row[..ns].iter().enumerate().map(|(k, &d)| (k as u16, d)), &mut vec![0.0; w.chem.n_elements]),
@@ -148,10 +163,10 @@ impl Step<'_> {
     }
 }
 
-/// React ground node `i` for `time` s with the gas over it, noting in its row what it changes (laws.md 2.2). The
-/// reactor sees sensible heat: the fusion enthalpy stays apart (`FlowView::fused`). A node gives no more heat than it
-/// holds: each gas it gives is cut by the same share.
-fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: usize, time: f64, row: &mut [f64]) {
+/// React ground node `i`, its amounts `h.start` and its heat `heat`, J, for `time` s with the gas over it, noting in
+/// its row what it changes (laws.md 2.2). The reactor sees sensible heat: the fusion enthalpy stays apart
+/// (`FlowView::fused`). A node gives no more heat than it holds: each gas it gives is cut by the same share.
+fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i, heat): (usize, f64), time: f64, row: &mut [f64]) {
     let ns = w.chem.ns();
     let (chem, na) = (&w.chem, w.mesh.level(AIR).n());
     let (j, air_share) = (w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR));
@@ -163,15 +178,15 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     rc.aired = crate::inside::aired(w, i, rc.film, crate::inside::land_filled(w, i).unwrap_or_else(|| nodes.filled(i)));
     rc.shelter = w.soil[i].texture.shelters();
     let cap = |amt: &[f64]| ground_cap(nodes.skin[i], 0..chem.ns(), |k| amt[k], |k| chem.subs[k].cp);
-    let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
-    let mut e = w.store.heat(Class::Ground)[i] - fused;
+    let fused = nodes.fused(i, heat, cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
+    let mut e = heat - fused;
     rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], time);
     let (made, out) = row.split_at_mut(ns);
     rc.made(chem, made);
     // What they gave to the gas around the node, or took from it, mol: what they made less what the node itself gained
     // (its amount's change), so the node's books end at what it really holds. The reactor's own sum of the gas it
     // exchanged sums large terms that cancel apart from `made`, and could differ from it by their rounding.
-    let kept = |k: usize| h.amt[k] - w.store.amounts(Class::Ground)[k * w.mesh.cells().n() + i];
+    let kept = |k: usize| h.amt[k] - h.start[k];
     let gas = |k: usize| if rc.dpool[k] != 0.0 { made[k] - kept(k) } else { 0.0 };
     // Gas given to the air takes the node's heat by heat capacity, shared with the node as it is after its reactions.
     let c_out = (0..chem.ns()).map(|k| gas(k).max(0.0) * chem.subs[k].cp).sum::<f64>();
