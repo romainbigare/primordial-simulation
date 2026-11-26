@@ -8,7 +8,8 @@
 // of a lattice `LEAF_CELL_M` wide, `LEAF_LONG_M` long by its own draw, a third as wide, turned its own way, of one of
 // the colours of fallen leaves (`leaf_tone`, linear).
 const LEAF_REACH_M = 8.0; const LEAVES_MOST = 0.25; const LEAF_CELL_M = 0.14; const LEAF_LONG_M = vec2f(0.05, 0.1);
-fn leaf_tone(k: u32) -> vec3f { var t = array<vec3f, 3>(vec3f(0.30, 0.20, 0.05), vec3f(0.24, 0.10, 0.03), vec3f(0.12, 0.08, 0.04)); return t[k]; }
+const LEAF_TONES = array<vec3f, 3>(vec3f(0.30, 0.20, 0.05), vec3f(0.24, 0.10, 0.03), vec3f(0.12, 0.08, 0.04));
+fn leaf_tone(k: u32) -> vec3f { return LEAF_TONES[k]; }
 // Floating-leaved herbs float their round leaves once the water is warmer than `PAD_WARM_K` (water lilies leaf in water
 // of 15 °C and more; Sculthorpe 1967), over up to `PADS_MOST` of the share they cover, in patches `PAD_PATCH_M`
 // across: a pad `PAD_R_M` across by its own draw, one of the scanned floating leaves (sprites.wgsl `PAD_FROM`) as the

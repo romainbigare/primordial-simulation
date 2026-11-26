@@ -80,6 +80,9 @@ fn lowbias(c: vec2i, k: i32) -> u32 {
   return x;
 }
 
+// A random number 0..1 of the grid cell c and the stream k (`lowbias`).
+fn unit(c: vec2i, k: i32) -> f32 { return f32(lowbias(c, k)) * (1.0 / 4294967296.0); }
+
 // The place of the pixel being drawn, for detail finer than a float holds at a map's size (land.wgsl sets them): the
 // world's origin of the draw, a whole multiple of 1024 m, and the point's distance from it, m. A position held as one
 // float over tens of kilometres has steps of millimetres, which centimetre detail shows as rows and columns.
@@ -177,6 +180,22 @@ fn b_spline(p: vec2f) -> BSpline {
   let w2 = 0.5 * (0.5 + t) * (0.5 + t);
   let w1 = 1.0 - w0 - w2;
   return BSpline(vec2i(i), vec3f(w0.x, w1.x, w2.x), vec3f(w0.y, w1.y, w2.y));
+}
+// Of the nine texels a B-spline `c` reads (`B_TAPS`, row by row from its north-west one), texel `n` and its weight.
+const B_TAPS = 9;
+fn b_texel(c: BSpline, n: i32) -> vec2i { return c.i + vec2i(n % 3 - 1, n / 3 - 1); }
+fn b_weight(c: BSpline, n: i32) -> f32 { return c.wx[n % 3] * c.wy[n / 3]; }
+
+// The weights of a uniform Catmull-Rom spline at `f` (0..1 along each axis) on the four points from the one before
+// it, and their slopes.
+fn catmull_rom(f: vec2f) -> array<vec2f, 4> {
+  let f2 = f * f;
+  let f3 = f2 * f;
+  return array<vec2f, 4>(0.5 * (-f3 + 2.0 * f2 - f), 0.5 * (3.0 * f3 - 5.0 * f2 + 2.0), 0.5 * (-3.0 * f3 + 4.0 * f2 + f), 0.5 * (f3 - f2));
+}
+fn catmull_rom_slope(f: vec2f) -> array<vec2f, 4> {
+  let f2 = f * f;
+  return array<vec2f, 4>(0.5 * (-3.0 * f2 + 4.0 * f - 1.0), 0.5 * (9.0 * f2 - 10.0 * f), 0.5 * (-9.0 * f2 + 8.0 * f + 1.0), 0.5 * (3.0 * f2 - 2.0 * f));
 }
 
 // A frozen cover of this mean depth, m of ice, covers e^-1 less than all of the ground: about 3 cm of snow, the depth at

@@ -197,11 +197,9 @@ fn read_tile(layer: i32, at: vec2f, spline: bool) -> Tiled {
   let d_slope = sign(signed) * mix(vec2f(mix(cd.y - cd.x, cd.w - cd.z, f.y), cy - cx) / texel, full_slope, bent);
   let lean = select(0.0, calm - signed, shaped && both);
   if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, water, signed, along, lean); }
-  let f2 = f * f;
-  let f3 = f2 * f;
   // The weights of the texels from i - 1 to i + 2 along each axis, and their slopes.
-  var w = array<vec2f, 4>(0.5 * (-f3 + 2.0 * f2 - f), 0.5 * (3.0 * f3 - 5.0 * f2 + 2.0), 0.5 * (-3.0 * f3 + 4.0 * f2 + f), 0.5 * (f3 - f2));
-  var dw = array<vec2f, 4>(0.5 * (-3.0 * f2 + 4.0 * f - 1.0), 0.5 * (9.0 * f2 - 10.0 * f), 0.5 * (-9.0 * f2 + 8.0 * f + 1.0), 0.5 * (3.0 * f2 - 2.0 * f));
+  let w = catmull_rom(f);
+  let dw = catmull_rom_slope(f);
   var h = vec3f(0.0);
   for (var y = 0; y < 4; y++) {
     for (var x = 0; x < 4; x++) {
@@ -250,9 +248,7 @@ fn blended(k: i32, c: Corners) -> vec4f {
 fn cells_smooth(k: i32, s: vec2f) -> vec4f {
   let c = b_spline(s - 0.5);
   var sum = vec4f(0.0);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) { sum += c.wx[x] * c.wy[y] * cell(k, c.i + vec2i(x - 1, y - 1)); }
-  }
+  for (var n = 0; n < B_TAPS; n++) { sum += b_weight(c, n) * cell(k, b_texel(c, n)); }
   return sum;
 }
 
@@ -283,11 +279,11 @@ fn moved_at(at: vec2f) -> vec3f {
   let dy = vec3f(t.y - 0.5, -2.0 * t.y, t.y + 0.5);
   let last = vec2i(land.samples.xy) - 1;
   var m = vec3f(0.0);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      let v = textureLoad(flows, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), 0).z;
-      m += v * vec3f(c.wx[x] * c.wy[y], dx[x] * c.wy[y], c.wx[x] * dy[y]);
-    }
+  for (var n = 0; n < B_TAPS; n++) {
+    let x = n % 3;
+    let y = n / 3;
+    let v = textureLoad(flows, clamp(b_texel(c, n), vec2i(0), last), 0).z;
+    m += v * vec3f(b_weight(c, n), dx[x] * c.wy[y], c.wx[x] * dy[y]);
   }
   return vec3f(m.x, m.yz / side);
 }
@@ -334,13 +330,11 @@ fn saturated_of(g: Tiled, at: vec2f) -> f32 {
   let c = b_spline(at / land.map.x - 0.5);
   var level = 0.0;
   var weight = 0.0;
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      let s = cell(SOIL, c.i + vec2i(x - 1, y - 1));
-      let w = select(0.0, c.wx[x] * c.wy[y], s.z > 0.0);
-      level += w * s.w;
-      weight += w;
-    }
+  for (var n = 0; n < B_TAPS; n++) {
+    let s = cell(SOIL, b_texel(c, n));
+    let w = select(0.0, b_weight(c, n), s.z > 0.0);
+    level += w * s.w;
+    weight += w;
   }
   if (weight <= 0.0) { return 0.0; }
   return smoothstep(-SATURATED_EDGE, 0.0, g.twi - level / weight);
@@ -459,15 +453,13 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, knob: f32) -> State {
   var held = 0.0;
   var pores = 0.0;
   let bs = b_spline(at / land.map.x - 0.5);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      let ci = bs.i + vec2i(x - 1, y - 1);
-      let w = bs.wx[x] * bs.wy[y];
-      let l = cell(LIQUID, ci);
-      let s = cell(SOIL, ci);
-      held += w * soil_held(l.w, s.x, s.y, g.twi);
-      pores += w * s.x;
-    }
+  for (var n = 0; n < B_TAPS; n++) {
+    let ci = b_texel(bs, n);
+    let w = b_weight(bs, n);
+    let l = cell(LIQUID, ci);
+    let s = cell(SOIL, ci);
+    held += w * soil_held(l.w, s.x, s.y, g.twi);
+    pores += w * s.x;
   }
   var p: State;
   if (g.water.x > -NO_LIQUID_M && g.water.y > 0.0) {

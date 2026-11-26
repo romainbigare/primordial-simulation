@@ -363,11 +363,7 @@ fn spline_field(at: vec2f, l: i32) -> vec4f {
   let c = b_spline(at / land.map.x - 0.5);
   let last = vec2i(textureDimensions(cover_field_tex).xy) - 1;
   var sum = vec4f(0.0);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      sum += c.wx[x] * c.wy[y] * textureLoad(cover_field_tex, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last), l, 0);
-    }
-  }
+  for (var n = 0; n < B_TAPS; n++) { sum += b_weight(c, n) * textureLoad(cover_field_tex, clamp(b_texel(c, n), vec2i(0), last), l, 0); }
   return sum;
 }
 

@@ -358,7 +358,7 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32)
     let fa = fire_at(at);
     let b = burn_at(at, cover.seen.x);
     let g = plant_fire(fa, scar_of(fa, b, at, cover.seen.x), b);
-    let dead = snag_unit(id, KILLED_DRAW) < g.y && g.w < DEAD_AFTER;
+    let dead = unit(id, KILLED_DRAW) < g.y && g.w < DEAD_AFTER;
     burnt = vec3f(g.x, select(0.0, dead_word(g.z), dead), g.w);
   }
   return Living(vec4f(f32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z), wade_word(shows, wades), ground_word(f.snow, burnt), mark_box(l, q)), true);
@@ -417,7 +417,7 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f) -> vec4f {
     let f = fire_at(at);
     on_scar = dead_on_scar(f, patch_dead(foot_patch(at)).z, scar_of(f, burn_at(at, cover.seen.x), at, cover.seen.x).x);
   }
-  if (snag_unit(id, 41) >= dead.mean * on_scar) { return none; }
+  if (unit(id, 41) >= dead.mean * on_scar) { return none; }
   let f = foot(at);
   if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)

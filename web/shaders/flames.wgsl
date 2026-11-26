@@ -64,9 +64,6 @@ const SMOKE_RGB = vec3f(0.78, 0.78, 0.80); const SMOKE_YOUNG_RGB = vec3f(0.42, 0
 // placed and sized (`PUFF_SIZE`) by its own draw, from `PUFF_PX` pixels.
 const SMOKE_NOISE_M = 900.0; const PUFF_M = 30.0; const PUFF_PX = vec2f(6.0, 16.0); const PUFF_SIZE = vec2f(0.7, 1.3);
 
-// A random number 0..1 of the grid cell c and the stream k.
-fn unit(c: vec2i, k: i32) -> f32 { return f32(lowbias(c, k)) * (1.0 / 4294967296.0); }
-
 // The density of fire.jpg's sprite s (0, 1 tongues; 2, 3 puffs) at `uv` in its quarter (0..1, y down), `g` of it a pixel.
 fn fire_sprite(s: i32, uv: vec2f, g: f32) -> f32 {
   let q = vec2f(f32(s % 2), f32(s / 2));

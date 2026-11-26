@@ -34,11 +34,7 @@ fn samples_at(at: vec2f, plane: i32) -> vec4f {
   let last = vec2i(land.samples.xy) - 1;
   let rows = vec2i(0, plane * i32(land.samples.y));
   var sum = vec4f(0.0);
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) {
-      sum += c.wx[x] * c.wy[y] * textureLoad(rock_field, clamp(c.i + vec2i(x - 1, y - 1), vec2i(0), last) + rows, 0);
-    }
-  }
+  for (var n = 0; n < B_TAPS; n++) { sum += b_weight(c, n) * textureLoad(rock_field, clamp(b_texel(c, n), vec2i(0), last) + rows, 0); }
   return sum;
 }
 
@@ -152,9 +148,7 @@ fn load_of(s: vec2i) -> f32 {
 fn load_at(at: vec2f) -> f32 {
   let c = b_spline(at / (land.map.x * land.map.yz) * land.samples.xy - 0.5);
   var sum = 0.0;
-  for (var y = 0; y < 3; y++) {
-    for (var x = 0; x < 3; x++) { sum += c.wx[x] * c.wy[y] * load_of(c.i + vec2i(x - 1, y - 1)); }
-  }
+  for (var n = 0; n < B_TAPS; n++) { sum += b_weight(c, n) * load_of(b_texel(c, n)); }
   return sum;
 }
 
