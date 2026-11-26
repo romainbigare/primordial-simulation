@@ -25,12 +25,9 @@ const host = self as unknown as { postMessage(m: unknown, transfer: Transferable
 let core: Core | null = null;
 
 /** The messages, each handled once the one before is done: a tile or a build asked while the core is still starting
- * waits for it. Of builds that wait, only the latest is made (it holds the samples whole; the squares it says changed
- * are those that differ from the ground before, so they hold those of the builds skipped). */
+ * waits for it. (The page hands a build only once every worker made the last, ground.ts `rebuild`.) */
 let handled: Promise<void> = Promise.resolve();
-let latestBuild = 0;
 host.onmessage = e => {
-  if (e.data.cmd === 'built') latestBuild = e.data.gen;
   handled = handled.then(() => handle(e.data));
 };
 
@@ -57,14 +54,15 @@ async function handle(m: Command): Promise<void> {
       const data = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
       // With the time it took, ms, and the bytes of the core's memory, for the page's cost line.
       host.postMessage({ kind: 'tile', depth: m.depth, x: m.x, y: m.y, data, gen: m.gen, ms: performance.now() - t0, memory: core.memory.buffer.byteLength }, [data.buffer]);
-    } else if (m.cmd === 'built' && core && m.gen === latestBuild) {
+    } else if (m.cmd === 'built' && core) {
       // The ground made again on the samples the world built (`ground_built`): a byte a square, 1 where its tiles
-      // changed, or why the relief was refused; then the rock again.
+      // changed, or why the relief was refused; then the rock again (of the worker that answers; the others say they
+      // are done).
       const n = m.relief.byteLength, into = core.input(n);
       new Uint8Array(core.memory.buffer, into, n).set(new Uint8Array(m.relief));
       const at = core.ground_built(), out = new Uint8Array(core.memory.buffer.slice(at, at + core.out_len()));
       if (out.some(v => v > 1)) throw new Error(new TextDecoder().decode(out));
-      if (!m.answer) return;
+      if (!m.answer) { host.postMessage({ kind: 'rebuilt', gen: m.gen }, []); return; }
       const r = core.rock(), rock = new Uint16Array(core.memory.buffer.slice(r, r + core.out_len()));
       host.postMessage({ kind: 'rebuilt', squares: out, rock, gen: m.gen }, [out.buffer, rock.buffer]);
     }

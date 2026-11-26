@@ -60,8 +60,9 @@ const KEY_ROW = 1 << 12, KEY_DEPTH = KEY_ROW * KEY_ROW;
 const keyOf = (depth: number, x: number, y: number) => depth * KEY_DEPTH + y * KEY_ROW + x;
 
 /** A tile kept: its depth, column and row, its layer of the atlas, when it came (ms since the tiles started), the
- * number of the last view that asked for it, and the version of the world's samples it is made of. */
-interface Kept { depth: number; x: number; y: number; layer: number; came: number; asked: number; version: number }
+ * number of the last view that asked for it, and the ground's version (`gen`) and the version of the world's samples
+ * it is made of. */
+interface Kept { depth: number; x: number; y: number; layer: number; came: number; asked: number; gen: number; version: number }
 /** The relief the world built its samples from, and the version of those samples (wasm/src/lib.rs `relief`,
  * `ground_version`). */
 export interface Built { relief: Uint8Array; version: number }
@@ -113,9 +114,14 @@ export class GroundTiles {
   private gen = 0;
   private told = 0;
   private stale = new Set<number>();
+  /** The workers still making the ground of the last build handed to them: the next waits till none is
+   * (`madeAgain`), so a worker never makes a build a newer one would make whole again; and whether that one is to be
+   * handed at once. */
+  private building = 0;
+  private urgent = false;
   /** The relief of the latest build not yet handed to the workers (`rebuild`), when the last was handed, ms, and the
    * timer of the next. */
-  private built: Built | null = null;
+  private waiting: Built | null = null;
   /** The version of the samples of each ground version handed to the workers (`gen`), and the version the preview of
    * edits is drawn over (`previewOver`). */
   private versionOf = new Map<number, number>();
@@ -146,7 +152,7 @@ export class GroundTiles {
         if (m.kind === 'error') return error(m.text);
         if (m.kind === 'ready') { w.ready = true; if (!this.rock) { this.rock = m.rock; this.rockVersion++; } this.changed(true); return this.next(); }
         if (m.kind === 'tile') { w.making--; w.memory = m.memory; spend('tile ms', m.ms); timed('tiles', () => this.took(m.depth, m.x, m.y, m.data, m.gen)); }
-        if (m.kind === 'rebuilt' && k === 0) this.rebuilt(m.squares, m.rock, m.gen);
+        if (m.kind === 'rebuilt') this.madeAgain(k === 0 ? m : null, m.gen);
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
       w.worker.postMessage({ cmd: 'init', wasm: copy, ground }, [copy]);
@@ -158,15 +164,17 @@ export class GroundTiles {
    * its ground again (`ground_built`), and the tiles asked after are of it. While the world plays (`now` false) at
    * most once every `REBUILD_EVERY_MS`, of the latest build come; a paused world's ground at once. */
   rebuild(relief: Built | null, now: boolean): void {
-    this.built = relief ?? this.built;
+    this.waiting = relief ?? this.waiting;
+    this.urgent = now;
     clearTimeout(this.rebuildTimer);
-    if (!this.built) return;
+    if (!this.waiting || this.building > 0) return;
     const wait = now ? 0 : this.rebuiltAt + REBUILD_EVERY_MS - performance.now();
     if (wait > 0) { this.rebuildTimer = window.setTimeout(() => this.rebuild(null, true), wait); return; }
-    const built = this.built;
-    this.built = null;
+    const built = this.waiting;
+    this.waiting = null;
     this.rebuiltAt = performance.now();
     this.gen++;
+    this.building = this.workers.length;
     this.versionOf.set(this.gen, built.version);
     this.workers.forEach((w, k) => {
       const copy = built.relief.slice();
@@ -175,15 +183,21 @@ export class GroundTiles {
     });
   }
 
-  /** The first worker's ground made again of the ground's version `gen`, each build in its order: the rock of the
-   * latest, and each tile kept over a square whose tiles changed (`squares`, a byte a square row by row) stale, asked
-   * for again and drawn until it comes (so builds that come before the first is answered mark the union of their
-   * squares). */
+  /** A worker made the ground of the ground's version `gen` again: the build waiting is handed once all did. The
+   * first's answer (`first`) brings the rock of it, and each tile kept of an older version over a square whose tiles
+   * changed (`squares`, a byte a square row by row) is stale, asked for again and drawn until it comes. */
+  private madeAgain(first: { squares: Uint8Array; rock: Uint16Array } | null, gen: number): void {
+    this.building--;
+    if (first) this.rebuilt(first.squares, first.rock, gen);
+    if (this.building === 0 && this.waiting) this.rebuild(null, this.urgent);
+  }
+
   private rebuilt(squares: Uint8Array, rock: Uint16Array, gen: number): void {
     this.told = gen;
     this.rock = rock;
     this.rockVersion++;
     for (const [key, k] of this.kept) {
+      if (k.gen >= gen) continue;
       const s = this.squaresOf(k.depth), x0 = Math.floor(k.x * s), y0 = Math.floor(k.y * s);
       const x1 = Math.min(Math.ceil((k.x + 1) * s), this.map.w), y1 = Math.min(Math.ceil((k.y + 1) * s), this.map.h);
       let changed = false;
@@ -271,7 +285,7 @@ export class GroundTiles {
    * some are still to come, a build is still to be handed to the workers, or the tiles the last changed are not yet
    * told. */
   shownVersion(): number | null {
-    if (this.built || this.told !== this.gen) return null;
+    if (this.waiting || this.told !== this.gen) return null;
     for (const k of this.inView) if (!this.kept.has(k) || this.stale.has(k)) return null;
     return this.versionOf.get(this.gen) ?? null;
   }
@@ -349,7 +363,7 @@ export class GroundTiles {
     if (layer !== undefined) {
       const came = performance.now() - this.start;
       const version = this.versionOf.get(gen) ?? this.previewed;
-      this.kept.set(keyOf(depth, x, y), { depth, x, y, layer, came: had ? had.came : came, asked: this.views, version });
+      this.kept.set(keyOf(depth, x, y), { depth, x, y, layer, came: had ? had.came : came, asked: this.views, gen, version });
       this.come.push({ layer, data });
       this.numbers.set([depth, x, y, had ? had.came : came], 4 * layer);
       this.numbers[4 * (MOST_TILES + layer)] = +(version === this.previewed);

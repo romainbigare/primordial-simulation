@@ -39,9 +39,10 @@ const LOAD_SHOWS: f64 = 0.25;
 /// of the world as it stands now, kept while it waits for edits (`hold`, and after each `settle`), which the next stroke
 /// takes as the world before it, so its first call copies nothing; the world as it was before the last stroke that
 /// changed it began, till the world steps on (`undo`); and what edits had shaped of each of the terrain's samples
-/// (`Relief::shaped`) when the samples of the version the cells' table is of were built (`version`), and in the samples
-/// of the ground the page shows (`shown`, `ground_shown`) with their version (`over`), from which `preview` tells it
-/// what edits moved since.
+/// (`Relief::shaped`) when the samples of the version the cells' table is of were built (`version`), at each version
+/// built since the one of the ground the page shows (`since`: the version, and the samples edits shaped with how far,
+/// oldest first), and in the samples of the ground the page shows (`shown`, `ground_shown`) with their version
+/// (`over`), from which `preview` tells it what edits moved since.
 struct Live {
     world: World,
     built: u32,
@@ -54,6 +55,7 @@ struct Live {
     ready: Option<World>,
     before: Option<World>,
     version: Vec<f64>,
+    since: Vec<(u32, Vec<(usize, f64)>)>,
     shown: Vec<f64>,
     over: u32,
 }
@@ -74,7 +76,7 @@ impl Live {
     fn new(world: World, plan: Schedule) -> Live {
         let cells = tape::Table::new(&world);
         let (shaped, v) = (world.relief.shaped.clone(), world.relief.version);
-        Live { built: v, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, ready: None, before: None, version: shaped.clone(), shown: shaped, over: v }
+        Live { built: v, world, plan, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, ready: None, before: None, version: shaped.clone(), since: vec![(v, sparse(&shaped))], shown: shaped, over: v }
     }
     /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table found again, as the cells'
     /// ground and the shore moved (`tape::Table::update`), and what edits had shaped kept as the new version's.
@@ -83,6 +85,7 @@ impl Live {
             self.cells.update(&self.world);
             self.built = self.world.relief.version;
             self.version = self.world.relief.shaped.clone();
+            self.since.push((self.built, sparse(&self.version)));
         }
     }
     /// End the stroke under way and settle the world's edits (`World::settle`); the world after it kept for the next
@@ -100,6 +103,11 @@ impl Live {
         self.ready = Some(self.world.clone());
         (done, changed)
     }
+}
+
+/// Of `v`, each place that holds some, with what it holds.
+fn sparse(v: &[f64]) -> Vec<(usize, f64)> {
+    v.iter().enumerate().filter(|p| *p.1 != 0.0).map(|(k, &m)| (k, m)).collect()
 }
 
 thread_local! {
@@ -593,13 +601,16 @@ pub extern "C" fn hold() {
 }
 
 /// The page's ground now shows the samples of version `version` (`ground_version`; its tiles made again from that
-/// version's relief): `preview` tells it what edits moved since. A version other than the latest built is ignored.
+/// version's relief): `preview` tells it what edits moved since. Those of the versions before it are forgotten; a
+/// version not built since the one shown before is ignored.
 #[no_mangle]
 pub extern "C" fn ground_shown(version: u32) {
     with(|l| {
-        if version == l.built {
-            (l.shown, l.over) = (l.version.clone(), version);
-        }
+        let Some(at) = l.since.iter().position(|v| v.0 == version) else { return };
+        l.since.drain(..at);
+        let mut shown = vec![0.0; l.world.terrain_samples().h.len()];
+        l.since[0].1.iter().for_each(|&(k, m)| shown[k] = m);
+        (l.shown, l.over) = (shown, version);
     })
 }
 

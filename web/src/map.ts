@@ -343,10 +343,10 @@ export class MapView {
 
   /** Draw the map anew at the next frame though a sharp picture of this same view is being drawn (`sharpen`, which a
    * playing world's frames leave to finish): the player changed the world, and sees it at once, drawn whole (at fewer
-   * pixels on a slow card) and sharp once it rests; not sharp again over the last, which a change every tenth of a
-   * second, as a held brush makes, would stop before it is done each time. */
+   * second, as a held brush makes, would stop before it is done each time. The whole map's picture is drawn again once
+   * the view rests (the rings about the view are drawn again at each rest). */
   showNow(): void {
-    this.sharpening = null; this.resting = false; this.sharpOf = '';
+    this.sharpening = null; this.resting = false; this.sharpOf = ''; this.wholeAt = -Infinity;
     clearTimeout(this.sharpTimer);
     this.invalidate();
   }
