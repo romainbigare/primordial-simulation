@@ -35,9 +35,11 @@ const OPEN_WATER = vec3f(0.006, 0.07, 0.20); const DEEP_WATER_PAINT = vec3f(0.00
 const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
 // Inland water holds the matter dissolved from the soil, which takes the blue first (Kirk 1994): running water is drawn
 // through `INLAND_ATTENUATION` (stretched as the clear water's) over `INLAND_DEEP`, the olive green of a deep pool, so
-// a stream shows its bed's own colour, greener and darker as it deepens; a lake is `LAKE_CLEAR` of the way to the
-// sea's clear water.
+// a stream shows its bed's own colour, greener and darker as it deepens; a lake's attenuation is `LAKE_CLEAR` of the
+// way to the sea's clear water, over `LAKE_WATER`, the turquoise of a clear lake whose fine pale grains send the green
+// back with the blue.
 const INLAND_ATTENUATION = vec3f(0.22, 0.12, 0.2); const INLAND_DEEP = vec3f(0.012, 0.035, 0.035); const LAKE_CLEAR = 0.85;
+const LAKE_WATER = vec3f(0.008, 0.17, 0.24);
 // Foam at the sea's edge: white, at most this share, over the water shallower than `FOAM_M`. Close up it is the swash's
 // lines, which follow the shore (lines of the bed's depth): one at the water's edge and `FOAM_LINES` more, each
 // `FOAM_LINE_M` of depth farther out and `FOAM_LINE_FALL` as strong as the last, `FOAM_LINE_W` of that spacing wide to
@@ -129,23 +131,23 @@ fn river_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + RIVER_S
 // The depth standing liquid `depth` m deep (as a lake's) is coloured as, `rel` of the way through its shore's band.
 fn standing_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + STANDING_SEEN_M * pow(max(rel, 0.0), RIVER_SEEN_POW); }
 
-// Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g, `clear` of it the
-// sea's clear water (the rest inland water, `INLAND_ATTENUATION`), carrying `load` g/m³ (water.wgsl `loaded_k`):
-// through its stretched attenuation (the bed lightened, `BED_LIGHTEN`), over its deep colour, the open sea's darkening
-// with depth.
-fn painted_through(bed: vec3f, depth: f32, g: vec2f, clear: f32, load: f32) -> vec3f {
-  let open = mix(OPEN_WATER, DEEP_WATER_PAINT, ease(log(OPEN_M), log(DEEP_M), log(max(depth, 1.0))));
-  let k = loaded_k(mix(INLAND_ATTENUATION, CLEAR_ATTENUATION, clear), load);
-  return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, k, loaded_deep(mix(INLAND_DEEP, open, clear), load));
+// Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g, of attenuation `k`,
+// 1/m, over the light `deep` that comes back where it is too deep to show its bed, carrying `load` g/m³ (water.wgsl
+// `loaded_k`): through its stretched attenuation (the bed lightened, `BED_LIGHTEN`), over its deep colour.
+fn painted_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f, load: f32) -> vec3f {
+  return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, loaded_k(k, load), loaded_deep(deep, load));
 }
 // The open sea far from any shore, as the map paints it (the screen's share of full scale): what the page shows past
 // the map's edge where it is drawn out to the screen's (picture.wgsl).
 fn open_sea_painted() -> vec3f { return painted(srgb(standing_painted(vec3f(0.0), DEEP_M, vec2f(0.0), 1.0, 0.0))); }
 // Running water (river.wgsl), inland water all.
-fn water_painted(bed: vec3f, depth: f32, g: vec2f, load: f32) -> vec3f { return painted_through(bed, depth, g, 0.0, load); }
-// Standing liquid, `sea` of it the sea's.
+fn water_painted(bed: vec3f, depth: f32, g: vec2f, load: f32) -> vec3f { return painted_through(bed, depth, g, INLAND_ATTENUATION, INLAND_DEEP, load); }
+// Standing liquid, `sea` of it the sea's (the rest a lake's): the sea's clear water over the open sea's colour, which
+// darkens with depth; a lake's (`LAKE_CLEAR`) over `LAKE_WATER`.
 fn standing_painted(bed: vec3f, depth: f32, g: vec2f, sea: f32, load: f32) -> vec3f {
-  return painted_through(bed, depth, g, mix(LAKE_CLEAR, 1.0, sea), load);
+  let open = mix(OPEN_WATER, DEEP_WATER_PAINT, ease(log(OPEN_M), log(DEEP_M), log(max(depth, 1.0))));
+  let k = mix(INLAND_ATTENUATION, CLEAR_ATTENUATION, mix(LAKE_CLEAR, 1.0, sea));
+  return painted_through(bed, depth, g, k, mix(LAKE_WATER, open, sea), load);
 }
 
 // A point of a plant of colour `c` (linear) `height` m over the ground at its foot, where liquid stands `depth` m deep

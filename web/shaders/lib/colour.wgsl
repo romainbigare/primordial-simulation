@@ -386,7 +386,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     let ripple = ripples(p.e) * (1.0 - p.snow);
     var water: vec3f;
     if (styled()) {
-      // The style: clear water over its bed, deepening to the open water (a lake's greener, `LAKE_CLEAR`), foam at its edge where the waves break
+      // The style: clear water over its bed, deepening to the open water (a lake's turquoise, `LAKE_WATER`), foam at its edge where the waves break
       // (style.wgsl `foam`): a lake's, of smaller waves, breaking shallower, as much less as its waves are lower.
       // Standing liquid is coloured as a channel is (style.wgsl `standing_seen`), its shore the channel's shallows and
       // its open water past the band deeper; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
