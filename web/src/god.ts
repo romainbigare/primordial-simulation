@@ -234,10 +234,11 @@ export class God {
     if (!st.tool.rate && !st.tool.step && !st.tool.amount) this.moved(st);
   }
 
-  /** A paint of stroke `st` where its brush is now, if it moved far and long enough since its last. */
+  /** A paint of stroke `st` where its brush is now, if it moved far and long enough since its last and the core
+   * answered that one (a fast drag never queues paints faster than the core does them; the next tick paints). */
   private moved(st: Stroke): void {
     const [x, y] = st.now, [lx, ly, lt] = st.last, far = Math.hypot(x - lx, y - ly) >= (PAINT_MOVE * this.radius) / this.page.squareM();
-    if (far && performance.now() - lt >= PAINT_MS) this.paint(st);
+    if (far && !st.waiting && performance.now() - lt >= PAINT_MS) this.paint(st);
   }
 
   /** The stroke ends: a last paint where the brush moved since (of a tool with steps, the steps still due), and it
