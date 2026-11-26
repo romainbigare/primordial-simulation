@@ -129,10 +129,10 @@ export class Burns {
     this.list = this.list.filter(b => month - b.month < never && [...b.squares.keys()].some(i => this.holds(b, i, age, month)));
   }
 
-  /** Of square `i`: how far each burn kept that lies on it reaches when it has taken the square's share (m, by the
-   * burn's place among them; 0: none lies on it), and whether its last burn is one of them. */
-  of(i: number, age: Float32Array, month: number): { limits: number[]; last: boolean } {
-    const limits = new Array<number>(BURNS).fill(0);
+  /** Of square `i`: into `limits` how far each burn kept that lies on it reaches when it has taken the square's share
+   * (m, by the burn's place among them; 0: none lies on it); whether its last burn is one of them. */
+  of(i: number, age: Float32Array, month: number, limits: number[]): boolean {
+    limits.fill(0);
     let last = false;
     this.list.forEach((b, k) => {
       const limit = b.squares.get(i);
@@ -141,7 +141,7 @@ export class Burns {
       limits[k] = Math.max(limit, 1e-3);
       last ||= Math.abs(age[i] - this.since(b, month)) <= AGE_SLACK;
     });
-    return { limits, last };
+    return last;
   }
 
   /** The burns as fire.wgsl reads them (`Fire.burns`) at time `now` (performance.now, ms) in the world's month `month`:

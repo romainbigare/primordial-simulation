@@ -302,7 +302,7 @@ export class Boot {
    * light (style.ts `toScreen`); its liquid blue where the
    * liquid's surface stands over the ground (deeper, darker); its ice white. */
   private paintGround(w: World): HTMLCanvasElement {
-    const m = w.meta, c = this.slabCanvas(), { height, matter, ground } = mapFields(w, 0).fields;
+    const m = w.meta, c = this.slabCanvas(), { height, matter, ground } = mapFields(w, 0);
     this.size(c, m.w, m.h);
     // Number `k` of the four a square holds in `f`, read between the squares' middles at (x, y), in squares.
     const read = (f: ArrayLike<number>, k: number, x: number, y: number) => {

@@ -88,17 +88,16 @@ interface Kept { depth: number; x: number; y: number; layer: number; came: numbe
 export interface Built { relief: Uint8Array; version: number }
 /** What edits moved the ground since the samples of a version (wasm/src/edit.rs `preview`): the window of the terrain's
  * samples that moved (west column, north row, width, height), that version (`over`), and of its samples row by row how
- * far each moved, m, and the depth of its loose ground once the samples are built again, m. */
+ * far each moved, m, and the depth of its loose ground once the samples are built again, m (`dh` and `loose` are two
+ * views of one buffer: neither's `.buffer` is its own). */
 export interface Preview { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array }
 
-/** The rock `rock` with the band of rows `rows` [from, to) of samples laid over it from `band` (wasm/src/ground.rs
- * `rock_rows`: of each of the four planes those rows in turn), as a new array. */
-function layRows(rock: Uint16Array | null, band: Uint16Array, [from, to]: [number, number]): Uint16Array {
-  const out = rock ? rock.slice() : new Uint16Array(band.length);
-  if (to <= from || !rock) return out;
-  const plane = out.length / 4, row = band.length / 4 / (to - from);
-  for (let p = 0; p < 4; p++) out.set(band.subarray(p * row * (to - from), (p + 1) * row * (to - from)), p * plane + row * from);
-  return out;
+/** Lay into the rock `rock`, in place, the band of rows `rows` [from, to) of samples from `band` (wasm/src/ground.rs
+ * `rock_rows`: of each of the four planes those rows in turn). */
+function layRows(rock: Uint16Array, band: Uint16Array, [from, to]: [number, number]): void {
+  if (to <= from) return;
+  const plane = rock.length / 4, rows = band.length / 4;
+  for (let p = 0; p < 4; p++) rock.set(band.subarray(p * rows, (p + 1) * rows), p * plane + (rows / (to - from)) * from);
 }
 
 export class GroundTiles {
@@ -137,8 +136,10 @@ export class GroundTiles {
    * links; the reflectance of its bed's make; its loose ground's grain; its pores and the deposit on it
    * (tape/src/ground/rock.rs); none until a worker made the ground. */
   rock: Uint16Array | null = null;
-  /** How many times the rock came (the land sends it to the GPU when this moves). */
+  /** How many times the rock came whole (the land sends it to the GPU when this moves); and what hears of the rows of
+   * samples [from, to) a build laid anew in it since (land.ts `rockLaid`). */
   rockVersion = 0;
+  onRows: (rows: [number, number]) => void = () => {};
   /** The ground's version: how many times the world's samples were built anew and handed to the workers (`rebuild`); a
    * tile made of an older one is stale. The last version whose changed tiles the first worker told (`rebuilt`): till it
    * is the latest, a tile kept may be stale and not yet known to be. The tiles kept that a build changed, drawn until
@@ -221,18 +222,17 @@ export class GroundTiles {
   }
 
   /** A worker made the ground of the ground's version `gen` again: the build waiting is handed once all did. The
-   * first's answer (`first`) brings the rock of it, and each tile kept of an older version over a square whose tiles
+   * first's answer (`first`) brings the rows of the rock it changed, laid in place, and each tile kept of an older version over a square whose tiles
    * changed (`squares`, a byte a square row by row) is stale, asked for again and drawn until it comes. */
   private madeAgain(first: { squares: Uint8Array; rock?: Uint16Array; rows: [number, number] } | null, gen: number): void {
     this.building--;
-    if (first) this.rebuilt(first.squares, layRows(this.rock, first.rock!, first.rows), gen);
+    if (first) this.rebuilt(first.squares, first.rock!, first.rows, gen);
     if (this.building === 0 && this.waiting) this.rebuild(null, this.urgent);
   }
 
-  private rebuilt(squares: Uint8Array, rock: Uint16Array, gen: number): void {
+  private rebuilt(squares: Uint8Array, band: Uint16Array, rows: [number, number], gen: number): void {
     this.told = gen;
-    this.rock = rock;
-    this.rockVersion++;
+    if (this.rock && rows[1] > rows[0]) { layRows(this.rock, band, rows); this.onRows(rows); }
     const version = this.versionOf.get(gen) ?? this.previewed;
     for (const [key, k] of this.kept) {
       if (k.gen >= gen || this.stale.has(key)) continue;

@@ -54,7 +54,8 @@ export class Paint {
       if (order < this.first.order) this.first = { order, rgb: c, covers: 0, k };
       return;
     }
-    this.rgb = this.rgb.map((v, q) => v + covers * toScreen(c[q])) as Rgb;
+    const rgb = this.rgb;
+    rgb[0] += covers * toScreen(c[0]); rgb[1] += covers * toScreen(c[1]); rgb[2] += covers * toScreen(c[2]);
     this.covered += covers;
     this.tall += covers * height;
     this.held += covers * rooted;

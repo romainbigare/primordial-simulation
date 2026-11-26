@@ -83,8 +83,9 @@ export class Land {
    * before the world's worker sent them); the plumes spread into the bodies of liquid (`plumesIn`); how far edits
    * moved each sample's ground since the samples the core was told the page shows (`preview`), m, and the window of
    * samples that holds what moved (null: none); the three as the GPU reads them (the plumes' load where it is more than
-   * the sample's own), whether they are to be made and sent anew, and the rows of them to send where only what edits
-   * moved changed (null: none). */
+   * the sample's own), whether they are to be made and sent anew (a new discharge) and whether the plumes are to be
+   * laid anew, the windows of samples the plumes were laid in (rows from, to, columns from, to), and the rows of them
+   * to send where only what edits moved changed (null: none). */
   private flows: Texture | null = null;
   private discharge: Uint16Array;
   private plumes: Uint8Array = new Uint8Array(0);
@@ -92,6 +93,8 @@ export class Land {
   private movedIn: [number, number, number, number] | null = null;
   private flowsData: Uint16Array | null = null;
   private flowsDue = true;
+  private plumesDue = false;
+  private plumed: [number, number, number, number][] = [];
   private movedRows: [number, number] | null = null;
   /** The version of the world's samples the core was last told the page's ground shows (`Live.groundShown`): the
    * preview of edits is of what moved since. */
@@ -103,13 +106,17 @@ export class Land {
   /** The rock as the GPU holds it: the ground's own (ground.ts `rock`, one copy on the page), in which the loose ground
    * of the samples edits moved since it came is set as the core will build them (`preview`); that preview's window
    * (west column, north row, width, height, in samples), its loose ground, m, and the ground's own loose ground there
-   * that it took the place of (to put back); and the rows of the rock's first plane still to send (none: null). */
+   * that it took the place of (to put back); the rows of the rock's first plane still to send, and the rows of all
+   * four planes a build laid anew still to send (`rockLaid`; none: null). */
   private rockShown: Uint16Array | null = null;
   private loosePreview: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array } | null = null;
   private rockRows: [number, number] | null = null;
+  private laidRows: [number, number] | null = null;
   /** Of each square, the mean of its samples' shares of coarse and fine grain (the rock's third plane), and the version
    * of the rock they are of (`grainShift`). */
   private grainOf: { version: number; coarse: Float32Array; fine: Float32Array } | null = null;
+  /** The rows of samples a build laid anew in the rock since the grain was last summed (`grainShift`; none: null). */
+  private grainRows: [number, number] | null = null;
   /** The time the flow's signs stand at while one picture is drawn in tiles (performance.now, ms; null: each draw's
    * own), so all its tiles show the signs at one place along the channels. */
   flowAt: number | null = null;
@@ -121,6 +128,18 @@ export class Land {
     this.discharge = new Uint16Array(2 * samples.across * samples.down);
     this.moved = new Float32Array(samples.across * samples.down);
     this.told = version;
+    tiles.onRows = rows => this.rockLaid(rows);
+  }
+
+  /** A build laid the rows of samples `rows` [from, to) anew in the rock (ground.ts `rebuilt`, in place: the rock the
+   * GPU holds is the same array): the preview's loose ground is set again over those rows, all four planes of them are
+   * sent, and the grain of their squares is summed again. */
+  private rockLaid(rows: [number, number]): void {
+    const band = [0, rows[0], 0, rows[1] - rows[0]];
+    this.grainRows = rowsOf(band, null, this.grainRows);
+    if (!this.rockShown) return;
+    if (this.loosePreview) this.overlay(this.loosePreview, rows);
+    this.laidRows = rowsOf(band, null, this.laidRows);
   }
 
   /** Once the ground in view shows a version of the samples the core was not told of, tell it (`core`): what edits moved
@@ -157,10 +176,11 @@ export class Land {
   }
 
   /** In the rock the GPU holds (`rockShown`), the loose ground of the samples of preview `p`'s window as the preview
-   * says, the ground's own there kept in `p.own`. */
-  private overlay(p: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array }): void {
+   * says, the ground's own there kept in `p.own`; only in the rows of samples `rows` [from, to) where given. */
+  private overlay(p: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array }, rows?: [number, number]): void {
     const out = this.rockShown!, across = this.samples.across, [x0, y0, w, h] = p.window;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const first = rows ? Math.max(rows[0] - y0, 0) : 0, last = rows ? Math.min(rows[1] - y0, h) : h;
+    for (let y = first; y < last; y++) for (let x = 0; x < w; x++) {
       const k = 4 * ((y0 + y) * across + x0 + x);
       p.own[y * w + x] = out[k];
       out[k] = half(p.loose[y * w + x]);
@@ -174,20 +194,40 @@ export class Land {
   }
 
   /** Where load came into a body of liquid in the last month, `bytes` (a sample, u32, and kg/s, f32, each: wasm/src/lib.rs
-   * `plumes`): spread into the flows the GPU reads when they are new (`flowsOf`). */
+   * `plumes`): spread into the flows the GPU reads when they are new (`plumesAgain`). */
   plumesIn(bytes: Uint8Array): void {
     // (Each frame brings its own bytes: only new plumes make the flows again.)
     if (bytes.length === this.plumes.length && bytes.every((b, i) => b === this.plumes[i])) return;
     this.plumes = bytes;
-    this.flowsDue = true;
+    this.plumesDue = true;
   }
 
-  /** The flows the GPU reads: the samples' discharge and load, with each plume's load (`MUD_PLUME_DAYS`) where it is
-   * more, and how far edits moved each sample's ground (`preview`). */
+  /** The flows the GPU reads (`flowsData`), made whole: the samples' discharge and load, and how far edits moved each
+   * sample's ground (`preview`), with the plumes laid over them (`layPlumes`). */
   private flowsOf(): Uint16Array {
-    const s = this.samples, out = new Uint16Array(4 * s.across * s.down), view = new DataView(this.plumes.buffer, this.plumes.byteOffset, this.plumes.byteLength);
+    const s = this.samples, n = s.across * s.down, out = this.flowsData ?? new Uint16Array(4 * n);
+    for (let k = 0; k < n; k++) { out[4 * k] = this.discharge[2 * k]; out[4 * k + 1] = this.discharge[2 * k + 1]; out[4 * k + 2] = half(this.moved[k]); }
+    this.plumed = [];
+    this.layPlumes(out);
+    return out;
+  }
+
+  /** In the flows the GPU reads, the plumes laid anew: the windows the last were laid in back to the samples' own load,
+   * then the new laid (`layPlumes`); the rows of samples [from, to) they span (null: none). */
+  private plumesAgain(out: Uint16Array): [number, number] | null {
+    const across = this.samples.across, was = this.plumed;
+    for (const [y0, y1, x0, x1] of was) for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) out[4 * (j * across + i) + 1] = this.discharge[2 * (j * across + i) + 1];
+    this.plumed = [];
+    this.layPlumes(out);
+    const all = [...was, ...this.plumed];
+    return all.length ? [Math.min(...all.map(p => p[0])), Math.max(...all.map(p => p[1])) + 1] : null;
+  }
+
+  /** Into the flows `out`, each plume's load (`MUD_PLUME_DAYS`) where it is more than what is there, and the window of
+   * samples each is laid in (`plumed`). */
+  private layPlumes(out: Uint16Array): void {
+    const s = this.samples, view = new DataView(this.plumes.buffer, this.plumes.byteOffset, this.plumes.byteLength);
     const sampleM = (this.tiles.map.cell_m * this.tiles.map.w) / s.across;
-    for (let k = 0; k < s.across * s.down; k++) out.set([this.discharge[2 * k], this.discharge[2 * k + 1], half(this.moved[k])], 4 * k);
     for (let p = 0; p + 8 <= this.plumes.byteLength; p += 8) {
       const k = view.getUint32(p, true), kg = view.getFloat32(p + 4, true), x = k % s.across, y = Math.floor(k / s.across);
       if (!(kg > 0) || k >= s.across * s.down) continue;
@@ -200,14 +240,15 @@ export class Land {
       // and is drawn falling by e over a sample at least, so no sample's square shows.
       const mean = at * Math.min(1, 2 * Math.PI * fall * fall), spread = Math.max(fall, 1);
       const r = Math.ceil(spread * Math.log(Math.max(mean / MUD_CLEAR_G, 1)));
-      for (let j = Math.max(0, y - r); j <= Math.min(s.down - 1, y + r); j++) {
-        for (let i = Math.max(0, x - r); i <= Math.min(s.across - 1, x + r); i++) {
+      const y0 = Math.max(0, y - r), y1 = Math.min(s.down - 1, y + r), x0 = Math.max(0, x - r), x1 = Math.min(s.across - 1, x + r);
+      this.plumed.push([y0, y1, x0, x1]);
+      for (let j = y0; j <= y1; j++) {
+        for (let i = x0; i <= x1; i++) {
           const d = Math.hypot(i - x, j - y), c = mean * Math.exp(-d / spread), t = 4 * (j * s.across + i) + 1;
           if (d <= r && c > unhalf(out[t])) out[t] = half(c);
         }
       }
     }
-    return out;
   }
 
   /** The table of frame 0 of world `w`: the core's rows `rows` (the melting point, then a row a square, then each
@@ -224,13 +265,13 @@ export class Land {
     const levels = ponds.subarray(0, count), fetches = ponds.subarray(count);
     this.rows = PLANES * H + Math.ceil(count / 2 / W);
     const data = new Float32Array(4 * W * this.rows);
-    data.set(Array.from(levels).flatMap((l, p) => [Number.isNaN(l) ? -NO_POND_M : l, fetches[p]]), 4 * PLANES * n);
+    for (let p = 0, at = 4 * PLANES * n; p < count; p++, at += 2) { data[at] = Number.isNaN(levels[p]) ? -NO_POND_M : levels[p]; data[at + 1] = fetches[p]; }
     this.sea = levels.reduce((low, l) => (l < low ? l : low), Infinity);
     if (!Number.isFinite(this.sea)) this.sea = -NO_POND_M;
     const sea = seaSquares(wet, w.meta), ground = fromLand(['ground_r', 'ground_g', 'ground_b'].map(name => plane(w, 0, name)), wet.sea, W, H);
     // The land's mean height, ground temperature and ice of each square (the sea's squares' from the land nearest): the land a
     // coastal square of the open low ground holds is the land's, not its 8 km cell's.
-    const [landZ, landT, landIce] = fromLand([0, 1, 3].map(k => Float32Array.from({ length: n }, (_, i) => rows[1 + row * i + k])), wet.sea, W, H);
+    const [landZ, landT, landIce] = fromLand([0, 1, 3].map(k => { const v = new Float32Array(n); for (let i = 0; i < n; i++) v[i] = rows[1 + row * i + k]; return v; }), wet.sea, W, H);
     // The share of organic matter of each square's loose ground, which the Earth view darkens it by (land.wgsl).
     const organic = w.index.has('organic') ? decode(w, 0, 'organic') : new Float32Array(n);
     // The soil's grain the laws read, each cell's (`World::soil`), over its samples' as the rock draws them: what the
@@ -246,17 +287,23 @@ export class Land {
     const saturatedFrom = (i: number) => (wetShare[i] <= 0 ? twiScale.max : wetShare[i] >= 1 ? twiScale.min : saturated[i]);
     const shown = look.mode === 'layer' && w.index.has(look.layer) ? plane(w, 0, look.layer) : null;
     this.fade = shown && w.meta.layers[w.index.get(look.layer)!].scale !== 'log' ? 1 : OVER_FADE;
-    const put = (k: number, i: number, v: number[]) => data.set(v, 4 * (k * n + i));
+    // (Plane `k` of square `i` starts at 4 (k n + i); the data starts at 0 everywhere.)
+    const at = (k: number, i: number) => 4 * (k * n + i);
     this.melt = rows[0];
     for (let i = 0; i < n; i++) {
-      for (let k = 0; k < Math.ceil(row / 4); k++) put(k, i, Array.from(rows.subarray(1 + row * i + 4 * k, 1 + row * i + Math.min(4 * k + 4, row))));
-      put(3, i, [ground[0][i] / 255, ground[1][i] / 255, ground[2][i] / 255, sea[i]]);
-      put(4, i, [landIce[i], 0, 0, 0]);
-      put(5, i, [shown ? shown[i] / 255 : 0, organic[i], landT[i], landZ[i]]);
-      put(6, i, [coarse[i] - samplesGrain.coarse[i], fine[i] - samplesGrain.fine[i], 0, 0]);
-      data[4 * n * Math.floor(SATURATED_AT / 4) + 4 * i + SATURATED_AT % 4] = saturatedFrom(i);
+      for (let c = 0; c < row; c++) data[at(c >> 2, i) + (c & 3)] = rows[1 + row * i + c];
+      let a = at(3, i);
+      data[a] = ground[0][i] / 255; data[a + 1] = ground[1][i] / 255; data[a + 2] = ground[2][i] / 255; data[a + 3] = sea[i];
+      data[at(4, i)] = landIce[i];
+      a = at(5, i);
+      data[a] = shown ? shown[i] / 255 : 0; data[a + 1] = organic[i]; data[a + 2] = landT[i]; data[a + 3] = landZ[i];
+      a = at(6, i);
+      data[a] = coarse[i] - samplesGrain.coarse[i]; data[a + 1] = fine[i] - samplesGrain.fine[i];
+      data[at(SATURATED_AT >> 2, i) + (SATURATED_AT & 3)] = saturatedFrom(i);
     }
-    blurSea(data, Array.from(sea, (s, i) => (s > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0)), W, H);
+    const open = new Uint8Array(n);
+    for (let i = 0; i < n; i++) open[i] = sea[i] > 0 && data[4 * i] < this.sea - OPEN_SEA_M ? 1 : 0;
+    blurSea(data, open, W, H);
     // The sea's squares are marked by their air's fall with height as -(it + 1) (land.wgsl `state_on`): only a point
     // with one of them about it reads the land's own numbers.
     for (let i = 0; i < n; i++) if (wet.sea[i]) data[4 * i + 2] = -(data[4 * i + 2] + 1);
@@ -269,16 +316,23 @@ export class Land {
   private grainShift(W: number, H: number, coarse: Float32Array, fine: Float32Array): { coarse: Float32Array; fine: Float32Array } {
     const r = this.tiles.rock, s = this.samples;
     if (!r) return { coarse, fine };
-    if (this.grainOf?.version !== this.tiles.rockVersion) {
-      const per = s.across / W, plane = 2 * 4 * s.across * s.down, out = { version: this.tiles.rockVersion, coarse: new Float32Array(W * H), fine: new Float32Array(W * H) };
-      for (let y = 0; y < s.down; y++) for (let x = 0; x < s.across; x++) {
-        const i = Math.floor(y / per) * W + Math.floor(x / per), t = plane + 4 * (y * s.across + x);
-        out.coarse[i] += unhalf(r[t]) / (per * per);
-        out.fine[i] += unhalf(r[t + 1]) / (per * per);
-      }
-      this.grainOf = out;
+    const per = s.across / W, plane = 2 * 4 * s.across * s.down;
+    // The squares of the samples' rows [from, to) summed anew: all of them where the rock came whole, else those of the
+    // rows a build laid anew.
+    let rows = this.grainRows;
+    if (this.grainOf?.version !== this.tiles.rockVersion) { this.grainOf = { version: this.tiles.rockVersion, coarse: new Float32Array(W * H), fine: new Float32Array(W * H) }; rows = [0, s.down]; }
+    this.grainRows = null;
+    const out = this.grainOf;
+    if (!rows) return out;
+    const y0 = Math.floor(Math.floor(rows[0] / per) * per), y1 = Math.min(Math.ceil(Math.ceil(rows[1] / per) * per), s.down);
+    out.coarse.fill(0, Math.floor(y0 / per) * W, Math.ceil(y1 / per) * W);
+    out.fine.fill(0, Math.floor(y0 / per) * W, Math.ceil(y1 / per) * W);
+    for (let y = y0; y < y1; y++) for (let x = 0; x < s.across; x++) {
+      const i = Math.floor(y / per) * W + Math.floor(x / per), t = plane + 4 * (y * s.across + x);
+      out.coarse[i] += unhalf(r[t]) / (per * per);
+      out.fine[i] += unhalf(r[t + 1]) / (per * per);
     }
-    return this.grainOf;
+    return out;
   }
 
   /** The bindings land.wgsl reads on `gpu` in view `look` (`lawBinds` and colour.wgsl's), for a draw whose pixels lie as
@@ -321,7 +375,12 @@ export class Land {
     if (this.due) { gpu.write(this.tex, this.data); this.due = false; this.written++; }
     const s = this.samples;
     this.flows ??= gpu.texture('land', s.across, s.down, 'rgba16float');
-    if (this.flowsDue) { this.flowsData = this.flowsOf(); gpu.write(this.flows, this.flowsData); this.flowsDue = false; this.movedRows = null; this.written++; }
+    if (this.flowsDue || !this.flowsData) { this.flowsData = this.flowsOf(); gpu.write(this.flows, this.flowsData); this.flowsDue = this.plumesDue = false; this.movedRows = null; this.written++; }
+    if (this.plumesDue) {
+      const rows = this.plumesAgain(this.flowsData);
+      this.movedRows = rows ? rowsOf([0, rows[0], 0, rows[1] - rows[0]], null, this.movedRows) : this.movedRows;
+      this.plumesDue = false;
+    }
     if (this.movedRows && this.flowsData) { gpu.writeRows(this.flows, this.flowsData, this.movedRows[0], this.movedRows[1] - this.movedRows[0]); this.movedRows = null; this.written++; }
     this.rock ??= gpu.texture('land', s.across, ROCK_PLANES * s.down, 'rgba16float');
     if (this.rockAt !== this.tiles.rockVersion) {
@@ -331,7 +390,13 @@ export class Land {
       if (r && this.loosePreview) this.overlay(this.loosePreview);
       gpu.write(this.rock, this.rockShown ?? Uint16Array.from({ length: 4 * ROCK_PLANES * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
       this.rockAt = this.tiles.rockVersion;
-      this.rockRows = null;
+      this.rockRows = this.laidRows = null;
+      this.written++;
+    }
+    if (this.laidRows && this.rockShown) {
+      const [from, to] = this.laidRows;
+      for (let p = 0; p < ROCK_PLANES; p++) gpu.writeRows(this.rock, this.rockShown, p * s.down + from, to - from);
+      this.laidRows = null;
       this.written++;
     }
     if (this.rockRows && this.rockShown) {
@@ -390,25 +455,38 @@ function blurSea(data: Float32Array, open: ArrayLike<number>, w: number, h: numb
  * open low ground is cells of 8 km, whose numbers are their liquid surface's: the land a coastal square of one holds is
  * the land's, so no 8 km square of the sea's numbers shows on a coast. */
 function fromLand(planes: ArrayLike<number>[], other: ArrayLike<number>, w: number, h: number): Float32Array[] {
-  const out = planes.map(p => Float32Array.from(p)), known = Uint8Array.from(other, v => (v ? 0 : 1));
-  for (let left = true; left;) {
-    left = false;
-    const now = known.slice();
-    for (let i = 0; i < w * h; i++) {
-      if (known[i]) continue;
+  const out = planes.map(p => Float32Array.from(p)), known = new Uint8Array(w * h), sum = [0, 0, 0];
+  for (let i = 0; i < w * h; i++) known[i] = other[i] ? 0 : 1;
+  // The ring found next: the squares not known with a known one about them, each once (`queued`).
+  const queued = new Uint8Array(w * h);
+  let ring: number[] = [];
+  const queueAbout = (i: number) => {
+    const x = i % w, y = (i / w) | 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx, yy = y + dy, j = yy * w + xx;
+      if (xx < 0 || yy < 0 || xx >= w || yy >= h || known[j] || queued[j]) continue;
+      queued[j] = 1; ring.push(j);
+    }
+  };
+  for (let i = 0; i < w * h; i++) if (known[i]) queueAbout(i);
+  while (ring.length) {
+    // Each square of the ring takes the mean of its neighbours known before the ring, then all of them are known.
+    for (const i of ring) {
       const x = i % w, y = (i / w) | 0;
       let n = 0;
-      const sum = [0, 0, 0];
+      sum[0] = sum[1] = sum[2] = 0;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const xx = x + dx, yy = y + dy, j = yy * w + xx;
         if (xx < 0 || yy < 0 || xx >= w || yy >= h || !known[j]) continue;
         out.forEach((p, c) => (sum[c] += p[j]));
         n++;
       }
-      if (n) { out.forEach((p, c) => (p[i] = sum[c] / n)); now[i] = 1; } else left = true;
+      out.forEach((p, c) => (p[i] = sum[c] / n));
     }
-    if (now.every((v, i) => v === known[i])) break;
-    known.set(now);
+    const done = ring;
+    ring = [];
+    for (const i of done) known[i] = 1;
+    for (const i of done) queueAbout(i);
   }
   return out;
 }
