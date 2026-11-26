@@ -255,8 +255,12 @@ host.onmessage = async e => {
       host.postMessage({ kind: 'preview', preview: preview() }, []);
     }
     else if (m.cmd === 'things' && core) {
+      // A playing world's next frame brings them; a paused one's come alone (the frame would be the same).
       thingsAt = m.at;
-      if (!playing) postFrame('frame');
+      if (!playing) {
+        const things = thingsAt ? bytes(core.things(...thingsAt), core.out_len()) : null;
+        host.postMessage({ kind: 'things', things }, things ? [things.buffer] : []);
+      }
     }
   } catch (err) {
     failed(err);

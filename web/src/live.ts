@@ -49,6 +49,8 @@ export class Live {
       if (m.kind === 'error') return on.error(m.text);
       if (m.kind === 'probe') return this.answers.shift()?.(JSON.parse(m.text) as Probe);
       if (m.kind === 'saved') return on.saved(m.saved!, m.year);
+      // The things of the window asked for, of a paused world (worker.ts `things`).
+      if (m.kind === 'things') return timed('world frames', () => on.things(m.things));
       // (What the edits moved since the ground the page shows comes with a brush of the ground, an undo, and the answer
       // to `groundShown`.)
       if (m.preview) on.preview(m.preview);
@@ -75,8 +77,8 @@ export class Live {
         return;
       }
       if (!this.world) return this.shown();
-      // The world changes only as it steps: a frame of the date shown (a pause, or the things of another window)
-      // brings its things and its stats, and the map is not drawn anew (`changed` false), unless an edit changed it.
+      // The world changes only as it steps: a frame of the date shown (a pause) brings its things and its stats, and
+      // the map is not drawn anew (`changed` false), unless an edit changed it.
       const date = this.world.meta.frames[0], same = date.day === m.day && date.year === m.year;
       this.world.data = m.frame;
       this.table = m.table;
