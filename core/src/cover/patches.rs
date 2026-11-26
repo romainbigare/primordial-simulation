@@ -329,12 +329,12 @@ pub(super) fn year(w: &mut World) {
     let Some(p) = Parts::of(&w.chem) else { return };
     let (mm, rho) = (p.mm(&w.chem), w.chem.subs[p.sub[WALL]].density[0]);
     let (ph, variety) = (&w.cfg.phys, w.cfg.variety);
-    for p in w.life.cells.iter_mut().flat_map(|x| x.cover.patches.iter_mut()) {
-        p.snag_age += 1.0;
-    }
-    for c in w.life.cells.iter_mut().map(|x| &mut x.cover).filter(|c| c.patch_count() > 1) {
+    for c in w.life.cells.iter_mut().map(|x| &mut x.cover) {
         let n = c.patch_count();
         c.patches[..n].iter_mut().for_each(|p| p.age += 1.0);
+        c.patches.iter_mut().for_each(|p| p.snag_age += 1.0);
+    }
+    for c in w.life.cells.iter_mut().map(|x| &mut x.cover).filter(|c| c.patch_count() > 1) {
         loop {
             let s: Vec<_> = (0..c.patch_count()).map(|k| sketch(c, (ph, &mm, rho), k)).collect();
             let mut pairs = (0..s.len()).flat_map(|a| (a + 1..s.len()).map(move |z| (a, z)));
