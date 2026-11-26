@@ -22,10 +22,10 @@ const PATCHY = 0.6; const PATCHY_M = 40.0; const PATCHY_OCTAVES = 4;
 // Loose ground deeper than this, m, creeps into smooth swells; thinner, the bed's roughness shows through it
 // (relief.wgsl).
 const SMOOTH_LOOSE_M = 0.5;
-// The patches fade out as the thinnest they make deepens from where it shows the bed or its roughness
-// (`HIDES_BED_M`, `SMOOTH_LOOSE_M`) to `PATCHES_GONE_M`, past which they are none: so no line shows where they end on
-// what reads deeper loose ground (a soil's colour, scree, roots).
-const PATCHES_GONE_M = 1.0;
+// The patches fade out as the thinnest they make deepens from `PATCHES_FADE_M` to where it no longer shows the bed or
+// its roughness (`HIDES_BED_M`, `SMOOTH_LOOSE_M`), past which they are none: so no line shows where they end on what
+// reads deeper loose ground (a soil's colour, scree, roots).
+const PATCHES_FADE_M = 0.25;
 
 // The rock's planes (`rock_field`): the loose ground's and its channel's, the bed's make, the loose ground's grain, its
 // deposit.
@@ -129,8 +129,8 @@ fn loose_seen(at: vec2f, mean: f32, e: f32) -> f32 {
   return with_patches(mean, ragged(at, e, PATCHY_M, PATCHY_OCTAVES, 55), share);
 }
 
-// How far the patches move loose ground `mean` m deep on the mean, as a share of it (`PATCHY`, `PATCHES_GONE_M`).
-fn patches_of(mean: f32) -> f32 { return PATCHY * (1.0 - ease(max(HIDES_BED_M, SMOOTH_LOOSE_M), PATCHES_GONE_M, mean * (1.0 - PATCHY))); }
+// How far the patches move loose ground `mean` m deep on the mean, as a share of it (`PATCHY`, `PATCHES_FADE_M`).
+fn patches_of(mean: f32) -> f32 { return PATCHY * (1.0 - ease(PATCHES_FADE_M, max(HIDES_BED_M, SMOOTH_LOOSE_M), mean * (1.0 - PATCHY))); }
 
 // How far the loose ground's depth swings, m, about its depth `mean` at a point (`loose_at`), over the patches
 // `loose_seen` does not show at `e` m a pixel: a rule on the depth read there is spread over this much, so it holds
