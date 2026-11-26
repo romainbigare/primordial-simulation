@@ -176,8 +176,10 @@ export class GroundTiles {
     this.gen++;
     this.building = this.workers.length;
     this.versionOf.set(this.gen, built.version);
+    const own = built.relief.byteOffset === 0 && built.relief.byteLength === built.relief.buffer.byteLength;
     this.workers.forEach((w, k) => {
-      const copy = built.relief.slice();
+      // (The last worker takes the relief itself where it is a buffer of its own: no copy.)
+      const copy = own && k === this.workers.length - 1 ? built.relief : built.relief.slice();
       // (Only the first sends back the rock and the squares changed.)
       w.worker.postMessage({ cmd: 'built', relief: copy.buffer, gen: this.gen, answer: k === 0 }, [copy.buffer]);
     });

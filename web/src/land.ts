@@ -100,11 +100,12 @@ export class Land {
    * `rockVersion`; before it came: loose ground of `NO_ROCK_YET_M` everywhere). */
   private rock: Texture | null = null;
   private rockAt = -1;
-  /** The rock as the GPU holds it: the ground's (ground.ts `rock`) with the loose ground of the samples edits moved
-   * since it came, as the core will build them (`preview`); that preview's window (west column, north row, width,
-   * height, in samples) and loose ground, m; and the rows of the rock's first plane still to send (none: null). */
+  /** The rock as the GPU holds it: the ground's own (ground.ts `rock`, one copy on the page), in which the loose ground
+   * of the samples edits moved since it came is set as the core will build them (`preview`); that preview's window
+   * (west column, north row, width, height, in samples), its loose ground, m, and the ground's own loose ground there
+   * that it took the place of (to put back); and the rows of the rock's first plane still to send (none: null). */
   private rockShown: Uint16Array | null = null;
-  private loosePreview: { window: [number, number, number, number]; loose: Float32Array } | null = null;
+  private loosePreview: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array } | null = null;
   private rockRows: [number, number] | null = null;
   /** Of each square, the mean of its samples' shares of coarse and fine grain (the rock's third plane), and the version
    * of the rock they are of (`grainShift`). */
@@ -145,22 +146,29 @@ export class Land {
       this.movedRows = rows;
     }
     // The loose ground of the samples it moved: the last preview's window back to the ground's own, then this one's.
-    const loose = this.loosePreview;
-    this.loosePreview = w * h > 0 ? { window: p.window, loose: p.loose } : null;
-    if (!this.rockShown || !this.tiles.rock) return;
-    if (loose) this.overlay(loose.window, this.tiles.rock, null);
-    if (this.loosePreview) this.overlay(p.window, this.tiles.rock, p.loose);
-    this.rockRows = rowsOf(loose?.window ?? null, this.loosePreview?.window ?? null, this.rockRows);
+    const before = this.loosePreview, shown = this.rockShown !== null;
+    if (before && shown) this.putBack(before);
+    this.loosePreview = w * h > 0 ? { window: p.window, loose: p.loose, own: new Uint16Array(w * h) } : null;
+    if (!shown) return;
+    if (this.loosePreview) this.overlay(this.loosePreview);
+    this.rockRows = rowsOf(before?.window ?? null, this.loosePreview?.window ?? null, this.rockRows);
   }
 
-  /** In the rock the GPU holds (`rockShown`), the loose ground of the samples of `window` (west column, north row, width,
-   * height): `loose`, m, row by row, or the ground's own (`rock`) where null. */
-  private overlay([x0, y0, w, h]: [number, number, number, number], rock: Uint16Array, loose: Float32Array | null): void {
-    const out = this.rockShown!, across = this.samples.across;
+  /** In the rock the GPU holds (`rockShown`), the loose ground of the samples of preview `p`'s window as the preview
+   * says, the ground's own there kept in `p.own`. */
+  private overlay(p: { window: [number, number, number, number]; loose: Float32Array; own: Uint16Array }): void {
+    const out = this.rockShown!, across = this.samples.across, [x0, y0, w, h] = p.window;
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const k = 4 * ((y0 + y) * across + x0 + x);
-      out[k] = loose ? half(loose[y * w + x]) : rock[k];
+      p.own[y * w + x] = out[k];
+      out[k] = half(p.loose[y * w + x]);
     }
+  }
+
+  /** In the rock the GPU holds, the ground's own loose ground put back in preview `p`'s window (`overlay`). */
+  private putBack(p: { window: [number, number, number, number]; own: Uint16Array }): void {
+    const out = this.rockShown!, across = this.samples.across, [x0, y0, w, h] = p.window;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[4 * ((y0 + y) * across + x0 + x)] = p.own[y * w + x];
   }
 
   /** Where load came into a body of liquid in the last month, `bytes` (a sample, u32, and kg/s, f32, each: wasm/src/lib.rs
@@ -315,9 +323,10 @@ export class Land {
     if (this.movedRows && this.flowsData) { gpu.writeRows(this.flows, this.flowsData, this.movedRows[0], this.movedRows[1] - this.movedRows[0]); this.movedRows = null; }
     this.rock ??= gpu.texture('land', s.across, ROCK_PLANES * s.down, 'rgba16float');
     if (this.rockAt !== this.tiles.rockVersion) {
+      // (A new rock holds the ground's own everywhere: the preview is set in it anew.)
       const r = this.tiles.rock;
-      this.rockShown = r ? r.slice() : null;
-      if (r && this.loosePreview) this.overlay(this.loosePreview.window, r, this.loosePreview.loose);
+      this.rockShown = r;
+      if (r && this.loosePreview) this.overlay(this.loosePreview);
       gpu.write(this.rock, this.rockShown ?? Uint16Array.from({ length: 4 * ROCK_PLANES * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
       this.rockAt = this.tiles.rockVersion;
       this.rockRows = null;
