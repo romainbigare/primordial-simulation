@@ -110,7 +110,7 @@ impl Table {
     pub fn frame(&self, w: &World) -> (Vec<u8>, Vec<f32>) {
         let c = Ctx::new(w);
         let mut bytes = Vec::with_capacity(w.map.n() * crate::LAYERS.len());
-        frame(&c, &mut bytes);
+        frame(&c, &self.square, &mut bytes);
         let n = w.mesh.cells().n();
         let levels = pcore::flow::levels(w, &(0..n).collect::<Vec<usize>>());
         let rows: Vec<[f64; ROW]> = (0..n).map(|i| self.row(&c, i, c.means.as_ref().map(|m| m[i]), levels.as_ref().map(|l| l[i]))).collect();

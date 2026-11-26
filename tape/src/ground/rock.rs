@@ -76,8 +76,9 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture]) -> Vec<
         out.extend([half(c[0] as f32), half(c[1] as f32), half(c[2] as f32), half(r.wavelength(k) as f32)]);
     }
     let pores: Vec<Pores> = grain[..s.h.len()].iter().map(Pores::of).collect();
+    let avail = shown("avail");
     for ((t, p), &loose) in grain.iter().zip(&pores).zip(&s.loose) {
-        let roots = shown("avail", p.for_roots(loose));
+        let roots = avail(p.for_roots(loose));
         out.extend([half(t.coarse as f32), half(t.fine as f32), half(-p.seep.log10() as f32), half(roots)]);
     }
     for (&settled, &age) in s.settled.iter().zip(&s.age) {
