@@ -205,7 +205,7 @@ fn a_basin_holds_its_liquid() {
 }
 
 /// A basin that reaches a pond grows it (`World::basin`): its level is the pond's, so the pond's liquid still covers
-/// all its samples, at a level no lower, and the basin's own centre lies in it, with the brushes overlapping by most of
+/// all its samples, at its own level, and the basin's own centre lies in it, with the brushes overlapping by most of
 /// one or by a little; a basin beside it, its rim on the pond's bank, leaves the pond as it was. The books are kept.
 #[test]
 fn a_basin_that_reaches_a_pond_grows_it() {
@@ -235,8 +235,8 @@ fn a_basin_that_reaches_a_pond_grows_it() {
         let grown = t.pond[centre(&t, at)];
         assert!(grown != NONE, "{apart} radii apart: no pond at the second brush");
         let first = t.pond[members[0]];
-        let kept = members.iter().all(|&k| t.pond[k] == first) && v.pond_levels()[first as usize] >= level - 1e-6;
-        assert!(kept && (apart > 2.0 || first == grown), "{apart} radii apart: the first pond not whole at its level in the grown pond");
+        let kept = members.iter().all(|&k| t.pond[k] == first) && (v.pond_levels()[first as usize] - level).abs() < 1e-6;
+        assert!(kept && (apart > 2.0 || first == grown), "{apart} radii apart: the first pond not whole at its level in the grown pond: {} from {level}", v.pond_levels()[first as usize]);
     }
 }
 

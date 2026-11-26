@@ -238,15 +238,18 @@ took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`
 of the closed ponds that stands on the brush's samples or its rim, so a pond its cut opens grows over it at its own
 level, and a pond whose liquid stands on none of them keeps every way out of it (a way out leaves by a sample beside
 its liquid, which the basin only raises); else the way out of its outlet: of the dry samples of its rim, the one the
-higher of whose height and the lowest sample beside it outside the rim is lowest. Each sample under the brush is cut
-to a bowl under that level, a depth × (1 − (d/0.85r)²) at a distance d from its centre (r its radius): a
-paraboloid that meets the level at 0.85 of its radius, its shore on even ground; across its banks, from half its
-radius to its edge, the cut lessens by (1 − x²)² (the brush's falloff, x from 0 to 1 across them) to none, so where
-the ground about it lies over the level the banks rise to it with no step; none filled. Each dry sample of the rim whose way out lies
-under the level (the liquid would leave by it) is raised to `edit_bank_m` over the level, the dug ground's bank, but the
-outlet, moved to the level (a pond it grows leaves by a pass at its own level wherever its own pass lay); cut or raised
-with each cell's own rock. So the floor is a closed basin, that deep under its pass at its centre, wherever it is made;
-its liquid covers the brush but for its banks over the level, and no pond it reaches is lowered. The
+higher of whose height and the lowest sample beside it outside the rim is lowest, of those across a side from a sample
+under the brush (the liquid runs across sides). Each sample under the brush is cut to a bowl under that level, the
+depth × (1 − (d/r)²) / (1 − (d₀/r)²) at a distance d from its centre (r its radius, d₀ its middle sample's distance):
+a paraboloid as deep as asked at its middle sample that meets the level at the brush's edge, its shore. Each dry
+sample of the rim whose way out lies under the level (the liquid would leave by it) is raised to `edit_bank_m` over the
+level, the dug ground's bank, but the outlet, moved to the level (a pond it grows leaves by a pass at its own level
+wherever its own pass lay). Every other sample out to a radius past the brush's edge (its banks) is cut toward the
+level, or toward the level of a pond it lies in or beside where that is higher (so the banks open no pond), by the
+share (1 − x)² of what lies over it, x from 0 at the shore to 1 at the banks' end: the bank rises from the shore at a
+slope that lessens to meet the ground about it with no step. None is filled; all is cut or raised with each cell's own
+rock. So the floor is a closed basin, that deep under its pass at its middle, wherever it is made; its liquid covers
+the brush, brushes laid over each other make one pond with one level, and no pond it reaches is lowered. The
 samples are built again over it at once; the key liquid fills the pond under its centre to that pond's level, its pass,
 with what the pores of the ground under it lack to be full (a real body on dry ground soaks the ground under it
 first: of a node that is one, its pores' lack at the cell's mean under the pond's samples alone, `flow::pores_lack`),

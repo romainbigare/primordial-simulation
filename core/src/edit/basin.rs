@@ -1,9 +1,10 @@
 //! A basin of liquid made by an edit (handover.md 11.1: add liquid; the ground dug and the key liquid added): the
-//! ground under a brush cut to a smooth bowl, a depth under the level the liquid is to stand at in its middle, its
-//! banks meeting the ground about it with no step; that level the lowest dry ground of its rim, or the level of the
-//! liquid of the ponds its cut opens, so a pond it reaches grows over it at its own level; a bank of `edit_bank_m` over that level only where its rim would let
-//! the liquid out, but at its outlet, at the level; and the key liquid poured in to its pass, all from the outside
-//! node. So the basin is closed by its making: a pond of the samples, whose body keeps what is poured into it, and
+//! ground under a brush cut to a smooth bowl, a depth under the level the liquid is to stand at in its middle, that
+//! meets the level at the brush's edge, its shore; past it banks that rise from the shore to the ground about it with no
+//! step; that level the lowest dry ground of its rim, or the level of the liquid of the ponds its cut opens, so a pond
+//! it reaches grows over it at its own level; a bank of `edit_bank_m` over that level only where its rim would let the
+//! liquid out, but at its outlet, at the level; and the key liquid poured in to its pass, all from the outside node.
+//! Brushes laid over each other so make one pond: each cuts all of its disc under the level. So the basin is closed by its making: a pond of the samples, whose body keeps what is poured into it, and
 //! never one that lowers a pond it reaches.
 
 use super::brush::Covered;
@@ -18,11 +19,9 @@ use std::collections::{BTreeMap, BTreeSet};
 /// has its neighbours across sides and corners under it or on the ring.
 const RIM_SAMPLES: f64 = 1.5;
 
-/// Where a basin's bowl meets its level, in radii of its brush: its shore on even ground.
-const SHORE: f64 = 0.85;
-
-/// Where a basin's banks begin, in radii of its brush: from there to its edge its cut lessens to none.
-const BANKS_FROM: f64 = 0.5;
+/// How far a basin's banks reach past its brush's edge, in radii of its brush: over them the ground about it falls to
+/// its level, so they rise from its shore at the brush's edge to the ground about it with no step.
+const BANKS_REACH: f64 = 1.0;
 
 /// How many times at most a basin pours again what its cells' other liquid and pores took of its liquid as it settled.
 const TOP_UPS: usize = 3;
@@ -36,10 +35,12 @@ impl World {
     /// the liquid of the closed ponds that stands on its samples or its rim (`pond_levels`, where it lies over their
     /// ground), else the way out of its outlet: of the samples of its rim on which no liquid stands, the one the higher
     /// of whose height and the lowest sample beside it outside the rim is lowest, that height. Every sample it
-    /// covers is cut to a bowl `depth` under that level at its centre whose banks meet the level at `SHORE` of the
-    /// brush's radius and the ground about it with no step (`bowl`), none filled; every dry sample of the rim whose way out lies under the level (the liquid would leave by it)
-    /// is raised to `edit_bank_m` over it, but the outlet, moved to the level (so a pond it grows leaves by a pass at
-    /// its own level, wherever its own pass lay); the ground cut or raised with each cell's own rock
+    /// covers is cut to a bowl `depth` under that level at its middle sample that meets the level at the brush's edge
+    /// (`bowl`); every dry sample of the rim whose way out lies under the level (the liquid would leave by it) is raised
+    /// to `edit_bank_m` over it, but the outlet, moved to the level (so a pond it grows leaves by a pass at its own
+    /// level, wherever its own pass lay); every other sample within `BANKS_REACH` past the brush's edge is cut toward
+    /// the level, or the level of a pond it lies in or beside where higher, by a share that falls from all of it at the
+    /// shore to none at the banks' end (`banked`); none filled. The ground cut or raised with each cell's own rock
     /// (`move_ground`), and the samples built again over it (`flow::build::reshape`). The key liquid fills the pond
     /// under the brush's centre to its level, its pass, from the outside node at each cell's ground temperature, poured
     /// into each cell's part of it (`pour_pond`, one pour for all its cells); the liquid settled with no time
@@ -71,10 +72,11 @@ impl World {
     /// stand (`basin`); whether it was made.
     fn dig(&mut self, b: Brush, depth: f64, liquid: usize) -> bool {
         let s = self.terrain_samples();
-        let wide = Brush { centre: b.centre, radius_m: b.radius_m + RIM_SAMPLES * self.map.length(SAMPLE_DEPTH) };
+        let reach = BANKS_REACH * b.radius_m;
+        let wide = Brush { centre: b.centre, radius_m: b.radius_m + reach.max(RIM_SAMPLES * self.map.length(SAMPLE_DEPTH)) };
         let all = self.covered(wide, s.across);
         let inside = |c: &Covered| c.d * wide.radius_m <= b.radius_m;
-        let Some(centre) = all.iter().filter(|c| inside(c)).min_by(|a, z| a.d.total_cmp(&z.d)).map(|c| c.k) else { return false };
+        let Some((centre, mid)) = all.iter().filter(|c| inside(c)).min_by(|a, z| a.d.total_cmp(&z.d)).map(|c| (c.k, c.d * wide.radius_m / b.radius_m)) else { return false };
         if open(&s, centre) {
             return false;
         }
@@ -96,26 +98,34 @@ impl World {
         };
         let on_rim = |k: usize| !cut.contains(&k) && around(k).any(|j| cut.contains(&j));
         let reached = all.iter().filter(|c| cut.contains(&c.k) || on_rim(c.k)).map(|c| wet(c.k)).filter(|l| l.is_finite()).fold(f64::NEG_INFINITY, f64::max);
-        // The outlet: the dry sample of the rim whose way out is lowest, the higher of its own height and the lowest
-        // sample beside it outside the rim.
+        // The outlet: of the dry samples of the rim across a side from one it covers (the liquid runs across sides,
+        // `space::drain`), the one whose way out is lowest, the higher of its own height and the lowest sample beside
+        // it outside the rim.
         let way = |k: usize| around(k).filter(|&j| !cut.contains(&j) && !on_rim(j)).map(|j| s.h[j]).fold(f64::INFINITY, f64::min).max(s.h[k]);
-        let outlet = all.iter().filter(|c| on_rim(c.k) && wet(c.k).is_nan()).map(|c| (c.k, way(c.k))).min_by(|a, z| a.1.total_cmp(&z.1));
+        let across_side = |k: usize| around(k).any(|j| cut.contains(&j) && (j % s.across == k % s.across || j / s.across == k / s.across));
+        let outlet = all.iter().filter(|c| on_rim(c.k) && across_side(c.k) && wet(c.k).is_nan()).map(|c| (c.k, way(c.k))).min_by(|a, z| a.1.total_cmp(&z.1));
         let level = if reached.is_finite() { reached } else if let Some((_, l)) = outlet { l } else { return false };
         let outlet = outlet.map(|o| o.0);
         let bank = level + self.cfg.edit_bank_m;
+        // The least a bank lowers a sample to: the level, or the level of a pond whose sample it is or lies beside,
+        // where higher (of the open low ground, its liquid's): so the banks open no pond.
+        let stands_at = |j: usize| {
+            let p = s.pond[j];
+            if p == NONE { f64::NEG_INFINITY } else if s.ponds[p as usize].pass == NONE { levels[p as usize] } else { s.ponds[p as usize].level }
+        };
+        let least = |k: usize| std::iter::once(k).chain(around(k)).map(stands_at).fold(level, f64::max);
         let mut cells: BTreeMap<usize, Vec<(usize, f64)>> = BTreeMap::new();
         for c in &all {
-            let h = s.h[c.k];
+            let (h, at) = (s.h[c.k], c.d * wide.radius_m);
+            let leaks = on_rim(c.k) && wet(c.k).is_nan();
             let to = if inside(c) {
-                bowl(h, level, depth, c.d * wide.radius_m / b.radius_m)
-            } else if !on_rim(c.k) || !wet(c.k).is_nan() {
-                h
-            } else if Some(c.k) == outlet {
+                bowl(h, level, depth, [at / b.radius_m, mid])
+            } else if leaks && Some(c.k) == outlet {
                 level
-            } else if way(c.k) < level {
+            } else if leaks && way(c.k) < level {
                 h.max(bank)
             } else {
-                h
+                banked(h, least(c.k), (at - b.radius_m) / reach)
             };
             if to != h {
                 cells.entry(c.cell).or_default().push((c.k, to - h));
@@ -174,14 +184,23 @@ impl World {
     }
 }
 
-/// The height a basin cuts ground `h` m high to at `d` radii from its centre, its liquid to stand at `level` m and
-/// `depth` m deep at its centre: toward its bowl, `depth` × (1 − (d/`SHORE`)²) under the level, a paraboloid that
-/// meets the level at `SHORE`; across its banks, from `BANKS_FROM` to the brush's edge, the cut lessens by the brush's
-/// `falloff` to none, so where the ground about it lies over the level its banks rise to it over that band with no
-/// step. None filled.
-fn bowl(h: f64, level: f64, depth: f64, d: f64) -> f64 {
-    let floor = level - depth * (1.0 - (d / SHORE).powi(2));
-    h - (h - floor).max(0.0) * super::brush::falloff(((d - BANKS_FROM) / (1.0 - BANKS_FROM)).max(0.0))
+/// The height a basin cuts ground `h` m high to at `d[0]` radii from its centre under its brush, its liquid to stand at
+/// `level` m and `depth` m deep at its middle sample, `d[1]` radii from its centre: its bowl, a paraboloid
+/// `depth` × (1 − d²) / (1 − `d[1]`²) under the level (at most `depth`), which meets the level at the brush's edge.
+/// None filled.
+fn bowl(h: f64, level: f64, depth: f64, d: [f64; 2]) -> f64 {
+    h.min(level - depth * ((1.0 - d[0] * d[0]) / (1.0 - d[1] * d[1]).max(f64::MIN_POSITIVE)).min(1.0))
+}
+
+/// The height a basin's bank cuts ground `h` m high to `t` of the way across its banks (`BANKS_REACH`), past its
+/// brush's edge: of what lies over `least` m (the level, `World::dig`), the share 1 − (1 − t)²: none at the shore, all
+/// of it from the banks' end, so the bank rises from the shore at a slope (a clear waterline) that lessens to meet the
+/// ground about it with no step. None filled.
+fn banked(h: f64, least: f64, t: f64) -> f64 {
+    if h <= least {
+        return h;
+    }
+    least + (h - least) * (1.0 - (1.0 - t.clamp(0.0, 1.0)).powi(2))
 }
 
 /// Whether sample `k` of `s` lies in the open low ground (a pond of no pass).
