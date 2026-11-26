@@ -46,26 +46,29 @@ pub extern "C" fn ground_built() -> *const u8 {
     })
 }
 
+/// Keep the ground `g`; nothing (`out_len` 0), or why its tiles cannot be drawn (`tape::Ground::drawable`), as text.
+fn keep(g: tape::Ground) -> Vec<u8> {
+    let why = g.drawable().err().unwrap_or_default();
+    GROUND.with(|c| *c.borrow_mut() = Some(Drawn::new(g)));
+    why.into_bytes()
+}
+
 /// Make the ground of the island `new_world` makes from `seed`, `size`, the latitudes `south` and `north` and `drawn`
 /// (`tape::Ground`): its terrain and its map's squares (`worldgen::terrain::island_ground`; how its cells are cut does
-/// not change the ground), with the default laws.
+/// not change the ground), with the default laws. Returns nothing (`out_len` 0), or why it cannot be drawn (`keep`).
 #[no_mangle]
-pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64, drawn: u32) {
+pub extern "C" fn ground(seed: u32, size: u32, south: f64, north: f64, drawn: u32) -> *const u8 {
     let (seed, cfg) = (seed as u64, island((south, north)));
     let (map, terrain) = worldgen::terrain::island_ground(seed, (size as usize, size as usize), shape_of(drawn), &cfg.phys);
-    let g = tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), &cfg.phys, cfg.gravity);
-    GROUND.with(|c| *c.borrow_mut() = Some(Drawn::new(g)));
+    give(keep(tape::Ground::new(seed, map, terrain, (cfg.lat_south, cfg.lat_north), &cfg.phys, cfg.gravity)))
 }
 
 /// Make the ground of the saved world handed in (`input`; `tape::Ground::of`). Returns nothing (`out_len` 0), or why it
-/// is refused (`saved`), as text.
+/// is refused (`saved`) or cannot be drawn (`keep`), as text.
 #[no_mangle]
 pub extern "C" fn ground_of_world() -> *const u8 {
     give(match saved() {
-        Ok((world, _)) => {
-            GROUND.with(|c| *c.borrow_mut() = Some(Drawn::new(tape::Ground::of(&world))));
-            Vec::new()
-        }
+        Ok((world, _)) => keep(tape::Ground::of(&world)),
         Err(e) => e.into_bytes(),
     })
 }

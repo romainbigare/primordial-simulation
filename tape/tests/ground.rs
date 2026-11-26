@@ -118,7 +118,7 @@ fn every_tile_agrees_on_where_a_pond_is() {
     let (g, depths) = ground();
     let depth = pcore::space::terrain::SAMPLE_DEPTH;
     assert!(depths.contains(&(depth + 1)) && !g.ponds().is_empty(), "the island's ponds at the samples' depth and one finer");
-    assert!(g.ponds().len() < tape::PONDS_EXACT, "{} ponds, more than a tile names", g.ponds().len());
+    assert!(g.drawable().is_ok(), "{} ponds, more than a tile names", g.ponds().len());
     let level = |q: usize| { let p = &g.ponds()[q - 1]; if p.pass == pcore::space::network::NONE { pcore::space::wear::STAND_M } else { p.level } };
     let (coarse, fine) = (g.tile(depth, 0, 0), [[0, 0], [1, 0], [0, 1], [1, 1]].map(|[x, y]| g.tile(depth + 1, x, y)));
     let fine_at = |x: usize, y: usize| named(&fine[(y / TILE) * 2 + x / TILE], x % TILE, y % TILE);

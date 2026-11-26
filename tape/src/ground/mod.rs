@@ -156,11 +156,23 @@ impl Ground {
     }
 
     /// The ground made again on the samples the relief `bytes` builds on the world's cells (`relief_bytes`,
-    /// `Terrain::built`; `rebuild`). Returns the squares whose tiles changed, or why the bytes are refused.
+    /// `Terrain::built`; `rebuild`). Returns the squares whose tiles changed, or why the bytes are refused, or why its
+    /// tiles cannot be drawn (`drawable`).
     pub fn rebuild_from(&mut self, bytes: &[u8]) -> Result<Vec<bool>, String> {
         let (r, years, cells): (Relief, f64, Square) = bincode::deserialize(bytes).map_err(|e| format!("a relief: {e}"))?;
         let s = self.terrain.built(self.seed, &cells, self.lat, &r, years);
-        Ok(self.rebuild(s))
+        let squares = self.rebuild(s);
+        self.drawable().map(|()| squares)
+    }
+
+    /// Whether its tiles can be drawn, or why not: a tile names the pond of a texel by a 16-bit float (`tile`), so it
+    /// names no more than `PONDS_EXACT` ponds.
+    pub fn drawable(&self) -> Result<(), String> {
+        let n = self.samples.ponds.len();
+        if n > PONDS_EXACT {
+            return Err(format!("The ground holds {n} ponds, and its tiles name at most {PONDS_EXACT}: it cannot be drawn."));
+        }
+        Ok(())
     }
 
     /// The ground made again on the samples `new` (as a world built them again, `Terrain::built`): what each sample

@@ -9,7 +9,7 @@ import type { GroundOf } from './ground';
 
 interface Core {
   memory: WebAssembly.Memory;
-  ground(seed: number, size: number, south: number, north: number, drawn: number): void;
+  ground(seed: number, size: number, south: number, north: number, drawn: number): number;
   input(len: number): number;
   ground_of_world(): number;
   tile(depth: number, x: number, y: number): number;
@@ -45,19 +45,21 @@ async function handle(m: Command): Promise<void> {
     if (m.cmd === 'init') {
       core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
       const g = m.ground;
+      // The saved world handed in (`input`), or the seed's: the core answers nothing, or why it refused it.
+      let at: number;
       if ('saved' in g) {
-        // The saved world handed in (`input`); the core answers nothing, or why it refused it.
         const n = g.saved.byteLength;
         const into = core.input(n); // (it may grow the memory: its buffer is read after)
         new Uint8Array(core.memory.buffer, into, n).set(new Uint8Array(g.saved));
-        const at = core.ground_of_world(), refused = new TextDecoder().decode(new Uint8Array(core.memory.buffer, at, core.out_len()));
-        if (refused) throw new Error(refused);
-      } else core.ground(g.seed, g.size, g.band[0], g.band[1], g.drawn ? 1 : 0);
+        at = core.ground_of_world();
+      } else at = core.ground(g.seed, g.size, g.band[0], g.band[1], g.drawn ? 1 : 0);
+      const refused = new TextDecoder().decode(new Uint8Array(core.memory.buffer, at, core.out_len()));
+      if (refused) throw new Error(refused);
       // The rock of each of the terrain's samples, with the word that the worker is ready (of the worker that answers;
       // the others say they are ready).
       if (!m.answer) { host.postMessage({ kind: 'ready' }, []); return; }
-      const at = core.rock();
-      const rock = new Uint16Array(core.memory.buffer.slice(at, at + core.out_len()));
+      const r = core.rock();
+      const rock = new Uint16Array(core.memory.buffer.slice(r, r + core.out_len()));
       host.postMessage({ kind: 'ready', rock }, [rock.buffer]);
     } else if (m.cmd === 'tile' && core) {
       const t0 = performance.now(), at = core.tile(m.depth, m.x, m.y);
