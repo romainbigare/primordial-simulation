@@ -347,7 +347,6 @@ const NS_A_MS = 1e6;
 
 /** WebGL2 on `canvas`, or null where the browser has none; `restored` redraws after a lost context comes back. */
 export function openWebGl2(canvas: HTMLCanvasElement, restored: () => void): Back | null {
-  // (The fast card, where a machine has two: the map does much work a pixel.)
-  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, premultipliedAlpha: true, powerPreference: 'high-performance' });
+  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, premultipliedAlpha: true });
   return gl ? new WebGl2(gl, canvas, restored) : null;
 }
