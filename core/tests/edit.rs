@@ -484,7 +484,7 @@ fn a_poured_pond_leaves_its_cells_temperature() {
     let m3 = POURED_M * w.mesh.cells().area()[i];
     let mol = m3 * w.chem.subs[k].density[1] / w.chem.subs[k].molar_mass;
     let (books, t0) = (Books::now(&w), w.t_ground(i));
-    assert!(pcore::flow::pour(&mut w, i, pond, (k, m3), |w| worldgen::testkit::put(w, k, i, mol)), "the cell holds no part of its pond");
+    assert_eq!(pcore::flow::pour(&mut w, pond, k, &[(i, m3)], |w, i, _| worldgen::testkit::put(w, k, i, mol)), [true], "the cell holds no part of its pond");
     books.assert_kept(&w, 1e-9);
     let t = w.t_ground(i);
     assert!((t - t0).abs() < POURED_KELVIN, "the cell went from {t0} K to {t} K");

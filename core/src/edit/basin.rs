@@ -34,8 +34,9 @@ impl World {
     /// a pass at its own level, wherever its own pass lay); the ground cut or raised with each cell's own rock
     /// (`move_ground`), and the samples built again over it (`flow::build::reshape`). The key liquid fills the pond
     /// under the brush's centre to its level, its pass, from the outside node at each cell's ground temperature, poured
-    /// into each cell's part of it (`pour_pond`); then the passes of a month's start and the liquid settled with no
-    /// time (`flow::settle`) level it (the pores of the ground it covers were given what they take first). Whether a
+    /// into each cell's part of it (`pour_pond`, one pour for all its cells); the liquid settled with no time
+    /// (`flow::settle`) levels it (the pores of the ground it covers were given what they take first), and the passes
+    /// of a month's start find the world's state from it once it is full. Whether a
     /// basin was made: none whose centre lies in the open low ground (its liquid stands there already). Where none is
     /// made but the samples were built again to read the ground, the liquid settles over them as `World::settle` would
     /// have (which finds nothing due then).
@@ -120,25 +121,26 @@ impl World {
         let filled = pond != NONE && !open(&s, centre);
         drop(s);
         // What a cell's other liquid and its ground's pores took of it as it settled is poured again, `TOP_UPS`
-        // times at most.
+        // times at most. (A pour finds the state of the cells it fills: the passes of a month's start find the rest
+        // from the basin once it settled.)
         let mut from = f64::NEG_INFINITY;
         for _ in 0..=TOP_UPS {
             let more = filled && self.pour_pond(pond, liquid, from);
-            crate::month_start(self);
             crate::flow::settle(self);
             if !more {
                 break;
             }
             from = self.pond_levels()[pond as usize];
         }
+        crate::month_start(self);
         true
     }
 
-    /// The key liquid `liquid` poured into each cell's part of pond `pond` (`flow::pour`): over each of its samples to
-    /// the pond's level from its ground or from the level `from` where higher, and what the pores of the ground that
-    /// covers lack to be full, which they take first (`flow::pores_lack`, under the pond's samples in the cell: so it
-    /// stands that deep over a dry floor too), m³, from the outside node at each cell's ground temperature, liquid (`put_liquid`). Whether it
-    /// poured more than `TOP_UP_SHARE` of the pond's room over its floor.
+    /// The key liquid `liquid` poured into each cell's part of pond `pond`, in one pour (`flow::pour`): over each of its
+    /// samples to the pond's level from its ground or from the level `from` where higher, and what the pores of the
+    /// ground that covers lack to be full, which they take first (`flow::pores_lack`, under the pond's samples in the
+    /// cell: so it stands that deep over a dry floor too), m³, from the outside node at each cell's ground temperature,
+    /// liquid (`put_liquid`). Whether it poured more than `TOP_UP_SHARE` of the pond's room over its floor.
     fn pour_pond(&mut self, pond: u32, liquid: usize, from: f64) -> bool {
         let s = self.terrain_samples();
         let level = s.ponds[pond as usize].level;
@@ -156,10 +158,9 @@ impl World {
         drop(s);
         let sub = &self.chem.subs[liquid];
         let per_m3 = sub.density[1] / sub.molar_mass;
-        for (&i, &v) in &by {
-            crate::flow::pour(self, i, pond, (liquid, v), |w| w.put_liquid(i, liquid, v * per_m3));
-        }
-        by.values().sum::<f64>() > TOP_UP_SHARE * room
+        let cells: Vec<(usize, f64)> = by.into_iter().collect();
+        crate::flow::pour(self, pond, liquid, &cells, |w, i, v| w.put_liquid(i, liquid, v * per_m3));
+        cells.iter().map(|c| c.1).sum::<f64>() > TOP_UP_SHARE * room
     }
 }
 

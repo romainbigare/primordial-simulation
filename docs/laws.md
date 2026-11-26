@@ -252,9 +252,10 @@ part holds it, so the runoff's pass keeps it there), the outside node giving its
 lie, so the cells keep their temperature; where the floor still opens to the open low ground (a rim under
 the sea's level), none (its liquid stands there already), and a brush whose centre lies in the open low ground makes
 none (where the samples were built again to read the ground, the liquid still settles over them, as the settling of
-the edits would). Then the liquid settles over the ground (below); what the cells' other liquid and pores took of it is poured
-again, up to three times, until it lacks less than a hundredth of its room, so it stands the asked depth over a dry
-floor. An edit moves the bed faster than the slow ground is checked: its caches
+the edits would). The pond's cells are poured in one pour. Then the liquid settles over the ground (below); what the
+cells' other liquid and pores took of it is poured again, up to three times, until it lacks less than a hundredth of
+its room, so it stands the asked depth over a dry floor; then the passes of a month's start find the world's state
+from the full basin. An edit moves the bed faster than the slow ground is checked: its caches
 are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. The samples' loose
 ground follows an edit when they are built again (`mantle::edited`): a lowering takes it first, from its top, where what
 the liquid laid lies (`Samples::settled`, never more than the loose ground), and on a sample an edit
