@@ -333,20 +333,42 @@ fn flamed(w: &World, i: usize) -> pcore::flame::Flamed {
 
 /// Quantise a value to a byte as the frames format defines: none (NaN) is 0, as nothing.
 pub fn quantise(l: &Layer, v: f64) -> u8 {
-    let b = match l.scale {
-        _ if v.is_nan() => 0.0,
-        "raw" => 255.0 * v,
-        "log" if v < l.min => 0.0,
-        "log" => 1.0 + 254.0 * (v.ln() - l.min.ln()) / (l.max.ln() - l.min.ln()),
-        _ => 255.0 * (v - l.min) / (l.max - l.min),
-    };
-    b.round().clamp(0.0, 255.0) as u8
+    Bytes::of(l).of_value(v)
 }
 
-/// Where the value `v` stands on the scale of the layer named `name`, 0..1, as its byte over 255 (`quantise`).
-pub(crate) fn shown(name: &str, v: f64) -> f32 {
-    let l = LAYERS.iter().find(|l| l.name == name).expect("a layer of that name");
-    f32::from(quantise(l, v)) / 255.0
+/// A layer's bytes (`quantise`), its scale read and the logarithms of its ends found once.
+struct Bytes {
+    raw: bool,
+    log: bool,
+    min: f64,
+    max: f64,
+    ln_min: f64,
+    ln_span: f64,
+}
+
+impl Bytes {
+    fn of(l: &Layer) -> Bytes {
+        Bytes { raw: l.scale == "raw", log: l.scale == "log", min: l.min, max: l.max, ln_min: l.min.ln(), ln_span: l.max.ln() - l.min.ln() }
+    }
+    /// The byte of `v`.
+    fn of_value(&self, v: f64) -> u8 {
+        let b = if v.is_nan() {
+            0.0
+        } else if self.raw {
+            255.0 * v
+        } else if self.log {
+            if v < self.min { 0.0 } else { 1.0 + 254.0 * (v.ln() - self.ln_min) / self.ln_span }
+        } else {
+            255.0 * (v - self.min) / (self.max - self.min)
+        };
+        b.round().clamp(0.0, 255.0) as u8
+    }
+}
+
+/// Where a value stands on the scale of the layer named `name`, 0..1, as its byte over 255 (`quantise`).
+pub(crate) fn shown(name: &str) -> impl Fn(f64) -> f32 {
+    let b = Bytes::of(LAYERS.iter().find(|l| l.name == name).expect("a layer of that name"));
+    move |v| f32::from(b.of_value(v)) / 255.0
 }
 
 /// The cell each pixel of an `across` x `down` raster of `window` (column, row, width and height in squares) shows,
@@ -362,14 +384,14 @@ pub fn pixels(w: &World) -> Vec<usize> {
     raster(w, [0.0, 0.0, w.map.w as f64, w.map.h as f64], w.map.w, w.map.h)
 }
 
-/// Append one frame: every layer in table order, a byte for each square of the map, row-major (`pixels`).
-pub(crate) fn frame(c: &Ctx, out: &mut Vec<u8>) {
-    layers(c, &pixels(c.w), out);
-}
-
-/// Append every layer in table order, a byte for each of `cells` (the cell each pixel shows).
-fn layers(c: &Ctx, cells: &[usize], out: &mut Vec<u8>) {
+/// Append one frame: every layer in table order, a byte for each square of the map, row-major, the cell each shows
+/// in `square` (`pixels`). Each layer is found once a cell shown.
+pub(crate) fn frame(c: &Ctx, square: &[usize], out: &mut Vec<u8>) {
+    let mut shown = vec![false; c.w.mesh.cells().n()];
+    square.iter().for_each(|&i| shown[i] = true);
     for l in LAYERS {
-        out.extend(cells.iter().map(|&i| quantise(l, (l.val)(c, i))));
+        let b = Bytes::of(l);
+        let by_cell: Vec<u8> = (0..shown.len()).map(|i| if shown[i] { b.of_value((l.val)(c, i)) } else { 0 }).collect();
+        out.extend(square.iter().map(|&i| by_cell[i]));
     }
 }

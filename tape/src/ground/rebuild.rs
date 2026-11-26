@@ -3,14 +3,24 @@
 
 use super::bends::REACH_SAMPLES;
 use super::channels::STEP_MOST;
+use super::mend::STRIP;
+use super::GUTTER;
 use pcore::space::network::NONE;
 use pcore::space::samples::Samples;
 use pcore::space::square::Square;
+use pcore::space::terrain::SAMPLE_DEPTH;
 
-/// The tiles about a changed sample that change with it, in samples each way: a texel names the channel it keeps by its
-/// step from its own sample, up to `STEP_MOST` (`channels`), which also holds the spline of the shore drawn smooth and
-/// the margin the heights finer than the samples read (`space::below`).
-const TILES_MARGIN: i64 = STEP_MOST;
+/// The tiles of `map` about a changed sample that change with it, in samples each way: a texel names the channel it
+/// keeps by its step from its own sample, up to `STEP_MOST` (`channels`), which also holds the spline of the shore drawn
+/// smooth and the margin the heights finer than the samples read (`space::below`); and a tile holds `GUTTER` texels
+/// past its squares, each mended from texels up to `mend::STRIP` farther (`channels::Channels::field`), as many texels
+/// as the coarsest depth that cuts the map into more than one tile makes of samples (the coarsest tile holds the whole
+/// map, and its texels off it repeat its edge).
+fn tiles_margin(map: &Square) -> i64 {
+    let cut = *super::depths(map).start() as i32 + 1;
+    let texel = 2f64.powi(SAMPLE_DEPTH as i32 - cut);
+    STEP_MOST + ((GUTTER + STRIP) as f64 * texel).ceil() as i64
+}
 
 /// What a tile reads of a sample: its height, way, main way upstream, the area that drains through it, its pond and
 /// that pond's level, its wetness index as the tiles hold it and whether its line carries it (`wetness`), and the point
@@ -50,6 +60,19 @@ pub(super) const BENDS_READ: i64 = REACH_SAMPLES as i64 + 1;
 /// samples each runs to, a step each.
 pub(super) const GRAIN_READ: i64 = 2;
 
+/// The samples round a sample that its rock reads (`rock::rock`): the fall of its reach, as its piece of channel
+/// (`BENDS_READ`), its links (a step), and its texture (`GRAIN_READ`).
+pub(super) const ROCK_READ: i64 = if BENDS_READ > GRAIN_READ { BENDS_READ } else { GRAIN_READ };
+
+/// The band of rows of samples (`across` a row) that holds every one marked in `marked`: its first row and the row
+/// past its last; none (0, 0) where none is marked.
+pub(super) fn rows(marked: &[bool], across: usize) -> (usize, usize) {
+    match (marked.iter().position(|&m| m), marked.iter().rposition(|&m| m)) {
+        (Some(first), Some(last)) => (first / across, last / across + 1),
+        _ => (0, 0),
+    }
+}
+
 /// Of each sample, whether one of the numbers its texture reads differs in `new` from `old` (its height, its ways,
 /// what drains through it, its run, its pond, its make and its loose ground), to the last bit.
 pub(super) fn moved(old: &Samples, new: &Samples) -> Vec<bool> {
@@ -69,16 +92,31 @@ pub(super) fn moved(old: &Samples, new: &Samples) -> Vec<bool> {
         .collect()
 }
 
-/// `marked` with every sample of `s` within `by` samples of a marked one, row and column, marked too.
+/// `marked` with every sample of `s` within `by` samples of a marked one, row and column, marked too: spread along
+/// the rows, then down the columns, each by a count of the marked ones in a window that slides along it.
 pub(super) fn near(s: &Samples, marked: &[bool], by: i64) -> Vec<bool> {
-    let mut out = marked.to_vec();
-    let (across, down) = (s.across as i64, s.down as i64);
-    for k in (0..marked.len()).filter(|&k| marked[k]) {
-        let (x, y) = ((k % s.across) as i64, (k / s.across) as i64);
-        for j in (y - by).max(0)..=(y + by).min(down - 1) {
-            for i in (x - by).max(0)..=(x + by).min(across - 1) {
-                out[(j * across + i) as usize] = true;
+    let (across, down) = (s.across, s.down);
+    let rows = spread(marked, across, (down, across, 1), by);
+    spread(&rows, 1, (across, down, across), by)
+}
+
+/// Of `marked`, along each of `lines` lines (the first of line `l` at `l * line_step`) of `len` places `step` apart,
+/// each place marked where one within `by` places of it is.
+fn spread(marked: &[bool], line_step: usize, (lines, len, step): (usize, usize, usize), by: i64) -> Vec<bool> {
+    let mut out = vec![false; marked.len()];
+    let by = by.max(0) as usize;
+    for l in 0..lines {
+        let at = |i: usize| l * line_step + i * step;
+        // The marked ones in the window [i - by, i + by] of place i.
+        let mut count = (0..by.min(len)).filter(|&i| marked[at(i)]).count();
+        for i in 0..len {
+            if i + by < len && marked[at(i + by)] {
+                count += 1;
             }
+            if i > by && marked[at(i - by - 1)] {
+                count -= 1;
+            }
+            out[at(i)] = count > 0;
         }
     }
     out
@@ -112,15 +150,15 @@ pub(super) fn readers(s: &Samples, marked: &[bool]) -> Vec<bool> {
     out
 }
 
-/// The squares of `map` whose tiles hold a sample of `s` marked in `marked`, or one within `TILES_MARGIN` of it, row
+/// The squares of `map` whose tiles hold a sample of `s` marked in `marked`, or one within `tiles_margin` of it, row
 /// by row.
 pub(super) fn squares(map: &Square, s: &Samples, marked: &[bool]) -> Vec<bool> {
-    let per = (s.across / map.w).max(1) as i64;
+    let (per, margin) = ((s.across / map.w).max(1) as i64, tiles_margin(map));
     let mut out = vec![false; map.w * map.h];
     for k in (0..marked.len()).filter(|&k| marked[k]) {
         let (x, y) = ((k % s.across) as i64, (k / s.across) as i64);
-        let lo = |v: i64| ((v - TILES_MARGIN).max(0) / per) as usize;
-        let hi = |v: i64, n: usize| (((v + TILES_MARGIN) / per) as usize).min(n - 1);
+        let lo = |v: i64| ((v - margin).max(0) / per) as usize;
+        let hi = |v: i64, n: usize| (((v + margin) / per) as usize).min(n - 1);
         for j in lo(y)..=hi(y, map.h) {
             for i in lo(x)..=hi(x, map.w) {
                 out[j * map.w + i] = true;

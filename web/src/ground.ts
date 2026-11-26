@@ -71,6 +71,16 @@ export interface Built { relief: Uint8Array; version: number }
  * far each moved, m, and the depth of its loose ground once the samples are built again, m. */
 export interface Preview { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array }
 
+/** The rock `rock` with the band of rows `rows` [from, to) of samples laid over it from `band` (wasm/src/ground.rs
+ * `rock_rows`: of each of the four planes those rows in turn), as a new array. */
+function layRows(rock: Uint16Array | null, band: Uint16Array, [from, to]: [number, number]): Uint16Array {
+  const out = rock ? rock.slice() : new Uint16Array(band.length);
+  if (to <= from || !rock) return out;
+  const plane = out.length / 4, row = band.length / 4 / (to - from);
+  for (let p = 0; p < 4; p++) out.set(band.subarray(p * row * (to - from), (p + 1) * row * (to - from)), p * plane + row * from);
+  return out;
+}
+
 export class GroundTiles {
   private workers: { worker: Worker; ready: boolean; making: number; memory: number }[] = [];
   private url: string;
@@ -148,14 +158,15 @@ export class GroundTiles {
       const w = { worker: new Worker(this.url), ready: false, making: 0, memory: 0 };
       w.worker.onerror = e => error(e.message || 'The worker of the ground\'s tiles failed.');
       w.worker.onmessage = e => {
-        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock: Uint16Array; text: string; gen: number; squares: Uint8Array; ms: number; memory: number };
+        const m = e.data as { kind: string; depth: number; x: number; y: number; data: Uint16Array; rock?: Uint16Array; rows: [number, number]; text: string; gen: number; squares: Uint8Array; ms: number; memory: number };
         if (m.kind === 'error') return error(m.text);
-        if (m.kind === 'ready') { w.ready = true; if (!this.rock) { this.rock = m.rock; this.rockVersion++; } this.changed(true); return this.next(); }
+        if (m.kind === 'ready') { w.ready = true; if (m.rock) { this.rock = m.rock; this.rockVersion++; } this.changed(true); return this.next(); }
         if (m.kind === 'tile') { w.making--; w.memory = m.memory; spend('tile ms', m.ms); timed('tiles', () => this.took(m.depth, m.x, m.y, m.data, m.gen)); }
         if (m.kind === 'rebuilt') this.madeAgain(k === 0 ? m : null, m.gen);
       };
       const copy = k === WORKERS - 1 ? wasm : wasm.slice(0);
-      w.worker.postMessage({ cmd: 'init', wasm: copy, ground }, [copy]);
+      // (Only the first sends the rock.)
+      w.worker.postMessage({ cmd: 'init', wasm: copy, ground, answer: k === 0 }, [copy]);
       this.workers.push(w);
     }
   }
@@ -186,9 +197,9 @@ export class GroundTiles {
   /** A worker made the ground of the ground's version `gen` again: the build waiting is handed once all did. The
    * first's answer (`first`) brings the rock of it, and each tile kept of an older version over a square whose tiles
    * changed (`squares`, a byte a square row by row) is stale, asked for again and drawn until it comes. */
-  private madeAgain(first: { squares: Uint8Array; rock: Uint16Array } | null, gen: number): void {
+  private madeAgain(first: { squares: Uint8Array; rock?: Uint16Array; rows: [number, number] } | null, gen: number): void {
     this.building--;
-    if (first) this.rebuilt(first.squares, first.rock, gen);
+    if (first) this.rebuilt(first.squares, layRows(this.rock, first.rock!, first.rows), gen);
     if (this.building === 0 && this.waiting) this.rebuild(null, this.urgent);
   }
 

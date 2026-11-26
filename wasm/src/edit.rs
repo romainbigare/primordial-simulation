@@ -8,8 +8,8 @@ use serde_json::json;
 
 /// A stroke of the brush under way: where it plants, and the starting kind (planted when it ends, `Live::settle`);
 /// where it moved the ground, each paint's place, radius, m, and height at its centre, m (`Act::Ground`); the make of
-/// the loose ground it lays (`World::draw_make`), the world as it was before it began, and whether one of its edits was
-/// made (then that world is the one an undo puts back).
+/// the loose ground it lays (`World::draw_make`), the world as it was before it began, whether one of its edits was
+/// made (then that world is the one an undo puts back), and the samples its paints may have moved.
 pub(crate) struct Stroke {
     planting: Vec<pcore::edit::Brush>,
     row: usize,
@@ -17,6 +17,39 @@ pub(crate) struct Stroke {
     make: u8,
     before: World,
     changed: bool,
+    moved: Area,
+}
+
+/// The most samples past its brush's radius an edit moves the ground: a basin's rim, 1.5 samples (`pcore::edit`'s
+/// basin), and the sample a brush's span rounds out to.
+const EDIT_REACH_SAMPLES: f64 = 3.0;
+
+/// A box of the terrain's samples: its west and north columns and rows, and its east and south ones past it (none:
+/// west not before east).
+#[derive(Clone, Copy)]
+pub(crate) struct Area([usize; 4]);
+
+impl Area {
+    pub(crate) const NONE: Area = Area([usize::MAX, usize::MAX, 0, 0]);
+    /// The samples (of `across` x `down`, `per` a square's side) the brush `b` may move the ground of, on squares of
+    /// `side_m` m: those within its radius and `EDIT_REACH_SAMPLES`.
+    fn of(b: pcore::edit::Brush, (across, down, per): (usize, usize, f64), side_m: f64) -> Area {
+        let r = b.radius_m / side_m * per + EDIT_REACH_SAMPLES;
+        let [cx, cy] = b.centre.map(|v| v * per);
+        let span = |c: f64, n: usize| ((c - r).floor().max(0.0) as usize, ((c + r).ceil().max(0.0) as usize + 1).min(n));
+        let ((x0, x1), (y0, y1)) = (span(cx, across), span(cy, down));
+        Area([x0, y0, x1, y1])
+    }
+    /// The box that holds both.
+    fn or(self, o: Area) -> Area {
+        let (a, b) = (self.0, o.0);
+        Area([a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])])
+    }
+    /// Its samples, row by row, as indices of a grid `across` wide.
+    fn samples(self, across: usize) -> impl Iterator<Item = usize> {
+        let [x0, y0, x1, y1] = self.0;
+        (y0..y1).flat_map(move |y| (x0..x1).map(move |x| y * across + x))
+    }
 }
 
 impl Stroke {
@@ -40,7 +73,7 @@ impl Live {
                 (unplanted, st.changed) = (why, st.changed || planted);
             }
             if st.changed {
-                self.before = Some(st.before);
+                self.before = Some((st.before, st.moved));
             } else {
                 self.ready = Some(st.before);
             }
@@ -60,6 +93,7 @@ impl Live {
         let under = self.world.under(planting);
         let edits: Vec<Edit> = under.iter().flat_map(|u| [Act::Clear(u.share), worldgen::schedule::grown(row)].map(|act| Edit { place: u.place, act })).collect();
         let done = self.world.edit(&edits);
+        self.unframed |= done.iter().any(|&d| d);
         let planted = done.chunks(2).any(|d| d.iter().all(|&ok| ok));
         if planted || under.is_empty() {
             return (planted, String::new());
@@ -105,22 +139,26 @@ const BURN: u32 = 3;
 /// two months, by `amount` (`shape`, `lake`, `burn`) or of the starting kind of row `row` (`keep_planting`). The first
 /// call of a stroke begins it (`Stroke`), with the world as it was (`ready`, else a copy) for its undo. Returns, as
 /// JSON, what the tool says (`cells`, whether it changed the world), and what the page is to be sent: the preview of
-/// the ground moved (`preview`) and a frame of the world (`frame`). A tool the shell has not is a page's bug: it panics.
+/// the ground moved (`preview`) and a frame of the world (`frame`); or, for a tool the shell has not, why it is refused
+/// (`refused`), and nothing is done.
 #[no_mangle]
 pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row: u32) -> *const u8 {
+    if !matches!(tool, SHAPE | LAKE | BURN | PLANT) {
+        return give(json!({"refused": format!("The core has no brush tool {tool}.")}).to_string().into_bytes());
+    }
     let out = with(|l| {
         if l.stroke.is_none() {
             let before = l.ready.take().unwrap_or_else(|| l.world.clone());
             l.strokes += 1;
-            l.stroke = Some(Stroke { planting: Vec::new(), row: 0, raises: Vec::new(), make: l.world.draw_make(l.strokes), before, changed: false });
+            l.stroke = Some(Stroke { planting: Vec::new(), row: 0, raises: Vec::new(), make: l.world.draw_make(l.strokes), before, changed: false, moved: Area::NONE });
         }
         let b = pcore::edit::Brush { centre: [x, y], radius_m: radius };
         match tool {
             SHAPE => shape(l, b, amount),
             LAKE => lake(l, b, amount),
             BURN => burn(l, b, amount),
-            PLANT => keep_planting(l, b, row),
-            _ => panic!("no brush tool {tool}"),
+            // (`PLANT`: a tool the shell has not is refused above.)
+            _ => keep_planting(l, b, row),
         }
     });
     give(out.to_string().into_bytes())
@@ -130,29 +168,42 @@ pub extern "C" fn brush(tool: u32, x: f64, y: f64, radius: f64, amount: f64, row
 fn make(l: &mut Live, b: pcore::edit::Brush, act: pcore::edit::Act) -> bool {
     let done = l.world.edit(&[pcore::edit::Edit { place: b.centre, act }])[0];
     l.stroke.as_mut().expect("a stroke under way").changed |= done;
+    l.unframed |= done;
     done
+}
+
+/// The samples the brush `b` may have moved the ground of kept, in the stroke under way and in the newest version
+/// (`Built::moved`), for `preview`.
+fn moved_ground(l: &mut Live, b: pcore::edit::Brush) {
+    let s = l.world.terrain_samples();
+    let per = (s.across / l.world.map.w) as f64;
+    let area = Area::of(b, (s.across, s.down, per), l.world.map.side);
+    let st = l.stroke.as_mut().expect("a stroke under way");
+    st.moved = st.moved.or(area);
+    let last = l.since.last_mut().expect("a version");
+    last.moved = last.moved.or(area);
 }
 
 /// The ground under the brush `b` raised by `height` m at its centre, less toward its edge (lowered where under none;
 /// `Act::Ground`), its loose top of the stroke's make on what the stroke raised where the brush is now. The page draws
-/// it from the preview until the stroke settles.
+/// it from the preview until the stroke settles. It names no cells (the page reads whether it changed the world).
 fn shape(l: &mut Live, b: pcore::edit::Brush, height: f64) -> serde_json::Value {
     let st = l.stroke.as_mut().expect("a stroke under way");
     let act = pcore::edit::Act::Ground { radius_m: b.radius_m, height_m: height, stroke_m: st.raised_at(b.centre, l.world.map.side).max(0.0), make: st.make };
     st.raises.push((b.centre, b.radius_m, height));
-    let cells: Vec<usize> = l.world.under(&[b]).iter().map(|u| u.cell).collect();
     let done = make(l, b, act);
-    json!({"cells": cells, "changed": done, "preview": true, "frame": false})
+    moved_ground(l, b);
+    json!({"cells": [], "changed": done, "preview": true, "frame": false})
 }
 
 /// A lake under the brush `b` at once, its floor `depth` m under its rim, full to its pass (`Act::Basin`: the samples
 /// are built again and the liquid settles; the page asks for the new relief): a frame, and the preview until the
-/// page's ground shows it.
+/// page's ground shows it. It names no cells, as `shape`.
 fn lake(l: &mut Live, b: pcore::edit::Brush, depth: f64) -> serde_json::Value {
-    let cells: Vec<usize> = l.world.under(&[b]).iter().map(|u| u.cell).collect();
     let done = make(l, b, pcore::edit::Act::Basin { radius_m: b.radius_m, depth_m: depth });
     l.follow();
-    json!({"cells": cells, "changed": done, "preview": true, "frame": done})
+    moved_ground(l, b);
+    json!({"cells": [], "changed": done, "preview": true, "frame": done})
 }
 
 /// `joules_m2` J a m² of heat added under the brush `b` to the remains lying there (`Act::Heat`), which dries and lights
@@ -201,14 +252,16 @@ pub extern "C" fn settled_relief() -> *const u8 {
 /// true: the page asks for the new version's relief), and the strikes burnt. Returns, as JSON, whether the ground was
 /// built again, each cell the flames reached and when, s after its strike (`burnt`: [cell, s] pairs), the squares whose
 /// centre lies in one of those cells (`squares`), why the stroke's planting placed nothing (`unplanted`: "" where it
-/// placed some), and whether the stroke can be undone (`undo`: one of its edits was made).
+/// placed some), whether the stroke can be undone (`undo`: one of its edits was made), and whether the page is to be
+/// sent a frame (`frame`: the world changed since the last, `Live::unframed`, or as it settled).
 #[no_mangle]
 pub extern "C" fn settle() -> *const u8 {
     let out = with(|l| {
         let (done, unplanted, undo) = l.settle();
         let reached: std::collections::BTreeSet<usize> = done.burnt.iter().map(|b| b.0 as usize).collect();
+        let frame = l.unframed || done.ground || !done.burnt.is_empty();
         let mut out = json!(done);
-        (out["squares"], out["unplanted"], out["undo"]) = (json!(l.cells.squares_in(|i| reached.contains(&i))), json!(unplanted), json!(undo));
+        (out["squares"], out["unplanted"], out["undo"], out["frame"]) = (json!(l.cells.squares_in(|i| reached.contains(&i))), json!(unplanted), json!(undo), json!(frame));
         out
     });
     give(out.to_string().into_bytes())
@@ -231,7 +284,7 @@ pub extern "C" fn soften() {
 #[no_mangle]
 pub extern "C" fn undo() -> *const u8 {
     let out = with(|l| {
-        let Some(mut before) = l.before.take() else { return json!({"done": false}) };
+        let Some((mut before, moved)) = l.before.take() else { return json!({"done": false}) };
         // (Its samples kept as those of its new version: none are built again.)
         let version = l.world.relief.version + 1;
         before.terrain.rename_built(before.relief.version, version);
@@ -239,13 +292,16 @@ pub extern "C" fn undo() -> *const u8 {
         l.world = before;
         (l.stroke, l.ready) = (None, None);
         l.follow();
+        // (It moves back what the stroke moved.)
+        let last = l.since.last_mut().expect("a version");
+        last.moved = last.moved.or(moved);
         json!({"done": true})
     });
     give(out.to_string().into_bytes())
 }
 
-/// The world waits for edits (the page paused it): a copy of it is kept for the first stroke (`Live::ready`), so that
-/// stroke's first call need not copy it; none where the last stroke's undo is kept (the next stroke copies the world
+/// The world waits for edits (the page paused it, or undid a stroke): a copy of it is kept for the first stroke
+/// (`Live::ready`), so that stroke's first call need not copy it; none where the last stroke's undo is kept (the next stroke copies the world
 /// then, so no more than two copies of it are kept between strokes).
 #[no_mangle]
 pub extern "C" fn hold() {
@@ -262,11 +318,8 @@ pub extern "C" fn hold() {
 #[no_mangle]
 pub extern "C" fn ground_shown(version: u32) {
     with(|l| {
-        let Some(at) = l.since.iter().position(|v| v.0 == version) else { return };
+        let Some(at) = l.since.iter().position(|v| v.version == version) else { return };
         l.since.drain(..at);
-        let mut shown = vec![0.0; l.world.terrain_samples().h.len()];
-        l.since[0].1.iter().for_each(|&(k, m)| shown[k] = m);
-        (l.shown, l.over) = (shown, version);
     })
 }
 
@@ -276,27 +329,28 @@ pub extern "C" fn ground_shown(version: u32) {
 /// version (`ground_version` as `ground_shown` last took it; five u32), then of each sample of the window, row by row,
 /// how far its ground moved, m (f32), then the depth of its loose ground once the samples are built again over the
 /// ground as it stands (`World::loose_to_build`, m, f32), little-endian; an empty window (0, 0, 0, 0) where none
-/// moved.
+/// moved. Only the samples edits may have moved since (`Built::moved`) are looked at.
 #[no_mangle]
 pub extern "C" fn preview() -> *const u8 {
-    let bytes = with(|l| {
-        let (now, shown) = (&l.world.relief.shaped, &l.shown);
-        let at = |v: &[f64], k: usize| v.get(k).copied().unwrap_or(0.0);
+    let bytes: Vec<u8> = with(|l| {
+        let (shown, newest) = (&l.since[0], l.since.last().expect("a version"));
+        let now = |k: usize| l.world.relief.shaped_at(k);
         let across = l.world.terrain_samples().across;
-        let moved = |k: usize| at(now, k) != at(shown, k);
+        let moved = |k: usize| now(k) != shown.shaped_at(k);
+        let may = l.since.iter().fold(Area::NONE, |a, v| a.or(v.moved));
         let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
-        for k in (0..now.len().max(shown.len())).filter(|&k| moved(k)) {
+        for k in may.samples(across).filter(|&k| moved(k)) {
             let (x, y) = (k % across, k / across);
             (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
         }
         let window: [u32; 4] = if x0 == usize::MAX { [0; 4] } else { [x0, y0, x1 - x0, y1 - y0].map(|v| v as u32) };
         let ks: Vec<usize> = (y0..y1).flat_map(|y| (x0..x1).map(move |x| y * across + x)).collect();
-        let dh = ks.iter().map(|&k| (at(now, k) - at(shown, k)) as f32);
+        let dh = ks.iter().map(|&k| (now(k) - shown.shaped_at(k)) as f32);
         // The heights the samples will be built at: those last built with what edits shaped since.
         let built = l.world.terrain_samples();
-        let loose = l.world.loose_to_build(&ks, &|j| built.h[j] + at(now, j) - at(&l.version, j));
+        let loose = l.world.loose_to_build(&ks, &|j| built.h[j] + now(j) - newest.shaped_at(j));
         let tail = dh.chain(loose.iter().map(|&m| m as f32));
-        window.iter().chain([&l.over]).flat_map(|v| v.to_le_bytes()).chain(tail.flat_map(|v| v.to_le_bytes())).collect()
+        window.iter().chain([&shown.version]).flat_map(|v| v.to_le_bytes()).chain(tail.flat_map(|v| v.to_le_bytes())).collect()
     });
     give(bytes)
 }

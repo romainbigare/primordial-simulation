@@ -69,6 +69,11 @@ const PACE_MS = 1000;
 
 const host = self as unknown as { postMessage(m: unknown, transfer: Transferable[]): void; onmessage: ((e: MessageEvent<Command>) => void) | null };
 let core: Core | null = null;
+/** The core compiled (`init`): a new or saved world after the core stopped stands on a new instance of it. */
+let compiled: WebAssembly.Module | null = null;
+/** Why the core stopped, in plain words, once a call trapped inside it (a panic aborts and leaves its state locked):
+ * every command after is answered with it, till a new or saved world starts a new instance. */
+let stopped = '';
 let playing = false;
 /** Months of the world per second of real time (Infinity: as many as a tick holds). */
 let rate = 12;
@@ -108,8 +113,12 @@ function handIn(data: ArrayBuffer, use: () => number): string {
 function preview(): { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array } {
   const c = core!, raw = bytes(c.preview(), c.out_len());
   const head = new Uint32Array(raw.buffer, 0, PREVIEW_HEAD), n = head[2] * head[3], at = 4 * PREVIEW_HEAD;
-  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer.slice(at, at + 4 * n)), loose: new Float32Array(raw.buffer.slice(at + 4 * n)) };
+  // (Both views of the one copy, which the page takes over: `moved`.)
+  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer, at, n), loose: new Float32Array(raw.buffer, at + 4 * n, n) };
 }
+
+/** The buffers of a preview, for the page to take over. */
+const moved = (p: { dh: Float32Array }): Transferable[] => [p.dh.buffer];
 
 /** The text the core last returned at `at`. */
 function text(at: number): string {
@@ -159,10 +168,19 @@ function tick(): void {
     if (owed && unshown === 0 && performance.now() - posted >= FRAME_MS) postFrame('frame');
   } catch (e) {
     playing = false;
-    host.postMessage({ kind: 'error', text: `The world stopped: ${String(e)}` }, []);
+    failed(e);
     return;
   }
   if (playing) timer = setTimeout(tick, GAP_MS);
+}
+
+/** Tell the page of the error `e`; a trap inside the core stops it (`stopped`). */
+function failed(e: unknown): void {
+  if (e instanceof WebAssembly.RuntimeError) {
+    core = null;
+    stopped = `The world stopped: the core failed inside (${e.message}). Make a new world, or open a saved one.`;
+  }
+  host.postMessage({ kind: 'error', text: stopped || (e instanceof Error ? e.message : String(e)) }, []);
 }
 
 function start(on: boolean): void {
@@ -175,11 +193,13 @@ host.onmessage = async e => {
   const m = e.data;
   try {
     if (m.cmd === 'init') {
-      core = (await WebAssembly.instantiate(m.wasm, {})).instance.exports as unknown as Core;
+      compiled = await WebAssembly.compile(m.wasm);
+      core = (await WebAssembly.instantiate(compiled, {})).exports as unknown as Core;
       host.postMessage({ kind: 'ready' }, []);
-    } else if ((m.cmd === 'new' || m.cmd === 'open') && core) {
-      // A new world, or the saved one handed in.
+    } else if ((m.cmd === 'new' || m.cmd === 'open') && compiled) {
+      // A new world, or the saved one handed in (on a new instance of the core where it stopped).
       start(false);
+      if (!core) { core = (await WebAssembly.instantiate(compiled, {})).exports as unknown as Core; stopped = ''; }
       const c = core, refused = m.cmd === 'open' ? handIn(m.saved, () => c.open_world())
         : c.new_world(m.seed, m.size, m.band[0], m.band[1], m.drawn ? 1 : 0, m.variety, m.soft ? 1 : 0) !== 0 ? 'The world was refused.' : '';
       if (refused) throw new Error(refused);
@@ -195,6 +215,7 @@ host.onmessage = async e => {
       if (!playing && core) core.hold();
     }
     else if (m.cmd === 'rate') rate = m.rate;
+    else if (stopped && m.cmd !== 'shown') host.postMessage({ kind: 'error', text: stopped }, []);
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
     else if (m.cmd === 'brush' && core) {
@@ -202,8 +223,10 @@ host.onmessage = async e => {
       // of the ground it moved (drawn till the page's ground shows it) and a frame (with the relief of the ground's new
       // version, where it built the samples again).
       const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
-      const sends = JSON.parse(answer) as { preview: boolean; frame: boolean };
-      host.postMessage({ kind: 'brushed', text: answer, ...(sends.preview ? { preview: preview() } : {}) }, []);
+      const sends = JSON.parse(answer) as { preview: boolean; frame: boolean; refused?: string };
+      if (sends.refused) throw new Error(sends.refused);
+      const p = sends.preview ? preview() : null;
+      host.postMessage({ kind: 'brushed', text: answer, ...(p ? { preview: p } : {}) }, p ? moved(p) : []);
       if (sends.frame) postFrame('frame', true);
     }
     else if (m.cmd === 'save' && core) {
@@ -221,27 +244,39 @@ host.onmessage = async e => {
         sentBuilds = core.ground_version() + 1;
         host.postMessage({ kind: 'relief', relief, reliefVersion: sentBuilds }, [relief.buffer]);
       }
-      if (m.cmd === 'settle') host.postMessage({ kind: 'settled', text: text(core.settle()) }, []);
-      else core.soften();
-      postFrame('frame', true);
+      // A stroke's end sends a frame where the world changed since the last (a lake's paint sent its own).
+      let framed = true;
+      if (m.cmd === 'settle') {
+        const answer = text(core.settle());
+        framed = (JSON.parse(answer) as { frame: boolean }).frame;
+        host.postMessage({ kind: 'settled', text: answer }, []);
+      } else core.soften();
+      if (framed) postFrame('frame', true);
     }
     else if (m.cmd === 'undo' && core) {
       // The world as before the last stroke (`undo`): its frame, the relief of its ground's new version, and the preview
-      // of what moved since the ground the page shows.
-      host.postMessage({ kind: 'undone', text: text(core.undo()), preview: preview() }, []);
+      // of what moved since the ground the page shows; then a copy kept for the next stroke (`hold`), as at a pause.
+      const done = text(core.undo()), p = preview();
+      host.postMessage({ kind: 'undone', text: done, preview: p }, moved(p));
       postFrame('frame', true);
+      core.hold();
     }
     else if (m.cmd === 'groundShown' && core) {
       // The page's ground shows the samples of this version now: what edits moved since (`preview`).
       core.ground_shown(m.version);
-      host.postMessage({ kind: 'preview', preview: preview() }, []);
+      const p = preview();
+      host.postMessage({ kind: 'preview', preview: p }, moved(p));
     }
     else if (m.cmd === 'things' && core) {
+      // A playing world's next frame brings them; a paused one's come alone (the frame would be the same).
       thingsAt = m.at;
-      if (!playing) postFrame('frame');
+      if (!playing) {
+        const things = thingsAt ? bytes(core.things(...thingsAt), core.out_len()) : null;
+        host.postMessage({ kind: 'things', things }, things ? [things.buffer] : []);
+      }
     }
   } catch (err) {
-    host.postMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) }, []);
+    failed(err);
   }
 };
 

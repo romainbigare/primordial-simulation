@@ -189,7 +189,7 @@ impl Recorder {
         }
         if framed {
             self.files.frames.push(w.day());
-            frame(&c, &mut self.files.bytes);
+            frame(&c, &crate::layers::pixels(w), &mut self.files.bytes);
         }
     }
 
