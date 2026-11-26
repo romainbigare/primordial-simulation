@@ -35,7 +35,7 @@ pub struct Config {
     pub build_years: u64,
     /// Depth of the loose ground an edit that raises the ground lays over the rock it raises, m (`World::shape`)
     pub edit_top_m: f64,
-    /// Height of the bank a dug basin keeps on its rim over its liquid's level, m (`World::basin`)
+    /// Height over its liquid's level of the bank a dug basin raises where its rim would leak, m (`World::basin`)
     pub edit_bank_m: f64,
     /// Speed setting: a sleeping node that has gained over this share of an amount it held when it fell asleep wakes
     pub wake_share: f64,

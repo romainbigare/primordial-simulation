@@ -166,11 +166,11 @@ fn disc_samples(w: &World, place: [f64; 2], r: f64) -> Vec<usize> {
     (0..s.h.len()).filter(|&k| (((k % s.across) as f64 + 0.5 - place[0] * per).hypot((k / s.across) as f64 + 0.5 - place[1] * per)) * m <= r).collect()
 }
 
-/// A basin of liquid (`Act::Basin`): the ground under a brush is cut to a floor `DEPTH` under the lowest dry sample of
-/// its rim, none of it raised, and the key liquid poured in to its pass with what the pores under it lack, from the
-/// outside node, so the books are kept. The floor is a closed basin, a pond at least that deep to its pass, whose body
-/// holds the liquid: on dry ground it covers the brush and stands the asked depth over the floor at once, and still
-/// after a month.
+/// A basin of liquid (`Act::Basin`): the ground under a brush is cut to a bowl `DEPTH` under the lowest dry sample of
+/// its rim at its centre, none of it raised, and the key liquid poured in to its pass with what the pores under it
+/// lack, from the outside node, so the books are kept. The floor is a closed basin, a pond that deep to its pass, whose
+/// body holds the liquid: on dry ground it covers the brush's middle and stands the asked depth over the floor at once,
+/// and still after a month.
 #[test]
 fn a_basin_holds_its_liquid() {
     const DEPTH: f64 = 5.0;
@@ -193,7 +193,8 @@ fn a_basin_holds_its_liquid() {
     assert!(pond != pcore::space::network::NONE, "the floor is no pond");
     let under = disc_samples(&w, place, r);
     assert!(under.iter().all(|&j| w.relief.shaped[j] <= 0.0), "ground under the brush raised");
-    assert!(under.iter().all(|&j| s.pond[j] == pond), "the liquid covers {} of the brush's {} samples", under.iter().filter(|&&j| s.pond[j] == pond).count(), under.len());
+    let middle = disc_samples(&w, place, 0.5 * r);
+    assert!(middle.iter().all(|&j| s.pond[j] == pond), "the liquid covers {} of the brush's middle's {} samples", middle.iter().filter(|&&j| s.pond[j] == pond).count(), middle.len());
     let depth = |w: &World| w.pond_levels()[pond as usize] - s.h[k];
     let (now, full) = (depth(&w), s.ponds[pond as usize].level - s.h[k]);
     assert!(full >= DEPTH - 1e-6 && now >= (1.0 - FULL_SHARE) * DEPTH && now <= full + 1e-6, "the liquid stands {now} m deep, {full} m to its pass");
@@ -224,7 +225,7 @@ fn a_basin_that_reaches_a_pond_grows_it() {
     assert!(pond != NONE, "the first pond");
     let level = w.pond_levels()[pond as usize];
     let members: Vec<usize> = (0..s.h.len()).filter(|&k| s.pond[k] == pond && s.h[k] < level).collect();
-    for apart in [1.0, 1.8, 2.4] {
+    for apart in [1.0, 1.6, 2.4] {
         let mut v = w.clone();
         let books = Books::now(&v);
         let at = [place[0] + apart * r / v.map.side, place[1]];

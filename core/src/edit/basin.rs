@@ -1,9 +1,10 @@
 //! A basin of liquid made by an edit (handover.md 11.1: add liquid; the ground dug and the key liquid added): the
-//! ground under a brush cut down to a floor a depth under the level the liquid is to stand at, the lowest dry ground
-//! of its rim, or the level of the liquid of the ponds its cut opens, so a pond it reaches grows over it at its own
-//! level; a bank of `edit_bank_m` over that level on its rim where lower, its spoil, but at its outlet, at the level;
-//! and the key liquid poured in to its pass, all from the outside node. So the basin is closed by its making: a pond
-//! of the samples, whose body keeps what is poured into it, and never one that lowers a pond it reaches.
+//! ground under a brush cut to a smooth bowl, a depth under the level the liquid is to stand at in its middle, its
+//! banks meeting the ground about it with no step; that level the lowest dry ground of its rim, or the level of the
+//! liquid of the ponds its cut opens, so a pond it reaches grows over it at its own level; a bank of `edit_bank_m` over that level only where its rim would let
+//! the liquid out, but at its outlet, at the level; and the key liquid poured in to its pass, all from the outside
+//! node. So the basin is closed by its making: a pond of the samples, whose body keeps what is poured into it, and
+//! never one that lowers a pond it reaches.
 
 use super::brush::Covered;
 use super::Brush;
@@ -17,6 +18,12 @@ use std::collections::{BTreeMap, BTreeSet};
 /// has its neighbours across sides and corners under it or on the ring.
 const RIM_SAMPLES: f64 = 1.5;
 
+/// Where a basin's bowl meets its level, in radii of its brush: its shore on even ground.
+const SHORE: f64 = 0.85;
+
+/// Where a basin's banks begin, in radii of its brush: from there to its edge its cut lessens to none.
+const BANKS_FROM: f64 = 0.5;
+
 /// How many times at most a basin pours again what its cells' other liquid and pores took of its liquid as it settled.
 const TOP_UPS: usize = 3;
 
@@ -29,9 +36,10 @@ impl World {
     /// the liquid of the closed ponds that stands on its samples or its rim (`pond_levels`, where it lies over their
     /// ground), else the way out of its outlet: of the samples of its rim on which no liquid stands, the one the higher
     /// of whose height and the lowest sample beside it outside the rim is lowest, that height. Every sample it
-    /// covers higher than `depth` under that level is cut to it, none filled; every dry sample of the rim lower than
-    /// `edit_bank_m` over the level is raised to it, but the outlet, moved to the level (so a pond it grows leaves by
-    /// a pass at its own level, wherever its own pass lay); the ground cut or raised with each cell's own rock
+    /// covers is cut to a bowl `depth` under that level at its centre whose banks meet the level at `SHORE` of the
+    /// brush's radius and the ground about it with no step (`bowl`), none filled; every dry sample of the rim whose way out lies under the level (the liquid would leave by it)
+    /// is raised to `edit_bank_m` over it, but the outlet, moved to the level (so a pond it grows leaves by a pass at
+    /// its own level, wherever its own pass lay); the ground cut or raised with each cell's own rock
     /// (`move_ground`), and the samples built again over it (`flow::build::reshape`). The key liquid fills the pond
     /// under the brush's centre to its level, its pass, from the outside node at each cell's ground temperature, poured
     /// into each cell's part of it (`pour_pond`, one pour for all its cells); the liquid settled with no time
@@ -99,13 +107,15 @@ impl World {
         for c in &all {
             let h = s.h[c.k];
             let to = if inside(c) {
-                h.min(level - depth)
+                bowl(h, level, depth, c.d * wide.radius_m / b.radius_m)
             } else if !on_rim(c.k) || !wet(c.k).is_nan() {
                 h
             } else if Some(c.k) == outlet {
                 level
-            } else {
+            } else if way(c.k) < level {
                 h.max(bank)
+            } else {
+                h
             };
             if to != h {
                 cells.entry(c.cell).or_default().push((c.k, to - h));
@@ -162,6 +172,16 @@ impl World {
         crate::flow::pour(self, pond, liquid, &cells, |w, i, v| w.put_liquid(i, liquid, v * per_m3));
         cells.iter().map(|c| c.1).sum::<f64>() > TOP_UP_SHARE * room
     }
+}
+
+/// The height a basin cuts ground `h` m high to at `d` radii from its centre, its liquid to stand at `level` m and
+/// `depth` m deep at its centre: toward its bowl, `depth` × (1 − (d/`SHORE`)²) under the level, a paraboloid that
+/// meets the level at `SHORE`; across its banks, from `BANKS_FROM` to the brush's edge, the cut lessens by the brush's
+/// `falloff` to none, so where the ground about it lies over the level its banks rise to it over that band with no
+/// step. None filled.
+fn bowl(h: f64, level: f64, depth: f64, d: f64) -> f64 {
+    let floor = level - depth * (1.0 - (d / SHORE).powi(2));
+    h - (h - floor).max(0.0) * super::brush::falloff(((d - BANKS_FROM) / (1.0 - BANKS_FROM)).max(0.0))
 }
 
 /// Whether sample `k` of `s` lies in the open low ground (a pond of no pass).
