@@ -115,18 +115,19 @@ pub fn pores_lack(w: &World, i: usize, m2: f64) -> f64 {
 }
 
 /// `m3` m³ of the liquid `k` poured into cell `i`'s part of the body of standing liquid of pond `pond`
-/// (`Samples::ponds`), as `book` puts it in the cell's ground node: in a cell of parts it comes into its liquid
-/// (`parts::to_liquid`), and that part holds it (`State::held`), so the runoff's pass keeps it in the body
-/// (`runoff::surface`) and levels it there; the cell's state is found anew (`land::cells_state`), so a dry cell's
-/// liquid stands in a part of its own over the ground it covers (`parts::create`). Whether the cell holds a part of
-/// that pond.
+/// (`Samples::ponds`), as `book` puts it in the cell's ground node from outside (`World::cross`, before Flow's working
+/// memory is taken, so the outside node gives its potential energy, as for every edit): in a cell of parts it comes
+/// into its liquid (`parts::to_liquid`), and that part holds it (`State::held`), so the runoff's pass keeps it in the
+/// body (`runoff::surface`) and levels it there; the cell's state is found anew (`land::cells_state`), so a dry cell's
+/// liquid stands in a part of its own over the ground it covers (`parts::create`). Where that places it is the edit's
+/// work too, paid by the outside node (`book_by`). Whether the cell holds a part of that pond.
 pub fn pour(w: &mut World, i: usize, pond: u32, (k, m3): (usize, f64), book: impl FnOnce(&mut World)) -> bool {
     let mut done = false;
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
+    let amount = |w: &World| w.store.amounts(Class::Ground)[k * n + i];
+    let (before, heat) = (amount(w), w.store.heat(Class::Ground)[i]);
+    book(w);
     with(w, true, |w, s| {
-        let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
-        let amount = |w: &World| w.store.amounts(Class::Ground)[k * n + i];
-        let (before, heat) = (amount(w), w.store.heat(Class::Ground)[i]);
-        book(w);
         parts::to_liquid(w, s, &[i as u32], (&[k], &[before]), &[heat], parts::Leaves::Liquid);
         s.note(k, i, amount(w) - before, area);
         let h = &mut s.state.held[i];
@@ -134,6 +135,7 @@ pub fn pour(w: &mut World, i: usize, pond: u32, (k, m3): (usize, f64), book: imp
             (h.m3[q], done) = (h.m3[q] + m3, true);
         }
         land::cells_state(w, s, &[i as u32], true);
+        book_by(w, s, Some(crate::store::Boundary::Outside));
     });
     done
 }
@@ -215,11 +217,17 @@ fn with(w: &mut World, moving: bool, f: impl FnOnce(&mut World, &mut Scratch)) {
     w.scratch = s;
 }
 
-/// Book the lifts and falls of the parts of Flow under way (`potential::Lifts`), if any, and keep the heads of the
-/// ground cells and the mean heads of the air nodes the potential energy now has (`Scratch::lift_at`).
+/// Book the lifts and falls of the parts of Flow under way (`potential::Lifts`), if any, each node's own by its heat,
+/// and keep the heads of the ground cells and the mean heads of the air nodes the potential energy now has
+/// (`Scratch::lift_at`).
 fn book(w: &mut World, s: &mut Scratch) {
+    book_by(w, s, None);
+}
+
+/// `book`, the change of each node's own potential energy paid by the boundary node `by` where given (`Lifts::book`).
+fn book_by(w: &mut World, s: &mut Scratch, by: Option<crate::store::Boundary>) {
     if let Some(lifts) = s.lifts.take() {
-        let (now, room) = lifts.book(w, s);
+        let (now, room) = lifts.book(w, s, by);
         // Where the matter now lies, so the lifts the laws after Flow pay go from there.
         let (head, za) = now.heads();
         s.lift_at.iter_mut().zip([head, za]).for_each(|(v, h)| (v.clear(), v.extend_from_slice(h)).1);

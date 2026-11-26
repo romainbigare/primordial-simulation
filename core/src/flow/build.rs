@@ -37,7 +37,9 @@ pub fn build(w: &mut World) {
 /// those of the last build (found here only where there was none); the caches of the slow-changing ground are found
 /// again first (`scratch::refresh`: the bed an edit moved). An edit moves a cell's ground and its samples' mean
 /// by the same volume, so its offset stays, to within the rounding of the areas, and the samples move only where edits
-/// shaped them.
+/// shaped them. What the new samples lift or lower of the matter of the cells (where in a cell it lies) is the edits'
+/// work: the outside node pays it, not the cells' heat (`book_by`), so the outside pays all an edit changes of the
+/// potential energy (`World::cross` paid for its matter as the cells stood before).
 pub fn reshape(w: &mut World) {
     if w.relief.offset.len() != w.mesh.cells().n() {
         w.relief.offset = offsets(w);
@@ -48,6 +50,7 @@ pub fn reshape(w: &mut World) {
         let old = w.terrain_samples();
         anew(w, s, &old);
         reroute(w, (&old, &w.terrain_samples()));
+        super::book_by(w, s, Some(crate::store::Boundary::Outside));
     });
     after(w);
 }

@@ -248,7 +248,8 @@ with what the pores of the ground under it lack to be full (a real body on dry g
 first: of a node that is one, its pores' lack at the cell's mean under the pond's samples alone, `flow::pores_lack`),
 from the outside node at the ground's temperature and liquid (with its fusion enthalpy where that ground is frozen),
 poured into each cell's part of that pond's body (`flow::pour`: in a cell of parts it comes into its liquid, and the
-part holds it, so the runoff's pass keeps it there); where the floor still opens to the open low ground (a rim under
+part holds it, so the runoff's pass keeps it there), the outside node giving its potential energy where it comes to
+lie, so the cells keep their temperature; where the floor still opens to the open low ground (a rim under
 the sea's level), none (its liquid stands there already), and a brush whose centre lies in the open low ground makes
 none (where the samples were built again to read the ground, the liquid still settles over them, as the settling of
 the edits would). Then the liquid settles over the ground (below); what the cells' other liquid and pores took of it is poured
@@ -264,7 +265,9 @@ does not follow an edit; the cell's soil keeps its texture. What an edit starts 
 (`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
 it as a build builds them, without the lobes, without counting a build of the years and with the cells' offsets of the
 last build (`flow::build::reshape`: an edit moves a cell's ground and its samples' mean by one volume, so its offset
-stays to within the rounding of the areas, and the samples move only where edits shaped them; a new version of the
+stays to within the rounding of the areas, and the samples move only where edits shaped them; what the new samples
+lift or lower of the cells' matter, where in a cell it lies, is the edits' work, paid by the outside node and not by
+the cells' heat, so the outside node pays all an edit changes of the potential energy; a new version of the
 relief, `Relief::version`, by which built samples are kept, and how the offsets raise the samples kept by the offsets,
 `relief::Lift`; each cell's ground by height found again only where its samples moved, `curve::update`), and what runs through each sample (its mean
 over about a year, `World::discharge`) runs down the new ways: what each sample adds of its own (what runs through it

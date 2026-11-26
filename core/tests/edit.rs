@@ -419,3 +419,33 @@ fn a_basin_not_made_still_settles_the_stroke_before_it() {
     let state = |w: &World| w.store.amounts(Class::Ground).iter().chain(w.store.heat(Class::Ground)).map(|x| x.to_bits()).collect::<Vec<u64>>();
     assert!(state(&w) == state(&alone) && w.relief.version == alone.relief.version, "the stroke's ground not settled");
 }
+
+/// The liquid poured into a pond (`flow::pour`, as a basin pours it) comes from the outside node with its potential
+/// energy where it comes to lie, as the ground an edit raises does (`World::cross`): the cell keeps its temperature, to
+/// within the rounding, and the books are kept.
+#[test]
+fn a_poured_pond_leaves_its_cells_temperature() {
+    let mut w = small_world();
+    let i = inland(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let place = [(x0 + x1) / 2.0, (y0 + y1) / 2.0];
+    let act = Act::Basin { radius_m: 0.4 * w.map.side, depth_m: 5.0 };
+    assert_eq!(w.edit(&[Edit { place, act }]), [true]);
+    let s = w.terrain_samples();
+    let per = (s.across / w.map.w) as f64;
+    let pond = s.pond[(place[1] * per) as usize * s.across + (place[0] * per) as usize];
+    drop(s);
+    let k = pcore::cover::Parts::of(&w.chem).expect("the liquid").liquid;
+    let m3 = POURED_M * w.mesh.cells().area()[i];
+    let mol = m3 * w.chem.subs[k].density[1] / w.chem.subs[k].molar_mass;
+    let (books, t0) = (Books::now(&w), w.t_ground(i));
+    assert!(pcore::flow::pour(&mut w, i, pond, (k, m3), |w| worldgen::testkit::put(w, k, i, mol)), "the cell holds no part of its pond");
+    books.assert_kept(&w, 1e-9);
+    let t = w.t_ground(i);
+    assert!((t - t0).abs() < POURED_KELVIN, "the cell went from {t0} K to {t} K");
+}
+
+/// The depth over its cell the test pours into a pond, m.
+const POURED_M: f64 = 2.0;
+/// How far the temperature of a cell a pond is poured into may move, K: the rounding of its heat.
+const POURED_KELVIN: f64 = 1e-9;
