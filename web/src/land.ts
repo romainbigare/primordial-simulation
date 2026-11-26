@@ -113,6 +113,8 @@ export class Land {
   /** The time the flow's signs stand at while one picture is drawn in tiles (performance.now, ms; null: each draw's
    * own), so all its tiles show the signs at one place along the channels. */
   flowAt: number | null = null;
+  /** How many times the table, the flows or the rock were sent to the GPU (`lawBinds`): what is drawn from them changed. */
+  private written = 0;
 
   /** `version`: the version of the world's samples `tiles` are made of. */
   constructor(readonly tiles: GroundTiles, private laws: Laws, private samples: SamplesOf, version: number) {
@@ -316,11 +318,11 @@ export class Land {
     const m = this.tiles.map;
     if (this.tex && this.tex.h !== this.rows) { gpu.drop(this.tex); this.tex = null; }
     this.tex ??= gpu.texture('land', m.w, this.rows, 'rgba32float');
-    if (this.due) { gpu.write(this.tex, this.data); this.due = false; }
+    if (this.due) { gpu.write(this.tex, this.data); this.due = false; this.written++; }
     const s = this.samples;
     this.flows ??= gpu.texture('land', s.across, s.down, 'rgba16float');
-    if (this.flowsDue) { this.flowsData = this.flowsOf(); gpu.write(this.flows, this.flowsData); this.flowsDue = false; this.movedRows = null; }
-    if (this.movedRows && this.flowsData) { gpu.writeRows(this.flows, this.flowsData, this.movedRows[0], this.movedRows[1] - this.movedRows[0]); this.movedRows = null; }
+    if (this.flowsDue) { this.flowsData = this.flowsOf(); gpu.write(this.flows, this.flowsData); this.flowsDue = false; this.movedRows = null; this.written++; }
+    if (this.movedRows && this.flowsData) { gpu.writeRows(this.flows, this.flowsData, this.movedRows[0], this.movedRows[1] - this.movedRows[0]); this.movedRows = null; this.written++; }
     this.rock ??= gpu.texture('land', s.across, ROCK_PLANES * s.down, 'rgba16float');
     if (this.rockAt !== this.tiles.rockVersion) {
       // (A new rock holds the ground's own everywhere: the preview is set in it anew.)
@@ -330,10 +332,12 @@ export class Land {
       gpu.write(this.rock, this.rockShown ?? Uint16Array.from({ length: 4 * ROCK_PLANES * s.across * s.down }, (_, i) => (i % 4 || i >= 4 * s.across * s.down ? 0 : half(NO_ROCK_YET_M))));
       this.rockAt = this.tiles.rockVersion;
       this.rockRows = null;
+      this.written++;
     }
     if (this.rockRows && this.rockShown) {
       gpu.writeRows(this.rock, this.rockShown, this.rockRows[0], this.rockRows[1] - this.rockRows[0]);
       this.rockRows = null;
+      this.written++;
     }
     const t = this.tiles.textures(gpu), l = this.laws, tm = this.tiles.meta;
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, this.tiles.depth, tm.step_most)
@@ -341,6 +345,11 @@ export class Land {
       .vec4(s.across, s.down, s.depth, this.drawn).vec4(tm.along_wrap, l.flood, this.slid(this.flowAt ?? performance.now()), l.flood ** -l.station).vec4(...l.line_law);
     return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
   }
+
+  /** What the draws that read the live map's laws read (`lawBinds`) as it stands, as text, but for its time (the tiles'
+   * fade, the flow's signs): it changes with what was sent to the GPU, the depth drawn and the pixels the detail is
+   * chosen by. */
+  contents(): string { return [this.written, this.tiles.written, this.tiles.depth, this.drawn].join(); }
 
   stop(gpu: Gpu | null): void {
     this.tiles.stop(gpu);

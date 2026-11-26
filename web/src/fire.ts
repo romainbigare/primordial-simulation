@@ -70,6 +70,8 @@ export class Fire {
   private smoke: Texture | null = null;
   private noSmoke: Texture | null = null;
   private smokeDue = false;
+  /** How many times planes were put (`put`): what is drawn of fire changed. */
+  private written = 0;
   /** The planes last put, as `put` took them. */
   private last: [number, number, number, FirePlanes | null, number, number] = [0, 0, 1, null, 0, 0];
   /** The burns of god mode laid about their strikes (burns.ts). */
@@ -106,6 +108,7 @@ export class Fire {
   put(w: number, h: number, cellM: number, p: FirePlanes | null, never: number, month: number): void {
     this.last = [w, h, cellM, p, never, month];
     if (this.held) return;
+    this.written++;
     this.w = w; this.h = h; this.cellM = cellM; this.never = never;
     if (p) this.burns.keep(p.age, month, never);
     // (Saturated ground does not burn: a scar lies on the dry land alone.)
@@ -156,6 +159,10 @@ export class Fire {
 
   /** Whether a burn is about to play or plays now. */
   playing(): boolean { return this.held || this.burns.playing(); }
+
+  /** What the plants' marks read of fire (`planeBinds`) at time `now` (performance.now, ms), as text, but for the time
+   * itself (which only the flames read): the planes put and the burns of god mode as they stand. */
+  contents(now: number): string { return [this.written, ...this.burns.uniforms(now, this.last[5])].join(); }
 
   /** The world stepped: the burns have burnt out, and the fire shown is the core's own (each burn kept still lies
    * about its strike). */

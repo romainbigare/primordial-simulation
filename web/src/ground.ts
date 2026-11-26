@@ -136,6 +136,8 @@ export class GroundTiles {
   /** Whether the tiles that came wait to be sent to the GPU, with the page and the tiles' numbers that name them (the
    * map holds them while the view moves, map.ts `hold`): what the GPU holds stays as it was, whole. */
   held = false;
+  /** How many times something was sent to the GPU (`textures`): what is drawn from the tiles changed. */
+  written = 0;
 
   /** `version`: the version of the world's samples `ground` is made of. */
   constructor(source: string, wasm: ArrayBuffer, ground: GroundOf, readonly map: MapOf, readonly meta: TileMeta, version: number, private changed: (shown: boolean) => void, error: (text: string) => void) {
@@ -440,6 +442,7 @@ export class GroundTiles {
     this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 2, 'rgba32float');
     const now = performance.now() - this.start;
     if (this.held && this.pages) return { atlas: this.atlas, areas: this.areas, pages: this.pages, tiles: this.tilesTex, now };
+    if (this.come.length) this.written++;
     for (const c of this.come) {
       gpu.write(this.atlas, c.data.subarray(0, PLANE_A * n), 0, c.layer);
       gpu.write(this.areas, c.data.subarray(PLANE_A * n, (PLANE_A + PLANE_B) * n), 0, c.layer);
@@ -449,9 +452,10 @@ export class GroundTiles {
       if (this.pages?.w !== this.page.w || this.pages.h !== this.page.h) { if (this.pages) gpu.drop(this.pages); this.pages = gpu.texture('tiles', this.page.w, this.page.h, 'rgba32float'); }
       gpu.write(this.pages, this.page.data);
       this.pageDue = false;
+      this.written++;
     }
     if (!this.fades) this.faded(now);
-    if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; }
+    if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; this.written++; }
     return { atlas: this.atlas, areas: this.areas, pages: this.pages!, tiles: this.tilesTex, now };
   }
 
