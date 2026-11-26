@@ -40,11 +40,13 @@ function clumpOf(height: number, from: number): number {
   return BUSH_GROW + (1 - BUSH_GROW) * trees;
 }
 
+/** The logarithms of the lattices' sides (`shareByWidth`). */
+const LOG_LATTICES = LATTICES.map(Math.log);
 /** The share of a kind of crown width `w`, m, drawn on lattice `l` by its width: between the two lattices whose sides
  * lie either side of it, by where it lies between them on a log scale; all on the first below it and on the last above
  * it. */
 function shareByWidth(w: number, l: number): number {
-  const x = Math.log(Math.max(w, 1e-6)), at = LATTICES.map(Math.log);
+  const x = Math.log(Math.max(w, 1e-6)), at = LOG_LATTICES;
   const below = l > 0 ? clamp((x - at[l - 1]) / (at[l] - at[l - 1])) : 1, above = l < at.length - 1 ? clamp((at[l + 1] - x) / (at[l + 1] - at[l])) : 1;
   return Math.min(below, above);
 }

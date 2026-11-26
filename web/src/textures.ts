@@ -34,6 +34,8 @@ export class CoverMarks {
   private kinds: Kinds | null = null;
   private tableTex: Texture | null = null;
   private fieldTex: Texture | null = null;
+  /** The field as the GPU takes it, 16-bit floats (kept from frame to frame: the GPU's copy after a lost context). */
+  private halves: Uint16Array | null = null;
   private due = false;
   /** The marks decided this frame (`prepare`): the bindings the cover draws with; the textures they are in, one for
    * each of their words; and the texture of the cells whose marks reach each cell. */
@@ -77,7 +79,10 @@ export class CoverMarks {
     }
     if (k) {
       gpu.write(this.tableTex!, k.table);
-      gpu.write(this.fieldTex!, Uint16Array.from(k.field.data, half));
+      const d = k.field.data;
+      if (this.halves?.length !== d.length) this.halves = new Uint16Array(d.length);
+      for (let i = 0; i < d.length; i++) this.halves[i] = half(d[i]);
+      gpu.write(this.fieldTex!, this.halves);
     }
     this.due = false;
   }

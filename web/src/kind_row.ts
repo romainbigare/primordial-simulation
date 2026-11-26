@@ -9,6 +9,8 @@ import { grownWalls, kindLook } from './style';
  * `GROUPS` of them (one number of a plane each, lib/mark.wgsl `GROUPS`; the core's `cover::GROUPS`). */
 const GROUP_AT = 22, GROUP_ROW = 4;
 const GROUPS = 4;
+/** The rows `groupsOf` fills, one a group. */
+const GROUP_ROWS = Array.from({ length: GROUPS }, () => new Float32Array(GROUP_AT));
 /** Where the row's tail starts, after its groups. */
 const TAIL_AT = GROUP_AT + GROUPS * GROUP_ROW;
 /** The numbers of a kind in the core's row (tape/src/stands.rs `row`), and the four of its tail after its groups: how
@@ -19,14 +21,16 @@ export const K = { root: 0, kg: 1, stem: 2, perM2: 3, height: 4, width: 5, cover
 
 /** The groups of plants of the kind of row `r` (`GROUP_AT`), the held ones, the large first: each a row of its own of
  * its plants' count, height, stem and crown, and the share of the ground its crowns cover (tape/src/stands.rs `plants`:
- * the crowns of its plants a m² at their width), the rest its kind's. */
+ * the crowns of its plants a m² at their width), the rest its kind's. The rows are scratch the next call fills anew
+ * (a frame finds the groups of every kind of every square). */
 export function groupsOf(r: Float32Array): Float32Array[] {
   const out: Float32Array[] = [];
   for (let g = 0; g < GROUPS && GROUP_AT + (g + 1) * GROUP_ROW <= r.length; g++) {
     const at = GROUP_AT + g * GROUP_ROW;
     if (!(r[at] > 0)) break;
-    const q = r.slice(0, GROUP_AT);
-    [q[K.perM2], q[K.height], q[K.stem], q[K.width]] = r.subarray(at, at + GROUP_ROW);
+    const q = GROUP_ROWS[g];
+    q.set(r.subarray(0, GROUP_AT));
+    q[K.perM2] = r[at]; q[K.height] = r[at + 1]; q[K.stem] = r[at + 2]; q[K.width] = r[at + 3];
     q[K.cover] = (Math.PI / 4) * q[K.perM2] * q[K.width] * q[K.width];
     out.push(q);
   }
@@ -80,7 +84,7 @@ const HARDY_REFL: Rgb = [0.03, 0.08, 0.06];
  * it turns dormant, from the cold or from drought, is the style's (style.ts). */
 const PALE_REFL: Rgb = [0.10, 0.14, 0.04];
 const PALE_MOST = 0.4;
-const mix = (a: Rgb, b: Rgb, t: number): Rgb => a.map((v, i) => v + (b[i] - v) * clamp(t)) as Rgb;
+const mix = (a: Rgb, b: Rgb, t: number): Rgb => { const k = clamp(t); return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]; };
 
 /** The reflectance of the crowns of the kind of row `r` whose walls reflect `walls`: a leaf's, less the more pigment
  * per area and the thicker its leaves (and duller), greyer the drier the ground it is made for, bluer the hardier to
