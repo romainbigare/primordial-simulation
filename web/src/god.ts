@@ -281,8 +281,8 @@ export class God {
     st.waiting = false;
     const heat = r.cells.filter(c => c.progress !== undefined);
     if (heat.length) this.heated(st, heat);
-    // (The ground's tools and a lake answer their cells as numbers.)
-    else if (typeof r.cells[0] === 'object') {
+    // (The ground's tools and a lake answer no cells: only whether they changed the world.)
+    else if (r.cells.length) {
       const done = (c: Brushed['cells'][number]) => c.done!.every(d => d);
       this.lastWhy = r.cells.some(done) ? '' : st.tool.reason(mostWhy(r.cells.filter(c => !done(c))));
     } else this.lastWhy = r.changed ? '' : st.tool.reason(UNCHANGED);

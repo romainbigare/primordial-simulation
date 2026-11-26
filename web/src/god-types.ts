@@ -12,7 +12,7 @@ export interface StartKind { row: number; name: string }
 /** What a brush did (wasm/src/edit.rs `brush`), as god mode reads it: of a planting, each cell newly under it, the share
  * of it under the brush, whether each of its edits was made and the core's reason where not; of heat, each cell under
  * it, its share, how much of the heat that lights its remains it holds (`progress`, 0 to 1) and why none would light.
- * (A brush of the ground, or a lake, answers its cells as numbers alone.) And whether it changed the world. */
+ * (A brush of the ground, or a lake, answers no cells.) And whether it changed the world. */
 export interface Brushed { cells: { cell: number; share: number; done?: boolean[]; progress?: number; why: string }[]; changed: boolean }
 /** The reason god mode gives a tool (`GodTool.reason`) where a paint whose cells hold no reason changed nothing. */
 export const UNCHANGED = 'Unchanged';
