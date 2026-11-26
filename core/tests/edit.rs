@@ -281,35 +281,80 @@ fn a_basin_open_to_the_low_ground_pours_nothing() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// What runs into the open low ground of samples `s` of world `w`, mol/s: the yearly flows of the samples in no pond
+/// whose liquid runs into it.
+fn to_low(w: &World, s: &pcore::space::samples::Samples) -> f64 {
+    use pcore::space::network::NONE;
+    let open = |k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
+    (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && open(s.to[k] as usize)).map(|k| w.discharge[k] as f64).sum()
+}
+
+/// A world `w` with a hill raised at sample `k` (radius `r` m, 60 m high) and settled.
+fn hill_at(w: &World, k: usize, r: f64) -> World {
+    let s = w.terrain_samples();
+    let per = (s.across / w.map.w) as f64;
+    let place = [((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per];
+    let mut v = w.clone();
+    v.edit(&[Edit { place, act: Act::Ground { radius_m: r, height_m: HILL_M, stroke_m: 0.0, make: 0 } }]);
+    v.settle();
+    v
+}
+
+/// The height of the hills the tests of the flows raise, m.
+const HILL_M: f64 = 60.0;
+/// How far what runs into the open low ground may move when a hill moves its channels, a share: the rounding of the
+/// yearly flows (32-bit).
+const TO_LOW_SHARE: f64 = 1e-4;
+
 /// A hill raised across a channel moves the channel, never drops it: the yearly flows run down the samples' new ways,
 /// and a pond the hill dams passes on what comes into it from its pass (`flow::build::reroute`), so what runs into the
 /// open low ground is what ran into it before, to the rounding of the flows. Of the test's channels, the first a hill
 /// dams into a new pond.
 #[test]
 fn a_hill_that_dams_a_channel_keeps_what_runs_to_the_low_ground() {
-    use pcore::space::{network::NONE, samples::Samples};
+    use pcore::space::network::NONE;
     let w = small_world();
-    let to_low = |w: &World, s: &Samples| -> f64 {
-        let open = |k: usize| s.pond[k] != NONE && s.ponds[s.pond[k] as usize].pass == NONE;
-        (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && open(s.to[k] as usize)).map(|k| w.discharge[k] as f64).sum()
-    };
     let s = w.terrain_samples();
     let before = to_low(&w, &s);
-    let per = (s.across / w.map.w) as f64;
     let mut channels: Vec<usize> = (0..s.h.len()).filter(|&k| s.pond[k] == NONE && s.to[k] != NONE && s.h[k] > 0.0 && s.up[k] > 1e7).collect();
     channels.sort_by(|&a, &b| s.up[b].total_cmp(&s.up[a]));
     let passes: Vec<u32> = s.ponds.iter().map(|p| p.pass).collect();
     let dammed = channels.iter().take(DAM_TRIES).find_map(|&k| {
-        let mut v = w.clone();
-        let place = [((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per];
-        v.edit(&[Edit { place, act: Act::Ground { radius_m: 0.3 * v.map.side, height_m: 60.0, stroke_m: 0.0, make: 0 } }]);
-        v.settle();
+        let v = hill_at(&w, k, 0.3 * w.map.side);
         let t = v.terrain_samples();
         t.ponds.iter().any(|p| p.pass != NONE && !passes.contains(&p.pass)).then(|| to_low(&v, &t))
     });
     let after = dammed.expect("a hill that dams a channel");
-    assert!(before > 0.0 && ((after - before) / before).abs() < 1e-4, "ran to the low ground {before} mol/s, now {after}");
+    assert!(before > 0.0 && ((after - before) / before).abs() < TO_LOW_SHARE, "ran to the low ground {before} mol/s, now {after}");
 }
+
+/// A hill raised on a pond's pass moves its pass: the pond passes on what comes into it from its new pass, and its old
+/// pass no longer lets it over (`flow::build::reroute`), so what runs into the open low ground is what ran into it
+/// before, to the rounding of the flows, and no river is counted twice. Of the closed ponds, those that most comes into
+/// first, the first whose pass a hill moves to a new sample out of it while it stays a pond.
+#[test]
+fn a_hill_on_a_pass_keeps_what_runs_to_the_low_ground() {
+    use pcore::space::network::NONE;
+    let w = small_world();
+    let s = w.terrain_samples();
+    let before = to_low(&w, &s);
+    // The closed ponds, by their keys and passes, those that most comes into first.
+    let came = |p: usize| (0..s.h.len()).filter(|&k| s.pond[k] == p as u32).map(|k| w.discharge[k] as f64).sum::<f64>();
+    let mut closed: Vec<(usize, u32, f64)> = s.ponds.iter().enumerate().filter(|p| p.1.pass != NONE).filter_map(|(p, pond)| (0..s.h.len()).find(|&k| s.pond[k] == p as u32).map(|k| (k, pond.pass, came(p)))).collect();
+    closed.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let passes: Vec<u32> = s.ponds.iter().map(|p| p.pass).collect();
+    let moved = closed.iter().find_map(|&(key, pass, _)| {
+        let v = hill_at(&w, pass as usize, PASS_HILL_SHARE * w.map.side);
+        let t = v.terrain_samples();
+        let p = t.pond[key];
+        (p != NONE && t.ponds[p as usize].pass != NONE && !passes.contains(&t.ponds[p as usize].pass) && t.pond[pass as usize] == NONE).then(|| to_low(&v, &t))
+    });
+    let after = moved.expect("a hill that moves a pass");
+    assert!(before > 0.0 && ((after - before) / before).abs() < TO_LOW_SHARE, "ran to the low ground {before} mol/s, now {after}");
+}
+
+/// The radius of the hill raised on a pass, a share of a square's side.
+const PASS_HILL_SHARE: f64 = 0.05;
 
 /// The channels a hill is raised across in the test of a dam, at most, the largest first.
 const DAM_TRIES: usize = 20;
