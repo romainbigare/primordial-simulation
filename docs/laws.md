@@ -305,7 +305,7 @@ two layers, its soft part and its frame (`Layer::Soft`, `Layer::Frame`; the fram
 start found it), in its pores (the cover's roots reach it, a mouth does not), frozen and lying on it as the soft solid
 (as deep as the month's start found it), and frozen in its pores; and beside them what ran over it in the month (its main channel's month,
 `World::liquid_month`), which a mouth reaches though it is no amount of the cell's. **The way to it**
-(`contract::ways_to_liquid`, at the start of life's month, after Flow's): for each decade of liquid (`LEVELS`), the shortest way
+(`contract::ways_to_liquid`, at the start of life's month, after Flow's, where takers live: only they walk it): for each decade of liquid (`LEVELS`), the shortest way
 along the links between cells' centres over cells that hold land out of their liquid (`contract::land`, as the month's
 start found it) from each cell to the nearest cell whose open liquid over the month
 (standing and running) holds that much (Dijkstra 1959; ties by the cell's index); `contract::to_liquid` gives it for a need

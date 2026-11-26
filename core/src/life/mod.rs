@@ -50,9 +50,9 @@ pub struct Life {
     /// how full its pores are (`inside::wet_land`; none where it holds no land or life has no key liquid). Not saved:
     /// life's month finds it before any law reads it
     pub wet: Vec<Option<crate::inside::WetGround>>,
-    /// Per cell, from the start of life's month (`contract::ways_to_liquid`): the way over land to the nearest cell with open
-    /// liquid of at least each decade over the month, m, and that cell (`contract::to_liquid`). Not saved: life's month finds it before any
-    /// law reads it
+    /// Per cell, from the start of a month of life with takers (`contract::ways_to_liquid`; else empty): the way over
+    /// land to the nearest cell with open liquid of at least each decade over the month, m, and that cell
+    /// (`contract::to_liquid`). Not saved: life's month finds it before any law reads it
     pub(crate) to_liquid: Vec<[(f64, u32); crate::contract::LEVELS]>,
     /// Per cell, its samples sorted (`inside::Sorted`), with the samples they are of (`inside::sort_samples`). Not
     /// saved: sorted again where they are not the samples now
@@ -64,13 +64,17 @@ pub struct Life {
 }
 
 /// Once a month, after Flow's state is built in full: where the soil's liquid saturates each cell's land
-/// (`contract::wet_grounds`) and the ways to liquid (`contract::ways_to_liquid`); the month of each cell's life, one
-/// task per chunk on the pool;
+/// (`contract::wet_grounds`) and, where takers live, who walk them, the ways to liquid (`contract::ways_to_liquid`;
+/// none else); the month of each cell's life, one task per chunk on the pool;
 /// then the flames in what it left on the ground (`flame::month`); the cover's seeds land (`cover::landed`), and what
 /// the takers sent (`fauna::land`).
 pub fn month(w: &mut World) {
     crate::contract::wet_grounds(w);
-    crate::contract::ways_to_liquid(w);
+    if w.life.cells.iter().any(|c| c.fauna.any()) {
+        crate::contract::ways_to_liquid(w);
+    } else {
+        w.life.to_liquid.clear();
+    }
     let load = w.life.cells.iter().filter(|c| c.cover.any() || c.fauna.any()).count();
     run(w, load, |w, d| {
         crate::cover::step(w, d);
