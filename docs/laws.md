@@ -252,7 +252,8 @@ none. Then the liquid settles over the ground (below); what the cells' other liq
 again, up to three times, until it lacks less than a hundredth of its room, so it stands the asked depth over a dry
 floor. An edit moves the bed faster than the slow ground is checked: its caches
 are found again first (`flow::scratch::refresh`), so each cell's surface follows its new ground. The samples' loose
-ground follows an edit when they are built again (`mantle::edited`): a lowering takes it first, and on a sample an edit
+ground follows an edit when they are built again (`mantle::edited`): a lowering takes it first, from its top, where what
+the liquid laid lies (`Samples::settled`, never more than the loose ground), and on a sample an edit
 shaped no more stays than the creep holds on its new slope (the mantle's balance with nothing coming from upslope, the
 bed breaking as under ground that does not lower), so the flanks of a hill raised steeper than loose ground rests at
 are bare bed, and the cells' plants root by it (`cover::loose_bins`). **Known limit:** the make of the samples' bed

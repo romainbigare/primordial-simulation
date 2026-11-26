@@ -106,6 +106,7 @@ fn a_steep_raised_hill_bares_its_flanks() {
     assert!(ks.iter().zip(&read).all(|(&k, &m)| m == after.loose[k]), "the shell reads the build's loose ground");
     let bared = ks.iter().filter(|&&k| before.loose[k] > 0.0 && after.loose[k] == 0.0).count();
     assert!(bared > ks.len() / 4, "{bared} of {} samples bared", ks.len());
+    assert!(ks.iter().all(|&k| after.settled[k] <= after.loose[k]), "more settled than lies loose");
     let top = *ks.iter().max_by(|&&a, &&b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
     assert!(after.loose[top] > 0.0 && after.loose[top] <= before.loose[top], "the top keeps {} of {} m", after.loose[top], before.loose[top]);
     let far = (0..after.h.len()).find(|&k| w.relief.shaped_at(k) == 0.0 && before.loose[k] > 0.0).unwrap();

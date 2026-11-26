@@ -226,7 +226,7 @@ impl Terrain {
         let ground = laid_ground(&s0, r, years);
         let mut found = self.found(seed, (&grid, rows), (h, &open, false), ground);
         for k in (0..r.shaped.len()).filter(|&k| r.shaped[k] != 0.0) {
-            found.loose[k] = edited(&grid, k, (&|j| found.h[j], found.up[k]), (found.loose[k], found.settled[k], r.shaped[k]));
+            [found.loose[k], found.settled[k]] = edited(&grid, k, (&|j| found.h[j], found.up[k]), (found.loose[k], found.settled[k], r.shaped[k]));
         }
         renumber(&mut found.pond, &mut found.ponds, &r.ponds);
         let found = Arc::new(found);
@@ -360,6 +360,6 @@ impl crate::World {
         let (grid, _, _) = grid_of(&self.map, lat);
         let (s0, built) = (self.terrain.samples(self.terrain.seed, &self.map, lat), self.terrain_samples());
         let r = &self.relief;
-        ks.iter().map(|&k| edited(&grid, k, (h, built.up[k]), (s0.loose[k] + laid_on(r, k), s0.settled[k] + laid_on(r, k), r.shaped_at(k)))).collect()
+        ks.iter().map(|&k| edited(&grid, k, (h, built.up[k]), (s0.loose[k] + laid_on(r, k), s0.settled[k] + laid_on(r, k), r.shaped_at(k)))[0]).collect()
     }
 }
