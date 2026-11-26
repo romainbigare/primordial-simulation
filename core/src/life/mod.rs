@@ -29,7 +29,7 @@ pub struct Cell {
     pub fauna: Fauna,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct Life {
     /// The life of each ground cell (taken out of the world while the cover's month runs on it, `chunk::run`)
     pub(crate) cells: Vec<Cell>,
@@ -61,6 +61,15 @@ pub struct Life {
     /// pass's start (`World::a_seen`, of each substance), the same for every cell under it, worked out where first read;
     /// else empty
     pub(crate) air_seen: Vec<std::sync::OnceLock<Vec<f64>>>,
+}
+
+impl Clone for Life {
+    /// A copy of it, without the ways to liquid (`Life::to_liquid`), which life's month finds again before its takers
+    /// read them, and with no pass running (`Life::air_seen` empty).
+    fn clone(&self) -> Life {
+        let Life { cells, stands, env, land, levels, wet, to_liquid: _, sorted, air_seen: _ } = self;
+        Life { cells: cells.clone(), stands: stands.clone(), env: env.clone(), land: land.clone(), levels: levels.clone(), wet: wet.clone(), to_liquid: Vec::new(), sorted: sorted.clone(), air_seen: Vec::new() }
+    }
 }
 
 /// Once a month, after Flow's state is built in full: where the soil's liquid saturates each cell's land

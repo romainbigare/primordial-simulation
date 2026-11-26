@@ -105,6 +105,21 @@ fn snapshot_round_trip_at_every_month() {
     }
 }
 
+/// A copy of a world with cover and takers steps as the world itself does (`World::clone`: what it shares and what its
+/// laws find again): the same fingerprint a month on.
+#[test]
+fn a_copy_of_the_world_steps_as_the_world() {
+    let mut w = two_kinds();
+    run(&mut w, 2);
+    let i = worldgen::testkit::dry_land(&w);
+    worldgen::testkit::takers(&mut w, i, 0, (10.0, 0.1));
+    run(&mut w, 1);
+    let mut copy = w.clone();
+    step(&mut w);
+    step(&mut copy);
+    assert_eq!(fingerprint(&copy), fingerprint(&w));
+}
+
 /// A roster run resumed from a snapshot taken before some of its kinds are due places them as the unbroken run does:
 /// the snapshot carries the schedule, and both runs end with the same world.
 #[test]

@@ -73,7 +73,7 @@ pub fn read_snapshot<P: DeserializeOwned>(mut z: impl Read) -> io::Result<(World
     }
     let mut w: World = bincode::deserialize_from(&mut z).map_err(bad)?;
     let plan = bincode::deserialize_from(&mut z).map_err(bad)?;
-    w.mesh = World::mesh_of(&w.map, &w.cfg);
+    w.mesh = std::sync::Arc::new(World::mesh_of(&w.map, &w.cfg));
     pcore::contract::stands(&mut w);
     Ok((w, plan))
 }

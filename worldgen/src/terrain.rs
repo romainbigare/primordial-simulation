@@ -278,7 +278,7 @@ pub(crate) fn build_on(seed: u64, map: Square, terrain: Terrain, (chem, init): (
         cfg,
         chem,
         map,
-        mesh,
+        mesh: std::sync::Arc::new(mesh),
         seed,
         time: 0,
         sleep: Default::default(),

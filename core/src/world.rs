@@ -123,9 +123,10 @@ pub struct World {
     pub chem: Chemistry,
     /// The map of squares the world is laid out on, its air blocks and the tree of its cells under them
     pub map: Square,
-    /// The shape of the world: its cells are the ground nodes, those of level `AIR` the air nodes (built from `map`, not saved)
+    /// The shape of the world: its cells are the ground nodes, those of level `AIR` the air nodes (built from `map`, not
+    /// saved; it never changes after, so a copy of the world shares it)
     #[serde(skip)]
-    pub mesh: Mesh,
+    pub mesh: std::sync::Arc<Mesh>,
     /// Seed of every keyed random draw (`rng::Rng`)
     pub seed: u64,
     /// World clock, seconds since the start (`clock`)
