@@ -32,7 +32,7 @@ fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {
 // strong, each shown as far as its waves (a tile over `WAVE_PEAK`) take a few pixels (draw.wgsl `shows_at`): their
 // slope east and south in units of the waves' spread (each axis of spread 1 where both show), and the light they focus
 // on a bed (1 on the mean; the finer scale's). Where the detail is not loaded, a flat surface.
-const WAVE_M = vec2f(4.0, 1.3); const WAVE_TURN = 0.6; const WAVE_FINE = 0.7; const WAVE_PEAK = 5.0;
+const WAVE_M = vec2f(8.0, 2.5); const WAVE_TURN = 0.6; const WAVE_FINE = 0.7; const WAVE_PEAK = 5.0;
 fn waves_read(e: f32, drift: vec2f) -> vec3f {
   if (!models_ready()) { return vec3f(0.0, 0.0, 1.0); }
   var out = vec3f(0.0, 0.0, 1.0);
@@ -61,7 +61,7 @@ fn waves_shown(e: f32) -> f32 {
 // Sea foam at the pixel seen at `e` m a pixel, slid `drift` m: the water's second layer, tiles `FOAM_TEX_M` m a side; its
 // coarse lace (even over 0..1) and its light over its mean, halved; where its lace (cells some `FOAM_LACE_M` across) is
 // finer than a few pixels, none (-1).
-const FOAM_TEX_M = 1.8; const FOAM_LACE_M = 0.25;
+const FOAM_TEX_M = 6.0; const FOAM_LACE_M = 0.8;
 fn foam_read(e: f32, drift: vec2f) -> vec2f {
   if (!models_ready() || shows_at(FOAM_LACE_M, e) <= 0.0) { return vec2f(-1.0, 0.5); }
   let uv = fract(pix_origin / FOAM_TEX_M) + (pix_local - drift) / FOAM_TEX_M;

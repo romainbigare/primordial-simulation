@@ -55,8 +55,8 @@ const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
 // snow has melted); the calcite up to `WHITING` per m, its grains finer than the light's wavelength scattering the blue
 // most (`WHITING_TINT`).
 const INLAND_CLEAR = vec3f(0.32, 0.11, 0.09);
-const DOM_SPECTRUM = vec3f(0.06, 0.25, 0.9); const DOM_MOST = 2.5; const DOM_LITTER = 0.6; const DOM_THAW = vec2f(273.0, 283.0);
-const BB_WATER = vec3f(0.0006, 0.003, 0.006); const BB_FINES = vec3f(0.02, 0.026, 0.022); const BACKSCATTER = 0.33;
+const DOM_SPECTRUM = vec3f(0.06, 0.25, 0.9); const DOM_MOST = 1.5; const DOM_LITTER = 0.1; const DOM_THAW = vec2f(273.0, 283.0);
+const BB_WATER = vec3f(0.0006, 0.003, 0.006); const BB_FINES = vec3f(0.03, 0.045, 0.035); const BACKSCATTER = 0.33;
 const BB_LOAD = vec3f(0.014, 0.010, 0.005);
 const FLOUR = 0.4; const FLOUR_TINT = vec3f(0.9, 1.0, 1.08); const FLOUR_ABSORB = 0.15; const MELT_K = vec4f(271.0, 273.5, 275.5, 279.0);
 const WHITING = 0.3; const WHITING_TINT = vec3f(0.4, 1.0, 1.3); const WHITING_K = vec2f(285.0, 300.0);
@@ -170,7 +170,7 @@ fn standing_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + STAN
 // has slope g with waves of mean square slope `hidden` too small to show (water.wgsl `surface_seen`), seen from the
 // map's view: the bed lightened (`BED_LIGHTEN`), over the water's deep colour, its surface's light `SHEEN` of what it
 // reflects (a painted map shows the water's own colour first: the sky it mirrors would grey every water alike).
-const SHEEN = 0.55;
+const SHEEN = 0.45;
 fn painted_through(bed: vec3f, depth: f32, g: vec2f, hidden: f32, o: Optics) -> vec3f {
   let t = exp(-2.0 * o.k * depth);
   return mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN) * t + o.deep * (1.0 - t) + SHEEN * surface_seen(g, MAP_VIEW, hidden);

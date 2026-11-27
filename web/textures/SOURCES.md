@@ -83,8 +83,8 @@ unpacked), then `bake/sizes.py` for its smaller sides. Drawn by `shaders/lib/tex
 
 | layer | what | source | licence |
 |---|---|---|---|
-| 0 | a sea of small waves: red and green its slope east and south, blue the light it focuses on a bed (its caustics); laid 4 m and 1.3 m across | made by `bake/water.py` from a wave spectrum (no download) | CC0 (made here) |
-| 1 | sea foam's lace, two of them made even over 0..1 (red, green), and the foam's light over its mean, halved (blue); laid 1.8 m across | ambientCG [Foam001](https://ambientcg.com/a/Foam001) (opacity and colour maps) and [Foam002](https://ambientcg.com/a/Foam002) (opacity map), 1K-JPG, shrunk to 512 | CC0 1.0 (ambientcg.com/license) |
+| 0 | a sea of small waves: red and green its slope east and south, blue the light it focuses on a bed (its caustics); laid 8 m and 2.5 m across | made by `bake/water.py` from a wave spectrum (no download) | CC0 (made here) |
+| 1 | sea foam's lace, two of them made even over 0..1 (red, green), and the foam's light over its mean, halved (blue); laid 6 m across | ambientCG [Foam001](https://ambientcg.com/a/Foam001) (opacity and colour maps) and [Foam002](https://ambientcg.com/a/Foam002) (opacity map), 1K-JPG, shrunk to 512 | CC0 1.0 (ambientcg.com/license) |
 
 ## snags.png
 

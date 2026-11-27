@@ -59,6 +59,10 @@ its front at the sea) and at two river mouths.
 The scene set `swamp` stands on a larger, wetter island (seed 1, size 48, at 42.75) where kinds stand on shallow pond
 ground (the core's footing): the shores of a shallow lake and of a deeper one under trees, at 1, 0.25 and 0.1 m a pixel, and soaked bare ground with its puddles (scene `mud`).
 
+The scene set `river_kinds` stands on `seed1`'s world at four streams that differ in what the water holds (`style.wgsl`
+`inland_optics`): one off the high ground by the ice, one over warm dry lowland, one through forest and meadow, and the
+river of scene `reach`, at 2 and 0.5 m a pixel.
+
 The scene set `card` stands on the test card (`ew card`, `worldgen/src/testkit/card.rs`): an island of 12 x 10
 squares whose block of 6 x 4 squares from square 3, 3 is set by hand, each square a kind of stand or ground the map
 draws (a tall closed stand of four size groups, an open stand over a sward, a young dense stand near 4 m, tall soft

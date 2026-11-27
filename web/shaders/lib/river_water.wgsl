@@ -11,9 +11,12 @@ const STONE_WATERED = 0.35;
 
 // The surface of running water (Spots.flow: how broken it is, its white water, how fast it runs): a pool lies smooth,
 // of mean square slope `POOL_MSS`; a riffle's water is broken, up to `RIFFLE_MSS` (a surface broken by the bed's
-// stones, as steep as wind waves of 15 m/s by Cox and Munk 1954), and white over up to `RIFFLE_FOAM` of it where it is
-// more broken than `RIFFLE_WHITE`. A channel too narrow for its pools and riffles to show is `ROUGH_FAR` broken, the mean of a reach.
-const POOL_MSS = 0.004; const RIFFLE_MSS = 0.08; const RIFFLE_FOAM = 0.18; const RIFFLE_WHITE = 0.5; const ROUGH_FAR = 0.45;
+// stones, as steep as wind waves of 15 m/s by Cox and Munk 1954), and it breaks white only where it is both broken past
+// `RIFFLE_WHITE` and shallow, under `RIFFLE_SHALLOW` of its middle's depth, there over up to `RIFFLE_FOAM` of it (the
+// bed's stones break the surface: white streaks over a riffle, the rest of the water keeps its colour). A channel too
+// narrow for its pools and riffles to show is `ROUGH_FAR` broken, the mean of a reach.
+const POOL_MSS = 0.004; const RIFFLE_MSS = 0.08; const RIFFLE_FOAM = 0.3; const RIFFLE_WHITE = 0.6; const RIFFLE_SHALLOW = 0.35;
+const ROUGH_FAR = 0.45;
 // The surface's pattern runs down the flow (a flow map: two copies slid along it, each faded out as it starts again
 // and the other at its full, so it never stretches and never jumps; Vlachos 2010): each copy runs `FLOW_CYCLE_M` of
 // the slowest water's slide (web/src/land.ts `slid`, which comes round after a length this divides), a pool's at that
@@ -72,7 +75,7 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f, shaped: f32)
   let soaked_bed = soil(g, 1.0, lit);
   // White water: over its steps and cascades, where its riffles break, and in the wakes of the stones that stand out
   // of it.
-  var white = max(flow.y, RIFFLE_FOAM * ease(RIFFLE_WHITE, 1.0, flow.x));
+  var white = max(flow.y, RIFFLE_FOAM * ease(RIFFLE_WHITE, 1.0, flow.x) * (1.0 - ease(0.0, RIFFLE_SHALLOW, w.x)) * shaped);
   let s = Stony(p.stony, p.stone, p.small, p.worn, BED_SUNK, 0.0, 0.0, 0.0, 1.0);
   let fallen = Stony(p.blocks, SCREE_STONE_M, 1.0, 0.0, BED_SUNK, 0.0, 0.0, STONE_RARE, 1.0);
   let least = p.depth / STONE_STANDS;
