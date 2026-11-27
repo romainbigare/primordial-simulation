@@ -134,8 +134,6 @@ export class Live {
   }
   /** End the stroke: what its edits start that takes no time runs at once (answered by `on.settled`). */
   settle(): void { this.worker.postMessage({ cmd: 'settle' }); }
-  /** Settle what the stroke under way did so far and go on with it (answered by a frame). */
-  soften(): void { this.worker.postMessage({ cmd: 'soften' }); }
   /** The world as a snapshot file of `ew run`, its gzip (answered by `on.saved`, with its year). */
   save(): void { this.worker.postMessage({ cmd: 'save' }); }
   /** Put the world back as before the last stroke (answered by `on.undone`). */

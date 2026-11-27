@@ -1,12 +1,12 @@
 // The tools of god mode (god-types.ts `GodTool`), in the order of the strip: each paints with the round brush
-// (wasm/src/edit.rs `brush`): Raise and Lower land move the ground under it while held, the faster the larger the brush,
-// along the brush's path, the map showing the new ground at each of the page's frames, and the world builds its samples
-// and settles its liquid over the new ground now and then while held (`soften`) and when the stroke ends (`settle`); Lake digs a basin under it at
-// once, its floor a chosen depth under the lowest point of the brush's rim (or under the level of a lake it reaches,
-// which grows over it), and fills it; Plant clears a share of each
-// cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, the
-// longer the faster, and those that hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain
-// words, from the core's own reasons. A new tool is one more entry of `godTools`.
+// (wasm/src/edit.rs `brush`): Raise and Lower land move the ground under it while held, the faster the larger the
+// brush, along the brush's path, the map showing the new ground at each of the page's frames, and the world builds its
+// samples and settles its liquid over the new ground once the brush rested after the stroke (`settle`); Lake digs a
+// basin under it at once, its floor a chosen depth under the lowest point of the brush's rim (or under the level of a
+// lake it reaches, which grows over it), and fills it; Plant clears a share of each cell under it and plants a grown
+// stand of a starting kind there; Burn heats the remains under it while held, the longer the faster, and those that
+// hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain words, from
+// the core's own reasons. A new tool is one more entry of `godTools`.
 import { UNCHANGED, type GodTool, type Probe, type StartKind } from './god-types';
 
 /** The core's brush tools (wasm/src/edit.rs `SHAPE`, `LAKE`, `PLANT`, `BURN`). */
@@ -96,7 +96,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   const shape = (sign: number): GodTool => ({
     key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise' : 'Lower',
     ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1,
-    rate: radius => sign * SHAPE_SPEED_PER_M * radius, tapS: SHAPE_TAP_S, follows: true, softens: true,
+    rate: radius => sign * SHAPE_SPEED_PER_M * radius, tapS: SHAPE_TAP_S, follows: true, rests: true,
     hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Right-drag moves the map.`, verb: `Hold to ${sign > 0 ? 'raise' : 'lower'}`,
     why: () => '', reason: why => (why === UNCHANGED ? 'No ground is left here to take away.' : why),
   });

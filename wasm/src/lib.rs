@@ -39,16 +39,17 @@ const LOAD_SHOWS: f64 = 0.25;
 
 /// The world; the version of its samples what the shell keeps of its cells is of (`Relief::version`); what is placed
 /// when, and what a recorder keeps of it (`tape::Kept`, saved with it, `save_world`); what the shell keeps of its cells
-/// (`tape::Table`); the table made with the last frame, till `table` hands it to the page; the samples' discharge, m³/s, and load, g/m³, last sent to the
-/// page (`tape::Table::discharge`, `tape::Table::load`; none before the first); the brush's stroke under way (`Stroke`;
-/// none between strokes: a stroke ends at `settle`) and the strokes begun; whether an edit changed the world since the
-/// last frame (`frame`), so a stroke's end sends one only then (`settle`); a copy of the world as it stands now, kept
-/// while it waits for edits (`hold`, and after a stroke that changed nothing), which the next stroke takes as the world
-/// before it, so its first call copies nothing; the world as it was before the last stroke that changed it began, till
-/// the world steps on (`undo`), with the samples that stroke moved (`shown::Area`); of the version of the ground the
-/// page shows (`ground_shown`) and of each built since, oldest first (`since`, `Built`), what edits had shaped, from
-/// which `preview` tells the page what edits moved since: the last is the version the cells' table is of; and the
-/// samples the last paint may have moved (`shown::preview` of a part).
+/// (`tape::Table`); the table made with the last frame, till `table` hands it to the page; the samples' discharge,
+/// m³/s, and load, g/m³, last sent to the page (`tape::Table::discharge`, `tape::Table::load`; none before the first);
+/// the brush's stroke under way (`Stroke`; none between strokes: a stroke ends at `settle`) and the strokes begun;
+/// whether an edit changed the world since the last frame (`frame`), so a stroke's end sends one only then (`settle`);
+/// a copy of the world as it stands now, kept while it waits for edits (`hold`: after a pause, an undo or a stroke's
+/// settling; and after a stroke that changed nothing), which the next stroke takes as the world before it, so its first
+/// call copies nothing; the world as it was before the last stroke that changed it began, till the world steps on
+/// (`undo`), with the samples that stroke moved (`shown::Area`); of the version of the ground the page shows
+/// (`ground_shown`) and of each built since, oldest first (`since`, `Built`), what edits had shaped, from which
+/// `preview` tells the page what edits moved since: the last is the version the cells' table is of; and the samples the
+/// last paint may have moved (`shown::preview` of a part).
 struct Live {
     world: World,
     built: u32,

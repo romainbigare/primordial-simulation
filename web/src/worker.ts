@@ -30,7 +30,6 @@ interface Core {
   kinds(): number;
   brush(tool: number, radius: number, row: number): number;
   settle(): number;
-  soften(): void;
   save_world(): number;
   undo(): number;
   hold(): void;
@@ -48,7 +47,6 @@ type Command =
   | { cmd: 'probe'; at: [number, number] }
   | { cmd: 'brush'; tool: number; stamps: Float64Array; radius: number; row: number }
   | { cmd: 'settle' }
-  | { cmd: 'soften' }
   | { cmd: 'undo' }
   | { cmd: 'groundShown'; version: number }
   | { cmd: 'save' }
@@ -237,24 +235,21 @@ host.onmessage = async e => {
       const saved = bytes(core.save_world(), core.out_len());
       host.postMessage({ kind: 'saved', saved, year: core.year() }, [saved.buffer]);
     }
-    else if ((m.cmd === 'settle' || m.cmd === 'soften') && core) {
-      // The stroke ends, or a held stroke settles what it did so far and goes on (`soften`); what its edits start that
-      // takes no time runs at once (`settle`), and its frame shows it. The relief of the ground's new version is sent
-      // first, before the world settles, so the page's ground is made again meanwhile.
-      const at = core.settled_relief(), n = core.out_len();
+    else if (m.cmd === 'settle' && core) {
+      // The stroke ends: what its edits start that takes no time runs at once (`settle`), and its frame shows it. The
+      // relief of the ground's new version is sent first, before the world settles, so the page's ground is made again
+      // meanwhile. Then, once what came meanwhile is done, a copy is kept for the next stroke (`hold`), as at a pause.
+      const c = core, at = c.settled_relief(), n = c.out_len();
       if (n > 0) {
         const relief = bytes(at, n);
-        sentBuilds = core.ground_version() + 1;
+        sentBuilds = c.ground_version() + 1;
         host.postMessage({ kind: 'relief', relief, reliefVersion: sentBuilds }, [relief.buffer]);
       }
+      const answer = text(c.settle());
+      host.postMessage({ kind: 'settled', text: answer }, []);
       // A stroke's end sends a frame where the world changed since the last (a lake's paint sent its own).
-      let framed = true;
-      if (m.cmd === 'settle') {
-        const answer = text(core.settle());
-        framed = (JSON.parse(answer) as { frame: boolean }).frame;
-        host.postMessage({ kind: 'settled', text: answer }, []);
-      } else core.soften();
-      if (framed) postFrame('frame', true);
+      if ((JSON.parse(answer) as { frame: boolean }).frame) postFrame('frame', true);
+      setTimeout(() => { try { if (core === c) c.hold(); } catch (e) { failed(e); } }, 0);
     }
     else if (m.cmd === 'undo' && core) {
       // The world as before the last stroke (`undo`): its frame, the relief of its ground's new version, and the preview

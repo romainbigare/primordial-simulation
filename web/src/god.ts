@@ -1,9 +1,9 @@
 // God mode on the live map (handover 11): the player picks a tool on the strip and edits the world with a round brush
 // (wasm/src/edit.rs `brush`, the core's `World::edit`): a tool paints as the brush moves, paints at each of the page's
 // frames while it is held (the ground, along the brush's path; heat), or makes one thing where the stroke begins (a
-// lake); when the stroke ends it settles
-// (`settle`: the ground built again, what was heated burns). With a mouse the brush is where the pointer is; on a
-// phone it stands at a sight in the middle of the map (`GodPage.aim`): a finger moves the map under it, and a stroke
+// lake); when the stroke ends it settles (`settle`: the ground built again, what was heated burns), a stroke of the
+// ground once the brush rested after it. With a mouse the brush is where the pointer is; on a phone it stands at a
+// sight in the middle of the map (`GodPage.aim`): a finger moves the map under it, and a stroke
 // lasts while the tool's big button is held, so a finger never hides the brush nor paints by mistake. A burn's stroke
 // ends as soon as the ground lights, and its fire spreads on the map (front.ts). The tools themselves are a list
 // (god-tools.ts `godTools`); this is what they share: the strip (done, the tools named, the undo of the last stroke), the
@@ -23,10 +23,10 @@ const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
 const PAINT_MS = 90, PAINT_MOVE = 0.25;
 /** A tool with a rate and no tap (`GodTool.tapS`) paints only once held this long, ms: a tap does nothing. */
 const HOLD_MS = 220;
-/** A held stroke of a tool that softens (`GodTool.softens`) settles what it did so far at most this often, ms: the
- * world's samples are built again and its liquid settles over them while the ground moves (a pause of the core of a
- * few hundred ms, so not at every step; the steps it holds up are painted together after it). */
-const SOFTEN_MS = 1000;
+/** A stroke of a tool that rests (`GodTool.rests`) settles this long after the brush was let go, ms, unless a stroke of
+ * it begins before then and goes on with it: a short lift of the brush does not settle the world (a pause of the core
+ * of a few hundred ms). */
+const SHAPE_REST_MS = 400;
 /** The ink of the brush where the tool cannot act: a dull red. */
 const NO_INK = 'rgba(196,76,60,.95)';
 /** How long the brush's size shows on the map after one is picked, ms. */
@@ -49,9 +49,8 @@ const FILL_MOST_MS = 4000;
 interface Stroke {
   tool: GodTool; last: [number, number, number]; began: number; now: [number, number]; path: [number, number][];
   sent: number; held: number; frame: number; waiting: boolean;
-  /** Of a tool with a rate: the time its paints covered, ms (the last covers what a tap lacks, `GodTool.tapS`). Of a tool
-   * that softens: when it last settled what it did so far (ms), and the paints sent then. */
-  covered: number; softened: number; softenedAt: number;
+  /** Of a tool with a rate: the time its paints covered, ms (the last covers what a tap lacks, `GodTool.tapS`). */
+  covered: number;
   /** Of heat: how much of the heat that lights them the cells under the brush hold, their mean by share over those that
    * can light (-1: no heat asked). */
   progress: number;
@@ -72,8 +71,13 @@ export class God {
   /** The timer of the question waiting for `PROBE_MS` to pass (0: none). */
   private askTimer = 0;
   /** The strokes ended whose settling the core has not answered yet, oldest first: the core answers in the order it was
-   * asked, so the answers to their paints and their settling come before those of the stroke under way. */
+   * asked, so the answers to their paints and their settling come before those of the stroke under way. The stroke
+   * let go that waits `SHAPE_REST_MS` to settle (`GodTool.rests`), and its timer; and what waits for the world to be
+   * settled (`whenSettled`). */
   private ended: Stroke[] = [];
+  private resting: Stroke | null = null;
+  private restTimer = 0;
+  private waiters: (() => void)[] = [];
   /** The map's corner and the pixels a square takes, as last drawn. */
   private drawnAt: [number, number, number] | null = null;
   /** When the size of the brush picked last stops showing on the map (ms). */
@@ -105,9 +109,9 @@ export class God {
   aiming(): boolean { return this.page.aim() !== null; }
 
   /** Put the tool away and forget the place: a new world, or god mode closed. A stroke held ends as a stroke does
-   * (`end`), so the core's answers to it come in their turn. */
+   * (`end`) and settles at once, so the core's answers to it come in their turn. */
   reset(): void {
-    this.end();
+    this.end(); this.settleNow();
     this.holdButton.classList.remove('held');
     this.probe = null; this.asking = false; this.filling = null;
     this.pick(null);
@@ -123,15 +127,36 @@ export class God {
   /** Whether a tool is on. */
   toolOn(): boolean { return this.tool !== null; }
 
-  /** Whether a stroke is under way or its settling still to come: the world does not play meanwhile. */
-  busy(): boolean { return this.stroke !== null || this.ended.length > 0; }
+  /** Whether a stroke is under way, rests (`SHAPE_REST_MS`) or its settling is still to come: the world does not play
+   * meanwhile. */
+  private busy(): boolean { return this.stroke !== null || this.resting !== null || this.ended.length > 0; }
 
-  /** Undo the last stroke, where there is one and no stroke is under way. */
+  /** Run `f` once the world is settled (play, save, undo): a stroke that rests settles at once, and `f` runs once the
+   * core answered every settling asked; never while a stroke is under way. */
+  whenSettled(f: () => void): void {
+    if (this.stroke) return;
+    this.settleNow();
+    if (this.busy()) this.waiters.push(f); else f();
+  }
+
+  /** The stroke that rests settles now (`Editor.settle`), where there is one. */
+  private settleNow(): void {
+    const st = this.resting;
+    if (!st) return;
+    clearTimeout(this.restTimer);
+    this.resting = null;
+    this.editor()?.settle();
+    this.ended.push(st);
+  }
+
+  /** Undo the last stroke once the world is settled (`whenSettled`), where there is one. */
   undo(): void {
-    if (!this.undoable || this.busy()) return;
-    this.undoable = false;
-    this.editor()?.undo();
-    this.show();
+    this.whenSettled(() => {
+      if (!this.undoable) return;
+      this.undoable = false;
+      this.editor()?.undo();
+      this.show();
+    });
   }
 
   /** Put the tool on away: true if one was on. */
@@ -141,9 +166,10 @@ export class God {
     return true;
   }
 
-  /** Take tool `t` (null: none), and say how to use it; the world pauses while one is on. A stroke under way ends. */
+  /** Take tool `t` (null: none), and say how to use it; the world pauses while one is on. A stroke under way ends, and
+   * where the tool changes, settles at once. */
   private pick(t: GodTool | null): void {
-    if (t !== this.tool) this.end();
+    if (t !== this.tool) { this.end(); this.settleNow(); }
     this.tool = t; this.lastWhy = '';
     if (t?.least && this.radius < t.least) this.radius = this.radii()[0];
     if (t) this.page.picked();
@@ -185,16 +211,20 @@ export class God {
   }
 
   /** A stroke of the tool on starting at (x, y) squares, true; false if no tool is on (the map moves). A stroke under
-   * way ends first. A tool with a rate begins to paint at once where it has a tap (`GodTool.tapS`), else once held
-   * `HOLD_MS`; another tool paints at once, and while held paints where the brush moves to (`tick`). */
+   * way ends first; a stroke that rests (`SHAPE_REST_MS`) goes on as this one where its tool rests (with its paint
+   * still awaited), else it settles first. A tool with a rate begins to paint at once where it has a tap
+   * (`GodTool.tapS`), else once held `HOLD_MS`; another tool paints at once, and while held paints where the brush
+   * moves to (`tick`). */
   start(x: number, y: number): boolean {
     const t = this.tool;
     if (!t) return false;
     this.end();
+    const on = this.resting?.tool === t && t.rests ? this.resting : null;
+    if (on) { clearTimeout(this.restTimer); this.resting = null; } else this.settleNow();
     this.page.picked();
     this.at = [x, y]; this.lastWhy = '';
     const now = performance.now();
-    const st: Stroke = this.stroke = { tool: t, last: [x, y, now], began: now, now: [x, y], path: [], sent: 0, held: 0, frame: 0, waiting: false, covered: 0, softened: now, softenedAt: 0, progress: -1 };
+    const st: Stroke = this.stroke = { tool: t, last: [x, y, now], began: now, now: [x, y], path: [], sent: on?.sent ?? 0, held: 0, frame: 0, waiting: on?.waiting ?? false, covered: 0, progress: -1 };
     if (t.rate && t.tapS === undefined) st.held = window.setTimeout(() => { if (this.stroke !== st) return; this.frames(st); this.paint(st); }, HOLD_MS);
     else if (t.rate) this.frames(st);
     else { this.paint(st); if (!t.amount) this.frames(st); }
@@ -214,14 +244,7 @@ export class God {
   private tick(st: Stroke): void {
     const aim = this.page.aim();
     if (aim) { this.follow(st, aim); this.at = aim; }
-    if (st.tool.softens && !st.waiting && st.sent > st.softenedAt && performance.now() - st.softened >= SOFTEN_MS) this.soften(st);
     if (st.tool.rate) { if (!st.waiting) this.paint(st); } else this.moved(st);
-  }
-
-  /** Stroke `st`, held, settles what it did so far and goes on (`Editor.soften`): the core answers its paints after. */
-  private soften(st: Stroke): void {
-    st.softened = performance.now(); st.softenedAt = st.sent;
-    this.editor()?.soften();
   }
 
   /** The brush of stroke `st` is at `at` (squares) now: of a tool that follows the path, where it was is kept. */
@@ -247,8 +270,8 @@ export class God {
   }
 
   /** The stroke ends: a last paint (of a tool with a rate, what the time since its last adds, and what a tap lacks;
-   * of another, where the brush moved since), and it settles; a tool with a rate and no tap let go before it painted
-   * does nothing. */
+   * of another, where the brush moved since), and it settles, a stroke of a tool that rests once it rested
+   * `SHAPE_REST_MS`; a tool with a rate and no tap let go before it painted does nothing. */
   end(): void {
     const st = this.stroke;
     if (!st) return;
@@ -257,8 +280,9 @@ export class God {
     if (st.tool.rate && st.tool.tapS === undefined && !st.sent) { this.page.redraw(); return; }
     if (st.tool.rate) this.paint(st, true);
     else if (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1])) this.paint(st);
-    this.editor()?.settle();
-    this.ended.push(st);
+    this.resting = st;
+    if (st.tool.rests) this.restTimer = window.setTimeout(() => this.settleNow(), SHAPE_REST_MS);
+    else this.settleNow();
   }
 
   /** Paint with stroke `st`'s tool where its brush is now (of a tool that follows the path, along it: `along`): by its
@@ -300,7 +324,7 @@ export class God {
   /** The core's answer to a paint: the heat it holds, or the reason, where it edited none of its cells (a lake that was
    * not dug draws no water). */
   brushed(r: Brushed): void {
-    const st = this.ended[0] ?? this.stroke;
+    const st = this.ended[0] ?? this.resting ?? this.stroke;
     if (!st) return;
     st.waiting = false;
     const heat = r.cells.filter(c => c.progress !== undefined);
@@ -332,6 +356,7 @@ export class God {
     if (r.unplanted) this.lastWhy = st.tool.reason(r.unplanted);
     if (r.undo) this.undoable = true;
     this.show();
+    if (!this.busy()) this.waiters.splice(0).forEach(f => f());
     if (!r.burnt.length) return;
     const m = this.page.squareM();
     this.page.burnt(r.squares, st.now, litSites([st.now[0] * m, st.now[1] * m], this.radius, st.progress).map(s => [s.x, s.y]));
@@ -382,7 +407,8 @@ export class God {
    * larger button), the tool's choices, a line of how to use it or why it cannot act here, and on a phone the button
    * held for a stroke. */
   private show(): void {
-    showStrip(this.page.strip, this.tools, this.tool, this.probe, this.undoable, this.undoButton);
+    // (A stroke that rests is undone once it settled, `undo`.)
+    showStrip(this.page.strip, this.tools, this.tool, this.probe, this.undoable || this.resting !== null, this.undoButton);
     showCard(this.page.card, this.holdButton, this.tool, this.probe, { radii: this.radii(), radius: this.radius, pick: m => this.sized(m) }, () => this.show());
   }
 

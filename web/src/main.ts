@@ -338,14 +338,17 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 function togglePlay(): void {
-  if (!world || god.busy()) return; // (a stroke of god mode settles first)
-  // (A paused world's ground is made again at once from its last build, ground.ts `rebuild`.)
-  if (live) {
-    playing = !playing; live.play(playing);
+  if (!world) return;
+  // (A stroke of god mode settles first; none plays while one is under way. A paused world's ground is made again at
+  // once from its last build, ground.ts `rebuild`.)
+  const l = live;
+  if (l) return god.whenSettled(() => {
+    if (live !== l) return;
+    playing = !playing; l.play(playing);
     // (The core forgets the last stroke as the world plays on.)
     if (playing) god.forgetUndo(); else land?.tiles.rebuild(null, true);
-    return syncUi();
-  }
+    syncUi();
+  });
   if (!playing && frame >= world.meta.frames.length - 1) setFrame(0);
   playing = !playing; acc = 0; syncUi();
 }
@@ -380,8 +383,8 @@ $('clearlayer').onclick = () => setLayer(null);
 /** Inspect's card, shown while its button is pressed. */
 $('inspect-btn').onclick = () => { const on = $('inspect-card').hidden; $('inspect-card').hidden = !on; $('inspect-btn').setAttribute('aria-pressed', String(on)); inspect(); };
 $('god-btn').onclick = () => setGod(!godOn());
-// (Between strokes: a stroke under way settles first.)
-$('save').onclick = () => { if (!god.busy()) live?.save(); };
+// (Between strokes: a stroke that rests settles first.)
+$('save').onclick = () => god.whenSettled(() => live?.save());
 $('fit').onclick = () => map.fit();
 $<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);

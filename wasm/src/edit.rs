@@ -22,9 +22,10 @@ pub(crate) struct Stroke {
 
 impl Live {
     /// End the stroke under way: its planting made (`plant`), the world's edits settled (`World::settle`); the world
-    /// before it kept for an undo where it changed the world, else for the next stroke (`ready`: it stands as the
-    /// world does), so no copy is made here. Returns what settling did, why its planting placed nothing ("" where it
-    /// placed some, or there was none), and whether the stroke can be undone.
+    /// before it kept for an undo where it changed the world (the copy for the next stroke is made after, `hold`), else
+    /// for the next stroke (`ready`: it stands as the world does), so no copy is made here. Returns what settling did,
+    /// why its planting placed nothing ("" where it placed some, or there was none), and whether the stroke can be
+    /// undone.
     pub(crate) fn settle(&mut self) -> (pcore::edit::Settled, String, bool) {
         let (mut unplanted, mut changed) = (String::new(), false);
         if let Some(mut st) = self.stroke.take() {
@@ -248,17 +249,6 @@ pub extern "C" fn settle() -> *const u8 {
     give(out.to_string().into_bytes())
 }
 
-/// Settle what the edits of the stroke under way started (`World::settle`: the samples built again over the ground it
-/// shaped so far and the liquid settled over them) and keep the stroke: the page settles a held stroke of the ground now
-/// and then, so its water follows while it is held. Its undo is still to the world before the stroke began.
-#[no_mangle]
-pub extern "C" fn soften() {
-    with(|l| {
-        l.world.settle();
-        l.follow();
-    })
-}
-
 /// Put the world back as it was before the last stroke of the brush that changed it began, once (one level). Its
 /// samples take a new version (`Relief::version`, above every one before, so no version names two grounds), and the
 /// page asks for its relief as after a build. Returns, as JSON, whether there was a stroke to undo.
@@ -281,13 +271,13 @@ pub extern "C" fn undo() -> *const u8 {
     give(out.to_string().into_bytes())
 }
 
-/// The world waits for edits (the page paused it, or undid a stroke): a copy of it is kept for the first stroke
-/// (`Live::ready`), so that stroke's first call need not copy it; none where the last stroke's undo is kept (the next stroke copies the world
-/// then, so no more than two copies of it are kept between strokes).
+/// The world waits for edits (the page paused it, undid a stroke, or a stroke settled): a copy of it is kept for the
+/// next stroke (`Live::ready`), so that stroke's first call need not copy it; none while a stroke is under way. So up to
+/// three worlds stand between strokes: the world, the copy, and the world before the last stroke for its undo.
 #[no_mangle]
 pub extern "C" fn hold() {
     with(|l| {
-        if l.ready.is_none() && l.before.is_none() && l.stroke.is_none() {
+        if l.ready.is_none() && l.stroke.is_none() {
             l.ready = Some(l.world.clone());
         }
     })
