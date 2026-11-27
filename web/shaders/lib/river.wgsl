@@ -12,7 +12,7 @@ const STEEP_STONE = vec2f(0.12, 0.5);
 // bank, in tufts `BAR_TUFT_M` across.
 const BAR_MOTTLE = 0.2; const BAR_PATCH_M = vec2f(2.5, 0.6);
 const STRAND_M = 0.9; const STRAND_W = 0.2; const STRAND = 0.28; const STRAND_WAVE_M = 8.0;
-const BAR_GROWN = 0.55; const BAR_TUFT_M = 1.1;
+const BAR_GROWN = 0.55; const BAR_TUFT_M = 1.1; const BANK_GROWN = 0.5;
 // A bank is a low scarp at the bed's edge, `BANK_M` wide plus `BANK_SHARE` of the bed's half width: its face is lit
 // or shaded as it is turned to the sun, by up to `BANK_SHADE` where the bend cuts it (the outer bank) and `BANK_LOW`
 // of that on the low slope inside a bend.
@@ -115,11 +115,14 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind
     }
   }
   // The top of a bar is the plants' again, in tufts with an edge of their own: more of them the nearer the bank, and
-  // down to the water's damp edge where the floods spend little power on the bed (`reach_kind`).
+  // down to the water's damp edge where the floods spend little power on the bed (`reach_kind`). The flow lays its
+  // bars inside its bends; off them, along a straight reach and outside a bend, the plants take the bed's margin
+  // `BANK_GROWN` more.
   let grown_from = BAR_GROWN * kind.x;
+  let point = c.bend * select(0.0, 1.0, r.across < 0.0);
   let tufts = shows_at(BAR_TUFT_M, e);
   if (tufts > 0.0 && r.up > grown_from) {
-    let grown = noise_l(lat_turned(BAR_TUFT_M, vec2f(0.0)), 79).x + 1.2 * ease(grown_from, 1.0, r.up) - 0.6;
+    let grown = noise_l(lat_turned(BAR_TUFT_M, vec2f(0.0)), 79).x + 1.2 * ease(grown_from, 1.0, r.up) - 0.6 + BANK_GROWN * (1.0 - point);
     in_bed = max(in_bed * (1.0 - open * tufts * tent(grown * BAR_TUFT_M / e)), water);
   }
   r.share = mix(in_bed, water, open);
@@ -144,7 +147,8 @@ fn bar_tone(e: f32, along: f32, r: Reach) -> f32 {
 }
 
 // What the light on the ground at the reach's point `r` of channel `c` is times, by its bank (`BANK_M`), seen at `e`
-// m a pixel on ground `g`: over 1 where the bank's face is turned to the sun, under where from it.
+// m a pixel on ground `g`: over 1 where the bank's face is turned to the sun, under where from it; fully on the cut
+// bank outside a bend, `BANK_LOW` of that on the low banks of a straight reach and inside a bend.
 fn bank_light(e: f32, g: Tiled, c: Channel, r: Reach) -> f32 {
   let wide = BANK_M + BANK_SHARE * c.bed;
   if (unseen(2.0 * (BANK_M + BANK_SHARE * BED_MOST_M))) { return 1.0; }
@@ -153,24 +157,28 @@ fn bank_light(e: f32, g: Tiled, c: Channel, r: Reach) -> f32 {
   // The bank's face looks at the channel's line, down the distance's slope.
   let facing = dot(-g.d_slope, LIGHT.xy) / length(LIGHT.xy);
   let inside = g.sd * g.lean < 0.0;
-  let cut = mix(0.6, select(1.0, BANK_LOW, inside), c.bend);
+  let cut = mix(BANK_LOW, select(1.0, BANK_LOW, inside), c.bend);
   return 1.0 + BANK_SHADE * cut * shown * facing * (1.0 - ease(0.0, wide, abs(r.bank)));
 }
 
 // A bank as the flow shapes it (Leopold and Wolman 1960): on the outside of a bend the flow cuts it into a steep face
-// of bare soil, `CUT_M` wide plus `CUT_SHARE` of the bed's half width out from the bed's edge, `CUT_STRAIGHT` of that
-// on a straight reach (none inside a bend), the soil `CUT_DARK` darker and more so under the turf's lip at its top (`LIP_DARK`), roots
-// hanging down it in strands `ROOT_M` apart (`ROOT_DARK` darker); on the inside of a bend the bed rises gently into
-// its bank, a low point bar (the bars, `reach_at`). Along the water's edge the ground is damp over the part of the
+// of bare soil, as far as the place is a bend, up to `CUT_M` wide plus `CUT_SHARE` of the bed's half width out from
+// the bed's edge, in stretches where the turf has slumped, as a noise along the bank over `CUT_PATCH_M` m rises from
+// `CUT_FROM.x` to `.y` (none on a straight reach or inside a bend: there the turf comes down to the water); the soil
+// `CUT_DARK` darker and more so under the turf's lip at its top (`LIP_DARK`), roots hanging down it in strands
+// `ROOT_M` apart (`ROOT_DARK` darker); on the inside of a bend the bed rises gently into its bank, a low point bar
+// (the bars, `reach_at`). Along the water's edge the ground is damp over the part of the
 // bed the water's level swings across: `DAMP_M` plus `DAMP_SWING` of the bed the water leaves at its mean flow.
-const CUT_M = 0.6; const CUT_SHARE = 0.25; const CUT_STRAIGHT = 0.4; const CUT_DARK = 0.12; const LIP_DARK = 0.25;
+const CUT_M = 0.3; const CUT_SHARE = 0.15; const CUT_PATCH_M = 4.0; const CUT_FROM = vec2f(-0.4, 0.4); const CUT_DARK = 0.12;
+const LIP_DARK = 0.25;
 const ROOT_M = vec2f(0.35, 1.2); const ROOT_DARK = 0.3; const DAMP_M = 0.3; const DAMP_SWING = 0.35;
 
 // The cut bank at the reach's point `r` of channel `c`, seen at `e` m a pixel on ground `g`: the share of the pixel
 // its face covers, and the colour of the ground there over the soil's own (its darkening, its lip and its roots).
 fn cut_bank(e: f32, g: Tiled, c: Channel, r: Reach) -> vec2f {
   let outer = select(0.0, 1.0, (g.sd - c.middle) * c.outer > 0.0);
-  let wide = (CUT_M + CUT_SHARE * c.bed) * mix(CUT_STRAIGHT, outer, c.bend);
+  if (outer * c.bend <= 0.0) { return vec2f(0.0, 1.0); }
+  let wide = (CUT_M + CUT_SHARE * c.bed) * c.bend * ease(CUT_FROM.x, CUT_FROM.y, noise_reach(g.along, CUT_PATCH_M, 0.0, 87));
   let shown = shows_at(wide, e);
   if (shown <= 0.0 || r.bank < -e || r.bank > wide + e) { return vec2f(0.0, 1.0); }
   let face = (tent((wide - r.bank) / e) - tent(-r.bank / e)) * shown;
@@ -211,11 +219,10 @@ const BED_OUT = vec2f(2.0, 1.0);
 // A channel's bed is as wide as its floods make it (lib/rock.wgsl `banks_of`). This month's water runs in it between
 // bars of washed gravel (lib/river.wgsl `reach_at`). Where the bed takes under `BED_PX` pixels it is all water.
 const BED_PX = 3.0;
-// A channel's bars are its bed's make washed (`BAR_LIFT` times as light, `BAR_PALE` of the way to pale sand), and sand
-// where its flow moves no stones bigger than `BAR_SAND_STONE` m: gravel on most reaches, sand and silt on the
-// gentlest. A bar rises from the water's edge at `BAR_RISE` (rise over run), which is how far up it the water's fringe
+// A channel's bars are its bed's make washed, `BAR_LIFT` times as light, where its flow moves stones of
+// `BAR_SAND_STONE` m, and the ground's own soil as light where it moves none (sand and silt on the gentlest reaches). A bar rises from the water's edge at `BAR_RISE` (rise over run), which is how far up it the water's fringe
 // wets and darkens it; past that fringe its gravel drains dry.
-const BAR_LIFT = 1.12; const BAR_PALE = 0.1; const BAR_RISE = 0.6;
+const BAR_LIFT = 1.12; const BAR_RISE = 0.6;
 // Driftwood lies on a bar from `DRIFTWOOD_UP.x` of the way up it to the bank, most from `DRIFTWOOD_UP.y` (the floods' wrack
 // line, at the top of the bars).
 const DRIFTWOOD_UP = vec2f(0.1, 0.35);
@@ -230,10 +237,9 @@ const EDGE_M = 0.35; const EDGE_LIGHT = 0.25;
 // band's pale bed runs on from them; its water keeps its look and widens (rock.wgsl `MOUTH_FLARE`), its signs of flow
 // fading and its bed's shape across it flattening into the open water's depth as the band's own does, and from
 // `MOUTH_MELTS` of the band on it melts into that water, all of it at the band's end. The sea's foam breaks no nearer
-// its line than its bed is half wide, all of it from `MOUTH_CALM` times that. A channel cuts through the shallows only
-// as far as it is deeper than they are: it melts into them from where the liquid stands `MOUTH_REACH.x` times as deep
-// as the channel law makes its middle, gone at `MOUTH_REACH.y` times, so a rill ends at the water's edge.
-const MOUTH_BARS = 0.5; const MOUTH_MELTS = 0.3; const MOUTH_CALM = 2.0; const MOUTH_REACH = vec2f(1.0, 3.0);
+// its line than its bed is half wide, all of it from `MOUTH_CALM` times that; the shore's beach and swash are not drawn
+// in its bed.
+const MOUTH_BARS = 0.5; const MOUTH_MELTS = 0.3; const MOUTH_CALM = 2.0;
 
 // The spots `s` of a point with its channel `ch` of discharge `q`, which moves stones of `stone` m down a reach of
 // slope `fall` (rise over run), on ground `g` (the
@@ -246,8 +252,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   let at = s.dry.at;
   let e = s.dry.e;
   let wide = max(ch.bed, line);
-  let middle = BED_MIDDLE * ch.mean * (1.0 + MOUTH_FLARE * mouth);
-  let cuts = (1.0 - ease(MOUTH_REACH.x * middle, MOUTH_REACH.y * middle, standing(g))) * (1.0 - ease(MOUTH_MELTS, 1.0, mouth));
+  let cuts = 1.0 - ease(MOUTH_MELTS, 1.0, mouth);
   out.dry.mouth = cuts * (1.0 - ease(wide, MOUTH_CALM * wide + 2.0 * e, g.d));
   // Outside its bed, its banks and its line from afar a channel draws nothing more.
   if (g.d > BED_OUT.x * ch.bed + BED_OUT.y + 2.0 * e && g.d > line + 2.0 * e) { return out; }
@@ -258,16 +263,18 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   let runs = 1.0 - mouth;
   let seen = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * wide);
   out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line)) * cuts * seen;
-  // The bars' colour: the bed's make washed, sand on the gentlest reaches; the bed seen through the water is the same.
-  let washed = mix(min(bed_make_at(at) * BAR_LIFT, vec3f(1.0)), BEACH_SAND, BAR_PALE);
-  let gravel = mix(BEACH_SAND, washed, ease(0.0, BAR_SAND_STONE, stone));
+  // The bars' colour: the bed's make washed, the soil's on the gentlest reaches; the bed seen through the water is the
+  // same, soaked (colour.wgsl `soil`).
+  let gravel = min(mix(s.dry.ground, bed_make_at(at), ease(0.0, BAR_SAND_STONE, stone)) * BAR_LIFT, vec3f(1.0));
   // On its bars the ground is that gravel, bare, rising from the water's edge, as far as they cover the pixel.
   let bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth)) * seen;
   out.dry.ground = mix(out.dry.ground, gravel * bar_tone(e, g.along, r), bars);
   // The floods strand dead wood high on the bars, as much as woody crowns stand about the channel (the trees' share of
   // the ground of its cells, lib/cover_field.wgsl `STANDS`).
   if (bars > 0.0) { out.dry.driftwood = min(field_at(at, STANDS).a, 1.0) * bars * ease(DRIFTWOOD_UP.x, DRIFTWOOD_UP.y, r.up); }
-  out.dry.sand *= 1.0 - bars;
+  let bed = (r.share + r.bars) * seen;
+  out.dry.sand *= 1.0 - bed;
+  out.dry.swash *= 1.0 - bed;
   out.dry.rock *= 1.0 - bars;
   out.dry.cover *= 1.0 - bars;
   out.dry.canopy *= 1.0 - bars;
