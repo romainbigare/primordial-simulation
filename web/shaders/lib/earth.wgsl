@@ -96,6 +96,9 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.place = s.at;
   s.e = e;
   s.grain = TAPE_GRAIN;
+  // A tape holds no relief finer than its squares: none of it lies low or high (relief.wgsl `Relief`).
+  s.hollow = 0.5;
+  s.basin = 0.5;
   return s;
 }
 // The colour of spot p at uv in the view drawn (`in_view_of`).

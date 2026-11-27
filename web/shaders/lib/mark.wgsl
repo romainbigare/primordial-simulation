@@ -79,12 +79,14 @@ const NEAR_SIZES = 3.0;
 
 // What the ground at `at` leaves a plant: the depth of the liquid over its roots, m (land.wgsl `state_at`), how
 // saturated it is (land.wgsl `saturated_at`: the law's strips), the snow there (lib/land.wgsl `snow_at`, 1 where it
-// lies) and its cells' snow's depth, m.
-struct Foot { depth: f32, saturated: f32, snow: f32, snow_m: f32 }
+// lies), its cells' snow's depth, m, and how lush it is (lush.wgsl `lush_of`, on the tiles' ground: no relief
+// finer than them).
+struct Foot { depth: f32, saturated: f32, snow: f32, snow_m: f32, lush: f32 }
 fn foot(at: vec2f) -> Foot {
   let g = ground_at(at, false);
   let st = state_at(at, g, corners(at / land.map.x));
-  return Foot(st.depth, saturated_of(g, at), select(snow_at(at, 0.0, st.snow, snow_past(st.snow, st.bares), 0.0, 0.0), st.snow, st.depth > 0.0), st.snow_m);
+  let lush = lush_of(g.twi, g.slope, sample_place(at, 0.0).n, 0.0);
+  return Foot(st.depth, saturated_of(g, at), select(snow_at(at, 0.0, st.snow, snow_past(st.snow, st.bares), 0.0, 0.0), st.snow, st.depth > 0.0), st.snow_m, lush);
 }
 
 // Of each of four kinds that stand in liquid as deep as `reach` m (canopy.ts: down to the core's `Cover::line`), 1 where
@@ -114,7 +116,7 @@ fn dense_at(saturated: f32, c: vec2i, q: i32) -> vec4f {
 // there, before the ground is read (`pick_kind`): the denser of the two grounds.
 fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32, exact: bool) -> vec4f {
   let here = select(vec4f(0.0), vec4f(cs.w[s]), kind(patch_plane(q), cs.at[s]) == vec4f(f32(cell_patch)));
-  if (!exact) { return here * (1.0 + PATCH) * max(kind(strips_plane(q), cs.at[s]), kind(rest_plane(q), cs.at[s])); }
+  if (!exact) { return here * THICK_MOST * max(kind(strips_plane(q), cs.at[s]), kind(rest_plane(q), cs.at[s])); }
   return here * thick * dense_at(f.saturated, cs.at[s], q) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
 }
 
@@ -147,9 +149,9 @@ const FREE_LEAST = 0.05;
 // The stream of a kind's draws for a cell, by its slot and square (`pick_kind`).
 const RACE_STREAM = 175;
 
-// The loose ground at the foot `at` (its squares `cs`) with its patches (rock.wgsl `loose_seen`, as the bare bed is
-// drawn), read only where a kind's roots may want more than lies there.
-fn foot_loose(at: vec2f, cs: Corners) -> f32 {
+// The loose ground at the foot `at` (its squares `cs`) as lush as `lush`, with its patches (rock.wgsl `loose_at`,
+// `loose_seen`, as the bare bed is drawn), read only where a kind's roots may want more than lies there.
+fn foot_loose(at: vec2f, cs: Corners, lush: f32) -> f32 {
   var deepest = 0.0;
   for (var s = 0; s < rolled(4); s++) {
     for (var q = 0; q < groups(); q++) {
@@ -157,7 +159,7 @@ fn foot_loose(at: vec2f, cs: Corners) -> f32 {
       deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
     }
   }
-  return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0)), 0.0), deepest > 0.0);
+  return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0), lush), 0.0), deepest > 0.0);
 }
 
 // The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` over the patches, its ground `f`),
@@ -175,7 +177,7 @@ fn foot_loose(at: vec2f, cs: Corners) -> f32 {
 fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: vec2i, exact: bool) -> vec3i {
   let n = kinds_n();
   var loose = 0.0;
-  if (exact) { loose = foot_loose(at, cs); }
+  if (exact) { loose = foot_loose(at, cs, f.lush); }
   // The weights by height, and of each bin the weight from it up.
   var bins: array<f32, TALL_BINS>;
   for (var s = 0; s < rolled(4); s++) {
@@ -333,15 +335,15 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32,
   // First whether any kind may claim the cell, before its ground is read; then, on open ground (`ground_open`), the
   // kind its ground lets claim it. (Both by one call, so the program holds `pick_kind` once.)
   let own = rand3(id, l).y;
-  var f = Foot(0.0, 0.0, 0.0, 0.0);
-  var thick = 1.0 + PATCH;
+  var f = Foot(0.0, 0.0, 0.0, 0.0, 0.0);
+  var thick = THICK_MOST;
   var pick = vec3i(-1);
   for (var look = 0; look < rolled(2); look++) {
     let exact = look == 1;
     if (exact) {
       if (!ground_open(at)) { return unclaimed; }
       f = foot(at);
-      thick = patchy(at);
+      thick = patchy(at, 0.0) * lush_thick(f.lush);
     }
     pick = pick_kind(l, at, cs, thick, f, own, id, exact);
     if (pick.x < 0) { return unclaimed; }
@@ -424,7 +426,7 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, fp: vec3i) -> Mark {
   }
   if (unit(id, 41) >= dead.mean * on_scar) { return none; }
   let f = foot(at);
-  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(sample_place(at, 0.0))) > 0.5) { return none; }
+  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(sample_place(at, 0.0), f.lush)) > 0.5) { return none; }
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }

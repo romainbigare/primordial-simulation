@@ -16,7 +16,7 @@ const RELIEF = 2.0; const AMBIENT = 0.30; const LIT_TOP = 1.7;
 // Steep ground is darker whichever way it faces, by up to `STEEP_SHADE` from a slope of `STEEP_SLOPES.x` (rise over
 // run) to `STEEP_SLOPES.y`: a ridge that runs along the light, whose two sides it lights alike, still shows its sides.
 // Ground the light does not reach, in the shade of higher ground toward it, is darkened to `CAST_SHADE`: where the
-// slope up to that ground (rock.wgsl `SoilAt.horizon`) passes the light's rise, eased from `CAST_EDGE.x` under it to
+// slope up to that ground (rock.wgsl `Laid.horizon`) passes the light's rise, eased from `CAST_EDGE.x` under it to
 // `CAST_EDGE.y` over it (a soft edge: the sun is a disc and the air scatters its light). The relief finer than the
 // samples (relief.wgsl) raises a knob toward the light and lowers a hollow: the slope up to the shading ground falls by
 // its height over `CAST_REACH_M`, so a knob rises out of the shade before the ground about it and the shade's edge

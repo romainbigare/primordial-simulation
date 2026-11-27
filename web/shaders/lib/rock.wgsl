@@ -7,8 +7,8 @@
 // Of each sample (a texel each): the depth of its loose ground, m, the largest stone its channel moves, m, the slope of
 // its channel's reach (rise over run), and its channel's links (`links_of`); in a second plane under the first, the
 // reflectance of its bed's make; and in a third, its loose ground's shares of coarse and fine grain, how slowly it
-// passes liquid (`soil_at`) and the liquid it holds for roots as the layer `avail` shows it; and in a fourth, the
-// slope up from it to the highest ground toward the light (`SoilAt.horizon`), a zero, how deep the load the liquid laid
+// passes liquid (`grain_at`) and the liquid it holds for roots as the layer `avail` shows it; and in a fourth, the
+// slope up from it to the highest ground toward the light (`Laid.horizon`), a zero, how deep the load the liquid laid
 // lies on it, m, and the
 // decimal logarithm of the years its loose ground has lain (tape/src/ground/rock.rs).
 @group(0) @binding(18) var rock_field: texture_2d<f32>;
@@ -57,7 +57,7 @@ fn samples_at(at: vec2f, plane: i32) -> vec4f { return samples_blend(at, plane).
 // field shows the samples' grid, and every edge wanders at every scale down to the relief's (relief.wgsl). An octave
 // fades out as it shrinks to a few pixels (draw.wgsl `shows_at`). The same noise, its values summed over the octaves
 // shown, each weighing less the finer (`Place.n`, about -1..1), moves the thresholds read on those fields (the
-// deposit's depth, `soil_at`) and the tone of the ground (style.wgsl `tone_of`).
+// deposit's depth, `laid_at`) and the tone of the ground (style.wgsl `tone_of`).
 const PLACE_WARP_M = vec3f(1000.0, 250.0, 62.0); const PLACE_WARP = vec3f(40.0, 55.0, 25.0); const PLACE_STREAM = 214;
 // The place the samples' fields are read for a point, m from the map's north-west corner, and the noise there.
 struct Place { at: vec2f, n: f32 }
@@ -81,39 +81,53 @@ fn sample_place(at: vec2f, e: f32) -> Place {
 // so the blend departs from the samples' mean by the place's noise (`Place.n`) times `LOOSE_SPREAD` of how far the
 // samples it blends spread: a rule read on it (the bed it bares, the plants' roots, `rooted`) follows no sample's
 // square where two samples' depths differ, and keeps the mean where they do not. Its change across a pixel is smooth.
-const LOOSE_SPREAD = 1.0;
-fn loose_at(place: Place) -> f32 {
+// Inside a sample the mantle lies deeper where the ground is lush (lush.wgsl `lush_of`: creep and wash fill the
+// hollows and drainage lines and strip the ridges and knobs), up to `LOOSE_LUSH` of itself either way, about none on
+// the mean (drawing only): so the bed shows and the plants' roots fail first on the crests, and the edges of both
+// follow the relief. Of a point as lush as `lush`.
+const LOOSE_SPREAD = 1.0; const LOOSE_LUSH = 0.6;
+fn loose_at(place: Place, lush: f32) -> f32 {
   let b = samples_blend(place.at, LOOSE_PLANE);
-  return max(b.mean.x + LOOSE_SPREAD * b.spread.x * place.n, 0.0);
+  return max(b.mean.x + LOOSE_SPREAD * b.spread.x * place.n, 0.0) * (1.0 + LOOSE_LUSH * lush);
 }
 
-// The loose ground's grain shares swap coarse for fine by up to `GRAIN_PATCHY` of themselves either way over patches from
-// `GRAIN_PATCH_M` across down, in `GRAIN_OCTAVES` octaves (ragged.wgsl): what the wear lays down is sorted in lenses
-// and patches finer than a sample. Even in the patches' noise, so the patches' mean is the samples' grain.
-const GRAIN_PATCHY = 0.6; const GRAIN_PATCH_M = 60.0; const GRAIN_OCTAVES = 3;
+// The loose ground's grain shares swap coarse for fine, at most all of themselves either way: what the wear lays down
+// is sorted finer than a sample. Rain wash carries the fines off the crests and the dry sunny sides into the hollows
+// and drainage lines, where they settle, and leaves the coarse behind (Kirkby 1969; from memory): `GRAIN_LUSH` of
+// themselves by how lush the ground is (lush.wgsl `lush_of`). Over that, lenses and patches: the noise of the
+// samples' places (`Place.n`, from a kilometre down) times `GRAIN_PLACE`, and patches from `GRAIN_PATCH_M` across
+// down in `GRAIN_OCTAVES` octaves (ragged.wgsl) times `GRAIN_PATCHY`. All about none on the mean, so the mean is the
+// samples' grain.
+const GRAIN_LUSH = 0.45; const GRAIN_PLACE = 0.3; const GRAIN_PATCHY = 0.3; const GRAIN_PATCH_M = 25.0; const GRAIN_OCTAVES = 3;
 
 // A deposit's depth departs from the samples' by a factor of up to e^`LAID_PATCHY` either way over the noise of the
 // samples' places (`Place.n`), and its age by up to `LAID_AGE_PATCHY` of its decimal logarithm: a load is laid thicker
 // in the swales and thinner on the bars, and reworked unevenly, so a deposit's edge and its fresh part wander.
 const LAID_PATCHY = 0.7; const LAID_AGE_PATCHY = 0.4;
-// The loose ground at a point: its grain as `Spot.grain` holds it, its deposit as `Spot.deposit` does, and the slope
-// up from it to the highest ground toward the light, rise over run (tape/src/ground/horizon.rs).
-struct SoilAt { grain: vec4f, deposit: vec2f, horizon: f32 }
-// The loose ground at `at`, read at the place `place` (`sample_place`) and moved by its noise, seen at `e` m a pixel,
-// with its organic matter `organic` (the cells', which changes as the dead matter on the ground rots): the samples'
-// grain (`samples_at`: the shares of coarse and fine grain and how slowly it passes liquid) moved by `shift`, the
-// cells' grain (`World::soil`, what the laws read) over the samples' in their square (web/src/land.ts), so the world's
-// soil is drawn on the mean and the samples' pattern inside a square, with its patches; how deep the load the liquid
-// laid lies there, m, and the decimal logarithm of the years its loose ground has lain (`LAID_PLANE`: a deposit's edge
-// is eased where it is drawn, colour.wgsl `laid_share`); and the horizon the same plane holds. All through the samples'
-// centres as a B-spline (`samples_at`): a field eased over a narrow edge shows no sample's square.
-fn soil_at(at: vec2f, place: Place, e: f32, organic: f32, shift: vec2f) -> SoilAt {
+// The loose ground's grain at `at`, as lush as `lush`, as `Spot.grain` holds it, read at the place `place`
+// (`sample_place`) and moved by its noise, seen at `e` m a pixel, with its organic matter `organic` (the cells', which
+// changes as the dead matter on the ground rots): the samples' grain (`samples_at`: the shares of coarse and fine grain
+// and how slowly it passes liquid) moved by `shift`, the cells' grain (`World::soil`, what the laws read) over the
+// samples' in their square (web/src/land.ts), so the world's soil is drawn on the mean and the samples' pattern inside
+// a square, with its patches. Through the samples' centres as a B-spline (`samples_at`): a field eased over a narrow
+// edge shows no sample's square.
+fn grain_at(at: vec2f, place: Place, e: f32, organic: f32, shift: vec2f, lush: f32) -> vec4f {
   let raw = samples_at(place.at, GRAIN_PLANE);
   let g = vec4f(clamp(raw.xy + shift, vec2f(0.0), vec2f(1.0)), raw.zw);
-  let n = GRAIN_PATCHY * ragged(at, e, GRAIN_PATCH_M, GRAIN_OCTAVES, 210);
+  let n = clamp(GRAIN_PATCHY * ragged(at, e, GRAIN_PATCH_M, GRAIN_OCTAVES, 210) + GRAIN_PLACE * place.n - GRAIN_LUSH * lush, -1.0, 1.0);
+  return vec4f(g.x * (1.0 + n), g.y * (1.0 - n), organic, g.z);
+}
+
+// What the samples' fourth plane holds at a point: its deposit as `Spot.deposit` holds it, and the slope up from it to
+// the highest ground toward the light, rise over run (tape/src/ground/horizon.rs).
+struct Laid { deposit: vec2f, horizon: f32 }
+// The deposit at the place `place` (`sample_place`), moved by its noise: how deep the load the liquid laid lies there,
+// m, and the decimal logarithm of the years its loose ground has lain (`LAID_PLANE`: a deposit's edge is eased where it
+// is drawn, colour.wgsl `laid_share`); and the horizon the same plane holds. Through the samples' centres as a B-spline
+// (`samples_at`).
+fn laid_at(place: Place) -> Laid {
   let laid = samples_at(place.at, LAID_PLANE);
-  let deposit = vec2f(laid.z * exp(LAID_PATCHY * place.n), laid.w + LAID_AGE_PATCHY * place.n);
-  return SoilAt(vec4f(g.x * (1.0 + n), g.y * (1.0 - n), organic, g.z), deposit, laid.x);
+  return Laid(vec2f(laid.z * exp(LAID_PATCHY * place.n), laid.w + LAID_AGE_PATCHY * place.n), laid.x);
 }
 
 // A point's bed is of one make, not a blend of two: bare rock and the soil broken from it show the bands the folded
@@ -129,8 +143,12 @@ fn soil_at(at: vec2f, place: Place, e: f32, organic: f32, shift: vec2f) -> SoilA
 const MAKE_RAGGED = 0.95; const MAKE_PATCH = 2.0; const MAKE_OCTAVES = 6; const MAKE_STREAM = 240;
 const MAKE_PX = 2.0; const MAKE_EDGE_PX = 1.5; const MAKE_EDGE_M = 25.0;
 // The reflectance of the bed's make at `at`, m from the map's north-west corner, read at the place `place`
-// (`sample_place`), seen at `e` m a pixel.
-fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
+// (`sample_place`), seen at `e` m a pixel: as the bare bed shows it, of one make (`sharp`), and as a soil over it
+// shows it (`soft`): the samples' plain blend, as creep and wash smear a mantle's colour over its beds' contacts across
+// tens to hundreds of metres (a residual soil's colour is its bed's, mixed downslope: from memory). Not `crisp`, the
+// soft alone (no noise is read).
+struct Make { sharp: vec3f, soft: vec3f }
+fn bed_make_at(at: vec2f, place: vec2f, e: f32, crisp: bool) -> Make {
   let spacing = land.map.x * land.map.y / land.samples.x;
   let p = place / spacing - 0.5;
   let bs = b_spline(p);
@@ -143,7 +161,7 @@ fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
     blend += b_weight(bs, n) * c[n];
   }
   let sharp = shows_at(spacing, e);
-  if (sharp <= 0.0) { return blend; }
+  if (sharp <= 0.0 || !crisp) { return Make(blend, blend); }
   // Each sample's make's weight; the leading make `a`, and the next `b` (none where all are of one make).
   var s: array<f32, B_TAPS>;
   for (var n = 0; n < B_TAPS; n++) {
@@ -154,7 +172,7 @@ fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
   for (var n = 1; n < B_TAPS; n++) { if (s[n] > s[a]) { a = n; } }
   var b = -1;
   for (var n = 0; n < B_TAPS; n++) { if (any(c[n] != c[a]) && (b < 0 || s[n] > s[b])) { b = n; } }
-  if (b < 0) { return c[a]; }
+  if (b < 0) { return Make(c[a], blend); }
   // The lighter of the two is `hi`, so the noise moves their edge the same way from either side of it.
   let swap = dot(c[b], LUMA) > dot(c[a], LUMA);
   let hi = c[select(a, b, swap)];
@@ -173,7 +191,7 @@ fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
   let x = d - MAKE_RAGGED * ragged(at, MAKE_PX * e, MAKE_PATCH * spacing, MAKE_OCTAVES, MAKE_STREAM);
   let across = length(slope) / spacing + MAKE_RAGGED * ragged_slope(MAKE_PX * e, MAKE_PATCH * spacing, MAKE_OCTAVES);
   let half = max(across * max(MAKE_EDGE_PX * e, MAKE_EDGE_M), 1e-6);
-  return mix(blend, mix(lo, hi, smoothstep(-half, half, x)), sharp);
+  return Make(mix(blend, mix(lo, hi, smoothstep(-half, half, x)), sharp), blend);
 }
 
 // Of the channel of sample `s`: the largest stone it moves, m, and the slope of its reach, rise over run (both 0 for

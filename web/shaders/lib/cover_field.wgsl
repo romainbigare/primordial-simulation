@@ -59,9 +59,12 @@ const PATCH_WARP = 0.16; const PATCH_LOBES = 0.55; const PATCH_FINE = vec2f(0.35
 // are its mean over its square, its edge no line on the ground. A mark's foot draws its patch and its cell by the
 // share each takes there, with its own draw fixed at its place to `FOOT_DRAW_M`.
 const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; const FOOT_DRAW_M = 0.01;
-// Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
-// mean (fixed noise in the world), alike near (cover.wgsl) and far.
-const PATCH_M = 8.0; const PATCH = 0.45;
+// Patches: the plants stand thicker and thinner over clumps about `PATCH_M` m across and `CLUMP_FINE.x` as strong
+// `CLUMP_FINE.y` times finer, by up to `PATCH` of their mean (fixed noise in the world), alike near (cover.wgsl) and
+// far: the noise's sum is sharpened by `CLUMP_SHARP` through a tanh, so a sparse cover gathers into clumps with gaps of
+// bare ground between them, not a soft wash (plants of dry ground stand in clumps that trap the water and the fines;
+// from memory), and on the mean none is lost.
+const PATCH_M = 8.0; const PATCH = 0.5; const CLUMP_FINE = vec2f(0.5, 3.0); const CLUMP_SHARP = 2.5;
 
 // Kinds grow in stands of their own: a plant is of its square's first kind (canopy.ts `Paint`) where a smooth draw fixed
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
@@ -87,8 +90,8 @@ const CANOPY_SNOW = 0.35;
 // What lies under and over the cover at a point (land.wgsl `land_spots`): how soaked its ground is, 0..1; its height
 // over the nearest water's level, m, and its slope (rise over run); the depth of the liquid standing over it, m; the depth of its loose ground with its patches
 // (rock.wgsl `loose_seen`), without them (`loose_at`) and that depth's change across a pixel, m; the share snow covers
-// and the snow's depth, m.
-struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loose_mean: f32, loose_px: f32, snow: f32, snow_m: f32 }
+// and the snow's depth, m; and how lush it is (`lush_of`).
+struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loose_mean: f32, loose_px: f32, snow: f32, snow_m: f32, lush: f32 }
 
 // The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; the share of
 // the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month; and
@@ -390,8 +393,16 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
   return with_patch(on_land(spline_field(at, l), land_smooth), l);
 }
 
-// How much thicker than their mean the plants stand at `at` (`PATCH`).
-fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
+// How much thicker than their mean the plants stand at `at`, seen at `e` m a pixel (`PATCH`): the finer clumps as far
+// as they show.
+fn patchy(at: vec2f, e: f32) -> f32 {
+  let fine = shows_at(PATCH_M / CLUMP_FINE.y, e);
+  var n = noise(at / PATCH_M, 40).x;
+  if (fine > 0.0) { n += fine * CLUMP_FINE.x * noise(at * (CLUMP_FINE.y / PATCH_M), 41).x; }
+  return 1.0 + PATCH * tanh(CLUMP_SHARP * n);
+}
+// The most times their mean the plants stand over the patches (`patchy`) where most lush (lush.wgsl `lush_thick`).
+const THICK_MOST = (1.0 + PATCH) * (1.0 + LUSH);
 
 // The stands' draw at `at` over patches of `m` m, even over 0..1.
 fn stand_draw(at: vec2f, m: f32) -> f32 { return smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / m, 70)); }
@@ -468,7 +479,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
   let near_images = shows_at(SWATH_DETAIL_M, e);
   let mean = f.rgb / f.a;
   var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
-  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images);
+  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images) * lush_hue(b.lush);
   var s = min(f.a * thick * hold, 1.0);
   let reeds = reeds_of(reed_place(b), s);
   let tufts = shows_at(SWARD_M, e);
@@ -551,7 +562,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   cell_patch_at(at, e);
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
-  let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
+  let thick = select(1.0, 1.0 + (patchy(at, e) - 1.0) * patches, patches > 0.0) * lush_thick(b.lush);
   // The plants' roots hold where the marks' do (mark.wgsl `holds`, on every patch of the loose ground), over a pixel and
   // over the patches too small to show here (`loose_unseen`), so the field far away and the marks near stand on the
   // same ground.
@@ -601,7 +612,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
       reeds = reeds_of(place, min(swarded.a * hold.w * thick, 1.0));
     }
     let filled = mix(seen.a, max(seen.a, REED_FILL), reeds);
-    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * filled, filled);
+    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * lush_hue(b.lush) * filled, filled);
     dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * min(trees.a, 1.0)), seen.a), far);
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);

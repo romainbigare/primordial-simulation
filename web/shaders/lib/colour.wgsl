@@ -194,7 +194,7 @@ struct Spot {
   // Its loose ground's grain: the shares of coarse and of fine grain, of organic matter, and how slowly its pores pass
   // liquid (the decimal logarithm of 1 m/s over their conductivity; tape/src/ground/rock.rs); and the share of its
   // pores the soil's liquid fills, 0..1 (land.wgsl `State`); how deep the load the liquid laid lies on it, m, and the
-  // decimal logarithm of the years its loose ground has lain (rock.wgsl `soil_at`); and the load its liquid carries,
+  // decimal logarithm of the years its loose ground has lain (rock.wgsl `laid_at`); and the load its liquid carries,
   // g/m³ (rock.wgsl `load_of`, `plume_at`).
   grain: vec4f, filled: f32, deposit: vec2f, load: f32,
   // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
@@ -264,7 +264,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // (Under full snow none of it shows: the snow below takes the pixel whole.)
   if (styled() && snow < 1.0) {
     // A burn scar takes the floor (burn.wgsl `burnt_floor`) and as much of the soil's own tint.
-    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, g.grain) * soil_detail(p), p);
+    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, g.grain, vec2f(p.basin, p.hollow)) * soil_detail(p), p);
     g.rgb = burnt.rgb;
     g.warm *= 1.0 - burnt.a;
     // Bed the waves' swash wets takes the one wet look of rock (stone.wgsl `wet_stone`) as far as it is soaked.
@@ -293,7 +293,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     for (var k = 0; k < rolled(2); k++) {
       var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 1.0, 0.0, sunk, snow, p.snow_m, STONE_RARE, p.swash.x);
       if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), p.stone, p.small, p.worn, BED_SUNK, snow, p.snow_m, 0.0, max(soaked(p), p.swash.x)); }
-      let st = stones(p.e, s, 0.0, p.bed, 61 + 8 * k);
+      let st = stones(p.e, s, 0.0, select(min(p.bed * SCREE_LIFT, vec3f(1.0)), p.bed, k == 1), 61 + 8 * k);
       g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
     }
   }
