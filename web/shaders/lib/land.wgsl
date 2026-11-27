@@ -121,9 +121,9 @@ fn sample_of(n: vec2i, depth: f32, tile: vec2f, code: i32) -> vec2i {
   return own + vec2i((code - 1) % side, (code - 1) / side) - most;
 }
 
-// The ground of layer `layer` at `at`, m from the map's north-west corner, blended between the texels' centres; with
-// `spline`, its height and slope through them as a Catmull-Rom spline (so light on a slope drawn over many pixels a
-// texel shows no creases). `t` is the layer's row of `tile_of`.
+// The ground of layer `layer` at `at`, m from the map's north-west corner, blended between the texels' centres (its
+// slope that blend's); with `spline`, its height and slope through them as a Catmull-Rom spline (so light on a slope
+// drawn over many pixels a texel shows no creases). `t` is the layer's row of `tile_of`.
 fn read_tile(layer: i32, t: vec4f, at: vec2f, spline: bool) -> Tiled {
   let texel = land.map.x / exp2(t.x - land.map.w);
   let q = at / texel - (t.yz * land.tiles.x - land.tiles.y) - 0.5;
@@ -200,7 +200,10 @@ fn read_tile(layer: i32, t: vec4f, at: vec2f, spline: bool) -> Tiled {
   let signed = mix(calm, full, bent);
   let d_slope = sign(signed) * mix(vec2f(mix(cd.y - cd.x, cd.w - cd.z, f.y), cy - cx) / texel, full_slope, bent);
   let lean = select(0.0, calm - signed, shaped && both);
-  if (!spline) { return Tiled(o.x + o.y, vec2f(0.0), o.z, abs(signed), d_slope, channels, ends, water, signed, along, lean); }
+  // Without the spline, the slope of the heights blended between the four texels.
+  let h4 = vec4f(c00.x + c00.y, c10.x + c10.y, c01.x + c01.y, c11.x + c11.y);
+  let plain_slope = vec2f(mix(h4.y - h4.x, h4.w - h4.z, f.y), mix(h4.z - h4.x, h4.w - h4.y, f.x)) / texel;
+  if (!spline) { return Tiled(o.x + o.y, plain_slope, o.z, abs(signed), d_slope, channels, ends, water, signed, along, lean); }
   // The weights of the texels from i - 1 to i + 2 along each axis, and their slopes.
   let w = catmull_rom(f);
   let dw = catmull_rom_slope(f);
@@ -395,9 +398,10 @@ const SNOW_BARES_MOST = 3.0;
 // How readily the ground of slope `slope` (east, south), `rise` m over its cells' mean and `knob` m over its relief's
 // mean (relief.wgsl), sheds its snow: the lower, the longer it keeps it.
 fn snow_bares(slope: vec2f, rise: f32, knob: f32) -> f32 {
-  let sunward = clamp(dot(-slope, LIGHT.xy) / length(LIGHT.xy), -1.0, 1.0);
-  return SNOW_BARES_MOST * tanh((SNOW_SUNNY * sunward + knob / SNOW_HOLLOW_M - rise / SNOW_RISE_M) / SNOW_BARES_MOST);
+  return SNOW_BARES_MOST * tanh((SNOW_SUNNY * sunward(slope) + knob / SNOW_HOLLOW_M - rise / SNOW_RISE_M) / SNOW_BARES_MOST);
 }
+// How far ground of slope `slope` (east, south; rise over run) faces the light, -1..1: its rise toward the light.
+fn sunward(slope: vec2f) -> f32 { return clamp(dot(-slope, LIGHT.xy) / length(LIGHT.xy), -1.0, 1.0); }
 
 // A snow line is ragged (ragged.wgsl `meet`): at its margin the snow breaks into drifts in hollows behind knobs, bare
 // knobs first, at every scale from `SNOW_PATCH_M` down to the pixel, `SNOW_PATCHY` of the index either way (noise

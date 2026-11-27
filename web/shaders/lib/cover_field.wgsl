@@ -62,6 +62,17 @@ const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; 
 // Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
 // mean (fixed noise in the world), alike near (cover.wgsl) and far.
 const PATCH_M = 8.0; const PATCH = 0.45;
+// Inside a cell the plants gather where water gathers and the sun dries the ground least, as seen from a plane: along
+// the drainage lines and in the hollows, on the slopes turned from the sun, and thin out on the ridges, the knobs and
+// the sunny sides (drawing only: the core knows a cell's mean and its saturated strips). How lush a point is, -1..1
+// (`lush_of`): the tanh of its wetness index over `LUSH_TWI_MID` times `LUSH_TWI` a unit, its rise toward the light
+// times `LUSH_SUN` (as snow lies longest there, land.wgsl `snow_bares`), the noise of the samples' places (rock.wgsl
+// `Place.n`, the patches of a mantle from a kilometre down) times `LUSH_PLACE`, and how low it lies in its relief (a
+// hollow's depth over `LUSH_LOW_M`, relief.wgsl); about none on the mean, so a cell keeps its cover. The plants stand
+// up to `LUSH` thicker and thinner by it (`lush_thick`), and the herbs' colour turns by `LUSH_HUE` of itself, greener
+// where lush, straw where dry. (The wetness index of the tiles' texels lies within about 6 to 9 on half the land.)
+const LUSH_TWI_MID = 7.5; const LUSH_TWI = 0.8; const LUSH_SUN = 3.0; const LUSH_PLACE = 0.6; const LUSH_LOW_M = 2.0;
+const LUSH = 0.9; const LUSH_HUE = vec3f(-0.25, -0.08, 0.06);
 
 // Kinds grow in stands of their own: a plant is of its square's first kind (canopy.ts `Paint`) where a smooth draw fixed
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
@@ -87,8 +98,8 @@ const CANOPY_SNOW = 0.35;
 // What lies under and over the cover at a point (land.wgsl `land_spots`): how soaked its ground is, 0..1; its height
 // over the nearest water's level, m, and its slope (rise over run); the depth of the liquid standing over it, m; the depth of its loose ground with its patches
 // (rock.wgsl `loose_seen`), without them (`loose_at`) and that depth's change across a pixel, m; the share snow covers
-// and the snow's depth, m.
-struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loose_mean: f32, loose_px: f32, snow: f32, snow_m: f32 }
+// and the snow's depth, m; and how lush it is (`lush_of`).
+struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loose_mean: f32, loose_px: f32, snow: f32, snow_m: f32, lush: f32 }
 
 // The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; the share of
 // the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month; and
@@ -393,6 +404,17 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
 // How much thicker than their mean the plants stand at `at` (`PATCH`).
 fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
 
+// How lush a point is (`LUSH_TWI`): of wetness index `twi` (land.wgsl `Tiled.twi`), slope `slope` (east, south; rise over
+// run), the noise of its samples' place `n` (rock.wgsl `Place.n`) and `low` m under its relief's mean (0 where not
+// known).
+fn lush_of(twi: f32, slope: vec2f, n: f32, low: f32) -> f32 {
+  return tanh(LUSH_TWI * (twi - LUSH_TWI_MID) - LUSH_SUN * sunward(slope) + LUSH_PLACE * n + low / LUSH_LOW_M);
+}
+// How much thicker than their mean the plants stand where they are as lush as `lush` (`lush_of`), at most `THICK_MOST`
+// times with the patches (`patchy`).
+fn lush_thick(lush: f32) -> f32 { return 1.0 + LUSH * lush; }
+const THICK_MOST = (1.0 + PATCH) * (1.0 + LUSH);
+
 // The stands' draw at `at` over patches of `m` m, even over 0..1.
 fn stand_draw(at: vec2f, m: f32) -> f32 { return smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / m, 70)); }
 
@@ -457,6 +479,9 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   return vec4f(c, cover * cluster);
 }
 
+// What the herbs' colour is multiplied by where they are as lush as `lush` (`LUSH_HUE`).
+fn lush_hue(lush: f32) -> vec3f { return 1.0 + LUSH_HUE * lush; }
+
 // The herbs' sward at `at`, seen at `e` m a pixel, over `b`, its field there `f` (`field_smooth`), premultiplied: their colour in stands of their kinds, the
 // share they cover (thicker and thinner by `thick`, `patchy`, as far as they hold there, `hold`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees' crowns,
 // reeds on soaked ground and at the water's edge, ferns on wet shaded ground, and flowers over it.
@@ -468,7 +493,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
   let near_images = shows_at(SWATH_DETAIL_M, e);
   let mean = f.rgb / f.a;
   var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
-  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images);
+  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images) * lush_hue(b.lush);
   var s = min(f.a * thick * hold, 1.0);
   let reeds = reeds_of(reed_place(b), s);
   let tufts = shows_at(SWARD_M, e);
@@ -551,7 +576,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   cell_patch_at(at, e);
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
-  let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
+  let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0) * lush_thick(b.lush);
   // The plants' roots hold where the marks' do (mark.wgsl `holds`, on every patch of the loose ground), over a pixel and
   // over the patches too small to show here (`loose_unseen`), so the field far away and the marks near stand on the
   // same ground.
@@ -601,7 +626,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
       reeds = reeds_of(place, min(swarded.a * hold.w * thick, 1.0));
     }
     let filled = mix(seen.a, max(seen.a, REED_FILL), reeds);
-    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * filled, filled);
+    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * lush_hue(b.lush) * filled, filled);
     dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * min(trees.a, 1.0)), seen.a), far);
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);

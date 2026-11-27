@@ -95,9 +95,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   var g = ground_at(at, true);
   // The place the samples' fields are read at (rock.wgsl `sample_place`).
   let place = sample_place(at, e);
-  // The loose ground with its patches, the bed it bares, and the relief finer than the tiles (relief.wgsl), which
-  // moves the ground's height and slope: the shading's normal and the fine line of a shore.
-  let loose_mean = loose_at(place);
+  // The loose ground with its patches, deeper as the tiles' ground is lush (cover_field.wgsl `lush_of`), the bed it
+  // bares, and the relief finer than the tiles (relief.wgsl), which moves the ground's height and slope: the shading's
+  // normal and the fine line of a shore.
+  let loose_mean = loose_at(place, lush_of(g.twi, g.slope, place.n, 0.0));
   let loose = loose_seen(at, loose_mean, e);
   let bare = bed_shows(loose);
   let fine = relief(e, g.slope, bare, loose);
@@ -165,7 +166,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
   let fringe = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * ch.water);
   let shore_over = over_water(g, ch, p.over, fringe);
-  let cf = cover_field(at, e, Beneath(max(soaked(p), marsh_of(p)), shore_over, length(g.slope), p.depth, loose, loose_mean, fwidth(loose), p.snow, st.snow_m));
+  // How lush the ground is for the plants (cover_field.wgsl `lush_of`): on the tiles' slope, as the marks read it, and
+  // lower in its relief's hollows.
+  let lush = lush_of(g.twi, tiled.slope, place.n, -fine.h);
+  let cf = cover_field(at, e, Beneath(max(soaked(p), marsh_of(p)), shore_over, length(g.slope), p.depth, loose, loose_mean, fwidth(loose), p.snow, st.snow_m, lush));
   p.cover = cf.cover;
   p.canopy = cf.canopy;
   p.shed = cf.shed;
