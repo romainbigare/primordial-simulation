@@ -2,13 +2,17 @@
 // two classes on each side of the big button held for a stroke; with a mouse it is a row over the panel, at the left.
 // The panel shows the tool on (`tool`: its picture, its name and where it lives, its sizes and its setting drawn as
 // pictures, why it cannot act here) or the tools of a class to pick from (`pick`: its categories as tabs, their tools as
-// picture cards; a tool to come shows, dimmed, and cannot be picked). The tools stand in the classes of god-tools.ts.
+// picture cards; a tool to come shows, dimmed, and cannot be picked). A finger swiping the panel down makes it small: one
+// bar of the tool on and its settings in words, so the map shows more; swiping it up, or a tap on it, shows it whole
+// again. The tools stand in the classes of god-tools.ts.
 import { iconSvg } from './icons';
-import { lightInk, make, ownRow, picture, sizeRow } from './god-controls';
+import { lightInk, make, ownRow, picture, radiusText, sizeRow } from './god-controls';
 import type { GodCategory, GodClass, GodTool, Probe, SoonTool } from './god-types';
 
 /** The side of the smaller copy of a tool's picture, its card's, px. */
 const CARD_SIDE = 480;
+/** The least move of a finger up or down the panel that makes it small or whole, px; a shorter one is a tap. */
+const SWIPE_PX = 40;
 
 /** What the menu asks of god mode: take a tool, undo the last stroke, close god mode, take a brush's radius (m). */
 export interface MenuActs { pick(t: GodTool): void; undo(): void; close(): void; size(m: number): void }
@@ -24,6 +28,8 @@ export class GodMenu {
   private mode: 'tool' | 'pick' = 'pick';
   private open: number;
   private category = 0;
+  /** Whether the panel is small: one bar (`barParts`). */
+  private small = false;
   /** The rail's button of each class, in order. */
   private classButtons: HTMLButtonElement[];
   /** What the panel was last built of (`show`), and the state it shows. */
@@ -43,6 +49,30 @@ export class GodMenu {
     });
     const half = Math.ceil(classes.length / 2);
     rail.replaceChildren(...this.classButtons.slice(0, half), hold, ...this.classButtons.slice(half));
+    this.listenSwipes();
+  }
+
+  /** A finger swiping the panel down makes it small, where what it touched stands scrolled to its top (else the swipe
+   * scrolls it); swiping the small bar up shows the panel whole. The tap a swipe ends with is not taken as one. */
+  private listenSwipes(): void {
+    let from: { x: number; y: number; top: boolean } | null = null;
+    const scrolledTop = (el: EventTarget | null) => this.panel.scrollTop <= 0 && ((el as Element | null)?.closest('.cards')?.scrollTop ?? 0) <= 0;
+    this.panel.addEventListener('touchstart', e => {
+      const p = e.touches[0];
+      from = e.touches.length === 1 ? { x: p.clientX, y: p.clientY, top: scrolledTop(e.target) } : null;
+    }, { passive: true });
+    this.panel.addEventListener('touchend', e => {
+      const p = e.changedTouches[0], start = from;
+      from = null;
+      if (!start) return;
+      const dy = p.clientY - start.y, dx = p.clientX - start.x;
+      if (Math.abs(dy) < SWIPE_PX || Math.abs(dx) > Math.abs(dy)) return;
+      if (!this.small && dy > 0 && start.top && scrolledTop(e.target)) this.small = true;
+      else if (this.small && dy < 0) this.small = false;
+      else return;
+      e.preventDefault();
+      this.again();
+    });
   }
 
   /** Show god mode as it stands (`s`): the panel is built anew only where what it shows changed, so a button stays under
@@ -50,8 +80,12 @@ export class GodMenu {
   show(s: MenuState): void {
     this.state = s;
     if (!s.tool) this.mode = 'pick';
-    const t = s.tool, set = t?.setting?.(), key = JSON.stringify([this.mode, this.open, this.category, t?.label, s.radius, s.radii, set?.on, set?.choices]);
-    if (key !== this.built) { this.built = key; this.panel.replaceChildren(...(this.mode === 'tool' && t ? this.toolParts(t) : this.pickParts())); }
+    const t = s.tool, set = t?.setting?.(), key = JSON.stringify([this.small, this.mode, this.open, this.category, t?.label, s.radius, s.radii, set?.on, set?.choices]);
+    if (key !== this.built) {
+      this.built = key;
+      this.panel.replaceChildren(...(this.small ? this.barParts(t) : [this.grip(), ...(this.mode === 'tool' && t ? this.toolParts(t) : this.pickParts())]));
+      this.panel.classList.toggle('small', this.small);
+    }
     this.classButtons.forEach((b, i) => b.setAttribute('aria-expanded', String(this.mode === 'pick' && i === this.open)));
     this.panel.querySelector<HTMLButtonElement>('.undo')?.toggleAttribute('disabled', !s.undoable);
     const why = this.panel.querySelector('.why'), where = this.panel.querySelector<HTMLElement>('.where');
@@ -66,7 +100,8 @@ export class GodMenu {
    * first; pressed again, the panel shows the tool on. */
   private classPressed(i: number): void {
     const place = this.placeOf(this.state?.tool);
-    if (this.mode === 'pick' && i === this.open) { if (this.state?.tool) this.mode = 'tool'; }
+    if (this.small) { this.small = false; this.mode = 'pick'; this.open = i; this.category = place?.[0] === i ? place[1] : 0; }
+    else if (this.mode === 'pick' && i === this.open) { if (this.state?.tool) this.mode = 'tool'; }
     else { this.mode = 'pick'; this.open = i; this.category = place?.[0] === i ? place[1] : 0; }
     this.again();
   }
@@ -84,6 +119,22 @@ export class GodMenu {
     this.hold.classList.toggle('none', !t);
     this.hold.classList.toggle('light', t !== null && lightInk(t.ink));
     for (const el of [this.rail, this.panel]) if (t) el.style.setProperty('--tool', t.ink); else el.style.removeProperty('--tool');
+  }
+
+  /** The grip at the top of the whole panel (a phone's): a tap on it makes the panel small, as a swipe down does. */
+  private grip(): HTMLElement {
+    return this.button('grip', '<span></span>', 'Make the panel small', () => { this.small = true; this.again(); });
+  }
+
+  /** The small panel: one bar of the tool on (its icon in its ink, its name, its size and setting in words, why it
+   * cannot act here), or a plain one with no tool on; a tap on it shows the panel whole. */
+  private barParts(t: GodTool | null): HTMLElement[] {
+    const s = this.state!, set = t?.setting?.(), bar = this.button('mini', '<span class="mark"></span><span class="words"><b></b><span class="where"></span><span class="why"></span></span>', 'Show the whole panel', () => { this.small = false; this.again(); });
+    bar.querySelector('.mark')!.innerHTML = iconSvg(t?.icon ?? 'wand');
+    bar.querySelector('b')!.textContent = t?.label ?? 'Pick a tool';
+    bar.querySelector('.where')!.textContent = t ? [radiusText(s.radius), set?.choices[set.on]?.label].filter(Boolean).join(' · ') : 'Tap or swipe up to see the tools';
+    bar.insertAdjacentHTML('beforeend', iconSvg('up'));
+    return [bar];
   }
 
   /** The panel of tool `t`: its picture with its name, where it lives, why it cannot act here, the buttons that change

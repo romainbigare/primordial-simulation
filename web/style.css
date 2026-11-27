@@ -173,6 +173,17 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 .pickhead { display: flex; align-items: center; gap: 8px; padding: 2px 2px 0 6px; }
 .pickhead h2 { flex: 1; font-size: 16px; font-weight: 700; }
 .round { background: var(--chip); }
+/* The small panel (a swipe down on a phone): one bar of the tool on; the grip that makes it small is a phone's. */
+.godpanel .grip { display: none; }
+.godpanel.small { padding: 6px; }
+.mini { display: flex; align-items: center; gap: 10px; width: 100%; height: 48px; padding: 0 10px 0 4px; background: none; text-align: left; }
+.mini .mark { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--tool, var(--chip)); color: var(--on-ink); }
+.mini .words { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mini b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini .words span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini .words .why { color: var(--warn); }
+.mini .words .why:empty { display: none; }
+.mini > .i { flex: none; color: var(--muted); }
 .tabs { display: flex; gap: 6px; overflow-x: auto; flex: none; scrollbar-width: none; }
 .tab { flex: none; height: 36px; border-radius: 999px; padding: 0 14px 0 10px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; background: var(--chip); }
 .tab .i { width: 16px; height: 16px; }
@@ -248,6 +259,9 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   .rail .disc .i { width: 21px; height: 21px; }
   .godpanel { --covers: bottom; position: fixed; z-index: 2; left: var(--edge); right: var(--edge); bottom: calc(var(--edge) + env(safe-area-inset-bottom) + var(--rail) + var(--rise)); max-height: calc(100dvh - var(--top) - 48px - 2 * var(--gap) - var(--edge) - env(safe-area-inset-bottom) - var(--rail) - var(--rise)); border-radius: 24px; background: color-mix(in srgb, var(--solid) 94%, transparent); }
   .godpanel .hint { display: none; }
+  .godpanel .grip { display: grid; place-items: center; flex: none; height: 16px; margin: -6px 0 -8px; background: none; }
+  .godpanel .grip span { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+  .godpanel { touch-action: pan-y; }
   .cards { max-height: 336px; overflow-y: auto; }
   /* The tool's button: its colour (`--tool`, the tool's ink) lit from the top left, deeper to the bottom right, with a
      soft ring of it and a shadow under it; dark words on a light ink (`light`); plain with no tool on. */
