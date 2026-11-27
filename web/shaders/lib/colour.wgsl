@@ -35,8 +35,9 @@ const ROCK = 5u; const BARE = 6u; const PLANTS = 7u;
 // 1982).
 const SAND = vec3f(0.45, 0.40, 0.30); const TUNDRA = vec3f(0.30, 0.31, 0.26); const UPLAND = vec3f(0.30, 0.27, 0.21);
 const SNOW = vec3f(0.90, 0.92, 0.95);
-// How many times steeper than it is the ground is shaded.
-const EXAGGERATE = 6.0;
+// How many times steeper than it is the ground is shaded: under the low light (`LIGHT`) a gentle slope already
+// departs far from flat ground's light, and a steep one must still read steeper.
+const EXAGGERATE = 2.0;
 // A beach (`beach`) lies on ground whose slope (rise over run) is under `BEACH_SLOPE`, none where it passes
 // `ROCK_SLOPE` (a steep coast is a rock shore: waves carry the sand away), and on loose ground at least `BEACH_LOOSE_M`
 // deep (sand is the load the wear laid at the shore); by a lake up to `LAKE_BEACH` of the sea's height over its level

@@ -60,8 +60,8 @@ fn laid_years(settled: f64, age: f64) -> f64 {
 /// coarse and fine particles of its loose ground (`grain`, one a sample), how slowly its pores pass liquid, the decimal
 /// logarithm of 1 m/s over their conductivity (`Pores::of`; 4 for 0.1 mm/s, 7 for 0.1 µm/s), and the liquid it holds
 /// for roots (`Pores::for_roots` over its loose ground's depth) as the layer `avail` shows it (`layers::shown`); then of
-/// each sample again two zeros, how deep the load the
-/// liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain
+/// each sample again the slope up to the highest ground toward the light (`horizon::horizon`), a zero, how deep the
+/// load the liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain
 /// (`laid_years`), by which a shell draws a deposit: four planes of a texture, one under the other. Only of the
 /// samples of the rows `rows`: each plane holds those rows alone.
 pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture], rows: std::ops::Range<usize>) -> Vec<u16> {
@@ -83,9 +83,10 @@ pub(super) fn rock(r: &Reaches, colours: &[[f64; 3]], grain: &[Texture], rows: s
         let roots = avail(p.for_roots(s.loose[k]));
         out.extend([half(t.coarse as f32), half(t.fine as f32), half(-p.seep.log10() as f32), half(roots)]);
     }
+    let horizon = super::horizon::horizon(s, r.metres);
     for k in ks {
         let (settled, age) = (s.settled[k], s.age[k]);
-        out.extend([0, 0, half(settled as f32), half(laid_years(settled, age).log10() as f32)]);
+        out.extend([half(horizon[k]), 0, half(settled as f32), half(laid_years(settled, age).log10() as f32)]);
     }
     out
 }
