@@ -298,8 +298,9 @@ does not follow an edit; the cell's soil keeps its texture. What an edit starts 
 (`World::wear_edits`, `space::shaped`). This is part of the edit: the hand lays the ground it shaped as the world's own
 wear would leave it after `edit_wear_years` (10⁶ years), and no time passes on the world's clock. Over the samples the
 edits shaped since the samples were last built and 32 about them (which drain them, and stand as they are), each such
-sample first takes the terrain's own roughness, the fine swells of its noise (`terrain::swells`) times how far the edits
-moved it, so a round hill has something to cut; then 8 steps of the start's law (`space::wear`): the flood from the
+sample first takes the terrain's own roughness, the fine swells of its noise (`terrain::swells`) about their mean over
+those samples (by how far the edits moved each) times how far the edits moved it, so a round hill has something to cut
+and the roughness neither raises nor lowers it as a whole; then 8 steps of the start's law (`space::wear`): the flood from the
 box's edge, the stream power law with the K of each sample's bed's make (`wear::cut`) and the creep (`slopes::creep`),
 on those samples alone and none at or under the liquid's stand; what the wear takes leaves the world (its load is not
 laid); no sample goes lower than it stood before the edits shaped it since, so a pit is not cut deeper; last the ground

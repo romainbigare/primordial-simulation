@@ -74,7 +74,8 @@ impl World {
     /// The ground edits shaped since the samples were last built (`Samples::shaped_since`) as the start's wear would
     /// leave it worn for `Config::edit_wear_years` (laws.md, Edits): over the box of those samples and
     /// `SLIDE_PASSES` about them, the ground as it stands, each such sample first given the terrain's own roughness
-    /// (`terrain::swells`) in proportion to how far the edits moved it, so the wear has something to cut; then
+    /// (`terrain::swells`, about their mean over those samples) in proportion to how far the edits moved it, so the wear
+    /// has something to cut; then
     /// `WORN_STEPS` steps of the start's law (`space::wear`): the flood from the box's edge, the stream power law with
     /// each bed's make's K (`wear::cut`, `Strata::cut`) and the creep (`slopes::creep`), on those samples alone and
     /// none at or under the liquid's stand (`wear::STAND_M`), the ground about them as it stands; no sample lower than
@@ -94,8 +95,11 @@ impl World {
         let local = win.grid(&g);
         let moved: Vec<f64> = (0..win.n()).map(|i| s.shaped_since(r, at(i))).collect();
         let was: Vec<f64> = (0..win.n()).map(|i| s.height_now(r, at(i))).collect();
-        let swells = |i: usize| super::terrain::swells(t.seed, &self.map, self.map.place_of(&leaf(at(i)), lat.0, lat.1).1);
-        let mut h: Vec<f64> = (0..win.n()).map(|i| if moved[i] != 0.0 { was[i] + moved[i] * swells(i) } else { was[i] }).collect();
+        let swells: Vec<f64> = (0..win.n()).map(|i| if moved[i] != 0.0 { super::terrain::swells(t.seed, &self.map, self.map.place_of(&leaf(at(i)), lat.0, lat.1).1) } else { 0.0 }).collect();
+        // (About their mean over what the edits moved, by how far: the roughness neither raises nor lowers the whole.)
+        let weight: f64 = moved.iter().map(|m| m.abs()).sum();
+        let mean = moved.iter().zip(&swells).map(|(m, w)| m.abs() * w).sum::<f64>() / weight;
+        let mut h: Vec<f64> = (0..win.n()).map(|i| was[i] + moved[i] * (swells[i] - mean)).collect();
         // The box's edge drains it; what no edit moved, or lies under the liquid, holds.
         let edge: Vec<bool> = (0..win.n()).map(|i| i % win.w == 0 || i % win.w == win.w - 1 || i < win.w || i >= win.n() - win.w).collect();
         let held: Vec<bool> = (0..win.n()).map(|i| edge[i] || moved[i] == 0.0 || was[i] <= STAND_M).collect();
