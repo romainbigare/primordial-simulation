@@ -7,9 +7,10 @@
 //! width = w0 × discharge^b), and what a m² drained passes on never passes `MOST_RUNOFF`, so a channel of drained area
 //! a covers no point farther than w0 × (`MOST_RUNOFF` a)^b / 2 from its line (its reach). Of the channels within their
 //! reach, a texel keeps the one whose distance over the larger of its reach and the texel's size is least: the one that
-//! covers it first as the flux grows, or, where every channel is narrower than a texel, the nearest; but a line that
-//! passes within half a texel's diagonal of the texel's centre (`CLAIM_DIAGONAL`) is as near as can be, so a rill
-//! keeps the texels it runs through however wide the river whose reach they lie in; it keeps that
+//! covers it first as the flux grows, or, where every channel is narrower than a texel, the nearest; but a line whose
+//! bed, widened by `CLAIM_TEXELS`, covers the texel's centre is as near as can be, so a rill keeps the texels it runs
+//! through and those about them however wide the river whose reach they lie in (a shell blends four texels, all of the
+//! one line); a tributary takes no texel in the bed of the channel it joins; it keeps that
 //! channel's sample, its distance to its line, signed by the side the texel lies on, of the line's nearest point how
 //! far along the channel it lies, and its distance to the line without its bends (its curve and its wander alone:
 //! from afar a shell draws a channel as a line wider than its bends, about that one). A channel a shell may draw as
@@ -61,10 +62,14 @@ const CSS_TEXELS_MOST: f64 = 3.0;
 /// A line reaches this many texels past its edge: a shell blends the distance between texels and spreads the edge
 /// over a pixel.
 const LINE_MARGIN: f64 = 1.5;
-/// A line claims the texels whose centre lies within this many texels of it (half a texel's diagonal: the texels it
-/// runs through) before any line farther away; among such lines, and lines as near over their scale, the nearest wins
-/// (by `NEAREST_TIE` of its distance, samples, too small to change any other choice).
-const CLAIM_DIAGONAL: f64 = 0.71;
+/// A line claims the texels whose centre lies within its bed's half width (`bends::Reaches::bed_of`) and this many
+/// texels more of it before any line farther away: the texels it runs through and their neighbours, so the four texels
+/// a shell blends about any point of its bed and of its banks hold it alone; among such lines, and lines as near over
+/// their scale, the nearest wins (by `NEAREST_TIE` of its distance, samples, too small to change any other choice).
+const CLAIM_TEXELS: f64 = 1.5;
+/// A texel knows the nearest line of another channel within this many times that line's claim (`others`): as far as
+/// its water may reach in a month of flood, and the pixel beyond it.
+const OTHER_CLAIMS: f64 = 2.0;
 const NEAREST_TIE: f64 = 1e-6;
 /// The farthest the middle of a sample's line lies from its centre, samples: its curve's middle lies within a quarter
 /// of a diagonal of it, and its bends move it by at most `bends::BEND_MOST`.
@@ -128,8 +133,11 @@ impl Window {
 /// its bends, m (`NO_CHANNEL_M` for none); the valleys about the lines (`valley`): the sum of their weights at the
 /// texel and of their floors' heights so weighted, m; and the deepest mouth of the lines that reach it
 /// (`shore::drowned`): where lines of two channels lie near, the texel's ground goes under as the larger mouth's does,
-/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it; and the
-/// nearest line of a sample that drains a channel's source, across its bank (`wetness::bank_lines`).
+/// whichever line holds it, so no line of a small channel across a large one's mouth stands out of it; the nearest
+/// line of a sample that drains a channel's source, across its bank (`wetness::bank_lines`); and of the texels that
+/// hold a channel, the nearest line of another channel (from another head, `Bends::head`) within `OTHER_CLAIMS` of
+/// that line's claim (`others`): its sample (`NONE` for none) and the distance to it, m, so where two channels meet
+/// each knows the other's water.
 pub(super) struct Field {
     pub dist: Vec<f64>,
     pub sample: Vec<u32>,
@@ -139,6 +147,8 @@ pub(super) struct Field {
     pub weight: Vec<f64>,
     pub mouth: Vec<[f64; 2]>,
     pub bank: Vec<(f64, u32)>,
+    pub other: Vec<u32>,
+    pub other_dist: Vec<f64>,
 }
 
 impl Field {
@@ -162,14 +172,15 @@ pub(super) struct Channels<'a> {
 
 /// A line near a window of texels: its sample, the line as drawn, where it joins the next sample's, what its
 /// distances are told apart by (half its channel's widest width, no less than a texel, samples), how far it reaches,
-/// samples, whether a valley is drawn about it, and whether it is drawn on these texels at all (a line near only for
-/// its wetness index is not).
+/// samples, how far it claims its texels (`CLAIM_TEXELS`), samples, whether a valley is drawn about it, and whether it is
+/// drawn on these texels at all (a line near only for its wetness index is not).
 pub(super) struct Near {
     pub q: usize,
     pub drawn: Drawn,
     join: Option<Join>,
     scale: f64,
     reach: f64,
+    claims: f64,
     carves: bool,
     shown: bool,
 }
@@ -273,7 +284,8 @@ impl<'a> Channels<'a> {
                     continue;
                 }
                 if let Some((drawn, join)) = self.line(q, texel) {
-                    near.push(Near { q, drawn, join, scale: own.max(texel) / metres, reach, carves, shown });
+                    let claims = (self.r.bed_of(q).0 / 2.0 / metres + CLAIM_TEXELS * k).min(reach);
+                    near.push(Near { q, drawn, join, scale: own.max(texel) / metres, reach, claims, carves, shown });
                 }
             }
         }
@@ -284,9 +296,8 @@ impl<'a> Channels<'a> {
     /// than `best` holds (over its scale), that `takes` it and that lie out of the bed of the channel it joins: `put`
     /// gets the texel, its distance signed by the side, m, and the share of the piece its nearest point lies along.
     fn lay(&self, win: &Window, l: &Near, ab: [[f64; 2]; 2], best: &mut [f64], takes: &dyn Fn(usize) -> bool, put: &mut dyn FnMut(usize, f64, f64)) {
-        let claims = CLAIM_DIAGONAL * win.k;
         about(win, l, ab, &mut |i, at, side, d2, t| {
-            let near = (d2.sqrt() - claims).max(0.0) / l.scale + NEAREST_TIE * d2.sqrt();
+            let near = (d2.sqrt() - l.claims).max(0.0) / l.scale + NEAREST_TIE * d2.sqrt();
             if near < best[i] && takes(i) && !l.join.is_some_and(|j| j.holds(at)) {
                 best[i] = near;
                 put(i, side * d2.sqrt() * self.r.metres, t);
@@ -302,13 +313,37 @@ impl<'a> Channels<'a> {
         let (near, reach_valley) = self.near(&all, all.k * self.r.metres);
         let mut f = self.laid(&all, &near, reach_valley);
         self.mend(&mut f, &all, &near);
+        let (other, other_dist) = self.others(&f, &all, &near);
         let heads = |q: usize| self.r.s.main[q] == NONE || !self.strips[self.r.s.main[q] as usize];
         let bank = super::wetness::bank_lines(&all, near.iter().filter(|l| banks_read(all.k) && self.strips[l.q]).map(|l| (l.q, heads(l.q), l.drawn.line.iter().map(|v| v.p).collect())));
         fn cut<T: Copy>(v: &[T], high: usize, m: usize, wide: usize) -> Vec<T> {
             (0..high).flat_map(|y| v[(y + m) * wide + m..(y + m + 1) * wide - m].iter().copied()).collect()
         }
         let c = |v: &[f64]| cut(v, win.high, m, wide);
-        Field { dist: c(&f.dist), sample: cut(&f.sample, win.high, m, wide), along: c(&f.along), calm: c(&f.calm), valley: c(&f.valley), weight: c(&f.weight), mouth: cut(&f.mouth, win.high, m, wide), bank: cut(&bank, win.high, m, wide) }
+        Field { dist: c(&f.dist), sample: cut(&f.sample, win.high, m, wide), along: c(&f.along), calm: c(&f.calm), valley: c(&f.valley), weight: c(&f.weight), mouth: cut(&f.mouth, win.high, m, wide), bank: cut(&bank, win.high, m, wide), other: cut(&other, win.high, m, wide), other_dist: c(&other_dist) }
+    }
+
+    /// Of each texel of `win` that holds a channel in `f`, the nearest line of `near` of another channel within
+    /// `OTHER_CLAIMS` of its claim that the texel can name (`names`): its sample (`NONE`: none) and the distance to it,
+    /// m (`NO_CHANNEL_M`: none).
+    fn others(&self, f: &Field, win: &Window, near: &[Near]) -> (Vec<u32>, Vec<f64>) {
+        let n = win.wide * win.high;
+        let (mut other, mut dist) = (vec![NONE; n], vec![NO_CHANNEL_M; n]);
+        let head = |q: u32| self.bends.head(q as usize);
+        for l in near.iter().filter(|l| l.shown) {
+            let most = OTHER_CLAIMS * l.claims;
+            for w in l.drawn.line.windows(2) {
+                about(win, l, [w[0].p, w[1].p], &mut |i, _, _, d2, _| {
+                    let d = d2.sqrt() * self.r.metres;
+                    let held = f.sample[i];
+                    let texel = [win.x0 + (i % win.wide) as i64, win.y0 + (i / win.wide) as i64];
+                    if held != NONE && d2 <= most * most && d < dist[i] && head(held) != head(l.q as u32) && names(self.r.s, texel, win.k, l.q as u32) {
+                        (other[i], dist[i]) = (l.q as u32, d);
+                    }
+                });
+            }
+        }
+        (other, dist)
     }
 
     /// The lines `near` laid into the texels of the window `win`: each line drawn into the texels within its reach,
@@ -316,7 +351,7 @@ impl<'a> Channels<'a> {
     /// into the texels that hold its own channel's line (the line from the same head, `Bends::head`) or none.
     fn laid(&self, win: &Window, near: &[Near], reach_valley: f64) -> Field {
         let n = win.wide * win.high;
-        let mut f = Field { dist: vec![NO_CHANNEL_M; n], sample: vec![NONE; n], along: vec![0.0; n], calm: vec![NO_CHANNEL_M; n], valley: vec![0.0; n], weight: vec![0.0; n], mouth: vec![[0.0; 2]; n], bank: Vec::new() };
+        let mut f = Field { dist: vec![NO_CHANNEL_M; n], sample: vec![NONE; n], along: vec![0.0; n], calm: vec![NO_CHANNEL_M; n], valley: vec![0.0; n], weight: vec![0.0; n], mouth: vec![[0.0; 2]; n], bank: Vec::new(), other: Vec::new(), other_dist: Vec::new() };
         // Of each texel, how near the line it holds lies, over the line's scale.
         let mut best = vec![f64::INFINITY; n];
         for l in near.iter().filter(|l| l.shown) {

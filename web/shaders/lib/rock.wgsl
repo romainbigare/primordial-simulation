@@ -164,7 +164,8 @@ fn plume_at(at: vec2f) -> f32 {
 // The sample next along the channel of sample `s` from the point `at` (m from the map's north-west corner), and the
 // share of the way from `s`'s centre to that one's the point lies (0: none): a channel's numbers grow evenly from one
 // sample's centre to the next one's along it (`links_of`), so its width has no step where two samples meet; a
-// tributary keeps its own to its join.
+// tributary keeps its own to its join, and a channel its own up to a sample through which none runs (the liquid of a
+// pond passes through its body, not its samples' channels: below its outlet the river starts as wide as it runs).
 struct Next { s: vec2i, share: f32 }
 fn next_along(s: vec2i, at: vec2f) -> Next {
   var next = Next(s, 0.0);
@@ -178,23 +179,28 @@ fn next_along(s: vec2i, at: vec2f) -> Next {
     let n = select(code, code - 1, code <= 4);
     let step = vec2i(n % 3, n / 3) - 1;
     let a = min(dot(p, vec2f(step)) / f32(dot(step, step)), 1.0);
-    if (a > next.share) { next = Next(s + step, a); }
+    if (a > next.share && discharge_of(s + step) > 0.0) { next = Next(s + step, a); }
   }
   return next;
 }
 
-// The sample of the channel at a point of ground `g`: its nearest texel's channel's, or the channel's of the texel
-// across from that where it carries more and that texel lies in its water, so a pixel in the water of a channel a
-// tributary joins is that channel's.
-fn sample_at(g: Tiled) -> vec2i {
-  let across = discharge_of(g.channels.zw);
-  if (across > discharge_of(g.channels.xy) && g.ends.y < 0.5 * land.channel.x * pow(across, land.channel.y)) { return g.channels.zw; }
-  return g.channels.xy;
+// What runs through the line of sample `s` drawn on the land, m³/s: its own discharge, or where its reach has no
+// slope (a pond's sample: the body passes the liquid, laws.md 1.2, and its samples' channels carry little) the larger
+// of that and the discharge of the sample it runs to, so the line from a lake's shore to its outlet carries what
+// leaves the lake.
+fn discharge_through(s: vec2i) -> f32 {
+  let q = discharge_of(s);
+  if (s.x < 0 || stone_and_fall(s).y > 0.0) { return q; }
+  let code = links_of(s) % LINK_UP;
+  if (code <= 0) { return q; }
+  let c = (code - 1) % 8 + 1;
+  let n = select(c, c - 1, c <= 4);
+  return max(q, discharge_of(s + vec2i(n % 3, n / 3) - 1));
 }
 
-// What runs through the channel at a point `at` of ground `g`, m³/s (`sample_at`, `next_along`).
+// What runs through the channel at a point `at` of ground `g`, m³/s (`Tiled.channel`, `next_along`).
 fn discharge_at(g: Tiled, at: vec2f) -> f32 {
-  let s = sample_at(g);
+  let s = g.channel;
   let n = next_along(s, at);
   return mix(discharge_of(s), discharge_of(n.s), n.share);
 }
@@ -242,8 +248,11 @@ fn noise_reach(along: f32, cell: f32, across: f32, k: i32) -> f32 {
 
 // A channel widens into the standing liquid it runs into: its bed and its water grow evenly to `MOUTH_FLARE` wider (and
 // its water that much shallower) across that liquid's band of shallows (land.wgsl `through_band`), none of it on the
-// land. A channel that moves no stones of `BAR_SAND_STONE` m carries sand and silt alone.
-const MOUTH_FLARE = 1.5;
+// land; and it opens toward that liquid on the land too, as a funnel: from where its ground lies `MOUTH_OPENS.x` times
+// its middle's depth over the liquid's level, to `MOUTH_OPENS.y` of that flare at the water's edge (the backwater of
+// the standing liquid slows the flow and spreads it: a gentle reach opens over a long way, a steep one at the shore).
+// A channel that moves no stones of `BAR_SAND_STONE` m carries sand and silt alone.
+const MOUTH_FLARE = 1.5; const MOUTH_OPENS = vec2f(3.0, 0.4);
 const BAR_SAND_STONE = 0.03;
 
 // A channel at a point of ground `g`, of this month's discharge `q`, m³/s: the half width of its bed on the point's
@@ -265,7 +274,10 @@ fn over_water(g: Tiled, ch: Channel, over: f32, shown: f32) -> f32 {
 // of the liquid it runs into.)
 fn channel_of(g: Tiled, q: f32, banks: f32, mouth: f32) -> Channel {
   if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0); }
-  let flare = 1.0 + MOUTH_FLARE * mouth;
+  // (On the land beside a pond, how near its level the ground lies: `MOUTH_OPENS`.)
+  var nearing = 0.0;
+  if (g.water.y > 0.0) { nearing = 1.0 - ease(0.0, MOUTH_OPENS.x * BED_MIDDLE * land.channel.z * pow(q, land.channel.w), over_ponds(g, 0.0)); }
+  let flare = 1.0 + MOUTH_FLARE * max(mouth, MOUTH_OPENS.y * nearing);
   let law = banks * flare;
   var vary = 1.0;
   if (!unseen(BED_VARY * BED_MOST_M) && g.d < BED_NEAR * law) { vary += BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5; }

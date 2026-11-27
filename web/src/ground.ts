@@ -32,8 +32,9 @@ const MOST_TILES = 56;
 const VIEW_TILES = 30;
 /** Of a tile, 16-bit floats a texel: the first plane four (the height as two, the wetness index, the signed distance to
  * its channel's line), the second four (that channel's sample, as its step from the texel's own, and one more than the
- * pond the texel lies in; 0: none; how far along its channel's line the texel lies, and its distance to that channel's line without its bends). */
-const PLANE_A = 4, PLANE_B = 4;
+ * pond the texel lies in; 0: none; how far along its channel's line the texel lies, and its distance to that channel's line without its bends),
+ * the third two (the sample of the nearest line of another channel, as the second's, and the distance to it). */
+const PLANE_A = 4, PLANE_B = 4, PLANE_C = 2;
 /** A new tile fades in over the one before it over this long, ms. */
 export const TILE_FADE_MS = 250;
 /** The view's tiles are asked for this share of its width and height past each of its edges, so a pan finds them. */
@@ -128,6 +129,7 @@ export class GroundTiles {
   private numbersDue = true;
   private atlas: Texture | null = null;
   private areas: Texture | null = null;
+  private others: Texture | null = null;
   private pages: Texture | null = null;
   /** The last view asked for, to ask again after a lost context. */
   private last: View | null = null;
@@ -472,19 +474,21 @@ export class GroundTiles {
     this.pageDue = true;
   }
 
-  /** The textures the land program reads (land.wgsl): the tiles' two planes, the page and each layer's tile (depth,
+  /** The textures the land program reads (land.wgsl): the tiles' three planes, the page and each layer's tile (depth,
    * column, row, when it came), sent to `gpu` as they change; and the time since the tiles started, ms. */
-  textures(gpu: Gpu): { atlas: Texture; areas: Texture; pages: Texture; page: Page; tiles: Texture; now: number } {
+  textures(gpu: Gpu): { atlas: Texture; areas: Texture; others: Texture; pages: Texture; page: Page; tiles: Texture; now: number } {
     const side = this.meta.size + 2 * this.meta.gutter, n = side * side;
     this.atlas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
     this.areas ??= gpu.texture('tiles', side, side, 'rgba16float', MOST_TILES);
+    this.others ??= gpu.texture('tiles', side, side, 'rg16float', MOST_TILES);
     this.tilesTex ??= gpu.texture('tiles', MOST_TILES, 2, 'rgba32float');
     const now = performance.now() - this.start;
-    if (this.held && this.pages && this.pageSent) return { atlas: this.atlas, areas: this.areas, pages: this.pages, page: this.pageSent, tiles: this.tilesTex, now };
+    if (this.held && this.pages && this.pageSent) return { atlas: this.atlas, areas: this.areas, others: this.others, pages: this.pages, page: this.pageSent, tiles: this.tilesTex, now };
     if (this.come.length) this.written++;
     for (const c of this.come) {
       gpu.write(this.atlas, c.data.subarray(0, PLANE_A * n), 0, c.layer);
       gpu.write(this.areas, c.data.subarray(PLANE_A * n, (PLANE_A + PLANE_B) * n), 0, c.layer);
+      gpu.write(this.others, c.data.subarray((PLANE_A + PLANE_B) * n, (PLANE_A + PLANE_B + PLANE_C) * n), 0, c.layer);
     }
     this.come = [];
     const page = this.page!;
@@ -498,7 +502,7 @@ export class GroundTiles {
     }
     if (!this.fades) this.faded(now);
     if (this.numbersDue) { gpu.write(this.tilesTex, this.numbers); this.numbersDue = false; this.written++; }
-    return { atlas: this.atlas, areas: this.areas, pages: this.pages!, page: this.pageSent!, tiles: this.tilesTex, now };
+    return { atlas: this.atlas, areas: this.areas, others: this.others, pages: this.pages!, page: this.pageSent!, tiles: this.tilesTex, now };
   }
 
   /** End at `now` (ms since the tiles started) the fade of every tile still fading in: a frame drawn with no fade shows
@@ -518,6 +522,6 @@ export class GroundTiles {
     clearTimeout(this.rebuildTimer);
     this.workers.forEach(w => w.worker.terminate());
     URL.revokeObjectURL(this.url);
-    if (gpu) for (const t of [this.atlas, this.areas, this.pages, this.tilesTex]) if (t) gpu.drop(t);
+    if (gpu) for (const t of [this.atlas, this.areas, this.others, this.pages, this.tilesTex]) if (t) gpu.drop(t);
   }
 }
