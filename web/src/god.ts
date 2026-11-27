@@ -1,20 +1,22 @@
-// God mode on the live map (handover 11): the player picks a tool on the strip and edits the world with a round brush
+// God mode on the live map (handover 11): the player picks a tool in the menu and edits the world with a round brush
 // (wasm/src/edit.rs `brush`, the core's `World::edit`): a tool paints as the brush moves, paints at each of the page's
 // frames while it is held (the ground, along the brush's path; heat), or makes one thing where the stroke begins (a
 // lake); when the stroke ends it settles (`settle`: the ground built again, what was heated burns), a stroke of the
 // ground once the brush rested after it. With a mouse the brush is where the pointer is; on a phone it stands at a
 // sight in the middle of the map (`GodPage.aim`): a finger moves the map under it, and a stroke
 // lasts while the tool's big button is held, so a finger never hides the brush nor paints by mistake. A burn's stroke
-// ends as soon as the ground lights, and its fire spreads on the map (front.ts). The tools themselves are a list
-// (god-tools.ts `godTools`); this is what they share: the strip (done, the tools named, the undo of the last stroke), the
-// card of the brush's sizes and the tool's choices, the strokes and the core's answers to them, the question to the core
-// about the place under the cursor (`probe`), and the brush drawn over the map at its true size (god-draw.ts).
+// ends as soon as the ground lights, and its fire spreads on the map (front.ts). The tools themselves stand in classes
+// (god-tools.ts `godClasses`); this is what they share: the menu (god-menu.ts: the rail of classes, the panel of the tool
+// on with its sizes and its setting, done and the undo of the last stroke, the cards to pick a tool), the strokes and
+// the core's answers to them, the question to the core about the place under the cursor (`probe`), and the brush drawn
+// over the map at its true size (god-draw.ts).
 
-import { UNCHANGED, type Brushed, type Editor, type GodPage, type GodTool, type Probe, type Settled } from './god-types';
+import { UNCHANGED, type Brushed, type Editor, type GodClass, type GodPage, type GodTool, type Probe, type Settled } from './god-types';
 import { drawBrush, drawFill, drawFlames, drawReason, drawSight, drawSizeTag, drawTrail, litSites } from './god-draw';
-import { holdButton, makeStrip, mostWhy, radiusText, showCard, showStrip } from './god-controls';
+import { holdButton, mostWhy, radiusText } from './god-controls';
+import { GodMenu } from './god-menu';
 
-/** The brush's radii, m (its size chips), and the one it starts at. */
+/** The brush's radii, m (its sizes), and the one it starts at. */
 const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
 /** Of a tool that paints where the brush moves, the least time between two paints of a stroke, ms, and the least move
  * of the brush's centre between them, a share of its radius: cells are edited once a stroke, so a paint where the
@@ -84,11 +86,11 @@ export class God {
   private sizeShownTill = 0;
   /** The fire of the last burn, drawn where it struck (squares) till the map's own has begun (`till`, ms). */
   private lingers: { at: [number, number]; progress: number; till: number } = { at: [0, 0], progress: 0, till: 0 };
-  /** Whether a stroke settled that can be undone (the core keeps one), and the button that undoes it. */
+  /** Whether a stroke settled that can be undone (the core keeps one). */
   private undoable = false;
-  private undoButton: HTMLButtonElement;
-  /** The button held for a stroke where the brush stands at the sight (`GodPage.aim`). */
+  /** The button held for a stroke where the brush stands at the sight (`GodPage.aim`), and the menu it stands in. */
   private holdButton: HTMLButtonElement;
+  private menu: GodMenu;
   /** The trail of the stroke of a tool that trails (`GodTool.trails`): each paint's place (squares) and radius (m), and
    * its ink; drawn till the core settled it. */
   private trail: { at: [number, number][]; radius: number[]; ink: string } | null = null;
@@ -97,11 +99,11 @@ export class God {
    * ring till the ground in view shows the samples it built (`GodPage.ground`). */
   private filling: { at: [number, number]; radius: number; ink: string; began: number; from: number; settled: number } | null = null;
 
-  /** `editor`: the live world's, where there is one. */
-  constructor(private page: GodPage, private editor: () => Editor | null, private tools: GodTool[]) {
-    this.undoButton = makeStrip(page.strip, tools, () => page.close(), t => this.pick(this.tool === t ? null : t), () => this.undo());
+  /** `editor`: the live world's, where there is one; `classes`: the tools, in their classes. */
+  constructor(private page: GodPage, private editor: () => Editor | null, classes: GodClass[]) {
     // (The button starts a stroke at the sight, on a phone alone.)
     this.holdButton = holdButton(() => { const aim = this.page.aim(); return aim !== null && this.start(...aim); }, () => this.end());
+    this.menu = new GodMenu(page.rail, page.panel, classes, this.holdButton, { pick: t => this.pick(t), undo: () => this.undo(), close: () => page.close(), size: m => this.sized(m) });
     this.show();
   }
 
@@ -402,14 +404,11 @@ export class God {
     this.page.redraw();
   }
 
-  /** The strip's buttons (the tool on pressed, a tool that cannot act here greyed with the reason, the undo greyed
-   * where no stroke can be undone), and the card: its title, the brush's sizes (chips; on a phone a smaller and a
-   * larger button), the tool's choices, a line of how to use it or why it cannot act here, and on a phone the button
-   * held for a stroke. */
+  /** The menu as god mode stands: the tool on, the place under the brush, the brush's sizes, and whether a stroke can
+   * be undone. */
   private show(): void {
     // (A stroke that rests is undone once it settled, `undo`.)
-    showStrip(this.page.strip, this.tools, this.tool, this.probe, this.undoable || this.resting !== null, this.undoButton);
-    showCard(this.page.card, this.holdButton, this.tool, this.probe, { radii: this.radii(), radius: this.radius, pick: m => this.sized(m) }, () => this.show());
+    this.menu.show({ tool: this.tool, probe: this.probe, radius: this.radius, radii: this.radii(), all: RADII_M, undoable: this.undoable || this.resting !== null });
   }
 
   /** The brush's radii the tool on may take (`GodTool.least`). */

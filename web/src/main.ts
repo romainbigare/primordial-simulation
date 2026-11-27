@@ -13,7 +13,7 @@ import { Fire } from './fire';
 import { God } from './god';
 import { FireFront } from './front';
 import { nearestFrame, setTimeline } from './timeline';
-import { godTools } from './god-tools';
+import { godClasses } from './god-tools';
 import { Panels, watchCovered } from './panels';
 import { fillIcons, iconSvg } from './icons';
 import { textureLegend } from './soil';
@@ -89,11 +89,11 @@ map.layer = vegetation;
 /** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
 const front = new FireFront(fire);
 const god = new God({
-  strip: $('god-strip'), card: $('god'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
+  rail: $('god-rail'), panel: $('god-panel'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
   picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), burnt: (b, strike, lit) => front.burnt(b, strike, lit),
   aim: () => (PHONE.matches && world ? map.sightAt() : null),
   ground: () => [live?.version ?? 0, land?.told ?? 0],
-}, () => live, godTools(() => live?.kinds ?? []));
+}, () => live, godClasses(() => live?.kinds ?? []));
 god.listen($<HTMLCanvasElement>('cv'));
 map.overlay = (ctx, ox, oy, s) => {
   slots.seen(ox, oy, s);
@@ -304,11 +304,11 @@ function syncUi(): void {
   map.playing = playing && live !== null;
 }
 
-/** Whether god mode is on: its strip and card shown. */
-function godOn(): boolean { return !$('god-strip').hidden; }
+/** Whether god mode is on: its rail and panel shown. */
+function godOn(): boolean { return !$('god').hidden; }
 function setGod(on: boolean): void {
-  $('god-strip').hidden = $('god').hidden = !on;
-  // (On a phone the strip takes the dock's place, style.css.)
+  $('god').hidden = !on;
+  // (On a phone its rail takes the dock's place, style.css.)
   document.body.classList.toggle('god-on', on);
   $('god-btn').setAttribute('aria-pressed', String(on));
   if (!on) god.reset();
@@ -376,7 +376,7 @@ const RING_SCALES = [1, 0.5, 0.35, 0.25, 0.125], RING_SCALE_KEY = 'ew.ringScale'
   };
 }
 const panels = new Panels($('bar'), $('cv'));
-watchCovered([$('bar'), $('year'), $('god-strip'), $('god'), $('inspect-card'), $('timebar')], edges => map.setCovered(edges));
+watchCovered([$('bar'), $('year'), $('god-rail'), $('god-panel'), $('inspect-card'), $('timebar')], edges => map.setCovered(edges));
 PHONE.addEventListener('change', () => map.setFill(PHONE.matches, world && landBox(world)));
 $<HTMLInputElement>('layerfind').oninput = findLayers;
 $('clearlayer').onclick = () => setLayer(null);
