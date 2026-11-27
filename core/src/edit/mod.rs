@@ -2,7 +2,7 @@
 //! and the live page change a world from the outside. Each edit acts on the cell under its place, through the law it
 //! belongs to (`World::clear`, `World::split`, `cover::place`, the flames' strikes), and is told to the shell as a raw
 //! event (`EventKind::Edit`). A round brush finds the cells under it and the share of each it covers (`brush`), and
-//! raises or lowers the ground under it (`shape`), which then slides till it stands no steeper than loose ground rests
+//! raises or lowers the ground under it (`shape`), which comes to rest as it is laid, no steeper than loose ground rests
 //! at (`World::rest`); what the edits start that takes no time runs at once, with no time on the world's clock
 //! (`World::settle`), the ground they shaped worn first (`World::wear_edits`).
 
@@ -116,8 +116,7 @@ impl World {
     /// (`EventKind::Edit`, its cell the node, the value 1 where it was made, 0 where the world could not make it). An
     /// edit whose numbers cannot be made (`Edit::valid`) is refused before it touches the world (its node the first
     /// cell where its place is not finite). The grown stand of a kind is found once for all of them, as the world stood
-    /// before the first placed it: each cell takes the same stand. The ground the call's edits of the ground shaped then
-    /// slides (`World::rest`), laid as the loose ground of the last one's make. Returns whether each was made.
+    /// before the first placed it: each cell takes the same stand. Returns whether each was made.
     pub fn edit(&mut self, edits: &[Edit]) -> Vec<bool> {
         if edits.iter().any(|e| e.valid() && e.act.reads_month()) {
             crate::month_start(self);
@@ -132,13 +131,6 @@ impl World {
                 done
             })
             .collect();
-        let shaped: Vec<(Brush, u8)> = edits.iter().zip(&done).filter_map(|(e, &d)| match e.act {
-            Act::Ground { radius_m, make, .. } if d => Some((Brush { centre: e.place, radius_m }, make)),
-            _ => None,
-        }).collect();
-        if let Some(&(_, make)) = shaped.last() {
-            self.rest(&shaped.iter().map(|p| p.0).collect::<Vec<_>>(), make as usize);
-        }
         done
     }
 

@@ -4,13 +4,23 @@
 //! the top of a stroke, `Config::edit_top_m` of loose ground of one of the terrain's makes (`Make::of`); a lowering
 //! takes the loose ground first, then the rock. Where in a cell the ground moved is kept on the terrain's samples
 //! (`Relief::shaped`), which are built again over it when the edits settle (`World::settle`). The ground the brush
-//! shaped slides till it stands no steeper than loose ground rests at (`World::rest`).
+//! shaped comes to rest as it is laid: it spreads about the brush and slides till it stands no steeper than loose ground
+//! rests at (`World::rest`).
 
 use super::Brush;
 use crate::rng::{Purpose, Rng};
 use crate::store::{Boundary, Class, Node};
 use crate::World;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+
+/// What edits moved spreads by this, m² per m of a brush's radius and per m it shapes at its centre (`World::rest`).
+const SPREAD: f64 = 0.2;
+/// What edits moved spreads out to this many radii from a brush's centre, less toward there (`World::rest`).
+const SPREAD_RADII: f64 = 2.0;
+/// The most a layer of an edit of the ground lays at the brush's centre, as a share of its radius (`World::shape`).
+const LAYER: f64 = 1.0 / 64.0;
+/// The most layers of one edit of the ground (`World::shape`): past it the layers are higher.
+const LAYERS_MOST: f64 = 64.0;
 
 impl World {
     /// The make of the loose ground the stroke `stroke` of a shell's edits lays (`Act::Ground`): one of the terrain's
@@ -21,11 +31,28 @@ impl World {
 
     /// The ground under the brush `b` raised by `height` m at its centre (lowered where under none), by `falloff` of
     /// that at a distance d from it (in radii: a smooth bump, flat at its edge), over the samples it covers
-    /// (`covered`). Each cell takes the volume its samples move by; a raise is the share `loose` of loose ground of the
-    /// make `make` (the part of the stroke's height at the centre, which has raised `stroke` m there before, within
-    /// `edit_top_m` of its top) and the rest the cell's rock (`raise`); a lowering takes at most what the cell holds
-    /// (`lower`), and its samples move by the share it took. Whether any ground moved.
+    /// (`covered`), in layers no higher at the centre than `LAYER` of its radius, each coming to rest before the next
+    /// (`lay`, `rest`): the ground stands the same however much one edit lays. A stroke that has raised `stroke` m at
+    /// the centre before lays the loose ground of its top (`lay`). Whether any ground moved.
     pub(crate) fn shape(&mut self, b: Brush, (height, stroke): (f64, f64), make: usize) -> bool {
+        let layers = (height.abs() / (LAYER * b.radius_m).max(f64::MIN_POSITIVE)).ceil().clamp(1.0, LAYERS_MOST);
+        let mut moved = false;
+        for l in 0..layers as usize {
+            let laid = self.lay(b, (height / layers, stroke + height.max(0.0) * l as f64 / layers), make);
+            if laid {
+                self.rest(b, height / layers, make);
+            }
+            moved |= laid;
+        }
+        moved
+    }
+
+    /// A layer `height` m high at the centre of the brush `b` laid (taken where under none). Each cell takes the volume
+    /// its samples move by; a raise is the share `loose` of loose ground of the make `make` (the part of the stroke's
+    /// height at the centre, which has raised `stroke` m there before, within `edit_top_m` of its top) and the rest the
+    /// cell's rock (`raise`); a lowering takes at most what the cell holds (`lower`), and its samples move by the share
+    /// it took. Whether any ground moved.
+    fn lay(&mut self, b: Brush, (height, stroke): (f64, f64), make: usize) -> bool {
         let s = self.terrain_samples();
         let mut cells: BTreeMap<usize, Vec<(usize, f64)>> = BTreeMap::new();
         for c in self.covered(b, s.across) {
@@ -63,14 +90,17 @@ impl World {
         self.terrain.makes.get(make).map_or_else(Vec::new, |m| m.of.clone())
     }
 
-    /// The ground about the brushes `brushes` (the edits of the ground of one call) slides till it stands no steeper than
-    /// loose ground rests at, its crest and foot rounded (`World::slid`; laws.md, Edits). Each cell moves by its
-    /// samples' heights (`move_ground`), what slides laid as loose ground of the make `make` (ground that slid lies loose
-    /// at the foot of its slope).
-    pub(super) fn rest(&mut self, brushes: &[Brush], make: usize) {
+    /// The ground the brush `b` just shaped by `height` m at its centre comes to rest (`World::slid`; laws.md, Edits):
+    /// what edits moved spreads about the brush, out to `SPREAD_RADII` of its radius and less toward there (`falloff`),
+    /// by `SPREAD` of its radius, m², for each m it shaped at its centre, and the ground slides till it stands no
+    /// steeper than loose ground rests at. Each cell moves by its samples' heights (`move_ground`), what comes to it
+    /// laid as loose ground of the make `make` (ground that slid lies loose at the foot of its slope).
+    fn rest(&mut self, b: Brush, height: f64, make: usize) {
         let across = self.terrain_samples().across;
-        let givers: BTreeSet<usize> = brushes.iter().flat_map(|&b| self.covered(b, across)).map(|c| c.k).collect();
-        let cells = self.cells_of(&self.slid(&givers.into_iter().collect::<Vec<_>>()), across);
+        let givers: Vec<usize> = self.spanned(b, across).into_iter().map(|p| p.0).collect();
+        let about = Brush { centre: b.centre, radius_m: SPREAD_RADII * b.radius_m };
+        let spreads: Vec<(usize, f64)> = self.spanned(about, across).into_iter().map(|(k, d)| (k, SPREAD * b.radius_m * height.abs() * super::falloff(d))).collect();
+        let cells = self.cells_of(&self.slid(&givers, &spreads), across);
         self.move_ground(&cells, 1.0, &self.mix_of(make));
     }
 

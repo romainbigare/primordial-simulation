@@ -37,10 +37,11 @@ pub(super) struct Covered {
 }
 
 impl World {
-    /// The terrain's samples the brush `b` covers, row by row (`Covered`; the samples `across` a row): those whose
-    /// centres lie within its radius, measured in samples from north to south (`Square::length`), and the sample under
-    /// its centre always, at none from it (a brush finer than a sample covers that sample).
-    pub(super) fn covered(&self, b: Brush, across: usize) -> Vec<Covered> {
+    /// The terrain's samples the brush `b` spans, row by row (the samples `across` a row), each with how far its centre
+    /// lies from the brush's centre, in radii: those whose centres lie within its radius, measured in samples from
+    /// north to south (`Square::length`), and the sample under its centre always, at none from it (a brush finer than a
+    /// sample spans that sample).
+    pub(super) fn spanned(&self, b: Brush, across: usize) -> Vec<(usize, f64)> {
         let map = &self.map;
         let per = (1u64 << SAMPLE_DEPTH.saturating_sub(map.square_depth())) as f64;
         let r = b.radius_m / map.length(SAMPLE_DEPTH);
@@ -60,11 +61,19 @@ impl World {
                 if d > r && !centre {
                     continue;
                 }
-                let place = self.sample_place(sy * across + sx, across);
-                out.push(Covered { k: sy * across + sx, cell: self.cell_under(place), place, d: if d > r { 0.0 } else { d / r.max(f64::MIN_POSITIVE) } });
+                out.push((sy * across + sx, if d > r { 0.0 } else { d / r.max(f64::MIN_POSITIVE) }));
             }
         }
         out
+    }
+
+    /// The terrain's samples the brush `b` covers (`spanned`), each with its cell and its centre (`Covered`).
+    pub(super) fn covered(&self, b: Brush, across: usize) -> Vec<Covered> {
+        let of = |(k, d): (usize, f64)| {
+            let place = self.sample_place(k, across);
+            Covered { k, cell: self.cell_under(place), place, d }
+        };
+        self.spanned(b, across).into_iter().map(of).collect()
     }
 
     /// The centre of the terrain's sample `k` (of samples `across` a row), in squares from the map's north-west corner.

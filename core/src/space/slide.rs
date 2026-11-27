@@ -1,7 +1,7 @@
-//! The slide of the ground edits shaped (laws.md, Edits and their settling; `World::slid`, `World::worn`): ground that
-//! stands steeper than loose ground rests at, or bends sharper than slid ground lies, moves down to its lower neighbours
-//! until it rests, the volume kept. Its slope is the steepest way down a sample, read the same along any direction of
-//! the grid, and its bend is read across its four sides alike, so its rest is round.
+//! The ground edits shaped comes to rest (laws.md, Edits and their settling; `World::slid`, `World::worn`): under a brush
+//! what edits moved spreads as it is laid (`spread`), so its crest and its foot are round, and ground that stands
+//! steeper than loose ground rests at moves down to its lower neighbours until it rests (`slide`), the volume kept. A
+//! sample's slope is the steepest way down it, read the same along any direction of the grid, so its rest is round.
 
 use super::grid::Grid;
 use super::mantle::REST;
@@ -13,13 +13,8 @@ pub(crate) const SLIDE_PASSES: usize = 32;
 /// pile of loose solid pieces fails at its most stable angle and comes to rest a couple of degrees under it (Jaeger,
 /// Liu and Nagel 1989, from memory).
 const SLID_UNDER_DEG: f64 = 2.0;
-/// The least radius over which slid ground bends, m: its crest rounds and its foot runs out over no less (a ridge's
-/// across it; a dome's is twice).
-const BEND_M: f64 = 800.0;
-/// A sample fails once its bend passes the most it may bend by this share of it: a smaller excess is left by the
-/// passes before, and the slide ends.
-const FAILS_OVER: f64 = 0.05;
-
+/// The most a step of the spread evens out between two samples, a share: four sides at this keep a sample stable.
+const SPREAD_STEP: f64 = 0.2;
 /// A sample lower than it stood before any edit by less than this is the rounding of the volumes it gave and took, m,
 /// not ground an edit lowered (`Sliding::can`).
 const DUG_M: f64 = 1e-6;
@@ -60,17 +55,6 @@ impl Near {
     fn slope(&self, h: &[f64], i: usize) -> f64 {
         let [(_, a), (_, b)] = self.downhill(h, i);
         a.hypot(b)
-    }
-    /// Of the sides of sample `i`, the neighbour and one over the square of its length, m⁻² (none off the grid).
-    fn weights(&self, i: usize) -> [(usize, f64); 4] {
-        let [dx, dy] = self.lengths(i);
-        let [e, w, n, s] = self.sides[i];
-        [(e, dx), (w, dx), (n, dy), (s, dy)].map(|(j, len)| (j, if j == i { 0.0 } else { 1.0 / (len * len) }))
-    }
-    /// How heights `h` bend at sample `i`, per m: the sum over its sides of how much higher the neighbour stands over the
-    /// square of its length (the Laplacian; under none on a crest, over none in a hollow).
-    fn bend(&self, h: &[f64], i: usize) -> f64 {
-        self.weights(i).iter().map(|&(j, w)| (h[j] - h[i]) * w).sum()
     }
 }
 
@@ -151,56 +135,34 @@ impl Sliding<'_> {
         self.send(i, jy, v * wy);
         v > 0.0
     }
+}
 
-    /// Sample `i`, bending sharper than `most` over its crest (under none), sends its lower neighbours across its sides
-    /// the volume that brings it to `most`, each by how much lower it stands over the square of its length (as creep
-    /// carries it), no more than it has, and none standing over it after. Whether it sent any.
-    fn crest(&mut self, i: usize, most: f64) -> bool {
-        let l = self.at.bend(self.h, i);
-        if l >= most * (1.0 + FAILS_OVER) {
-            return false;
+/// What edits moved on grid `g` (a box of the terrain's samples) spreads: the heights `h` (m, row by row; moved in
+/// place) over where they stood before any edit (`base`) diffuse between the samples across their sides, by `kt` m² at
+/// each sample (the mean of the two across a side; none where it is none), in explicit steps (`SPREAD_STEP`), as creep
+/// carries loose ground down its slope (Culling 1960). Only what edits moved spreads: the ground as it stood before
+/// keeps its own relief, a sample an edit raised stays no lower than it stood and one it lowered no higher. The volume
+/// is kept by the samples' areas; no ground leaves the box.
+pub(super) fn spread(g: &Grid, (h, base): (&mut [f64], &[f64]), kt: &[f64]) {
+    let at = Near::of(g);
+    let stiff = |i: usize| at.lengths(i).iter().map(|len| kt[i] / (len * len)).sum::<f64>();
+    let steps = ((0..g.n()).map(stiff).fold(0.0, f64::max) / SPREAD_STEP).ceil();
+    // Each side once, from its west or north sample: the two samples and the m³ that cross it per m they differ by.
+    let side = |i: usize, j: usize, (len, wide): (f64, f64)| (i, j, (kt[i] + kt[j]) / 2.0 / steps * wide / len);
+    let sides: Vec<(usize, usize, f64)> = (0..g.n())
+        .flat_map(|i| {
+            let ([e, _, _, s], [dx, dy]) = (at.sides[i], at.lengths(i));
+            [side(i, e, (dx, dy)), side(i, s, (dy, (dx + at.lengths(s)[0]) / 2.0))]
+        })
+        .filter(|&(i, j, k)| i != j && k > 0.0)
+        .collect();
+    let mut flows = vec![0.0; sides.len()];
+    for _ in 0..steps as usize {
+        sides.iter().zip(&mut flows).for_each(|(&(i, j, k), v)| *v = k * ((h[i] - base[i]) - (h[j] - base[j])));
+        for (&(i, j, _), v) in sides.iter().zip(&flows) {
+            h[i] -= v / at.area(i);
+            h[j] += v / at.area(j);
         }
-        let (hi, ai, sides) = (self.h[i], self.at.area(i), self.at.weights(i));
-        // Each side's share: how much lower it stands over the square of its length (none where not lower).
-        let share = sides.map(|(j, w)| (hi - self.h[j]).max(0.0) * w);
-        let all: f64 = share.iter().sum();
-        // The bend rises by v times this as v m³ leave the sample.
-        let by: f64 = sides.iter().zip(&share).map(|(&(j, w), s)| (1.0 / ai + s / all / self.at.area(j)) * w).sum();
-        let mut v = ((most - l) / by).min(self.can(i));
-        for (&(j, _), &s) in sides.iter().zip(&share).filter(|p| *p.1 > 0.0) {
-            v = v.min((hi - self.h[j]) / (1.0 / ai + s / all / self.at.area(j)));
-        }
-        for (&(j, _), &s) in sides.iter().zip(&share).filter(|p| *p.1 > 0.0) {
-            self.send(i, j, v * s / all);
-        }
-        v > 0.0
-    }
-
-    /// Sample `j`, bending sharper than `most` in its hollow (over none), takes from its higher neighbours across its
-    /// sides that may give (`Sliding::can`) the volume that brings it to `most`, from each by how much higher it stands over
-    /// the square of its length (as creep carries it), no more than it has, nor so much that `j` stands over it. Whether
-    /// it took any.
-    fn foot(&mut self, j: usize, most: f64) -> bool {
-        let l = self.at.bend(self.h, j);
-        if l <= most * (1.0 + FAILS_OVER) {
-            return false;
-        }
-        let (hj, aj, sides) = (self.h[j], self.at.area(j), self.at.weights(j));
-        let share = sides.map(|(i, w)| if self.can(i) > 0.0 { (self.h[i] - hj).max(0.0) * w } else { 0.0 });
-        let all: f64 = share.iter().sum();
-        if all <= 0.0 {
-            return false;
-        }
-        // The bend of `j` falls by v times this as v m³ come to it.
-        let by: f64 = sides.iter().zip(&share).map(|(&(i, w), s)| (1.0 / aj + s / all / self.at.area(i)) * w).sum();
-        let mut v = (l - most) / by;
-        for (&(i, _), &s) in sides.iter().zip(&share).filter(|p| *p.1 > 0.0) {
-            v = v.min(self.can(i) * all / s).min((self.h[i] - hj) / (s / all / self.at.area(i) + 1.0 / aj));
-        }
-        for (&(i, _), &s) in sides.iter().zip(&share).filter(|p| *p.1 > 0.0) {
-            self.send(i, j, v * s / all);
-        }
-        v > 0.0
     }
 }
 
@@ -210,41 +172,39 @@ impl Sliding<'_> {
 /// (`Sliding::passes`). A sample that stands steeper than loose ground rests at (`REST`; or than it stood before any
 /// edit, where steeper: steep ground no edit made keeps its slope) sends its lower neighbours the ground that brings it
 /// `SLID_UNDER_DEG` under that (`Sliding::steep`). Where the ground is `fresh` (a paint just shaped it), a sample beside
-/// ground an edit lowered may so fail as a wall, with its own ground (`Sliding::can`), and the slid ground rounds: a
-/// sample that bends over its crest sharper than slid ground lies (`BEND_M`; or than it bent before any edit) sends
-/// them what rounds it (`Sliding::crest`), and one that bends so in its hollow takes what fills it from its higher
-/// neighbours that may give (`Sliding::foot`). So the rest of a held brush is a round cone or bowl, its crest rounded
-/// and its foot running out into the ground about it. The volume is kept by the samples' areas; no ground leaves the
-/// box.
+/// ground an edit lowered may so fail as a wall, with its own ground (`Sliding::can`). So the rest of a held brush is a
+/// round cone or bowl. The volume is kept by the samples' areas; no ground leaves the box.
 pub(super) fn slide(g: &Grid, (h, base): (&mut [f64], &[f64]), gives: &[f64], fresh: bool) {
     let at = Near::of(g);
     let under = (REST.atan() - SLID_UNDER_DEG.to_radians()).tan() / REST;
     let steepest: Vec<[f64; 2]> = (0..g.n()).map(|i| at.slope(base, i)).map(|s| [REST.max(s), (REST * under).max(s)]).collect();
-    let crest: Vec<f64> = (0..g.n()).map(|i| (-1.0 / BEND_M).min(at.bend(base, i))).collect();
-    let hollow: Vec<f64> = (0..g.n()).map(|i| (1.0 / BEND_M).max(at.bend(base, i))).collect();
     let mut order: Vec<usize> = (0..g.n()).collect();
     order.sort_by(|&a, &b| h[b].total_cmp(&h[a]).then(a.cmp(&b)));
     let mut s = Sliding { at, h, base, has: gives.to_vec(), fresh, now: Vec::new(), stirred: vec![true; g.n()] };
-    s.passes(&order, SLIDE_PASSES, |s, i| s.steep(i, steepest[i]) || (fresh && (s.crest(i, crest[i]) | s.foot(i, hollow[i]))));
+    s.passes(&order, SLIDE_PASSES, |s, i| s.steep(i, steepest[i]));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// A flat grid `n` samples a side of `side` m, a brush of `r` samples at its middle held for `frames` paints of
-    /// `height` m each at its centre (by (1 − (d/r)²)², raised or lowered), each paint followed by the slide, each sample
-    /// giving what the paints laid on it (`World::slid`): the heights, the grid and the volume the paints raised, m³.
+    /// A flat grid `n` samples a side, a brush of `r` samples at its middle held for `frames` paints of `height` m each
+    /// at its centre (by (1 − (d/r)²)², raised or lowered), each paint followed by the spread (a fifth of the radius, m²,
+    /// for each m laid, out to twice the radius, as `World::rest` spreads it) and the slide, each sample giving what
+    /// stands on it (`World::slid`): the heights, the grid and the volume the paints raised, m³.
     fn held(n: usize, r: f64, (frames, height): (usize, f64)) -> (Vec<f64>, Grid, f64) {
         let (g, side) = (Grid::new(n, n, false, 125.0, vec![125.0; n]), n as f64 / 2.0 - 0.5);
         let d = |i: usize| ((i % n) as f64 - side).hypot((i / n) as f64 - side) / r;
+        let bump = |d: f64| (1.0 - d * d).max(0.0).powi(2);
+        let kt: Vec<f64> = (0..n * n).map(|i| 0.2 * r * 125.0 * height.abs() * bump(d(i) / 2.0)).collect();
         let (mut h, base) = (vec![0.0; n * n], vec![0.0; n * n]);
         let mut painted = 0.0;
         for _ in 0..frames {
-            for i in (0..n * n).filter(|&i| d(i) < 1.0) {
-                h[i] += height * (1.0 - d(i) * d(i)).powi(2);
-                painted += height * (1.0 - d(i) * d(i)).powi(2) * g.area(i);
+            for (i, at) in h.iter_mut().enumerate() {
+                *at += height * bump(d(i));
+                painted += height * bump(d(i)) * g.area(i);
             }
+            spread(&g, (&mut h, &base), &kt);
             let gives: Vec<f64> = (0..n * n).map(|i| h[i].max(0.0) * g.area(i)).collect();
             slide(&g, (&mut h, &base), &gives, true);
         }

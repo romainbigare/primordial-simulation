@@ -39,12 +39,17 @@ fn ground_volumes(w: &World, i: usize) -> [f64; 2] {
     [v(&|k| w.g(k, i)), v(&|k| w.b(k, i))]
 }
 
-/// An edit of the ground under a brush inside cell `i` (radius 0.4 of a square about its middle), raising it by
+/// An edit of the ground under a brush inside cell `i` (radius `radius` of a square about its middle), raising it by
 /// `height` m at its centre.
-fn shape(w: &mut World, i: usize, height: f64) -> bool {
+fn shape_within(w: &mut World, i: usize, radius: f64, height: f64) -> bool {
     let [x0, y0, x1, y1] = w.map.bounds(i);
-    let act = Act::Ground { radius_m: 0.4 * w.map.side, height_m: height, stroke_m: 0.0, make: 0 };
+    let act = Act::Ground { radius_m: radius * w.map.side, height_m: height, stroke_m: 0.0, make: 0 };
     w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }])[0]
+}
+
+/// `shape_within` with a brush of radius 0.4 of a square.
+fn shape(w: &mut World, i: usize, height: f64) -> bool {
+    shape_within(w, i, 0.4, height)
 }
 
 /// The volume the edits shaped on the terrain's samples, m³ (`Relief::shaped` by each sample's area).
@@ -54,7 +59,8 @@ fn shaped(w: &World) -> f64 {
 }
 
 /// A raise lays the cell's own rock and, at the top of a stroke, `edit_top_m` of loose ground: the cell's ground rises by
-/// the volume its samples rose by, the books are kept. When the edits settle, the samples are built again over it (a
+/// the volume its samples rose by, the books are kept (its brush a quarter of a square: what it lays spreads to twice
+/// its radius, `World::rest`, inside its cell). When the edits settle, the samples are built again over it (a
 /// new version of the relief, no build of the years): against the same world's samples built again with no edit, its
 /// sample nearest its centre stands higher by what the relief holds it raised (the raise, worn as it settled:
 /// `World::wear_edits`) and a sample far from it stands where it does.
@@ -69,7 +75,7 @@ fn a_raised_brush_raises_its_disc_and_keeps_the_books() {
     control.settle();
     let before = control.terrain_samples();
     let height = 20.0;
-    assert!(shape(&mut w, i, height));
+    assert!(shape_within(&mut w, i, 0.25, height));
     books.assert_kept(&w, 1e-9);
     let (v, area) = (shaped(&w), w.mesh.cells().area()[i]);
     let [loose, rock] = ground_volumes(&w, i);
@@ -77,7 +83,7 @@ fn a_raised_brush_raises_its_disc_and_keeps_the_books() {
     assert!(((w.ground_z(i) - z0) * area / v - 1.0).abs() < 1e-9, "the ground rose {} m for {v} m3", w.ground_z(i) - z0);
     assert!(((loose - loose0) / (top * v) - 1.0).abs() < 1e-9 && ((rock - rock0) / ((1.0 - top) * v) - 1.0).abs() < 1e-9, "loose {} and rock {} of {v} m3", loose - loose0, rock - rock0);
     let centre = (0..w.relief.shaped.len()).max_by(|&a, &b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
-    assert!(w.relief.shaped[centre] > 0.9 * height, "the brush's centre rose {} m", w.relief.shaped[centre]);
+    assert!(w.relief.shaped[centre] > 0.75 * height, "the brush's centre rose {} m", w.relief.shaped[centre]);
     let settled = w.settle();
     books.assert_kept(&w, 1e-9);
     assert!(settled.ground && w.relief.version == version + 1 && w.built_years() == years && !w.relief.due, "{settled:?}, version {}", w.relief.version);
@@ -90,7 +96,7 @@ fn a_raised_brush_raises_its_disc_and_keeps_the_books() {
 
 /// The samples' loose ground follows an edit (`mantle::edited`): a hill raised as steep as loose ground rests at (it
 /// slides no steeper, `World::rest`) keeps the less of it the steeper it stands, its steep flanks (over three quarters
-/// of `REST`, an eighth of its samples or more) less than half the share of their own its gentle ground keeps, its
+/// of `REST`, a sixteenth of its samples or more: its crest and its foot are round) less than half the share of their own its gentle ground keeps, its
 /// gentle top keeps loose ground (no more than lay there), and a sample no edit shaped keeps its own; what a shell
 /// reads of it before the samples are built again (`World::loose_to_build`) is what the build gives.
 #[test]
@@ -116,7 +122,7 @@ fn a_steep_raised_hill_thins_its_flanks() {
         (shares.iter().sum::<f64>() / shares.len() as f64, shares.len())
     };
     let ((flanks, n_flanks), (gentle, n_gentle)) = (kept(&|s| s > 0.75 * pcore::space::REST), kept(&|s| s < 0.25 * pcore::space::REST));
-    assert!(n_flanks > ks.len() / 8 && n_gentle > 0 && flanks < 0.5 * gentle, "{n_flanks} flanks keep {flanks}, {n_gentle} gentle samples {gentle}");
+    assert!(n_flanks > ks.len() / 16 && n_gentle > 0 && flanks < 0.5 * gentle, "{n_flanks} flanks keep {flanks}, {n_gentle} gentle samples {gentle}");
     assert!(ks.iter().all(|&k| after.settled[k] <= after.loose[k]), "more settled than lies loose");
     let top = *ks.iter().max_by(|&&a, &&b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
     assert!(after.loose[top] > 0.0 && after.loose[top] <= before.loose[top], "the top keeps {} of {} m", after.loose[top], before.loose[top]);
@@ -483,13 +489,14 @@ fn a_basin_renumbers_no_pond_it_did_not_reach() {
     }
 }
 
-/// How far under the floor of the open low ground the test's pit is dug at its centre, m.
-const PIT_BELOW_M: f64 = 300.0;
+/// How far under the floor of the open low ground the test's pit is dug at its centre, m: its ground comes to rest as
+/// it is dug (`World::rest`: its walls slide in and its rim spreads), so it stands shallower than it is dug.
+const PIT_BELOW_M: f64 = 600.0;
 
 /// A pit dug inland below the floor of the open low ground stays a closed basin: the open low ground is what lies under
 /// its level joined to the seed's (`drain::open_from`), so the pit's samples are a pond with a pass and the seed's open
-/// low ground stays open, however deep the pit. (Its brush is wide enough that its walls stand no steeper than loose
-/// ground rests at: the brush's falloff is steepest at 1.54 times its depth over its radius.)
+/// low ground stays open, however deep the pit. (Its brush is as wide as its depth over the slope loose ground rests
+/// at: wider, the rim it spreads would reach the shore.)
 #[test]
 fn a_pit_deeper_than_the_open_low_ground_stays_a_closed_pond() {
     use pcore::space::network::NONE;
@@ -502,7 +509,7 @@ fn a_pit_deeper_than_the_open_low_ground_stays_a_closed_pond() {
     drop(s0);
     let height = floor - PIT_BELOW_M - w.ground_z(i);
     let [x0, y0, x1, y1] = w.map.bounds(i);
-    let act = Act::Ground { radius_m: 2.0 * height.abs() / pcore::space::REST, height_m: height, stroke_m: 0.0, make: 0 };
+    let act = Act::Ground { radius_m: height.abs() / pcore::space::REST, height_m: height, stroke_m: 0.0, make: 0 };
     assert!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }])[0]);
     w.settle();
     let s = w.terrain_samples();

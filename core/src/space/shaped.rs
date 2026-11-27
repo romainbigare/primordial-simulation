@@ -5,7 +5,7 @@
 use super::drain::{flood, starts};
 use super::grid::Grid;
 use super::samples::grid_of;
-use super::slide::{slide, SLIDE_PASSES};
+use super::slide::{slide, spread, SLIDE_PASSES};
 use super::slopes::creep;
 use super::strata::Strata;
 use super::wear::{cut, CREEP, CUT, STAND_M};
@@ -48,6 +48,11 @@ impl Window {
     pub(super) fn global(&self, i: usize, across: usize) -> usize {
         (self.y0 + i / self.w) * across + self.x0 + i % self.w
     }
+    /// Its place, row by row, of the sample `k` of the grid `across` wide; none where it lies outside.
+    fn local(&self, k: usize, across: usize) -> Option<usize> {
+        let (x, y) = ((k % across).checked_sub(self.x0)?, (k / across).checked_sub(self.y0)?);
+        (x < self.w && y < self.h).then_some(y * self.w + x)
+    }
     /// Its own grid, of the rows of grid `g` it spans (not round a globe).
     pub(super) fn grid(&self, g: &Grid) -> Grid {
         Grid::new(self.w, self.h, false, g.dy, g.dx[self.y0..self.y0 + self.h].to_vec())
@@ -55,19 +60,24 @@ impl Window {
 }
 
 impl World {
-    /// Where the ground slides after edits shaped the samples `givers` (`slide`, fresh: walls fail and the slid ground
-    /// rounds): the ground as it stands (`Samples::height_now`), before any edit as it stands less what edits shaped
-    /// (`Relief::shaped`), over the box of the givers and `SLIDE_PASSES` samples about them; each sample gives what edits
-    /// laid on it. Returns each sample that moved and by how much, m, in their order.
-    pub(crate) fn slid(&self, givers: &[usize]) -> Vec<(usize, f64)> {
+    /// Where the ground comes to rest after edits shaped the samples `givers`: over the box of the givers and
+    /// `SLIDE_PASSES` samples about them, the ground as it stands (`Samples::height_now`), before any edit as it stands
+    /// less what edits shaped (`Relief::shaped`). What edits moved first spreads by `spreads` (a sample and its m²;
+    /// `spread`), then the ground slides (`slide`, fresh: walls fail), each sample giving what edits laid on it. Returns
+    /// each sample that moved and by how much, m, in their order.
+    pub(crate) fn slid(&self, givers: &[usize], spreads: &[(usize, f64)]) -> Vec<(usize, f64)> {
         let (g, _, _) = grid_of(&self.map, (self.cfg.lat_south, self.cfg.lat_north));
         let (s, r) = (self.terrain_samples(), &self.relief);
         let win = Window::about(&g, givers, SLIDE_PASSES);
+        let local = win.grid(&g);
         let was: Vec<f64> = (0..win.n()).map(|i| s.height_now(r, win.global(i, g.across))).collect();
         let base: Vec<f64> = (0..win.n()).map(|i| was[i] - r.shaped_at(win.global(i, g.across))).collect();
-        let gives: Vec<f64> = (0..win.n()).map(|i| win.global(i, g.across)).map(|k| r.shaped_at(k).max(0.0) * g.area(k)).collect();
+        let mut kt = vec![0.0; win.n()];
+        spreads.iter().filter_map(|&(k, m2)| Some((win.local(k, g.across)?, m2))).for_each(|(i, m2)| kt[i] += m2);
         let mut h = was.clone();
-        slide(&win.grid(&g), (&mut h, &base), &gives, true);
+        spread(&local, (&mut h, &base), &kt);
+        let gives: Vec<f64> = (0..win.n()).map(|i| (h[i] - base[i]).max(0.0) * local.area(i)).collect();
+        slide(&local, (&mut h, &base), &gives, true);
         (0..win.n()).filter(|&i| h[i] != was[i]).map(|i| (win.global(i, g.across), h[i] - was[i])).collect()
     }
 
@@ -80,7 +90,7 @@ impl World {
     /// each bed's make's K (`wear::cut`, `Strata::cut`) and the creep (`slopes::creep`), on those samples alone and
     /// none at or under the liquid's stand (`wear::STAND_M`), the ground about them as it stands; no sample lower than
     /// it stood before the edits shaped it since (a pit is not cut deeper), and last the slide (`slide`, not fresh: each
-    /// sample gives no more than stands over that, and the valleys stay). Returns each sample that moved and by how
+    /// sample gives no more than stands over that, and nothing spreads, so the valleys stay). Returns each sample that moved and by how
     /// much, m, in their order.
     pub(crate) fn worn(&self) -> Vec<(usize, f64)> {
         let lat = (self.cfg.lat_south, self.cfg.lat_north);
