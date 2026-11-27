@@ -173,7 +173,8 @@ narrower than a texel, the nearest); a line whose bed (its width at `BED_RUNOFF`
 texel's centre claims it before any line farther away (so a rill keeps the texels it runs through and their neighbours
 beside a wide river, and the four texels a shell blends about any point of a bed hold one line), but a tributary takes
 no texel in the water of the channel it joins (within half that water's width at its mean flow, `FLOOD` to the power
-minus `STATION_EXP` of its bed's, of its line near the join): its own water runs across the other's bars to it. It keeps that channel's distance, signed by
+minus `STATION_EXP` of its bed's, of its line near the join), and in the rest of that bed only those of its own bed:
+its own water runs across the other's bars to it, and beside it the other's bars are the other's. It keeps that channel's distance, signed by
 the side (60,000 where none reaches), and its sample, as the step from the sample that holds the texel's centre
 (1 + (dx + 21) + 43 (dy + 21); 0 for none), whole numbers a 16-bit float holds exactly; and of the nearest point of
 that channel's line, how far along the channel from its head it lies, m, modulo 128 m (`ALONG_WRAP_M`: a 16-bit float

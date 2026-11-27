@@ -44,24 +44,28 @@ pub(super) struct Drawn {
 }
 
 /// Where a tributary's line joins the next sample's (the middle of that one's line, samples), the direction of that
-/// line there, that channel's water: half the width its water takes of its bed at its mean flow (`bends::Reaches::bed_of`,
-/// `water_share`), samples, and the length of the tributary's last piece, which runs into it, samples. The tributary
-/// takes no texel within that water of the line it joins (taken straight through the join) and nearer the join than its
-/// last piece is long, so in the water of the channel it joins every texel is that channel's, and the tributary's own
-/// water runs across the other's bars and banks into it.
+/// line there, half the width of that channel's bed and of its water at its mean flow (`bends::Reaches::bed_of`,
+/// `water_share`), samples, and the length of the tributary's last piece, which runs into it, samples. Nearer the join
+/// than that last piece is long, the tributary takes no texel within that water of the line it joins (taken straight
+/// through the join), and in the rest of that bed only those of its own bed: so in the water of the channel it joins
+/// every texel is that channel's, the tributary's own water runs across the other's bars into it, and beside it the
+/// other's bars are the other's.
 #[derive(Clone, Copy)]
 pub(super) struct Join {
     at: [f64; 2],
     along: [f64; 2],
     bank: f64,
+    water: f64,
     last: f64,
 }
 
 impl Join {
-    /// Does the point `p` (samples) lie in the bed of the channel joined, where the tributary takes no texel?
-    pub(super) fn holds(&self, p: [f64; 2]) -> bool {
+    /// Does the point `p` (samples), `d` samples from the tributary's line whose own bed is `bed` samples half wide,
+    /// lie where the channel joined keeps the texels?
+    pub(super) fn holds(&self, p: [f64; 2], d: f64, bed: f64) -> bool {
         let (dx, dy) = (p[0] - self.at[0], p[1] - self.at[1]);
-        (dx * self.along[1] - dy * self.along[0]).abs() < self.bank && dx.hypot(dy) < self.last
+        let across = (dx * self.along[1] - dy * self.along[0]).abs();
+        dx.hypot(dy) < self.last && (across < self.water || (across < self.bank && d > bed))
     }
 }
 
@@ -143,7 +147,7 @@ impl Channels<'_> {
                 own.line.push(Vertex { p: on(from.p, at), t: 1.0, s: from.s + x * run });
                 own.calm.push(on(calm_from, calm_at));
             }
-            Join { at, along: [(c[0] - a[0]) / len, (c[1] - a[1]) / len], bank: water_share() * r.bed_of(j as usize).0 / (2.0 * r.metres), last }
+            Join { at, along: [(c[0] - a[0]) / len, (c[1] - a[1]) / len], bank: r.bed_of(j as usize).0 / (2.0 * r.metres), water: water_share() * r.bed_of(j as usize).0 / (2.0 * r.metres), last }
         });
         Some((own, join))
     }

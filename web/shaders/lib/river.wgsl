@@ -214,7 +214,7 @@ const BED_PX = 3.0;
 // where its flow moves no stones bigger than `BAR_SAND_STONE` m: gravel on most reaches, sand and silt on the
 // gentlest. A bar rises from the water's edge at `BAR_RISE` (rise over run), which is how far up it the water's fringe
 // wets and darkens it; past that fringe its gravel drains dry.
-const BAR_LIFT = 1.3; const BAR_PALE = 0.15; const BAR_RISE = 0.6;
+const BAR_LIFT = 1.12; const BAR_PALE = 0.1; const BAR_RISE = 0.6;
 // Driftwood lies on a bar from `DRIFTWOOD_UP.x` of the way up it to the bank, most from `DRIFTWOOD_UP.y` (the floods' wrack
 // line, at the top of the bars).
 const DRIFTWOOD_UP = vec2f(0.1, 0.35);
