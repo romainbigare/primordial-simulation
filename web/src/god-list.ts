@@ -1,7 +1,7 @@
 // God mode's list of all its tools (god-menu.ts), grouped by class and category, so every tool is one tap away. Its
 // head is a row of the classes' icons: a tap scrolls the list to that class, and the class in view is marked as the list
-// scrolls. Each tool is one slim row: its small round picture, its name, and its verb, or "Soon" for a tool to come,
-// which is dimmed and cannot be picked. A category with no tools yet says so in one quiet line.
+// scrolls. Each tool is one slim row: its small round picture, its name, and on the right what it does in a few words;
+// a tool to come is dimmed, marked "Soon" and cannot be picked. A category with no tools yet says so in one quiet line.
 import { iconSvg } from './icons';
 import { make, picture, tapButton } from './god-controls';
 import type { GodClass, GodTool, SoonTool } from './god-types';
@@ -83,14 +83,15 @@ export class GodList {
     return part;
   }
 
-  /** The row of tool `t`: its picture, its name and its verb; a tool to come dimmed, with "Soon". */
+  /** The row of tool `t`: its picture, its name and what it does; a tool to come dimmed, with "Soon". */
   private row(t: GodTool | SoonTool, pick: (t: GodTool) => void): HTMLButtonElement {
     const real = isTool(t);
     const b = tapButton('trow', '<span class="thumb"></span><b></b><small></small>', real ? t.label : `${t.label}: coming soon`, () => { if (real) pick(t); });
     (b.firstChild as HTMLElement).style.backgroundImage = picture(t.pic, THUMB_SIDE);
-    b.children[1].textContent = t.label;
-    b.children[2].textContent = real ? t.verb : 'Soon';
-    if (real) { b.style.setProperty('--tool', t.ink); this.rows.set(t, b); } else { b.disabled = true; b.classList.add('soon'); }
+    b.querySelector('b')!.textContent = t.label;
+    b.querySelector('small')!.textContent = t.about;
+    if (real) { b.style.setProperty('--tool', t.ink); this.rows.set(t, b); }
+    else { b.disabled = true; b.classList.add('soon'); b.querySelector('b')!.after(make('i', 'tag')); b.querySelector('.tag')!.textContent = 'Soon'; }
     return b;
   }
 

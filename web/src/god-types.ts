@@ -31,8 +31,9 @@ export interface Editor {
 export interface GodTool {
   /** Its icon, its name, its picture (`god/<pic>.jpg` beside the page), and its colour on the map. */
   icon: IconName; label: string; pic: string; ink: string;
-  /** How to use it with a mouse, in a short line; and its big button's words on a phone (`GodPage.aim`). */
-  hint: string; verb: string;
+  /** What it does, in a few words (its row in the list); how to use it with a mouse, in a short line; and its big
+   * button's words on a phone (`GodPage.aim`). */
+  about: string; hint: string; verb: string;
   /** The core's brush tool it paints with (wasm/src/edit.rs `brush`), and the starting kind it places (-1: none). */
   code: number; row(): number;
   /** What it adds at the centre of a brush of radius `radius` m each second it is held, in its core tool's unit (m of
@@ -79,7 +80,7 @@ export interface GodSetting {
   choices: { label: string; title: string; pic?: string }[];
 }
 /** A tool to come: its name and picture; its row shows, and cannot be picked. */
-export interface SoonTool { soon: true; label: string; pic: string }
+export interface SoonTool { soon: true; label: string; pic: string; about: string }
 /** A category of tools: its name, its icon and its tools. */
 export interface GodCategory { label: string; icon: IconName; tools: (GodTool | SoonTool)[] }
 /** A class of god mode's tools (a part of the list): its name, its icon and its categories. */
