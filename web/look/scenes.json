@@ -172,8 +172,8 @@
       "cost_views": [2.0],
       "scenes": [
         { "name": "cold", "about": "a stream off the high ground by the ice, north-east of the big lake", "at": [19.54, 12.55] },
-        { "name": "warm", "about": "a river over warm dry lowland in the south, above its drowned valley", "at": [17.08, 25.0] },
-        { "name": "forest", "about": "a stream through forest and meadow in the north", "at": [20.8, 8.96] },
+        { "name": "warm", "about": "a river over warm dry lowland in the south, above its drowned valley", "at": [17.24, 25.0] },
+        { "name": "forest", "about": "a stream through forest and meadow in the north", "at": [20.87, 8.96] },
         { "name": "woodland", "about": "the river through open woodland of scene rivers/reach", "at": [26.5, 14.6] }
       ]
     }
