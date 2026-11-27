@@ -89,10 +89,10 @@ fn a_raised_brush_raises_its_disc_and_keeps_the_books() {
 }
 
 /// The samples' loose ground follows an edit (`mantle::edited`): a hill raised as steep as loose ground rests at (it
-/// slides no steeper, `World::rest`) keeps little of it on its flanks, more than a quarter of its samples no more than a
-/// quarter of their own, its gentle top keeps loose ground (no more than lay there), and a sample no edit shaped keeps
-/// its own; what a shell reads of it before the samples are built again (`World::loose_to_build`) is what the build
-/// gives.
+/// slides no steeper, `World::rest`) keeps the less of it the steeper it stands, its steep flanks (over three quarters
+/// of `REST`, an eighth of its samples or more) less than half the share of their own its gentle ground keeps, its
+/// gentle top keeps loose ground (no more than lay there), and a sample no edit shaped keeps its own; what a shell
+/// reads of it before the samples are built again (`World::loose_to_build`) is what the build gives.
 #[test]
 fn a_steep_raised_hill_thins_its_flanks() {
     let mut w = small_world();
@@ -108,8 +108,15 @@ fn a_steep_raised_hill_thins_its_flanks() {
     let after = w.terrain_samples();
     let read = w.loose_to_build(&ks, &|j| after.h[j]);
     assert!(ks.iter().zip(&read).all(|(&k, &m)| m == after.loose[k]), "the shell reads the build's loose ground");
-    let thinned = ks.iter().filter(|&&k| before.loose[k] > 0.0 && after.loose[k] <= 0.25 * before.loose[k]).count();
-    assert!(thinned > ks.len() / 4, "{thinned} of {} samples thinned to a quarter", ks.len());
+    // The share of its own loose ground each sample keeps, by its slope across it (as the mantle reads it).
+    let dy = w.map.length(pcore::space::terrain::SAMPLE_DEPTH);
+    let slope = |k: usize| ((after.h[k + 1] - after.h[k - 1]) / (2.0 * after.rows[k / after.across] / dy)).hypot((after.h[k + after.across] - after.h[k - after.across]) / (2.0 * dy));
+    let kept = |steep: &dyn Fn(f64) -> bool| {
+        let shares: Vec<f64> = ks.iter().filter(|&&k| before.loose[k] > 0.0 && steep(slope(k))).map(|&k| after.loose[k] / before.loose[k]).collect();
+        (shares.iter().sum::<f64>() / shares.len() as f64, shares.len())
+    };
+    let ((flanks, n_flanks), (gentle, n_gentle)) = (kept(&|s| s > 0.75 * pcore::space::REST), kept(&|s| s < 0.25 * pcore::space::REST));
+    assert!(n_flanks > ks.len() / 8 && n_gentle > 0 && flanks < 0.5 * gentle, "{n_flanks} flanks keep {flanks}, {n_gentle} gentle samples {gentle}");
     assert!(ks.iter().all(|&k| after.settled[k] <= after.loose[k]), "more settled than lies loose");
     let top = *ks.iter().max_by(|&&a, &&b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
     assert!(after.loose[top] > 0.0 && after.loose[top] <= before.loose[top], "the top keeps {} of {} m", after.loose[top], before.loose[top]);
@@ -118,9 +125,10 @@ fn a_steep_raised_hill_thins_its_flanks() {
 }
 
 /// The ground a brush shapes stands no steeper than loose ground rests at (`space::REST`; `World::rest`): after a long
-/// hold at one place, raising far past where its flanks would stand steeper, no link along a row or a column between
-/// two samples under the brush stands steeper than that, where it stood no steeper before the edits (steep ground no
-/// edit made keeps its slope); the ground slid out from under it, and the books are kept.
+/// hold at one place, raising far past where its flanks would stand steeper, no link along a row or a column and no
+/// sample (its slope across it, as the samples' loose ground reads it) stands steeper than that, where it stood no
+/// steeper before the edits (steep ground no edit made keeps its slope); the ground slid out from under the brush, no
+/// sample stands lower than before, and the books are kept.
 #[test]
 fn a_held_brush_stands_no_steeper_than_loose_ground_rests() {
     use pcore::space::terrain::SAMPLE_DEPTH;
@@ -130,30 +138,33 @@ fn a_held_brush_stands_no_steeper_than_loose_ground_rests() {
     let before = w.terrain_samples();
     let [x0, y0, x1, y1] = w.map.bounds(i);
     let (centre, r) = ([(x0 + x1) / 2.0, (y0 + y1) / 2.0], 0.4 * w.map.side);
-    let height = 0.05 * w.map.side;
-    for _ in 0..40 {
+    let height = 0.01 * w.map.side;
+    for _ in 0..60 {
         assert!(shape(&mut w, i, height));
     }
     books.assert_kept(&w, 1e-9);
     let s = w.terrain_samples();
     let (per, dy) = ((s.across / w.map.w) as f64, w.map.length(SAMPLE_DEPTH));
-    let under = |k: usize| (((k % s.across) as f64 + 0.5) / per - centre[0]).hypot(((k / s.across) as f64 + 0.5) / per - centre[1]) * w.map.side < r;
+    let near = |k: usize| (((k % s.across) as f64 + 0.5) / per - centre[0]).hypot(((k / s.across) as f64 + 0.5) / per - centre[1]) * w.map.side < 3.0 * r;
+    let now = |k: usize| s.height_now(&w.relief, k);
+    // The slope across sample `k` of heights `h`, from its neighbours east and west and north and south.
+    let across = |h: &dyn Fn(usize) -> f64, k: usize| {
+        let dx = s.rows[k / s.across] / dy;
+        ((h(k + 1) - h(k - 1)) / (2.0 * dx)).hypot((h(k + s.across) - h(k - s.across)) / (2.0 * dy))
+    };
     let (mut links, mut slid) = (0, false);
-    for k in (0..s.h.len()).filter(|&k| under(k)) {
+    for k in (0..s.h.len()).filter(|&k| near(k)) {
         for (j, len) in [(k + 1, s.rows[k / s.across] / dy), (k + s.across, dy)] {
-            if j >= s.h.len() || !under(j) {
-                continue;
-            }
-            let now = (s.height_now(&w.relief, k) - s.height_now(&w.relief, j)).abs() / len;
-            let was = (before.h[k] - before.h[j]).abs() / len;
+            let (now, was) = ((now(k) - now(j)).abs() / len, (before.h[k] - before.h[j]).abs() / len);
             assert!(now <= pcore::space::REST.max(was) + 1e-9, "the link from {k} to {j} stands at {now} (before {was})");
             links += 1;
         }
-    }
-    for k in (0..s.h.len()).filter(|&k| !under(k)) {
+        let (now, was) = (across(&now, k), across(&|j| before.h[j], k));
+        assert!(now < pcore::space::REST.max(was), "sample {k} stands at {now} (before {was})");
+        assert!(w.relief.shaped_at(k) > -1e-9, "sample {k} stands {} m lower", -w.relief.shaped_at(k));
         slid |= w.relief.shaped_at(k) > 0.0 && ((k % s.across) as f64 + 0.5) / per > centre[0] + 1.5 * r / w.map.side;
     }
-    assert!(links > 20 && slid, "{links} links under the brush; ground slid past it: {slid}");
+    assert!(links > 20 && slid, "{links} links about the brush; ground slid past it: {slid}");
 }
 
 /// When the edits settle, the ground a stroke shaped is laid as the start's wear would leave it worn

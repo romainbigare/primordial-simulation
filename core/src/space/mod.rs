@@ -17,6 +17,7 @@ pub mod square;
 pub mod samples;
 pub(crate) mod shaped;
 mod shelf;
+pub(crate) mod slide;
 pub(crate) mod delta;
 mod fill;
 mod hollows;

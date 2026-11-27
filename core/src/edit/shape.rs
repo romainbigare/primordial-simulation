@@ -63,10 +63,10 @@ impl World {
         self.terrain.makes.get(make).map_or_else(Vec::new, |m| m.of.clone())
     }
 
-    /// The ground under the brushes `brushes` (the edits of the ground of one call) slides till it stands no steeper than
-    /// loose ground rests at (`World::slid`; laws.md, Edits): the samples they cover give ground, their neighbours may
-    /// take it. Each cell moves by its samples' heights (`move_ground`), what slides laid as loose ground of the make
-    /// `make` (ground that slid lies loose at the foot of its slope).
+    /// The ground about the brushes `brushes` (the edits of the ground of one call) slides till it stands no steeper than
+    /// loose ground rests at, its crest and foot rounded (`World::slid`; laws.md, Edits). Each cell moves by its
+    /// samples' heights (`move_ground`), what slides laid as loose ground of the make `make` (ground that slid lies loose
+    /// at the foot of its slope).
     pub(super) fn rest(&mut self, brushes: &[Brush], make: usize) {
         let across = self.terrain_samples().across;
         let givers: BTreeSet<usize> = brushes.iter().flat_map(|&b| self.covered(b, across)).map(|c| c.k).collect();

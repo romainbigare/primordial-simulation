@@ -234,16 +234,25 @@ of where it lies. A raise lays the cell's own rock (its bed's mixture) and, at t
 loose ground of one of the terrain's makes drawn from the seed for the stroke (`Make::of`, `World::draw_make`); a
 lowering takes the loose ground first, then the rock, never more than the cell holds (its samples move by the share it
 took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **The ground a brush shaped slides**
-(`World::rest`, `space::shaped`): after the edits of the ground of one call (all the places of a paint), where a link
-across a side or a corner (so its rest is near round) from a sample under one of their brushes stands steeper than loose
-ground rests at (`REST`, 0.8), or than the link stood before any edit where that is steeper (steep ground no edit made
-keeps its slope), ground slides from the higher sample to the lower until the link stands `SLID_UNDER_DEG` (2°) gentler
-(a pile of loose pieces fails at its most stable angle and comes to rest a little under it), the highest sample first,
-in at most 32 passes, which end once no link fails. A sample under the brushes gives any of its ground, a neighbour
-gives on only what it took, so ground moves at most a sample a pass. The heights are those of the ground as it stands
-(the samples as last built with what edits shaped since, `Samples::height_now`). Each cell moves by its samples' heights
-as a raise or a lowering does, from and to the outside node, what slid laid as loose ground of the stroke's make. So a
-hill raised high spreads at its foot, and a pit's walls slide in. A basin's ground (below) does not slide: its bowl and
+(`World::rest`, `space::slide`): after the edits of the ground of one call (all the places of a paint), over the box of
+the samples under their brushes and 32 about them, ground moves down from a sample to its lower neighbours across its
+sides, the volume kept, in at most 32 passes over the samples, the highest first, which end once none moves. The slope
+of a sample is the steepest way down it, from its lower neighbour east or west and its lower neighbour north or south
+(an upwind slope, as of the eikonal equation): even ground tilted any way reads its own slope, so the rest is round, not
+of the grid's square or octagon. A sample that stands steeper than loose ground rests at (`REST`, 0.8), or than it
+stood before any edit where that is steeper (steep ground no edit made keeps its slope), sends its two lower neighbours,
+each by its part of the slope, the ground that brings it `SLID_UNDER_DEG` (2°) gentler (a pile of loose pieces fails at
+its most stable angle and comes to rest a little under it). The slid ground rounds: a sample that bends over its crest
+sharper than `BEND_M` (800 m of radius) allows, its Laplacian across its four sides under −1/`BEND_M` (or than it bent
+before any edit, where sharper), sends its lower neighbours, each by how much lower it stands, what brings it to that;
+one that bends so in a hollow takes what fills it from its higher neighbours. So the crest of a held hill is rounded and
+its foot runs out into the ground about it over a few samples, with no crease. Each sample gives what edits laid on it
+and what it took in the slide, and gives it on in the same pass where it stands lower; a sample that stands, or has a
+neighbour across a side that stands, lower than before any edit may give its own ground (a pit's wall fails and its
+rim rounds), one sample further each pass. The heights are those of the ground as it stands (the samples as last built
+with what edits shaped since, `Samples::height_now`). Each cell moves by its samples' heights as a raise or a lowering
+does, from and to the outside node, what slid laid as loose ground of the stroke's make. So a hill raised high spreads
+at its foot into a round cone with a rounded top, and a pit's walls slide in to a round bowl. A basin's ground (below) does not slide: its bowl and
 banks are made as they are meant to stand. **A basin of liquid** (`edit::Act::Basin`,
 `World::basin`): its rim is the samples beside those the brush covers. Its level is the highest level of the liquid
 of the closed ponds that stands on the brush's samples or its rim, so a pond its cut opens grows over it at its own
@@ -283,7 +292,7 @@ the liquid laid lies (`Samples::settled`, never more than the loose ground), and
 shaped what is left thins by what the creep holds on its new slope over what it held on its slope before the edits,
 where less (the mantle's balance with nothing coming from upslope, the bed breaking as under ground that does not
 lower): ground an edit barely tilted keeps nearly all its own, so the edge of a brush shows no step, and the flanks of a hill raised as steep as loose ground rests at
-(it slides no steeper) keep little of it, and the cells' plants root by it (`cover::loose_bins`). **Known limit:** the make of the samples' bed
+(it slides no steeper) keep the less of it the steeper they stand, and the cells' plants root by it (`cover::loose_bins`). **Known limit:** the make of the samples' bed
 does not follow an edit; the cell's soil keeps its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
 (`World::settle`), with no time on the world's clock: where the ground was shaped, it is first laid as worn
 (`World::wear_edits`, `space::shaped`). This is part of the edit: the hand lays the ground it shaped as the world's own
@@ -294,8 +303,9 @@ moved it, so a round hill has something to cut; then 8 steps of the start's law 
 box's edge, the stream power law with the K of each sample's bed's make (`wear::cut`) and the creep (`slopes::creep`),
 on those samples alone and none at or under the liquid's stand; what the wear takes leaves the world (its load is not
 laid); no sample goes lower than it stood before the edits shaped it since, so a pit is not cut deeper; last the ground
-slides as after a paint, so it stands no steeper than `REST` (ground at its rest slope keeps no channel cut deeper than
-the slide's 2° leaves room for: such a slope is a smooth face of loose ground). Each cell moves by its samples' heights
+slides as after a paint, so it stands no steeper than `REST`, but each sample gives no more than stands over where it
+stood before the edits, no wall fails and nothing rounds, so the valleys stay (ground at its rest slope keeps no channel
+cut deeper than the slide's 2° leaves room for: such a slope is a smooth face of loose ground). Each cell moves by its samples' heights
 from and to the outside node, as its own rock. So valleys cut into a raised hill with ridges between them, and a river
 under a raised bank cuts through it. A basin's ground is not worn: a basin wears what the edits before it shaped, then
 digs as it is meant to stand. Then the samples are built again over

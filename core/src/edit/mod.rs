@@ -14,9 +14,9 @@ mod shape;
 pub use brush::{falloff, Brush, Under};
 
 /// The most samples past its brush's radius an edit moves the ground or the loose ground the samples are built with:
-/// the slide of what it shaped (`space::shaped::SLIDE_PASSES`), the sample beside that whose slope it moves, and the
-/// sample a brush's span rounds out to (a basin's rim, 1.5 samples, lies within).
-pub const REACH_SAMPLES: f64 = (crate::space::shaped::SLIDE_PASSES + 2) as f64;
+/// the box the slide of what it shaped stays in (`space::slide::SLIDE_PASSES`), the sample beside that whose slope it
+/// moves, and the sample a brush's span rounds out to (a basin's rim, 1.5 samples, lies within).
+pub const REACH_SAMPLES: f64 = (crate::space::slide::SLIDE_PASSES + 2) as f64;
 
 use crate::event::{Event, EventKind};
 use crate::World;
