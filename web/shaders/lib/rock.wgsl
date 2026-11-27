@@ -133,8 +133,12 @@ fn soil_at(at: vec2f, place: Place, e: f32, organic: f32, shift: vec2f) -> SoilA
 const MAKE_RAGGED = 0.95; const MAKE_PATCH = 2.0; const MAKE_OCTAVES = 6; const MAKE_STREAM = 240;
 const MAKE_PX = 2.0; const MAKE_EDGE_PX = 1.5; const MAKE_EDGE_M = 25.0;
 // The reflectance of the bed's make at `at`, m from the map's north-west corner, read at the place `place`
-// (`sample_place`), seen at `e` m a pixel.
-fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
+// (`sample_place`), seen at `e` m a pixel: as the bare bed shows it, of one make (`sharp`), and as a soil over it
+// shows it (`soft`): the samples' plain blend, as creep and wash smear a mantle's colour over its beds' contacts across
+// tens to hundreds of metres (a residual soil's colour is its bed's, mixed downslope: from memory). Not `crisp`, the
+// soft alone (no noise is read).
+struct Make { sharp: vec3f, soft: vec3f }
+fn bed_make_at(at: vec2f, place: vec2f, e: f32, crisp: bool) -> Make {
   let spacing = land.map.x * land.map.y / land.samples.x;
   let p = place / spacing - 0.5;
   let bs = b_spline(p);
@@ -147,7 +151,7 @@ fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
     blend += b_weight(bs, n) * c[n];
   }
   let sharp = shows_at(spacing, e);
-  if (sharp <= 0.0) { return blend; }
+  if (sharp <= 0.0 || !crisp) { return Make(blend, blend); }
   // Each sample's make's weight; the leading make `a`, and the next `b` (none where all are of one make).
   var s: array<f32, B_TAPS>;
   for (var n = 0; n < B_TAPS; n++) {
@@ -158,7 +162,7 @@ fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
   for (var n = 1; n < B_TAPS; n++) { if (s[n] > s[a]) { a = n; } }
   var b = -1;
   for (var n = 0; n < B_TAPS; n++) { if (any(c[n] != c[a]) && (b < 0 || s[n] > s[b])) { b = n; } }
-  if (b < 0) { return c[a]; }
+  if (b < 0) { return Make(c[a], blend); }
   // The lighter of the two is `hi`, so the noise moves their edge the same way from either side of it.
   let swap = dot(c[b], LUMA) > dot(c[a], LUMA);
   let hi = c[select(a, b, swap)];
@@ -177,7 +181,7 @@ fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
   let x = d - MAKE_RAGGED * ragged(at, MAKE_PX * e, MAKE_PATCH * spacing, MAKE_OCTAVES, MAKE_STREAM);
   let across = length(slope) / spacing + MAKE_RAGGED * ragged_slope(MAKE_PX * e, MAKE_PATCH * spacing, MAKE_OCTAVES);
   let half = max(across * max(MAKE_EDGE_PX * e, MAKE_EDGE_M), 1e-6);
-  return mix(blend, mix(lo, hi, smoothstep(-half, half, x)), sharp);
+  return Make(mix(blend, mix(lo, hi, smoothstep(-half, half, x)), sharp), blend);
 }
 
 // Of the channel of sample `s`: the largest stone it moves, m, and the slope of its reach, rise over run (both 0 for

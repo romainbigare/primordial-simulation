@@ -29,6 +29,14 @@ const MOSS = 0.45; const MOSS_M = 1.5; const MOSS_TINT = vec3f(0.6, 0.95, 0.45);
 // (so it reads as rock from far, never as a smooth blot), its light's departure from flat ground's `ROCK_RELIEF` times
 // as strong (a face shows how it is turned).
 const ROCK_GREY = 0.55; const ROCK_TONE = 0.95; const MOTTLE = 0.25; const MOTTLE_M = 60.0; const ROCK_RELIEF = 1.8;
+// One make of bed is not one colour. Its layers show as bands along the contours, `BAND_M` of height apart, each its own
+// tone (up to `BANDS` either way), blended smoothly into the next (bedding seen across a slope), wobbling by up to
+// `BAND_WOBBLE_M` along the mottle's noise; they fade out where a band takes under `BAND_PX` pixels. A stable gentle
+// surface weathers darker and warmer (`VARNISH`: rock varnish and crusts of lichen take years to centuries to darken
+// it), a steep face is broken fresh; lichens tint it grey-green or ochre by up to `LICHEN_HUE` along the mottle's
+// noise (from memory).
+const BAND_M = 18.0; const BANDS = 0.22; const BAND_WOBBLE_M = 6.0; const BAND_PX = vec2f(1.5, 4.0);
+const VARNISH = vec3f(0.8, 0.74, 0.66); const LICHEN_HUE = vec3f(0.06, 0.03, -0.08);
 // Gentle bare bed is slabs: a network of cracks `CRACK_W` of their spacing wide, every `SLAB_M`, darker by
 // `CRACK_DARK`; each slab's tone differs by up to `SLAB_TONES`.
 const SLAB_M = 4.0; const CRACK_W = 0.06; const CRACK_DARK = 0.5; const SLAB_TONES = 0.15;
@@ -51,6 +59,8 @@ const STRATA_WOBBLE = 3.0; const STRATA_WAVE_M = 30.0; const BREAK_M = 20.0; con
 // gravel a size up), no smaller than `COBBLE_M`, sunk `BED_SUNK` in the bed's gravel.
 const SCREE_FROM = 0.25; const SCREE_FULL = 0.7; const SCREE_LOOSE_M = 1.0; const SCREE_STONE_M = 3.0; const SCREE = 0.8;
 const BELOW_LEAST = 0.2;
+// A scree's blocks are `SCREE_LIFT` times as light as their bed's face: freshly broken, not yet weathered (from memory).
+const SCREE_LIFT = 1.25;
 const STONES_ON_BED = 0.25; const SUNK_MOST = 0.55; const SUNK_LOOSE_M = 0.5;
 const STONE_SEEN = 2.5; const COBBLE_M = 0.65; const BED_SUNK = 0.3;
 
@@ -97,13 +107,23 @@ fn crack(n: f32, width: f32) -> f32 { return 1.0 - smoothstep(0.0, width, abs(n)
 // `e` m a pixel, in the style: slabs where gentle, a cliff's face where steep (the constants above). Each detail fades
 // where a pixel spans more than a quarter of it.
 fn rock_face(bed: vec3f, z: f32, at: vec2f, steep: f32, e: f32, shade: f32) -> vec3f {
-  let grey = mix(bed, vec3f(dot(bed, LUMA)), ROCK_GREY) * ROCK_TONE;
-  var tone = (1.0 + MOTTLE * noise_turned(at / MOTTLE_M, 57)) * (1.0 + (ROCK_RELIEF - 1.0) * (shade - 1.0));
+  let mottle = noise_turned(at / MOTTLE_M, 57);
+  let cliff = cliff_of(steep);
+  let weathered = mix(VARNISH, vec3f(1.0), cliff) * (1.0 + LICHEN_HUE * mottle);
+  let grey = mix(bed, vec3f(dot(bed, LUMA)), ROCK_GREY) * ROCK_TONE * weathered;
+  var tone = (1.0 + MOTTLE * mottle) * (1.0 + (ROCK_RELIEF - 1.0) * (shade - 1.0));
+  // Its layers' bands, read only where they show (each layer's tone hashed, no texture read).
+  let band_shows = 1.0 - ease(BAND_M / BAND_PX.y, BAND_M / BAND_PX.x, steep * e);
+  if (band_shows > 0.0) {
+    let layer = (z + BAND_WOBBLE_M * mottle) / BAND_M;
+    let k = floor(layer);
+    let own = vec2f(f32(lowbias(vec2i(i32(k), 7), 54) & 255u), f32(lowbias(vec2i(i32(k) + 1, 7), 54) & 255u)) / 255.0 - 0.5;
+    tone *= 1.0 + 2.0 * BANDS * band_shows * mix(own.x, own.y, smoothstep(0.0, 1.0, layer - k));
+  }
   // The slabs and their cracks, read only where they show.
   let slab_shows = shows_at(SLAB_M * CRACK_W * 4.0, e);
   var slabs = 1.0;
   if (slab_shows > 0.0) { slabs = 1.0 + SLAB_TONES * noise_turned(at / SLAB_M + 17.0, 59) - CRACK_DARK * crack(noise_turned(at / SLAB_M, 58), CRACK_W); }
-  let cliff = cliff_of(steep);
   var face = 1.0;
   // A face is no less steep than `CLIFF_FROM`, so its pixels span at least that much height: its strata are gone where
   // that is 0.3 of their spacing, and its cracks where they are under a pixel (draw.wgsl `LEAST_E`).

@@ -17,8 +17,10 @@ const SHORE_RISE_LEAST = 1e-3;
 // The relief moves the ground's height fully on ground drawn this steep (rise over run), less on gentler.
 const RELIEF_EDGE_SLOPE = 0.1;
 // A soil takes `SOIL_OF_BED` of its bed's colour where the bed is bare, less as its loose ground deepens, none from
-// `SOIL_OF_BED_M` m on (Earth view only).
-const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0;
+// `SOIL_OF_BED_M` m on (Earth view only): the bed's make as bare bed shows it on the thinnest, as a mantle smears it
+// from `SOIL_SMEAR_M` m deep on (rock.wgsl `Make`), and then `SOIL_SMEARED` as much of it (its own weathering and
+// organic matter mute it); there the stones on it, which creep and floods carry, are of the smeared make too.
+const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0; const SOIL_SMEAR_M = 0.3; const SOIL_SMEARED = 0.55;
 
 // What is at a point: the ground without the channel's water (`dry`: on the bars of its bed washed gravel, bare, as
 // far as they cover the pixel, river.wgsl `river_spots`), the channel's water (`wet`) and the share of the
@@ -150,11 +152,12 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
   // the cells' soil is a mean over kilometres, the bed's make is the samples'.
   // (The bed's make is read once, where something below asks for it.)
-  var make = vec3f(0.0);
+  var make = Make(vec3f(0.0), vec3f(0.0));
   var made = false;
   if (styled() && loose < SOIL_OF_BED_M) {
-    make = bed_make_at(at, place.at, e); made = true;
-    p.ground = mix(p.ground, make, SOIL_OF_BED * (1.0 - loose / SOIL_OF_BED_M));
+    make = bed_make_at(at, place.at, e, loose < SOIL_SMEAR_M); made = true;
+    let smear = ease(0.0, SOIL_SMEAR_M, loose);
+    p.ground = mix(p.ground, mix(make.sharp, make.soft, smear), SOIL_OF_BED * mix(1.0, SOIL_SMEARED, smear) * (1.0 - loose / SOIL_OF_BED_M));
   }
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
@@ -202,8 +205,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) {
-    if (!made) { make = bed_make_at(at, place.at, e); made = true; }
-    p.bed = make;
+    if (!made) { make = bed_make_at(at, place.at, e, loose < SOIL_SMEAR_M); made = true; }
+    p.bed = make.sharp;
   }
   p.fetch = g.water.z;
   let waves = waves_of(p.sea, p.fetch);
@@ -213,8 +216,8 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.swash = swash_of(over_ponds(tiled, 0.0), waves, length(tiled.slope), at, e, p.snow);
   // A beach of pebbles takes their colour from the bed they are worn from (colour.wgsl `shore_grain`).
   if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) {
-    if (!made) { make = bed_make_at(at, place.at, e); }
-    p.bed = make;
+    if (!made) { make = bed_make_at(at, place.at, e, loose < SOIL_SMEAR_M); }
+    p.bed = make.sharp;
   }
   p.river = 0.0;
   p.river_depth = 0.0;

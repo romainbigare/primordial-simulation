@@ -284,7 +284,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     for (var k = 0; k < rolled(2); k++) {
       var s = Stony(scree * (1.0 - plants), SCREE_STONE_M, 1.0, 0.0, sunk, snow, p.snow_m, STONE_RARE, p.swash.x);
       if (k == 1) { s = Stony(p.stony * (1.0 - p.sand), p.stone, p.small, p.worn, BED_SUNK, snow, p.snow_m, 0.0, max(soaked(p), p.swash.x)); }
-      let st = stones(p.e, s, 0.0, p.bed, 61 + 8 * k);
+      let st = stones(p.e, s, 0.0, select(min(p.bed * SCREE_LIFT, vec3f(1.0)), p.bed, k == 1), 61 + 8 * k);
       g.rgb = mix(g.rgb, st.rgb / max(st.a, 1e-4), st.a);
     }
   }
