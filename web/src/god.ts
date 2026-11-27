@@ -288,11 +288,11 @@ export class God {
   }
 
   /** Paint with stroke `st`'s tool where its brush is now (of a tool that follows the path, along it: `along`): by its
-   * amount, or for a tool with a rate by what the time since its last paint adds (the stroke's `last` paint: no less
-   * than what its tap lacks), its rate doubling every `doubling` s it has been held, at most `doublings` times. */
+   * amount, or for a tool with a rate by what the time since its last paint adds (no more than `GodTool.mostS`; the
+   * stroke's `last` paint: no less than what its tap lacks), its rate doubling every `doubling` s it has been held, at most `doublings` times. */
   private paint(st: Stroke, last = false): void {
     const t = st.tool, [x, y] = st.now, now = performance.now();
-    const ms = Math.max(now - st.last[2], last && t.tapS ? 1000 * t.tapS - st.covered : 0);
+    const ms = Math.max(Math.min(now - st.last[2], 1000 * (t.mostS ?? Infinity)), last && t.tapS ? 1000 * t.tapS - st.covered : 0);
     st.covered += ms;
     const rate = t.rate ? t.rate(this.radius) * (t.doubling ? 2 ** Math.min((now - st.began) / 1000 / t.doubling, t.doublings ?? Infinity) : 1) : 0;
     const amount = t.amount ? t.amount() : (rate * ms) / 1000;

@@ -166,6 +166,13 @@ pub(super) fn spread(g: &Grid, (h, base): (&mut [f64], &[f64]), kt: &[f64]) {
     }
 }
 
+/// Whether a sample of grid `g` of heights `h`, that stood at `base` before any edit, stands steeper than it may (than
+/// loose ground rests at, `REST`, or than it stood before any edit where steeper): whether a slide would move any ground.
+pub(super) fn fails(g: &Grid, h: &[f64], base: &[f64]) -> bool {
+    let at = Near::of(g);
+    (0..g.n()).any(|i| at.slope(h, i) > REST.max(at.slope(base, i)))
+}
+
 /// Ground slides on grid `g` (a box of the terrain's samples), of heights `h` (m, row by row; moved in place) that stood
 /// at `base` before any edit, from the samples that give it (`gives`: the volume each may give, m³, and what it takes),
 /// in passes (`SLIDE_PASSES`), each over the samples highest first as they stood when the slide began
