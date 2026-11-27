@@ -79,7 +79,7 @@ const NEAR_SIZES = 3.0;
 
 // What the ground at `at` leaves a plant: the depth of the liquid over its roots, m (land.wgsl `state_at`), how
 // saturated it is (land.wgsl `saturated_at`: the law's strips), the snow there (lib/land.wgsl `snow_at`, 1 where it
-// lies), its cells' snow's depth, m, and how lush it is (cover_field.wgsl `lush_of`, on the tiles' ground: no relief
+// lies), its cells' snow's depth, m, and how lush it is (lush.wgsl `lush_of`, on the tiles' ground: no relief
 // finer than them).
 struct Foot { depth: f32, saturated: f32, snow: f32, snow_m: f32, lush: f32 }
 fn foot(at: vec2f) -> Foot {

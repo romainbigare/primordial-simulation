@@ -65,17 +65,6 @@ const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; 
 // bare ground between them, not a soft wash (plants of dry ground stand in clumps that trap the water and the fines;
 // from memory), and on the mean none is lost.
 const PATCH_M = 8.0; const PATCH = 0.5; const CLUMP_FINE = vec2f(0.5, 3.0); const CLUMP_SHARP = 2.5;
-// Inside a cell the plants gather where water gathers and the sun dries the ground least, as seen from a plane: along
-// the drainage lines and in the hollows, on the slopes turned from the sun, and thin out on the ridges, the knobs and
-// the sunny sides (drawing only: the core knows a cell's mean and its saturated strips). How lush a point is, -1..1
-// (`lush_of`): the tanh of its wetness index over `LUSH_TWI_MID` times `LUSH_TWI` a unit, its rise toward the light
-// times `LUSH_SUN` (as snow lies longest there, land.wgsl `snow_bares`), the noise of the samples' places (rock.wgsl
-// `Place.n`, the patches of a mantle from a kilometre down) times `LUSH_PLACE`, and how low it lies in its relief (a
-// hollow's depth over `LUSH_LOW_M`, relief.wgsl); about none on the mean, so a cell keeps its cover. The plants stand
-// up to `LUSH` thicker and thinner by it (`lush_thick`), and the herbs' colour turns by `LUSH_HUE` of itself, greener
-// where lush, straw where dry. (The wetness index of the tiles' texels lies within about 6 to 9 on half the land.)
-const LUSH_TWI_MID = 7.5; const LUSH_TWI = 0.8; const LUSH_SUN = 3.0; const LUSH_PLACE = 0.6; const LUSH_LOW_M = 2.0;
-const LUSH = 0.9; const LUSH_HUE = vec3f(-0.25, -0.08, 0.06);
 
 // Kinds grow in stands of their own: a plant is of its square's first kind (canopy.ts `Paint`) where a smooth draw fixed
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
@@ -412,16 +401,7 @@ fn patchy(at: vec2f, e: f32) -> f32 {
   if (fine > 0.0) { n += fine * CLUMP_FINE.x * noise(at * (CLUMP_FINE.y / PATCH_M), 41).x; }
   return 1.0 + PATCH * tanh(CLUMP_SHARP * n);
 }
-
-// How lush a point is (`LUSH_TWI`): of wetness index `twi` (land.wgsl `Tiled.twi`), slope `slope` (east, south; rise over
-// run), the noise of its samples' place `n` (rock.wgsl `Place.n`) and `low` m under its relief's mean (0 where not
-// known).
-fn lush_of(twi: f32, slope: vec2f, n: f32, low: f32) -> f32 {
-  return tanh(LUSH_TWI * (twi - LUSH_TWI_MID) - LUSH_SUN * sunward(slope) + LUSH_PLACE * n + low / LUSH_LOW_M);
-}
-// How much thicker than their mean the plants stand where they are as lush as `lush` (`lush_of`), at most `THICK_MOST`
-// times with the patches (`patchy`).
-fn lush_thick(lush: f32) -> f32 { return 1.0 + LUSH * lush; }
+// The most times their mean the plants stand over the patches (`patchy`) where most lush (lush.wgsl `lush_thick`).
 const THICK_MOST = (1.0 + PATCH) * (1.0 + LUSH);
 
 // The stands' draw at `at` over patches of `m` m, even over 0..1.
@@ -487,9 +467,6 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   }
   return vec4f(c, cover * cluster);
 }
-
-// What the herbs' colour is multiplied by where they are as lush as `lush` (`LUSH_HUE`).
-fn lush_hue(lush: f32) -> vec3f { return 1.0 + LUSH_HUE * lush; }
 
 // The herbs' sward at `at`, seen at `e` m a pixel, over `b`, its field there `f` (`field_smooth`), premultiplied: their colour in stands of their kinds, the
 // share they cover (thicker and thinner by `thick`, `patchy`, as far as they hold there, `hold`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees' crowns,

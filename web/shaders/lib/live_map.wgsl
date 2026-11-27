@@ -97,7 +97,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   var g = ground_at(at, true);
   // The place the samples' fields are read at (rock.wgsl `sample_place`).
   let place = sample_place(at, e);
-  // The loose ground with its patches, deeper as the tiles' ground is lush (cover_field.wgsl `lush_of`), the bed it
+  // The loose ground with its patches, deeper as the tiles' ground is lush (lush.wgsl `lush_of`), the bed it
   // bares, and the relief finer than the tiles (relief.wgsl), which moves the ground's height and slope: the shading's
   // normal and the fine line of a shore.
   let loose_mean = loose_at(place, lush_of(g.twi, g.slope, place.n, 0.0));
@@ -163,7 +163,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
-  // How lush the ground is (cover_field.wgsl `lush_of`): on the tiles' slope, as the marks read it, and lower in its
+  // How lush the ground is (lush.wgsl `lush_of`): on the tiles' slope, as the marks read it, and lower in its
   // relief's hollows.
   let lush = lush_of(g.twi, tiled.slope, place.n, -fine.h);
   let soil = soil_at(at, place, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy, lush);

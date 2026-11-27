@@ -81,7 +81,7 @@ fn sample_place(at: vec2f, e: f32) -> Place {
 // so the blend departs from the samples' mean by the place's noise (`Place.n`) times `LOOSE_SPREAD` of how far the
 // samples it blends spread: a rule read on it (the bed it bares, the plants' roots, `rooted`) follows no sample's
 // square where two samples' depths differ, and keeps the mean where they do not. Its change across a pixel is smooth.
-// Inside a sample the mantle lies deeper where the ground is lush (cover_field.wgsl `lush_of`: creep and wash fill the
+// Inside a sample the mantle lies deeper where the ground is lush (lush.wgsl `lush_of`: creep and wash fill the
 // hollows and drainage lines and strip the ridges and knobs), up to `LOOSE_LUSH` of itself either way, about none on
 // the mean (drawing only): so the bed shows and the plants' roots fail first on the crests, and the edges of both
 // follow the relief. Of a point as lush as `lush`.
@@ -94,7 +94,7 @@ fn loose_at(place: Place, lush: f32) -> f32 {
 // The loose ground's grain shares swap coarse for fine, at most all of themselves either way: what the wear lays down
 // is sorted finer than a sample. Rain wash carries the fines off the crests and the dry sunny sides into the hollows
 // and drainage lines, where they settle, and leaves the coarse behind (Kirkby 1969; from memory): `GRAIN_LUSH` of
-// themselves by how lush the ground is (cover_field.wgsl `lush_of`). Over that, lenses and patches: the noise of the
+// themselves by how lush the ground is (lush.wgsl `lush_of`). Over that, lenses and patches: the noise of the
 // samples' places (`Place.n`, from a kilometre down) times `GRAIN_PLACE`, and patches from `GRAIN_PATCH_M` across
 // down in `GRAIN_OCTAVES` octaves (ragged.wgsl) times `GRAIN_PATCHY`. All about none on the mean, so the mean is the
 // samples' grain.
