@@ -343,7 +343,7 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32,
     if (exact) {
       if (!ground_open(at)) { return unclaimed; }
       f = foot(at);
-      thick = patchy(at) * lush_thick(f.lush);
+      thick = patchy(at, 0.0) * lush_thick(f.lush);
     }
     pick = pick_kind(l, at, cs, thick, f, own, id, exact);
     if (pick.x < 0) { return unclaimed; }

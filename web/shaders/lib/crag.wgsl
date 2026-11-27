@@ -8,13 +8,15 @@
 
 // Bare soil's tone varies by up to this share over clods `CLOD_M` across.
 const CLOD = 0.06; const CLOD_M = 0.5;
-// Open soil (no canopy over it) varies in tone by up to `SOIL_MOTTLE` over patches `SOIL_PATCH_M` and a quarter of that
-// across, and in grit `GRIT_M` across by up to `GRIT`, `SAND_GRIT` times that more where all its grain is coarse (bare
+// Open soil (no canopy over it) is darker in the low ground of its relief and paler on its rises, as wash gathers the
+// damp fines in the hollows and leaves the crests dry and coarse (from memory): by up to `SOIL_LOW` either way by how
+// low it lies among its basins and `SOIL_HOLLOW` among its hollows (relief.wgsl `Relief`, so its tone follows the
+// light's shapes); it varies in tone by up to `SOIL_MOTTLE` over patches `SOIL_PATCH_M` across, and in grit `GRIT_M` across by up to `GRIT`, `SAND_GRIT` times that more where all its grain is coarse (bare
 // sand glints); where it is dry (wetter than `CRUST_WET` none) its crust cracks in lines `CRUST_M` and a third of that
 // apart, `CRUST_W` of their spacing wide, darker by up to `CRUST_DARK`, as far as it shrinks when it dries: by its fine
 // grain and `SILT_SHRINK` of its middle grain, all of it from a share `SHRINK_FULL` (clay shrinks and swells, sand
 // does not; Grossman and others 1968).
-const SOIL_MOTTLE = 0.14; const SOIL_PATCH_M = 22.0; const GRIT = 0.1; const GRIT_M = 0.035; const SAND_GRIT = 1.5;
+const SOIL_LOW = 0.12; const SOIL_HOLLOW = 0.12; const SOIL_MOTTLE = 0.07; const SOIL_PATCH_M = 40.0; const GRIT = 0.1; const GRIT_M = 0.035; const SAND_GRIT = 1.5;
 const CRUST_WET = 0.35; const CRUST_M = 1.6; const CRUST_W = 0.035; const CRUST_DARK = 0.45;
 const SILT_SHRINK = 0.3; const SHRINK_FULL = 0.35;
 // Under a closed canopy the bare ground is litter: its colour times `LITTER_TINT`, up to `LITTER` of it, and in the
@@ -68,8 +70,9 @@ const STONE_SEEN = 2.5; const COBBLE_M = 0.65; const BED_SUNK = 0.3;
 fn shrinks(grain: vec4f) -> f32 { return ease(0.0, SHRINK_FULL, grain.y + SILT_SHRINK * max(1.0 - grain.x - grain.y, 0.0)); }
 
 // The bare ground's colour `c` (linear, unlit) at the pixel, seen at `e` m a pixel, under `canopy` of closed crowns, `wet`,
-// of grain `grain` (`Spot.grain`): its clods, and under the crowns their shade, litter and moss.
-fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32, grain: vec4f) -> vec3f {
+// of grain `grain` (`Spot.grain`), as low as `low` lies among its basins and its hollows (`Spot.basin`, `Spot.hollow`,
+// 0..1, 0.5 where none shows): its clods, and under the crowns their shade, litter and moss.
+fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32, grain: vec4f, low: vec2f) -> vec3f {
   let litter = LITTER * STYLE * canopy;
   let soft = mix(c, vec3f(dot(c, vec3f(1.0 / 3.0))), FLOOR_GREY * STYLE * canopy);
   var out = soft * mix(vec3f(1.0), LITTER_TINT, litter) * (1.0 - UNDER_DARK * STYLE * canopy);
@@ -78,11 +81,10 @@ fn floor_of(c: vec3f, e: f32, canopy: f32, wet: f32, grain: vec4f) -> vec3f {
   if (clods > 0.0) { out *= 1.0 + CLOD * STYLE * noise_l(lat_axes(CLOD_M, vec2f(0.0)), 51).x * clods; }
   // Open soil: its patches, its grit and, where dry, its cracked crust.
   let open = 1.0 - min(canopy, 1.0);
-  let patches = shows_at(0.25 * SOIL_PATCH_M, e);
-  if (patches > 0.0) {
-    let m = noise_l(lat_turned(SOIL_PATCH_M, vec2f(0.0)), 56).x + 0.5 * noise_l(lat_turned(0.25 * SOIL_PATCH_M, vec2f(3.0)), 57).x;
-    out *= 1.0 + SOIL_MOTTLE * open * patches * m;
-  }
+  var m = SOIL_LOW * (2.0 * low.x - 1.0) + SOIL_HOLLOW * (2.0 * low.y - 1.0);
+  let patches = shows_at(SOIL_PATCH_M, e);
+  if (patches > 0.0) { m += SOIL_MOTTLE * patches * noise_l(lat_turned(SOIL_PATCH_M, vec2f(0.0)), 56).x; }
+  out *= 1.0 + open * m;
   let grit = shows_at(2.0 * GRIT_M, e);
   if (grit > 0.0) { out *= 1.0 + GRIT * (1.0 + SAND_GRIT * grain.x) * open * grit * noise_l(lat_turned(GRIT_M, vec2f(1.0)), 58).x; }
   let dry = open * ease(CRUST_WET, 0.0, wet) * shrinks(grain) * shows_at(CRUST_W * CRUST_M, e);

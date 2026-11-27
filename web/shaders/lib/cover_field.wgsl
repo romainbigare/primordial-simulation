@@ -59,9 +59,12 @@ const PATCH_WARP = 0.16; const PATCH_LOBES = 0.55; const PATCH_FINE = vec2f(0.35
 // are its mean over its square, its edge no line on the ground. A mark's foot draws its patch and its cell by the
 // share each takes there, with its own draw fixed at its place to `FOOT_DRAW_M`.
 const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; const FOOT_DRAW_M = 0.01;
-// Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
-// mean (fixed noise in the world), alike near (cover.wgsl) and far.
-const PATCH_M = 8.0; const PATCH = 0.45;
+// Patches: the plants stand thicker and thinner over clumps about `PATCH_M` m across and `CLUMP_FINE.x` as strong
+// `CLUMP_FINE.y` times finer, by up to `PATCH` of their mean (fixed noise in the world), alike near (cover.wgsl) and
+// far: the noise's sum is sharpened by `CLUMP_SHARP` through a tanh, so a sparse cover gathers into clumps with gaps of
+// bare ground between them, not a soft wash (plants of dry ground stand in clumps that trap the water and the fines;
+// from memory), and on the mean none is lost.
+const PATCH_M = 8.0; const PATCH = 0.5; const CLUMP_FINE = vec2f(0.5, 3.0); const CLUMP_SHARP = 2.5;
 // Inside a cell the plants gather where water gathers and the sun dries the ground least, as seen from a plane: along
 // the drainage lines and in the hollows, on the slopes turned from the sun, and thin out on the ridges, the knobs and
 // the sunny sides (drawing only: the core knows a cell's mean and its saturated strips). How lush a point is, -1..1
@@ -401,8 +404,14 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
   return with_patch(on_land(spline_field(at, l), land_smooth), l);
 }
 
-// How much thicker than their mean the plants stand at `at` (`PATCH`).
-fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
+// How much thicker than their mean the plants stand at `at`, seen at `e` m a pixel (`PATCH`): the finer clumps as far
+// as they show.
+fn patchy(at: vec2f, e: f32) -> f32 {
+  let fine = shows_at(PATCH_M / CLUMP_FINE.y, e);
+  var n = noise(at / PATCH_M, 40).x;
+  if (fine > 0.0) { n += fine * CLUMP_FINE.x * noise(at * (CLUMP_FINE.y / PATCH_M), 41).x; }
+  return 1.0 + PATCH * tanh(CLUMP_SHARP * n);
+}
 
 // How lush a point is (`LUSH_TWI`): of wetness index `twi` (land.wgsl `Tiled.twi`), slope `slope` (east, south; rise over
 // run), the noise of its samples' place `n` (rock.wgsl `Place.n`) and `low` m under its relief's mean (0 where not
@@ -576,7 +585,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   cell_patch_at(at, e);
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
-  let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0) * lush_thick(b.lush);
+  let thick = select(1.0, 1.0 + (patchy(at, e) - 1.0) * patches, patches > 0.0) * lush_thick(b.lush);
   // The plants' roots hold where the marks' do (mark.wgsl `holds`, on every patch of the loose ground), over a pixel and
   // over the patches too small to show here (`loose_unseen`), so the field far away and the marks near stand on the
   // same ground.

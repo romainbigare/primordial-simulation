@@ -163,15 +163,15 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
-  let soil = soil_at(at, place, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy);
+  // How lush the ground is (cover_field.wgsl `lush_of`): on the tiles' slope, as the marks read it, and lower in its
+  // relief's hollows.
+  let lush = lush_of(g.twi, tiled.slope, place.n, -fine.h);
+  let soil = soil_at(at, place, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy, lush);
   p.grain = soil.grain;
   p.deposit = soil.deposit;
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
   let fringe = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * ch.water);
   let shore_over = over_water(g, ch, p.over, fringe);
-  // How lush the ground is for the plants (cover_field.wgsl `lush_of`): on the tiles' slope, as the marks read it, and
-  // lower in its relief's hollows.
-  let lush = lush_of(g.twi, tiled.slope, place.n, -fine.h);
   let cf = cover_field(at, e, Beneath(max(soaked(p), marsh_of(p)), shore_over, length(g.slope), p.depth, loose, loose_mean, fwidth(loose), p.snow, st.snow_m, lush));
   p.cover = cf.cover;
   p.canopy = cf.canopy;

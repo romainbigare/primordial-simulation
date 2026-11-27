@@ -91,10 +91,14 @@ fn loose_at(place: Place, lush: f32) -> f32 {
   return max(b.mean.x + LOOSE_SPREAD * b.spread.x * place.n, 0.0) * (1.0 + LOOSE_LUSH * lush);
 }
 
-// The loose ground's grain shares swap coarse for fine by up to `GRAIN_PATCHY` of themselves either way over patches from
-// `GRAIN_PATCH_M` across down, in `GRAIN_OCTAVES` octaves (ragged.wgsl): what the wear lays down is sorted in lenses
-// and patches finer than a sample. Even in the patches' noise, so the patches' mean is the samples' grain.
-const GRAIN_PATCHY = 0.6; const GRAIN_PATCH_M = 60.0; const GRAIN_OCTAVES = 3;
+// The loose ground's grain shares swap coarse for fine, at most all of themselves either way: what the wear lays down
+// is sorted finer than a sample. Rain wash carries the fines off the crests and the dry sunny sides into the hollows
+// and drainage lines, where they settle, and leaves the coarse behind (Kirkby 1969; from memory): `GRAIN_LUSH` of
+// themselves by how lush the ground is (cover_field.wgsl `lush_of`). Over that, lenses and patches: the noise of the
+// samples' places (`Place.n`, from a kilometre down) times `GRAIN_PLACE`, and patches from `GRAIN_PATCH_M` across
+// down in `GRAIN_OCTAVES` octaves (ragged.wgsl) times `GRAIN_PATCHY`. All about none on the mean, so the mean is the
+// samples' grain.
+const GRAIN_LUSH = 0.45; const GRAIN_PLACE = 0.3; const GRAIN_PATCHY = 0.3; const GRAIN_PATCH_M = 25.0; const GRAIN_OCTAVES = 3;
 
 // A deposit's depth departs from the samples' by a factor of up to e^`LAID_PATCHY` either way over the noise of the
 // samples' places (`Place.n`), and its age by up to `LAID_AGE_PATCHY` of its decimal logarithm: a load is laid thicker
@@ -103,18 +107,18 @@ const LAID_PATCHY = 0.7; const LAID_AGE_PATCHY = 0.4;
 // The loose ground at a point: its grain as `Spot.grain` holds it, its deposit as `Spot.deposit` does, and the slope
 // up from it to the highest ground toward the light, rise over run (tape/src/ground/horizon.rs).
 struct SoilAt { grain: vec4f, deposit: vec2f, horizon: f32 }
-// The loose ground at `at`, read at the place `place` (`sample_place`) and moved by its noise, seen at `e` m a pixel,
-// with its organic matter `organic` (the cells', which changes as the dead matter on the ground rots): the samples'
-// grain (`samples_at`: the shares of coarse and fine grain and how slowly it passes liquid) moved by `shift`, the
+// The loose ground at `at`, as lush as `lush`, read at the place `place` (`sample_place`) and moved by its noise, seen
+// at `e` m a pixel, with its organic matter `organic` (the cells', which changes as the dead matter on the ground
+// rots): the samples' grain (`samples_at`: the shares of coarse and fine grain and how slowly it passes liquid) moved by `shift`, the
 // cells' grain (`World::soil`, what the laws read) over the samples' in their square (web/src/land.ts), so the world's
 // soil is drawn on the mean and the samples' pattern inside a square, with its patches; how deep the load the liquid
 // laid lies there, m, and the decimal logarithm of the years its loose ground has lain (`LAID_PLANE`: a deposit's edge
 // is eased where it is drawn, colour.wgsl `laid_share`); and the horizon the same plane holds. All through the samples'
 // centres as a B-spline (`samples_at`): a field eased over a narrow edge shows no sample's square.
-fn soil_at(at: vec2f, place: Place, e: f32, organic: f32, shift: vec2f) -> SoilAt {
+fn soil_at(at: vec2f, place: Place, e: f32, organic: f32, shift: vec2f, lush: f32) -> SoilAt {
   let raw = samples_at(place.at, GRAIN_PLANE);
   let g = vec4f(clamp(raw.xy + shift, vec2f(0.0), vec2f(1.0)), raw.zw);
-  let n = GRAIN_PATCHY * ragged(at, e, GRAIN_PATCH_M, GRAIN_OCTAVES, 210);
+  let n = clamp(GRAIN_PATCHY * ragged(at, e, GRAIN_PATCH_M, GRAIN_OCTAVES, 210) + GRAIN_PLACE * place.n - GRAIN_LUSH * lush, -1.0, 1.0);
   let laid = samples_at(place.at, LAID_PLANE);
   let deposit = vec2f(laid.z * exp(LAID_PATCHY * place.n), laid.w + LAID_AGE_PATCHY * place.n);
   return SoilAt(vec4f(g.x * (1.0 + n), g.y * (1.0 - n), organic, g.z), deposit, laid.x);

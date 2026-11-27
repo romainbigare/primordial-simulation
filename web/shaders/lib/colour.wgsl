@@ -255,7 +255,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // (Under full snow none of it shows: the snow below takes the pixel whole.)
   if (styled() && snow < 1.0) {
     // A burn scar takes the floor (burn.wgsl `burnt_floor`) and as much of the soil's own tint.
-    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, g.grain) * soil_detail(p), p);
+    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, g.grain, vec2f(p.basin, p.hollow)) * soil_detail(p), p);
     g.rgb = burnt.rgb;
     g.warm *= 1.0 - burnt.a;
     // Bed the waves' swash wets takes the one wet look of rock (stone.wgsl `wet_stone`) as far as it is soaked.
