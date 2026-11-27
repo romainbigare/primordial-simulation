@@ -49,7 +49,7 @@ const LOAD_SHOWS: f64 = 0.25;
 /// (`undo`), with the samples that stroke moved (`shown::Area`); of the version of the ground the page shows
 /// (`ground_shown`) and of each built since, oldest first (`since`, `Built`), what edits had shaped, from which
 /// `preview` tells the page what edits moved since: the last is the version the cells' table is of; and the samples the
-/// last paint may have moved (`shown::preview` of a part).
+/// last paint moved and those beside them (`shown::preview` of a part).
 struct Live {
     world: World,
     built: u32,

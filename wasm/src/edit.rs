@@ -145,36 +145,45 @@ fn make(l: &mut Live, edits: &[Edit]) -> bool {
     done
 }
 
-/// The samples the brush `b` may have moved the ground of kept, in the stroke under way, in the newest version
-/// (`Built::moved`) and in the paint (`Live::painted`), for `preview`.
-fn moved_ground(l: &mut Live, b: Brush) {
-    let s = l.world.terrain_samples();
-    let per = (s.across / l.world.map.w) as f64;
-    let area = Area::of(b, (s.across, s.down, per), l.world.map.side);
+/// The box `area` of samples edits of the stroke under way may have moved the ground of kept, in the stroke and in the
+/// newest version (`Built::moved`), for `preview`.
+fn moved_ground(l: &mut Live, area: Area) {
     let st = l.stroke.as_mut().expect("a stroke under way");
     st.moved = st.moved.or(area);
-    l.painted = l.painted.or(area);
     let last = l.since.last_mut().expect("a version");
     last.moved = last.moved.or(area);
+}
+
+/// The box of the samples the brushes about the places `centres` of radius `radius` m may move the ground of
+/// (`Area::of`).
+fn reach(l: &Live, centres: &[[f64; 2]], radius: f64) -> Area {
+    let s = l.world.terrain_samples();
+    let per = (s.across / l.world.map.w) as f64;
+    centres.iter().fold(Area::NONE, |a, &centre| a.or(Area::of(Brush { centre, radius_m: radius }, (s.across, s.down, per), l.world.map.side)))
 }
 
 /// The ground under a brush of radius `radius` m at each place of `stamps` raised by its height at its centre, m, less
 /// toward its edge (lowered where under none; `Act::Ground`), all in one call; each lays its loose top of the stroke's
 /// make on what the stroke raised so far at the sample under its centre. The page draws it from the preview of the part
-/// it may have moved until the stroke settles. It names no cells (the page reads whether it changed the world).
+/// it moved (`Live::painted`: the samples the call moved and one about them, whose slope moved) until the stroke
+/// settles. It names no cells (the page reads whether it changed the world).
 fn shape(l: &mut Live, stamps: &[([f64; 2], f64)], radius: f64) -> serde_json::Value {
     let st = l.stroke.as_ref().expect("a stroke under way");
     let s = l.world.terrain_samples();
-    let per = (s.across / l.world.map.w) as f64;
+    let (across, down, per) = (s.across, s.down, (s.across / l.world.map.w) as f64);
     let at = |v: f64, n: usize| ((v * per).floor().max(0.0) as usize).min(n - 1);
     let raised = |[x, y]: [f64; 2]| {
-        let k = at(y, s.down) * s.across + at(x, s.across);
+        let k = at(y, down) * across + at(x, across);
         l.world.relief.shaped_at(k) - st.before.relief.shaped_at(k)
     };
     let edits: Vec<Edit> = stamps.iter().map(|&(place, height_m)| Edit { place, act: Act::Ground { radius_m: radius, height_m, stroke_m: raised(place).max(0.0), make: st.make } }).collect();
     drop(s);
+    let may = reach(l, &stamps.iter().map(|p| p.0).collect::<Vec<_>>(), radius);
+    let was: Vec<f64> = may.samples(across).map(|k| l.world.relief.shaped_at(k)).collect();
     let done = make(l, &edits);
-    stamps.iter().for_each(|&(centre, _)| moved_ground(l, Brush { centre, radius_m: radius }));
+    let moved = may.samples(across).zip(was).filter(|&(k, m)| l.world.relief.shaped_at(k) != m).fold(Area::NONE, |a, (k, _)| a.or(Area::sample(k, across)));
+    l.painted = moved.grown(1, (across, down));
+    moved_ground(l, may);
     json!({"cells": [], "changed": done, "preview": "paint", "frame": false})
 }
 
@@ -184,7 +193,8 @@ fn shape(l: &mut Live, stamps: &[([f64; 2], f64)], radius: f64) -> serde_json::V
 fn lake(l: &mut Live, b: Brush, depth: f64) -> serde_json::Value {
     let done = make(l, &[Edit { place: b.centre, act: Act::Basin { radius_m: b.radius_m, depth_m: depth } }]);
     l.follow();
-    moved_ground(l, b);
+    let area = reach(l, &[b.centre], b.radius_m);
+    moved_ground(l, area);
     json!({"cells": [], "changed": done, "preview": "whole", "frame": done})
 }
 

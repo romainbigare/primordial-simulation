@@ -3,13 +3,14 @@
 //! potential energy of where it lies, so the books close. A raise lays the cell's own rock (its bed's mixture) and, at
 //! the top of a stroke, `Config::edit_top_m` of loose ground of one of the terrain's makes (`Make::of`); a lowering
 //! takes the loose ground first, then the rock. Where in a cell the ground moved is kept on the terrain's samples
-//! (`Relief::shaped`), which are built again over it when the edits settle (`World::settle`).
+//! (`Relief::shaped`), which are built again over it when the edits settle (`World::settle`). The ground the brush
+//! shaped slides till it stands no steeper than loose ground rests at (`World::rest`).
 
 use super::Brush;
 use crate::rng::{Purpose, Rng};
 use crate::store::{Boundary, Class, Node};
 use crate::World;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 impl World {
     /// The make of the loose ground the stroke `stroke` of a shell's edits lays (`Act::Ground`): one of the terrain's
@@ -33,21 +34,40 @@ impl World {
         drop(s);
         let top = self.cfg.edit_top_m;
         let loose = if height > 0.0 { ((stroke + height).min(top) - stroke.min(top)).max(0.0) / height } else { 0.0 };
-        let mix = self.terrain.makes.get(make).map_or_else(Vec::new, |m| m.of.clone());
-        self.move_ground(&cells, loose, &mix)
+        self.move_ground(&cells, loose, &self.mix_of(make))
+    }
+
+    /// The substances of the terrain's make `make` (`Make::of`), each with its share by volume; none where there is none.
+    fn mix_of(&self, make: usize) -> Vec<(usize, f64)> {
+        self.terrain.makes.get(make).map_or_else(Vec::new, |m| m.of.clone())
+    }
+
+    /// The ground under the brushes `brushes` (the edits of the ground of one call) slides till it stands no steeper than
+    /// loose ground rests at (`World::slid`; laws.md, Edits): the samples they cover give ground, their neighbours may
+    /// take it. Each cell moves by its samples' heights (`move_ground`), what slides laid as loose ground of the make
+    /// `make` (ground that slid lies loose at the foot of its slope).
+    pub(super) fn rest(&mut self, brushes: &[Brush], make: usize) {
+        let across = self.terrain_samples().across;
+        let givers: BTreeSet<usize> = brushes.iter().flat_map(|&b| self.covered(b, across)).map(|c| c.k).collect();
+        let mut cells: BTreeMap<usize, Vec<(usize, f64)>> = BTreeMap::new();
+        for (k, dh) in self.slid(&givers.into_iter().collect::<Vec<_>>()) {
+            cells.entry(self.cell_under(self.sample_place(k, across))).or_default().push((k, dh));
+        }
+        self.move_ground(&cells, 1.0, &self.mix_of(make));
     }
 
     /// The ground of each cell of `cells` moved by its samples' heights, m (each sample and how far it moves; raised
     /// where above none): the cell takes the volume they move by, a raise the share `loose` of it as loose ground of the
     /// substances `mix` and the rest as its rock (`raise`), a lowering at most what it holds (`lower`), and its samples
-    /// move by the share it took (`Relief::shape`). Whether any ground moved.
+    /// move by the share it took (`Relief::shape`; all of what they say where the cell's volume does not change, as
+    /// where ground slides inside it). Whether any ground moved.
     pub(super) fn move_ground(&mut self, cells: &BTreeMap<usize, Vec<(usize, f64)>>, loose: f64, mix: &[(usize, f64)]) -> bool {
         let s = self.terrain_samples();
         let mut moved = false;
         for (&i, samples) in cells {
             let v: f64 = samples.iter().map(|&(k, dh)| dh * s.area(k)).sum();
             let got = if v >= 0.0 { self.raise(i, v, loose, mix) } else { -self.lower(i, -v) };
-            let share = if v != 0.0 { got / v } else { 0.0 };
+            let share = if v != 0.0 { got / v } else { 1.0 };
             samples.iter().for_each(|&(k, dh)| self.relief.shape(k, dh * share, s.h.len()));
             moved |= got != 0.0;
         }

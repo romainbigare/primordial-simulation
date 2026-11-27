@@ -2,8 +2,9 @@
 //! and the live page change a world from the outside. Each edit acts on the cell under its place, through the law it
 //! belongs to (`World::clear`, `World::split`, `cover::place`, the flames' strikes), and is told to the shell as a raw
 //! event (`EventKind::Edit`). A round brush finds the cells under it and the share of each it covers (`brush`), and
-//! raises or lowers the ground under it (`shape`); what the edits start that takes no time runs at once, with no time
-//! on the world's clock (`World::settle`).
+//! raises or lowers the ground under it (`shape`), which then slides till it stands no steeper than loose ground rests
+//! at (`World::rest`); what the edits start that takes no time runs at once, with no time on the world's clock
+//! (`World::settle`).
 
 mod brush;
 mod heat;
@@ -11,6 +12,11 @@ mod basin;
 mod shape;
 
 pub use brush::{falloff, Brush, Under};
+
+/// The most samples past its brush's radius an edit moves the ground or the loose ground the samples are built with:
+/// the slide of what it shaped (`space::shaped::SLIDE_PASSES`), the sample beside that whose slope it moves, and the
+/// sample a brush's span rounds out to (a basin's rim, 1.5 samples, lies within).
+pub const REACH_SAMPLES: f64 = (crate::space::shaped::SLIDE_PASSES + 2) as f64;
 
 use crate::event::{Event, EventKind};
 use crate::World;
@@ -110,13 +116,14 @@ impl World {
     /// (`EventKind::Edit`, its cell the node, the value 1 where it was made, 0 where the world could not make it). An
     /// edit whose numbers cannot be made (`Edit::valid`) is refused before it touches the world (its node the first
     /// cell where its place is not finite). The grown stand of a kind is found once for all of them, as the world stood
-    /// before the first placed it: each cell takes the same stand. Returns whether each was made.
+    /// before the first placed it: each cell takes the same stand. The ground the call's edits of the ground shaped then
+    /// slides (`World::rest`), laid as the loose ground of the last one's make. Returns whether each was made.
     pub fn edit(&mut self, edits: &[Edit]) -> Vec<bool> {
         if edits.iter().any(|e| e.valid() && e.act.reads_month()) {
             crate::month_start(self);
         }
         let mut grown = BTreeMap::new();
-        edits
+        let done: Vec<bool> = edits
             .iter()
             .map(|e| {
                 let i = if e.place.iter().all(|v| v.is_finite()) { self.cell_under(e.place) } else { 0 };
@@ -124,7 +131,15 @@ impl World {
                 self.events.push(Event { day: self.day(), kind: EventKind::Edit(*e), node: i as u32, value: if done { 1.0 } else { 0.0 } });
                 done
             })
-            .collect()
+            .collect();
+        let shaped: Vec<(Brush, u8)> = edits.iter().zip(&done).filter_map(|(e, &d)| match e.act {
+            Act::Ground { radius_m, make, .. } if d => Some((Brush { centre: e.place, radius_m }, make)),
+            _ => None,
+        }).collect();
+        if let Some(&(_, make)) = shaped.last() {
+            self.rest(&shaped.iter().map(|p| p.0).collect::<Vec<_>>(), make as usize);
+        }
+        done
     }
 
     /// Run at once what the edits since the month began start that takes no time, with no time on the world's clock

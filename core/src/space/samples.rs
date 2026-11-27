@@ -33,7 +33,8 @@ use std::sync::{Arc, Mutex};
 /// (`space::strata`, as the wear left it); the depth of its loose ground the wear left, m, how much of it settled in
 /// the wear's last stage, m (all of it on the open low ground), and how long it has lain, years (`mantle::age`); and
 /// the volumes the wear moved (`wear::Books`); and how much liquid gathers at each, its topographic wetness index
-/// ln(a / tan β) (`sample_index`); and the channel law of the terrain (`Terrain::channel`).
+/// ln(a / tan β) (`sample_index`); the channel law of the terrain (`Terrain::channel`); and what edits had shaped of
+/// each sample when these were built from the relief, m (`Relief::shaped`; none for the seed's).
 #[derive(Clone, Debug)]
 pub struct Samples {
     pub seed: u64,
@@ -56,6 +57,7 @@ pub struct Samples {
     pub channel: [f64; 2],
     /// The area of a sample of each row, m² (`Square::place_of`, found with the samples): a sample's is its row's.
     pub rows: Vec<f64>,
+    pub shaped: Vec<f64>,
 }
 
 /// A pond: the samples of one closed basin that lie under its level, where liquid stands at one level before it runs
@@ -111,6 +113,17 @@ impl Samples {
             return sum / area;
         }
         at(&l)
+    }
+
+    /// What edits of the relief `r` shaped of sample `k` since these samples were built, m (`Relief::shaped`).
+    pub fn shaped_since(&self, r: &Relief, k: usize) -> f64 {
+        r.shaped_at(k) - self.shaped.get(k).copied().unwrap_or(0.0)
+    }
+
+    /// The height of the ground of sample `k` as it stands, m: as built, with what edits of the relief `r` shaped since
+    /// (`shaped_since`).
+    pub fn height_now(&self, r: &Relief, k: usize) -> f64 {
+        self.h[k] + self.shaped_since(r, k)
     }
 
     /// The slope of sample `k` to the sample its liquid runs to, rise over run (none where it runs to none or uphill).
@@ -238,6 +251,7 @@ impl Terrain {
             [found.loose[k], found.settled[k]] = edited(&grid, k, (&|j| found.h[j], found.up[k]), (found.loose[k], found.settled[k]), &|j| r.shaped[j]);
         }
         renumber(&mut found.pond, &mut found.ponds, &r.ponds);
+        found.shaped = r.shaped.clone();
         let found = Arc::new(found);
         let mut kept = self.kept.1.lock().expect("the built samples");
         known(&kept).unwrap_or_else(|| {
@@ -334,7 +348,7 @@ impl Terrain {
             None => sample_index(grid.across, grid.down, grid.dy, &up, &h),
         };
         let Ground { make, loose, settled, age, books } = ground;
-        Samples { seed, across: grid.across, down: grid.down, h, to: f.to, order: f.order, up, main, run: f.apart, pond, ponds, make, loose, settled, age, books, twi, channel: self.channel, rows }
+        Samples { seed, across: grid.across, down: grid.down, h, to: f.to, order: f.order, up, main, run: f.apart, pond, ponds, make, loose, settled, age, books, twi, channel: self.channel, rows, shaped: Vec::new() }
     }
 }
 
@@ -350,7 +364,7 @@ struct Ground {
 
 /// The grid of the samples of `map` (its rows between latitudes `south` and `north`): each row's samples as wide as
 /// they lie there; the area of a sample of each row, m² (`Square::place_of`); and the leaf of each sample.
-fn grid_of(map: &Square, (south, north): (f64, f64)) -> (Grid, Vec<f64>, impl Fn(usize) -> Leaf) {
+pub(super) fn grid_of(map: &Square, (south, north): (f64, f64)) -> (Grid, Vec<f64>, impl Fn(usize) -> Leaf) {
     let per = 1usize << (SAMPLE_DEPTH - map.square_depth());
     let (across, down) = (map.w * per, map.h * per);
     let leaf = move |k: usize| leaf_at(across, k);
