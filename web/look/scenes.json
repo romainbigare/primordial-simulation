@@ -56,11 +56,12 @@
       "cost_views": [2.0, 0.5],
       "scenes": [
         { "name": "reach", "about": "a river through open woodland, its bends and bars", "at": [26.5, 14.6] },
-        { "name": "reach_close", "about": "close: the water, a bar and a bank of scene reach", "at": [26.4883, 14.6091], "views": [0.1] },
-        { "name": "confluence", "about": "two rivers join on a valley floor", "at": [14.05, 22.85] },
+        { "name": "reach_close", "about": "close: the water, a bar and a bank of scene reach", "at": [26.4975, 14.631], "views": [0.1] },
+        { "name": "confluence", "about": "a stream joins a river on a valley floor, at the junction", "at": [14.188, 22.742] },
         { "name": "lake_inlet", "about": "a stream runs into the big lake, west shore", "at": [14.8, 17.0] },
         { "name": "lake_inlet_nw", "about": "the north-west stream runs into the big lake", "at": [14.05, 15.25] },
-        { "name": "lagoon_mouth", "about": "the east river runs into its lagoon", "at": [29.494, 16.374] },
+        { "name": "lagoon_mouth", "about": "the east river runs into its cove", "at": [29.574, 16.646] },
+        { "name": "lake_outlet", "about": "the river leaves the big lake at its south end", "at": [19.2, 20.25] },
         { "name": "sea_mouth", "about": "the largest river at the head of its drowned valley", "at": [16.9, 25.47] }
       ]
     },
