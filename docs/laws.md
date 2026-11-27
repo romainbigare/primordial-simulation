@@ -234,9 +234,10 @@ of where it lies. A raise lays the cell's own rock (its bed's mixture) and, at t
 loose ground of one of the terrain's makes drawn from the seed for the stroke (`Make::of`, `World::draw_make`); a
 lowering takes the loose ground first, then the rock, never more than the cell holds (its samples move by the share it
 took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **A basin of liquid** (`edit::Act::Basin`,
-`World::basin`): its rim is the samples beside those the brush covers. Its level is the highest level of the liquid
+`World::basin`): its rim is the samples beside those the brush covers. Its level is the lowest level of the liquid
 of the closed ponds that stands on the brush's samples or its rim, so a pond its cut opens grows over it at its own
-level, and a pond whose liquid stands on none of them keeps every way out of it (a way out leaves by a sample beside
+level, and ponds at different levels it reaches join at the lower one, the one level their liquid can stand at once
+joined (the liquid of a higher one would run down into the lower over the cut); a pond whose liquid stands on none of them keeps every way out of it (a way out leaves by a sample beside
 its liquid, which the basin only raises); else the way out of its outlet: of the dry samples of its rim, the one the
 higher of whose height and the lowest sample beside it outside the rim is lowest, of those across a side from a sample
 under the brush (the liquid runs across sides). Each sample under the brush, and each sample about it out to its banks' end on which stands the liquid of a
@@ -252,7 +253,9 @@ level, or toward the level of a pond it lies in or beside where that is higher (
 share (1 − x)² of what lies over it, x from 0 at the shore to 1 at the banks' end: the bank rises from the shore at a
 slope that lessens to meet the ground about it with no step. None is filled; all is cut or raised with each cell's own
 rock. So the floor is a closed basin, that deep under its pass at its middle, wherever it is made; its liquid covers
-the brush, brushes laid over each other make one pond with one level, and no pond it reaches is lowered. The
+the brush, brushes laid over each other make one pond with one level, a pond it reaches is lowered only to the level
+of a lower pond it joins it to (its floor about the brush cut under that level, so its liquid stands in the joined
+pond), and no pond it does not reach is lowered. The
 samples are built again over it at once; the key liquid fills the pond under its centre to that pond's level, its pass,
 with what the pores of the ground under it lack to be full (a real body on dry ground soaks the ground under it
 first: of a node that is one, its pores' lack at the cell's mean under the pond's samples alone, `flow::pores_lack`),
