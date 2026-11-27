@@ -257,7 +257,7 @@ fn patch_of(at: vec2f, e: f32) -> PatchAt {
   let up = o >= vec2f(0.5);
   out.step = vec2i(select(-1, 1, up.x), select(-1, 1, up.y));
   let past = (o - select(vec2f(0.0), vec2f(1.0), up)) * side;
-  let higher = vec2f(meet(at, e, past.x, CELL_EDGE_M, 1.0, 0.0, 2.0 * CELL_EDGE_M, PATCH_NOISE + 1), meet(at, e, past.y, CELL_EDGE_M, 1.0, 0.0, 2.0 * CELL_EDGE_M, PATCH_NOISE + 2));
+  let higher = vec2f(meet(at, e, past.x, CELL_EDGE_M, 1.0, 0.0, 0.0, 2.0 * CELL_EDGE_M, PATCH_NOISE + 1), meet(at, e, past.y, CELL_EDGE_M, 1.0, 0.0, 0.0, 2.0 * CELL_EDGE_M, PATCH_NOISE + 2));
   out.across = select(1.0 - higher, higher, up);
   let a = textureLoad(cover_field_tex, q, PLACES_LAYER, 0);
   if (a.z <= 0.0) { return out; }
@@ -268,7 +268,7 @@ fn patch_of(at: vec2f, e: f32) -> PatchAt {
   if (b.y > 0.0 && b.y - length(o - vec2f(a.w, b.x)) > inside) { which = 2; inside = b.y - length(o - vec2f(a.w, b.x)); }
   if (inside * side <= -2.0 * PATCH_EDGE_M) { return out; }
   out.which = which;
-  out.share = meet(at, e, inside * side, PATCH_EDGE_M, 1.0, 0.0, 2.0 * PATCH_EDGE_M, PATCH_NOISE) * (1.0 - out.across.x) * (1.0 - out.across.y);
+  out.share = meet(at, e, inside * side, PATCH_EDGE_M, 1.0, 0.0, 0.0, 2.0 * PATCH_EDGE_M, PATCH_NOISE) * (1.0 - out.across.x) * (1.0 - out.across.y);
   return out;
 }
 

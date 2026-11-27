@@ -71,6 +71,10 @@ fn ragged_slope(e: f32, size: f32, octaves: i32) -> f32 {
 // the limit over the swing they would make. So far away the zone is a fade, near it is ragged patches of both looks
 // down to the pixel, and on the mean the limit lies in the same place at every zoom.
 const MEET_OCTAVES = 10;
+// The spread a limit read on the patches from `size` m down takes at `e` m a pixel, in units of their swing: the swing
+// of the octaves too small to show (`ragged_hidden`), and no less than the patches' change across a pixel
+// (`ragged_slope`), so their edge is eased over a pixel, not drawn in its steps and specks.
+fn meet_spread(e: f32, size: f32) -> f32 { return max(0.5 * ragged_hidden(e, size, MEET_OCTAVES), ragged_slope(e, size, MEET_OCTAVES) * e); }
 
 // The far look's share, 0..1, at a point `x` past the limit whose patches move it by up to `swing` (`ragged`, each to
 // its own scale), both in the number's own units; `px` is how much `x` changes across a pixel (0 where not known). The
@@ -79,10 +83,12 @@ const MEET_OCTAVES = 10;
 // memory). Where the patches show, the share fades over `soft` of the zone's half width about their edge: 0 for a
 // look that ends at an edge of its own (snow, char), 1 for one that thins out over the zone (the plants of a stand,
 // the dead trees of a burn), the patches moving where it thins. The patches are read only at a point inside the zone.
+// `grain` is how much `x` changes across a pixel by detail of its own finer than the zone (0: none), which eases the
+// edge alone, so it is not drawn in that detail's pixels.
 const MEET_LEAST_M = 40.0;
-fn meet(at: vec2f, e: f32, x: f32, swing: f32, soft: f32, px: f32, size: f32, k: i32) -> f32 {
+fn meet(at: vec2f, e: f32, x: f32, swing: f32, soft: f32, px: f32, grain: f32, size: f32, k: i32) -> f32 {
   let half = max(swing, MEET_LEAST_M * px / max(e, 1e-9));
-  let edge = max(max(half * max(0.5 * ragged_hidden(e, size, MEET_OCTAVES), soft), 0.5 * px), 1e-6 * half);
+  let edge = max(max(half * max(meet_spread(e, size), soft), 0.5 * (px + grain)), 1e-6 * half);
   if (x >= half + edge) { return 1.0; }
   if (x <= -half - edge) { return 0.0; }
   return smoothstep(-edge, edge, x + half * ragged(at, e, size, MEET_OCTAVES, k));
@@ -90,9 +96,9 @@ fn meet(at: vec2f, e: f32, x: f32, swing: f32, soft: f32, px: f32, size: f32, k:
 
 // The patches' number of a share of the ground laid in them (`share_level`) at `at`, seen at `e` m a pixel, not held
 // within -1..1 (`ragged_sum`: no part of the ground piles up at its ends, where a share near none or all would take
-// it); and the spread a share read on it takes over the patches too small to show, in the number's units.
+// it); and the spread a share read on it takes (`meet_spread`), in the number's units.
 fn meet_noise(at: vec2f, e: f32, size: f32, k: i32) -> vec2f {
-  return vec2f(ragged_sum(at, e, size, MEET_OCTAVES, k), 0.5 * ragged_hidden(e, size, MEET_OCTAVES));
+  return vec2f(ragged_sum(at, e, size, MEET_OCTAVES, k), meet_spread(e, size));
 }
 
 // A share `s` of the ground laid in patches (a square's burnt share) takes the points whose patches' number

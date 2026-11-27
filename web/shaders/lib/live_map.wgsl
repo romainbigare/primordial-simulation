@@ -140,9 +140,11 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.t = st.t;
   // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
   // (The line's zone is as wide as the cells' share moves it across a pixel: the ground's own index changes at the
-  // relief's scale, down to the pixel, and its change across a pixel's block of four would draw the blocks.)
+  // relief's scale, down to the pixel, and its change across a pixel's block of four would draw the blocks. Its edge is
+  // eased over the index's change across the pixel by the relief's slope, `bares_grain`, worked out, not taken from the
+  // block.)
   let snow_x = snow_past(st.snow, st.bares);
-  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_past(st.snow, 0.0))), st.snow, st.depth > 0.0);
+  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_past(st.snow, 0.0)), bares_grain(length(fine.slope) * e)), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
   // the cells' soil is a mean over kilometres, the bed's make is the samples'.

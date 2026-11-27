@@ -418,12 +418,15 @@ fn snow_past(share: f32, bares: f32) -> f32 {
 }
 
 // The snow at `at`, seen at `e` m a pixel, whose cells hold `share` of their ground under snow, `past` the line its snow
-// ends at (`snow_past`), that changing by `px` across a pixel: 1 where it lies, 0 where not, the pixel's share at its
-// edge.
-fn snow_at(at: vec2f, e: f32, share: f32, past: f32, px: f32) -> f32 {
+// ends at (`snow_past`), that changing by `px` across a pixel by the cells' share and by `grain` by the ground's index
+// (`snow_bares`): 1 where it lies, 0 where not, the pixel's share at its edge.
+fn snow_at(at: vec2f, e: f32, share: f32, past: f32, px: f32, grain: f32) -> f32 {
   if (share <= 0.0 || share >= 1.0) { return share; }
-  return meet(at, e, past, SNOW_PATCHY, SNOW_THIN, px, SNOW_PATCH_M, SNOW_NOISE);
+  return meet(at, e, past, SNOW_PATCHY, SNOW_THIN, px, grain, SNOW_PATCH_M, SNOW_NOISE);
 }
+// How much the ground's index (`snow_bares`) changes across a pixel by its relief finer than the tiles, whose height
+// changes by `knob_px` m across it: at most the index's whole range.
+fn bares_grain(knob_px: f32) -> f32 { return min(knob_px / SNOW_HOLLOW_M, 2.0 * SNOW_BARES_MOST); }
 
 // The height of ground `g`, cut `cut` m deep, over the level of the ponds about it, m (`NO_LIQUID_M`: none about it):
 // it counts the more the less of the point is theirs.
