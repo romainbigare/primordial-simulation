@@ -20,9 +20,10 @@ const RELIEF = 2.0; const AMBIENT = 0.30; const LIT_TOP = 1.7;
 // `CAST_EDGE.y` over it (a soft edge: the sun is a disc and the air scatters its light). The relief finer than the
 // samples (relief.wgsl) raises a knob toward the light and lowers a hollow: the slope up to the shading ground falls by
 // its height over `CAST_REACH_M`, so a knob rises out of the shade before the ground about it and the shade's edge
-// breaks into lit knobs and dark hollows.
+// breaks into lit knobs and dark hollows. The edge widens by the knobs' change over `CAST_KNOB_PX` pixels: a knob of a
+// few pixels would break it into a pixel's steps.
 const STEEP_SHADE = 0.6; const STEEP_SLOPES = vec2f(0.03, 0.7);
-const CAST_SHADE = 0.62; const CAST_EDGE = vec2f(-0.10, 0.06); const CAST_REACH_M = 60.0;
+const CAST_SHADE = 0.62; const CAST_EDGE = vec2f(-0.10, 0.06); const CAST_REACH_M = 60.0; const CAST_KNOB_PX = 3.0;
 // Ground of one colour over kilometres is not of one tone: the Earth view lightens and darkens it by up to `TONE_SWAY`
 // either way over the noise of the samples' places (rock.wgsl `sample_place`, from hundreds of metres to a kilometre),
 // as a painted map's wash is uneven.
@@ -106,10 +107,11 @@ fn relief_light(x: f32) -> f32 {
 }
 
 // What the colour of dry ground of slope `slope` (rise over run) is multiplied by where the slope up to the highest
-// ground toward the light is `horizon` and the fine relief raises the point `knob` m: its steepness' shade and the
-// shade cast on it (`STEEP_SHADE`, `CAST_SHADE`).
-fn relief_shade(slope: f32, horizon: f32, knob: f32) -> f32 {
-  let unlit = smoothstep(CAST_EDGE.x, CAST_EDGE.y, horizon - knob / CAST_REACH_M - LIGHT.z / length(LIGHT.xy));
+// ground toward the light is `horizon` and the fine relief raises the point `knob.x` m, that changing by `knob.y` m
+// across a pixel: its steepness' shade and the shade cast on it (`STEEP_SHADE`, `CAST_SHADE`).
+fn relief_shade(slope: f32, horizon: f32, knob: vec2f) -> f32 {
+  let wide = CAST_KNOB_PX * knob.y / CAST_REACH_M;
+  let unlit = smoothstep(CAST_EDGE.x - wide, CAST_EDGE.y + wide, horizon - knob.x / CAST_REACH_M - LIGHT.z / length(LIGHT.xy));
   return mix(1.0, STEEP_SHADE, smoothstep(STEEP_SLOPES.x, STEEP_SLOPES.y, slope)) * mix(1.0, CAST_SHADE, unlit);
 }
 

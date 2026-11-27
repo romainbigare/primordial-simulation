@@ -28,9 +28,9 @@ const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0;
 // and of the channel's water: the signs of its flow (lib/flow.wgsl `flow_signs`), and (`water`) its depth over the
 // depth the channel law gives its middle and how near its edge the point lies, 0..1; and the way it runs (`down`, a
 // unit vector east and south); and of the dry ground, the slope up to the highest ground toward the light (rock.wgsl
-// `SoilAt.horizon`), how far the relief finer than the tiles raises it, m (relief.wgsl), and its tone (style.wgsl
-// `tone_of`).
-struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f, horizon: f32, knob: f32, tone: f32 }
+// `SoilAt.horizon`), how far the relief finer than the tiles raises it and that height's change across a pixel, m
+// (relief.wgsl), and its tone (style.wgsl `tone_of`).
+struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f, horizon: f32, knob: vec2f, tone: f32 }
 
 // The spot `s` with its channel's stones: on the bed of channel `ch` (of discharge `q`, on ground `g`), and beside it
 // where the reach is steep, with the walls and the fallen blocks of a steep reach. The largest drawn takes its size
@@ -228,7 +228,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
   // The marks of fire on dry ground: its burn scars and the plants they took (burn.wgsl).
   p = burnt_spot(p);
-  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0), soil.horizon, fine.h, tone_of(place.n));
+  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0), soil.horizon, vec2f(fine.h, length(fine.slope) * e), tone_of(place.n));
   // A channel is drawn on the land and through the band of shallows of the liquid it runs into, no farther.
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
