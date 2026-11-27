@@ -185,7 +185,7 @@ fn bank_light(e: f32, g: Tiled, c: Channel, r: Reach) -> f32 {
 // bed the water's level swings across: `DAMP_M` plus `DAMP_SWING` of the bed the water leaves at its mean flow.
 const CUT_M = 0.3; const CUT_SHARE = 0.15; const CUT_PATCH_M = 4.0; const CUT_FROM = vec2f(-0.4, 0.4); const CUT_DARK = 0.12;
 const LIP_DARK = 0.25;
-const ROOT_M = vec2f(0.35, 1.2); const ROOT_DARK = 0.3; const DAMP_M = 0.3; const DAMP_SWING = 0.35;
+const ROOT_M = vec2f(0.35, 1.2); const ROOT_DARK = 0.3; const DAMP_M = 0.3; const DAMP_SWING = 0.6;
 
 // The cut bank at the reach's point `r` of channel `c`, seen at `e` m a pixel on ground `g`: the share of the pixel
 // its face covers, and the colour of the ground there over the soil's own (its darkening, its lip and its roots).
@@ -233,10 +233,11 @@ const BED_OUT = vec2f(2.0, 1.0);
 // A channel's bed is as wide as its floods make it (lib/rock.wgsl `banks_of`). This month's water runs in it between
 // bars of washed gravel (lib/river.wgsl `reach_at`). Where the bed takes under `BED_PX` pixels it is all water.
 const BED_PX = 3.0;
-// A channel's bars are its bed's make washed, `BAR_LIFT` times as light, where its flow moves stones of
-// `BAR_SAND_STONE` m, and the ground's own soil as light where it moves none (sand and silt on the gentlest reaches). A bar rises from the water's edge at `BAR_RISE` (rise over run), which is how far up it the water's fringe
+// A channel's bars are the ground's own soil, and where its flow moves stones of `BAR_SAND_STONE` m `BAR_OF_BED` of the
+// way to its bed's make (gravel worn from it, stained by the silt and the film the floods leave: no bar is bare
+// rock's colour). A bar rises from the water's edge at `BAR_RISE` (rise over run), which is how far up it the water's fringe
 // wets and darkens it; past that fringe its gravel drains dry.
-const BAR_LIFT = 1.12; const BAR_RISE = 0.6;
+const BAR_OF_BED = 0.5; const BAR_RISE = 0.6;
 // Driftwood lies on a bar from `DRIFTWOOD_UP.x` of the way up it to the bank, most from `DRIFTWOOD_UP.y` (the floods' wrack
 // line, at the top of the bars).
 const DRIFTWOOD_UP = vec2f(0.1, 0.35);
@@ -279,9 +280,8 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   let apart = 1.0 - select(0.0, joined(other.x, other.y), other.x > 0.0);
   let seen = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * wide);
   out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line)) * cuts * seen;
-  // The bars' colour: the bed's make washed, the soil's on the gentlest reaches; the bed seen through the water is the
-  // same, soaked (colour.wgsl `soil`).
-  let gravel = min(mix(s.dry.ground, bed_make_at(at), ease(0.0, BAR_SAND_STONE, stone)) * BAR_LIFT, vec3f(1.0));
+  // The bars' colour (`BAR_OF_BED`); the bed seen through the water is the same, soaked (colour.wgsl `soil`).
+  let gravel = mix(s.dry.ground, bed_make_at(at), BAR_OF_BED * ease(0.0, BAR_SAND_STONE, stone));
   // On its bars the ground is that gravel, bare, rising from the water's edge, as far as they cover the pixel.
   let bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth)) * seen;
   out.dry.ground = mix(out.dry.ground, gravel * bar_tone(e, g.along, r), bars);

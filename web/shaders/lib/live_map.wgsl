@@ -110,7 +110,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let grows_short = grows - land.reach.x * round(grows / land.reach.x);
   let reach = g.channel;
   var next = Next(reach, 0.0);
-  var q = discharge_of(reach);
+  var q = discharge_through(reach);
   // (Most points that hold a channel lie far from its line, in its reach alone: there its own sample's discharge says
   // enough, and what grows along it, its stones and its neighbour's are read within `CHANNEL_NEAR` of its line.)
   var banks = banks_of(q);
