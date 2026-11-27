@@ -4,8 +4,9 @@
 //! step; that level the lowest dry ground of its rim, or the level of the liquid of the ponds its cut opens, so a pond
 //! it reaches grows over it at its own level; a bank of `edit_bank_m` over that level only where its rim would let the
 //! liquid out, but at its outlet, at the level; and the key liquid poured in to its pass, all from the outside node.
-//! Brushes laid over each other so make one pond: each cuts all of its disc under the level. So the basin is closed by its making: a pond of the samples, whose body keeps what is poured into it, and
-//! never one that lowers a pond it reaches.
+//! Brushes laid over each other so make one pond with one floor: each cuts all of its disc, and the floor of the pond it joins about it, under the level, as deep
+//! as it lies from the shore of all their liquid. So the basin is closed by its making: a pond of the samples,
+//! whose body keeps what is poured into it, and never one that lowers a pond it reaches.
 
 use super::brush::Covered;
 use super::Brush;
@@ -114,12 +115,22 @@ impl World {
             if p == NONE { f64::NEG_INFINITY } else if s.ponds[p as usize].pass == NONE { levels[p as usize] } else { s.ponds[p as usize].level }
         };
         let least = |k: usize| std::iter::once(k).chain(around(k)).map(stands_at).fold(level, f64::max);
+        // Its shore: the samples about it it does not cover and on which no liquid stands. A sample lies as far inside
+        // the basin as from the nearest of them, in radii of the brush, and no farther than from the end of the ground
+        // read about it: so its bowl deepens from the shore of all the liquid it joins, over the samples it covers and
+        // those of the ponds it joins (those whose liquid stands on its samples or its rim) alike, and brushes laid
+        // over each other leave one floor with no ridge between.
+        let step = self.map.length(SAMPLE_DEPTH);
+        let shore: Vec<usize> = all.iter().filter(|c| !inside(c) && wet(c.k).is_nan()).map(|c| c.k).collect();
+        let apart = |k: usize, j: usize| ((k % s.across) as f64 - (j % s.across) as f64).hypot((k / s.across) as f64 - (j / s.across) as f64) * step;
+        let from_shore = |k: usize, at: f64| shore.iter().map(|&j| apart(k, j)).fold(wide.radius_m - at, f64::min) / b.radius_m;
+        let joined: BTreeSet<u32> = all.iter().filter(|c| (cut.contains(&c.k) || on_rim(c.k)) && wet(c.k).is_finite()).map(|c| s.pond[c.k]).collect();
         let mut cells: BTreeMap<usize, Vec<(usize, f64)>> = BTreeMap::new();
         for c in &all {
             let (h, at) = (s.h[c.k], c.d * wide.radius_m);
             let leaks = on_rim(c.k) && wet(c.k).is_nan();
-            let to = if inside(c) {
-                bowl(h, level, depth, [at / b.radius_m, mid])
+            let to = if inside(c) || (wet(c.k).is_finite() && joined.contains(&s.pond[c.k])) {
+                bowl(h, level, depth, [1.0 - from_shore(c.k, at).min(1.0), mid])
             } else if leaks && Some(c.k) == outlet {
                 level
             } else if leaks && way(c.k) < level {
@@ -184,10 +195,10 @@ impl World {
     }
 }
 
-/// The height a basin cuts ground `h` m high to at `d[0]` radii from its centre under its brush, its liquid to stand at
-/// `level` m and `depth` m deep at its middle sample, `d[1]` radii from its centre: its bowl, a paraboloid
-/// `depth` × (1 − d²) / (1 − `d[1]`²) under the level (at most `depth`), which meets the level at the brush's edge.
-/// None filled.
+/// The height a basin cuts ground `h` m high to, a radius of its brush less `d[0]` radii from its shore (`World::dig`),
+/// its liquid to stand at `level` m and `depth` m deep at its middle sample, `d[1]` radii from its centre: its bowl, a
+/// paraboloid `depth` × (1 − d²) / (1 − `d[1]`²) under the level (at most `depth`), which meets the level at the
+/// shore. None filled.
 fn bowl(h: f64, level: f64, depth: f64, d: [f64; 2]) -> f64 {
     h.min(level - depth * ((1.0 - d[0] * d[0]) / (1.0 - d[1] * d[1]).max(f64::MIN_POSITIVE)).min(1.0))
 }

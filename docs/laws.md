@@ -239,9 +239,12 @@ of the closed ponds that stands on the brush's samples or its rim, so a pond its
 level, and a pond whose liquid stands on none of them keeps every way out of it (a way out leaves by a sample beside
 its liquid, which the basin only raises); else the way out of its outlet: of the dry samples of its rim, the one the
 higher of whose height and the lowest sample beside it outside the rim is lowest, of those across a side from a sample
-under the brush (the liquid runs across sides). Each sample under the brush is cut to a bowl under that level, the
-depth × (1 − (d/r)²) / (1 − (d₀/r)²) at a distance d from its centre (r its radius, d₀ its middle sample's distance):
-a paraboloid as deep as asked at its middle sample that meets the level at the brush's edge, its shore. Each dry
+under the brush (the liquid runs across sides). Each sample under the brush, and each sample about it out to its banks' end on which stands the liquid of a
+pond it joins, is cut to a bowl under that level, the depth × (1 − (d/r)²) / (1 − (d₀/r)²) (at most the depth; r the
+brush's radius, d₀ its middle sample's distance from its centre), d being r less the sample's distance from the shore:
+from the nearest dry sample the brush does not cover, and no farther than from the banks' end. So one brush digs a
+paraboloid as deep as asked at its middle that meets the level at its edge, its shore, and brushes laid over each
+other leave one floor that deepens from the shore of all their liquid, with no ridge between. Each dry
 sample of the rim whose way out lies under the level (the liquid would leave by it) is raised to `edit_bank_m` over the
 level, the dug ground's bank, but the outlet, moved to the level (a pond it grows leaves by a pass at its own level
 wherever its own pass lay). Every other sample out to a radius past the brush's edge (its banks) is cut toward the
