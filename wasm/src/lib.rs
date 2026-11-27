@@ -17,6 +17,7 @@ use worldgen::schedule::Schedule;
 
 mod edit;
 mod ground;
+mod shown;
 use edit::Stroke;
 
 /// The year life starts: the default of `ew run`.
@@ -38,15 +39,17 @@ const LOAD_SHOWS: f64 = 0.25;
 
 /// The world; the version of its samples what the shell keeps of its cells is of (`Relief::version`); what is placed
 /// when, and what a recorder keeps of it (`tape::Kept`, saved with it, `save_world`); what the shell keeps of its cells
-/// (`tape::Table`); the table made with the last frame, till `table` hands it to the page; the samples' discharge, m³/s, and load, g/m³, last sent to the
-/// page (`tape::Table::discharge`, `tape::Table::load`; none before the first); the brush's stroke under way (`Stroke`;
-/// none between strokes: a stroke ends at `settle`) and the strokes begun; whether an edit changed the world since the
-/// last frame (`frame`), so a stroke's end sends one only then (`settle`); a copy of the world as it stands now, kept
-/// while it waits for edits (`hold`, and after a stroke that changed nothing), which the next stroke takes as the world
-/// before it, so its first call copies nothing; the world as it was before the last stroke that changed it began, till
-/// the world steps on (`undo`), with the samples that stroke moved (`edit::Area`); and of the version of the ground the
-/// page shows (`ground_shown`) and of each built since, oldest first (`since`, `Built`), what edits had shaped, from
-/// which `preview` tells the page what edits moved since: the last is the version the cells' table is of.
+/// (`tape::Table`); the table made with the last frame, till `table` hands it to the page; the samples' discharge,
+/// m³/s, and load, g/m³, last sent to the page (`tape::Table::discharge`, `tape::Table::load`; none before the first);
+/// the brush's stroke under way (`Stroke`; none between strokes: a stroke ends at `settle`) and the strokes begun;
+/// whether an edit changed the world since the last frame (`frame`), so a stroke's end sends one only then (`settle`);
+/// a copy of the world as it stands now, kept while it waits for edits (`hold`: after a pause, an undo or a stroke's
+/// settling; and after a stroke that changed nothing), which the next stroke takes as the world before it, so its first
+/// call copies nothing; the world as it was before the last stroke that changed it began, till the world steps on
+/// (`undo`), with the samples that stroke moved (`shown::Area`); of the version of the ground the page shows
+/// (`ground_shown`) and of each built since, oldest first (`since`, `Built`), what edits had shaped, from which
+/// `preview` tells the page what edits moved since: the last is the version the cells' table is of; and the samples the
+/// last paint moved and those beside them (`shown::preview` of a part).
 struct Live {
     world: World,
     built: u32,
@@ -59,24 +62,25 @@ struct Live {
     strokes: u64,
     unframed: bool,
     ready: Option<World>,
-    before: Option<(World, edit::Area)>,
+    before: Option<(World, shown::Area)>,
     since: Vec<Built>,
+    painted: shown::Area,
 }
 
 /// A version of the world's samples (`Relief::version`): what edits had shaped of each of the terrain's samples when
 /// they were built (`Relief::shaped`: the samples that hold some, with how far, in their order), and the samples edits
-/// moved while it was the newest version (`edit::Area`).
+/// moved while it was the newest version (`shown::Area`).
 struct Built {
     version: u32,
     shaped: Vec<(usize, f64)>,
-    moved: edit::Area,
+    moved: shown::Area,
 }
 
 impl Built {
     /// The version of the world `w`'s samples now.
     fn of(w: &World) -> Built {
         let shaped = w.relief.shaped.iter().enumerate().filter(|p| *p.1 != 0.0).map(|(k, &m)| (k, m)).collect();
-        Built { version: w.relief.version, shaped, moved: edit::Area::NONE }
+        Built { version: w.relief.version, shaped, moved: shown::Area::NONE }
     }
     /// What edits had shaped of sample `k` at this version, m.
     fn shaped_at(&self, k: usize) -> f64 {
@@ -90,7 +94,7 @@ impl Live {
     fn new(world: World, (plan, kept): (Schedule, tape::Kept)) -> Live {
         let cells = tape::Table::new(&world);
         let since = vec![Built::of(&world)];
-        Live { built: world.relief.version, world, plan, kept, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, unframed: false, ready: None, before: None, since }
+        Live { built: world.relief.version, world, plan, kept, cells, table: Vec::new(), sent: Vec::new(), stroke: None, strokes: 0, unframed: false, ready: None, before: None, since, painted: shown::Area::NONE }
     }
     /// Where the world built its samples anew (a build, a reshape, an undo): the cells' table found again, as the cells'
     /// ground and the shore moved (`tape::Table::update`), and what edits had shaped kept as the new version's.
@@ -206,7 +210,7 @@ pub extern "C" fn new_world(seed: u32, size: u32, south: f64, north: f64, drawn:
 }
 
 /// Room for `len` bytes the page hands in (the gzip of a snapshot, for `open_world` or `ground_of_world`; a relief, for
-/// `ground_built`): their
+/// `ground_built`; the places of a paint, for `brush`): their
 /// address in memory, valid until the next call.
 #[no_mangle]
 pub extern "C" fn input(len: usize) -> *mut u8 {
@@ -216,10 +220,15 @@ pub extern "C" fn input(len: usize) -> *mut u8 {
     })
 }
 
+/// The bytes the page handed in (`input`), taken: a call reads them once.
+fn handed() -> Vec<u8> {
+    IN.with(|i| std::mem::take(&mut *i.borrow_mut()))
+}
+
 /// The saved world handed in (`input`; read once), or why it is refused: not a snapshot of this build's format
 /// (`tape::open_snapshot`), a globe (the page draws islands), or settings `Config::validate` refuses.
 fn saved() -> Result<Saved, String> {
-    let gz = IN.with(|i| std::mem::take(&mut *i.borrow_mut()));
+    let gz = handed();
     let (world, rest): Saved = tape::open_snapshot(&gz[..]).map_err(|e| format!("Not a saved world of this build: {e}."))?;
     if world.map.wrap {
         return Err(String::from("A saved globe: the page draws islands only."));

@@ -15,7 +15,7 @@
 //! ground (its bed bare), and the gentle ground at its foot, where a grows and S falls, holds the more.
 //!
 //! Where edits shaped a sample (`Relief::shaped`), its loose ground follows (`edited`): a lowering takes it first, and
-//! it thins as the creep holds less on its new slope than on its old, so the flanks of a hill raised steep are bare bed.
+//! it thins as the creep holds less on its new slope than on its old, so the flanks of a hill raised steep keep little.
 
 use super::grid::Grid;
 
@@ -26,8 +26,9 @@ const BREAKS_UNDER_M: f64 = 0.4;
 /// The slowest lowering the mantle's law reads, a share of `BREAKS`: a sample that does not lower keeps the mantle of
 /// this lowering, not an infinite one.
 const SLOWEST: f64 = 1e-6;
-/// The slope loose ground rests at, rise over run: its creep grows without bound as a slope nears it.
-const REST: f64 = 0.8;
+/// The slope loose ground rests at, rise over run: its creep grows without bound as a slope nears it, and ground edits
+/// shape slides till it stands no steeper (`space::shaped`).
+pub const REST: f64 = 0.8;
 /// The depth of loose ground the creep's diffusivity (`wear::CREEP`) is anchored at, m.
 const CREEP_DEPTH_M: f64 = 1.0;
 /// The search for the depth the creep holds stops after this many Newton's steps, or a step shorter than this, m.

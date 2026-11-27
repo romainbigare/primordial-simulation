@@ -297,7 +297,13 @@ export class MapView {
         if (touch.moved < TAP_PX) return;
         touchPaints();
       }
-      if (e.pointerId === painter) { painterAt = { x: e.offsetX, y: e.offsetY }; return this.paint?.move(...at(e)); }
+      if (e.pointerId === painter) {
+        // (Each place the browser saw the pointer at since the last event, so a stroke follows its path.)
+        const seen = e.getCoalescedEvents?.() ?? [];
+        for (const c of seen.length ? seen : [e]) this.paint?.move(...at(c));
+        painterAt = { x: e.offsetX, y: e.offsetY };
+        return;
+      }
       if (this.gesture.move(e.pointerId, e.offsetX, e.offsetY)) this.redraw();
       // (While a tool paints the map, the brush shows where it acts: no square is outlined.)
       else this.setHover(this.paint?.on() ? -1 : this.cellAt(e.offsetX, e.offsetY));

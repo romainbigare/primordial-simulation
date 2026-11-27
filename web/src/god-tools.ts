@@ -1,12 +1,12 @@
 // The tools of god mode (god-types.ts `GodTool`), in the order of the strip: each paints with the round brush
-// (wasm/src/edit.rs `brush`): Raise and Lower land move the ground under it by a step at once and a step each tenth of
-// a second while held, the map showing the new ground at each, and the world builds its samples and settles its liquid
-// over the new ground now and then while held (`soften`) and when the stroke ends (`settle`); Lake digs a basin under it at
-// once, its floor a chosen depth under the lowest point of the brush's rim (or under the level of a lake it reaches,
-// which grows over it), and fills it; Plant clears a share of each
-// cell under it and plants a grown stand of a starting kind there; Burn heats the remains under it while held, the
-// longer the faster, and those that hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain
-// words, from the core's own reasons. A new tool is one more entry of `godTools`.
+// (wasm/src/edit.rs `brush`): Raise and Lower land move the ground under it while held, the faster the larger the
+// brush, along the brush's path, the map showing the new ground at each of the page's frames, and the world builds its
+// samples and settles its liquid over the new ground once the brush rested after the stroke (`settle`); Lake digs a
+// basin under it at once, its floor a chosen depth under the lowest point of the brush's rim (or under the level of a
+// lake it reaches, which grows over it), and fills it; Plant clears a share of each cell under it and plants a grown
+// stand of a starting kind there; Burn heats the remains under it while held, the longer the faster, and those that
+// hold enough heat light and burn at once when the stroke ends. What the world cannot do is said in plain words, from
+// the core's own reasons. A new tool is one more entry of `godTools`.
 import { UNCHANGED, type GodTool, type Probe, type StartKind } from './god-types';
 
 /** The core's brush tools (wasm/src/edit.rs `SHAPE`, `LAKE`, `PLANT`, `BURN`). */
@@ -17,9 +17,12 @@ const LAKE_DEPTHS: [string, number][] = [['Shallow', 2], ['Middle', 5], ['Deep',
 /** The least radius of a lake, m: it is dug on the terrain's samples, 125 m apart (core/src/space/terrain.rs
  * `SAMPLE_DEPTH`), so a smaller one is a few samples, drawn as a rounded square, not a disc. */
 const LAKE_LEAST_M = 300;
-/** How far Raise and Lower move the ground at the brush's centre each step, m, and the time between steps while held,
- * ms (the owner's choice: 25 m a tenth of a second, so a second's hold makes a hill of 250 m). */
-const SHAPE_STEP_M = 25, SHAPE_STEP_MS = 100;
+/** How fast Raise and Lower move the ground at the brush's centre while it is held still, m/s for each m of the brush's
+ * radius (the owner's choice: 250 m/s at a radius of 300 m, so a second's hold makes a hill of 250 m there, and a brush
+ * twice as wide moves it twice as fast). */
+const SHAPE_SPEED_PER_M = 250 / 300;
+/** A stroke of Raise or Lower adds at least what this long a hold adds, s: a tap makes a bump that shows. */
+const SHAPE_TAP_S = 0.1;
 /** How much heat Burn adds at the brush's centre while held, J/m² a second: at the first radius, the remains of a
  * typical place light in about a second (the heat they need: core/src/flame `needed`; a cell holds the heat over all
  * its land, of which the brush covers a share), the wettest in tens. */
@@ -84,7 +87,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
     },
   };
   const burn: GodTool = {
-    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: HEAT_J_M2_S, doubling: HEAT_DOUBLING_S, doublings: HEAT_DOUBLINGS, settlesLit: true,
+    key: 'burn', icon: 'fire', label: 'Fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: () => HEAT_J_M2_S, doubling: HEAT_DOUBLING_S, doublings: HEAT_DOUBLINGS, settlesLit: true,
     hint: 'Hold on the map. The ring fills, then the ground lights.', verb: 'Hold to burn',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,
@@ -92,7 +95,8 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   /** A ground tool: it moves the ground up or down (`sign`) under the brush while held. */
   const shape = (sign: number): GodTool => ({
     key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise' : 'Lower',
-    ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1, step: { amount: sign * SHAPE_STEP_M, every: SHAPE_STEP_MS }, softens: true,
+    ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1,
+    rate: radius => sign * SHAPE_SPEED_PER_M * radius, tapS: SHAPE_TAP_S, follows: true, rests: true,
     hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Right-drag moves the map.`, verb: `Hold to ${sign > 0 ? 'raise' : 'lower'}`,
     why: () => '', reason: why => (why === UNCHANGED ? 'No ground is left here to take away.' : why),
   });

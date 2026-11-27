@@ -20,11 +20,11 @@ export const UNCHANGED = 'Unchanged';
  * after the strike, and the squares whose centre lies in one of them; why its planting placed nothing ('' where it
  * placed some, or there was none); and whether the stroke can be undone (it changed the world). */
 export interface Settled { burnt: [number, number][]; squares: number[]; unplanted: string; undo: boolean }
-/** The worker's side of the tools (live.ts `Live`): ask what lies under a place, paint, end a stroke, settle a stroke
- * held so far and go on with it, and undo the last. */
+/** The worker's side of the tools (live.ts `Live`): ask what lies under a place, paint at one or more places (each its
+ * x and y in squares and its amount) in one message, end a stroke, and undo the last. */
 export interface Editor {
-  probe(x: number, y: number, answer: (p: Probe) => void): void; brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): void;
-  settle(): void; soften(): void; undo(): void;
+  probe(x: number, y: number, answer: (p: Probe) => void): void; brush(tool: number, stamps: [number, number, number][], radius: number, row: number): void;
+  settle(): void; undo(): void;
 }
 
 /** A tool of god mode. The strip shows the tools in the order of their list; a new tool is one more entry. */
@@ -35,15 +35,20 @@ export interface GodTool {
   hint: string; verb: string;
   /** The core's brush tool it paints with (wasm/src/edit.rs `brush`), and the starting kind it places (-1: none). */
   code: number; row(): number;
-  /** What it adds at the brush's centre each second it is held, in its core tool's unit (m of ground, up or down where
-   * less than 0; J/m² of heat): it paints again and again while the pointer is down, held still or not. */
-  rate?: number;
-  /** What it adds at the brush's centre in steps, in its core tool's unit (m of ground, up or down where less than 0):
-   * one where the stroke begins and one more at the start of each `every` ms it is held. */
-  step?: { amount: number; every: number };
-  /** Whether a stroke of it held settles what it did so far every `SOFTEN_MS` (god.ts): the ground's tools, so the
-   * water follows the ground while it moves. */
-  softens?: boolean;
+  /** What it adds at the centre of a brush of radius `radius` m each second it is held, in its core tool's unit (m of
+   * ground, up or down where less than 0; J/m² of heat): it paints at each of the page's frames while the pointer is
+   * down, held still or not, once the core answered its last paint (by what the time since then adds). */
+  rate?(radius: number): number;
+  /** A stroke of it adds at least what a hold this long adds, s, so a tap shows; none: a tap does nothing (it begins
+   * to paint once held `HOLD_MS`, god.ts). */
+  tapS?: number;
+  /** Whether a paint of it lays its amount along the brush's path since its last paint (god.ts `along`), so a fast drag
+   * leaves an unbroken trace; else all of it where the brush is. */
+  follows?: boolean;
+  /** Whether its stroke settles only once the brush rested `SHAPE_REST_MS` after it was let go (god.ts): a stroke of it
+   * begun before then goes on as the same stroke of the core (they share one undo), so the world settles once, not at
+   * each lift of the brush. */
+  rests?: boolean;
   /** The time over which its rate doubles while it is held, s (none: it stays), and the most times it doubles. */
   doubling?: number; doublings?: number;
   /** Whether what it starts runs on its own once it took (a fire): its stroke ends as soon as a cell lights; and its

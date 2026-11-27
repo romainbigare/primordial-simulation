@@ -60,11 +60,17 @@ impl World {
                 if d > r && !centre {
                     continue;
                 }
-                let place = [x / per, y / per];
+                let place = self.sample_place(sy * across + sx, across);
                 out.push(Covered { k: sy * across + sx, cell: self.cell_under(place), place, d: if d > r { 0.0 } else { d / r.max(f64::MIN_POSITIVE) } });
             }
         }
         out
+    }
+
+    /// The centre of the terrain's sample `k` (of samples `across` a row), in squares from the map's north-west corner.
+    pub(super) fn sample_place(&self, k: usize, across: usize) -> [f64; 2] {
+        let per = (1u64 << SAMPLE_DEPTH.saturating_sub(self.map.square_depth())) as f64;
+        [((k % across) as f64 + 0.5) / per, ((k / across) as f64 + 0.5) / per]
     }
 
     /// The cells under the brushes `brushes` (one, or the places of a stroke), in the order of the cells (`Under`): each

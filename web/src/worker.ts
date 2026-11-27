@@ -28,14 +28,13 @@ interface Core {
   cells(): number;
   probe(x: number, y: number): number;
   kinds(): number;
-  brush(tool: number, x: number, y: number, radius: number, amount: number, row: number): number;
+  brush(tool: number, radius: number, row: number): number;
   settle(): number;
-  soften(): void;
   save_world(): number;
   undo(): number;
   hold(): void;
   ground_shown(version: number): void;
-  preview(): number;
+  preview(part: number): number;
   out_len(): number;
 }
 type Command =
@@ -46,16 +45,16 @@ type Command =
   | { cmd: 'rate'; rate: number }
   | { cmd: 'things'; at: [number, number, number, number] | null }
   | { cmd: 'probe'; at: [number, number] }
-  | { cmd: 'brush'; tool: number; at: [number, number]; radius: number; amount?: number; row: number }
+  | { cmd: 'brush'; tool: number; stamps: Float64Array; radius: number; row: number }
   | { cmd: 'settle' }
-  | { cmd: 'soften' }
   | { cmd: 'undo' }
   | { cmd: 'groundShown'; version: number }
   | { cmd: 'save' }
   | { cmd: 'shown'; frames: number };
 
-/** The numbers before the heights of a preview (wasm/src/edit.rs `preview`): its window and its version, u32. */
-const PREVIEW_HEAD = 5;
+/** The numbers before the heights of a preview (wasm/src/shown.rs `preview`): its window, its version and whether it
+ * is a part, u32. */
+const PREVIEW_HEAD = 6;
 /** Longest time a tick steps before it lets messages in, ms. */
 const TICK_MS = 50;
 /** Pause between ticks, ms. */
@@ -106,15 +105,16 @@ function handIn(data: ArrayBuffer, use: () => number): string {
   return new TextDecoder().decode(bytes(at, c.out_len()));
 }
 
-/** What edits moved the ground since the ground the page shows (wasm/src/edit.rs `preview`): the window of the
- * terrain's samples (west column, north row, width, height), the version of the samples it moved from (`over`: the
- * page draws it over the tiles made of that version alone), and of its samples row by row how far each moved, m, and
- * the depth of its loose ground once built again, m. */
-function preview(): { window: [number, number, number, number]; over: number; dh: Float32Array; loose: Float32Array } {
-  const c = core!, raw = bytes(c.preview(), c.out_len());
+/** What edits moved the ground since the ground the page shows (wasm/src/shown.rs `preview`): whole, or of the part
+ * the last paint may have moved (`part`): the window of the terrain's samples (west column, north row, width, height),
+ * the version of the samples it moved from (`over`: the page draws it over the tiles made of that version alone),
+ * whether it is a part, and of its samples row by row how far each moved, m, and the depth of its loose ground once
+ * built again, m. */
+function preview(part = false): { window: [number, number, number, number]; over: number; part: boolean; dh: Float32Array; loose: Float32Array } {
+  const c = core!, raw = bytes(c.preview(part ? 1 : 0), c.out_len());
   const head = new Uint32Array(raw.buffer, 0, PREVIEW_HEAD), n = head[2] * head[3], at = 4 * PREVIEW_HEAD;
   // (Both views of the one copy, which the page takes over: `moved`.)
-  return { window: [head[0], head[1], head[2], head[3]], over: head[4], dh: new Float32Array(raw.buffer, at, n), loose: new Float32Array(raw.buffer, at + 4 * n, n) };
+  return { window: [head[0], head[1], head[2], head[3]], over: head[4], part: head[5] !== 0, dh: new Float32Array(raw.buffer, at, n), loose: new Float32Array(raw.buffer, at + 4 * n, n) };
 }
 
 /** The buffers of a preview, for the page to take over. */
@@ -219,13 +219,14 @@ host.onmessage = async e => {
     else if (m.cmd === 'shown') unshown = Math.max(0, unshown - m.frames);
     else if (m.cmd === 'probe' && core) host.postMessage({ kind: 'probe', text: text(core.probe(...m.at)) }, []);
     else if (m.cmd === 'brush' && core) {
-      // The brush between two months (wasm/src/edit.rs `brush`): its answer says whether the page is sent the preview
-      // of the ground it moved (drawn till the page's ground shows it) and a frame (with the relief of the ground's new
-      // version, where it built the samples again).
-      const answer = text(core.brush(m.tool, m.at[0], m.at[1], m.radius, m.amount ?? 0, m.row));
-      const sends = JSON.parse(answer) as { preview: boolean; frame: boolean; refused?: string };
+      // The brush between two months at the places of a paint (wasm/src/edit.rs `brush`): its answer says whether the
+      // page is sent the preview of the ground it moved (of the part the paint may have moved, or whole; drawn till the
+      // page's ground shows it) and a frame (with the relief of the ground's new version, where it built the samples
+      // again).
+      const c = core, answer = handIn(m.stamps.buffer as ArrayBuffer, () => c.brush(m.tool, m.radius, m.row));
+      const sends = JSON.parse(answer) as { preview: '' | 'paint' | 'whole'; frame: boolean; refused?: string };
       if (sends.refused) throw new Error(sends.refused);
-      const p = sends.preview ? preview() : null;
+      const p = sends.preview ? preview(sends.preview === 'paint') : null;
       host.postMessage({ kind: 'brushed', text: answer, ...(p ? { preview: p } : {}) }, p ? moved(p) : []);
       if (sends.frame) postFrame('frame', true);
     }
@@ -234,24 +235,21 @@ host.onmessage = async e => {
       const saved = bytes(core.save_world(), core.out_len());
       host.postMessage({ kind: 'saved', saved, year: core.year() }, [saved.buffer]);
     }
-    else if ((m.cmd === 'settle' || m.cmd === 'soften') && core) {
-      // The stroke ends, or a held stroke settles what it did so far and goes on (`soften`); what its edits start that
-      // takes no time runs at once (`settle`), and its frame shows it. The relief of the ground's new version is sent
-      // first, before the world settles, so the page's ground is made again meanwhile.
-      const at = core.settled_relief(), n = core.out_len();
+    else if (m.cmd === 'settle' && core) {
+      // The stroke ends: what its edits start that takes no time runs at once (`settle`), and its frame shows it. The
+      // relief of the ground's new version is sent first, before the world settles, so the page's ground is made again
+      // meanwhile. Then, once what came meanwhile is done, a copy is kept for the next stroke (`hold`), as at a pause.
+      const c = core, at = c.settled_relief(), n = c.out_len();
       if (n > 0) {
         const relief = bytes(at, n);
-        sentBuilds = core.ground_version() + 1;
+        sentBuilds = c.ground_version() + 1;
         host.postMessage({ kind: 'relief', relief, reliefVersion: sentBuilds }, [relief.buffer]);
       }
+      const answer = text(c.settle());
+      host.postMessage({ kind: 'settled', text: answer }, []);
       // A stroke's end sends a frame where the world changed since the last (a lake's paint sent its own).
-      let framed = true;
-      if (m.cmd === 'settle') {
-        const answer = text(core.settle());
-        framed = (JSON.parse(answer) as { frame: boolean }).frame;
-        host.postMessage({ kind: 'settled', text: answer }, []);
-      } else core.soften();
-      if (framed) postFrame('frame', true);
+      if ((JSON.parse(answer) as { frame: boolean }).frame) postFrame('frame', true);
+      setTimeout(() => { try { if (core === c) c.hold(); } catch (e) { failed(e); } }, 0);
     }
     else if (m.cmd === 'undo' && core) {
       // The world as before the last stroke (`undo`): its frame, the relief of its ground's new version, and the preview

@@ -56,7 +56,8 @@ fn shaped(w: &World) -> f64 {
 /// A raise lays the cell's own rock and, at the top of a stroke, `edit_top_m` of loose ground: the cell's ground rises by
 /// the volume its samples rose by, the books are kept. When the edits settle, the samples are built again over it (a
 /// new version of the relief, no build of the years): against the same world's samples built again with no edit, its
-/// sample nearest its centre stands higher by what it was raised and a sample far from it stands where it does.
+/// sample nearest its centre stands higher by what the relief holds it raised (the raise, worn as it settled:
+/// `World::wear_edits`) and a sample far from it stands where it does.
 #[test]
 fn a_raised_brush_raises_its_disc_and_keeps_the_books() {
     let mut w = small_world();
@@ -75,22 +76,25 @@ fn a_raised_brush_raises_its_disc_and_keeps_the_books() {
     let top = w.cfg.edit_top_m / height;
     assert!(((w.ground_z(i) - z0) * area / v - 1.0).abs() < 1e-9, "the ground rose {} m for {v} m3", w.ground_z(i) - z0);
     assert!(((loose - loose0) / (top * v) - 1.0).abs() < 1e-9 && ((rock - rock0) / ((1.0 - top) * v) - 1.0).abs() < 1e-9, "loose {} and rock {} of {v} m3", loose - loose0, rock - rock0);
+    let centre = (0..w.relief.shaped.len()).max_by(|&a, &b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
+    assert!(w.relief.shaped[centre] > 0.9 * height, "the brush's centre rose {} m", w.relief.shaped[centre]);
     let settled = w.settle();
     books.assert_kept(&w, 1e-9);
     assert!(settled.ground && w.relief.version == version + 1 && w.built_years() == years && !w.relief.due, "{settled:?}, version {}", w.relief.version);
     let after = w.terrain_samples();
-    let centre = (0..w.relief.shaped.len()).max_by(|&a, &b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
     let far = (centre + after.h.len() / 2) % after.h.len();
     let rose = w.relief.shaped[centre];
-    assert!(rose > 0.9 * height && ((after.h[centre] - before.h[centre]) / rose - 1.0).abs() < 1e-6, "the centre rose {} m for {rose}", after.h[centre] - before.h[centre]);
+    assert!(rose > 0.0 && ((after.h[centre] - before.h[centre]) / rose - 1.0).abs() < 1e-6, "the centre rose {} m for {rose}", after.h[centre] - before.h[centre]);
     assert!((after.h[far] - before.h[far]).abs() < 1e-3, "a sample far away moved {} m", after.h[far] - before.h[far]);
 }
 
-/// The samples' loose ground follows an edit (`mantle::edited`): a hill raised steep bares its flanks, where loose
-/// ground cannot rest, its gentle top keeps loose ground (no more than lay there), and a sample no edit shaped keeps its own; what a shell reads
-/// of it before the samples are built again (`World::loose_to_build`) is what the build gives.
+/// The samples' loose ground follows an edit (`mantle::edited`): a hill raised as steep as loose ground rests at (it
+/// slides no steeper, `World::rest`) keeps little of it on its flanks, more than a quarter of its samples no more than a
+/// quarter of their own, its gentle top keeps loose ground (no more than lay there), and a sample no edit shaped keeps
+/// its own; what a shell reads of it before the samples are built again (`World::loose_to_build`) is what the build
+/// gives.
 #[test]
-fn a_steep_raised_hill_bares_its_flanks() {
+fn a_steep_raised_hill_thins_its_flanks() {
     let mut w = small_world();
     let i = inland(&w);
     let mut control = w.clone();
@@ -104,13 +108,84 @@ fn a_steep_raised_hill_bares_its_flanks() {
     let after = w.terrain_samples();
     let read = w.loose_to_build(&ks, &|j| after.h[j]);
     assert!(ks.iter().zip(&read).all(|(&k, &m)| m == after.loose[k]), "the shell reads the build's loose ground");
-    let bared = ks.iter().filter(|&&k| before.loose[k] > 0.0 && after.loose[k] == 0.0).count();
-    assert!(bared > ks.len() / 4, "{bared} of {} samples bared", ks.len());
+    let thinned = ks.iter().filter(|&&k| before.loose[k] > 0.0 && after.loose[k] <= 0.25 * before.loose[k]).count();
+    assert!(thinned > ks.len() / 4, "{thinned} of {} samples thinned to a quarter", ks.len());
     assert!(ks.iter().all(|&k| after.settled[k] <= after.loose[k]), "more settled than lies loose");
     let top = *ks.iter().max_by(|&&a, &&b| w.relief.shaped[a].total_cmp(&w.relief.shaped[b])).unwrap();
     assert!(after.loose[top] > 0.0 && after.loose[top] <= before.loose[top], "the top keeps {} of {} m", after.loose[top], before.loose[top]);
     let far = (0..after.h.len()).find(|&k| w.relief.shaped_at(k) == 0.0 && before.loose[k] > 0.0).unwrap();
     assert_eq!(after.loose[far], before.loose[far], "a sample far away keeps its loose ground");
+}
+
+/// The ground a brush shapes stands no steeper than loose ground rests at (`space::REST`; `World::rest`): after a long
+/// hold at one place, raising far past where its flanks would stand steeper, no link along a row or a column between
+/// two samples under the brush stands steeper than that, where it stood no steeper before the edits (steep ground no
+/// edit made keeps its slope); the ground slid out from under it, and the books are kept.
+#[test]
+fn a_held_brush_stands_no_steeper_than_loose_ground_rests() {
+    use pcore::space::terrain::SAMPLE_DEPTH;
+    let mut w = small_world();
+    let i = inland(&w);
+    let books = Books::now(&w);
+    let before = w.terrain_samples();
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let (centre, r) = ([(x0 + x1) / 2.0, (y0 + y1) / 2.0], 0.4 * w.map.side);
+    let height = 0.05 * w.map.side;
+    for _ in 0..40 {
+        assert!(shape(&mut w, i, height));
+    }
+    books.assert_kept(&w, 1e-9);
+    let s = w.terrain_samples();
+    let (per, dy) = ((s.across / w.map.w) as f64, w.map.length(SAMPLE_DEPTH));
+    let under = |k: usize| (((k % s.across) as f64 + 0.5) / per - centre[0]).hypot(((k / s.across) as f64 + 0.5) / per - centre[1]) * w.map.side < r;
+    let (mut links, mut slid) = (0, false);
+    for k in (0..s.h.len()).filter(|&k| under(k)) {
+        for (j, len) in [(k + 1, s.rows[k / s.across] / dy), (k + s.across, dy)] {
+            if j >= s.h.len() || !under(j) {
+                continue;
+            }
+            let now = (s.height_now(&w.relief, k) - s.height_now(&w.relief, j)).abs() / len;
+            let was = (before.h[k] - before.h[j]).abs() / len;
+            assert!(now <= pcore::space::REST.max(was) + 1e-9, "the link from {k} to {j} stands at {now} (before {was})");
+            links += 1;
+        }
+    }
+    for k in (0..s.h.len()).filter(|&k| !under(k)) {
+        slid |= w.relief.shaped_at(k) > 0.0 && ((k % s.across) as f64 + 0.5) / per > centre[0] + 1.5 * r / w.map.side;
+    }
+    assert!(links > 20 && slid, "{links} links under the brush; ground slid past it: {slid}");
+}
+
+/// When the edits settle, the ground a stroke shaped is laid as the start's wear would leave it worn
+/// (`World::wear_edits`, `Config::edit_wear_years`): a round hill raised by one brush is round no longer, the samples
+/// the brush raised alike (at one distance from its centre, about a corner of samples) standing apart by more than a
+/// twentieth of its height, for most of them; no sample stands lower than before the stroke, the ground the stroke did
+/// not shape is where it stood, and the books are kept.
+#[test]
+fn a_raised_hill_settles_worn() {
+    let mut w = small_world();
+    let i = inland(&w);
+    let books = Books::now(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let centre = [(x0 + x1) / 2.0, (y0 + y1) / 2.0];
+    let (radius_m, height_m) = (0.75 * w.map.side, 0.15 * w.map.side);
+    assert!(w.edit(&[Edit { place: centre, act: Act::Ground { radius_m, height_m, stroke_m: 0.0, make: 0 } }])[0]);
+    let raised = w.relief.shaped.clone();
+    w.settle();
+    books.assert_kept(&w, 1e-9);
+    let s = w.terrain_samples();
+    let per = (s.across / w.map.w) as f64;
+    assert!((0..s.h.len()).all(|k| raised.get(k).copied().unwrap_or(0.0) != 0.0 || w.relief.shaped_at(k) == 0.0), "the ground no edit shaped stays");
+    let low = w.relief.shaped.iter().cloned().fold(0.0, f64::min);
+    assert!(low > -1e-9, "no sample stands under where it stood, to within the rounding: {low}");
+    // The samples the brush raised alike: the same distances east and south of its centre, either way and either axis.
+    let mut alike: std::collections::BTreeMap<(i64, i64), Vec<f64>> = Default::default();
+    for k in (0..s.h.len()).filter(|&k| raised[k] > 0.2 * height_m) {
+        let [u, v] = [(k % s.across) as f64 + 0.5 - centre[0] * per, (k / s.across) as f64 + 0.5 - centre[1] * per].map(|d| (2.0 * d.abs()).round() as i64);
+        alike.entry((u.min(v), u.max(v))).or_default().push(w.relief.shaped_at(k));
+    }
+    let apart = alike.values().filter(|h| h.len() > 1 && h.iter().cloned().fold(f64::MIN, f64::max) - h.iter().cloned().fold(f64::MAX, f64::min) > height_m / 20.0).count();
+    assert!(2 * apart > alike.len(), "{apart} of {} sets of samples raised alike stand apart", alike.len());
 }
 
 /// A lowering takes the loose ground first: one shallower than the cell's loose ground leaves its rock as it was; the
@@ -402,7 +477,8 @@ const PIT_BELOW_M: f64 = 300.0;
 
 /// A pit dug inland below the floor of the open low ground stays a closed basin: the open low ground is what lies under
 /// its level joined to the seed's (`drain::open_from`), so the pit's samples are a pond with a pass and the seed's open
-/// low ground stays open, however deep the pit.
+/// low ground stays open, however deep the pit. (Its brush is wide enough that its walls stand no steeper than loose
+/// ground rests at: the brush's falloff is steepest at 1.54 times its depth over its radius.)
 #[test]
 fn a_pit_deeper_than_the_open_low_ground_stays_a_closed_pond() {
     use pcore::space::network::NONE;
@@ -414,7 +490,9 @@ fn a_pit_deeper_than_the_open_low_ground_stays_a_closed_pond() {
     let floor = s0.h.iter().copied().fold(f64::INFINITY, f64::min);
     drop(s0);
     let height = floor - PIT_BELOW_M - w.ground_z(i);
-    assert!(shape(&mut w, i, height));
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let act = Act::Ground { radius_m: 2.0 * height.abs() / pcore::space::REST, height_m: height, stroke_m: 0.0, make: 0 };
+    assert!(w.edit(&[Edit { place: [(x0 + x1) / 2.0, (y0 + y1) / 2.0], act }])[0]);
     w.settle();
     let s = w.terrain_samples();
     let pit = (0..s.h.len()).min_by(|&a, &b| s.h[a].total_cmp(&s.h[b])).unwrap();

@@ -148,6 +148,8 @@ export const TEXEL_BYTES: Record<Format, number> = { rgba8unorm: 4, 'rgba8unorm-
 export type Format = 'rgba8unorm' | 'rgba8unorm-srgb' | 'rgba32float' | 'rgba16float' | 'rg16float' | 'r16float';
 /** The data a texture of each format is filled with: bytes, 32-bit floats, or 16-bit floats as their bits. */
 export type TexelData = Uint8Array | Float32Array | Uint16Array;
+/** A box of a texture's texels: its west column, north row, width and height. */
+export type Box = [number, number, number, number];
 /** How a sampler reads a texture: blended between its texels' centres and between its mip levels (`smooth`); blended
  * between its texels' centres on its nearest mip level (`mip`); or repeated across the plane and blended between its
  * mip levels too (`tile`: a texture laid on the ground). */
@@ -174,9 +176,10 @@ export interface Gpu {
   /** Fill mip level `level` of texture `t` (all its layers, layer after layer, rows top first; or layer `layer` alone,
    * which the renderer does not keep: after a lost context it is empty). */
   write(t: Texture, data: TexelData, level?: number, layer?: number): void;
-  /** Fill rows `y` to `y + rows` of the first level of texture `t` (one layer) from `data`, all of its texels: the
-   * renderer keeps `data` itself as that level, so the rows not sent must already hold what it holds. */
-  writeRows(t: Texture, data: TexelData, y: number, rows: number): void;
+  /** Fill the box `box` (west column, north row, width, height in texels) of the first level of texture `t` (one layer)
+   * from `data`, all of its texels: the renderer keeps `data` itself as that level, so the texels not sent must
+   * already hold what it holds. */
+  writeBox(t: Texture, data: TexelData, box: Box): void;
   /** Make the mip levels of texture `t` from its first (a picture drawn into it, shown smaller later). */
   mipmap(t: Texture): void;
   /** Let texture `t` go: at once on the back end; on the page's GPU once the next picture begins (`HeldGpu.begin`). */
@@ -303,10 +306,10 @@ export class HeldGpu implements Gpu {
     if (layer === undefined) h.levels[level] = data;
     this.back.write(h.inner, data, level, layer);
   }
-  writeRows(t: Texture, data: TexelData, y: number, rows: number): void {
+  writeBox(t: Texture, data: TexelData, box: Box): void {
     const h = t as HeldTexture;
     h.levels[0] = data;
-    this.back.writeRows(h.inner, data, y, rows);
+    this.back.writeBox(h.inner, data, box);
   }
   mipmap(t: Texture): void { this.back.mipmap((t as HeldTexture).inner); }
   drop(t: Texture): void { this.held.delete(t as HeldTexture); this.dropped.push(t as HeldTexture); }

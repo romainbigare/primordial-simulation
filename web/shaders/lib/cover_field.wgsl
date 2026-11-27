@@ -611,10 +611,10 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
 
 // Things too small to be drawn one by one but a pixel or more across (crowns and dead trees seen from afar) are drawn
 // as round specks about `w` m across that cover the share `share` of the ground on the mean: on lattices fixed in the
-// world whose cells are a power of two metres from `SPECK_BASE_M`, each turned its own way (`SPECK_TURN` radians an
-// octave, so no rows line up), each cell as wide as its specks, one speck a cell at most at a place of its own draw
-// (`SPECK_JITTER` of its cell either way), in as many cells as the share asks (past
-// what specks in every cell cover, the rest lies evenly between them); the two lattices whose cells are nearest `w`
+// world whose cells are `SPECK_BASE_M` times a power of two (above or below it: a young plant's speck is as small as
+// its crown), each turned its own way (`SPECK_TURN` radians an octave, so no rows line up), each cell as wide as its
+// specks, one speck a cell at most at a place of its own draw (`SPECK_JITTER` of its cell either way), in as many cells
+// as the share asks (past what specks in every cell cover, the rest lies evenly between them); the two lattices whose cells are nearest `w`
 // blended by how near, so a speck's size follows the plants' with no seam. A point reads the four cells nearest it.
 // They melt into their mean, the share evenly, as they shrink from `SPECK_PX`.y to `SPECK_PX`.x pixels across. Of the
 // point: the specks' cover, and how lit it is, -1..1, from its shaded side (south-east, away from `LIGHT`) to its lit
@@ -627,7 +627,7 @@ fn specks(at: vec2f, w: f32, share: f32, e: f32, k: i32) -> vec2f {
   if (SPECK_PX.x * least_e() >= SPECK_MOST_M) { return vec2f(min(share, 1.0), 0.0); }
   let detail = ease(SPECK_PX.x * e, SPECK_PX.y * e, w);
   if (detail <= 0.0 || share <= 0.0) { return vec2f(min(share, 1.0), 0.0); }
-  let octave = log2(max(w, SPECK_BASE_M) / SPECK_BASE_M);
+  let octave = log2(w / SPECK_BASE_M);
   let low = floor(octave);
   let fine = speck_lattice(at, SPECK_BASE_M * exp2(low), SPECK_TURN * low, share, e, k);
   let coarse = speck_lattice(at, SPECK_BASE_M * exp2(low + 1.0), SPECK_TURN * (low + 1.0), share, e, k + 3);

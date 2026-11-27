@@ -17,8 +17,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// `Config::build_years`, which the years of the build are read from); the version of the samples built from it, one
 /// more at every build and every reshape after edits (`version`, by which built samples are kept, `Terrain::built`;
 /// none: the seed's samples); the key of each pond of the samples last built, in the order of their numbers
-/// (`ponds::keys`, by which the next build numbers its ponds, `ponds::renumber`); and whether edits shaped it since the samples were last built (`due`, not saved: a world
-/// read from a snapshot builds them from it).
+/// (`ponds::keys`, by which the next build numbers its ponds, `ponds::renumber`); whether edits shaped it since the
+/// samples were last built (`due`, not saved: a world read from a snapshot builds them from it); and whether what they
+/// shaped since was worn as the edits settle (`worn`, `World::wear_edits`; not saved, as `due`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Relief {
     pub laid: Vec<f64>,
@@ -29,6 +30,7 @@ pub struct Relief {
     pub version: u32,
     pub ponds: Vec<u32>,
     pub due: bool,
+    pub worn: bool,
 }
 
 impl Relief {
@@ -55,13 +57,13 @@ impl Relief {
         self.at(k) - self.built.get(k).copied().unwrap_or(0.0)
     }
     /// `m` m shaped of sample `k` of `n` samples by an edit (raised; lowered where under none): the samples are due to
-    /// be built again.
+    /// be built again, and what edits shaped since to be worn.
     pub fn shape(&mut self, k: usize, m: f64, n: usize) {
         if self.shaped.len() != n {
             self.shaped.resize(n, 0.0);
         }
         self.shaped[k] += m;
-        self.due = true;
+        (self.due, self.worn) = (true, false);
     }
     /// What edits shaped of sample `k`, m.
     pub fn shaped_at(&self, k: usize) -> f64 {
@@ -108,7 +110,7 @@ impl Serialize for Relief {
 impl<'de> Deserialize<'de> for Relief {
     fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Relief, D::Error> {
         let s = Sparse::deserialize(from)?;
-        Ok(Relief { laid: dense(s.laid), built: dense(s.built), shaped: dense(s.shaped), offset: s.offset, builds: s.builds, version: s.version, ponds: s.ponds, due: false })
+        Ok(Relief { laid: dense(s.laid), built: dense(s.built), shaped: dense(s.shaped), offset: s.offset, builds: s.builds, version: s.version, ponds: s.ponds, due: false, worn: false })
     }
 }
 
@@ -254,7 +256,7 @@ mod tests {
     /// A relief saved and read again is the same, also where a list holds only none.
     #[test]
     fn a_relief_reads_back_the_same() {
-        let r = Relief { laid: vec![0.0; 4], built: vec![0.0, 1.5, 0.0], shaped: vec![-2.0, 0.0], offset: vec![0.25], builds: 2, version: 3, ponds: vec![7, 2], due: false };
+        let r = Relief { laid: vec![0.0; 4], built: vec![0.0, 1.5, 0.0], shaped: vec![-2.0, 0.0], offset: vec![0.25], builds: 2, version: 3, ponds: vec![7, 2], due: false, worn: false };
         let back: Relief = serde_json::from_str(&serde_json::to_string(&r).expect("saved")).expect("read");
         assert_eq!(back, r);
     }

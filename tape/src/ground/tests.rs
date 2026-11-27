@@ -137,10 +137,11 @@ fn a_ground_made_again_is_the_ground_made_anew() {
     let per = (s.across / w.map.w) as f64;
     let place = [((k % s.across) as f64 + 0.5) / per, ((k / s.across) as f64 + 0.5) / per];
     drop(s);
-    // A stroke settled; the relief the world's samples will be built from, told before it settles, is the one they are
-    // built from (none before the world's first build of its offsets).
+    // A stroke settled; the relief the world's samples will be built from, told before it settles (its ground worn, as
+    // settling wears it), is the one they are built from (none before the world's first build of its offsets).
     let stroke = |w: &mut pcore::World, height_m: f64| {
         w.edit(&[Edit { place, act: Act::Ground { radius_m: 0.3 * w.map.side, height_m, stroke_m: 0.0, make: 0 } }]);
+        w.wear_edits();
         let told = super::super::Ground::settled_relief_bytes(w);
         w.settle();
         assert!(told.as_ref().is_none_or(|r| *r == super::super::Ground::relief_bytes(w)), "the relief told before the world settled");

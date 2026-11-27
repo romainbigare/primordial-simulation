@@ -1,8 +1,9 @@
 // God mode on the live map (handover 11): the player picks a tool on the strip and edits the world with a round brush
-// (wasm/src/edit.rs `brush`, the core's `World::edit`): a tool paints as the brush moves, paints again and again while
-// it is held (the ground, heat), or makes one thing where the stroke begins (a lake); when the stroke ends it settles
-// (`settle`: the ground built again, what was heated burns). With a mouse the brush is where the pointer is; on a
-// phone it stands at a sight in the middle of the map (`GodPage.aim`): a finger moves the map under it, and a stroke
+// (wasm/src/edit.rs `brush`, the core's `World::edit`): a tool paints as the brush moves, paints at each of the page's
+// frames while it is held (the ground, along the brush's path; heat), or makes one thing where the stroke begins (a
+// lake); when the stroke ends it settles (`settle`: the ground built again, what was heated burns), a stroke of the
+// ground once the brush rested after it. With a mouse the brush is where the pointer is; on a phone it stands at a
+// sight in the middle of the map (`GodPage.aim`): a finger moves the map under it, and a stroke
 // lasts while the tool's big button is held, so a finger never hides the brush nor paints by mistake. A burn's stroke
 // ends as soon as the ground lights, and its fire spreads on the map (front.ts). The tools themselves are a list
 // (god-tools.ts `godTools`); this is what they share: the strip (done, the tools named, the undo of the last stroke), the
@@ -15,19 +16,17 @@ import { holdButton, makeStrip, mostWhy, radiusText, showCard, showStrip } from 
 
 /** The brush's radii, m (its size chips), and the one it starts at. */
 const RADII_M = [150, 300, 600, 1000, 2000, 3000], FIRST_RADIUS = 2;
-/** The least time between two paints of a stroke, ms, and the least move of the brush's centre between them, a share
- * of its radius: cells are edited once a stroke, so a paint where the brush has not moved adds nothing. A tool with a
- * rate paints every `PAINT_MS` while held. */
+/** Of a tool that paints where the brush moves, the least time between two paints of a stroke, ms, and the least move
+ * of the brush's centre between them, a share of its radius: cells are edited once a stroke, so a paint where the
+ * brush has not moved adds nothing. A paint that follows the brush's path (`GodTool.follows`) lays its places no
+ * farther apart than that share of the radius. */
 const PAINT_MS = 90, PAINT_MOVE = 0.25;
-/** A tool with a rate paints only once held this long, ms: a tap does nothing. */
+/** A tool with a rate and no tap (`GodTool.tapS`) paints only once held this long, ms: a tap does nothing. */
 const HOLD_MS = 220;
-/** A tool that paints in steps (`GodTool.step`) looks this many times a step whether one is due, so each lands within a
- * quarter of its time of its start. */
-const STEP_LOOKS = 4;
-/** A held stroke of a tool that softens (`GodTool.softens`) settles what it did so far at most this often, ms: the
- * world's samples are built again and its liquid settles over them while the ground moves (a pause of the core of a
- * few hundred ms, so not at every step; the steps it holds up are painted together after it). */
-const SOFTEN_MS = 1000;
+/** A stroke of a tool that rests (`GodTool.rests`) settles this long after the brush was let go, ms, unless a stroke of
+ * it begins before then and goes on with it: a short lift of the brush does not settle the world (a pause of the core
+ * of a few hundred ms). */
+const SHAPE_REST_MS = 400;
 /** The ink of the brush where the tool cannot act: a dull red. */
 const NO_INK = 'rgba(196,76,60,.95)';
 /** How long the brush's size shows on the map after one is picked, ms. */
@@ -43,14 +42,15 @@ const FILL_MOST_MS = 4000;
 
 
 /** A stroke under way: its tool, the place and time of its last paint (squares, ms), when it began (ms), where the
- * brush is now (squares), the paints sent, the timer that paints while it is held (its tick, `tick`), and whether a
- * paint of it waits for the core's answer (a tool with a rate paints again only once answered, with the time since: the
- * core may take longer over a paint than the timer's step). */
+ * brush is now (squares) and where it was since its last paint, in order (of a tool that follows the path), the paints
+ * sent, the timer that waits `HOLD_MS` and the animation frame that ticks while it is held (`tick`), and whether a
+ * paint of it waits for the core's answer (a tool with a rate paints again only once answered, with the time since and
+ * the path since: the core may take longer over a paint than a frame). */
 interface Stroke {
-  tool: GodTool; last: [number, number, number]; began: number; now: [number, number]; sent: number; held: number; waiting: boolean;
-  /** Of a tool that paints in steps: the steps painted. Of a tool that softens: when it last settled what it did so far
-   * (ms), and the paints sent then. */
-  steps: number; softened: number; softenedAt: number;
+  tool: GodTool; last: [number, number, number]; began: number; now: [number, number]; path: [number, number][];
+  sent: number; held: number; frame: number; waiting: boolean;
+  /** Of a tool with a rate: the time its paints covered, ms (the last covers what a tap lacks, `GodTool.tapS`). */
+  covered: number;
   /** Of heat: how much of the heat that lights them the cells under the brush hold, their mean by share over those that
    * can light (-1: no heat asked). */
   progress: number;
@@ -71,8 +71,13 @@ export class God {
   /** The timer of the question waiting for `PROBE_MS` to pass (0: none). */
   private askTimer = 0;
   /** The strokes ended whose settling the core has not answered yet, oldest first: the core answers in the order it was
-   * asked, so the answers to their paints and their settling come before those of the stroke under way. */
+   * asked, so the answers to their paints and their settling come before those of the stroke under way. The stroke
+   * let go that waits `SHAPE_REST_MS` to settle (`GodTool.rests`), and its timer; and what waits for the world to be
+   * settled (`whenSettled`). */
   private ended: Stroke[] = [];
+  private resting: Stroke | null = null;
+  private restTimer = 0;
+  private waiters: (() => void)[] = [];
   /** The map's corner and the pixels a square takes, as last drawn. */
   private drawnAt: [number, number, number] | null = null;
   /** When the size of the brush picked last stops showing on the map (ms). */
@@ -104,9 +109,9 @@ export class God {
   aiming(): boolean { return this.page.aim() !== null; }
 
   /** Put the tool away and forget the place: a new world, or god mode closed. A stroke held ends as a stroke does
-   * (`end`), so the core's answers to it come in their turn. */
+   * (`end`) and settles at once, so the core's answers to it come in their turn. */
   reset(): void {
-    this.end();
+    this.end(); this.settleNow();
     this.holdButton.classList.remove('held');
     this.probe = null; this.asking = false; this.filling = null;
     this.pick(null);
@@ -122,15 +127,36 @@ export class God {
   /** Whether a tool is on. */
   toolOn(): boolean { return this.tool !== null; }
 
-  /** Whether a stroke is under way or its settling still to come: the world does not play meanwhile. */
-  busy(): boolean { return this.stroke !== null || this.ended.length > 0; }
+  /** Whether a stroke is under way, rests (`SHAPE_REST_MS`) or its settling is still to come: the world does not play
+   * meanwhile. */
+  private busy(): boolean { return this.stroke !== null || this.resting !== null || this.ended.length > 0; }
 
-  /** Undo the last stroke, where there is one and no stroke is under way. */
+  /** Run `f` once the world is settled (play, save, undo): a stroke that rests settles at once, and `f` runs once the
+   * core answered every settling asked; never while a stroke is under way. */
+  whenSettled(f: () => void): void {
+    if (this.stroke) return;
+    this.settleNow();
+    if (this.busy()) this.waiters.push(f); else f();
+  }
+
+  /** The stroke that rests settles now (`Editor.settle`), where there is one. */
+  private settleNow(): void {
+    const st = this.resting;
+    if (!st) return;
+    clearTimeout(this.restTimer);
+    this.resting = null;
+    this.editor()?.settle();
+    this.ended.push(st);
+  }
+
+  /** Undo the last stroke once the world is settled (`whenSettled`), where there is one. */
   undo(): void {
-    if (!this.undoable || this.busy()) return;
-    this.undoable = false;
-    this.editor()?.undo();
-    this.show();
+    this.whenSettled(() => {
+      if (!this.undoable) return;
+      this.undoable = false;
+      this.editor()?.undo();
+      this.show();
+    });
   }
 
   /** Put the tool on away: true if one was on. */
@@ -140,9 +166,10 @@ export class God {
     return true;
   }
 
-  /** Take tool `t` (null: none), and say how to use it; the world pauses while one is on. A stroke under way ends. */
+  /** Take tool `t` (null: none), and say how to use it; the world pauses while one is on. A stroke under way ends, and
+   * where the tool changes, settles at once. */
   private pick(t: GodTool | null): void {
-    if (t !== this.tool) this.end();
+    if (t !== this.tool) { this.end(); this.settleNow(); }
     this.tool = t; this.lastWhy = '';
     if (t?.least && this.radius < t.least) this.radius = this.radii()[0];
     if (t) this.page.picked();
@@ -184,54 +211,55 @@ export class God {
   }
 
   /** A stroke of the tool on starting at (x, y) squares, true; false if no tool is on (the map moves). A stroke under
-   * way ends first. A tool with a rate begins to paint once held `HOLD_MS`; another tool paints at once, and while held
-   * paints where the brush moves to (`tick`). */
+   * way ends first; a stroke that rests (`SHAPE_REST_MS`) goes on as this one where its tool rests (with its paint
+   * still awaited), else it settles first. A tool with a rate begins to paint at once where it has a tap
+   * (`GodTool.tapS`), else once held `HOLD_MS`; another tool paints at once, and while held paints where the brush
+   * moves to (`tick`). */
   start(x: number, y: number): boolean {
     const t = this.tool;
     if (!t) return false;
     this.end();
+    const on = this.resting?.tool === t && t.rests ? this.resting : null;
+    if (on) { clearTimeout(this.restTimer); this.resting = null; } else this.settleNow();
     this.page.picked();
     this.at = [x, y]; this.lastWhy = '';
     const now = performance.now();
-    const st: Stroke = this.stroke = { tool: t, last: [x, y, now], began: now, now: [x, y], sent: 0, held: 0, waiting: false, steps: 0, softened: now, softenedAt: 0, progress: -1 };
-    const ticks = () => window.setInterval(() => this.tick(st), t.step ? t.step.every / STEP_LOOKS : PAINT_MS);
-    if (t.rate) st.held = window.setTimeout(() => { if (this.stroke !== st) return; st.held = ticks(); this.paint(st); }, HOLD_MS);
-    else { this.paint(st); if (!t.amount) st.held = ticks(); }
+    const st: Stroke = this.stroke = { tool: t, last: [x, y, now], began: now, now: [x, y], path: [], sent: on?.sent ?? 0, held: 0, frame: 0, waiting: on?.waiting ?? false, covered: 0, progress: -1 };
+    if (t.rate && t.tapS === undefined) st.held = window.setTimeout(() => { if (this.stroke !== st) return; this.frames(st); this.paint(st); }, HOLD_MS);
+    else if (t.rate) this.frames(st);
+    else { this.paint(st); if (!t.amount) this.frames(st); }
     // A lake's water is drawn in its ring from the tap.
     if (t.amount) this.filling = { at: [x, y], radius: this.radius, ink: t.ink, began: now, from: this.page.ground()[0], settled: 0 };
     return true;
   }
 
+  /** Tick stroke `st` at each of the page's frames while it is held (`tick`). */
+  private frames(st: Stroke): void {
+    const next = () => { if (this.stroke !== st) return; this.tick(st); st.frame = requestAnimationFrame(next); };
+    st.frame = requestAnimationFrame(next);
+  }
+
   /** A tick of stroke `st` while held: the brush follows the sight where it stands there; a tool with a rate paints
-   * again once the core answered its last paint, one with steps once a step is due too, another where the brush moved.
-   * A tick of a stroke that ended stops. */
+   * again once the core answered its last paint, another where the brush moved. */
   private tick(st: Stroke): void {
-    if (this.stroke !== st) { clearInterval(st.held); return; }
     const aim = this.page.aim();
-    if (aim) { st.now = aim; this.at = aim; }
-    if (st.tool.softens && !st.waiting && st.sent > st.softenedAt && performance.now() - st.softened >= SOFTEN_MS) this.soften(st);
-    if (st.tool.rate || st.tool.step) { if (!st.waiting && this.due(st) !== 0) this.paint(st); } else this.moved(st);
+    if (aim) { this.follow(st, aim); this.at = aim; }
+    if (st.tool.rate) { if (!st.waiting) this.paint(st); } else this.moved(st);
   }
 
-  /** Stroke `st`, held, settles what it did so far and goes on (`Editor.soften`): the core answers its paints after. */
-  private soften(st: Stroke): void {
-    st.softened = performance.now(); st.softenedAt = st.sent;
-    this.editor()?.soften();
-  }
-
-  /** Of stroke `st` of a tool with steps, the steps due and not yet painted: one at its start and one at the start of
-   * each `every` ms held since, so a hold of t ms makes ⌈t / every⌉ (at least one); of another tool, 1. */
-  private due(st: Stroke): number {
-    const s = st.tool.step;
-    return s ? Math.max(1, Math.ceil((performance.now() - st.began) / s.every)) - st.steps : 1;
+  /** The brush of stroke `st` is at `at` (squares) now: of a tool that follows the path, where it was is kept. */
+  private follow(st: Stroke, at: [number, number]): void {
+    if (at[0] === st.now[0] && at[1] === st.now[1]) return;
+    if (st.tool.follows) st.path.push(st.now);
+    st.now = at;
   }
 
   /** The pointer of the stroke moved to (x, y) squares: a paint there, once it moved far and long enough. */
   move(x: number, y: number): void {
     const st = this.stroke;
     if (!st) return;
-    st.now = [x, y];
-    if (!st.tool.rate && !st.tool.step && !st.tool.amount) this.moved(st);
+    this.follow(st, [x, y]);
+    if (!st.tool.rate && !st.tool.amount) this.moved(st);
   }
 
   /** A paint of stroke `st` where its brush is now, if it moved far and long enough since its last and the core
@@ -241,42 +269,62 @@ export class God {
     if (far && !st.waiting && performance.now() - lt >= PAINT_MS) this.paint(st);
   }
 
-  /** The stroke ends: a last paint where the brush moved since (of a tool with steps, the steps still due), and it
-   * settles; a tool with a rate let go before it painted (a tap) does nothing. */
+  /** The stroke ends: a last paint (of a tool with a rate, what the time since its last adds, and what a tap lacks;
+   * of another, where the brush moved since), and it settles, a stroke of a tool that rests once it rested
+   * `SHAPE_REST_MS`; a tool with a rate and no tap let go before it painted does nothing. */
   end(): void {
     const st = this.stroke;
     if (!st) return;
-    clearInterval(st.held);
+    clearTimeout(st.held); cancelAnimationFrame(st.frame);
     this.stroke = null;
-    if (st.tool.rate && !st.sent) { this.page.redraw(); return; }
-    if (st.tool.step) { if (this.due(st) > 0) this.paint(st); }
-    else if (st.tool.rate || (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1]))) this.paint(st);
-    this.editor()?.settle();
-    this.ended.push(st);
+    if (st.tool.rate && st.tool.tapS === undefined && !st.sent) { this.page.redraw(); return; }
+    if (st.tool.rate) this.paint(st, true);
+    else if (!st.tool.amount && (st.now[0] !== st.last[0] || st.now[1] !== st.last[1])) this.paint(st);
+    this.resting = st;
+    if (st.tool.rests) this.restTimer = window.setTimeout(() => this.settleNow(), SHAPE_REST_MS);
+    else this.settleNow();
   }
 
-  /** Paint with stroke `st`'s tool where its brush is now: by its amount, for a tool with steps by the steps due (all
-   * at once where the core was slower than a step), or for a tool with a rate by what the time since its last paint
-   * adds, its rate doubling every `doubling` s it has been held, at most `doublings` times. */
-  private paint(st: Stroke): void {
+  /** Paint with stroke `st`'s tool where its brush is now (of a tool that follows the path, along it: `along`): by its
+   * amount, or for a tool with a rate by what the time since its last paint adds (the stroke's `last` paint: no less
+   * than what its tap lacks), its rate doubling every `doubling` s it has been held, at most `doublings` times. */
+  private paint(st: Stroke, last = false): void {
     const t = st.tool, [x, y] = st.now, now = performance.now();
-    const rate = (t.rate ?? 0) * (t.doubling ? 2 ** Math.min((now - st.began) / 1000 / t.doubling, t.doublings ?? Infinity) : 1);
-    const steps = t.step ? this.due(st) : 0;
-    st.steps += steps;
-    const amount = t.amount ? t.amount() : t.step ? steps * t.step.amount : (rate * (now - st.last[2])) / 1000;
-    st.last = [x, y, now];
+    const ms = Math.max(now - st.last[2], last && t.tapS ? 1000 * t.tapS - st.covered : 0);
+    st.covered += ms;
+    const rate = t.rate ? t.rate(this.radius) * (t.doubling ? 2 ** Math.min((now - st.began) / 1000 / t.doubling, t.doublings ?? Infinity) : 1) : 0;
+    const amount = t.amount ? t.amount() : (rate * ms) / 1000;
+    const stamps = t.follows ? this.along(st, amount) : [[x, y, amount] as [number, number, number]];
+    st.last = [x, y, now]; st.path = [];
     if (t.trails) {
       if (this.stroke === st && st.sent === 0) this.trail = { at: [], radius: [], ink: t.ink };
       this.trail?.at.push([x, y]); this.trail?.radius.push(this.radius);
     }
     st.waiting = true; st.sent++;
-    this.editor()?.brush(t.code, x, y, this.radius, amount, t.row());
+    this.editor()?.brush(t.code, stamps, this.radius, t.row());
+  }
+
+  /** The places of a paint of `amount` of stroke `st` along the brush's path since its last paint (`Stroke.path`):
+   * evenly along it, as few as keep them no more than `PAINT_MOVE` of the radius apart (one, where it is now, where it
+   * did not move), each with its share of the amount. */
+  private along(st: Stroke, amount: number): [number, number, number][] {
+    const points: [number, number][] = [[st.last[0], st.last[1]], ...st.path, st.now];
+    const legs = points.slice(1).map((p, i) => Math.hypot(p[0] - points[i][0], p[1] - points[i][1]));
+    const length = legs.reduce((a, b) => a + b, 0), n = Math.max(1, Math.ceil(length / ((PAINT_MOVE * this.radius) / this.page.squareM())));
+    const out: [number, number, number][] = [];
+    for (let s = 1, leg = 0, walked = 0; s <= n; s++) {
+      const want = (length * s) / n;
+      while (leg < legs.length - 1 && walked + legs[leg] < want) walked += legs[leg++];
+      const f = legs[leg] > 0 ? Math.min((want - walked) / legs[leg], 1) : 1, [a, b] = [points[leg], points[leg + 1]];
+      out.push([a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1]), amount / n]);
+    }
+    return out;
   }
 
   /** The core's answer to a paint: the heat it holds, or the reason, where it edited none of its cells (a lake that was
    * not dug draws no water). */
   brushed(r: Brushed): void {
-    const st = this.ended[0] ?? this.stroke;
+    const st = this.ended[0] ?? this.resting ?? this.stroke;
     if (!st) return;
     st.waiting = false;
     const heat = r.cells.filter(c => c.progress !== undefined);
@@ -308,6 +356,7 @@ export class God {
     if (r.unplanted) this.lastWhy = st.tool.reason(r.unplanted);
     if (r.undo) this.undoable = true;
     this.show();
+    if (!this.busy()) this.waiters.splice(0).forEach(f => f());
     if (!r.burnt.length) return;
     const m = this.page.squareM();
     this.page.burnt(r.squares, st.now, litSites([st.now[0] * m, st.now[1] * m], this.radius, st.progress).map(s => [s.x, s.y]));
@@ -358,7 +407,8 @@ export class God {
    * larger button), the tool's choices, a line of how to use it or why it cannot act here, and on a phone the button
    * held for a stroke. */
   private show(): void {
-    showStrip(this.page.strip, this.tools, this.tool, this.probe, this.undoable, this.undoButton);
+    // (A stroke that rests is undone once it settled, `undo`.)
+    showStrip(this.page.strip, this.tools, this.tool, this.probe, this.undoable || this.resting !== null, this.undoButton);
     showCard(this.page.card, this.holdButton, this.tool, this.probe, { radii: this.radii(), radius: this.radius, pick: m => this.sized(m) }, () => this.show());
   }
 

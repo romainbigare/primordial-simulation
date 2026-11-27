@@ -73,7 +73,7 @@ impl Dry {
 /// on each sample now (`Relief::laid`), which a build does not read.
 fn built_bytes(w: &World, version: u32) -> Vec<u8> {
     let r = &w.relief;
-    let built = Relief { laid: Vec::new(), built: r.built.clone(), shaped: r.shaped.clone(), offset: r.offset.clone(), builds: r.builds, version, ponds: r.ponds.clone(), due: false };
+    let built = Relief { laid: Vec::new(), built: r.built.clone(), shaped: r.shaped.clone(), offset: r.offset.clone(), builds: r.builds, version, ponds: r.ponds.clone(), due: false, worn: false };
     bincode::serialize(&(&built, w.built_years(), &w.map)).expect("a relief serializes")
 }
 
@@ -154,8 +154,9 @@ impl Ground {
 
     /// The relief world `w`'s samples will be built from when its edits settle (`World::settle`,
     /// `flow::build::reshape`: the next version, the offsets kept), as `relief_bytes` gives it after: so a shell's
-    /// ground can be made again while the world settles. None where its edits shaped nothing, or where the reshape will
-    /// find the offsets (no build before).
+    /// ground can be made again while the world settles. The shell wears the edits' ground first (`World::wear_edits`),
+    /// as settling would. None where its edits shaped nothing, or where the reshape will find the offsets (no build
+    /// before).
     pub fn settled_relief_bytes(w: &World) -> Option<Vec<u8>> {
         if !w.relief.due || w.relief.offset.len() != w.mesh.cells().n() {
             return None;

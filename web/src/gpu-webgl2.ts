@@ -1,7 +1,7 @@
 // The map's renderer on WebGL2 (gpu.ts): the programs' GLSL ES 3.00 as naga wrote it from their WGSL (web/shade),
 // each uniform block bound to its WGSL binding's number, each GLSL sampler on a texture unit of its own. A texture the
 // renderer draws into is drawn upside down (the draw header's `flip`), so its first row is its top, as the canvas's.
-import { Back, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, drawHeader } from './gpu';
+import { Back, Box, Texture, Format, TexelData, Sampler, Pass, Draw, Warming, programs, drawHeader } from './gpu';
 
 /** A linked program: where each binding of its WGSL lies. */
 interface Linked { prog: WebGLProgram; units: { unit: number; texture: number; sampler: number | null }[] }
@@ -111,12 +111,15 @@ class WebGl2 implements Back {
     else { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.texSubImage2D(gl.TEXTURE_2D, level, 0, 0, w, h, format, type, data); }
   }
 
-  writeRows(t: Texture, data: TexelData, y: number, rows: number): void {
+  writeBox(t: Texture, data: TexelData, [x, y, w, h]: Box): void {
     const gl = this.gl, g = t as WebGl2Texture, [, format, type] = this.formats[t.format];
-    if (gl.isContextLost()) return;
+    if (gl.isContextLost() || w <= 0 || h <= 0) return;
     const row = (data.length / t.h) | 0;
     gl.bindTexture(gl.TEXTURE_2D, g.tex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, y, t.w, rows, format, type, data, y * row);
+    // (The box's rows are read `t.w` texels apart in `data`.)
+    gl.pixelStorei(gl.UNPACK_ROW_LENGTH, t.w);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, w, h, format, type, data, y * row + x * (row / t.w));
+    gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
   }
 
   mipmap(t: Texture): void {

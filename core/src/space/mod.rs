@@ -15,6 +15,7 @@ pub mod relief;
 mod rises;
 pub mod square;
 pub mod samples;
+pub(crate) mod shaped;
 mod shelf;
 pub(crate) mod delta;
 mod fill;
@@ -26,6 +27,7 @@ pub mod terrain;
 pub mod tree;
 pub mod wear;
 
+pub use mantle::REST;
 pub use tree::{Leaf, Tree};
 
 use std::f64::consts::TAU;
