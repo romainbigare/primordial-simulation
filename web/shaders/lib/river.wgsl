@@ -232,7 +232,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   let seen = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * wide);
   out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line)) * cuts * seen;
   // The bars' colour: the bed's make washed, sand on the gentlest reaches; the bed seen through the water is the same.
-  let washed = mix(min(bed_make_at(s.dry.place) * BAR_LIFT, vec3f(1.0)), BEACH_SAND, BAR_PALE);
+  let washed = mix(min(bed_make_at(s.dry.at, s.dry.place, s.dry.e) * BAR_LIFT, vec3f(1.0)), BEACH_SAND, BAR_PALE);
   let gravel = mix(BEACH_SAND, washed, ease(0.0, BAR_SAND_STONE, stone));
   // On its bars the ground is that gravel, bare, rising from the water's edge, as far as they cover the pixel.
   let bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth)) * seen;

@@ -46,6 +46,24 @@ fn ragged_hidden(e: f32, size: f32, octaves: i32) -> f32 {
   return 2.0 * hidden / sum;
 }
 
+// How fast the patches (`ragged`) change across a metre, on the mean, seen at `e` m a pixel: each octave shown by its
+// share, a noise's slope about `PATCH_SLOPE` a cell. A limit read on them is eased over the change across a pixel, so
+// its edge shows no pixel's steps. No noise is read.
+const PATCH_SLOPE = 1.2;
+fn ragged_slope(e: f32, size: f32, octaves: i32) -> f32 {
+  var s = size;
+  var weight = 1.0;
+  var sum = 0.0;
+  var slope = 0.0;
+  for (var o = 0; o < octaves; o++) {
+    slope += weight * shows_at(s, e) * PATCH_SLOPE / s;
+    sum += weight;
+    s /= RAGGED_STEP;
+    weight *= RAGGED_FALL;
+  }
+  return 2.0 * slope / sum;
+}
+
 // Where two looks of the ground meet (a patch of a cell's cover and the rest of it, snow and bare ground, a scar and
 // the ground a fire spared) they meet over a zone, not along a line: the far look takes a point where its number past
 // the limit, moved by the patches, passes none. The patches run from `size` m down to the pixel over up to

@@ -150,7 +150,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   var make = vec3f(0.0);
   var made = false;
   if (styled() && loose < SOIL_OF_BED_M) {
-    make = bed_make_at(place.at); made = true;
+    make = bed_make_at(at, place.at, e); made = true;
     p.ground = mix(p.ground, make, SOIL_OF_BED * (1.0 - loose / SOIL_OF_BED_M));
   }
   p.z = g.h;
@@ -196,7 +196,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) {
-    if (!made) { make = bed_make_at(place.at); made = true; }
+    if (!made) { make = bed_make_at(at, place.at, e); made = true; }
     p.bed = make;
   }
   p.fetch = g.water.z;
@@ -207,7 +207,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.swash = swash_of(over_ponds(tiled, 0.0), waves, length(tiled.slope), at, e, p.snow);
   // A beach of pebbles takes their colour from the bed they are worn from (colour.wgsl `shore_grain`).
   if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) {
-    if (!made) { make = bed_make_at(place.at); }
+    if (!made) { make = bed_make_at(at, place.at, e); }
     p.bed = make;
   }
   p.river = 0.0;

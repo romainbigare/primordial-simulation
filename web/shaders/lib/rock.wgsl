@@ -100,10 +100,65 @@ fn soil_at(at: vec2f, place: Place, e: f32, organic: f32, shift: vec2f) -> SoilA
   return SoilAt(vec4f(g.x * (1.0 + n), g.y * (1.0 - n), organic, g.z), deposit, laid.x);
 }
 
-// The reflectance of the bed's make at the place `at` (`sample_place`), m from the map's north-west corner
-// (`samples_at`): so bare rock shows the bands the folded layers make (core/src/space/strata.rs), and no sample's
-// square where one band meets the next.
-fn bed_make_at(at: vec2f) -> vec3f { return samples_at(at, MAKE_PLANE).xyz; }
+// A point's bed is of one make, not a blend of two: bare rock and the soil broken from it show the bands the folded
+// layers make (core/src/space/strata.rs) with an edge that wanders like an outcrop's. Of the samples about the place a
+// point reads, each make weighs its samples' weights through their centres as a B-spline (`b_spline`); the leading
+// make and the next meet where the difference of their weights passes the patches' noise (`ragged`, from
+// `MAKE_PATCH` samples' spacing down, `MAKE_OCTAVES`, streams from `MAKE_STREAM`) times `MAKE_RAGGED`, short of one, so
+// no make shows past where its weight starts: the contour of a smooth weight follows no sample's square, and the noise
+// moves it by up to most of a sample, at every scale. An octave shows from `MAKE_PX` times the pixels `shows_at` asks
+// (a wiggle of a few pixels is a jagged line), and the two meet over `MAKE_EDGE_PX` pixels and no less than
+// `MAKE_EDGE_M` (a soil broken from two beds mixes over metres). As a pixel grows to the samples' spacing the pick
+// fades into the samples' plain blend (`shows_at`).
+const MAKE_RAGGED = 0.95; const MAKE_PATCH = 2.0; const MAKE_OCTAVES = 6; const MAKE_STREAM = 240;
+const MAKE_PX = 2.0; const MAKE_EDGE_PX = 1.5; const MAKE_EDGE_M = 25.0;
+// The reflectance of the bed's make at `at`, m from the map's north-west corner, read at the place `place`
+// (`sample_place`), seen at `e` m a pixel.
+fn bed_make_at(at: vec2f, place: vec2f, e: f32) -> vec3f {
+  let spacing = land.map.x * land.map.y / land.samples.x;
+  let p = place / spacing - 0.5;
+  let bs = b_spline(p);
+  let last = vec2i(land.samples.xy) - 1;
+  let rows = vec2i(0, MAKE_PLANE * i32(land.samples.y));
+  var c: array<vec3f, B_TAPS>;
+  var blend = vec3f(0.0);
+  for (var n = 0; n < B_TAPS; n++) {
+    c[n] = textureLoad(rock_field, clamp(b_texel(bs, n), vec2i(0), last) + rows, 0).xyz;
+    blend += b_weight(bs, n) * c[n];
+  }
+  let sharp = shows_at(spacing, e);
+  if (sharp <= 0.0) { return blend; }
+  // Each sample's make's weight; the leading make `a`, and the next `b` (none where all are of one make).
+  var s: array<f32, B_TAPS>;
+  for (var n = 0; n < B_TAPS; n++) {
+    s[n] = 0.0;
+    for (var m = 0; m < B_TAPS; m++) { s[n] += select(0.0, b_weight(bs, m), all(c[m] == c[n])); }
+  }
+  var a = 0;
+  for (var n = 1; n < B_TAPS; n++) { if (s[n] > s[a]) { a = n; } }
+  var b = -1;
+  for (var n = 0; n < B_TAPS; n++) { if (any(c[n] != c[a]) && (b < 0 || s[n] > s[b])) { b = n; } }
+  if (b < 0) { return c[a]; }
+  // The lighter of the two is `hi`, so the noise moves their edge the same way from either side of it.
+  let swap = dot(c[b], LUMA) > dot(c[a], LUMA);
+  let hi = c[select(a, b, swap)];
+  let lo = c[select(b, a, swap)];
+  // Their weights' difference and its change along x and y, a sample (the B-spline's weights' slopes).
+  let t = p - round(p);
+  let dwx = vec3f(t.x - 0.5, -2.0 * t.x, 0.5 + t.x);
+  let dwy = vec3f(t.y - 0.5, -2.0 * t.y, 0.5 + t.y);
+  var d = 0.0;
+  var slope = vec2f(0.0);
+  for (var m = 0; m < B_TAPS; m++) {
+    let sign = select(0.0, 1.0, all(c[m] == hi)) - select(0.0, 1.0, all(c[m] == lo));
+    d += sign * b_weight(bs, m);
+    slope += sign * vec2f(dwx[m % 3] * bs.wy[m / 3], bs.wx[m % 3] * dwy[m / 3]);
+  }
+  let x = d - MAKE_RAGGED * ragged(at, MAKE_PX * e, MAKE_PATCH * spacing, MAKE_OCTAVES, MAKE_STREAM);
+  let across = length(slope) / spacing + MAKE_RAGGED * ragged_slope(MAKE_PX * e, MAKE_PATCH * spacing, MAKE_OCTAVES);
+  let half = max(across * max(MAKE_EDGE_PX * e, MAKE_EDGE_M), 1e-6);
+  return mix(blend, mix(lo, hi, smoothstep(-half, half, x)), sharp);
+}
 
 // Of the channel of sample `s`: the largest stone it moves, m, and the slope of its reach, rise over run (both 0 for
 // none, `s.x < 0`).
