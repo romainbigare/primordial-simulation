@@ -43,7 +43,9 @@ const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
 // ground by ice and snow, carried by meltwater, so as much as the ground it runs on lies at melting (`MELT_K`): milky
 // blue-green; and the fine calcite that warm water lays down, as the solubility of calcium carbonate falls as water
 // warms (whitings, Thompson and others 1997), from `WHITING_K.x` to `WHITING_K.y`: turquoise. Pure water scatters
-// `BB_WATER` (Morel 1974, stretched). So cold clear water reads dark blue-green, warm clear water turquoise, meltwater
+// `BB_WATER` (Morel 1974, stretched), and inland water always carries some fine clay and organic grains that hardly
+// settle (its wash load), `BB_FINES` (a river's backscatter is some 0.01 to 0.05 per m), so deep water keeps a hue and
+// is never black. So cold clear water reads dark blue-green, warm clear water turquoise, meltwater
 // milky, the water of organic soils and forest tea-brown to black, a loaded river muddy.
 // The organic matter dissolved, as its absorption at 440 nm, 1/m (stretched): `DOM_MOST` where the soil is darkest
 // with it (style.wgsl `humus`) or woody crowns close over the ground (their litter, `DOM_LITTER` as much as the
@@ -54,7 +56,7 @@ const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
 // most (`WHITING_TINT`).
 const INLAND_CLEAR = vec3f(0.32, 0.11, 0.09);
 const DOM_SPECTRUM = vec3f(0.06, 0.25, 0.9); const DOM_MOST = 2.5; const DOM_LITTER = 0.6; const DOM_THAW = vec2f(273.0, 283.0);
-const BB_WATER = vec3f(0.0006, 0.003, 0.006); const BACKSCATTER = 0.33;
+const BB_WATER = vec3f(0.0006, 0.003, 0.006); const BB_FINES = vec3f(0.02, 0.026, 0.022); const BACKSCATTER = 0.33;
 const BB_LOAD = vec3f(0.014, 0.010, 0.005);
 const FLOUR = 0.4; const FLOUR_TINT = vec3f(0.9, 1.0, 1.08); const FLOUR_ABSORB = 0.15; const MELT_K = vec4f(271.0, 273.5, 275.5, 279.0);
 const WHITING = 0.3; const WHITING_TINT = vec3f(0.4, 1.0, 1.3); const WHITING_K = vec2f(285.0, 300.0);
@@ -66,7 +68,7 @@ fn inland_optics(t: f32, organic: f32, canopy: f32, load: f32) -> Optics {
   let dom = DOM_MOST * min(humus(organic) + DOM_LITTER * min(canopy, 1.0), 1.0) * ease(DOM_THAW.x, DOM_THAW.y, t);
   let flour = FLOUR * ease(MELT_K.x, MELT_K.y, t) * (1.0 - ease(MELT_K.z, MELT_K.w, t));
   let whiting = WHITING * ease(WHITING_K.x, WHITING_K.y, t);
-  let bb = BB_WATER + flour * FLOUR_TINT + whiting * WHITING_TINT + load * BB_LOAD;
+  let bb = BB_WATER + BB_FINES + flour * FLOUR_TINT + whiting * WHITING_TINT + load * BB_LOAD;
   let a = INLAND_CLEAR + dom * DOM_SPECTRUM + load * LOAD_ATTENUATION + flour * FLOUR_ABSORB;
   return Optics(a + bb, BACKSCATTER * bb / (a + bb));
 }
@@ -166,10 +168,12 @@ fn standing_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + STAN
 
 // Bed `bed` (linear, lit) seen through `depth` m of water in the style of optics `o` (`inland_optics`), whose surface
 // has slope g with waves of mean square slope `hidden` too small to show (water.wgsl `surface_seen`), seen from the
-// map's view: the bed lightened (`BED_LIGHTEN`), over the water's deep colour.
+// map's view: the bed lightened (`BED_LIGHTEN`), over the water's deep colour, its surface's light `SHEEN` of what it
+// reflects (a painted map shows the water's own colour first: the sky it mirrors would grey every water alike).
+const SHEEN = 0.55;
 fn painted_through(bed: vec3f, depth: f32, g: vec2f, hidden: f32, o: Optics) -> vec3f {
   let t = exp(-2.0 * o.k * depth);
-  return mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN) * t + o.deep * (1.0 - t) + surface_seen(g, MAP_VIEW, hidden);
+  return mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN) * t + o.deep * (1.0 - t) + SHEEN * surface_seen(g, MAP_VIEW, hidden);
 }
 // The open sea far from any shore, as the map paints it (the screen's share of full scale): what the page shows past
 // the map's edge where it is drawn out to the screen's (picture.wgsl).

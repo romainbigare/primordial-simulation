@@ -27,8 +27,9 @@ const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0;
 // so a shore is a smooth line at any zoom, not the pixels' steps;
 // and of the channel's water: the signs of its flow (lib/flow.wgsl `flow_signs`), and (`water`) its depth over the
 // depth the channel law gives its middle and how near its edge the point lies, 0..1; and the way it runs (`down`, a
-// unit vector east and south).
-struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f }
+// unit vector east and south); and how far its bed's shape across it shows, 0..1 (none: its water is coloured as its
+// mean across, river_water.wgsl `MEAN_REL`).
+struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f, shaped: f32 }
 
 // The spot `s` with its channel's stones: on the bed of channel `ch` (of discharge `q`, on ground `g`), and beside it
 // where the reach is steep, with the walls and the fallen blocks of a steep reach. The largest drawn takes its size
@@ -219,7 +220,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
   // The marks of fire on dry ground: its burn scars and the plants they took (burn.wgsl).
   p = burnt_spot(p);
-  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0));
+  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0), 0.0);
   // A channel is drawn on the land and through the band of shallows of the liquid it runs into, no farther.
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
@@ -259,7 +260,7 @@ fn live_map(v: Varying) -> vec4f {
     if (share <= 0.0) { continue; }
     let g = ground_for(p, k == LAYER_RIVER);
     var o: Shaded;
-    if (k == LAYER_RIVER) { o = river_on(p, g, spots.flow, spots.water, spots.down); } else { o = colour_on(p, g); }
+    if (k == LAYER_RIVER) { o = river_on(p, g, spots.flow, spots.water, spots.down, spots.shaped); } else { o = colour_on(p, g); }
     c = Shaded(mix(c.rgb, o.rgb, share), mix(c.m, o.m, share), select(c.kind, o.kind, share > 0.5));
   }
   var shown = 0.0;

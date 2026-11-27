@@ -289,5 +289,6 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   out.wet.shade = hill_shade(g.slope + bank, EXAGGERATE * earth.look.x) * banks;
   // Water too narrow for its pools and riffles to show is as broken as a reach on the mean (river_water.wgsl).
   out.flow.x += (1.0 - resolved) * runs * ROUGH_FAR;
+  out.shaped = resolved * runs;
   return out;
 }

@@ -23,6 +23,10 @@ const FLOW_CYCLE_M = 2.0; const PACE_ROUGH = 1.0; const PACE_FAST = 2.0; const F
 // 1 - s, softened over `FOAM_SOFT` of it either side, so its mean is s at any zoom; its light varies by `FOAM_TONE` of
 // the lace's own.
 const FOAM_SOFT = 0.12; const FOAM_TONE = 0.6;
+// Water whose bed's shape across it does not show is coloured as its mean across: as deep as `MEAN_REL` of its middle
+// (a bed of a parabola's shape, its depth to the power `RIVER_SEEN_POW` on the mean), so its far tone is its near
+// one's mean.
+const MEAN_REL = 0.69;
 
 // The surface of running water seen at `e` m a pixel, running `down` (a unit vector) with the signs `flow` of its flow
 // (lib/flow.wgsl `flow_signs`), white over `white` of it: its slope east and south, the mean square slope of the waves
@@ -58,12 +62,12 @@ fn running_surface(e: f32, down: vec2f, flow: vec3f, white: f32) -> Surface {
 
 // The colour of a channel's water at spot `p` (`land_spots`) over its bed `g` (colour.wgsl `ground_for`), a reflectance
 // in linear light, with the signs `flow` of its flow, its depth over its middle's and its wash at the edge `w`
-// (river.wgsl `river_spots`), running `down`: its bed, soaked bare ground (washed sand and gravel: the flow takes the
+// (river.wgsl `river_spots`), as far as its bed's shape shows (`shaped`), running `down`: its bed, soaked bare ground (washed sand and gravel: the flow takes the
 // plants) under its film (`BED_FILM`), seen through running water as deep as it is there (water.wgsl), in the style
 // coloured by what it holds (style.wgsl `inland_optics`) and by its bed's shape (`river_seen`); its surface's waves
 // and foam (`running_surface`); snow lies on it as on standing liquid (colour.wgsl `colour_on`), and a layer's view
 // shades its bed as far as it shows (`Shaded.m`).
-fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
+fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f, shaped: f32) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
   let soaked_bed = soil(g, 1.0, lit);
   // White water: over its steps and cascades, where its riffles break, and in the wakes of the stones that stand out
@@ -86,7 +90,7 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
     // holds and by its bed's shape: light shallows over the bed's stones, a dark deep thread, a light wash at its edge.
     let bed = BED_SHOWN * soaked_bed * mix(1.0, surf.caustic, CAUSTICS * calm * (1.0 - ease(0.0, CAUSTIC_DEEP_M, p.depth)));
     let o = inland_optics(p.t, p.grain.z, p.canopy, p.load);
-    water = painted_through(bed, river_seen(p.depth, w.x), surf.g * calm, surf.hidden * calm, o) * (1.0 + EDGE_LIGHT * w.y);
+    water = painted_through(bed, river_seen(p.depth, mix(MEAN_REL, w.x, shaped)), surf.g * calm, surf.hidden * calm, o) * (1.0 + EDGE_LIGHT * w.y);
   }
   water = mix(water, FOAM_RGB * lit * surf.tone, surf.foam);
   // The stones that stand out of it.
