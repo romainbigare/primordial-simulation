@@ -2,7 +2,7 @@
 // style.css into one self-contained dist/index.html.
 import { readFileSync, writeFileSync, rmSync, copyFileSync, readdirSync, mkdirSync } from 'node:fs';
 
-const order = ['data', 'errors', 'cost', 'fields', 'earth', 'style', 'form', 'kind_row', 'lattices', 'paint', 'canopy', 'gpu', 'gpu-webgl2', 'detail', 'field-window', 'ground', 'land', 'burns', 'fire', 'gesture', 'map', 'charts', 'live', 'textures', 'vegetation', 'slots', 'soil', 'icons', 'panels', 'god-types', 'god-draw', 'god-controls', 'god-menu', 'god', 'god-tools', 'front', 'timeline', 'world-form', 'inspect', 'numbers', 'boot', 'main'];
+const order = ['data', 'errors', 'cost', 'fields', 'earth', 'style', 'form', 'kind_row', 'lattices', 'paint', 'canopy', 'gpu', 'gpu-webgl2', 'detail', 'field-window', 'ground', 'land', 'burns', 'fire', 'gesture', 'map', 'charts', 'live', 'textures', 'vegetation', 'slots', 'soil', 'icons', 'panels', 'god-types', 'god-draw', 'god-controls', 'god-list', 'god-menu', 'god', 'god-tools', 'front', 'timeline', 'world-form', 'inspect', 'numbers', 'boot', 'main'];
 // A module as plain script: its imports and exports taken out (the modules share one scope).
 const plain = n => readFileSync(`dist/.js/${n}.js`, 'utf8').replace(/^import .*$/gm, '').replace(/^export \{\};$/gm, '').replace(/^export /gm, '');
 // The live world's two workers (the world's and the ground's tiles') and the detail's (its strips' levels) run on
@@ -34,8 +34,8 @@ for (const f of Object.values(strips).flat()) {
   const [stem, ext] = [f.replace(/\.[a-z]+$/, ''), f.slice(f.lastIndexOf('.'))];
   for (const g of [f, ...sized.filter(n => n.startsWith(`${stem}@`) && n.endsWith(ext))]) copyFileSync(`textures/${g}`, `dist/${g}`);
 }
-// God mode's pictures (god-menu.ts), beside the page in `god/`: each tool's and each empty category's, with its card's
-// smaller copy, and each starting kind's.
+// God mode's pictures (god-list.ts, god-controls.ts), beside the page in `god/`: each tool's, with its smaller copy,
+// and each starting kind's.
 mkdirSync('dist/god', { recursive: true });
 for (const f of readdirSync('textures/god').filter(n => n.endsWith('.jpg'))) copyFileSync(`textures/god/${f}`, `dist/god/${f}`);
 rmSync('dist/.js', { recursive: true });

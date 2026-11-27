@@ -1,5 +1,5 @@
 // The tools of god mode (god-types.ts `GodTool`) and the classes and categories that hold them, as the page shows them
-// (god-menu.ts); the tools to come stand among them as cards that cannot be picked. Each tool paints with the round brush
+// (god-list.ts); the tools to come stand among them as rows that cannot be picked. Each tool paints with the round brush
 // (wasm/src/edit.rs `brush`): Raise and Lower land move the ground under it while held, the faster the larger the
 // brush, along the brush's path, the map showing the new ground at each of the page's frames, and the world builds its
 // samples and settles its liquid over the new ground once the brush rested after the stroke (`settle`); Lake brush digs
@@ -73,18 +73,18 @@ const soon = (label: string, pic: string): SoonTool => ({ soon: true, label, pic
 export function godClasses(kinds: () => StartKind[]): GodClass[] {
   const [raise, lower, lake, plant, burn] = godTools(kinds);
   /** A category with no tools yet. */
-  const empty = (label: string, icon: IconName, pic: string) => ({ label, icon, pic, tools: [] });
+  const empty = (label: string, icon: IconName) => ({ label, icon, tools: [] });
   return [
-    { label: 'Human', icon: 'human', pic: 'human-built', categories: [
-      empty('Population', 'population', 'human-population'), empty('War', 'war', 'human-war'), empty('Culture', 'culture', 'human-culture'),
-      empty('Technology', 'technology', 'human-technology'), empty('Built environment', 'built', 'human-built'),
+    { label: 'Human', icon: 'human', categories: [
+      empty('Population', 'population'), empty('War', 'war'), empty('Culture', 'culture'), empty('Technology', 'technology'),
+      empty('Built environment', 'built'),
     ] },
-    { label: 'Animals', icon: 'animals', pic: 'animal-population', categories: [empty('Population', 'population', 'animal-population')] },
-    { label: 'Nature', icon: 'nature', pic: 'mountains', categories: [
+    { label: 'Animals', icon: 'animals', categories: [empty('Population', 'population')] },
+    { label: 'Nature', icon: 'nature', categories: [
       { label: 'Create', icon: 'create', tools: [plant, soon('Mountains', 'mountains'), soon('Rivers', 'rivers'), soon('Lakes', 'lakes')] },
       { label: 'Edit', icon: 'edit', tools: [raise, lower, lake, soon('Smooth land', 'smooth')] },
     ] },
-    { label: 'Destruction', icon: 'destruction', pic: 'volcano', categories: [
+    { label: 'Destruction', icon: 'destruction', categories: [
       { label: 'Fire', icon: 'fire', tools: [soon('Meteor shower', 'meteor'), soon('Volcano', 'volcano'), burn] },
       { label: 'Water', icon: 'lake', tools: [soon('Tsunami', 'tsunami'), soon('Flood', 'flood'), soon('Drought', 'water-drought')] },
       { label: 'Climate', icon: 'heatwave', tools: [

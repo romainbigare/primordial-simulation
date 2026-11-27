@@ -78,13 +78,12 @@ export interface GodSetting {
   /** Each choice's short name, the line that says more of it, and its picture (`god/<pic>.jpg`, of `picture`). */
   choices: { label: string; title: string; pic?: string }[];
 }
-/** A tool to come: its name and picture; its card shows, and cannot be picked. */
+/** A tool to come: its name and picture; its row shows, and cannot be picked. */
 export interface SoonTool { soon: true; label: string; pic: string }
-/** A category of tools: its name, its icon, its tools, and the picture shown while it holds none. */
-export interface GodCategory { label: string; icon: IconName; tools: (GodTool | SoonTool)[]; pic?: string }
-/** A class of god mode's tools (the home's pictures): its name, its icon, its picture (`god/<pic>.jpg`) and its
- * categories. */
-export interface GodClass { label: string; icon: IconName; pic: string; categories: GodCategory[] }
+/** A category of tools: its name, its icon and its tools. */
+export interface GodCategory { label: string; icon: IconName; tools: (GodTool | SoonTool)[] }
+/** A class of god mode's tools (a part of the list): its name, its icon and its categories. */
+export interface GodClass { label: string; icon: IconName; categories: GodCategory[] }
 /** What the page gives god mode: the box of the big button held for a stroke (a phone's), and its panel; the map drawn anew; that a tool was picked or a
  * stroke begins (the world pauses); that god mode is done; the side of a square, m; the squares a stroke burnt (`Settled`), where it struck
  * (squares) and where its heat lit the ground, m (god-draw.ts `litSites`, the most lit first); on a phone the
