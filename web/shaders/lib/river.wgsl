@@ -40,6 +40,14 @@ const BRAID_UP = 0.4;
 // it over `BED_SOFT` of its half width, the plants thinning into it.
 const WATER_SOFT = 0.12; const BED_SOFT = 0.15;
 
+// Where two channels meet, the water is the union of their waters: of the other channel near the point (live_map.wgsl
+// `other_of`), its water's half width, m, the point's distance to its line, m, and the depth of its middle, m (0: none).
+// Within its water, and within `JOIN_SOFT` of its half width past its edge, no bank, bar or cut of this one is drawn.
+const JOIN_SOFT = 0.5;
+// How far the point at `d` m from the other channel's line, its water `half` m half wide, lies in or by that water,
+// 0..1 (`JOIN_SOFT`).
+fn joined(half: f32, d: f32) -> f32 { return 1.0 - ease(half, (1.0 + JOIN_SOFT) * half, d); }
+
 // The kind of a reach that carries `q` m³/s this month down slope `fall`, moving stones of `stone` m, its bed `law` m
 // half wide by the channel law: how bare its bars are, 0..1 (`POWER_BARE`), and how far it braids, 0..1 (`BRAID_S`).
 fn reach_kind(q: f32, fall: f32, stone: f32, law: f32) -> vec2f {
@@ -66,8 +74,8 @@ struct Reach { share: f32, bars: f32, across: f32, steep: f32, edge: f32, up: f3
 
 // The reach at the pixel, seen at `e` m a pixel, on ground `g` of the channel `c` (rock.wgsl `channel_at`), drawn no
 // thinner than `line` m half wide (`line_of`), `open` of its bed drawn apart from its water, whose flow moves stones
-// of `stone` m, of kind `kind` (`reach_kind`).
-fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind: vec2f) -> Reach {
+// of `stone` m, of kind `kind` (`reach_kind`), beside the other channel `other` (`joined`).
+fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind: vec2f, other: vec3f) -> Reach {
   var r: Reach;
   r.steep = ease(STEEP_STONE.x, STEEP_STONE.y, stone);
   r.flank = 1.0;
@@ -124,6 +132,12 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind
   if (tufts > 0.0 && r.up > grown_from) {
     let grown = noise_l(lat_turned(BAR_TUFT_M, vec2f(0.0)), 79).x + 1.2 * ease(grown_from, 1.0, r.up) - 0.6 + BANK_GROWN * (1.0 - point);
     in_bed = max(in_bed * (1.0 - open * tufts * tent(grown * BAR_TUFT_M / e)), water);
+  }
+  // The other channel's water joins this one's: water and bed both.
+  if (other.x > 0.0) {
+    let theirs = tent((other.x - other.y) / water_px);
+    water = max(water, theirs);
+    in_bed = max(in_bed, theirs);
   }
   r.share = mix(in_bed, water, open);
   r.bars = max(in_bed - r.share, 0.0);
@@ -246,8 +260,9 @@ const MOUTH_BARS = 0.5; const MOUTH_MELTS = 0.3; const MOUTH_CALM = 2.0;
 // place along the channel growing by `grows` a pixel east and south), drawn no thinner than `line` m half wide
 // (`line_of`): the bed (rock.wgsl `banks_of`) and this month's water in it (lib/river.wgsl `reach_at`), apart where the bed
 // takes a few pixels and is wider than the line; the bars' look, the banks' light and the water's depth and signs of
-// flow; `mouth` of the way through the shallows of the liquid it runs into (`MOUTH_BARS`).
-fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, grows: vec2f, line: f32, mouth: f32) -> Spots {
+// flow; `mouth` of the way through the shallows of the liquid it runs into (`MOUTH_BARS`); the other channel near it
+// `other` (`joined`), whose water joins its own.
+fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, grows: vec2f, line: f32, mouth: f32, other: vec3f) -> Spots {
   var out = s;
   let at = s.dry.at;
   let e = s.dry.e;
@@ -259,8 +274,9 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   var open = 0.0;
   // (No bed takes `BED_PX` pixels in a program made for draws from this far: rock.wgsl `BED_MOST_M`.)
   if (BED_PX * least_e() < BED_MOST_M) { open = ease(BED_PX * e, 2.0 * BED_PX * e, ch.law) * (1.0 - ease(ch.law, 2.0 * ch.law, line)); }
-  let r = reach_at(e, g, ch, line, open, stone, reach_kind(q, fall, stone, ch.law));
+  let r = reach_at(e, g, ch, line, open, stone, reach_kind(q, fall, stone, ch.law), other);
   let runs = 1.0 - mouth;
+  let apart = 1.0 - select(0.0, joined(other.x, other.y), other.x > 0.0);
   let seen = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * wide);
   out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line)) * cuts * seen;
   // The bars' colour: the bed's make washed, the soil's on the gentlest reaches; the bed seen through the water is the
@@ -288,9 +304,9 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   // A cut bank's face is bare soil (`cut_bank`).
   var banks = 1.0;
   if (open > 0.0) {
-    banks = mix(1.0, bank_light(e, g, ch, r), open * runs);
+    banks = mix(1.0, bank_light(e, g, ch, r), open * runs * apart);
     let cut = cut_bank(e, g, ch, r);
-    let face = cut.x * open * runs;
+    let face = cut.x * open * runs * apart;
     out.dry.cover *= 1.0 - face;
     out.dry.ground = mix(out.dry.ground, out.dry.ground * cut.y, face);
   }
@@ -300,6 +316,8 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   let resolved = ease(e, 2.0 * e, ch.water) * open;
   let x = r.across;
   out.wet.depth = mix(ch.mean, depth_across(ch, x) * r.flank, resolved);
+  // In the other channel's water the depth is the deeper of the two.
+  if (other.x > 0.0) { out.wet.depth = max(out.wet.depth, other.z * (1.0 - min(other.y * other.y / (other.x * other.x), 1.0))); }
   if (resolved > 0.0) {
     // (Below a step's white water a steep reach's water lies in a pool: slower, and `STEP_POOL` deeper.)
     let signs = flow_signs(e, g.along, x, ch, r.steep, fall, stone);

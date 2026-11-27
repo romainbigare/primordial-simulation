@@ -224,10 +224,44 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
   if (!near) { return out; }
-  var r = river_spots(out, g, ch, q, moved, fall, grows_short, line_of(q, e), mouth);
+  var r = river_spots(out, g, ch, q, moved, fall, grows_short, line_of(q, e), mouth, other_of(at));
   // A channel's water carries its sample's load, grown along it as its discharge is.
   r.wet.load = mix(load_of(reach), load_of(next.s), next.share);
   return r;
+}
+
+// The tiles' third plane (web/src/ground.ts `PLANE_C`): of each texel that holds a channel, the sample of the nearest
+// line of another channel (named as `areas` names its own, land.wgsl `sample_of`; 0: none) and the distance to it, m
+// (tape/src/ground/channels.rs `others`). Read only where a point holds a channel near its line.
+@group(0) @binding(24) var others: texture_2d_array<f32>;
+
+// The other channel near the point at `at` (river.wgsl `joined`): its water's half width at its mean flow
+// this month, m (rock.wgsl `banks_of`, `land.reach.w` of it), the distance to its line, m, blended over the four
+// texels about the point that name the same sample as the nearest, and the depth of its middle, m (`BED_MIDDLE`);
+// none (0) where no other channel is near.
+fn other_of(at: vec2f) -> vec3f {
+  let page = page_at(at);
+  if (page.x < 0.0) { return vec3f(0.0); }
+  let layer = i32(page.x);
+  let t = textureLoad(tile_of, vec2i(layer, 0), 0);
+  let q = at / (land.map.x / exp2(t.x - land.map.w)) - (t.yz * land.tiles.x - land.tiles.y) - 0.5;
+  let i = vec2i(floor(q));
+  let f = q - floor(q);
+  let last = i32(textureDimensions(others).x) - 1;
+  let at4 = array<vec2i, 4>(clamp(i, vec2i(0), vec2i(last)), clamp(i + vec2i(1, 0), vec2i(0), vec2i(last)), clamp(i + vec2i(0, 1), vec2i(0), vec2i(last)), clamp(i + 1, vec2i(0), vec2i(last)));
+  let corner = select(0, 1, f.x > 0.5) + select(0, 2, f.y > 0.5);
+  let w = vec4f((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  let own = textureLoad(others, at4[corner], layer, 0);
+  let s = sample_of(at4[corner], t.x, t.yz, i32(own.x + 0.5));
+  if (s.x < 0) { return vec3f(0.0); }
+  var d = vec2f(0.0);
+  for (var n = 0; n < 4; n++) {
+    let o = select(textureLoad(others, at4[n], layer, 0), own, n == corner);
+    if (abs(o.x - own.x) < 0.5) { d += w[n] * vec2f(o.y, 1.0); }
+  }
+  let qo = discharge_of(s);
+  if (qo <= 0.0) { return vec3f(0.0); }
+  return vec3f(banks_of(qo) * land.reach.w, d.x / d.y, BED_MIDDLE * land.channel.z * pow(qo, land.channel.w));
 }
 
 // The colours a pixel mixes, each over the last by the share of the pixel it covers: its ground (`LAYER_GROUND`); where

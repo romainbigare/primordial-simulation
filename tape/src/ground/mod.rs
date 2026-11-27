@@ -223,7 +223,8 @@ impl Ground {
     /// exactly up to `PONDS_EXACT`; and of
     /// the nearest point of that channel's line, how far along the channel it lies, m, modulo `ALONG_WRAP_M`, and the
     /// distance to the nearest channel's line without its bends, m, signed by the side (60,000 where none reaches it).
-    /// Texels off the map are those of its edge.
+    /// The third, two a texel: the sample of the nearest line of another channel (`channels::Field::other`), as the
+    /// second plane's, and the distance to it, m (60,000 for none). Texels off the map are those of its edge.
     pub fn tile(&self, depth: u8, tx: i64, ty: i64) -> Vec<u16> {
         assert!(self.depths().contains(&depth), "a tile of a depth the ground is drawn at");
         let side = TILE + 2 * GUTTER;
@@ -268,7 +269,7 @@ impl Ground {
             })
             .unzip();
         let at = |p: usize| (clamp(x0 + (p % side) as i64, across) - win[0]) as usize + (clamp(y0 + (p / side) as i64, down) - win[1]) as usize * wide;
-        let mut out = Vec::with_capacity(8 * side * side);
+        let mut out = Vec::with_capacity(10 * side * side);
         for i in (0..side * side).map(at) {
             let hi = half(heights[i] as f32);
             out.extend([hi, half((heights[i] - unhalf(hi) as f64) as f32), half(twi[i] as f32), half(near.dist[i] as f32)]);
@@ -278,6 +279,10 @@ impl Ground {
             let texel = [win[0] + (i % wide) as i64, win[1] + (i / wide) as i64];
             let along = near.along[i].rem_euclid(ALONG_WRAP_M);
             out.extend([half(channels::code(&self.samples, texel, k, near.sample[i]) as f32), half(pond), half(along as f32), half(near.calm[i] as f32)]);
+        }
+        for i in (0..side * side).map(at) {
+            let texel = [win[0] + (i % wide) as i64, win[1] + (i / wide) as i64];
+            out.extend([half(channels::code(&self.samples, texel, k, near.other[i]) as f32), half(near.other_dist[i] as f32)]);
         }
         out
     }
