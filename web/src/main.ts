@@ -89,7 +89,7 @@ map.layer = vegetation;
 /** God mode: the tools that edit the live world (live world only), shown while the god button is pressed. */
 const front = new FireFront(fire);
 const god = new God({
-  rail: $('god-rail'), panel: $('god-panel'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
+  holdBox: $('god-hold'), panel: $('god-panel'), redraw: () => map.redraw(), squareM: () => world?.meta.cell_m ?? 1,
   picked: () => { if (playing) togglePlay(); }, close: () => setGod(false), burnt: (b, strike, lit) => front.burnt(b, strike, lit),
   aim: () => (PHONE.matches && world ? map.sightAt() : null),
   ground: () => [live?.version ?? 0, land?.told ?? 0],
@@ -304,11 +304,11 @@ function syncUi(): void {
   map.playing = playing && live !== null;
 }
 
-/** Whether god mode is on: its rail and panel shown. */
+/** Whether god mode is on: its panel shown. */
 function godOn(): boolean { return !$('god').hidden; }
 function setGod(on: boolean): void {
   $('god').hidden = !on;
-  // (On a phone its rail takes the dock's place, style.css.)
+  // (On a phone its panel and big button take the dock's place, style.css.)
   document.body.classList.toggle('god-on', on);
   $('god-btn').setAttribute('aria-pressed', String(on));
   if (!on) god.reset();
@@ -376,7 +376,7 @@ const RING_SCALES = [1, 0.5, 0.35, 0.25, 0.125], RING_SCALE_KEY = 'ew.ringScale'
   };
 }
 const panels = new Panels($('bar'), $('cv'));
-watchCovered([$('bar'), $('year'), $('god-rail'), $('god-panel'), $('inspect-card'), $('timebar')], edges => map.setCovered(edges));
+watchCovered([$('bar'), $('year'), $('god-hold'), $('god-panel'), $('inspect-card'), $('timebar')], edges => map.setCovered(edges));
 PHONE.addEventListener('change', () => map.setFill(PHONE.matches, world && landBox(world)));
 $<HTMLInputElement>('layerfind').oninput = findLayers;
 $('clearlayer').onclick = () => setLayer(null);

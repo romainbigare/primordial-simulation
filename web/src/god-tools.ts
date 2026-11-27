@@ -73,16 +73,16 @@ export function godClasses(kinds: () => StartKind[]): GodClass[] {
   /** A category with no tools yet. */
   const empty = (label: string, icon: IconName, pic: string) => ({ label, icon, pic, tools: [] });
   return [
-    { label: 'Human', icon: 'human', categories: [
+    { label: 'Human', icon: 'human', pic: 'human-built', categories: [
       empty('Population', 'population', 'human-population'), empty('War', 'war', 'human-war'), empty('Culture', 'culture', 'human-culture'),
       empty('Technology', 'technology', 'human-technology'), empty('Built environment', 'built', 'human-built'),
     ] },
-    { label: 'Animals', icon: 'animals', categories: [empty('Population', 'population', 'animal-population')] },
-    { label: 'Nature', icon: 'nature', categories: [
+    { label: 'Animals', icon: 'animals', pic: 'animal-population', categories: [empty('Population', 'population', 'animal-population')] },
+    { label: 'Nature', icon: 'nature', pic: 'mountains', categories: [
       { label: 'Create', icon: 'create', tools: [plant, soon('Mountains', 'mountains'), soon('Rivers', 'rivers'), soon('Lakes', 'lakes')] },
       { label: 'Edit', icon: 'edit', tools: [raise, lower, lake, soon('Smooth land', 'smooth')] },
     ] },
-    { label: 'Destruction', icon: 'destruction', categories: [
+    { label: 'Destruction', icon: 'destruction', pic: 'volcano', categories: [
       { label: 'Fire', icon: 'fire', tools: [soon('Meteor shower', 'meteor'), soon('Volcano', 'volcano'), burn] },
       { label: 'Water', icon: 'lake', tools: [soon('Tsunami', 'tsunami'), soon('Flood', 'flood'), soon('Drought', 'water-drought')] },
       { label: 'Climate', icon: 'heatwave', tools: [

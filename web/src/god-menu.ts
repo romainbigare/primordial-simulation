@@ -1,15 +1,15 @@
-// God mode's menu (god.ts): the rail of the tools' classes, and the panel. On a phone the rail is the dock at the bottom,
-// two classes on each side of the big button held for a stroke; with a mouse it is a row over the panel, at the left.
-// The panel shows the tool on (`tool`: its picture, its name and where it lives, its sizes and its setting drawn as
-// pictures, why it cannot act here) or the tools of a class to pick from (`pick`: its categories as tabs, their tools as
-// picture cards; a tool to come shows, dimmed, and cannot be picked). A finger swiping the panel down makes it small: one
-// bar of the tool on and its settings in words, so the map shows more; swiping it up, or a tap on it, shows it whole
-// again. The tools stand in the classes of god-tools.ts.
+// God mode's menu (god.ts): one panel, and on a phone the big button held for a stroke, standing half over the panel's
+// foot. The panel shows the home (`home`: the tool in hand, and the tools' classes as pictures with how many of their
+// tools are ready), a class (`pick`: its categories as tabs, their tools as picture cards; a tool to come shows, dimmed,
+// and cannot be picked) or the tool on (`tool`: its picture, its name and where it lives, its sizes and its setting
+// drawn as pictures, why it cannot act here). A finger swiping the panel down makes it small: one bar of the tool on and
+// its settings in words, so the map shows more; swiping it up, or a tap on it, shows it whole again. The tools stand in
+// the classes of god-tools.ts.
 import { iconSvg } from './icons';
 import { lightInk, make, ownRow, picture, radiusText, sizeRow } from './god-controls';
 import type { GodCategory, GodClass, GodTool, Probe, SoonTool } from './god-types';
 
-/** The side of the smaller copy of a tool's picture, its card's, px. */
+/** The side of the smaller copy of a picture, a card's or a class's, px. */
 const CARD_SIDE = 480;
 /** The least move of a finger up or down the panel that makes it small or whole, px; a shorter one is a tap. */
 const SWIPE_PX = 40;
@@ -24,31 +24,20 @@ export interface MenuState { tool: GodTool | null; probe: Probe | null; radius: 
 const isTool = (t: GodTool | SoonTool): t is GodTool => !('soon' in t);
 
 export class GodMenu {
-  /** What the panel shows, the class open in it and its category (indices). */
-  private mode: 'tool' | 'pick' = 'pick';
-  private open: number;
+  /** What the panel shows, and the class open in it and its category (indices). */
+  private mode: 'home' | 'pick' | 'tool' = 'home';
+  private open = 0;
   private category = 0;
   /** Whether the panel is small: one bar (`barParts`). */
   private small = false;
-  /** The rail's button of each class, in order. */
-  private classButtons: HTMLButtonElement[];
   /** What the panel was last built of (`show`), and the state it shows. */
   private built = '';
   private state: MenuState | null = null;
 
-  /** `hold` starts a stroke at the sight; it stands in the rail, which is never built anew (a button taken out of the
+  /** `hold` starts a stroke at the sight; it stands in `holdBox`, which is never built anew (a button taken out of the
    * page loses the finger on it, and its stroke would end). */
-  constructor(private rail: HTMLElement, private panel: HTMLElement, private classes: GodClass[], private hold: HTMLButtonElement, private acts: MenuActs) {
-    // (At first the first class that holds a tool is open.)
-    this.open = Math.max(0, classes.findIndex(c => c.categories.some(k => k.tools.some(isTool))));
-    this.classButtons = classes.map((c, i) => {
-      const b = make('button', 'class', `<span class="disc">${iconSvg(c.icon)}</span>`);
-      b.type = 'button'; b.append(c.label);
-      b.onclick = () => this.classPressed(i);
-      return b;
-    });
-    const half = Math.ceil(classes.length / 2);
-    rail.replaceChildren(...this.classButtons.slice(0, half), hold, ...this.classButtons.slice(half));
+  constructor(holdBox: HTMLElement, private panel: HTMLElement, private classes: GodClass[], private hold: HTMLButtonElement, private acts: MenuActs) {
+    holdBox.replaceChildren(hold);
     this.listenSwipes();
   }
 
@@ -79,14 +68,14 @@ export class GodMenu {
    * the finger while the brush's place changes. */
   show(s: MenuState): void {
     this.state = s;
-    if (!s.tool) this.mode = 'pick';
+    if (!s.tool && this.mode === 'tool') this.mode = 'home';
     const t = s.tool, set = t?.setting?.(), key = JSON.stringify([this.small, this.mode, this.open, this.category, t?.label, s.radius, s.radii, set?.on, set?.choices]);
     if (key !== this.built) {
       this.built = key;
-      this.panel.replaceChildren(...(this.small ? this.barParts(t) : [this.grip(), ...(this.mode === 'tool' && t ? this.toolParts(t) : this.pickParts())]));
+      const view = this.mode === 'tool' && t ? this.toolParts(t) : this.mode === 'pick' ? this.pickParts() : this.homeParts();
+      this.panel.replaceChildren(...(this.small ? this.barParts(t) : [this.grip(), ...view]));
       this.panel.classList.toggle('small', this.small);
     }
-    this.classButtons.forEach((b, i) => b.setAttribute('aria-expanded', String(this.mode === 'pick' && i === this.open)));
     this.panel.querySelector<HTMLButtonElement>('.undo')?.toggleAttribute('disabled', !s.undoable);
     const why = this.panel.querySelector('.why'), where = this.panel.querySelector<HTMLElement>('.where');
     if (why && where && t) { why.textContent = t.why(s.probe); where.hidden = why.textContent !== ''; }
@@ -96,15 +85,15 @@ export class GodMenu {
   /** Show god mode again as it stood last, after the menu's own state changed. */
   private again(): void { if (this.state) this.show(this.state); }
 
-  /** A class pressed on the rail: its tools open, at the category of the tool on where it is of this class, else its
-   * first; pressed again, the panel shows the tool on. */
-  private classPressed(i: number): void {
+  /** Open class `i`, at the category of the tool on where it is of this class, else its first. */
+  private openClass(i: number): void {
     const place = this.placeOf(this.state?.tool);
-    if (this.small) { this.small = false; this.mode = 'pick'; this.open = i; this.category = place?.[0] === i ? place[1] : 0; }
-    else if (this.mode === 'pick' && i === this.open) { if (this.state?.tool) this.mode = 'tool'; }
-    else { this.mode = 'pick'; this.open = i; this.category = place?.[0] === i ? place[1] : 0; }
+    this.mode = 'pick'; this.open = i; this.category = place?.[0] === i ? place[1] : 0;
     this.again();
   }
+
+  /** Show `mode` (the home, or the tool on). */
+  private go(mode: 'home' | 'tool'): void { this.mode = mode; this.again(); }
 
   /** The class and the category (indices) that hold tool `t`, where one does. */
   private placeOf(t: GodTool | null | undefined): [number, number] | null {
@@ -118,7 +107,13 @@ export class GodMenu {
     if (this.hold.innerHTML !== face) this.hold.innerHTML = face;
     this.hold.classList.toggle('none', !t);
     this.hold.classList.toggle('light', t !== null && lightInk(t.ink));
-    for (const el of [this.rail, this.panel]) if (t) el.style.setProperty('--tool', t.ink); else el.style.removeProperty('--tool');
+    for (const el of [this.hold, this.panel]) if (t) el.style.setProperty('--tool', t.ink); else el.style.removeProperty('--tool');
+  }
+
+  /** The tool's size and own setting in words ("600 m · 5 m"). */
+  private summary(t: GodTool): string {
+    const set = t.setting?.();
+    return [radiusText(this.state!.radius), set?.choices[set.on]?.label].filter(Boolean).join(' · ');
   }
 
   /** The grip at the top of the whole panel (a phone's): a tap on it makes the panel small, as a swipe down does. */
@@ -129,32 +124,64 @@ export class GodMenu {
   /** The small panel: one bar of the tool on (its icon in its ink, its name, its size and setting in words, why it
    * cannot act here), or a plain one with no tool on; a tap on it shows the panel whole. */
   private barParts(t: GodTool | null): HTMLElement[] {
-    const s = this.state!, set = t?.setting?.(), bar = this.button('mini', '<span class="mark"></span><span class="words"><b></b><span class="where"></span><span class="why"></span></span>', 'Show the whole panel', () => { this.small = false; this.again(); });
+    const bar = this.button('mini', '<span class="mark"></span><span class="words"><b></b><span class="where"></span><span class="why"></span></span>', 'Show the whole panel', () => { this.small = false; this.again(); });
     bar.querySelector('.mark')!.innerHTML = iconSvg(t?.icon ?? 'wand');
     bar.querySelector('b')!.textContent = t?.label ?? 'Pick a tool';
-    bar.querySelector('.where')!.textContent = t ? [radiusText(s.radius), set?.choices[set.on]?.label].filter(Boolean).join(' · ') : 'Tap or swipe up to see the tools';
+    bar.querySelector('.where')!.textContent = t ? this.summary(t) : 'Tap or swipe up to see the tools';
     bar.insertAdjacentHTML('beforeend', iconSvg('up'));
     return [bar];
   }
 
-  /** The panel of tool `t`: its picture with its name, where it lives, why it cannot act here, the buttons that change
-   * the tool, undo and close god mode; its sizes, its own setting, and with a mouse how to use it. */
+  /** A row of the panel's head: `lead` (a button or an icon), the title `text`, and the buttons `ends`. */
+  private head(lead: HTMLElement | null, text: string, ends: HTMLElement[]): HTMLElement {
+    const head = make('div', 'pickhead'), title = make('h2', '');
+    title.textContent = text;
+    head.append(...(lead ? [lead] : []), title, ...ends);
+    return head;
+  }
+
+  /** The home: Undo and Done, the tool in hand (a tap shows it), and the classes as pictures, each with how many of its
+   * tools are ready of all it holds. */
+  private homeParts(): HTMLElement[] {
+    const t = this.state?.tool ?? null;
+    const parts = [this.head(null, 'God tools', [
+      this.button('round undo', iconSvg('undo'), 'Undo the last stroke (Ctrl+Z)', () => this.acts.undo()),
+      this.button('round done', iconSvg('close'), 'Done: close god mode', () => this.acts.close())])];
+    if (t) {
+      const hand = this.button('inhand', '<span class="mark"></span><span class="words"><small>In your hand</small><b></b></span>', `Back to ${t.label}`, () => this.go('tool'));
+      hand.querySelector('.mark')!.innerHTML = iconSvg(t.icon);
+      hand.querySelector('b')!.textContent = `${t.label} · ${this.summary(t)}`;
+      hand.insertAdjacentHTML('beforeend', iconSvg('next'));
+      parts.push(hand);
+    }
+    const tiles = make('div', 'ctiles');
+    tiles.setAttribute('role', 'group'); tiles.setAttribute('aria-label', 'Classes');
+    tiles.append(...this.classes.map((c, i) => {
+      const b = this.button('ctile', '<span class="over plate"><span class="disc"></span><span class="words"><b></b><small></small></span></span>', c.label, () => this.openClass(i));
+      b.style.backgroundImage = picture(c.pic, CARD_SIDE);
+      b.querySelector('.disc')!.innerHTML = iconSvg(c.icon);
+      b.querySelector('b')!.textContent = c.label;
+      const all = c.categories.flatMap(k => k.tools), ready = all.filter(isTool).length;
+      b.querySelector('small')!.textContent = ready ? `${ready} of ${all.length} ready` : 'Coming soon';
+      return b;
+    }));
+    parts.push(tiles);
+    return parts;
+  }
+
+  /** The panel of tool `t`: its picture with its name, where it lives (a tap opens its class there), why it cannot act
+   * here, the buttons back home, undo and close god mode; its sizes, its own setting, and with a mouse how to use it. */
   private toolParts(t: GodTool): HTMLElement[] {
     const s = this.state!, place = this.placeOf(t), hero = make('div', 'hero');
     hero.style.backgroundImage = picture(t.pic);
-    const change = this.button('over change', `${iconSvg('grid')}Change tool`, 'Change tool', () => {
-      this.mode = 'pick';
-      if (place) [this.open, this.category] = place;
-      this.again();
-    });
+    const home = this.button('over change', `${iconSvg('grid')}All tools`, 'All tools', () => this.go('home'));
     const acts = make('div', 'acts');
     acts.append(this.button('over undo', iconSvg('undo'), 'Undo the last stroke (Ctrl+Z)', () => this.acts.undo()),
       this.button('over done', iconSvg('close'), 'Done: close god mode', () => this.acts.close()));
-    const plate = make('div', 'over plate');
-    plate.append(make('b', ''), make('span', 'where'), make('span', 'why'));
-    plate.children[0].textContent = t.label;
-    plate.children[1].textContent = place ? `${this.classes[place[0]].label} › ${this.classes[place[0]].categories[place[1]].label}` : '';
-    hero.append(change, acts, plate);
+    const plate = this.button('over plate', '<b></b><span class="where"></span><span class="why"></span>', `More tools of ${place ? this.classes[place[0]].categories[place[1]].label : 'this kind'}`, () => { if (place) this.openClass(place[0]); });
+    plate.querySelector('b')!.textContent = t.label;
+    plate.querySelector('.where')!.textContent = place ? `${this.classes[place[0]].label} › ${this.classes[place[0]].categories[place[1]].label} ›` : '';
+    hero.append(home, acts, plate);
     const parts = [hero, sizeRow(s.all, s.radii, s.radius, m => this.acts.size(m))];
     const own = t.setting?.();
     if (own) parts.push(ownRow(own, () => this.again()));
@@ -163,15 +190,13 @@ export class GodMenu {
     return [...parts, hint];
   }
 
-  /** The panel of the class open: its name, the button back to the tool on (or, with none, Done), its categories as
-   * tabs, and the tools of the one open as picture cards, or the category's picture where it holds none yet. */
+  /** The panel of the class open: the button back home, its icon and name, its categories as tabs, and the tools of the
+   * one open as picture cards, or the category's picture where it holds none yet. */
   private pickParts(): HTMLElement[] {
     const c = this.classes[this.open], cat = c.categories[this.category], t = this.state?.tool ?? null;
-    const head = make('div', 'pickhead'), title = make('h2', '');
-    title.textContent = c.label;
-    head.append(title, t
-      ? this.button('round back', iconSvg(t.icon), `Back to ${t.label}`, () => { this.mode = 'tool'; this.again(); })
-      : this.button('round done', iconSvg('close'), 'Done: close god mode', () => this.acts.close()));
+    const back = this.button('round back', iconSvg('back'), 'Back to all classes', () => this.go('home'));
+    const head = this.head(back, c.label, []);
+    head.querySelector('h2')!.insertAdjacentHTML('beforebegin', iconSvg(c.icon));
     const tabs = make('div', 'tabs');
     tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Categories');
     tabs.append(...c.categories.map((k, i) => {

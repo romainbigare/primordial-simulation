@@ -6,8 +6,8 @@
 // sight in the middle of the map (`GodPage.aim`): a finger moves the map under it, and a stroke
 // lasts while the tool's big button is held, so a finger never hides the brush nor paints by mistake. A burn's stroke
 // ends as soon as the ground lights, and its fire spreads on the map (front.ts). The tools themselves stand in classes
-// (god-tools.ts `godClasses`); this is what they share: the menu (god-menu.ts: the rail of classes, the panel of the tool
-// on with its sizes and its setting, done and the undo of the last stroke, the cards to pick a tool), the strokes and
+// (god-tools.ts `godClasses`); this is what they share: the menu (god-menu.ts: the panel of the home of the tools' classes,
+// of a class's cards to pick a tool, and of the tool on with its sizes and its setting, done and the undo of the last stroke), the strokes and
 // the core's answers to them, the question to the core about the place under the cursor (`probe`), and the brush drawn
 // over the map at its true size (god-draw.ts).
 
@@ -103,7 +103,7 @@ export class God {
   constructor(private page: GodPage, private editor: () => Editor | null, classes: GodClass[]) {
     // (The button starts a stroke at the sight, on a phone alone.)
     this.holdButton = holdButton(() => { const aim = this.page.aim(); return aim !== null && this.start(...aim); }, () => this.end());
-    this.menu = new GodMenu(page.rail, page.panel, classes, this.holdButton, { pick: t => this.pick(t), undo: () => this.undo(), close: () => page.close(), size: m => this.sized(m) });
+    this.menu = new GodMenu(page.holdBox, page.panel, classes, this.holdButton, { pick: t => this.pick(t), undo: () => this.undo(), close: () => page.close(), size: m => this.sized(m) });
     this.show();
   }
 
