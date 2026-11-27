@@ -148,6 +148,13 @@ fn hill_shade(g: vec2f, k: f32) -> f32 {
   return ((n.x * LIGHT.x + n.y * LIGHT.y + LIGHT.z) / sqrt(dot(n, n) + 1.0)) / LIGHT.z;
 }
 
+// The fill light (style.wgsl `FILL`) on ground of slope (gx, gy) made `k` times steeper, over its light on flat ground;
+// none where the ground turns from it.
+fn fill_shade(g: vec2f, k: f32) -> f32 {
+  let n = vec3f(-k * g, 1.0);
+  return max(dot(n, FILL), 0.0) / (length(n) * FILL.z);
+}
+
 // What the colour of a point of the map reads.
 struct Spot {
   // The depth of the liquid standing there, m (0: none); the ground's height over the liquid's surface, m (0 under
@@ -157,6 +164,8 @@ struct Spot {
   // they are not drawn one by one: their reflectance times the share of the ground they cover, and
   // that share; the ground's height, m; its slope (rise over run); the light on it over the light on flat ground.
   snow: f32, t: f32, ground: vec3f, cover: vec4f, z: f32, slope: f32, shade: f32,
+  // The fill light on it (`fill_shade`).
+  fill: f32,
   // Beach sand on it and a river through it, 0..1, and the river's depth, m; how much of a river's mouth it is, 0..1
   // (river.wgsl `MOUTH_CALM`).
   sand: f32, river: f32, river_depth: f32, mouth: f32,
@@ -373,7 +382,7 @@ fn ground_for(p: Spot, running: bool) -> Ground {
 // The light on spot p over the light on flat ground, in the view drawn (`light`, in the style `relief_light`).
 fn lit_at(p: Spot) -> f32 {
   let x = 1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow);
-  return select(light(x, p.slope), relief_light(x), styled());
+  return select(light(x, p.slope), filled(relief_light(x), p.fill), styled());
 }
 
 fn colour(p: Spot) -> Shaded { return colour_on(p, ground_for(p, false)); }

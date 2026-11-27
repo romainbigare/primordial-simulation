@@ -124,6 +124,13 @@ fn tone_of(n: f32) -> f32 { return 1.0 + TONE_SWAY * clamp(n, -1.0, 1.0); }
 const HOLLOW_TONE = 0.35;
 fn hollow_tone(fold: f32) -> f32 { return 1.0 + HOLLOW_TONE * (2.0 * fold - 1.0); }
 
+// Ground turned from the low sun is lit by the sky's light alone, which lights it the more the more it faces the sky
+// opposite the sun: a fill light from the south-west, `FILL.z` up (a unit vector), adds `FILL_SHARE` of the ambient
+// light in the shade (none on lit ground), so a shaded wall still shows its gullies, not a flat dark stain.
+const FILL = vec3f(-0.612, 0.612, 0.5); const FILL_SHARE = 0.5;
+// The light on ground lit `lit` (`relief_light`) whose fill light is `fill` (colour.wgsl `fill_shade`).
+fn filled(lit: f32, fill: f32) -> f32 { return lit + ease(1.0, AMBIENT, lit) * AMBIENT * FILL_SHARE * fill; }
+
 // What the colour of ground whose share `bare` is bare, and whose share `seen` shows its soil from above
 // (`Ground.seen`), is multiplied by: its bare part tinted by its grain `grain` (`Spot.grain`: the shares of coarse and
 // fine grain and of organic matter) as `SAND_TINT` to `CLAY_TINT` say, and the soil seen darkened by its organic matter

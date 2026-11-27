@@ -161,6 +161,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
+  p.fill = fill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
   p.grain = soil.grain;
   p.deposit = soil.deposit;

@@ -74,6 +74,7 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.z = h.x;
   s.slope = length(h.zw) * look.x;
   s.shade = hill_shade(h.zw, EXAGGERATE * look.x);
+  s.fill = fill_shade(h.zw, EXAGGERATE * look.x);
   // A tape's ground is its squares': their own colour is their bed's where no loose ground lies on it.
   s.loose = inside.w;
   s.rock = 0.0;
