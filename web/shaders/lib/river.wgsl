@@ -97,10 +97,11 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind
   // nearest texel lies far from the line itself (`Tiled.ends`), and nothing is drawn (it drew small square brackets).
   let real = 1.0 - ease(reach + e, reach + 2.0 * e, g.ends.x);
   // The bed's edge and the water's are spread over a pixel, and over `BED_SOFT` and `WATER_SOFT` of them where the bed
-  // is drawn apart.
+  // is drawn apart: the bed's inward from its edge, so it reaches no farther than a pixel past it.
   let bed_px = max(e, open * BED_SOFT * banks);
   let water_px = max(e, open * WATER_SOFT * half);
-  var in_bed = (tent((reach - g.d) / bed_px) - tent((-reach - g.d) / bed_px)) * real;
+  let bed_edge = reach - (bed_px - e);
+  var in_bed = (tent((bed_edge - g.d) / bed_px) - tent((-bed_edge - g.d) / bed_px)) * real;
   // The water lies in its bed: where the two edges' raggedness would put it past the bank, the bank holds it; and
   // round the bars of a braided reach (`braid_bar`), shallowing over their flanks.
   var water = min(tent((half - thread) / water_px) - tent((-half - thread) / water_px), in_bed);
