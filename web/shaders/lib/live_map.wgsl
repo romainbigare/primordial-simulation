@@ -27,8 +27,10 @@ const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0;
 // so a shore is a smooth line at any zoom, not the pixels' steps;
 // and of the channel's water: the signs of its flow (lib/flow.wgsl `flow_signs`), and (`water`) its depth over the
 // depth the channel law gives its middle and how near its edge the point lies, 0..1; and the way it runs (`down`, a
-// unit vector east and south).
-struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f }
+// unit vector east and south); and of the dry ground, the slope up to the highest ground toward the light (rock.wgsl
+// `SoilAt.horizon`), how far the relief finer than the tiles raises it, m (relief.wgsl), and its tone (style.wgsl
+// `tone_of`).
+struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f, horizon: f32, knob: f32, tone: f32 }
 
 // The spot `s` with its channel's stones: on the bed of channel `ch` (of discharge `q`, on ground `g`), and beside it
 // where the reach is steep, with the walls and the fallen blocks of a steep reach. The largest drawn takes its size
@@ -52,16 +54,16 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
 // B-spline (`cells_smooth`, so no square shows where the cells' values jump), or of a layer of the soil the live map
 // finds at each point (colour.wgsl `Earth.view`), its share as a byte of a layer from 0 to 1: the share of the pores
 // the soil's liquid fills by the laws inside a cell (`State`), the grain's shares of the samples (rock.wgsl
-// `soil_samples_at`, without the patches the Earth's colours draw), the liquid the samples' loose ground holds for roots as
+// `soil_at`, without the patches the Earth's colours draw), the liquid the samples' loose ground holds for roots as
 // its layer shows it, or the share of that the roots read at the point: on the saturated strips all of it, on the drier
 // rest the share the core's cover read there in its cell's last month (the layer `roots`, `cover::CellRan`), blended
 // over the edge of the wet ground; or how saturated the ground is there (land.wgsl `saturated_at`).
 fn layer_at(at: vec2f, dry: Spot) -> f32 {
   let k = earth.view.w;
   if (k == 2.0) { return dry.filled; }
-  if (k == 3.0) { return soil_samples_at(at, GRAIN_PLANE).x; }
-  if (k == 4.0) { return soil_samples_at(at, GRAIN_PLANE).y; }
-  if (k == 5.0) { return soil_samples_at(at, GRAIN_PLANE).w; }
+  if (k == 3.0) { return samples_at(dry.place, GRAIN_PLANE).x; }
+  if (k == 4.0) { return samples_at(dry.place, GRAIN_PLANE).y; }
+  if (k == 5.0) { return samples_at(dry.place, GRAIN_PLANE).w; }
   if (k == 6.0) { return mix(cells_smooth(VIEW, at / land.map.x).x, 1.0, saturated_at(at)); }
   if (k == 7.0) { return saturated_at(at); }
   return cells_smooth(VIEW, at / land.map.x).x;
@@ -91,12 +93,14 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let look = earth.look;
   let cs = corners(at / land.map.x);
   var g = ground_at(at, true);
+  // The place the samples' fields are read at (rock.wgsl `sample_place`).
+  let place = sample_place(at, e);
   // The loose ground with its patches, the bed it bares, and the relief finer than the tiles (relief.wgsl), which
   // moves the ground's height and slope: the shading's normal and the fine line of a shore.
-  let loose_mean = loose_at(at);
+  let loose_mean = loose_at(place.at);
   let loose = loose_seen(at, loose_mean, e);
   let bare = bed_shows(loose);
-  let fine = relief(e, length(g.slope), bare, loose);
+  let fine = relief(e, g.slope, bare, loose);
   // The waves' swash follows the shore as the tiles draw it: the relief's bumps would break its line into specks.
   let tiled = g;
   // The relief moves the ground's height as much as the ground drawn is steep (`RELIEF_EDGE_SLOPE`): on a flat shore a
@@ -135,8 +139,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.filled = st.filled;
   p.t = st.t;
   // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
+  // (The line's zone is as wide as the cells' share moves it across a pixel: the ground's own index changes at the
+  // relief's scale, down to the pixel, and its change across a pixel's block of four would draw the blocks.)
   let snow_x = snow_past(st.snow, st.bares);
-  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_x)), st.snow, st.depth > 0.0);
+  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_past(st.snow, 0.0))), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
   // the cells' soil is a mean over kilometres, the bed's make is the samples'.
@@ -144,14 +150,14 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   var make = vec3f(0.0);
   var made = false;
   if (styled() && loose < SOIL_OF_BED_M) {
-    make = bed_make_at(at); made = true;
+    make = bed_make_at(place.at); made = true;
     p.ground = mix(p.ground, make, SOIL_OF_BED * (1.0 - loose / SOIL_OF_BED_M));
   }
   p.z = g.h;
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
-  let soil = soil_at(at, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy);
+  let soil = soil_at(at, place, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy);
   p.grain = soil.grain;
   p.deposit = soil.deposit;
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
@@ -190,7 +196,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.snow_m = st.snow_m;
   // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
   if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) {
-    if (!made) { make = bed_make_at(at); made = true; }
+    if (!made) { make = bed_make_at(place.at); made = true; }
     p.bed = make;
   }
   p.fetch = g.water.z;
@@ -201,13 +207,14 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.swash = swash_of(over_ponds(tiled, 0.0), waves, length(tiled.slope), at, e, p.snow);
   // A beach of pebbles takes their colour from the bed they are worn from (colour.wgsl `shore_grain`).
   if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) {
-    if (!made) { make = bed_make_at(at); }
+    if (!made) { make = bed_make_at(place.at); }
     p.bed = make;
   }
   p.river = 0.0;
   p.river_depth = 0.0;
   p.mouth = 0.0;
   p.at = at;
+  p.place = place.at;
   p.e = e;
   p.hollow = fine.hollow;
   p.hollow_d = vec2f(dpdx(fine.hollow), dpdy(fine.hollow));
@@ -219,7 +226,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
   // The marks of fire on dry ground: its burn scars and the plants they took (burn.wgsl).
   p = burnt_spot(p);
-  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0));
+  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0), soil.horizon, fine.h, tone_of(place.n));
   // A channel is drawn on the land and through the band of shallows of the liquid it runs into, no farther.
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
@@ -265,7 +272,8 @@ fn live_map(v: Varying) -> vec4f {
   var shown = 0.0;
   if (earth.view.x == 1.0) { shown = layer_at(at, spots.dry); }
   var rgb = in_view_of(c, shown);
-  // In the Earth view the dry ground takes the shade of its steepness and of the heights toward the light.
-  if (styled() && spots.dry.depth <= 0.0) { rgb *= relief_shade(spots.dry.slope, horizon_at(at)); }
+  // In the Earth view the dry ground takes the shade of its steepness and of the heights toward the light, and its
+  // tone.
+  if (styled() && spots.dry.depth <= 0.0) { rgb *= relief_shade(spots.dry.slope, spots.horizon, spots.knob) * spots.tone; }
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

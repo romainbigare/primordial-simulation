@@ -91,6 +91,8 @@ fn spot_at(uv: vec2f, h: vec4f, e: f32) -> Spot {
   s.river = m.w;
   s.river_depth = inside.y;
   s.at = earth.place.xy + uv * earth.place.zw;
+  // A tape holds no samples' fields: they are its squares'.
+  s.place = s.at;
   s.e = e;
   s.grain = TAPE_GRAIN;
   return s;

@@ -179,8 +179,9 @@ struct Spot {
   // The largest stone the point's channel moves, m (0: none), and the share of woody crowns about a channel's bar,
   // whose dead wood the floods leave on it, 0..1.
   moved: f32, driftwood: f32,
-  // Where it lies in the world, m, and the metres a pixel takes there (for the ripples of a liquid's surface).
-  at: vec2f, e: f32,
+  // Where it lies in the world, m, the place the fields held per terrain sample are read for it (rock.wgsl
+  // `sample_place`), and the metres a pixel takes there (for the ripples of a liquid's surface).
+  at: vec2f, place: vec2f, e: f32,
   // Its loose ground's grain: the shares of coarse and of fine grain, of organic matter, and how slowly its pores pass
   // liquid (the decimal logarithm of 1 m/s over their conductivity; tape/src/ground/rock.rs); and the share of its
   // pores the soil's liquid fills, 0..1 (land.wgsl `State`); how deep the load the liquid laid lies on it, m, and the

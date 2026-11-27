@@ -157,7 +157,7 @@ fn foot_loose(at: vec2f, cs: Corners) -> f32 {
       deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
     }
   }
-  return select(0.0, loose_seen(at, loose_at(at), 0.0), deepest > 0.0);
+  return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0).at), 0.0), deepest > 0.0);
 }
 
 // The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` over the patches, its ground `f`),
@@ -424,7 +424,7 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, fp: vec3i) -> Mark {
   }
   if (unit(id, 41) >= dead.mean * on_scar) { return none; }
   let f = foot(at);
-  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(at)) > 0.5) { return none; }
+  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(sample_place(at, 0.0).at)) > 0.5) { return none; }
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }

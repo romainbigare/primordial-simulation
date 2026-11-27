@@ -37,7 +37,7 @@ const OVER_FADE = 64;
 const NO_POND_M = 1000;
 /** Before the rock of the samples came, the ground is drawn as if its loose ground were this deep, m: no bed shows. */
 const NO_ROCK_YET_M = 1;
-/** The planes of the rock of the samples, one under the other (rock.wgsl `ROCK_PLANES`). */
+/** The planes of the rock of the samples, one under the other (rock.wgsl `LOOSE_PLANE`...). */
 const ROCK_PLANES = 4;
 /** Of the uniforms of land.wgsl (`Land`), four-wide members. */
 const LAND_VEC4S = 8;
@@ -433,7 +433,7 @@ export class Land {
     const u = new Uniforms(LAND_VEC4S).vec4(m.cell_m, m.w, m.h, m.square_depth).vec4(tm.size, tm.gutter, t.page.depth, tm.step_most)
       .vec4(t.now, TILE_FADE_MS, this.melt, l.line).vec4(l.soil_m, l.wet_depth, l.rooted_from, 0).vec4(l.channel_width, l.channel_width_exp, l.channel_depth, l.channel_depth_exp)
       .vec4(s.across, s.down, s.depth, this.drawn).vec4(tm.along_wrap, l.flood, this.slid(this.flowAt ?? performance.now()), l.flood ** -l.station).vec4(...l.line_law);
-    return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock, 19: 'smooth' };
+    return { 8: u.buffer, 9: t.atlas, 10: t.pages, 11: t.tiles, 12: this.tex, 13: t.areas, 17: this.flows, 18: this.rock };
   }
 
   /** What the draws that read the live map's laws read (`lawBinds`) as it stands, as text, but for its time (the tiles'

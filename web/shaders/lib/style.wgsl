@@ -16,10 +16,17 @@ const RELIEF = 2.0; const AMBIENT = 0.30; const LIT_TOP = 1.7;
 // Steep ground is darker whichever way it faces, by up to `STEEP_SHADE` from a slope of `STEEP_SLOPES.x` (rise over
 // run) to `STEEP_SLOPES.y`: a ridge that runs along the light, whose two sides it lights alike, still shows its sides.
 // Ground the light does not reach, in the shade of higher ground toward it, is darkened to `CAST_SHADE`: where the
-// slope up to that ground (rock.wgsl `horizon_at`) passes the light's rise, eased from `CAST_EDGE.x` under it to
-// `CAST_EDGE.y` over it (a soft edge: the sun is a disc and the air scatters its light).
+// slope up to that ground (rock.wgsl `SoilAt.horizon`) passes the light's rise, eased from `CAST_EDGE.x` under it to
+// `CAST_EDGE.y` over it (a soft edge: the sun is a disc and the air scatters its light). The relief finer than the
+// samples (relief.wgsl) raises a knob toward the light and lowers a hollow: the slope up to the shading ground falls by
+// its height over `CAST_REACH_M`, so a knob rises out of the shade before the ground about it and the shade's edge
+// breaks into lit knobs and dark hollows.
 const STEEP_SHADE = 0.6; const STEEP_SLOPES = vec2f(0.03, 0.7);
-const CAST_SHADE = 0.62; const CAST_EDGE = vec2f(-0.10, 0.06);
+const CAST_SHADE = 0.62; const CAST_EDGE = vec2f(-0.10, 0.06); const CAST_REACH_M = 60.0;
+// Ground of one colour over kilometres is not of one tone: the Earth view lightens and darkens it by up to `TONE_SWAY`
+// either way over the noise of the samples' places (rock.wgsl `sample_place`, from hundreds of metres to a kilometre),
+// as a painted map's wash is uneven.
+const TONE_SWAY = 0.04;
 const SHADE_TINT = vec3f(0.80, 0.88, 1.08); const LIT_TINT = vec3f(1.06, 1.02, 0.92);
 // Bare ground is drawn by its grain (a painted map's earth): its colour times a tint at full strength, the tints of its
 // grains by their shares. Coarse grain (sand) pale and warm: quartz grains bare of coatings; middle grain (silt) warm;
@@ -99,11 +106,15 @@ fn relief_light(x: f32) -> f32 {
 }
 
 // What the colour of dry ground of slope `slope` (rise over run) is multiplied by where the slope up to the highest
-// ground toward the light is `horizon`: its steepness' shade and the shade cast on it (`STEEP_SHADE`, `CAST_SHADE`).
-fn relief_shade(slope: f32, horizon: f32) -> f32 {
-  let unlit = smoothstep(CAST_EDGE.x, CAST_EDGE.y, horizon - LIGHT.z / length(LIGHT.xy));
+// ground toward the light is `horizon` and the fine relief raises the point `knob` m: its steepness' shade and the
+// shade cast on it (`STEEP_SHADE`, `CAST_SHADE`).
+fn relief_shade(slope: f32, horizon: f32, knob: f32) -> f32 {
+  let unlit = smoothstep(CAST_EDGE.x, CAST_EDGE.y, horizon - knob / CAST_REACH_M - LIGHT.z / length(LIGHT.xy));
   return mix(1.0, STEEP_SHADE, smoothstep(STEEP_SLOPES.x, STEEP_SLOPES.y, slope)) * mix(1.0, CAST_SHADE, unlit);
 }
+
+// What the colour of the dry ground is multiplied by where the noise of the samples' places is `n` (`TONE_SWAY`).
+fn tone_of(n: f32) -> f32 { return 1.0 + TONE_SWAY * clamp(n, -1.0, 1.0); }
 
 // What the colour of ground whose share `bare` is bare, and whose share `seen` shows its soil from above
 // (`Ground.seen`), is multiplied by: its bare part tinted by its grain `grain` (`Spot.grain`: the shares of coarse and
