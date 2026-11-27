@@ -34,8 +34,7 @@ for (const f of Object.values(strips).flat()) {
   const [stem, ext] = [f.replace(/\.[a-z]+$/, ''), f.slice(f.lastIndexOf('.'))];
   for (const g of [f, ...sized.filter(n => n.startsWith(`${stem}@`) && n.endsWith(ext))]) copyFileSync(`textures/${g}`, `dist/${g}`);
 }
-// God mode's pictures (god-list.ts, god-controls.ts), beside the page in `god/`: each tool's, with its smaller copy,
-// and each starting kind's.
+// God mode's pictures (god-list.ts, god-controls.ts), beside the page in `god/`: each tool's and each starting kind's.
 mkdirSync('dist/god', { recursive: true });
 for (const f of readdirSync('textures/god').filter(n => n.endsWith('.jpg'))) copyFileSync(`textures/god/${f}`, `dist/god/${f}`);
 rmSync('dist/.js', { recursive: true });

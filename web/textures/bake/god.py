@@ -1,5 +1,6 @@
 """god.py DL OUT [name...]: makes the god mode's pictures (web/textures/god/, SOURCES.md `## god/`) from the game's
-textures and the downloads in DL (`god_fetch.sh DL`), each as god.json says, into OUT: NAME.jpg and its smaller twin.
+textures and the downloads in DL (`god_fetch.sh DL`), each as god.json says, into OUT: NAME@480.jpg (a plant kind's:
+NAME@160.jpg).
 
 Each picture is a small scene (god_scenes_*.py): a height field shaped and painted with textures, sprites stood on
 it, rendered from above by god_render.py, then effects (god_fx.py) laid over it. With names, only those are made.
@@ -148,10 +149,8 @@ def main():
     spec = json.load(open(os.path.join(HERE, 'god.json')))
     import god_scenes_fire
     import god_scenes_land
-    import god_scenes_life
     import god_scenes_weather
-    scenes = {**god_scenes_land.SCENES, **god_scenes_fire.SCENES, **god_scenes_weather.SCENES,
-              **god_scenes_life.SCENES}
+    scenes = {**god_scenes_land.SCENES, **god_scenes_fire.SCENES, **god_scenes_weather.SCENES}
     sprites = P.Sprites()
     os.makedirs(out, exist_ok=True)
     for name, ps in spec['pictures'].items():
@@ -161,9 +160,7 @@ def main():
         R.SKY_MAP = load_sky(os.path.join(dl, ps['sky'] + '.jpg')) if 'sky' in ps else None
         srgb = scenes[ps['scene']](kit)
         small = name.startswith('kind-')
-        sizes = R.save(srgb, os.path.join(out, name), *((R.KIND_OUT, R.KIND_SMALL, R.KIND_BYTES, R.KIND_SMALL_BYTES)
-                                                       if small else ()))
-        print(name, *sizes)
+        print(name, R.save(srgb, os.path.join(out, name), *((R.KIND_SMALL, R.KIND_SMALL_BYTES) if small else ())))
 
 
 if __name__ == '__main__':
