@@ -18,39 +18,59 @@ const BAR_GROWN = 0.55; const BAR_TUFT_M = 1.1;
 // of that on the low slope inside a bend.
 const BANK_M = 0.4; const BANK_SHARE = 0.12; const BANK_SHADE = 0.45; const BANK_LOW = 0.25;
 
-// A wide shallow reach drops its load in bars in its middle too: where its water is more than `MID_BAR_WD.x` times as
-// wide as it is deep at its middle, all of them from `MID_BAR_WD.y` (gravel-bed rivers wander about bars in their
-// middle from a width over depth of about 20, and braid from about 40: Church 1983, from memory), and not in a bend's pool, where the flow runs deep
-// against the outer bank. Each is a lens along the flow where noise `MID_BAR_M` long (the second half as strong, -1..1)
-// passes `MID_BAR_FROM`, full width from `MID_BAR_FULL`: up to `MID_BAR_WIDE` of the water's half width either side
-// of its middle; its top lies `MID_BAR_UP` of the way up to the bank (washed bare, no plants).
-const MID_BAR_WD = vec2f(20.0, 45.0); const MID_BAR_M = vec2f(48.0, 16.0); const MID_BAR_FROM = 0.1; const MID_BAR_FULL = 0.45;
-const MID_BAR_WIDE = 0.45;
-const MID_BAR_UP = 0.4;
+// What a reach builds follows its numbers by one law. Its bars bare or grown: the power its floods spend on a m² of its
+// bed (specific stream power, ω = ρg Q S / w, of the bankfull flood, `land.reach.y` times its mean flow; `WATER_WEIGHT`
+// N/m³) keeps them washed bare from `POWER_BARE.x` W/m² on, all of them from `POWER_BARE.y`; under it plants take the
+// bed down to the water's damp edge (flood plains of low power are fine and grown, of high power coarse and stripped:
+// Nanson and Croke 1992). Its threads: a gravel bed braids where its slope passes `BRAID_S` times its bankfull flood
+// (m³/s) to the power `BRAID_EXP` (Leopold and Wolman 1957, in metric units), fully from `BRAID_OVER` times that slope,
+// on a bed at least `BRAID_WIDE_M.x` m half wide (all of it from `.y`), and not on a reach steeper than
+// `STEP_POOL_S`, where the flow drops in steps and pools between walls (Montgomery and Buffington 1997).
+const WATER_WEIGHT = 9810.0; const POWER_BARE = vec2f(15.0, 90.0);
+const BRAID_S = 0.0125; const BRAID_EXP = -0.44; const BRAID_OVER = 2.0; const BRAID_WIDE_M = vec2f(1.5, 3.5);
+const STEP_POOL_S = vec2f(0.025, 0.045);
+// A braided reach's bars rise out of its water where a noise along the flow, cells `BRAID_M` m long (the second half as
+// strong) and `BRAID_ACROSS` across the water, held low near the banks, passes `BRAID_FROM` (from `.x` to `.y` as the
+// reach braids more); their flanks run under the water over `BRAID_FLANK` of the noise, its depth there shallowing to
+// the bar's edge, and their tops rise `BRAID_UP` of the way up to the bank.
+const BRAID_M = vec2f(26.0, 9.0); const BRAID_ACROSS = 1.7; const BRAID_FROM = vec2f(0.55, 0.15); const BRAID_FLANK = 0.3;
+const BRAID_UP = 0.4;
+// Across the edges the eye crosses no line: where its bed is drawn apart from its water, the water thins over
+// `WATER_SOFT` of its half width at its edge (the last centimetres over the bar), and the bed meets the ground beside
+// it over `BED_SOFT` of its half width, the plants thinning into it.
+const WATER_SOFT = 0.12; const BED_SOFT = 0.15;
 
-// The half width of the bar in the middle of channel `c` at `along` m along it, as a share of its water's half width (0:
-// none).
-fn mid_bar(c: Channel, along: f32) -> f32 {
-  let wd = 2.0 * c.water / max(BED_MIDDLE * c.mean, 1e-3);
-  let wide = ease(MID_BAR_WD.x, MID_BAR_WD.y, wd) * (1.0 - c.bend);
-  if (wide <= 0.0) { return 0.0; }
-  let n = (noise_reach(along, MID_BAR_M.x, 0.0, 84) + 0.5 * noise_reach(along, MID_BAR_M.y, 0.0, 85)) / 1.5;
-  let lens = ease(MID_BAR_FROM, MID_BAR_FULL, n);
-  return MID_BAR_WIDE * wide * sqrt(lens);
+// The kind of a reach that carries `q` m³/s this month down slope `fall`, moving stones of `stone` m, its bed `law` m
+// half wide by the channel law: how bare its bars are, 0..1 (`POWER_BARE`), and how far it braids, 0..1 (`BRAID_S`).
+fn reach_kind(q: f32, fall: f32, stone: f32, law: f32) -> vec2f {
+  let flood = land.reach.y * q;
+  let power = WATER_WEIGHT * flood * fall / max(2.0 * law, 1e-3);
+  let over = fall / (BRAID_S * pow(max(flood, 1e-6), BRAID_EXP));
+  let braids = ease(1.0, BRAID_OVER, over) * (1.0 - ease(STEP_POOL_S.x, STEP_POOL_S.y, fall)) * ease(0.0, BAR_SAND_STONE, stone) * ease(BRAID_WIDE_M.x, BRAID_WIDE_M.y, law);
+  return vec2f(ease(POWER_BARE.x, POWER_BARE.y, power), braids);
+}
+
+// How far a reach that braids `braids` (0..1) rises toward a bar at `along` m along it, the share `x` of the way across
+// its water (`Reach.across`): over 0 on a bar, from -`BRAID_FLANK` on its flank under the water.
+fn braid_bar(along: f32, x: f32, braids: f32) -> f32 {
+  let n = (noise_reach(along, BRAID_M.x, BRAID_ACROSS * x, 84) + 0.5 * noise_reach(along, BRAID_M.y, 2.0 * BRAID_ACROSS * x + 5.0, 85)) / 1.5;
+  return n * (1.0 - x * x) - mix(BRAID_FROM.x, BRAID_FROM.y, braids);
 }
 
 // A reach at a point: the share of the pixel its water covers, and its bars (the bed out of the water); how far across
 // the water the point lies, -1 at its inner edge, 0 at its middle and 1 at its outer edge (`across`); how steep the
 // reach reads, 0..1 (`steep`); how far out of the water the point lies on the bed, m (`edge`), and that as a share of
-// the way to the bed's edge (`up`); and how far outside the bed's edge it lies, m, negative inside (`bank`).
-struct Reach { share: f32, bars: f32, across: f32, steep: f32, edge: f32, up: f32, bank: f32 }
+// the way to the bed's edge (`up`); how far outside the bed's edge it lies, m, negative inside (`bank`); and the share
+// of its water's depth left over a braid bar's flank (`flank`, 1 off them).
+struct Reach { share: f32, bars: f32, across: f32, steep: f32, edge: f32, up: f32, bank: f32, flank: f32 }
 
 // The reach at the pixel, seen at `e` m a pixel, on ground `g` of the channel `c` (rock.wgsl `channel_at`), drawn no
 // thinner than `line` m half wide (`line_of`), `open` of its bed drawn apart from its water, whose flow moves stones
-// of `stone` m.
-fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32) -> Reach {
+// of `stone` m, of kind `kind` (`reach_kind`).
+fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind: vec2f) -> Reach {
   var r: Reach;
   r.steep = ease(STEEP_STONE.x, STEEP_STONE.y, stone);
+  r.flank = 1.0;
   var half = c.water;
   var banks = c.bed;
   // The edges' raggedness shows where the water takes a few pixels.
@@ -76,23 +96,29 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32) -> R
   // Past a line's end its texels' signed distances change sign across its extension and blend to a false 0 there: the
   // nearest texel lies far from the line itself (`Tiled.ends`), and nothing is drawn (it drew small square brackets).
   let real = 1.0 - ease(reach + e, reach + 2.0 * e, g.ends.x);
-  var in_bed = (tent((reach - g.d) / e) - tent((-reach - g.d) / e)) * real;
-  // The water lies in its bed: where the two edges' raggedness would put it past the bank, the bank holds it; and round
-  // the bar in its middle where it has one (`mid_bar`).
-  var water = min(tent((half - thread) / e) - tent((-half - thread) / e), in_bed);
-  let bar = mid_bar(c, g.along) * half;
-  if (bar > e) {
-    let from_middle = abs(g.sd - c.middle);
-    water *= 1.0 - (tent((bar - from_middle) / e) - tent((-bar - from_middle) / e));
-    if (from_middle < bar) {
-      r.edge = bar - from_middle;
-      r.up = MID_BAR_UP * r.edge / bar;
+  // The bed's edge and the water's are spread over a pixel, and over `BED_SOFT` and `WATER_SOFT` of them where the bed
+  // is drawn apart.
+  let bed_px = max(e, open * BED_SOFT * banks);
+  let water_px = max(e, open * WATER_SOFT * half);
+  var in_bed = (tent((reach - g.d) / bed_px) - tent((-reach - g.d) / bed_px)) * real;
+  // The water lies in its bed: where the two edges' raggedness would put it past the bank, the bank holds it; and
+  // round the bars of a braided reach (`braid_bar`), shallowing over their flanks.
+  var water = min(tent((half - thread) / water_px) - tent((-half - thread) / water_px), in_bed);
+  if (kind.y > 0.0 && open > 0.0 && thread < half) {
+    let rise = braid_bar(g.along, r.across, kind.y);
+    r.flank = 1.0 - ease(-BRAID_FLANK, 0.0, rise);
+    water *= 1.0 - open * tent(rise * half / water_px);
+    if (rise > 0.0) {
+      r.edge = rise * half;
+      r.up = BRAID_UP * ease(0.0, 1.0 - BRAID_FROM.y, rise);
     }
   }
-  // The top of a bar is the plants' again, in tufts with an edge of their own: more of them the nearer the bank.
+  // The top of a bar is the plants' again, in tufts with an edge of their own: more of them the nearer the bank, and
+  // down to the water's damp edge where the floods spend little power on the bed (`reach_kind`).
+  let grown_from = BAR_GROWN * kind.x;
   let tufts = shows_at(BAR_TUFT_M, e);
-  if (tufts > 0.0 && r.up > BAR_GROWN) {
-    let grown = noise_l(lat_turned(BAR_TUFT_M, vec2f(0.0)), 79).x + 1.2 * ease(BAR_GROWN, 1.0, r.up) - 0.6;
+  if (tufts > 0.0 && r.up > grown_from) {
+    let grown = noise_l(lat_turned(BAR_TUFT_M, vec2f(0.0)), 79).x + 1.2 * ease(grown_from, 1.0, r.up) - 0.6;
     in_bed = max(in_bed * (1.0 - open * tufts * tent(grown * BAR_TUFT_M / e)), water);
   }
   r.share = mix(in_bed, water, open);
@@ -188,7 +214,7 @@ const BED_PX = 3.0;
 // where its flow moves no stones bigger than `BAR_SAND_STONE` m: gravel on most reaches, sand and silt on the
 // gentlest. A bar rises from the water's edge at `BAR_RISE` (rise over run), which is how far up it the water's fringe
 // wets and darkens it; past that fringe its gravel drains dry.
-const BAR_LIFT = 1.7; const BAR_PALE = 0.35; const BAR_RISE = 0.6;
+const BAR_LIFT = 1.3; const BAR_PALE = 0.15; const BAR_RISE = 0.6;
 // Driftwood lies on a bar from `DRIFTWOOD_UP.x` of the way up it to the bank, most from `DRIFTWOOD_UP.y` (the floods' wrack
 // line, at the top of the bars).
 const DRIFTWOOD_UP = vec2f(0.1, 0.35);
@@ -227,7 +253,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   var open = 0.0;
   // (No bed takes `BED_PX` pixels in a program made for draws from this far: rock.wgsl `BED_MOST_M`.)
   if (BED_PX * least_e() < BED_MOST_M) { open = ease(BED_PX * e, 2.0 * BED_PX * e, ch.law) * (1.0 - ease(ch.law, 2.0 * ch.law, line)); }
-  let r = reach_at(e, g, ch, line, open, stone);
+  let r = reach_at(e, g, ch, line, open, stone, reach_kind(q, fall, stone, ch.law));
   let runs = 1.0 - mouth;
   let seen = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * wide);
   out.share = r.share * above_snow(s.dry.snow * s.dry.snow_m, 2.0 * max(ch.water, line)) * cuts * seen;
@@ -265,7 +291,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   // riffles and its bed's shape across it; else its mean depth.
   let resolved = ease(e, 2.0 * e, ch.water) * open;
   let x = r.across;
-  out.wet.depth = mix(ch.mean, depth_across(ch, x), resolved);
+  out.wet.depth = mix(ch.mean, depth_across(ch, x) * r.flank, resolved);
   if (resolved > 0.0) {
     // (Below a step's white water a steep reach's water lies in a pool: slower, and `STEP_POOL` deeper.)
     let signs = flow_signs(e, g.along, x, ch, r.steep, fall, stone);
