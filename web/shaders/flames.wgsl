@@ -38,10 +38,13 @@ const GLOW_RGB = vec3f(1.0, 0.36, 0.06);
 // tall); behind it the embers fade over `EMBER_FADE` of the way to the next front, to `EMBER_BASE` of their glow: the
 // burning share smoulders all month.
 const SWEEP_M = 400.0; const SWEEP_OCTAVES = 6; const SWEEP_LEVELS = 3.0; const SWEEP_S = 6.0; const EMBER_FADE = 0.35; const EMBER_BASE = 0.4;
-// A point's flames fade in over the first `FLAME_FADE` of a square's burning share, so they end smoothly where the
-// share blended between the squares' centres ends; none stands on liquid (its ponds' as the ground's tiles draw them,
-// land.wgsl `standing`, deeper than `FILM_M`).
-const FLAME_FADE = 0.005; const FLAME_COVER = 0.8;
+// A point's flames fade in over the first `FLAME_FADE` of a square's burning share; none stands on liquid (its ponds'
+// as the ground's tiles draw them, land.wgsl `standing`, deeper than `FILM_M`). The outer front of the burnt share
+// burns this month along the share of it the square's burning share is of its scar: where a second number of the
+// patches (noise streams from `FRONT_NOISE`) lies under that share's level (ragged.wgsl `share_level`), so the burning
+// stretches of the front thin out in patches as the share blended between the squares' centres falls to none, and do
+// not end on the straight line where it reaches none.
+const FLAME_FADE = 0.005; const FLAME_COVER = 0.8; const FRONT_NOISE = 97;
 // The fronts inside a burning share are drawn as lines where their flaming depth takes from `INNER_PX.x` to
 // `INNER_PX.y` pixels: thinner, a share's glow is its embers' mean.
 const INNER_PX = vec2f(1.0, 3.0);
@@ -159,10 +162,13 @@ fn tongues(at: vec2f, t: f32, len: f32, wind: vec2f, e: f32, time: f32) -> vec3f
     let resolved = ease(INNER_PX.x * e, INNER_PX.y * e, FLAME_DEPTH * f.length);
     let inner = max(band - zone, 0.0);
     let flaming = max(1.0 - ease(max(FLAME_DEPTH * f.length, FRONT_PX * e), max(FLAME_DEPTH * f.length, FRONT_PX * e) + e, behind_m), 0.0);
-    var lf = tongues(at, t, f.length, f.wind, e, time) * shown;
+    // (The outer front's burning stretches, `FRONT_NOISE`.)
+    let fr = meet_noise(at, max(e, FRONT_SMOOTH * f.length), BURN_PATCH_M, FRONT_NOISE);
+    let front = smoothstep(-fr.y, fr.y, share_level(f.flame / max(f.rest, f.flame)) - fr.x);
+    var lf = tongues(at, t, f.length, f.wind, e, time) * shown * front;
     lf += inner * resolved * tongues(at, (round(sweep) - sweep) / sweep_dy, f.length, f.wind, e, time) * shown;
     // The fronts flame where tongues do not show; the embers flicker behind them.
-    lf += (zone + inner * resolved * flaming) * FLAME_MID * (1.0 - shown);
+    lf += (zone * front + inner * resolved * flaming) * FLAME_MID * (1.0 - shown);
     lf += EMBERS * inner * (1.0 - flaming) * mix(EMBER_BASE, 1.0, exp(-behind / EMBER_FADE)) * specks * EMBER_RGB;
     light += lf * ease(0.0, FLAME_FADE, f.flame) * on_liquid;
   }
