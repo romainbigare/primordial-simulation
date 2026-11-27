@@ -15,6 +15,7 @@ mod frame;
 mod lines;
 mod mend;
 mod half;
+mod horizon;
 mod rebuild;
 mod rock;
 mod shore;
@@ -199,7 +200,11 @@ impl Ground {
         stems::update(&new, &shore, (&mut at, &mut raw), (&ways, &shore_moved));
         let mut grain = std::mem::take(&mut self.grain);
         let moved = rebuild::moved(&old, &new);
-        self.rock_rows = rebuild::rows(&rebuild::near(&new, &moved, rebuild::ROCK_READ), new.across);
+        // (The rock of a sample holds its horizon too, which reads every sample toward the light: `horizon`.)
+        let metres = self.map.length(SAMPLE_DEPTH);
+        let shaded: Vec<bool> = horizon::horizon(&old, metres).iter().zip(horizon::horizon(&new, metres)).map(|(a, b)| a.to_bits() != b.to_bits()).collect();
+        let (read, lit) = (rebuild::rows(&rebuild::near(&new, &moved, rebuild::ROCK_READ), new.across), rebuild::rows(&shaded, new.across));
+        self.rock_rows = if read.1 == 0 { lit } else if lit.1 == 0 { read } else { (read.0.min(lit.0), read.1.max(lit.1)) };
         let read = rebuild::near(&new, &moved, rebuild::GRAIN_READ);
         (0..new.h.len()).filter(|&k| read[k]).for_each(|k| grain[k] = pcore::soil::texture_at(&new, &self.terrain.makes, self.gravity, k));
         let strips = wetness::strips(&new, &self.phys);
@@ -284,8 +289,8 @@ impl Ground {
 
     /// The rock of each of the terrain's samples, row by row in four planes of four 16-bit floats a sample: the depth
     /// of its loose ground, m, the largest stone its channel moves, m, and its channel's links; the reflectance of its
-    /// bed's make, of `colours` one a make; the texture of its loose ground; and its pores and the deposit on it
-    /// (`rock::rock`).
+    /// bed's make, of `colours` one a make; the texture of its loose ground; and its pores, how high the ground stands
+    /// toward the light and the deposit on it (`rock::rock`).
     pub fn rock(&self, colours: &[[f64; 3]]) -> Vec<u16> {
         rock::rock(&self.reaches(), colours, &self.grain, 0..self.samples.down)
     }

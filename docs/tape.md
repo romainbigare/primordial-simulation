@@ -248,7 +248,7 @@ reflectance of its bed's make and a zero. Then of each sample again the shares o
 loose ground (`pcore::soil::textures`), how slowly its pores pass liquid (the decimal logarithm of 1 m/s over their
 conductivity, `Pores::of`), by which the page's puddles stand longer on slow ground, and the liquid its loose ground
 holds for roots (`Pores::for_roots` of its texture over its depth) as the `avail` layer shows it, 0..1 of its scale,
-which the page draws that layer by. Then of each sample again two zeros, how deep the load the liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain, by which the page draws a deposit. **The
+which the page draws that layer by. Then of each sample again the slope up from it to the highest ground toward the north-west on its diagonal of samples (rise over run; `tape/src/ground/horizon.rs`: where it passes the rise of the page's light, the sample lies in the shade of that ground), a zero, how deep the load the liquid laid lies on it, m (`Samples::settled`), and the decimal logarithm of the years its loose ground has lain, by which the page draws a deposit. **The
 samples' discharge** (`Table::discharge`): what runs through each of the terrain's samples, m³/s, row by row (its
 `World::discharge` at the mol per m³ of the liquid its cell's ground holds; none where that holds no liquid; a
 sample of a pond that holds no liquid, that its body's liquid does not reach (a body not yet full stands under its
