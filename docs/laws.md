@@ -285,7 +285,20 @@ where less (the mantle's balance with nothing coming from upslope, the bed break
 lower): ground an edit barely tilted keeps nearly all its own, so the edge of a brush shows no step, and the flanks of a hill raised as steep as loose ground rests at
 (it slides no steeper) keep little of it, and the cells' plants root by it (`cover::loose_bins`). **Known limit:** the make of the samples' bed
 does not follow an edit; the cell's soil keeps its texture. What an edit starts that the laws treat as instant within a month runs at once when the edits settle
-(`World::settle`), with no time on the world's clock: where the ground was shaped, the samples are built again over
+(`World::settle`), with no time on the world's clock: where the ground was shaped, it is first laid as worn
+(`World::wear_edits`, `space::shaped`). This is part of the edit: the hand lays the ground it shaped as the world's own
+wear would leave it after `edit_wear_years` (10⁶ years), and no time passes on the world's clock. Over the samples the
+edits shaped since the samples were last built and 32 about them (which drain them, and stand as they are), each such
+sample first takes the terrain's own roughness, the fine swells of its noise (`terrain::swells`) times how far the edits
+moved it, so a round hill has something to cut; then 8 steps of the start's law (`space::wear`): the flood from the
+box's edge, the stream power law with the K of each sample's bed's make (`wear::cut`) and the creep (`slopes::creep`),
+on those samples alone and none at or under the liquid's stand; what the wear takes leaves the world (its load is not
+laid); no sample goes lower than it stood before the edits shaped it since, so a pit is not cut deeper; last the ground
+slides as after a paint, so it stands no steeper than `REST` (ground at its rest slope keeps no channel cut deeper than
+the slide's 2° leaves room for: such a slope is a smooth face of loose ground). Each cell moves by its samples' heights
+from and to the outside node, as its own rock. So valleys cut into a raised hill with ridges between them, and a river
+under a raised bank cuts through it. A basin's ground is not worn: a basin wears what the edits before it shaped, then
+digs as it is meant to stand. Then the samples are built again over
 it as a build builds them, without the lobes, without counting a build of the years and with the cells' offsets of the
 last build (`flow::build::reshape`: an edit moves a cell's ground and its samples' mean by one volume, so its offset
 stays to within the rounding of the areas, and the samples move only where edits shaped them; what the new samples

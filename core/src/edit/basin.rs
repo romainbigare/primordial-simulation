@@ -42,7 +42,8 @@ impl World {
     /// level, wherever its own pass lay); every other sample within `BANKS_REACH` past the brush's edge is cut toward
     /// the level, or the level of a pond it lies in or beside where higher, by a share that falls from all of it at the
     /// shore to none at the banks' end (`banked`); none filled. The ground cut or raised with each cell's own rock
-    /// (`move_ground`), and the samples built again over it (`flow::build::reshape`). The key liquid fills the pond
+    /// (`move_ground`; neither worn, `World::wear_edits`, nor slid, `World::rest`: it stands as it is made), and the
+    /// samples built again over it (`flow::build::reshape`). The key liquid fills the pond
     /// under the brush's centre to its level, its pass, from the outside node at each cell's ground temperature, poured
     /// into each cell's part of it (`pour_pond`, one pour for all its cells); the liquid settled with no time
     /// (`flow::settle`) levels it (the pores of the ground it covers were given what they take first), and the passes
@@ -56,9 +57,11 @@ impl World {
             return false;
         }
         // (The ground is read on the samples as they stand over the cells' grounds: built again first where edits
-        // shaped them, or where they were never built from the running world, the seed's.)
+        // shaped them, worn as settling wears them (a basin's own ground is not worn), or where they were never built
+        // from the running world, the seed's.)
         let reshaped = self.relief.due || self.relief.version == 0;
         if reshaped {
+            self.wear_edits();
             crate::flow::build::reshape(self);
         }
         let made = self.dig(b, depth, liquid);

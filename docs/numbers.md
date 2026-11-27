@@ -39,6 +39,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `build_years` | years | years between two builds of the terrain's samples from what the load laid (`flow::build`): their heights, ways, ponds and the load's rooms stay as last built between | none: a choice between the cost of a build (0.75 s on the 64 island, about 3% of a year once a decade) and how long a deposit waits to steepen its reach; 10 | tuned, first guess |
 | `edit_top_m` | m | depth of the loose ground an edit that raises the ground lays over the rock it raises (`World::shape`): the top of a raised stroke is loose ground of one of the world's rock makes, the rest the cell's own rock | the loose ground over rock on gentle slopes, where its making balances its creep, is about 1 m deep (Heimsath, Dietrich, Nishiizumi and Finkel 1997) | anchored |
 | `edit_bank_m` | m | height over its liquid's level of the bank a dug basin raises where its rim would let the liquid out, but at its outlet (`World::basin`) | none: a dug pond's spoil is heaped where it closes the pond, a few metres high; 3 m holds the liquid at its level there | tuned, first guess |
+| `edit_wear_years` | years | how long the start's wear (`space::wear`: the stream power law and the creep) wears the ground a stroke shaped when the edits settle (`World::wear_edits`): the hand lays its ground as worn so long, with no time on the world's clock | none: the start wears the land 2e6 years; half that cuts valleys into a raised hill of a few hundred metres, its flanks a twentieth to a tenth apart where the brush raised them alike, and lowers it by about a sixth, while a bump on a channel is cut through | tuned, first guess |
 | `skin_m` | m | depth of the layer that exchanges with the surface within a year: its heat (and what it conducts sideways), and the pores roots and evaporation draw from; a cell takes at most this of each sample's loose ground | the yearly swing of temperature reaches 2 to 4 m in soil (my arithmetic, unchecked); 95% of roots lie in the top 2 m in most biomes (Schenk and Jackson 2002, from memory) | anchored |
 | `air_top_m` | m | height of the air column | the lower air of Earth, 8 to 16 km | anchored |
 | `gravity` | m/s² | pull of the planet | 9.81 | physical |
@@ -461,16 +462,16 @@ Not rows of the model: real sizes that a run's results can be held against, kept
 
 ## Counts
 
-The 133 rows of `Config` and `Physics` are their 133 fields; the constants outside the structs are counted by their mark.
+The 134 rows of `Config` and `Physics` are their 134 fields; the constants outside the structs are counted by their mark.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 7, and 8 outside the structs | `sun`, `tilt`, `radius_m`, `gravity`, `rho_body`, `sorb_scale`, `sorb_power` |
 | anchored | 105, and 47 outside the structs | `lat_south`, `lat_north`, `rotation`, `days_per_month`, `months_per_year`, `edit_top_m`, `skin_m`, `air_top_m`, `sensible`, `evap`, `dissolve`, `wind`, `mix`, `rain_drift_s`, `moist_min`, `line_spread`, `cloud_life`, `drop_m`, `drop_forward`, `drop_dark`, `carry`, `wear`, `creep`, `bury`, `light_depth`, `light_yield`, `gas_floor`, `gas_ref`, `wet_depth`, `t_cat`, `frost_k`, `harden`, `c_basal`, `e_life`, `c_repair`, `dormant`, `dormancy`, `kernel_near`, `c_copy`, `c_capacity`, `mut_size`, `thin_kg`, `tall`, `stem_form`, `stem_solid`, `wall_kg`, `drawdown`, `huber`, `c_sapwood`, `root_uptake`, `root_turnover`, `seed_kg`, `bed_depth`, `bed_porosity`, `bed_seep`, `soil_m`, `hill`, `channel_width`, `channel_width_exp`, `channel_depth`, `channel_depth_exp`, `h_mix`, `thermocline`, `eddy_time`, `eddy_speed`, `eddy_size`, `top_damp`, `c_muscle`, `upkeep_exp`, `meeh`, `r_air`, `r_coat`, `drink_least`, `drink_exp`, `walk_froude`, `c_move`, `move_ref`, `move_exp`, `chew`, `busy`, `bite_floor`, `reach_len`, `store_most`, `dry_most`, `litter_rho`, `litter_k`, `jaw`, `jaw_exp`, `bite_time`, `bite_breadth`, `bite_exp`, `crown_density`, `thin_exp`, `flux_ahead`, `t_light`, `t_burn`, `duff_hold`, `smoulder_moist`, `surface_m`, `cured_life`, `cured_rho`, `base_share`, `snag_life`, `fine_d`, `front_life` |
 | tuned | 6, and 36 outside the structs | `rain_time`, `c_leaf`, `kernel_far`, `kernel_far_share`, `alike`, `strikes` |
-| tuned, first guess | 11, and 17 outside the structs | `build_years`, `edit_bank_m`, `hard_min`, `c_firm`, `root_per_height`, `root_least`, `rooted_from`, `hide`, `soft`, `still`, `hold` |
+| tuned, first guess | 12, and 17 outside the structs | `build_years`, `edit_bank_m`, `edit_wear_years`, `hard_min`, `c_firm`, `root_per_height`, `root_least`, `rooted_from`, `hide`, `soft`, `still`, `hold` |
 | speed | 2, and 4 outside the structs | `wake_share`, `sleep_days` |
 | setting | 1 | `variety` |
 | container | 1 | `phys` |
 
-Rows marked tuned: 14 fields, and 51 rows of constants outside the structs (those of the ground's tiles and of the page among them). Rules chosen for a run: 1.
+Rows marked tuned: 15 fields, and 51 rows of constants outside the structs (those of the ground's tiles and of the page among them). Rules chosen for a run: 1.

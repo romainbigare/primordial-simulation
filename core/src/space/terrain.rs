@@ -199,6 +199,15 @@ pub fn rise(seed: u64, map: &Square, lift: &Lift, place: Place, level: f64) -> (
     }
 }
 
+/// The ground's own swells and hollows at `place` of `map` for `seed` (`rise_at`'s second part: what the base's fine
+/// octaves add about their mean, a share of a unit of the rise), the roughness of the terrain at the scale of a hill.
+pub(super) fn swells(seed: u64, map: &Square, place: Place) -> f64 {
+    match spot(map, place, per_square(map)) {
+        Spot::Flat(p) => rise_at(seed, warped(seed, p)).1,
+        Spot::Round(p) => rise_at(seed, warped(seed, p)).1,
+    }
+}
+
 /// Units of the noise a square of `map`: on an island `ACROSS` over `ANCHOR_M`; on a globe `ACROSS` round its equator.
 pub(super) fn per_square(map: &Square) -> f64 {
     if map.wrap { ACROSS / map.w.max(map.h) as f64 } else { map.side * ACROSS / ANCHOR_M }

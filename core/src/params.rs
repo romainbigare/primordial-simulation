@@ -37,6 +37,8 @@ pub struct Config {
     pub edit_top_m: f64,
     /// Height over its liquid's level of the bank a dug basin raises where its rim would leak, m (`World::basin`)
     pub edit_bank_m: f64,
+    /// Years of the start's wear the ground a stroke of the ground shaped is laid as worn by, years (`World::wear_edits`)
+    pub edit_wear_years: f64,
     /// Speed setting: a sleeping node that has gained over this share of an amount it held when it fell asleep wakes
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
@@ -486,7 +488,7 @@ impl Config {
         // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
         require(p.h_mix > 0.0 && p.thermocline >= 0.0, || format!("h_mix ({}) must be above 0 and thermocline ({}) not below", p.h_mix, p.thermocline))?;
         require(self.build_years > 0, || format!("build_years ({}) must be above 0", self.build_years))?;
-        require(self.edit_top_m >= 0.0 && self.edit_bank_m >= 0.0, || format!("edit_top_m ({}) and edit_bank_m ({}) must not be below 0", self.edit_top_m, self.edit_bank_m))?;
+        require(self.edit_top_m >= 0.0 && self.edit_bank_m >= 0.0 && (0.0..f64::INFINITY).contains(&self.edit_wear_years), || format!("edit_top_m ({}), edit_bank_m ({}) and edit_wear_years ({}) must not be below 0, the last finite", self.edit_top_m, self.edit_bank_m, self.edit_wear_years))?;
         require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
         // The moistest air of a node saturates before the node does, and not when it holds nothing (`seen::saturated`).
         require(self.moist_min > 0.0 && self.moist_min < 1.0, || format!("moist_min ({}) must be above 0 and below 1", self.moist_min))?;
@@ -533,6 +535,7 @@ impl Default for Config {
             build_years: 10,
             edit_top_m: 1.0,
             edit_bank_m: 3.0,
+            edit_wear_years: 1e6,
             wake_share: 0.05,
             sleep_days: 90,
             chunks: default_chunks(),

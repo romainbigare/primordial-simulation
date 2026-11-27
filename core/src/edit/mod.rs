@@ -4,7 +4,7 @@
 //! event (`EventKind::Edit`). A round brush finds the cells under it and the share of each it covers (`brush`), and
 //! raises or lowers the ground under it (`shape`), which then slides till it stands no steeper than loose ground rests
 //! at (`World::rest`); what the edits start that takes no time runs at once, with no time on the world's clock
-//! (`World::settle`).
+//! (`World::settle`), the ground they shaped worn first (`World::wear_edits`).
 
 mod brush;
 mod heat;
@@ -143,13 +143,14 @@ impl World {
     }
 
     /// Run at once what the edits since the month began start that takes no time, with no time on the world's clock
-    /// (laws.md 0): where edits shaped the ground (`Relief::due`), the samples are built again over it
-    /// (`flow::build::reshape`), the passes of a month's start find the state of the ground from them, and the liquid
-    /// settles over it (`flow::settle`); then the strikes of edits and the heat they added burn (`flame::now`). Returns
-/// what it did (`Settled`).
+    /// (laws.md 0): where edits shaped the ground (`Relief::due`), it is worn (`wear_edits`, where not yet), the samples
+    /// are built again over it (`flow::build::reshape`), the passes of a month's start find the state of the ground from
+    /// them, and the liquid settles over it (`flow::settle`); then the strikes of edits and the heat they added burn
+    /// (`flame::now`). Returns what it did (`Settled`).
     pub fn settle(&mut self) -> Settled {
         let ground = self.relief.due;
         if ground {
+            self.wear_edits();
             crate::flow::build::reshape(self);
             crate::month_start(self);
             crate::flow::settle(self);

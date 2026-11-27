@@ -34,7 +34,7 @@ pub(super) const LOW_STAND_M: f64 = -100.0;
 pub const STAND_M: f64 = 0.0;
 /// The stream power law's K for m = 1/2 and n = 1, per year: ground under liquid that drains 1 m² lowers by K a year
 /// on a unit slope.
-const CUT: f64 = 3.0e-7;
+pub(super) const CUT: f64 = 3.0e-7;
 /// The diffusivity of the slopes' creep, m² a year.
 pub(super) const CREEP: f64 = 3.0e-3;
 /// The grids the time runs on, coarsest first, each half as coarse as the one before: the samples a side to one of
@@ -248,7 +248,7 @@ fn run(g: &Grid, h: &mut [f64], (up, open, draw): (&[f64], &[bool], &[f64]), (be
 /// f = K dt √A / d. A
 /// sample under its basin's level, or whose liquid runs to higher ground, only rises. Returns the area that drains
 /// through each sample, m².
-fn cut(g: &Grid, h: &mut [f64], f: &Flood, (up, open, k_cut): (&[f64], &[bool], &[f64]), dt: f64) -> Vec<f64> {
+pub(super) fn cut(g: &Grid, h: &mut [f64], f: &Flood, (up, open, k_cut): (&[f64], &[bool], &[f64]), dt: f64) -> Vec<f64> {
     let own = (0..g.n()).map(|k| g.area(k)).collect();
     let area = spread_down(&f.surface, f.order.iter().rev().map(|&k| k as usize), |k| f.earlier(g, k), own);
     for &k in &f.order {

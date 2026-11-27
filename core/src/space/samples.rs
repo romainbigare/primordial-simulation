@@ -310,7 +310,7 @@ impl Terrain {
     }
 
     /// The draws of the ways down of `n` samples for `seed` (`drain::draws`), found once and kept.
-    fn draws(&self, seed: u64, n: usize) -> Arc<Vec<f64>> {
+    pub(super) fn draws(&self, seed: u64, n: usize) -> Arc<Vec<f64>> {
         let mut kept = self.kept.3.lock().expect("the draws");
         match kept.as_ref().filter(|d| d.0 == seed && d.1.len() == n) {
             Some(d) => d.1.clone(),

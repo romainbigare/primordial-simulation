@@ -37,6 +37,27 @@ impl World {
         self.move_ground(&cells, loose, &self.mix_of(make))
     }
 
+    /// The ground edits shaped since the samples were last built, worn as the start's wear would leave it worn for
+    /// `Config::edit_wear_years` (`World::worn`; laws.md, Edits): a part of the edit, laid so by the hand, with no time
+    /// on the world's clock. Each cell moves by its samples' heights (`move_ground`, from and to the outside node), the
+    /// cells' own rock. Once, till edits shape the ground again (`Relief::worn`): `settle` runs it, and a shell may run
+    /// it before to tell the relief the settle builds from.
+    pub fn wear_edits(&mut self) {
+        if !self.relief.due || self.relief.worn {
+            return;
+        }
+        let cells = self.cells_of(&self.worn(), self.terrain_samples().across);
+        self.move_ground(&cells, 0.0, &[]);
+        self.relief.worn = true;
+    }
+
+    /// The samples `moved` (each with how far it moves, m; of samples `across` a row) by the cell each lies in.
+    fn cells_of(&self, moved: &[(usize, f64)], across: usize) -> BTreeMap<usize, Vec<(usize, f64)>> {
+        let mut cells: BTreeMap<usize, Vec<(usize, f64)>> = BTreeMap::new();
+        moved.iter().for_each(|&(k, dh)| cells.entry(self.cell_under(self.sample_place(k, across))).or_default().push((k, dh)));
+        cells
+    }
+
     /// The substances of the terrain's make `make` (`Make::of`), each with its share by volume; none where there is none.
     fn mix_of(&self, make: usize) -> Vec<(usize, f64)> {
         self.terrain.makes.get(make).map_or_else(Vec::new, |m| m.of.clone())
@@ -49,10 +70,7 @@ impl World {
     pub(super) fn rest(&mut self, brushes: &[Brush], make: usize) {
         let across = self.terrain_samples().across;
         let givers: BTreeSet<usize> = brushes.iter().flat_map(|&b| self.covered(b, across)).map(|c| c.k).collect();
-        let mut cells: BTreeMap<usize, Vec<(usize, f64)>> = BTreeMap::new();
-        for (k, dh) in self.slid(&givers.into_iter().collect::<Vec<_>>()) {
-            cells.entry(self.cell_under(self.sample_place(k, across))).or_default().push((k, dh));
-        }
+        let cells = self.cells_of(&self.slid(&givers.into_iter().collect::<Vec<_>>()), across);
         self.move_ground(&cells, 1.0, &self.mix_of(make));
     }
 

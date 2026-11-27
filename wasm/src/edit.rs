@@ -232,10 +232,14 @@ fn keep_planting(l: &mut Live, b: Brush, row: u32) -> serde_json::Value {
 }
 
 /// The relief the world's samples will be built from when its stroke settles (`tape::Ground::settled_relief_bytes`),
-/// for the page's ground to be made again while the world settles; nothing (`out_len` 0) where none can be told before.
+/// the ground its edits shaped worn first, as settling does (`World::wear_edits`), for the page's ground to be made
+/// again while the world settles; nothing (`out_len` 0) where none can be told before.
 #[no_mangle]
 pub extern "C" fn settled_relief() -> *const u8 {
-    let bytes = with(|l| tape::Ground::settled_relief_bytes(&l.world).unwrap_or_default());
+    let bytes = with(|l| {
+        l.world.wear_edits();
+        tape::Ground::settled_relief_bytes(&l.world).unwrap_or_default()
+    });
     give(bytes)
 }
 
