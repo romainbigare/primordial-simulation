@@ -28,9 +28,10 @@ const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0;
 // and of the channel's water: the signs of its flow (lib/flow.wgsl `flow_signs`), and (`water`) its depth over the
 // depth the channel law gives its middle and how near its edge the point lies, 0..1; and the way it runs (`down`, a
 // unit vector east and south); and of the dry ground, the slope up to the highest ground toward the light (rock.wgsl
-// `SoilAt.horizon`), how far the relief finer than the tiles raises it and that height's change across a pixel, m
-// (relief.wgsl), and its tone (style.wgsl `tone_of`).
-struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f, horizon: f32, knob: vec2f, tone: f32 }
+// `SoilAt.horizon`), how far the noise of the relief finer than the tiles raises it and that height's change across a
+// pixel, m (relief.wgsl `Relief.knob`), its tone (style.wgsl `tone_of`), and how high it stands in the broad hollows of
+// its gullies (gullies.wgsl `Gullies.fold`).
+struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f, horizon: f32, knob: vec2f, tone: f32, fold: f32 }
 
 // The spot `s` with its channel's stones: on the bed of channel `ch` (of discharge `q`, on ground `g`), and beside it
 // where the reach is steep, with the walls and the fallen blocks of a steep reach. The largest drawn takes its size
@@ -95,12 +96,16 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   var g = ground_at(at, true);
   // The place the samples' fields are read at (rock.wgsl `sample_place`).
   let place = sample_place(at, e);
-  // The loose ground with its patches, the bed it bares, and the relief finer than the tiles (relief.wgsl), which
-  // moves the ground's height and slope: the shading's normal and the fine line of a shore.
+  // The loose ground with its patches, the bed it bares, its soil, the channel's sample and discharge, and the relief
+  // finer than the tiles (relief.wgsl), which moves the ground's height and slope: the shading's normal and the fine
+  // line of a shore.
   let loose_mean = loose_at(place);
   let loose = loose_seen(at, loose_mean, e);
   let bare = bed_shows(loose);
-  let fine = relief(e, g.slope, bare, loose);
+  let soil = soil_at(at, place, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy);
+  let reach = sample_at(g);
+  var q = discharge_of(reach);
+  let fine = relief(e, GullyGround(g.slope, bare, loose, soil.deposit.x, g.twi, min(g.h - earth.view.z, over_ponds(g, 0.0)), g.d, q));
   // The waves' swash follows the shore as the tiles draw it: the relief's bumps would break its line into specks.
   let tiled = g;
   // The relief moves the ground's height as much as the ground drawn is steep (`RELIEF_EDGE_SLOPE`): on a flat shore a
@@ -112,9 +117,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // (Its change across a pixel taken the short way round the length the place along is kept modulo.)
   let grows = vec2f(dpdx(g.along), dpdy(g.along));
   let grows_short = grows - land.reach.x * round(grows / land.reach.x);
-  let reach = sample_at(g);
   var next = Next(reach, 0.0);
-  var q = discharge_of(reach);
   // (Most points that hold a channel lie far from its line, in its reach alone: there its own sample's discharge says
   // enough, and what grows along it, its stones and its neighbour's are read within `CHANNEL_NEAR` of its line.)
   var banks = banks_of(q);
@@ -126,7 +129,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   }
   let mouth = through_band(g, e);
   let ch = channel_of(g, q, banks, mouth);
-  let st = state_on(at, g, cs, depth_in(g, ch), fine.h);
+  let st = state_on(at, g, cs, depth_in(g, ch), fine.knob.x, gully_drift(fine.spur, fine.fold));
   let surface = blended(SURFACE, cs);
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
@@ -144,7 +147,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // eased over the index's change across the pixel by the relief's slope, `bares_grain`, worked out, not taken from the
   // block.)
   let snow_x = snow_past(st.snow, st.bares);
-  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_past(st.snow, 0.0)), bares_grain(length(fine.slope) * e)), st.snow, st.depth > 0.0);
+  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_past(st.snow, 0.0)), bares_grain(fine.knob.y * e)), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
   // the cells' soil is a mean over kilometres, the bed's make is the samples'.
@@ -159,7 +162,6 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.slope = length(g.slope) * look.x;
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
-  let soil = soil_at(at, place, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy);
   p.grain = soil.grain;
   p.deposit = soil.deposit;
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.
@@ -228,7 +230,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
   // The marks of fire on dry ground: its burn scars and the plants they took (burn.wgsl).
   p = burnt_spot(p);
-  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0), soil.horizon, vec2f(fine.h, length(fine.slope) * e), tone_of(place.n));
+  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0), soil.horizon, vec2f(fine.knob.x, fine.knob.y * e), tone_of(place.n), fine.fold);
   // A channel is drawn on the land and through the band of shallows of the liquid it runs into, no farther.
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
   if (p.depth <= 0.0) { out.dry.over = shore_over; }
@@ -274,8 +276,8 @@ fn live_map(v: Varying) -> vec4f {
   var shown = 0.0;
   if (earth.view.x == 1.0) { shown = layer_at(at, spots.dry); }
   var rgb = in_view_of(c, shown);
-  // In the Earth view the dry ground takes the shade of its steepness and of the heights toward the light, and its
-  // tone.
-  if (styled() && spots.dry.depth <= 0.0) { rgb *= relief_shade(spots.dry.slope, spots.horizon, spots.knob) * spots.tone; }
+  // In the Earth view the dry ground takes the shade of its steepness and of the heights toward the light, its tone,
+  // and the dark of its gullies' broad hollows.
+  if (styled() && spots.dry.depth <= 0.0) { rgb *= relief_shade(spots.dry.slope, spots.horizon, spots.knob) * spots.tone * hollow_tone(spots.fold); }
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

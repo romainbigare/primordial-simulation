@@ -118,6 +118,12 @@ fn relief_shade(slope: f32, horizon: f32, knob: vec2f) -> f32 {
 // What the colour of the dry ground is multiplied by where the noise of the samples' places is `n` (`TONE_SWAY`).
 fn tone_of(n: f32) -> f32 { return 1.0 + TONE_SWAY * clamp(n, -1.0, 1.0); }
 
+// The broad hollows of the gullies are darker and their tops lighter by up to `HOLLOW_TONE`: less of the sky reaches a
+// hollow, and its soil is damper (a painted map's shading of its valleys). What the colour of dry ground is multiplied
+// by where it stands `fold` high in them (gullies.wgsl `Gullies.fold`, 0 a floor .. 1 a top).
+const HOLLOW_TONE = 0.35;
+fn hollow_tone(fold: f32) -> f32 { return 1.0 + HOLLOW_TONE * (2.0 * fold - 1.0); }
+
 // What the colour of ground whose share `bare` is bare, and whose share `seen` shows its soil from above
 // (`Ground.seen`), is multiplied by: its bare part tinted by its grain `grain` (`Spot.grain`: the shares of coarse and
 // fine grain and of organic matter) as `SAND_TINT` to `CLAY_TINT` say, and the soil seen darkened by its organic matter
