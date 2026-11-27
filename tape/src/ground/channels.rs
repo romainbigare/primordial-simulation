@@ -10,7 +10,7 @@
 //! covers it first as the flux grows, or, where every channel is narrower than a texel, the nearest; but a line whose
 //! bed, widened by `CLAIM_TEXELS`, covers the texel's centre is as near as can be, so a rill keeps the texels it runs
 //! through and those about them however wide the river whose reach they lie in (a shell blends four texels, all of the
-//! one line), and a tributary keeps its bed and its banks up to the water of the channel it joins; it keeps that
+//! one line); a tributary takes no texel in the bed of the channel it joins; it keeps that
 //! channel's sample, its distance to its line, signed by the side the texel lies on, of the line's nearest point how
 //! far along the channel it lies, and its distance to the line without its bends (its curve and its wander alone:
 //! from afar a shell draws a channel as a line wider than its bends, about that one). A channel a shell may draw as
@@ -164,7 +164,7 @@ pub(super) struct Channels<'a> {
 
 /// A line near a window of texels: its sample, the line as drawn, where it joins the next sample's, what its
 /// distances are told apart by (half its channel's widest width, no less than a texel, samples), how far it reaches,
-/// samples, its bed's half width and how far it claims its texels (`CLAIM_TEXELS`), samples, whether a valley is drawn about it, and whether it is
+/// samples, how far it claims its texels (`CLAIM_TEXELS`), samples, whether a valley is drawn about it, and whether it is
 /// drawn on these texels at all (a line near only for its wetness index is not).
 pub(super) struct Near {
     pub q: usize,
@@ -172,7 +172,6 @@ pub(super) struct Near {
     join: Option<Join>,
     scale: f64,
     reach: f64,
-    bed: f64,
     claims: f64,
     carves: bool,
     shown: bool,
@@ -277,8 +276,8 @@ impl<'a> Channels<'a> {
                     continue;
                 }
                 if let Some((drawn, join)) = self.line(q, texel) {
-                    let bed = self.r.bed_of(q).0 / 2.0 / metres;
-                    near.push(Near { q, drawn, join, scale: own.max(texel) / metres, reach, bed, claims: (bed + CLAIM_TEXELS * k).min(reach), carves, shown });
+                    let claims = (self.r.bed_of(q).0 / 2.0 / metres + CLAIM_TEXELS * k).min(reach);
+                    near.push(Near { q, drawn, join, scale: own.max(texel) / metres, reach, claims, carves, shown });
                 }
             }
         }
@@ -291,7 +290,7 @@ impl<'a> Channels<'a> {
     fn lay(&self, win: &Window, l: &Near, ab: [[f64; 2]; 2], best: &mut [f64], takes: &dyn Fn(usize) -> bool, put: &mut dyn FnMut(usize, f64, f64)) {
         about(win, l, ab, &mut |i, at, side, d2, t| {
             let near = (d2.sqrt() - l.claims).max(0.0) / l.scale + NEAREST_TIE * d2.sqrt();
-            if near < best[i] && takes(i) && !l.join.is_some_and(|j| j.holds(at, d2.sqrt(), l.bed)) {
+            if near < best[i] && takes(i) && !l.join.is_some_and(|j| j.holds(at)) {
                 best[i] = near;
                 put(i, side * d2.sqrt() * self.r.metres, t);
             }
