@@ -21,6 +21,8 @@ const LAKE_LEAST_M = 300;
  * radius (the owner's choice: 250 m/s at a radius of 300 m, so a second's hold makes a hill of 250 m there, and a brush
  * twice as wide moves it twice as fast). */
 const SHAPE_SPEED_PER_M = 250 / 300;
+/** One paint of Raise or Lower covers at most this long a hold, s: a twentieth of a second (`GodTool.mostS`). */
+const SHAPE_PAINT_MOST_S = 0.05;
 /** A stroke of Raise or Lower adds at least what this long a hold adds, s: a tap makes a bump that shows. */
 const SHAPE_TAP_S = 0.1;
 /** How much heat Burn adds at the brush's centre while held, J/m² a second: at the first radius, the remains of a
@@ -96,7 +98,7 @@ export function godTools(kinds: () => StartKind[]): GodTool[] {
   const shape = (sign: number): GodTool => ({
     key: sign > 0 ? 'raise' : 'lower', icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise' : 'Lower',
     ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1,
-    rate: radius => sign * SHAPE_SPEED_PER_M * radius, tapS: SHAPE_TAP_S, follows: true, rests: true,
+    rate: radius => sign * SHAPE_SPEED_PER_M * radius, tapS: SHAPE_TAP_S, mostS: SHAPE_PAINT_MOST_S, follows: true, rests: true,
     hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Right-drag moves the map.`, verb: `Hold to ${sign > 0 ? 'raise' : 'lower'}`,
     why: () => '', reason: why => (why === UNCHANGED ? 'No ground is left here to take away.' : why),
   });
