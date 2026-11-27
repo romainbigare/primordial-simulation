@@ -105,8 +105,9 @@ export async function reopen(page, url) {
   await page.waitForFunction(() => { const e = window.__ew; return e.world && e.world !== window.__ewWas && e.land && e.land.tiles.rock; }, null, { timeout: 300000, polling: 250 });
 }
 
-/** The longest a picture is waited for, ms: a sharp picture over forest takes minutes in software. */
-const SETTLE_MOST_MS = 300000;
+/** The longest a picture is waited for, ms: a software GL takes up to about ten minutes to make the ground's program
+ * of a close view before it draws the first frame with it. */
+const SETTLE_MOST_MS = 1200000;
 
 /** Wait until the picture is whole: no tile and no detail to come, no frame due, the sharp picture drawn; the ms
  * waited, or -1. */
