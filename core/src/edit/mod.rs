@@ -94,6 +94,14 @@ impl Edit {
         finite(&self.place) && act
     }
 
+    /// The ground it lays, where it is an edit of the ground whose numbers can be made (`Act::Ground`, `valid`).
+    fn ground(&self) -> Option<shape::Laid> {
+        match self.act {
+            Act::Ground { radius_m, height_m, stroke_m, make } if self.valid() => Some(shape::Laid { b: Brush { centre: self.place, radius_m }, height: height_m, stroke: stroke_m, make: make as usize }),
+            _ => None,
+        }
+    }
+
     /// What the edit did to cell `i`, in a line; `done` false: the world could not make it.
     pub fn line(&self, i: usize, done: bool) -> String {
         let what = match self.act {
@@ -116,22 +124,29 @@ impl World {
     /// (`EventKind::Edit`, its cell the node, the value 1 where it was made, 0 where the world could not make it). An
     /// edit whose numbers cannot be made (`Edit::valid`) is refused before it touches the world (its node the first
     /// cell where its place is not finite). The grown stand of a kind is found once for all of them, as the world stood
-    /// before the first placed it: each cell takes the same stand. Returns whether each was made.
+    /// before the first placed it: each cell takes the same stand. Edits of the ground that follow one another (the
+    /// places of a paint) are laid together and come to rest together (`World::shape`). Returns whether each was made.
     pub fn edit(&mut self, edits: &[Edit]) -> Vec<bool> {
         if edits.iter().any(|e| e.valid() && e.act.reads_month()) {
             crate::month_start(self);
         }
         let mut grown = BTreeMap::new();
-        let done: Vec<bool> = edits
-            .iter()
-            .map(|e| {
-                let i = if e.place.iter().all(|v| v.is_finite()) { self.cell_under(e.place) } else { 0 };
-                let done = e.valid() && self.make(i, e, &mut grown);
-                self.events.push(Event { day: self.day(), kind: EventKind::Edit(*e), node: i as u32, value: if done { 1.0 } else { 0.0 } });
-                done
-            })
-            .collect();
+        let mut done = Vec::with_capacity(edits.len());
+        while done.len() < edits.len() {
+            let left = &edits[done.len()..];
+            let laid: Vec<shape::Laid> = left.iter().map_while(Edit::ground).collect();
+            let made = if laid.is_empty() { vec![left[0].valid() && self.make(self.node_of(&left[0]), &left[0], &mut grown)] } else { self.shape(&laid) };
+            for (e, &d) in left.iter().zip(&made) {
+                self.events.push(Event { day: self.day(), kind: EventKind::Edit(*e), node: self.node_of(e) as u32, value: if d { 1.0 } else { 0.0 } });
+            }
+            done.extend(made);
+        }
         done
+    }
+
+    /// The cell under the place of the edit `e`, its node (the first cell where its place is not finite).
+    fn node_of(&self, e: &Edit) -> usize {
+        if e.place.iter().all(|v| v.is_finite()) { self.cell_under(e.place) } else { 0 }
     }
 
     /// Run at once what the edits since the month began start that takes no time, with no time on the world's clock
@@ -179,7 +194,8 @@ impl World {
             }
             Act::Basin { radius_m, depth_m } => self.basin(Brush { centre: e.place, radius_m }, depth_m),
             Act::Heat { radius_m, joules_m2 } => self.heat(Brush { centre: e.place, radius_m }, joules_m2),
-            Act::Ground { radius_m, height_m, stroke_m, make } => self.shape(Brush { centre: e.place, radius_m }, (height_m, stroke_m), make as usize),
+            // (Made with those beside it: `World::edit`, `World::shape`.)
+            Act::Ground { .. } => false,
         }
     }
 }

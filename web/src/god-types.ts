@@ -42,6 +42,9 @@ export interface GodTool {
   /** A stroke of it adds at least what a hold this long adds, s, so a tap shows; none: a tap does nothing (it begins
    * to paint once held `HOLD_MS`, god.ts). */
   tapS?: number;
+  /** The most time one paint of it covers, s (none: all the time since its last paint): what the core does for a
+   * paint grows with the time it covers, so a slow frame or a slow computer slows the tool, never the brush. */
+  mostS?: number;
   /** Whether a paint of it lays its amount along the brush's path since its last paint (god.ts `along`), so a fast drag
    * leaves an unbroken trace; else all of it where the brush is. */
   follows?: boolean;

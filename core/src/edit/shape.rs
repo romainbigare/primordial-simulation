@@ -17,10 +17,19 @@ use std::collections::BTreeMap;
 const SPREAD: f64 = 0.2;
 /// What edits moved spreads out to this many radii from a brush's centre, less toward there (`World::rest`).
 const SPREAD_RADII: f64 = 2.0;
-/// The most a layer of an edit of the ground lays at the brush's centre, as a share of its radius (`World::shape`).
+/// The most a layer of a paint's edits of the ground lays at their centres, as a share of their radius (`World::shape`).
 const LAYER: f64 = 1.0 / 64.0;
-/// The most layers of one edit of the ground (`World::shape`): past it the layers are higher.
+/// The most layers of one paint's edits of the ground (`World::shape`): past it the layers are higher.
 const LAYERS_MOST: f64 = 64.0;
+
+/// An edit of the ground (`Act::Ground`): its brush, the height it lays at its centre, m (takes, where under none), what
+/// its stroke raised there before, m, and the terrain's make of the loose ground it lays.
+pub(super) struct Laid {
+    pub b: Brush,
+    pub height: f64,
+    pub stroke: f64,
+    pub make: usize,
+}
 
 impl World {
     /// The make of the loose ground the stroke `stroke` of a shell's edits lays (`Act::Ground`): one of the terrain's
@@ -29,20 +38,29 @@ impl World {
         Rng::new(self.seed, stroke, 0, Purpose::Edit).below(self.terrain.makes.len().max(1)) as u8
     }
 
-    /// The ground under the brush `b` raised by `height` m at its centre (lowered where under none), by `falloff` of
-    /// that at a distance d from it (in radii: a smooth bump, flat at its edge), over the samples it covers
-    /// (`covered`), in layers no higher at the centre than `LAYER` of its radius, each coming to rest before the next
-    /// (`lay`, `rest`): the ground stands the same however much one edit lays. A stroke that has raised `stroke` m at
-    /// the centre before lays the loose ground of its top (`lay`). Whether any ground moved.
-    pub(crate) fn shape(&mut self, b: Brush, (height, stroke): (f64, f64), make: usize) -> bool {
-        let layers = (height.abs() / (LAYER * b.radius_m).max(f64::MIN_POSITIVE)).ceil().clamp(1.0, LAYERS_MOST);
-        let mut moved = false;
-        for l in 0..layers as usize {
-            let laid = self.lay(b, (height / layers, stroke + height.max(0.0) * l as f64 / layers), make);
-            if laid {
-                self.rest(b, height / layers, make);
+    /// The ground under the brushes of `laid` (the edits of the ground of one paint, in their order) raised, each by its
+    /// height at its centre (lowered where under none) and by `falloff` of that at a distance d from it (in radii: a
+    /// smooth bump, flat at its edge), over the samples it covers (`covered`). They are laid in layers, together no
+    /// higher at their centres than `LAYER` of their radius, and after each layer the ground about them comes to rest
+    /// once (`lay`, `rest`): the ground stands the same however much one paint lays, and a paint of many places costs
+    /// one rest a layer. A stroke that has raised `stroke` m at a centre before lays the loose ground of its top
+    /// (`lay`). Whether each moved any ground.
+    pub(super) fn shape(&mut self, laid: &[Laid]) -> Vec<bool> {
+        let high: f64 = laid.iter().map(|l| l.height.abs() / (LAYER * l.b.radius_m).max(f64::MIN_POSITIVE)).sum();
+        let layers = high.ceil().clamp(1.0, LAYERS_MOST);
+        let mut moved = vec![false; laid.len()];
+        for n in 0..layers as usize {
+            let mut resting = Vec::new();
+            for (l, m) in laid.iter().zip(&mut moved) {
+                let height = l.height / layers;
+                if self.lay(l.b, (height, l.stroke + l.height.max(0.0) * n as f64 / layers), l.make) {
+                    resting.push((l.b, height));
+                    *m = true;
+                }
             }
-            moved |= laid;
+            if let (Some(last), false) = (laid.last(), resting.is_empty()) {
+                self.rest(&resting, last.make);
+            }
         }
         moved
     }
@@ -90,17 +108,19 @@ impl World {
         self.terrain.makes.get(make).map_or_else(Vec::new, |m| m.of.clone())
     }
 
-    /// The ground the brush `b` just shaped by `height` m at its centre comes to rest (`World::slid`; laws.md, Edits):
-    /// what edits moved spreads about the brush, out to `SPREAD_RADII` of its radius and less toward there (`falloff`),
-    /// by `SPREAD` of its radius, m², for each m it shaped at its centre, and the ground slides till it stands no
-    /// steeper than loose ground rests at. Each cell moves by its samples' heights (`move_ground`), what comes to it
-    /// laid as loose ground of the make `make` (ground that slid lies loose at the foot of its slope).
-    fn rest(&mut self, b: Brush, height: f64, make: usize) {
+    /// The ground the brushes of `laid` just shaped, each by its height at its centre, m, comes to rest (`World::slid`;
+    /// laws.md, Edits): what edits moved spreads about each brush, out to `SPREAD_RADII` of its radius and less toward
+    /// there (`falloff`), by `SPREAD` of its radius, m², for each m it shaped at its centre, and the ground slides till
+    /// it stands no steeper than loose ground rests at. Each cell moves by its samples' heights (`move_ground`), what
+    /// comes to it laid as loose ground of the make `make` (ground that slid lies loose at the foot of its slope).
+    fn rest(&mut self, laid: &[(Brush, f64)], make: usize) {
         let across = self.terrain_samples().across;
-        let givers: Vec<usize> = self.spanned(b, across).into_iter().map(|p| p.0).collect();
-        let about = Brush { centre: b.centre, radius_m: SPREAD_RADII * b.radius_m };
-        let spreads: Vec<(usize, f64)> = self.spanned(about, across).into_iter().map(|(k, d)| (k, SPREAD * b.radius_m * height.abs() * super::falloff(d))).collect();
-        let cells = self.cells_of(&self.slid(&givers, &spreads), across);
+        let givers: Vec<usize> = laid.iter().flat_map(|&(b, _)| self.spanned(b, across)).map(|p| p.0).collect();
+        let spreads = |&(b, height): &(Brush, f64)| {
+            let about = Brush { centre: b.centre, radius_m: SPREAD_RADII * b.radius_m };
+            self.spanned(about, across).into_iter().map(move |(k, d)| (k, SPREAD * b.radius_m * height.abs() * super::falloff(d)))
+        };
+        let cells = self.cells_of(&self.slid(&givers, &laid.iter().flat_map(spreads).collect::<Vec<_>>()), across);
         self.move_ground(&cells, 1.0, &self.mix_of(make));
     }
 
