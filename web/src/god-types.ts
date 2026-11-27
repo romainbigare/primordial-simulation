@@ -1,6 +1,6 @@
 // What god mode (god.ts) and the live world (live.ts) say to each other, and what a tool of god mode is
 // (god-tools.ts): the core's answers about a place, a brush and a stroke's settling; the worker's side of the tools; a
-// tool; and what the page gives god mode.
+// tool, its setting, and the classes and categories that hold the tools; and what the page gives god mode.
 import type { IconName } from './icons';
 
 /** What the core says of the cell under a place (wasm/src/edit.rs `probe`): the cell, its edges in squares (west,
@@ -27,10 +27,10 @@ export interface Editor {
   settle(): void; undo(): void;
 }
 
-/** A tool of god mode. The strip shows the tools in the order of their list; a new tool is one more entry. */
+/** A tool of god mode. It stands in a category of a class (`GodClass`); a new tool is one more entry there. */
 export interface GodTool {
-  /** Its key (its button's `data-tool`), its icon, its short name, and its colour on the map. */
-  key: string; icon: IconName; label: string; ink: string;
+  /** Its icon, its name, its picture (`god/<pic>.jpg` beside the page), and its colour on the map. */
+  icon: IconName; label: string; pic: string; ink: string;
   /** How to use it with a mouse, in a short line; and its big button's words on a phone (`GodPage.aim`). */
   hint: string; verb: string;
   /** The core's brush tool it paints with (wasm/src/edit.rs `brush`), and the starting kind it places (-1: none). */
@@ -65,16 +65,29 @@ export interface GodTool {
   /** The core's reason a cell was not edited (`Brushed`), in plain words; of `UNCHANGED`, why a paint that names no
    * cell's reason changed nothing. */
   reason(why: string): string;
-  /** Its own choices, shown under the brush's sizes (`show` draws the card anew after one is picked). */
-  choices?(show: () => void): HTMLElement;
+  /** Its own setting besides the brush's size, as it stands now. */
+  setting?(): GodSetting;
 }
-/** What the page gives god mode: its strip and card; the map drawn anew; that a tool was picked or a stroke begins (the
- * world pauses); that god mode is done; the side of a square, m; the squares a stroke burnt (`Settled`), where it struck
+/** A setting of a tool: its name, its choices, the one on, and what picks one. Its choices are drawn as `look` says:
+ * cuts through the ground, each deeper than the one before (`depth`), or each its own picture (`picture`). */
+export interface GodSetting {
+  name: string; look: 'depth' | 'picture'; on: number; pick(i: number): void;
+  /** Each choice's short name, the line that says more of it, and its picture (`god/<pic>.jpg`, of `picture`). */
+  choices: { label: string; title: string; pic?: string }[];
+}
+/** A tool to come: its name and picture; its card shows, and cannot be picked. */
+export interface SoonTool { soon: true; label: string; pic: string }
+/** A category of tools: its name, its icon, its tools, and the picture shown while it holds none. */
+export interface GodCategory { label: string; icon: IconName; tools: (GodTool | SoonTool)[]; pic?: string }
+/** A class of god mode's tools (the rail's buttons): its name, its icon and its categories. */
+export interface GodClass { label: string; icon: IconName; categories: GodCategory[] }
+/** What the page gives god mode: its rail of classes and its panel; the map drawn anew; that a tool was picked or a
+ * stroke begins (the world pauses); that god mode is done; the side of a square, m; the squares a stroke burnt (`Settled`), where it struck
  * (squares) and where its heat lit the ground, m (god-draw.ts `litSites`, the most lit first); on a phone the
  * place at the sight in the middle of the map, squares (null: the brush is under the pointer); and which samples the
  * world holds and which the ground in view shows. */
 export interface GodPage {
-  strip: HTMLElement; card: HTMLElement;
+  rail: HTMLElement; panel: HTMLElement;
   redraw(): void; picked(): void; close(): void; squareM(): number; burnt(squares: number[], strike: [number, number], lit: [number, number][]): void;
   aim(): [number, number] | null;
   /** The version of the live world's samples, and the version the ground in view is made of (`Land::told`). */

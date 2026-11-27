@@ -3,7 +3,7 @@
 :root {
   --map-bg: #0f1214; --glass: rgba(27, 31, 35, .78); --solid: #1b1f23; --ink: #e6e8ea; --muted: #959ca3;
   --line: rgba(230, 232, 234, .1); --chip: rgba(230, 232, 234, .07); --hover: rgba(230, 232, 234, .1);
-  --accent: #6fb2e3; --on-accent: #0c1217; --warn: #f0a070; --shadow: 0 8px 28px rgba(0, 0, 0, .45), 0 1px 3px rgba(0, 0, 0, .3);
+  --accent: #6fb2e3; --on-accent: #0c1217; --on-ink: #10161a; --tile: #262b30; --warn: #f0a070; --shadow: 0 8px 28px rgba(0, 0, 0, .45), 0 1px 3px rgba(0, 0, 0, .3);
   --r: 12px; --r-sm: 10px; --gap: 8px; --edge: 12px; --btn: 40px; --bar: 56px; --thumb: 14px;
   color-scheme: dark;
 }
@@ -126,19 +126,68 @@ s { display: inline-block; width: 12px; height: 12px; border-radius: 3px; text-d
 .inspect u { text-decoration: none; color: var(--muted); }
 .inspect td s { width: 28px; }
 
-/* God mode: the strip at the left (done, the tools, undo), and the card beside it (the brush's sizes, the tool's
-   choices, how to use it). */
-.strip { --covers: left; position: fixed; z-index: 2; left: var(--edge); top: calc(var(--edge) + var(--bar) + var(--gap)); display: flex; flex-direction: column; gap: 4px; padding: 6px; }
-.strip .ib { width: 48px; height: 48px; }
-.strip .ib .i { width: 24px; height: 24px; }
-.strip .ib:disabled { opacity: .35; cursor: default; background: none; }
-.strip .ib.no:not([aria-pressed="true"]) { color: color-mix(in srgb, var(--muted) 60%, transparent); }
-.strip .ib.no[aria-pressed="true"] { background: var(--muted); }
-.god { --covers: left; position: fixed; z-index: 2; left: calc(var(--edge) + 62px + var(--gap)); top: calc(var(--edge) + var(--bar) + var(--gap)); width: 300px; max-height: calc(100dvh - var(--bar) - 3 * var(--edge)); overflow-y: auto; padding: 12px 16px; font-size: 13px; display: grid; gap: 8px; }
-.god p { margin: 0; }
-.god .hint { color: var(--muted); }
-.god .why { color: var(--warn); }
-.god .stepper, .god .hold { display: none; }
+/* God mode (god-menu.ts): at the left, the rail of the tools' classes over the panel, which shows the tool on (its
+   picture, its sizes and its setting drawn as pictures, how to use it) or the tools of a class as picture cards. A
+   picture missing shows as a quiet dark tile (`--tile`). The big button held for a stroke is the phone's alone. */
+.god { --covers: left; position: fixed; z-index: 2; left: var(--edge); top: calc(var(--edge) + var(--bar) + var(--gap)); width: 340px; max-height: calc(100dvh - var(--bar) - 3 * var(--edge)); display: flex; flex-direction: column; gap: var(--gap); }
+.rail { display: flex; align-items: center; gap: 2px; padding: 4px; flex: none; }
+.rail .class { flex: 1 1 0; min-width: 0; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0; border: 0; border-radius: 16px; background: none; font-size: 10.5px; font-weight: 600; }
+.rail .disc { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--chip); transition: background .12s; }
+.rail .class:hover .disc { background: var(--hover); }
+.rail .class[aria-expanded="true"] .disc { background: var(--ink); color: var(--on-ink); }
+.rail .hold { display: none; }
+.godpanel { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px; display: flex; flex-direction: column; gap: 12px; border-radius: 20px; scrollbar-width: none; }
+:where(.godpanel) button { border: 0; padding: 0; }
+.godpanel button:disabled { cursor: default; }
+.godpanel :is(.hero, .pic, .empty, .picture) { background: var(--tile) center / cover no-repeat; }
+.over { background: rgba(12, 15, 17, .66); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.hero { position: relative; height: 136px; flex: none; border-radius: 16px; overflow: hidden; }
+.hero .change { position: absolute; left: 8px; top: 8px; height: 36px; border-radius: 999px; padding: 0 12px 0 9px; display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.hero .acts { position: absolute; right: 8px; top: 8px; display: flex; gap: 6px; }
+.hero .acts button, .round { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; }
+.hero .acts button:disabled { opacity: .4; }
+.hero .plate { position: absolute; left: 8px; bottom: 8px; max-width: 80%; border-radius: 12px; padding: 6px 12px; display: flex; flex-direction: column; }
+.hero .plate b { font-size: 16px; }
+.hero .plate span { font-size: 11.5px; color: #c3c8cd; }
+.hero .plate .why { color: var(--warn); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hero .plate .why:empty { display: none; }
+.godpanel .i { width: 17px; height: 17px; }
+.set { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+.set .head { width: 72px; flex: none; display: flex; flex-direction: column; min-width: 0; }
+.set .label { font-size: 11.5px; color: var(--muted); }
+.set .value { font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.choices { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+.choices button { min-width: 0; border-radius: 14px; background-color: transparent; }
+.choices button[aria-pressed="true"] { background-color: rgba(230, 232, 234, .09); }
+.dot { flex: 0 1 46px; height: 46px; display: grid; place-items: center; }
+.dot span { width: var(--d); height: var(--d); border-radius: 50%; background: rgba(230, 232, 234, .3); }
+.dot[aria-pressed="true"] span { background: var(--tool); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tool) 30%, transparent); }
+.depth { flex: 0 1 80px; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.depth svg { width: 40px; height: 24px; }
+.depth .ground { fill: #6b5a44; }
+.depth .water { fill: var(--tool); }
+.depth[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--tool); }
+.choices .picture { flex: 0 1 56px; height: 48px; border-radius: 10px; background-color: var(--tile); }
+.choices .picture[aria-pressed="true"] { background-color: var(--tile); box-shadow: inset 0 0 0 2px var(--tool); }
+.godpanel .hint { margin: 0 4px 2px; color: var(--muted); font-size: 13px; }
+.pickhead { display: flex; align-items: center; gap: 8px; padding: 2px 2px 0 6px; }
+.pickhead h2 { flex: 1; font-size: 16px; font-weight: 700; }
+.round { background: var(--chip); }
+.tabs { display: flex; gap: 6px; overflow-x: auto; flex: none; scrollbar-width: none; }
+.tab { flex: none; height: 36px; border-radius: 999px; padding: 0 14px 0 10px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; background: var(--chip); }
+.tab .i { width: 16px; height: 16px; }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--on-ink); }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; scrollbar-width: none; }
+.gcard { min-width: 0; border-radius: 16px; padding: 6px 6px 8px; background: rgba(230, 232, 234, .04); display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.gcard[aria-pressed="true"] { background: rgba(230, 232, 234, .08); box-shadow: inset 0 0 0 2px var(--tool); }
+.gcard .pic { position: relative; height: 92px; border-radius: 11px; }
+.gcard b { font-size: 13.5px; padding: 0 4px; }
+.gcard small { font-size: 11px; color: var(--muted); padding: 0 4px; margin-top: -6px; }
+.gcard.soon { opacity: .45; }
+.badge { position: absolute; top: 6px; right: 6px; padding: 2px 8px; border-radius: 999px; background: rgba(12, 15, 17, .72); font-size: 10.5px; font-weight: 600; font-style: normal; }
+.empty { height: 150px; border-radius: 16px; display: flex; align-items: flex-end; }
+.empty p { margin: 8px; padding: 6px 12px; border-radius: 12px; background: rgba(12, 15, 17, .72); font-size: 13px; }
+
 /* While the ground is made again: a small note with a spinner, under the bar. */
 .busy { position: fixed; z-index: 3; left: 50%; top: calc(var(--edge) + var(--bar) + var(--gap)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--gap); padding: 4px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); pointer-events: none; }
 .busy i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: turn .8s linear infinite; }
@@ -163,10 +212,10 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
 .dropzone { position: fixed; inset: 12px; z-index: 9; display: grid; place-items: center; font-size: 20px; border: 2px dashed var(--accent); border-radius: 14px; background: color-mix(in srgb, var(--map-bg) 88%, transparent); pointer-events: none; }
 
 /* A phone: the controls go where the thumb is. A dock at the bottom holds the tools, each named under its icon, and
-   play in the middle; the date and the World button stand alone at the top. Panels are sheets from the bottom, god
-   mode's tools a row above the dock. The map is drawn out to the screen's edges (map.ts `setFill`). */
+   play in the middle; the date and the World button stand alone at the top. Panels are sheets from the bottom; god
+   mode's rail takes the dock's place, its panel over it. The map is drawn out to the screen's edges (map.ts `setFill`). */
 @media (max-width: 640px) {
-  :root { --edge: 12px; --dock: 76px; --top: calc(var(--edge) + env(safe-area-inset-top)); --above-dock: calc(var(--edge) + env(safe-area-inset-bottom) + var(--dock) + var(--gap)); }
+  :root { --edge: 12px; --dock: 76px; --rail: 80px; --rise: 30px; --top: calc(var(--edge) + env(safe-area-inset-top)); --above-dock: calc(var(--edge) + env(safe-area-inset-bottom) + var(--dock) + var(--gap)); }
   .bar { --covers: bottom; top: auto; bottom: calc(var(--edge) + env(safe-area-inset-bottom)); height: var(--dock); display: flex; justify-content: space-around; padding: 0 4px; gap: 0; }
   .bar::before { border-radius: 26px; }
   .grp { display: contents; }
@@ -186,33 +235,27 @@ input[type=range]::-moz-range-thumb { width: calc(var(--thumb) - 4px); height: c
   .panel { top: auto; bottom: 0; left: 0; width: 100%; max-width: none; max-height: 75dvh; border-radius: 22px 22px 0 0; padding-top: 22px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateY(24px); transform-origin: bottom; }
   .panel::before { content: ""; position: absolute; top: 8px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--line); }
   #inspect-card { --covers: none; top: calc(var(--top) + 48px + var(--gap)); left: var(--edge); width: auto; max-height: 40dvh; }
-  /* God mode: its strip takes the dock's place (done, each tool named, undo). Above it, the brush's size between a
-     smaller and a larger button, the tool's choices, and the tool's big button, held for a stroke at the sight in the
-     middle of the map (god.ts); how to use a tool is said on the card with a mouse. */
+  /* God mode: its rail takes the dock's place, two classes on each side of the tool's big button, which stands raised
+     in its middle and is held for a stroke at the sight in the middle of the map (god.ts); the panel stands over it.
+     How to use a tool is said with a mouse alone. */
   body.god-on .bar::before, body.god-on .bar .grp > :is(.tool, .play, .speed), body.god-on .fit { display: none; }
   body.god-on .bar { pointer-events: none; }
   body.god-on .bar :is(.world, .date) { pointer-events: auto; }
-  .strip { --covers: bottom; top: auto; left: var(--edge); right: var(--edge); bottom: calc(var(--edge) + env(safe-area-inset-bottom)); height: var(--dock); flex-direction: row; justify-content: space-around; align-items: center; gap: 0; padding: 0 4px; border-radius: 26px; }
-  .strip .ib { flex: 1 1 0; min-width: 0; max-width: 60px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-radius: 16px; }
-  .strip .ib .i { width: 22px; height: 22px; }
-  .god.glass { --covers: bottom; top: auto; left: var(--edge); right: var(--edge); width: auto; bottom: var(--above-dock); max-height: none; padding: 0; gap: 8px; grid-template-columns: minmax(0, 1fr) auto; align-items: end; background: none; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; pointer-events: none; }
-  .god > * { pointer-events: auto; }
-  .god h2, .god p, .god .sizes { display: none; }
-  .god:not(:has(.hold)) { display: none; }
-  .god .stepper, .god .chips { grid-column: 1; justify-self: start; max-width: 100%; padding: 4px; border-radius: 999px; background: var(--glass); -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); border: 1px solid var(--line); box-shadow: var(--shadow); }
-  .god .stepper { display: flex; align-items: center; gap: 4px; }
-  .god .stepper button { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--chip); font-size: 18px; line-height: 1; }
-  .god .stepper button:disabled { opacity: .35; }
-  .god .stepper b { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
-  .god .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .god .chips button { flex: none; }
-  /* (The card shows all of the button's shadow: nothing in it scrolls but the choices.) */
-  .god.glass { overflow: visible; }
-  /* The tool's button: its colour (`--tool`, the tool's ink, god.ts) lit from the top left, deeper to the bottom right,
-     with a soft ring of it and a shadow under it. */
-  .god .hold { display: grid; place-content: center; justify-items: center; gap: 3px; grid-column: 2; grid-row: 1 / span 2; width: 84px; height: 84px; margin: 6px; border: 1px solid rgba(255, 255, 255, .28); border-radius: 50%; background: radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--tool) 55%, #fff4e0), var(--tool) 52%, color-mix(in srgb, var(--tool) 72%, #5a1606)); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .35); font-size: 11px; font-weight: 700; line-height: 1.1; text-align: center; box-shadow: 0 0 0 5px color-mix(in srgb, var(--tool) 28%, transparent), 0 8px 22px rgba(0, 0, 0, .45), inset 0 -3px 8px rgba(0, 0, 0, .18); touch-action: none; transition: transform .1s, box-shadow .1s; }
-  .god .hold .i { width: 24px; height: 24px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3)); }
-  .god .hold.held { transform: scale(.93); box-shadow: 0 0 0 9px color-mix(in srgb, var(--tool) 35%, transparent), 0 4px 14px rgba(0, 0, 0, .45), inset 0 2px 8px rgba(0, 0, 0, .25); }
+  .god { display: contents; }
+  .rail { --covers: bottom; position: fixed; z-index: 2; left: var(--edge); right: var(--edge); bottom: calc(var(--edge) + env(safe-area-inset-bottom)); height: var(--rail); padding: 0 6px; border-radius: 28px; }
+  .rail .class { height: 68px; border-radius: 18px; }
+  .rail .disc { width: 40px; height: 40px; }
+  .rail .disc .i { width: 21px; height: 21px; }
+  .godpanel { --covers: bottom; position: fixed; z-index: 2; left: var(--edge); right: var(--edge); bottom: calc(var(--edge) + env(safe-area-inset-bottom) + var(--rail) + var(--rise)); max-height: calc(100dvh - var(--top) - 48px - 2 * var(--gap) - var(--edge) - env(safe-area-inset-bottom) - var(--rail) - var(--rise)); border-radius: 24px; background: color-mix(in srgb, var(--solid) 94%, transparent); }
+  .godpanel .hint { display: none; }
+  .cards { max-height: 336px; overflow-y: auto; }
+  /* The tool's button: its colour (`--tool`, the tool's ink) lit from the top left, deeper to the bottom right, with a
+     soft ring of it and a shadow under it; dark words on a light ink (`light`); plain with no tool on. */
+  .rail .hold { display: grid; flex: none; width: 88px; height: 88px; margin: -36px 4px 0; place-content: center; justify-items: center; gap: 3px; padding: 0 6px; border: 1px solid rgba(255, 255, 255, .28); border-radius: 50%; background: radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--tool) 55%, #fff4e0), var(--tool) 52%, color-mix(in srgb, var(--tool) 70%, #1a0d06)); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .4); font-size: 11px; font-weight: 700; line-height: 1.1; text-align: center; box-shadow: 0 0 0 5px color-mix(in srgb, var(--tool) 28%, transparent), 0 8px 22px rgba(0, 0, 0, .45); touch-action: none; transition: transform .1s, box-shadow .1s; }
+  .rail .hold.light { color: var(--on-ink); text-shadow: none; }
+  .rail .hold.none { background: var(--solid); color: var(--muted); text-shadow: none; box-shadow: var(--shadow); }
+  .rail .hold .i { width: 25px; height: 25px; }
+  .rail .hold.held { transform: scale(.93); box-shadow: 0 0 0 9px color-mix(in srgb, var(--tool) 35%, transparent), 0 4px 14px rgba(0, 0, 0, .45), inset 0 2px 8px rgba(0, 0, 0, .25); }
   .busy { top: calc(var(--top) + 48px + var(--gap)); }
   .errors { top: calc(var(--top) + 48px + var(--gap)); }
   .tl { left: var(--edge); right: calc(2 * var(--edge) + var(--btn)); width: auto; transform: none; bottom: var(--above-dock); }

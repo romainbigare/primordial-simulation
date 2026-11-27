@@ -79,8 +79,11 @@
     <div id="inspect" class="inspect"><p class="hint">Hover or tap the map.</p></div>
   </aside>
 
-  <nav class="strip glass" id="god-strip" aria-label="God tools" hidden></nav>
-  <div class="god glass" id="god" hidden></div>
+  <!-- God mode (god-menu.ts): the rail of the tools' classes, and the panel of the tool on or of the tools to pick. -->
+  <div class="god" id="god" hidden>
+    <nav class="rail glass" id="god-rail" aria-label="God tools"></nav>
+    <section class="godpanel glass" id="god-panel" aria-label="Tool"></section>
+  </div>
   <div class="busy glass" id="busy" role="status" hidden><i></i>Updating ground…</div>
 
   <div class="tl glass tape-only" id="timebar">
