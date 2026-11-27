@@ -1,0 +1,326 @@
+{
+ "relief": ["aerial_rocks_02"],
+ "pictures": {
+  "plants": {
+    "scene": "plants",
+    "seed": 2,
+    "gain": 1.6,
+    "textures": {
+     "meadow": ["carpets:0", 1.5, [2.2, 2.4, 1.8]],
+     "herbs": ["carpets:3", 3, [1.1, 1.3, 1.0]],
+     "petals": ["carpets:9", 0.8]
+    }
+  },
+  "mountains": {
+    "scene": "mountains",
+    "seed": 4,
+    "textures": {
+     "rock": ["aerial_rocks_02", 700],
+     "meadow": ["aerial_rocks_04", 700, [0.85, 1.05, 0.85]],
+     "snow": ["snow_field_aerial", 900]
+    }
+  },
+  "rivers": {
+    "scene": "rivers",
+    "seed": 5,
+    "sky": "kloofendal_48d_partly_cloudy_puresky",
+    "textures": {
+     "meadow": ["aerial_rocks_04", 300, [0.85, 1.08, 0.8]],
+     "field": ["aerial_grass_rock", 400, [0.75, 1.0, 0.7]],
+     "gravel": ["ground:7", 25]
+    }
+  },
+  "lakes": {
+    "scene": "lakes",
+    "seed": 6,
+    "sky": "kloofendal_48d_partly_cloudy_puresky",
+    "textures": {
+     "meadow": ["aerial_rocks_04", 400, [0.85, 1.08, 0.8]],
+     "shore": ["ground:5", 30],
+     "bed": ["ground:13", 30]
+    }
+  },
+  "raise": {
+    "scene": "raise",
+    "seed": 7,
+    "textures": {
+     "meadow": ["aerial_grass_rock", 45, [0.6, 0.78, 0.5]],
+     "earth": ["ground:9", 6],
+     "grass": ["sparse_grass", 3]
+    }
+  },
+  "lower": {
+    "scene": "lower",
+    "seed": 8,
+    "textures": {
+     "meadow": ["aerial_grass_rock", 45, [0.6, 0.78, 0.5]],
+     "earth": ["ground:9", 6],
+     "floor": ["ground:13", 5],
+     "grass": ["sparse_grass", 3]
+    }
+  },
+  "lake-brush": {
+    "scene": "lake-brush",
+    "seed": 9,
+    "sky": "kloofendal_48d_partly_cloudy_puresky",
+    "textures": {
+     "meadow": ["aerial_grass_rock", 45, [0.6, 0.78, 0.5]],
+     "earth": ["ground:6", 5],
+     "grass": ["sparse_grass", 3]
+    }
+  },
+  "smooth": {
+    "scene": "smooth",
+    "seed": 10,
+    "textures": {
+     "meadow": ["aerial_grass_rock", 90, [0.75, 1.0, 0.68]],
+     "rock": ["aerial_rocks_02", 90]
+    }
+  },
+  "meteor": {
+    "scene": "meteor",
+    "seed": 11,
+    "hits": [[-20, 60, 55, 22], [-250, 220, 28, 11], [200, 300, 24, 9], [170, -70, 20, 8]],
+    "falling": [[-90, 190, 70, 600], [120, 150, 160, 600], [40, 420, 120, 500]],
+    "textures": {
+     "ground": ["aerial_ground_rock", 250],
+     "grass": ["aerial_rocks_04", 300, [0.8, 0.95, 0.75]],
+     "scorch": ["fire:1", 6, [0.6, 0.55, 0.5]]
+    }
+  },
+  "volcano": {
+    "scene": "volcano",
+    "seed": 12,
+    "textures": {
+     "rock": ["aerial_rocks_02", 900],
+     "ash": ["aerial_beach_01", 600, [0.35, 0.34, 0.34]],
+     "land": ["aerial_rocks_04", 800, [0.8, 1.0, 0.75]]
+    }
+  },
+  "fire": {
+    "scene": "fire",
+    "seed": 13,
+    "textures": {
+     "dry": ["withered_grass", 12, [0.7, 0.62, 0.45]],
+     "grass": ["carpets:13", 3, [2.2, 2.0, 1.6]],
+     "burnt": ["fire:1", 4]
+    }
+  },
+  "tsunami": {
+    "scene": "tsunami",
+    "seed": 14,
+    "sky": "kloofendal_48d_partly_cloudy_puresky",
+    "textures": {
+     "land": ["aerial_rocks_04", 300, [0.85, 1.08, 0.8]],
+     "sand": ["aerial_beach_01", 200],
+     "seabed": ["ground:14", 20]
+    }
+  },
+  "flood": {
+    "scene": "flood",
+    "seed": 15,
+    "sky": "kloofendal_overcast_puresky",
+    "textures": {
+     "crop": ["aerial_grass_rock", 150, [0.8, 1.0, 0.7]],
+     "pasture": ["aerial_rocks_04", 150, [0.85, 1.08, 0.8]],
+     "soil": ["dirt_aerial_02", 120],
+     "pasture2": ["sparse_grass", 10, [1.6, 1.8, 1.4]]
+    }
+  },
+  "water-drought": {
+    "scene": "water-drought",
+    "seed": 16,
+    "textures": {
+     "land": ["withered_grass", 15, [0.75, 0.68, 0.55]],
+     "mud": ["ground:12", 10, [0.7, 0.62, 0.52]],
+     "cracks": ["carpets:5", 14, [0.85, 0.78, 0.7]]
+    }
+  },
+  "climate-drought": {
+    "scene": "climate-drought",
+    "seed": 17,
+    "textures": {
+     "grass": ["withered_grass", 10, [0.6, 0.53, 0.4]],
+     "soil": ["ground:11", 4, [0.8, 0.75, 0.7]],
+     "bed": ["ground:12", 3, [0.85, 0.8, 0.75]]
+    }
+  },
+  "heatwave": {
+    "scene": "heatwave",
+    "seed": 18,
+    "textures": {
+     "soil": ["cracked_red_ground", 3],
+     "grass": ["withered_grass", 8, [0.7, 0.55, 0.4]]
+    }
+  },
+  "glacial": {
+    "scene": "glacial",
+    "seed": 19,
+    "textures": {
+     "land": ["aerial_rocks_04", 700, [0.8, 1.0, 0.8]],
+     "rock": ["aerial_rocks_02", 700, [0.55, 0.57, 0.62]],
+     "snow": ["snow_field_aerial", 900]
+    }
+  },
+  "storm": {
+    "scene": "storm",
+    "seed": 20,
+    "textures": {
+     "crop": ["aerial_grass_rock", 200, [0.7, 0.9, 0.65]],
+     "pasture": ["aerial_rocks_04", 200, [0.8, 1.0, 0.75]],
+     "soil": ["aerial_ground_rock", 150, [0.7, 0.68, 0.6]]
+    }
+  },
+  "human-population": {
+    "scene": "human-population",
+    "seed": 21,
+    "dist": 200,
+    "textures": {
+     "crop": ["aerial_grass_rock", 150, [0.8, 1.0, 0.7]],
+     "pasture": ["aerial_rocks_04", 150, [0.85, 1.08, 0.8]],
+     "soil": ["dirt_aerial_02", 100],
+     "green": ["aerial_grass_rock", 60, [0.75, 1.0, 0.7]],
+     "track": ["ground:11", 4],
+     "roof": ["thatch_roof_angled", 3]
+    }
+  },
+  "human-war": {
+    "scene": "human-war",
+    "seed": 22,
+    "dist": 300,
+    "textures": {
+     "crop": ["aerial_grass_rock", 150, [0.8, 1.0, 0.7]],
+     "pasture": ["aerial_rocks_04", 150, [0.85, 1.08, 0.8]],
+     "soil": ["dirt_aerial_02", 100],
+     "green": ["aerial_grass_rock", 60, [0.75, 1.0, 0.7]],
+     "track": ["ground:11", 4],
+     "roof": ["thatch_roof_angled", 3],
+     "burnt": ["fire:1", 4]
+    }
+  },
+  "human-culture": {
+    "scene": "human-culture",
+    "seed": 23,
+    "textures": {
+     "meadow": ["aerial_grass_rock", 40, [0.6, 0.78, 0.5]],
+     "track": ["ground:11", 4],
+     "burnt": ["fire:1", 3],
+     "stone": ["rock_boulder_cracked", 4]
+    }
+  },
+  "human-technology": {
+    "scene": "human-technology",
+    "seed": 24,
+    "sky": "kloofendal_48d_partly_cloudy_puresky",
+    "textures": {
+     "crop": ["aerial_grass_rock", 80, [0.75, 1.05, 0.65]],
+     "gold": ["withered_grass", 10, [0.85, 0.75, 0.45]],
+     "soil": ["dirt_aerial_02", 60],
+     "stone": ["castle_wall_slates", 4],
+     "roof": ["thatch_roof_angled", 3]
+    }
+  },
+  "human-built": {
+    "scene": "human-built",
+    "seed": 25,
+    "textures": {
+     "crop": ["aerial_grass_rock", 150, [0.8, 1.0, 0.7]],
+     "pasture": ["aerial_rocks_04", 150, [0.85, 1.08, 0.8]],
+     "soil": ["dirt_aerial_02", 100],
+     "street": ["ground:11", 5],
+     "tiles": ["clay_roof_tiles_02", 3],
+     "stone": ["castle_wall_slates", 4]
+    }
+  },
+  "animal-population": {
+    "scene": "animal-population",
+    "seed": 26,
+    "textures": {
+     "grass": ["withered_grass", 12, [0.75, 0.72, 0.5]],
+     "dry": ["aerial_grass_rock", 60, [0.85, 0.85, 0.6]],
+     "trampled": ["dirt_aerial_03", 40]
+    }
+  },
+  "kind-short-grass": {
+    "scene": "kind",
+    "seed": 31,
+    "dist": 7,
+    "textures": {
+     "ground": ["carpets:10", 2, [1.6, 1.95, 1.25]]
+    },
+    "sprites": [
+     {"set": "tuft", "density": 40000, "size": [0.2, 0.35]}
+    ]
+  },
+  "kind-herbs": {
+    "scene": "kind",
+    "seed": 32,
+    "dist": 9,
+    "gain": 1.3,
+    "textures": {
+     "ground": ["carpets:3", 3, [1.1, 1.25, 1.0]],
+     "cover": ["carpets:0", 1.5, [2.0, 2.2, 1.6]]
+    },
+    "sprites": [
+     {"set": "othonna", "density": 9000, "size": [0.4, 0.8]},
+     {"set": "searsia", "density": 3000, "size": [0.6, 1.1]},
+     {"set": "fern", "density": 2500, "size": [0.6, 1.0]}
+    ]
+  },
+  "kind-trees": {
+    "scene": "kind",
+    "seed": 33,
+    "dist": 55,
+    "textures": {
+     "ground": ["carpets:10", 2, [1.7, 1.9, 1.4]],
+     "cover": ["carpets:3", 3, [1.1, 1.25, 1.0]]
+    },
+    "sprites": [
+     {"set": "round", "density": 90, "size": [9, 15]}
+    ]
+  },
+  "kind-swamp-trees": {
+    "scene": "kind",
+    "seed": 34,
+    "dist": 50,
+    "water": 0.6,
+    "textures": {
+     "ground": ["ground:16", 2]
+    },
+    "sprites": [
+     {"set": "pad_patch", "density": 900, "size": [0.4, 0.7], "afloat": true},
+     {"set": "cypress", "density": 40, "size": [14, 20]},
+     {"set": "mangrove", "density": 30, "size": [8, 12]},
+     {"set": "rush", "density": 500, "size": [1.0, 1.6]}
+    ],
+    "sky": "kloofendal_48d_partly_cloudy_puresky"
+  },
+  "kind-dry-shrubs": {
+    "scene": "kind",
+    "seed": 35,
+    "dist": 14,
+    "textures": {
+     "ground": ["carpets:4", 3]
+    },
+    "sprites": [
+     {"set": "searsia", "density": 1500, "size": [0.9, 1.6], "tint": [[0.95, 0.95, 0.8], [1.05, 1.0, 0.8]]},
+     {"set": "dead_bush", "density": 800, "size": [0.8, 1.4], "tint": [[2.2, 2.0, 1.7], [2.6, 2.3, 1.9]]},
+     {"set": "othonna", "density": 900, "size": [0.5, 0.9], "tint": [[0.9, 0.85, 0.7], [1.0, 0.95, 0.75]]}
+    ]
+  },
+  "kind-tall-grass": {
+    "scene": "kind",
+    "seed": 36,
+    "dist": 9,
+    "textures": {
+     "ground": ["carpets:11", 2, [1.5, 1.6, 1.2]],
+     "cover": ["carpets:8", 2, [1.6, 1.8, 1.3]]
+    },
+    "sprites": [
+     {"set": "tuft", "density": 9000, "size": [0.7, 1.2]},
+     {"set": "reed", "density": 600, "size": [1.3, 1.8]}
+    ],
+    "gain": 1.4
+  }
+ }
+}
