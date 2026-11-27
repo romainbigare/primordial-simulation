@@ -50,6 +50,20 @@
       "years": ["A", "B", "SA"],
       "years_view": 0.2
     },
+    "rivers": {
+      "world": "seed1",
+      "views": [8.0, 2.0, 0.5],
+      "cost_views": [2.0, 0.5],
+      "scenes": [
+        { "name": "reach", "about": "a river through open woodland, its bends and bars", "at": [26.5, 14.6] },
+        { "name": "reach_close", "about": "close: the water, a bar and a bank of scene reach", "at": [26.4883, 14.6091], "views": [0.1] },
+        { "name": "confluence", "about": "two rivers join on a valley floor", "at": [14.05, 22.85] },
+        { "name": "lake_inlet", "about": "a stream runs into the big lake, west shore", "at": [14.8, 17.0] },
+        { "name": "lake_inlet_nw", "about": "the north-west stream runs into the big lake", "at": [14.05, 15.25] },
+        { "name": "lagoon_mouth", "about": "the east river runs into its lagoon", "at": [29.494, 16.374] },
+        { "name": "sea_mouth", "about": "the largest river at the head of its drowned valley", "at": [16.9, 25.47] }
+      ]
+    },
     "load_wet": {
       "world": "seed1_wet",
       "views": [100.0, 25.0, 5.0],

@@ -105,9 +105,12 @@ export async function reopen(page, url) {
   await page.waitForFunction(() => { const e = window.__ew; return e.world && e.world !== window.__ewWas && e.land && e.land.tiles.rock; }, null, { timeout: 300000, polling: 250 });
 }
 
+/** The longest a picture is waited for, ms: a sharp picture over forest takes minutes in software. */
+const SETTLE_MOST_MS = 300000;
+
 /** Wait until the picture is whole: no tile and no detail to come, no frame due, the sharp picture drawn; the ms
  * waited, or -1. */
-export async function settle(page, most = 120000) {
+export async function settle(page, most = SETTLE_MOST_MS) {
   const t0 = Date.now(); let calm = 0;
   while (Date.now() - t0 < most) {
     const busy = await page.evaluate(() => !window.__ew.map.settled());
@@ -118,9 +121,13 @@ export async function settle(page, most = 120000) {
   return -1;
 }
 
-/** Put world point (x, y in squares) at the middle of the map, a css pixel `mpp` metres. */
+/** Put world point (x, y in squares) at the middle of the map, a css pixel `mpp` metres. The signs of the flow on the
+ * channels stand still at their start (land.ts `flowAt`, map.ts `flowSoon`): a picture never waits on their slide, and
+ * two pictures of one build show the same water. */
 export async function look(page, { x, y, mpp }) {
   await page.evaluate(({ x, y, mpp }) => { const e = window.__ew, m = e.map, cv = document.getElementById('cv'), s = e.world.meta.cell_m / mpp;
+    if (m.land) Object.defineProperty(m.land, 'flowAt', { get: () => 0, set: () => {}, configurable: true });
+    m.flowSoon = () => {};
     m.cam = { s, ox: cv.clientWidth / 2 - x * s, oy: cv.clientHeight / 2 - y * s }; m.fitted = false; m.invalidate(); }, { x, y, mpp });
   await sleep(400);
 }

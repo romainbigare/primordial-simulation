@@ -49,6 +49,10 @@ The scene set `mouths` stands at the page's island's largest river mouths at 100
 plumes (`plumes`: [x, y, kg/s], x and y in squares), which `set` and `cost` put in place of the world's
 (`page.mjs` `plumes`): a test of how a plume is drawn while the core lays none.
 
+The scene set `rivers` stands on `seed1`'s world along its channels: a reach with its bends and bars, a confluence, two
+streams into the big lake, a river into its lagoon and one at the head of a drowned valley, at 8, 2 and 0.5 m a pixel,
+and a reach close. A picture is taken with the signs of the flow held still at their start (`page.mjs` `look`).
+
 The scene set `deltas` stands on the same world's east delta (from 100 to 1 m a pixel: its top, a lagoon's shore and
 its front at the sea) and at two river mouths.
 
