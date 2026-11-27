@@ -32,15 +32,24 @@ const PATCHES_FADE_M = 0.25;
 const LOOSE_PLANE = 0; const MAKE_PLANE = 1; const GRAIN_PLANE = 2; const LAID_PLANE = 3;
 
 // Plane `plane` of the samples at `at`, m from the map's north-west corner: through the samples' centres as a
-// B-spline read texel by texel (draw.wgsl `b_spline`), so no sample's square shows.
-fn samples_at(at: vec2f, plane: i32) -> vec4f {
+// B-spline read texel by texel (draw.wgsl `b_spline`), so no sample's square shows; and how far the samples it blends
+// spread about that, the root of their weighted variance (`Blend.spread`).
+struct Blend { mean: vec4f, spread: vec4f }
+fn samples_blend(at: vec2f, plane: i32) -> Blend {
   let c = b_spline(at / (land.map.x * land.map.yz) * land.samples.xy - 0.5);
   let last = vec2i(land.samples.xy) - 1;
   let rows = vec2i(0, plane * i32(land.samples.y));
   var sum = vec4f(0.0);
-  for (var n = 0; n < B_TAPS; n++) { sum += b_weight(c, n) * textureLoad(rock_field, clamp(b_texel(c, n), vec2i(0), last) + rows, 0); }
-  return sum;
+  var squares = vec4f(0.0);
+  for (var n = 0; n < B_TAPS; n++) {
+    let v = textureLoad(rock_field, clamp(b_texel(c, n), vec2i(0), last) + rows, 0);
+    sum += b_weight(c, n) * v;
+    squares += b_weight(c, n) * v * v;
+  }
+  return Blend(sum, sqrt(max(squares - sum * sum, vec4f(0.0))));
 }
+// (The same, its mean alone.)
+fn samples_at(at: vec2f, plane: i32) -> vec4f { return samples_blend(at, plane).mean; }
 
 // A field held per sample is a mean over the sample's square, and its edges are no lines on the ground: each is read
 // at a place moved from the point (`sample_place`), along the slope of octaves of gradient noise `PLACE_WARP_M` across
@@ -67,9 +76,16 @@ fn sample_place(at: vec2f, e: f32) -> Place {
   return out;
 }
 
-// The depth of the loose ground at the place `at` (`sample_place`), m (`samples_at`): no sample's square shows in the
-// bed it bares and its change across a pixel, which eases the plants' edge (`rooted`), is smooth.
-fn loose_at(at: vec2f) -> f32 { return samples_at(at, LOOSE_PLANE).x; }
+// The depth of the loose ground at the place `place` (`sample_place`), m (`samples_blend`): a sample's depth is a mean,
+// and inside it the ground is as deep as its neighbours' about as often (a mantle thickens and thins at every scale),
+// so the blend departs from the samples' mean by the place's noise (`Place.n`) times `LOOSE_SPREAD` of how far the
+// samples it blends spread: a rule read on it (the bed it bares, the plants' roots, `rooted`) follows no sample's
+// square where two samples' depths differ, and keeps the mean where they do not. Its change across a pixel is smooth.
+const LOOSE_SPREAD = 1.0;
+fn loose_at(place: Place) -> f32 {
+  let b = samples_blend(place.at, LOOSE_PLANE);
+  return max(b.mean.x + LOOSE_SPREAD * b.spread.x * place.n, 0.0);
+}
 
 // The loose ground's grain shares swap coarse for fine by up to `GRAIN_PATCHY` of themselves either way over patches from
 // `GRAIN_PATCH_M` across down, in `GRAIN_OCTAVES` octaves (ragged.wgsl): what the wear lays down is sorted in lenses

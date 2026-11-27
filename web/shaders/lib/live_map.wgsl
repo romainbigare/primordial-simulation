@@ -97,7 +97,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let place = sample_place(at, e);
   // The loose ground with its patches, the bed it bares, and the relief finer than the tiles (relief.wgsl), which
   // moves the ground's height and slope: the shading's normal and the fine line of a shore.
-  let loose_mean = loose_at(place.at);
+  let loose_mean = loose_at(place);
   let loose = loose_seen(at, loose_mean, e);
   let bare = bed_shows(loose);
   let fine = relief(e, g.slope, bare, loose);
