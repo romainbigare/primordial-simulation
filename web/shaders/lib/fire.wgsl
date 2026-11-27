@@ -87,11 +87,12 @@ fn fire_at(at: vec2f) -> FireAt {
 }
 
 // The months since the burn of the scar in patches at `at` (`FireAt.rest`), a point of rank `rank` among the patches
-// (`burn_rank`'s number made even, 0..1): of one of the four squares whose centres lie about it, drawn by the rank with
-// the chance of each square's blend weight times its scar in patches. So where scars of different ages meet, the point
-// takes one of them, and their meeting is as ragged as the patches; a blend of their ages would lay a straight line where
-// the younger one's char fades.
-fn scar_age(at: vec2f, rank: f32) -> f32 {
+// (`burn_rank`: its number and the spread a share read on it takes): of one of the four squares whose centres lie
+// about it, drawn by the rank made even (0..1) with the chance of each square's blend weight times its scar in
+// patches. So where scars of different ages meet, the point takes one of them, and their meeting is as ragged as the
+// patches; a blend of their ages would lay a straight line where the younger one's char fades. Two squares' ages meet
+// over the rank's spread, so their edge is eased over a pixel.
+fn scar_age(at: vec2f, rank: vec2f) -> f32 {
   let s = at / fire.map.x - 0.5;
   let c = vec2i(floor(s));
   let f = fract(s);
@@ -101,12 +102,21 @@ fn scar_age(at: vec2f, rank: f32) -> f32 {
     t[k] = fire_texel(0, c + vec2i(k % 2, k / 2));
     w[k] *= fire_texel(2, c + vec2i(k % 2, k / 2)).w;
   }
-  var left = rank * (w.x + w.y + w.z + w.w);
-  for (var k = 0; k < 3; k++) {
-    if (left < w[k]) { return t[k].y / max(t[k].x, 1e-6); }
-    left -= w[k];
+  let total = w.x + w.y + w.z + w.w;
+  // The rank made even, and its spread in the same units (the slope of `smoothstep` there).
+  let even = smoothstep(-EVEN_ONE, EVEN_ONE, rank.x);
+  let u = clamp((rank.x + EVEN_ONE) / (2.0 * EVEN_ONE), 0.0, 1.0);
+  let spread = max(rank.y * 6.0 * u * (1.0 - u) / (2.0 * EVEN_ONE), 1e-6) * total;
+  var age = 0.0;
+  var below = 0.0;
+  for (var k = 0; k < 4; k++) {
+    // The share of the point the rank draws square k by: past the squares before it and short of it.
+    let past = select(smoothstep(-spread, spread, even * total - below), 1.0, k == 0);
+    below += w[k];
+    let short = select(smoothstep(-spread, spread, even * total - below), 0.0, k == 3);
+    age += (past - short) * t[k].y / max(t[k].x, 1e-6);
   }
-  return t[3].y / max(t[3].x, 1e-6);
+  return age;
 }
 
 // A square's burnt share lies in patches with ragged edges, from `BURN_PATCH_M` across down to the pixel (ragged.wgsl
@@ -200,7 +210,7 @@ fn scar_of(f: FireAt, b: BurnAt, at: vec2f, e: f32) -> vec4f {
   let scar = max(patches, burn);
   if (scar <= 0.0) { return vec4f(0.0); }
   // (Each part of the scar is as old as its own burn.)
-  let age = select(scar_age(at, smoothstep(-EVEN_ONE, EVEN_ONE, rank.x)), b.age, burn > patches);
+  let age = select(scar_age(at, rank), b.age, burn > patches);
   // (The core's ash is per m² of the square's land: it lies on the land burnt, its share of it; on a burn of god mode's
   // land, its own square's.)
   let ash = select(f.ash / max(f.burnt, 1e-6), b.ash, burn > patches);
@@ -242,9 +252,11 @@ fn burnt_plant(rgb: vec3f, a: f32, soot: f32, burning: f32) -> vec3f { return mi
 // Dead walls that died within `SAME_BURN_MONTHS` of a square's last burn are that burn's. The core keeps a burn of
 // under `EVENT_LEAST` of a patch spread over it, its dead walls too (laws.md 3c); the map stands them on the land the
 // burn took: their density at a point under `scar` of a scar (`scar_of`) of the square's share is their patch's mean
-// times this.
+// times this. The squares' burns' months are blended between their centres, so walls are a burn's as far as they died
+// within `SAME_BURN_MONTHS` of it, none of them from twice that: no line is drawn where the blend passes the limit.
 const SAME_BURN_MONTHS = 1.5; const YEAR_MONTHS = 12.0;
 fn dead_on_scar(f: FireAt, years: f32, scar: f32) -> f32 {
-  if (f.burnt <= 0.0 || abs(years * YEAR_MONTHS - f.age) > SAME_BURN_MONTHS) { return 1.0; }
-  return scar / f.burnt;
+  if (f.burnt <= 0.0) { return 1.0; }
+  let same = ease(2.0 * SAME_BURN_MONTHS, SAME_BURN_MONTHS, abs(years * YEAR_MONTHS - f.age));
+  return mix(1.0, scar / f.burnt, same);
 }
