@@ -5,7 +5,7 @@
 use super::drain::{flood, starts};
 use super::grid::Grid;
 use super::samples::grid_of;
-use super::slide::{slide, spread, SLIDE_PASSES};
+use super::slide::{fails, slide, spread, SLIDE_PASSES};
 use super::slopes::creep;
 use super::strata::Strata;
 use super::wear::{cut, CREEP, CUT, STAND_M};
@@ -15,6 +15,10 @@ use crate::World;
 /// and the stream power law is solved exactly along them (`wear::cut`), so a few steps take the ways as the ground
 /// moves.
 const WORN_STEPS: usize = 8;
+
+/// The samples about those that spread that the spread and the look for a slide read (`World::slid`): the sample
+/// beside one that spreads may take its ground, and the one beside that tells its slope.
+const SPREAD_MARGIN: usize = 2;
 
 /// A box of the samples of a grid: its west column and north row, and its width and height.
 #[derive(Clone, Copy)]
@@ -53,6 +57,12 @@ impl Window {
         let (x, y) = ((k % across).checked_sub(self.x0)?, (k / across).checked_sub(self.y0)?);
         (x < self.w && y < self.h).then_some(y * self.w + x)
     }
+    /// The part of it inside the box `o`.
+    fn within(&self, o: &Window) -> Window {
+        let (x0, y0) = (self.x0.max(o.x0), self.y0.max(o.y0));
+        let (x1, y1) = ((self.x0 + self.w).min(o.x0 + o.w), (self.y0 + self.h).min(o.y0 + o.h));
+        Window { x0, y0, w: x1.saturating_sub(x0), h: y1.saturating_sub(y0) }
+    }
     /// Its own grid, of the rows of grid `g` it spans (not round a globe).
     pub(super) fn grid(&self, g: &Grid) -> Grid {
         Grid::new(self.w, self.h, false, g.dy, g.dx[self.y0..self.y0 + self.h].to_vec())
@@ -60,25 +70,39 @@ impl Window {
 }
 
 impl World {
-    /// Where the ground comes to rest after edits shaped the samples `givers`: over the box of the givers and
-    /// `SLIDE_PASSES` samples about them, the ground as it stands (`Samples::height_now`), before any edit as it stands
-    /// less what edits shaped (`Relief::shaped`). What edits moved first spreads by `spreads` (a sample and its m²;
-    /// `spread`), then the ground slides (`slide`, fresh: walls fail), each sample giving what edits laid on it. Returns
-    /// each sample that moved and by how much, m, in their order.
+    /// Where the ground comes to rest after edits shaped the samples `givers`: the ground as it stands
+    /// (`Samples::height_now`), before any edit as it stands less what edits shaped (`Relief::shaped`). What edits moved
+    /// first spreads by `spreads` (a sample and its m², summed where it comes more than once; `spread`), over the box
+    /// of those samples and `SPREAD_MARGIN` about them. Where a sample then stands too steep (`fails`), the ground
+    /// slides over the box of the givers and `SLIDE_PASSES` samples about them (`slide`, fresh: walls fail), each
+    /// sample giving what edits laid on it; where none does, the ground about it rests as it stands and is not read.
+    /// Returns each sample that moved and by how much, m, in their order.
     pub(crate) fn slid(&self, givers: &[usize], spreads: &[(usize, f64)]) -> Vec<(usize, f64)> {
         let (g, _, _) = grid_of(&self.map, (self.cfg.lat_south, self.cfg.lat_north));
         let (s, r) = (self.terrain_samples(), &self.relief);
-        let win = Window::about(&g, givers, SLIDE_PASSES);
-        let local = win.grid(&g);
-        let was: Vec<f64> = (0..win.n()).map(|i| s.height_now(r, win.global(i, g.across))).collect();
-        let base: Vec<f64> = (0..win.n()).map(|i| was[i] - r.shaped_at(win.global(i, g.across))).collect();
-        let mut kt = vec![0.0; win.n()];
-        spreads.iter().filter_map(|&(k, m2)| Some((win.local(k, g.across)?, m2))).for_each(|(i, m2)| kt[i] += m2);
+        // The ground of a box as it stands, and before any edit.
+        let stands = |win: &Window| -> [Vec<f64>; 2] {
+            let was: Vec<f64> = (0..win.n()).map(|i| s.height_now(r, win.global(i, g.across))).collect();
+            let base = (0..win.n()).map(|i| was[i] - r.shaped_at(win.global(i, g.across))).collect();
+            [was, base]
+        };
+        let moved = |win: &Window, h: &[f64], was: &[f64]| (0..win.n()).filter(|&i| h[i] != was[i]).map(|i| (win.global(i, g.across), h[i] - was[i])).collect();
+        let all = Window::about(&g, givers, SLIDE_PASSES);
+        let near = Window::about(&g, &spreads.iter().map(|p| p.0).collect::<Vec<_>>(), SPREAD_MARGIN).within(&all);
+        let (local, [was, base]) = (near.grid(&g), stands(&near));
+        let mut kt = vec![0.0; near.n()];
+        spreads.iter().filter_map(|&(k, m2)| Some((near.local(k, g.across)?, m2))).for_each(|(i, m2)| kt[i] += m2);
         let mut h = was.clone();
         spread(&local, (&mut h, &base), &kt);
-        let gives: Vec<f64> = (0..win.n()).map(|i| (h[i] - base[i]).max(0.0) * local.area(i)).collect();
-        slide(&local, (&mut h, &base), &gives, true);
-        (0..win.n()).filter(|&i| h[i] != was[i]).map(|i| (win.global(i, g.across), h[i] - was[i])).collect()
+        if !fails(&local, &h, &base) {
+            return moved(&near, &h, &was);
+        }
+        let (local, [was, base]) = (all.grid(&g), stands(&all));
+        let mut slid = was.clone();
+        (0..near.n()).filter_map(|i| Some((all.local(near.global(i, g.across), g.across)?, h[i]))).for_each(|(i, at)| slid[i] = at);
+        let gives: Vec<f64> = (0..all.n()).map(|i| (slid[i] - base[i]).max(0.0) * local.area(i)).collect();
+        slide(&local, (&mut slid, &base), &gives, true);
+        moved(&all, &slid, &was)
     }
 
     /// The ground edits shaped since the samples were last built (`Samples::shaped_since`) as the start's wear would

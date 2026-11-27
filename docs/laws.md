@@ -234,16 +234,19 @@ of where it lies. A raise lays the cell's own rock (its bed's mixture) and, at t
 loose ground of one of the terrain's makes drawn from the seed for the stroke (`Make::of`, `World::draw_make`); a
 lowering takes the loose ground first, then the rock, never more than the cell holds (its samples move by the share it
 took). Where in a cell the ground moved is kept on its samples (`Relief::shaped`). **The ground a brush shaped comes to rest**
-(`World::shape`, `World::rest`, `space::slide`): an edit of the ground is laid in layers no higher at its centre than a
-sixty-fourth of its brush's radius (at most 64 of them), and after each the ground about the brush comes to rest, so the
-ground stands the same however much one edit lays: a held brush raises the same hill at any pace of its paints. Over the
-box of the samples under the brush and 32 about them, what edits moved first spreads (`slide::spread`): the height of
+(`World::shape`, `World::rest`, `space::slide`): the edits of the ground that follow one another in a call (the places
+of a paint) are laid together, in layers together no higher at their centres than a sixty-fourth of their brush's
+radius (at most 64 of them), and after each layer the ground about their brushes comes to rest once, so the ground
+stands the same however much one paint lays: a held brush raises the same hill at any pace of its paints, and a paint
+of many places costs one rest a layer. What edits moved first spreads (`slide::spread`), over the samples it reaches: the height of
 each sample over where it stood before any edit diffuses between the samples across their sides, as creep carries loose
 ground down its slope, by `SPREAD` (0.2) of the brush's radius, m², for each m the layer laid at the centre, out to
 `SPREAD_RADII` (2) radii from the centre and less toward there (the brush's falloff of the distance over that). Only
 what edits moved spreads, so the ground keeps the relief it had, a sample an edit raised stands no lower than before
 and one it lowered no higher; the crest of a held hill is round and its foot runs out into the ground about it, with no
-crease. Then the ground slides (`slide::slide`): ground moves down from a sample to its lower neighbours across its
+crease. Then, where a sample stands too steep (`slide::fails`; where none does the ground rests as it stands), the
+ground slides (`slide::slide`) over the box of the samples under the brushes and 32 about them: ground moves down from
+a sample to its lower neighbours across its
 sides, the volume kept, in at most 32 passes over the samples, the highest first, which end once none moves. The slope
 of a sample is the steepest way down it, from its lower neighbour east or west and its lower neighbour north or south
 (an upwind slope, as of the eikonal equation): even ground tilted any way reads its own slope, so the rest is round, not
