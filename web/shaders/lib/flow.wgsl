@@ -1,13 +1,9 @@
-// The signs of the flow on a channel's water (land.wgsl `river_spots`): what shows which way and how fast it runs,
-// laid along the channel's own line (`Tiled.along`) and across its water, fixed in the world and coming again after
-// the length a place along a channel is kept modulo (rock.wgsl `noise_reach`). Streaks: short bright lines along the
-// flow, where the current's shear ripples the surface, in lanes `LANE_M` wide (`LANES` of them at least and at most
-// across half the water) and dashes `STREAK_M` long; many over a riffle, few on a pool, whose water lies smooth and
-// dark. A riffle's water breaks in small white flecks `FLECK_M` long. The signs slide down the channel (`land.reach.z`
-// m for the slowest water): a pool's at that pace, a riffle's twice, a steep reach's up to four times as fast (each a
-// whole number of times, blended, so the slide has no jump where it comes round); the steps stay where they are.
-const LANE_M = 0.45; const LANES = vec2f(3.0, 12.0); const STREAK_M = 8.0; const STREAK = 0.55;
-const FLECK_M = 2.0; const FLECK = 0.3;
+// The signs of the flow on a channel's water (land.wgsl `river_spots`): how broken its surface is, its white water, and
+// how fast it runs (its surface's waves and foam slide down it, river_water.wgsl `running_surface`). A pool's water
+// lies smooth, `POOL_ROUGH` as broken as a riffle's, and the water calms towards its banks, by `EDGE_CALM` at its edge.
+// The steps' white water is laid along the channel's own line (`Tiled.along`) and across its water, fixed in the world
+// and coming again after the length a place along a channel is kept modulo (rock.wgsl `noise_reach`).
+const POOL_ROUGH = 0.25; const EDGE_CALM = 0.5;
 // A reach falls in steps from a slope of `STEP_SLOPE.x`, all of it stepped from `STEP_SLOPE.y` (step-pool reaches lie
 // above a slope of about 0.03, pool-riffle and plane-bed ones below: Montgomery and Buffington 1997). Its steps lie
 // `STEP_JUDD.x` S^-`STEP_JUDD.y` m apart on the mean (S its slope: Judd 1964, from memory), no closer than
@@ -37,18 +33,8 @@ const STEP_POOL = 0.6; const POOL_CALM = 0.8;
 // Steeper than `CASCADE_SLOPE.x` the reach is a cascade, white between its steps too, by up to `CASCADE_FOAM` from
 // `CASCADE_SLOPE.y` (cascades lie above a slope of about 0.1: Montgomery and Buffington 1997).
 const STEP_ROUGH = vec2f(0.15, 0.6); const FOAM_STEEP = 0.9; const CASCADE_SLOPE = vec2f(0.08, 0.15); const CASCADE_FOAM = 0.45;
-// The streams of the world's random numbers of the streaks, the flecks, the steps' lines, the steps, the runs without
-// steps and the white water's streaks.
-const FLOW_STREAK = 74; const FLOW_FLECK = 75; const FLOW_WAVE = 76; const FLOW_STEP = 77; const FLOW_RUN = 82; const FLOW_WHITE = 78;
-
-// A pattern of the flow's signs slid down the channel: `pattern` at `along` less `pace` times the slide, for the two
-// whole paces about `pace`, blended.
-fn slid(along: f32, pace: f32, cell: f32, across: f32, k: i32) -> f32 {
-  let slide = land.reach.z;
-  let lower = noise_reach(along - floor(pace) * slide, cell, across, k);
-  if (slide == 0.0) { return lower; }
-  return mix(lower, noise_reach(along - (floor(pace) + 1.0) * slide, cell, across, k), fract(pace));
-}
+// The streams of the world's random numbers of the steps' lines, the steps and the runs without steps.
+const FLOW_WAVE = 76; const FLOW_STEP = 77; const FLOW_RUN = 82;
 
 // The steps of cells `cell` m long (a power of two) at `a` m along the channel (its line's waver added), the share `x`
 // of the way across its water of half width `half` m, seen at `e` m a pixel, on a reach whose steps lie `spacing` m
@@ -86,20 +72,17 @@ fn steps_of(a: f32, x: f32, half: f32, cell: f32, spacing: f32, e: f32) -> vec2f
 
 // The signs of the flow seen at `e` m a pixel, `along` m along the channel's line, the share `x` of the way across
 // its water from its middle to its outer edge (-1 at its inner edge), on the channel `c` (rock.wgsl `channel_at`) of a
-// reach of steepness `steep`, 0..1, and slope `fall` (rise over run), whose flow moves stones of `stone` m: the light its
-// streaks add to the surface's, the share of white water, and how fast and shallow the water runs there, 0..1.
+// reach of steepness `steep`, 0..1, and slope `fall` (rise over run), whose flow moves stones of `stone` m: how broken
+// its surface is, 0..1, the share of white water, and how fast and shallow the water runs there, 0..1.
 fn flow_signs(e: f32, along: f32, x: f32, c: Channel, steep: f32, fall: f32, stone: f32) -> vec3f {
-  var f = vec3f(0.0, 0.0, steep);
-  // (The widest lanes of the widest bed do not show in a program made for draws from far: rock.wgsl `BED_MOST_M`.)
-  if (unseen(2.0 * BED_MOST_M / LANES.x)) { return f; }
-  let lanes = clamp(c.water / LANE_M, LANES.x, LANES.y);
-  let shown = shows_at(2.0 * c.water / lanes, e);
-  if (shown <= 0.0) { return f; }
   let riffle = 1.0 - c.bend;
-  let pace = 1.0 + riffle + 2.0 * steep;
   let mid = 1.0 - x * x;
-  f.x = STREAK * shown * mid * (0.25 + 0.75 * riffle) * ease(0.3, 0.7, slid(along, pace, STREAK_M, x * lanes, FLOW_STREAK));
-  f.y = FLECK * shown * mid * riffle * riffle * (1.0 - steep) * ease(0.5, 0.8, slid(along, pace, FLECK_M, 2.0 * x * lanes, FLOW_FLECK));
+  var f = vec3f(mix(POOL_ROUGH, 1.0, max(riffle, steep)) * (1.0 - EDGE_CALM * x * x), 0.0, steep);
+  // (The widest water of the widest bed does not show its steps in a program made for draws from far: rock.wgsl
+  // `BED_MOST_M`.)
+  if (unseen(BED_MOST_M)) { return f; }
+  let shown = shows_at(2.0 * STEP_EDGE_M, e);
+  if (shown <= 0.0) { return f; }
   let stepped = ease(STEP_SLOPE.x, STEP_SLOPE.y, fall);
   let rough = ease(STEP_ROUGH.x, STEP_ROUGH.y, stone / max(BED_MIDDLE * c.mean, 1e-3));
   if (stepped > 0.0 && rough > 0.0) {
@@ -108,9 +91,8 @@ fn flow_signs(e: f32, along: f32, x: f32, c: Channel, steep: f32, fall: f32, sto
     let size = log2(STEP_CELL * spacing);
     let a = along + STEP_WAVE * spacing * noise_reach(along, STEP_WAVE_M, 1.5 * x, FLOW_WAVE);
     let s = mix(steps_of(a, x, c.water, exp2(floor(size)), spacing, e), steps_of(a, x, c.water, exp2(floor(size) + 1.0), spacing, e), fract(size));
-    let torn = 0.5 + 0.5 * ease(-0.4, 0.5, slid(along, pace, FLECK_M, 2.0 * x * lanes, FLOW_WHITE));
     let cascade = CASCADE_FOAM * ease(CASCADE_SLOPE.x, CASCADE_SLOPE.y, fall) * mid;
-    f.y = max(f.y, shown * stepped * rough * torn * max(FOAM_STEEP * s.x * sqrt(mid), cascade));
+    f.y = shown * stepped * rough * max(FOAM_STEEP * s.x * sqrt(mid), cascade);
     f.z = steep * (1.0 - POOL_CALM * stepped * s.y);
   }
   return f;

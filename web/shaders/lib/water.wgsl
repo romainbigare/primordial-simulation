@@ -8,40 +8,22 @@
 // for pure water), and the light that comes back from water too deep to show its bed (linear, a reflectance).
 const ATTENUATION = vec3f(0.35, 0.07, 0.03);
 const DEEP_WATER = vec3f(0.0044, 0.027, 0.107);
-// The share of light a liquid's surface reflects straight up (Fresnel at normal incidence, refractive index 1.33), the
-// sky's light and the sun's (linear, over the light of sunlit flat ground).
+// The share of light a liquid's surface reflects straight up (Fresnel at normal incidence, refractive index 1.33); the
+// sky's light seen at its zenith and at its horizon, which a surface reflects as it is turned (a clear sky is bluest
+// and darkest overhead and paler towards the horizon: Rayleigh scattering over a longer path), and the sun's (linear,
+// over the light of sunlit flat ground).
 const REFLECT_UP = 0.02;
 const SKY = vec3f(0.61, 0.73, 0.87);
+const SKY_ZENITH = vec3f(0.42, 0.58, 0.86); const SKY_HORIZON = vec3f(0.78, 0.84, 0.90);
 const SUN = vec3f(1.0, 0.96, 0.83);
-// The sun shows in a ripple as sharply as this power of the cosine between its slope and the half-way light, at most
+// The sun shows in a wave as sharply as this power of the cosine between its slope and the half-way light, at most
 // this share of its light (the sun's disc is small: a glint is a sparkle, not a sheet).
 const GLINT_POWER = 150.0;
 const GLINT_MOST = 0.4;
-// Ripples: their longest wavelength, m, the octaves below it (each half as long), and the slope of each.
-const RIPPLE_LONGEST_M = 2.0;
-const RIPPLE_OCTAVES = 4;
-const RIPPLE_SLOPE = 0.09;
-
-// The slope (east, south) of a liquid's surface at the pixel, seen at `e` m a pixel: octaves of ripples fixed
-// in the world, each turned from the last so they stand in no grid, each fading out as it shrinks below a few pixels
-// (it would only flicker).
-fn ripples(e: f32) -> vec2f {
-  var g = vec2f(0.0);
-  var wave = RIPPLE_LONGEST_M;
-  // The octave's turn from the world's axes; a turn of about 37 degrees between octaves.
-  var rot = mat2x2f(1.0, 0.0, 0.0, 1.0);
-  let turn = mat2x2f(0.8, 0.6, -0.6, 0.8);
-  for (var k = 0; k < RIPPLE_OCTAVES; k++) {
-    // An octave fades out by half its wavelength a pixel: none shows in a draw of pixels that large (draw.wgsl
-    // `LEAST_E`).
-    if (least_e() >= 0.5 * wave) { break; }
-    let shown = 1.0 - ease(wave / 8.0, wave / 2.0, e);
-    if (shown > 0.0) { g += shown * RIPPLE_SLOPE * (transpose(rot) * noise_l(lat(rot * (1.0 / wave), vec2f(0.0)), k).yz); }
-    wave *= 0.5;
-    rot = turn * rot;
-  }
-  return g;
-}
+// Waves too small for the pixel to show still reflect more of the sky and the sun on the mean than a flat surface: a
+// surface of mean square slope s² seen from the map's view reflects `ROUGH_SKY` s² more of the sky's light and
+// `ROUGH_GLINT` s² of the sun's (the mean of `surface_seen` over the water's waves, fitted for slopes of 0.05 to 0.3).
+const ROUGH_SKY = 0.35; const ROUGH_GLINT = 0.04;
 
 // The way to the eye of the map's angled view: from the south, 35 degrees above the horizon (the sprites' camera,
 // web/textures/SOURCES.md), east, south and up.
@@ -49,15 +31,19 @@ const MAP_VIEW = vec3f(0.0, 0.8192, 0.5736);
 
 // What a liquid's surface of slope g (east, south) adds of the sky and the sun lit from the north-west (`LIGHT`), seen
 // from straight above.
-fn surface_light(g: vec2f) -> vec3f { return surface_seen(g, vec3f(0.0, 0.0, 1.0)); }
+fn surface_light(g: vec2f) -> vec3f { return surface_seen(g, vec3f(0.0, 0.0, 1.0), 0.0); }
 
-// The same seen from the way `view` (a unit vector, east, south and up).
-fn surface_seen(g: vec2f, view: vec3f) -> vec3f {
+// The same seen from the way `view` (a unit vector, east, south and up), with waves of mean square slope `hidden` too
+// small to show (`ROUGH_SKY`): the sky it mirrors by the way it reflects the eye's ray (`SKY_ZENITH`).
+fn surface_seen(g: vec2f, view: vec3f, hidden: f32) -> vec3f {
   let n = normalize(vec3f(-g, 1.0));
-  let fresnel = REFLECT_UP + (1.0 - REFLECT_UP) * pow(1.0 - dot(n, view), 5.0);
+  let cosine = dot(n, view);
+  let fresnel = REFLECT_UP + (1.0 - REFLECT_UP) * pow(1.0 - max(cosine, 0.0), 5.0);
+  let ray = 2.0 * cosine * n - view;
+  let sky = mix(SKY_HORIZON, SKY_ZENITH, clamp(ray.z, 0.0, 1.0));
   let half_way = normalize(LIGHT + view);
   let glint = pow(max(dot(n, half_way), 0.0), GLINT_POWER);
-  return fresnel * SKY + GLINT_MOST * glint * SUN;
+  return (fresnel + ROUGH_SKY * hidden) * sky + (GLINT_MOST * glint + ROUGH_GLINT * hidden) * SUN;
 }
 
 // The share of the light that crosses `depth` m of standing water down to its bed and back, for red, green and blue.
@@ -91,7 +77,7 @@ fn seen_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f) -> vec3
 // The same seen from the way `view` (`surface_seen`).
 fn seen_from(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f, view: vec3f) -> vec3f {
   let t = exp(-2.0 * k * depth);
-  return bed * t + deep * (1.0 - t) + surface_seen(g, view);
+  return bed * t + deep * (1.0 - t) + surface_seen(g, view, 0.0);
 }
 
 // Waves at a shore, as their height and their length in deep water, m (L = g T² / 2π): the open sea's, a metre and six
@@ -107,6 +93,14 @@ fn waves_of(sea: f32, fetch: f32) -> vec2f {
   let lake = min(vec2f(0.0016 * sqrt(x) * u2g, GRAVITY * t * t / (2.0 * PI)), SEA_WAVE);
   return mix(lake, SEA_WAVE, sea);
 }
+// The light a liquid's waves focus on its bed (tex.wgsl `waves_read`) shows by up to `CAUSTICS` in the shallows, fading
+// out to none where it is `CAUSTIC_DEEP_M` deep (the waves' focus lies within a few of their lengths).
+const CAUSTICS = 0.6; const CAUSTIC_DEEP_M = 0.8;
+// The mean square slope of the sea's surface in a wind of `WIND_M_S` (Cox and Munk 1954: 0.003 + 0.00512 U), and of
+// standing liquid `sea` of it the sea's, of fetch `fetch` m (`waves_of`): a lake's as much less as its waves are lower
+// than the sea's, no less than `LAKE_MSS_LEAST` of it (a pond's surface still ripples).
+const SEA_MSS = 0.003 + 0.00512 * WIND_M_S; const LAKE_MSS_LEAST = 0.15;
+fn standing_mss(sea: f32, fetch: f32) -> f32 { return SEA_MSS * max(waves_of(sea, fetch).x / SEA_WAVE.x, LAKE_MSS_LEAST); }
 // The height over the still level the swash of waves `w` (`waves_of`) reaches up a shore of slope `slope` (rise over
 // run), m: the run-up that 2% of them pass, R = 1.1 (0.35 β √(H L) + √(H L (0.563 β² + 0.004)) / 2) (Stockdon and
 // others 2006).

@@ -75,6 +75,17 @@ fire.jpg`):
 | 0 | four sprites, a quarter each, their density alone (grey times cover) on black, each fitted to its quarter with its foot on the bottom middle: two flame tongues (`flame_05`, `flame_06`), two puffs of smoke (`smoke_07`, `smoke_08`) | [Particle Pack 1.1](https://kenney.nl/assets/particle-pack), its `PNG (Transparent)` folder | Kenney Vleugels (kenney.nl) | CC0 1.0 |
 | 1 | burnt ground: charred soil, ash, needles and grass stalks; 1 m across | [burned_ground_01](https://polyhaven.com/a/burned_ground_01) (diffuse, 2k), shrunk, its light divided out as `ground.jpg`'s | Rob Tuytel (Poly Haven) | CC0 1.0 |
 
+## water.png
+
+Two 512 x 512 layers that hold numbers, not colours (`web/src/detail.ts` `NUMBER_LAYERS`), each repeating, made by
+`bake/water.py` (`python3 -I bake/water.py FOAM001_DIR FOAM002_DIR water.png`, the folders of the two 1K-JPG downloads
+unpacked), then `bake/sizes.py` for its smaller sides. Drawn by `shaders/lib/tex.wgsl` (`waves_read`, `foam_read`).
+
+| layer | what | source | licence |
+|---|---|---|---|
+| 0 | a sea of small waves: red and green its slope east and south, blue the light it focuses on a bed (its caustics); laid 4 m and 1.3 m across | made by `bake/water.py` from a wave spectrum (no download) | CC0 (made here) |
+| 1 | sea foam's lace, two of them made even over 0..1 (red, green), and the foam's light over its mean, halved (blue); laid 1.8 m across | ambientCG [Foam001](https://ambientcg.com/a/Foam001) (opacity and colour maps) and [Foam002](https://ambientcg.com/a/Foam002) (opacity map), 1K-JPG, shrunk to 512 | CC0 1.0 (ambientcg.com/license) |
+
 ## snags.png
 
 512 x 512 layers, the trunks each a whole layer and the stumps each a quarter of one, each a sprite with its cover,

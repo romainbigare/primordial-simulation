@@ -27,6 +27,48 @@ fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {
   return exposed(textureSampleGrad(detail_tex, detail_sampler, uv, t, gx, gy).rgb);
 }
 
+// The water's surface at the pixel seen at `e` m a pixel, its pattern slid `drift` m (down the flow), as two scales of
+// the water's first layer: tiles `WAVE_M` m a side, the second turned by `WAVE_TURN` radians and `WAVE_FINE` as
+// strong, each shown as far as its waves (a tile over `WAVE_PEAK`) take a few pixels (draw.wgsl `shows_at`): their
+// slope east and south in units of the waves' spread (each axis of spread 1 where both show), and the light they focus
+// on a bed (1 on the mean; the finer scale's). Where the detail is not loaded, a flat surface.
+const WAVE_M = vec2f(4.0, 1.3); const WAVE_TURN = 0.6; const WAVE_FINE = 0.7; const WAVE_PEAK = 5.0;
+fn waves_read(e: f32, drift: vec2f) -> vec3f {
+  if (!models_ready()) { return vec3f(0.0, 0.0, 1.0); }
+  var out = vec3f(0.0, 0.0, 1.0);
+  for (var k = 0; k < rolled(2); k++) {
+    let side = select(WAVE_M.x, WAVE_M.y, k == 1);
+    let shown = shows_at(side / WAVE_PEAK, e);
+    if (shown <= 0.0) { continue; }
+    let a = select(0.0, WAVE_TURN, k == 1);
+    let m = mat2x2f(cos(a), sin(a), -sin(a), cos(a));
+    // (The draw's origin, a whole multiple of 1024 m, taken out first, so the tiles' place is exact in a float.)
+    let uv = m * (fract(pix_origin / side) + (pix_local - drift) / side);
+    let g = e / side;
+    let t = textureSampleGrad(detail_tex, detail_sampler, uv, WATER_FROM, m * vec2f(g, 0.0), m * vec2f(0.0, g)).rgb;
+    let weight = select(1.0, WAVE_FINE, k == 1) * shown / sqrt(1.0 + WAVE_FINE * WAVE_FINE);
+    out = vec3f(out.xy + weight * (transpose(m) * ((t.xy - 0.5) * (2.0 * WAVE_RANGE))), select(out.z, mix(1.0, t.z * CAUSTIC_RANGE, shown), k == 1));
+  }
+  return out;
+}
+// The share of the water's waves' slope a pixel `e` m shows (`waves_read`), squared: what of their mean square slope
+// shows; the rest reflects as a rough surface's mean (water.wgsl `ROUGH_SKY`).
+fn waves_shown(e: f32) -> f32 {
+  let a = shows_at(WAVE_M.x / WAVE_PEAK, e);
+  let b = WAVE_FINE * shows_at(WAVE_M.y / WAVE_PEAK, e);
+  return (a * a + b * b) / (1.0 + WAVE_FINE * WAVE_FINE);
+}
+// Sea foam at the pixel seen at `e` m a pixel, slid `drift` m: the water's second layer, tiles `FOAM_TEX_M` m a side; its
+// coarse lace (even over 0..1) and its light over its mean, halved; where its lace (cells some `FOAM_LACE_M` across) is
+// finer than a few pixels, none (-1).
+const FOAM_TEX_M = 1.8; const FOAM_LACE_M = 0.25;
+fn foam_read(e: f32, drift: vec2f) -> vec2f {
+  if (!models_ready() || shows_at(FOAM_LACE_M, e) <= 0.0) { return vec2f(-1.0, 0.5); }
+  let uv = fract(pix_origin / FOAM_TEX_M) + (pix_local - drift) / FOAM_TEX_M;
+  let g = e / FOAM_TEX_M;
+  return textureSampleGrad(detail_tex, detail_sampler, uv, WATER_FROM + 1, vec2f(g, 0.0), vec2f(0.0, g)).rb;
+}
+
 // Photograph t's mean (its last mip), linear.
 fn photo_mean(t: i32) -> vec3f { return exposed(textureSampleLevel(detail_tex, detail_sampler, vec2f(0.5), t, DETAIL_TOP).rgb); }
 
@@ -54,9 +96,15 @@ fn carpet_m(c: i32) -> f32 { return CARPET_M[c]; }
 // The fire's strip (web/textures/fire.jpg, after the carpets): its first layer four sprites a quarter each, their
 // density alone (two flame tongues, two puffs of smoke: flames.wgsl), its second a photograph of burnt ground (burn.wgsl).
 const FIRE_FROM = CARPETS_FROM + CARPETS;
-// The snags' strip (web/textures/snags.png, after the fire's): `SNAG_LAYERS` layers of sprites with their cover, a
+// The water's strip (web/textures/water.png, after the fire's): numbers, not colours. Its first layer a surface of
+// small waves, its slope east and south (0.5 flat, `WAVE_RANGE` either way) and the light it focuses on a bed
+// (`CAUSTIC_RANGE` times, 1 on the mean); its second sea foam's lace, two of them each even over 0..1, and the foam's
+// light over its mean, halved (river_water.wgsl).
+const WATER_FROM = FIRE_FROM + 2;
+const WAVE_RANGE = 3.0; const CAUSTIC_RANGE = 3.0;
+// The snags' strip (web/textures/snags.png, after the water's): `SNAG_LAYERS` layers of sprites with their cover, a
 // charred trunk a whole layer, a charred stump a quarter of one (snag_sprites.wgsl, snag.wgsl).
-const SNAGS_FROM = FIRE_FROM + 2;
+const SNAGS_FROM = WATER_FROM + 2;
 
 // The rendered models (web/textures/trees.png and models.png; their table, sets and counts in sprites.wgsl, which the
 // bake tool writes): the trees one to a layer from `TREES_FROM` on, the rest four to a layer from `MODELS_FROM` on
