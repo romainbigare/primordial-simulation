@@ -108,7 +108,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // (Its change across a pixel taken the short way round the length the place along is kept modulo.)
   let grows = vec2f(dpdx(g.along), dpdy(g.along));
   let grows_short = grows - land.reach.x * round(grows / land.reach.x);
-  let reach = sample_at(g);
+  let reach = g.channel;
   var next = Next(reach, 0.0);
   var q = discharge_of(reach);
   // (Most points that hold a channel lie far from its line, in its reach alone: there its own sample's discharge says

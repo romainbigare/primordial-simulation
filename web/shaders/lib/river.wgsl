@@ -95,7 +95,7 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind
   let reach = max(banks, line);
   // Past a line's end its texels' signed distances change sign across its extension and blend to a false 0 there: the
   // nearest texel lies far from the line itself (`Tiled.ends`), and nothing is drawn (it drew small square brackets).
-  let real = 1.0 - ease(reach + e, reach + 2.0 * e, g.ends.x);
+  let real = 1.0 - ease(reach + e, reach + 2.0 * e, g.ends);
   // The bed's edge and the water's are spread over a pixel, and over `BED_SOFT` and `WATER_SOFT` of them where the bed
   // is drawn apart: the bed's inward from its edge, so it reaches no farther than a pixel past it.
   let bed_px = max(e, open * BED_SOFT * banks);

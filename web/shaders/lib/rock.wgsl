@@ -183,18 +183,9 @@ fn next_along(s: vec2i, at: vec2f) -> Next {
   return next;
 }
 
-// The sample of the channel at a point of ground `g`: its nearest texel's channel's, or the channel's of the texel
-// across from that where it carries more and that texel lies in its water, so a pixel in the water of a channel a
-// tributary joins is that channel's.
-fn sample_at(g: Tiled) -> vec2i {
-  let across = discharge_of(g.channels.zw);
-  if (across > discharge_of(g.channels.xy) && g.ends.y < 0.5 * land.channel.x * pow(across, land.channel.y)) { return g.channels.zw; }
-  return g.channels.xy;
-}
-
-// What runs through the channel at a point `at` of ground `g`, m³/s (`sample_at`, `next_along`).
+// What runs through the channel at a point `at` of ground `g`, m³/s (`Tiled.channel`, `next_along`).
 fn discharge_at(g: Tiled, at: vec2f) -> f32 {
-  let s = sample_at(g);
+  let s = g.channel;
   let n = next_along(s, at);
   return mix(discharge_of(s), discharge_of(n.s), n.share);
 }

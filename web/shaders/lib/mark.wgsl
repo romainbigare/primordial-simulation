@@ -372,7 +372,7 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32,
 // half width about its middle), whose bed floods take; and where the ground there holds no plant at all, none.
 fn ground_open(at: vec2f) -> bool {
   let g = ground_at(at, false);
-  let ch = channel_at(g, discharge_of(sample_at(g)));
+  let ch = channel_at(g, discharge_of(g.channel));
   return ch.water <= 0.0 || abs(g.sd - ch.middle) >= ch.water;
 }
 
