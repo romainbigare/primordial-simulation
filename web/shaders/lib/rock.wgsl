@@ -184,17 +184,18 @@ fn next_along(s: vec2i, at: vec2f) -> Next {
   return next;
 }
 
-// What runs through the line of sample `s` drawn on the land, m³/s: its own discharge, or where none runs through it
-// (a pond's sample: the body passes the liquid, laws.md 1.2) the discharge of the sample it runs to, so the line from
-// a lake's shore to its outlet carries what leaves the lake.
+// What runs through the line of sample `s` drawn on the land, m³/s: its own discharge, or where its reach has no
+// slope (a pond's sample: the body passes the liquid, laws.md 1.2, and its samples' channels carry little) the larger
+// of that and the discharge of the sample it runs to, so the line from a lake's shore to its outlet carries what
+// leaves the lake.
 fn discharge_through(s: vec2i) -> f32 {
   let q = discharge_of(s);
-  if (q > 0.0 || s.x < 0) { return q; }
+  if (s.x < 0 || stone_and_fall(s).y > 0.0) { return q; }
   let code = links_of(s) % LINK_UP;
-  if (code <= 0) { return 0.0; }
+  if (code <= 0) { return q; }
   let c = (code - 1) % 8 + 1;
   let n = select(c, c - 1, c <= 4);
-  return discharge_of(s + vec2i(n % 3, n / 3) - 1);
+  return max(q, discharge_of(s + vec2i(n % 3, n / 3) - 1));
 }
 
 // What runs through the channel at a point `at` of ground `g`, m³/s (`Tiled.channel`, `next_along`).
