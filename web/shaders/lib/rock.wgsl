@@ -242,8 +242,11 @@ fn noise_reach(along: f32, cell: f32, across: f32, k: i32) -> f32 {
 
 // A channel widens into the standing liquid it runs into: its bed and its water grow evenly to `MOUTH_FLARE` wider (and
 // its water that much shallower) across that liquid's band of shallows (land.wgsl `through_band`), none of it on the
-// land. A channel that moves no stones of `BAR_SAND_STONE` m carries sand and silt alone.
-const MOUTH_FLARE = 1.5;
+// land; and it opens toward that liquid on the land too, as a funnel: from where its ground lies `MOUTH_OPENS.x` times
+// its middle's depth over the liquid's level, to `MOUTH_OPENS.y` of that flare at the water's edge (the backwater of
+// the standing liquid slows the flow and spreads it: a gentle reach opens over a long way, a steep one at the shore).
+// A channel that moves no stones of `BAR_SAND_STONE` m carries sand and silt alone.
+const MOUTH_FLARE = 1.5; const MOUTH_OPENS = vec2f(3.0, 0.4);
 const BAR_SAND_STONE = 0.03;
 
 // A channel at a point of ground `g`, of this month's discharge `q`, m³/s: the half width of its bed on the point's
@@ -265,7 +268,10 @@ fn over_water(g: Tiled, ch: Channel, over: f32, shown: f32) -> f32 {
 // of the liquid it runs into.)
 fn channel_of(g: Tiled, q: f32, banks: f32, mouth: f32) -> Channel {
   if (q <= 0.0) { return Channel(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0); }
-  let flare = 1.0 + MOUTH_FLARE * mouth;
+  // (On the land beside a pond, how near its level the ground lies: `MOUTH_OPENS`.)
+  var nearing = 0.0;
+  if (g.water.y > 0.0) { nearing = 1.0 - ease(0.0, MOUTH_OPENS.x * BED_MIDDLE * land.channel.z * pow(q, land.channel.w), over_ponds(g, 0.0)); }
+  let flare = 1.0 + MOUTH_FLARE * max(mouth, MOUTH_OPENS.y * nearing);
   let law = banks * flare;
   var vary = 1.0;
   if (!unseen(BED_VARY * BED_MOST_M) && g.d < BED_NEAR * law) { vary += BED_VARY * (noise_reach(g.along, BED_VARY_M.x, 0.0, 68) + 0.5 * noise_reach(g.along, BED_VARY_M.y, 0.0, 69)) / 1.5; }

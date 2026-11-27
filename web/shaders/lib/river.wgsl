@@ -232,7 +232,7 @@ const EDGE_M = 0.35; const EDGE_LIGHT = 0.25;
 // its line than its bed is half wide, all of it from `MOUTH_CALM` times that. A channel cuts through the shallows only
 // as far as it is deeper than they are: it melts into them from where the liquid stands `MOUTH_REACH.x` times as deep
 // as the channel law makes its middle, gone at `MOUTH_REACH.y` times, so a rill ends at the water's edge.
-const MOUTH_BARS = 0.5; const MOUTH_MELTS = 0.5; const MOUTH_CALM = 2.0; const MOUTH_REACH = vec2f(1.0, 2.0);
+const MOUTH_BARS = 0.5; const MOUTH_MELTS = 0.3; const MOUTH_CALM = 2.0; const MOUTH_REACH = vec2f(1.0, 3.0);
 
 // The spots `s` of a point with its channel `ch` of discharge `q`, which moves stones of `stone` m down a reach of
 // slope `fall` (rise over run), on ground `g` (the
