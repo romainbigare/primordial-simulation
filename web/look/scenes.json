@@ -166,6 +166,17 @@
         { "name": "tall_bushes", "about": "tall bushes", "at": [7.5, 5.5] },
         { "name": "wet_closed", "about": "a tall closed stand of trees of wet ground, four size groups", "at": [5.5, 6.5] }
       ]
+    },
+    "river_kinds": {
+      "world": "seed1",
+      "views": [2.0, 0.5],
+      "cost_views": [2.0],
+      "scenes": [
+        { "name": "cold", "about": "a stream off the high ground by the ice, north-east of the big lake", "at": [19.54, 12.55] },
+        { "name": "warm", "about": "a river over warm dry lowland in the south, above its drowned valley", "at": [17.24, 25.0] },
+        { "name": "forest", "about": "a stream through forest and meadow in the north", "at": [20.87, 8.96] },
+        { "name": "woodland", "about": "the river through open woodland of scene rivers/reach", "at": [26.5, 14.6] }
+      ]
     }
   }
 }

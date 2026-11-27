@@ -47,9 +47,10 @@ const LAND_VEC4S = 8;
  * ice is drawn on the mean. A square is open sea where it is the sea's and its ground lies `OPEN_SEA_M` under its
  * surface on the mean: a coast's squares hold land, whose ice is its snow. */
 const SEA_BLUR = 1.5, SEA_REACH = 4, OPEN_SEA_M = 20;
-/** The signs of the flow on a channel's water slide along it (lib/flow.wgsl): they step this many times a second, the
- * slowest water's by this many metres a second; they show where a pixel takes no more than `FLOW_SHOWS_E` m (the
- * shader's streaks fade out there) on water at least `FLOW_PX` pixels wide. */
+/** The surface of a channel's water, its waves and foam, slides down it (lib/river_water.wgsl `running_surface`): it
+ * steps this many times a second, the slowest water's by this many metres a second; it shows where a pixel takes no
+ * more than `FLOW_SHOWS_E` m (farther, a slide of the waves' centimetres a step does not show) on water at least
+ * `FLOW_PX` pixels wide. */
 export const FLOW_FPS = 6;
 const FLOW_M_S = 0.35, FLOW_SHOWS_E = 0.6, FLOW_PX = 4;
 /** Seconds in a day. */

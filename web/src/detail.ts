@@ -13,9 +13,9 @@ import { timed } from './cost';
  * bake/split.py and bake/sprites.cjs, and put in the page by build.mjs). */
 declare const STRIPS: Record<StripGroup, string[]>;
 /** The groups of the strips in their layers' order in the texture array (tex.wgsl's `*_FROM`): the photographs, the
- * ground cover, the fire's, the snags, the rendered models, the heights of those that stand in water, and the trees
+ * ground cover, the fire's, the water's surface and foam, the snags, the rendered models, the heights of those that stand in water, and the trees
  * last (cut-outs). */
-const STRIP_GROUPS = ['ground', 'carpets', 'fire', 'snags', 'models', 'heights', 'trees'] as const;
+const STRIP_GROUPS = ['ground', 'carpets', 'fire', 'water', 'snags', 'models', 'heights', 'trees'] as const;
 type StripGroup = typeof STRIP_GROUPS[number];
 
 /** The side of each layer of the strips' files, texels (tex.wgsl's `*_TEX` and the rest: the photographs, the ground
@@ -69,9 +69,10 @@ const CUT = 128;
 /** The detail's texels are sRGB: the GPU reads them as light, and blends and filters them in light (tex.wgsl). */
 const DETAIL_FORMAT = 'rgba8unorm-srgb';
 /** Of each group, the layers of a strip that hold numbers, not colours, from its first: the fire's flames and puffs
- * (its first layer, flames.wgsl `fire_sprite`) and the heights of what stands in water (all, tex.wgsl), which
- * detail-worker.ts writes so that they read back as those numbers. */
-const NUMBER_LAYERS: Partial<Record<StripGroup, number>> = { fire: 1, heights: Infinity };
+ * (its first layer, flames.wgsl `fire_sprite`), the water's slopes, caustics and foam (all, river_water.wgsl) and the
+ * heights of what stands in water (all, tex.wgsl), which detail-worker.ts writes so that they read back as those
+ * numbers. */
+const NUMBER_LAYERS: Partial<Record<StripGroup, number>> = { fire: 1, water: Infinity, heights: Infinity };
 
 /** The strips' files beside the page at layers `side` texels a side (web/textures/bake/sizes.py), in their layers'
  * order, whether each is the trees' (cut-outs), and how many of its first layers hold numbers (`NUMBER_LAYERS`). */

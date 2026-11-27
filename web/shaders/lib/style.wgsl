@@ -33,13 +33,48 @@ const HUMUS_TINT = vec3f(0.22, 0.16, 0.11); const HUMUS_FROM = 0.002; const HUMU
 const CLEAR_ATTENUATION = vec3f(0.18, 0.04, 0.026);
 const OPEN_WATER = vec3f(0.006, 0.07, 0.20); const DEEP_WATER_PAINT = vec3f(0.004, 0.022, 0.10);
 const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
-// Inland water holds the matter dissolved from the soil, which takes the blue first (Kirk 1994): running water is drawn
-// through `INLAND_ATTENUATION` (stretched as the clear water's) over `INLAND_DEEP`, the olive green of a deep pool, so
-// a stream shows its bed's own colour, greener and darker as it deepens; a lake's attenuation is `LAKE_CLEAR` of the
-// way to the sea's clear water, over `LAKE_WATER`, the turquoise of a clear lake whose fine pale grains send the green
-// back with the blue.
-const INLAND_ATTENUATION = vec3f(0.22, 0.12, 0.2); const INLAND_DEEP = vec3f(0.012, 0.035, 0.035); const LAKE_CLEAR = 0.85;
-const LAKE_WATER = vec3f(0.008, 0.17, 0.24);
+// Inland water by what it holds: one law for every stream and lake (Kirk 1994). Light is attenuated by the water itself
+// (`INLAND_CLEAR`, stretched as the clear sea's is), by the organic matter dissolved from soils and litter, which takes
+// the blue most and the red least (its absorption falls as exp(-0.014 (λ - 440 nm)): Bricaud and others 1981, red,
+// green and blue `DOM_SPECTRUM`), and by the grains it carries. What comes back from water too deep to show its bed is
+// what its particles scatter back over all that takes the light, R = 0.33 b_b / (a + b_b) (Gordon and others 1975),
+// so water that holds nothing to scatter is dark, and water that holds fine pale grains glows. Three kinds of grains
+// scatter: the load it carries (`load` g/m³; `BB_LOAD` a g/m³, brown: a muddy river); rock flour, fresh fine rock
+// ground by ice and snow, carried by meltwater, so as much as the ground it runs on lies at melting (`MELT_K`): milky
+// blue-green; and the fine calcite that warm water lays down, as the solubility of calcium carbonate falls as water
+// warms (whitings, Thompson and others 1997), from `WHITING_K.x` to `WHITING_K.y`: turquoise. Pure water scatters
+// `BB_WATER` (Morel 1974, stretched), and inland water always carries some fine clay and organic grains that hardly
+// settle (its wash load), `BB_FINES` (a river's backscatter is some 0.01 to 0.05 per m), so deep water keeps a hue and
+// is never black. So cold clear water reads dark blue-green, warm clear water turquoise, meltwater
+// milky, the water of organic soils and forest tea-brown to black, a loaded river muddy.
+// The organic matter dissolved, as its absorption at 440 nm, 1/m (stretched): `DOM_MOST` where the soil is darkest
+// with it (style.wgsl `humus`) or woody crowns close over the ground (their litter, `DOM_LITTER` as much as the
+// soil's), none where the ground is frozen, all of it from `DOM_THAW.y` (microbes make it in thawed soil).
+// The flour scatters back up to `FLOUR` per m (pale: `FLOUR_TINT`) and takes `FLOUR_ABSORB` of that, as the ground lies
+// from `MELT_K.x` to `MELT_K.y` K and no more from `MELT_K.z` to `MELT_K.w` (below, the water is frozen; above, its
+// snow has melted); the calcite up to `WHITING` per m, its grains finer than the light's wavelength scattering the blue
+// most (`WHITING_TINT`).
+const INLAND_CLEAR = vec3f(0.32, 0.11, 0.09);
+const DOM_SPECTRUM = vec3f(0.06, 0.25, 0.9); const DOM_MOST = 1.5; const DOM_LITTER = 0.1; const DOM_THAW = vec2f(273.0, 283.0);
+const BB_WATER = vec3f(0.0006, 0.003, 0.006); const BB_FINES = vec3f(0.03, 0.045, 0.035); const BACKSCATTER = 0.33;
+const BB_LOAD = vec3f(0.014, 0.010, 0.005);
+const FLOUR = 0.4; const FLOUR_TINT = vec3f(0.9, 1.0, 1.08); const FLOUR_ABSORB = 0.15; const MELT_K = vec4f(271.0, 273.5, 275.5, 279.0);
+const WHITING = 0.3; const WHITING_TINT = vec3f(0.4, 1.0, 1.3); const WHITING_K = vec2f(285.0, 300.0);
+// What inland water takes from light, 1/m, and sends back where it is too deep to show its bed (linear).
+struct Optics { k: vec3f, deep: vec3f }
+// The optics of inland water on ground at `t` K whose soil's organic share is `organic` under woody crowns closing
+// `canopy` of it, carrying `load` g/m³.
+fn inland_optics(t: f32, organic: f32, canopy: f32, load: f32) -> Optics {
+  let dom = DOM_MOST * min(humus(organic) + DOM_LITTER * min(canopy, 1.0), 1.0) * ease(DOM_THAW.x, DOM_THAW.y, t);
+  let flour = FLOUR * ease(MELT_K.x, MELT_K.y, t) * (1.0 - ease(MELT_K.z, MELT_K.w, t));
+  let whiting = WHITING * ease(WHITING_K.x, WHITING_K.y, t);
+  let bb = BB_WATER + BB_FINES + flour * FLOUR_TINT + whiting * WHITING_TINT + load * BB_LOAD;
+  let a = INLAND_CLEAR + dom * DOM_SPECTRUM + load * LOAD_ATTENUATION + flour * FLOUR_ABSORB;
+  return Optics(a + bb, BACKSCATTER * bb / (a + bb));
+}
+// Clear inland water at no particular place: no organic matter, no load, cool (the water about a plant's stem,
+// `seen_in_liquid`).
+fn clear_inland() -> Optics { return inland_optics(WHITING_K.x, 0.0, 0.0, 0.0); }
 // Foam at the sea's edge: white, at most this share, over the water shallower than `FOAM_M`. Close up it is the swash's
 // lines, which follow the shore (lines of the bed's depth): one at the water's edge and `FOAM_LINES` more, each
 // `FOAM_LINE_M` of depth farther out and `FOAM_LINE_FALL` as strong as the last, `FOAM_LINE_W` of that spacing wide to
@@ -125,29 +160,30 @@ fn rim_depth(slope: f32, e: f32, rim_m: f32) -> f32 { return max(rim_m, slope * 
 // (`rel`) to the power `RIVER_SEEN_POW`: the shallows show their bed, the deep thread is darker and greener. Standing
 // liquid past its shore's band is coloured `STANDING_SEEN_M` deeper (`rel` how far through the band), so its open
 // water reads as water over a shallow shelf too, and its shallows grade to it.
-const RIVER_SEEN_M = 2.0; const RIVER_SEEN_POW = 1.6; const STANDING_SEEN_M = 8.0;
+const RIVER_SEEN_M = 5.0; const RIVER_SEEN_POW = 1.6; const STANDING_SEEN_M = 8.0;
 // The depth a channel's water `depth` m deep is coloured as, `rel` of the depth of its middle by the channel law.
 fn river_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + RIVER_SEEN_M * pow(max(rel, 0.0), RIVER_SEEN_POW); }
 // The depth standing liquid `depth` m deep (as a lake's) is coloured as, `rel` of the way through its shore's band.
 fn standing_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + STANDING_SEEN_M * pow(max(rel, 0.0), RIVER_SEEN_POW); }
 
-// Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g, of attenuation `k`,
-// 1/m, over the light `deep` that comes back where it is too deep to show its bed, carrying `load` g/m³ (water.wgsl
-// `loaded_k`): through its stretched attenuation (the bed lightened, `BED_LIGHTEN`), over its deep colour.
-fn painted_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f, load: f32) -> vec3f {
-  return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, loaded_k(k, load), loaded_deep(deep, load));
+// Bed `bed` (linear, lit) seen through `depth` m of water in the style of optics `o` (`inland_optics`), whose surface
+// has slope g with waves of mean square slope `hidden` too small to show (water.wgsl `surface_seen`), seen from the
+// map's view: the bed lightened (`BED_LIGHTEN`), over the water's deep colour, its surface's light `SHEEN` of what it
+// reflects (a painted map shows the water's own colour first: the sky it mirrors would grey every water alike).
+const SHEEN = 0.45;
+fn painted_through(bed: vec3f, depth: f32, g: vec2f, hidden: f32, o: Optics) -> vec3f {
+  let t = exp(-2.0 * o.k * depth);
+  return mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN) * t + o.deep * (1.0 - t) + SHEEN * surface_seen(g, MAP_VIEW, hidden);
 }
 // The open sea far from any shore, as the map paints it (the screen's share of full scale): what the page shows past
 // the map's edge where it is drawn out to the screen's (picture.wgsl).
-fn open_sea_painted() -> vec3f { return painted(srgb(standing_painted(vec3f(0.0), DEEP_M, vec2f(0.0), 1.0, 0.0))); }
-// Running water (river.wgsl), inland water all.
-fn water_painted(bed: vec3f, depth: f32, g: vec2f, load: f32) -> vec3f { return painted_through(bed, depth, g, INLAND_ATTENUATION, INLAND_DEEP, load); }
-// Standing liquid, `sea` of it the sea's (the rest a lake's): the sea's clear water over the open sea's colour, which
-// darkens with depth; a lake's (`LAKE_CLEAR`) over `LAKE_WATER`.
-fn standing_painted(bed: vec3f, depth: f32, g: vec2f, sea: f32, load: f32) -> vec3f {
+fn open_sea_painted() -> vec3f { return painted(srgb(standing_painted(vec3f(0.0), DEEP_M, vec2f(0.0), 0.0, 1.0, clear_inland(), 0.0))); }
+// Standing liquid, `sea` of it the sea's (the rest a lake's, of optics `o`), carrying `load` g/m³: the sea's clear
+// water over the open sea's colour, which darkens with depth, turbid with its load (water.wgsl `loaded_k`).
+fn standing_painted(bed: vec3f, depth: f32, g: vec2f, hidden: f32, sea: f32, o: Optics, load: f32) -> vec3f {
   let open = mix(OPEN_WATER, DEEP_WATER_PAINT, ease(log(OPEN_M), log(DEEP_M), log(max(depth, 1.0))));
-  let k = mix(INLAND_ATTENUATION, CLEAR_ATTENUATION, mix(LAKE_CLEAR, 1.0, sea));
-  return painted_through(bed, depth, g, k, mix(LAKE_WATER, open, sea), load);
+  let k = mix(o.k, loaded_k(CLEAR_ATTENUATION, load), sea);
+  return painted_through(bed, depth, g, hidden, Optics(k, mix(o.deep, loaded_deep(open, load), sea)));
 }
 
 // A point of a plant of colour `c` (linear) `height` m over the ground at its foot, where liquid stands `depth` m deep
@@ -164,7 +200,7 @@ fn seen_in_liquid(c: vec3f, depth: f32, height: f32, e: f32) -> vec3f {
   var seen = c;
   if (below > 0.0) {
     let column = standing_seen(depth, shore_rim(depth, 0.0, e, LAKE_RIM_M));
-    seen = standing_painted(BED_SHOWN * c, column * min(below / depth, 1.0), vec2f(0.0), 0.0, 0.0);
+    seen = standing_painted(BED_SHOWN * c, column * min(below / depth, 1.0), vec2f(0.0), 0.0, 0.0, clear_inland(), 0.0);
   }
   return seen + WATERLINE * SKY * (1.0 - smoothstep(0.0, e, abs(below)));
 }
