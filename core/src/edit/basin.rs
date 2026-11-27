@@ -1,12 +1,14 @@
 //! A basin of liquid made by an edit (handover.md 11.1: add liquid; the ground dug and the key liquid added): the
 //! ground under a brush cut to a smooth bowl, a depth under the level the liquid is to stand at in its middle, that
 //! meets the level at the brush's edge, its shore; past it banks that rise from the shore to the ground about it with no
-//! step; that level the lowest dry ground of its rim, or the level of the liquid of the ponds its cut opens, so a pond
-//! it reaches grows over it at its own level; a bank of `edit_bank_m` over that level only where its rim would let the
-//! liquid out, but at its outlet, at the level; and the key liquid poured in to its pass, all from the outside node.
+//! step; that level the lowest dry ground of its rim, or the lowest level of the liquid of the ponds its cut opens, so a
+//! pond it reaches grows over it at its own level, and ponds at different levels join at the lower; a bank of
+//! `edit_bank_m` over that level only where its rim would let the liquid out, but at its outlet, at the level; and the
+//! key liquid poured in to its pass, all from the outside node.
 //! Brushes laid over each other so make one pond with one floor: each cuts all of its disc, and the floor of the pond it joins about it, under the level, as deep
 //! as it lies from the shore of all their liquid. So the basin is closed by its making: a pond of the samples,
-//! whose body keeps what is poured into it, and never one that lowers a pond it reaches.
+//! whose body keeps what is poured into it, and never one that lowers a pond it reaches but to the level of a lower pond
+//! it joins it to.
 
 use super::brush::Covered;
 use super::Brush;
@@ -32,10 +34,12 @@ const TOP_UP_SHARE: f64 = 0.01;
 
 impl World {
     /// A basin of liquid `depth` m deep under the brush `b` (the module's doc). Its rim is the samples beside those it
-    /// covers (within `RIM_SAMPLES` round it, as built over the cells' grounds now). Its level is the highest level of
+    /// covers (within `RIM_SAMPLES` round it, as built over the cells' grounds now). Its level is the lowest level of
     /// the liquid of the closed ponds that stands on its samples or its rim (`pond_levels`, where it lies over their
-    /// ground), else the way out of its outlet: of the samples of its rim on which no liquid stands, the one the higher
-    /// of whose height and the lowest sample beside it outside the rim is lowest, that height. Every sample it
+    /// ground: the one level the liquid of all of them can stand at once joined, as a higher one runs down into the
+    /// lower over the cut, whose floor about the brush is cut under it with the basin's), else the way out of its
+    /// outlet: of the samples of its rim on which no liquid stands, the one the higher of whose height and the lowest
+    /// sample beside it outside the rim is lowest, that height. Every sample it
     /// covers is cut to a bowl `depth` under that level at its middle sample that meets the level at the brush's edge
     /// (`bowl`); every dry sample of the rim whose way out lies under the level (the liquid would leave by it) is raised
     /// to `edit_bank_m` over it, but the outlet, moved to the level (so a pond it grows leaves by a pass at its own
@@ -101,7 +105,7 @@ impl World {
             (-1..=1).flat_map(move |dy| (-1..=1).map(move |dx| (x + dx, y + dy))).filter(move |&(i, j)| (i, j) != (x, y) && i >= 0 && i < across && j >= 0 && j < down).map(move |(i, j)| (j * across + i) as usize)
         };
         let on_rim = |k: usize| !cut.contains(&k) && around(k).any(|j| cut.contains(&j));
-        let reached = all.iter().filter(|c| cut.contains(&c.k) || on_rim(c.k)).map(|c| wet(c.k)).filter(|l| l.is_finite()).fold(f64::NEG_INFINITY, f64::max);
+        let reached = all.iter().filter(|c| cut.contains(&c.k) || on_rim(c.k)).map(|c| wet(c.k)).filter(|l| l.is_finite()).fold(f64::INFINITY, f64::min);
         // The outlet: of the dry samples of the rim across a side from one it covers (the liquid runs across sides,
         // `space::drain`), the one whose way out is lowest, the higher of its own height and the lowest sample beside
         // it outside the rim.

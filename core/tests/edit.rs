@@ -607,3 +607,61 @@ fn a_copied_world_steps_as_its_original() {
     let bits = |w: &World| [Class::Ground, Class::Air].iter().flat_map(|&c| w.store.amounts(c).iter().chain(w.store.heat(c))).map(|x| x.to_bits()).collect::<Vec<u64>>();
     assert!(bits(&w) == bits(&copy), "the copy stepped apart");
 }
+
+/// How far apart the test's two basins lie, in radii of their brushes: apart, each a pond of its own.
+const TWO_APART: f64 = 2.4;
+
+/// The share of the liquid standing in two ponds the ground newly covered may take into its pores, or give, as they
+/// join.
+const PORES_SHARE: f64 = 1e-3;
+
+/// Two ponds at different levels joined by an edit between them keep all their liquid and stand as one: lowering the
+/// ground between them, or a basin whose brush reaches both. A basin stands at the lower level (`World::basin`), the
+/// one level the joined liquid can hold: the higher pond's floor about the brush is cut under it, so its liquid stays
+/// standing in the joined pond, which the basin fills to its pass; lowered ground lets the higher pond's liquid run
+/// down into the lower. The books are kept.
+#[test]
+fn an_edit_between_two_ponds_joins_them_and_keeps_their_liquid() {
+    let mut w = small_world();
+    let i = inland(&w);
+    let [x0, y0, x1, y1] = w.map.bounds(i);
+    let r = 0.3 * w.map.side;
+    let act = Act::Basin { radius_m: r, depth_m: 5.0 };
+    let a = [(x0 + x1) / 2.0, (y0 + y1) / 2.0];
+    let b = [a[0] + TWO_APART * r / w.map.side, a[1]];
+    let mid = [(a[0] + b[0]) / 2.0, a[1]];
+    assert_eq!(w.edit(&[Edit { place: a, act }, Edit { place: b, act }]), [true, true]);
+    let pond_at = |w: &World, p: [f64; 2]| {
+        let s = w.terrain_samples();
+        let per = (s.across / w.map.w) as f64;
+        s.pond[(p[1] * per) as usize * s.across + (p[0] * per) as usize]
+    };
+    // The liquid standing in the closed ponds, m³.
+    let standing = |w: &World| w.pools().iter().filter(|p| !p.low).map(|p| p.volume).sum::<f64>();
+    let (pa, pb) = (pond_at(&w, a), pond_at(&w, b));
+    let levels = w.pond_levels();
+    let (la, lb) = (levels[pa as usize], levels[pb as usize]);
+    assert!(pa != pb && (la - lb).abs() > 1.0, "two ponds at different levels: {la} and {lb}");
+    let lower = if la < lb { a } else { b };
+    let before = standing(&w);
+    let books = Books::now(&w);
+
+    let mut lowered = w.clone();
+    let down = Act::Ground { radius_m: r, height_m: -10.0, stroke_m: 0.0, make: 0 };
+    assert_eq!(lowered.edit(&[Edit { place: mid, act: down }; 4]), [true; 4]);
+    lowered.settle();
+    books.assert_kept(&lowered, 1e-9);
+    let joined = pond_at(&lowered, lower);
+    assert!(joined != pcore::space::network::NONE && pond_at(&lowered, mid) == joined, "lowered: the ground between in the lower pond");
+    let after = standing(&lowered);
+    assert!((after / before - 1.0).abs() < PORES_SHARE, "lowered: {after} m³ stand of {before}");
+
+    let mut dug = w.clone();
+    assert_eq!(dug.edit(&[Edit { place: mid, act }]), [true]);
+    books.assert_kept(&dug, 1e-9);
+    let joined = pond_at(&dug, mid);
+    assert!(pond_at(&dug, a) == joined && pond_at(&dug, b) == joined, "a basin between: the two ponds and the basin one pond");
+    let level = dug.pond_levels()[joined as usize];
+    assert!(level >= la.min(lb) - 1e-6 && level < la.max(lb), "a basin between stands at {level}, the ponds at {la} and {lb}");
+    assert!(standing(&dug) >= (1.0 - PORES_SHARE) * before, "a basin between: {} m³ stand of {before}", standing(&dug));
+}
