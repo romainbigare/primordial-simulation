@@ -27,6 +27,8 @@ const BANK_M = 0.4; const BANK_SHARE = 0.12; const BANK_SHADE = 0.45; const BANK
 const MID_BAR_WD = vec2f(20.0, 45.0); const MID_BAR_M = vec2f(48.0, 16.0); const MID_BAR_FROM = 0.1; const MID_BAR_FULL = 0.45;
 const MID_BAR_WIDE = 0.45;
 const MID_BAR_UP = 0.4;
+// A bar in the middle shows from a pixel wide, fully from `MID_BAR_PX` pixels: narrower, a line of them drew dashes.
+const MID_BAR_PX = 3.0;
 
 // The half width of the bar in the middle of channel `c` at `along` m along it, as a share of its water's half width (0:
 // none).
@@ -83,7 +85,7 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32) -> R
   let bar = mid_bar(c, g.along) * half;
   if (bar > e) {
     let from_middle = abs(g.sd - c.middle);
-    water *= 1.0 - (tent((bar - from_middle) / e) - tent((-bar - from_middle) / e));
+    water *= 1.0 - ease(e, MID_BAR_PX * e, bar) * (tent((bar - from_middle) / e) - tent((-bar - from_middle) / e));
     if (from_middle < bar) {
       r.edge = bar - from_middle;
       r.up = MID_BAR_UP * r.edge / bar;
@@ -169,6 +171,26 @@ const LINE_FADE = 4.0;
 // that no line widens carries next to nothing, and drew a faint thin line through the forest.
 const FRINGE_PX = vec2f(0.5, 2.0);
 
+// Along a channel its banks are damp and its plants denser and greener (the riparian strip: the capillary fringe over
+// its water and the floods' wetting; from memory), out to `RIPARIAN_M` plus `RIPARIAN_BEDS` of its bed's half widths
+// from its water's edge, that varying by `RIPARIAN_VARY` of itself along it over `RIPARIAN_VARY_M`: in the style the
+// ground there is darker by up to `RIPARIAN_DARK` (red, green and blue), fading out across the strip, so a river
+// seen from afar runs in a darker green ribbon. It shows as far as the channel's water or its line does
+// (`FRINGE_PX`); a strip narrower than a pixel is spread over the pixel, as dark on the mean.
+const RIPARIAN_M = 10.0; const RIPARIAN_BEDS = 2.0; const RIPARIAN_VARY = 0.5; const RIPARIAN_VARY_M = 150.0;
+const RIPARIAN_DARK = vec3f(0.38, 0.24, 0.4); const RIPARIAN_STREAM = 86;
+// How far ground `g` lies in the riparian strip of channel `ch` drawn `line` m half wide from afar (`line_of`), seen at
+// `e` m a pixel, 0..1.
+fn riparian(g: Tiled, ch: Channel, line: f32, e: f32) -> f32 {
+  if (ch.water <= 0.0) { return 0.0; }
+  let wide = max(ch.water, line);
+  let seen = ease(FRINGE_PX.x * e, FRINGE_PX.y * e, 2.0 * wide);
+  if (seen <= 0.0) { return 0.0; }
+  let strip = (RIPARIAN_M + RIPARIAN_BEDS * ch.bed) * (1.0 + RIPARIAN_VARY * noise_reach(g.along, RIPARIAN_VARY_M, 0.0, RIPARIAN_STREAM));
+  let spread = strip + 2.0 * e;
+  return seen * strip / spread * ease(0.5 * wide, wide, g.d) * (1.0 - smoothstep(wide, wide + spread, g.d));
+}
+
 // The least half width a channel of discharge `q` is drawn at where a pixel takes `e` m, m.
 fn line_of(q: f32, e: f32) -> f32 {
   if (q <= 0.0) { return 0.0; }
@@ -197,6 +219,9 @@ const DRIFTWOOD_UP = vec2f(0.1, 0.35);
 // The water within `EDGE_M` of its edge is lighter by up to `EDGE_LIGHT`: the wash at the bank, where the bed's last
 // centimetres show.
 const EDGE_M = 0.35; const EDGE_LIGHT = 0.25;
+// A channel too narrow for its bed's shape to show is coloured as water `RIVER_LINE` times as deep as its middle: from
+// afar a river is a thread of dark water, its bed's light lost under its banks.
+const RIVER_LINE = 2.0;
 
 // A river runs into standing liquid through its band of shallows (`mouth` of the way through it, land.wgsl
 // `through_band`), where its bed lies under that liquid: its bars go under within `MOUTH_BARS` of the band, so the
@@ -275,8 +300,8 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   // Down the flow: square to the distance's slope, the way the place along the channel grows.
   let square = vec2f(-g.d_slope.y, g.d_slope.x);
   out.down = square * sign(dot(square, grows));
-  // (A channel too narrow for its bed's shape to show is coloured as the river's deep water.)
-  out.water = vec2f(mix(1.0, out.wet.depth / (BED_MIDDLE * ch.mean), resolved * runs), resolved * runs * (1.0 - ease(0.0, EDGE_M, (1.0 - abs(x)) * ch.water)));
+  // (A channel too narrow for its bed's shape to show is coloured as deep water, `RIVER_LINE`.)
+  out.water = vec2f(mix(RIVER_LINE, out.wet.depth / (BED_MIDDLE * ch.mean), resolved * runs), resolved * runs * (1.0 - ease(0.0, EDGE_M, (1.0 - abs(x)) * ch.water)));
   out.wet.stony *= runs;
   out.wet.blocks *= runs;
   out.wet.sand = 0.0;
@@ -312,10 +337,10 @@ const STONE_WATERED = 0.35;
 // (colour.wgsl `colour_on`), and a layer's view shades its bed as far as it shows (`Shaded.m`).
 fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f) -> Shaded {
   let lit = light(1.0 + (p.shade - 1.0) * (0.8 + 0.3 * p.snow), p.slope);
-  let soaked_bed = soil(g, 1.0, lit);
+  let soaked_bed = BED_FILM * soil(g, 1.0, lit);
   let ripple = ripples(p.e) * (1.0 - p.snow);
   let k = loaded_k(RUNNING_CLEAR, p.load);
-  var water = seen_through(BED_FILM * soaked_bed, p.depth, ripple, k, loaded_deep(DEEP_WATER, p.load));
+  var water = seen_through(soaked_bed, p.depth, ripple, k, loaded_deep(DEEP_WATER, p.load));
   // In the style a channel's water is coloured by its bed's shape (style.wgsl `river_seen`): light shallows over the
   // bed's stones, a dark deep thread, a light wash at its edge.
   if (styled()) { water = mix(water_painted(BED_SHOWN * soaked_bed, river_seen(p.depth, w.x), ripple, p.load) * (1.0 + EDGE_LIGHT * w.y), FAST_WATER, FAST * flow.z); }
