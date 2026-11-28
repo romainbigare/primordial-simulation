@@ -50,8 +50,8 @@ the world's (`page.mjs` `plumes`).
 
 The scene set `plants` stands on `seed1`'s world where its plant cover is drawn from far to near: green hills
 cut by gullies (12, 4 and 2 m a pixel), a forest where its trees pass from the field to single crowns (6 to 0.3 m),
-tall forest and mountains from far (40 and 12 m), the island's middle (85 m), a river valley, an open woodland and
-sparse low plants on dry ground; its cost views are 40, 4 and 1 m a pixel.
+tall forest and mountains from far (40 and 12 m), the island's middle (85 m), a river valley, an open woodland (6 to
+0.5 m) and sparse low plants on dry ground (4 and 1 m); its cost views are 40, 4 and 1 m a pixel.
 
 The scene set `ground` stands on `seed1`'s world on bare and thin-soil ground from 12 m to 0.4 m a pixel: steep bare
 rock, steep hills of thin soil, the edge of the snow on them, a dry plain and a river valley's side, with the island's

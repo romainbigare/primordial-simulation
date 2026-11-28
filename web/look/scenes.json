@@ -151,8 +151,8 @@
         { "name": "z40", "about": "mountains and their cover from far", "at": [19.5, 13.5], "views": [40.0] },
         { "name": "over", "about": "the island's middle, the far view", "at": [16.0, 16.0], "views": [85.0] },
         { "name": "river", "about": "a river valley's plants", "at": [26.5, 14.6], "views": [12.0, 3.0] },
-        { "name": "woodland", "about": "an open woodland: stands breaking up into clumps and single trees", "at": [26.5, 10.5], "views": [6.0, 2.0] },
-        { "name": "dry", "about": "sparse low plants on dry ground", "at": [21.5, 7.5], "views": [4.0] }
+        { "name": "woodland", "about": "an open woodland: stands breaking up into clumps and single trees", "at": [26.5, 10.5], "views": [6.0, 2.0, 0.5] },
+        { "name": "dry", "about": "sparse low plants on dry ground", "at": [21.5, 7.5], "views": [4.0, 1.0] }
       ]
     },
     "swamp": {
