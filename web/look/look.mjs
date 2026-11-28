@@ -31,13 +31,16 @@ function setOf() {
   return { name, set, world: SCENES.worlds[set.world], scenes: set.scenes.filter(s => !only || only.includes(s.name)) };
 }
 
-/** A browser on the tool's server with the page of the current build, and the builds `variants` ({ site: the JSON of
- * its programs }, `page.site`). */
+/** The tool's server with the page of the current build and the builds `variants` ({ site: the JSON of its programs },
+ * `page.site`), each in a browser of its own (`browsers`, by site; `browser` is the page's): a browser makes the
+ * programs of all its pages on one thread, so the builds' programs are made side by side. */
 async function start(variants = {}) {
   P.site('site');
   for (const [name, shaders] of Object.entries(variants)) P.site(name, shaders);
-  const { server, url } = await P.serve(), browser = await P.launch();
-  return { server, url, browser, lab: await lab(browser), stop: async () => { await browser.close(); server.close(); } };
+  const { server, url } = await P.serve(), sites = ['site', ...Object.keys(variants)];
+  const browsers = Object.fromEntries(await Promise.all(sites.map(async name => [name, await P.launch()])));
+  const stop = async () => { await Promise.all(Object.values(browsers).map(b => b.close())); server.close(); };
+  return { server, url, browser: browsers.site, browsers, lab: await lab(browsers.site), stop };
 }
 
 /** The file name of a view's picture (`mpp` metres a css pixel). */
@@ -48,7 +51,7 @@ async function set(out) {
   const t0 = Date.now(), { name, set, world, scenes } = setOf(), crowns = flags.crowns !== 'no';
   const at = worlds(set.world, world, dates(world))[world.at], s = await start(crowns ? { 'site-mask': maskShaders() } : {});
   mkdirSync(out, { recursive: true });
-  const page = await P.open(s.browser, s.url, 'site', at, { px, scale }), maskPage = crowns ? await P.open(s.browser, s.url, 'site-mask', at, { px, scale }) : null;
+  const page = await P.open(s.browser, s.url, 'site', at, { px, scale }), maskPage = crowns ? await P.open(s.browsers['site-mask'], s.url, 'site-mask', at, { px, scale }) : null;
   if (world.step) for (const p of [page, maskPage]) if (p) await P.step(p, world.step);
   const result = { set: name, world: at, year: await P.year(page), px, scenes: {} }, items = [];
   for (const scene of scenes) {
@@ -184,7 +187,7 @@ async function cost(out) {
   const s = await start(Object.fromEntries(passes.map(pass => [`site-cost-${pass}`, costShaders(pass)])));
   mkdirSync(join(out, 'raw'), { recursive: true });
   const pages = {};
-  for (const pass of passes) pages[pass] = await P.open(s.browser, s.url, `site-cost-${pass}`, at, { px, scale });
+  for (const pass of passes) pages[pass] = await P.open(s.browsers[`site-cost-${pass}`], s.url, `site-cost-${pass}`, at, { px, scale });
   if (world.step) for (const pass of passes) await P.step(pages[pass], world.step);
   const result = { set: name, world: at, px, show: SHOW, scenes: {} }, items = [];
   for (const scene of scenes) {

@@ -1,5 +1,5 @@
 // The page under test: the built page (web/dist) copied with the tool's hooks, served with the saved worlds, and driven
-// in a headless browser (Playwright's Chromium; with no graphics card it draws WebGL2 in software).
+// in a headless browser (Playwright's Chromium; with no graphics card it draws WebGL2 in software, with llvmpipe: `launch`).
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, createReadStream } from 'node:fs';
@@ -69,9 +69,22 @@ export function serve() {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/** A headless browser. */
+/** The browser's flags that draw WebGL2 with Mesa's llvmpipe through EGL: about twice as fast as Chromium's own
+ * SwiftShader on every core of a machine with no graphics card, the page opened ten times faster. Needs the system's
+ * EGL (`libegl1`, `libegl-mesa0`: docs/workflow.md); without it Chromium falls back to SwiftShader. */
+const LLVMPIPE = ['--ignore-gpu-blocklist', '--enable-gpu', '--use-gl=angle', '--use-angle=gl-egl'];
+
+/** A headless browser drawing with llvmpipe; says which renderer it draws with, and warns when it is not llvmpipe. */
 export async function launch() {
-  return playwright().chromium.launch();
+  const browser = await playwright().chromium.launch({ args: LLVMPIPE }), page = await browser.newPage();
+  const renderer = await page.evaluate(() => {
+    const gl = document.createElement('canvas').getContext('webgl2'), ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    return gl ? gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) : 'no WebGL2';
+  });
+  await page.close();
+  console.log(`renderer: ${renderer}`);
+  if (!/llvmpipe/.test(renderer)) console.warn('not llvmpipe: pictures take twice as long (install libegl1 libegl-mesa0, docs/workflow.md)');
+  return browser;
 }
 /** In `browser`, the page of `site` on the saved world `world` (both paths under `out/look`, served at `base`), its map
  * `px` css pixels a side with the controls that float over it hidden, once it stands on the world. Errors of the page
@@ -105,9 +118,10 @@ export async function reopen(page, url) {
   await page.waitForFunction(() => { const e = window.__ew; return e.world && e.world !== window.__ewWas && e.land && e.land.tiles.rock; }, null, { timeout: 300000, polling: 250 });
 }
 
-/** The longest a picture is waited for, ms: a sharp picture at 1 m a pixel and nearer takes minutes to draw in
- * software on a busy machine, and a picture taken before it is whole is the last frame's. */
-const SETTLE_MOST_MS = 600000;
+/** The longest wait for a picture to be whole, ms: the first picture of a page makes its programs (about 1.5 min with
+ * llvmpipe), and a fine view over forest draws in tiles. */
+const SETTLE_MOST_MS = 300000;
+
 /** Wait until the picture is whole: no tile and no detail to come, no frame due, the sharp picture drawn; the ms
  * waited, or -1. */
 export async function settle(page, most = SETTLE_MOST_MS) {
@@ -151,9 +165,11 @@ export async function plumes(page, list) {
   await sleep(400);
 }
 
-/** The picture of the map now, whole (`settle`), as PNG bytes; written to `out` where given. */
+/** The picture of the map now, whole (`settle`), as PNG bytes; written to `out` where given. A picture that is not
+ * whole in time is never taken: it throws. */
 export async function shot(page, out = null) {
   const waited = await settle(page);
+  if (waited < 0) throw new Error(`the picture was not whole after ${SETTLE_MOST_MS / 1000} s: not taken${out ? ` (${out})` : ''}`);
   await page.mouse.move(2, 2);
   const png = await (await page.$('#map')).screenshot();
   if (out) { mkdirSync(dirname(out), { recursive: true }); writeFileSync(out, png); }

@@ -113,6 +113,19 @@
         { "name": "valley", "about": "a valley floor at a confluence", "at": [14.05, 22.85] }
       ]
     },
+    "water": {
+      "world": "seed1",
+      "views": [12.0, 3.0, 1.0],
+      "cost_views": [40.0, 4.0, 1.0],
+      "scenes": [
+        { "name": "over", "about": "the island's middle, the big lake and the seas about it", "at": [16.0, 16.0], "views": [85.0] },
+        { "name": "lake", "about": "the big lake from far", "at": [19.5, 13.5], "views": [40.0] },
+        { "name": "lake_shore", "about": "a stream's inlet into the big lake, west shore", "at": [14.8, 17.0], "views": [12.0, 3.0, 1.0, 0.3] },
+        { "name": "bay", "about": "a bay of the sea under a steep coast", "at": [8.75, 16.25], "views": [12.0] },
+        { "name": "mouth", "about": "the east river's mouth at the sea", "at": [29.494, 16.374] },
+        { "name": "river", "about": "a river valley", "at": [26.5, 14.6], "views": [12.0, 3.0, 1.0, 0.3] }
+      ]
+    },
     "plants": {
       "world": "seed1",
       "views": [12.0, 4.0],

@@ -125,9 +125,11 @@ fn clump_one(q: Plant, fit: ModelFit, i: i32) -> ClumpOne {
 // fine leaves far away keeps its cover and its edge and does not fade into a haze of half-covered texels.
 const TREE_EDGE = 0.25;
 fn dense_cover(s: i32, a: f32, dense: f32) -> f32 {
-  let d = 1.0 - pow(1.0 - min(a, 1.0), dense);
+  let d = layered_cover(a, dense);
   return select(d, smoothstep(0.5 - TREE_EDGE, 0.5 + TREE_EDGE, d), s < TREES);
 }
+// The share of `dense` layers of a texel's cover `a` that a ray meets.
+fn layered_cover(a: f32, dense: f32) -> f32 { return 1.0 - pow(1.0 - min(a, 1.0), dense); }
 
 // A clump's sprites at a pixel gathered front to back are taken as covering it from this much cover on (the ones behind
 // are not read).
@@ -188,16 +190,26 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
 
 // A thing standing up from its foot (a plant, a dead tree) casts its sprite on the ground away from the sun
 // (south-east): each of its texels over its foot, at a height on it, laid `MODEL_SHADOW_RUN` (draw.wgsl) of that height
-// south and as far east. A pixel looks for a mark no farther than its lattice's reach `side` m east and south of the
-// mark's foot (cover.wgsl `lattice`, mark.wgsl `mark_box`): a shadow that would reach farther is drawn shorter, as wide
-// as its thing (narrower only where its width alone passes the reach), so it is never cut by a straight line. The cast
-// of a thing `h` m tall and `w` m wide, its top leaning `top` m east, reaching no farther than `side` m: how long it
-// lies south, how wide, and how far east its top lies, m.
+// south and as far east, and across the light's way as far as it lies across the sprite. A crown and a stem are round,
+// so the sun meets them as wide as the map sees them: the shadow is the sprite's whole width across the light, not the
+// narrower shadow of a flat card facing south. A pixel looks for a mark no farther than its lattice's reach `side` m east
+// and south of the mark's foot (cover.wgsl `lattice`, mark.wgsl `mark_box`): a shadow that would reach farther is drawn
+// smaller, all of it by one factor, so it is never cut by a straight line. The cast of a thing `h` m tall and `w` m
+// wide, its top leaning `top` m east: how long it lies south, how wide, and how far east its top lies, m.
 struct Cast { long: f32, w: f32, top: f32 }
 fn cast_of(h: f32, w: f32, top: f32, side: f32) -> Cast {
-  let across = 0.5 * w + max(top, 0.0);
-  let k = min(1.0, side / max(across, 1e-6));
-  return Cast(min(MODEL_SHADOW_RUN * h, max(side - k * across, 0.0)), k * w, k * top);
+  let long = MODEL_SHADOW_RUN * h;
+  let k = min(1.0, side / max(cast_reach(Cast(long, w, top)).x, 1e-6));
+  return Cast(k * long, k * w, k * top);
+}
+
+// The light's way runs north-west to south-east: a ground point lies (east - south) times this across it from a cast's
+// axis, and half a cast's width across it reaches half this of its width east and south (1 / sqrt 2).
+const ACROSS_LIGHT = 0.70711;
+// How far cast `c` reaches east and south of its foot, m.
+fn cast_reach(c: Cast) -> vec2f {
+  let side = c.long + 0.5 * ACROSS_LIGHT * c.w;
+  return vec2f(side + max(c.top, 0.0), side);
 }
 
 // A stem stands round on the ground: its shadow starts across its whole base, and the base is read `BASE_ROW` of the
@@ -210,7 +222,7 @@ const BASE_ROW = 0.03;
 fn cast_uv(c: Cast, v: vec2f, foot: f32) -> vec2f {
   let up = v.y / max(c.long, 1e-6);
   if (up < 0.0 || up > 1.0) { return vec2f(-1.0); }
-  return vec2f((v.x - v.y - c.top * up) / c.w + 0.5, min((1.0 - foot) * (1.0 - up), 1.0 - foot - BASE_ROW));
+  return vec2f(ACROSS_LIGHT * (v.x - v.y - c.top * up) / c.w + 0.5, min((1.0 - foot) * (1.0 - up), 1.0 - foot - BASE_ROW));
 }
 
 // Where a stem meets the ground, the sky's light is shut out on every side but one: the ground under and about its foot
@@ -225,15 +237,20 @@ const STEM_REACH = 0.03;
 // The shadow of plant q drawn from its model sprite `fit` at p, e m a pixel: its sprite cast on the ground (`cast_of`)
 // from where its stem meets what it falls on: the ground at its foot, or the surface of the liquid it stands in, where
 // its stem shows out of it (`seen_in_liquid`): the map's view (water.wgsl `MAP_VIEW`) draws it the cosine of the depth
-// north of the foot. Blurred (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of its sprays as
-// are left, over its bare twin's, a bush's lighter (`BUSH_SHADOW`). On land, its stem's contact shade (`contact_shade`)
-// at its foot. How dark it makes the ground, 0..1.
-const SHADOW_BLUR = 0.2;
-// The cast of plant q drawn from sprite `fit`, no longer than `CAST_WIDTHS` times its width (`cast_of`): a soft blot
-// the shape of its crown, not a thin stroke (in a stand a long shadow falls on the crowns about it and in the floor's
-// shade, not on open ground).
-const CAST_WIDTHS = 1.5;
-fn model_cast(q: Plant, fit: ModelFit) -> Cast { return cast_of(fit.h, fit.w, 0.0, min(q.reach, (CAST_WIDTHS + 0.5) * fit.w)); }
+// north of the foot. Its leafy sprite's as many of its sprays as are left, over its bare twin's, a bush's lighter
+// (`BUSH_SHADOW`). On land, its stem's contact shade (`contact_shade`) at its foot. How dark it makes the ground, 0..1.
+// Its edge is soft, the softer the higher the texel it falls from: the sun is a disc half a degree across, so a texel `z`
+// m up blurs its shadow over about 0.036 z under a 15 degree sun, and a crown's edge lets light through between its
+// leaves. Blurred over `SHADOW_BLUR` of its sprite at its foot to `SHADOW_SOFT` at its top, at least a pixel, and laid
+// as the share of its layers a ray meets (`layered_cover`), not edged as a crown is seen, so it fades out. A low sun's
+// ray runs through a crown's whole depth, not down through its top as the map sees it: it meets `SHADOW_LAYERS` times
+// as many leaves, so the blurred crown stays dark inside and its soft edge spreads out.
+const SHADOW_BLUR = 0.03; const SHADOW_SOFT = 0.2; const SHADOW_LAYERS = 3.0;
+// A crown is a cloud of leafy sprays, wider than the sprite's outline of it, and lit through from a low sun its
+// shadow spreads: a plant's shadow is laid `SHADOW_WIDE` times its sprite's width (canopy.ts `SHADOW_WIDTHS`).
+const SHADOW_WIDE = 1.5;
+// The cast of plant q drawn from sprite `fit`.
+fn model_cast(q: Plant, fit: ModelFit) -> Cast { return cast_of(fit.h, SHADOW_WIDE * fit.w, 0.0, q.reach); }
 fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let v = p - q.at + vec2f(0.0, MAP_VIEW.y * q.wades);
   let c = model_cast(q, fit);
@@ -242,8 +259,8 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let uv = cast_uv(c, v, foot);
   if (all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))) {
     // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
-    let g = max(max(e / c.w, e / c.long), SHADOW_BLUR);
-    let leafy = dense_cover(fit.s, model_texel(fit.s, uv, g).a, fit.dense) * q.left;
+    let g = max(max(e / c.w, e / c.long), mix(SHADOW_BLUR, SHADOW_SOFT, 1.0 - uv.y / (1.0 - foot)));
+    let leafy = layered_cover(model_texel(fit.s, uv, g).a, SHADOW_LAYERS * fit.dense) * q.left;
     var kept = leafy;
     if (q.left < 1.0) { kept += bare_texel(fit.s, uv, g).a * (1.0 - leafy); }
     dark = CROWN_SHADOW * kept;

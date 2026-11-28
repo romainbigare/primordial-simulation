@@ -493,7 +493,8 @@ fn dead_box(l: i32, q: Snag) -> f32 {
   let w = snag_w(q);
   let body = 0.5 * w + abs(sin(q.lean)) * q.h;
   let c = snag_cast(q, r * g.z);
-  let m = vec4f(body, max(body, c.long + 0.5 * c.w + max(c.top, 0.0)), q.h, c.long);
+  let reach = cast_reach(c);
+  let m = vec4f(body, max(body, reach.x), q.h, reach.y);
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }
@@ -526,7 +527,8 @@ fn mark_box(l: i32, q: Plant) -> f32 {
   // Its clump's plants stand up to `spread` from its foot (models.wgsl `clump_one`).
   let body = fit.spread + 0.5 * fit.w + abs(q.lean.x) * fit.h;
   let c = model_cast(q, fit);
-  let m = vec4f(body, max(body, min(c.long + 0.5 * c.w + fit.spread, q.reach)), fit.h + fit.spread, max(c.long, foot_rise(fit.s) * fit.h) + fit.spread);
+  let reach = cast_reach(c);
+  let m = vec4f(body, max(body, min(reach.x + fit.spread, q.reach)), fit.h + fit.spread, max(reach.y, foot_rise(fit.s) * fit.h) + fit.spread);
   let steps = min(ceil(m / g.z * BOX_STEPS), vec4f(r, r, r + g.w, r) * BOX_STEPS);
   return steps.x + 64.0 * (steps.y + 64.0 * (steps.z + 64.0 * steps.w));
 }

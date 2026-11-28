@@ -45,16 +45,18 @@ const HUMUS_TINT = vec3f(0.22, 0.16, 0.11); const HUMUS_FROM = 0.002; const HUMU
 // type 1 and clearer), so the bed shows to tens of metres, its red half as much as water itself takes it (Pope and
 // Fry 1997), so clear shallows over sand turn a little turquoise; beyond the bed's last light the open water's colour, darkening from `OPEN_M` to
 // `DEEP_M` deep (linear reflectances).
-const CLEAR_ATTENUATION = vec3f(0.18, 0.04, 0.026);
+const CLEAR_ATTENUATION = vec3f(0.19, 0.05, 0.034);
 const OPEN_WATER = vec3f(0.006, 0.07, 0.20); const DEEP_WATER_PAINT = vec3f(0.004, 0.022, 0.10);
 const OPEN_M: f32 = 30.0; const DEEP_M: f32 = 600.0;
 // Inland water holds the matter dissolved from the soil, which takes the blue first (Kirk 1994): running water is drawn
 // through `INLAND_ATTENUATION` (stretched as the clear water's) over `INLAND_DEEP`, the olive green of a deep pool, so
 // a stream shows its bed's own colour, greener and darker as it deepens; a lake's attenuation is `LAKE_CLEAR` of the
 // way to the sea's clear water, over `LAKE_WATER`, the turquoise of a clear lake whose fine pale grains send the green
-// back with the blue.
+// back with the blue, darkening from `LAKE_OPEN_M` to `LAKE_DEEP_M` deep (as the colour reads its depth) into
+// `LAKE_DEEP`, the dark blue green of a deep lake.
 const INLAND_ATTENUATION = vec3f(0.22, 0.12, 0.2); const INLAND_DEEP = vec3f(0.012, 0.035, 0.035); const LAKE_CLEAR = 0.85;
-const LAKE_WATER = vec3f(0.008, 0.17, 0.24);
+const LAKE_WATER = vec3f(0.008, 0.17, 0.24); const LAKE_DEEP = vec3f(0.006, 0.045, 0.08);
+const LAKE_OPEN_M: f32 = 6.0; const LAKE_DEEP_M: f32 = 60.0;
 // Foam at the sea's edge: white, at most this share, over the water shallower than `FOAM_M`. Close up it is the swash's
 // lines, which follow the shore (lines of the bed's depth): one at the water's edge and `FOAM_LINES` more, each
 // `FOAM_LINE_M` of depth farther out and `FOAM_LINE_FALL` as strong as the last, `FOAM_LINE_W` of that spacing wide to
@@ -69,9 +71,10 @@ const FOAM_BREAK_M = 6.0; const FOAM_LINE_PX = vec2f(1.5, 4.0); const FOAM_RIM =
 const FOAM_WANDER = 0.3; const FOAM_WANDER_M = 4.0;
 // The pixels across the foam's band over which it fades in.
 const FOAM_PX = vec2f(0.5, 1.5);
-// The bed under any water is drawn this far towards pale sand (`BEACH_SAND` times `BED_TONE`), so shallows read a
-// little light over a dark soaked bed too, and the bed's own stones and sand still show.
-const BED_LIGHTEN = 0.35; const BED_TONE = 0.85;
+// The bed under standing water is drawn this far towards pale sand (`BEACH_SAND` times `BED_TONE`), so shallows read a
+// little light over a dark soaked bed too, and the bed's own stones and sand still show; a channel's bed
+// `RUNNING_LIGHTEN` as far, as its stones' film keeps it dark (river.wgsl `BED_FILM`).
+const BED_LIGHTEN = 0.35; const BED_TONE = 0.85; const RUNNING_LIGHTEN = 0.1;
 // Lakes and rivers are metres deep where the sea is tens: each is coloured as if `LAKE_SCALE` times as deep, and by
 // one law (`river_seen`): lighter towards its shore, where it is less than a rim's depth deep (`LAKE_RIM_M`): a band
 // as wide as the bed's slope makes it, wide where the bed is gentle and no narrower than `LAKE_RIM_PX` pixels where
@@ -79,6 +82,9 @@ const BED_LIGHTEN = 0.35; const BED_TONE = 0.85;
 // light: it reads through the shallows, and the water's own colour stays.
 const LAKE_SCALE = 1.5;
 const LAKE_RIM_M = 0.3; const LAKE_RIM_PX = 2.5;
+// Standing liquid is coloured as shallows out to `SHELF_M` from its waterline (as its bed's slope says how deep that
+// lies), or to its rim if that is wider: a shore's light shelf, which the bed seen through it grades into the open water.
+const SHELF_M = 30.0;
 const BED_SHOWN = 0.8;
 
 // Beach sand (colour.wgsl `beach`), bright and dry; a beach takes this share of its colour from its loose ground's
@@ -165,7 +171,7 @@ fn rim_depth(slope: f32, e: f32, rim_m: f32) -> f32 { return max(rim_m, slope * 
 // (`rel`) to the power `RIVER_SEEN_POW`: the shallows show their bed, the deep thread is darker and greener. Standing
 // liquid past its shore's band is coloured `STANDING_SEEN_M` deeper (`rel` how far through the band), so its open
 // water reads as water over a shallow shelf too, and its shallows grade to it.
-const RIVER_SEEN_M = 2.0; const RIVER_SEEN_POW = 1.6; const STANDING_SEEN_M = 8.0;
+const RIVER_SEEN_M = 4.0; const RIVER_SEEN_POW = 1.6; const STANDING_SEEN_M = 8.0;
 // The depth a channel's water `depth` m deep is coloured as, `rel` of the depth of its middle by the channel law.
 fn river_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + RIVER_SEEN_M * pow(max(rel, 0.0), RIVER_SEEN_POW); }
 // The depth standing liquid `depth` m deep (as a lake's) is coloured as, `rel` of the way through its shore's band.
@@ -173,21 +179,22 @@ fn standing_seen(depth: f32, rel: f32) -> f32 { return LAKE_SCALE * depth + STAN
 
 // Bed `bed` (linear, lit) seen through `depth` m of water in the style, whose surface has slope g, of attenuation `k`,
 // 1/m, over the light `deep` that comes back where it is too deep to show its bed, carrying `load` g/m³ (water.wgsl
-// `loaded_k`): through its stretched attenuation (the bed lightened, `BED_LIGHTEN`), over its deep colour.
-fn painted_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f, load: f32) -> vec3f {
-  return seen_through(mix(bed, BEACH_SAND * BED_TONE, BED_LIGHTEN), depth, g, loaded_k(k, load), loaded_deep(deep, load));
+// `loaded_k`): through its stretched attenuation (the bed lightened by `lighten`, `BED_LIGHTEN`), over its deep colour.
+fn painted_through(bed: vec3f, depth: f32, g: vec2f, k: vec3f, deep: vec3f, load: f32, lighten: f32) -> vec3f {
+  return seen_through(mix(bed, BEACH_SAND * BED_TONE, lighten), depth, g, loaded_k(k, load), loaded_deep(deep, load));
 }
 // The open sea far from any shore, as the map paints it (the screen's share of full scale): what the page shows past
 // the map's edge where it is drawn out to the screen's (picture.wgsl).
 fn open_sea_painted() -> vec3f { return painted(srgb(standing_painted(vec3f(0.0), DEEP_M, vec2f(0.0), 1.0, 0.0))); }
 // Running water (river.wgsl), inland water all.
-fn water_painted(bed: vec3f, depth: f32, g: vec2f, load: f32) -> vec3f { return painted_through(bed, depth, g, INLAND_ATTENUATION, INLAND_DEEP, load); }
+fn water_painted(bed: vec3f, depth: f32, g: vec2f, load: f32) -> vec3f { return painted_through(bed, depth, g, INLAND_ATTENUATION, INLAND_DEEP, load, RUNNING_LIGHTEN); }
 // Standing liquid, `sea` of it the sea's (the rest a lake's): the sea's clear water over the open sea's colour, which
 // darkens with depth; a lake's (`LAKE_CLEAR`) over `LAKE_WATER`.
 fn standing_painted(bed: vec3f, depth: f32, g: vec2f, sea: f32, load: f32) -> vec3f {
   let open = mix(OPEN_WATER, DEEP_WATER_PAINT, ease(log(OPEN_M), log(DEEP_M), log(max(depth, 1.0))));
+  let lake = mix(LAKE_WATER, LAKE_DEEP, ease(log(LAKE_OPEN_M), log(LAKE_DEEP_M), log(max(depth, 1.0))));
   let k = mix(INLAND_ATTENUATION, CLEAR_ATTENUATION, mix(LAKE_CLEAR, 1.0, sea));
-  return painted_through(bed, depth, g, k, mix(LAKE_WATER, open, sea), load);
+  return painted_through(bed, depth, g, k, mix(lake, open, sea), load, BED_LIGHTEN);
 }
 
 // A point of a plant of colour `c` (linear) `height` m over the ground at its foot, where liquid stands `depth` m deep
