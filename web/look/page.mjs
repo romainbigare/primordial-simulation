@@ -105,9 +105,12 @@ export async function reopen(page, url) {
   await page.waitForFunction(() => { const e = window.__ew; return e.world && e.world !== window.__ewWas && e.land && e.land.tiles.rock; }, null, { timeout: 300000, polling: 250 });
 }
 
+/** The longest a picture is waited for, ms: a sharp picture at 1 m a pixel and nearer takes minutes to draw in
+ * software on a busy machine, and a picture taken before it is whole is the last frame's. */
+const SETTLE_MOST_MS = 600000;
 /** Wait until the picture is whole: no tile and no detail to come, no frame due, the sharp picture drawn; the ms
  * waited, or -1. */
-export async function settle(page, most = 120000) {
+export async function settle(page, most = SETTLE_MOST_MS) {
   const t0 = Date.now(); let calm = 0;
   while (Date.now() - t0 < most) {
     const busy = await page.evaluate(() => !window.__ew.map.settled());
