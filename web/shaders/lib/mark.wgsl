@@ -245,8 +245,10 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
           for (var o = 0; o < rolled(GROUPS); o++) { mine += w[o] * over_one(h[o], h[g]); }
           claim[g] = w[g] / max(1.0 - max(over - mine, 0.0), FREE_LEAST);
         }
-        let draws = vec3f(pcg3d(vec3u(vec2u(id), u32(RACE_STREAM + 4 * i32(slots[c] + 0.5) + s)))) * (1.0 / 4294967296.0);
-        let key = select(draws.x, stand_pick(stand_draw(at, STAND_M), own), any(chance < vec4f(0.0)));
+        let slot = i32(slots[c] + 0.5);
+        let draws = vec3f(pcg3d(vec3u(vec2u(id), u32(RACE_STREAM + 4 * slot + s)))) * (1.0 / 4294967296.0);
+        var key = draws.x;
+        if (any(chance < vec4f(0.0))) { key = stand_pick(stand_draw(at, STAND_M), own); } else { key = kind_key(at, slot, draws.x); }
         if (key >= dot(claim, vec4f(1.0))) { continue; }
         if (!exact) { return vec3i(0); }
         // Its place among its groups, the large first.
@@ -265,6 +267,17 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
   return best;
 }
 
+// The plants of a kind gather in patches about `KIND_PATCH_M` m across, each kind's its own (noise streams from
+// `KIND_PATCH_STREAM` by its slot): its draw for a cell (`pick_kind`) is the patches' mixed with `KIND_PATCH_MIX` of its
+// own draw `own` (`even_mix`), even over 0..1, so the kind keeps its share and its plants stand in drifts of their own, not as an
+// even scatter of single crowns among the others' (from memory: shrubs spread in clonal patches, and the seedlings of a
+// tree come up about their parent). The squares' first kinds on the lattice of stands stand in the stands the field
+// far away draws (`stand_pick`); the field draws the rest, and the low plants, as their mean.
+const KIND_PATCH_M = 15.0; const KIND_PATCH_MIX = 0.25; const KIND_PATCH_STREAM = 400;
+fn kind_key(at: vec2f, slot: i32, own: f32) -> f32 {
+  return even_mix(smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / KIND_PATCH_M, KIND_PATCH_STREAM + slot)), own, KIND_PATCH_MIX);
+}
+
 // A kind's form and how surely it is drawn share one number: form + this x sure (canopy.ts `SURE_PACK`).
 const SURE_PACK = 0.5;
 // How closed a kind's crown is and the share of its leaves left share one number: the leaves left in steps of
@@ -272,9 +285,10 @@ const SURE_PACK = 0.5;
 const LEFT_STEPS = 100.0;
 
 // The plant at place z among the groups (`along`) of kind `t` of the square at `sq` on lattice l with its foot at `c`, its size's draw `size`,
-// its own random numbers `r` (its colour's draw, its lean's direction, its lean); no taller than `up` m north of
-// its foot lets it stand (the rows looked at, textures.ts `ROWS_MOST`); no wider than its lattice's reach each way.
-fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up: f32, wades: f32) -> Plant {
+// its own random numbers `r` (its hue's and tone's draws, its lean's direction, its lean) and its colour's draw
+// `tint` (`tint_draw`); no taller than `up` m north of its foot lets it stand (the rows looked at, textures.ts
+// `ROWS_MOST`); no wider than its lattice's reach each way.
+fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, tint: f32, up: f32, wades: f32) -> Plant {
   let form = kind(form_plane(t), sq);
   // Its leaves left this season, and how closed its crown is in leaf.
   let left = floor(form.x) / LEFT_STEPS;
@@ -306,8 +320,8 @@ fn plant_of(l: i32, sq: vec2i, t: i32, z: f32, c: vec2f, size: f32, r: vec3f, up
   let width = along(kind(width_plane(l, t), sq), z, held) * grow;
   let tall = min(height, up / STAND);
   let lean = LEAN * r.z * vec2f(cos(2.0 * PI * r.y), sin(2.0 * PI * r.y));
-  let tint = vary(mix(first.rgb, to.rgb, r.x), fract(r.yz * 13.0));
-  return Plant(c, min(width, 2.0 * reach), tall, closed, tint, first.w, own, design, shape.x, shape.y, lean, reach, dry, tender, left, wet, wades);
+  let rgb = vary(mix(first.rgb, to.rgb, tint), fract(r.yz * 13.0));
+  return Plant(c, min(width, 2.0 * reach), tall, closed, rgb, first.w, own, design, shape.x, shape.y, lean, reach, dry, tender, left, wet, wades);
 }
 
 // What lattice l decides of the mark of its cell k (counted from its base, `cover.base`): its square, kind and place
@@ -354,6 +368,14 @@ fn marks_thick(l: i32, at: vec2f, c: Clumps, lush: f32) -> f32 {
   return max(cl.fill, near) * clump_ramp(cl.rank, clump_line(cl, near)) / max(own * left, 1e-6);
 }
 
+// The share of the ground at a mark's foot at `at` that the trees' crowns close, among clumps `c` where the ground is
+// as lush as `lush`, as the field draws them (cover_field.wgsl `cover_field`): a low plant there stands in their
+// shade, as the sward does (`SWARD_SHADE`).
+fn crowns_over(at: vec2f, c: Clumps, lush: f32) -> f32 {
+  let crowns = lushed(min(field_at(at, STANDS).a, 1.0), lush);
+  return clumped(crowned(c, field_at(at, WIDE_LAYER)[STANDS]), crowns, crowns);
+}
+
 // The mark of a living plant of cell k of lattice l (`decide`), or that none claims the cell (its dead tree is decided
 // then, `dead_decided`).
 struct Living { mark: Mark, claimed: bool }
@@ -381,7 +403,7 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32,
   let n = vec2i(i32(land.map.y), i32(land.map.z));
   let sq = clamp(cs.at[pick.x], vec2i(0), n - 1);
   let wades = select(0.0, f.depth, f.depth > FILM_M);
-  let q = mark_plant(l, k, sq, pick.y, place_of(pick.z), wades);
+  let q = mark_plant(l, k, sq, pick.y, place_of(pick.z), 0.0, wades);
   let shows = above_snow(f.snow * f.snow_m, q.h) * thing;
   if (shows <= 0.0) { return none; }
   // On dry ground under a scar or a passing front (fire.wgsl `plant_fire`, as the field reads it): sooted and burning;
@@ -397,7 +419,8 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32,
     burnt = vec3f(g.x, select(0.0, dead_word(g.z), dead), g.w);
   }
   let code = u32(((sq.y * n.x + sq.x) * kinds_n() + pick.y) * GROUPS * PLACE_STEPS + pick.z) + 1u;
-  return Living(Mark(code, wade_word(shows, wades), ground_shares(f.snow, burnt), mark_box(l, q)), true);
+  let under = select(crowns_over(at, clumps, f.lush), 0.0, l == STANDS);
+  return Living(Mark(code, wade_word(shows, wades), ground_shares(f.snow, burnt), mark_box(l, q), tint_draw(at, rand3(id, l + COVER_LATTICES).x), under), true);
 }
 
 // Whether a plant may stand on the ground at `at`: not in a channel's water (rock.wgsl `channel_at`, its water's
@@ -460,7 +483,7 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, fp: vec3i) -> Mark {
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }
-  return Mark(dead_code() + 1u, shows, ground_shares(f.snow, vec3f(0.0)), dead_box(l, dead.q));
+  return Mark(dead_code() + 1u, shows, ground_shares(f.snow, vec3f(0.0)), dead_box(l, dead.q), 0.0, 0.0);
 }
 
 // The box dead tree q of lattice l covers about its foot, as `mark_box`: its sprite with its lean, and its shadow.
@@ -509,11 +532,18 @@ fn mark_box(l: i32, q: Plant) -> f32 {
 }
 
 // The plant at place z among the groups of kind `t` of the square at `sq` in cell k of lattice l (`decide`): at its
-// place in the cell, of its size and its own random numbers, no taller than the rows looked at let it stand; liquid
-// `wades` m deep over its foot (0: on land).
-fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32, z: f32, wades: f32) -> Plant {
+// place in the cell, of its size, its own random numbers and its colour's draw `tint` (`tint_draw`), no taller than the
+// rows looked at let it stand; liquid `wades` m deep over its foot (0: on land).
+fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32, z: f32, tint: f32, wades: f32) -> Plant {
   let g = cover.grid[l];
   let id = cover.base[l].xy + vec2i(k);
-  return plant_of(l, sq, t, z, mark_foot(l, k), place(id, l).z, rand3(id, l + COVER_LATTICES), (g.w + cover.reach[l].x) * g.z, wades);
+  return plant_of(l, sq, t, z, mark_foot(l, k), place(id, l).z, rand3(id, l + COVER_LATTICES), tint, (g.w + cover.reach[l].x) * g.z, wades);
 }
+
+// A plant's colour lies between its kind's two (`plant_of`: a leaf turning in its season, `KindLook`) by its own draw
+// `own` mixed with a draw over patches `TINT_M` m across (`stand_pick`): the crowns of a stand turn together in
+// patches and groups, as the ground and the shelter they share time their season, not one by one as confetti; at the
+// foot `at`, m from the map's corner. Even over 0..1, as the field's mean counts it (style.ts `seenFar`).
+const TINT_M = 25.0; const TINT_STREAM = 260;
+fn tint_draw(at: vec2f, own: f32) -> f32 { return stand_pick(smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / TINT_M, TINT_STREAM)), own); }
 

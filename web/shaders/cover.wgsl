@@ -68,9 +68,9 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       // Its share that shows and the depth of the liquid over its foot (mark.wgsl `wade_word`).
       let wade = wade_of(m.shows);
       let g = decided_ground(l, k);
-      let q = mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), wade.y);
+      let q = mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), m.tint, wade.y);
       if (g.z > 0.0) { snag_over(dst, shade, burnt_tree(l, k, q.h, dead_months(g.z)), p, l, k, e, fade * wade.x); continue; }
-      plant(dst, shade, q, p, e, fade * wade.x, g.x, g.yw);
+      plant(dst, shade, q, p, e, fade * wade.x, g.x, g.yw, 1.0 - SWARD_SHADE * m.under);
     }
   }
 }
@@ -93,16 +93,17 @@ fn marks_over(v: Varying) -> vec4f {
 
 // Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground, the fire on it is
 // `burnt` (its soot and burning: fire.wgsl `plant_fire`) and the deepest shadow laid on the pixel is `shade`: its
-// shadow and its model's sprites (models.wgsl), burnt as the field far away draws it (fire.wgsl `burnt_plant`), in
-// `CROWN_CAST` of the shadows the plants drawn before it (north and west of it) lay there: a shadow falls on the crowns
-// south-east of its plant as on the ground, shorter as they stand nearly as high (models.wgsl `cast_of`).
+// shadow and its model's sprites (models.wgsl), burnt as the field far away draws it (fire.wgsl `burnt_plant`), lit
+// `lit` of full (a low plant in the trees' shade, mark.wgsl `crowns_over`), in `CROWN_CAST` of the shadows the plants
+// drawn before it (north and west of it) lay there: a shadow falls on the crowns south-east of its plant as on the
+// ground, shorter as they stand nearly as high (models.wgsl `cast_of`).
 const CROWN_CAST = 0.35;
-fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32, burnt: vec2f) {
+fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32, burnt: vec2f, lit: f32) {
   let fit = model_fit(q);
   let laid = *shade;
   shadow(dst, shade, fade * model_shadow(q, fit, p, e));
   let m = clump_plant(q, fit, p, e, snow);
-  if (m.a > 0.0) { over(dst, burnt_plant(m.rgb, 1.0, burnt.x, burnt.y) * (1.0 - CROWN_CAST * laid), m.a * fade); }
+  if (m.a > 0.0) { over(dst, burnt_plant(m.rgb, 1.0, burnt.x, burnt.y) * lit * (1.0 - CROWN_CAST * laid), m.a * fade); }
 }
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f { return marks_over(v); }

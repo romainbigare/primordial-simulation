@@ -60,16 +60,19 @@ fn word_bytes(x: u32) -> vec4f {
 
 // A mark as decided (mark.wgsl `decide`): one more than its code, its square, kind and place (0: none), as a whole
 // number; the share of it that shows with the depth of the liquid over its foot (`wade_word`); the shares of the
-// ground at its foot (`ground_shares`); and the box it covers about its foot (`mark_box`), a whole number.
-struct Mark { code: u32, shows: f32, ground: vec4f, box: f32 }
-const NO_MARK = Mark(0u, 0.0, vec4f(0.0), 0.0);
+// ground at its foot (`ground_shares`); the box it covers about its foot (`mark_box`), a whole number under 2^24; and
+// its plant's colour draw (mark.wgsl `tint_draw`) and the share of the trees' crowns over its foot (mark.wgsl
+// `crowns_over`), 0..1 each, kept in `LOOK_STEPS` steps in the box's word's top byte, four bits each.
+struct Mark { code: u32, shows: f32, ground: vec4f, box: f32, tint: f32, under: f32 }
+const NO_MARK = Mark(0u, 0.0, vec4f(0.0), 0.0, 0.0, 0.0);
+const LOOK_STEPS = 15.0;
 
 // Word `w` of mark `m` (`decide`) as its four bytes (marks.wgsl): the ground's shares a byte each as they are, the
 // others as the bytes of a 32-bit word.
 fn mark_word(m: Mark, w: i32) -> vec4f {
   if (w == 2) { return (round(m.ground * 255.0) + BYTE_LIFT) / 255.0; }
   var x = m.code;
-  if (w == 1) { x = bitcast<u32>(m.shows); } else if (w == 3) { x = u32(m.box); }
+  if (w == 1) { x = bitcast<u32>(m.shows); } else if (w == 3) { x = u32(m.box) | (u32(round(m.tint * LOOK_STEPS)) << 24u) | (u32(round(m.under * LOOK_STEPS)) << 28u); }
   return word_bytes(x);
 }
 
@@ -138,14 +141,16 @@ fn reach_at(l: i32, k: vec2f) -> Reach {
 }
 
 // The mark lattice l decided for its cell k (`decide`), from the marks' textures, where it covers the point `d` m from
-// its foot within a pixel `e` m (its box, `mark_box`), else none (`code` 0): one more than its code, and its share
-// (`decided_ground`: the rest of what was decided of it).
-struct Seen { code: u32, shows: f32 }
+// its foot within a pixel `e` m (its box, `mark_box`), else none (`code` 0): one more than its code, its share, its
+// colour draw and the crowns over it (`Mark`; `decided_ground`: the rest of what was decided of it).
+struct Seen { code: u32, shows: f32, tint: f32, under: f32 }
 fn decided(l: i32, k: vec2f, d: vec2f, e: f32) -> Seen {
   let t = mark_texel(l, k);
   let code = word_of(textureLoad(marks_kind, t, 0));
-  if (code == 0u || !box_holds(word_of(textureLoad(marks_box, t, 0)), d, cover.grid[l].z, e)) { return Seen(0u, 0.0); }
-  return Seen(code, bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))));
+  if (code == 0u) { return Seen(0u, 0.0, 0.0, 0.0); }
+  let box = word_of(textureLoad(marks_box, t, 0));
+  if (!box_holds(box, d, cover.grid[l].z, e)) { return Seen(0u, 0.0, 0.0, 0.0); }
+  return Seen(code, bitcast<f32>(word_of(textureLoad(marks_shows, t, 0))), f32((box >> 24u) & 15u) / LOOK_STEPS, f32(box >> 28u) / LOOK_STEPS);
 }
 
 // The months since a plant a burn killed died, from its word's byte (mark.wgsl `dead_word`).

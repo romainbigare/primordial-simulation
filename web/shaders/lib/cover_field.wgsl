@@ -63,7 +63,7 @@ const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; 
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
 // are patches about as large as the noise's cells (`STAND_M` the trees', `SWARD_STAND_M` the herbs') with mixed edges,
 // and each kind keeps its share (draw.wgsl `noise_turned`, made even over 0..1).
-const STAND_M = 60.0; const SWARD_STAND_M = 5.0; const STAND_MIX = 0.4;
+const STAND_M = 60.0; const SWARD_STAND_M = 5.0; const STAND_MIX = 0.5;
 // Far away a canopy's tone varies gently: the stands fade into their mean where a pixel takes from `STAND_CALM_E` to
 // twice as many m (by a 500 m scale bar), so only real differences (forest and meadow, leafy and bare, turned and
 // green) show there.
@@ -402,10 +402,13 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
 // The stands' draw at `at` over patches of `m` m, even over 0..1.
 fn stand_draw(at: vec2f, m: f32) -> f32 { return smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / m, 70)); }
 
-// The stands' draw `u` mixed with a plant's own draw `r` (both even over 0..1), made even again: the distribution
-// function of (1 - STAND_MIX) u + STAND_MIX r. A plant is of the first kind where this falls under the kind's share.
-fn stand_pick(u: f32, r: f32) -> f32 {
-  let a = 1.0 - STAND_MIX; let b = STAND_MIX;
+// The stands' draw `u` mixed with a plant's own draw `r` (both even over 0..1), made even again (`even_mix`). A plant
+// is of the first kind where this falls under the kind's share.
+fn stand_pick(u: f32, r: f32) -> f32 { return even_mix(u, r, STAND_MIX); }
+// A draw `u` mixed with a draw `r` (both even over 0..1, `b` of r, at most half), made even again: the distribution
+// function of (1 - b) u + b r.
+fn even_mix(u: f32, r: f32, b: f32) -> f32 {
+  let a = 1.0 - b;
   let v = a * u + b * r;
   if (v < b) { return v * v / (2.0 * a * b); }
   if (v < a) { return (v - 0.5 * b) / a; }
