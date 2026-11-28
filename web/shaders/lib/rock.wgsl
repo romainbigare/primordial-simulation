@@ -185,17 +185,24 @@ fn next_along(s: vec2i, at: vec2f) -> Next {
 }
 
 // What runs through the line of sample `s` drawn on the land, m³/s: its own discharge, or where its reach has no
-// slope (a pond's sample: the body passes the liquid, laws.md 1.2, and its samples' channels carry little) the larger
-// of that and the discharge of the sample it runs to, so the line from a lake's shore to its outlet carries what
-// leaves the lake.
+// slope (a pond's sample: the body passes the liquid, laws.md 1.2, and its samples' channels carry little) the largest
+// of that and the discharges of the samples down its way, up to `POND_STEPS` of them, so the line from where a lake's
+// drawn water ends to its outlet carries what leaves the lake: the shore drawn lies up to a few samples from the
+// samples' own (tape/src/ground/shore.rs `MOUTH_MOST`).
+const POND_STEPS = 4;
 fn discharge_through(s: vec2i) -> f32 {
-  let q = discharge_of(s);
-  if (s.x < 0 || stone_and_fall(s).y > 0.0) { return q; }
-  let code = links_of(s) % LINK_UP;
-  if (code <= 0) { return q; }
-  let c = (code - 1) % 8 + 1;
-  let n = select(c, c - 1, c <= 4);
-  return max(q, discharge_of(s + vec2i(n % 3, n / 3) - 1));
+  var q = discharge_of(s);
+  var k = s;
+  for (var n = 0; n < POND_STEPS; n++) {
+    if (k.x < 0 || stone_and_fall(k).y > 0.0) { break; }
+    let code = links_of(k) % LINK_UP;
+    if (code <= 0) { break; }
+    let c = (code - 1) % 8 + 1;
+    let step = select(c, c - 1, c <= 4);
+    k += vec2i(step % 3, step / 3) - 1;
+    q = max(q, discharge_of(k));
+  }
+  return q;
 }
 
 // What runs through the channel at a point `at` of ground `g`, m³/s (`Tiled.channel`, `next_along`).
