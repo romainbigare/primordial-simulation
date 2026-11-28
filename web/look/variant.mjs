@@ -21,6 +21,6 @@ export function programs(name, change) {
   mkdirSync(OUT, { recursive: true });
   cpSync(join(ROOT, 'web/shaders'), dir, { recursive: true });
   change(dir);
-  execFileSync('cargo', ['run', '-q', '-p', 'ew-shade', '--', dir, json], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
+  execFileSync('cargo', ['run', '-q', '--profile', 'fast', '-p', 'ew-shade', '--', dir, json], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
   return readFileSync(json, 'utf8');
 }

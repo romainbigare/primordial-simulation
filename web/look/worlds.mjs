@@ -43,7 +43,7 @@ export function worlds(name, spec, when, log = console.log) {
     mkdirSync(dir, { recursive: true });
     const last = Math.max(...when), years = String(Math.ceil(last + 1 / (2 * MONTHS)));
     const ew = spec.card ? ['card', '--out', join(dir, snapName(spec.at))] : ['run', ...spec.run, '--years', years, '--frames-every', '1000', '--snapshots-at', when.join(','), '--out', dir];
-    const args = ['run', '--release', '-q', '-p', 'cli', '--', ...ew];
+    const args = ['run', '--profile', 'fast', '-q', '-p', 'cli', '--', ...ew];
     log(`making world ${name} at ${when.join(', ')}: cargo ${args.join(' ')}`);
     const t0 = Date.now();
     execFileSync('cargo', args, { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });

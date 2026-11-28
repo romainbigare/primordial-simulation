@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "mkdir -p dist && cargo run -q -p ew-shade -- shaders dist/.shaders.json && tsc -p . && node build.mjs",
+    "build": "mkdir -p dist && cargo run -q --profile fast -p ew-shade -- shaders dist/.shaders.json && tsc -p . && node build.mjs",
     "look": "node look/look.mjs",
     "wasm": "cargo build -p ew-wasm --profile wasm --target wasm32-unknown-unknown && mkdir -p dist && cp ../target/wasm32-unknown-unknown/wasm/ew_wasm.wasm dist/ew.wasm"
   }
