@@ -189,8 +189,9 @@ struct Spot {
   // whose dead wood the floods leave on it, 0..1.
   moved: f32, driftwood: f32,
   // Where it lies in the world, m, the place the fields held per terrain sample are read for it (rock.wgsl
-  // `sample_place`), and the metres a pixel takes there (for the ripples of a liquid's surface).
-  at: vec2f, place: vec2f, e: f32,
+  // `sample_place`) and the noise there (`Place.n`), and the metres a pixel takes there (for the ripples of a liquid's
+  // surface).
+  at: vec2f, place: vec2f, place_n: f32, e: f32,
   // Its loose ground's grain: the shares of coarse and of fine grain, of organic matter, and how slowly its pores pass
   // liquid (the decimal logarithm of 1 m/s over their conductivity; tape/src/ground/rock.rs); and the share of its
   // pores the soil's liquid fills, 0..1 (land.wgsl `State`); how deep the load the liquid laid lies on it, m, and the
@@ -405,13 +406,21 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     let ripple = ripples(p.e) * (1.0 - p.snow);
     var water: vec3f;
     if (styled()) {
-      // The style: clear water over its bed, deepening to the open water (a lake's turquoise, `LAKE_WATER`), foam at its edge where the waves break
+      // The style: clear water over its bed, deepening to the open water (a lake's turquoise to its deep blue green, `LAKE_WATER`), foam at its edge where the waves break
       // (style.wgsl `foam`): a lake's, of smaller waves, breaking shallower, as much less as its waves are lower.
       // Standing liquid is coloured as a channel is (style.wgsl `standing_seen`), its shore the channel's shallows and
       // its open water past the band deeper; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
-      let seen = standing_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
+      // Its depth as the colour reads it is swayed (water.wgsl `bed_sway`), the wind roughens its surface (`gusts`), and
+      // the sea's swell runs over it past its shore's shelf (`swell`).
+      let bed_slope = p.slope / earth.look.x;
+      let rel = shore_rim(p.depth, bed_slope, p.e, max(LAKE_RIM_M, SHELF_M * bed_slope));
+      let seen = standing_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea) * bed_sway(p.place_n), rel);
+      let rough = gusts(p.e);
+      let surface = ripple * (1.0 + GUST_RIPPLE * rough);
+      var sheen = GUST_SHEEN * rough;
+      if (p.sea > 0.0) { sheen += SWELL_SHEEN * p.sea * rel * swell(p.at, p.e); }
       let waves = max(waves_of(p.sea, p.fetch).x / SEA_WAVE.x, 1e-3);
-      water = mix(standing_painted(BED_SHOWN * bed, seen, ripple, p.sea, p.load), FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, p.slope / earth.look.x, p.e, p.at));
+      water = mix(standing_painted(BED_SHOWN * bed, seen, surface, p.sea, p.load) + sheen * SKY, FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, bed_slope, p.e, p.at));
     } else {
       water = water_over(bed, p.depth, ripple, p.load);
     }
@@ -441,7 +450,8 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
   if (film <= 0.0 && river <= 0.0) { return Shaded(rgb, lit, g.kind); }
   // A film on soaked ground lies still and mirrors the sky; the swash's sheet runs, rippled `SWASH_CALM` less than
   // standing liquid. A river's water is rippled.
-  let ripple = select(vec2f(0.0), ripples(p.e), p.swash.x > 0.0 || river > 0.0);
+  var ripple = vec2f(0.0);
+  if (p.swash.x > 0.0 || river > 0.0) { ripple = ripples(p.e); }
   if (film > 0.0) {
     rgb += film * surface_light(ripple * p.swash.x * (1.0 - SWASH_CALM));
     let pud = puddles(p, film, g.peat);
@@ -465,7 +475,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
 // Puddles: on bare ground soaked past `FILM_FROM` (`film` 0..1 from there to soaked through) where the low plants leave
 // it open (a sward's puddles lie under its blades), liquid stands over up to `PUDDLES` of the ground when soaked
 // through, gathered where the ground lies low: in the lowest `BASIN_LOW` of its basins (the relief's octaves `BASIN_M`
-// long, relief.wgsl `Relief`), the more the lower, and in each basin in the lowest of its hollows (its octaves
+// long, hollows.wgsl, relief.wgsl `Relief`), the more the lower, and in each basin in the lowest of its hollows (its octaves
 // `HOLLOW_M` long) up to the basin's level. So most of the ground holds none, and a basin's lowest part a few large
 // puddles of joined hollows among smaller ones. A puddle is `PUDDLE_DEPTH_M` deep for each unit of the hollows' rank
 // its point lies under its level; the mud about it is soaked through out to `PUDDLE_HALO` times its level above it in
@@ -483,7 +493,7 @@ const BOG_POOLS = 0.3;
 // A bog's pools are dark with the dissolved organic matter of the peat, which takes most of the light, the blue most:
 // their light is `BOG_WATER` of a muddy puddle's (humic waters; Kirk 1994, from memory).
 const BOG_WATER = vec3f(0.35, 0.25, 0.15);
-const HOLLOW_M = vec2f(0.5, 2.0); const BASIN_M = vec2f(4.0, 20.0); const BASIN_LOW = 0.35;
+const BASIN_LOW = 0.35;
 const PUDDLES = 0.06; const PUDDLE_DEPTH_M = 0.3; const PUDDLE_HALO = 1.0; const PUDDLE_SHORE = 0.5; const MENISCUS = 0.3;
 const PUDDLE_PX = vec2f(3.0, 8.0); const PUDDLE_FAST = 4.5; const PUDDLE_SLOW = 6.5;
 // The mud about a puddle, soaked through, is `PUDDLE_WET_DARK` darker than the soaked ground. A puddle's water is

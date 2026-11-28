@@ -59,13 +59,6 @@ const PATCH_WARP = 0.16; const PATCH_LOBES = 0.55; const PATCH_FINE = vec2f(0.35
 // are its mean over its square, its edge no line on the ground. A mark's foot draws its patch and its cell by the
 // share each takes there, with its own draw fixed at its place to `FOOT_DRAW_M`.
 const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; const FOOT_DRAW_M = 0.01;
-// Patches: the plants stand thicker and thinner over clumps about `PATCH_M` m across and `CLUMP_FINE.x` as strong
-// `CLUMP_FINE.y` times finer, by up to `PATCH` of their mean (fixed noise in the world), alike near (cover.wgsl) and
-// far: the noise's sum is sharpened by `CLUMP_SHARP` through a tanh, so a sparse cover gathers into clumps with gaps of
-// bare ground between them, not a soft wash (plants of dry ground stand in clumps that trap the water and the fines;
-// from memory), and on the mean none is lost.
-const PATCH_M = 8.0; const PATCH = 0.5; const CLUMP_FINE = vec2f(0.5, 3.0); const CLUMP_SHARP = 2.5;
-
 // Kinds grow in stands of their own: a plant is of its square's first kind (canopy.ts `Paint`) where a smooth draw fixed
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
 // are patches about as large as the noise's cells (`STAND_M` the trees', `SWARD_STAND_M` the herbs') with mixed edges,
@@ -78,8 +71,6 @@ const STAND_CALM_E = 1.5;
 // Thin ground is poor: the herbs cover from `THIN_COVER` of their share where the loose ground is `THIN_FROM_M` m deep
 // or less to all of it from `THIN_TO_M` m, so the ground's own colour shows through toward the bed's.
 const THIN_COVER = 0.25; const THIN_FROM_M = 0.05; const THIN_TO_M = 0.5;
-// The trees' canopy is lighter and darker by up to `CANOPY_TONE` over groups of crowns `CANOPY_M` across.
-const CANOPY_TONE = 0.2; const CANOPY_M = 35.0;
 // The light the trees leave the kinds below on the mean of a square is counted no less than this, so a square its
 // trees close does not heap its low kinds on its last open ground.
 const LIT_LEAST = 0.05;
@@ -199,8 +190,13 @@ fn fern_tufts() -> Tufts { return sprite_tufts(FERN_FROM, FERN_N, vec2i(FERN_FRO
 // How much the herbs at a place over `b` under crowns closing `canopy` of it, where reeds stand as `reeds`, are ferns.
 fn ferns_of(b: Beneath, canopy: f32, reeds: f32) -> f32 { return min(canopy, 1.0) * b.soaked * (1.0 - reeds); }
 // How much a place over `b` holds the tall herbs of the wet edge, on soaked ground and in the water's edge band
-// (`REED_WET`, `REED_BAND_M`): x the band's, y the soaked ground's; their larger is the place's (`reed_place`).
-fn wet_edge(b: Beneath) -> vec2f { return vec2f(ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)), ease(REED_WET, 1.0, b.soaked)); }
+// (`REED_WET`, `REED_BAND_M`): x the band's, y the soaked ground's, as far as it is flat (all under the slope
+// `REED_FLAT.x`, rise over run, none from `.y`: a soaked slope drains, the rushes hold the seeps and the flats); their
+// larger is the place's (`reed_place`).
+const REED_FLAT = vec2f(0.05, 0.15);
+fn wet_edge(b: Beneath) -> vec2f {
+  return vec2f(ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)), ease(REED_WET, 1.0, b.soaked) * ease(REED_FLAT.y, REED_FLAT.x, b.slope));
+}
 fn reed_place(b: Beneath) -> f32 { let w = wet_edge(b); return max(w.x, w.y); }
 // How much reeds stand at a place that holds them as `place`, where the herbs cover `herbs` of the ground (`REED_HERBS`):
 // one rule far and near.
@@ -393,17 +389,6 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
   return with_patch(on_land(spline_field(at, l), land_smooth), l);
 }
 
-// How much thicker than their mean the plants stand at `at`, seen at `e` m a pixel (`PATCH`): the finer clumps as far
-// as they show.
-fn patchy(at: vec2f, e: f32) -> f32 {
-  let fine = shows_at(PATCH_M / CLUMP_FINE.y, e);
-  var n = noise(at / PATCH_M, 40).x;
-  if (fine > 0.0) { n += fine * CLUMP_FINE.x * noise(at * (CLUMP_FINE.y / PATCH_M), 41).x; }
-  return 1.0 + PATCH * tanh(CLUMP_SHARP * n);
-}
-// The most times their mean the plants stand over the patches (`patchy`) where most lush (lush.wgsl `lush_thick`).
-const THICK_MOST = (1.0 + PATCH) * (1.0 + LUSH);
-
 // The stands' draw at `at` over patches of `m` m, even over 0..1.
 fn stand_draw(at: vec2f, m: f32) -> f32 { return smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / m, 70)); }
 
@@ -468,10 +453,12 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
   return vec4f(c, cover * cluster);
 }
 
-// The herbs' sward at `at`, seen at `e` m a pixel, over `b`, its field there `f` (`field_smooth`), premultiplied: their colour in stands of their kinds, the
-// share they cover (thicker and thinner by `thick`, `patchy`, as far as they hold there, `hold`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees' crowns,
-// reeds on soaked ground and at the water's edge, ferns on wet shaded ground, and flowers over it.
-fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold: f32) -> vec4f {
+// The herbs' sward at `at`, seen at `e` m a pixel, over `b`, its field there `f` (`field_smooth`), premultiplied: their
+// colour in stands of their kinds, the share they cover (as lush as the ground is, lush.wgsl `lushed`, as far as they
+// hold there, `hold`, in clumps `lc` in the gaps of the trees' crowns, which close `closed` of the ground on their mean,
+// clumps.wgsl `clumped`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees'
+// crowns, reeds on soaked ground and at the water's edge, ferns on wet shaded ground, and flowers over it.
+fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, hold: f32, lc: Clumps, closed: f32) -> vec4f {
   if (f.a <= 0.0 || hold <= 0.0) { return vec4f(0.0); }
   // Near, its images give its detail (detail.wgsl `grass_detail`): the drawn tufts' and swathes' tone fades out as they
   // show, and its kinds' stands keep `SWARD_STANDS_NEAR` of their difference from the mean, so the layers do not pile
@@ -479,8 +466,9 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
   let near_images = shows_at(SWATH_DETAIL_M, e);
   let mean = f.rgb / f.a;
   var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
-  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images) * lush_hue(b.lush);
-  var s = min(f.a * thick * hold, 1.0);
+  let even = lushed(min(f.a * hold, 1.0), b.lush);
+  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images) * lush_hue(b.lush) * clump_light(lc, even * (1.0 - closed));
+  var s = clumped(lc, even, even * (1.0 - closed));
   let reeds = reeds_of(reed_place(b), s);
   let tufts = shows_at(SWARD_M, e);
   var tone = 1.0;
@@ -550,9 +538,9 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
 }
 
 // The cover's field at `at` seen at `e` m a pixel over `b`, premultiplied, and the trees' crowns' share: the herbs'
-// sward, then each lattice (`lattice_field`), the lower under the taller, thicker and thinner over the patches
-// (`patchy`), as far as it holds there (`held_at`); far away, where the sward's and the low lattices' detail no longer
-// shows, those three as their one layer (canopy.ts `FIELD.low`).
+// sward, then each lattice (`lattice_field`), the lower under the taller, as the ground is lush (lush.wgsl
+// `lushed`), in clumps (clumps.wgsl), as far as it holds there (`held_at`); far away, where the sward's and the low
+// lattices' detail no longer shows, those three as their one layer (canopy.ts `FIELD.low`).
 fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   land_weights(at);
   // Under liquid where no square about the point holds cover, none stands: every layer reads none (`on_land`; the
@@ -560,9 +548,9 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   // about it), and under liquid no burn reads its patch (burn.wgsl). Neither the patch nor a layer is read.
   if (b.depth > 0.0 && land_plain <= LAND_LEAST && land_smooth <= LAND_LEAST) { return CoverAt(vec4f(0.0), 0.0, 0.0, vec4f(0.0), 0.0, 0.0); }
   cell_patch_at(at, e);
-  // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
-  let patches = shows_at(PATCH_M, e);
-  let thick = select(1.0, 1.0 + (patchy(at, e) - 1.0) * patches, patches > 0.0) * lush_thick(b.lush);
+  // The clumps the trees stand in, and the low plants in their gaps (clumps.wgsl).
+  let tc = clumps_at(at, e);
+  let lc = low_rank(tc);
   // The plants' roots hold where the marks' do (mark.wgsl `holds`, on every patch of the loose ground), over a pixel and
   // over the patches too small to show here (`loose_unseen`), so the field far away and the marks near stand on the
   // same ground.
@@ -570,9 +558,11 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   bs.loose_px = max(b.loose_px, loose_unseen(b.loose_mean, e));
   var hold = held_at(at, bs);
   hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * bs.loose_px, THIN_TO_M + 0.5 * bs.loose_px, b.loose));
-  // The trees' field, read once: their crowns' share.
+  // The trees' field, read once: their crowns' share on the mean, and at the point in their clumps.
   var trees = vec4f(0.0);
   if (cover_look.sides[STANDS] > 0.0) { trees = field_smooth(at, STANDS); }
+  let crowns = lushed(min(trees.a * hold[STANDS], 1.0), b.lush);
+  let crowns_here = clumped(tc, crowns, crowns);
   // The low kinds take the light the trees leave (the cover's light law, laws.md 3: a kind below gets the light of
   // the ground the taller does not hold and what passes its layer): they thin under the crowns that stand at the point
   // and stand as much thicker on the ground that holds no tree, their square keeping its cover. So ground too thin for
@@ -592,32 +582,33 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   if (least_e() < LOW_FAR_FULL_E && far < 1.0) {
     swarded = field_smooth(at, SWARD_LAYER);
     sward_read = true;
-    dst = sward(at, e, b, swarded, trees.a, thick, hold.w);
+    dst = sward(at, e, b, swarded, crowns_here, hold.w, lc, closed);
     // A lattice no square holds adds nothing: its field is not read.
     for (var l = 0; l < rolled(STANDS); l++) {
-      if (cover_look.sides[l] > 0.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, thick, hold[l], dst); }
+      if (cover_look.sides[l] > 0.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, hold[l], dst, lc, closed); }
     }
   }
   if (far > 0.0) {
-    // As thick as they stand at the point (`hold`, `thick`), up to all of the ground.
+    // As they stand at the point (`hold`, `lushed`), in the gaps of the trees' clumps.
     // In the shade of the trees' crowns as the sward is near (`SWARD_SHADE`), so the far and the near tone agree.
     let low = field_smooth(at, LOW_LAYER);
-    var seen = low * (min(low.a * hold.w * thick, 1.0) / max(low.a, 1e-6));
+    let mean = lushed(min(low.a * hold.w, 1.0), b.lush);
+    var seen = low * (clumped(lc, mean, mean * (1.0 - closed)) / max(low.a, 1e-6));
     // Reeds on soaked ground and at the water's edge stand dense and in their own tint, as near (`sward`), as far as the
     // herbs stand there.
     let place = reed_place(b);
     var reeds = 0.0;
     if (place > 0.0) {
       if (!sward_read) { swarded = field_smooth(at, SWARD_LAYER); }
-      reeds = reeds_of(place, min(swarded.a * hold.w * thick, 1.0));
+      reeds = reeds_of(place, lushed(min(swarded.a * hold.w, 1.0), b.lush));
     }
     let filled = mix(seen.a, max(seen.a, REED_FILL), reeds);
-    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * lush_hue(b.lush) * filled, filled);
-    dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * min(trees.a, 1.0)), seen.a), far);
+    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * lush_hue(b.lush) * clump_light(lc, mean * (1.0 - closed)) * filled, filled);
+    dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * crowns_here), seen.a), far);
   }
-  dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
+  dst = lattice_field(at, e, STANDS, trees, b, hold[STANDS], dst, tc, 0.0);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
-  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0), min(field_at(at, LOW_LAYER).a * hold.w * thick, 1.0));
+  return CoverAt(dst, crowns_here, field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0), lushed(min(field_at(at, LOW_LAYER).a * hold.w, 1.0), b.lush));
 }
 
 // Things too small to be drawn one by one but a pixel or more across (crowns and dead trees seen from afar) are drawn
@@ -670,40 +661,55 @@ fn speck_lattice(at_m: vec2f, side: f32, turn: f32, share: f32, e: f32, k: i32) 
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_crown`
-// by the width of its marks there, as each mark shows, mark.wgsl `decide`), thicker and thinner by `thick`, holding
-// `hold` of its plants there, over `dst` (premultiplied): its shadows darken what lies below, its crowns cover their
-// share at their mean; the trees' in their stands, in groups of lighter and darker crowns, and snowy as the ground under
-// them, each crown a lit dome over its shadow (`specks`, as wide as the marks there) from where it takes a pixel or more.
-// A lattice no square holds (its side 0, textures.ts) adds nothing.
+// by the width of its marks there, as each mark shows, mark.wgsl `decide`), as lush as the ground is (lush.wgsl
+// `lushed`), holding `hold` of its plants there, in clumps `c` in the gaps of the trees, which close `closed` of the ground on their mean
+// (0 for the trees: clumps.wgsl `clumped`), over `dst` (premultiplied): its shadows darken what lies below, its crowns
+// cover their share; the trees' in their stands, snowy as the ground under them, each crown a lit dome over its shadow
+// (`specks`, as wide as the marks there) from where it takes a pixel or more. A lattice no square holds (its side 0,
+// textures.ts) adds nothing. Its shadows fall on the ground among its plants: where the clumps show, none in a gap.
 // A far crown is lit by up to `DOME_LIT` of its colour either way across it, and casts its shadow `DOME_SHADOW` of its
 // width south-east (the marks' shadows reach about a crown's width: models.wgsl `cast_of`).
 const DOME_LIT = 0.35; const DOME_SHADOW = 0.6;
-fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, hold: f32, dst: vec4f) -> vec4f {
+// The trees' canopy seen from above is a rough top of crowns in groups (clumps.wgsl `clump_light`), its clumps' rims
+// lit by up to `CANOPY_RIM` within
+// `CANOPY_RIM_CROWNS` crowns' widths of their edge as they face the sun or turn from it; and the ground beyond a
+// clump's edge away from the sun lies in its cast shade, as long as the marks' (`MODEL_SHADOW_RUN` times the trees'
+// height) and as dark as a crown's shadow (`CROWN_SHADOW`), eased over a pixel.
+const CANOPY_RIM = 0.2; const CANOPY_RIM_CROWNS = 1.5;
+fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, hold: f32, dst: vec4f, c: Clumps, closed: f32) -> vec4f {
   if (cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
   var unshown = 1.0;
   if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_crown(field_at(at, WIDE_LAYER)[l], e); }
-  let crowns = min(f.a * hold * thick, 1.0);
-  if (crowns * unshown <= 0.0) { return dst; }
-  var c = f.rgb / f.a;
+  let plain = min(f.a * hold, 1.0);
+  let mean = lushed(plain, b.lush);
+  if (mean * unshown <= 0.0) { return dst; }
+  let near = mean * (1.0 - closed);
+  let crowns = clumped(c, mean, near);
+  var col = f.rgb / f.a * clump_light(c, near);
   var share = crowns;
-  var dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * thick, 1.0);
+  var dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * lush_thick(plain, b.lush), 1.0) * mix(1.0, min(crowns / mean, 1.0), c.shows);
   if (l == STANDS) {
-    c = in_stands(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M);
-    let groups = shows_at(CANOPY_M, e);
-    if (groups > 0.0) { c *= 1.0 + CANOPY_TONE * noise_turned(at / CANOPY_M, 79) * groups; }
-    c = mix(c, vec3f(1.0), CANOPY_SNOW * b.snow);
-    if (SPECK_PX.x * least_e() < SPECK_MOST_M && SPECK_PX.x * e < SPECK_MOST_M) {
-      let w = field_at(at, WIDE_LAYER)[l];
+    col = in_stands(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M) * clump_light(c, near);
+    let w = field_at(at, WIDE_LAYER)[l];
+    if (c.shows > 0.0) {
+      let edge = clump_edge(c, clump_ground(c, near));
+      let rim = edge.y * (1.0 - ease(0.0, CANOPY_RIM_CROWNS * w, edge.x));
+      col *= 1.0 + CANOPY_RIM * c.shows * rim;
+      let shaded = smoothstep(-e, e, edge.x - MODEL_SHADOW_RUN * field_at(at, TALL_LAYER)[l] * edge.y);
+      dark = max(dark, CROWN_SHADOW * c.shows * shaded);
+    }
+    col = mix(col, vec3f(1.0), CANOPY_SNOW * b.snow);
+    if (crowns > 0.0 && SPECK_PX.x * least_e() < SPECK_MOST_M && SPECK_PX.x * e < SPECK_MOST_M) {
       let dome = specks(at, w, crowns, e, 83);
       // The shadows: the crowns' own specks laid south-east, as dark on the mean as the field's shade.
       let laid = specks(at - DOME_SHADOW * w * vec2f(1.0), w, crowns, e, 83).x;
       dark *= laid / max(crowns, 1e-3);
       share = dome.x;
-      c *= 1.0 + DOME_LIT * dome.y;
+      col *= 1.0 + DOME_LIT * dome.y;
     }
   }
   share *= unshown;
   dark = min(dark, 1.0) * unshown;
   let below = vec4f(dst.rgb * (1.0 - dark), dark + dst.a * (1.0 - dark));
-  return vec4f(c * share, share) + below * (1.0 - share);
+  return vec4f(col * share, share) + below * (1.0 - share);
 }

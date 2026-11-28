@@ -73,9 +73,10 @@ export interface CoverField { w: number; h: number; layers: number; data: Float3
 export interface Kinds { w: number; h: number; planes: Planes; cols: number; table: Float32Array; field: CoverField; tallest: number[]; widest: number[]; walls: Rgb }
 
 /** A plant's shadow darkens this many times the square of its crown's width of ground: the marks cast their
- * sprite, which covers as much as its crown, `MODEL_SHADOW_RUN` (2.6) as long (models.wgsl `model_shadow`), so the field
- * far away is as dark as the marks near. */
-const SHADOW_WIDTHS = 2.6 * (Math.PI / 4);
+ * sprite, which covers as much as its crown, `MODEL_SHADOW_RUN` (2.6) as far south and `SHADOW_WIDE` (1.5) its width
+ * across the light's way, sqrt 2 of that along a row (models.wgsl `model_cast`, `cast_uv`), so the field far away is as
+ * dark as the marks near. */
+const SHADOW_WIDTHS = 2.6 * 1.5 * Math.SQRT2 * (Math.PI / 4);
 
 /** Where a frame's kinds come from in the core's table (tape/src/table.rs) and what they are set out into
  * (`kindsOf`): the table `rows`, `row` numbers a square; `kinds` kinds a square of `kindRow` numbers from `at` on, and

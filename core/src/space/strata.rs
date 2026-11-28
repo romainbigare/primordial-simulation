@@ -1,4 +1,4 @@
-//! The makes of the bed (laws.md 0 and 8): the bed is of a few makes, each a mix of the chemistry's bed substances
+//! The makes of the bed (laws.md 0 and 5): the bed is of a few makes, each a mix of the chemistry's bed substances
 //! (`worldgen`), each worn by flowing liquid as much faster than the first as Flow's wear breaks it (`Terrain::cut`).
 //! They lie in layers, a stack laid flat and then folded, so a surface that cuts it shows bands that scarps and vales
 //! follow and its top layers cap the heights; through them stand a few bodies of the hardest make, as bodies of rock

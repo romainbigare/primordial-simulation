@@ -1,4 +1,4 @@
-// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl lush.wgsl no_grass.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl fire.wgsl snag.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl hollows.wgsl gullies.wgsl relief.wgsl clumps.wgsl cover_field.wgsl lush.wgsl no_grass.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl fire.wgsl snag.wgsl
 // The marks of the plant cover's cells in view, decided once a frame (lib/mark.wgsl `decide`): a texel a cell, each
 // lattice's cells in rows of their own (`cover.rows`), drawn before the map (web/src/textures.ts `prepare`), each of
 // its words (lib/cells.wgsl `mark_word`) into one of the marks' textures, all four at once.

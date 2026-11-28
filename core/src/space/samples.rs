@@ -1,4 +1,4 @@
-//! The terrain's samples (laws.md 0 and 8), the leaves of `SAMPLE_DEPTH` of the map: the noise says how high the ground
+//! The terrain's samples (laws.md 0 and 5), the leaves of `SAMPLE_DEPTH` of the map: the noise says how high the ground
 //! would stand (`Terrain::sample`), and the ground is that worn by flowing liquid and creep at the world's start
 //! (`space::wear`), so valleys branch between ridges and the closed basins the cutting left stay. A
 //! flood over the worn heights (`space::drain`) finds where each sample's liquid runs, and the ponds: the samples

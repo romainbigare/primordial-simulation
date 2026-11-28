@@ -230,8 +230,8 @@ fn snow_depth(ice_m: f32, t: f32, melt: f32) -> f32 { return SNOW_PER_ICE * ice_
 // about half of the sun's (canopy.ts `CROWN_SHADOW`).
 const CROWN_SHADOW = 0.42;
 // A thing standing up casts its shadow on the ground away from the sun (south-east, `LIGHT`), this many times its
-// height long (models.wgsl `model_shadow`, snag.wgsl): 0.7 of what the light's rise gives (3.7 heights under 15
-// degrees), as a crown's shadow thins toward its tip.
+// height south and as far east (models.wgsl `cast_of`, snag.wgsl): 3.7 heights along the light, as its rise of 15
+// degrees gives (cot 15 / sqrt 2 = 2.64 each way).
 const MODEL_SHADOW_RUN = 2.6;
 
 // Liquid standing shallower than this over the drawn ground is drawn as soaked ground, m: the drawn ground follows the

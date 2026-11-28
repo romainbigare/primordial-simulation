@@ -7,13 +7,13 @@ ask the owner.
 
 | What | Where |
 |---|---|
-| What we build, the principles, the plan | `docs/handover.md` (the spec) |
+| What we build, the principles, the architecture | `docs/handover.md` (the spec) |
 | How each law works now | `docs/laws.md` |
 | Every free number: unit, anchor, mark (physical, anchored, tuned) | `docs/numbers.md` |
 | What the tape records | `docs/tape.md` |
 | The plan, the priorities, the owner's decisions | `review/roadmap.md` |
-| How to lead the work (for the orchestrator) | `review/orchestrator.md` |
-| The laws | `core/src/<law>/` (`flow`, `change`, `bond`, `copy`, `choose`), bodies in `core/src/body/`, plants in `core/src/cover/`, the ground in `core/src/space/` |
+| How we work: build profiles, tests, the gate, pictures, helpers | `docs/workflow.md` |
+| The laws | `core/src/<law>/`: `flow`, `change`, `cover` (plants), `fauna` (the takers), `flame`, `soil`; a cell's life in `life/`, what stands inside it in `inside/`, the ground's shape in `space/`, the books in `store/` |
 | How the map is drawn | `tape/src/ground/` (tiles) and `web/` (the page) |
 | How the page is looked at and measured | `web/look/` |
 | Physical constants and units | `core/src/units.rs` |
@@ -49,9 +49,8 @@ ask the owner.
 1. **Everything is kept.** Each element, the energy and the members of a node. Every transfer books both sides through
    a shared helper. A drift above about 1e-9 is a bug: find it, do not hide it. **The books are 64-bit:** numbers that
    hold matter or energy stay 64-bit, and each move is booked on both sides with one 64-bit number. 32-bit is for
-   numbers that hold nothing (cards, brain rows, faces, rates).
-2. **Counts are real.** A member count is never rounded up (`Body::n()` is "at least one" only where the physics means
-   one body). Means over a node or a group are weighted by members.
+   numbers that hold nothing (genes, rates, what the page draws).
+2. **Counts are real.** A member count is never rounded up. Means over a node or a group are weighted by members.
 3. **One source for each quantity.** One ground temperature (`World::t_ground_last`), one melting rule, one way to pay
    for lifting gas into the air. When two places need the same number, they read the same thing.
 4. **A law never overdraws a node.** It never asks a node for more than it holds; where it could, it limits that
@@ -78,15 +77,21 @@ ask the owner.
 
 1. **Few, fast and meaningful** (`docs/handover.md` 12.3). A test states a law or an invariant, not the story of a bug.
 2. Use the shared kit `worldgen::testkit` for setup. Never copy setup code between test files.
-3. **Slow tests are `#[ignore]`** (`cargo test --release --workspace --no-fail-fast -- --ignored`): run them before the
-   last push. The normal suite stays under about 30 seconds.
+3. **Slow tests are `#[ignore]`** (`cargo test --profile fast --workspace --no-fail-fast -- --ignored`): run them once,
+   before the last push, and only when a law changed. The normal suite stays short: a test that takes many seconds
+   is `#[ignore]` or made smaller.
 4. Never loosen a tolerance to make a test pass. Never restore old physics inside a test.
 5. Delete the tests of a mechanism you delete.
 
 ## 6. Working
 
+How to build, test and take pictures fast on a machine with no graphics card is in `docs/workflow.md`. In short: build
+and test with `--profile fast` while you work; the gate before main uses `--release`.
+
 1. **A pure clean-up keeps the results bit for bit.** Compare a few short runs (same fingerprint, same
    `series.csv`). Keep the order of floating-point sums; `a*b*c` is not `a*(b*c)`.
 2. **A change of the laws is its own commit**, with the physics reason and its effect on a few numbers of a long run
    (populations, temperatures, drift).
-3. Before you push: build, all tests, clippy, the wasm build (`cargo build -p pcore --target wasm32-unknown-unknown`).
+3. Before you push to main: the gate (`docs/workflow.md` 5): release build, all tests, clippy, the wasm build, the
+   page build.
+4. Pictures of the page come from the picture tool (`web/look/`), never from a world grown by hand in a browser.

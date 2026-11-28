@@ -1,8 +1,8 @@
 // The Earth view's style for the plant cover (web/shaders/lib/style.wgsl holds the style of each pixel): the colours a
-// kind of cover is drawn in, pushed far apart from one another, lighter than real leaves, and turning with the season;
-// and the design its plants are drawn with (the form of a tree's crown is form.ts's). Each is a function of the kind's
-// numbers alone (tape/src/stands.rs), so the same numbers always give the same look and a kind that evolves drifts
-// smoothly from its parent. The marks near (cover.wgsl) and the field far away (cover_field.wgsl) draw the same colours
+// kind of cover is drawn in, pushed apart from one another, in the olive and dark greens leaves show from a plane (not
+// a painted map's bright greens), and turning with the season; and the design its plants are drawn with (the form of
+// a tree's crown is form.ts's). Each is a function of the kind's numbers alone (tape/src/stands.rs), so the same
+// numbers always give the same look and a kind that evolves drifts smoothly from its parent. The marks near (cover.wgsl) and the field far away (cover_field.wgsl) draw the same colours
 // (`seenFar`). Colours are worked in OKLab (Ottosson 2020), whose distances follow the eye's, and handed on as
 // reflectances in linear light.
 import { clamp, smooth } from './earth';
@@ -37,21 +37,21 @@ const SOFT_STANDS_M = [2, 4];
 // departure from the starting cover's.
 /** Hue at the starting cover's numbers, degrees, and its change per decade of capture area, per K of frost gene, per
  * decade of moisture gene. */
-const HUE_MID = 140, HUE_PER_LEAF = -55, HUE_PER_FROST = -4, HUE_PER_MOIST = 25;
+const HUE_MID = 130, HUE_PER_LEAF = -55, HUE_PER_FROST = -4, HUE_PER_MOIST = 25;
 /** The greens' hues stay living greens, from yellow-green to blue-green, degrees: a kind of thick hardy leaves is the
  * bluest green of the palette, not a teal. */
-const HUE_GREENS = [105, 150];
+const HUE_GREENS = [100, 145];
 /** Lightness at the starting cover's numbers, and its change per decade of capture area and per share of walls. */
-const L_MID = 0.75, L_PER_LEAF = 0.14, L_PER_WOOD = -0.15;
+const L_MID = 0.58, L_PER_LEAF = 0.14, L_PER_WOOD = -0.2;
 /** Chroma at the starting cover's numbers, and its share lost per decade of moisture gene below theirs. */
-const C_MID = 0.13, C_DRY = 0.3;
+const C_MID = 0.09, C_DRY = 0.3;
 /** The starting cover's numbers (worldgen/src/life/kinds.rs `COVER_GENES`): capture area, log10 m²/kg; walls' share;
  * moisture gene; frost gene, K; seeds' share. */
 const LEAF_0 = 0.4, WOOD_0 = 0.5, MOIST_0 = -0.3, FROST_0 = 268, SEED_0 = 0.1;
 /** A herb is the ground's sward under the trees and bushes: its lightness is drawn toward `SWARD_L` (keeping this share
  * of its departure from it) and its chroma is this share of a plant's, so the ground does not outshine what stands on it
  * and the plants stand out on it by shape and shadow. */
-const SWARD_L = 0.64, SWARD_L_KEEP = 0.5, SWARD_CHROMA = 0.7;
+const SWARD_L = 0.6, SWARD_L_KEEP = 0.5, SWARD_CHROMA = 0.85;
 /** The physical leaf's lightness (canopy.ts `foliage`) counts this much over that of a green leaf (`LEAF_PHYS`), so a
  * kind short of fuel still shows paler. */
 const PHYSICAL_L = 0.3;
@@ -73,7 +73,7 @@ const COLD_NEAR_K = 25, FROZEN_GROUND_K = 1.5;
  * fully once the ground's warming, as the sine of the season, falls under `-COOLING_SINE`. */
 const COLDEST = 0.15, COOLING_SINE = 0.3;
 /** The turning colours (OKLCH: lightness, chroma, hue): yellow, orange, red, dormant brown, and straw. */
-const YELLOW: Rgb = [0.86, 0.17, 95], ORANGE: Rgb = [0.74, 0.18, 58], RED: Rgb = [0.6, 0.19, 28], BARE: Rgb = [0.5, 0.06, 55], STRAW: Rgb = [0.8, 0.09, 88];
+const YELLOW: Rgb = [0.78, 0.13, 92], ORANGE: Rgb = [0.66, 0.14, 58], RED: Rgb = [0.54, 0.15, 28], BARE: Rgb = [0.5, 0.06, 55], STRAW: Rgb = [0.8, 0.09, 88];
 /** How far a kind turns from yellow through orange to red: from 0 to 1 as its light capacity per m² of capture area
  * (more pigment per area) rises from `RED_FROM` to `RED_TO`, log10 mol/m²/s; its plants spread `HUE_SPREAD` of it
  * either way. */
