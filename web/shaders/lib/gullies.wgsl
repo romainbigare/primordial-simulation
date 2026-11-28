@@ -17,7 +17,7 @@ const GULLY_LONGEST_M = 2000.0; const GULLY_STEP = 2.0; const GULLY_OCTAVES = 6;
 // A gully's sides slope `GULLY_K` times the ground's slope (counted up to `GULLY_STEEP_MOST`, rise over run), each
 // octave `GULLY_DECAY` times less, a rill's `RILL_K` times less again (a rill is a groove in the gully's wall, not a
 // gully of its own), softly held under `WALL_MOST`: under the low light not every wall turns into the shade.
-const GULLY_K = 1.0; const RILL_K = 0.5; const GULLY_DECAY = 0.9; const GULLY_STEEP_MOST = 0.8; const WALL_MOST = 0.7;
+const GULLY_K = 1.0; const RILL_K = 0.35; const GULLY_DECAY = 0.9; const GULLY_STEEP_MOST = 0.8; const WALL_MOST = 0.7;
 // A cell is `GULLY_PER_CELL` wavelengths across; its point moves up to `GULLY_JITTER` of a cell; its wavelength is the
 // octave's times 2^(+-`WAVE_VARY`/2) and its gullies bend by up to `BEND` of a cell across per cell along, so no two
 // cells comb the slope alike.
