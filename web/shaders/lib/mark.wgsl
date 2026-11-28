@@ -106,9 +106,10 @@ fn stand_in(depth: f32, reach: vec4f) -> vec4f {
 }
 
 // The share of each kind that stands where its roots need `need` m of loose ground (0: its square's ground holds it
-// everywhere, canopy.ts) and `loose` m lies (land.wgsl `rooted`).
+// everywhere, canopy.ts) and `loose` m lies (land.wgsl `rooted`, over the field's span, cover_field.wgsl `ROOTS_SOFT`).
 fn holds(loose: f32, need: vec4f) -> vec4f {
-  return select(vec4f(rooted(loose, need.x, 0.0), rooted(loose, need.y, 0.0), rooted(loose, need.z, 0.0), rooted(loose, need.w, 0.0)), vec4f(1.0), need <= vec4f(0.0));
+  let s = ROOTS_SOFT * need;
+  return select(vec4f(rooted(loose, need.x, s.x), rooted(loose, need.y, s.y), rooted(loose, need.z, s.z), rooted(loose, need.w, s.w)), vec4f(1.0), need <= vec4f(0.0));
 }
 
 // How dense the four kinds from 4q stand at a point of the square at c that is saturated by `saturated` (land.wgsl
@@ -159,8 +160,9 @@ const FREE_LEAST = 0.05;
 // The stream of a kind's draws for a cell, by its slot and square (`pick_kind`).
 const RACE_STREAM = 175;
 
-// The loose ground at the foot `at` (its squares `cs`) with its patches (rock.wgsl `loose_at`, `loose_seen`, as the
-// bare bed is drawn), read only where a kind's roots may want more than lies there.
+// The loose ground at the foot `at` (its squares `cs`) its plants' roots hold by (cover_field.wgsl `rooted_loose`, of
+// its depth with its patches, rock.wgsl `loose_seen`, as the bare bed is drawn), read only where a kind's roots may
+// want more than lies there.
 fn foot_loose(at: vec2f, cs: Corners) -> f32 {
   var deepest = 0.0;
   for (var s = 0; s < rolled(4); s++) {
@@ -169,7 +171,9 @@ fn foot_loose(at: vec2f, cs: Corners) -> f32 {
       deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
     }
   }
-  return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0)), 0.0), deepest > 0.0);
+  if (deepest <= 0.0) { return 0.0; }
+  let mean = loose_at(sample_place(at, 0.0));
+  return rooted_loose(loose_seen(at, mean, 0.0), mean);
 }
 
 // The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` times their mean, its ground `f`),

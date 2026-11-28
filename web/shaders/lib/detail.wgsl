@@ -284,12 +284,10 @@ fn rock_detail(e: f32) -> vec3f { return detail(ROCK_TEX, e); }
 
 // The change the grass gives the sward of cover s at e m a pixel: its tiles laid in hexagons (`grass_hexes`),
 // green, dry as far as the sward is straw (`straw`, 0..1), with tall reeds as far as they stand (`reeds`, 0..1); its fine
-// change `GRASS_FAR` of itself from `GRASS_FAR_E` m a pixel on, where it would read as noise; lighter and darker,
-// greener and yellower over drifts `DRIFT_GRASS_M` m across (`DRIFT_TONE`, `DRIFT_HUE`), all about 1 so its mean stays
-// the world's colour.
+// change `GRASS_FAR` of itself from `GRASS_FAR_E` m a pixel on, where it would read as noise; about 1 so its mean
+// stays the world's colour (its drifts are the sward's, lush.wgsl `herb_drift`).
 const GRASS_PATCH_M = 6.0; const GRASS_THIN = 0.5;
-const DRIFT_GRASS_M = 6.0; const DRIFT_TONE = 0.06;
-const DRIFT_HUE = vec3f(-0.04, 0.025, -0.05); const GRASS_FAR = 0.5; const GRASS_FAR_E = vec2f(0.01, 0.04);
+const GRASS_FAR = 0.5; const GRASS_FAR_E = vec2f(0.01, 0.04);
 fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
   // Which kinds the hexagons hold: short turf, a meadow, tussocks, as a noise over `GRASS_PATCH_M` m falls, a thinner
   // sward leaning to tussocks (`GRASS_THIN`).
@@ -298,10 +296,7 @@ fn grass_detail(e: f32, straw: f32, reeds: f32, s: f32) -> vec3f {
   var out = vec3f(1.0);
   if (straw < 1.0) { out = grass_hexes(e, n, false, reeds); }
   if (straw > 0.0) { out = mix(out, grass_hexes(e, n, true, reeds), straw); }
-  out = 1.0 + mix(1.0, GRASS_FAR, ease(GRASS_FAR_E.x, GRASS_FAR_E.y, e)) * (out - 1.0);
-  let d = noise_l(lat_turned(DRIFT_GRASS_M, vec2f(0.2)), 104).x + 0.5 * noise_l(lat_turned(0.4 * DRIFT_GRASS_M, vec2f(0.6)), 105).x;
-  let h = noise_l(lat_turned(2.3 * DRIFT_GRASS_M, vec2f(0.8)), 106).x;
-  return out * (1.0 + DRIFT_TONE * d) * (1.0 + DRIFT_HUE * h);
+  return 1.0 + mix(1.0, GRASS_FAR, ease(GRASS_FAR_E.x, GRASS_FAR_E.y, e)) * (out - 1.0);
 }
 
 // The grass's tiles laid in hexagons (`hexes`) `HEX_M` m across, each

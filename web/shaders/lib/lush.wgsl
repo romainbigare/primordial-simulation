@@ -37,3 +37,30 @@ fn lush_thick(s: f32, lush: f32) -> f32 { return 1.0 + LUSH * lush * (1.0 - clam
 
 // What the herbs' colour is multiplied by where they are as lush as `lush` (`LUSH_HUE`).
 fn lush_hue(lush: f32) -> vec3f { return 1.0 + LUSH_HUE * lush; }
+
+// Herbs on a slope stand in drifts down its fall line, wetter and greener in the paths the water takes, drier and
+// paler between them (rills and runnels sort a sward on a hillside: from memory): what their colour is multiplied by at
+// `at`, m, seen at `e` m a pixel, on ground of slope `slope` (rise over run, east and south): their tone moves by up to
+// `HERB_DRIFT` against how lush they look (`lush_hue` of `HERB_DRIFT_LUSH` a unit) over noise `HERB_DRIFT_M` m across
+// and `HERB_DRIFT_LONG` times that long down the fall line, as the slope rises to `HERB_DRIFT_STEEP` (none on flat
+// ground), as far as it shows (`shows_at`). The noise is laid along four fixed ways (`HERB_DRIFT_WAYS`, over a half
+// turn), the two nearest the fall line blended: a noise turned or stretched pixel by pixel would swirl, or shift by
+// whole cells over a small turn so far from the map's corner.
+const HERB_DRIFT = 0.1; const HERB_DRIFT_LUSH = 0.5; const HERB_DRIFT_M = 6.0; const HERB_DRIFT_LONG = 4.0;
+const HERB_DRIFT_STEEP = 0.25; const HERB_DRIFT_WAYS = 4; const HERB_DRIFT_STREAM = 262;
+fn herb_drift(at: vec2f, e: f32, slope: vec2f) -> vec3f {
+  let shows = shows_at(HERB_DRIFT_M, e) * ease(0.0, HERB_DRIFT_STEEP, length(slope));
+  if (shows <= 0.0) { return vec3f(1.0); }
+  // The fall line's way in steps of the ways, over a half turn.
+  let way = fract(atan2(slope.y, slope.x) / PI + 1.0) * f32(HERB_DRIFT_WAYS);
+  let first = floor(way);
+  var n = 0.0;
+  for (var k = 0; k < 2; k++) {
+    let w = (first + f32(k)) % f32(HERB_DRIFT_WAYS);
+    let turn = PI * w / f32(HERB_DRIFT_WAYS);
+    let along = vec2f(cos(turn), sin(turn));
+    let q = vec2f(dot(at, along) / HERB_DRIFT_LONG, dot(at, vec2f(-along.y, along.x))) / HERB_DRIFT_M;
+    n += select(way - first, 1.0 - (way - first), k == 0) * noise(q, HERB_DRIFT_STREAM + i32(w)).x;
+  }
+  return (1.0 - HERB_DRIFT * shows * n) * lush_hue(HERB_DRIFT_LUSH * shows * n);
+}

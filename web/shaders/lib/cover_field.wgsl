@@ -79,10 +79,10 @@ const LIT_LEAST = 0.05;
 const CANOPY_SNOW = 0.35;
 
 // What lies under and over the cover at a point (land.wgsl `land_spots`): how soaked its ground is, 0..1; its height
-// over the nearest water's level, m, and its slope (rise over run); the depth of the liquid standing over it, m; the depth of its loose ground with its patches
-// (rock.wgsl `loose_seen`), without them (`loose_at`) and that depth's change across a pixel, m; the share snow covers
-// and the snow's depth, m; and how lush it is (`lush_of`).
-struct Beneath { soaked: f32, over: f32, slope: f32, depth: f32, loose: f32, loose_mean: f32, loose_px: f32, snow: f32, snow_m: f32, lush: f32 }
+// over the nearest water's level, m, and its slope (rise over run, east and south); the depth of the liquid standing
+// over it, m; the depth of its loose ground with its patches (rock.wgsl `loose_seen`), without them (`loose_at`) and
+// that depth's change across a pixel, m; the share snow covers and the snow's depth, m; and how lush it is (`lush_of`).
+struct Beneath { soaked: f32, over: f32, slope: vec2f, depth: f32, loose: f32, loose_mean: f32, loose_px: f32, snow: f32, snow_m: f32, lush: f32 }
 
 // The cover's field at a point, premultiplied; the share the trees' crowns close over the ground there; the share of
 // the ground there and about it (blended over the squares with land) under crowns whose leaves fall this month; and
@@ -97,7 +97,15 @@ const ROOTED_ALL = 0.999;
 
 // Of each lattice and the sward (red, green, blue, alpha), the share of its plants that stand at a point over `b`:
 // where their roots hold (land.wgsl `rooted`, over the share of their square that holds them, so the square keeps its
-// cover) and out of the snow (draw.wgsl `above_snow`). Each layer is read only where it may limit them.
+// cover) and out of the snow (draw.wgsl `above_snow`). Each layer is read only where it may limit them. Plants thin
+// out over `ROOTS_SOFT` of their need across their rule's edge, on the loose ground's depth `ROOTS_REACH` of the way
+// from its patches to its mean without them (`rooted_loose`), the marks as the field (mark.wgsl `holds`,
+// `foot_loose`): roots reach metres about a plant, across the patches, and plants thin out toward bare ground over the
+// thinning soil, the herbs with no outline, a stand's edge in single crowns (from memory).
+const ROOTS_SOFT = 1.0; const ROOTS_REACH = 0.35;
+// The depth of loose ground plants' roots hold by, m, where it lies `seen` m deep with its patches and `mean` m without
+// them (rock.wgsl `loose_seen`, `loose_at`).
+fn rooted_loose(seen: f32, mean: f32) -> f32 { return mix(seen, mean, ROOTS_REACH); }
 fn held_at(at: vec2f, b: Beneath) -> vec4f {
   let mean = field_at(at, ROOTED_LAYER);
   let roots = any(mean < vec4f(ROOTED_ALL));
@@ -107,7 +115,8 @@ fn held_at(at: vec2f, b: Beneath) -> vec4f {
   var out = vec4f(1.0);
   if (roots) {
     let need = field_at(at, NEED_LAYER);
-    for (var c = 0; c < 4; c++) { out[c] = rooted(b.loose, need[c], b.loose_px) / max(mean[c], 1e-3); }
+    let loose = rooted_loose(b.loose, b.loose_mean);
+    for (var c = 0; c < 4; c++) { out[c] = rooted(loose, need[c], max(b.loose_px, ROOTS_SOFT * need[c])) / max(mean[c], 1e-3); }
   }
   if (buried > 0.0) {
     let tall = field_at(at, TALL_LAYER);
@@ -195,7 +204,8 @@ fn ferns_of(b: Beneath, canopy: f32, reeds: f32) -> f32 { return min(canopy, 1.0
 // larger is the place's (`reed_place`).
 const REED_FLAT = vec2f(0.05, 0.15);
 fn wet_edge(b: Beneath) -> vec2f {
-  return vec2f(ease(REED_BAND_M, 0.0, b.over / max(b.slope, 1e-3)), ease(REED_WET, 1.0, b.soaked) * ease(REED_FLAT.y, REED_FLAT.x, b.slope));
+  let slope = length(b.slope);
+  return vec2f(ease(REED_BAND_M, 0.0, b.over / max(slope, 1e-3)), ease(REED_WET, 1.0, b.soaked) * ease(REED_FLAT.y, REED_FLAT.x, slope));
 }
 fn reed_place(b: Beneath) -> f32 { let w = wet_edge(b); return max(w.x, w.y); }
 // How much reeds stand at a place that holds them as `place`, where the herbs cover `herbs` of the ground (`REED_HERBS`):
@@ -456,9 +466,10 @@ fn flowers_at(e: f32, bloom: f32, petal: vec3f) -> vec4f {
 // The herbs' sward at `at`, seen at `e` m a pixel, over `b`, its field there `f` (`field_smooth`), premultiplied: their
 // colour in stands of their kinds, the share they cover (as lush as the ground is, lush.wgsl `lushed`, as far as they
 // hold there, `hold`, in clumps `lc` in the gaps of the trees' crowns, which close `closed` of the ground on their mean,
-// clumps.wgsl `clumped`) with its tufts, swathes and blades where each shows, in the shade of `canopy` of the trees'
-// crowns, reeds on soaked ground and at the water's edge, ferns on wet shaded ground, and flowers over it.
-fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, hold: f32, lc: Clumps, closed: f32) -> vec4f {
+// clumps.wgsl `clumped`) in their drifts (`drift`, lush.wgsl `herb_drift`) with its tufts, swathes and blades where
+// each shows, in the shade of `canopy` of the trees' crowns, reeds on soaked ground and at the water's edge, ferns on
+// wet shaded ground, and flowers over it.
+fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, hold: f32, lc: Clumps, closed: f32, drift: vec3f) -> vec4f {
   if (f.a <= 0.0 || hold <= 0.0) { return vec4f(0.0); }
   // Near, its images give its detail (detail.wgsl `grass_detail`): the drawn tufts' and swathes' tone fades out as they
   // show, and its kinds' stands keep `SWARD_STANDS_NEAR` of their difference from the mean, so the layers do not pile
@@ -467,7 +478,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, hold: f32, lc: Cl
   let mean = f.rgb / f.a;
   var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
   let even = lushed(min(f.a * hold, 1.0), b.lush);
-  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images) * lush_hue(b.lush) * clump_light(lc, even * (1.0 - closed));
+  c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images) * lush_hue(b.lush) * drift * clump_light(lc, even * (1.0 - closed));
   var s = clumped(lc, even, even * (1.0 - closed));
   let reeds = reeds_of(reed_place(b), s);
   let tufts = shows_at(SWARD_M, e);
@@ -557,7 +568,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   var bs = b;
   bs.loose_px = max(b.loose_px, loose_unseen(b.loose_mean, e));
   var hold = held_at(at, bs);
-  hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * bs.loose_px, THIN_TO_M + 0.5 * bs.loose_px, b.loose));
+  hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * bs.loose_px, THIN_TO_M + 0.5 * bs.loose_px, rooted_loose(b.loose, b.loose_mean)));
   // The trees' field, read once: their crowns' share on the mean, and at the point in their clumps.
   var trees = vec4f(0.0);
   if (cover_look.sides[STANDS] > 0.0) { trees = field_smooth(at, STANDS); }
@@ -575,6 +586,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   hold = vec4f(hold.xy * min(lit, 1.0), hold.z, hold.w * lit * herbs_out(b.depth, wet));
   // Under the trees: the sward and the low lattices one by one near, as one layer far (`LOW_FAR_E`).
   let far = ease(LOW_FAR_E, LOW_FAR_FULL_E, e);
+  let drift = herb_drift(at, e, b.slope);
   var dst = vec4f(0.0);
   // The sward's field, read once where the near or the far picture asks for it.
   var swarded = vec4f(0.0);
@@ -582,7 +594,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   if (least_e() < LOW_FAR_FULL_E && far < 1.0) {
     swarded = field_smooth(at, SWARD_LAYER);
     sward_read = true;
-    dst = sward(at, e, b, swarded, crowns_here, hold.w, lc, closed);
+    dst = sward(at, e, b, swarded, crowns_here, hold.w, lc, closed, drift);
     // A lattice no square holds adds nothing: its field is not read.
     for (var l = 0; l < rolled(STANDS); l++) {
       if (cover_look.sides[l] > 0.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, hold[l], dst, lc, closed); }
@@ -603,7 +615,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
       reeds = reeds_of(place, lushed(min(swarded.a * hold.w, 1.0), b.lush));
     }
     let filled = mix(seen.a, max(seen.a, REED_FILL), reeds);
-    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * lush_hue(b.lush) * clump_light(lc, mean * (1.0 - closed)) * filled, filled);
+    seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * lush_hue(b.lush) * drift * clump_light(lc, mean * (1.0 - closed)) * filled, filled);
     dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * crowns_here), seen.a), far);
   }
   dst = lattice_field(at, e, STANDS, trees, b, hold[STANDS], dst, tc, 0.0);
