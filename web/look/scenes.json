@@ -113,6 +113,20 @@
         { "name": "valley", "about": "a valley floor at a confluence", "at": [14.05, 22.85] }
       ]
     },
+    "ground": {
+      "world": "seed1",
+      "views": [12.0, 6.0, 4.0, 2.0, 1.0, 0.4],
+      "cost_views": [40.0, 4.0, 1.0],
+      "scenes": [
+        { "name": "over", "about": "the island's middle", "at": [16.0, 16.0], "views": [85.0] },
+        { "name": "far", "about": "the snowy hills from far", "at": [19.5, 13.5], "views": [40.0] },
+        { "name": "rock", "about": "steep bare rock", "at": [19.03, 16.34] },
+        { "name": "hills", "about": "steep hills of thin soil", "at": [19.7, 13.3] },
+        { "name": "snow_edge", "about": "the edge of the snow on the hills", "at": [19.58, 13.68] },
+        { "name": "plain", "about": "a dry plain", "at": [7.75, 23.25] },
+        { "name": "valley", "about": "a river valley's side", "at": [26.5, 14.6] }
+      ]
+    },
     "water": {
       "world": "seed1",
       "views": [12.0, 3.0, 1.0],
