@@ -65,7 +65,7 @@ const BELOW_LEAST = 0.2;
 // pavement), the more the thinner, none from `PAVEMENT_LOOSE_M` deep, none on a deposit (from memory): blocks of the
 // scree's in `PAVEMENT` of its places, and the lightness of the rock's photograph, `LAG_SEEN` of it (colour.wgsl
 // `ground_of`).
-const PAVEMENT = 0.3; const PAVEMENT_LOOSE_M = 2.0; const LAG_SEEN = 0.6;
+const PAVEMENT = 0.8; const PAVEMENT_LOOSE_M = 3.0; const LAG_SEEN = 0.6;
 // How far spot p's loose ground is a lag of stones, 0..1.
 fn lag_of(p: Spot) -> f32 { return (1.0 - ease(0.0, PAVEMENT_LOOSE_M, p.loose)) * (1.0 - laid_share(p)); }
 // A scree's blocks are `SCREE_LIFT` times as light as their bed's face: freshly broken, not yet weathered (from memory).

@@ -16,11 +16,11 @@ const STONE_GAP = 3.0; const STONE_SIZES = vec2f(0.55, 1.45); const STONE_REACH 
 // The largest stone drawn, m: no draw shows one from this many m a pixel on.
 const STONE_MOST_M = 4.5;
 // Under the size its sprite shows from (draw.wgsl `THING_PX`) a stone is still drawn one by one from the size a
-// plant's speck shows from (cover_field.wgsl `SPECK_PX`), as a speck: a dome lit by the sun, `STONE_SPECK_LIGHT.x`
-// times its colour on its shaded side to `.y` on its lit one, over its shadow (as its sprite's), its edge eased over a
-// pixel. Smaller, it is the tone the stones give the ground. So stony ground keeps its grain of lit and shaded points
-// as it shrinks.
-const STONE_SPECK_LIGHT = vec2f(0.55, 1.3);
+// plant's speck shows from (draw.wgsl `SPECK_PX`), as a speck: a dome lit by the sun, `STONE_SPECK_LIGHT.x` times its
+// colour on its shaded side to `.y` on its lit one, over `STONE_SPECK_SHADE` of its sprite's shadow (a shadow as dark
+// as the sprite's, about a speck of a pixel or two, reads as a pit), its edge eased over a pixel. Smaller, it is the
+// tone the stones give the ground. So stony ground keeps its grain of lit and shaded points as it shrinks.
+const STONE_SPECK_LIGHT = vec2f(0.7, 1.6); const STONE_SPECK_SHADE = 0.5;
 
 // A stone of the stones `s` (`placed`) as a speck, seen at `e` m a pixel, over `out` (its colour times its coverage,
 // and that coverage), as strongly as `shows`, of the bed's tone `tone`.
@@ -28,7 +28,7 @@ fn stone_speck(out: vec4f, p: Placed, s: Stony, e: f32, shows: f32, tone: vec3f)
   let r = s.small * p.r;
   let v = p.v / r;
   let d = length(v);
-  let shade = STONE_SHADOW * (1.0 - smoothstep(0.6, 1.1, length(v + STONE_SHADOW_REACH * LIGHT.xy / length(LIGHT.xy))));
+  let shade = STONE_SPECK_SHADE * STONE_SHADOW * (1.0 - smoothstep(0.6, 1.1, length(v + STONE_SHADOW_REACH * LIGHT.xy / length(LIGHT.xy))));
   let a = 1.0 - smoothstep(1.0 - 0.5 * e / r, 1.0 + 0.5 * e / r, d);
   let dst = mix(out, vec4f(0.0, 0.0, 0.0, 1.0), shade * shows * (1.0 - a));
   if (a <= 0.0) { return dst; }
