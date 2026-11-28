@@ -386,7 +386,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
     // and the light they focus on its bed in the shallows (water.wgsl `CAUSTICS`).
     let calm = 1.0 - p.snow;
     let mss = standing_mss(p.sea, p.fetch) * calm;
-    let surf = waves_read(p.e, vec2f(0.0));
+    let surf = waves_read(p.e, vec2f(0.0), wave_patch(p.e));
     let ripple = sqrt(0.5 * mss) * surf.xy;
     let bed = soil(g, 1.0, lit) * mix(1.0, surf.z, CAUSTICS * calm * (1.0 - ease(0.0, CAUSTIC_DEEP_M, p.depth)));
     var water: vec3f;
@@ -397,7 +397,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
       // its open water past the band deeper; the sea by its own depth, a lake as `LAKE_SCALE` times as deep.
       let seen = standing_seen(p.depth * mix(1.0, 1.0 / LAKE_SCALE, p.sea), shore_rim(p.depth, p.slope / earth.look.x, p.e, LAKE_RIM_M));
       let waves = max(waves_of(p.sea, p.fetch).x / SEA_WAVE.x, 1e-3);
-      let o = inland_optics(p.t, p.grain.z, p.canopy, p.load);
+      let o = inland_optics(p.t, p.grain.z, p.load);
       water = mix(standing_painted(BED_SHOWN * bed, seen, ripple, mss * (1.0 - waves_shown(p.e)), p.sea, o, p.load), FOAM_RGB, waves * (1.0 - p.mouth) * foam(p.depth / waves, p.slope / earth.look.x, p.e, p.at));
     } else {
       water = water_over(bed, p.depth, ripple, p.load);
@@ -429,7 +429,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
   // A film on soaked ground lies still and mirrors the sky; the swash's sheet runs, rippled `SWASH_CALM` less than
   // standing liquid. A river's water is rippled.
   var ripple = vec2f(0.0);
-  if (p.swash.x > 0.0 || river > 0.0) { ripple = sqrt(0.5 * SEA_MSS) * waves_read(p.e, vec2f(0.0)).xy; }
+  if (p.swash.x > 0.0 || river > 0.0) { ripple = sqrt(0.5 * SEA_MSS) * waves_read(p.e, vec2f(0.0), 0.0).xy; }
   if (film > 0.0) {
     rgb += film * surface_light(ripple * p.swash.x * (1.0 - SWASH_CALM));
     let pud = puddles(p, film, g.peat);

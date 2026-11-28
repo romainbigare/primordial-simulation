@@ -33,7 +33,15 @@ fn photo(t: i32, uv: vec2f, gx: vec2f, gy: vec2f) -> vec3f {
 // slope east and south in units of the waves' spread (each axis of spread 1 where both show), and the light they focus
 // on a bed (1 on the mean; the finer scale's). Where the detail is not loaded, a flat surface.
 const WAVE_M = vec2f(8.0, 2.5); const WAVE_TURN = 0.6; const WAVE_FINE = 0.7; const WAVE_PEAK = 5.0;
-fn waves_read(e: f32, drift: vec2f) -> vec3f {
+// The two scales' share of the slope swaps by up to `WAVE_PATCH` either way over patches `WAVE_PATCH_M` across (`mottle`,
+// noise -1..1 of stream `WAVE_PATCH_K`, `wave_patch`), so no repeat of a tile shows over a wide water.
+const WAVE_PATCH = 0.6; const WAVE_PATCH_M = 23.0; const WAVE_PATCH_K = 218;
+// (None where a pixel `e` m shows no wave.)
+fn wave_patch(e: f32) -> f32 {
+  if (shows_at(WAVE_M.x / WAVE_PEAK, e) <= 0.0) { return 0.0; }
+  return noise_l(lat_turned(WAVE_PATCH_M, vec2f(0.6)), WAVE_PATCH_K).x;
+}
+fn waves_read(e: f32, drift: vec2f, mottle: f32) -> vec3f {
   if (!models_ready()) { return vec3f(0.0, 0.0, 1.0); }
   var out = vec3f(0.0, 0.0, 1.0);
   for (var k = 0; k < rolled(2); k++) {
@@ -46,7 +54,7 @@ fn waves_read(e: f32, drift: vec2f) -> vec3f {
     let uv = m * (fract(pix_origin / side) + (pix_local - drift) / side);
     let g = e / side;
     let t = textureSampleGrad(detail_tex, detail_sampler, uv, WATER_FROM, m * vec2f(g, 0.0), m * vec2f(0.0, g)).rgb;
-    let weight = select(1.0, WAVE_FINE, k == 1) * shown / sqrt(1.0 + WAVE_FINE * WAVE_FINE);
+    let weight = select(1.0 + WAVE_PATCH * mottle, WAVE_FINE * (1.0 - WAVE_PATCH * mottle), k == 1) * shown / sqrt(1.0 + WAVE_FINE * WAVE_FINE);
     out = vec3f(out.xy + weight * (transpose(m) * ((t.xy - 0.5) * (2.0 * WAVE_RANGE))), select(out.z, mix(1.0, t.z * CAUSTIC_RANGE, shown), k == 1));
   }
   return out;

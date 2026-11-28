@@ -61,7 +61,7 @@ ground (the core's footing): the shores of a shallow lake and of a deeper one un
 
 The scene set `river_kinds` stands on `seed1`'s world at four streams that differ in what the water holds (`style.wgsl`
 `inland_optics`): one off the high ground by the ice, one over warm dry lowland, one through forest and meadow, and the
-river of scene `reach`, at 2 and 0.5 m a pixel.
+river of scene `reach`, at 2 and 0.5 m a pixel, and that river's surface close (scene `surface`, 0.1 m).
 
 The scene set `card` stands on the test card (`ew card`, `worldgen/src/testkit/card.rs`): an island of 12 x 10
 squares whose block of 6 x 4 squares from square 3, 3 is set by hand, each square a kind of stand or ground the map

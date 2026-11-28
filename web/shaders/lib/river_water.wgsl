@@ -11,11 +11,11 @@ const STONE_WATERED = 0.35;
 
 // The surface of running water (Spots.flow: how broken it is, its white water, how fast it runs): a pool lies smooth,
 // of mean square slope `POOL_MSS`; a riffle's water is broken, up to `RIFFLE_MSS` (a surface broken by the bed's
-// stones, as steep as wind waves of 15 m/s by Cox and Munk 1954), and it breaks white only where it is both broken past
+// stones, as steep as wind waves of 8 m/s by Cox and Munk 1954), and it breaks white only where it is both broken past
 // `RIFFLE_WHITE` and shallow, under `RIFFLE_SHALLOW` of its middle's depth, there over up to `RIFFLE_FOAM` of it (the
 // bed's stones break the surface: white streaks over a riffle, the rest of the water keeps its colour). A channel too
 // narrow for its pools and riffles to show is `ROUGH_FAR` broken, the mean of a reach.
-const POOL_MSS = 0.004; const RIFFLE_MSS = 0.08; const RIFFLE_FOAM = 0.3; const RIFFLE_WHITE = 0.6; const RIFFLE_SHALLOW = 0.35;
+const POOL_MSS = 0.003; const RIFFLE_MSS = 0.045; const RIFFLE_FOAM = 0.3; const RIFFLE_WHITE = 0.6; const RIFFLE_SHALLOW = 0.35;
 const ROUGH_FAR = 0.45;
 // The surface's pattern runs down the flow (a flow map: two copies slid along it, each faded out as it starts again
 // and the other at its full, so it never stretches and never jumps; Vlachos 2010): each copy runs `FLOW_CYCLE_M` of
@@ -40,6 +40,7 @@ fn running_surface(e: f32, down: vec2f, flow: vec3f, white: f32) -> Surface {
   let pace = 1.0 + PACE_ROUGH * flow.x + PACE_FAST * flow.z;
   let cycle = fract(land.reach.z / FLOW_CYCLE_M);
   let laced = shows_at(FOAM_LACE_M, e);
+  let mottle = wave_patch(e);
   var g = vec2f(0.0);
   var weights = 0.0;
   var s = Surface(vec2f(0.0), mss * (1.0 - waves_shown(e)), 0.0, 0.0, 0.0);
@@ -47,7 +48,7 @@ fn running_surface(e: f32, down: vec2f, flow: vec3f, white: f32) -> Surface {
     let phase = fract(cycle + 0.5 * f32(k));
     let weight = 1.0 - abs(2.0 * phase - 1.0);
     let drift = down * (pace * FLOW_CYCLE_M * phase) + f32(k) * FLOW_COPY_M;
-    let w = waves_read(e, drift);
+    let w = waves_read(e, drift, mottle);
     g += weight * w.xy;
     weights += weight * weight;
     s.caustic += weight * w.z;
@@ -92,7 +93,7 @@ fn river_on(p: Spot, g: Ground, flow: vec3f, w: vec2f, down: vec2f, shaped: f32)
     // In the style the bed takes the light the waves focus on it in the shallows, and the water is coloured by what it
     // holds and by its bed's shape: light shallows over the bed's stones, a dark deep thread, a light wash at its edge.
     let bed = BED_SHOWN * soaked_bed * mix(1.0, surf.caustic, CAUSTICS * calm * (1.0 - ease(0.0, CAUSTIC_DEEP_M, p.depth)));
-    let o = inland_optics(p.t, p.grain.z, p.canopy, p.load);
+    let o = inland_optics(p.t, p.grain.z, p.load);
     water = painted_through(bed, river_seen(p.depth, mix(MEAN_REL, w.x, shaped)), surf.g * calm, surf.hidden * calm, o) * (1.0 + EDGE_LIGHT * w.y);
   }
   water = mix(water, FOAM_RGB * lit * surf.tone, surf.foam);
