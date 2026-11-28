@@ -655,7 +655,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
 // floor of their stand lies in the gloom of its canopy beside their own shadows, darker by `FLOOR_GLOOM` of the share
 // its crowns close (a closed canopy lets little light through its gaps to the floor: its shadows cross and the sky is
 // mostly hidden; seen from a plane the gaps in a closed wood are dark: from memory).
-const DOME_SHADOW = 0.6; const FLOOR_GLOOM = 0.6;
+const DOME_SHADOW = 0.6; const FLOOR_GLOOM = 0.25;
 // The trees' canopy seen from above is a rough top of crowns in groups (clumps.wgsl `clump_light`), its clumps' rims
 // lit by up to `CANOPY_RIM` within `CANOPY_RIM_CROWNS` crowns' widths of their edge as they face the sun or turn from
 // it; and the ground beyond a clump's edge away from the sun lies in its cast shade, as long as the marks'
