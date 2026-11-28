@@ -1,4 +1,4 @@
-//! The cover: the light-eaters as a field (laws.md 4). Each ground cell holds up to its world's `Config::variety` kinds
+//! The cover: the light-eaters as a field (laws.md 3). Each ground cell holds up to its world's `Config::variety` kinds
 //! of cover, each the amounts of a few substances (`Parts`: the fuel its light reaction makes, body matter, and the solid
 //! it builds) and a small vector of genes, as plain arrays per cell (`Cover`). Once a month each cell's cover catches light,
 //! runs its light reaction, pays its upkeep, fixes, builds and dies (`grow`), and sends seeds to the cells around

@@ -1,4 +1,4 @@
-//! The large shape of an island's land (laws.md 0 and 8): where its crust is raised and how strongly (`Lift`). The
+//! The large shape of an island's land (laws.md 0 and 5): where its crust is raised and how strongly (`Lift`). The
 //! terrain's noise is lowered by how far a place lies from the rises (`Lift::fall`), and each rise has its range, where
 //! the land rises fastest (`Range`). An island of one rise (`Shape::One`) has one rise in the middle of its map; an
 //! island of drawn rises (`Shape::Drawn`) has one to several, their count, places, sizes, shapes and strengths drawn

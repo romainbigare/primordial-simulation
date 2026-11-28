@@ -1,5 +1,5 @@
 //! Law 2: Change. Substances react inside nodes by mass action, faster when hot (laws.md 2). `kernel`: the rate law
-//! and the reactor; `balance`: reactions that undo each other; `gas`: the gas a body or a part exchanges with the air.
+//! and the reactor; `balance`: reactions that undo each other.
 //! Here: the step over the ground and air nodes, which react when due and sleep while calm (`clock::Sleep`): `rows`
 //! makes their rows, `booking` books them.
 

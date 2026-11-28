@@ -6,29 +6,35 @@ the page. One entry, run in `web/` after `npm run wasm` and `npm run build`:
     npm run look -- <command> ...
 
 It needs Playwright (found the normal way, else set `PLAYWRIGHT` to its folder, here
-`/opt/node22/lib/node_modules/playwright`). What it makes goes to `out/look/` (not in git): the page with its hooks
+`/opt/node22/lib/node_modules/playwright`) and the system's EGL (`libegl1`, `libegl-mesa0`): the browser draws WebGL2
+with Mesa's llvmpipe on every core (`page.mjs` `launch`), and prints `renderer: ...` at start. Without EGL it falls
+back to SwiftShader, twice as slow. What it makes goes to `out/look/` (not in git): the page with its hooks
 (`site/`), the crowns' mask build (`site-mask/`), the counted builds (`site-cost-*`), and the saved worlds (`worlds/`).
 
 ## Commands
 
-| Command | What it does | Time here (no graphics card, shared machine) |
+| Command | What it does | Time here (4 cores, llvmpipe) |
 |---|---|---|
-| `set OUT [--scenes NAME] [--only A,B] [--px 400] [--crowns no]` | every scene and view of a scene set: `OUT/<scene>_<mpp>.png`, the mask pictures in `OUT/mask/`, `OUT/sheet.png`, `OUT/numbers.json`; prints each scene's kinds of cover (from the cells' table) | 19 min for `seed1` (8 scenes x 3 views, 24 + 24 pictures); 14 min with 2 views; about 80 s more when the world is made first; 10 to 13 min for `card` (18 + 18 pictures) |
+| `set OUT [--scenes NAME] [--only A,B] [--px 400] [--crowns no]` | every scene and view of a scene set: `OUT/<scene>_<mpp>.png`, the mask pictures in `OUT/mask/`, `OUT/sheet.png`, `OUT/numbers.json`; prints each scene's kinds of cover (from the cells' table) | 10 min for `seed1` (28 + 28 pictures), 4.5 min with `--crowns no`; about 25 s more when the world is made first |
 | `compare OUT_A OUT_B` | the numbers of two `set`s side by side with their differences (printed, and `OUT_B/compare_<A>.txt`), and `OUT_B/compare_<A>.png`: each picture of A beside B | a few s |
-| `shot OUT.png --at X,Y --mpp M [--world FILE]` | one picture: of the set's world, or of a snapshot you give | 1 to 2 min (the page opens first) |
+| `shot OUT.png --at X,Y --mpp M [--world FILE]` | one picture: of the set's world, or of a snapshot you give | about 1.5 min (the page makes its programs first) |
 | `sheet OUT.png COLS FILE...` | a contact sheet of pictures, each labelled with its file name | a few s |
-| `cost OUT [--scenes NAME] [--only A,B]` | the cost of a pixel as a count: each scene drawn once at each of the set's `cost_views` by two counted builds, the ground's and the marks' (below): `OUT/cost.json`, the count pictures `OUT/<scene>_<mpp>_<build>.png`, `OUT/sheet.png`, the counts as drawn in `OUT/raw/` | 3.7 min for `seed1` (8 scenes x 2 builds, 16 pictures), the two builds made first; 4 min for `card` (36 pictures) |
-| `years OUT [--scenes NAME]` | the set's `years` scenes at its `years_view` in each of 10 years at the same date, from 10 saved worlds a year apart: the pictures, `OUT/years.png`, `OUT/years.json` | 10.5 min for `seed1` (3 scenes x 10 years), and 30 s to make its 10 worlds |
+| `cost OUT [--scenes NAME] [--only A,B]` | the cost of a pixel as a count: each scene drawn once at each of the set's `cost_views` by two counted builds, the ground's and the marks' (below): `OUT/cost.json`, the count pictures `OUT/<scene>_<mpp>_<build>.png`, `OUT/sheet.png`, the counts as drawn in `OUT/raw/` | not timed with llvmpipe |
+| `years OUT [--scenes NAME]` | the set's `years` scenes at its `years_view` in each of 10 years at the same date, from 10 saved worlds a year apart: the pictures, `OUT/years.png`, `OUT/years.json` | not timed with llvmpipe; 30 s to make its 10 worlds |
 
-The map is `--px` css pixels a side (400 by default), taken at `--scale` screen pixels a css pixel (1 by default). A picture takes 15 to 50 s, and 2 to 3 min at 1 m a pixel over
-forest (the page draws its frames there at half the pixels first, then the sharp picture in tiles). Two `set`s of one
-build give the same numbers to the last digit.
+The map is `--px` css pixels a side (400 by default), taken at `--scale` screen pixels a css pixel (1 by default). The
+first picture of a page takes 1 to 3 min: the browser makes the programs' machine code, on one thread a browser. Each
+picture after it in the same page takes 1 to 10 s. So take many pictures in one command, not many `shot`s. Each build
+(the page, the mask, the counted builds) runs in a browser of its own, so their programs are made side by side. A
+picture that is not whole within 5 min is never taken: the command stops with an error. Two `set`s of one build give
+the same numbers, but for pictures with flowing liquid, which may differ by a few hundredths (the flow's signs move with
+the clock).
 
 ## Scenes and worlds (`scenes.json`)
 
 A world is the flags of an `ew run` and a date (`at`, years with whole months: 42.75 is late summer of year 42), and for
 `years` how many years in a row; or the test card (`"card": true`, made by `ew card`, at its one date). The tool makes
-it with `cargo run --release -p cli -- run <flags> --snapshots-at <dates>` (about 25 s for 43 years, 35 s for 52) into
+it with `cargo run --profile fast -p cli -- run <flags> --snapshots-at <dates>` (about 25 s for 43 years, 35 s for 52) into
 `out/look/worlds/<name>-v<snapshot version>-<hash>/`, and makes it again when the snapshot's format version or the code
 of `core`, `worldgen`, `tape` or `cli` changes (committed or not).
 
@@ -37,23 +43,10 @@ A scene set names its world, its views (metres a pixel; a scene may name its own
 size 32, band 20,65, the six starting kinds, the takers in year 52) at 42.75, with the builders' places. The law moves
 what grows where: `set` prints each scene's kinds, so you see what stands there.
 
-The scene set `sediment` stands on `seed1`'s world where the liquid lays its load: river mouths at the sea, rivers at the
-heads of drowned valleys, streams into the big lake, a valley floor, at 8, 2 and 0.5 m a pixel, and two mouths close.
-
-The scene sets `load_wet` and `load_dry` stand at the same island's river mouths in its wettest and driest months, and
-`load_wet` at a catchment burnt a month before. A world with `step` (scenes.json) is played that many months in the
-page after it opens, then paused (`page.mjs` `step`): a month's load in the channels and its plumes are counted as the
-world steps and not saved.
-
-The scene set `mouths` stands at the page's island's largest river mouths at 100 and 25 m a pixel, each with test
-plumes (`plumes`: [x, y, kg/s], x and y in squares), which `set` and `cost` put in place of the world's
-(`page.mjs` `plumes`): a test of how a plume is drawn while the core lays none.
-
-The scene set `deltas` stands on the same world's east delta (from 100 to 1 m a pixel: its top, a lagoon's shore and
-its front at the sea) and at two river mouths.
-
-The scene set `swamp` stands on a larger, wetter island (seed 1, size 48, at 42.75) where kinds stand on shallow pond
-ground (the core's footing): the shores of a shallow lake and of a deeper one under trees, at 1, 0.25 and 0.1 m a pixel, and soaked bare ground with its puddles (scene `mud`).
+Each scene set and world in `scenes.json` says what it shows in its `about`. Two keys change how a world is opened:
+`step` plays it that many months in the page, then pauses it (`page.mjs` `step`: what the core counts only as it steps,
+a month's load and its plumes, is then drawn); `plumes` ([x, y, kg/s], x and y in squares) puts test plumes in place of
+the world's (`page.mjs` `plumes`).
 
 The scene set `card` stands on the test card (`ew card`, `worldgen/src/testkit/card.rs`): an island of 12 x 10
 squares whose block of 6 x 4 squares from square 3, 3 is set by hand, each square a kind of stand or ground the map
