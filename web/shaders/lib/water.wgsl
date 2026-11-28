@@ -13,13 +13,17 @@ const DEEP_WATER = vec3f(0.0044, 0.027, 0.107);
 const REFLECT_UP = 0.02;
 const SKY = vec3f(0.61, 0.73, 0.87);
 const SUN = vec3f(1.0, 0.96, 0.83);
-// The sun shows in a ripple as sharply as this power of the cosine between its slope and the half-way light, at most
-// this share of its light (the sun's disc is small: a glint is a sparkle, not a sheet).
-const GLINT_POWER = 150.0;
+// The sun shows in a ripple that faces it: the low sun (`LIGHT`) shows in no ripple seen from straight above, so the
+// map draws its glints where a ripple's slope toward the sun passes `GLINT_SLOPE.x`, fully from `.y`, at most `GLINT_MOST`
+// of its light (the sun's disc is small: a glint is a sparkle, not a sheet).
+const GLINT_SLOPE = vec2f(0.55, 0.75);
 const GLINT_MOST = 0.4;
+// The sky is brightest about the sun: a ripple sends back `SKY_TILT` more of the sky's light per unit of its slope
+// toward the sun (less turned away), so wind waves show as a fine sheen of light and dark (drawing only).
+const SKY_TILT = 0.08;
 // Ripples: their longest wavelength, m, the octaves below it (each half as long), and the slope of each.
-const RIPPLE_LONGEST_M = 2.0;
-const RIPPLE_OCTAVES = 4;
+const RIPPLE_LONGEST_M = 8.0;
+const RIPPLE_OCTAVES = 6;
 const RIPPLE_SLOPE = 0.09;
 
 // The slope (east, south) of a liquid's surface at the pixel, seen at `e` m a pixel: octaves of ripples fixed
@@ -55,10 +59,66 @@ fn surface_light(g: vec2f) -> vec3f { return surface_seen(g, vec3f(0.0, 0.0, 1.0
 fn surface_seen(g: vec2f, view: vec3f) -> vec3f {
   let n = normalize(vec3f(-g, 1.0));
   let fresnel = REFLECT_UP + (1.0 - REFLECT_UP) * pow(1.0 - dot(n, view), 5.0);
-  let half_way = normalize(LIGHT + view);
-  let glint = pow(max(dot(n, half_way), 0.0), GLINT_POWER);
-  return fresnel * SKY + GLINT_MOST * glint * SUN;
+  let sunward = dot(-g, LIGHT.xy) / length(LIGHT.xy);
+  let glint = smoothstep(GLINT_SLOPE.x, GLINT_SLOPE.y, sunward);
+  return (fresnel + SKY_TILT * sunward) * SKY + GLINT_MOST * glint * SUN;
 }
+
+// The wind roughens standing liquid unevenly, and a rougher patch sends back more of the bright sky near the horizon,
+// a calmer one less (seen from the air a lake is streaked and blotched by its wind; from memory): gusts run in lanes
+// along the wind (`WIND_WAY`, a unit vector east and south) `GUST_LANE_M.x` long and `.y` wide, and cat's paws,
+// patches `PAW_M` across, `PAW` as strong, roughen it between them; close, the wind's streaks lie along it in lines
+// `WINDROW_M.y` apart and some `WINDROW_M.x` long (windrows, Langmuir 1938), `WINDROW_W` of the noise wide (no
+// narrower than a pixel and a half), `WINDROW` as rough. Where the wind roughens it by r (`gusts`, about -1..1, 0 on
+// the mean) the surface sends back `GUST_SHEEN` r more of the sky's light, and its ripples are `GUST_RIPPLE` r steeper.
+const WIND_WAY = vec2f(0.91, 0.415); const GUST_LANE_M = vec2f(2400.0, 450.0); const PAW_M = 150.0; const PAW = 0.7;
+const WINDROW_M = vec2f(400.0, 30.0); const WINDROW_W = 0.1; const WINDROW = 1.0;
+const GUST_SHEEN = 0.008; const GUST_RIPPLE = 0.6;
+const GUST_STREAM = 220; const PAW_STREAM = 221; const WINDROW_STREAM = 222;
+// A patch of the wind's roughness shows from `SWAY_PX.x` pixels across, fully from `.y`: smaller, it reads as a stain,
+// not as water.
+const SWAY_PX = vec2f(6.0, 16.0);
+fn sway_shows(size: f32, e: f32) -> f32 { return select(ease(SWAY_PX.x * e, SWAY_PX.y * e, size), 0.0, least_e() >= size / SWAY_PX.x); }
+// The lattice of cells `size.x` m long along the wind and `size.y` m across it.
+fn wind_lat(size: vec2f) -> Lat {
+  return lat(mat2x2f(WIND_WAY.x / size.x, -WIND_WAY.y / size.y, WIND_WAY.y / size.x, WIND_WAY.x / size.y), vec2f(0.0));
+}
+fn gusts(e: f32) -> f32 {
+  var r = 0.0;
+  let lanes = sway_shows(GUST_LANE_M.y, e);
+  if (lanes > 0.0) { r += lanes * noise_l(wind_lat(GUST_LANE_M), GUST_STREAM).x; }
+  let paws = sway_shows(PAW_M, e);
+  if (paws > 0.0) { r += PAW * paws * noise_l(lat_turned(PAW_M, vec2f(0.0)), PAW_STREAM).x; }
+  let rows = sway_shows(WINDROW_M.y, e);
+  if (rows > 0.0) {
+    let n = noise_l(wind_lat(WINDROW_M), WINDROW_STREAM);
+    // (The noise's change across a pixel, from its slope along and across the wind.)
+    let px = length(n.yz / WINDROW_M) * e;
+    r += WINDROW * rows * (1.0 - smoothstep(0.0, max(WINDROW_W, 1.5 * px), abs(n.x)));
+  }
+  return r;
+}
+
+// The open sea's swell runs with the wind (its waves `SEA_WAVE` long), its crests bent by `SWELL_BEND` of a wavelength
+// over noise `SWELL_BEND_M` across and stronger and weaker along them by `SWELL_GROUPS` of that noise (a swell comes
+// in groups); where a crest's face is turned to the sun it sends back `SWELL_SHEEN` more of the sky's light, less on
+// its back. It shows as its wavelength takes the pixels a patch of the wind's does (`SWAY_PX`). The share of that
+// sheen at the pixel at `at`, seen at `e` m a pixel, -1..1.
+const SWELL_BEND = 0.8; const SWELL_BEND_M = 350.0; const SWELL_GROUPS = 0.5; const SWELL_SHEEN = 0.009; const SWELL_STREAM = 223;
+fn swell(at: vec2f, e: f32) -> f32 {
+  let shown = sway_shows(SEA_WAVE.y, e);
+  if (shown <= 0.0) { return 0.0; }
+  let n = noise_l(lat_turned(SWELL_BEND_M, vec2f(0.0)), SWELL_STREAM).x;
+  let phase = 2.0 * PI * (dot(at, WIND_WAY) / SEA_WAVE.y + SWELL_BEND * n);
+  return shown * (1.0 - SWELL_GROUPS + SWELL_GROUPS * n) * sin(phase);
+}
+
+// The bed under standing liquid is drawn as uneven as a real one, which the samples are too coarse to hold: the depth
+// its colour reads moves by up to `BED_SWAY` of itself either way (as its logarithm) by the noise of its samples' place
+// (rock.wgsl `Place.n`, from a kilometre down), so the open water shows banks and deeps and the shallows break into
+// irregular shoals; its waterline stays where it is. The share of its depth the colour reads where that noise is `n`.
+const BED_SWAY = 0.35;
+fn bed_sway(n: f32) -> f32 { return exp(BED_SWAY * n); }
 
 // The share of the light that crosses `depth` m of standing water down to its bed and back, for red, green and blue.
 fn through(depth: f32) -> vec3f { return exp(-2.0 * ATTENUATION * depth); }

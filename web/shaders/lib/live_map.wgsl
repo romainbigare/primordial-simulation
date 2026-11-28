@@ -14,8 +14,10 @@ const STONE_SMALL = vec2f(0.3, 1.25);
 // The edge of standing liquid is found from how fast its depth changes across the ground, the ground's slope: no slower
 // than this (rise over run), so on flat ground the edge still lies within a pixel's footprint where the depth crosses.
 const SHORE_RISE_LEAST = 1e-3;
-// The relief moves the ground's height fully on ground drawn this steep (rise over run), less on gentler.
-const RELIEF_EDGE_SLOPE = 0.1;
+// The relief moves the ground's height fully on ground drawn this steep (rise over run), less on gentler, and none
+// under standing liquid deeper than `RELIEF_UNDER_M` (each of its knobs drew a round shoal in clear water, in rows along
+// the coast; the colour sways the bed's depth instead, water.wgsl `bed_sway`).
+const RELIEF_EDGE_SLOPE = 0.1; const RELIEF_UNDER_M = 2.0;
 // A soil takes `SOIL_OF_BED` of its bed's colour where the bed is bare, less as its loose ground deepens, none from
 // `SOIL_OF_BED_M` m on (Earth view only): the bed's make as bare bed shows it on the thinnest, as a mantle smears it
 // from `SOIL_SMEAR_M` m deep on (rock.wgsl `Make`), and then `SOIL_SMEARED` as much of it (its own weathering and
@@ -112,7 +114,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let tiled = g;
   // The relief moves the ground's height as much as the ground drawn is steep (`RELIEF_EDGE_SLOPE`): on a flat shore a
   // bump of a few decimetres would move the water's edge by tens of metres into a fringe of puddles.
-  g.h += fine.h * ease(0.0, RELIEF_EDGE_SLOPE, length(g.slope));
+  g.h += fine.h * ease(0.0, RELIEF_EDGE_SLOPE, length(g.slope)) * (1.0 - ease(0.0, RELIEF_UNDER_M, standing(g)));
   g.slope += fine.slope;
   // Its channel: what runs through it and the largest stone it moves, each grown evenly along it (rock.wgsl
   // `next_along`).
@@ -226,6 +228,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.mouth = 0.0;
   p.at = at;
   p.place = place.at;
+  p.place_n = place.n;
   p.e = e;
   p.hollow = fine.hollow;
   p.hollow_d = vec2f(dpdx(fine.hollow), dpdy(fine.hollow));
