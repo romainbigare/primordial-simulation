@@ -20,7 +20,7 @@ const STONE_MOST_M = 4.5;
 // colour on its shaded side to `.y` on its lit one, over `STONE_SPECK_SHADE` of its sprite's shadow (a shadow as dark
 // as the sprite's, about a speck of a pixel or two, reads as a pit), its edge eased over a pixel. Smaller, it is the
 // tone the stones give the ground. So stony ground keeps its grain of lit and shaded points as it shrinks.
-const STONE_SPECK_LIGHT = vec2f(0.7, 1.6); const STONE_SPECK_SHADE = 0.5;
+const STONE_SPECK_LIGHT = vec2f(0.65, 1.3); const STONE_SPECK_SHADE = 0.5;
 
 // A stone of the stones `s` (`placed`) as a speck, seen at `e` m a pixel, over `out` (its colour times its coverage,
 // and that coverage), as strongly as `shows`, of the bed's tone `tone`.
