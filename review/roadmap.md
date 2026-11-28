@@ -54,7 +54,8 @@ These stand until the owner says otherwise. Their own words are in quotes; the o
 
 **The order of work**, in the owner's words: (1) the variety of habitat; (2) the sorted start, for plants and then
 animals, so life fits that variety from the start; (3) the animals' numbers, run again after those. After the variety
-of habitat: "the look of the habitats, and everything else paused until it is done."
+of habitat: "the look of the habitats, and everything else paused until it is done." Now: the look of the natural
+landscape and god mode, side by side; the rest waits.
 
 **The page and the look**
 - The owner judges by pictures: before and after (same seed, date and place) with every change they will see.
@@ -137,13 +138,13 @@ What `main` holds. The laws are in `docs/laws.md`.
 ## 3. The priorities, in order
 
 Each item is a package: measure first, one change a commit, pictures before and after. A change of the laws deletes
-what it replaces in the same merge.
+what it replaces in the same merge. Items 1 and 2 are in work side by side, by the owner's word.
 
 1. **God mode: finish the small game.** In work. Each "soon" tool becomes a physics edit (`docs/handover.md` 11): flood
    (add liquid), drought (less rain over an area for some years), climate (the sun or the heat-absorbing gas),
    mountains and rivers (the ground brush, the liquid finds its way). Grey out what the world cannot do and say why.
    Then a save before each action and "then and now". The test: an action has a result one can see after 50 years.
-2. **The look of the habitats: finish it** (section 1). Open: the mean colour still jumps between some neighbouring
+2. **The look of the natural landscape: finish it** (section 1). In work. Open: the mean colour still jumps between some neighbouring
    scale bars; the closed canopy between drawn crowns is noise; grass does not sway; the texture array's memory on a
    phone. Judge in the angled view, at a phone's size and pixel ratio.
 3. **The sorted start**: every world's cover placed fitted to its land. Carried over by hand from `wip/sorted-start`
