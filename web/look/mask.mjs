@@ -8,12 +8,12 @@ const MAGENTA = 'vec3f(1.0, 0.0, 1.0)';
 const PATCHES = [
   ['cover.wgsl', 'fn lattice(dst: ptr<function, vec4f>',
     'var<private> mask_stands: bool = false;\nfn lattice(dst: ptr<function, vec4f>'],
-  ['cover.wgsl', '      plant(dst, shade, mark_plant(',
-    '      mask_stands = l == STANDS;\n      plant(dst, shade, mark_plant('],
-  ['cover.wgsl', 'if (m.a > 0.0) { over(dst, m.rgb, m.a * fade); }',
-    `if (m.a > 0.0) { over(dst, select(m.rgb, ${MAGENTA}, mask_stands), m.a * fade); }`],
-  ['lib/cover_field.wgsl', '  let dark = CROWN_SHADOW',
-    `  if (l == STANDS) { c = ${MAGENTA}; }\n  let dark = CROWN_SHADOW`],
+  ['cover.wgsl', '      plant(dst, shade, q, p, e,',
+    '      mask_stands = l == STANDS;\n      plant(dst, shade, q, p, e,'],
+  ['cover.wgsl', 'over(dst, burnt_plant(m.rgb, 1.0, burnt.x, burnt.y), m.a * fade);',
+    `over(dst, select(burnt_plant(m.rgb, 1.0, burnt.x, burnt.y), ${MAGENTA}, mask_stands), m.a * fade);`],
+  ['lib/cover_field.wgsl', '  share *= unshown;',
+    `  if (l == STANDS) { col = ${MAGENTA}; }\n  share *= unshown;`],
 ];
 
 /** The programs of the mask build, as the JSON web/shade writes (for `page.site`). */
