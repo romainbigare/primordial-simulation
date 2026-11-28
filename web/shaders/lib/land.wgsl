@@ -456,10 +456,11 @@ fn through_band(g: Tiled, e: f32) -> f32 {
 fn standing(g: Tiled) -> f32 { return max(g.water.x - g.h, 0.0) * g.water.y; }
 
 // The state at `at`, m from the map's north-west corner, on ground `g` whose bed a channel cuts
-// `cut` m deep there (`depth_in`), whose relief's noise stands `knob` m over its mean (relief.wgsl `Relief.knob`) and
+// `cut` m deep there (`depth_in`), whose forms the snow lies by stand `form.x` m over their mean and slope `form.yz`
+// (the tiles' slope and relief.wgsl `Relief.drift`) and
 // whose gullies hold its snow as ground `drift` m higher would (`gully_drift`): the cells' values blended between the
 // squares' centres (`cs`), and the laws inside a cell applied at the point.
-fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, knob: f32, drift: f32) -> State {
+fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, form: vec3f, drift: f32) -> State {
   // The cells' ground, and the share of it each one's frozen cover covers, blended: the shares, not the depths, so a
   // snowy cell beside a bare one draws its share falling across the space between their centres, not at once along a
   // line where the blended depth reaches what covers all (tanh saturates within a few centimetres).
@@ -510,7 +511,7 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, knob: f32, drift: f32) -
   p.t = ground.y - ground.z * (g.h - ground.x);
   p.snow = covered * unmelted(p.t, land.time.z);
   p.snow_m = snow_depth(ground.w, p.t, land.time.z);
-  p.bares = snow_bares(g.slope, g.h - ground.x + drift, knob);
+  p.bares = snow_bares(form.yz, g.h - ground.x + drift, form.x);
   return p;
 }
 
@@ -521,7 +522,7 @@ fn state_on(at: vec2f, g: Tiled, cs: Corners, cut: f32, knob: f32, drift: f32) -
 fn state_at(at: vec2f, g: Tiled, cs: Corners) -> State {
   let c = channel_at(g, discharge_at(g, at));
   let cut = depth_in(g, c);
-  var p = state_on(at, g, cs, cut, 0.0, 0.0);
+  var p = state_on(at, g, cs, cut, vec3f(0.0, g.slope), 0.0);
   p.depth = max(max(p.depth, cut), select(0.0, NO_LIQUID_M, g.d < c.bed));
   return p;
 }

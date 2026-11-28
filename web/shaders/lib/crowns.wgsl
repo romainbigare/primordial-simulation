@@ -21,13 +21,13 @@ fn dome_tone(d: vec2f) -> f32 { return 1.0 + DOME_LIT * dome_lit(d) - DOME_RIM *
 // specks, one speck a cell at most at a place of its own draw (`SPECK_JITTER` of its cell either way), in as many cells
 // as the share asks (past what specks in every cell cover, the rest lies evenly between them); the two lattices whose
 // cells are nearest `w` blended by how near, so a speck's size follows the plants' with no seam. A point reads the four
-// cells nearest it. They melt into their mean, the share evenly, as they shrink from `SPECK_PX`.y to `SPECK_PX`.x pixels
-// across, and their light and their own colour from `SPECK_LOOK_PX`.y to `.x` (on a speck of a pixel or two they would
+// cells nearest it. They melt into their mean, the share evenly, as they shrink from `SPECK_PX`.y to `.x` pixels
+// across (draw.wgsl), and their light and their own colour from `SPECK_LOOK_PX`.y to `.x` (on a speck of a pixel or two they would
 // read as noise). Of the point: the specks' cover; what their colour is multiplied by (`dome_tone`, 1 between them); and
 // the speck's own draw, even over 0..1 (its kind's, `stand_share`; 0.5 between them), and how far its own colour shows.
 // No speck is wider than `SPECK_MOST_M` (a mark is at most 10 m across: lattices.ts `marksOf`): in a program made for
 // draws whose pixels are wider than a speck (draw.wgsl `LEAST_E`) they are compiled out.
-const SPECK_BASE_M = 1.0; const SPECK_TURN = 0.9; const SPECK_JITTER = 0.4; const SPECK_PX = vec2f(1.0, 3.0);
+const SPECK_BASE_M = 1.0; const SPECK_TURN = 0.9; const SPECK_JITTER = 0.4;
 const SPECK_LOOK_PX = vec2f(2.0, 4.0); const SPECK_MOST_M = 10.0;
 struct Specks { on: f32, tone: f32, own: f32, look: f32 }
 fn specks(at: vec2f, w: f32, share: f32, e: f32, k: i32) -> Specks {

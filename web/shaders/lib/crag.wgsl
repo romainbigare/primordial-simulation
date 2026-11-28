@@ -61,10 +61,23 @@ const STRATA_WOBBLE = 3.0; const STRATA_WAVE_M = 30.0; const BREAK_M = 20.0; con
 // gravel a size up), no smaller than `COBBLE_M`, sunk `BED_SUNK` in the bed's gravel.
 const SCREE_FROM = 0.25; const SCREE_FULL = 0.7; const SCREE_LOOSE_M = 1.0; const SCREE_STONE_M = 3.0; const SCREE = 0.8;
 const BELOW_LEAST = 0.2;
+// Thin loose ground keeps a lag of the stones the wash and the wind leave as they take its fines (a desert
+// pavement), the more the thinner, none from `PAVEMENT_LOOSE_M` deep, none on a deposit (from memory): blocks of the
+// scree's in `PAVEMENT` of its places, and the lightness of the rock's photograph, `LAG_SEEN` of it (colour.wgsl
+// `ground_of`).
+const PAVEMENT = 0.8; const PAVEMENT_LOOSE_M = 2.0; const LAG_SEEN = 0.6;
+// How far spot p's loose ground is a lag of stones, 0..1.
+fn lag_of(p: Spot) -> f32 { return (1.0 - ease(0.0, PAVEMENT_LOOSE_M, p.loose)) * (1.0 - laid_share(p)); }
 // A scree's blocks are `SCREE_LIFT` times as light as their bed's face: freshly broken, not yet weathered (from memory).
 const SCREE_LIFT = 1.25;
 const STONES_ON_BED = 0.25; const SUNK_MOST = 0.55; const SUNK_LOOSE_M = 0.5;
 const STONE_SEEN = 2.5; const COBBLE_M = 0.65; const BED_SUNK = 0.3;
+
+// A dry wash's floor (gullies.wgsl `Gullies.wash`) is the ground's colour `WASH_GREY` of the way to its grey and
+// `WASH_LIFT` times as light: its floods carry the dark fines and the varnished stones' coats away and leave pale
+// sand and fresh gravel (from memory).
+const WASH_GREY = 0.3; const WASH_LIFT = 1.4;
+fn washed(c: vec3f, wash: f32) -> vec3f { return mix(c, mix(c, vec3f(dot(c, LUMA)), WASH_GREY) * WASH_LIFT, wash); }
 
 // How far ground of grain `grain` (`Spot.grain`) shrinks and cracks as it dries, 0..1 (`SHRINK_FULL`).
 fn shrinks(grain: vec4f) -> f32 { return ease(0.0, SHRINK_FULL, grain.y + SILT_SHRINK * max(1.0 - grain.x - grain.y, 0.0)); }

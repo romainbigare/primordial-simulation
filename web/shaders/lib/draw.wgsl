@@ -76,6 +76,9 @@ fn as_thing(size: f32, e: f32) -> f32 { return ease(THING_PX.x * e, THING_PX.y *
 // the same crowns, cover_field.wgsl `lattice_field`) from farther than a stone does.
 const CROWN_PX = vec2f(2.5, 6.0);
 fn as_crown(size: f32, e: f32) -> f32 { return ease(CROWN_PX.x * e, CROWN_PX.y * e, size); }
+// Smaller than that, a plant or a stone is still drawn one by one as a speck (cover_field.wgsl `specks`, stone.wgsl
+// `stone_speck`) from `SPECK_PX.x` pixels across, fully from `.y`; under that it melts into its mean.
+const SPECK_PX = vec2f(1.0, 3.0);
 
 // A random word of the grid cell c and the stream k, fixed in the world (lowbias32, Wellons 2018).
 fn lowbias(c: vec2i, k: i32) -> u32 {

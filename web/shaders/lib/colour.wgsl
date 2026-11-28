@@ -200,8 +200,9 @@ struct Spot {
   grain: vec4f, filled: f32, deposit: vec2f, load: f32,
   // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
   // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
-  // plants cover there on their mean (cover_field.wgsl `CoverAt.low`).
-  hollow: f32, hollow_d: vec2f, basin: f32, low: f32,
+  // plants cover there on their mean (cover_field.wgsl `CoverAt.low`); the share of it a dry wash's pale floor takes
+  // (gullies.wgsl `Gullies.wash`).
+  hollow: f32, hollow_d: vec2f, basin: f32, low: f32, wash: f32,
   // The share of it under a burn scar, and how much of the scar is char, ash and scorched soil, 0..1 (burn.wgsl
   // `burnt_spot`; none where no program draws the marks of fire).
   scar: vec4f,
@@ -264,17 +265,24 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   var bed = p.bed;
   // (Under full snow none of it shows: the snow below takes the pixel whole.)
   if (styled() && snow < 1.0) {
+    // Thin loose ground shows its lag of stones from above (`lag_of`): the lightness of the rock's photograph, which
+    // bare bed shows too, as far as the photograph shows at the pixel (from afar it is its mean: nothing is read).
+    let lag = lag_of(p) * (1.0 - min(p.canopy, 1.0)) * rock_shows(p.e);
+    var stones_seen = vec3f(1.0);
+    if (p.rock > 0.0 || lag > 0.0) { stones_seen = rock_detail(p.e); }
+    let lagged = 1.0 + LAG_SEEN * lag * (dot(stones_seen, LUMA) - 1.0);
     // A burn scar takes the floor (burn.wgsl `burnt_floor`) and as much of the soil's own tint.
-    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, g.grain, vec2f(p.basin, p.hollow)) * soil_detail(p), p);
+    let burnt = burnt_floor(floor_of(g.rgb, p.e, p.canopy, p.wet, g.grain, vec2f(p.basin, p.hollow)) * soil_detail(p) * lagged, p);
     g.rgb = burnt.rgb;
     g.warm *= 1.0 - burnt.a;
     // Bed the waves' swash wets takes the one wet look of rock (stone.wgsl `wet_stone`) as far as it is soaked.
     if (p.rock > 0.0) {
-      bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade) * rock_detail(p.e);
+      bed = rock_face(p.bed, p.z, p.at, steep, p.e, p.shade) * stones_seen;
       if (p.swash.x > 0.0) { bed = mix(bed, wet_stone(bed, p.shade, 1.0, 0.0), p.swash.x); }
     }
   }
   g.rgb = mix(g.rgb, bed, p.rock);
+  if (styled()) { g.rgb = washed(g.rgb, p.wash); }
   if (p.rock > 0.5) { g.kind = ROCK; }
   g.bare = 1.0 - plants;
   g.rgb = mix(g.rgb, SNOW * select(vec3f(1.0), snow_texture(p.e), styled()), snow);
@@ -286,7 +294,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // Stones over it (stone.wgsl): scree, on bare bed, and in a channel; none on a beach.
   if (styled()) {
     let thin = 1.0 - ease(0.0, SCREE_LOOSE_M, p.loose);
-    let scree = max(SCREE * ease(SCREE_FROM, SCREE_FULL, steep) * thin * thin * p.below, max(STONES_ON_BED * p.rock, p.blocks)) * (1.0 - p.sand);
+    let scree = max(max(SCREE * ease(SCREE_FROM, SCREE_FULL, steep) * thin * thin * p.below, PAVEMENT * lag_of(p)), max(STONES_ON_BED * p.rock, p.blocks)) * (1.0 - p.sand);
     let sunk = SUNK_MOST * ease(0.0, SUNK_LOOSE_M, p.loose);
     // The scree's angular blocks, then the channel's worn stones, from one place in the code, as wet as the swash leaves them
     // (and a channel's, as its ground is soaked). (Dry open ground's

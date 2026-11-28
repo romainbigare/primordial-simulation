@@ -34,8 +34,9 @@ const SOIL_OF_BED = 0.9; const SOIL_OF_BED_M = 3.0; const SOIL_SMEAR_M = 0.3; co
 // unit vector east and south); and of the dry ground, the slope up to the highest ground toward the light (rock.wgsl
 // `Laid.horizon`), how far the noise of the relief finer than the tiles raises it and that height's change across a
 // pixel, m (relief.wgsl `Relief.knob`), its tone (style.wgsl `tone_of`), and how high it stands in the broad hollows of
-// its gullies (gullies.wgsl `Gullies.fold`), and how far it lies in a channel's riparian strip (river.wgsl `riparian`).
-struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f, horizon: f32, knob: vec2f, tone: f32, fold: f32, damp: f32 }
+// its gullies and in its rills (gullies.wgsl `Gullies.fold`, `rill`), and how far it lies in a channel's riparian
+// strip (river.wgsl `riparian`).
+struct Spots { dry: Spot, wet: Spot, share: f32, pool: f32, flow: vec3f, water: vec2f, down: vec2f, horizon: f32, knob: vec2f, tone: f32, fold: f32, rill: f32, damp: f32 }
 
 // The spot `s` with its channel's stones: on the bed of channel `ch` (of discharge `q`, on ground `g`), and beside it
 // where the reach is steep, with the walls and the fallen blocks of a steep reach. The largest drawn takes its size
@@ -133,7 +134,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   }
   let mouth = through_band(g, e);
   let ch = channel_of(g, q, banks, mouth);
-  let st = state_on(at, g, cs, depth_in(g, ch), fine.knob.x, gully_drift(fine.spur, fine.fold));
+  let st = state_on(at, g, cs, depth_in(g, ch), vec3f(fine.drift.x, tiled.slope + fine.drift.yz), gully_drift(fine.spur, fine.fold));
   let surface = blended(SURFACE, cs);
   var p: Spot;
   // A film of liquid over the drawn ground is soaked ground, not water (`FILM_M`).
@@ -147,11 +148,11 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.t = st.t;
   // The cells' snow placed where the ground holds it (`snow_at`); on standing liquid, the cells' share.
   // (The line's zone is as wide as the cells' share moves it across a pixel: the ground's own index changes at the
-  // relief's scale, down to the pixel, and its change across a pixel's block of four would draw the blocks. Its edge is
-  // eased over the index's change across the pixel by the relief's slope, `bares_grain`, worked out, not taken from the
-  // block.)
+  // scale of the forms the snow lies by, down to a few metres, and its change across a pixel's block of four would draw
+  // the blocks. Its edge is eased over the index's change across the pixel by those forms' slope, `bares_grain`, worked
+  // out, not taken from the block.)
   let snow_x = snow_past(st.snow, st.bares);
-  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_past(st.snow, 0.0)), bares_grain(fine.knob.y * e)), st.snow, st.depth > 0.0);
+  p.snow = select(snow_at(at, e, st.snow, snow_x, fwidth(snow_past(st.snow, 0.0)), bares_grain(fine.drift.w * e)), st.snow, st.depth > 0.0);
   p.ground = surface.xyz;
   // In the Earth view a thin soil shows the colour of the bed it is broken from (a residual soil, worldgen::terrain):
   // the cells' soil is a mean over kilometres, the bed's make is the samples'.
@@ -207,8 +208,10 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
     p.below = mix(BELOW_LEAST, 1.0, 0.5 - 0.5 * dot(deepens, g.slope) / max(length(deepens) * length(g.slope), 1e-9));
   }
   p.snow_m = st.snow_m;
-  // The bed's colour where it shows or stones of it lie: a channel's, and the scree's on thin loose ground.
-  if (p.rock > 0.0 || p.stony > 0.0 || loose < SCREE_LOOSE_M) {
+  // The bed's colour where it shows or stones of it lie: a channel's, and the scree's and the lag's on thin loose
+  // ground.
+  let stones_of_bed = loose < max(SCREE_LOOSE_M, PAVEMENT_LOOSE_M);
+  if (p.rock > 0.0 || p.stony > 0.0 || stones_of_bed) {
     if (!made) { make = bed_make_at(at, place.at, e, loose < SOIL_SMEAR_M); made = true; }
     p.bed = make.sharp;
   }
@@ -219,7 +222,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.sand = beach(p.sea, g.h - earth.view.z, p.over, length(g.slope), p.loose, look.z * (1.0 - laid_share(p)), waves);
   p.swash = swash_of(over_ponds(tiled, 0.0), waves, length(tiled.slope), at, e, p.snow);
   // A beach of pebbles takes their colour from the bed they are worn from (colour.wgsl `shore_grain`).
-  if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && loose >= SCREE_LOOSE_M) {
+  if (p.sand > 0.0 && p.rock <= 0.0 && p.stony <= 0.0 && !stones_of_bed) {
     if (!made) { make = bed_make_at(at, place.at, e, loose < SOIL_SMEAR_M); }
     p.bed = make.sharp;
   }
@@ -233,6 +236,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.hollow = fine.hollow;
   p.hollow_d = vec2f(dpdx(fine.hollow), dpdy(fine.hollow));
   p.basin = fine.basin;
+  p.wash = fine.wash;
   p.low = cf.low;
   // The depth less the film, signed (under the ground drawn: minus its height over the level, as the share of the point
   // that is the ponds' weighs it), over the depth's change across a pixel.
@@ -240,7 +244,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let pool = select(0.0, tent(signed / (max(length(g.slope) * g.water.y, SHORE_RISE_LEAST) * e)), g.water.y > 0.0);
   // The marks of fire on dry ground: its burn scars and the plants they took (burn.wgsl).
   p = burnt_spot(p);
-  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0), laid.horizon, vec2f(fine.knob.x, fine.knob.y * e), tone_of(place.n), fine.fold, 0.0);
+  var out = Spots(p, p, 0.0, pool, vec3f(0.0), vec2f(0.0), vec2f(0.0), laid.horizon, vec2f(fine.knob.x, fine.knob.y * e), tone_of(place.n), fine.fold, fine.rill, 0.0);
   if (p.depth <= 0.0) { out.damp = riparian(g, ch, line_of(q, e), e); }
   // A channel is drawn on the land and through the band of shallows of the liquid it runs into, no farther.
   if (ch.water <= 0.0 || mouth >= 1.0) { return out; }
@@ -288,9 +292,9 @@ fn live_map(v: Varying) -> vec4f {
   if (earth.view.x == 1.0) { shown = layer_at(at, spots.dry); }
   var rgb = in_view_of(c, shown);
   // In the Earth view the dry ground takes the shade of its steepness and of the heights toward the light, its tone,
-  // the dark of its gullies' broad hollows, and of a channel's riparian strip.
+  // the dark of its gullies' broad hollows and of its rills' floors, and of a channel's riparian strip.
   if (styled() && spots.dry.depth <= 0.0) {
-    rgb *= relief_shade(spots.dry.slope, spots.horizon, spots.knob) * spots.tone * hollow_tone(spots.fold) * (1.0 - RIPARIAN_DARK * spots.damp * (1.0 - spots.dry.snow));
+    rgb *= relief_shade(spots.dry.slope, spots.horizon, spots.knob) * spots.tone * hollow_tone(spots.fold) * rill_tone(spots.rill) * (1.0 - RIPARIAN_DARK * spots.damp * (1.0 - spots.dry.snow));
   }
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }
