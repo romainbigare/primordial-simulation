@@ -59,6 +59,10 @@ const PATCH_WARP = 0.16; const PATCH_LOBES = 0.55; const PATCH_FINE = vec2f(0.35
 // are its mean over its square, its edge no line on the ground. A mark's foot draws its patch and its cell by the
 // share each takes there, with its own draw fixed at its place to `FOOT_DRAW_M`.
 const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; const FOOT_DRAW_M = 0.01;
+// Two patches of one cell that touch meet along a ragged line that fingers `PATCH_MEET_M` m either way of where they
+// are equally deep (ragged.wgsl `meet`, its own noise stream after the margins'): two stands of different kinds
+// interlock over tens of metres, not along a drawn line.
+const PATCH_MEET_M = 60.0;
 // Kinds grow in stands of their own: a plant is of its square's first kind (canopy.ts `Paint`) where a smooth draw fixed
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
 // are patches about as large as the noise's cells (`STAND_M` the trees', `SWARD_STAND_M` the herbs') with mixed edges,
@@ -141,6 +145,8 @@ fn herbs_out(depth: f32, wet: vec4f) -> f32 {
 const SWARD = 0.45; const SWARD_M = 0.35;
 // Under the trees' crowns the sward is in their shade: darker by up to `SWARD_SHADE` as they close over it.
 const SWARD_SHADE = 0.35;
+// The sward's tussocks (`sward`).
+const TUSSOCK_M = 0.8; const TUSSOCK_LIT = 0.6; const TUSSOCK_STREAM = 270;
 const TUFT_TONE = 0.15; const SWATH = 0.18; const SWATH_M = 3.0; const SWARD_STANDS_NEAR = 0.5;
 // A sward whose red over its green passes from `STRAW_HUE.x` to `.y` is straw: its grass is drawn dry.
 const STRAW_HUE = vec2f(0.85, 1.1);
@@ -245,8 +251,11 @@ var<private> across_share: vec2f = vec2f(0.0);
 // the rest of its cell over its margin (`PATCH_EDGE_M`, ragged.wgsl `meet`) and as far as the point is its cell's;
 // the steps to the cells across the nearer of its cell's edges along x and along y, and the share of the point each
 // takes, as the cells meet across their edges over theirs (`CELL_EDGE_M`: so the rest of a cell, and its dead walls,
-// meet its neighbours' over a band, not along a line). Where no cell holds a patch (the field has no patch's layers) no noise is
-// read: the square the point lies in, none of its neighbours'.
+// meet its neighbours' over a band, not along a line). A patch is its own cell's alone (the cell across does not read
+// it): it thins out to none at its cell's edge (its share of the point times one less twice the cells' across, each
+// way), the edge's patches fingering it into the cells' meeting band, so it meets no cell's edge along a line. Where
+// no cell holds a patch (the field has no patch's layers) no noise is read: the square the point lies in, none of its
+// neighbours'.
 struct PatchAt { cell: vec2i, which: i32, share: f32, step: vec2i, across: vec2f }
 fn patch_of(at: vec2f, e: f32) -> PatchAt {
   let side = land.map.x;
@@ -271,13 +280,18 @@ fn patch_of(at: vec2f, e: f32) -> PatchAt {
   let a = textureLoad(cover_field_tex, q, PLACES_LAYER, 0);
   if (a.z <= 0.0) { return out; }
   let b = textureLoad(cover_field_tex, q, PLACES_LAYER + 1, 0);
-  // How far inside each patch's reach the point lies, m (the second's where it is the deeper inside).
+  // How far inside each patch's reach the point lies, m (the second's where it is the deeper inside, by a ragged edge
+  // between the two: `PATCH_MEET_M`).
   var which = 1;
   var inside = a.z - length(o - a.xy);
-  if (b.y > 0.0 && b.y - length(o - vec2f(a.w, b.x)) > inside) { which = 2; inside = b.y - length(o - vec2f(a.w, b.x)); }
+  if (b.y > 0.0) {
+    let second = b.y - length(o - vec2f(a.w, b.x));
+    if (meet(at, e, (second - inside) * side, PATCH_MEET_M, 0.0, 0.0, 0.0, 2.0 * PATCH_MEET_M, PATCH_NOISE + 3) > 0.5) { which = 2; inside = second; }
+  }
   if (inside * side <= -2.0 * PATCH_EDGE_M) { return out; }
   out.which = which;
-  out.share = meet(at, e, inside * side, PATCH_EDGE_M, 1.0, 0.0, 0.0, 2.0 * PATCH_EDGE_M, PATCH_NOISE) * (1.0 - out.across.x) * (1.0 - out.across.y);
+  let own = clamp(1.0 - 2.0 * out.across, vec2f(0.0), vec2f(1.0));
+  out.share = meet(at, e, inside * side, PATCH_EDGE_M, 1.0, 0.0, 0.0, 2.0 * PATCH_EDGE_M, PATCH_NOISE) * own.x * own.y;
   return out;
 }
 
@@ -498,6 +512,11 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, hold: f32, lc: Cl
   let reeds = reeds_of(reed_place(b), s);
   let tufts = shows_at(SWARD_M, e);
   var tone = 1.0;
+  // Its tussocks: lit domes about `TUSSOCK_M` across with bare specks between as far as it is thin (crowns.wgsl
+  // `specks`), lit by `TUSSOCK_LIT` of a crown's light, from where one takes a pixel or two.
+  let tussocks = specks(at, TUSSOCK_M, s, e, TUSSOCK_STREAM);
+  s = tussocks.on;
+  tone *= mix(1.0, tussocks.tone, TUSSOCK_LIT);
   if (tufts > 0.0) {
     let n = tufts * noise_l(lat_turned(SWARD_M, vec2f(0.0)), 54).x;
     s = clamp(s * (1.0 + SWARD * n), 0.0, 1.0);
@@ -603,7 +622,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   hold = vec4f(hold.xy * min(lit, 1.0), hold.z, hold.w * lit * herbs_out(b.depth, wet));
   // Under the trees: the sward and the low lattices one by one near, as one layer far (`LOW_FAR_E`).
   let far = ease(LOW_FAR_E, LOW_FAR_FULL_E, e);
-  let drift = herb_drift(at, e, b.slope);
+  let drift = herb_drift(at, e, b.slope) * herb_mottle(at, e);
   var dst = vec4f(0.0);
   // The sward's field, read once where the near or the far picture asks for it.
   var swarded = vec4f(0.0);

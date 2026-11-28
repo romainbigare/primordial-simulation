@@ -38,6 +38,26 @@ fn lush_thick(s: f32, lush: f32) -> f32 { return 1.0 + LUSH * lush * (1.0 - clam
 // What the herbs' colour is multiplied by where they are as lush as `lush` (`LUSH_HUE`).
 fn lush_hue(lush: f32) -> vec3f { return 1.0 + LUSH_HUE * lush; }
 
+// A sward is mottled in patches tens of metres across (`HERB_MOTTLE_M`, and a second octave `HERB_MOTTLE_STEP` times
+// finer at `HERB_MOTTLE_FALL` of its weight), where its plants grow a little thicker or thinner, greener or paler (seen from a plane a
+// meadow or a heath is a mottle of patches, from memory): what their colour is multiplied by at `at`, m, seen at `e` m
+// a pixel: their tone by up to `HERB_MOTTLE` against how lush they look (`lush_hue` of `HERB_MOTTLE_LUSH` a unit), as
+// far as each octave shows (`shows_at`); about none on the mean.
+const HERB_MOTTLE = 0.12; const HERB_MOTTLE_LUSH = 0.6; const HERB_MOTTLE_M = 45.0; const HERB_MOTTLE_STEP = 3.0;
+const HERB_MOTTLE_FALL = 0.5; const HERB_MOTTLE_STREAM = 266;
+fn herb_mottle(at: vec2f, e: f32) -> vec3f {
+  var n = 0.0;
+  var size = HERB_MOTTLE_M;
+  var weight = 1.0;
+  for (var o = 0; o < 2; o++) {
+    let shows = shows_at(size, e);
+    if (shows > 0.0) { n += weight * shows * noise_turned(at / size, HERB_MOTTLE_STREAM + o); }
+    size /= HERB_MOTTLE_STEP;
+    weight *= HERB_MOTTLE_FALL;
+  }
+  return (1.0 - HERB_MOTTLE * n) * lush_hue(HERB_MOTTLE_LUSH * n);
+}
+
 // Herbs on a slope stand in drifts down its fall line, wetter and greener in the paths the water takes, drier and
 // paler between them (rills and runnels sort a sward on a hillside: from memory): what their colour is multiplied by at
 // `at`, m, seen at `e` m a pixel, on ground of slope `slope` (rise over run, east and south): their tone moves by up to
