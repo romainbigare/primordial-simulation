@@ -101,7 +101,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   // The loose ground with its patches, deeper as the tiles' ground is lush (lush.wgsl `lush_of`), the bed it bares,
   // what the liquid laid on it, the channel's sample and discharge, and the relief finer than the tiles (relief.wgsl),
   // which moves the ground's height and slope: the shading's normal and the fine line of a shore.
-  let loose_mean = loose_at(place, lush_of(g.twi, g.slope, place.n, 0.0));
+  let loose_mean = loose_at(place, lush_of(g.twi, g.slope, place.n, 0.0, vec2f(0.5)));
   let loose = loose_seen(at, loose_mean, e);
   let bare = bed_shows(loose);
   let laid = laid_at(place);
@@ -166,9 +166,9 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   p.shade = hill_shade(g.slope, EXAGGERATE * look.x);
   p.fill = fill_shade(g.slope, EXAGGERATE * look.x);
   p.loose = loose;
-  // How lush the ground is (lush.wgsl `lush_of`): on the tiles' slope, as the marks read it, and lower in the hollows
-  // of its relief's noise.
-  let lush = lush_of(g.twi, tiled.slope, place.n, -fine.knob.x);
+  // How lush the ground is (lush.wgsl `lush_of`): on the tiles' slope and in its gullies, as the marks read it, and
+  // lower in the hollows of its relief's noise.
+  let lush = lush_of(g.twi, tiled.slope, place.n, -fine.knob.x, vec2f(fine.spur, fine.fold));
   p.grain = grain_at(at, place, e, blended(VIEW, cs).y, blended(GRAIN_SHIFT, cs).xy, lush);
   p.deposit = laid.deposit;
   // The height over the nearest water, standing or running: a channel's banks rise from its edge.

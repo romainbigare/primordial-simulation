@@ -1,12 +1,12 @@
-// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl cover_field.wgsl lush.wgsl no_grass.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl fire.wgsl snag.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl hollows.wgsl gullies.wgsl relief.wgsl clumps.wgsl cover_field.wgsl lush.wgsl no_grass.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl fire.wgsl snag.wgsl
 // The plant cover's marks over the live map (web/src/textures.ts): the trees and bushes, at every frame, plant by plant
 // where a plant takes a few pixels; where it takes less, the ground draws it as a field of the same colours
 // (lib/cover_field.wgsl), and the herbs always so, as its sward. Each lattice of marks (web/src/canopy.ts `LATTICES`)
 // lies fixed in the world, one mark a cell at a place and rank hashed from the cell (Worley 1996; pcg3d, Jarzynski and
 // Olano 2020; lowbias32, draw.wgsl), so the marks hold while the camera moves and stand in no rows. A mark picks its
 // kind at its own foot: of the four squares about it, blended as the map's other fields (land.wgsl `corners`), each
-// kind's chance that a cell holds one of its plants (thicker and thinner over the field's patches and as lush as its
-// ground is, cover_field.wgsl `patchy`, `lush_thick`), on the saturated ground at the foot (land.wgsl `saturated_at`) and on the drier ground as densely as the
+// kind's chance that a cell holds one of its plants (in the field's clumps and as lush as its ground is, clumps.wgsl,
+// mark.wgsl `marks_thick`), on the saturated ground at the foot (land.wgsl `saturated_at`) and on the drier ground as densely as the
 // core splits the kind's plants between its land's saturated strips and its rest (mark.wgsl `dense_at`), and less where
 // its loose ground is thinner than its roots need (land.wgsl `rooted`, its chance raised where its square's ground is
 // thin, so the square keeps its cover); a plant buried by the snow's depth against its height does not show, one

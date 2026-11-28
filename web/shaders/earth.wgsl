@@ -1,4 +1,4 @@
-// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl no_detail.wgsl no_burn.wgsl earth.wgsl
+// uses: draw.wgsl water.wgsl style.wgsl crag.wgsl stone.wgsl ice.wgsl colour.wgsl hollows.wgsl no_detail.wgsl no_burn.wgsl earth.wgsl
 // A tape's map in view: the fields of its squares drawn in the view's colours at each pixel of the screen.
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f {

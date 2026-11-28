@@ -457,7 +457,7 @@ fn colour_on(p: Spot, g: Ground) -> Shaded {
 // Puddles: on bare ground soaked past `FILM_FROM` (`film` 0..1 from there to soaked through) where the low plants leave
 // it open (a sward's puddles lie under its blades), liquid stands over up to `PUDDLES` of the ground when soaked
 // through, gathered where the ground lies low: in the lowest `BASIN_LOW` of its basins (the relief's octaves `BASIN_M`
-// long, relief.wgsl `Relief`), the more the lower, and in each basin in the lowest of its hollows (its octaves
+// long, hollows.wgsl, relief.wgsl `Relief`), the more the lower, and in each basin in the lowest of its hollows (its octaves
 // `HOLLOW_M` long) up to the basin's level. So most of the ground holds none, and a basin's lowest part a few large
 // puddles of joined hollows among smaller ones. A puddle is `PUDDLE_DEPTH_M` deep for each unit of the hollows' rank
 // its point lies under its level; the mud about it is soaked through out to `PUDDLE_HALO` times its level above it in
@@ -475,7 +475,7 @@ const BOG_POOLS = 0.3;
 // A bog's pools are dark with the dissolved organic matter of the peat, which takes most of the light, the blue most:
 // their light is `BOG_WATER` of a muddy puddle's (humic waters; Kirk 1994, from memory).
 const BOG_WATER = vec3f(0.35, 0.25, 0.15);
-const HOLLOW_M = vec2f(0.5, 2.0); const BASIN_M = vec2f(4.0, 20.0); const BASIN_LOW = 0.35;
+const BASIN_LOW = 0.35;
 const PUDDLES = 0.06; const PUDDLE_DEPTH_M = 0.3; const PUDDLE_HALO = 1.0; const PUDDLE_SHORE = 0.5; const MENISCUS = 0.3;
 const PUDDLE_PX = vec2f(3.0, 8.0); const PUDDLE_FAST = 4.5; const PUDDLE_SLOW = 6.5;
 // The mud about a puddle, soaked through, is `PUDDLE_WET_DARK` darker than the soaked ground. A puddle's water is

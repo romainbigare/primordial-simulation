@@ -79,13 +79,23 @@ const NEAR_SIZES = 3.0;
 
 // What the ground at `at` leaves a plant: the depth of the liquid over its roots, m (land.wgsl `state_at`), how
 // saturated it is (land.wgsl `saturated_at`: the law's strips), the snow there (lib/land.wgsl `snow_at`, 1 where it
-// lies), its cells' snow's depth, m, and how lush it is (lush.wgsl `lush_of`, on the tiles' ground: no relief
-// finer than them).
+// lies), its cells' snow's depth, m, and how lush it is (lush.wgsl `lush_of`, on the tiles' ground and in its gullies
+// as the ground under it draws them at the marks' size of a pixel, relief.wgsl; no relief finer than them).
 struct Foot { depth: f32, saturated: f32, snow: f32, snow_m: f32, lush: f32 }
 fn foot(at: vec2f) -> Foot {
   let g = ground_at(at, false);
   let st = state_at(at, g, corners(at / land.map.x));
-  let lush = lush_of(g.twi, g.slope, sample_place(at, 0.0).n, 0.0);
+  let place = sample_place(at, 0.0);
+  let loose = loose_at(place, lush_of(g.twi, g.slope, place.n, 0.0, vec2f(0.5)));
+  // (The gullies are read on the lattices of the foot's place, draw.wgsl `lat`, and the pixel's place is set back;
+  // the ground's height over the sea is not known here, the ponds' alone.)
+  let pixel = vec4f(pix_origin, pix_local);
+  pix_origin = 1024.0 * floor(at / 1024.0);
+  pix_local = at - pix_origin;
+  let cut = gullies(cover.seen.x, GullyGround(g.slope, bed_shows(loose), loose, laid_at(place).deposit.x, g.twi, over_ponds(g, 0.0), g.d, discharge_of(sample_at(g))));
+  pix_origin = pixel.xy;
+  pix_local = pixel.zw;
+  let lush = lush_of(g.twi, g.slope, place.n, 0.0, vec2f(cut.spur, cut.fold));
   return Foot(st.depth, saturated_of(g, at), select(snow_at(at, 0.0, st.snow, snow_past(st.snow, st.bares), 0.0, 0.0), st.snow, st.depth > 0.0), st.snow_m, lush);
 }
 
@@ -110,13 +120,13 @@ fn dense_at(saturated: f32, c: vec2i, q: i32) -> vec4f {
 }
 
 // What the four kinds from 4q of square s count for at a foot of ground `f` where `loose` m of loose ground lies,
-// `thick` over the patches: its share there (`patch_corners`), none for a kind of another patch of its cell's cover
+// `thick` times their mean (`marks_thick`): its share there (`patch_corners`), none for a kind of another patch of its cell's cover
 // than the foot's (`cell_patch`), how dense each stands on that ground (`dense_at`), how much of it its roots
 // hold and whether they reach through the liquid there (`stand_in`); or, not `exact`, the most they may count for
-// there, before the ground is read (`pick_kind`): the denser of the two grounds.
+// there, before the ground is read (`pick_kind`; `thick` then the most it may be): the denser of the two grounds.
 fn counts(cs: Corners, s: i32, q: i32, thick: f32, f: Foot, loose: f32, exact: bool) -> vec4f {
   let here = select(vec4f(0.0), vec4f(cs.w[s]), kind(patch_plane(q), cs.at[s]) == vec4f(f32(cell_patch)));
-  if (!exact) { return here * THICK_MOST * max(kind(strips_plane(q), cs.at[s]), kind(rest_plane(q), cs.at[s])); }
+  if (!exact) { return here * thick * max(kind(strips_plane(q), cs.at[s]), kind(rest_plane(q), cs.at[s])); }
   return here * thick * dense_at(f.saturated, cs.at[s], q) * holds(loose, kind(roots_plane(q), cs.at[s])) * stand_in(f.depth, kind(reach_plane(q), cs.at[s]));
 }
 
@@ -162,7 +172,7 @@ fn foot_loose(at: vec2f, cs: Corners, lush: f32) -> f32 {
   return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0), lush), 0.0), deepest > 0.0);
 }
 
-// The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` over the patches, its ground `f`),
+// The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` times their mean, its ground `f`),
 // its own draw `own`: its square (of the four), kind and place among the kind's groups in steps (`PLACE_STEPS`), or -1
 // where none stands. Each group of each kind of each square weighs its chance on the lattice by its share at the foot.
 // A kind claims the cell by a draw of its own (keyed by its slot in its cell's cover, a label it keeps, and its square;
@@ -325,6 +335,21 @@ fn decide(l: i32, k: vec2f) -> Mark {
   return living.mark;
 }
 
+// How many times their mean the plants of lattice l stand at a mark's foot at `at` among clumps `c`, as lush as
+// `thick` times their mean (lush.wgsl `lush_thick`; `thin` the least it may be): as the field draws them
+// (cover_field.wgsl `lattice_field`), the share they cover of the ground the trees leave in clumps (clumps.wgsl
+// `clumped`, the low plants in the trees' gaps, `low_rank`), each clump as many times denser as its ground is less
+// than all, none between the clumps; so on the mean they keep their number.
+fn marks_thick(l: i32, at: vec2f, c: Clumps, thin: f32, thick: f32) -> f32 {
+  let trees = min(field_at(at, STANDS).a, 1.0);
+  let own = select(field_at(at, l).a, trees, l == STANDS);
+  let left = select(1.0 - trees, 1.0, l == STANDS);
+  var cl = c;
+  if (l != STANDS) { cl = low_rank(c); }
+  let most = min(own * thick, 1.0) * left;
+  return select(0.0, thick * max(cl.fill, most) / max(min(own * thin, 1.0) * left, 1e-6), cl.rank < clump_ground(cl, most));
+}
+
 // The mark of a living plant of cell k of lattice l (`decide`), or that none claims the cell (its dead tree is decided
 // then, `dead_decided`).
 struct Living { mark: Mark, claimed: bool }
@@ -336,14 +361,15 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32,
   // kind its ground lets claim it. (Both by one call, so the program holds `pick_kind` once.)
   let own = rand3(id, l).y;
   var f = Foot(0.0, 0.0, 0.0, 0.0, 0.0);
-  var thick = THICK_MOST;
+  let clumps = clumps_at(at, 0.0);
+  var thick = marks_thick(l, at, clumps, 1.0 - LUSH, 1.0 + LUSH);
   var pick = vec3i(-1);
   for (var look = 0; look < rolled(2); look++) {
     let exact = look == 1;
     if (exact) {
       if (!ground_open(at)) { return unclaimed; }
       f = foot(at);
-      thick = patchy(at, 0.0) * lush_thick(f.lush);
+      thick = marks_thick(l, at, clumps, lush_thick(f.lush), lush_thick(f.lush));
     }
     pick = pick_kind(l, at, cs, thick, f, own, id, exact);
     if (pick.x < 0) { return unclaimed; }
