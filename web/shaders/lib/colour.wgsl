@@ -265,8 +265,8 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
   // (Under full snow none of it shows: the snow below takes the pixel whole.)
   if (styled() && snow < 1.0) {
     // Thin loose ground shows its lag of stones from above (`lag_of`): the lightness of the rock's photograph, which
-    // bare bed shows too.
-    let lag = lag_of(p) * (1.0 - min(p.canopy, 1.0));
+    // bare bed shows too, as far as the photograph shows at the pixel (from afar it is its mean: nothing is read).
+    let lag = lag_of(p) * (1.0 - min(p.canopy, 1.0)) * rock_shows(p.e);
     var stones_seen = vec3f(1.0);
     if (p.rock > 0.0 || lag > 0.0) { stones_seen = rock_detail(p.e); }
     let lagged = 1.0 + LAG_SEEN * lag * (dot(stones_seen, LUMA) - 1.0);

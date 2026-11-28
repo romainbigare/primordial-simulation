@@ -279,8 +279,9 @@ fn laid_images(w: ptr<function, array<f32, SOIL_IMAGES>>, p: Spot, open: f32, sa
   }
 }
 
-// The change the photograph of mossy rock gives bare bed, at e m a pixel.
+// The change the photograph of mossy rock gives bare bed, at e m a pixel, and the share of it that shows there.
 fn rock_detail(e: f32) -> vec3f { return detail(ROCK_TEX, e); }
+fn rock_shows(e: f32) -> f32 { return shows_at(detail_m(ROCK_TEX), e); }
 
 // The change the grass gives the sward of cover s at e m a pixel: its tiles laid in hexagons (`grass_hexes`),
 // green, dry as far as the sward is straw (`straw`, 0..1), with tall reeds as far as they stand (`reeds`, 0..1); its fine
