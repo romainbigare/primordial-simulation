@@ -113,6 +113,21 @@
         { "name": "valley", "about": "a valley floor at a confluence", "at": [14.05, 22.85] }
       ]
     },
+    "plants": {
+      "world": "seed1",
+      "views": [12.0, 4.0],
+      "cost_views": [40.0, 4.0, 1.0],
+      "scenes": [
+        { "name": "green", "about": "green hills: herbs and stands of trees on gullied slopes", "at": [13.0, 17.3], "views": [12.0, 4.0, 2.0] },
+        { "name": "forest", "about": "a forest where its trees pass from the field to single crowns", "at": [21.63, 16.38], "views": [6.0, 3.0, 1.0, 0.3] },
+        { "name": "forest40", "about": "tall forest from far", "at": [21.5, 20.5], "views": [40.0, 12.0] },
+        { "name": "z40", "about": "mountains and their cover from far", "at": [19.5, 13.5], "views": [40.0] },
+        { "name": "over", "about": "the island's middle, the far view", "at": [16.0, 16.0], "views": [85.0] },
+        { "name": "river", "about": "a river valley's plants", "at": [26.5, 14.6], "views": [12.0, 3.0] },
+        { "name": "woodland", "about": "an open woodland: stands breaking up into clumps and single trees", "at": [26.5, 10.5], "views": [6.0, 2.0] },
+        { "name": "dry", "about": "sparse low plants on dry ground", "at": [21.5, 7.5], "views": [4.0] }
+      ]
+    },
     "swamp": {
       "world": "swamp",
       "views": [1.0, 0.25, 0.1],
