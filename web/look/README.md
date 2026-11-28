@@ -60,6 +60,8 @@ cut by gullies (12, 4 and 2 m a pixel), a forest where its trees pass from the f
 tall forest and mountains from far (40 and 12 m), the island's middle (85 m), a river valley, an open woodland and
 sparse low plants on dry ground; its cost views are 40, 4 and 1 m a pixel.
 
+The scene set `water` stands on `seed1`'s world where it is wet, from far to near: the island's middle (85 m a pixel), the big lake from far (40 m), a stream's inlet into the big lake (12 to 0.3 m), a bay of the sea under a steep coast, the east river's mouth at the sea (12 to 1 m) and a river valley (12 to 0.3 m); its cost views are 40, 4 and 1 m a pixel.
+
 The scene set `card` stands on the test card (`ew card`, `worldgen/src/testkit/card.rs`): an island of 12 x 10
 squares whose block of 6 x 4 squares from square 3, 3 is set by hand, each square a kind of stand or ground the map
 draws (a tall closed stand of four size groups, an open stand over a sward, a young dense stand near 4 m, tall soft
