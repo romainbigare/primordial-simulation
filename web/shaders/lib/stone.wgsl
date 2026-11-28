@@ -15,6 +15,26 @@ const STONE_OCTAVES = 4; const STONE_STEP = 2.2; const STONE_FEW = 0.5; const ST
 const STONE_GAP = 3.0; const STONE_SIZES = vec2f(0.55, 1.45); const STONE_REACH = 1.6;
 // The largest stone drawn, m: no draw shows one from this many m a pixel on.
 const STONE_MOST_M = 4.5;
+// Under the size its sprite shows from (draw.wgsl `THING_PX`) a stone is still drawn one by one from the size a
+// plant's speck shows from (cover_field.wgsl `SPECK_PX`), as a speck: a dome lit by the sun, `STONE_SPECK_LIGHT.x`
+// times its colour on its shaded side to `.y` on its lit one, over its shadow (as its sprite's), its edge eased over a
+// pixel. Smaller, it is the tone the stones give the ground. So stony ground keeps its grain of lit and shaded points
+// as it shrinks.
+const STONE_SPECK_LIGHT = vec2f(0.55, 1.3);
+
+// A stone of the stones `s` (`placed`) as a speck, seen at `e` m a pixel, over `out` (its colour times its coverage,
+// and that coverage), as strongly as `shows`, of the bed's tone `tone`.
+fn stone_speck(out: vec4f, p: Placed, s: Stony, e: f32, shows: f32, tone: vec3f) -> vec4f {
+  let r = s.small * p.r;
+  let v = p.v / r;
+  let d = length(v);
+  let shade = STONE_SHADOW * (1.0 - smoothstep(0.6, 1.1, length(v + STONE_SHADOW_REACH * LIGHT.xy / length(LIGHT.xy))));
+  let a = 1.0 - smoothstep(1.0 - 0.5 * e / r, 1.0 + 0.5 * e / r, d);
+  let dst = mix(out, vec4f(0.0, 0.0, 0.0, 1.0), shade * shows * (1.0 - a));
+  if (a <= 0.0) { return dst; }
+  let lit = clamp(dot(vec3f(v, sqrt(max(1.0 - d * d, 0.0))), LIGHT) / LIGHT.z, STONE_SPECK_LIGHT.x, STONE_SPECK_LIGHT.y);
+  return mix(dst, vec4f(wet_stone(tone * lit, lit, s.wet, s.worn), 1.0), a * shows);
+}
 
 // A wet stone is darker: water fills the pores of its face, and light that would scatter back from the dry grains goes
 // into the rock (wet rock and soil send back about half to two thirds of the light dry ones do: Lekner and Dorf 1988),
@@ -87,20 +107,25 @@ fn stones(e: f32, s: Stony, least: f32, bed: vec3f, k: i32) -> vec4f {
     // Out of the water, where it stands in a channel's.
     var stands = 1.0;
     if (least > 0.0) { stands = ease(least, 1.5 * least, s.small * size); }
-    // Smaller than a few pixels: the share of the ground they cover, as a tone (as far as the snow leaves them).
+    // Drawn one by one from a speck's size (`SPECK_PX`), as its sprite from a thing's (draw.wgsl `as_thing`);
+    // smaller, the share of the ground they cover, as a tone (as far as the snow leaves them).
+    var one = 0.0;
     var near = 0.0;
+    if (!unseen(STONE_MOST_M / SPECK_PX.x)) { one = ease(SPECK_PX.x * e, SPECK_PX.y * e, s.small * size); }
     if (stone_sprites() && !unseen(STONE_MOST_M / THING_PX.x)) { near = as_thing(s.small * size, e); }
     let high = STONE_TOP * (1.0 - s.sunk);
-    let mean = 2.0 * density * stands * above_snow(snow_m, high * 0.5 * s.small * size) * PI * 0.25 * 0.7 * s.small * s.small / (STONE_GAP * STONE_GAP) * (1.0 - near);
+    let mean = 2.0 * density * stands * above_snow(snow_m, high * 0.5 * s.small * size) * PI * 0.25 * 0.7 * s.small * s.small / (STONE_GAP * STONE_GAP) * (1.0 - one);
     out = mix(out, vec4f(wet_stone(tone, 1.0, s.wet, s.worn), 1.0), mean);
-    if (near > 0.0 && stands > 0.0 && density > 0.0) {
+    if (one > 0.0 && stands > 0.0 && density > 0.0) {
       for (var l = 0; l < 2; l++) {
         let p = placed(size, density, o, l, k, vec2f(0.0));
         let r = s.small * p.r;
         if (!p.held || dot(p.v, p.v) > STONE_REACH * STONE_REACH * r * r) { continue; }
         // Under snow deeper than it is tall, a stone does not show.
-        let shows = near * stands * above_snow(snow_m, high * r);
-        if (shows > 0.0) { out = stone_sprite(out, p, s, e, shows, tone); }
+        let shows = stands * above_snow(snow_m, high * r);
+        if (shows <= 0.0) { continue; }
+        if (near > 0.0) { out = stone_sprite(out, p, s, e, near * shows, tone); }
+        if (one > near) { out = stone_speck(out, p, s, e, (one - near) * shows, tone); }
       }
     }
     size *= STONE_STEP;

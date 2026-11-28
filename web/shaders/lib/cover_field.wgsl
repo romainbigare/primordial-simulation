@@ -627,12 +627,12 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
 // specks, one speck a cell at most at a place of its own draw (`SPECK_JITTER` of its cell either way), in as many cells
 // as the share asks (past what specks in every cell cover, the rest lies evenly between them); the two lattices whose cells are nearest `w`
 // blended by how near, so a speck's size follows the plants' with no seam. A point reads the four cells nearest it.
-// They melt into their mean, the share evenly, as they shrink from `SPECK_PX`.y to `SPECK_PX`.x pixels across. Of the
+// They melt into their mean, the share evenly, as they shrink (draw.wgsl `SPECK_PX`). Of the
 // point: the specks' cover, and how lit it is, -1..1, from its shaded side (south-east, away from `LIGHT`) to its lit
 // side (a round crown or stem lit from the north-west).
 // No speck is wider than `SPECK_MOST_M` (a mark is at most 10 m across: lattices.ts `marksOf`): in a program made for
 // draws whose pixels are wider than a speck (draw.wgsl `LEAST_E`) they are compiled out.
-const SPECK_BASE_M = 1.0; const SPECK_TURN = 0.9; const SPECK_JITTER = 0.4; const SPECK_PX = vec2f(1.0, 3.0);
+const SPECK_BASE_M = 1.0; const SPECK_TURN = 0.9; const SPECK_JITTER = 0.4;
 const SPECK_MOST_M = 10.0;
 fn specks(at: vec2f, w: f32, share: f32, e: f32, k: i32) -> vec2f {
   if (SPECK_PX.x * least_e() >= SPECK_MOST_M) { return vec2f(min(share, 1.0), 0.0); }
