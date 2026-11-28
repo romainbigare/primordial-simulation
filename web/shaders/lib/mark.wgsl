@@ -149,9 +149,9 @@ const FREE_LEAST = 0.05;
 // The stream of a kind's draws for a cell, by its slot and square (`pick_kind`).
 const RACE_STREAM = 175;
 
-// The loose ground at the foot `at` (its squares `cs`) as lush as `lush`, with its patches (rock.wgsl `loose_at`,
-// `loose_seen`, as the bare bed is drawn), read only where a kind's roots may want more than lies there.
-fn foot_loose(at: vec2f, cs: Corners, lush: f32) -> f32 {
+// The loose ground at the foot `at` (its squares `cs`) with its patches (rock.wgsl `loose_seen`, as the bare bed is
+// drawn), read only where a kind's roots may want more than lies there.
+fn foot_loose(at: vec2f, cs: Corners) -> f32 {
   var deepest = 0.0;
   for (var s = 0; s < rolled(4); s++) {
     for (var q = 0; q < groups(); q++) {
@@ -159,7 +159,7 @@ fn foot_loose(at: vec2f, cs: Corners, lush: f32) -> f32 {
       deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
     }
   }
-  return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0), lush), 0.0), deepest > 0.0);
+  return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0)), 0.0), deepest > 0.0);
 }
 
 // The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` over the patches, its ground `f`),
@@ -177,7 +177,7 @@ fn foot_loose(at: vec2f, cs: Corners, lush: f32) -> f32 {
 fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: vec2i, exact: bool) -> vec3i {
   let n = kinds_n();
   var loose = 0.0;
-  if (exact) { loose = foot_loose(at, cs, f.lush); }
+  if (exact) { loose = foot_loose(at, cs); }
   // The weights by height, and of each bin the weight from it up.
   var bins: array<f32, TALL_BINS>;
   for (var s = 0; s < rolled(4); s++) {
@@ -343,7 +343,7 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32,
     if (exact) {
       if (!ground_open(at)) { return unclaimed; }
       f = foot(at);
-      thick = patchy(at, 0.0) * lush_thick(f.lush);
+      thick = patchy(at) * lush_thick(field_at(at, l).a, f.lush);
     }
     pick = pick_kind(l, at, cs, thick, f, own, id, exact);
     if (pick.x < 0) { return unclaimed; }
@@ -426,7 +426,7 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, fp: vec3i) -> Mark {
   }
   if (unit(id, 41) >= dead.mean * on_scar) { return none; }
   let f = foot(at);
-  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(sample_place(at, 0.0), f.lush)) > 0.5) { return none; }
+  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(sample_place(at, 0.0))) > 0.5) { return none; }
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }

@@ -81,14 +81,10 @@ fn sample_place(at: vec2f, e: f32) -> Place {
 // so the blend departs from the samples' mean by the place's noise (`Place.n`) times `LOOSE_SPREAD` of how far the
 // samples it blends spread: a rule read on it (the bed it bares, the plants' roots, `rooted`) follows no sample's
 // square where two samples' depths differ, and keeps the mean where they do not. Its change across a pixel is smooth.
-// Inside a sample the mantle lies deeper where the ground is lush (lush.wgsl `lush_of`: creep and wash fill the
-// hollows and drainage lines and strip the ridges and knobs), up to `LOOSE_LUSH` of itself either way, about none on
-// the mean (drawing only): so the bed shows and the plants' roots fail first on the crests, and the edges of both
-// follow the relief. Of a point as lush as `lush`.
-const LOOSE_SPREAD = 1.0; const LOOSE_LUSH = 0.6;
-fn loose_at(place: Place, lush: f32) -> f32 {
+const LOOSE_SPREAD = 1.0;
+fn loose_at(place: Place) -> f32 {
   let b = samples_blend(place.at, LOOSE_PLANE);
-  return max(b.mean.x + LOOSE_SPREAD * b.spread.x * place.n, 0.0) * (1.0 + LOOSE_LUSH * lush);
+  return max(b.mean.x + LOOSE_SPREAD * b.spread.x * place.n, 0.0);
 }
 
 // The loose ground's grain shares swap coarse for fine, at most all of themselves either way: what the wear lays down

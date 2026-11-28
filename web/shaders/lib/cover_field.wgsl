@@ -59,12 +59,9 @@ const PATCH_WARP = 0.16; const PATCH_LOBES = 0.55; const PATCH_FINE = vec2f(0.35
 // are its mean over its square, its edge no line on the ground. A mark's foot draws its patch and its cell by the
 // share each takes there, with its own draw fixed at its place to `FOOT_DRAW_M`.
 const PATCH_EDGE_M = 250.0; const CELL_EDGE_M = 500.0; const PATCH_NOISE = 213; const FOOT_DRAW_M = 0.01;
-// Patches: the plants stand thicker and thinner over clumps about `PATCH_M` m across and `CLUMP_FINE.x` as strong
-// `CLUMP_FINE.y` times finer, by up to `PATCH` of their mean (fixed noise in the world), alike near (cover.wgsl) and
-// far: the noise's sum is sharpened by `CLUMP_SHARP` through a tanh, so a sparse cover gathers into clumps with gaps of
-// bare ground between them, not a soft wash (plants of dry ground stand in clumps that trap the water and the fines;
-// from memory), and on the mean none is lost.
-const PATCH_M = 8.0; const PATCH = 0.5; const CLUMP_FINE = vec2f(0.5, 3.0); const CLUMP_SHARP = 2.5;
+// Soft patches: the plants stand thicker and thinner over patches about `PATCH_M` m across, by up to `PATCH` of their
+// mean (fixed noise in the world), alike near (cover.wgsl) and far.
+const PATCH_M = 8.0; const PATCH = 0.45;
 
 // Kinds grow in stands of their own: a plant is of its square's first kind (canopy.ts `Paint`) where a smooth draw fixed
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
@@ -393,14 +390,8 @@ fn field_smooth(at: vec2f, l: i32) -> vec4f {
   return with_patch(on_land(spline_field(at, l), land_smooth), l);
 }
 
-// How much thicker than their mean the plants stand at `at`, seen at `e` m a pixel (`PATCH`): the finer clumps as far
-// as they show.
-fn patchy(at: vec2f, e: f32) -> f32 {
-  let fine = shows_at(PATCH_M / CLUMP_FINE.y, e);
-  var n = noise(at / PATCH_M, 40).x;
-  if (fine > 0.0) { n += fine * CLUMP_FINE.x * noise(at * (CLUMP_FINE.y / PATCH_M), 41).x; }
-  return 1.0 + PATCH * tanh(CLUMP_SHARP * n);
-}
+// How much thicker than their mean the plants stand at `at` (`PATCH`).
+fn patchy(at: vec2f) -> f32 { return 1.0 + PATCH * noise(at / PATCH_M, 40).x; }
 // The most times their mean the plants stand over the patches (`patchy`) where most lush (lush.wgsl `lush_thick`).
 const THICK_MOST = (1.0 + PATCH) * (1.0 + LUSH);
 
@@ -480,7 +471,7 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
   let mean = f.rgb / f.a;
   var c = in_stands(at, e, f, SWARD_LAYER, SWARD_FIRST, SWARD_REST, SWARD_STAND_M);
   c = mix(c, mean + SWARD_STANDS_NEAR * (c - mean), near_images) * lush_hue(b.lush);
-  var s = min(f.a * thick * hold, 1.0);
+  var s = lushed(min(f.a * thick * hold, 1.0), b.lush);
   let reeds = reeds_of(reed_place(b), s);
   let tufts = shows_at(SWARD_M, e);
   var tone = 1.0;
@@ -551,8 +542,8 @@ fn sward(at: vec2f, e: f32, b: Beneath, f: vec4f, canopy: f32, thick: f32, hold:
 
 // The cover's field at `at` seen at `e` m a pixel over `b`, premultiplied, and the trees' crowns' share: the herbs'
 // sward, then each lattice (`lattice_field`), the lower under the taller, thicker and thinner over the patches
-// (`patchy`), as far as it holds there (`held_at`); far away, where the sward's and the low lattices' detail no longer
-// shows, those three as their one layer (canopy.ts `FIELD.low`).
+// (`patchy`) and as lush as the ground is (lush.wgsl `lushed`), as far as it holds there (`held_at`); far away, where
+// the sward's and the low lattices' detail no longer shows, those three as their one layer (canopy.ts `FIELD.low`).
 fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   land_weights(at);
   // Under liquid where no square about the point holds cover, none stands: every layer reads none (`on_land`; the
@@ -562,7 +553,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   cell_patch_at(at, e);
   // The patches as far as they show: where they take less than a pixel the field is their mean (and no noise is read).
   let patches = shows_at(PATCH_M, e);
-  let thick = select(1.0, 1.0 + (patchy(at, e) - 1.0) * patches, patches > 0.0) * lush_thick(b.lush);
+  let thick = select(1.0, 1.0 + (patchy(at) - 1.0) * patches, patches > 0.0);
   // The plants' roots hold where the marks' do (mark.wgsl `holds`, on every patch of the loose ground), over a pixel and
   // over the patches too small to show here (`loose_unseen`), so the field far away and the marks near stand on the
   // same ground.
@@ -602,14 +593,14 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
     // As thick as they stand at the point (`hold`, `thick`), up to all of the ground.
     // In the shade of the trees' crowns as the sward is near (`SWARD_SHADE`), so the far and the near tone agree.
     let low = field_smooth(at, LOW_LAYER);
-    var seen = low * (min(low.a * hold.w * thick, 1.0) / max(low.a, 1e-6));
+    var seen = low * (lushed(min(low.a * hold.w * thick, 1.0), b.lush) / max(low.a, 1e-6));
     // Reeds on soaked ground and at the water's edge stand dense and in their own tint, as near (`sward`), as far as the
     // herbs stand there.
     let place = reed_place(b);
     var reeds = 0.0;
     if (place > 0.0) {
       if (!sward_read) { swarded = field_smooth(at, SWARD_LAYER); }
-      reeds = reeds_of(place, min(swarded.a * hold.w * thick, 1.0));
+      reeds = reeds_of(place, lushed(min(swarded.a * hold.w * thick, 1.0), b.lush));
     }
     let filled = mix(seen.a, max(seen.a, REED_FILL), reeds);
     seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * lush_hue(b.lush) * filled, filled);
@@ -617,7 +608,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   }
   dst = lattice_field(at, e, STANDS, trees, b, thick, hold[STANDS], dst);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
-  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0), min(field_at(at, LOW_LAYER).a * hold.w * thick, 1.0));
+  return CoverAt(dst, min(closed * hold[STANDS], 1.0), field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0), lushed(min(field_at(at, LOW_LAYER).a * hold.w * thick, 1.0), b.lush));
 }
 
 // Things too small to be drawn one by one but a pixel or more across (crowns and dead trees seen from afar) are drawn
@@ -670,8 +661,8 @@ fn speck_lattice(at_m: vec2f, side: f32, turn: f32, share: f32, e: f32, k: i32) 
 }
 
 // Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_crown`
-// by the width of its marks there, as each mark shows, mark.wgsl `decide`), thicker and thinner by `thick`, holding
-// `hold` of its plants there, over `dst` (premultiplied): its shadows darken what lies below, its crowns cover their
+// by the width of its marks there, as each mark shows, mark.wgsl `decide`), thicker and thinner by `thick` and as lush
+// as the ground is (lush.wgsl `lushed`), holding `hold` of its plants there, over `dst` (premultiplied): its shadows darken what lies below, its crowns cover their
 // share at their mean; the trees' in their stands, in groups of lighter and darker crowns, and snowy as the ground under
 // them, each crown a lit dome over its shadow (`specks`, as wide as the marks there) from where it takes a pixel or more.
 // A lattice no square holds (its side 0, textures.ts) adds nothing.
@@ -682,11 +673,12 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, thick: f32, ho
   if (cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
   var unshown = 1.0;
   if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_crown(field_at(at, WIDE_LAYER)[l], e); }
-  let crowns = min(f.a * hold * thick, 1.0);
+  let mean = min(f.a * hold * thick, 1.0);
+  let crowns = lushed(mean, b.lush);
   if (crowns * unshown <= 0.0) { return dst; }
   var c = f.rgb / f.a;
   var share = crowns;
-  var dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * thick, 1.0);
+  var dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * thick * lush_thick(mean, b.lush), 1.0);
   if (l == STANDS) {
     c = in_stands(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M);
     let groups = shows_at(CANOPY_M, e);
