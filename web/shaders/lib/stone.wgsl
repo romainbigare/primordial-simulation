@@ -32,7 +32,7 @@ fn stone_speck(out: vec4f, p: Placed, s: Stony, e: f32, shows: f32, tone: vec3f)
   let a = 1.0 - smoothstep(1.0 - 0.5 * e / r, 1.0 + 0.5 * e / r, d);
   let dst = mix(out, vec4f(0.0, 0.0, 0.0, 1.0), shade * shows * (1.0 - a));
   if (a <= 0.0) { return dst; }
-  let lit = clamp(dot(vec3f(v, sqrt(max(1.0 - d * d, 0.0))), LIGHT) / LIGHT.z, STONE_SPECK_LIGHT.x, STONE_SPECK_LIGHT.y);
+  let lit = clamp(dome_lambert(v) / LIGHT.z, STONE_SPECK_LIGHT.x, STONE_SPECK_LIGHT.y);
   return mix(dst, vec4f(wet_stone(tone * lit, lit, s.wet, s.worn), 1.0), a * shows);
 }
 

@@ -40,6 +40,10 @@ const PI = 3.14159265;
 // under which the heights cast long shades (style.wgsl `relief_shade`). The ground's rock holds each sample's horizon
 // toward the north-west (tape/src/ground/horizon.rs).
 const LIGHT = vec3f(-0.683, -0.683, 0.259);
+// How a round dome seen from above is lit at its point `d` (from its middle, in its radius, east and south): the sun's
+// light on its face (Lambert), whose normal is (d, the rest of a unit up), 1 at the flat ground's `LIGHT.z`. A crown
+// (crowns.wgsl `dome_lit`) and a small stone (stone.wgsl `stone_speck`) are lit by it alike.
+fn dome_lambert(d: vec2f) -> f32 { return dot(vec3f(d, sqrt(max(1.0 - dot(d, d), 0.0))), LIGHT); }
 
 // 0 at a, 1 at b, smooth between (a may be above b). Equal bounds make a step at them: none at them and below, all
 // above (taken over `EASE_STEP`, so no division by none gives a number that is not one).

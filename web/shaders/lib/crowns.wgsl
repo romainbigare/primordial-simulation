@@ -7,10 +7,7 @@
 // .. 1 (its side toward it), and a crown's colour moves by up to `DOME_LIT` of itself either way with it; its rim is
 // darker by up to `DOME_RIM` (its leaves thin out there and show the shade inside it), about none on the mean.
 const DOME_LIT = 0.45; const DOME_RIM = 0.25;
-fn dome_lit(d: vec2f) -> f32 {
-  let r2 = min(dot(d, d), 1.0);
-  return dot(d, LIGHT.xy) + LIGHT.z * (sqrt(1.0 - r2) - 2.0 / 3.0);
-}
+fn dome_lit(d: vec2f) -> f32 { return dome_lambert(d) - 2.0 / 3.0 * LIGHT.z; }
 // What a crown's colour is multiplied by at point `d` of it (`dome_lit`).
 fn dome_tone(d: vec2f) -> f32 { return 1.0 + DOME_LIT * dome_lit(d) - DOME_RIM * (min(dot(d, d), 1.0) - 0.5); }
 
