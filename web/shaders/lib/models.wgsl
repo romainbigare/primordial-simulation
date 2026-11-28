@@ -24,6 +24,10 @@ const SPRAYS = 30.0;
 const CROWN_SNOW = 0.8; const CROWN_SNOW_RGB = vec3f(0.90, 0.92, 0.95); const SNOW_LIT = vec2f(0.5, 1.2);
 // A tree's shadow darkens the ground by `CROWN_SHADOW` (draw.wgsl); a bush's by this share of that.
 const BUSH_SHADOW = 0.3;
+// A crown's leaves are lit as a dome (crowns.wgsl `dome_tone`, as its speck far away is) whose middle lies `CROWN_MID`
+// of its sprite's height down from its top and which reaches `CROWN_HALF` of that height up and down and the sprite's
+// half width across (measured on the sprites: the crown takes their upper four fifths).
+const CROWN_MID = 0.42; const CROWN_HALF = 0.42;
 
 // The sprites a plant of q's kind is drawn from, by its numbers (the first and how many). Its family comes from its
 // kind's genes alone, each plant crossing a border between families by its own draw (`set_draw`, `under_edge`), so a
@@ -170,7 +174,7 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   if (a + bare.a <= 0.0) { return vec4f(0.0); }
   let lum = dot(t.rgb, LUMA);
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
-  var leaf = q.rgb * lum / LEAF_MEAN;
+  var leaf = q.rgb * lum / LEAF_MEAN * dome_tone(vec2f(2.0 * uv.x - 1.0, (uv.y - CROWN_MID) / CROWN_HALF));
   // Snow on its lit leaves: how lit, against its own leaves' mean (`model_leaf`), so a dark conifer holds it as a light
   // crown does.
   let lit = lum / max(model_leaf(s), 1e-4);
@@ -185,14 +189,15 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
 // A thing standing up from its foot (a plant, a dead tree) casts its sprite on the ground away from the sun
 // (south-east): each of its texels over its foot, at a height on it, laid `MODEL_SHADOW_RUN` (draw.wgsl) of that height
 // south and as far east. A pixel looks for a mark no farther than its lattice's reach `side` m east and south of the
-// mark's foot (cover.wgsl `lattice`, mark.wgsl `mark_box`): a shadow that would reach farther is drawn smaller, all of it
-// by one factor, so it is never cut by a straight line. The cast of a thing `h` m tall and `w` m wide, its top leaning
-// `top` m east: how long it lies south, how wide, and how far east its top lies, m.
+// mark's foot (cover.wgsl `lattice`, mark.wgsl `mark_box`): a shadow that would reach farther is drawn shorter, as wide
+// as its thing (narrower only where its width alone passes the reach), so it is never cut by a straight line. The cast
+// of a thing `h` m tall and `w` m wide, its top leaning `top` m east, reaching no farther than `side` m: how long it
+// lies south, how wide, and how far east its top lies, m.
 struct Cast { long: f32, w: f32, top: f32 }
 fn cast_of(h: f32, w: f32, top: f32, side: f32) -> Cast {
-  let long = MODEL_SHADOW_RUN * h;
-  let k = min(1.0, side / max(long + 0.5 * w + max(top, 0.0), 1e-6));
-  return Cast(k * long, k * w, k * top);
+  let across = 0.5 * w + max(top, 0.0);
+  let k = min(1.0, side / max(across, 1e-6));
+  return Cast(min(MODEL_SHADOW_RUN * h, max(side - k * across, 0.0)), k * w, k * top);
 }
 
 // A stem stands round on the ground: its shadow starts across its whole base, and the base is read `BASE_ROW` of the
@@ -223,9 +228,12 @@ const STEM_REACH = 0.03;
 // north of the foot. Blurred (`SHADOW_BLUR` of its sprite at least a pixel); its leafy sprite's as many of its sprays as
 // are left, over its bare twin's, a bush's lighter (`BUSH_SHADOW`). On land, its stem's contact shade (`contact_shade`)
 // at its foot. How dark it makes the ground, 0..1.
-const SHADOW_BLUR = 0.05;
-// The cast of plant q drawn from sprite `fit`.
-fn model_cast(q: Plant, fit: ModelFit) -> Cast { return cast_of(fit.h, fit.w, 0.0, q.reach); }
+const SHADOW_BLUR = 0.2;
+// The cast of plant q drawn from sprite `fit`, no longer than `CAST_WIDTHS` times its width (`cast_of`): a soft blot
+// the shape of its crown, not a thin stroke (in a stand a long shadow falls on the crowns about it and in the floor's
+// shade, not on open ground).
+const CAST_WIDTHS = 1.5;
+fn model_cast(q: Plant, fit: ModelFit) -> Cast { return cast_of(fit.h, fit.w, 0.0, min(q.reach, (CAST_WIDTHS + 0.5) * fit.w)); }
 fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let v = p - q.at + vec2f(0.0, MAP_VIEW.y * q.wades);
   let c = model_cast(q, fit);

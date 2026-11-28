@@ -1,4 +1,4 @@
-// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl hollows.wgsl gullies.wgsl relief.wgsl clumps.wgsl cover_field.wgsl lush.wgsl no_grass.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl fire.wgsl snag.wgsl
+// uses: draw.wgsl ragged.wgsl water.wgsl style.wgsl land.wgsl rock.wgsl hollows.wgsl gullies.wgsl relief.wgsl clumps.wgsl crowns.wgsl cover_field.wgsl lush.wgsl no_grass.wgsl sprites.wgsl snag_sprites.wgsl heights.wgsl tex.wgsl plant.wgsl cells.wgsl mark.wgsl models.wgsl fire.wgsl snag.wgsl
 // The plant cover's marks over the live map (web/src/textures.ts): the trees and bushes, at every frame, plant by plant
 // where a plant takes a few pixels; where it takes less, the ground draws it as a field of the same colours
 // (lib/cover_field.wgsl), and the herbs always so, as its sward. Each lattice of marks (web/src/canopy.ts `LATTICES`)
@@ -93,12 +93,16 @@ fn marks_over(v: Varying) -> vec4f {
 
 // Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground, the fire on it is
 // `burnt` (its soot and burning: fire.wgsl `plant_fire`) and the deepest shadow laid on the pixel is `shade`: its
-// shadow and its model's sprites (models.wgsl), burnt as the field far away draws it (fire.wgsl `burnt_plant`).
+// shadow and its model's sprites (models.wgsl), burnt as the field far away draws it (fire.wgsl `burnt_plant`), in
+// `CROWN_CAST` of the shadows the plants drawn before it (north and west of it) lay there: a shadow falls on the crowns
+// south-east of its plant as on the ground, shorter as they stand nearly as high (models.wgsl `cast_of`).
+const CROWN_CAST = 0.35;
 fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32, burnt: vec2f) {
   let fit = model_fit(q);
+  let laid = *shade;
   shadow(dst, shade, fade * model_shadow(q, fit, p, e));
   let m = clump_plant(q, fit, p, e, snow);
-  if (m.a > 0.0) { over(dst, burnt_plant(m.rgb, 1.0, burnt.x, burnt.y), m.a * fade); }
+  if (m.a > 0.0) { over(dst, burnt_plant(m.rgb, 1.0, burnt.x, burnt.y) * (1.0 - CROWN_CAST * laid), m.a * fade); }
 }
 
 @fragment fn fs(v: Varying) -> @location(0) vec4f { return marks_over(v); }

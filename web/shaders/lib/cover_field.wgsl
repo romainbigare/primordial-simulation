@@ -421,25 +421,37 @@ fn stand_share(u: f32, s: f32) -> f32 {
   return clamp((g - a * u) / b, 0.0, 1.0);
 }
 
-// The colour at `at`, seen at `e` m a pixel, of layer l whose field is `f` (premultiplied), its kinds in stands of
-// about `m` m: its first kind's (layer `first`) where its stands are, the rest's (layer `rest`) elsewhere; their mean
-// where a stand takes less than a pixel. The first kind's share and the rest's colour are read between the texels as
-// plainly blended, both alike, so the rest's colour is its kinds' own; a rest under `REST_LEAST` of the layer is too
-// small to tell its colour from the field's rounding, and the layer is its mean there (in full from twice that share).
+// The kinds at `at`, seen at `e` m a pixel, of layer l whose field is `f` (premultiplied), its kinds in stands of
+// about `m` m: its mean colour, its first kind's (layer `first`) and the rest's (layer `rest`), the first's share of
+// it, and how far its stands show (where a stand takes a pixel or more; the layer is its mean where they do not). The
+// first kind's share and the rest's colour are read between the texels as plainly blended, both alike, so the rest's
+// colour is its kinds' own; a rest under `REST_LEAST` of the layer is too small to tell its colour from the field's
+// rounding, and the layer is its mean there (in full from twice that share).
 const REST_LEAST = 0.01;
-fn in_stands(at: vec2f, e: f32, f: vec4f, l: i32, first: i32, rest: i32, m: f32) -> vec3f {
+struct Stands { mean: vec3f, first: vec3f, rest: vec3f, share: f32, shows: f32 }
+fn stands_of(at: vec2f, e: f32, f: vec4f, l: i32, first: i32, rest: i32, m: f32) -> Stands {
   let mean = f.rgb / f.a;
-  if (least_e() >= 2.0 * STAND_CALM_E) { return mean; }
+  var out = Stands(mean, mean, mean, 1.0, 0.0);
+  if (least_e() >= 2.0 * STAND_CALM_E) { return out; }
   let shows = shows_at(m, e) * (1.0 - ease(STAND_CALM_E, 2.0 * STAND_CALM_E, e));
-  if (shows <= 0.0) { return mean; }
+  if (shows <= 0.0) { return out; }
   let whole = field_at(at, l);
   let one = field_at(at, first);
   let others = field_at(at, rest);
-  let told = ease(REST_LEAST, 2.0 * REST_LEAST, others.a / max(whole.a, 1e-6));
-  if (told <= 0.0) { return mean; }
-  let own = one.rgb / max(one.a, 1e-6);
-  let other = others.rgb / max(others.a, 1e-6);
-  return mix(mean, mix(other, own, stand_share(stand_draw(at, m), clamp(one.a / whole.a, 0.0, 1.0))), shows * told);
+  out.shows = shows * ease(REST_LEAST, 2.0 * REST_LEAST, others.a / max(whole.a, 1e-6));
+  out.first = one.rgb / max(one.a, 1e-6);
+  out.rest = others.rgb / max(others.a, 1e-6);
+  out.share = clamp(one.a / whole.a, 0.0, 1.0);
+  return out;
+}
+// The colour of the kinds `k` (`stands_of`) where the first kind's share of the plants is `first`.
+fn stands_colour(k: Stands, first: f32) -> vec3f { return mix(k.mean, mix(k.rest, k.first, first), k.shows); }
+// The colour at `at` of the kinds of layer l as `stands_of` gives them: its first kind's where its stands are, the
+// rest's elsewhere (`stand_share`).
+fn in_stands(at: vec2f, e: f32, f: vec4f, l: i32, first: i32, rest: i32, m: f32) -> vec3f {
+  let k = stands_of(at, e, f, l, first, rest, m);
+  if (k.shows <= 0.0) { return k.mean; }
+  return stands_colour(k, stand_share(stand_draw(at, m), k.share));
 }
 
 // The flowers over the sward at `at`, seen at `e` m a pixel, of the herbs whose share `bloom` is in flower: their
@@ -567,13 +579,15 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
   // same ground.
   var bs = b;
   bs.loose_px = max(b.loose_px, loose_unseen(b.loose_mean, e));
+  // The marks' mean widths, read once.
+  let wide = field_at(at, WIDE_LAYER);
   var hold = held_at(at, bs);
   hold.w *= mix(THIN_COVER, 1.0, ease(THIN_FROM_M - 0.5 * bs.loose_px, THIN_TO_M + 0.5 * bs.loose_px, rooted_loose(b.loose, b.loose_mean)));
   // The trees' field, read once: their crowns' share on the mean, and at the point in their clumps.
   var trees = vec4f(0.0);
   if (cover_look.sides[STANDS] > 0.0) { trees = field_smooth(at, STANDS); }
   let crowns = lushed(min(trees.a * hold[STANDS], 1.0), b.lush);
-  let crowns_here = clumped(tc, crowns, crowns);
+  let crowns_here = clumped(crowned(tc, wide[STANDS]), crowns, crowns);
   // The low kinds take the light the trees leave (the cover's light law, laws.md 3: a kind below gets the light of
   // the ground the taller does not hold and what passes its layer): they thin under the crowns that stand at the point
   // and stand as much thicker on the ground that holds no tree, their square keeping its cover. So ground too thin for
@@ -597,7 +611,7 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
     dst = sward(at, e, b, swarded, crowns_here, hold.w, lc, closed, drift);
     // A lattice no square holds adds nothing: its field is not read.
     for (var l = 0; l < rolled(STANDS); l++) {
-      if (cover_look.sides[l] > 0.0) { dst = lattice_field(at, e, l, field_smooth(at, l), b, hold[l], dst, lc, closed); }
+      if (cover_look.sides[l] > 0.0) { dst = lattice_field(at, e, l, field_smooth(at, l), wide, b, hold[l], dst, lc, closed, crowns_here); }
     }
   }
   if (far > 0.0) {
@@ -618,110 +632,79 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
     seen = vec4f(seen.rgb / max(seen.a, 1e-6) * mix(vec3f(1.0), REED_TINT, reeds) * lush_hue(b.lush) * drift * clump_light(lc, mean * (1.0 - closed)) * filled, filled);
     dst = mix(dst, vec4f(seen.rgb * (1.0 - SWARD_SHADE * crowns_here), seen.a), far);
   }
-  dst = lattice_field(at, e, STANDS, trees, b, hold[STANDS], dst, tc, 0.0);
+  dst = lattice_field(at, e, STANDS, trees, wide, b, hold[STANDS], dst, tc, 0.0, 0.0);
   // The crowns that stand over the point shade its floor (crag.wgsl `floor_of`).
   return CoverAt(dst, crowns_here, field_at(at, SHADE_LAYER).w, wet, min(field_at(at, SWARD_LAYER).a, 1.0), lushed(min(field_at(at, LOW_LAYER).a * hold.w, 1.0), b.lush));
 }
 
-// Things too small to be drawn one by one but a pixel or more across (crowns and dead trees seen from afar) are drawn
-// as round specks about `w` m across that cover the share `share` of the ground on the mean: on lattices fixed in the
-// world whose cells are `SPECK_BASE_M` times a power of two (above or below it: a young plant's speck is as small as
-// its crown), each turned its own way (`SPECK_TURN` radians an octave, so no rows line up), each cell as wide as its
-// specks, one speck a cell at most at a place of its own draw (`SPECK_JITTER` of its cell either way), in as many cells
-// as the share asks (past what specks in every cell cover, the rest lies evenly between them); the two lattices whose cells are nearest `w`
-// blended by how near, so a speck's size follows the plants' with no seam. A point reads the four cells nearest it.
-// They melt into their mean, the share evenly, as they shrink from `SPECK_PX`.y to `SPECK_PX`.x pixels across. Of the
-// point: the specks' cover, and how lit it is, -1..1, from its shaded side (south-east, away from `LIGHT`) to its lit
-// side (a round crown or stem lit from the north-west).
-// No speck is wider than `SPECK_MOST_M` (a mark is at most 10 m across: lattices.ts `marksOf`): in a program made for
-// draws whose pixels are wider than a speck (draw.wgsl `LEAST_E`) they are compiled out.
-const SPECK_BASE_M = 1.0; const SPECK_TURN = 0.9; const SPECK_JITTER = 0.4; const SPECK_PX = vec2f(1.0, 3.0);
-const SPECK_MOST_M = 10.0;
-fn specks(at: vec2f, w: f32, share: f32, e: f32, k: i32) -> vec2f {
-  if (SPECK_PX.x * least_e() >= SPECK_MOST_M) { return vec2f(min(share, 1.0), 0.0); }
-  let detail = ease(SPECK_PX.x * e, SPECK_PX.y * e, w);
-  if (detail <= 0.0 || share <= 0.0) { return vec2f(min(share, 1.0), 0.0); }
-  let octave = log2(w / SPECK_BASE_M);
-  let low = floor(octave);
-  let fine = speck_lattice(at, SPECK_BASE_M * exp2(low), SPECK_TURN * low, share, e, k);
-  let coarse = speck_lattice(at, SPECK_BASE_M * exp2(low + 1.0), SPECK_TURN * (low + 1.0), share, e, k + 3);
-  let got = mix(fine, coarse, octave - low);
-  return vec2f(mix(min(share, 1.0), got.x, detail), got.y * detail);
-}
-// The specks of `specks` on the lattice of cells `side` m, as wide as its cells, turned `turn` radians.
-fn speck_lattice(at_m: vec2f, side: f32, turn: f32, share: f32, e: f32, k: i32) -> vec2f {
-  let full = 0.25 * PI;
-  let chance = share / full;
-  let r = 0.5 * side;
-  let turned = mat2x2f(cos(turn), sin(turn), -sin(turn), cos(turn));
-  let at = turned * at_m;
-  let light = turned * LIGHT.xy / length(LIGHT.xy);
-  let near = floor(at / side - 0.5);
-  var on = 0.0;
-  var lit = 0.0;
-  for (var c = 0; c < 4; c++) {
-    let cell = near + vec2f(f32(c % 2), f32(c / 2));
-    let id = vec2i(cell);
-    let draw = vec3f(f32(lowbias(id, k) & 1023u), f32(lowbias(id, k + 1) & 1023u), f32(lowbias(id, k + 2) & 1023u)) / 1023.0;
-    if (draw.z >= chance) { continue; }
-    let d = (at - (cell + 0.5 + SPECK_JITTER * (2.0 * draw.xy - 1.0)) * side) / r;
-    let one = 1.0 - smoothstep(1.0 - 0.5 * e / r, 1.0 + 0.5 * e / r, length(d));
-    if (one > on) { on = one; lit = -dot(d, light); }
-  }
-  let even = max(share - full, 0.0) / (1.0 - full);
-  return vec2f(on + (1.0 - on) * even, lit * on);
-}
-
-// Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, as far as its marks do not show (draw.wgsl `as_crown`
-// by the width of its marks there, as each mark shows, mark.wgsl `decide`), as lush as the ground is (lush.wgsl
-// `lushed`), holding `hold` of its plants there, in clumps `c` in the gaps of the trees, which close `closed` of the ground on their mean
-// (0 for the trees: clumps.wgsl `clumped`), over `dst` (premultiplied): its shadows darken what lies below, its crowns
-// cover their share; the trees' in their stands, snowy as the ground under them, each crown a lit dome over its shadow
-// (`specks`, as wide as the marks there) from where it takes a pixel or more. A lattice no square holds (its side 0,
-// textures.ts) adds nothing. Its shadows fall on the ground among its plants: where the clumps show, none in a gap.
-// A far crown is lit by up to `DOME_LIT` of its colour either way across it, and casts its shadow `DOME_SHADOW` of its
-// width south-east (the marks' shadows reach about a crown's width: models.wgsl `cast_of`).
-const DOME_LIT = 0.35; const DOME_SHADOW = 0.6;
+// Lattice l's field `f` at `at`, seen at `e` m a pixel over `b`, its marks' mean widths there `wide` (`WIDE_LAYER`),
+// as far as its marks do not show (draw.wgsl `as_crown` by the width of its marks there, as each mark shows,
+// mark.wgsl `decide`), as lush as the ground is (lush.wgsl `lushed`), holding `hold` of its plants there, in clumps `c`
+// in the gaps of the trees, which close `closed` of the ground on their mean (0 for the trees: clumps.wgsl `clumped`),
+// over `dst` (premultiplied): its shadows darken what lies below, its crowns cover their share; the trees' in their
+// stands, snowy as the ground under them, their clumps' edges made of crowns (clumps.wgsl `crowned`), their canopy
+// grained by their groups (crowns.wgsl `canopy_grain`), each crown a lit dome over its shadow (crowns.wgsl `specks`, as
+// wide as the marks there, each of its stand's first kind or the rest by its own draw, `stand_share`) from where it
+// takes a pixel or more; the low plants under `canopy` of the trees' crowns in their shade, as the sward
+// (`SWARD_SHADE`). A lattice no square holds (its side 0, textures.ts) adds nothing. Its shadows fall on the ground
+// among its plants: where the clumps show, none in a gap. A far crown casts its shadow `DOME_SHADOW` of its width
+// south-east (the marks' shadows reach about a crown's width: models.wgsl `cast_of`). Where the trees' marks show, the
+// floor of their stand lies in the gloom of its canopy beside their own shadows, darker by `FLOOR_GLOOM` of the share
+// its crowns close (a closed canopy lets little light through its gaps to the floor: its shadows cross and the sky is
+// mostly hidden; seen from a plane the gaps in a closed wood are dark: from memory).
+const DOME_SHADOW = 0.6; const FLOOR_GLOOM = 0.6;
 // The trees' canopy seen from above is a rough top of crowns in groups (clumps.wgsl `clump_light`), its clumps' rims
-// lit by up to `CANOPY_RIM` within
-// `CANOPY_RIM_CROWNS` crowns' widths of their edge as they face the sun or turn from it; and the ground beyond a
-// clump's edge away from the sun lies in its cast shade, as long as the marks' (`MODEL_SHADOW_RUN` times the trees'
-// height) and as dark as a crown's shadow (`CROWN_SHADOW`), eased over a pixel.
+// lit by up to `CANOPY_RIM` within `CANOPY_RIM_CROWNS` crowns' widths of their edge as they face the sun or turn from
+// it; and the ground beyond a clump's edge away from the sun lies in its cast shade, as long as the marks'
+// (`MODEL_SHADOW_RUN` times the trees' height) and as dark as a crown's shadow (`CROWN_SHADOW`), its edge eased over
+// half a crown (it is the edge crowns' shadows) or a pixel.
 const CANOPY_RIM = 0.2; const CANOPY_RIM_CROWNS = 1.5;
-fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, b: Beneath, hold: f32, dst: vec4f, c: Clumps, closed: f32) -> vec4f {
+fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, wide: vec4f, b: Beneath, hold: f32, dst: vec4f, clumps: Clumps, closed: f32, canopy: f32) -> vec4f {
   if (cover_look.sides[l] <= 0.0 || f.a <= 0.0) { return dst; }
+  let w = wide[l];
   var unshown = 1.0;
-  if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_crown(field_at(at, WIDE_LAYER)[l], e); }
+  if (cover_look.shown[l] > 0.0) { unshown = 1.0 - as_crown(w, e); }
   let plain = min(f.a * hold, 1.0);
   let mean = lushed(plain, b.lush);
-  if (mean * unshown <= 0.0) { return dst; }
+  if (mean <= 0.0 || (unshown <= 0.0 && l != STANDS)) { return dst; }
   let near = mean * (1.0 - closed);
+  var c = clumps;
+  if (l == STANDS) { c = crowned(clumps, w); }
   let crowns = clumped(c, mean, near);
-  var col = f.rgb / f.a * clump_light(c, near);
-  var share = crowns;
   var dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * lush_thick(plain, b.lush), 1.0) * mix(1.0, min(crowns / mean, 1.0), c.shows);
+  let gloom = select(0.0, FLOOR_GLOOM * min(crowns, 1.0), l == STANDS);
+  if (unshown <= 0.0) { return darkened(dst, gloom); }
+  var col = f.rgb / f.a * clump_light(c, near) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
+  var share = crowns;
   if (l == STANDS) {
-    col = in_stands(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M) * clump_light(c, near);
-    let w = field_at(at, WIDE_LAYER)[l];
+    let kinds = stands_of(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M);
+    var u = 0.5;
+    var first = kinds.share;
+    if (kinds.shows > 0.0) { u = stand_draw(at, STAND_M); first = stand_share(u, kinds.share); }
+    var tone = canopy_grain(at, w, e);
     if (c.shows > 0.0) {
-      let edge = clump_edge(c, clump_ground(c, near));
+      let edge = clump_edge(c, near);
       let rim = edge.y * (1.0 - ease(0.0, CANOPY_RIM_CROWNS * w, edge.x));
-      col *= 1.0 + CANOPY_RIM * c.shows * rim;
-      let shaded = smoothstep(-e, e, edge.x - MODEL_SHADOW_RUN * field_at(at, TALL_LAYER)[l] * edge.y);
+      tone *= 1.0 + CANOPY_RIM * c.shows * rim;
+      let soft = max(e, 0.5 * w);
+      let shaded = smoothstep(-soft, soft, edge.x - MODEL_SHADOW_RUN * field_at(at, TALL_LAYER)[l] * edge.y);
       dark = max(dark, CROWN_SHADOW * c.shows * shaded);
     }
-    col = mix(col, vec3f(1.0), CANOPY_SNOW * b.snow);
     if (crowns > 0.0 && SPECK_PX.x * least_e() < SPECK_MOST_M && SPECK_PX.x * e < SPECK_MOST_M) {
       let dome = specks(at, w, crowns, e, 83);
       // The shadows: the crowns' own specks laid south-east, as dark on the mean as the field's shade.
-      let laid = specks(at - DOME_SHADOW * w * vec2f(1.0), w, crowns, e, 83).x;
+      let laid = specks(at - DOME_SHADOW * w * vec2f(1.0), w, crowns, e, 83).on;
       dark *= laid / max(crowns, 1e-3);
-      share = dome.x;
-      col *= 1.0 + DOME_LIT * dome.y;
+      share = dome.on;
+      tone *= dome.tone;
+      first = mix(first, select(0.0, 1.0, stand_pick(u, dome.own) < kinds.share), dome.look);
     }
+    col = stands_colour(kinds, first) * clump_light(c, near) * tone;
+    col = mix(col, vec3f(1.0), CANOPY_SNOW * b.snow);
   }
   share *= unshown;
-  dark = min(dark, 1.0) * unshown;
-  let below = vec4f(dst.rgb * (1.0 - dark), dark + dst.a * (1.0 - dark));
-  return vec4f(col * share, share) + below * (1.0 - share);
+  dark = mix(gloom, min(dark, 1.0), unshown);
+  return vec4f(col * share, share) + darkened(dst, dark) * (1.0 - share);
 }
+// The cover `dst` (premultiplied) under a shadow `dark` deep: what lies below darkened, the shadow's own cover added.
+fn darkened(dst: vec4f, dark: f32) -> vec4f { return vec4f(dst.rgb * (1.0 - dark), dark + dst.a * (1.0 - dark)); }

@@ -10,8 +10,8 @@ const PATCHES = [
     'var<private> mask_stands: bool = false;\nfn lattice(dst: ptr<function, vec4f>'],
   ['cover.wgsl', '      plant(dst, shade, q, p, e,',
     '      mask_stands = l == STANDS;\n      plant(dst, shade, q, p, e,'],
-  ['cover.wgsl', 'over(dst, burnt_plant(m.rgb, 1.0, burnt.x, burnt.y), m.a * fade);',
-    `over(dst, select(burnt_plant(m.rgb, 1.0, burnt.x, burnt.y), ${MAGENTA}, mask_stands), m.a * fade);`],
+  ['cover.wgsl', 'over(dst, burnt_plant(m.rgb, 1.0, burnt.x, burnt.y) * (1.0 - CROWN_CAST * laid), m.a * fade);',
+    `over(dst, select(burnt_plant(m.rgb, 1.0, burnt.x, burnt.y) * (1.0 - CROWN_CAST * laid), ${MAGENTA}, mask_stands), m.a * fade);`],
   ['lib/cover_field.wgsl', '  share *= unshown;',
     `  if (l == STANDS) { col = ${MAGENTA}; }\n  share *= unshown;`],
 ];

@@ -342,16 +342,16 @@ fn decide(l: i32, k: vec2f) -> Mark {
 // How many times their mean the plants of lattice l stand at a mark's foot at `at` among clumps `c` where the ground
 // is as lush as `lush` (lush.wgsl `lushed`; the most they may, before the ground is read, where it is the lushest, 1):
 // as the field draws them (cover_field.wgsl `lattice_field`), the share they cover of the ground the trees leave in
-// clumps (clumps.wgsl `clumped`, the low plants in the trees' gaps, `low_rank`), each clump as many times denser as
-// its plants' cover there is more than their mean, none between the clumps; so on the mean they keep their number.
+// clumps (clumps.wgsl `clumped`, the trees' edges eased over their crowns, `crowned`, the low plants in the trees'
+// gaps, `low_rank`) over their mean; so on the mean they keep their number, and a clump's edge thins mark by mark.
 fn marks_thick(l: i32, at: vec2f, c: Clumps, lush: f32) -> f32 {
   let trees = min(field_at(at, STANDS).a, 1.0);
   let own = min(select(field_at(at, l).a, trees, l == STANDS), 1.0);
   let left = select(1.0 - trees, 1.0, l == STANDS);
   var cl = c;
-  if (l != STANDS) { cl = low_rank(c); }
+  if (l == STANDS) { cl = crowned(c, field_at(at, WIDE_LAYER)[STANDS]); } else { cl = low_rank(c); }
   let near = lushed(own, lush) * left;
-  return select(0.0, max(cl.fill, near) / max(own * left, 1e-6), cl.rank < clump_ground(cl, near));
+  return max(cl.fill, near) * clump_ramp(cl.rank, clump_line(cl, near)) / max(own * left, 1e-6);
 }
 
 // The mark of a living plant of cell k of lattice l (`decide`), or that none claims the cell (its dead tree is decided

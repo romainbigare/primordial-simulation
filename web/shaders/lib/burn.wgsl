@@ -56,8 +56,8 @@ fn dead_far(p: Spot, f: FireAt, fired: bool) -> Spot {
   var on_scar = 1.0;
   if (cell_patch == 0 && fired) { on_scar = dead_on_scar(f, dead.z, p.scar.x); }
   let seen = specks(p.at, w, on_scar * dead.x / snag_kg(dead.y) * 0.25 * PI * w * w, p.e, 89);
-  let share = seen.x * (1.0 - near);
-  q.cover = vec4f(DEAD_BARK * (1.0 + DOME_LIT * seen.y) * share + q.cover.rgb * (1.0 - share), share + q.cover.a * (1.0 - share));
+  let share = seen.on * (1.0 - near);
+  q.cover = vec4f(DEAD_BARK * seen.tone * share + q.cover.rgb * (1.0 - share), share + q.cover.a * (1.0 - share));
   return q;
 }
 
