@@ -295,7 +295,8 @@ fn live_map(v: Varying) -> vec4f {
       p.depth = select(FILM_M, 0.0, spots.dry.depth > 0.0);
     }
     if (k == LAYER_RIVER) { p = spots.wet; share = spots.share; }
-    if (share <= 0.0) { continue; }
+    // (Under a channel's water that covers the whole pixel no other layer shows: none is coloured.)
+    if (share <= 0.0 || (k != LAYER_RIVER && spots.share >= 1.0)) { continue; }
     let g = ground_for(p, k == LAYER_RIVER);
     var o: Shaded;
     if (k == LAYER_RIVER) { o = river_on(p, g, spots.flow, spots.water, spots.down, spots.shaped); } else { o = colour_on(p, g); }
