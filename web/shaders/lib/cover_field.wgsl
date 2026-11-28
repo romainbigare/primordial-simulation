@@ -67,7 +67,7 @@ const PATCH_MEET_M = 60.0;
 // in the world, mixed with `STAND_MIX` of the plant's own draw, falls within the first kind's share; so a kind's stands
 // are patches about as large as the noise's cells (`STAND_M` the trees', `SWARD_STAND_M` the herbs') with mixed edges,
 // and each kind keeps its share (draw.wgsl `noise_turned`, made even over 0..1).
-const STAND_M = 60.0; const SWARD_STAND_M = 5.0; const STAND_MIX = 0.5;
+const STAND_M = 60.0; const SWARD_STAND_M = 5.0; const STAND_MIX = 0.35;
 // Far away a canopy's tone varies gently: the stands fade into their mean where a pixel takes from `STAND_CALM_E` to
 // twice as many m (by a 500 m scale bar), so only real differences (forest and meadow, leafy and bare, turned and
 // green) show there.
@@ -675,6 +675,10 @@ fn cover_field(at: vec2f, e: f32, b: Beneath) -> CoverAt {
 // its crowns close (a closed canopy lets little light through its gaps to the floor: its shadows cross and the sky is
 // mostly hidden; seen from a plane the gaps in a closed wood are dark: from memory).
 const DOME_SHADOW = 0.6; const FLOOR_GLOOM = 0.25;
+// Inside the blobs of crowns (crowns.wgsl `canopy_grain`) the ground between the trees drawn one by one (or their
+// specks) is mostly their own lower foliage, `UNDER_FILL` of it, `UNDER_FOLIAGE` as light as their tops: a blob reads
+// as one bumpy crown, its gaps to the next dark.
+const UNDER_FILL = 0.8; const UNDER_FOLIAGE = 0.6;
 // The trees' canopy seen from above is a rough top of crowns in groups (clumps.wgsl `clump_light`), its clumps' rims
 // lit by up to `CANOPY_RIM` within `CANOPY_RIM_CROWNS` crowns' widths of their edge as they face the sun or turn from
 // it; and the ground beyond a clump's edge away from the sun lies in its cast shade, as long as the marks'
@@ -695,38 +699,47 @@ fn lattice_field(at: vec2f, e: f32, l: i32, f: vec4f, wide: vec4f, b: Beneath, h
   let crowns = clumped(c, mean, near);
   var dark = CROWN_SHADOW * min(field_at(at, SHADE_LAYER)[l] * hold * lush_thick(plain, b.lush), 1.0) * mix(1.0, min(crowns / mean, 1.0), c.shows);
   let gloom = select(0.0, FLOOR_GLOOM * min(crowns, 1.0), l == STANDS);
-  if (unshown <= 0.0) { return darkened(dst, gloom); }
-  var col = f.rgb / f.a * clump_light(c, near) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
-  var share = crowns;
-  if (l == STANDS) {
-    let kinds = stands_of(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M);
-    var u = 0.5;
-    var first = kinds.share;
-    if (kinds.shows > 0.0) { u = stand_draw(at, STAND_M); first = stand_share(u, kinds.share); }
-    var tone = canopy_grain(at, w, e);
-    if (c.shows > 0.0) {
-      let edge = clump_edge(c, near);
-      let rim = edge.y * (1.0 - ease(0.0, CANOPY_RIM_CROWNS * w, edge.x));
-      tone *= 1.0 + CANOPY_RIM * c.shows * rim;
-      let soft = max(e, 0.5 * w);
-      let shaded = smoothstep(-soft, soft, edge.x - MODEL_SHADOW_RUN * field_at(at, TALL_LAYER)[l] * edge.y);
-      dark = max(dark, CROWN_SHADOW * c.shows * shaded);
-    }
-    if (crowns > 0.0 && SPECK_PX.x * least_e() < SPECK_MOST_M && SPECK_PX.x * e < SPECK_MOST_M) {
-      let dome = specks(at, w, crowns, e, 83);
-      // The shadows: the crowns' own specks laid south-east, as dark on the mean as the field's shade.
-      let laid = specks(at - DOME_SHADOW * w * vec2f(1.0), w, crowns, e, 83).on;
-      dark *= laid / max(crowns, 1e-3);
-      share = dome.on;
-      tone *= dome.tone;
-      first = mix(first, select(0.0, 1.0, stand_pick(u, dome.own) < kinds.share), dome.look);
-    }
-    col = stands_colour(kinds, first) * clump_light(c, near) * tone;
-    col = mix(col, vec3f(1.0), CANOPY_SNOW * b.snow);
+  if (l != STANDS) {
+    let col = f.rgb / f.a * clump_light(c, near) * (1.0 - SWARD_SHADE * min(canopy, 1.0));
+    let share = crowns * unshown;
+    return vec4f(col * share, share) + darkened(dst, min(dark, 1.0) * unshown) * (1.0 - share);
   }
+  let kinds = stands_of(at, e, f, STANDS, STANDS_FIRST, STANDS_REST, STAND_M);
+  var u = 0.5;
+  var first = kinds.share;
+  if (kinds.shows > 0.0) { u = stand_draw(at, STAND_M); first = stand_share(u, kinds.share); }
+  let grain = canopy_grain(at, w, e);
+  var tone = grain.tone;
+  if (c.shows > 0.0) {
+    let edge = clump_edge(c, near);
+    let rim = edge.y * (1.0 - ease(0.0, CANOPY_RIM_CROWNS * w, edge.x));
+    tone *= 1.0 + CANOPY_RIM * c.shows * rim;
+    let soft = max(e, 0.5 * w);
+    let shaded = smoothstep(-soft, soft, edge.x - MODEL_SHADOW_RUN * field_at(at, TALL_LAYER)[l] * edge.y);
+    dark = max(dark, CROWN_SHADOW * c.shows * shaded);
+  }
+  // The blobs' lower foliage between their crowns (`UNDER_FOLIAGE`).
+  let lower = mix(stands_colour(kinds, first) * clump_light(c, near) * tone, vec3f(1.0), CANOPY_SNOW * b.snow);
+  let foliage = UNDER_FILL * grain.on * min(crowns, 1.0);
+  if (unshown <= 0.0) { return over_cover(darkened(dst, gloom), UNDER_FOLIAGE * lower, foliage); }
+  var share = crowns;
+  if (crowns > 0.0 && SPECK_PX.x * least_e() < SPECK_MOST_M && SPECK_PX.x * e < SPECK_MOST_M) {
+    let dome = specks(at, w, crowns, e, 83);
+    // The shadows: the crowns' own specks laid south-east, as dark on the mean as the field's shade.
+    let laid = specks(at - DOME_SHADOW * w * vec2f(1.0), w, crowns, e, 83).on;
+    dark *= laid / max(crowns, 1e-3);
+    share = dome.on;
+    tone *= dome.tone;
+    first = mix(first, select(0.0, 1.0, stand_pick(u, dome.own) < kinds.share), dome.look);
+  }
+  let col = mix(stands_colour(kinds, first) * clump_light(c, near) * tone, vec3f(1.0), CANOPY_SNOW * b.snow);
   share *= unshown;
   dark = mix(gloom, min(dark, 1.0), unshown);
-  return vec4f(col * share, share) + darkened(dst, dark) * (1.0 - share);
+  // (The lower foliage shows between the specks as far as they show as crowns, `specks_show`.)
+  let below = over_cover(darkened(dst, dark), UNDER_FOLIAGE * lower, foliage * mix(1.0, specks_show(w, e), unshown));
+  return vec4f(col * share, share) + below * (1.0 - share);
 }
+// The cover `dst` (premultiplied) with colour `rgb` laid over it covering `a` of it.
+fn over_cover(dst: vec4f, rgb: vec3f, a: f32) -> vec4f { return vec4f(rgb * a, a) + dst * (1.0 - a); }
 // The cover `dst` (premultiplied) under a shadow `dark` deep: what lies below darkened, the shadow's own cover added.
 fn darkened(dst: vec4f, dark: f32) -> vec4f { return vec4f(dst.rgb * (1.0 - dark), dark + dst.a * (1.0 - dark)); }

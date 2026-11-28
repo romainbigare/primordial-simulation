@@ -26,7 +26,7 @@
 // does.
 const CLUMP_M = 90.0; const CLUMP_STEP = 2.9; const CLUMP_FALL = 0.6; const CLUMP_OCTAVES = 4; const CLUMP_TURN = 0.7;
 const CANOPY_FILL = 0.85; const LOW_FILL = 0.75; const CANOPY_BUMP = 0.5; const LOW_BUMP = 0.3; const LOW_SOFT = 0.3;
-const CANOPY_EDGE = 1.5; const CANOPY_EDGE_M = 2.0; const CLUMP_TONE = 0.12;
+const CANOPY_EDGE = 1.5; const CANOPY_EDGE_M = 8.0; const CLUMP_TONE = 0.12;
 const CLUMP_PX = 0.75; const CLUMP_HIDDEN = 0.35; const CLUMP_STREAM = 230;
 
 // The clumps at a point: its rank, even over 0..1, and its change across a metre east and south; how far a share

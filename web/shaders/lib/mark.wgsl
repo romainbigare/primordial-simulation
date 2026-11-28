@@ -273,7 +273,7 @@ fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: 
 // even scatter of single crowns among the others' (from memory: shrubs spread in clonal patches, and the seedlings of a
 // tree come up about their parent). The squares' first kinds on the lattice of stands stand in the stands the field
 // far away draws (`stand_pick`); the field draws the rest, and the low plants, as their mean.
-const KIND_PATCH_M = 15.0; const KIND_PATCH_MIX = 0.25; const KIND_PATCH_STREAM = 400;
+const KIND_PATCH_M = 30.0; const KIND_PATCH_MIX = 0.1; const KIND_PATCH_STREAM = 400;
 fn kind_key(at: vec2f, slot: i32, own: f32) -> f32 {
   return even_mix(smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / KIND_PATCH_M, KIND_PATCH_STREAM + slot)), own, KIND_PATCH_MIX);
 }
@@ -543,9 +543,9 @@ fn mark_plant(l: i32, k: vec2f, sq: vec2i, t: i32, z: f32, tint: f32, wades: f32
 }
 
 // A plant's colour lies between its kind's two (`plant_of`: a leaf turning in its season, `KindLook`) by its own draw
-// `own` mixed with a draw over patches `TINT_M` m across (`stand_pick`): the crowns of a stand turn together in
-// patches and groups, as the ground and the shelter they share time their season, not one by one as confetti; at the
-// foot `at`, m from the map's corner. Even over 0..1, as the field's mean counts it (style.ts `seenFar`).
-const TINT_M = 25.0; const TINT_STREAM = 260;
-fn tint_draw(at: vec2f, own: f32) -> f32 { return stand_pick(smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / TINT_M, TINT_STREAM)), own); }
+// `own`, `TINT_MIX` of it, mixed with a draw over patches `TINT_M` m across (`even_mix`): the crowns of a stand turn
+// together in patches and groups, as the ground and the shelter they share time their season, not one by one as
+// confetti; at the foot `at`, m from the map's corner. Even over 0..1, as the field's mean counts it (style.ts `seenFar`).
+const TINT_M = 40.0; const TINT_MIX = 0.15; const TINT_STREAM = 260;
+fn tint_draw(at: vec2f, own: f32) -> f32 { return even_mix(smoothstep(-EVEN_ONE, EVEN_ONE, noise_turned(at / TINT_M, TINT_STREAM)), own, TINT_MIX); }
 

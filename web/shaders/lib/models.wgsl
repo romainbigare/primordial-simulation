@@ -176,7 +176,11 @@ fn model_plant(q: Plant, fit: ModelFit, p: vec2f, e: f32, snow: f32) -> vec4f {
   if (a + bare.a <= 0.0) { return vec4f(0.0); }
   let lum = dot(t.rgb, LUMA);
   let leafy = smoothstep(LEAF_GREEN.x, LEAF_GREEN.y, t.g / max(t.r + t.g + t.b, 1e-4));
-  var leaf = q.rgb * lum / LEAF_MEAN * dome_tone(vec2f(2.0 * uv.x - 1.0, (uv.y - CROWN_MID) / CROWN_HALF));
+  // Its leaves' own light and dark show by its size in pixels (draw.wgsl `as_thing`): a crown of a few pixels is its
+  // leaves' mean lit as a dome, so a wood seen from afar reads as its crowns and their groups, not as the sprites'
+  // speckle.
+  let leaf_lum = mix(model_leaf(s), lum, as_thing(w, e));
+  var leaf = q.rgb * leaf_lum / LEAF_MEAN * dome_tone(vec2f(2.0 * uv.x - 1.0, (uv.y - CROWN_MID) / CROWN_HALF));
   // Snow on its lit leaves: how lit, against its own leaves' mean (`model_leaf`), so a dark conifer holds it as a light
   // crown does.
   let lit = lum / max(model_leaf(s), 1e-4);

@@ -69,19 +69,29 @@ fn speck_lattice(at_m: vec2f, side: f32, turn: f32, share: f32, e: f32, k: i32) 
   return Specks(on + (1.0 - on) * even, mix(1.0, dome_tone(d_on * turned), on), own, 1.0);
 }
 
-// Crowns stand in groups: a closed stand seen from above is a pebbly top of crowns and of their groups. Groups about
-// `GRAIN_CROWNS` crowns across, and their own groups `GRAIN_STEP` times that, each a dome (`dome_tone`) over the
-// specks' lattices (`speck_lattice`, every cell holding one; of each size the two lattices of `SPECK_BASE_M` times a
-// power of two about it, blended by how near, as `specks`: a lattice whose cells followed the crowns' width would
-// shift by whole cells over a small change of it, and show noise) with the shade between them `GRAIN_GAP` darker,
-// light the canopy's colour by `GRAIN` of a dome's change, as far as each shows (from `GRAIN_PX`.x pixels across,
-// fully from `.y`: a smaller dome reads as noise), the second weighing `GRAIN_FALL` of the first: about none on the
-// mean (the domes cover about `GRAIN_ON` of their ground, measured). What the colour of a canopy of crowns `w` m
-// across is multiplied by at `at`, m, seen at `e` m a pixel.
-const GRAIN_CROWNS = 2.5; const GRAIN_STEP = 4.0; const GRAIN = 0.6; const GRAIN_FALL = 0.7; const GRAIN_GAP = 0.3;
-const GRAIN_ON = 0.67; const GRAIN_PX = vec2f(2.0, 4.0); const GRAIN_STREAM = 250;
-fn canopy_grain(at: vec2f, w: f32, e: f32) -> f32 {
-  var tone = 1.0;
+// Crowns stand in groups: a closed stand seen from above is a top of round, bumpy blobs of foliage, each a dome lit on
+// its side toward the sun and dark on the other, with thin dark gaps between them, of clearly unequal sizes (a few big
+// emergent crowns, many middle ones, small ones in the gaps), each its own lightness and hue (from memory: an aerial
+// photograph of a wood shows its crowns 10 to 15 % apart in tone and hue). Such blobs about `GRAIN_CROWNS` times the
+// stand's mean crown across, and some `GRAIN_EMERGENT` of them twice as wide over them (`grain_domes`), and their own
+// groups `GRAIN_STEP` times wider, light the canopy's colour by `GRAIN` of a dome's change (`dome_tone`; the second
+// size by `GRAIN_FALL` of that), the shade between them `GRAIN_GAP` darker; each dome lighter or darker by up to
+// `GRAIN_TREE_TONE` and yellower or bluer by up to `GRAIN_TREE_HUE` (`GRAIN_HUE` a unit) by its own draw. They show as
+// far as a dome takes from `GRAIN_PX`.x pixels across, fully from `.y` (a smaller dome reads as noise). A size lies on
+// the specks' lattices of `SPECK_BASE_M` times a power of two (`speck_lattice`, every cell holding one), the two about
+// it blended over the middle `GRAIN_BLEND` of the octave between them (a lattice whose cells followed the width would
+// shift by whole cells over a small change of it and show noise; a wider blend lays two sizes of domes over each other
+// and blurs both). About none on the mean (the domes cover about `GRAIN_ON` of their ground, measured). Of a canopy of
+// crowns `w` m across at `at`, m, seen at `e` m a pixel: what its colour is multiplied by, and how much of the point
+// its blobs of the first size cover (`CanopyGrain`). The field far away (cover_field.wgsl `lattice_field`) and the
+// marks near (cover.wgsl `marks_over`) lay it alike, so a stand keeps its blobs from the field to the single trees.
+const GRAIN_CROWNS = 1.0; const GRAIN_STEP = 4.0; const GRAIN = 0.8; const GRAIN_FALL = 0.7; const GRAIN_GAP = 0.3;
+const GRAIN_ON = 0.67; const GRAIN_PX = vec2f(2.0, 4.0); const GRAIN_STREAM = 250; const GRAIN_BLEND = 0.3;
+const GRAIN_EMERGENT = 0.25;
+const GRAIN_TREE_TONE = 0.12; const GRAIN_TREE_HUE = 0.12; const GRAIN_HUE = vec3f(0.6, 0.15, -0.9);
+struct CanopyGrain { tone: vec3f, on: f32 }
+fn canopy_grain(at: vec2f, w: f32, e: f32) -> CanopyGrain {
+  var out = CanopyGrain(vec3f(1.0), 0.0);
   var size = GRAIN_CROWNS * w;
   var weight = GRAIN;
   for (var o = 0; o < 2; o++) {
@@ -89,17 +99,32 @@ fn canopy_grain(at: vec2f, w: f32, e: f32) -> f32 {
     if (shows > 0.0) {
       let octave = log2(size / SPECK_BASE_M);
       let low = floor(octave);
-      let f = octave - low;
-      var g = 0.0;
+      let f = smoothstep(0.5 - 0.5 * GRAIN_BLEND, 0.5 + 0.5 * GRAIN_BLEND, octave - low);
+      var g = vec4f(0.0);
       for (var n = 0; n < 2; n++) {
-        let at_n = low + f32(n);
-        let one = speck_lattice(at, SPECK_BASE_M * exp2(at_n), SPECK_TURN * at_n, 0.25 * PI, e, GRAIN_STREAM + 3 * n);
-        g += select(1.0 - f, f, n == 1) * (one.tone - 1.0 + GRAIN_GAP * (one.on - GRAIN_ON));
+        let wn = select(1.0 - f, f, n == 1);
+        if (wn > 0.0) { g += wn * grain_domes(at, low + f32(n), e, GRAIN_STREAM + 6 * n + 12 * o); }
       }
-      tone += weight * shows * g;
+      out.tone += weight * shows * g.rgb;
+      if (o == 0) { out.on = shows * g.a; }
     }
     size *= GRAIN_STEP;
     weight *= GRAIN_FALL;
   }
-  return max(tone, 0.0);
+  out.tone = max(out.tone, vec3f(0.0));
+  return out;
+}
+// The domes of `canopy_grain` on the lattice of octave `at_n` (`SPECK_BASE_M` times 2 to its power), with
+// `GRAIN_EMERGENT` of the cells of the next lattice holding a dome twice as wide over them, seen at `e` m a pixel,
+// streams from `k`: the change they make to a canopy's colour, and their cover.
+fn grain_domes(at: vec2f, at_n: f32, e: f32, k: i32) -> vec4f {
+  let one = speck_lattice(at, SPECK_BASE_M * exp2(at_n), SPECK_TURN * at_n, 0.25 * PI, e, k);
+  let big = speck_lattice(at, SPECK_BASE_M * exp2(at_n + 1.0), SPECK_TURN * (at_n + 1.0), 0.25 * PI * GRAIN_EMERGENT, e, k + 3);
+  // (The big dome's draw is under `GRAIN_EMERGENT`: made even over 0..1 again.)
+  let is_big = big.on > 0.5;
+  let draw = select(one.own, big.own / GRAIN_EMERGENT, is_big);
+  let own = vec2f(draw, fract(draw * 61.7)) * 2.0 - 1.0;
+  let tree = GRAIN_TREE_TONE * own.x + GRAIN_TREE_HUE * own.y * GRAIN_HUE;
+  let on = max(one.on, big.on);
+  return vec4f(select(one.tone, big.tone, is_big) - 1.0 + GRAIN_GAP * (on - GRAIN_ON) + on * tree, on);
 }

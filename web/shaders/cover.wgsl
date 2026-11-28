@@ -48,8 +48,9 @@ fn burnt_tree(l: i32, k: vec2f, h: f32, months: f32) -> Snag {
 // The marks of lattice l over dst at p, m from the draw's corner, e m a pixel, the deepest shadow laid on the pixel
 // `shade`: of the cells about the pixel's whose marks reach its cell (`reach_at`), the marks that stand and cover it
 // (`decided`): living plants, and dead trees where fire left dead walls standing (mark.wgsl `dead_decided`), in one
-// order, row by row from the north.
-fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i32, e: f32) {
+// order, row by row from the north. The trees' crowns in the groups their field far away has (crowns.wgsl
+// `canopy_grain`), whose colour multiplies theirs by `canopy`.
+fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i32, e: f32, canopy: vec3f) {
   let fade = cover_look.shown[l];
   if (fade <= 0.0) { return; }
   let cell = floor(cover.grid[l].xy + p / cover.grid[l].z);
@@ -70,7 +71,7 @@ fn lattice(dst: ptr<function, vec4f>, shade: ptr<function, f32>, p: vec2f, l: i3
       let g = decided_ground(l, k);
       let q = mark_plant(l, k, vec2i(s % n, s / n), kd % kinds_n(), place_of(packed % (GROUPS * PLACE_STEPS)), m.tint, wade.y);
       if (g.z > 0.0) { snag_over(dst, shade, burnt_tree(l, k, q.h, dead_months(g.z)), p, l, k, e, fade * wade.x); continue; }
-      plant(dst, shade, q, p, e, fade * wade.x, g.x, g.yw, 1.0 - SWARD_SHADE * m.under);
+      plant(dst, shade, q, p, e, fade * wade.x, g.x, g.yw, (1.0 - SWARD_SHADE * m.under) * select(vec3f(1.0), canopy, l == STANDS));
     }
   }
 }
@@ -84,7 +85,9 @@ fn marks_over(v: Varying) -> vec4f {
   bends_e = e;
   var dst = vec4f(0.0);
   var shade = 0.0;
-  for (var l = 0; l < rolled(COVER_LATTICES); l++) { lattice(&dst, &shade, p, l, e); }
+  var canopy = vec3f(1.0);
+  if (cover_look.shown[STANDS] > 0.0) { canopy = canopy_grain(cover.corner.xy + p, field_at(cover.corner.xy + p, WIDE_LAYER)[STANDS], e).tone; }
+  for (var l = 0; l < rolled(COVER_LATTICES); l++) { lattice(&dst, &shade, p, l, e, canopy); }
   // Linear light turned into the screen's share once (draw.wgsl `srgb`), in the style (style.wgsl `painted`),
   // premultiplied.
   if (dst.a <= 0.0) { return vec4f(0.0); }
@@ -93,12 +96,12 @@ fn marks_over(v: Varying) -> vec4f {
 
 // Plant q over dst at p, e m a pixel, as strongly as `fade`, where snow covers `snow` of the ground, the fire on it is
 // `burnt` (its soot and burning: fire.wgsl `plant_fire`) and the deepest shadow laid on the pixel is `shade`: its
-// shadow and its model's sprites (models.wgsl), burnt as the field far away draws it (fire.wgsl `burnt_plant`), lit
-// `lit` of full (a low plant in the trees' shade, mark.wgsl `crowns_over`), in `CROWN_CAST` of the shadows the plants
+// shadow and its model's sprites (models.wgsl), burnt as the field far away draws it (fire.wgsl `burnt_plant`), its
+// colour times `lit` (a low plant in the trees' shade, mark.wgsl `crowns_over`; a tree in its group of crowns), in `CROWN_CAST` of the shadows the plants
 // drawn before it (north and west of it) lay there: a shadow falls on the crowns south-east of its plant as on the
 // ground, shorter as they stand nearly as high (models.wgsl `cast_of`).
 const CROWN_CAST = 0.35;
-fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32, burnt: vec2f, lit: f32) {
+fn plant(dst: ptr<function, vec4f>, shade: ptr<function, f32>, q: Plant, p: vec2f, e: f32, fade: f32, snow: f32, burnt: vec2f, lit: vec3f) {
   let fit = model_fit(q);
   let laid = *shade;
   shadow(dst, shade, fade * model_shadow(q, fit, p, e));
