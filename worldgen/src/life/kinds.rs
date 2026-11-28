@@ -66,7 +66,7 @@ const DRY_WOODY: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.4), (c
 /// of living cover), a light capacity a quarter above the herb's, fully active down to a third of what its ground holds
 /// for roots, a quarter of what it builds to seeds, a short life (repair -1), and 3% of its soft tissue as the solid
 /// that slows the burning of fuel (`BURN_CURBS`): plants that make such a solid hold about 1 to 5% of their
-/// dry leaf mass so (from memory), and a bite of it slows the burning of a body that eats it (laws.md 2.1).
+/// dry leaf mass so (from memory).
 const TALL_FAST: [f32; cover::NG] = with(COVER_GENES, &[(cover::LIGHT, -4.9), (cover::LEAF, 0.5), (cover::WALLS, 0.4), (cover::MOIST, -0.5), (cover::SEED, 0.25), (cover::BURN_CURBS, -1.523)]);
 
 /// Starting kinds of cover, in the order the roster places them. A row sets only what the laws read (genes, and where,

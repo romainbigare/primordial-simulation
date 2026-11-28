@@ -1,4 +1,4 @@
-//! The ground a shell draws, in tiles (laws.md 10): what never changes of a place, made once and kept. A tile of
+//! The ground a shell draws, in tiles (laws.md 0, docs/tape.md): what never changes of a place, made once and kept. A tile of
 //! `depth` holds `TILE` x `TILE` texels, each a leaf of that depth, and `GUTTER` texels more along each edge, so a
 //! shader reads a texel's neighbours inside the tile. Per texel: the terrain's mean height over it
 //! (`Terrain::heights_on`, so a texel is the mean of its four children), the wetness index of the place (`wetness`), and

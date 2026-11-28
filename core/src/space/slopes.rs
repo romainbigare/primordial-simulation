@@ -1,4 +1,4 @@
-//! The slopes of the ground worn at the world's start (laws.md 0 and 8, `space::wear`): they creep, and the ground
+//! The slopes of the ground worn at the world's start (laws.md 0 and 5, `space::wear`): they creep, and the ground
 //! floats back up as the wear unloads it.
 
 use super::grid::Grid;

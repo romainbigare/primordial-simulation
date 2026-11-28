@@ -14,6 +14,16 @@ debug = 1
 lto = "thin"
 codegen-units = 1
 
+# Daily work (docs/workflow.md): release without link-time optimisation, in 16 parts, incremental. The same worlds bit
+# for bit as `release`, about 10 % slower to run, a change of `core` built again in seconds instead of minutes. The
+# gate before main builds `release`.
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+debug = 0
+
 [profile.dev]
 opt-level = 1
 

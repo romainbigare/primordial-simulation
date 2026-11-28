@@ -1,4 +1,4 @@
-//! The shelf the wear at the world's start lays on the open low ground (laws.md 0 and 8): what flowing liquid and
+//! The shelf the wear at the world's start lays on the open low ground (laws.md 0 and 5): what flowing liquid and
 //! creep carry off the land into the open low ground (`space::wear`) settles where the liquid slows, at the mouths of
 //! the channels, and the waves spread it along the shore. Each sample of the shore takes the load that reached the
 //! shore within `ALONG_M` of it, as a share of that stretch of shore; from it the load builds out a platform a little

@@ -1,4 +1,4 @@
-//! The loose ground the wear at the world's start leaves on the land (laws.md 0 and 8, `space::wear`): the depth where
+//! The loose ground the wear at the world's start leaves on the land (laws.md 0 and 5, `space::wear`): the depth where
 //! the bed's breaking into loose ground balances what takes it away. The bed breaks at `BREAKS` a year under no loose
 //! ground, e times slower under each `BREAKS_UNDER_M` of it (Heimsath, Dietrich, Nishiizumi and Finkel 1997). Two things
 //! take it away, and the depth is the smaller of the two balances (all of the loose ground creeps, what settled too):

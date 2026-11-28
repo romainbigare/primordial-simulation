@@ -1,4 +1,4 @@
-//! The ground below the terrain's samples (laws.md 0 and 8): one function of the seed and the map that every cell's
+//! The ground below the terrain's samples (laws.md 0 and 5): one function of the seed and the map that every cell's
 //! height and level-volume curve and every pixel a shell draws read (`Terrain::heights_on`, `Terrain::inside`).
 //!
 //! Each leaf finer than `SAMPLE_DEPTH` departs from its parent's mean by a smooth continuation of the coarser heights
