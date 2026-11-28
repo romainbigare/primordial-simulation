@@ -164,8 +164,8 @@ fn plume_at(at: vec2f) -> f32 {
 // The sample next along the channel of sample `s` from the point `at` (m from the map's north-west corner), and the
 // share of the way from `s`'s centre to that one's the point lies (0: none): a channel's numbers grow evenly from one
 // sample's centre to the next one's along it (`links_of`), so its width has no step where two samples meet; a
-// tributary keeps its own to its join, and a channel its own up to a sample through which none runs (the liquid of a
-// pond passes through its body, not its samples' channels: below its outlet the river starts as wide as it runs).
+// tributary keeps its own to its join; the discharge grown is what runs through the line (`discharge_through`), so a
+// river leaving a lake is as wide as it runs from the shore on.
 struct Next { s: vec2i, share: f32 }
 fn next_along(s: vec2i, at: vec2f) -> Next {
   var next = Next(s, 0.0);
@@ -179,7 +179,7 @@ fn next_along(s: vec2i, at: vec2f) -> Next {
     let n = select(code, code - 1, code <= 4);
     let step = vec2i(n % 3, n / 3) - 1;
     let a = min(dot(p, vec2f(step)) / f32(dot(step, step)), 1.0);
-    if (a > next.share && discharge_of(s + step) > 0.0) { next = Next(s + step, a); }
+    if (a > next.share) { next = Next(s + step, a); }
   }
   return next;
 }

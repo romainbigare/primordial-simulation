@@ -11,6 +11,8 @@ const CHANNEL_NEAR = 3.0;
 // `STONE_SMALL.y` of its sample's size.
 const IN_CHANNEL = 0.6; const STONES_OUT = 1.8; const WORN_Q = vec2f(0.005, 0.3); const BAR_FINES = 0.5; const WALL = 0.85; const BLOCKS = 0.5; const STEEP_SHARP = 0.5;
 const STONE_SMALL = vec2f(0.3, 1.25);
+// A channel's bed holds its stones from where it is `STONED_PX.x` pixels wide, all of them from `.y`.
+const STONED_PX = vec2f(2.0, 4.0);
 // The edge of standing liquid is found from how fast its depth changes across the ground, the ground's slope: no slower
 // than this (rise over run), so on flat ground the edge still lies within a pixel's footprint where the depth crosses.
 const SHORE_RISE_LEAST = 1e-3;
@@ -41,8 +43,10 @@ fn stony(s: Spot, g: Tiled, ch: Channel, q: f32, moved: f32, cobble: f32) -> Spo
   p.small = clamp(max(STONE_SEEN * moved, COBBLE_M) / cobble, STONE_SMALL.x, STONE_SMALL.y);
   let steep_reach = ease(STEEP_STONE.x, STEEP_STONE.y, moved);
   let beside = steep_reach * (1.0 - ease(ch.bed, STONES_OUT * ch.bed, g.d));
-  p.stony = IN_CHANNEL * ease(0.0, BAR_SAND_STONE, moved) * select(beside, 1.0, g.d < ch.bed);
-  p.blocks = BLOCKS * steep_reach * select(beside, 1.0, g.d < ch.bed);
+  // (A bed narrower than `STONED_PX` pixels is drawn as its water's thin line, not as a row of stones.)
+  let in_bed = select(beside, ease(STONED_PX.x * s.e, STONED_PX.y * s.e, 2.0 * ch.bed), g.d < ch.bed);
+  p.stony = IN_CHANNEL * ease(0.0, BAR_SAND_STONE, moved) * in_bed;
+  p.blocks = BLOCKS * steep_reach * in_bed;
   p.rock = max(p.rock, WALL * beside);
   p.cover *= 1.0 - WALL * beside;
   if (p.stony > 0.0) { p.worn = ease(log(WORN_Q.x), log(WORN_Q.y), log(max(q, 1e-9))) * (1.0 - STEEP_SHARP * steep_reach); }
@@ -118,7 +122,7 @@ fn land_spots(at: vec2f, e: f32) -> Spots {
   let near = g.d < max(CHANNEL_NEAR * banks, line_most(e)) + 2.0 * e;
   if (near) {
     next = next_along(reach, at);
-    q = mix(q, discharge_of(next.s), next.share);
+    q = mix(q, discharge_through(next.s), next.share);
     banks = banks_of(q);
   }
   let mouth = through_band(g, e);
@@ -291,7 +295,8 @@ fn live_map(v: Varying) -> vec4f {
       p.depth = select(FILM_M, 0.0, spots.dry.depth > 0.0);
     }
     if (k == LAYER_RIVER) { p = spots.wet; share = spots.share; }
-    if (share <= 0.0) { continue; }
+    // (Under a channel's water that covers the whole pixel no other layer shows: none is coloured.)
+    if (share <= 0.0 || (k != LAYER_RIVER && spots.share >= 1.0)) { continue; }
     let g = ground_for(p, k == LAYER_RIVER);
     var o: Shaded;
     if (k == LAYER_RIVER) { o = river_on(p, g, spots.flow, spots.water, spots.down, spots.shaped); } else { o = colour_on(p, g); }
