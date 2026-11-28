@@ -1,15 +1,15 @@
-// The controls of god mode's panel (god-menu.ts), drawn as pictures: the brush's sizes as dots that grow, a tool's
-// setting as cuts through the ground or as pictures, the pictures beside the page, the big button held for a stroke at
-// the sight on a phone, and the reason most cells of a paint give.
+// The controls of god mode's menu (god-menu.ts, god-list.ts), drawn as pictures: the brush's sizes as small dots that
+// grow, a tool's setting as cuts through the ground or as pictures, the pictures beside the page, the big button held
+// for a stroke at the sight on a phone, and the reason most cells of a paint give.
 import type { Brushed, GodSetting } from './god-types';
 
 /** The drawn side of the smallest and of the largest brush's dot, css px: the dots between grow evenly. */
-const DOT_LEAST_PX = 8, DOT_MOST_PX = 28;
+const DOT_LEAST_PX = 6, DOT_MOST_PX = 17;
 /** Of a depth setting's cut through the ground, in its 40 x 24 drawing: the top of the ground, and the depth of the
  * shallowest and of the deepest cut under it. */
 const CUT_TOP = 6, CUT_LEAST = 5, CUT_MOST = 16;
 /** The side of the smaller copy of a setting's picture, px. */
-const KIND_SIDE = 160;
+export const KIND_SIDE = 160;
 /** An ink lighter than this (its luminance, 0 to 1) takes dark words on it, a darker one white words. */
 const LIGHT_INK = 0.55;
 
@@ -35,25 +35,34 @@ function settingRow(name: string, value: string, items: HTMLElement[]): HTMLElem
   return row;
 }
 
-/** A choice of a setting: its words for a screen reader and a mouse, whether it is on, and what picks it. */
-function choice(cls: string, label: string, title: string, on: boolean, pick: () => void): HTMLButtonElement {
-  const b = make('button', cls);
-  b.type = 'button'; b.title = title; b.setAttribute('aria-label', label); b.setAttribute('aria-pressed', String(on));
-  b.onclick = pick;
+/** A button of class `cls` holding `html`, named `label` (its title and its words for a screen reader), doing `act`. */
+export function tapButton(cls: string, html: string, label: string, act: () => void): HTMLButtonElement {
+  const b = make('button', cls, html);
+  b.type = 'button'; b.title = label; b.setAttribute('aria-label', label);
+  b.onclick = act;
   return b;
 }
 
-/** The brush's sizes: the radii the tool may take (`radii`, m, of all the sizes `all`), each a dot as large as its rank
- * among all, the one on (`radius`) in the tool's ink; a dot pressed calls `pick` with its radius. */
-export function sizeRow(all: number[], radii: number[], radius: number, pick: (m: number) => void): HTMLElement {
-  const dots = radii.map(m => {
-    const b = choice('dot', `Brush ${radiusText(m)}`, radiusText(m), m === radius, () => pick(m));
+/** A choice of a setting: its words for a screen reader, the line a mouse shows, whether it is on, and what picks it. */
+function choice(cls: string, label: string, title: string, on: boolean, pick: () => void): HTMLButtonElement {
+  const b = tapButton(cls, '', label, pick);
+  b.title = title; b.setAttribute('aria-pressed', String(on));
+  return b;
+}
+
+/** The brush's sizes in a row: the radii the tool may take (`radii`, m, of all the sizes `all`), each a dot as large as
+ * its rank among all, the one on (`radius`) in the tool's ink; a dot pressed calls `pick` with its radius. */
+export function sizeDots(all: number[], radii: number[], radius: number, pick: (m: number) => void): HTMLElement {
+  const row = make('div', 'dots');
+  row.setAttribute('role', 'group'); row.setAttribute('aria-label', `Brush size: ${radiusText(radius)}`);
+  row.append(...radii.map(m => {
+    const b = choice('dot', `Brush ${radiusText(m)}`, `Brush ${radiusText(m)}`, m === radius, () => pick(m));
     const d = DOT_LEAST_PX + ((DOT_MOST_PX - DOT_LEAST_PX) * all.indexOf(m)) / Math.max(all.length - 1, 1);
     b.append(make('span', ''));
     b.style.setProperty('--d', `${d}px`);
     return b;
-  });
-  return settingRow('Size', radiusText(radius), dots);
+  }));
+  return row;
 }
 
 /** A tool's own setting `s`: each choice a cut through the ground, deeper than the one before, with its words under it

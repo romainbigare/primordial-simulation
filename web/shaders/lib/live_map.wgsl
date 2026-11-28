@@ -304,6 +304,8 @@ fn live_map(v: Varying) -> vec4f {
   }
   var shown = 0.0;
   if (earth.view.x == 1.0) { shown = layer_at(at, spots.dry); }
-  let rgb = in_view_of(c, shown);
+  var rgb = in_view_of(c, shown);
+  // In the Earth view the dry ground takes the shade of its steepness and of the heights toward the light.
+  if (styled() && spots.dry.depth <= 0.0) { rgb *= relief_shade(spots.dry.slope, horizon_at(at)); }
   return vec4f(clamp(rgb / 255.0, vec3f(0.0), vec3f(1.0)) * draw.alpha, draw.alpha);
 }

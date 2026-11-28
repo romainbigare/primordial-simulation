@@ -12,7 +12,14 @@ const SATURATE = 0.35; const CONTRAST = 0.15; const LIFT = 0.06;
 
 // The relief: the light's departure from flat ground's this many times stronger at full strength, held between the
 // shade's soft ambient light and the brightest lit side; the shaded side cool, the lit side warm.
-const RELIEF = 1.6; const AMBIENT = 0.62; const LIT_TOP = 1.35;
+const RELIEF = 2.0; const AMBIENT = 0.30; const LIT_TOP = 1.7;
+// Steep ground is darker whichever way it faces, by up to `STEEP_SHADE` from a slope of `STEEP_SLOPES.x` (rise over
+// run) to `STEEP_SLOPES.y`: a ridge that runs along the light, whose two sides it lights alike, still shows its sides.
+// Ground the light does not reach, in the shade of higher ground toward it, is darkened to `CAST_SHADE`: where the
+// slope up to that ground (rock.wgsl `horizon_at`) passes the light's rise, eased from `CAST_EDGE.x` under it to
+// `CAST_EDGE.y` over it (a soft edge: the sun is a disc and the air scatters its light).
+const STEEP_SHADE = 0.6; const STEEP_SLOPES = vec2f(0.03, 0.7);
+const CAST_SHADE = 0.62; const CAST_EDGE = vec2f(-0.10, 0.06);
 const SHADE_TINT = vec3f(0.80, 0.88, 1.08); const LIT_TINT = vec3f(1.06, 1.02, 0.92);
 // Bare ground is drawn by its grain (a painted map's earth): its colour times a tint at full strength, the tints of its
 // grains by their shares. Coarse grain (sand) pale and warm: quartz grains bare of coatings; middle grain (silt) warm;
@@ -122,6 +129,13 @@ fn relief_light(x: f32) -> f32 {
   // Below 1 it falls towards the ambient light, above towards the top, each as steeply as k at 1 (no crease).
   if (k < 1.0) { return AMBIENT + (1.0 - AMBIENT) * exp((k - 1.0) / (1.0 - AMBIENT)); }
   return LIT_TOP - (LIT_TOP - 1.0) * exp(-(k - 1.0) / (LIT_TOP - 1.0));
+}
+
+// What the colour of dry ground of slope `slope` (rise over run) is multiplied by where the slope up to the highest
+// ground toward the light is `horizon`: its steepness' shade and the shade cast on it (`STEEP_SHADE`, `CAST_SHADE`).
+fn relief_shade(slope: f32, horizon: f32) -> f32 {
+  let unlit = smoothstep(CAST_EDGE.x, CAST_EDGE.y, horizon - LIGHT.z / length(LIGHT.xy));
+  return mix(1.0, STEEP_SHADE, smoothstep(STEEP_SLOPES.x, STEEP_SLOPES.y, slope)) * mix(1.0, CAST_SHADE, unlit);
 }
 
 // What the colour of ground whose share `bare` is bare, and whose share `seen` shows its soil from above

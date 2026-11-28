@@ -20,15 +20,13 @@ MARCH_STEPS = 400
 MARCH_SAFETY = 0.8
 # The pictures are rendered this many times larger than they are saved, then shrunk (anti-aliasing).
 SUPER = 1.5
+# The size a tool's picture is drawn at, and the size it is saved at (the page's thumbnail) with its file's byte budget.
 FULL = (960, 540)
-SMALL = (480, 270)
+SMALL, SMALL_BYTES = (480, 270), 50_000
+# The same for a plant kind's picture.
+KIND_SIZE = (320, 240)
+KIND_SMALL, KIND_SMALL_BYTES = (160, 120), 15_000
 JPEG_QUALITY = 82
-# Each picture's file under this many bytes, each smaller one under the second (the UI's budget).
-FULL_BYTES, SMALL_BYTES = 150_000, 50_000
-# A plant kind's card: its size, its smaller twin's, and their budgets.
-KIND_OUT, KIND_SMALL = (320, 240), (160, 120)
-KIND_SIZE = KIND_OUT
-KIND_BYTES, KIND_SMALL_BYTES = 40_000, 15_000
 
 
 class View:
@@ -300,21 +298,17 @@ def finish(buf, grade):
     return np.clip(s * v[..., None], 0, 1)
 
 
-def save(srgb, path_stem, size=FULL, small=SMALL, full_bytes=FULL_BYTES, small_bytes=SMALL_BYTES):
-    """The picture as `stem.jpg` at `size` and `stem@<w>.jpg` at `small`, each JPEG at `JPEG_QUALITY`, lowered a
-    step at a time where its file would pass its byte budget. Returns the two files' sizes."""
+def save(srgb, path_stem, small=SMALL, small_bytes=SMALL_BYTES):
+    """The picture as `stem@<w>.jpg` at `small`, a JPEG at `JPEG_QUALITY`, lowered a step at a time where its file
+    would pass its byte budget. Returns the file's size."""
     im = Image.fromarray((srgb * 255 + 0.5).astype(np.uint8), 'RGB')
-    sizes = []
-    for (w, h), cap, name in ((size, full_bytes, f'{path_stem}.jpg'),
-                              (small, small_bytes, f'{path_stem}@{small[0]}.jpg')):
-        out = im.resize((w, h), Image.LANCZOS).filter(ImageFilter.UnsharpMask(radius=1.0, percent=40, threshold=2))
-        q = JPEG_QUALITY
-        while True:
-            b = io.BytesIO()
-            out.save(b, 'JPEG', quality=q, optimize=True, progressive=True)
-            if b.tell() <= cap or q <= 60:
-                break
-            q -= 3
-        open(name, 'wb').write(b.getvalue())
-        sizes.append(b.tell())
-    return sizes
+    out = im.resize(small, Image.LANCZOS).filter(ImageFilter.UnsharpMask(radius=1.0, percent=40, threshold=2))
+    q = JPEG_QUALITY
+    while True:
+        b = io.BytesIO()
+        out.save(b, 'JPEG', quality=q, optimize=True, progressive=True)
+        if b.tell() <= small_bytes or q <= 60:
+            break
+        q -= 3
+    open(f'{path_stem}@{small[0]}.jpg', 'wb').write(b.getvalue())
+    return b.tell()

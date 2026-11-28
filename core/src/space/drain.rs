@@ -1,4 +1,4 @@
-//! The way liquid leaves the terrain's samples (laws.md 0 and 8): a priority flood from the open low ground that does
+//! The way liquid leaves the terrain's samples (laws.md 0 and 5): a priority flood from the open low ground that does
 //! not raise the ground (Barnes, Lehman and Mulla 2014). It reaches the samples across their sides by the level their
 //! liquid stands to, lowest first: a sample's own height where it drains, and under a closed basin's level that of the
 //! basin's lowest pass (the highest ground on the lowest way out). Each sample's liquid runs to one of the neighbours

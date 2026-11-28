@@ -1,5 +1,5 @@
 // The tools of god mode (god-types.ts `GodTool`) and the classes and categories that hold them, as the page shows them
-// (god-menu.ts); the tools to come stand among them as cards that cannot be picked. Each tool paints with the round brush
+// (god-list.ts); the tools to come stand among them as rows that cannot be picked. Each tool paints with the round brush
 // (wasm/src/edit.rs `brush`): Raise and Lower land move the ground under it while held, the faster the larger the
 // brush, along the brush's path, the map showing the new ground at each of the page's frames, and the world builds its
 // samples and settles its liquid over the new ground once the brush rested after the stroke (`settle`); Lake brush digs
@@ -65,30 +65,30 @@ const UNPLANTED: Record<string, string> = { NoLand: OPEN_WATER, NoRoom: 'The pla
 const plainKind = (k: StartKind): [string, string] => PLAIN_KINDS[k.name] ?? [k.name, ''];
 /** The picture of a starting kind, by its plain name ("Swamp trees": `kind-swamp-trees`). */
 const kindPic = (plain: string) => `kind-${plain.toLowerCase().replace(/ /g, '-')}`;
-/** A tool to come: its name and its picture. */
-const soon = (label: string, pic: string): SoonTool => ({ soon: true, label, pic });
+/** A tool to come: its name, its picture and what it will do. */
+const soon = (label: string, pic: string, about: string): SoonTool => ({ soon: true, label, pic, about });
 
 /** The classes of god mode's tools, with today's tools and those to come; Plants plants one of the world's starting kinds
  * (`kinds`). */
 export function godClasses(kinds: () => StartKind[]): GodClass[] {
   const [raise, lower, lake, plant, burn] = godTools(kinds);
   /** A category with no tools yet. */
-  const empty = (label: string, icon: IconName, pic: string) => ({ label, icon, pic, tools: [] });
+  const empty = (label: string, icon: IconName) => ({ label, icon, tools: [] });
   return [
-    { label: 'Human', icon: 'human', pic: 'human-built', categories: [
-      empty('Population', 'population', 'human-population'), empty('War', 'war', 'human-war'), empty('Culture', 'culture', 'human-culture'),
-      empty('Technology', 'technology', 'human-technology'), empty('Built environment', 'built', 'human-built'),
+    { label: 'Human', icon: 'human', categories: [
+      empty('Population', 'population'), empty('War', 'war'), empty('Culture', 'culture'), empty('Technology', 'technology'),
+      empty('Built environment', 'built'),
     ] },
-    { label: 'Animals', icon: 'animals', pic: 'animal-population', categories: [empty('Population', 'population', 'animal-population')] },
-    { label: 'Nature', icon: 'nature', pic: 'mountains', categories: [
-      { label: 'Create', icon: 'create', tools: [plant, soon('Mountains', 'mountains'), soon('Rivers', 'rivers'), soon('Lakes', 'lakes')] },
-      { label: 'Edit', icon: 'edit', tools: [raise, lower, lake, soon('Smooth land', 'smooth')] },
+    { label: 'Animals', icon: 'animals', categories: [empty('Population', 'population')] },
+    { label: 'Nature', icon: 'nature', categories: [
+      { label: 'Create', icon: 'create', tools: [plant, soon('Mountains', 'mountains', 'A ready-made mountain'), soon('Rivers', 'rivers', 'Draws a river'), soon('Lakes', 'lakes', 'A ready-made lake')] },
+      { label: 'Edit', icon: 'edit', tools: [raise, lower, lake, soon('Smooth land', 'smooth', 'Softens rough land')] },
     ] },
-    { label: 'Destruction', icon: 'destruction', pic: 'volcano', categories: [
-      { label: 'Fire', icon: 'fire', tools: [soon('Meteor shower', 'meteor'), soon('Volcano', 'volcano'), burn] },
-      { label: 'Water', icon: 'lake', tools: [soon('Tsunami', 'tsunami'), soon('Flood', 'flood'), soon('Drought', 'water-drought')] },
+    { label: 'Destruction', icon: 'destruction', categories: [
+      { label: 'Fire', icon: 'fire', tools: [soon('Meteor shower', 'meteor', 'Rocks fall from the sky'), soon('Volcano', 'volcano', 'A cone that pours lava'), burn] },
+      { label: 'Water', icon: 'lake', tools: [soon('Tsunami', 'tsunami', 'A great wave hits the coast'), soon('Flood', 'flood', 'Rivers and lakes spill over'), soon('Drought', 'water-drought', 'Rivers and lakes dry up')] },
       { label: 'Climate', icon: 'heatwave', tools: [
-        soon('Drought', 'climate-drought'), soon('Heatwave', 'heatwave'), soon('Glacial times', 'glacial'), soon('Tornado & storm', 'storm'),
+        soon('Drought', 'climate-drought', 'No rain for a long time'), soon('Heatwave', 'heatwave', 'Days of fierce heat'), soon('Glacial times', 'glacial', 'Cold years, spreading ice'), soon('Tornado & storm', 'storm', 'Wind and heavy rain'),
       ] },
     ] },
   ];
@@ -105,6 +105,7 @@ function godTools(kinds: () => StartKind[]): GodTool[] {
   };
   const plant: GodTool = {
     icon: 'plant', label: 'Plants', pic: 'plants', ink: '#7ed957', code: BRUSH_PLANT, row: plantRow, trails: true,
+    about: 'Grows the kind you pick',
     hint: 'Drag on the map where to plant. The plants grow when you let go. Right-drag moves the map.', verb: 'Hold to plant',
     why: (p: Probe | null) => (!kinds().length ? 'This world has no plants to plant.' : p && p.land <= 0 ? OPEN_WATER : ''),
     reason: why => UNPLANTED[why] ?? why,
@@ -118,6 +119,7 @@ function godTools(kinds: () => StartKind[]): GodTool[] {
   };
   const burn: GodTool = {
     icon: 'fire', label: 'Fire', pic: 'fire', ink: '#ff8a3d', code: BRUSH_BURN, row: () => -1, rate: () => HEAT_J_M2_S, doubling: HEAT_DOUBLING_S, doublings: HEAT_DOUBLINGS, settlesLit: true,
+    about: 'Lights dry plants',
     hint: 'Hold on the map. The ring fills, then the ground lights.', verb: 'Hold to burn',
     why: (p: Probe | null) => (!p || p.fire === 'yes' ? '' : (UNLIT[p.fire] ?? p.fire)),
     reason: why => UNLIT[why] ?? why,
@@ -127,12 +129,14 @@ function godTools(kinds: () => StartKind[]): GodTool[] {
     icon: sign > 0 ? 'raise' : 'lower', label: sign > 0 ? 'Raise land' : 'Lower land', pic: sign > 0 ? 'raise' : 'lower',
     ink: sign > 0 ? '#e8c46a' : '#6ab4e8', code: BRUSH_SHAPE, row: () => -1,
     rate: radius => sign * SHAPE_SPEED_PER_M * radius, tapS: SHAPE_TAP_S, mostS: SHAPE_PAINT_MOST_S, follows: true, rests: true,
+    about: sign > 0 ? 'Pushes the land up' : 'Presses the land down',
     hint: `Hold on the map to ${sign > 0 ? 'raise' : 'lower'} the land. Right-drag moves the map.`, verb: `Hold to ${sign > 0 ? 'raise' : 'lower'}`,
     why: () => '', reason: why => (why === UNCHANGED ? 'No ground is left here to take away.' : why),
   });
   let deep = 1;
   const lake: GodTool = {
     icon: 'lake', label: 'Lake brush', pic: 'lake-brush', ink: '#4aa3e8', code: BRUSH_LAKE, row: () => -1, amount: () => LAKE_DEPTHS[deep][1], least: LAKE_LEAST_M,
+    about: 'Digs a lake and fills it',
     hint: 'Click the map to dig a lake. It fills with water at once.', verb: 'Tap to dig',
     why: (p: Probe | null) => (p && p.land <= 0 ? 'This is open water already.' : ''),
     reason: why => (why === UNCHANGED ? 'No lake can be dug here.' : why),

@@ -1,4 +1,4 @@
-//! The cells' table a shell draws the state of the ground from (laws.md 10): a row for each square of the map, the numbers
+//! The cells' table a shell draws the state of the ground from (laws.md 0, docs/tape.md): a row for each square of the map, the numbers
 //! of the cell that holds its centre that the laws inside a cell read, so a shader blends them between the squares'
 //! centres and applies the laws at each pixel of the ground's tiles (`ground`). It is made with each frame, from the
 //! frame's own context (`Ctx`), and holds nothing a picture needs to make.

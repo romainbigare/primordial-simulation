@@ -1,4 +1,4 @@
-//! The closed basins of the terrain's samples (laws.md 0 and 8): the samples under a basin's level (`space::drain`),
+//! The closed basins of the terrain's samples (laws.md 0 and 5): the samples under a basin's level (`space::drain`),
 //! where liquid stands at one level before it runs over the basin's lowest pass, and the load the wear at the world's
 //! start (`space::wear`) carries into them, which fills them from the floor up. A basin the load fills is a plain;
 //! one it leaves is a pond (`samples::Pond`). The parts of the open low ground are ponds too, of no pass (`open_parts`).

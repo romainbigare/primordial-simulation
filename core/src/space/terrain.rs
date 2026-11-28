@@ -1,4 +1,4 @@
-//! The terrain (laws.md 0 and 8): the height of the ground at any point of the map, one function of the world's seed,
+//! The terrain (laws.md 0 and 5): the height of the ground at any point of the map, one function of the world's seed,
 //! its map and its level (`Terrain`), at any size. Value noise summed over octaves (fractal noise), with ridges, its
 //! domain warped so coasts and ridges bend (Perlin 1985; Musgrave 1989), raised to heights, says how high the ground
 //! would stand; an island's falls away from its rises (`space::rises`). The ground at the samples (`SAMPLE_DEPTH`) is

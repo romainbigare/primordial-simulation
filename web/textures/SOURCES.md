@@ -205,8 +205,8 @@ shrunk, stood as clumps, their leaves' lightness scaled):
 
 ## god/
 
-The pictures of god mode's tools (`god/<name>.jpg`, 960 x 540, and `god/<name>@480.jpg`; the plant kinds
-`god/kind-<name>.jpg`, 320 x 240, and `@160`): small scenes seen from above as the map is, looking north and some 50
+The pictures of god mode's tools (`god/<name>@480.jpg`, 480 x 270, drawn at 960 x 540 and shrunk; the plant kinds
+`god/kind-<name>@160.jpg`, 160 x 120, drawn at 320 x 240): small scenes seen from above as the map is, looking north and some 50
 degrees down, lit by a warm sun from the north-west, with a darker edge. Each is made by `bake/god.py`: a height field
 shaped by noise and carved by rain (Beyer 2015), painted with the textures below and the game's own layers, the page's
 sprites stood on it with their shadows, rendered by ray marching (`bake/god_render.py`), then smoke, flames, glow,
@@ -229,13 +229,8 @@ aerial_rocks_02 its relief), the skies' tone-mapped JPEG panorama (only seen ref
 | [aerial_rocks_04](https://polyhaven.com/a/aerial_rocks_04) | grassland with rocks | Rob Tuytel |
 | [snow_field_aerial](https://polyhaven.com/a/snow_field_aerial) | snow | Rob Tuytel |
 | [dirt_aerial_02](https://polyhaven.com/a/dirt_aerial_02) | tilled fields | Rob Tuytel |
-| [dirt_aerial_03](https://polyhaven.com/a/dirt_aerial_03) | trampled ground | Rob Tuytel |
 | [withered_grass](https://polyhaven.com/a/withered_grass) | dry grass | Charlotte Baglioni |
 | [sparse_grass](https://polyhaven.com/a/sparse_grass) | grass detail, pasture | Amal Kumar |
 | [cracked_red_ground](https://polyhaven.com/a/cracked_red_ground) | scorched ground | Amal Kumar |
-| [thatch_roof_angled](https://polyhaven.com/a/thatch_roof_angled) | thatched roofs | Rob Tuytel, Dimitrios Savva |
-| [clay_roof_tiles_02](https://polyhaven.com/a/clay_roof_tiles_02) | tiled roofs | Amal Kumar |
-| [castle_wall_slates](https://polyhaven.com/a/castle_wall_slates) | stone walls | Rob Tuytel |
-| [rock_boulder_cracked](https://polyhaven.com/a/rock_boulder_cracked) | standing stones | Dario Barresi, Dimitrios Savva |
 | [kloofendal_48d_partly_cloudy_puresky](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) | sky in water | Greg Zaal, Jarod Guest |
 | [kloofendal_overcast_puresky](https://polyhaven.com/a/kloofendal_overcast_puresky) | sky in flood water | Greg Zaal |

@@ -1,4 +1,4 @@
-//! The ground worn at the world's start (laws.md 0 and 8): the terrain's noise says how high the ground would stand;
+//! The ground worn at the world's start (laws.md 0 and 5): the terrain's noise says how high the ground would stand;
 //! the samples' heights come from the land rising there for `WEAR_YEARS` from the low stand of the open low ground's
 //! liquid (`LOW_STAND_M`), which flowing liquid cuts it down to, while its slopes creep and it floats back up as it is
 //! unloaded; then the liquid rises to 0 m and drowns what lies under it. The law is the stream power law (Howard 1994;

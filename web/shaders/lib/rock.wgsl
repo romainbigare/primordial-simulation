@@ -7,8 +7,9 @@
 // Of each sample (a texel each): the depth of its loose ground, m, the largest stone its channel moves, m, the slope of
 // its channel's reach (rise over run), and its channel's links (`links_of`); in a second plane under the first, the
 // reflectance of its bed's make; and in a third, its loose ground's shares of coarse and fine grain, how slowly it
-// passes liquid (`soil_at`) and the liquid it holds for roots as the layer `avail` shows it; and in a fourth, its
-// two zeros, how deep the load the liquid laid lies on it, m, and the
+// passes liquid (`soil_at`) and the liquid it holds for roots as the layer `avail` shows it; and in a fourth, the
+// slope up from it to the highest ground toward the light (`horizon_at`), a zero, how deep the load the liquid laid
+// lies on it, m, and the
 // decimal logarithm of the years its loose ground has lain (tape/src/ground/rock.rs).
 @group(0) @binding(18) var rock_field: texture_2d<f32>;
 @group(0) @binding(19) var rock_sampler: sampler;
@@ -41,6 +42,10 @@ fn samples_at(at: vec2f, plane: i32) -> vec4f {
   for (var n = 0; n < B_TAPS; n++) { sum += b_weight(c, n) * textureLoad(rock_field, clamp(b_texel(c, n), vec2i(0), last) + rows, 0); }
   return sum;
 }
+
+// The slope up from `at` to the highest ground toward the light, rise over run (the rock's deposit plane holds each
+// sample's, tape/src/ground/horizon.rs; `samples_at`: no sample's square shows in the shade the heights cast).
+fn horizon_at(at: vec2f) -> f32 { return samples_at(at, LAID_PLANE).x; }
 
 // The depth of the loose ground at `at`, m (`samples_at`): no sample's square shows in the bed it bares and its change
 // across a pixel, which eases the plants' edge (`rooted`), is smooth.
