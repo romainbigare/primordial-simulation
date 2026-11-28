@@ -86,12 +86,13 @@ fn crowned(c: Clumps, w: f32) -> Clumps {
 }
 
 // The line of clumps `c` whose plants cover `near` of the ground: the rank at the middle of their edge and the half
-// width of its ease (`Clumps.edge`, `.soft`), set so the share eased linearly over it (`clump_ramp`) keeps their ground
-// (`clump_ground`) on the mean over the rank, even over 0..1: the ramp's mean is the integral of the rank held to 0..1
-// over the ramp, which is quadratic where the ramp passes an end of the rank.
+// width of its ease (`Clumps.edge`, and `.soft` no wider than the clumps' ground: a few small clumps are their plants,
+// not a haze), set so the share eased linearly over it (`clump_ramp`) keeps their ground (`clump_ground`) on the mean
+// over the rank, even over 0..1: the ramp's mean is the integral of the rank held to 0..1 over the ramp, which is
+// quadratic where the ramp passes an end of the rank.
 fn clump_line(c: Clumps, near: f32) -> vec2f {
   let g = clump_ground(c, near);
-  let w = max(max(c.edge, c.soft), 1e-4);
+  let w = max(max(c.edge, min(c.soft, g)), 1e-4);
   let end = min(w, 0.25 / w);
   if (g <= end) { return vec2f(sqrt(4.0 * w * g) - w, w); }
   if (g >= 1.0 - end) { return vec2f(1.0 + w - sqrt(4.0 * w * max(1.0 - g, 0.0)), w); }

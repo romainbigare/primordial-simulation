@@ -102,7 +102,7 @@ const ROOTED_ALL = 0.999;
 // from its patches to its mean without them (`rooted_loose`), the marks as the field (mark.wgsl `holds`,
 // `foot_loose`): roots reach metres about a plant, across the patches, and plants thin out toward bare ground over the
 // thinning soil, the herbs with no outline, a stand's edge in single crowns (from memory).
-const ROOTS_SOFT = 1.0; const ROOTS_REACH = 0.35;
+const ROOTS_SOFT = 0.3; const ROOTS_REACH = 0.2;
 // The depth of loose ground plants' roots hold by, m, where it lies `seen` m deep with its patches and `mean` m without
 // them (rock.wgsl `loose_seen`, `loose_at`).
 fn rooted_loose(seen: f32, mean: f32) -> f32 { return mix(seen, mean, ROOTS_REACH); }
