@@ -125,7 +125,7 @@ const HOLLOW_TONE = 0.35;
 fn hollow_tone(fold: f32) -> f32 { return 1.0 + HOLLOW_TONE * (2.0 * fold - 1.0); }
 // So are a rill's floor and its crests, by up to `RILL_TONE` (`Gullies.rill`): the shade of a groove in any light, so a
 // slope the sun lights whole still shows its grain.
-const RILL_TONE = 0.2;
+const RILL_TONE = 0.12;
 fn rill_tone(rill: f32) -> f32 { return 1.0 + RILL_TONE * (2.0 * rill - 1.0); }
 
 // Ground turned from the low sun is lit by the sky's light alone, which lights it the more the more it faces the sky

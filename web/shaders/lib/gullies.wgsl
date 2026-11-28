@@ -15,8 +15,9 @@
 // place the snow, which would move as the rills show with the zoom).
 const GULLY_LONGEST_M = 2000.0; const GULLY_STEP = 2.0; const GULLY_OCTAVES = 6; const RILL_OCTAVES = 5;
 // A gully's sides slope `GULLY_K` times the ground's slope (counted up to `GULLY_STEEP_MOST`, rise over run), each
-// octave `GULLY_DECAY` times less, softly held under `WALL_MOST`: under the low light not every wall turns into the shade.
-const GULLY_K = 1.0; const GULLY_DECAY = 0.9; const GULLY_STEEP_MOST = 0.8; const WALL_MOST = 0.7;
+// octave `GULLY_DECAY` times less, a rill's `RILL_K` times less again (a rill is a groove in the gully's wall, not a
+// gully of its own), softly held under `WALL_MOST`: under the low light not every wall turns into the shade.
+const GULLY_K = 1.0; const RILL_K = 0.5; const GULLY_DECAY = 0.9; const GULLY_STEEP_MOST = 0.8; const WALL_MOST = 0.7;
 // A cell is `GULLY_PER_CELL` wavelengths across; its point moves up to `GULLY_JITTER` of a cell; its wavelength is the
 // octave's times 2^(+-`WAVE_VARY`/2) and its gullies bend by up to `BEND` of a cell across per cell along, so no two
 // cells comb the slope alike.
@@ -186,7 +187,7 @@ fn gullies(e: f32, gg: GullyGround) -> Gullies {
     let dfork = select(vec2f(0.0), 6.0 * t * (1.0 - t) / FORK_FADE * rdr / max(r, 1e-9), r < FORK_FADE);
     let rounded = ease(ROUND_LONG_M.x, ROUND_LONG_M.y, wave);
     let p = gully_profile(c, (1.0 - rounded) * (1.0 - SOIL_ROUND * soil), sharp * (1.0 - rounded), max(SHARP_FLOOR, PI * CREASE_PX * e / wave));
-    var wall = k * depth * (1.0 - SOIL_SHORT_CUT * soil * ease(SOIL_SHORT_M.x, SOIL_SHORT_M.y, wave));
+    var wall = k * depth * (1.0 - SOIL_SHORT_CUT * soil * ease(SOIL_SHORT_M.x, SOIL_SHORT_M.y, wave)) * select(1.0, RILL_K, o >= GULLY_OCTAVES);
     wall = wall / sqrt(1.0 + (wall / WALL_MOST) * (wall / WALL_MOST));
     let a = shown * wall * wave / (2.0 * PI);
     out.h += a * fork * (p.x - 0.5);
