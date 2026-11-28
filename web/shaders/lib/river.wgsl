@@ -35,6 +35,9 @@ const STEP_POOL_S = vec2f(0.025, 0.045);
 // the bar's edge, and their tops rise `BRAID_UP` of the way up to the bank.
 const BRAID_M = vec2f(26.0, 9.0); const BRAID_ACROSS = 1.7; const BRAID_FROM = vec2f(0.55, 0.15); const BRAID_FLANK = 0.3;
 const BRAID_UP = 0.4;
+// A braid bar's edge is spread over `BRAID_SOFT` of the noise either way (its flank's last centimetres of water thin
+// over the bar's foot), and never less than a pixel.
+const BRAID_SOFT = 0.06;
 // Across the edges the eye crosses no line: where its bed is drawn apart from its water, the water thins over
 // `WATER_SOFT` of its half width at its edge (the last centimetres over the bar), and the bed meets the ground beside
 // it over `BED_SOFT` of its half width, the plants thinning into it.
@@ -116,7 +119,7 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind
   if (kind.y > 0.0 && open > 0.0 && thread < half) {
     let rise = braid_bar(g.along, r.across, kind.y);
     r.flank = 1.0 - ease(-BRAID_FLANK, 0.0, rise);
-    water *= 1.0 - open * tent(rise * half / water_px);
+    water *= 1.0 - open * ease(-1.0, 1.0, rise / max(BRAID_SOFT, water_px / max(half, 1e-6)));
     if (rise > 0.0) {
       r.edge = rise * half;
       r.up = BRAID_UP * ease(0.0, 1.0 - BRAID_FROM.y, rise);
@@ -133,9 +136,10 @@ fn reach_at(e: f32, g: Tiled, c: Channel, line: f32, open: f32, stone: f32, kind
     let grown = noise_l(lat_turned(BAR_TUFT_M, vec2f(0.0)), 79).x + 1.2 * ease(grown_from, 1.0, r.up) - 0.6 + BANK_GROWN * (1.0 - point);
     in_bed = max(in_bed * (1.0 - open * tufts * tent(grown * BAR_TUFT_M / e)), water);
   }
-  // The other channel's water joins this one's: water and bed both.
+  // The other channel's water joins this one's, water and bed both, and in the mouth where they meet (`joined`) the
+  // whole bed is water: no bar lies across a junction.
   if (other.x > 0.0) {
-    let theirs = tent((other.x - other.y) / water_px);
+    let theirs = max(tent((other.x - other.y) / water_px), in_bed * joined(other.x, other.y));
     water = max(water, theirs);
     in_bed = max(in_bed, theirs);
   }
@@ -238,6 +242,10 @@ const BED_PX = 3.0;
 // rock's colour). A bar rises from the water's edge at `BAR_RISE` (rise over run), which is how far up it the water's fringe
 // wets and darkens it; past that fringe its gravel drains dry.
 const BAR_OF_BED = 0.5; const BAR_RISE = 0.6;
+// A bar's top is stained by the silt and the film of algae the floods leave on its stones, `BAR_STAIN` of its make's
+// light; within the band the water's level swings across (`DAMP_SWING`) its gravel is wet, `BAR_DAMP` as light (wet
+// rough ground reflects about half of what it does dry: Lekner and Dorf 1988), the more the nearer the water.
+const BAR_STAIN = 0.8; const BAR_DAMP = 0.55;
 // Driftwood lies on a bar from `DRIFTWOOD_UP.x` of the way up it to the bank, most from `DRIFTWOOD_UP.y` (the floods' wrack
 // line, at the top of the bars).
 const DRIFTWOOD_UP = vec2f(0.1, 0.35);
@@ -255,6 +263,11 @@ const EDGE_M = 0.35; const EDGE_LIGHT = 0.25;
 // its line than its bed is half wide, all of it from `MOUTH_CALM` times that; the shore's beach and swash are not drawn
 // in its bed.
 const MOUTH_BARS = 0.5; const MOUTH_MELTS = 0.3; const MOUTH_CALM = 2.0;
+
+// The ground of a bar of colour `c` at `edge` m out of the water of channel `ch` (`BAR_STAIN`, `BAR_DAMP`).
+fn bar_ground(c: vec3f, edge: f32, ch: Channel) -> vec3f { return c * BAR_STAIN * mix(BAR_DAMP, 1.0, ease(0.0, damp_of(ch), edge)); }
+// How far out of the water of channel `ch` its bed is damp, m (`DAMP_SWING`).
+fn damp_of(ch: Channel) -> f32 { return DAMP_M + DAMP_SWING * max(ch.bed - ch.water, 0.0); }
 
 // The spots `s` of a point with its channel `ch` of discharge `q`, which moves stones of `stone` m down a reach of
 // slope `fall` (rise over run), on ground `g` (the
@@ -284,7 +297,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   let gravel = mix(s.dry.ground, bed_make_at(at), BAR_OF_BED * ease(0.0, BAR_SAND_STONE, stone));
   // On its bars the ground is that gravel, bare, rising from the water's edge, as far as they cover the pixel.
   let bars = r.bars * (1.0 - ease(0.0, MOUTH_BARS, mouth)) * seen;
-  out.dry.ground = mix(out.dry.ground, gravel * bar_tone(e, g.along, r), bars);
+  out.dry.ground = mix(out.dry.ground, bar_ground(gravel * bar_tone(e, g.along, r), r.edge, ch), bars);
   // The floods strand dead wood high on the bars, as much as woody crowns stand about the channel (the trees' share of
   // the ground of its cells, lib/cover_field.wgsl `STANDS`).
   if (bars > 0.0) { out.dry.driftwood = min(field_at(at, STANDS).a, 1.0) * bars * ease(DRIFTWOOD_UP.x, DRIFTWOOD_UP.y, r.up); }
@@ -296,7 +309,7 @@ fn river_spots(s: Spots, g: Tiled, ch: Channel, q: f32, stone: f32, fall: f32, g
   out.dry.canopy *= 1.0 - bars;
   out.dry.wet *= 1.0 - bars;
   // The water's edge is damp as far as its level swings (`DAMP_SWING`); past that its fringe wets the bar as it rises.
-  let damp = DAMP_M + DAMP_SWING * max(ch.bed - ch.water, 0.0);
+  let damp = damp_of(ch);
   out.dry.over = mix(out.dry.over, BAR_RISE * max(r.edge - damp, 0.0), bars);
   out.dry.small *= 1.0 - BAR_FINES * r.up;
   out.wet.ground = gravel;
