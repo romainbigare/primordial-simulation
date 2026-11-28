@@ -72,11 +72,14 @@ export interface CoverField { w: number; h: number; layers: number; data: Float3
  * on it, m (0: no square holds its marks), and the reflectance of the walls the cover builds (its stems). */
 export interface Kinds { w: number; h: number; planes: Planes; cols: number; table: Float32Array; field: CoverField; tallest: number[]; widest: number[]; walls: Rgb }
 
-/** A plant's shadow darkens this many times the square of its crown's width of ground: the marks cast their
- * sprite, which covers as much as its crown, `MODEL_SHADOW_RUN` (2.6) as far south and `SHADOW_WIDE` (1.5) its width
- * across the light's way, sqrt 2 of that along a row (models.wgsl `model_cast`, `cast_uv`), so the field far away is as
- * dark as the marks near. */
-const SHADOW_WIDTHS = 2.6 * 1.5 * Math.SQRT2 * (Math.PI / 4);
+/** A plant `width` m across darkens this many times the square of its width of ground with its shadow: the marks cast
+ * their sprite, which covers as much as its crown, `MODEL_SHADOW_RUN` (2.6) as far south and from 1 (a crown 3 m wide
+ * and narrower) to 1.5 (8 m and wider) its width across the light's way, sqrt 2 of that along a row (models.wgsl
+ * `model_cast`, `SHADOW_WIDE`, `crown_big`, `cast_uv`), so the field far away is as dark as the marks near. */
+function shadowWidths(width: number): number {
+  const t = Math.min(Math.max((width - 3) / (8 - 3), 0), 1), big = t * t * (3 - 2 * t);
+  return 2.6 * (1 + 0.5 * big) * Math.SQRT2 * (Math.PI / 4);
+}
 
 /** Where a frame's kinds come from in the core's table (tape/src/table.rs) and what they are set out into
  * (`kindsOf`): the table `rows`, `row` numbers a square; `kinds` kinds a square of `kindRow` numbers from `at` on, and
@@ -224,7 +227,7 @@ function kindOf(s: Sheet, i: number, k: number, r: Float32Array, g: Gather): voi
       s.tallest[l] = Math.max(s.tallest[l], pl[K.height]);
       s.widest[l] = Math.max(s.widest[l], o.width);
       // The share of the ground its plants cover, each as closed as its crown.
-      g.paint[l].add(k, order, c, o.covers * stands * pl[K.crown] * look.left, (chances[q] / (a * a)) * o.width * o.width * SHADOW_WIDTHS, [pl[K.height], mean, r[K.need]], o.width);
+      g.paint[l].add(k, order, c, o.covers * stands * pl[K.crown] * look.left, (chances[q] / (a * a)) * o.width * o.width * shadowWidths(o.width), [pl[K.height], mean, r[K.need]], o.width);
       g.shed += leavesFalling(o.covers * stands * pl[K.crown], look.left, s.falling);
     });
   });

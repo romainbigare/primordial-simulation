@@ -241,12 +241,21 @@ const STEM_REACH = 0.03;
 // as the share of its layers a ray meets (`layered_cover`), not edged as a crown is seen, so it fades out. A low sun's
 // ray runs through a crown's whole depth, not down through its top as the map sees it: it meets `SHADOW_LAYERS` times
 // as many leaves, so the blurred crown stays dark inside and its soft edge spreads out.
-const SHADOW_BLUR = 0.03; const SHADOW_SOFT = 0.2; const SHADOW_LAYERS = 3.0;
-// A crown is a cloud of leafy sprays, wider than the sprite's outline of it, and lit through from a low sun its
-// shadow spreads: a plant's shadow is laid `SHADOW_WIDE` times its sprite's width (canopy.ts `SHADOW_WIDTHS`).
-const SHADOW_WIDE = 1.5;
+// A big crown is a cloud of leafy sprays, wider than the sprite's outline of it, and lit through from a low sun its
+// shadow spreads: it is laid `SHADOW_WIDE` times its sprite's width (canopy.ts `shadowWide`). A small tree's shadow
+// keeps its own shape. Each pair: for a small crown, `SMALL_CROWN_M` wide and narrower, and for a big one,
+// `BIG_CROWN_M` and wider; between them as `crown_big`.
+const SHADOW_BLUR = 0.03;
+const SHADOW_SOFT = vec2f(0.08, 0.2); const SHADOW_LAYERS = vec2f(2.0, 3.0); const SHADOW_WIDE = vec2f(1.0, 1.5);
+const SMALL_CROWN_M = 3.0; const BIG_CROWN_M = 8.0;
+// How big a crown `w` m wide is, 0 (small) to 1 (big).
+fn crown_big(w: f32) -> f32 { return smoothstep(SMALL_CROWN_M, BIG_CROWN_M, w); }
+// One of the pairs above for a crown `big` big.
+fn by_crown(pair: vec2f, big: f32) -> f32 { return mix(pair.x, pair.y, big); }
 // The cast of plant q drawn from sprite `fit`.
-fn model_cast(q: Plant, fit: ModelFit) -> Cast { return cast_of(fit.h, SHADOW_WIDE * fit.w, 0.0, q.reach); }
+fn model_cast(q: Plant, fit: ModelFit) -> Cast {
+  return cast_of(fit.h, by_crown(SHADOW_WIDE, crown_big(fit.w)) * fit.w, 0.0, q.reach);
+}
 fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let v = p - q.at + vec2f(0.0, MAP_VIEW.y * q.wades);
   let c = model_cast(q, fit);
@@ -255,8 +264,9 @@ fn model_shadow(q: Plant, fit: ModelFit, p: vec2f, e: f32) -> f32 {
   let uv = cast_uv(c, v, foot);
   if (all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))) {
     // Its step over a pixel along the longer of its two axes (it is squeezed along the sun), so it shows no stripes.
-    let g = max(max(e / c.w, e / c.long), mix(SHADOW_BLUR, SHADOW_SOFT, 1.0 - uv.y / (1.0 - foot)));
-    let leafy = layered_cover(model_texel(fit.s, uv, g).a, SHADOW_LAYERS * fit.dense) * q.left;
+    let big = crown_big(fit.w);
+    let g = max(max(e / c.w, e / c.long), mix(SHADOW_BLUR, by_crown(SHADOW_SOFT, big), 1.0 - uv.y / (1.0 - foot)));
+    let leafy = layered_cover(model_texel(fit.s, uv, g).a, by_crown(SHADOW_LAYERS, big) * fit.dense) * q.left;
     var kept = leafy;
     if (q.left < 1.0) { kept += bare_texel(fit.s, uv, g).a * (1.0 - leafy); }
     dark = CROWN_SHADOW * kept;
