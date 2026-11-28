@@ -10,8 +10,9 @@
 // edge (a sward's tussocks and a heath's bushes thin out into the bare ground about them), a grove's edge is sharp.
 // Each clump's top is lit by its slope toward the light (`Clumps.bumps`), by `lit` of its colour a unit of it: the
 // trees' by `CANOPY_BUMP`, the low plants' by `LOW_BUMP`; and its plants stand darker toward its heart and lighter
-// toward its edge, by up to `CLUMP_TONE` either way (taller and denser where the clump is old, from memory). The marks near (mark.wgsl `marks_thick`) and the field far
-// (cover_field.wgsl) read one rank, so a clump drawn far is the plants drawn near.
+// toward its edge, by up to `CLUMP_TONE` either way (taller and denser where the clump is old, from memory). The marks
+// near (mark.wgsl `marks_thick`) and the field far (cover_field.wgsl) read one rank, so a clump drawn far is the
+// plants drawn near.
 // The rank is made of `CLUMP_OCTAVES` octaves of gradient noise from `CLUMP_M` m down to about a crown, each
 // `CLUMP_STEP` times finer, weighing `CLUMP_FALL` of the last and turned from it by `CLUMP_TURN` radians (so no grid
 // shows), each as far as it shows at the size of a pixel (draw.wgsl `shows_at`), made even again over the octaves

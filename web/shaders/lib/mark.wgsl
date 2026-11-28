@@ -86,7 +86,7 @@ fn foot(at: vec2f) -> Foot {
   let g = ground_at(at, false);
   let st = state_at(at, g, corners(at / land.map.x));
   let place = sample_place(at, 0.0);
-  let loose = loose_at(place, lush_of(g.twi, g.slope, place.n, 0.0, vec2f(0.5)));
+  let loose = loose_at(place);
   // (The gullies are read on the lattices of the foot's place, draw.wgsl `lat`, and the pixel's place is set back;
   // the ground's height over the sea is not known here, the ponds' alone.)
   let pixel = vec4f(pix_origin, pix_local);
@@ -159,9 +159,9 @@ const FREE_LEAST = 0.05;
 // The stream of a kind's draws for a cell, by its slot and square (`pick_kind`).
 const RACE_STREAM = 175;
 
-// The loose ground at the foot `at` (its squares `cs`) as lush as `lush`, with its patches (rock.wgsl `loose_at`,
-// `loose_seen`, as the bare bed is drawn), read only where a kind's roots may want more than lies there.
-fn foot_loose(at: vec2f, cs: Corners, lush: f32) -> f32 {
+// The loose ground at the foot `at` (its squares `cs`) with its patches (rock.wgsl `loose_at`, `loose_seen`, as the
+// bare bed is drawn), read only where a kind's roots may want more than lies there.
+fn foot_loose(at: vec2f, cs: Corners) -> f32 {
   var deepest = 0.0;
   for (var s = 0; s < rolled(4); s++) {
     for (var q = 0; q < groups(); q++) {
@@ -169,7 +169,7 @@ fn foot_loose(at: vec2f, cs: Corners, lush: f32) -> f32 {
       deepest = max(deepest, max(max(needs.x, needs.y), max(needs.z, needs.w)));
     }
   }
-  return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0), lush), 0.0), deepest > 0.0);
+  return select(0.0, loose_seen(at, loose_at(sample_place(at, 0.0)), 0.0), deepest > 0.0);
 }
 
 // The kind of the mark of lattice l whose foot is at `at` (its squares `cs`, `thick` times their mean, its ground `f`),
@@ -187,7 +187,7 @@ fn foot_loose(at: vec2f, cs: Corners, lush: f32) -> f32 {
 fn pick_kind(l: i32, at: vec2f, cs: Corners, thick: f32, f: Foot, own: f32, id: vec2i, exact: bool) -> vec3i {
   let n = kinds_n();
   var loose = 0.0;
-  if (exact) { loose = foot_loose(at, cs, f.lush); }
+  if (exact) { loose = foot_loose(at, cs); }
   // The weights by height, and of each bin the weight from it up.
   var bins: array<f32, TALL_BINS>;
   for (var s = 0; s < rolled(4); s++) {
@@ -335,19 +335,19 @@ fn decide(l: i32, k: vec2f) -> Mark {
   return living.mark;
 }
 
-// How many times their mean the plants of lattice l stand at a mark's foot at `at` among clumps `c`, as lush as
-// `thick` times their mean (lush.wgsl `lush_thick`; `thin` the least it may be): as the field draws them
-// (cover_field.wgsl `lattice_field`), the share they cover of the ground the trees leave in clumps (clumps.wgsl
-// `clumped`, the low plants in the trees' gaps, `low_rank`), each clump as many times denser as its ground is less
-// than all, none between the clumps; so on the mean they keep their number.
-fn marks_thick(l: i32, at: vec2f, c: Clumps, thin: f32, thick: f32) -> f32 {
+// How many times their mean the plants of lattice l stand at a mark's foot at `at` among clumps `c` where the ground
+// is as lush as `lush` (lush.wgsl `lushed`; the most they may, before the ground is read, where it is the lushest, 1):
+// as the field draws them (cover_field.wgsl `lattice_field`), the share they cover of the ground the trees leave in
+// clumps (clumps.wgsl `clumped`, the low plants in the trees' gaps, `low_rank`), each clump as many times denser as
+// its plants' cover there is more than their mean, none between the clumps; so on the mean they keep their number.
+fn marks_thick(l: i32, at: vec2f, c: Clumps, lush: f32) -> f32 {
   let trees = min(field_at(at, STANDS).a, 1.0);
-  let own = select(field_at(at, l).a, trees, l == STANDS);
+  let own = min(select(field_at(at, l).a, trees, l == STANDS), 1.0);
   let left = select(1.0 - trees, 1.0, l == STANDS);
   var cl = c;
   if (l != STANDS) { cl = low_rank(c); }
-  let most = min(own * thick, 1.0) * left;
-  return select(0.0, thick * max(cl.fill, most) / max(min(own * thin, 1.0) * left, 1e-6), cl.rank < clump_ground(cl, most));
+  let near = lushed(own, lush) * left;
+  return select(0.0, max(cl.fill, near) / max(own * left, 1e-6), cl.rank < clump_ground(cl, near));
 }
 
 // The mark of a living plant of cell k of lattice l (`decide`), or that none claims the cell (its dead tree is decided
@@ -362,14 +362,14 @@ fn living_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, cs: Corners, all: f32,
   let own = rand3(id, l).y;
   var f = Foot(0.0, 0.0, 0.0, 0.0, 0.0);
   let clumps = clumps_at(at, 0.0);
-  var thick = marks_thick(l, at, clumps, 1.0 - LUSH, 1.0 + LUSH);
+  var thick = marks_thick(l, at, clumps, 1.0);
   var pick = vec3i(-1);
   for (var look = 0; look < rolled(2); look++) {
     let exact = look == 1;
     if (exact) {
       if (!ground_open(at)) { return unclaimed; }
       f = foot(at);
-      thick = marks_thick(l, at, clumps, lush_thick(f.lush), lush_thick(f.lush));
+      thick = marks_thick(l, at, clumps, f.lush);
     }
     pick = pick_kind(l, at, cs, thick, f, own, id, exact);
     if (pick.x < 0) { return unclaimed; }
@@ -452,7 +452,7 @@ fn dead_decided(l: i32, k: vec2f, id: vec2i, at: vec2f, fp: vec3i) -> Mark {
   }
   if (unit(id, 41) >= dead.mean * on_scar) { return none; }
   let f = foot(at);
-  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(sample_place(at, 0.0), f.lush)) > 0.5) { return none; }
+  if (f.depth > FILM_M || !ground_open(at) || bed_shows(loose_at(sample_place(at, 0.0))) > 0.5) { return none; }
   // (They show as things by the ground they cover, as their specks far away give way to them, burn.wgsl `dead_far`.)
   let shows = above_snow(f.snow * f.snow_m, dead.q.h) * as_crown(dead_seen_w(dead.tall), cover.seen.x);
   if (shows <= 0.0) { return none; }
