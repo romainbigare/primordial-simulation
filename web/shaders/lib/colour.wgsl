@@ -199,8 +199,9 @@ struct Spot {
   grain: vec4f, filled: f32, deposit: vec2f, load: f32,
   // How low it lies among the hollows of its ground, 0..1, even (relief.wgsl `Relief`), and its change across a pixel
   // along the screen's axes; how low it lies among the ground's basins, 0..1, even; the share of the ground the low
-  // plants cover there on their mean (cover_field.wgsl `CoverAt.low`).
-  hollow: f32, hollow_d: vec2f, basin: f32, low: f32,
+  // plants cover there on their mean (cover_field.wgsl `CoverAt.low`); the share of it a dry wash's pale floor takes
+  // (gullies.wgsl `Gullies.wash`).
+  hollow: f32, hollow_d: vec2f, basin: f32, low: f32, wash: f32,
   // The share of it under a burn scar, and how much of the scar is char, ash and scorched soil, 0..1 (burn.wgsl
   // `burnt_spot`; none where no program draws the marks of fire).
   scar: vec4f,
@@ -274,6 +275,7 @@ fn ground_of(p: Spot, snow: f32) -> Ground {
     }
   }
   g.rgb = mix(g.rgb, bed, p.rock);
+  if (styled()) { g.rgb = washed(g.rgb, p.wash); }
   if (p.rock > 0.5) { g.kind = ROCK; }
   g.bare = 1.0 - plants;
   g.rgb = mix(g.rgb, SNOW * select(vec3f(1.0), snow_texture(p.e), styled()), snow);

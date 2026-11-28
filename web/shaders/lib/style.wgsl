@@ -123,6 +123,10 @@ fn tone_of(n: f32) -> f32 { return 1.0 + TONE_SWAY * clamp(n, -1.0, 1.0); }
 // by where it stands `fold` high in them (gullies.wgsl `Gullies.fold`, 0 a floor .. 1 a top).
 const HOLLOW_TONE = 0.35;
 fn hollow_tone(fold: f32) -> f32 { return 1.0 + HOLLOW_TONE * (2.0 * fold - 1.0); }
+// So are a rill's floor and its crests, by up to `RILL_TONE` (`Gullies.rill`): the shade of a groove in any light, so a
+// slope the sun lights whole still shows its grain.
+const RILL_TONE = 0.2;
+fn rill_tone(rill: f32) -> f32 { return 1.0 + RILL_TONE * (2.0 * rill - 1.0); }
 
 // Ground turned from the low sun is lit by the sky's light alone, which lights it the more the more it faces the sky
 // opposite the sun: a fill light from the south-west, `FILL.z` up (a unit vector), adds `FILL_SHARE` of the ambient

@@ -1,16 +1,19 @@
 // The gullies of the ground finer than its tiles (relief.wgsl): the samples stand 125 m apart and the tiles draw the
 // ground between them smooth, so a mountain would be a soft swell. Here steep ground is cut into a branching net of
-// gullies with spurs between them, at every scale from `GULLY_LONGEST_M` down to the fine noise's longest octave: the
+// gullies with spurs between them, at every scale from `GULLY_LONGEST_M` down to about a hundred metres: the
 // water that runs down a slope cuts it into gullies that join into larger ones (Horton 1945; Montgomery and Dietrich
-// 1992), and leaves a plain, a wet flat and a valley's floor uncut. Each octave is erosion noise (after Fewes 2023 and
+// 1992), and leaves a plain, a wet flat and a valley's floor uncut. Below them the same net goes on as rills, down to a
+// few metres, so a slope seen close has a grain down its fall line. Each octave is erosion noise (after Fewes 2023 and
 // Johansen 2024): in each cell of a turned lattice a wave runs across the fall line from a point of its own, and the
 // four cells about a point are blended as a pair (cos, sin), so a gully runs on where they agree and forks or ends
 // where they do not. Each octave follows the fall line of the ground with the octaves before it, so small gullies run
 // down the sides of big ones and join them. Fixed in the world; each octave fades out as it shrinks to a few pixels
 // (draw.wgsl `shows_at`), so its cost does not grow with the zoom.
 
-// The longest octave's wavelength, m; each next one `GULLY_STEP` times shorter; their number (2000 m to 62 m).
-const GULLY_LONGEST_M = 2000.0; const GULLY_STEP = 2.0; const GULLY_OCTAVES = 6;
+// The longest octave's wavelength, m; each next one `GULLY_STEP` times shorter; their number (2000 m to 62 m); and the
+// rills' octaves after them (31 m to 2 m), which count in neither share of the gullies (`Gullies.spur`, `fold`: they
+// place the snow, which would move as the rills show with the zoom).
+const GULLY_LONGEST_M = 2000.0; const GULLY_STEP = 2.0; const GULLY_OCTAVES = 6; const RILL_OCTAVES = 5;
 // A gully's sides slope `GULLY_K` times the ground's slope (counted up to `GULLY_STEEP_MOST`, rise over run), each
 // octave `GULLY_DECAY` times less, softly held under `WALL_MOST`: under the low light not every wall turns into the shade.
 const GULLY_K = 1.0; const GULLY_DECAY = 0.9; const GULLY_STEEP_MOST = 0.8; const WALL_MOST = 0.7;
@@ -20,11 +23,12 @@ const GULLY_K = 1.0; const GULLY_DECAY = 0.9; const GULLY_STEEP_MOST = 0.8; cons
 const GULLY_PER_CELL = 1.5; const GULLY_JITTER = 0.6; const WAVE_VARY = 0.5; const BEND = 0.25;
 // The blended wave is made whole again as c / sqrt(r^2 + `NORM_SOFT`^2) (r the length of its pair): full depth but at a
 // fork, and no crease. At a fork, where the cells' waves cancel (r under `FORK_FADE`), the octave fades out: made whole
-// there it would draw a closed loop of floor and crest about the fork, a lens. A V floor is rounded over `SHARP_FLOOR` of the profile, and over no less than `FLOOR_HALF_M` m
-// to each side of its middle (a gully's floor is metres wide, its stream's bed and the fill about it). Octaves from
+// there it would draw a closed loop of floor and crest about the fork, a lens. A V floor and a sharp crest are rounded
+// over `SHARP_FLOOR` of the profile, and over no less than `CREASE_PX` pixels to each side (finer, a crease would draw
+// the pixels' steps). Octaves from
 // `ROUND_LONG_M.x` to `.y` long turn from V to round, so a long wall has no sharp crest and the edge of its shade no
 // razor's.
-const NORM_SOFT = 0.3; const FORK_FADE = 0.45; const SHARP_FLOOR = 0.15; const FLOOR_HALF_M = 6.0;
+const NORM_SOFT = 0.3; const FORK_FADE = 0.45; const SHARP_FLOOR = 0.15; const CREASE_PX = 1.0;
 const ROUND_LONG_M = vec2f(1000.0, 4000.0);
 // The fall line that steers an octave, and the slope drawn, still fall along the ground's own fall line by
 // `KEEP_FALL` of its slope (no closed pit or knob), the hold rounded over `KEEP_SOFT` of it.
@@ -46,8 +50,13 @@ const VARY_M = 3500.0; const VARY_DEPTH = 0.7; const VARY_SHARP = 0.9;
 // `CALM_Q.x` (about 1 km²: a small channel runs in its gully's floor).
 const CALM_SLOPE = vec2f(0.06, 0.3); const CALM_TWI = vec2f(12.0, 16.0); const CALM_SHORE_M = vec2f(0.0, 15.0);
 const CALM_CHANNEL_M = vec2f(40.0, 160.0); const CALM_CHANNEL_GROW = 0.8; const CALM_Q = vec2f(0.008, 0.08);
-// The gullies' share of the point (`Gullies.spur`, `fold`) is all of it from walls that slope this much in sum.
-const GULLY_SEEN = 0.3;
+// The gullies' share of the point (`Gullies.spur`, `fold`) is all of it from walls that slope this much in sum, the
+// rills' (`Gullies.rill`) from `RILL_SEEN`.
+const GULLY_SEEN = 0.3; const RILL_SEEN = 0.1;
+// A dry wash runs in the floor of every gully (not a rill) from `WASH_LONG_M` long down: a pale line of the fines and
+// gravel its floods sort, `WASH_SHARE` of its wave to each side of its middle, all of it where its walls slope
+// `WASH_WALL` (rise over run). A line finer than `WASH_PX` pixels is spread over them, as pale on the mean.
+const WASH_LONG_M = 500.0; const WASH_SHARE = 0.03; const WASH_WALL = 0.15; const WASH_PX = 0.7;
 // The noise streams of the octaves (from `GULLY_STREAM` on) and of the slow variation.
 const GULLY_STREAM = 300; const VARY_STREAM = 340;
 
@@ -58,8 +67,9 @@ const GULLY_STREAM = 300; const VARY_STREAM = 340;
 struct GullyGround { slope: vec2f, bare: f32, loose: f32, laid: f32, twi: f32, over_level: f32, channel_d: f32, q: f32 }
 // The gullies: their height, m, and slope east and south; how high the point stands in them, 0 a floor to 1 a spur
 // (`spur`, of all octaves; `fold`, of the octaves weighted by their length, each as a round wave: the broad hollows),
-// 0.5 where none is cut.
-struct Gullies { h: f32, slope: vec2f, spur: f32, fold: f32 }
+// 0.5 where none is cut; how high it stands in its rills (`rill`, as `spur`); and the share of the point a wash's pale
+// floor takes (`WASH_SHARE`), 0..1.
+struct Gullies { h: f32, slope: vec2f, spur: f32, fold: f32, rill: f32, wash: f32 }
 
 // The slope `d` added to ground of slope `g0`, held so the whole still falls along g0 by `keep` of its slope.
 fn keep_falling(g0: vec2f, d: vec2f, keep: f32) -> vec2f {
@@ -138,7 +148,7 @@ fn gully_calm(gg: GullyGround) -> f32 {
 
 // The gullies of ground `gg` seen at `e` m a pixel.
 fn gullies(e: f32, gg: GullyGround) -> Gullies {
-  var out = Gullies(0.0, vec2f(0.0), 0.5, 0.5);
+  var out = Gullies(0.0, vec2f(0.0), 0.5, 0.5, 0.5, 0.0);
   let s0 = length(gg.slope);
   var depth = min(s0, GULLY_STEEP_MOST) * gully_calm(gg);
   // (Calm ground, and a view too far for the longest octave, read nothing.)
@@ -150,12 +160,13 @@ fn gullies(e: f32, gg: GullyGround) -> Gullies {
   let q2 = NORM_SOFT * NORM_SOFT;
   let whole = sqrt(1.0 + q2);
   // The sums `spur` and `fold` are the means of: the profile weighted by each octave's wall slope, and the round wave
-  // weighted by that times its length.
+  // weighted by that times its length; and `rill`'s, as `spur`'s.
   var sums = vec4f(0.0);
+  var rills = vec2f(0.0);
   var wave = GULLY_LONGEST_M;
   var k = GULLY_K;
   var rot = mat2x2f(cos(TURN_A), sin(TURN_A), -sin(TURN_A), cos(TURN_A));
-  for (var o = 0; o < GULLY_OCTAVES; o++) {
+  for (var o = 0; o < GULLY_OCTAVES + RILL_OCTAVES; o++) {
     let shown = shows_at(GULLY_SHOW * wave, e);
     if (shown <= 0.0) { break; }
     // The fall line so far, never back up the ground's; the unit vector across it.
@@ -174,13 +185,23 @@ fn gullies(e: f32, gg: GullyGround) -> Gullies {
     let fork = t * t * (3.0 - 2.0 * t);
     let dfork = select(vec2f(0.0), 6.0 * t * (1.0 - t) / FORK_FADE * rdr / max(r, 1e-9), r < FORK_FADE);
     let rounded = ease(ROUND_LONG_M.x, ROUND_LONG_M.y, wave);
-    let p = gully_profile(c, (1.0 - rounded) * (1.0 - SOIL_ROUND * soil), sharp * (1.0 - rounded), max(SHARP_FLOOR, PI * FLOOR_HALF_M / wave));
+    let p = gully_profile(c, (1.0 - rounded) * (1.0 - SOIL_ROUND * soil), sharp * (1.0 - rounded), max(SHARP_FLOOR, PI * CREASE_PX * e / wave));
     var wall = k * depth * (1.0 - SOIL_SHORT_CUT * soil * ease(SOIL_SHORT_M.x, SOIL_SHORT_M.y, wave));
     wall = wall / sqrt(1.0 + (wall / WALL_MOST) * (wall / WALL_MOST));
     let a = shown * wall * wave / (2.0 * PI);
     out.h += a * fork * (p.x - 0.5);
     out.slope += a * (fork * p.y * dc + (p.x - 0.5) * dfork);
-    sums += shown * wall * fork * vec4f(p.x, 1.0, wave * 0.5 * (1.0 + c), wave);
+    if (o < GULLY_OCTAVES) { sums += shown * wall * fork * vec4f(p.x, 1.0, wave * 0.5 * (1.0 + c), wave); }
+    else { rills += shown * wall * fork * vec2f(p.x, 1.0); }
+    // Its wash: how near the floor's middle the point lies, m (near it t = (1 + c) / 2 is about (phase / 2)^2), against
+    // its half width spread over the pixel.
+    if (o < GULLY_OCTAVES && wave <= WASH_LONG_M) {
+      let half = WASH_SHARE * wave;
+      let spread = max(half, WASH_PX * e);
+      let off = sqrt(0.5 * (1.0 + c)) * wave / PI;
+      let line = (1.0 - smoothstep(0.5 * spread, spread, off)) * half / spread;
+      out.wash = max(out.wash, shown * fork * ease(0.0, WASH_WALL, wall) * line);
+    }
     wave /= GULLY_STEP;
     k *= GULLY_DECAY;
     rot = OCTAVE_TURN * rot;
@@ -189,5 +210,6 @@ fn gullies(e: f32, gg: GullyGround) -> Gullies {
   let cut = ease(0.0, GULLY_SEEN, sums.y);
   out.spur = 0.5 + (sums.x / max(sums.y, 1e-9) - 0.5) * cut;
   out.fold = 0.5 + (sums.z / max(sums.w, 1e-9) - 0.5) * cut;
+  out.rill = 0.5 + (rills.x / max(rills.y, 1e-9) - 0.5) * ease(0.0, RILL_SEEN, rills.y);
   return out;
 }

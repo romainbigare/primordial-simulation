@@ -66,6 +66,12 @@ const SCREE_LIFT = 1.25;
 const STONES_ON_BED = 0.25; const SUNK_MOST = 0.55; const SUNK_LOOSE_M = 0.5;
 const STONE_SEEN = 2.5; const COBBLE_M = 0.65; const BED_SUNK = 0.3;
 
+// A dry wash's floor (gullies.wgsl `Gullies.wash`) is the ground's colour `WASH_GREY` of the way to its grey and
+// `WASH_LIFT` times as light: its floods carry the dark fines and the varnished stones' coats away and leave pale
+// sand and fresh gravel (from memory).
+const WASH_GREY = 0.3; const WASH_LIFT = 1.4;
+fn washed(c: vec3f, wash: f32) -> vec3f { return mix(c, mix(c, vec3f(dot(c, LUMA)), WASH_GREY) * WASH_LIFT, wash); }
+
 // How far ground of grain `grain` (`Spot.grain`) shrinks and cracks as it dries, 0..1 (`SHRINK_FULL`).
 fn shrinks(grain: vec4f) -> f32 { return ease(0.0, SHRINK_FULL, grain.y + SILT_SHRINK * max(1.0 - grain.x - grain.y, 0.0)); }
 
